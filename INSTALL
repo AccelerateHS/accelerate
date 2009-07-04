@@ -1,0 +1,12 @@
+Requirements: Glasgow Haskell Compiler (GHC), 6.10.1 or later
+
+Standard Cabal installation:
+
+  % runhaskell Setup.hs configure --prefix=INSTALLPATH
+  % runhaskell Setup.hs build
+  % runhaskell Setup.hs install
+    OR
+    runhaskell Setup.hs install -- user
+
+Then, to use the library, pass the flag "-package accelerate" to GHC.
+

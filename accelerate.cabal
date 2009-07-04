@@ -1,0 +1,28 @@
+Name:			accelerate
+Version:		0.3.0
+Synopsis:		An embedded language for accelerated array processing
+Description:	        This libraries defines an embedded language for array
+		        computations that are suitable for offloading to compute
+		        accelerators, such as CUDA-capable GPUs.
+License:		BSD3
+License-file:		LICENSE
+Author:			Manuel M T Chakravarty, Gabriele Keller & Sean Lee
+Maintainer:		Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Category:		Concurrency, Data
+Build-type:		Simple
+extra-source-files:  	INSTALL
+
+Build-Depends:	        array, base, haskell98, mtl
+Exposed-modules:	Data.Array.Accelerate
+Other-modules:		Data.Array.Accelerate.AST
+			Data.Array.Accelerate.Language
+			Data.Array.Accelerate.Pretty
+			Data.Array.Accelerate.Run
+			Data.Array.Accelerate.Smart
+			Data.Array.Accelerate.Type
+			Data.Array.Accelerate.Typeable
+ghc-options:     	-Wall -fno-warn-orphans
+Extensions:		FlexibleContexts, FlexibleInstances, 
+			ExistentialQuantification, GADTs, TypeFamilies, 
+			ScopedTypeVariables,
+			BangPatterns, PatternGuards, TypeOperators
