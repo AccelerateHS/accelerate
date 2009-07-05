@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 
 -- |Embedded array processing language: smart expression constructors
 --
@@ -16,6 +16,9 @@ module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
   Exp(..), convertExp, convertFun1, convertFun2,
+
+  -- * Class of element types in array computations
+  Elem,
 
   -- * Constructors for literals
   mkVal, mkNumVal,
@@ -53,7 +56,7 @@ data Exp t where
   Tag         :: Typeable1 (Idx env) => TupleType t -> Idx env t -> Exp t
 
   -- All the same constructors as `AST.OpenExp'
-  Const       :: ScalarType t -> t          -> Exp t
+  Const       :: TupleType t -> t           -> Exp t
   Pair        :: Exp s -> Exp t             -> Exp (s, t)
   Fst         :: Exp (s, t)                 -> Exp s
   Snd         :: Exp (s, t)                 -> Exp t
@@ -85,7 +88,7 @@ convertExp (Shape a)         = AST.Shape a
 
 -- |Convert a unary functions
 --
-convertFun1 :: forall a b. (Typeable a, IsTuple a) 
+convertFun1 :: forall a b. IsTuple a 
             => (Exp a -> Exp b) -> AST.Fun (a -> b)
 convertFun1 f = Lam (Body openF)
   where
@@ -94,7 +97,7 @@ convertFun1 f = Lam (Body openF)
 
 -- |Convert a binary functions
 --
-convertFun2 :: forall a b c. (Typeable a, IsTuple a, Typeable b, IsTuple b) 
+convertFun2 :: forall a b c. (IsTuple a, IsTuple b) 
             => (Exp a -> Exp b -> Exp c) -> AST.Fun (a -> b -> c)
 convertFun2 f = Lam (Lam (Body openF))
   where
@@ -104,7 +107,222 @@ convertFun2 f = Lam (Lam (Body openF))
 
 instance Show (Exp t) where
   show e = show (convertExp e :: AST.OpenExp () t)
+
+
+-- |Processed data types: tuples of scalars
+-- -
+
+class Elem a where
+  type ElemRepr a :: *
+  elemType :: {-dummy-} a -> TupleType (ElemRepr a)
+  fromElem :: a -> ElemRepr a
+  toElem   :: ElemRepr a -> a
+
+instance Elem () where
+  type ElemRepr () = ()
+  elemType _ = UnitTuple
+  fromElem = id
+  toElem   = id
+
+{-
+instance Elem Int where
+  type ElemRepr Int = ((), Int)
+  elemType _ = UnitTuple `PairTuple` SingleTuple scalarType
+  fromElem v = ((), v)
+  toElem ((), v) = v
+ -}
+
+instance Elem Int where
+  type ElemRepr Int = Int
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Int8 where
+  type ElemRepr Int8 = Int8
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Int16 where
+  type ElemRepr Int16 = Int16
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Int32 where
+  type ElemRepr Int32 = Int32
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Int64 where
+  type ElemRepr Int64 = Int64
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Word where
+  type ElemRepr Word = Word
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Word8 where
+  type ElemRepr Word8 = Word8
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Word16 where
+  type ElemRepr Word16 = Word16
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Word32 where
+  type ElemRepr Word32 = Word32
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Word64 where
+  type ElemRepr Word64 = Word64
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CShort where
+  type ElemRepr CShort = CShort
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CUShort where
+  type ElemRepr CUShort = CUShort
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CInt where
+  type ElemRepr CInt = CInt
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CUInt where
+  type ElemRepr CUInt = CUInt
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CLong where
+  type ElemRepr CLong = CLong
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CULong where
+  type ElemRepr CULong = CULong
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CLLong where
+  type ElemRepr CLLong = CLLong
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CULLong where
+  type ElemRepr CULLong = CULLong
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Float where
+  type ElemRepr Float = Float
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Double where
+  type ElemRepr Double = Double
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CFloat where
+  type ElemRepr CFloat = CFloat
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CDouble where
+  type ElemRepr CDouble = CDouble
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Bool where
+  type ElemRepr Bool = Bool
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem Char where
+  type ElemRepr Char = Char
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CChar where
+  type ElemRepr CChar = CChar
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CSChar where
+  type ElemRepr CSChar = CSChar
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance Elem CUChar where
+  type ElemRepr CUChar = CUChar
+  elemType _ = SingleTuple scalarType
+  fromElem = id
+  toElem   = id
+
+instance (Elem a, Elem b) => Elem (a, b) where
+  type ElemRepr (a, b) = (ElemRepr a, ElemRepr b)
+  elemType (_::(a, b)) 
+    = PairTuple (elemType (undefined :: a)) (elemType (undefined :: b))
+  fromElem (a, b) = (fromElem a, fromElem b)
+  toElem   (a, b) = (toElem a, toElem b)
+
+instance (Elem a, Elem b, Elem c) => Elem (a, b, c) where
+  type ElemRepr (a, b, c) = (ElemRepr (a, b), ElemRepr c)
+  elemType (_::(a, b, c)) 
+    = PairTuple (elemType (undefined :: (a, b))) (elemType (undefined :: c))
+  fromElem (a, b, c) = (fromElem (a, b), fromElem c)
+  toElem   (ab, c) = let (a, b) = toElem ab in (a, b, toElem c)
   
+instance (Elem a, Elem b, Elem c, Elem d) => Elem (a, b, c, d) where
+  type ElemRepr (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr d)
+  elemType (_::(a, b, c, d)) 
+    = PairTuple (elemType (undefined :: (a, b, c))) (elemType (undefined :: d))
+  fromElem (a, b, c, d) = (fromElem (a, b, c), fromElem d)
+  toElem   (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem d)
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
+  type ElemRepr (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr e)
+  elemType (_::(a, b, c, d, e)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d))) 
+                (elemType (undefined :: e))
+  fromElem (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem e)
+  toElem   (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem e)
+
 
 -- |Smart constructors to construct HOAS AST expressions
 -- -
@@ -112,11 +330,11 @@ instance Show (Exp t) where
 -- |Smart constructor for literals
 -- -
 
-mkVal :: IsScalar t => t -> Exp t
-mkVal = Const scalarType
+mkVal :: Elem t => t -> Exp t
+mkVal = Const (elemType undefined)
 
 mkNumVal :: IsNum t => t -> Exp t
-mkNumVal = Const (NumScalarType numType)
+mkNumVal = Const (UnitTuple (NumScalarType numType))
 
 -- |Smart constructor for constants
 -- -

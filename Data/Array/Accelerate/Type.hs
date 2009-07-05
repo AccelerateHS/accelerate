@@ -66,7 +66,7 @@ data NonNumDict a where
 -- |Scalar type representation
 -- -
 
--- |Integral types supported in APU computations.
+-- |Integral types supported in array computations.
 --
 data IntegralType a where
   TypeInt     :: IntegralDict Int     -> IntegralType Int
@@ -88,7 +88,7 @@ data IntegralType a where
   TypeCLLong  :: IntegralDict CLLong  -> IntegralType CLLong
   TypeCULLong :: IntegralDict CULLong -> IntegralType CULLong
 
--- |Floating-point types supported in APU computations.
+-- |Floating-point types supported in array computations.
 --
 data FloatingType a where
   TypeFloat   :: FloatingDict Float   -> FloatingType Float
@@ -96,7 +96,7 @@ data FloatingType a where
   TypeCFloat  :: FloatingDict CFloat  -> FloatingType CFloat
   TypeCDouble :: FloatingDict CDouble -> FloatingType CDouble
 
--- |Non-numeric types supported in APU computations.
+-- |Non-numeric types supported in array computations.
 --
 data NonNumType a where
   TypeBool    :: NonNumDict Bool      -> NonNumType Bool   -- ^marshaled to CInt
@@ -105,19 +105,19 @@ data NonNumType a where
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
   TypeCUChar  :: NonNumDict CUChar    -> NonNumType CUChar
 
--- |Numeric APU types implement Num & Real
+-- |Numeric element types implement Num & Real
 --
 data NumType a where
   IntegralNumType :: IntegralType a -> NumType a
   FloatingNumType :: FloatingType a -> NumType a
 
--- |Bounded APU types implement Bounded
+-- |Bounded element types implement Bounded
 --
 data BoundedType a where
   IntegralBoundedType :: IntegralType a -> BoundedType a
   NonNumBoundedType   :: NonNumType a   -> BoundedType a
 
--- |All scalar APU types implement Eq, Ord & Enum
+-- |All scalar element types implement Eq, Ord & Enum
 --
 data ScalarType a where
   NumScalarType    :: NumType a    -> ScalarType a

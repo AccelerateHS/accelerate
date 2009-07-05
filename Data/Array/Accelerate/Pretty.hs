@@ -123,7 +123,7 @@ prettyExp wrap (Var _ idx)       = text $ "a" ++ show (count idx)
     count :: Idx env t -> Int
     count ZeroIdx       = 0
     count (SuccIdx idx) = 1 + count idx
-prettyExp _    (Const ty v)      = text $ runShow ty v
+prettyExp _    (Const ty v)      = text $ runTupleShow ty v
 prettyExp _    (Pair e1 e2)      = prettyTuple (Pair e1 e2)
 prettyExp wrap (Fst e)           = wrap $ text "fst" <+> prettyExp parens e
 prettyExp wrap (Snd e)           = wrap $ text "snd" <+> prettyExp parens e
@@ -218,12 +218,20 @@ noParens = id
 -- |Auxilliary dictionary operations
 -- -
 
+-- |Show tuple values
+--
+runTupleShow :: TupleType a -> (a -> String)
+runTupleShow UnitTuple       = show
+runTupleShow (SingleTuple x) = runScalarShow x
+runTupleShow (PairTuple ty1 ty2) 
+  = \(x, y) -> "(" ++ runTupleShow ty1 x ++ ", " ++ runTupleShow ty2 y ++ ")"
+
 -- |Show scalar values
 --
-runShow :: ScalarType a -> (a -> String)
-runShow (NumScalarType (IntegralNumType ty)) 
+runScalarShow :: ScalarType a -> (a -> String)
+runScalarShow (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = show
-runShow (NumScalarType (FloatingNumType ty)) 
+runScalarShow (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = show
-runShow (NonNumScalarType ty)       
+runScalarShow (NonNumScalarType ty)       
   | NonNumDict   <- nonNumDict ty   = show

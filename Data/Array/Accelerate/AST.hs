@@ -196,7 +196,7 @@ data OpenExp env t where
   Var         :: TupleType t -> Idx env t -> OpenExp env t
 
   -- |Constant values
-  Const       :: ScalarType t -> t -> OpenExp env t
+  Const       :: TupleType t -> t -> OpenExp env t
 
   -- |Tuples
   Pair        :: OpenExp env s -> OpenExp env t -> OpenExp env (s, t)
