@@ -14,6 +14,7 @@ extra-source-files:  	INSTALL
 
 Build-Depends:	        array, base, haskell98, mtl
 Exposed-modules:	Data.Array.Accelerate
+			Data.Array.Accelerate.Interpreter
 Other-modules:		Data.Array.Accelerate.AST
 			Data.Array.Accelerate.Language
 			Data.Array.Accelerate.Pretty

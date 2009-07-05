@@ -10,6 +10,16 @@
 --  ~~~~~~~~~~~~~~~~~~
 --  The types representing array computations are only exported abstractly.
 --  This gives us more flexibility for later changes.
+--
+--  Code execution
+--  ~~~~~~~~~~~~~~
+--  Access to the various backends is via the 'run' function in
+--  backend-specific toplevel modules.  Currently, we have the following:
+--
+--  * 'Data.Array.Accelerate.Interpreter': simple interpreter in Haskell; it's
+--      slow, but doesn't have any further dependencies and also serves as a
+--      reference implementation
+
 
 module Data.Array.Accelerate (
 
@@ -22,7 +32,7 @@ module Data.Array.Accelerate (
   -- * Array data types
   Array, Arr, DIM0, DIM1, DIM2,
 
-  -- * Array indices
+  -- * Array shapes & indices
   Index(..),
 
   -- * Abstract types of array computations
@@ -34,9 +44,6 @@ module Data.Array.Accelerate (
   -- * Smart expression constructors
   module Data.Array.Accelerate.Language,
 
-  -- * Executing array code
---  run
-
 ) where
 
 -- friends
@@ -45,4 +52,3 @@ import Data.Array.Accelerate.AST   (Index(..))
 import Data.Array.Accelerate.Smart (Exp,
                                     mkVal, mkNumVal)  -- FIXME: can't we avoid that
 import Data.Array.Accelerate.Language
---import Data.Array.Accelerate.Run
