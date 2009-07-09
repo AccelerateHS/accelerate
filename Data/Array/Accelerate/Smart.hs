@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Smart (
   Elem,
 
   -- * Constructors for literals
-  mkVal, mkNumVal,
+  exp, {-mkNumVal,-}
 
   -- * Constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -33,86 +33,25 @@ module Data.Array.Accelerate.Smart (
 
 ) where
 
+-- avoid clashes with Prelude functions
+import Prelude hiding (exp)
+
 -- standard library
 import Data.Maybe
 import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..))
+import Data.Array.Accelerate.AST           hiding (Exp, OpenExp(..), Arr)
 import qualified Data.Array.Accelerate.AST as AST
 import Data.Array.Accelerate.Pretty
-import Data.Array.Accelerate.Typeable
 
 
--- |HOAS AST
+-- |Surface types (tuples of scalars) and their conversion into representation
+-- types 
 -- -
 
--- HOAS expressions mirror the constructors of `AST.OpenExp', but with the
--- `Tag' constructor instead of variables in the form of de Bruijn indices.
---
-data Exp t where
-  -- Tag used during the conversion to de Bruijn indices
-  Tag         :: Typeable1 (Idx env) => TupleType t -> Idx env t -> Exp t
-
-  -- All the same constructors as `AST.OpenExp'
-  Const       :: TupleType t -> t           -> Exp t
-  Pair        :: Exp s -> Exp t             -> Exp (s, t)
-  Fst         :: Exp (s, t)                 -> Exp s
-  Snd         :: Exp (s, t)                 -> Exp t
-  Cond        :: Exp Bool -> Exp t -> Exp t -> Exp t
-  PrimConst   :: PrimConst t                -> Exp t
-  PrimApp     :: PrimFun (a -> r) -> Exp a  -> Exp r
-  IndexScalar :: Arr dim t -> Exp dim       -> Exp t
-  Shape       :: Arr dim e                  -> Exp dim
-
-
--- |Conversion from HOAS to de Bruijn AST
--- -
-
--- |Convert an open expression
---
-convertExp :: Typeable env => Exp t -> AST.OpenExp env t
-convertExp (Tag ty idx)      = AST.Var ty (fromJust (cast1 idx))
-                                  -- can't go wrong unless the library is wrong!
-convertExp (Const ty v)      = AST.Const ty v
-convertExp (Pair e1 e2)      = AST.Pair (convertExp e1) (convertExp e2)
-convertExp (Fst e)           = AST.Fst (convertExp e)
-convertExp (Snd e)           = AST.Snd (convertExp e)
-convertExp (Cond e1 e2 e3)   = AST.Cond (convertExp e1) (convertExp e2) 
-                                        (convertExp e3)
-convertExp (PrimConst c)     = AST.PrimConst c
-convertExp (PrimApp p e)     = AST.PrimApp p (convertExp e)
-convertExp (IndexScalar a e) = AST.IndexScalar a (convertExp e)
-convertExp (Shape a)         = AST.Shape a
-
--- |Convert a unary functions
---
-convertFun1 :: forall a b. IsTuple a 
-            => (Exp a -> Exp b) -> AST.Fun (a -> b)
-convertFun1 f = Lam (Body openF)
-  where
-    a     = Tag tupleType (ZeroIdx :: Idx ((), a) a)
-    openF = convertExp (f a)
-
--- |Convert a binary functions
---
-convertFun2 :: forall a b c. (IsTuple a, IsTuple b) 
-            => (Exp a -> Exp b -> Exp c) -> AST.Fun (a -> b -> c)
-convertFun2 f = Lam (Lam (Body openF))
-  where
-    a     = Tag tupleType (SuccIdx ZeroIdx :: Idx (((), a), b) a)
-    b     = Tag tupleType (ZeroIdx         :: Idx (((), a), b) b)
-    openF = convertExp (f a b)
-
-instance Show (Exp t) where
-  show e = show (convertExp e :: AST.OpenExp () t)
-
-
--- |Processed data types: tuples of scalars
--- -
-
-class Elem a where
+class (Typeable a, Typeable (ElemRepr a)) => Elem a where
   type ElemRepr a :: *
   elemType :: {-dummy-} a -> TupleType (ElemRepr a)
   fromElem :: a -> ElemRepr a
@@ -123,14 +62,6 @@ instance Elem () where
   elemType _ = UnitTuple
   fromElem = id
   toElem   = id
-
-{-
-instance Elem Int where
-  type ElemRepr Int = ((), Int)
-  elemType _ = UnitTuple `PairTuple` SingleTuple scalarType
-  fromElem v = ((), v)
-  toElem ((), v) = v
- -}
 
 instance Elem Int where
   type ElemRepr Int = Int
@@ -323,6 +254,210 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
   fromElem (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem e)
   toElem   (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem e)
 
+-- Conversion of type representations
+--
+
+convertIntegralType :: IntegralType a -> IntegralType (ElemRepr a)
+convertIntegralType ty@(TypeInt _)     = ty
+convertIntegralType ty@(TypeInt8 _)    = ty
+convertIntegralType ty@(TypeInt16 _)   = ty
+convertIntegralType ty@(TypeInt32 _)   = ty
+convertIntegralType ty@(TypeInt64 _)   = ty
+convertIntegralType ty@(TypeWord _)    = ty
+convertIntegralType ty@(TypeWord8 _)   = ty
+convertIntegralType ty@(TypeWord16 _)  = ty
+convertIntegralType ty@(TypeWord32 _)  = ty
+convertIntegralType ty@(TypeWord64 _)  = ty
+convertIntegralType ty@(TypeCShort _)  = ty
+convertIntegralType ty@(TypeCUShort _) = ty
+convertIntegralType ty@(TypeCInt _)    = ty
+convertIntegralType ty@(TypeCUInt _)   = ty
+convertIntegralType ty@(TypeCLong _)   = ty
+convertIntegralType ty@(TypeCULong _)  = ty
+convertIntegralType ty@(TypeCLLong _)  = ty
+convertIntegralType ty@(TypeCULLong _) = ty
+
+convertFloatingType :: FloatingType a -> FloatingType (ElemRepr a)
+convertFloatingType ty@(TypeFloat _)   = ty
+convertFloatingType ty@(TypeDouble _)  = ty
+convertFloatingType ty@(TypeCFloat _)  = ty
+convertFloatingType ty@(TypeCDouble _) = ty
+
+convertNonNumType :: NonNumType a -> NonNumType (ElemRepr a)
+convertNonNumType ty@(TypeBool   _) = ty
+convertNonNumType ty@(TypeChar   _) = ty
+convertNonNumType ty@(TypeCChar  _) = ty
+convertNonNumType ty@(TypeCSChar _) = ty
+convertNonNumType ty@(TypeCUChar _) = ty
+
+convertNumType :: NumType a -> NumType (ElemRepr a)
+convertNumType (IntegralNumType ty) = IntegralNumType $ convertIntegralType ty
+convertNumType (FloatingNumType ty) = FloatingNumType $ convertFloatingType ty
+
+convertBoundedType :: BoundedType a -> BoundedType (ElemRepr a)
+convertBoundedType (IntegralBoundedType ty) 
+  = IntegralBoundedType (convertIntegralType ty)
+convertBoundedType (NonNumBoundedType ty) 
+  = NonNumBoundedType (convertNonNumType ty)
+
+convertScalarType :: ScalarType a -> ScalarType (ElemRepr a)
+convertScalarType (NumScalarType ty)    = NumScalarType $ convertNumType ty
+convertScalarType (NonNumScalarType ty) 
+  = NonNumScalarType $ convertNonNumType ty
+
+-- |HOAS AST
+-- -
+
+-- |Array representation for the surface language
+--
+data Arr dim e where
+  Arr :: Elem e => String -> Arr dim e
+
+-- HOAS expressions mirror the constructors of `AST.OpenExp', but with the
+-- `Tag' constructor instead of variables in the form of de Bruijn indices.
+-- Moreover, HOAS expression use n-tuples and the type class 'Elem' to
+-- constrain element types, whereas `AST.OpenExp' uses nested pairs and the 
+-- class 'IsTuple'.
+--
+data Exp t where
+    -- Needed for conversion to de Bruijn form
+  Tag         :: Elem t
+              => Int                        -> Exp t
+                 -- environment size at defining occurrence
+
+    -- All the same constructors as `AST.OpenExp'
+  Const       :: Elem t 
+              => t                          -> Exp t
+  Pair        :: Exp s -> Exp t             -> Exp (s, t)
+  Fst         :: Exp (s, t)                 -> Exp s
+  Snd         :: Exp (s, t)                 -> Exp t
+  Cond        :: Exp Bool -> Exp t -> Exp t -> Exp t
+  PrimConst   :: PrimConst t                -> Exp t
+  PrimApp     :: PrimFun (a -> r) -> Exp a  -> Exp r
+  IndexScalar :: Arr dim t -> Exp dim       -> Exp t
+  Shape       :: Arr dim e                  -> Exp dim
+
+
+-- |Conversion from HOAS to de Bruijn AST
+-- -
+
+-- A layout of an environment an entry for each entry of the environment.
+-- Each entry in the layout holds the deBruijn index that refers to the
+-- corresponding entry in the environment.
+--
+data Layout env env' where
+  EmptyLayout :: Layout env ()
+  PushLayout  :: Typeable t 
+              => Layout env env' -> Idx env t -> Layout env (env', t)
+
+-- Project the nth index out of an environment layout
+--
+prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
+prjIdx 0 (PushLayout _ ix) = fromJust (gcast ix)
+                               -- can't go wrong unless the library is wrong!
+prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
+prjIdx _ EmptyLayout       
+  = error "Data.Array.Accelerate.Smart.prjIdx: internal error"
+
+-- |Convert an open expression with the given environment layout
+--
+convertExp :: forall t env.
+              Layout env env -> Exp t -> AST.OpenExp env (ElemRepr t)
+convertExp lyt = cvt
+  where
+    cvt :: forall t'. Exp t' -> AST.OpenExp env (ElemRepr t')
+    cvt (Tag i)           = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
+    cvt (Const v)         = AST.Const (elemType (undefined::t')) (fromElem v)
+    cvt (Pair e1 e2)      = AST.Pair (cvt e1) (cvt e2)
+    cvt (Fst e)           = AST.Fst (cvt e)
+    cvt (Snd e)           = AST.Snd (cvt e)
+    cvt (Cond e1 e2 e3)   = AST.Cond (cvt e1) (cvt e2) (cvt e3)
+    cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
+    cvt (PrimApp p e)     = AST.PrimApp (convertPrimFun p) (cvt e)
+    cvt (IndexScalar a e) = AST.IndexScalar (convertArr a) (cvt e)
+    cvt (Shape a)         = AST.Shape (convertArr a)
+
+-- |Convert a primitive constant
+--
+convertPrimConst :: PrimConst a -> PrimConst (ElemRepr a)
+convertPrimConst (PrimMinBound ty) = PrimMinBound $ convertBoundedType ty
+convertPrimConst (PrimMaxBound ty) = PrimMinBound $ convertBoundedType ty
+convertPrimConst (PrimPi ty)       = PrimPi $ convertFloatingType ty
+
+-- |Convert a primitive operation
+--
+convertPrimFun :: PrimFun (a -> b) -> PrimFun (ElemRepr a -> ElemRepr b)
+convertPrimFun (PrimAdd ty)   = PrimAdd (convertNumType ty)
+convertPrimFun (PrimSub ty)   = PrimSub (convertNumType ty)
+convertPrimFun (PrimMul ty)   = PrimMul (convertNumType ty)
+convertPrimFun (PrimNeg ty)   = PrimNeg (convertNumType ty)
+convertPrimFun (PrimAbs ty)   = PrimAbs (convertNumType ty)
+convertPrimFun (PrimSig ty)   = PrimSig (convertNumType ty)
+convertPrimFun (PrimQuot ty)  = PrimQuot (convertIntegralType ty)
+convertPrimFun (PrimRem ty)   = PrimRem (convertIntegralType ty)
+convertPrimFun (PrimIDiv ty)  = PrimIDiv (convertIntegralType ty)
+convertPrimFun (PrimMod ty)   = PrimMod (convertIntegralType ty)
+convertPrimFun (PrimBAnd ty)  = PrimBAnd (convertIntegralType ty)
+convertPrimFun (PrimBOr ty)   = PrimBOr (convertIntegralType ty)
+convertPrimFun (PrimBXor ty)  = PrimBXor (convertIntegralType ty)
+convertPrimFun (PrimBNot ty)  = PrimBNot (convertIntegralType ty)
+convertPrimFun (PrimFDiv ty)  = PrimFDiv (convertFloatingType ty)
+convertPrimFun (PrimRecip ty) = PrimRecip (convertFloatingType ty)
+convertPrimFun (PrimLt ty)    = PrimLt (convertScalarType ty)
+convertPrimFun (PrimGt ty)    = PrimGt (convertScalarType ty)
+convertPrimFun (PrimLtEq ty)  = PrimLtEq (convertScalarType ty)
+convertPrimFun (PrimGtEq ty)  = PrimGtEq (convertScalarType ty)
+convertPrimFun (PrimEq ty)    = PrimEq (convertScalarType ty)
+convertPrimFun (PrimNEq ty)   = PrimNEq (convertScalarType ty)
+convertPrimFun (PrimMax ty)   = PrimMax (convertScalarType ty)
+convertPrimFun (PrimMin ty)   = PrimMin (convertScalarType ty)
+convertPrimFun PrimLAnd       = PrimLAnd
+convertPrimFun PrimLOr        = PrimLOr
+convertPrimFun PrimLNot       = PrimLNot
+convertPrimFun PrimOrd        = PrimOrd
+convertPrimFun PrimChr        = PrimChr
+convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
+
+-- |Convert surface array representation to the internal one
+--
+convertArr :: forall dim e. Arr dim e -> AST.Arr (ElemRepr dim) (ElemRepr e)
+convertArr (Arr idStr) = AST.Arr (elemType (undefined :: e)) idStr
+
+-- |Convert a unary functions
+--
+convertFun1 :: forall a b. Elem a
+            => (Exp a -> Exp b) -> AST.Fun (ElemRepr a -> ElemRepr b)
+convertFun1 f = Lam (Body openF)
+  where
+    a     = Tag 0
+    lyt   = EmptyLayout 
+            `PushLayout` 
+            (ZeroIdx :: Idx ((), ElemRepr a) (ElemRepr a))
+    openF = convertExp lyt (f a)
+
+-- |Convert a binary functions
+--
+convertFun2 :: forall a b c. (Elem a, Elem b) 
+            => (Exp a -> Exp b -> Exp c) 
+            -> AST.Fun (ElemRepr a -> ElemRepr b -> ElemRepr c)
+convertFun2 f = Lam (Lam (Body openF))
+  where
+    a     = Tag 1
+    b     = Tag 0
+    lyt   = EmptyLayout 
+            `PushLayout`
+            (SuccIdx ZeroIdx :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr a))
+            `PushLayout`
+            (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
+    openF = convertExp lyt (f a b)
+
+instance Show (Exp t) where
+  show e = show (convertExp EmptyLayout e :: AST.OpenExp () (ElemRepr t))
+
+
+-- |Generalised array indexing
+-- -
+
 
 -- |Smart constructors to construct HOAS AST expressions
 -- -
@@ -330,11 +465,14 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
 -- |Smart constructor for literals
 -- -
 
-mkVal :: Elem t => t -> Exp t
-mkVal = Const (elemType undefined)
+exp :: Elem t => t -> Exp t
+exp v = Const v
 
+{-
 mkNumVal :: IsNum t => t -> Exp t
-mkNumVal = Const (UnitTuple (NumScalarType numType))
+mkNumVal = exp --Const (UnitTuple (NumScalarType numType))
+-- FIXME: Why is this separate from 'exp'?
+ -}
 
 -- |Smart constructor for constants
 -- -

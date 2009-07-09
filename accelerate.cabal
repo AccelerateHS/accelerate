@@ -6,7 +6,7 @@ Description:	        This libraries defines an embedded language for array
 		        accelerators, such as CUDA-capable GPUs.
 License:		BSD3
 License-file:		LICENSE
-Author:			Manuel M T Chakravarty, Gabriele Keller & Sean Lee
+Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 Maintainer:		Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Category:		Concurrency, Data
 Build-type:		Simple
@@ -15,13 +15,14 @@ extra-source-files:  	INSTALL
 Build-Depends:	        array, base, haskell98, mtl
 Exposed-modules:	Data.Array.Accelerate
 			Data.Array.Accelerate.Interpreter
-Other-modules:		Data.Array.Accelerate.AST
+Other-modules:		Data.Array.Accelerate.Array.Representation
+			Data.Array.Accelerate.Array.Sugar
+			Data.Array.Accelerate.AST
 			Data.Array.Accelerate.Language
 			Data.Array.Accelerate.Pretty
 			Data.Array.Accelerate.Run
 			Data.Array.Accelerate.Smart
 			Data.Array.Accelerate.Type
-			Data.Array.Accelerate.Typeable
 ghc-options:     	-Wall -fno-warn-orphans
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 

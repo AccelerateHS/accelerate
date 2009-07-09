@@ -39,8 +39,6 @@ import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
   CLLong, CULLong, CFloat, CDouble)
   -- in the future, CHalf
-import Foreign.ForeignPtr (
-  ForeignPtr)
 
 
 -- |Scalar types
@@ -596,91 +594,6 @@ data CDouble4 = CDouble4 CDouble CDouble CDouble CDouble
 -- in the future, vector types for CHalf
  -}
 
--- |Arrays
--- -------
-
--- |Multi-dimensional arrays for array processing
---
--- * If device and host memory are separate, arrays will be transferred to the
---   device when necessary (if possible asynchronously and in parallel with
---   other tasks) and cached on the device if sufficient memory is available.
---
-data Array dim e where
-  Array { arrayShape    :: Shape dim          -- ^extend of dimensions
-        , arrayElemType :: TupleType e        -- ^constrains valid element types
-        , arrayId       :: String             -- ^for pretty printing
-        , arraySize     :: Int                -- ^data size in bytes
-        , arrayPtr      :: ForeignPtr e       -- ^data
-        }               :: Array dim e
-
--- |The shape of an array gives the number of elements in each dimensions
--- (i.e., it is one more than the largest permitted index in that dimensions).
--- This type family characterises permitted shape specifiers and maps
--- specifier type to representation type of shapes and vanilla array indices.
---
-type family Shape dim
-type instance Shape () = ()
-type instance Shape Int = ((), Int)
-type instance Shape (Int, Int) = (((), Int), Int)
-type instance Shape (Int, Int, Int) = ((((), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int) = (((((), Int), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int, Int) 
-  = ((((((), Int), Int), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int, Int, Int) 
-  = (((((((), Int), Int), Int), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int, Int, Int, Int) 
-  = ((((((((), Int), Int), Int), Int), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int, Int, Int, Int, Int) 
-  = (((((((((), Int), Int), Int), Int), Int), Int), Int), Int)
-type instance Shape (Int, Int, Int, Int, Int, Int, Int, Int, Int) 
-  = ((((((((((), Int), Int), Int), Int), Int), Int), Int), Int), Int)
-
--- |Most common dimensionalities
---
-type DIM0 = ()
-type DIM1 = ((), Int)
-type DIM2 = (((), Int), Int)
-type DIM3 = ((((), Int), Int), Int)
-
--- |Our index class
---
-class Ix ix where
-  dim   :: ix -> Int           -- ^number of dimensions (>= 0)
-  size  :: ix -> Int           -- ^for a *shape* yield the total number of 
-                               -- elements in that array
-  index :: ix -> ix -> Int     -- ^corresponding index into a linear, row-major 
-                               -- representation of the array (first argument
-                               -- is the shape)
-  -- FIXME: we might want an unsafeIndex, too
-
-instance Ix () where
-  dim   _   = 0
-  size  _   = 1
-  index _ _ = 0
-
-instance Ix Int where
-  dim   _                 = 1
-  size  sh                = sh
-  index sh ix 
-    | ix >= 0 && ix <= sh = ix
-    | otherwise           = error "Control.APU.Type: index out of bounds"
-
-instance (Ix ix1, Ix ix2) => Ix (ix1, ix2) where
-  dim   (ix, _)               = dim ix + 1
-  size  (sh1, sh2)            = size sh1 * size sh2
-  index (sh1, sh2) (ix1, ix2) = index sh1 ix1 * size sh2 + index sh2 ix2
-
--- |Array representation inside collective computations; this is only to track
--- the array, not to represent it
---
-data Arr dim e where
-  Arr :: TupleType e -> String -> Arr dim e
-
--- |Scalar results (both elementary scalars and tuples of scalars) are being
--- represented as 0-dimensional singleton arrays
---
-type Scalar a = Arr DIM0 a
-
 
 -- |Compound types
 -- ---------------
@@ -692,6 +605,7 @@ data TupleType t where
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
 
+{-
 -- |Tuples of scalar and array types - all types manipulated in GPU code
 --
 data AnyType t where
@@ -699,6 +613,7 @@ data AnyType t where
   ScalarType :: ScalarType a           -> AnyType a
   ArrayType  :: TupleType a            -> AnyType (Array dim a)
   PairType   :: AnyType a -> AnyType b -> AnyType (a, b)
+ -}
 
 -- |Querying tuple type representations
 -- -
@@ -714,18 +629,3 @@ instance IsScalar a => IsTuple a where
 
 instance (IsTuple a, IsTuple b) => IsTuple (a, b) where
   tupleType = PairTuple tupleType tupleType
-
--- |Possible results of collective array computations are tuples of
--- multi-dimensional arrays
---
-class CompResult r where
-  strings :: r -> [String]
-
-instance CompResult () where
-  strings _ = []
-
-instance CompResult (Arr dim e) where
-  strings (Arr _ str) = [str]
-
-instance (CompResult r1, CompResult r2) => CompResult (r1, r2) where
-  strings (r1, r2) = strings r1 ++ strings r2

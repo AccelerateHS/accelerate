@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 
--- |Embedded array processing language: user visible language
+-- |Embedded array processing language: user-visible language
 --
 --  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 --
@@ -16,6 +16,9 @@
 -- easily qualified.
 
 module Data.Array.Accelerate.Language (
+
+  -- * Expressions
+  Exp, exp, mkNumVal,           -- re-exporting from 'Smart'
 
   -- * Array processing computation monad
   AP, APstate, runAPU,
@@ -41,17 +44,20 @@ module Data.Array.Accelerate.Language (
 
 ) where
 
+-- avoid clashes with Prelude functions
+import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not, 
+                         exp)
+import qualified Prelude
+
 -- standard libraries
 import Data.Bits
 import Control.Monad.State
 
--- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not)
-import qualified Prelude
-
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..))
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.AST                  hiding (Exp, OpenExp(..))
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty
 
@@ -128,7 +134,7 @@ wrapComp2 ty1 ty2 comp
 -- |Collective operations
 -- ----------------------
 
-use :: IsTuple e => Array dim e -> AP (Arr dim e)
+use :: (Dim dim, Elem e) => Array dim e -> AP (Arr dim e)
 use array = wrapComp tupleType (Use array)
 
 unit :: IsTuple e => Exp e -> AP (Scalar e)

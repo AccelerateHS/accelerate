@@ -33,13 +33,13 @@ module Data.Array.Accelerate (
   Array, Arr, DIM0, DIM1, DIM2,
 
   -- * Array shapes & indices
-  Index(..),
+  Ix(..), All(..), Slice,
 
   -- * Abstract types of array computations
   Exp,
 
   -- * FIXME
-  mkVal, mkNumVal,
+  exp, mkNumVal,
 
   -- * Smart expression constructors
   module Data.Array.Accelerate.Language,
@@ -48,7 +48,6 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST   (Index(..))
-import Data.Array.Accelerate.Smart (Exp,
-                                    mkVal, mkNumVal)  -- FIXME: can't we avoid that
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language

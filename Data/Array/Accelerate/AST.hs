@@ -53,13 +53,15 @@
 
 module Data.Array.Accelerate.AST (
 
-  Comps(..), CompBinding(..), Comp(..), Index(..), Idx(..), Fun, OpenFun(..), 
-  Exp, OpenExp(..), PrimConst(..), PrimFun(..),
+  Comps(..), CompBinding(..), CompResult(..), Comp(..), Arr(..), Scalar, 
+  Index(..), Idx(..), Fun, OpenFun(..), Exp, OpenExp(..), PrimConst(..), 
+  PrimFun(..)
 
 ) where
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Representation
 
 
 -- |Abstract syntax of array computations
@@ -76,6 +78,21 @@ newtype Comps = Comps [CompBinding]
 --
 data CompBinding where
   CompBinding :: CompResult a => a -> Comp a -> CompBinding
+
+-- |Possible results of collective array computations are tuples of
+-- multi-dimensional arrays
+--
+class CompResult r where
+  strings :: r -> [String]
+
+instance CompResult () where
+  strings _ = []
+
+instance CompResult (Arr dim e) where
+  strings (Arr _ str) = [str]
+
+instance (CompResult r1, CompResult r2) => CompResult (r1, r2) where
+  strings (r1, r2) = strings r1 ++ strings r2
 
 -- |The various variants of collective array operations
 --
@@ -121,7 +138,7 @@ data Comp a where
 
   -- Remove all elements from a linear array that do not satisfy the given
   -- predicate
-  Filter      :: Fun (a -> Bool) -> Arr DIM1 a -> Comp (Arr DIM1 a)
+  Filter      :: Fun (a -> Bool) -> Arr DIM1Repr a -> Comp (Arr DIM1Repr a)
 
   -- Left-to-right prescan of a linear array with a given *associative*
   -- function and its neutral element; produces a rightmost fold value and a
@@ -129,8 +146,8 @@ data Comp a where
   -- in a scan, as opposed to a prescan)
   Scan        :: Fun (a -> a -> a)                -- ^combination function
               -> Exp a                            -- ^default value
-              -> Arr DIM1 a                       -- ^linear array
-              -> Comp (Arr DIM0 a, Arr DIM1 a)
+              -> Arr DIM1Repr a                   -- ^linear array
+              -> Comp (Arr DIM0Repr a, Arr DIM1Repr a)
     -- FIXME: generalise multi-dimensional scan?  And/or a generalised mapScan?
 
   -- Generalised forward permutation is characterised by a permutation
@@ -156,6 +173,18 @@ data Comp a where
               -> Fun (dim' -> dim)                -- ^permutation function
               -> Arr dim a                        -- ^source array
               -> Comp (Arr dim' a)
+
+
+-- |Array representation inside collective computations; this is only to track
+-- the array, not to represent it's value
+--
+data Arr dim e where
+  Arr :: TupleType e -> String -> Arr dim e
+
+-- |Scalar results (both elementary scalars and tuples of scalars) are being
+-- represented as 0-dimensional singleton arrays
+--
+type Scalar a = Arr DIM0Repr a
 
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.
@@ -230,7 +259,7 @@ data PrimConst ty where
   -- constant from Floating
   PrimPi        :: FloatingType a -> PrimConst a
 
--- |Primitive GPU operations
+-- |Primitive scalar operations
 --
 data PrimFun sig where
 

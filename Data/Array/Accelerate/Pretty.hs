@@ -20,6 +20,7 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.AST
 
 
