@@ -17,11 +17,11 @@
 
 module Data.Array.Accelerate.Language (
 
-  -- * Expressions
-  Exp, exp, mkNumVal,           -- re-exporting from 'Smart'
-
   -- * Array processing computation monad
-  AP, APstate, runAPU,
+  AP, APstate,          -- re-exporting from 'Smart'
+
+  -- * Expressions
+  Exp, exp,             -- re-exporting from 'Smart'
 
   -- * Array introduction
   use, unit,
@@ -51,13 +51,12 @@ import qualified Prelude
 
 -- standard libraries
 import Data.Bits
-import Control.Monad.State
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.AST                  hiding (Exp, OpenExp(..))
+import Data.Array.Accelerate.AST                  hiding (Exp, OpenExp(..), Arr)
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty
 
@@ -68,73 +67,10 @@ infix  4 ==*, /=*, <*, <=*, >*, >=*
 infixl 9 !
 
 
--- |Monad of collective operations
--- -------------------------------
-
--- |Array processing computations as a state transformer
---
-type AP a = State APstate a
-
-data APstate = APstate 
-               { comps :: Comps        -- the program so far (reversed list)
-               , sym   :: Int          -- next unique variable name
-               }
-
-unComps :: APstate -> [CompBinding]
-unComps s = case comps s of Comps cs -> cs
-
-initialAPstate :: APstate
-initialAPstate = APstate (Comps []) 0
-
-runAPU :: AP a -> Comps
-runAPU = reverseComps . comps . flip execState initialAPstate
-  where
-    reverseComps (Comps cs) = Comps (reverse cs)
-
--- Obtain a unique variable name; it's unique in the AP computation
---
-genSym :: AP String
-genSym 
-  = do
-      n <- gets sym
-      modify $ \s -> s {sym = succ (sym s)}
-      return $ "a" ++ show n
-
--- Obtain a unique array identifier at a given element type; it's unique in
--- the AP computation 
---
-genArr :: TupleType e -> AP (Arr dim e)
-genArr ty
-  = do
-      name <- genSym
-      return $ Arr ty name
-
--- Add a collective operation to the list in the monad state
---
-pushComp :: CompBinding -> AP ()
-pushComp comp = modify $ \s -> s {comps = Comps $ comp : unComps s}
-
-wrapComp :: TupleType e -> Comp (Arr dim e) -> AP (Arr dim e)
-wrapComp ty comp
-  = do
-      arr <- genArr ty
-      pushComp $ arr `CompBinding` comp
-      return arr
-
-wrapComp2 :: TupleType e1 -> TupleType e2 -> Comp (Arr dim1 e1, Arr dim2 e2)
-          -> AP (Arr dim1 e1, Arr dim2 e2)
-wrapComp2 ty1 ty2 comp
-  = do
-      arr1 <- genArr ty1
-      arr2 <- genArr ty2
-      pushComp $ (arr1, arr2) `CompBinding` comp
-      return (arr1, arr2)
-
-
 -- |Collective operations
 -- ----------------------
 
-use :: (Dim dim, Elem e) => Array dim e -> AP (Arr dim e)
+use :: (Ix dim, Elem e) => Array dim e -> AP (Arr dim e)
 use array = wrapComp tupleType (Use array)
 
 unit :: IsTuple e => Exp e -> AP (Scalar e)
@@ -222,14 +158,14 @@ instance (IsNum t, IsIntegral t) => Bits (Exp t) where
   complement = mkBNot
   -- FIXME: argh, the rest have fixed types in their signatures
 
-instance IsNum t => Num (Exp t) where
+instance (Elem t, IsNum t) => Num (Exp t) where
   (+)         = mkAdd
   (-)         = mkSub
   (*)         = mkMul
   negate      = mkNeg
   abs         = mkAbs
   signum      = mkSig
-  fromInteger = mkNumVal . fromInteger
+  fromInteger = exp . fromInteger
 
 instance IsNum t => Real (Exp t)
   -- FIXME: Why did we include this class?  We won't need `toRational' until
@@ -248,10 +184,10 @@ instance IsFloating t => Floating (Exp t) where
   pi  = mkPi
   -- FIXME: add other ops
 
-instance IsFloating t => Fractional (Exp t) where
+instance (Elem t, IsFloating t) => Fractional (Exp t) where
   (/)          = mkFDiv
   recip        = mkRecip
-  fromRational = mkNumVal . fromRational
+  fromRational = exp . fromRational
   -- FIXME: add other ops
 
 instance IsFloating t => RealFrac (Exp t)

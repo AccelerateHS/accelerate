@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Representation
 
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- |Embedded array processing language: smart expression constructors
 --
@@ -14,11 +15,14 @@
 
 module Data.Array.Accelerate.Smart (
 
-  -- * HOAS AST
-  Exp(..), convertExp, convertFun1, convertFun2,
-
-  -- * Class of element types in array computations
+  -- * Class of element types and of array shapes
   Elem,
+
+  -- * Array processing computation monad
+  AP, APstate, runAP, wrapComp, wrapComp2,
+
+  -- * HOAS AST
+  Arr(..), Exp(..), convertExp, convertFun1, convertFun2,
 
   -- * Constructors for literals
   exp, {-mkNumVal,-}
@@ -37,19 +41,22 @@ module Data.Array.Accelerate.Smart (
 import Prelude hiding (exp)
 
 -- standard library
+import Control.Monad.State
 import Data.Maybe
 import Data.Typeable
+import Unsafe.Coerce
 
 -- friends
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST           hiding (Exp, OpenExp(..), Arr)
+import Data.Array.Accelerate.AST           hiding (Exp, OpenExp(..), Arr(..))
 import qualified Data.Array.Accelerate.AST as AST
 import Data.Array.Accelerate.Pretty
 
 
--- |Surface types (tuples of scalars) and their conversion into representation
--- types 
--- -
+-- |Surface types (tuples of scalars) and their conversion
+-- -------------------------------------------------------
 
 class (Typeable a, Typeable (ElemRepr a)) => Elem a where
   type ElemRepr a :: *
@@ -306,7 +313,7 @@ convertScalarType (NonNumScalarType ty)
   = NonNumScalarType $ convertNonNumType ty
 
 -- |HOAS AST
--- -
+-- ---------
 
 -- |Array representation for the surface language
 --
@@ -361,7 +368,7 @@ prjIdx _ EmptyLayout
 
 -- |Convert an open expression with the given environment layout
 --
-convertExp :: forall t env.
+convertExp :: forall t env. 
               Layout env env -> Exp t -> AST.OpenExp env (ElemRepr t)
 convertExp lyt = cvt
   where
@@ -374,8 +381,25 @@ convertExp lyt = cvt
     cvt (Cond e1 e2 e3)   = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
     cvt (PrimApp p e)     = AST.PrimApp (convertPrimFun p) (cvt e)
-    cvt (IndexScalar a e) = AST.IndexScalar (convertArr a) (cvt e)
-    cvt (Shape a)         = AST.Shape (convertArr a)
+    cvt (IndexScalar (a::Arr dim t') e) 
+      = AST.IndexScalar (convertArr a) (elemToShapeRepr (undefined::dim) (cvt e))
+    cvt (Shape (a::Arr t' s))         
+      = shapeToElemRepr (undefined::t') (AST.Shape (convertArr a))
+
+-- We know that 'ElemRepr dim ~ (ShapeToElemRepr (ToShapeRepr dim))', but the
+-- type checker doesn't.  In the absence of "type lemmata", there is no easy
+-- way to tell it about the equality, apart from using the unsafeCoerce
+-- sledgehammer.
+
+elemToShapeRepr :: dim 
+                -> AST.OpenExp env (ElemRepr dim)
+                -> AST.OpenExp env (ShapeToElemRepr (ToShapeRepr dim))
+elemToShapeRepr _ = unsafeCoerce
+
+shapeToElemRepr :: dim 
+                -> AST.OpenExp env (ShapeToElemRepr (ToShapeRepr dim))
+                -> AST.OpenExp env (ElemRepr dim)
+shapeToElemRepr _ = unsafeCoerce
 
 -- |Convert a primitive constant
 --
@@ -420,7 +444,7 @@ convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
 
 -- |Convert surface array representation to the internal one
 --
-convertArr :: forall dim e. Arr dim e -> AST.Arr (ElemRepr dim) (ElemRepr e)
+convertArr :: forall dim e. Arr dim e -> AST.Arr (ToShapeRepr dim) (ElemRepr e)
 convertArr (Arr idStr) = AST.Arr (elemType (undefined :: e)) idStr
 
 -- |Convert a unary functions
@@ -455,24 +479,80 @@ instance Show (Exp t) where
   show e = show (convertExp EmptyLayout e :: AST.OpenExp () (ElemRepr t))
 
 
--- |Generalised array indexing
--- -
+-- |Monad of collective operations
+-- -------------------------------
+
+-- |Array processing computations as a state transformer
+--
+type AP a = State APstate a
+
+data APstate = APstate 
+               { comps :: Comps        -- the program so far (reversed list)
+               , sym   :: Int          -- next unique variable name
+               }
+
+unComps :: APstate -> [CompBinding]
+unComps s = case comps s of Comps cs -> cs
+
+initialAPstate :: APstate
+initialAPstate = APstate (Comps []) 0
+
+runAP :: AP a -> Comps
+runAP = reverseComps . comps . flip execState initialAPstate
+  where
+    reverseComps (Comps cs) = Comps (reverse cs)
+
+-- Obtain a unique variable name; it's unique in the AP computation
+--
+genSym :: AP String
+genSym 
+  = do
+      n <- gets sym
+      modify $ \s -> s {sym = succ (sym s)}
+      return $ "a" ++ show n
+
+-- Obtain a unique array identifier at a given element type; it's unique in
+-- the AP computation 
+--
+genArr :: Elem e => AP (Arr dim e)
+genArr
+  = do
+      name <- genSym
+      return $ Arr name
+
+-- Add a collective operation to the list in the monad state
+--
+pushComp :: CompBinding -> AP ()
+pushComp comp = modify $ \s -> s {comps = Comps $ comp : unComps s}
+
+wrapComp :: Elem e 
+         => Comp (AST.Arr (ToShapeRepr dim) (ElemRepr e)) -> AP (Arr dim e)
+wrapComp comp
+  = do
+      arr <- genArr
+      pushComp $ convertArr arr `CompBinding` comp
+      return arr
+
+wrapComp2 :: (Elem e1, Elem e2) 
+          => Comp (AST.Arr (ToShapeRepr dim1) (ElemRepr e1), 
+                   AST.Arr (ToShapeRepr dim2) (ElemRepr e2))
+          -> AP (Arr dim1 e1, Arr dim2 e2)
+wrapComp2 comp
+  = do
+      arr1 <- genArr
+      arr2 <- genArr
+      pushComp $ (convertArr arr1, convertArr arr2) `CompBinding` comp
+      return (arr1, arr2)
 
 
 -- |Smart constructors to construct HOAS AST expressions
--- -
+-- -----------------------------------------------------
 
 -- |Smart constructor for literals
 -- -
 
 exp :: Elem t => t -> Exp t
 exp v = Const v
-
-{-
-mkNumVal :: IsNum t => t -> Exp t
-mkNumVal = exp --Const (UnitTuple (NumScalarType numType))
--- FIXME: Why is this separate from 'exp'?
- -}
 
 -- |Smart constructor for constants
 -- -

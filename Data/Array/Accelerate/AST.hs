@@ -148,7 +148,7 @@ data Comp a where
               -> Exp a                            -- ^default value
               -> Arr DIM1Repr a                   -- ^linear array
               -> Comp (Arr DIM0Repr a, Arr DIM1Repr a)
-    -- FIXME: generalise multi-dimensional scan?  And/or a generalised mapScan?
+    -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
   -- Generalised forward permutation is characterised by a permutation
   -- function that determines for each element of the source array where it
@@ -243,10 +243,10 @@ data OpenExp env t where
   PrimApp     :: PrimFun (a -> r) -> OpenExp env a -> OpenExp env r
 
   -- |Project a single scalar from an array
-  IndexScalar :: Arr dim t -> OpenExp env dim -> OpenExp env t
+  IndexScalar :: Arr dim t -> OpenExp env (ShapeToElemRepr dim) -> OpenExp env t
 
   -- |Array shape
-  Shape       :: Arr dim e -> OpenExp env dim
+  Shape       :: Arr dim e -> OpenExp env (ShapeToElemRepr dim)
 
 -- |Primitive GPU constants
 --

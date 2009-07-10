@@ -16,7 +16,8 @@ module Data.Array.Accelerate.Array.Representation (
   Array(..),
 
   -- * Array indexing and slicing
-  DIM0Repr, DIM1Repr, DIM2Repr, All(..), IxRepr(..), SliceRepr(..)
+  DIM0Repr, DIM1Repr, DIM2Repr, All(..), IxRepr(..), ShapeToElemRepr,
+  SliceRepr(..)
 
 ) where
 
@@ -82,6 +83,14 @@ instance IxRepr ix => IxRepr (ix, Int) where
     | i >= 0 && i < sz       = indexRepr sh ix + sizeRepr sh * i
     | otherwise              
     = error "Data.Array.Accelerate.Array: index out of bounds"
+
+-- |Indices as values
+--
+type family ShapeToElemRepr ix
+type instance ShapeToElemRepr ()              = ()
+type instance ShapeToElemRepr ((), Int)       = Int
+type instance ShapeToElemRepr ((a, Int), Int) = (ShapeToElemRepr (a, Int), Int)
+
 
 -- |Slice representation
 -- -

@@ -38,10 +38,7 @@ module Data.Array.Accelerate (
   -- * Abstract types of array computations
   Exp,
 
-  -- * FIXME
-  exp, mkNumVal,
-
-  -- * Smart expression constructors
+  -- * Surface language
   module Data.Array.Accelerate.Language,
 
 ) where
