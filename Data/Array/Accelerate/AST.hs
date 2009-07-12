@@ -179,7 +179,7 @@ data Comp a where
 -- the array, not to represent it's value
 --
 data Arr dim e where
-  Arr :: TupleType e -> String -> Arr dim e
+  Arr :: IxRepr dim => TupleType e -> String -> Arr dim e
 
 -- |Scalar results (both elementary scalars and tuples of scalars) are being
 -- represented as 0-dimensional singleton arrays

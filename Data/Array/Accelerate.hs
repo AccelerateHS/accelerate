@@ -30,13 +30,13 @@ module Data.Array.Accelerate (
   Bool, Char, CChar, CSChar, CUChar,
 
   -- * Array data types
-  Array, Arr, DIM0, DIM1, DIM2,
+  Array, Arr,
+
+  -- * Array element types
+  Elem,
 
   -- * Array shapes & indices
-  Ix(..), All(..), Slice,
-
-  -- * Abstract types of array computations
-  Exp,
+  Ix(..), All(..), Slice, DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Surface language
   module Data.Array.Accelerate.Language,
@@ -45,6 +45,5 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Language

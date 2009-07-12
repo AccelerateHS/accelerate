@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}  -- for instance Slice sl
 
 -- |Embedded array processing language: array representation
 --
@@ -15,40 +14,38 @@ module Data.Array.Accelerate.Array.Representation (
   -- * Array representation
   Array(..),
 
+  -- * Array shapes
+  DIM0Repr, DIM1Repr, DIM2Repr, 
+
   -- * Array indexing and slicing
-  DIM0Repr, DIM1Repr, DIM2Repr, All(..), IxRepr(..), ShapeToElemRepr,
-  SliceRepr(..)
+  All(..), IxRepr(..), ShapeToElemRepr, SliceRepr(..)
 
 ) where
 
---standard library
-import Foreign.ForeignPtr (
-  ForeignPtr)
+-- GHC internals
+import GHC.Prim
 
 -- friends
+import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Type
 
 
 -- |Arrays
 -- -------
 
--- |Multi-dimensional arrays for array processing
+-- |Representation type for multi-dimensional arrays for array processing
 --
 -- * If device and host memory are separate, arrays will be transferred to the
 --   device when necessary (if possible asynchronously and in parallel with
 --   other tasks) and cached on the device if sufficient memory is available.
 --
 data Array dim e where
--- New record syntax for 6.12
---  Array :: { arrayShape    :: dim             -- ^extend of dimensions = shape
-  Array    { arrayShape    :: dim             -- ^extend of dimensions = shape
+  Array :: (IxRepr dim, ArrayElem e) =>
+           { arrayShape    :: dim             -- ^extend of dimensions = shape
            , arrayElemType :: TupleType e     -- ^constrains valid element types
            , arrayId       :: String          -- ^for pretty printing
-           , arraySize     :: Int             -- ^data size in bytes
-           , arrayPtr      :: ForeignPtr e    -- ^data
---           }               -> Array dim e
-           }               :: Array dim e
-
+           , arrayPtr      :: ArrayData e     -- ^data
+           }               -> Array dim e
 
 -- |Shorthand for common shape representations
 --

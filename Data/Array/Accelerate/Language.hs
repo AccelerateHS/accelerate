@@ -71,31 +71,33 @@ infixl 9 !
 -- ----------------------
 
 use :: (Ix dim, Elem e) => Array dim e -> AP (Arr dim e)
-use array = wrapComp tupleType (Use array)
+use array = wrapComp (Use array)
 
-unit :: IsTuple e => Exp e -> AP (Scalar e)
-unit e = wrapComp tupleType (Unit (convertExp e))
+unit :: Elem e => Exp e -> AP (Scalar e)
+unit e = wrapComp (Unit (convertExp e))
 
-reshape :: IsTuple e => Exp dim -> Arr dim' e -> AP (Arr dim e)
-reshape e arr = wrapComp tupleType (Reshape (convertExp e) arr) 
+reshape :: (Ix dim, Ix dim', Elem e) => Exp dim -> Arr dim' e -> AP (Arr dim e)
+reshape e arr = wrapComp (Reshape (convertExp e) (convertArr arr))
 
-replicate :: IsTuple e => Index dim' dim -> Arr dim e -> AP (Arr dim' e)
-replicate ix arr = wrapComp tupleType (Replicate ix arr)
+replicate :: Elem e => Index dim' dim -> Arr dim e -> AP (Arr dim' e)
+replicate ix arr = wrapComp (Replicate ix arr)
   -- FIXME: need nice syntax for generalised indicies
 
-(!) :: IsTuple e => Arr dim e -> Index dim dim' -> AP (Arr dim' e)
-arr ! ix = wrapComp tupleType (Index arr ix)
+(!) :: Elem e => Arr dim e -> Index dim dim' -> AP (Arr dim' e)
+arr ! ix = wrapComp (Index arr ix)
 
-zip :: IsTuple (a, b) => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
-zip arr1 arr2 = wrapComp tupleType (Zip arr1 arr2)
+zip :: (Ix dim, Elem a, Elem b) => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
+zip arr1 arr2 = wrapComp (Zip arr1 arr2)
 
-map :: (IsTuple a, IsTuple b) 
+map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) -> Arr dim a -> AP (Arr dim b)
-map f arr = wrapComp tupleType (Map (convertFun1 f) arr)
+map f arr = wrapComp $ Map (convertFun1 f) arr
 
 zipWith :: (IsTuple (a, b), IsTuple c)
         => (Exp a -> Exp b -> Exp c) -> Arr dim a -> Arr dim b -> AP (Arr dim c)
 zipWith f arr1 arr2 
+  = zip arr1 arr2 >>= map (\xy -> f (Fst xy) (Snd xy))
+{-
   = do
       let f' = \xy -> f (Fst xy) (Snd xy)
       arr' <- genArr tupleType
@@ -103,16 +105,15 @@ zipWith f arr1 arr2
       arr <- genArr tupleType
       pushComp $ arr `CompBinding` (Map (convertFun1 f') arr')
       return arr
+ -}
 
-filter :: IsTuple a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
-filter p arr = wrapComp tupleType (Filter (convertFun1 p) arr)
-  -- FIXME: we want the argument of the mapped function to be a tuple, too
+filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
+filter p arr = wrapComp $ Filter (convertFun1 p) arr
 
-scan :: IsTuple a 
+scan :: Elem a 
      => (Exp a -> Exp a -> Exp a) -> Exp a -> Arr DIM1 a 
      -> AP (Scalar a, Arr DIM1 a)
-scan f e arr = wrapComp2 tupleType tupleType $
-                 (Scan (convertFun2 f) (convertExp e) arr)
+scan f e arr = wrapComp2 $ Scan (convertFun2 f) (convertExp e) arr
 
 fold :: IsTuple a 
      => (Exp a -> Exp a -> Exp a) -> Exp a -> Arr DIM1 a -> AP (Scalar a)
@@ -121,16 +122,16 @@ fold f e arr
       (r, _) <- scan f e arr
       return r
 
-permute :: (IsTuple a, IsTuple dim, IsTuple dim')
+permute :: (Ix dim, Ix dim', Elem a)
         => (Exp a -> Exp a -> Exp a) -> Arr dim' a -> (Exp dim -> Exp dim') 
         -> Arr dim a -> AP (Arr dim' a)
 permute f dftArr perm arr 
-  = wrapComp tupleType $ Permute (convertFun2 f) dftArr (convertFun1 perm) arr
+  = wrapComp $ Permute (convertFun2 f) dftArr (convertFun1 perm) arr
 
-backpermute :: (IsTuple a , IsTuple dim, IsTuple dim')
+backpermute :: (Ix dim, Ix dim', Elem a)
             => Exp dim' -> (Exp dim' -> Exp dim) -> Arr dim a -> AP (Arr dim' a)
 backpermute newDim perm arr 
-  = wrapComp tupleType $ Backpermute (convertExp newDim) (convertFun1 perm) arr
+  = wrapComp $ Backpermute (convertExp newDim) (convertFun1 perm) arr
 
 
 -- |Instances of all relevant H98 classes
