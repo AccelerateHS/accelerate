@@ -19,10 +19,14 @@ module Data.Array.Accelerate.Smart (
   AP, runAP, wrapComp, wrapComp2,
 
   -- * HOAS AST
-  Arr(..), convertArr, Exp(..), convertExp, convertFun1, convertFun2,
+  Arr(..), Scalar, Vector, Exp(..), 
+
+  -- * Conversions
+  {-convertSlice,-} convertArray, convertArr, convertExp, convertShape,
+  convertFun1, convertFun2,
 
   -- * Constructors for literals
-  exp, {-mkNumVal,-}
+  exp,
 
   -- * Constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -47,7 +51,7 @@ import Unsafe.Coerce
 import Data.Array.Accelerate.Array.Representation hiding (Array(..))
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..), Arr(..))
+import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..), Arr(..), Scalar)
 import Data.Array.Accelerate.Pretty
 import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
@@ -107,6 +111,21 @@ convertScalarType (NumScalarType ty)    = NumScalarType $ convertNumType ty
 convertScalarType (NonNumScalarType ty) 
   = NonNumScalarType $ convertNonNumType ty
 
+{-
+-- |Conversion of slice indices
+--
+convertSlice :: forall sl. SliceIx sl
+             => sl -> SliceIndex (ToShapeRepr (Slice    sl))
+                                 (ToShapeRepr (CoSlice  sl))
+                                 (ToShapeRepr (SliceDim sl))
+convertSlice = cvt . toShapeRepr
+  where
+    cvt :: ToShapeRepr sl -> SliceIndex (ToShapeRepr (Slice    sl))
+                                        (ToShapeRepr (CoSlice  sl))
+                                        (ToShapeRepr (SliceDim sl))
+    cvt () = SliceNil
+-}
+
 -- |HOAS AST
 -- ---------
 
@@ -114,6 +133,14 @@ convertScalarType (NonNumScalarType ty)
 --
 data Arr dim e where
   Arr :: (Ix dim, Elem e) => String -> Arr dim e
+
+-- |Scalars of the surface language
+--
+type Scalar a = Arr DIM0 a
+
+-- |Scalars of the surface language
+--
+type Vector a = Arr DIM1 a
 
 -- HOAS expressions mirror the constructors of `AST.OpenExp', but with the
 -- `Tag' constructor instead of variables in the form of de Bruijn indices.
@@ -163,9 +190,9 @@ prjIdx _ EmptyLayout
 
 -- |Convert an open expression with the given environment layout
 --
-convertExp :: forall t env. 
-              Layout env env -> Exp t -> AST.OpenExp env (ElemRepr t)
-convertExp lyt = cvt
+convertOpenExp :: forall t env. 
+                  Layout env env -> Exp t -> AST.OpenExp env (ElemRepr t)
+convertOpenExp lyt = cvt
   where
     cvt :: forall t'. Exp t' -> AST.OpenExp env (ElemRepr t')
     cvt (Tag i)           = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
@@ -180,6 +207,16 @@ convertExp lyt = cvt
       = AST.IndexScalar (convertArr a) (elemToShapeRepr (undefined::dim) (cvt e))
     cvt (Shape (a::Arr t' s))         
       = shapeToElemRepr (undefined::t') (AST.Shape (convertArr a))
+
+-- |Convert a closed expression
+--
+convertExp :: Exp t -> AST.Exp (ElemRepr t)
+convertExp = convertOpenExp EmptyLayout
+
+-- |Convert a shape expression
+--
+convertShape :: dim -> Exp dim -> AST.Exp (ShapeToElemRepr (ToShapeRepr dim))
+convertShape dim = elemToShapeRepr dim . convertOpenExp EmptyLayout
 
 -- We know that 'ElemRepr dim ~ (ShapeToElemRepr (ToShapeRepr dim))', but the
 -- type checker doesn't.  In the absence of "type lemmata", there is no easy
@@ -242,7 +279,12 @@ convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
 convertArray :: forall dim e. 
                 Array dim e -> AST.Array (ToShapeRepr dim) (ElemRepr e)
 convertArray (Array {arrayShape = shape, arrayId = id, arrayPtr = ptr})
-  = AST.Array {arrayShape = toShapeRepr shape, arrayId = id, arrayPtr = ptr}
+  = AST.Array {
+      AST.arrayShape = toShapeRepr shape, 
+      AST.arrayElemType = elemType (undefined::e), 
+      AST.arrayId = id, 
+      AST.arrayPtr = ptr
+    }
 
 -- |Convert surface AP array representation to the internal one
 --
@@ -259,7 +301,7 @@ convertFun1 f = Lam (Body openF)
     lyt   = EmptyLayout 
             `PushLayout` 
             (ZeroIdx :: Idx ((), ElemRepr a) (ElemRepr a))
-    openF = convertExp lyt (f a)
+    openF = convertOpenExp lyt (f a)
 
 -- |Convert a binary functions
 --
@@ -275,10 +317,10 @@ convertFun2 f = Lam (Lam (Body openF))
             (SuccIdx ZeroIdx :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr a))
             `PushLayout`
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
-    openF = convertExp lyt (f a b)
+    openF = convertOpenExp lyt (f a b)
 
 instance Show (Exp t) where
-  show e = show (convertExp EmptyLayout e :: AST.OpenExp () (ElemRepr t))
+  show e = show (convertExp e :: AST.Exp (ElemRepr t))
 
 
 -- |Monad of collective operations

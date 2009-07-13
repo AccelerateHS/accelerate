@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Array indexing and slicing
-  ShapeElem, Shape(..), Ix(..), Slice(..)
+  ShapeElem, Shape(..), Ix(..), SliceIx(..)
 
 ) where
 
@@ -250,7 +250,7 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
 --
 data Array dim e where
   Array :: (Ix dim, Elem e, ArrayElem (ElemRepr e)) =>
-           { arrayShape    :: dim             -- ^extend of dimensions = shape
+           { arrayShape    :: dim             -- ^extent of dimensions = shape
            , arrayId       :: String          -- ^for pretty printing
            , arrayPtr      :: ArrayData (ElemRepr e)
                                               -- ^data, same layout as in
@@ -327,7 +327,7 @@ type instance FromShapeRepr ((((((), a), b), c), d), e) = (a, b, c, d, e)
 
 -- |Indices as n-tuples
 --
-class (Shape ix, IxRepr (ToShapeRepr ix)) => Ix ix where
+class (Elem ix, Shape ix, IxRepr (ToShapeRepr ix)) => Ix ix where
   dim   :: ix -> Int           -- ^number of dimensions (>= 0)
   size  :: ix -> Int           -- ^for a *shape* yield the total number of 
                                -- elements in that array
@@ -349,26 +349,19 @@ instance Ix (Int, Int, Int, Int, Int)
 
 -- Slices -aka generalised indices- as n-tuples
 --
-class Slice sl where
-  type CoSlice sl :: *
+class (Shape sl, SliceIxRepr (ToShapeRepr sl), Ix (SliceDim sl)) 
+  => SliceIx sl where
+  type Slice    sl :: *
+  type CoSlice  sl :: *
+  type SliceDim sl :: *
+  sliceIndex :: sl -> SliceIndex (ToShapeRepr sl)
+                                 (SliceRepr (ToShapeRepr    sl))
+                                 (CoSliceRepr (ToShapeRepr  sl))
+                                 (SliceDimRepr (ToShapeRepr sl))
 
-instance (Shape sl, SliceRepr (ToShapeRepr sl)) => Slice sl where
-  type CoSlice sl = FromShapeRepr (CoSliceRepr (ToShapeRepr sl))
-
-{-
-class (Shape sl, SliceRepr (ShapeRepr sl)) => Slice sl where
-  type CoSlice sl :: *
-
-instance Slice () where
-  type CoSlice () = ()
-
-instance Slice Int where
-  type CoSlice Int = ()
-
-instance Slice All where
-  type CoSlice All = ()
-
-instance (ShapeElem a, ShapeElem b) => Slice (a, b) where
-  type CoSlice (a, b) = 
- -}
-
+instance (Shape sl, SliceIxRepr (ToShapeRepr sl), Ix (SliceDim sl)) 
+  => SliceIx sl where
+  type Slice    sl = FromShapeRepr (SliceRepr    (ToShapeRepr sl))
+  type CoSlice  sl = FromShapeRepr (CoSliceRepr  (ToShapeRepr sl))
+  type SliceDim sl = FromShapeRepr (SliceDimRepr (ToShapeRepr sl))
+  sliceIndex = sliceIndexRepr . toShapeRepr

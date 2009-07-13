@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Array.Representation (
   DIM0Repr, DIM1Repr, DIM2Repr, 
 
   -- * Array indexing and slicing
-  All(..), IxRepr(..), ShapeToElemRepr, SliceRepr(..)
+  All(..), IxRepr(..), ShapeToElemRepr, SliceIxRepr(..), SliceIndex(..)
 
 ) where
 
@@ -26,8 +26,8 @@ module Data.Array.Accelerate.Array.Representation (
 import GHC.Prim
 
 -- friends
-import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Data
 
 
 -- |Arrays
@@ -41,7 +41,7 @@ import Data.Array.Accelerate.Type
 --
 data Array dim e where
   Array :: (IxRepr dim, ArrayElem e) =>
-           { arrayShape    :: dim             -- ^extend of dimensions = shape
+           { arrayShape    :: dim             -- ^extent of dimensions = shape
            , arrayElemType :: TupleType e     -- ^constrains valid element types
            , arrayId       :: String          -- ^for pretty printing
            , arrayPtr      :: ArrayData e     -- ^data
@@ -98,24 +98,40 @@ data All = All
 
 -- |Class of slice representations (which are nested pairs)
 --
-class SliceRepr sl where
-  type CoSliceRepr sl
+class SliceIxRepr sl where
+  type SliceRepr    sl      -- the projected slice
+  type CoSliceRepr  sl      -- the complement of the slice
+  type SliceDimRepr sl      -- the combined dimension
+    -- argument *value* not used; it's just a phantom value to fix the type
+  sliceIndexRepr :: sl -> SliceIndex sl 
+                                     (SliceRepr    sl) 
+                                     (CoSliceRepr  sl) 
+                                     (SliceDimRepr sl)
 
-instance SliceRepr () where
-  type CoSliceRepr () = ()
+instance SliceIxRepr () where
+  type SliceRepr    () = ()
+  type CoSliceRepr  () = ()
+  type SliceDimRepr () = ()
+  sliceIndexRepr _ = SliceNil
 
-instance SliceRepr sl => SliceRepr (sl, All) where
-  type CoSliceRepr (sl, All) = (CoSliceRepr sl, Int)
+instance SliceIxRepr sl => SliceIxRepr (sl, All) where
+  type SliceRepr    (sl, All) = (SliceRepr sl, Int)
+  type CoSliceRepr  (sl, All) = CoSliceRepr sl
+  type SliceDimRepr (sl, All) = (SliceDimRepr sl, Int)
+  sliceIndexRepr _ = SliceAll (sliceIndexRepr (undefined::sl))
 
-instance SliceRepr sl => SliceRepr (sl, Int) where
-  type CoSliceRepr (sl, Int) = CoSliceRepr sl
+instance SliceIxRepr sl => SliceIxRepr (sl, Int) where
+  type SliceRepr    (sl, Int) = SliceRepr sl
+  type CoSliceRepr  (sl, Int) = (CoSliceRepr sl, Int)
+  type SliceDimRepr (sl, Int) = (SliceDimRepr sl, Int)
+  sliceIndexRepr _ = SliceFixed (sliceIndexRepr (undefined::sl))
 
-{-
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.
 --
-data Index initialDim projectedDim where
-  IndexNil   :: Index () ()
-  IndexAll   :: Index init proj -> Index (init, Int) (proj, Int)
-  IndexFixed :: Exp Int -> Index init proj -> Index (init, Int)  proj
--}
+data SliceIndex ix slice coSlice sliceDim where
+  SliceNil   :: SliceIndex () () () ()
+  SliceAll   :: 
+   SliceIndex ix slice co dim -> SliceIndex (ix, All) (slice, Int) co (dim, Int)
+  SliceFixed :: 
+   SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)

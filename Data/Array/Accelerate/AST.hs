@@ -54,8 +54,7 @@
 module Data.Array.Accelerate.AST (
 
   Comps(..), CompBinding(..), CompResult(..), Comp(..), Arr(..), Scalar, 
-  Index(..), Idx(..), Fun, OpenFun(..), Exp, OpenExp(..), PrimConst(..), 
-  PrimFun(..)
+  Idx(..), Fun, OpenFun(..), Exp, OpenExp(..), PrimConst(..), PrimFun(..)
 
 ) where
 
@@ -113,21 +112,23 @@ data Comp a where
 
   -- Change the shape of an array without altering its contents
   -- * precondition: size dim == size dim'
-  Reshape     :: Exp dim                          -- ^new shape
+  Reshape     :: Exp (ShapeToElemRepr dim)        -- ^new shape
               -> Arr dim' a                       -- ^array to be reshaped
               -> Comp (Arr dim a)
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: Index dim' dim                   -- ^specifies new dimensions
-              -> Arr dim a                        -- ^data to be replicated
-              -> Comp (Arr dim' a)
+  Replicate   :: SliceIndex slix sl co dim        -- ^slice type specification
+              -> Exp slix                         -- ^slice value specification
+              -> Arr sl a                         -- ^data to be replicated
+              -> Comp (Arr dim a)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: Arr dim a                        -- ^array to be indexed
-              -> Index dim dim'                   -- ^dimensions to indexed
-              -> Comp (Arr dim' a)
+  Index       :: SliceIndex slix sl co dim        -- ^slice type specification
+              -> Arr dim a                        -- ^array to be indexed
+              -> Exp slix                         -- ^slice value specification
+              -> Comp (Arr sl a)
 
   -- Pairwise combination of elements of two arrays with the same shape
   Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (a, b))
@@ -185,14 +186,6 @@ data Arr dim e where
 -- represented as 0-dimensional singleton arrays
 --
 type Scalar a = Arr DIM0Repr a
-
--- |Generalised array index, which may index only in a subset of the dimensions
--- of a shape.
---
-data Index initialDim projectedDim where
-  IndexNil   :: Index () ()
-  IndexAll   :: Index init proj -> Index (init, Int) (proj, Int)
-  IndexFixed :: Exp Int -> Index init proj -> Index (init, Int)  proj
 
 -- De Bruijn variable index projecting a specific type from a type
 -- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 

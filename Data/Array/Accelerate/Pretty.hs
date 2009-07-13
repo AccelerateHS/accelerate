@@ -81,10 +81,10 @@ prettyComp (Use arr)          = text "use" <+> prettyArray arr
 prettyComp (Unit e)           = text "unit" <+> prettyExp parens e
 prettyComp (Reshape sh arr)
   = text "reshape" <+> prettyExp parens sh <+> prettyArr arr
-prettyComp (Replicate ix arr) 
-  = text "replicate" <+> prettyIndex ix <+> prettyArr arr
-prettyComp (Index arr ix) 
-  = prettyArr arr <> char '!' <> prettyIndex ix
+prettyComp (Replicate _ty ix arr) 
+  = text "replicate" <+> prettyExp id ix <+> prettyArr arr
+prettyComp (Index _ty arr ix) 
+  = prettyArr arr <> char '!' <> prettyExp id ix
 prettyComp (Zip arr1 arr2)    = text "zip" <+> prettyArr arr1 <+> prettyArr arr2
 prettyComp (Map f arr)      
   = text "map" <+> parens (prettyFun f) <+> prettyArr arr
@@ -195,15 +195,17 @@ prettyAnyType ty = text $ show ty
 prettyArray :: Array dim a -> Doc
 prettyArray arr = text $ arrayId arr
 
+{-
 -- |Pretty print a generalised array index
 --
-prettyIndex :: Index initial projected -> Doc
+prettyIndex :: SliceIndex slice co dim -> Doc
 prettyIndex = parens . hsep . punctuate (char ',') . prettyIxs
   where
-    prettyIxs :: Index initial projected -> [Doc]
-    prettyIxs IndexNil           = [empty]
-    prettyIxs (IndexAll ixs)     = char '.' : prettyIxs ixs
-    prettyIxs (IndexFixed e ixs) = prettyExp noParens e : prettyIxs ixs
+    prettyIxs :: SliceIndex slice co dim -> [Doc]
+    prettyIxs SliceNil           = [empty]
+    prettyIxs (SliceAll ixs)     = char '.' : prettyIxs ixs
+    prettyIxs (SliceFixed e ixs) = prettyExp noParens e : prettyIxs ixs
+ -}
 
 -- |Pretty print the identification of an array representation in collective code
 --

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
 
 -- |Embedded array processing language: user-visible language
 --
@@ -18,7 +18,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array processing computation monad
-  AP, APstate,          -- re-exporting from 'Smart'
+  AP,                   -- re-exporting from 'Smart'
 
   -- * Expressions
   Exp, exp,             -- re-exporting from 'Smart'
@@ -50,13 +50,13 @@ import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not,
 import qualified Prelude
 
 -- standard libraries
+import Control.Monad
 import Data.Bits
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.AST                  hiding (Exp, OpenExp(..), Arr)
+import Data.Array.Accelerate.AST          hiding (Exp, OpenExp(..), Arr, Scalar)
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty
 
@@ -71,29 +71,38 @@ infixl 9 !
 -- ----------------------
 
 use :: (Ix dim, Elem e) => Array dim e -> AP (Arr dim e)
-use array = wrapComp (Use array)
+use array = wrapComp $ Use (convertArray array)
 
 unit :: Elem e => Exp e -> AP (Scalar e)
-unit e = wrapComp (Unit (convertExp e))
+unit e = wrapComp $ Unit (convertExp e)
 
-reshape :: (Ix dim, Ix dim', Elem e) => Exp dim -> Arr dim' e -> AP (Arr dim e)
-reshape e arr = wrapComp (Reshape (convertExp e) (convertArr arr))
+reshape :: forall dim dim' e. (Ix dim, Ix dim', Elem e) 
+        => Exp dim -> Arr dim' e -> AP (Arr dim e)
+reshape e arr = wrapComp $ Reshape (convertShape (undefined::dim) e)
+                                   (convertArr arr)
 
-replicate :: Elem e => Index dim' dim -> Arr dim e -> AP (Arr dim' e)
-replicate ix arr = wrapComp (Replicate ix arr)
-  -- FIXME: need nice syntax for generalised indicies
+{-
+replicate :: forall slix e. (SliceIx slix, Elem e) 
+          => Exp slix -> Arr (Slice slix) e -> AP (Arr (SliceDim slix) e)
+replicate ix arr = wrapComp $ Replicate (sliceIndex (undefined::slix))
+                                        (convertShape (undefined::slix) ix) 
+                                        (convertArr arr)
+-}
 
-(!) :: Elem e => Arr dim e -> Index dim dim' -> AP (Arr dim' e)
-arr ! ix = wrapComp (Index arr ix)
+--(!) :: forall slix e. (SliceIx slix, Elem e) 
+--    => Arr (SliceDim slix) e -> Exp slix -> AP (Arr (Slice slix) e)
+arr ! ix = wrapComp $ Index (sliceIndex (undefined::slix)) 
+                            undefined --(convertArr arr)
+                            undefined --(convertShape (undefined::slix) ix)
 
 zip :: (Ix dim, Elem a, Elem b) => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
-zip arr1 arr2 = wrapComp (Zip arr1 arr2)
+zip arr1 arr2 = wrapComp $ Zip (convertArr arr1) (convertArr arr2)
 
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) -> Arr dim a -> AP (Arr dim b)
-map f arr = wrapComp $ Map (convertFun1 f) arr
+map f arr = wrapComp $ Map (convertFun1 f) (convertArr arr)
 
-zipWith :: (IsTuple (a, b), IsTuple c)
+zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         => (Exp a -> Exp b -> Exp c) -> Arr dim a -> Arr dim b -> AP (Arr dim c)
 zipWith f arr1 arr2 
   = zip arr1 arr2 >>= map (\xy -> f (Fst xy) (Snd xy))
@@ -108,51 +117,50 @@ zipWith f arr1 arr2
  -}
 
 filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
-filter p arr = wrapComp $ Filter (convertFun1 p) arr
+filter p arr = wrapComp $ Filter (convertFun1 p) (convertArr arr)
 
 scan :: Elem a 
-     => (Exp a -> Exp a -> Exp a) -> Exp a -> Arr DIM1 a 
-     -> AP (Scalar a, Arr DIM1 a)
-scan f e arr = wrapComp2 $ Scan (convertFun2 f) (convertExp e) arr
+     => (Exp a -> Exp a -> Exp a) -> Exp a -> Vector a -> AP (Scalar a, Vector a)
+scan f e arr = wrapComp2 $ Scan (convertFun2 f) (convertExp e) (convertArr arr)
 
-fold :: IsTuple a 
-     => (Exp a -> Exp a -> Exp a) -> Exp a -> Arr DIM1 a -> AP (Scalar a)
+fold :: Elem a => (Exp a -> Exp a -> Exp a) -> Exp a -> Vector a -> AP (Scalar a)
 fold f e arr
-  = do
-      (r, _) <- scan f e arr
-      return r
+  = scan f e arr >>= return . fst
 
 permute :: (Ix dim, Ix dim', Elem a)
         => (Exp a -> Exp a -> Exp a) -> Arr dim' a -> (Exp dim -> Exp dim') 
         -> Arr dim a -> AP (Arr dim' a)
 permute f dftArr perm arr 
-  = wrapComp $ Permute (convertFun2 f) dftArr (convertFun1 perm) arr
+  = wrapComp $ Permute (convertFun2 f) (convertArr dftArr) (convertFun1 perm)
+                       (convertArr arr)
 
+{- FIXME:
 backpermute :: (Ix dim, Ix dim', Elem a)
             => Exp dim' -> (Exp dim' -> Exp dim) -> Arr dim a -> AP (Arr dim' a)
 backpermute newDim perm arr 
-  = wrapComp $ Backpermute (convertExp newDim) (convertFun1 perm) arr
-
+  = wrapComp $ 
+      Backpermute (convertExp newDim) (convertFun1 perm) (convertArr arr)
+-}
 
 -- |Instances of all relevant H98 classes
 -- --------------------------------------
 
-instance IsBounded t => Bounded (Exp t) where
+instance (Elem t, IsBounded t) => Bounded (Exp t) where
   minBound = mkMinBound
   maxBound = mkMaxBound
 
-instance IsScalar t => Enum (Exp t)
+instance (Elem t, IsScalar t) => Enum (Exp t)
 --  succ = mkSucc
 --  pred = mkPred
   -- FIXME: ops
 
-instance IsScalar t => Prelude.Eq (Exp t)
+instance (Elem t, IsScalar t) => Prelude.Eq (Exp t)
   -- FIXME: instance makes no sense with standard signatures
 
-instance IsScalar t => Prelude.Ord (Exp t)
+instance (Elem t, IsScalar t) => Prelude.Ord (Exp t)
   -- FIXME: instance makes no sense with standard signatures
 
-instance (IsNum t, IsIntegral t) => Bits (Exp t) where
+instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd
   (.|.)      = mkBOr
   xor        = mkBXor
@@ -168,11 +176,11 @@ instance (Elem t, IsNum t) => Num (Exp t) where
   signum      = mkSig
   fromInteger = exp . fromInteger
 
-instance IsNum t => Real (Exp t)
+instance (Elem t, IsNum t) => Real (Exp t)
   -- FIXME: Why did we include this class?  We won't need `toRational' until
   --   we support rational numbers in AP computations.
 
-instance IsIntegral t => Integral (Exp t) where
+instance (Elem t, IsIntegral t) => Integral (Exp t) where
   quot = mkQuot
   rem  = mkRem
   div  = mkIDiv
@@ -181,7 +189,7 @@ instance IsIntegral t => Integral (Exp t) where
 --  divMod  =
 --  toInteger =  -- makes no sense
 
-instance IsFloating t => Floating (Exp t) where
+instance (Elem t, IsFloating t) => Floating (Exp t) where
   pi  = mkPi
   -- FIXME: add other ops
 
@@ -191,41 +199,41 @@ instance (Elem t, IsFloating t) => Fractional (Exp t) where
   fromRational = exp . fromRational
   -- FIXME: add other ops
 
-instance IsFloating t => RealFrac (Exp t)
+instance (Elem t, IsFloating t) => RealFrac (Exp t)
   -- FIXME: add ops
 
-instance IsFloating t => RealFloat (Exp t)
+instance (Elem t, IsFloating t) => RealFloat (Exp t)
   -- FIXME: add ops
 
 
 -- |Methods from H98 classes, where we need other signatures
 -- ---------------------------------------------------------
 
-(==*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(==*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (==*) = mkEq
 
-(/=*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(/=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (/=*) = mkNEq
 
 -- compare :: a -> a -> Ordering  -- we have no enumerations at the moment
 -- compare = ...
 
-(<*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(<*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<*)  = mkLt
 
-(>=*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(>=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>=*) = mkGtEq
 
-(>*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(>*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>*)  = mkGt
 
-(<=*) :: IsScalar t => Exp t -> Exp t -> Exp Bool
+(<=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<=*) = mkLtEq
 
-max :: IsScalar t => Exp t -> Exp t -> Exp t
+max :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 max = mkMax
 
-min :: IsScalar t => Exp t -> Exp t -> Exp t
+min :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
 
