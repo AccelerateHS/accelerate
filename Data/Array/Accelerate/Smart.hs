@@ -22,8 +22,8 @@ module Data.Array.Accelerate.Smart (
   Arr(..), Scalar, Vector, Exp(..), 
 
   -- * Conversions
-  {-convertSlice,-} convertArray, convertArr, convertExp, convertShape,
-  convertFun1, convertFun2,
+  {-convertSlice,-} convertArray, convertArr, convertExp, convertFun1,
+  convertFun2, 
 
   -- * Constructors for literals
   exp,
@@ -45,7 +45,6 @@ import Prelude hiding (exp)
 import Control.Monad.State
 import Data.Maybe
 import Data.Typeable
-import Unsafe.Coerce
 
 -- friends
 import Data.Array.Accelerate.Array.Representation hiding (Array(..))
@@ -62,7 +61,7 @@ import qualified Data.Array.Accelerate.Array.Representation as AST
 
 -- Conversion of type representations
 --
-
+{-
 convertIntegralType :: IntegralType a -> IntegralType (ElemRepr a)
 convertIntegralType ty@(TypeInt _)     = ty
 convertIntegralType ty@(TypeInt8 _)    = ty
@@ -110,7 +109,7 @@ convertScalarType :: ScalarType a -> ScalarType (ElemRepr a)
 convertScalarType (NumScalarType ty)    = NumScalarType $ convertNumType ty
 convertScalarType (NonNumScalarType ty) 
   = NonNumScalarType $ convertNonNumType ty
-
+-}
 {-
 -- |Conversion of slice indices
 --
@@ -201,45 +200,27 @@ convertOpenExp lyt = cvt
     cvt (Fst e)           = AST.Fst (cvt e)
     cvt (Snd e)           = AST.Snd (cvt e)
     cvt (Cond e1 e2 e3)   = AST.Cond (cvt e1) (cvt e2) (cvt e3)
-    cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
-    cvt (PrimApp p e)     = AST.PrimApp (convertPrimFun p) (cvt e)
-    cvt (IndexScalar (a::Arr dim t') e) 
-      = AST.IndexScalar (convertArr a) (elemToShapeRepr (undefined::dim) (cvt e))
-    cvt (Shape (a::Arr t' s))         
-      = shapeToElemRepr (undefined::t') (AST.Shape (convertArr a))
+--    cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
+    cvt (PrimConst c)     = AST.PrimConst c
+--    cvt (PrimApp p e)     = AST.PrimApp (convertPrimFun p) (cvt e)
+    cvt (IndexScalar a e) = AST.IndexScalar (convertArr a) (cvt e)
+    cvt (Shape a)         = AST.Shape (convertArr a)
 
 -- |Convert a closed expression
 --
 convertExp :: Exp t -> AST.Exp (ElemRepr t)
 convertExp = convertOpenExp EmptyLayout
 
--- |Convert a shape expression
---
-convertShape :: dim -> Exp dim -> AST.Exp (ShapeToElemRepr (ToShapeRepr dim))
-convertShape dim = elemToShapeRepr dim . convertOpenExp EmptyLayout
-
--- We know that 'ElemRepr dim ~ (ShapeToElemRepr (ToShapeRepr dim))', but the
--- type checker doesn't.  In the absence of "type lemmata", there is no easy
--- way to tell it about the equality, apart from using the unsafeCoerce
--- sledgehammer.
-
-elemToShapeRepr :: dim 
-                -> AST.OpenExp env (ElemRepr dim)
-                -> AST.OpenExp env (ShapeToElemRepr (ToShapeRepr dim))
-elemToShapeRepr _ = unsafeCoerce
-
-shapeToElemRepr :: dim 
-                -> AST.OpenExp env (ShapeToElemRepr (ToShapeRepr dim))
-                -> AST.OpenExp env (ElemRepr dim)
-shapeToElemRepr _ = unsafeCoerce
-
+{-
 -- |Convert a primitive constant
 --
 convertPrimConst :: PrimConst a -> PrimConst (ElemRepr a)
 convertPrimConst (PrimMinBound ty) = PrimMinBound $ convertBoundedType ty
 convertPrimConst (PrimMaxBound ty) = PrimMinBound $ convertBoundedType ty
 convertPrimConst (PrimPi ty)       = PrimPi $ convertFloatingType ty
+-}
 
+{-
 -- |Convert a primitive operation
 --
 convertPrimFun :: PrimFun (a -> b) -> PrimFun (ElemRepr a -> ElemRepr b)
@@ -273,7 +254,7 @@ convertPrimFun PrimLNot       = PrimLNot
 convertPrimFun PrimOrd        = PrimOrd
 convertPrimFun PrimChr        = PrimChr
 convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
-
+-}
 -- |Convert surface array representation to the internal one
 --
 convertArray :: forall dim e. 

@@ -17,13 +17,13 @@ module Data.Array.Accelerate.Array.Sugar (
   Array(..),
 
   -- * Class of element types and of array shapes
-  Elem(..),
+  Elem(..), ElemRepr,
 
   -- * Array shapes
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Array indexing and slicing
-  ShapeElem, Shape(..), Ix(..), SliceIx(..)
+  ShapeBase, Shape(..), Ix(..), SliceIx(..)
 
 ) where
 
@@ -36,211 +36,414 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation hiding (Array)
 
 
+-- |Representation change for array element types
+-- ----------------------------------------------
+
+-- |Type representation mapping
+--
+-- The idea is to use '()' and '(,)' as type-level nil and snoc to construct 
+-- snoc-lists of types.
+--
+type family ElemRepr a :: *
+type instance ElemRepr () = ()
+type instance ElemRepr All = ((), ())
+type instance ElemRepr Int = ((), Int)
+type instance ElemRepr Int8 = ((), Int8)
+type instance ElemRepr Int16 = ((), Int16)
+type instance ElemRepr Int32 = ((), Int32)
+type instance ElemRepr Int64 = ((), Int64)
+type instance ElemRepr Word = ((), Word)
+type instance ElemRepr Word8 = ((), Word8)
+type instance ElemRepr Word16 = ((), Word16)
+type instance ElemRepr Word32 = ((), Word32)
+type instance ElemRepr Word64 = ((), Word64)
+type instance ElemRepr CShort = ((), CShort)
+type instance ElemRepr CUShort = ((), CUShort)
+type instance ElemRepr CInt = ((), CInt)
+type instance ElemRepr CUInt = ((), CUInt)
+type instance ElemRepr CLong = ((), CLong)
+type instance ElemRepr CULong = ((), CULong)
+type instance ElemRepr CLLong = ((), CLLong)
+type instance ElemRepr CULLong = ((), CULLong)
+type instance ElemRepr Float = ((), Float)
+type instance ElemRepr Double = ((), Double)
+type instance ElemRepr CFloat = ((), CFloat)
+type instance ElemRepr CDouble = ((), CDouble)
+type instance ElemRepr Bool = ((), Bool)
+type instance ElemRepr Char = ((), Char)
+type instance ElemRepr CChar = ((), CChar)
+type instance ElemRepr CSChar = ((), CSChar)
+type instance ElemRepr CUChar = ((), CUChar)
+type instance ElemRepr (a, b) = (ElemRepr a, ElemRepr' b)
+type instance ElemRepr (a, b, c) = (ElemRepr (a, b), ElemRepr' c)
+type instance ElemRepr (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr' d)
+type instance ElemRepr (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
+
+-- To avoid overly nested pairs, we use a flattened representation at the
+-- leaves.
+--
+type family ElemRepr' a :: *
+type instance ElemRepr' () = ()
+type instance ElemRepr' All = ()
+type instance ElemRepr' Int = Int
+type instance ElemRepr' Int8 = Int8
+type instance ElemRepr' Int16 = Int16
+type instance ElemRepr' Int32 = Int32
+type instance ElemRepr' Int64 = Int64
+type instance ElemRepr' Word = Word
+type instance ElemRepr' Word8 = Word8
+type instance ElemRepr' Word16 = Word16
+type instance ElemRepr' Word32 = Word32
+type instance ElemRepr' Word64 = Word64
+type instance ElemRepr' CShort = CShort
+type instance ElemRepr' CUShort = CUShort
+type instance ElemRepr' CInt = CInt
+type instance ElemRepr' CUInt = CUInt
+type instance ElemRepr' CLong = CLong
+type instance ElemRepr' CULong = CULong
+type instance ElemRepr' CLLong = CLLong
+type instance ElemRepr' CULLong = CULLong
+type instance ElemRepr' Float = Float
+type instance ElemRepr' Double = Double
+type instance ElemRepr' CFloat = CFloat
+type instance ElemRepr' CDouble = CDouble
+type instance ElemRepr' Bool = Bool
+type instance ElemRepr' Char = Char
+type instance ElemRepr' CChar = CChar
+type instance ElemRepr' CSChar = CSChar
+type instance ElemRepr' CUChar = CUChar
+type instance ElemRepr' (a, b) = (ElemRepr a, ElemRepr' b)
+type instance ElemRepr' (a, b, c) = (ElemRepr (a, b), ElemRepr' c)
+type instance ElemRepr' (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr' d)
+type instance ElemRepr' (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
+
+
 -- |Surface types (tuples of scalars)
 -- ----------------------------------
 
-class (Typeable a, Typeable (ElemRepr a)) => Elem a where
-  type ElemRepr a :: *
-  elemType :: {-dummy-} a -> TupleType (ElemRepr a)
-  fromElem :: a -> ElemRepr a
-  toElem   :: ElemRepr a -> a
+class (Typeable a, Typeable (ElemRepr a), Typeable (ElemRepr' a)) 
+      => Elem a where
+  elemType  :: {-dummy-} a -> TupleType (ElemRepr a)
+  fromElem  :: a -> ElemRepr a
+  toElem    :: ElemRepr a -> a
+
+  elemType' :: {-dummy-} a -> TupleType (ElemRepr' a)
+  fromElem' :: a -> ElemRepr' a
+  toElem'   :: ElemRepr' a -> a
 
 instance Elem () where
-  type ElemRepr () = ()
   elemType _ = UnitTuple
   fromElem = id
   toElem   = id
 
+  elemType' _ = UnitTuple
+  fromElem' = id
+  toElem'   = id
+
+instance Elem All where
+  elemType _      = PairTuple UnitTuple UnitTuple
+  fromElem All    = ((), ())
+  toElem ((), ()) = All
+
+  elemType' _      = UnitTuple
+  fromElem' All    = ()
+  toElem' ()       = All
+
 instance Elem Int where
-  type ElemRepr Int = Int
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Int8 where
-  type ElemRepr Int8 = Int8
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Int16 where
-  type ElemRepr Int16 = Int16
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Int32 where
-  type ElemRepr Int32 = Int32
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Int64 where
-  type ElemRepr Int64 = Int64
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Word where
-  type ElemRepr Word = Word
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Word8 where
-  type ElemRepr Word8 = Word8
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Word16 where
-  type ElemRepr Word16 = Word16
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Word32 where
-  type ElemRepr Word32 = Word32
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Word64 where
-  type ElemRepr Word64 = Word64
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CShort where
-  type ElemRepr CShort = CShort
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CUShort where
-  type ElemRepr CUShort = CUShort
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CInt where
-  type ElemRepr CInt = CInt
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CUInt where
-  type ElemRepr CUInt = CUInt
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CLong where
-  type ElemRepr CLong = CLong
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CULong where
-  type ElemRepr CULong = CULong
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CLLong where
-  type ElemRepr CLLong = CLLong
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CULLong where
-  type ElemRepr CULLong = CULLong
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Float where
-  type ElemRepr Float = Float
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Double where
-  type ElemRepr Double = Double
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CFloat where
-  type ElemRepr CFloat = CFloat
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CDouble where
-  type ElemRepr CDouble = CDouble
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Bool where
-  type ElemRepr Bool = Bool
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem Char where
-  type ElemRepr Char = Char
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CChar where
-  type ElemRepr CChar = CChar
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CSChar where
-  type ElemRepr CSChar = CSChar
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance Elem CUChar where
-  type ElemRepr CUChar = CUChar
-  elemType _ = SingleTuple scalarType
-  fromElem = id
-  toElem   = id
+  elemType       = singletonScalarType
+  fromElem v     = ((), v)
+  toElem ((), v) = v
+
+  elemType' _    = SingleTuple scalarType
+  fromElem'      = id
+  toElem'        = id
 
 instance (Elem a, Elem b) => Elem (a, b) where
-  type ElemRepr (a, b) = (ElemRepr a, ElemRepr b)
   elemType (_::(a, b)) 
-    = PairTuple (elemType (undefined :: a)) (elemType (undefined :: b))
-  fromElem (a, b) = (fromElem a, fromElem b)
-  toElem   (a, b) = (toElem a, toElem b)
+    = PairTuple (elemType (undefined :: a)) (elemType' (undefined :: b))
+  fromElem (a, b)  = (fromElem a, fromElem' b)
+  toElem   (a, b)  = (toElem a, toElem' b)
+
+  elemType' (_::(a, b)) 
+    = PairTuple (elemType (undefined :: a)) (elemType' (undefined :: b))
+  fromElem' (a, b) = (fromElem a, fromElem' b)
+  toElem'   (a, b) = (toElem a, toElem' b)
 
 instance (Elem a, Elem b, Elem c) => Elem (a, b, c) where
-  type ElemRepr (a, b, c) = (ElemRepr (a, b), ElemRepr c)
   elemType (_::(a, b, c)) 
-    = PairTuple (elemType (undefined :: (a, b))) (elemType (undefined :: c))
-  fromElem (a, b, c) = (fromElem (a, b), fromElem c)
-  toElem   (ab, c) = let (a, b) = toElem ab in (a, b, toElem c)
+    = PairTuple (elemType (undefined :: (a, b))) (elemType' (undefined :: c))
+  fromElem (a, b, c) = (fromElem (a, b), fromElem' c)
+  toElem   (ab, c) = let (a, b) = toElem ab in (a, b, toElem' c)
+  
+  elemType' (_::(a, b, c)) 
+    = PairTuple (elemType (undefined :: (a, b))) (elemType' (undefined :: c))
+  fromElem' (a, b, c) = (fromElem (a, b), fromElem' c)
+  toElem'   (ab, c) = let (a, b) = toElem ab in (a, b, toElem' c)
   
 instance (Elem a, Elem b, Elem c, Elem d) => Elem (a, b, c, d) where
-  type ElemRepr (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr d)
   elemType (_::(a, b, c, d)) 
-    = PairTuple (elemType (undefined :: (a, b, c))) (elemType (undefined :: d))
-  fromElem (a, b, c, d) = (fromElem (a, b, c), fromElem d)
-  toElem   (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem d)
+    = PairTuple (elemType (undefined :: (a, b, c))) (elemType' (undefined :: d))
+  fromElem (a, b, c, d) = (fromElem (a, b, c), fromElem' d)
+  toElem   (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem' d)
+
+  elemType' (_::(a, b, c, d)) 
+    = PairTuple (elemType (undefined :: (a, b, c))) (elemType' (undefined :: d))
+  fromElem' (a, b, c, d) = (fromElem (a, b, c), fromElem' d)
+  toElem'   (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem' d)
 
 instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
-  type ElemRepr (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr e)
   elemType (_::(a, b, c, d, e)) 
     = PairTuple (elemType (undefined :: (a, b, c, d))) 
-                (elemType (undefined :: e))
-  fromElem (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem e)
-  toElem   (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem e)
+                (elemType' (undefined :: e))
+  fromElem (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
+  toElem   (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
+
+  elemType' (_::(a, b, c, d, e)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d))) 
+                (elemType' (undefined :: e))
+  fromElem' (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
+  toElem'   (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
+
+-- |Convenience functions
+-- -
+
+singletonScalarType :: IsScalar a => a -> TupleType ((), a)
+singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
+
 
 
 -- |Surface arrays
@@ -270,64 +473,41 @@ type DIM5 = (Int, Int, Int, Int, Int)
 
 -- |Shape elements
 --
-class Shape she => ShapeElem she
-instance ShapeElem Int
-instance ShapeElem All
+class Elem shb => ShapeBase shb
+instance ShapeBase Int
+instance ShapeBase All
 
-class Shape sh where
-  type ToShapeRepr sh :: *
-  toShapeRepr   :: sh -> ToShapeRepr sh
-  fromShapeRepr :: ToShapeRepr sh -> sh
+class Elem sh => Shape sh
 
-instance Shape () where
-  type ToShapeRepr () = ()
-  toShapeRepr   = id
-  fromShapeRepr = id
+instance Shape ()
+instance Shape Int
+instance Shape All
+instance (ShapeBase a, ShapeBase b) => Shape (a, b)
+instance (ShapeBase a, ShapeBase b, ShapeBase c) => Shape (a, b, c)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d) 
+  => Shape (a, b, c, d)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e) 
+  => Shape (a, b, c, d, e)
 
-instance Shape Int where
-  type ToShapeRepr Int = ((), Int)
-  toShapeRepr i = ((), i)
-  fromShapeRepr ((), i) = i
-
-instance Shape All where
-  type ToShapeRepr All = ((), All)
-  toShapeRepr a = ((), a)
-  fromShapeRepr ((), a) = a
-
-instance (ShapeElem a, ShapeElem b) => Shape (a, b) where
-  type ToShapeRepr (a, b) = (ToShapeRepr a, b)
-  toShapeRepr (a, b) = (toShapeRepr a, b)
-  fromShapeRepr (repr, b) = let a = fromShapeRepr repr in (a, b)
-
-instance (ShapeElem a, ShapeElem b, ShapeElem c) => Shape (a, b, c) where
-  type ToShapeRepr (a, b, c) = (ToShapeRepr (a, b), c)
-  toShapeRepr (a, b, c) = (toShapeRepr (a, b), c)
-  fromShapeRepr (repr, c) = let (a, b) = fromShapeRepr repr in (a, b, c)
-
-instance (ShapeElem a, ShapeElem b, ShapeElem c, ShapeElem d) 
-  => Shape (a, b, c, d) where
-  type ToShapeRepr (a, b, c, d) = (ToShapeRepr (a, b, c), d)
-  toShapeRepr (a, b, c, d) = (toShapeRepr (a, b, c), d)
-  fromShapeRepr (repr, d) = let (a, b, c) = fromShapeRepr repr in (a, b, c, d)
-
-instance (ShapeElem a, ShapeElem b, ShapeElem c, ShapeElem d, ShapeElem e) 
-  => Shape (a, b, c, d, e) where
-  type ToShapeRepr (a, b, c, d, e) = (ToShapeRepr (a, b, c, d), e)
-  toShapeRepr (a, b, c, d, e) = (toShapeRepr (a, b, c, d), e)
-  fromShapeRepr (repr, e) 
-    = let (a, b, c, d) = fromShapeRepr repr in (a, b, c, d, e)
+type family FromShapeBase shb :: *
+type instance FromShapeBase Int = Int
+type instance FromShapeBase ()  = All
 
 type family FromShapeRepr shr :: *
-type instance FromShapeRepr () = ()
-type instance FromShapeRepr ((), a) = a
-type instance FromShapeRepr (((), a), b) = (a, b)
-type instance FromShapeRepr ((((), a), b), c) = (a, b, c)
-type instance FromShapeRepr (((((), a), b), c), d) = (a, b, c, d)
-type instance FromShapeRepr ((((((), a), b), c), d), e) = (a, b, c, d, e)
+type instance FromShapeRepr ()           = ()
+type instance FromShapeRepr ((), a)      = FromShapeBase a
+type instance FromShapeRepr (((), a), b) = (FromShapeBase a, FromShapeBase b)
+type instance FromShapeRepr ((((), a), b), c) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c)
+type instance FromShapeRepr (((((), a), b), c), d) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d)
+type instance FromShapeRepr ((((((), a), b), c), d), e) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
+     FromShapeBase e)
 
 -- |Indices as n-tuples
 --
-class (Elem ix, Shape ix, IxRepr (ToShapeRepr ix)) => Ix ix where
+class (Shape ix, IxRepr (ElemRepr ix)) => Ix ix where
   dim   :: ix -> Int           -- ^number of dimensions (>= 0)
   size  :: ix -> Int           -- ^for a *shape* yield the total number of 
                                -- elements in that array
@@ -336,9 +516,9 @@ class (Elem ix, Shape ix, IxRepr (ToShapeRepr ix)) => Ix ix where
                                -- is the shape)
   -- FIXME: we might want an unsafeIndex, too
 
-  dim         = dimRepr . toShapeRepr
-  size        = sizeRepr . toShapeRepr
-  index sh ix = indexRepr (toShapeRepr sh) (toShapeRepr ix)
+  dim         = dimRepr . fromElem
+  size        = sizeRepr . fromElem
+  index sh ix = indexRepr (fromElem sh) (fromElem ix)
 
 instance Ix ()
 instance Ix (Int)
@@ -349,19 +529,19 @@ instance Ix (Int, Int, Int, Int, Int)
 
 -- Slices -aka generalised indices- as n-tuples
 --
-class (Shape sl, SliceIxRepr (ToShapeRepr sl), Ix (SliceDim sl)) 
+class (Shape sl, SliceIxRepr (ElemRepr sl), Ix (SliceDim sl)) 
   => SliceIx sl where
   type Slice    sl :: *
   type CoSlice  sl :: *
   type SliceDim sl :: *
-  sliceIndex :: sl -> SliceIndex (ToShapeRepr sl)
-                                 (SliceRepr (ToShapeRepr    sl))
-                                 (CoSliceRepr (ToShapeRepr  sl))
-                                 (SliceDimRepr (ToShapeRepr sl))
+  sliceIndex :: sl -> SliceIndex (ElemRepr sl)
+                                 (SliceRepr (ElemRepr    sl))
+                                 (CoSliceRepr (ElemRepr  sl))
+                                 (SliceDimRepr (ElemRepr sl))
 
-instance (Shape sl, SliceIxRepr (ToShapeRepr sl), Ix (SliceDim sl)) 
+instance (Shape sl, SliceIxRepr (ElemRepr sl), Ix (SliceDim sl)) 
   => SliceIx sl where
-  type Slice    sl = FromShapeRepr (SliceRepr    (ToShapeRepr sl))
-  type CoSlice  sl = FromShapeRepr (CoSliceRepr  (ToShapeRepr sl))
-  type SliceDim sl = FromShapeRepr (SliceDimRepr (ToShapeRepr sl))
-  sliceIndex = sliceIndexRepr . toShapeRepr
+  type Slice    sl = FromShapeRepr (SliceRepr    (ElemRepr sl))
+  type CoSlice  sl = FromShapeRepr (CoSliceRepr  (ElemRepr sl))
+  type SliceDim sl = FromShapeRepr (SliceDimRepr (ElemRepr sl))
+  sliceIndex = sliceIndexRepr . fromElem

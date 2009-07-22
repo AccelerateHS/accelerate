@@ -27,5 +27,5 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 ghc-options:     	-Wall -fno-warn-orphans
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
-			ScopedTypeVariables,
+			ScopedTypeVariables, DeriveDataTypeable,
 			BangPatterns, PatternGuards, TypeOperators

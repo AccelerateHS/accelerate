@@ -61,6 +61,7 @@ module Data.Array.Accelerate.AST (
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar (ElemRepr)
 
 
 -- |Abstract syntax of array computations
@@ -112,7 +113,7 @@ data Comp a where
 
   -- Change the shape of an array without altering its contents
   -- * precondition: size dim == size dim'
-  Reshape     :: Exp (ShapeToElemRepr dim)        -- ^new shape
+  Reshape     :: Exp dim                          -- ^new shape
               -> Arr dim' a                       -- ^array to be reshaped
               -> Comp (Arr dim a)
 
@@ -226,20 +227,20 @@ data OpenExp env t where
   Snd         :: OpenExp env (s, t)             -> OpenExp env t
 
   -- |Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond        :: OpenExp env Bool -> OpenExp env t -> OpenExp env t 
+  Cond        :: OpenExp env ((), Bool) -> OpenExp env t -> OpenExp env t 
               -> OpenExp env t
 
   -- |Primitive constants
-  PrimConst   :: PrimConst t -> OpenExp env t
+  PrimConst   :: PrimConst t -> OpenExp env (ElemRepr t)
 
   -- |Primitive scalar operations
   PrimApp     :: PrimFun (a -> r) -> OpenExp env a -> OpenExp env r
 
   -- |Project a single scalar from an array
-  IndexScalar :: Arr dim t -> OpenExp env (ShapeToElemRepr dim) -> OpenExp env t
+  IndexScalar :: Arr dim t -> OpenExp env dim -> OpenExp env t
 
   -- |Array shape
-  Shape       :: Arr dim e -> OpenExp env (ShapeToElemRepr dim)
+  Shape       :: Arr dim e -> OpenExp env dim
 
 -- |Primitive GPU constants
 --
