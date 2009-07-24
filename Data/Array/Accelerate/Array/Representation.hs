@@ -111,24 +111,24 @@ instance SliceIxRepr () where
   type SliceDimRepr () = ()
   sliceIndexRepr _ = SliceNil
 
-instance SliceIxRepr sl => SliceIxRepr (sl, ((), All)) where
-  type SliceRepr    (sl, ((), All)) = (SliceRepr sl, ((), Int))
-  type CoSliceRepr  (sl, ((), All)) = CoSliceRepr sl
-  type SliceDimRepr (sl, ((), All)) = (SliceDimRepr sl, ((), Int))
+instance SliceIxRepr sl => SliceIxRepr (sl, ()) where
+  type SliceRepr    (sl, ()) = (SliceRepr sl, Int)
+  type CoSliceRepr  (sl, ()) = CoSliceRepr sl
+  type SliceDimRepr (sl, ()) = (SliceDimRepr sl, Int)
   sliceIndexRepr _ = SliceAll (sliceIndexRepr (undefined::sl))
 
-instance SliceIxRepr sl => SliceIxRepr (sl, ((), Int)) where
-  type SliceRepr    (sl, ((), Int)) = SliceRepr sl
-  type CoSliceRepr  (sl, ((), Int)) = (CoSliceRepr sl, ((), Int))
-  type SliceDimRepr (sl, ((), Int)) = (SliceDimRepr sl, ((), Int))
+instance SliceIxRepr sl => SliceIxRepr (sl, Int) where
+  type SliceRepr    (sl, Int) = SliceRepr sl
+  type CoSliceRepr  (sl, Int) = (CoSliceRepr sl, Int)
+  type SliceDimRepr (sl, Int) = (SliceDimRepr sl, Int)
   sliceIndexRepr _ = SliceFixed (sliceIndexRepr (undefined::sl))
 
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.
 --
 data SliceIndex ix slice coSlice sliceDim where
- SliceNil   :: SliceIndex () () () ()
- SliceAll   :: SliceIndex ix slice co dim 
-            -> SliceIndex (ix, ((), All)) (slice, ((), Int)) co (dim, ((), Int))
- SliceFixed :: SliceIndex ix slice co dim 
-            -> SliceIndex (ix, ((), Int)) slice (co, ((), Int)) (dim, ((), Int))
+  SliceNil   :: SliceIndex () () () ()
+  SliceAll   :: 
+   SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
+  SliceFixed :: 
+   SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)

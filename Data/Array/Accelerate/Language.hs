@@ -78,25 +78,27 @@ unit e = wrapComp $ Unit (convertExp e)
 
 reshape :: forall dim dim' e. (Ix dim, Ix dim', Elem e) 
         => Exp dim -> Arr dim' e -> AP (Arr dim e)
-reshape e arr = wrapComp $ Reshape (convertShape (undefined::dim) e)
+reshape e arr = wrapComp $ Reshape (convertExp e)
                                    (convertArr arr)
 
-{-
 replicate :: forall slix e. (SliceIx slix, Elem e) 
           => Exp slix -> Arr (Slice slix) e -> AP (Arr (SliceDim slix) e)
-replicate ix arr = wrapComp $ Replicate (sliceIndex (undefined::slix))
-                                        (convertShape (undefined::slix) ix) 
-                                        (convertArr arr)
--}
+replicate ix arr = wrapComp $ 
+                     mkReplicate (undefined::slix) (undefined::e)
+                                 (convertExp ix) (convertArr arr)
 
---(!) :: forall slix e. (SliceIx slix, Elem e) 
---    => Arr (SliceDim slix) e -> Exp slix -> AP (Arr (Slice slix) e)
-arr ! ix = wrapComp $ Index (sliceIndex (undefined::slix)) 
-                            undefined --(convertArr arr)
-                            undefined --(convertShape (undefined::slix) ix)
+(!) :: forall slix e. (SliceIx slix, Elem e) 
+    => Arr (SliceDim slix) e -> Exp slix -> AP (Arr (Slice slix) e)
+arr ! ix = wrapComp $ 
+             mkIndex (undefined::slix) (undefined::e) 
+                     (convertArr arr) (convertExp ix)
 
-zip :: (Ix dim, Elem a, Elem b) => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
-zip arr1 arr2 = wrapComp $ Zip (convertArr arr1) (convertArr arr2)
+zip :: forall dim a b. (Ix dim, Elem a, Elem b) 
+    => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
+zip arr1 arr2 
+  = wrapComp $ 
+      mkZip (undefined::dim) (undefined::a) (undefined::b) 
+            (convertArr arr1) (convertArr arr2)
 
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) -> Arr dim a -> AP (Arr dim b)
@@ -106,15 +108,6 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         => (Exp a -> Exp b -> Exp c) -> Arr dim a -> Arr dim b -> AP (Arr dim c)
 zipWith f arr1 arr2 
   = zip arr1 arr2 >>= map (\xy -> f (Fst xy) (Snd xy))
-{-
-  = do
-      let f' = \xy -> f (Fst xy) (Snd xy)
-      arr' <- genArr tupleType
-      pushComp $ arr' `CompBinding` (Zip arr1 arr2)
-      arr <- genArr tupleType
-      pushComp $ arr `CompBinding` (Map (convertFun1 f') arr')
-      return arr
- -}
 
 filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
 filter p arr = wrapComp $ Filter (convertFun1 p) (convertArr arr)
@@ -134,13 +127,12 @@ permute f dftArr perm arr
   = wrapComp $ Permute (convertFun2 f) (convertArr dftArr) (convertFun1 perm)
                        (convertArr arr)
 
-{- FIXME:
 backpermute :: (Ix dim, Ix dim', Elem a)
             => Exp dim' -> (Exp dim' -> Exp dim) -> Arr dim a -> AP (Arr dim' a)
 backpermute newDim perm arr 
   = wrapComp $ 
       Backpermute (convertExp newDim) (convertFun1 perm) (convertArr arr)
--}
+
 
 -- |Instances of all relevant H98 classes
 -- --------------------------------------

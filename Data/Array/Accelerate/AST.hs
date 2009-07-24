@@ -132,7 +132,7 @@ data Comp a where
               -> Comp (Arr sl a)
 
   -- Pairwise combination of elements of two arrays with the same shape
-  Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (a, b))
+  Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (ElemRepr (a, b)))
 
   -- Apply the given function to all elements of the given array
   Map         :: Fun (a -> b) -> Arr dim a -> Comp (Arr dim b)
@@ -140,7 +140,9 @@ data Comp a where
 
   -- Remove all elements from a linear array that do not satisfy the given
   -- predicate
-  Filter      :: Fun (a -> Bool) -> Arr DIM1Repr a -> Comp (Arr DIM1Repr a)
+  Filter      :: Fun (a -> ElemRepr Bool) 
+              -> Arr DIM1Repr a 
+              -> Comp (Arr DIM1Repr a)
 
   -- Left-to-right prescan of a linear array with a given *associative*
   -- function and its neutral element; produces a rightmost fold value and a

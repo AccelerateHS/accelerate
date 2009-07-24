@@ -17,18 +17,19 @@ module Data.Array.Accelerate.Array.Sugar (
   Array(..),
 
   -- * Class of element types and of array shapes
-  Elem(..), ElemRepr,
+  Elem(..), ElemRepr, ElemRepr', FromShapeRepr,
 
   -- * Array shapes
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Array indexing and slicing
-  ShapeBase, Shape(..), Ix(..), SliceIx(..)
+  ShapeBase, Shape, Ix(..), SliceIx(..), convertSliceIndex
 
 ) where
 
 -- standard library
 import Data.Typeable
+import Unsafe.Coerce
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -529,7 +530,10 @@ instance Ix (Int, Int, Int, Int, Int)
 
 -- Slices -aka generalised indices- as n-tuples
 --
-class (Shape sl, SliceIxRepr (ElemRepr sl), Ix (SliceDim sl)) 
+class (Shape sl, 
+       SliceIxRepr (ElemRepr sl), 
+       Ix (Slice sl), Ix (CoSlice sl), Ix (SliceDim sl), 
+       SliceIxConv sl) 
   => SliceIx sl where
   type Slice    sl :: *
   type CoSlice  sl :: *
@@ -539,9 +543,28 @@ class (Shape sl, SliceIxRepr (ElemRepr sl), Ix (SliceDim sl))
                                  (CoSliceRepr (ElemRepr  sl))
                                  (SliceDimRepr (ElemRepr sl))
 
-instance (Shape sl, SliceIxRepr (ElemRepr sl), Ix (SliceDim sl)) 
+instance (Shape sl, 
+          SliceIxRepr (ElemRepr sl), 
+          Ix (Slice sl), Ix (CoSlice sl), Ix (SliceDim sl), 
+          SliceIxConv sl)
   => SliceIx sl where
   type Slice    sl = FromShapeRepr (SliceRepr    (ElemRepr sl))
   type CoSlice  sl = FromShapeRepr (CoSliceRepr  (ElemRepr sl))
   type SliceDim sl = FromShapeRepr (SliceDimRepr (ElemRepr sl))
   sliceIndex = sliceIndexRepr . fromElem
+
+class SliceIxConv slix where
+  convertSliceIndex :: slix {- dummy to fix the type variable -}
+                    -> SliceIndex (ElemRepr slix)
+                                  (SliceRepr (ElemRepr    slix))
+                                  (CoSliceRepr (ElemRepr  slix))
+                                  (SliceDimRepr (ElemRepr slix))
+                    -> SliceIndex (ElemRepr slix)
+                                  (ElemRepr (Slice slix))
+                                  (ElemRepr (CoSlice slix))
+                                  (ElemRepr (SliceDim slix))
+
+instance SliceIxConv slix where
+  convertSliceIndex _ = unsafeCoerce
+    -- FIXME: the coercion is safe given the definition of the involved
+    --   families, but we really ought to code a proof for that instead

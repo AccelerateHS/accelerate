@@ -22,16 +22,18 @@ module Data.Array.Accelerate.Smart (
   Arr(..), Scalar, Vector, Exp(..), 
 
   -- * Conversions
-  {-convertSlice,-} convertArray, convertArr, convertExp, convertFun1,
-  convertFun2, 
+  convertArray, convertArr, convertExp, convertFun1, convertFun2, 
 
-  -- * Constructors for literals
+  -- * Smart constructors for array operations
+  mkIndex, mkReplicate, mkZip,
+
+  -- * Smart constructors for literals
   exp,
 
-  -- * Constructors for constants
+  -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
 
-  -- * Constructors for primitive functions
+  -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot,
@@ -196,9 +198,10 @@ convertOpenExp lyt = cvt
     cvt :: forall t'. Exp t' -> AST.OpenExp env (ElemRepr t')
     cvt (Tag i)           = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
     cvt (Const v)         = AST.Const (elemType (undefined::t')) (fromElem v)
-    cvt (Pair e1 e2)      = AST.Pair (cvt e1) (cvt e2)
-    cvt (Fst e)           = AST.Fst (cvt e)
-    cvt (Snd e)           = AST.Snd (cvt e)
+-- FIXME:
+--    cvt (Pair e1 e2)      = AST.Pair (cvt e1) (cvt e2)
+--    cvt (Fst e)           = AST.Fst (cvt e)
+--    cvt (Snd e)           = AST.Snd (cvt e)
     cvt (Cond e1 e2 e3)   = AST.Cond (cvt e1) (cvt e2) (cvt e3)
 --    cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
     cvt (PrimConst c)     = AST.PrimConst c
@@ -258,10 +261,10 @@ convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
 -- |Convert surface array representation to the internal one
 --
 convertArray :: forall dim e. 
-                Array dim e -> AST.Array (ToShapeRepr dim) (ElemRepr e)
+                Array dim e -> AST.Array (ElemRepr dim) (ElemRepr e)
 convertArray (Array {arrayShape = shape, arrayId = id, arrayPtr = ptr})
   = AST.Array {
-      AST.arrayShape = toShapeRepr shape, 
+      AST.arrayShape = fromElem shape, 
       AST.arrayElemType = elemType (undefined::e), 
       AST.arrayId = id, 
       AST.arrayPtr = ptr
@@ -269,7 +272,7 @@ convertArray (Array {arrayShape = shape, arrayId = id, arrayPtr = ptr})
 
 -- |Convert surface AP array representation to the internal one
 --
-convertArr :: forall dim e. Arr dim e -> AST.Arr (ToShapeRepr dim) (ElemRepr e)
+convertArr :: forall dim e. Arr dim e -> AST.Arr (ElemRepr dim) (ElemRepr e)
 convertArr (Arr idStr) = AST.Arr (elemType (undefined :: e)) idStr
 
 -- |Convert a unary functions
@@ -351,7 +354,7 @@ pushComp :: CompBinding -> AP ()
 pushComp comp = modify $ \s -> s {comps = Comps $ comp : unComps s}
 
 wrapComp :: (Ix dim, Elem e)
-         => Comp (AST.Arr (ToShapeRepr dim) (ElemRepr e)) -> AP (Arr dim e)
+         => Comp (AST.Arr (ElemRepr dim) (ElemRepr e)) -> AP (Arr dim e)
 wrapComp comp
   = do
       arr <- genArr
@@ -359,8 +362,8 @@ wrapComp comp
       return arr
 
 wrapComp2 :: (Ix dim1, Ix dim2, Elem e1, Elem e2) 
-          => Comp (AST.Arr (ToShapeRepr dim1) (ElemRepr e1), 
-                   AST.Arr (ToShapeRepr dim2) (ElemRepr e2))
+          => Comp (AST.Arr (ElemRepr dim1) (ElemRepr e1), 
+                   AST.Arr (ElemRepr dim2) (ElemRepr e2))
           -> AP (Arr dim1 e1, Arr dim2 e2)
 wrapComp2 comp
   = do
@@ -368,6 +371,37 @@ wrapComp2 comp
       arr2 <- genArr
       pushComp $ (convertArr arr1, convertArr arr2) `CompBinding` comp
       return (arr1, arr2)
+
+
+-- |Smart constructors to construct representation AST forms
+-- ---------------------------------------------------------
+
+mkIndex :: forall slix e. (SliceIx slix, Elem e) 
+        => slix {- dummy to fix the type variable -}
+        -> e    {- dummy to fix the type variable -}
+        -> AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e) 
+        -> AST.Exp (ElemRepr slix)
+        -> Comp (AST.Arr (ElemRepr (Slice slix)) (ElemRepr e))
+mkIndex slix _ arr e 
+  = Index (convertSliceIndex slix (sliceIndex (undefined::slix))) arr e
+
+mkReplicate :: forall slix e. (SliceIx slix, Elem e) 
+        => slix {- dummy to fix the type variable -}
+        -> e    {- dummy to fix the type variable -}
+        -> AST.Exp (ElemRepr slix)
+        -> AST.Arr (ElemRepr (Slice slix)) (ElemRepr e) 
+        -> Comp (AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e))
+mkReplicate slix _ e arr 
+  = Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
+
+mkZip :: (Ix dim, Elem a, Elem b) 
+      => dim {- dummy to fix the type variable -}
+      -> a   {- dummy to fix the type variable -}
+      -> b   {- dummy to fix the type variable -}
+      -> AST.Arr (ElemRepr dim) (ElemRepr a) 
+      -> AST.Arr (ElemRepr dim) (ElemRepr b)
+      -> Comp (AST.Arr (ElemRepr dim) (ElemRepr (a, b)))
+mkZip _ _ _ arr1 arr2 = undefined
 
 
 -- |Smart constructors to construct HOAS AST expressions
