@@ -1,9 +1,11 @@
 Name:			accelerate
 Version:		0.3.0
 Synopsis:		An embedded language for accelerated array processing
-Description:	        This libraries defines an embedded language for array
-		        computations that are suitable for offloading to compute
-		        accelerators, such as CUDA-capable GPUs.
+Description:	        This library defines an embedded language for
+			regular, multi-dimensional array computations with
+			multiple backends to facilitate high-performance
+			implementations.  Currently, the only backend is an
+			interpreter.
 License:		BSD3
 License-file:		LICENSE
 Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee

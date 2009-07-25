@@ -5,7 +5,7 @@ import qualified Prelude
 
 import Data.Array.Accelerate
 
-dotp :: Array DIM1 Float -> Array DIM1 Float -> AP (Scalar Float)
+dotp :: Vector Float -> Vector Float -> AP (Sca Float)
 dotp xs ys 
   = do
       xs' <- use xs

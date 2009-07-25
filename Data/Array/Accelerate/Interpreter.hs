@@ -11,7 +11,7 @@
 
 module Data.Array.Accelerate.Interpreter (
 
-  -- * execution of array computations
+  -- * Execute an array computation by interpretation
   run
 
 ) where

@@ -53,7 +53,7 @@
 
 module Data.Array.Accelerate.AST (
 
-  Comps(..), CompBinding(..), CompResult(..), Comp(..), Arr(..), Scalar, 
+  Comps(..), CompBinding(..), CompResult(..), Comp(..), Arr(..), Sca, 
   Idx(..), Fun, OpenFun(..), Exp, OpenExp(..), PrimConst(..), PrimFun(..)
 
 ) where
@@ -106,7 +106,7 @@ data Comp a where
   Use         :: Array dim a -> Comp (Arr dim a)
 
   -- capture a scalar (or a tuple of scalars) in a singleton array  
-  Unit        :: Exp a -> Comp (Scalar a)
+  Unit        :: Exp a -> Comp (Sca a)
 
   -- collective operations
   --
@@ -198,7 +198,7 @@ data Arr dim e where
 -- |Scalar results (both elementary scalars and tuples of scalars) are being
 -- represented as 0-dimensional singleton arrays
 --
-type Scalar a = Arr DIM0Repr a
+type Sca a = Arr DIM0Repr a
 
 -- De Bruijn variable index projecting a specific type from a type
 -- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 

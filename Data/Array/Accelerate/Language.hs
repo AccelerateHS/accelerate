@@ -18,7 +18,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array processing computation monad
-  AP, Arr,              -- re-exporting from 'Smart'
+  AP, Arr, Sca, Vec,    -- re-exporting from 'Smart'
 
   -- * Expressions
   Exp, exp,             -- re-exporting from 'Smart'
@@ -59,7 +59,7 @@ import Data.Bits
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.AST          hiding (Exp, OpenExp(..), Arr, Scalar)
+import Data.Array.Accelerate.AST          hiding (Exp, OpenExp(..), Arr, Sca)
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty
 
@@ -76,7 +76,7 @@ infixl 9 !
 use :: (Ix dim, Elem e) => Array dim e -> AP (Arr dim e)
 use array = wrapComp $ Use (convertArray array)
 
-unit :: Elem e => Exp e -> AP (Scalar e)
+unit :: Elem e => Exp e -> AP (Sca e)
 unit e = wrapComp $ Unit (convertExp e)
 
 reshape :: forall dim dim' e. (Ix dim, Ix dim', Elem e) 
@@ -120,10 +120,10 @@ filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
 filter p arr = wrapComp $ Filter (convertFun1 p) (convertArr arr)
 
 scan :: Elem a 
-     => (Exp a -> Exp a -> Exp a) -> Exp a -> Vector a -> AP (Scalar a, Vector a)
+     => (Exp a -> Exp a -> Exp a) -> Exp a -> Vec a -> AP (Sca a, Vec a)
 scan f e arr = wrapComp2 $ Scan (convertFun2 f) (convertExp e) (convertArr arr)
 
-fold :: Elem a => (Exp a -> Exp a -> Exp a) -> Exp a -> Vector a -> AP (Scalar a)
+fold :: Elem a => (Exp a -> Exp a -> Exp a) -> Exp a -> Vec a -> AP (Sca a)
 fold f e arr
   = scan f e arr >>= return . fst
 

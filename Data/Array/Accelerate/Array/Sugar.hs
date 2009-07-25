@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
-  Array(..),
+  Array(..), Scalar, Vector,
 
   -- * Class of element types and of array shapes
   Elem(..), ElemRepr, ElemRepr', FromShapeRepr,
@@ -463,6 +463,14 @@ data Array dim e where
            , arrayPtr      :: ArrayData (ElemRepr e)
                                               -- ^data, same layout as in
            }               -> Array dim e
+
+-- |Scalars
+--
+type Scalar e = Array DIM0 e
+
+-- |Vectors
+--
+type Vector e = Array DIM1 e
 
 -- |Shorthand for common shape types
 --

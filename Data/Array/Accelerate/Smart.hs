@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Smart (
   AP, runAP, wrapComp, wrapComp2,
 
   -- * HOAS AST
-  Arr(..), Scalar, Vector, Exp(..), 
+  Arr(..), Sca, Vec, Exp(..), 
 
   -- * Conversions
   convertArray, convertArr, convertExp, convertFun1, convertFun2, 
@@ -52,7 +52,7 @@ import Data.Typeable
 import Data.Array.Accelerate.Array.Representation hiding (Array(..))
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..), Arr(..), Scalar)
+import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..), Arr(..), Sca)
 import Data.Array.Accelerate.Pretty
 import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
@@ -137,11 +137,11 @@ data Arr dim e where
 
 -- |Scalars of the surface language
 --
-type Scalar a = Arr DIM0 a
+type Sca a = Arr DIM0 a
 
 -- |Scalars of the surface language
 --
-type Vector a = Arr DIM1 a
+type Vec a = Arr DIM1 a
 
 -- HOAS expressions mirror the constructors of `AST.OpenExp', but with the
 -- `Tag' constructor instead of variables in the form of de Bruijn indices.
