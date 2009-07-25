@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 
 -- |Embedded array processing language: array representation
 --
@@ -19,7 +18,7 @@ module Data.Array.Accelerate.Array.Representation (
   DIM0Repr, DIM1Repr, DIM2Repr, 
 
   -- * Array indexing and slicing
-  All(..), IxRepr(..), SliceIxRepr(..), SliceIndex(..)
+  IxRepr(..), SliceIxRepr(..), SliceIndex(..)
 
 ) where
 
@@ -88,10 +87,6 @@ instance IxRepr ix => IxRepr (ix, Int) where
 
 -- |Slice representation
 -- -
-
--- |Identifier for entire dimensions in slice descriptors
---
-data All = All deriving Typeable
 
 -- |Class of slice representations (which are nested pairs)
 --

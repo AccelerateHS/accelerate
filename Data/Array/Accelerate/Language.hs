@@ -18,10 +18,13 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array processing computation monad
-  AP,                   -- re-exporting from 'Smart'
+  AP, Arr,              -- re-exporting from 'Smart'
 
   -- * Expressions
   Exp, exp,             -- re-exporting from 'Smart'
+
+  -- * Slice expressions
+  All(..),              -- re-exporting from 'Sugar'
 
   -- * Array introduction
   use, unit,

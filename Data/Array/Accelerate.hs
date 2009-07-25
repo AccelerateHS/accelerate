@@ -36,7 +36,7 @@ module Data.Array.Accelerate (
   Elem,
 
   -- * Array shapes & indices
-  Ix(..), All(..), Slice, DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
+  Ix(..), All(..), SliceIx(..), DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Surface language
   module Data.Array.Accelerate.Language,

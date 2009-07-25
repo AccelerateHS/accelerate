@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE UndecidableInstances #-}  -- for instance Slice sl
 
 -- |Embedded array processing language: user-visible array operations
@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Array indexing and slicing
-  ShapeBase, Shape, Ix(..), SliceIx(..), convertSliceIndex
+  ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex
 
 ) where
 
@@ -121,6 +121,10 @@ type instance ElemRepr' (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
 
 -- |Surface types (tuples of scalars)
 -- ----------------------------------
+
+-- |Identifier for entire dimensions in slice descriptors
+--
+data All = All deriving Typeable
 
 class (Typeable a, Typeable (ElemRepr a), Typeable (ElemRepr' a)) 
       => Elem a where
