@@ -131,12 +131,22 @@ data Comp a where
               -> Exp slix                         -- ^slice value specification
               -> Comp (Arr sl a)
 
+{-
   -- Pairwise combination of elements of two arrays with the same shape
-  Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (ElemRepr (a, b)))
+  Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (a, b))
+ -}
 
-  -- Apply the given function to all elements of the given array
+  -- Apply the given unary function to all elements of the given array
   Map         :: Fun (a -> b) -> Arr dim a -> Comp (Arr dim b)
     -- FIXME: generalise to mapFold
+
+  -- Apply a given binary function pairwise to all elements of the given arrays.
+  -- The length of the result is the length of the shorter of the two argument
+  -- arrays.
+  ZipWith     :: Fun (a -> b -> c) 
+              -> Arr dim a 
+              -> Arr dim b 
+              -> Comp (Arr dim c)
 
   -- Remove all elements from a linear array that do not satisfy the given
   -- predicate

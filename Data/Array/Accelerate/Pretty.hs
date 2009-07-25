@@ -85,9 +85,12 @@ prettyComp (Replicate _ty ix arr)
   = text "replicate" <+> prettyExp id ix <+> prettyArr arr
 prettyComp (Index _ty arr ix) 
   = prettyArr arr <> char '!' <> prettyExp id ix
-prettyComp (Zip arr1 arr2)    = text "zip" <+> prettyArr arr1 <+> prettyArr arr2
+--prettyComp (Zip arr1 arr2)    = text "zip" <+> prettyArr arr1 <+> prettyArr arr2
 prettyComp (Map f arr)      
   = text "map" <+> parens (prettyFun f) <+> prettyArr arr
+prettyComp (ZipWith f arr1 arr2)    
+  = text "zipWith" <+> parens (prettyFun f) <+> prettyArr arr1 <+> 
+    prettyArr arr2
 prettyComp (Filter p arr)   
   = text "filter" <+> parens (prettyFun p) <+> prettyArr arr
 prettyComp (Scan f e arr)   

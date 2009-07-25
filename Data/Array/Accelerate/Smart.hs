@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Smart (
   convertArray, convertArr, convertExp, convertFun1, convertFun2, 
 
   -- * Smart constructors for array operations
-  mkIndex, mkReplicate, mkZip,
+  mkIndex, mkReplicate, {- mkZip, -}
 
   -- * Smart constructors for literals
   exp,
@@ -394,14 +394,16 @@ mkReplicate :: forall slix e. (SliceIx slix, Elem e)
 mkReplicate slix _ e arr 
   = Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
 
+{-
 mkZip :: (Ix dim, Elem a, Elem b) 
       => dim {- dummy to fix the type variable -}
       -> a   {- dummy to fix the type variable -}
       -> b   {- dummy to fix the type variable -}
       -> AST.Arr (ElemRepr dim) (ElemRepr a) 
-      -> AST.Arr (ElemRepr dim) (ElemRepr b)
+      -> AST.Arr (ElemRepr dim) (ElemRepr' b)
       -> Comp (AST.Arr (ElemRepr dim) (ElemRepr (a, b)))
-mkZip _ _ _ arr1 arr2 = undefined
+mkZip _ _ _ arr1 arr2 = Zip arr1 arr2
+ -}
 
 
 -- |Smart constructors to construct HOAS AST expressions

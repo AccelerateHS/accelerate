@@ -95,10 +95,13 @@ arr ! ix = wrapComp $
 
 zip :: forall dim a b. (Ix dim, Elem a, Elem b) 
     => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
+zip = zipWith (\x y -> x `Pair` y)
+{-
 zip arr1 arr2 
   = wrapComp $ 
       mkZip (undefined::dim) (undefined::a) (undefined::b) 
             (convertArr arr1) (convertArr arr2)
+ -}
 
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) -> Arr dim a -> AP (Arr dim b)
@@ -107,7 +110,8 @@ map f arr = wrapComp $ Map (convertFun1 f) (convertArr arr)
 zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         => (Exp a -> Exp b -> Exp c) -> Arr dim a -> Arr dim b -> AP (Arr dim c)
 zipWith f arr1 arr2 
-  = zip arr1 arr2 >>= map (\xy -> f (Fst xy) (Snd xy))
+--  = zip arr1 arr2 >>= map (\xy -> f (Fst xy) (Snd xy))
+  = wrapComp $ ZipWith (convertFun2 f) (convertArr arr1) (convertArr arr2)
 
 filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
 filter p arr = wrapComp $ Filter (convertFun1 p) (convertArr arr)
