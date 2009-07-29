@@ -58,75 +58,6 @@ import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
 
 
--- |Conversion of surface to internal types
--- ----------------------------------------
-
--- Conversion of type representations
---
-{-
-convertIntegralType :: IntegralType a -> IntegralType (ElemRepr a)
-convertIntegralType ty@(TypeInt _)     = ty
-convertIntegralType ty@(TypeInt8 _)    = ty
-convertIntegralType ty@(TypeInt16 _)   = ty
-convertIntegralType ty@(TypeInt32 _)   = ty
-convertIntegralType ty@(TypeInt64 _)   = ty
-convertIntegralType ty@(TypeWord _)    = ty
-convertIntegralType ty@(TypeWord8 _)   = ty
-convertIntegralType ty@(TypeWord16 _)  = ty
-convertIntegralType ty@(TypeWord32 _)  = ty
-convertIntegralType ty@(TypeWord64 _)  = ty
-convertIntegralType ty@(TypeCShort _)  = ty
-convertIntegralType ty@(TypeCUShort _) = ty
-convertIntegralType ty@(TypeCInt _)    = ty
-convertIntegralType ty@(TypeCUInt _)   = ty
-convertIntegralType ty@(TypeCLong _)   = ty
-convertIntegralType ty@(TypeCULong _)  = ty
-convertIntegralType ty@(TypeCLLong _)  = ty
-convertIntegralType ty@(TypeCULLong _) = ty
-
-convertFloatingType :: FloatingType a -> FloatingType (ElemRepr a)
-convertFloatingType ty@(TypeFloat _)   = ty
-convertFloatingType ty@(TypeDouble _)  = ty
-convertFloatingType ty@(TypeCFloat _)  = ty
-convertFloatingType ty@(TypeCDouble _) = ty
-
-convertNonNumType :: NonNumType a -> NonNumType (ElemRepr a)
-convertNonNumType ty@(TypeBool   _) = ty
-convertNonNumType ty@(TypeChar   _) = ty
-convertNonNumType ty@(TypeCChar  _) = ty
-convertNonNumType ty@(TypeCSChar _) = ty
-convertNonNumType ty@(TypeCUChar _) = ty
-
-convertNumType :: NumType a -> NumType (ElemRepr a)
-convertNumType (IntegralNumType ty) = IntegralNumType $ convertIntegralType ty
-convertNumType (FloatingNumType ty) = FloatingNumType $ convertFloatingType ty
-
-convertBoundedType :: BoundedType a -> BoundedType (ElemRepr a)
-convertBoundedType (IntegralBoundedType ty) 
-  = IntegralBoundedType (convertIntegralType ty)
-convertBoundedType (NonNumBoundedType ty) 
-  = NonNumBoundedType (convertNonNumType ty)
-
-convertScalarType :: ScalarType a -> ScalarType (ElemRepr a)
-convertScalarType (NumScalarType ty)    = NumScalarType $ convertNumType ty
-convertScalarType (NonNumScalarType ty) 
-  = NonNumScalarType $ convertNonNumType ty
--}
-{-
--- |Conversion of slice indices
---
-convertSlice :: forall sl. SliceIx sl
-             => sl -> SliceIndex (ToShapeRepr (Slice    sl))
-                                 (ToShapeRepr (CoSlice  sl))
-                                 (ToShapeRepr (SliceDim sl))
-convertSlice = cvt . toShapeRepr
-  where
-    cvt :: ToShapeRepr sl -> SliceIndex (ToShapeRepr (Slice    sl))
-                                        (ToShapeRepr (CoSlice  sl))
-                                        (ToShapeRepr (SliceDim sl))
-    cvt () = SliceNil
--}
-
 -- |HOAS AST
 -- ---------
 
@@ -196,68 +127,27 @@ convertOpenExp :: forall t env.
 convertOpenExp lyt = cvt
   where
     cvt :: forall t'. Exp t' -> AST.OpenExp env (ElemRepr t')
-    cvt (Tag i)           = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
-    cvt (Const v)         = AST.Const (elemType (undefined::t')) (fromElem v)
--- FIXME:
---    cvt (Pair e1 e2)      = AST.Pair (cvt e1) (cvt e2)
---    cvt (Fst e)           = AST.Fst (cvt e)
---    cvt (Snd e)           = AST.Snd (cvt e)
-    cvt (Cond e1 e2 e3)   = AST.Cond (cvt e1) (cvt e2) (cvt e3)
---    cvt (PrimConst c)     = AST.PrimConst (convertPrimConst c)
-    cvt (PrimConst c)     = AST.PrimConst c
---    cvt (PrimApp p e)     = AST.PrimApp (convertPrimFun p) (cvt e)
-    cvt (IndexScalar a e) = AST.IndexScalar (convertArr a) (cvt e)
-    cvt (Shape a)         = AST.Shape (convertArr a)
+    cvt (Tag i)             = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
+    cvt (Const v)           = AST.Const (elemType (undefined::t')) (fromElem v)
+    cvt (Pair (e1::Exp t1) 
+              (e2::Exp t2)) = AST.Pair (undefined::t1)
+                                       (undefined::t2)
+                                       (cvt e1) (cvt e2)
+    cvt (Fst (e::Exp (t', t2)))             
+                            = AST.Fst (undefined::t') (undefined::t2) (cvt e)
+    cvt (Snd (e::Exp (t1, t')))             
+                            = AST.Snd (undefined::t1) (undefined::t') (cvt e)
+    cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
+    cvt (PrimConst c)       = AST.PrimConst c
+    cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
+    cvt (IndexScalar a e)   = AST.IndexScalar (convertArr a) (cvt e)
+    cvt (Shape a)           = AST.Shape (convertArr a)
 
 -- |Convert a closed expression
 --
 convertExp :: Exp t -> AST.Exp (ElemRepr t)
 convertExp = convertOpenExp EmptyLayout
 
-{-
--- |Convert a primitive constant
---
-convertPrimConst :: PrimConst a -> PrimConst (ElemRepr a)
-convertPrimConst (PrimMinBound ty) = PrimMinBound $ convertBoundedType ty
-convertPrimConst (PrimMaxBound ty) = PrimMinBound $ convertBoundedType ty
-convertPrimConst (PrimPi ty)       = PrimPi $ convertFloatingType ty
--}
-
-{-
--- |Convert a primitive operation
---
-convertPrimFun :: PrimFun (a -> b) -> PrimFun (ElemRepr a -> ElemRepr b)
-convertPrimFun (PrimAdd ty)   = PrimAdd (convertNumType ty)
-convertPrimFun (PrimSub ty)   = PrimSub (convertNumType ty)
-convertPrimFun (PrimMul ty)   = PrimMul (convertNumType ty)
-convertPrimFun (PrimNeg ty)   = PrimNeg (convertNumType ty)
-convertPrimFun (PrimAbs ty)   = PrimAbs (convertNumType ty)
-convertPrimFun (PrimSig ty)   = PrimSig (convertNumType ty)
-convertPrimFun (PrimQuot ty)  = PrimQuot (convertIntegralType ty)
-convertPrimFun (PrimRem ty)   = PrimRem (convertIntegralType ty)
-convertPrimFun (PrimIDiv ty)  = PrimIDiv (convertIntegralType ty)
-convertPrimFun (PrimMod ty)   = PrimMod (convertIntegralType ty)
-convertPrimFun (PrimBAnd ty)  = PrimBAnd (convertIntegralType ty)
-convertPrimFun (PrimBOr ty)   = PrimBOr (convertIntegralType ty)
-convertPrimFun (PrimBXor ty)  = PrimBXor (convertIntegralType ty)
-convertPrimFun (PrimBNot ty)  = PrimBNot (convertIntegralType ty)
-convertPrimFun (PrimFDiv ty)  = PrimFDiv (convertFloatingType ty)
-convertPrimFun (PrimRecip ty) = PrimRecip (convertFloatingType ty)
-convertPrimFun (PrimLt ty)    = PrimLt (convertScalarType ty)
-convertPrimFun (PrimGt ty)    = PrimGt (convertScalarType ty)
-convertPrimFun (PrimLtEq ty)  = PrimLtEq (convertScalarType ty)
-convertPrimFun (PrimGtEq ty)  = PrimGtEq (convertScalarType ty)
-convertPrimFun (PrimEq ty)    = PrimEq (convertScalarType ty)
-convertPrimFun (PrimNEq ty)   = PrimNEq (convertScalarType ty)
-convertPrimFun (PrimMax ty)   = PrimMax (convertScalarType ty)
-convertPrimFun (PrimMin ty)   = PrimMin (convertScalarType ty)
-convertPrimFun PrimLAnd       = PrimLAnd
-convertPrimFun PrimLOr        = PrimLOr
-convertPrimFun PrimLNot       = PrimLNot
-convertPrimFun PrimOrd        = PrimOrd
-convertPrimFun PrimChr        = PrimChr
-convertPrimFun PrimRoundFloatInt = PrimRoundFloatInt
--}
 -- |Convert surface array representation to the internal one
 --
 convertArray :: forall dim e. 
@@ -393,17 +283,6 @@ mkReplicate :: forall slix e. (SliceIx slix, Elem e)
         -> Comp (AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e))
 mkReplicate slix _ e arr 
   = Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
-
-{-
-mkZip :: (Ix dim, Elem a, Elem b) 
-      => dim {- dummy to fix the type variable -}
-      -> a   {- dummy to fix the type variable -}
-      -> b   {- dummy to fix the type variable -}
-      -> AST.Arr (ElemRepr dim) (ElemRepr a) 
-      -> AST.Arr (ElemRepr dim) (ElemRepr' b)
-      -> Comp (AST.Arr (ElemRepr dim) (ElemRepr (a, b)))
-mkZip _ _ _ arr1 arr2 = Zip arr1 arr2
- -}
 
 
 -- |Smart constructors to construct HOAS AST expressions

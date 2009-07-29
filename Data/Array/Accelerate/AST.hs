@@ -61,7 +61,7 @@ module Data.Array.Accelerate.AST (
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (ElemRepr)
+import Data.Array.Accelerate.Array.Sugar (ElemRepr, ElemRepr')
 
 
 -- |Abstract syntax of array computations
@@ -234,25 +234,41 @@ data OpenExp env t where
   Const       :: TupleType t -> t -> OpenExp env t
 
   -- |Tuples
-  Pair        :: OpenExp env s -> OpenExp env t -> OpenExp env (s, t)
-  Fst         :: OpenExp env (s, t)             -> OpenExp env s
-  Snd         :: OpenExp env (s, t)             -> OpenExp env t
+  Pair        :: s {- dummy to fix the type variable -}
+              -> t {- dummy to fix the type variable -}
+              -> OpenExp env (ElemRepr s) 
+              -> OpenExp env (ElemRepr t) 
+              -> OpenExp env (ElemRepr (s, t))
+  Fst         :: s {- dummy to fix the type variable -}
+              -> t {- dummy to fix the type variable -}
+              -> OpenExp env (ElemRepr (s, t))
+              -> OpenExp env (ElemRepr s)
+  Snd         :: s {- dummy to fix the type variable -}
+              -> t {- dummy to fix the type variable -}
+              -> OpenExp env (ElemRepr (s, t))
+              -> OpenExp env (ElemRepr t)
 
   -- |Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond        :: OpenExp env ((), Bool) -> OpenExp env t -> OpenExp env t 
+  Cond        :: OpenExp env (ElemRepr Bool) 
+              -> OpenExp env t 
+              -> OpenExp env t 
               -> OpenExp env t
 
   -- |Primitive constants
   PrimConst   :: PrimConst t -> OpenExp env (ElemRepr t)
 
   -- |Primitive scalar operations
-  PrimApp     :: PrimFun (a -> r) -> OpenExp env a -> OpenExp env r
+  PrimApp     :: PrimFun (a -> r) 
+              -> OpenExp env (ElemRepr a) 
+              -> OpenExp env (ElemRepr r)
 
   -- |Project a single scalar from an array
   IndexScalar :: Arr dim t -> OpenExp env dim -> OpenExp env t
 
   -- |Array shape
   Shape       :: Arr dim e -> OpenExp env dim
+
+--  Cvt :: ElemRepr
 
 -- |Primitive GPU constants
 --

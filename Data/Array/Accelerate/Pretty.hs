@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, FlexibleInstances, PatternGuards, TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |Embedded array processing language: pretty printing
 --
@@ -121,18 +122,18 @@ prettyFun fun =
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
 prettyExp :: (Doc -> Doc) -> OpenExp env t -> Doc
---prettyExp wrap (Arg ty)      = wrap $ text "arg ::" <+> prettyAnyType ty
 prettyExp wrap (Var _ idx)       = text $ "a" ++ show (count idx)
   where
     count :: Idx env t -> Int
     count ZeroIdx       = 0
     count (SuccIdx idx) = 1 + count idx
 prettyExp _    (Const ty v)      = text $ runTupleShow ty v
-prettyExp _    (Pair e1 e2)      = prettyTuple (Pair e1 e2)
-prettyExp wrap (Fst e)           = wrap $ text "fst" <+> prettyExp parens e
-prettyExp wrap (Snd e)           = wrap $ text "snd" <+> prettyExp parens e
+prettyExp _    e@(Pair _ _ _ _)  = prettyTuple e
+prettyExp wrap (Fst _ _ e)       = wrap $ text "fst" <+> prettyExp parens e
+prettyExp wrap (Snd _ _ e)       = wrap $ text "snd" <+> prettyExp parens e
 prettyExp wrap (Cond c t e) 
-  = wrap $ sep [prettyExp parens c <+> char '?', prettyExp noParens (Pair t e)]
+  = wrap $ sep [prettyExp parens c <+> char '?', 
+                parens (prettyExp noParens t <> comma <+> prettyExp noParens e)]
 prettyExp _    (PrimConst a)     = prettyConst a
 prettyExp wrap (PrimApp p a)     = wrap $ prettyPrim p <+> prettyExp parens a
 prettyExp wrap (IndexScalar a i)
@@ -147,8 +148,8 @@ prettyTuple e = parens $ sep (map (<> comma) (init es) ++ [last es])
     es = collect e
     --
     collect :: OpenExp env t -> [Doc]
-    collect (Pair e1 e2) = collect e1 ++ collect e2
-    collect e            = [prettyExp noParens e]
+    collect (Pair _ _ e1 e2) = collect e1 ++ collect e2
+    collect e                = [prettyExp noParens e]
 
 -- |Pretty print a primitive constant
 --
