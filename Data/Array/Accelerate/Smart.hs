@@ -64,7 +64,7 @@ import qualified Data.Array.Accelerate.Array.Representation as AST
 -- |Array representation for the surface language
 --
 data Arr dim e where
-  Arr :: (Ix dim, Elem e) => String -> Arr dim e
+  Arr :: (Ix dim, Elem e) => Int -> Arr dim e
 
 -- |Scalars of the surface language
 --
@@ -152,18 +152,18 @@ convertExp = convertOpenExp EmptyLayout
 --
 convertArray :: forall dim e. 
                 Array dim e -> AST.Array (ElemRepr dim) (ElemRepr e)
-convertArray (Array {arrayShape = shape, arrayId = id, arrayPtr = ptr})
+convertArray (Array {arrayShape = shape, arrayId = id, arrayData = adata})
   = AST.Array {
-      AST.arrayShape = fromElem shape, 
+      AST.arrayShape    = fromElem shape, 
       AST.arrayElemType = elemType (undefined::e), 
-      AST.arrayId = id, 
-      AST.arrayPtr = ptr
+      AST.arrayId       = id, 
+      AST.arrayData     = adata
     }
 
 -- |Convert surface AP array representation to the internal one
 --
 convertArr :: forall dim e. Arr dim e -> AST.Arr (ElemRepr dim) (ElemRepr e)
-convertArr (Arr idStr) = AST.Arr (elemType (undefined :: e)) idStr
+convertArr (Arr idInt) = AST.Arr (elemType (undefined :: e)) idInt
 
 -- |Convert a unary functions
 --
@@ -220,14 +220,15 @@ runAP = reverseComps . comps . flip execState initialAPstate
   where
     reverseComps (Comps cs) = Comps (reverse cs)
 
--- Obtain a unique variable name; it's unique in the AP computation
+-- Obtain a unique variable name (in the form of a small `Int'); it's unique in 
+-- this AP computation
 --
-genSym :: AP String
+genSym :: AP Int
 genSym 
   = do
       n <- gets sym
       modify $ \s -> s {sym = succ (sym s)}
-      return $ "a" ++ show n
+      return n
 
 -- Obtain a unique array identifier at a given element type; it's unique in
 -- the AP computation 

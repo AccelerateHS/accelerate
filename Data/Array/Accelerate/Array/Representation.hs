@@ -47,7 +47,7 @@ data Array dim e where
            { arrayShape    :: dim             -- ^extent of dimensions = shape
            , arrayElemType :: TupleType e     -- ^constrains valid element types
            , arrayId       :: String          -- ^for pretty printing
-           , arrayPtr      :: ArrayData e     -- ^data
+           , arrayData     :: ArrayData e     -- ^data
            }               -> Array dim e
 
 -- |Shorthand for common shape representations

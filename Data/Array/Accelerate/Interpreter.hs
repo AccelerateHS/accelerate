@@ -1,4 +1,5 @@
-{-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
+{-# LANGUAGE GADTs, BangPatterns, PatternGuards, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |Embedded array processing language: execution by a simple interpreter
 --
@@ -17,22 +18,107 @@ module Data.Array.Accelerate.Interpreter (
 ) where
 
 -- standard libraries
+import Control.Monad
+import Control.Monad.ST
+import Control.Monad.State
 import Data.Bits
-import Data.Char        (chr, ord)
+import Data.Char                (chr, ord)
+import Data.IntMap              (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.Typeable
 import Foreign.C.String
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Sugar (Elem(..), ElemRepr)
 import Data.Array.Accelerate.AST
 
 
--- | Array code execution
+-- | Execution of array operations
+-- -------------------------------
+
+-- |Array environment
 -- -
 
--- |Execute a collective operation.
+-- Array representation during execution of an array computation.
 --
-run :: Comp a -> a
-run = error "Data.Array.Accelerate.Interpreter.run: unimplemented"
+-- These use an untyped representation as we don't use type-indexed de Bruijn
+-- indices for array variables yet.
+--
+data ArrVal = forall shape e. (Typeable shape, Typeable e) =>
+              ArrVal { arrValShape :: shape          -- array shape
+                     , arrValData  :: MutableArrayData e
+                     }
+                     
+-- Environment of arrays of an array computation during interpretation
+--
+type ArrEnv = IntMap ArrVal
+
+-- Retrieve the shape of an entry from the array environment
+--
+prjArrShape :: Arr dim e -> ArrEnv -> dim
+prjArrShape (Arr _ i) aenv 
+  = case aenv!!i of
+      ArrVal sh _ -> case cast sh of
+                       Nothing  -> mismatch
+                       Just sh' -> sh'
+  where
+    mismatch = error "Data.Array.Accelerate.Interpreter.prjArrShape: mismatch"
+
+
+-- |Interpreter monad
+-- -
+
+-- |State transformer in which the interpreter runs
+--
+type Interp s a = StateT InterpState (ST s) a
+
+data InterpState = InterpState {arrEnv :: ArrEnv}
+
+initialInterpState :: InterpState
+initialInterpState = InterpState IntMap.empty
+
+runInterp :: Interp s a -> a
+runInterp = runST . flip evalStateT initialInterpState
+
+-- Add an entry to the array environment
+--
+def :: Arr dim e -> ArrVal -> Interp s ()
+def (Arr _ i) aval 
+  = modify $ \s -> s {arrEnv = IntMap.insert i aval (arrEnv s)}
+
+-- Add an entry to the array environment, which is initialised from an
+-- external array
+--
+defArray :: Arr dim e -> Array dim e -> Interp s ()
+defArray arr array
+  = do
+      adata <- thawArray (arrValData array)
+      arr `def` ArrVal {arrayValShape = arrayShape arr, arrValData = adata}
+
+-- Extract the entire array environment (to pass it to the evaluation of an
+-- expression)
+--
+getArrEnv :: Interp s ArrEnv
+getArrEnv = liftM arrEnv gets 
+
+-- |Execute a sequence of array computations
+-- -
+
+-- |Run a whole sequence
+-- -
+runComps :: Comps 
+
+
+-- |Run a collective operation.
+--
+runComp :: Comp a -> Interp s a
+runComp (Use array) = defArray ?? array
+
+
+-- |Expression evaluation
+-- ----------------------
 
 -- Valuation for an expression environment
 --
@@ -46,63 +132,96 @@ prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push val v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 
--- Execute a close expression
+-- Execute a closed expression
 --
-runExp :: Exp t -> t
-runExp e = runOpenExp e Empty
+runExp :: Exp t -> ArrEnv -> t
+runExp e aenv = runOpenExp e Empty aenv
 
 -- Execute an open expression
 --
-runOpenExp :: OpenExp env a -> Val env -> a
-runOpenExp (Var _ idx)          env = prj idx env
-runOpenExp (Const _ c)          _   = c
-runOpenExp (Pair e1 e2)         env = (runOpenExp e1 env, runOpenExp e2 env)
-runOpenExp (Fst e)              env = let (v1, !_) = runOpenExp e env in v1
-runOpenExp (Snd e)              env = let (!_, v2) = runOpenExp e env in v2
-runOpenExp (Cond c t e)         env = if runOpenExp c env then runOpenExp t env 
-                                                          else runOpenExp e env
-runOpenExp (PrimConst c)        _   = runPrimConst c
-runOpenExp (PrimApp p arg)      env = runPrim p $ runOpenExp arg env
-runOpenExp (IndexScalar arr ix) env = error "???"
-runOpenExp (Shape arr)          _   = error "arr doesn't contain the array value"
+runOpenExp :: OpenExp env a -> Val env -> ArrEnv -> a
+runOpenExp (Var _ idx)          env _    = prj idx env
+runOpenExp (Const _ c)          _   _    = c
+runOpenExp (Pair ds dt e1 e2)   env aenv = runPair ds dt
+                                                   (runOpenExp e1 env aenv) 
+         									                         (runOpenExp e2 env aenv)
+runOpenExp (Fst ds dt e)        env aenv = runFst ds dt (runOpenExp e env aenv)
+runOpenExp (Snd ds dt e)        env aenv = runSnd ds dt (runOpenExp e env aenv)
+runOpenExp (Cond c t e)         env aenv = if toElem (runOpenExp c env aenv) 
+                                           then runOpenExp t env aenv
+                                           else runOpenExp e env aenv
+runOpenExp (PrimConst c)        _   _    = fromElem $ runPrimConst c
+runOpenExp (PrimApp p arg)      env aenv 
+  = fromElem $ runPrim p (toElem (runOpenExp arg env aenv))
+runOpenExp (IndexScalar arr ix) env aenv = error "missing IndexScalar"
+runOpenExp (Shape arr)          _   aenv = prjArrShape arr aenv
+
 runPrimConst :: PrimConst a -> a
 runPrimConst (PrimMinBound ty) = runMinBound ty
 runPrimConst (PrimMaxBound ty) = runMaxBound ty
 runPrimConst (PrimPi       ty) = runPi ty
 
 runPrim :: PrimFun p -> p
-runPrim (PrimAdd   ty)     = runAdd ty
-runPrim (PrimSub   ty)     = runSub ty
-runPrim (PrimMul   ty)     = runMul ty
-runPrim (PrimNeg   ty)     = runNeg ty
-runPrim (PrimAbs   ty)     = runAbs ty
-runPrim (PrimSig   ty)     = runSig ty
-runPrim (PrimQuot  ty)     = runQuot ty
-runPrim (PrimRem   ty)     = runRem ty
-runPrim (PrimIDiv  ty)     = runIDiv ty
-runPrim (PrimMod   ty)     = runMod ty
-runPrim (PrimBAnd  ty)     = runBAnd ty
-runPrim (PrimBOr   ty)     = runBOr ty
-runPrim (PrimBXor  ty)     = runBXor ty
-runPrim (PrimBNot  ty)     = runBNot ty
-runPrim (PrimFDiv  ty)     = runFDiv ty
-runPrim (PrimRecip ty)     = runRecip ty
-runPrim (PrimLt    ty)     = runLt ty
-runPrim (PrimGt    ty)     = runGt ty
-runPrim (PrimLtEq  ty)     = runLtEq ty
-runPrim (PrimGtEq  ty)     = runGtEq ty
-runPrim (PrimEq    ty)     = runEq ty
-runPrim (PrimNEq   ty)     = runNEq ty
-runPrim (PrimMax   ty)     = runMax ty
-runPrim (PrimMin   ty)     = runMin ty
-runPrim PrimLAnd           = runLAnd
-runPrim PrimLOr            = runLOr
-runPrim PrimLNot           = runLNot
-runPrim PrimOrd            = runOrd
-runPrim PrimChr            = runChr
-runPrim PrimRoundFloatInt  = runRoundFloatInt
-runPrim PrimTruncFloatInt  = runTruncFloatInt
-runPrim PrimIntFloat       = runIntFloat
+runPrim (PrimAdd   ty)    = runAdd ty
+runPrim (PrimSub   ty)    = runSub ty
+runPrim (PrimMul   ty)    = runMul ty
+runPrim (PrimNeg   ty)    = runNeg ty
+runPrim (PrimAbs   ty)    = runAbs ty
+runPrim (PrimSig   ty)    = runSig ty
+runPrim (PrimQuot  ty)    = runQuot ty
+runPrim (PrimRem   ty)    = runRem ty
+runPrim (PrimIDiv  ty)    = runIDiv ty
+runPrim (PrimMod   ty)    = runMod ty
+runPrim (PrimBAnd  ty)    = runBAnd ty
+runPrim (PrimBOr   ty)    = runBOr ty
+runPrim (PrimBXor  ty)    = runBXor ty
+runPrim (PrimBNot  ty)    = runBNot ty
+runPrim (PrimFDiv  ty)    = runFDiv ty
+runPrim (PrimRecip ty)    = runRecip ty
+runPrim (PrimLt    ty)    = runLt ty
+runPrim (PrimGt    ty)    = runGt ty
+runPrim (PrimLtEq  ty)    = runLtEq ty
+runPrim (PrimGtEq  ty)    = runGtEq ty
+runPrim (PrimEq    ty)    = runEq ty
+runPrim (PrimNEq   ty)    = runNEq ty
+runPrim (PrimMax   ty)    = runMax ty
+runPrim (PrimMin   ty)    = runMin ty
+runPrim PrimLAnd          = runLAnd
+runPrim PrimLOr           = runLOr
+runPrim PrimLNot          = runLNot
+runPrim PrimOrd           = runOrd
+runPrim PrimChr           = runChr
+runPrim PrimRoundFloatInt = runRoundFloatInt
+runPrim PrimTruncFloatInt = runTruncFloatInt
+runPrim PrimIntFloat      = runIntFloat
+
+
+-- Auxilliary functions
+-- --------------------
+
+runPair :: forall s t. (Elem s, Elem t)
+        => s {- dummy to fix the type variable -}
+        -> t {- dummy to fix the type variable -}
+        -> ElemRepr s
+        -> ElemRepr t
+        -> ElemRepr (s, t)
+runPair _ _ x y = fromElem (toElem x :: s, toElem y :: t)
+
+runFst :: forall s t. (Elem s, Elem t)
+       => s {- dummy to fix the type variable -}
+       -> t {- dummy to fix the type variable -}
+       -> ElemRepr (s, t)
+       -> ElemRepr s
+runFst _ _ xy = let (x, !_) = toElem xy :: (s, t)
+                in fromElem x
+
+runSnd :: forall s t. (Elem s, Elem t)
+       => s {- dummy to fix the type variable -}
+       -> t {- dummy to fix the type variable -}
+       -> ElemRepr (s, t)
+       -> ElemRepr t
+runSnd _ _ xy = let (!_, y) = toElem xy :: (s, t)
+                in fromElem y
 
 
 -- Implementation of the primitives
@@ -277,4 +396,3 @@ runMin (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry min
 runMin (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry min
-

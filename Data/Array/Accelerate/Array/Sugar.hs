@@ -450,7 +450,6 @@ singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 
 
-
 -- |Surface arrays
 -- ---------------
 
@@ -460,7 +459,7 @@ data Array dim e where
   Array :: (Ix dim, Elem e, ArrayElem (ElemRepr e)) =>
            { arrayShape    :: dim             -- ^extent of dimensions = shape
            , arrayId       :: String          -- ^for pretty printing
-           , arrayPtr      :: ArrayData (ElemRepr e)
+           , arrayData     :: ArrayData (ElemRepr e)
                                               -- ^data, same layout as in
            }               -> Array dim e
 

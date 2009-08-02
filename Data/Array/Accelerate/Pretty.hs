@@ -28,65 +28,53 @@ import Data.Array.Accelerate.AST
 -- |Show instances
 -- ---------------
 
-instance Show Comps where
-  show cs = render $ prettyComps cs
-
-instance Show CompBinding where
-  show c = render $ prettyCompBinding c
-
-instance Show (Comp a) where
+instance Show (Comp env a) where
   show c = render $ prettyComp c
 
-instance Show (OpenFun env f) where
+instance Show (Fun env f) where
   show f = render $ prettyFun f
 
-instance Show (OpenExp env t) where
+instance Show (Exp env t) where
   show e = render $ prettyExp noParens e
 
 
--- |Pretty printing
--- ----------------
+-- Pretty printing
+-- ---------------
 
--- |Pretty print a sequence of collective operations.
+-- Pretty print a monadic binding sequence.
 --
-prettyComps :: Comps -> Doc
-prettyComps (Comps [])  = text "<empty>"
-prettyComps (Comps [c]) = prettyCompReturn c
-prettyComps (Comps cs)  =
-  hang (text "do") 2 $
-    vcat (map prettyCompBinding binds ++ [prettyCompReturn ret])
+prettyBind :: Comp env a -> Doc
+prettyBind c
+  = hang (text "do") 2 $ 
+      bind 0 c
   where
-    binds = init cs
-    ret   = last cs
+    bind :: Int -> Comp env a -> Doc
+    bind i (Bind c1 c2)  = char 'a' <> int i <+> text "<-" <+> prettyComp c1
+                           $$
+                           bind (i + 1) c2
+    bind i (Bind2 c1 c2) = text "(a" <> int i <> text ", a" <> int (i + 1) <>
+                           text ") <-" <+> prettyComp c1
+                           $$
+                           bind (i + 2) c2
+    bind _ c             = prettyComp c
 
--- |Pretty print just the collective operation of a binding.
+-- Pretty print a collective array computation.
 --
-prettyCompReturn :: CompBinding -> Doc
-prettyCompReturn (CompBinding _ coll) = prettyComp coll
-
--- |Pretty print a binding of a collective operation.
---
-prettyCompBinding :: CompBinding -> Doc
-prettyCompBinding (CompBinding r coll) 
-  = prettyVarNames (strings r) <+> text "<-" <+> prettyComp coll
-  where
-    prettyVarNames []     = text "()"
-    prettyVarNames [name] = text name
-    prettyVarNames names  = 
-      parens . hsep . punctuate (char ',') . map text $ names
-
--- |Pretty print a collective array computation.
---
-prettyComp :: Comp a -> Doc
-prettyComp (Use arr)          = text "use" <+> prettyArray arr
-prettyComp (Unit e)           = text "unit" <+> prettyExp parens e
+prettyComp :: Comp env a -> Doc
+prettyComp (Return idx)        = text "return" <+> prettyArr idx
+prettyComp (Return2 idx1 idx2) = text "return" <+> 
+                                   (parens $ prettyArr idx1 <> char ',' <+>
+                                             prettyArr idx2)
+prettyComp c@(Bind _ _)        = prettyBind c
+prettyComp c@(Bind2 _ _)       = prettyBind c
+prettyComp (Use arr)           = text "use" <+> prettyArray arr
+prettyComp (Unit e)            = text "unit" <+> prettyExp parens e
 prettyComp (Reshape sh arr)
   = text "reshape" <+> prettyExp parens sh <+> prettyArr arr
 prettyComp (Replicate _ty ix arr) 
   = text "replicate" <+> prettyExp id ix <+> prettyArr arr
 prettyComp (Index _ty arr ix) 
   = prettyArr arr <> char '!' <> prettyExp id ix
---prettyComp (Zip arr1 arr2)    = text "zip" <+> prettyArr arr1 <+> prettyArr arr2
 prettyComp (Map f arr)      
   = text "map" <+> parens (prettyFun f) <+> prettyArr arr
 prettyComp (ZipWith f arr1 arr2)    
@@ -104,29 +92,25 @@ prettyComp (Backpermute sh p arr)
   = text "backpermute" <+> prettyExp parens sh <+> parens (prettyFun p) <+> 
     prettyArr arr
 
--- |Pretty print a function over scalar expressions.
+-- Pretty print a function over scalar expressions.
 --
-prettyFun :: OpenFun env fun -> Doc
+prettyFun :: Fun env fun -> Doc
 prettyFun fun = 
   let (n, bodyDoc) = count fun
   in
-  char '\\' <> hsep [text $ "a" ++ show idx | idx <- [0..n]] <+> text "->" <+> 
+  char '\\' <> hsep [text $ "x" ++ show idx | idx <- [0..n]] <+> text "->" <+> 
   bodyDoc
   where
-     count :: OpenFun env fun -> (Int, Doc)
+     count :: Fun env fun -> (Int, Doc)
      count (Body body) = (-1, prettyExp noParens body)
      count (Lam fun)   = let (n, body) = count fun in (1 + n, body)
 
--- |Pretty print an expression.
+-- Pretty print an expression.
 --
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
-prettyExp :: (Doc -> Doc) -> OpenExp env t -> Doc
-prettyExp wrap (Var _ idx)       = text $ "a" ++ show (count idx)
-  where
-    count :: Idx env t -> Int
-    count ZeroIdx       = 0
-    count (SuccIdx idx) = 1 + count idx
+prettyExp :: (Doc -> Doc) -> Exp env t -> Doc
+prettyExp wrap (Var _ idx)       = text $ "x" ++ show (idxToInt idx)
 prettyExp _    (Const ty v)      = text $ runTupleShow ty v
 prettyExp _    e@(Pair _ _ _ _)  = prettyTuple e
 prettyExp wrap (Fst _ _ e)       = wrap $ text "fst" <+> prettyExp parens e
@@ -136,29 +120,30 @@ prettyExp wrap (Cond c t e)
                 parens (prettyExp noParens t <> comma <+> prettyExp noParens e)]
 prettyExp _    (PrimConst a)     = prettyConst a
 prettyExp wrap (PrimApp p a)     = wrap $ prettyPrim p <+> prettyExp parens a
-prettyExp wrap (IndexScalar a i)
-  = wrap $ cat [prettyArr a, char '!', prettyExp parens i]
-prettyExp wrap (Shape a)         = wrap $ text "shape" <+> prettyArr a
+prettyExp wrap (IndexScalar idx i)
+  = wrap $ cat [prettyArr idx, char '!', prettyExp parens i]
+prettyExp wrap (Shape idx)       = wrap $ 
+                                     text "shape" <+> prettyArr idx
 
--- |Pretty print nested pairs as a proper tuple.
+-- Pretty print nested pairs as a proper tuple.
 --
-prettyTuple :: OpenExp env t -> Doc
+prettyTuple :: Exp env t -> Doc
 prettyTuple e = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
     es = collect e
     --
-    collect :: OpenExp env t -> [Doc]
+    collect :: Exp env t -> [Doc]
     collect (Pair _ _ e1 e2) = collect e1 ++ collect e2
     collect e                = [prettyExp noParens e]
 
--- |Pretty print a primitive constant
+-- Pretty print a primitive constant
 --
 prettyConst :: PrimConst a -> Doc
 prettyConst (PrimMinBound _) = text "minBound"
 prettyConst (PrimMaxBound _) = text "maxBound"
 prettyConst (PrimPi       _) = text "pi"
 
--- |Pretty print a primitive operation
+-- Pretty print a primitive operation
 --
 prettyPrim :: PrimFun a -> Doc
 prettyPrim (PrimAdd _)   = text "(+)"
@@ -189,18 +174,18 @@ prettyPrim PrimLAnd      = text "&&*"
 prettyPrim PrimLOr       = text "||*"
 prettyPrim PrimLNot      = text "not"
 
--- |Pretty print type
+-- Pretty print type
 --
 prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 
--- |Pretty print the identification code of an APU array
+-- Pretty print the identification of an external array 
 --
 prettyArray :: Array dim a -> Doc
 prettyArray arr = text $ arrayId arr
 
 {-
--- |Pretty print a generalised array index
+-- Pretty print a generalised array index
 --
 prettyIndex :: SliceIndex slice co dim -> Doc
 prettyIndex = parens . hsep . punctuate (char ',') . prettyIxs
@@ -211,21 +196,30 @@ prettyIndex = parens . hsep . punctuate (char ',') . prettyIxs
     prettyIxs (SliceFixed e ixs) = prettyExp noParens e : prettyIxs ixs
  -}
 
--- |Pretty print the identification of an array representation in collective code
+-- Pretty print the de Bruijn index of an array
 --
-prettyArr :: Arr dim a -> Doc
-prettyArr (Arr _ str) = text str
+prettyArr :: Idx env (Arr dim a) -> Doc
+prettyArr idx = char 'a' <> int (idxToInt idx)
 
--- |Auxilliary pretty printing combinators
--- -
+-- Auxilliary pretty printing combinators
+-- 
 
 noParens :: Doc -> Doc
 noParens = id
 
--- |Auxilliary dictionary operations
--- -
+-- Auxilliary ops
+--
 
--- |Show tuple values
+-- Convert a typed de Brujin index to the corresponding integer
+--
+idxToInt :: Idx env t -> Int
+idxToInt ZeroIdx       = 0
+idxToInt (SuccIdx idx) = 1 + idxToInt idx
+
+-- Auxilliary dictionary operations
+-- 
+
+-- Show tuple values
 --
 runTupleShow :: TupleType a -> (a -> String)
 runTupleShow UnitTuple       = show
@@ -233,7 +227,7 @@ runTupleShow (SingleTuple x) = runScalarShow x
 runTupleShow (PairTuple ty1 ty2) 
   = \(x, y) -> "(" ++ runTupleShow ty1 x ++ ", " ++ runTupleShow ty2 y ++ ")"
 
--- |Show scalar values
+-- Show scalar values
 --
 runScalarShow :: ScalarType a -> (a -> String)
 runScalarShow (NumScalarType (IntegralNumType ty)) 

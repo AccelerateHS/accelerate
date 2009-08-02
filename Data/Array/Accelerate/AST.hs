@@ -12,72 +12,118 @@
 --  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --  The embedded array processing language is a two-level language.  It
 --  combines a language of scalar expressions and functions with a language of
---  collective array operations.  Scalar expressions are used to compute 
+--  collective array operations.  Scalar expressions are used to compute
 --  arguments for collective operations and scalar functions are used to
 --  parametrise higher-order, collective array operations.  The two-level
 --  structure, in particular, ensures that collective operations cannot be
 --  parametrised with collective operations; hence, we are following a flat
 --  data-parallel model.  The collective operations manipulate
---  multi-dimensional arrays whose shape is explicitly tracked in their
---  types.  In fact, collective operations cannot produce any values other
---  than multi-dimensional arrays; when they yield a scalar, this is in the
---  form of a 0-dimensional, singleton array. 
+--  multi-dimensional arrays whose shape is explicitly tracked in their types.
+--  In fact, collective operations cannot produce any values other than
+--  multi-dimensional arrays; when they yield a scalar, this is in the form of
+--  a 0-dimensional, singleton array.  Similarly, scalar expression can -as
+--  their name indicates- only produce tuples of scalar, but not arrays. 
+--  (There are, however, two expression forms that take arrays as arguments.)
 --
 --  Programs
 --  ~~~~~~~~
---  Collective array programs are monadic sequences of collective array 
+--  Collective array programs are monadic sequences of collective array
 --  operations.  The monadic framework provides for the explicit sharing of
 --  intermediate results and orders the computations.  Programs are the
 --  execution unit for array computations.
 --
 --  Functions
 --  ~~~~~~~~~
---  The array expression language is first-order and only provides only limited
---  control structures, to ensure that it can be efficiently executed on
---  compute acceleration hardware, such as GPUs.  To restrict functions to
+--  The array expression language is first-order and only provides limited
+--  control structures to ensure that it can be efficiently executed on
+--  compute-acceleration hardware, such as GPUs.  To restrict functions to
 --  first-order, we separate function abstraction from the main expression
 --  type.  Functions are represented using de Bruijn indices.
 --
 --  Parametric and ad-hoc polymorphism
 --  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --  The array language features paramatric polymophism (e.g., pairing and
---  projections) as well as ad-hoc polymorphism (e.g., arithmetic
---  operations).  All ad-hoc polymorphic constructs include reified dictionaries
---  (c.f., module `Types').  Reified dictionaries also ensure that constants
---  (constructor `Const') are representable on compute acceleration hardware.
+--  projections) as well as ad-hoc polymorphism (e.g., arithmetic operations).
+--  All ad-hoc polymorphic constructs include reified dictionaries (c.f.,
+--  module 'Types').  Reified dictionaries also ensure that constants
+--  (constructor 'Const') are representable on compute acceleration hardware.
 --
---  Host <-> device transfer
---  ~~~~~~~~~~~~~~~~~~~~~~~~
---  This is included in the array computations to enable the code generator to 
---  schedule transfers concurrently with array operations.
+--  External vs. internal arrays
+--  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--  Arrays in the embedded language have a type different from those of the
+--  host language - the host language uses the type constructor 'Array', while
+--  the embedded language uses 'Arr'.  External 'Array's are internalised with
+--  a 'use' operation.  This makes the multiple use (sharing) of an
+--  internalised array explicit and it indicates where host->device transfers
+--  are needed when compute-acceleration hardware is used. (These transfers
+--  may proceed concurrently to host and device computations.)
 
 module Data.Array.Accelerate.AST (
 
-  Comps(..), CompBinding(..), CompResult(..), Comp(..), Arr(..), Sca, 
-  Idx(..), Fun, OpenFun(..), Exp, OpenExp(..), PrimConst(..), PrimFun(..)
+  -- * Typed de Bruijn indices
+  Idx(..),
+  
+  -- * Internal arrays
+  Arr(..), Sca, Vec,
+  
+  -- * Monadic array computations
+  Program, Comp(..), CompResult(..),
+  
+  -- * Expressions
+  Fun(..), Exp(..), PrimConst(..), PrimFun(..)
 
 ) where
+  
+-- standard library
+import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Data  (ArrayElem)
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (ElemRepr, ElemRepr')
+import Data.Array.Accelerate.Array.Sugar (Elem, ElemRepr, ElemRepr')
 
 
--- |Abstract syntax of array computations
--- -
+-- Typed de Bruijn indices
+-- -----------------------
 
--- |A program of collective array operations is a sequence of collective array
--- operations 
-newtype Comps = Comps [CompBinding]
-  -- FIXME: we'd like conditionals, but then we need a binary tree rather than a
-  --  sequence of collective array operations
-
--- |A binding of a collective array operation is such an operation with an
--- apporpriate number of `Arr' binders
+-- De Bruijn variable index projecting a specific type from a type
+-- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 
 --
-data CompBinding where
-  CompBinding :: CompResult a => a -> Comp a -> CompBinding
+data Idx env t where
+  ZeroIdx ::              Idx (env, t) t
+  SuccIdx :: Idx env t -> Idx (env, s) t
+
+
+-- Internal arrays
+-- ---------------
+
+-- |Array representation inside collective computations; this is only to track
+-- the array, not to represent it's value.
+--
+-- We require the dimensions and element type to be in `Typeable' as we don't
+-- use type-indexed de Bruijn indices for array variables at the moment and
+-- hence need to cast in the interpreter.
+--
+data Arr dim e where
+  Arr :: (IxRepr dim, ArrayElem e, Typeable dim, Typeable e) 
+      => TupleType e -> Int -> Arr dim e
+
+-- |Scalar results (both elementary scalars and tuples of scalars) are being
+-- represented as 0-dimensional singleton arrays
+--
+type Sca a = Arr DIM0Repr a
+
+-- |Vectors as 1-dimensional arrays
+--
+type Vec a = Arr DIM1Repr a
+
+
+-- Monadic array computations
+-- --------------------------
+
+-- Abstract syntax of array computations
+-- 
 
 -- |Possible results of collective array computations are tuples of
 -- multi-dimensional arrays
@@ -89,79 +135,104 @@ instance CompResult () where
   strings _ = []
 
 instance CompResult (Arr dim e) where
-  strings (Arr _ str) = [str]
+  strings (Arr _ i) = ['a':show i]
 
 instance (CompResult r1, CompResult r2) => CompResult (r1, r2) where
   strings (r1, r2) = strings r1 ++ strings r2
 
--- |The various variants of collective array operations
+
+-- |Programs are closed array computations.
+--
+type Program a = Comp () a
+
+-- |Collective array computations parametrised over array variables
+-- represented with de Bruijn indices.
 --
 -- * We have no fold, only scan which returns the fold result and scan array.
 --   We assume that the code generatoris clever enough to eliminate any dead
 --   code, when only one of the two values is needed.
 --
-data Comp a where
+-- * Scalar functions and expressions embedded in well-formed array
+--   computations cannot contain free scalar variable indices.  They cannot be
+--   bound in array computations, and hence, cannot appear in any well-formed
+--   program.
+--
+data Comp env a where
+  
+  -- Monadic return
+  Return      :: Idx env (Arr dim e) -> Comp env (Arr dim e)
 
-  -- array inlet (triggers async host->device transfer if necessary)
-  Use         :: Array dim a -> Comp (Arr dim a)
+  -- Monadic return with pairing
+  Return2     :: Idx env (Arr dim1 e1) 
+              -> Idx env (Arr dim2 e2) 
+              -> Comp env (Arr dim1 e1, Arr dim2 e2)
+    -- FIXME: we ought to be able to return n-tuples (as nested pairs) of arrays
+    --        without using multiple returns - in fact, it's very ugly to have
+    --        two returns in the first place
+    
+  -- Monadic bind
+  Bind        :: Comp env a -> Comp (env, a) b -> Comp env b
+        
+  -- Monadic bind with unpairing
+  Bind2       :: Comp env (a, b) -> Comp ((env, a), b) c -> Comp env c
+  -- FIXME: we ought to be able to match n-tuples (as nested pairs) of arrays
+  --        without using multiple binds - in fact, it's very ugly to have
+  --        two binds in the first place
+        
+  -- Array Inlet (Triggers Async Host->Device Transfer if Necessary)
+  Use         :: Array dim e -> Comp env (Arr dim e)
 
-  -- capture a scalar (or a tuple of scalars) in a singleton array  
-  Unit        :: Exp a -> Comp (Sca a)
-
-  -- collective operations
-  --
+  -- Capture a Scalar (or a tuple of Scalars) in a Singleton Array  
+  Unit        :: Exp env e -> Comp env (Sca e)
 
   -- Change the shape of an array without altering its contents
   -- * precondition: size dim == size dim'
-  Reshape     :: Exp dim                          -- ^new shape
-              -> Arr dim' a                       -- ^array to be reshaped
-              -> Comp (Arr dim a)
+  Reshape     :: Exp env dim                     -- ^new shape
+              -> Idx env (Arr dim' e)            -- ^array to be reshaped
+              -> Comp env (Arr dim e)
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: SliceIndex slix sl co dim        -- ^slice type specification
-              -> Exp slix                         -- ^slice value specification
-              -> Arr sl a                         -- ^data to be replicated
-              -> Comp (Arr dim a)
+              -> Exp env slix                     -- ^slice value specification
+              -> Idx env (Arr sl e)               -- ^data to be replicated
+              -> Comp env (Arr dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
   Index       :: SliceIndex slix sl co dim        -- ^slice type specification
-              -> Arr dim a                        -- ^array to be indexed
-              -> Exp slix                         -- ^slice value specification
-              -> Comp (Arr sl a)
-
-{-
-  -- Pairwise combination of elements of two arrays with the same shape
-  Zip         :: Arr dim a -> Arr dim b -> Comp (Arr dim (a, b))
- -}
+              -> Idx env (Arr dim e)              -- ^array to be indexed
+              -> Exp env slix                     -- ^slice value specification
+              -> Comp env (Arr sl e)
 
   -- Apply the given unary function to all elements of the given array
-  Map         :: Fun (a -> b) -> Arr dim a -> Comp (Arr dim b)
+  Map         :: Fun env (e -> e') 
+              -> Idx env (Arr dim e) 
+              -> Comp env (Arr dim e')
     -- FIXME: generalise to mapFold
 
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
-  ZipWith     :: Fun (a -> b -> c) 
-              -> Arr dim a 
-              -> Arr dim b 
-              -> Comp (Arr dim c)
+  ZipWith     :: Fun env (e1 -> e2 -> e3) 
+              -> Idx env (Arr dim e1)
+              -> Idx env (Arr dim e2)
+              -> Comp env (Arr dim e3)
 
   -- Remove all elements from a linear array that do not satisfy the given
   -- predicate
-  Filter      :: Fun (a -> ElemRepr Bool) 
-              -> Arr DIM1Repr a 
-              -> Comp (Arr DIM1Repr a)
+  Filter      :: Fun env (e -> ElemRepr Bool) 
+              -> Idx env (Vec e)
+              -> Comp env (Vec e)
 
   -- Left-to-right prescan of a linear array with a given *associative*
   -- function and its neutral element; produces a rightmost fold value and a
   -- linear of the same shape (the fold value would be the rightmost element
   -- in a scan, as opposed to a prescan)
-  Scan        :: Fun (a -> a -> a)                -- ^combination function
-              -> Exp a                            -- ^default value
-              -> Arr DIM1Repr a                   -- ^linear array
-              -> Comp (Arr DIM0Repr a, Arr DIM1Repr a)
+  Scan        :: Fun env (e -> e -> e)            -- ^combination function
+              -> Exp env e                        -- ^default value
+              -> Idx env (Vec e)                 -- ^linear array
+              -> Comp env (Sca e, Vec e)
     -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
   -- Generalised forward permutation is characterised by a permutation
@@ -175,100 +246,76 @@ data Comp a where
   -- positions on the target array are picked multiple times by the
   -- permutation functions).  The combination functions needs to be
   -- *associative* and *commutative*.  
-  Permute     :: Fun (a -> a -> a)                -- ^combination function
-              -> Arr dim' a                       -- ^default values
-              -> Fun (dim -> dim')                -- ^permutation function
-              -> Arr dim a                        -- ^linear array to permute
-              -> Comp (Arr dim' a)
+  Permute     :: Fun env (e -> e -> e)            -- ^combination function
+              -> Idx env (Arr dim' e)             -- ^default values
+              -> Fun env (dim -> dim')            -- ^permutation function
+              -> Idx env (Arr dim e)              -- ^linear array to permute
+              -> Comp env (Arr dim' e)
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
-  Backpermute :: Exp dim'                         -- ^dimensions of the result
-              -> Fun (dim' -> dim)                -- ^permutation function
-              -> Arr dim a                        -- ^source array
-              -> Comp (Arr dim' a)
-
-
--- |Array representation inside collective computations; this is only to track
--- the array, not to represent it's value
---
-data Arr dim e where
-  Arr :: IxRepr dim => TupleType e -> String -> Arr dim e
-
--- |Scalar results (both elementary scalars and tuples of scalars) are being
--- represented as 0-dimensional singleton arrays
---
-type Sca a = Arr DIM0Repr a
-
--- De Bruijn variable index projecting a specific type from a type
--- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 
---
-data Idx env t where
-  ZeroIdx ::              Idx (env, t) t
-  SuccIdx :: Idx env t -> Idx (env, s) t
-
--- |Closed function (may be nullary)
---
-type Fun fun = OpenFun () fun
+  Backpermute :: Exp env dim'                     -- ^dimensions of the result
+              -> Fun env (dim' -> dim)            -- ^permutation function
+              -> Idx env (Arr dim e)              -- ^source array
+              -> Comp env (Arr dim' e)
 
 -- |Function abstraction
 --
-data OpenFun env t where
-  Body :: OpenExp env t      -> OpenFun env t
-  Lam  :: OpenFun (env, a) t -> OpenFun env (a -> t)
-
--- Closed expression
---
-type Exp t = OpenExp () t
+data Fun env t where
+  Body :: Exp env t      -> Fun env t
+  Lam  :: Fun (env, a) t -> Fun env (a -> t)
 
 -- |Open expressions using de Bruijn indices for variables ranging over tuples
--- of scalars; they never produce an array.  All code, except Cond, is
--- evaluated eagerly.  N-tuples are represented as a nested pairs. 
+-- of scalars and arrays of tuples.  All code, except Cond, is evaluated
+-- eagerly.  N-tuples are represented as a nested pairs. 
 --
-data OpenExp env t where
+data Exp env t where
 
-  -- |Variable index
-  Var         :: TupleType t -> Idx env t -> OpenExp env t
+  -- |Variable index, ranging only over tuples or scalars
+  Var         :: TupleType t -> Idx env t -> Exp env t
 
   -- |Constant values
-  Const       :: TupleType t -> t -> OpenExp env t
+  Const       :: TupleType t -> t -> Exp env t
 
   -- |Tuples
-  Pair        :: s {- dummy to fix the type variable -}
+  Pair        :: (Elem s, Elem t)
+              => s {- dummy to fix the type variable -}
               -> t {- dummy to fix the type variable -}
-              -> OpenExp env (ElemRepr s) 
-              -> OpenExp env (ElemRepr t) 
-              -> OpenExp env (ElemRepr (s, t))
-  Fst         :: s {- dummy to fix the type variable -}
+              -> Exp env (ElemRepr s) 
+              -> Exp env (ElemRepr t) 
+              -> Exp env (ElemRepr (s, t))
+  Fst         :: (Elem s, Elem t)
+              => s {- dummy to fix the type variable -}
               -> t {- dummy to fix the type variable -}
-              -> OpenExp env (ElemRepr (s, t))
-              -> OpenExp env (ElemRepr s)
-  Snd         :: s {- dummy to fix the type variable -}
+              -> Exp env (ElemRepr (s, t))
+              -> Exp env (ElemRepr s)
+  Snd         :: (Elem s, Elem t)
+              => s {- dummy to fix the type variable -}
               -> t {- dummy to fix the type variable -}
-              -> OpenExp env (ElemRepr (s, t))
-              -> OpenExp env (ElemRepr t)
+              -> Exp env (ElemRepr (s, t))
+              -> Exp env (ElemRepr t)
 
   -- |Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond        :: OpenExp env (ElemRepr Bool) 
-              -> OpenExp env t 
-              -> OpenExp env t 
-              -> OpenExp env t
+  Cond        :: Exp env (ElemRepr Bool) 
+              -> Exp env t 
+              -> Exp env t 
+              -> Exp env t
 
   -- |Primitive constants
-  PrimConst   :: PrimConst t -> OpenExp env (ElemRepr t)
+  PrimConst   :: Elem t
+              => PrimConst t -> Exp env (ElemRepr t)
 
   -- |Primitive scalar operations
-  PrimApp     :: PrimFun (a -> r) 
-              -> OpenExp env (ElemRepr a) 
-              -> OpenExp env (ElemRepr r)
+  PrimApp     :: (Elem a, Elem r)
+              => PrimFun (a -> r) 
+              -> Exp env (ElemRepr a) 
+              -> Exp env (ElemRepr r)
 
   -- |Project a single scalar from an array
-  IndexScalar :: Arr dim t -> OpenExp env dim -> OpenExp env t
+  IndexScalar :: Idx env (Arr dim t) -> Exp env dim -> Exp env t
 
   -- |Array shape
-  Shape       :: Arr dim e -> OpenExp env dim
-
---  Cvt :: ElemRepr
+  Shape       :: Idx env (Arr dim e) -> Exp env dim
 
 -- |Primitive GPU constants
 --
