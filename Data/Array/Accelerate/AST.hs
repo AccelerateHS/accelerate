@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, EmptyDataDecls, DeriveDataTypeable #-}
 
 -- |Embedded array processing language: accelerate AST with de Bruijn indices
 --
@@ -67,7 +67,7 @@ module Data.Array.Accelerate.AST (
   Arr(..), Sca, Vec,
   
   -- * Monadic array computations
-  Program, Comp(..), CompResult(..),
+  Program, Comp(..),
   
   -- * Expressions
   Fun(..), Exp(..), PrimConst(..), PrimFun(..)
@@ -95,8 +95,8 @@ data Idx env t where
   SuccIdx :: Idx env t -> Idx (env, s) t
 
 
--- Internal arrays
--- ---------------
+-- Internal arrays (using representation types)
+-- --------------------------------------------
 
 -- |Array representation inside collective computations; this is only to track
 -- the array, not to represent it's value.
@@ -105,10 +105,13 @@ data Idx env t where
 -- use type-indexed de Bruijn indices for array variables at the moment and
 -- hence need to cast in the interpreter.
 --
-data Arr dim e where
+data Arr dim e {- where
   Arr :: (IxRepr dim, ArrayElem e, Typeable dim, Typeable e) 
-      => TupleType e -> Int -> Arr dim e
-
+      => TupleType e -> Int -> Arr dim e -}
+  -- FIXME: Do we ever construct values of this type?  If not, the problem is
+  -- that the restrictions imposed by the classes are not effective either.
+  deriving Typeable
+  
 -- |Scalar results (both elementary scalars and tuples of scalars) are being
 -- represented as 0-dimensional singleton arrays
 --
@@ -125,22 +128,6 @@ type Vec a = Arr DIM1Repr a
 -- Abstract syntax of array computations
 -- 
 
--- |Possible results of collective array computations are tuples of
--- multi-dimensional arrays
---
-class CompResult r where
-  strings :: r -> [String]
-
-instance CompResult () where
-  strings _ = []
-
-instance CompResult (Arr dim e) where
-  strings (Arr _ i) = ['a':show i]
-
-instance (CompResult r1, CompResult r2) => CompResult (r1, r2) where
-  strings (r1, r2) = strings r1 ++ strings r2
-
-
 -- |Programs are closed array computations.
 --
 type Program a = Comp () a
@@ -153,9 +140,9 @@ type Program a = Comp () a
 --   code, when only one of the two values is needed.
 --
 -- * Scalar functions and expressions embedded in well-formed array
---   computations cannot contain free scalar variable indices.  They cannot be
---   bound in array computations, and hence, cannot appear in any well-formed
---   program.
+--   computations cannot contain free scalar variable indices.  The latter
+--   cannot be bound in array computations, and hence, cannot appear in any
+--   well-formed program.
 --
 data Comp env a where
   
@@ -258,6 +245,10 @@ data Comp env a where
               -> Fun env (dim' -> dim)            -- ^permutation function
               -> Idx env (Arr dim e)              -- ^source array
               -> Comp env (Arr dim' e)
+              
+              
+-- Embedded expressions
+-- --------------------
 
 -- |Function abstraction
 --

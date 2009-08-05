@@ -9,14 +9,14 @@
 --
 --- Description ---------------------------------------------------------------
 --
---  This modules defines the the user-visible embedded language using more
+--  This modules defines the AST of the user-visible embedded language using more
 --  convenient higher-order abstract syntax (instead of de Bruijn indices).
 --  Moreover, it defines smart constructors to construct programs.
 
 module Data.Array.Accelerate.Smart (
 
   -- * Array processing computation monad
-  AP, runAP, wrapComp, wrapComp2,
+  AP, runAP, {-wrapComp, wrapComp2,-}
 
   -- * HOAS AST
   Arr(..), Sca, Vec, Exp(..), 
@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Smart (
   convertArray, convertArr, convertExp, convertFun1, convertFun2, 
 
   -- * Smart constructors for array operations
-  mkIndex, mkReplicate, {- mkZip, -}
+  mkIndex, mkReplicate,
 
   -- * Smart constructors for literals
   exp,
@@ -52,19 +52,21 @@ import Data.Typeable
 import Data.Array.Accelerate.Array.Representation hiding (Array(..))
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Exp, OpenExp(..), Arr(..), Sca)
+import Data.Array.Accelerate.AST hiding (Comp(..), Exp(..), Arr(..), Sca, Vec)
 import Data.Array.Accelerate.Pretty
 import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
 
 
--- |HOAS AST
--- ---------
+-- |Internal arrays (for the surface language)
+-- -------------------------------------------
 
 -- |Array representation for the surface language
 --
 data Arr dim e where
-  Arr :: (Ix dim, Elem e) => Int -> Arr dim e
+  Arr :: (Ix dim, Elem e) 
+      => Int              -- de Bruijn index
+      -> Arr dim e
 
 -- |Scalars of the surface language
 --
@@ -73,6 +75,86 @@ type Sca a = Arr DIM0 a
 -- |Scalars of the surface language
 --
 type Vec a = Arr DIM1 a
+
+
+-- Monadic array computations
+-- --------------------------
+
+data Comp a where
+
+    -- All the same constructors as 'AST.Comp'  
+  Return      :: a -> Comp a
+  Bind        :: Comp a -> (a -> Comp b) -> Comp b
+
+  Use         :: Array dim e -> Comp (Arr dim e)
+  Unit        :: Exp e -> Comp (Sca e)
+  Reshape     :: Exp dim
+              -> Arr dim' e 
+              -> Comp (Arr dim e)
+  Replicate   :: (SliceIx slix, Elem e)
+              => Exp slix
+              -> Arr sl e
+              -> Comp (Arr dim e)
+  Index       :: SliceIndex slix sl co dim
+              -> Arr dim e
+              -> Exp slix
+              -> Comp (Arr sl e)
+  Map         :: (Exp e -> Exp e') 
+              -> Arr dim e
+              -> Comp (Arr dim e')
+  ZipWith     :: (Exp e1 -> Exp e2 -> Exp e3) 
+              -> Arr dim e1
+              -> Arr dim e2
+              -> Comp (Arr dim e3)
+  Filter      :: (Exp e -> Exp Bool) 
+              -> Vec e
+              -> Comp (Vec e)
+  Scan        :: (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> Vec e
+              -> Comp (Sca e, Vec e)
+  Permute     :: (Exp e -> Exp e -> Exp e)
+              -> Arr dim' e
+              -> (Exp dim -> Exp dim')
+              -> Arr dim e
+              -> Comp (Arr dim' e)
+  Backpermute :: Exp dim'
+              -> (Exp dim' -> Exp dim)
+              -> Arr dim e
+              -> Comp (Arr dim' e)
+
+
+-- |Conversion from HOAS to de Bruijn computation AST
+-- -
+
+-- Type conversion for tuples of internal arrays
+--
+type family ArrRepr a :: *
+type instance ArrRepr ()             = ()
+type instance ArrRepr (Arr dim e)    = AST.Arr (ElemRepr dim) (ElemRepr e)
+type instance ArrRepr (a, b)         = (ArrRepr a, ArrRepr b)
+type instance ArrRepr (a, b, c)      = (ArrRepr a, ArrRepr b, ArrRepr c)
+type instance ArrRepr (a, b, c, d)   
+  = (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d)
+type instance ArrRepr (a, b, c, d, e)   
+  = (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e)
+
+-- |Convert a computation with given environment layout
+--
+convertComp :: Layout env env -> Comp a -> AST.Comp env (ArrRepr a)
+--convertComp lyt (Return a)    = AST.Return a
+convertComp lyt (Use array)     = AST.Use (convertArray array)
+convertComp lyt (Unit e)        = AST.Unit (convertExp lyt e)
+convertComp lyt (Reshape e arr) = AST.Reshape (convertExp lyt e)
+                                              (convertArr lyt arr)
+convertComp lyt (Replicate ix arr) 
+  = mkReplicate (undefined::slix) (undefined::e)
+                (convertExp lyt ix) (convertArr lyt arr)
+-- FIXME: many missing!
+
+
+-- Embedded expressions of the surface language
+-- --------------------------------------------
 
 -- HOAS expressions mirror the constructors of `AST.OpenExp', but with the
 -- `Tag' constructor instead of variables in the form of de Bruijn indices.
@@ -86,20 +168,25 @@ data Exp t where
               => Int                        -> Exp t
                  -- environment size at defining occurrence
 
-    -- All the same constructors as `AST.OpenExp'
+    -- All the same constructors as 'AST.Exp'
   Const       :: Elem t 
               => t                          -> Exp t
-  Pair        :: Exp s -> Exp t             -> Exp (s, t)
-  Fst         :: Exp (s, t)                 -> Exp s
-  Snd         :: Exp (s, t)                 -> Exp t
+  Pair        :: (Elem s, Elem t)
+              => Exp s -> Exp t             -> Exp (s, t)
+  Fst         :: (Elem s, Elem t)
+              => Exp (s, t)                 -> Exp s
+  Snd         :: (Elem s, Elem t)
+              => Exp (s, t)                 -> Exp t
   Cond        :: Exp Bool -> Exp t -> Exp t -> Exp t
-  PrimConst   :: PrimConst t                -> Exp t
-  PrimApp     :: PrimFun (a -> r) -> Exp a  -> Exp r
+  PrimConst   :: Elem t
+              => PrimConst t                -> Exp t
+  PrimApp     :: (Elem a, Elem r)
+              => PrimFun (a -> r) -> Exp a  -> Exp r
   IndexScalar :: Arr dim t -> Exp dim       -> Exp t
   Shape       :: Arr dim e                  -> Exp dim
 
 
--- |Conversion from HOAS to de Bruijn AST
+-- |Conversion from HOAS to de Bruijn expression AST
 -- -
 
 -- A layout of an environment an entry for each entry of the environment.
@@ -122,11 +209,10 @@ prjIdx _ EmptyLayout
 
 -- |Convert an open expression with the given environment layout
 --
-convertOpenExp :: forall t env. 
-                  Layout env env -> Exp t -> AST.OpenExp env (ElemRepr t)
-convertOpenExp lyt = cvt
+convertExp :: forall t env. Layout env env -> Exp t -> AST.Exp env (ElemRepr t)
+convertExp lyt = cvt
   where
-    cvt :: forall t'. Exp t' -> AST.OpenExp env (ElemRepr t')
+    cvt :: forall t'. Exp t' -> AST.Exp env (ElemRepr t')
     cvt (Tag i)             = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
     cvt (Const v)           = AST.Const (elemType (undefined::t')) (fromElem v)
     cvt (Pair (e1::Exp t1) 
@@ -140,13 +226,9 @@ convertOpenExp lyt = cvt
     cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)       = AST.PrimConst c
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
-    cvt (IndexScalar a e)   = AST.IndexScalar (convertArr a) (cvt e)
-    cvt (Shape a)           = AST.Shape (convertArr a)
-
--- |Convert a closed expression
---
-convertExp :: Exp t -> AST.Exp (ElemRepr t)
-convertExp = convertOpenExp EmptyLayout
+-- FIXME:
+--    cvt (IndexScalar a e)   = AST.IndexScalar (convertArr a) (cvt e)
+--    cvt (Shape a)           = AST.Shape (convertArr a)
 
 -- |Convert surface array representation to the internal one
 --
@@ -160,28 +242,31 @@ convertArray (Array {arrayShape = shape, arrayId = id, arrayData = adata})
       AST.arrayData     = adata
     }
 
--- |Convert surface AP array representation to the internal one
+-- |Convert surface AP array tag into a typed de Bruijn index for the internal
+-- representation
 --
-convertArr :: forall dim e. Arr dim e -> AST.Arr (ElemRepr dim) (ElemRepr e)
-convertArr (Arr idInt) = AST.Arr (elemType (undefined :: e)) idInt
+convertArr :: Layout env env 
+           -> Arr dim e 
+           -> Idx env (AST.Arr (ElemRepr dim) (ElemRepr e))
+convertArr lyt (Arr i) = prjIdx i lyt
 
 -- |Convert a unary functions
 --
-convertFun1 :: forall a b. Elem a
-            => (Exp a -> Exp b) -> AST.Fun (ElemRepr a -> ElemRepr b)
+convertFun1 :: forall a b env. Elem a
+            => (Exp a -> Exp b) -> AST.Fun () (ElemRepr a -> ElemRepr b)
 convertFun1 f = Lam (Body openF)
   where
     a     = Tag 0
     lyt   = EmptyLayout 
             `PushLayout` 
             (ZeroIdx :: Idx ((), ElemRepr a) (ElemRepr a))
-    openF = convertOpenExp lyt (f a)
+    openF = convertExp lyt (f a)
 
 -- |Convert a binary functions
 --
 convertFun2 :: forall a b c. (Elem a, Elem b) 
             => (Exp a -> Exp b -> Exp c) 
-            -> AST.Fun (ElemRepr a -> ElemRepr b -> ElemRepr c)
+            -> AST.Fun () (ElemRepr a -> ElemRepr b -> ElemRepr c)
 convertFun2 f = Lam (Lam (Body openF))
   where
     a     = Tag 1
@@ -191,15 +276,20 @@ convertFun2 f = Lam (Lam (Body openF))
             (SuccIdx ZeroIdx :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr a))
             `PushLayout`
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
-    openF = convertOpenExp lyt (f a b)
+    openF = convertExp lyt (f a b)
 
 instance Show (Exp t) where
-  show e = show (convertExp e :: AST.Exp (ElemRepr t))
+  show e = show (convertExp EmptyLayout e :: AST.Exp () (ElemRepr t))
 
 
 -- |Monad of collective operations
 -- -------------------------------
 
+instance Monad Comp where
+  return = Return
+  (>>=)  = Bind
+  
+{-
 -- |Array processing computations as a state transformer
 --
 type AP a = State APstate a
@@ -262,28 +352,31 @@ wrapComp2 comp
       arr2 <- genArr
       pushComp $ (convertArr arr1, convertArr arr2) `CompBinding` comp
       return (arr1, arr2)
+-}
 
 
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
-mkIndex :: forall slix e. (SliceIx slix, Elem e) 
+{-
+mkIndex :: forall slix e env. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
         -> AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e) 
-        -> AST.Exp (ElemRepr slix)
+        -> AST.Exp env (ElemRepr slix)
         -> Comp (AST.Arr (ElemRepr (Slice slix)) (ElemRepr e))
 mkIndex slix _ arr e 
-  = Index (convertSliceIndex slix (sliceIndex (undefined::slix))) arr e
+  = AST.Index (convertSliceIndex slix (sliceIndex (undefined::slix))) arr e
+-}
 
-mkReplicate :: forall slix e. (SliceIx slix, Elem e) 
+mkReplicate :: forall slix e env. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
-        -> AST.Exp (ElemRepr slix)
-        -> AST.Arr (ElemRepr (Slice slix)) (ElemRepr e) 
-        -> Comp (AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e))
-mkReplicate slix _ e arr 
-  = Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
+        -> AST.Exp env (ElemRepr slix)
+        -> Idx env (AST.Arr (ElemRepr (Slice slix)) (ElemRepr e))
+        -> AST.Comp env (AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e))
+mkReplicate slix _ e arr
+  = AST.Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
 
 
 -- |Smart constructors to construct HOAS AST expressions
@@ -298,6 +391,7 @@ exp v = Const v
 -- |Smart constructor for constants
 -- -
 
+{-
 mkMinBound :: IsBounded t => Exp t
 mkMinBound = PrimConst (PrimMinBound boundedType)
 
@@ -406,3 +500,4 @@ mkLNot x = PrimLNot `PrimApp` x
 -- FIXME: Character conversions
 
 -- FIXME: Numeric conversions
+-}
