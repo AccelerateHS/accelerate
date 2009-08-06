@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Language (
   Acc, Exp,             -- re-exporting from 'Smart'
 
   -- * Scalar introduction
-  exp,                  -- re-exporting from 'Smart'
+  constant,             -- re-exporting from 'Smart'
 
   -- * Array introduction
   use, unit,
@@ -45,8 +45,8 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not, 
-                         exp)
+import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not,
+                         const)
 import qualified Prelude
 
 -- standard libraries
@@ -128,7 +128,7 @@ scan = Scan
 fold :: Elem a 
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
-     -> Vector a 
+     -> Acc (Vector a)
      -> Acc (Scalar a)
 fold f e arr = error "fold f e arr = scan f e arr >>= return . fst"
 
@@ -180,7 +180,7 @@ instance (Elem t, IsNum t) => Num (Exp t) where
   negate      = mkNeg
   abs         = mkAbs
   signum      = mkSig
-  fromInteger = exp . fromInteger
+  fromInteger = constant . fromInteger
 
 instance (Elem t, IsNum t) => Real (Exp t)
   -- FIXME: Why did we include this class?  We won't need `toRational' until

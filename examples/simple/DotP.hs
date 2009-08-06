@@ -5,9 +5,10 @@ import qualified Prelude
 
 import Data.Array.Accelerate
 
-dotp :: Vector Float -> Vector Float -> AP (Sca Float)
+dotp :: Vector Float -> Vector Float -> Acc (Scalar Float)
 dotp xs ys 
-  = do
-      xs' <- use xs
-      ys' <- use ys
-      zipWith (*) xs' ys' >>= fold (+) 0
+  = let
+      xs' = use xs
+      ys' = use ys
+    in
+    fold (+) 0 (zipWith (*) xs' ys')

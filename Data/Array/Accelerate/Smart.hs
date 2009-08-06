@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Smart (
   Acc(..), Exp(..), 
 
   -- * Smart constructors for literals
-  exp,
+  constant,
 
   -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -30,9 +30,6 @@ module Data.Array.Accelerate.Smart (
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot,
 
 ) where
-
--- avoid clashes with Prelude functions
-import Prelude hiding (exp)
 
 -- standard library
 import Control.Monad.State
@@ -318,8 +315,8 @@ mkReplicate slix _ e arr
 -- |Smart constructor for literals
 -- -
 
-exp :: Elem t => t -> Exp t
-exp v = Const v
+constant :: Elem t => t -> Exp t
+constant = Const
 
 -- |Smart constructor for constants
 -- -
