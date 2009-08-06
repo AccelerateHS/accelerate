@@ -17,14 +17,11 @@
 
 module Data.Array.Accelerate.Language (
 
-  -- * Array processing computation monad
-  AP, Arr, Sca, Vec,    -- re-exporting from 'Smart'
+  -- * Array and scalar expressions
+  Acc, Exp,             -- re-exporting from 'Smart'
 
-  -- * Expressions
-  Exp, exp,             -- re-exporting from 'Smart'
-
-  -- * Slice expressions
-  All(..),              -- re-exporting from 'Sugar'
+  -- * Scalar introduction
+  exp,                  -- re-exporting from 'Smart'
 
   -- * Array introduction
   use, unit,
@@ -59,7 +56,6 @@ import Data.Bits
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.AST          hiding (Exp, OpenExp(..), Arr, Sca)
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty
 
@@ -73,65 +69,83 @@ infixl 9 !
 -- |Collective operations
 -- ----------------------
 
-use :: (Ix dim, Elem e) => Array dim e -> AP (Arr dim e)
-use array = wrapComp $ Use (convertArray array)
+use :: (Ix dim, Elem e) => Array dim e -> Acc (Array dim e)
+use = Use
 
-unit :: Elem e => Exp e -> AP (Sca e)
-unit e = wrapComp $ Unit (convertExp e)
+unit :: Elem e => Exp e -> Acc (Scalar e)
+unit = Unit
 
-reshape :: forall dim dim' e. (Ix dim, Ix dim', Elem e) 
-        => Exp dim -> Arr dim' e -> AP (Arr dim e)
-reshape e arr = wrapComp $ Reshape (convertExp e)
-                                   (convertArr arr)
+reshape :: (Ix dim, Ix dim', Elem e) 
+        => Exp dim 
+        -> Acc (Array dim' e) 
+        -> Acc (Array dim e)
+reshape = Reshape
 
 replicate :: forall slix e. (SliceIx slix, Elem e) 
-          => Exp slix -> Arr (Slice slix) e -> AP (Arr (SliceDim slix) e)
-replicate ix arr = wrapComp $ 
-                     mkReplicate (undefined::slix) (undefined::e)
-                                 (convertExp ix) (convertArr arr)
+          => Exp slix 
+          -> Acc (Array (Slice    slix) e) 
+          -> Acc (Array (SliceDim slix) e)
+replicate = Replicate (undefined::slix) (undefined::e)
 
 (!) :: forall slix e. (SliceIx slix, Elem e) 
-    => Arr (SliceDim slix) e -> Exp slix -> AP (Arr (Slice slix) e)
-arr ! ix = wrapComp $ 
-             mkIndex (undefined::slix) (undefined::e) 
-                     (convertArr arr) (convertExp ix)
+    => Acc (Array (SliceDim slix) e) 
+    -> Exp slix 
+    -> Acc (Array (Slice slix) e)
+(!) = Index (undefined::slix) (undefined::e) 
 
-zip :: forall dim a b. (Ix dim, Elem a, Elem b) 
-    => Arr dim a -> Arr dim b -> AP (Arr dim (a, b))
+zip :: (Ix dim, Elem a, Elem b) 
+    => Acc (Array dim a)
+    -> Acc (Array dim b)
+    -> Acc (Array dim (a, b))
 zip = zipWith (\x y -> x `Pair` y)
 
 map :: (Ix dim, Elem a, Elem b) 
-    => (Exp a -> Exp b) -> Arr dim a -> AP (Arr dim b)
-map f arr = wrapComp $ Map (convertFun1 f) (convertArr arr)
+    => (Exp a -> Exp b) 
+    -> Acc (Array dim a)
+    -> Acc (Array dim b)
+map = Map
 
 zipWith :: (Ix dim, Elem a, Elem b, Elem c)
-        => (Exp a -> Exp b -> Exp c) -> Arr dim a -> Arr dim b -> AP (Arr dim c)
-zipWith f arr1 arr2 
-  = wrapComp $ ZipWith (convertFun2 f) (convertArr arr1) (convertArr arr2)
+        => (Exp a -> Exp b -> Exp c) 
+        -> Acc (Array dim a)
+        -> Acc (Array dim b)
+        -> Acc (Array dim c)
+zipWith = ZipWith
 
-filter :: Elem a => (Exp a -> Exp Bool) -> Arr DIM1 a -> AP (Arr DIM1 a)
-filter p arr = wrapComp $ Filter (convertFun1 p) (convertArr arr)
+filter :: Elem a 
+       => (Exp a -> Exp Bool) 
+       -> Acc (Vector a) 
+       -> Acc (Vector a)
+filter = Filter
 
 scan :: Elem a 
-     => (Exp a -> Exp a -> Exp a) -> Exp a -> Vec a -> AP (Sca a, Vec a)
-scan f e arr = wrapComp2 $ Scan (convertFun2 f) (convertExp e) (convertArr arr)
+     => (Exp a -> Exp a -> Exp a) 
+     -> Exp a 
+     -> Acc (Vector a)
+     -> Acc (Scalar a, Vector a)
+scan = Scan
 
-fold :: Elem a => (Exp a -> Exp a -> Exp a) -> Exp a -> Vec a -> AP (Sca a)
-fold f e arr
-  = scan f e arr >>= return . fst
+fold :: Elem a 
+     => (Exp a -> Exp a -> Exp a) 
+     -> Exp a 
+     -> Vector a 
+     -> Acc (Scalar a)
+fold f e arr = error "fold f e arr = scan f e arr >>= return . fst"
 
 permute :: (Ix dim, Ix dim', Elem a)
-        => (Exp a -> Exp a -> Exp a) -> Arr dim' a -> (Exp dim -> Exp dim') 
-        -> Arr dim a -> AP (Arr dim' a)
-permute f dftArr perm arr 
-  = wrapComp $ Permute (convertFun2 f) (convertArr dftArr) (convertFun1 perm)
-                       (convertArr arr)
+        => (Exp a -> Exp a -> Exp a) 
+        -> Acc (Array dim' a) 
+        -> (Exp dim -> Exp dim') 
+        -> Acc (Array dim  a) 
+        -> Acc (Array dim' a)
+permute = Permute
 
 backpermute :: (Ix dim, Ix dim', Elem a)
-            => Exp dim' -> (Exp dim' -> Exp dim) -> Arr dim a -> AP (Arr dim' a)
-backpermute newDim perm arr 
-  = wrapComp $ 
-      Backpermute (convertExp newDim) (convertFun1 perm) (convertArr arr)
+            => Exp dim' 
+            -> (Exp dim' -> Exp dim) 
+            -> Acc (Array dim  a) 
+            -> Acc (Array dim' a)
+backpermute = Backpermute
 
 
 -- |Instances of all relevant H98 classes

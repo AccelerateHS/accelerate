@@ -9,23 +9,14 @@
 --
 --- Description ---------------------------------------------------------------
 --
---  This modules defines the AST of the user-visible embedded language using more
---  convenient higher-order abstract syntax (instead of de Bruijn indices).
---  Moreover, it defines smart constructors to construct programs.
+--  This modules defines the AST of the user-visible embedded language using
+--  more convenient higher-order abstract syntax (instead of de Bruijn
+--  indices). Moreover, it defines smart constructors to construct programs.
 
 module Data.Array.Accelerate.Smart (
 
-  -- * Array processing computation monad
-  AP, runAP, {-wrapComp, wrapComp2,-}
-
   -- * HOAS AST
-  Arr(..), Sca, Vec, Exp(..), 
-
-  -- * Conversions
-  convertArray, convertArr, convertExp, convertFun1, convertFun2, 
-
-  -- * Smart constructors for array operations
-  mkIndex, mkReplicate,
+  Acc(..), Exp(..), 
 
   -- * Smart constructors for literals
   exp,
@@ -49,79 +40,67 @@ import Data.Maybe
 import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.Array.Representation hiding (Array(..))
+import Data.Array.Accelerate.Array.Representation hiding (
+  Array(..), Scalar, Vector)
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST hiding (Comp(..), Exp(..), Arr(..), Sca, Vec)
+import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, OpenExp(..), Exp)
 import Data.Array.Accelerate.Pretty
 import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
 
 
--- |Internal arrays (for the surface language)
--- -------------------------------------------
-
--- |Array representation for the surface language
---
-data Arr dim e where
-  Arr :: (Ix dim, Elem e) 
-      => Int              -- de Bruijn index
-      -> Arr dim e
-
--- |Scalars of the surface language
---
-type Sca a = Arr DIM0 a
-
--- |Scalars of the surface language
---
-type Vec a = Arr DIM1 a
-
-
 -- Monadic array computations
 -- --------------------------
 
-data Comp a where
+data Acc a where
 
-    -- All the same constructors as 'AST.Comp'  
-  Return      :: a -> Comp a
-  Bind        :: Comp a -> (a -> Comp b) -> Comp b
-
-  Use         :: Array dim e -> Comp (Arr dim e)
-  Unit        :: Exp e -> Comp (Sca e)
+  Use         :: Array dim e -> Acc (Array dim e)
+  Unit        :: Exp e -> Acc (Scalar e)
   Reshape     :: Exp dim
-              -> Arr dim' e 
-              -> Comp (Arr dim e)
+              -> Acc (Array dim' e)
+              -> Acc (Array dim e)
   Replicate   :: (SliceIx slix, Elem e)
-              => Exp slix
-              -> Arr sl e
-              -> Comp (Arr dim e)
-  Index       :: SliceIndex slix sl co dim
-              -> Arr dim e
+              => slix {- dummy to fix the type variable -}
+              -> e    {- dummy to fix the type variable -}
               -> Exp slix
-              -> Comp (Arr sl e)
-  Map         :: (Exp e -> Exp e') 
-              -> Arr dim e
-              -> Comp (Arr dim e')
-  ZipWith     :: (Exp e1 -> Exp e2 -> Exp e3) 
-              -> Arr dim e1
-              -> Arr dim e2
-              -> Comp (Arr dim e3)
-  Filter      :: (Exp e -> Exp Bool) 
-              -> Vec e
-              -> Comp (Vec e)
-  Scan        :: (Exp e -> Exp e -> Exp e)
+              -> Acc (Array (Slice slix)    e)
+              -> Acc (Array (SliceDim slix) e)
+  Index       :: (SliceIx slix, Elem e)
+              => slix {- dummy to fix the type variable -}
+              -> e    {- dummy to fix the type variable -}
+              -> Acc (Array (SliceDim slix) e)
+              -> Exp slix
+              -> Acc (Array (Slice slix) e)
+  Map         :: Elem e
+              => (Exp e -> Exp e') 
+              -> Acc (Array dim e)
+              -> Acc (Array dim e')
+  ZipWith     :: (Elem e1, Elem e2, Elem e3)
+              => (Exp e1 -> Exp e2 -> Exp e3) 
+              -> Acc (Array dim e1)
+              -> Acc (Array dim e2)
+              -> Acc (Array dim e3)
+  Filter      :: Elem e
+              => (Exp e -> Exp Bool) 
+              -> Acc (Vector e)
+              -> Acc (Vector e)
+  Scan        :: Elem e
+              => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> Vec e
-              -> Comp (Sca e, Vec e)
-  Permute     :: (Exp e -> Exp e -> Exp e)
-              -> Arr dim' e
+              -> Acc (Vector e)
+              -> Acc (Scalar e, Vector e)
+  Permute     :: (Ix dim, Ix dim', Elem e)
+              => (Exp e -> Exp e -> Exp e)
+              -> Acc (Array dim' e)
               -> (Exp dim -> Exp dim')
-              -> Arr dim e
-              -> Comp (Arr dim' e)
-  Backpermute :: Exp dim'
+              -> Acc (Array dim e)
+              -> Acc (Array dim' e)
+  Backpermute :: (Ix dim, Ix dim', Elem e)
+              => Exp dim'
               -> (Exp dim' -> Exp dim)
-              -> Arr dim e
-              -> Comp (Arr dim' e)
+              -> Acc (Array dim e)
+              -> Acc (Array dim' e)
 
 
 -- |Conversion from HOAS to de Bruijn computation AST
@@ -129,28 +108,50 @@ data Comp a where
 
 -- Type conversion for tuples of internal arrays
 --
-type family ArrRepr a :: *
-type instance ArrRepr ()             = ()
-type instance ArrRepr (Arr dim e)    = AST.Arr (ElemRepr dim) (ElemRepr e)
-type instance ArrRepr (a, b)         = (ArrRepr a, ArrRepr b)
-type instance ArrRepr (a, b, c)      = (ArrRepr a, ArrRepr b, ArrRepr c)
-type instance ArrRepr (a, b, c, d)   
-  = (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d)
-type instance ArrRepr (a, b, c, d, e)   
-  = (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e)
+type family ArrayRepr a :: *
+type instance ArrayRepr ()             = ()
+type instance ArrayRepr (Array dim e)  = AST.Array (ElemRepr dim) (ElemRepr e)
+type instance ArrayRepr (a, b)         = (ArrayRepr a, ArrayRepr b)
+type instance ArrayRepr (a, b, c)      
+  = ((ArrayRepr a, ArrayRepr b), ArrayRepr c)
+type instance ArrayRepr (a, b, c, d)
+  = (((ArrayRepr a, ArrayRepr b), ArrayRepr c), ArrayRepr d)
+type instance ArrayRepr (a, b, c, d, e) 
+  = ((((ArrayRepr a, ArrayRepr b), ArrayRepr c), ArrayRepr d), ArrayRepr e)
 
--- |Convert a computation with given environment layout
+-- |Convert a computation with given array environment layout
 --
-convertComp :: Layout env env -> Comp a -> AST.Comp env (ArrRepr a)
---convertComp lyt (Return a)    = AST.Return a
-convertComp lyt (Use array)     = AST.Use (convertArray array)
-convertComp lyt (Unit e)        = AST.Unit (convertExp lyt e)
-convertComp lyt (Reshape e arr) = AST.Reshape (convertExp lyt e)
-                                              (convertArr lyt arr)
-convertComp lyt (Replicate ix arr) 
-  = mkReplicate (undefined::slix) (undefined::e)
-                (convertExp lyt ix) (convertArr lyt arr)
--- FIXME: many missing!
+convertOpenAcc :: Layout aenv aenv 
+               -> Acc a 
+               -> AST.OpenAcc aenv (ArrayRepr a)
+convertOpenAcc alyt (Use array)     = AST.Use (convertArray array)
+convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
+convertOpenAcc alyt (Reshape e acc) 
+  = AST.Reshape (convertExp alyt e) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Replicate slixType eType ix acc)
+  = mkReplicate slixType eType 
+                (convertExp alyt ix) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Index slixType eType acc ix)
+  = mkIndex slixType eType (convertOpenAcc alyt acc) (convertExp alyt ix)
+convertOpenAcc alyt (Map f acc) 
+  = AST.Map (convertFun1 alyt f) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (ZipWith f acc1 acc2) 
+  = AST.ZipWith (convertFun2 alyt f) 
+                (convertOpenAcc alyt acc1)
+                (convertOpenAcc alyt acc2)
+convertOpenAcc alyt (Filter p acc) 
+  = AST.Filter (convertFun1 alyt p) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Scan f e acc) 
+  = AST.Scan (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Permute f dftAcc perm acc) 
+  = AST.Permute (convertFun2 alyt f) 
+                (convertOpenAcc alyt dftAcc)
+                (convertFun1 alyt perm) 
+                (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Backpermute newDim perm acc) 
+  = AST.Backpermute (convertExp alyt newDim)
+                    (convertFun1 alyt perm)
+                    (convertOpenAcc alyt acc)
 
 
 -- Embedded expressions of the surface language
@@ -170,20 +171,20 @@ data Exp t where
 
     -- All the same constructors as 'AST.Exp'
   Const       :: Elem t 
-              => t                          -> Exp t
-  Pair        :: (Elem s, Elem t)
-              => Exp s -> Exp t             -> Exp (s, t)
-  Fst         :: (Elem s, Elem t)
-              => Exp (s, t)                 -> Exp s
-  Snd         :: (Elem s, Elem t)
-              => Exp (s, t)                 -> Exp t
-  Cond        :: Exp Bool -> Exp t -> Exp t -> Exp t
-  PrimConst   :: Elem t
-              => PrimConst t                -> Exp t
-  PrimApp     :: (Elem a, Elem r)
-              => PrimFun (a -> r) -> Exp a  -> Exp r
-  IndexScalar :: Arr dim t -> Exp dim       -> Exp t
-  Shape       :: Arr dim e                  -> Exp dim
+              => t                            -> Exp t
+  Pair        :: (Elem s, Elem t)             
+              => Exp s -> Exp t               -> Exp (s, t)
+  Fst         :: (Elem s, Elem t)             
+              => Exp (s, t)                   -> Exp s
+  Snd         :: (Elem s, Elem t)             
+              => Exp (s, t)                   -> Exp t
+  Cond        :: Exp Bool -> Exp t -> Exp t   -> Exp t
+  PrimConst   :: Elem t                       
+              => PrimConst t                  -> Exp t
+  PrimApp     :: (Elem a, Elem r)             
+              => PrimFun (a -> r) -> Exp a    -> Exp r
+  IndexScalar :: Acc (Array dim t) -> Exp dim -> Exp t
+  Shape       :: Acc (Array dim e)            -> Exp dim
 
 
 -- |Conversion from HOAS to de Bruijn expression AST
@@ -207,12 +208,16 @@ prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
 prjIdx _ EmptyLayout       
   = error "Data.Array.Accelerate.Smart.prjIdx: internal error"
 
--- |Convert an open expression with the given environment layout
+-- |Convert an open expression with given environment layouts
 --
-convertExp :: forall t env. Layout env env -> Exp t -> AST.Exp env (ElemRepr t)
-convertExp lyt = cvt
+convertOpenExp :: forall t env aenv. 
+                  Layout env  env       -- scalar environment
+               -> Layout aenv aenv      -- array environment
+               -> Exp t                 -- expression to be converted
+               -> AST.OpenExp env aenv (ElemRepr t)
+convertOpenExp lyt alyt = cvt
   where
-    cvt :: forall t'. Exp t' -> AST.Exp env (ElemRepr t')
+    cvt :: forall t'. Exp t' -> AST.OpenExp env aenv (ElemRepr t')
     cvt (Tag i)             = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
     cvt (Const v)           = AST.Const (elemType (undefined::t')) (fromElem v)
     cvt (Pair (e1::Exp t1) 
@@ -226,9 +231,16 @@ convertExp lyt = cvt
     cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)       = AST.PrimConst c
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
--- FIXME:
---    cvt (IndexScalar a e)   = AST.IndexScalar (convertArr a) (cvt e)
---    cvt (Shape a)           = AST.Shape (convertArr a)
+    cvt (IndexScalar a e)   = AST.IndexScalar (convertOpenAcc alyt a) (cvt e)
+    cvt (Shape a)           = AST.Shape (convertOpenAcc alyt a)
+  
+-- |Convert an expression closed wrt to scalar variables
+--
+convertExp :: forall t env aenv. 
+              Layout aenv aenv      -- array environment
+           -> Exp t                 -- expression to be converted
+           -> AST.Exp aenv (ElemRepr t)
+convertExp alyt = convertOpenExp EmptyLayout alyt
 
 -- |Convert surface array representation to the internal one
 --
@@ -241,33 +253,28 @@ convertArray (Array {arrayShape = shape, arrayId = id, arrayData = adata})
       AST.arrayId       = id, 
       AST.arrayData     = adata
     }
-
--- |Convert surface AP array tag into a typed de Bruijn index for the internal
--- representation
---
-convertArr :: Layout env env 
-           -> Arr dim e 
-           -> Idx env (AST.Arr (ElemRepr dim) (ElemRepr e))
-convertArr lyt (Arr i) = prjIdx i lyt
-
+    
 -- |Convert a unary functions
 --
-convertFun1 :: forall a b env. Elem a
-            => (Exp a -> Exp b) -> AST.Fun () (ElemRepr a -> ElemRepr b)
-convertFun1 f = Lam (Body openF)
+convertFun1 :: forall a b aenv. Elem a
+            => Layout aenv aenv 
+            -> (Exp a -> Exp b) 
+            -> AST.Fun aenv (ElemRepr a -> ElemRepr b)
+convertFun1 alyt f = Lam (Body openF)
   where
     a     = Tag 0
     lyt   = EmptyLayout 
             `PushLayout` 
             (ZeroIdx :: Idx ((), ElemRepr a) (ElemRepr a))
-    openF = convertExp lyt (f a)
+    openF = convertOpenExp lyt alyt (f a)
 
 -- |Convert a binary functions
 --
-convertFun2 :: forall a b c. (Elem a, Elem b) 
-            => (Exp a -> Exp b -> Exp c) 
-            -> AST.Fun () (ElemRepr a -> ElemRepr b -> ElemRepr c)
-convertFun2 f = Lam (Lam (Body openF))
+convertFun2 :: forall a b c aenv. (Elem a, Elem b) 
+            => Layout aenv aenv 
+            -> (Exp a -> Exp b -> Exp c) 
+            -> AST.Fun aenv (ElemRepr a -> ElemRepr b -> ElemRepr c)
+convertFun2 alyt f = Lam (Lam (Body openF))
   where
     a     = Tag 1
     b     = Tag 0
@@ -276,107 +283,33 @@ convertFun2 f = Lam (Lam (Body openF))
             (SuccIdx ZeroIdx :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr a))
             `PushLayout`
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
-    openF = convertExp lyt (f a b)
+    openF = convertOpenExp lyt alyt (f a b)
 
 instance Show (Exp t) where
-  show e = show (convertExp EmptyLayout e :: AST.Exp () (ElemRepr t))
-
-
--- |Monad of collective operations
--- -------------------------------
-
-instance Monad Comp where
-  return = Return
-  (>>=)  = Bind
-  
-{-
--- |Array processing computations as a state transformer
---
-type AP a = State APstate a
-
-data APstate = APstate 
-               { comps :: Comps        -- the program so far (reversed list)
-               , sym   :: Int          -- next unique variable name
-               }
-
-unComps :: APstate -> [CompBinding]
-unComps s = case comps s of Comps cs -> cs
-
-initialAPstate :: APstate
-initialAPstate = APstate (Comps []) 0
-
-runAP :: AP a -> Comps
-runAP = reverseComps . comps . flip execState initialAPstate
-  where
-    reverseComps (Comps cs) = Comps (reverse cs)
-
--- Obtain a unique variable name (in the form of a small `Int'); it's unique in 
--- this AP computation
---
-genSym :: AP Int
-genSym 
-  = do
-      n <- gets sym
-      modify $ \s -> s {sym = succ (sym s)}
-      return n
-
--- Obtain a unique array identifier at a given element type; it's unique in
--- the AP computation 
---
-genArr :: (Ix dim, Elem e) => AP (Arr dim e)
-genArr
-  = do
-      name <- genSym
-      return $ Arr name
-
--- Add a collective operation to the list in the monad state
---
-pushComp :: CompBinding -> AP ()
-pushComp comp = modify $ \s -> s {comps = Comps $ comp : unComps s}
-
-wrapComp :: (Ix dim, Elem e)
-         => Comp (AST.Arr (ElemRepr dim) (ElemRepr e)) -> AP (Arr dim e)
-wrapComp comp
-  = do
-      arr <- genArr
-      pushComp $ convertArr arr `CompBinding` comp
-      return arr
-
-wrapComp2 :: (Ix dim1, Ix dim2, Elem e1, Elem e2) 
-          => Comp (AST.Arr (ElemRepr dim1) (ElemRepr e1), 
-                   AST.Arr (ElemRepr dim2) (ElemRepr e2))
-          -> AP (Arr dim1 e1, Arr dim2 e2)
-wrapComp2 comp
-  = do
-      arr1 <- genArr
-      arr2 <- genArr
-      pushComp $ (convertArr arr1, convertArr arr2) `CompBinding` comp
-      return (arr1, arr2)
--}
+  show e 
+    = show (convertExp EmptyLayout e :: AST.Exp () (ElemRepr t))
 
 
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
-{-
-mkIndex :: forall slix e env. (SliceIx slix, Elem e) 
+mkIndex :: forall slix e env aenv. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
-        -> AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e) 
-        -> AST.Exp env (ElemRepr slix)
-        -> Comp (AST.Arr (ElemRepr (Slice slix)) (ElemRepr e))
+        -> AST.OpenAcc aenv (ArrayRepr (Array (SliceDim slix) e))
+        -> AST.Exp     aenv (ElemRepr slix)
+        -> AST.OpenAcc aenv (ArrayRepr (Array (Slice slix) e))
 mkIndex slix _ arr e 
-  = AST.Index (convertSliceIndex slix (sliceIndex (undefined::slix))) arr e
--}
+  = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
 
-mkReplicate :: forall slix e env. (SliceIx slix, Elem e) 
+mkReplicate :: forall slix e env aenv. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
-        -> AST.Exp env (ElemRepr slix)
-        -> Idx env (AST.Arr (ElemRepr (Slice slix)) (ElemRepr e))
-        -> AST.Comp env (AST.Arr (ElemRepr (SliceDim slix)) (ElemRepr e))
+        -> AST.Exp     aenv (ElemRepr slix)
+        -> AST.OpenAcc aenv (ArrayRepr (Array (Slice slix) e))
+        -> AST.OpenAcc aenv (ArrayRepr (Array (SliceDim slix) e))
 mkReplicate slix _ e arr
-  = AST.Replicate (convertSliceIndex slix (sliceIndex (undefined::slix))) e arr
+  = AST.Replicate (convertSliceIndex slix (sliceIndex slix)) e arr
 
 
 -- |Smart constructors to construct HOAS AST expressions
@@ -391,14 +324,13 @@ exp v = Const v
 -- |Smart constructor for constants
 -- -
 
-{-
-mkMinBound :: IsBounded t => Exp t
+mkMinBound :: (Elem t, IsBounded t) => Exp t
 mkMinBound = PrimConst (PrimMinBound boundedType)
 
-mkMaxBound :: IsBounded t => Exp t
+mkMaxBound :: (Elem t, IsBounded t) => Exp t
 mkMaxBound = PrimConst (PrimMaxBound boundedType)
 
-mkPi :: IsFloating r => Exp r
+mkPi :: (Elem r, IsFloating r) => Exp r
 mkPi = PrimConst (PrimPi floatingType)
 
 -- |Smart constructors for primitive applications
@@ -406,84 +338,84 @@ mkPi = PrimConst (PrimPi floatingType)
 
 -- Operators from Num
 
-mkAdd :: IsNum t => Exp t -> Exp t -> Exp t
+mkAdd :: (Elem t, IsNum t) => Exp t -> Exp t -> Exp t
 mkAdd x y = PrimAdd numType `PrimApp` (x `Pair` y)
 
-mkSub :: IsNum t => Exp t -> Exp t -> Exp t
+mkSub :: (Elem t, IsNum t) => Exp t -> Exp t -> Exp t
 mkSub x y = PrimSub numType `PrimApp` (x `Pair` y)
 
-mkMul :: IsNum t => Exp t -> Exp t -> Exp t
+mkMul :: (Elem t, IsNum t) => Exp t -> Exp t -> Exp t
 mkMul x y = PrimMul numType `PrimApp` (x `Pair` y)
 
-mkNeg :: IsNum t => Exp t -> Exp t
+mkNeg :: (Elem t, IsNum t) => Exp t -> Exp t
 mkNeg x = PrimNeg numType `PrimApp` x
 
-mkAbs :: IsNum t => Exp t -> Exp t
+mkAbs :: (Elem t, IsNum t) => Exp t -> Exp t
 mkAbs x = PrimAbs numType `PrimApp` x
 
-mkSig :: IsNum t => Exp t -> Exp t
+mkSig :: (Elem t, IsNum t) => Exp t -> Exp t
 mkSig x = PrimSig numType `PrimApp` x
 
 -- Operators from Integral & Bits
 
-mkQuot :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkQuot :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkQuot x y = PrimQuot integralType `PrimApp` (x `Pair` y)
 
-mkRem :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkRem :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkRem x y = PrimRem integralType `PrimApp` (x `Pair` y)
 
-mkIDiv :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkIDiv :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkIDiv x y = PrimIDiv integralType `PrimApp` (x `Pair` y)
 
-mkMod :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkMod :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkMod x y = PrimMod integralType `PrimApp` (x `Pair` y)
 
-mkBAnd :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkBAnd :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkBAnd x y = PrimBAnd integralType `PrimApp` (x `Pair` y)
 
-mkBOr :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkBOr :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkBOr x y = PrimBOr integralType `PrimApp` (x `Pair` y)
 
-mkBXor :: IsIntegral t => Exp t -> Exp t -> Exp t
+mkBXor :: (Elem t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkBXor x y = PrimBXor integralType `PrimApp` (x `Pair` y)
 
-mkBNot :: IsIntegral t => Exp t -> Exp t
+mkBNot :: (Elem t, IsIntegral t) => Exp t -> Exp t
 mkBNot x = PrimBNot integralType `PrimApp` x
   -- FIXME: add shifts
 
 -- Operators from Fractional, Floating, RealFrac & RealFloat
 
-mkFDiv :: IsFloating t => Exp t -> Exp t -> Exp t
+mkFDiv :: (Elem t, IsFloating t) => Exp t -> Exp t -> Exp t
 mkFDiv x y = PrimFDiv floatingType `PrimApp` (x `Pair` y)
 
-mkRecip :: IsFloating t => Exp t -> Exp t
+mkRecip :: (Elem t, IsFloating t) => Exp t -> Exp t
 mkRecip x = PrimRecip floatingType `PrimApp` x
   -- FIXME: add operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
-mkLt :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkLt :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkLt x y = PrimLt scalarType `PrimApp` (x `Pair` y)
 
-mkGt :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkGt :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkGt x y = PrimGt scalarType `PrimApp` (x `Pair` y)
 
-mkLtEq :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkLtEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkLtEq x y = PrimLtEq scalarType `PrimApp` (x `Pair` y)
 
-mkGtEq :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkGtEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkGtEq x y = PrimGtEq scalarType `PrimApp` (x `Pair` y)
 
-mkEq :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkEq x y = PrimEq scalarType `PrimApp` (x `Pair` y)
 
-mkNEq :: IsScalar t => Exp t -> Exp t -> Exp Bool
+mkNEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkNEq x y = PrimLt scalarType `PrimApp` (x `Pair` y)
 
-mkMax :: IsScalar t => Exp t -> Exp t -> Exp t
+mkMax :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 mkMax x y = PrimMax scalarType `PrimApp` (x `Pair` y)
 
-mkMin :: IsScalar t => Exp t -> Exp t -> Exp t
+mkMin :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 mkMin x y = PrimMin scalarType `PrimApp` (x `Pair` y)
 
 -- Logical operators
@@ -500,4 +432,3 @@ mkLNot x = PrimLNot `PrimApp` x
 -- FIXME: Character conversions
 
 -- FIXME: Numeric conversions
--}

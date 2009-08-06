@@ -28,113 +28,96 @@ import Data.Array.Accelerate.AST
 -- |Show instances
 -- ---------------
 
-instance Show (Comp env a) where
-  show c = render $ prettyComp c
+instance Show (OpenAcc aenv a) where
+  show c = render $ prettyAcc 0 c
 
-instance Show (Fun env f) where
-  show f = render $ prettyFun f
+instance Show (OpenFun env aenv f) where
+  show f = render $ prettyFun 0 f
 
-instance Show (Exp env t) where
-  show e = render $ prettyExp noParens e
+instance Show (OpenExp env aenv t) where
+  show e = render $ prettyExp 0 noParens e
 
 
 -- Pretty printing
 -- ---------------
 
--- Pretty print a monadic binding sequence.
+-- Pretty print an array expression
 --
-prettyBind :: Comp env a -> Doc
-prettyBind c
-  = hang (text "do") 2 $ 
-      bind 0 c
-  where
-    bind :: Int -> Comp env a -> Doc
-    bind i (Bind c1 c2)  = char 'a' <> int i <+> text "<-" <+> prettyComp c1
-                           $$
-                           bind (i + 1) c2
-    bind i (Bind2 c1 c2) = text "(a" <> int i <> text ", a" <> int (i + 1) <>
-                           text ") <-" <+> prettyComp c1
-                           $$
-                           bind (i + 2) c2
-    bind _ c             = prettyComp c
-
--- Pretty print a collective array computation.
---
-prettyComp :: Comp env a -> Doc
-prettyComp (Return idx)        = text "return" <+> prettyArr idx
-prettyComp (Return2 idx1 idx2) = text "return" <+> 
-                                   (parens $ prettyArr idx1 <> char ',' <+>
-                                             prettyArr idx2)
-prettyComp c@(Bind _ _)        = prettyBind c
-prettyComp c@(Bind2 _ _)       = prettyBind c
-prettyComp (Use arr)           = text "use" <+> prettyArray arr
-prettyComp (Unit e)            = text "unit" <+> prettyExp parens e
-prettyComp (Reshape sh arr)
-  = text "reshape" <+> prettyExp parens sh <+> prettyArr arr
-prettyComp (Replicate _ty ix arr) 
-  = text "replicate" <+> prettyExp id ix <+> prettyArr arr
-prettyComp (Index _ty arr ix) 
-  = prettyArr arr <> char '!' <> prettyExp id ix
-prettyComp (Map f arr)      
-  = text "map" <+> parens (prettyFun f) <+> prettyArr arr
-prettyComp (ZipWith f arr1 arr2)    
-  = text "zipWith" <+> parens (prettyFun f) <+> prettyArr arr1 <+> 
-    prettyArr arr2
-prettyComp (Filter p arr)   
-  = text "filter" <+> parens (prettyFun p) <+> prettyArr arr
-prettyComp (Scan f e arr)   
-  = text "scan" <+> parens (prettyFun f) <+> prettyExp parens e <+> 
-    prettyArr arr
-prettyComp (Permute f dfts p arr) 
-  = text "permute" <+> parens (prettyFun f) <+> prettyArr dfts <+> 
-    parens (prettyFun p) <+> prettyArr arr
-prettyComp (Backpermute sh p arr) 
-  = text "backpermute" <+> prettyExp parens sh <+> parens (prettyFun p) <+> 
-    prettyArr arr
+prettyAcc :: Int -> OpenAcc aenv a -> Doc
+prettyAcc lvl (Let acc1 acc2) = text "let a" <> int lvl <+> text " = " <+>
+                                prettyAcc lvl acc1 <+> text " in " <+>
+                                prettyAcc (lvl + 1) acc2
+prettyAcc lvl (Use arr)       = text "use" <+> prettyArray arr
+prettyAcc lvl (Unit e)        = text "unit" <+> prettyExp lvl parens e
+prettyAcc lvl (Reshape sh acc)
+  = text "reshape" <+> prettyExp lvl parens sh <+> prettyAcc lvl acc
+prettyAcc lvl (Replicate _ty ix acc) 
+  = text "replicate" <+> prettyExp lvl id ix <+> prettyAcc lvl acc
+prettyAcc lvl (Index _ty acc ix) 
+  = prettyAcc lvl acc <> char '!' <> prettyExp lvl id ix
+prettyAcc lvl (Map f acc)
+  = text "map" <+> parens (prettyFun lvl f) <+> prettyAcc lvl acc
+prettyAcc lvl (ZipWith f acc1 acc2)    
+  = text "zipWith" <+> parens (prettyFun lvl f) <+> prettyAcc lvl acc1 <+> 
+    prettyAcc lvl acc2
+prettyAcc lvl (Filter p acc)   
+  = text "filter" <+> parens (prettyFun lvl p) <+> prettyAcc lvl acc
+prettyAcc lvl (Scan f e acc)   
+  = text "scan" <+> parens (prettyFun lvl f) <+> prettyExp lvl parens e <+> 
+    prettyAcc lvl acc
+prettyAcc lvl (Permute f dfts p acc) 
+  = text "permute" <+> parens (prettyFun lvl f) <+> prettyAcc lvl dfts <+> 
+    parens (prettyFun lvl p) <+> prettyAcc lvl acc
+prettyAcc lvl (Backpermute sh p acc) 
+  = text "backpermute" <+> prettyExp lvl parens sh <+> 
+    parens (prettyFun lvl p) <+> prettyAcc lvl acc
 
 -- Pretty print a function over scalar expressions.
 --
-prettyFun :: Fun env fun -> Doc
-prettyFun fun = 
+prettyFun :: Int -> OpenFun env aenv fun -> Doc
+prettyFun lvl fun = 
   let (n, bodyDoc) = count fun
   in
   char '\\' <> hsep [text $ "x" ++ show idx | idx <- [0..n]] <+> text "->" <+> 
   bodyDoc
   where
-     count :: Fun env fun -> (Int, Doc)
-     count (Body body) = (-1, prettyExp noParens body)
+     count :: OpenFun env aenv fun -> (Int, Doc)
+     count (Body body) = (-1, prettyExp lvl noParens body)
      count (Lam fun)   = let (n, body) = count fun in (1 + n, body)
 
 -- Pretty print an expression.
 --
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
-prettyExp :: (Doc -> Doc) -> Exp env t -> Doc
-prettyExp wrap (Var _ idx)       = text $ "x" ++ show (idxToInt idx)
-prettyExp _    (Const ty v)      = text $ runTupleShow ty v
-prettyExp _    e@(Pair _ _ _ _)  = prettyTuple e
-prettyExp wrap (Fst _ _ e)       = wrap $ text "fst" <+> prettyExp parens e
-prettyExp wrap (Snd _ _ e)       = wrap $ text "snd" <+> prettyExp parens e
-prettyExp wrap (Cond c t e) 
-  = wrap $ sep [prettyExp parens c <+> char '?', 
-                parens (prettyExp noParens t <> comma <+> prettyExp noParens e)]
-prettyExp _    (PrimConst a)     = prettyConst a
-prettyExp wrap (PrimApp p a)     = wrap $ prettyPrim p <+> prettyExp parens a
-prettyExp wrap (IndexScalar idx i)
-  = wrap $ cat [prettyArr idx, char '!', prettyExp parens i]
-prettyExp wrap (Shape idx)       = wrap $ 
-                                     text "shape" <+> prettyArr idx
+prettyExp :: Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
+prettyExp _   wrap (Var _ idx)       = text $ "x" ++ show (idxToInt idx)
+prettyExp _   _    (Const ty v)      = text $ runTupleShow ty v
+prettyExp lvl _    e@(Pair _ _ _ _)  = prettyTuple lvl e
+prettyExp lvl wrap (Fst _ _ e)       
+  = wrap $ text "fst" <+> prettyExp lvl parens e
+prettyExp lvl wrap (Snd _ _ e)       
+  = wrap $ text "snd" <+> prettyExp lvl parens e
+prettyExp lvl wrap (Cond c t e) 
+  = wrap $ sep [prettyExp lvl parens c <+> char '?', 
+                parens (prettyExp lvl noParens t <> comma <+> 
+                        prettyExp lvl noParens e)]
+prettyExp _   _    (PrimConst a)     = prettyConst a
+prettyExp lvl wrap (PrimApp p a)     
+  = wrap $ prettyPrim p <+> prettyExp lvl parens a
+prettyExp lvl wrap (IndexScalar idx i)
+  = wrap $ cat [prettyAcc lvl idx, char '!', prettyExp lvl parens i]
+prettyExp lvl wrap (Shape idx)       = wrap $ text "shape" <+> prettyAcc lvl idx
 
 -- Pretty print nested pairs as a proper tuple.
 --
-prettyTuple :: Exp env t -> Doc
-prettyTuple e = parens $ sep (map (<> comma) (init es) ++ [last es])
+prettyTuple :: Int -> OpenExp env aenv t -> Doc
+prettyTuple lvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
     es = collect e
     --
-    collect :: Exp env t -> [Doc]
+    collect :: OpenExp env aenv t -> [Doc]
     collect (Pair _ _ e1 e2) = collect e1 ++ collect e2
-    collect e                = [prettyExp noParens e]
+    collect e                = [prettyExp lvl noParens e]
 
 -- Pretty print a primitive constant
 --
@@ -179,8 +162,6 @@ prettyPrim PrimLNot      = text "not"
 prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 
--- Pretty print the identification of an external array 
---
 prettyArray :: Array dim a -> Doc
 prettyArray arr = text $ arrayId arr
 
@@ -195,11 +176,6 @@ prettyIndex = parens . hsep . punctuate (char ',') . prettyIxs
     prettyIxs (SliceAll ixs)     = char '.' : prettyIxs ixs
     prettyIxs (SliceFixed e ixs) = prettyExp noParens e : prettyIxs ixs
  -}
-
--- Pretty print the de Bruijn index of an array
---
-prettyArr :: Idx env (Arr dim a) -> Doc
-prettyArr idx = char 'a' <> int (idxToInt idx)
 
 -- Auxilliary pretty printing combinators
 -- 

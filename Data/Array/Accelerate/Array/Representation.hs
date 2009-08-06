@@ -12,10 +12,10 @@
 module Data.Array.Accelerate.Array.Representation (
 
   -- * Array representation
-  Array(..),
+  Array(..), Scalar, Vector,
 
   -- * Array shapes
-  DIM0Repr, DIM1Repr, DIM2Repr, 
+  DIM0, DIM1, DIM2, 
 
   -- * Array indexing and slicing
   IxRepr(..), SliceIxRepr(..), SliceIndex(..)
@@ -52,9 +52,17 @@ data Array dim e where
 
 -- |Shorthand for common shape representations
 --
-type DIM0Repr = ()
-type DIM1Repr = ((), Int)
-type DIM2Repr = (((), Int), Int)
+type DIM0 = ()
+type DIM1 = ((), Int)
+type DIM2 = (((), Int), Int)
+
+-- Special case of singleton arrays
+--
+type Scalar e = Array DIM0 e
+
+-- Special case of one-dimensional arrays
+--
+type Vector e = Array DIM1 e
 
 
 -- |Index representation

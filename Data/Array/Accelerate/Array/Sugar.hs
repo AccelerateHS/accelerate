@@ -34,7 +34,8 @@ import Unsafe.Coerce
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation hiding (Array)
+import Data.Array.Accelerate.Array.Representation hiding (
+  Array, DIM0, DIM1, DIM2, Scalar, Vector)
 
 
 -- |Representation change for array element types

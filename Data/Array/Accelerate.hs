@@ -30,7 +30,7 @@ module Data.Array.Accelerate (
   Bool, Char, CChar, CSChar, CUChar,
 
   -- * Array data types
-  Array, Scalar, Vector, Arr, Sca, Vec,
+  Array, Scalar, Vector,
 
   -- * Array element types
   Elem,
