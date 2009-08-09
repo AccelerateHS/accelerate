@@ -32,19 +32,20 @@ module Data.Array.Accelerate.Smart (
 ) where
 
 -- standard library
-import Control.Monad.State
 import Data.Maybe
 import Data.Typeable
 
 -- friends
+import Data.Array.Accelerate.Type
+{-
 import Data.Array.Accelerate.Array.Representation hiding (
   Array(..), Scalar, Vector)
+-}
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, OpenExp(..), Exp)
-import Data.Array.Accelerate.Pretty
 import qualified Data.Array.Accelerate.AST                  as AST
 import qualified Data.Array.Accelerate.Array.Representation as AST
+import Data.Array.Accelerate.Pretty
 
 
 -- Monadic array computations
@@ -53,8 +54,11 @@ import qualified Data.Array.Accelerate.Array.Representation as AST
 data Acc a where
 
   Use         :: Array dim e -> Acc (Array dim e)
-  Unit        :: Exp e -> Acc (Scalar e)
-  Reshape     :: Exp dim
+  Unit        :: Elem e
+              => Exp e 
+              -> Acc (Scalar e)
+  Reshape     :: Ix dim
+              => Exp dim
               -> Acc (Array dim' e)
               -> Acc (Array dim e)
   Replicate   :: (SliceIx slix, Elem e)
@@ -69,7 +73,7 @@ data Acc a where
               -> Acc (Array (SliceDim slix) e)
               -> Exp slix
               -> Acc (Array (Slice slix) e)
-  Map         :: Elem e
+  Map         :: (Elem e, Elem e')
               => (Exp e -> Exp e') 
               -> Acc (Array dim e)
               -> Acc (Array dim e')
@@ -158,7 +162,7 @@ convertOpenAcc alyt (Backpermute newDim perm acc)
 -- `Tag' constructor instead of variables in the form of de Bruijn indices.
 -- Moreover, HOAS expression use n-tuples and the type class 'Elem' to
 -- constrain element types, whereas `AST.OpenExp' uses nested pairs and the 
--- class 'IsTuple'.
+-- GADT 'TupleType'.
 --
 data Exp t where
     -- Needed for conversion to de Bruijn form
@@ -215,8 +219,8 @@ convertOpenExp :: forall t env aenv.
 convertOpenExp lyt alyt = cvt
   where
     cvt :: forall t'. Exp t' -> AST.OpenExp env aenv (ElemRepr t')
-    cvt (Tag i)             = AST.Var (elemType (undefined::t')) (prjIdx i lyt)
-    cvt (Const v)           = AST.Const (elemType (undefined::t')) (fromElem v)
+    cvt (Tag i)             = AST.Var (prjIdx i lyt)
+    cvt (Const v)           = AST.Const (fromElem v)
     cvt (Pair (e1::Exp t1) 
               (e2::Exp t2)) = AST.Pair (undefined::t1)
                                        (undefined::t2)
@@ -244,12 +248,7 @@ convertExp alyt = convertOpenExp EmptyLayout alyt
 convertArray :: forall dim e. 
                 Array dim e -> AST.Array (ElemRepr dim) (ElemRepr e)
 convertArray (Array {arrayShape = shape, arrayId = id, arrayData = adata})
-  = AST.Array {
-      AST.arrayShape    = fromElem shape, 
-      AST.arrayElemType = elemType (undefined::e), 
-      AST.arrayId       = id, 
-      AST.arrayData     = adata
-    }
+  = AST.Array (fromElem shape) adata
     
 -- |Convert a unary functions
 --

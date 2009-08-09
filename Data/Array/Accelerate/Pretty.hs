@@ -90,8 +90,8 @@ prettyFun lvl fun =
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
 prettyExp :: Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
-prettyExp _   wrap (Var _ idx)       = text $ "x" ++ show (idxToInt idx)
-prettyExp _   _    (Const ty v)      = text $ runTupleShow ty v
+prettyExp _   wrap (Var idx)         = text $ "x" ++ show (idxToInt idx)
+prettyExp _   _    (Const v)         = text $ show v
 prettyExp lvl _    e@(Pair _ _ _ _)  = prettyTuple lvl e
 prettyExp lvl wrap (Fst _ _ e)       
   = wrap $ text "fst" <+> prettyExp lvl parens e
@@ -163,7 +163,7 @@ prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 
 prettyArray :: Array dim a -> Doc
-prettyArray arr = text $ arrayId arr
+prettyArray arr = text "<array>"
 
 {-
 -- Pretty print a generalised array index
@@ -195,6 +195,7 @@ idxToInt (SuccIdx idx) = 1 + idxToInt idx
 -- Auxilliary dictionary operations
 -- 
 
+{-
 -- Show tuple values
 --
 runTupleShow :: TupleType a -> (a -> String)
@@ -202,6 +203,7 @@ runTupleShow UnitTuple       = show
 runTupleShow (SingleTuple x) = runScalarShow x
 runTupleShow (PairTuple ty1 ty2) 
   = \(x, y) -> "(" ++ runTupleShow ty1 x ++ ", " ++ runTupleShow ty2 y ++ ")"
+-}
 
 -- Show scalar values
 --

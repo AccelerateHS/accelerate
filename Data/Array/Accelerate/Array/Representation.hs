@@ -18,7 +18,10 @@ module Data.Array.Accelerate.Array.Representation (
   DIM0, DIM1, DIM2, 
 
   -- * Array indexing and slicing
-  IxRepr(..), SliceIxRepr(..), SliceIndex(..)
+  Ix(..), SliceIx(..), SliceIndex(..),
+
+  -- * Array operations
+  (!), newArray
 
 ) where
 
@@ -26,11 +29,15 @@ module Data.Array.Accelerate.Array.Representation (
 import GHC.Prim
 
 -- standard libraries
+import Control.Monad.ST
 import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+
+
+infixl 9 !
 
 
 -- |Arrays
@@ -43,12 +50,10 @@ import Data.Array.Accelerate.Array.Data
 --   other tasks) and cached on the device if sufficient memory is available.
 --
 data Array dim e where
-  Array :: (IxRepr dim, ArrayElem e) =>
-           { arrayShape    :: dim             -- ^extent of dimensions = shape
-           , arrayElemType :: TupleType e     -- ^constrains valid element types
-           , arrayId       :: String          -- ^for pretty printing
-           , arrayData     :: ArrayData e     -- ^data
-           }               -> Array dim e
+  Array :: (Ix dim, ArrayElem e) 
+        => dim             -- ^extent of dimensions = shape
+        -> ArrayData e     -- ^data
+        -> Array dim e
 
 -- |Shorthand for common shape representations
 --
@@ -70,27 +75,37 @@ type Vector e = Array DIM1 e
 
 -- |Class of index representations (which are nested pairs)
 --
-class IxRepr ix where
-  dimRepr   :: ix -> Int           -- ^number of dimensions (>= 0)
-  sizeRepr  :: ix -> Int           -- ^for a *shape* yield the total number of 
+class Ix ix where
+  dim   :: ix -> Int           -- ^number of dimensions (>= 0)
+  size  :: ix -> Int           -- ^for a *shape* yield the total number of 
                                    -- elements in that array
-  indexRepr :: ix -> ix -> Int     -- ^yield the index position in a linear, 
+  index :: ix -> ix -> Int     -- ^yield the index position in a linear, 
                                    -- row-major representation of the array
                                    -- (first argument is the shape)
   -- FIXME: we might want an unsafeIndex, too
+  iter  :: ix -> (ix -> a) -> (a -> a -> a)-> a -> a
+                               -- ^iterate through the entire shape, applying
+                               -- the function; third argument combines results
+                               -- and fourth is returned in case of an empty
+                               -- iteration space
 
-instance IxRepr () where
-  dimRepr   _   = 0
-  sizeRepr  _   = 1
-  indexRepr _ _ = 0
+instance Ix () where
+  dim   _       = 0
+  size  _       = 1
+  index _ _     = 0
+  iter  _ _ _ r = r
 
-instance IxRepr ix => IxRepr (ix, Int) where
-  dimRepr   (sh, _)          = dimRepr sh + 1
-  sizeRepr  (sh, sz)         = sizeRepr sh * sz
-  indexRepr (sh, sz) (ix, i) 
-    | i >= 0 && i < sz       = indexRepr sh ix + sizeRepr sh * i
+instance Ix ix => Ix (ix, Int) where
+  dim   (sh, _)          = dim sh + 1
+  size  (sh, sz)         = size sh * sz
+  index (sh, sz) (ix, i) 
+    | i >= 0 && i < sz   = index sh ix + size sh * i
     | otherwise              
     = error "Data.Array.Accelerate.Array: index out of bounds"
+  iter (sh, sz) f c r    = iter' 0
+    where
+      iter' i | i >= sz   = r
+              | otherwise = iter sh (\ix -> f (ix, i)) c r `c` iter' (i + 1)
 
 
 -- |Slice representation
@@ -98,33 +113,33 @@ instance IxRepr ix => IxRepr (ix, Int) where
 
 -- |Class of slice representations (which are nested pairs)
 --
-class SliceIxRepr sl where
-  type SliceRepr    sl      -- the projected slice
-  type CoSliceRepr  sl      -- the complement of the slice
-  type SliceDimRepr sl      -- the combined dimension
+class SliceIx sl where
+  type Slice    sl      -- the projected slice
+  type CoSlice  sl      -- the complement of the slice
+  type SliceDim sl      -- the combined dimension
     -- argument *value* not used; it's just a phantom value to fix the type
-  sliceIndexRepr :: sl -> SliceIndex sl 
-                                     (SliceRepr    sl) 
-                                     (CoSliceRepr  sl) 
-                                     (SliceDimRepr sl)
+  sliceIndex :: sl -> SliceIndex sl 
+                                     (Slice    sl) 
+                                     (CoSlice  sl) 
+                                     (SliceDim sl)
 
-instance SliceIxRepr () where
-  type SliceRepr    () = ()
-  type CoSliceRepr  () = ()
-  type SliceDimRepr () = ()
-  sliceIndexRepr _ = SliceNil
+instance SliceIx () where
+  type Slice    () = ()
+  type CoSlice  () = ()
+  type SliceDim () = ()
+  sliceIndex _ = SliceNil
 
-instance SliceIxRepr sl => SliceIxRepr (sl, ()) where
-  type SliceRepr    (sl, ()) = (SliceRepr sl, Int)
-  type CoSliceRepr  (sl, ()) = CoSliceRepr sl
-  type SliceDimRepr (sl, ()) = (SliceDimRepr sl, Int)
-  sliceIndexRepr _ = SliceAll (sliceIndexRepr (undefined::sl))
+instance SliceIx sl => SliceIx (sl, ()) where
+  type Slice    (sl, ()) = (Slice sl, Int)
+  type CoSlice  (sl, ()) = CoSlice sl
+  type SliceDim (sl, ()) = (SliceDim sl, Int)
+  sliceIndex _ = SliceAll (sliceIndex (undefined::sl))
 
-instance SliceIxRepr sl => SliceIxRepr (sl, Int) where
-  type SliceRepr    (sl, Int) = SliceRepr sl
-  type CoSliceRepr  (sl, Int) = (CoSliceRepr sl, Int)
-  type SliceDimRepr (sl, Int) = (SliceDimRepr sl, Int)
-  sliceIndexRepr _ = SliceFixed (sliceIndexRepr (undefined::sl))
+instance SliceIx sl => SliceIx (sl, Int) where
+  type Slice    (sl, Int) = Slice sl
+  type CoSlice  (sl, Int) = (CoSlice sl, Int)
+  type SliceDim (sl, Int) = (SliceDim sl, Int)
+  sliceIndex _ = SliceFixed (sliceIndex (undefined::sl))
 
 -- |Generalised array index, which may index only in a subset of the dimensions
 -- of a shape.
@@ -135,3 +150,24 @@ data SliceIndex ix slice coSlice sliceDim where
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
   SliceFixed :: 
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
+
+
+-- Array operations
+-- ----------------
+
+-- |Array indexing
+--
+(!) :: Array dim e -> dim -> e
+(Array sh adata) ! ix = adata `indexArrayData` index sh ix
+
+-- |Create an array from its representation function
+--
+newArray :: (Ix dim, ArrayElem e) => dim -> (dim -> e) -> Array dim e
+newArray sh f 
+  = adata `seq` Array sh adata
+  where 
+    adata = runArrayData $ do
+              arr <- newArrayData (size sh)
+              let write ix = writeArrayData arr (index sh ix) (f ix)      
+              iter sh write (>>) (return ())
+              return arr

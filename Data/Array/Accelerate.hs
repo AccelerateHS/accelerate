@@ -16,9 +16,8 @@
 --  Access to the various backends is via the 'run' function in
 --  backend-specific toplevel modules.  Currently, we have the following:
 --
---  * 'Data.Array.Accelerate.Interpreter': simple interpreter in Haskell; it's
---      slow, but doesn't have any further dependencies and also serves as a
---      reference implementation
+--  * 'Data.Array.Accelerate.Interpreter': simple interpreter in Haskell as a
+--      reference implementation of the semantics of the array language
 
 
 module Data.Array.Accelerate (

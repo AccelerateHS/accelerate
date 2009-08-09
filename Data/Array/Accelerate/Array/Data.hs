@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |Embedded array processing language: array data layout for linear arrays
 --
@@ -12,7 +13,7 @@
 module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
-  ArrayElem, ArrayData, MutableArrayData
+  ArrayElem(..), ArrayData, MutableArrayData, runArrayData
 
 ) where
 
@@ -71,79 +72,94 @@ data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a) 
                                               (GArrayData ba b)
 
-class ArrayElem e where
-  indexArray :: ArrayData e -> Int -> e
+class Show e => ArrayElem e where
+  indexArrayData        :: ArrayData e -> Int -> e
   --
-  newArray   :: Int                              -> ST s (MutableArrayData s e)
-  readArray  :: MutableArrayData s e -> Int      -> ST s e
-  writeArray :: MutableArrayData s e -> Int -> e -> ST s ()
+  newArrayData          :: Int -> ST s (MutableArrayData s e)
+  readArrayData         :: MutableArrayData s e -> Int      -> ST s e
+  writeArrayData        :: MutableArrayData s e -> Int -> e -> ST s ()
+  unsafeFreezeArrayData :: MutableArrayData s e -> ST s (ArrayData e)
 
 instance ArrayElem () where
-  indexArray AD_Unit i = i `seq` ()
-  newArray size = return AD_Unit
-  readArray AD_Unit i =  i `seq` return ()
-  writeArray AD_Unit i () =  return ()
+  indexArrayData AD_Unit i = i `seq` ()
+  newArrayData size = return AD_Unit
+  readArrayData AD_Unit i = i `seq` return ()
+  writeArrayData AD_Unit i () = return ()
+  unsafeFreezeArrayData AD_Unit = return AD_Unit
 
 instance ArrayElem Int where
-  indexArray (AD_Int ba) i = ba IArray.! i
-  newArray size = liftM AD_Int $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Int ba) i =  MArray.readArray ba i
-  writeArray (AD_Int ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Int ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Int $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Int ba) i = MArray.readArray ba i
+  writeArrayData (AD_Int ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Int ba) = liftM AD_Int $ MArray.unsafeFreeze ba
 
 instance ArrayElem Int8 where
-  indexArray (AD_Int8 ba) i = ba IArray.! i
-  newArray size = liftM AD_Int8 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Int8 ba) i =  MArray.readArray ba i
-  writeArray (AD_Int8 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Int8 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Int8 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Int8 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Int8 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Int8 ba) = liftM AD_Int8 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Int16 where
-  indexArray (AD_Int16 ba) i = ba IArray.! i
-  newArray size = liftM AD_Int16 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Int16 ba) i =  MArray.readArray ba i
-  writeArray (AD_Int16 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Int16 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Int16 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Int16 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Int16 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Int16 ba) = liftM AD_Int16 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Int32 where
-  indexArray (AD_Int32 ba) i = ba IArray.! i
-  newArray size = liftM AD_Int32 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Int32 ba) i =  MArray.readArray ba i
-  writeArray (AD_Int32 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Int32 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Int32 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Int32 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Int32 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Int32 ba) = liftM AD_Int32 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Int64 where
-  indexArray (AD_Int64 ba) i = ba IArray.! i
-  newArray size = liftM AD_Int64 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Int64 ba) i =  MArray.readArray ba i
-  writeArray (AD_Int64 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Int64 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Int64 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Int64 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Int64 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Int64 ba) = liftM AD_Int64 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Word where
-  indexArray (AD_Word ba) i = ba IArray.! i
-  newArray size = liftM AD_Word $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Word ba) i =  MArray.readArray ba i
-  writeArray (AD_Word ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Word ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Word $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Word ba) i = MArray.readArray ba i
+  writeArrayData (AD_Word ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Word ba) = liftM AD_Word $ MArray.unsafeFreeze ba
 
 instance ArrayElem Word8 where
-  indexArray (AD_Word8 ba) i = ba IArray.! i
-  newArray size = liftM AD_Word8 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Word8 ba) i =  MArray.readArray ba i
-  writeArray (AD_Word8 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Word8 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Word8 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Word8 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Word8 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Word8 ba) = liftM AD_Word8 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Word16 where
-  indexArray (AD_Word16 ba) i = ba IArray.! i
-  newArray size = liftM AD_Word16 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Word16 ba) i =  MArray.readArray ba i
-  writeArray (AD_Word16 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Word16 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Word16 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Word16 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Word16 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Word16 ba) 
+    = liftM AD_Word16 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Word32 where
-  indexArray (AD_Word32 ba) i = ba IArray.! i
-  newArray size = liftM AD_Word32 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Word32 ba) i =  MArray.readArray ba i
-  writeArray (AD_Word32 ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Word32 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Word32 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Word32 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Word32 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Word32 ba) 
+    = liftM AD_Word32 $ MArray.unsafeFreeze ba
 
 instance ArrayElem Word64 where
-  indexArray (AD_Word64 ba) i = ba IArray.! i
-  newArray size = liftM AD_Word64 $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Word64 ba) i =  MArray.readArray ba i
-  writeArray (AD_Word64 ba) i e = MArray.writeArray ba i e
-
+  indexArrayData (AD_Word64 ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Word64 $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Word64 ba) i = MArray.readArray ba i
+  writeArrayData (AD_Word64 ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Word64 ba) 
+    = liftM AD_Word64 $ MArray.unsafeFreeze ba
+  
 -- FIXME:
 -- CShort
 -- CUShort
@@ -155,32 +171,37 @@ instance ArrayElem Word64 where
 -- CULLong
 
 instance ArrayElem Float where
-  indexArray (AD_Float ba) i = ba IArray.! i
-  newArray size = liftM AD_Float $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Float ba) i =  MArray.readArray ba i
-  writeArray (AD_Float ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Float ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Float $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Float ba) i = MArray.readArray ba i
+  writeArrayData (AD_Float ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Float ba) = liftM AD_Float $ MArray.unsafeFreeze ba
 
 instance ArrayElem Double where
-  indexArray (AD_Double ba) i = ba IArray.! i
-  newArray size = liftM AD_Double $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Double ba) i =  MArray.readArray ba i
-  writeArray (AD_Double ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Double ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Double $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Double ba) i = MArray.readArray ba i
+  writeArrayData (AD_Double ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Double ba) 
+    = liftM AD_Double $ MArray.unsafeFreeze ba
 
 -- FIXME:
 -- CFloat
 -- CDouble
 
 instance ArrayElem Bool where
-  indexArray (AD_Bool ba) i = ba IArray.! i
-  newArray size = liftM AD_Bool $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Bool ba) i =  MArray.readArray ba i
-  writeArray (AD_Bool ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Bool ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Bool $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Bool ba) i = MArray.readArray ba i
+  writeArrayData (AD_Bool ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Bool ba) = liftM AD_Bool $ MArray.unsafeFreeze ba
 
 instance ArrayElem Char where
-  indexArray (AD_Char ba) i = ba IArray.! i
-  newArray size = liftM AD_Char $ MArray.newArray_ (0, size - 1)
-  readArray (AD_Char ba) i =  MArray.readArray ba i
-  writeArray (AD_Char ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Char ba) i = ba IArray.! i
+  newArrayData size = liftM AD_Char $ MArray.newArray_ (0, size - 1)
+  readArrayData (AD_Char ba) i = MArray.readArray ba i
+  writeArrayData (AD_Char ba) i e = MArray.writeArray ba i e
+  unsafeFreezeArrayData (AD_Char ba) = liftM AD_Char $ MArray.unsafeFreeze ba
 
 -- FIXME:
 -- CChar
@@ -188,18 +209,29 @@ instance ArrayElem Char where
 -- CUChar
 
 instance (ArrayElem a, ArrayElem b) => ArrayElem (a, b) where
-  indexArray (AD_Pair a b) i = (indexArray a i, indexArray b i)
-  newArray size 
+  indexArrayData (AD_Pair a b) i = (indexArrayData a i, indexArrayData b i)
+  newArrayData size 
     = do 
-        a <- newArray size
-        b <- newArray size
+        a <- newArrayData size
+        b <- newArrayData size
         return $ AD_Pair a b
-  readArray (AD_Pair a b) i 
+  readArrayData (AD_Pair a b) i 
     = do
-        x <- readArray a i
-        y <- readArray b i
+        x <- readArrayData a i
+        y <- readArrayData b i
         return (x, y)
-  writeArray (AD_Pair a b) i (x, y)
+  writeArrayData (AD_Pair a b) i (x, y)
     = do
-        writeArray a i x
-        writeArray b i y
+        writeArrayData a i x
+        writeArrayData b i y
+  unsafeFreezeArrayData (AD_Pair a b) 
+    = do
+        a' <- unsafeFreezeArrayData a
+        b' <- unsafeFreezeArrayData b
+        return $ AD_Pair a' b'
+
+-- |Safe combination of creating and fast freezing of array data.
+--
+runArrayData :: ArrayElem e
+             => (forall s. ST s (MutableArrayData s e)) -> ArrayData e
+runArrayData st = runST (st >>= unsafeFreezeArrayData)

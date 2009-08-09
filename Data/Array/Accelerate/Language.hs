@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods #-}
 
 -- |Embedded array processing language: user-visible language
 --

@@ -54,6 +54,12 @@
 --  All ad-hoc polymorphic constructs include reified dictionaries (c.f.,
 --  module 'Types').  Reified dictionaries also ensure that constants
 --  (constructor 'Const') are representable on compute acceleration hardware.
+--
+--  The AST contains both reified dictionaries and type class constraints.  
+--  Type classes are used for array-related functionality that is uniformly
+--  available for all supported types.  In contrast, reified dictionaries are
+--  used for functionality that is only available for certain types, such as
+--  arithmetic operations.
 
 module Data.Array.Accelerate.AST (
 
@@ -113,44 +119,50 @@ data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: OpenAcc aenv a                -- ^bound expressions 
-              -> OpenAcc (aenv, a) b           -- ^the bound expr's scope
-              -> OpenAcc aenv b
+  Let         :: OpenAcc aenv (Array dim e)         -- ^bound expressions 
+              -> OpenAcc (aenv, Array dim e) (Array dim' e')           
+                                                    -- ^the bound expr's scope
+              -> OpenAcc aenv (Array dim' e')
 
-  -- Variable bound by a 'Let', rerpesented by a de Bruijn index              
-  Avar        :: Idx     aenv a 
-              -> OpenAcc aenv a
+  -- Variable bound by a 'Let', represented by a de Bruijn index              
+  Avar        :: Idx     aenv (Array dim e)
+              -> OpenAcc aenv (Array dim e)
   
   -- Array Inlet (Triggers Async Host->Device Transfer if Necessary)
   Use         :: Array dim e 
               -> OpenAcc aenv (Array dim e)
 
   -- Capture a Scalar (or a tuple of Scalars) in a Singleton Array  
-  Unit        :: Exp     aenv e 
+  Unit        :: ArrayElem e
+              => Exp     aenv e 
               -> OpenAcc aenv (Scalar e)
 
   -- Change the shape of an array without altering its contents
   -- * precondition: size dim == size dim'
-  Reshape     :: Exp     aenv dim                 -- ^new shape
+  Reshape     :: Ix dim
+              => Exp     aenv dim                 -- ^new shape
               -> OpenAcc aenv (Array dim' e)      -- ^array to be reshaped
               -> OpenAcc aenv (Array dim e)
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: SliceIndex slix sl co dim        -- ^slice type specification
+  Replicate   :: ArrayElem e
+              => SliceIndex slix sl co dim        -- ^slice type specification
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)        -- ^data to be replicated
               -> OpenAcc aenv (Array dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: SliceIndex slix sl co dim        -- ^slice type specification
+  Index       :: ArrayElem e
+              => SliceIndex slix sl co dim        -- ^slice type specification
               -> OpenAcc aenv (Array dim e)       -- ^array to be indexed
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)
 
   -- Apply the given unary function to all elements of the given array
-  Map         :: Fun     aenv (e -> e') 
+  Map         :: ArrayElem e'
+              => Fun     aenv (e -> e') 
               -> OpenAcc aenv (Array dim e) 
               -> OpenAcc aenv (Array dim e')
     -- FIXME: generalise to mapFold
@@ -158,7 +170,8 @@ data OpenAcc aenv a where
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
-  ZipWith     :: Fun     aenv (e1 -> e2 -> e3) 
+  ZipWith     :: ArrayElem e3
+              => Fun     aenv (e1 -> e2 -> e3) 
               -> OpenAcc aenv (Array dim e1)
               -> OpenAcc aenv (Array dim e2)
               -> OpenAcc aenv (Array dim e3)
@@ -198,7 +211,8 @@ data OpenAcc aenv a where
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
-  Backpermute :: Exp     aenv dim'                 -- ^dimensions of the result
+  Backpermute :: Ix dim'
+              => Exp     aenv dim'                 -- ^dimensions of the result
               -> Fun     aenv (dim' -> dim)        -- ^permutation function
               -> OpenAcc aenv (Array dim e)        -- ^source array
               -> OpenAcc aenv (Array dim' e)
@@ -228,13 +242,13 @@ type Fun aenv t = OpenFun () aenv t
 data OpenExp env aenv t where
 
   -- |Variable index, ranging only over tuples or scalars
-  Var         :: TupleType t 
-              -> Idx env t 
+  Var         :: ArrayElem t
+              => Idx env t 
               -> OpenExp env aenv t
 
   -- |Constant values
-  Const       :: TupleType t 
-              -> t 
+  Const       :: ArrayElem t 
+              => t 
               -> OpenExp env aenv t
 
   -- |Tuples

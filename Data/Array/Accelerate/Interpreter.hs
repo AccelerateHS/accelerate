@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, BangPatterns, PatternGuards, RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies, ScopedTypeVariables #-}
 
 -- |Embedded array processing language: execution by a simple interpreter
 --
@@ -9,118 +9,45 @@
 --
 --- Description ---------------------------------------------------------------
 --
+--  This interpreter is meant to be a reference implementation of the semantics
+--  of the embedded array language.  The emphasis is on defining the semantics
+--  as clearly as possible, not on performance.
 
 module Data.Array.Accelerate.Interpreter (
 
   -- * Execute an array computation by interpretation
-  run
+  run,
+  
+  -- * Delayed array class
+  Delay
 
 ) where
 
 -- standard libraries
-import Control.Monad
-import Control.Monad.ST
-import Control.Monad.State
 import Data.Bits
 import Data.Char                (chr, ord)
-import Data.IntMap              (IntMap)
-import qualified Data.IntMap as IntMap
-import Data.Typeable
-import Foreign.C.String
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar (Elem(..), ElemRepr)
 import Data.Array.Accelerate.AST
 
 
--- | Execution of array operations
--- -------------------------------
+-- Program execution
+-- -----------------
 
--- |Array environment
--- -
-
--- Array representation during execution of an array computation.
+-- Run a complete array program
 --
--- These use an untyped representation as we don't use type-indexed de Bruijn
--- indices for array variables yet.
---
-data ArrVal = forall shape e. (Typeable shape, Typeable e) =>
-              ArrVal { arrValShape :: shape          -- array shape
-                     , arrValData  :: MutableArrayData e
-                     }
-                     
--- Environment of arrays of an array computation during interpretation
---
-type ArrEnv = IntMap ArrVal
-
--- Retrieve the shape of an entry from the array environment
---
-prjArrShape :: Arr dim e -> ArrEnv -> dim
-prjArrShape (Arr _ i) aenv 
-  = case aenv!!i of
-      ArrVal sh _ -> case cast sh of
-                       Nothing  -> mismatch
-                       Just sh' -> sh'
-  where
-    mismatch = error "Data.Array.Accelerate.Interpreter.prjArrShape: mismatch"
+run :: Delay a => Acc a -> a
+run = force . evalAcc
 
 
--- |Interpreter monad
--- -
+-- Environments
+-- ------------
 
--- |State transformer in which the interpreter runs
---
-type Interp s a = StateT InterpState (ST s) a
-
-data InterpState = InterpState {arrEnv :: ArrEnv}
-
-initialInterpState :: InterpState
-initialInterpState = InterpState IntMap.empty
-
-runInterp :: Interp s a -> a
-runInterp = runST . flip evalStateT initialInterpState
-
--- Add an entry to the array environment
---
-def :: Arr dim e -> ArrVal -> Interp s ()
-def (Arr _ i) aval 
-  = modify $ \s -> s {arrEnv = IntMap.insert i aval (arrEnv s)}
-
--- Add an entry to the array environment, which is initialised from an
--- external array
---
-defArray :: Arr dim e -> Array dim e -> Interp s ()
-defArray arr array
-  = do
-      adata <- thawArray (arrValData array)
-      arr `def` ArrVal {arrayValShape = arrayShape arr, arrValData = adata}
-
--- Extract the entire array environment (to pass it to the evaluation of an
--- expression)
---
-getArrEnv :: Interp s ArrEnv
-getArrEnv = liftM arrEnv gets 
-
--- |Execute a sequence of array computations
--- -
-
--- |Run a whole sequence
--- -
-runComps :: Comps 
-
-
--- |Run a collective operation.
---
-runComp :: Comp a -> Interp s a
-runComp (Use array) = defArray ?? array
-
-
--- |Expression evaluation
--- ----------------------
-
--- Valuation for an expression environment
+-- Valuation for an environment
 --
 data Val env where
   Empty :: Val ()
@@ -132,267 +59,354 @@ prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push val v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 
--- Execute a closed expression
+
+-- Delayed arrays
+-- --------------
+
+-- Delayed arrays are characterised by the domain of an array and its functional
+-- representation
+-- 
+
+class Delay a where
+  data Delayed a
+  delay :: a -> Delayed a
+  force :: Delayed a -> a
+  
+instance Delay () where
+  data Delayed () = DelayedUnit
+  delay ()          = DelayedUnit
+  force DelayedUnit = ()
+
+instance Delay (Array dim e) where
+  data Delayed (Array dim e) = (Ix dim, ArrayElem e) => 
+                               DelayedArray { shapeDA :: dim
+                                            , repfDA  :: (dim -> e)
+                                            }
+  delay arr@(Array sh _)    = DelayedArray sh (arr!)
+  force (DelayedArray sh f) = newArray sh f
+  
+instance (Delay a1, Delay a2) => Delay (a1, a2) where
+  data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
+  delay (a1, a2) = DelayedPair (delay a1) (delay a2)
+  force (DelayedPair a1 a2) = (force a1, force a2)
+
+
+-- Array expression evaluation
+-- ---------------------------
+
+-- Evaluate an open array expression
 --
-runExp :: Exp t -> ArrEnv -> t
-runExp e aenv = runOpenExp e Empty aenv
+evalOpenAcc :: Delay a => OpenAcc aenv a -> Val aenv -> Delayed a
+evalOpenAcc (Let acc1 acc2) aenv = let !arr1 = force $ evalOpenAcc acc1 aenv
+                                   in evalOpenAcc acc2 (aenv `Push` arr1)
+evalOpenAcc (Avar idx)      aenv = delay $ prj idx aenv
+evalOpenAcc (Use arr)       aenv = delay arr
+evalOpenAcc (Unit e)        aenv = unit (evalExp e aenv)
+evalOpenAcc (Reshape e acc) aenv = reshape (evalExp e aenv) 
+                                           (evalOpenAcc acc aenv)
 
--- Execute an open expression
+-- Evaluate a closed array expressions
 --
-runOpenExp :: OpenExp env a -> Val env -> ArrEnv -> a
-runOpenExp (Var _ idx)          env _    = prj idx env
-runOpenExp (Const _ c)          _   _    = c
-runOpenExp (Pair ds dt e1 e2)   env aenv = runPair ds dt
-                                                   (runOpenExp e1 env aenv) 
-         									                         (runOpenExp e2 env aenv)
-runOpenExp (Fst ds dt e)        env aenv = runFst ds dt (runOpenExp e env aenv)
-runOpenExp (Snd ds dt e)        env aenv = runSnd ds dt (runOpenExp e env aenv)
-runOpenExp (Cond c t e)         env aenv = if toElem (runOpenExp c env aenv) 
-                                           then runOpenExp t env aenv
-                                           else runOpenExp e env aenv
-runOpenExp (PrimConst c)        _   _    = fromElem $ runPrimConst c
-runOpenExp (PrimApp p arg)      env aenv 
-  = fromElem $ runPrim p (toElem (runOpenExp arg env aenv))
-runOpenExp (IndexScalar arr ix) env aenv = error "missing IndexScalar"
-runOpenExp (Shape arr)          _   aenv = prjArrShape arr aenv
-
-runPrimConst :: PrimConst a -> a
-runPrimConst (PrimMinBound ty) = runMinBound ty
-runPrimConst (PrimMaxBound ty) = runMaxBound ty
-runPrimConst (PrimPi       ty) = runPi ty
-
-runPrim :: PrimFun p -> p
-runPrim (PrimAdd   ty)    = runAdd ty
-runPrim (PrimSub   ty)    = runSub ty
-runPrim (PrimMul   ty)    = runMul ty
-runPrim (PrimNeg   ty)    = runNeg ty
-runPrim (PrimAbs   ty)    = runAbs ty
-runPrim (PrimSig   ty)    = runSig ty
-runPrim (PrimQuot  ty)    = runQuot ty
-runPrim (PrimRem   ty)    = runRem ty
-runPrim (PrimIDiv  ty)    = runIDiv ty
-runPrim (PrimMod   ty)    = runMod ty
-runPrim (PrimBAnd  ty)    = runBAnd ty
-runPrim (PrimBOr   ty)    = runBOr ty
-runPrim (PrimBXor  ty)    = runBXor ty
-runPrim (PrimBNot  ty)    = runBNot ty
-runPrim (PrimFDiv  ty)    = runFDiv ty
-runPrim (PrimRecip ty)    = runRecip ty
-runPrim (PrimLt    ty)    = runLt ty
-runPrim (PrimGt    ty)    = runGt ty
-runPrim (PrimLtEq  ty)    = runLtEq ty
-runPrim (PrimGtEq  ty)    = runGtEq ty
-runPrim (PrimEq    ty)    = runEq ty
-runPrim (PrimNEq   ty)    = runNEq ty
-runPrim (PrimMax   ty)    = runMax ty
-runPrim (PrimMin   ty)    = runMin ty
-runPrim PrimLAnd          = runLAnd
-runPrim PrimLOr           = runLOr
-runPrim PrimLNot          = runLNot
-runPrim PrimOrd           = runOrd
-runPrim PrimChr           = runChr
-runPrim PrimRoundFloatInt = runRoundFloatInt
-runPrim PrimTruncFloatInt = runTruncFloatInt
-runPrim PrimIntFloat      = runIntFloat
+evalAcc :: Delay a => Acc a -> Delayed a
+evalAcc acc = evalOpenAcc acc Empty
 
 
--- Auxilliary functions
--- --------------------
+-- Array primitives
+-- ----------------
 
-runPair :: forall s t. (Elem s, Elem t)
+unit :: ArrayElem e => e -> Delayed (Scalar e)
+unit e = DelayedArray {shapeDA = (), repfDA = const e}
+
+reshape :: Ix dim => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
+reshape newShape darr@(DelayedArray {shapeDA = oldShape})
+  | size newShape == size oldShape
+  = let Array _ adata = force darr
+    in 
+    delay $ Array newShape adata
+  | otherwise 
+  = error "Data.Array.Accelerate.Interpreter.reshape: shape mismatch"
+  
+
+-- Expression evaluation
+-- ---------------------
+
+-- Evaluate an open expression
+--
+-- NB: The implementation of 'IndexScalar' and 'Shape' demonstrate clearly why
+--     array expressions must be hoisted out of scalar expressions before code
+--     execution.  If these operations are in the body of a function that
+--     gets mapped over an array, the array argument would be forced many times
+--     leading to a large amount of wasteful recomputation.
+--  
+evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
+evalOpenExp (Var idx)            env _    = prj idx env
+evalOpenExp (Const c)            _   _    = c
+evalOpenExp (Pair ds dt e1 e2)   env aenv = evalPair ds dt
+                                                   (evalOpenExp e1 env aenv) 
+         									                         (evalOpenExp e2 env aenv)
+evalOpenExp (Fst ds dt e)        env aenv = evalFst ds dt 
+                                                    (evalOpenExp e env aenv)
+evalOpenExp (Snd ds dt e)        env aenv = evalSnd ds dt 
+                                                    (evalOpenExp e env aenv)
+evalOpenExp (Cond c t e)         env aenv = if toElem (evalOpenExp c env aenv) 
+                                            then evalOpenExp t env aenv
+                                            else evalOpenExp e env aenv
+evalOpenExp (PrimConst c)        _   _    = fromElem $ evalPrimConst c
+evalOpenExp (PrimApp p arg)      env aenv 
+  = fromElem $ evalPrim p (toElem (evalOpenExp arg env aenv))
+evalOpenExp (IndexScalar acc ix) env aenv 
+  = (force $ evalOpenAcc acc aenv) ! (evalOpenExp ix env aenv)
+evalOpenExp (Shape acc)          _   aenv 
+  = let Array sh _ = force $ evalOpenAcc acc aenv 
+    in sh
+
+
+-- Evaluate a closed expression
+--
+evalExp :: Exp aenv t -> Val aenv -> t
+evalExp e aenv = evalOpenExp e Empty aenv
+
+
+-- Scalar primitives
+-- -----------------
+
+evalPrimConst :: PrimConst a -> a
+evalPrimConst (PrimMinBound ty) = evalMinBound ty
+evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
+evalPrimConst (PrimPi       ty) = evalPi ty
+
+evalPrim :: PrimFun p -> p
+evalPrim (PrimAdd   ty)    = evalAdd ty
+evalPrim (PrimSub   ty)    = evalSub ty
+evalPrim (PrimMul   ty)    = evalMul ty
+evalPrim (PrimNeg   ty)    = evalNeg ty
+evalPrim (PrimAbs   ty)    = evalAbs ty
+evalPrim (PrimSig   ty)    = evalSig ty
+evalPrim (PrimQuot  ty)    = evalQuot ty
+evalPrim (PrimRem   ty)    = evalRem ty
+evalPrim (PrimIDiv  ty)    = evalIDiv ty
+evalPrim (PrimMod   ty)    = evalMod ty
+evalPrim (PrimBAnd  ty)    = evalBAnd ty
+evalPrim (PrimBOr   ty)    = evalBOr ty
+evalPrim (PrimBXor  ty)    = evalBXor ty
+evalPrim (PrimBNot  ty)    = evalBNot ty
+evalPrim (PrimFDiv  ty)    = evalFDiv ty
+evalPrim (PrimRecip ty)    = evalRecip ty
+evalPrim (PrimLt    ty)    = evalLt ty
+evalPrim (PrimGt    ty)    = evalGt ty
+evalPrim (PrimLtEq  ty)    = evalLtEq ty
+evalPrim (PrimGtEq  ty)    = evalGtEq ty
+evalPrim (PrimEq    ty)    = evalEq ty
+evalPrim (PrimNEq   ty)    = evalNEq ty
+evalPrim (PrimMax   ty)    = evalMax ty
+evalPrim (PrimMin   ty)    = evalMin ty
+evalPrim PrimLAnd          = evalLAnd
+evalPrim PrimLOr           = evalLOr
+evalPrim PrimLNot          = evalLNot
+evalPrim PrimOrd           = evalOrd
+evalPrim PrimChr           = evalChr
+evalPrim PrimRoundFloatInt = evalRoundFloatInt
+evalPrim PrimTruncFloatInt = evalTruncFloatInt
+evalPrim PrimIntFloat      = evalIntFloat
+
+
+-- Pairing
+-- -------
+
+evalPair :: forall s t. (Elem s, Elem t)
         => s {- dummy to fix the type variable -}
         -> t {- dummy to fix the type variable -}
         -> ElemRepr s
         -> ElemRepr t
         -> ElemRepr (s, t)
-runPair _ _ x y = fromElem (toElem x :: s, toElem y :: t)
+evalPair _ _ x y = fromElem (toElem x :: s, toElem y :: t)
 
-runFst :: forall s t. (Elem s, Elem t)
+evalFst :: forall s t. (Elem s, Elem t)
        => s {- dummy to fix the type variable -}
        -> t {- dummy to fix the type variable -}
        -> ElemRepr (s, t)
        -> ElemRepr s
-runFst _ _ xy = let (x, !_) = toElem xy :: (s, t)
-                in fromElem x
+evalFst _ _ xy = let (x, !_) = toElem xy :: (s, t)
+                 in fromElem x
 
-runSnd :: forall s t. (Elem s, Elem t)
+evalSnd :: forall s t. (Elem s, Elem t)
        => s {- dummy to fix the type variable -}
        -> t {- dummy to fix the type variable -}
        -> ElemRepr (s, t)
        -> ElemRepr t
-runSnd _ _ xy = let (!_, y) = toElem xy :: (s, t)
-                in fromElem y
+evalSnd _ _ xy = let (!_, y) = toElem xy :: (s, t)
+                 in fromElem y
 
 
--- Implementation of the primitives
--- --------------------------------
+-- Implementation of scalar primitives
+-- -----------------------------------
 
-runLAnd :: (Bool, Bool) -> Bool
-runLAnd (!x, !y) = x && y
+evalLAnd :: (Bool, Bool) -> Bool
+evalLAnd (!x, !y) = x && y
 
-runLOr  :: (Bool, Bool) -> Bool
-runLOr (!x, !y) = x || y
+evalLOr  :: (Bool, Bool) -> Bool
+evalLOr (!x, !y) = x || y
 
-runLNot :: Bool -> Bool
-runLNot x = not x
+evalLNot :: Bool -> Bool
+evalLNot x = not x
 
-runOrd :: Char -> Int
-runOrd = ord
+evalOrd :: Char -> Int
+evalOrd = ord
 
-runChr :: Int -> Char
-runChr =  chr
+evalChr :: Int -> Char
+evalChr =  chr
 
-runRoundFloatInt :: Float -> Int
-runRoundFloatInt = round
+evalRoundFloatInt :: Float -> Int
+evalRoundFloatInt = round
 
-runTruncFloatInt :: Float -> Int
-runTruncFloatInt = truncate
+evalTruncFloatInt :: Float -> Int
+evalTruncFloatInt = truncate
 
-runIntFloat :: Int -> Float
-runIntFloat = fromIntegral
+evalIntFloat :: Int -> Float
+evalIntFloat = fromIntegral
 
 
--- |Extract methods from reified dictionaries
--- ------------------------------------------
+-- Extract methods from reified dictionaries
+-- 
 
--- |Constant methods of Bounded
--- -
+-- Constant methods of Bounded
+-- 
 
-runMinBound :: BoundedType a -> a
-runMinBound (IntegralBoundedType ty) 
+evalMinBound :: BoundedType a -> a
+evalMinBound (IntegralBoundedType ty) 
   | IntegralDict <- integralDict ty = minBound
-runMinBound (NonNumBoundedType   ty) 
+evalMinBound (NonNumBoundedType   ty) 
   | NonNumDict   <- nonNumDict ty   = minBound
 
-runMaxBound :: BoundedType a -> a
-runMaxBound (IntegralBoundedType ty) 
+evalMaxBound :: BoundedType a -> a
+evalMaxBound (IntegralBoundedType ty) 
   | IntegralDict <- integralDict ty = maxBound
-runMaxBound (NonNumBoundedType   ty) 
+evalMaxBound (NonNumBoundedType   ty) 
   | NonNumDict   <- nonNumDict ty   = maxBound
 
--- |Constant method of floating
--- -
+-- Constant method of floating
+-- 
 
-runPi :: FloatingType a -> a
-runPi ty | FloatingDict <- floatingDict ty = pi
+evalPi :: FloatingType a -> a
+evalPi ty | FloatingDict <- floatingDict ty = pi
 
--- |Methods of Num
--- -
+-- Methods of Num
+-- 
 
-runAdd :: NumType a -> ((a, a) -> a)
-runAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
-runAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (+)
+evalAdd :: NumType a -> ((a, a) -> a)
+evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
+evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (+)
 
-runSub :: NumType a -> ((a, a) -> a)
-runSub (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (-)
-runSub (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (-)
+evalSub :: NumType a -> ((a, a) -> a)
+evalSub (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (-)
+evalSub (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (-)
 
-runMul :: NumType a -> ((a, a) -> a)
-runMul (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (*)
-runMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (*)
+evalMul :: NumType a -> ((a, a) -> a)
+evalMul (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (*)
+evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (*)
 
-runNeg :: NumType a -> (a -> a)
-runNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = negate
-runNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = negate
+evalNeg :: NumType a -> (a -> a)
+evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = negate
+evalNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = negate
 
-runAbs :: NumType a -> (a -> a)
-runAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = abs
-runAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = abs
+evalAbs :: NumType a -> (a -> a)
+evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = abs
+evalAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = abs
 
-runSig :: NumType a -> (a -> a)
-runSig (IntegralNumType ty) | IntegralDict <- integralDict ty = signum
-runSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = signum
+evalSig :: NumType a -> (a -> a)
+evalSig (IntegralNumType ty) | IntegralDict <- integralDict ty = signum
+evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = signum
 
-runQuot :: IntegralType a -> ((a, a) -> a)
-runQuot ty | IntegralDict <- integralDict ty = uncurry quot
+evalQuot :: IntegralType a -> ((a, a) -> a)
+evalQuot ty | IntegralDict <- integralDict ty = uncurry quot
 
-runRem :: IntegralType a -> ((a, a) -> a)
-runRem ty | IntegralDict <- integralDict ty = uncurry rem
+evalRem :: IntegralType a -> ((a, a) -> a)
+evalRem ty | IntegralDict <- integralDict ty = uncurry rem
 
-runIDiv :: IntegralType a -> ((a, a) -> a)
-runIDiv ty | IntegralDict <- integralDict ty = uncurry div
+evalIDiv :: IntegralType a -> ((a, a) -> a)
+evalIDiv ty | IntegralDict <- integralDict ty = uncurry div
 
-runMod :: IntegralType a -> ((a, a) -> a)
-runMod ty | IntegralDict <- integralDict ty = uncurry mod
+evalMod :: IntegralType a -> ((a, a) -> a)
+evalMod ty | IntegralDict <- integralDict ty = uncurry mod
 
-runBAnd :: IntegralType a -> ((a, a) -> a)
-runBAnd ty | IntegralDict <- integralDict ty = uncurry (.&.)
+evalBAnd :: IntegralType a -> ((a, a) -> a)
+evalBAnd ty | IntegralDict <- integralDict ty = uncurry (.&.)
 
-runBOr :: IntegralType a -> ((a, a) -> a)
-runBOr ty | IntegralDict <- integralDict ty = uncurry (.|.)
+evalBOr :: IntegralType a -> ((a, a) -> a)
+evalBOr ty | IntegralDict <- integralDict ty = uncurry (.|.)
 
-runBXor :: IntegralType a -> ((a, a) -> a)
-runBXor ty | IntegralDict <- integralDict ty = uncurry xor
+evalBXor :: IntegralType a -> ((a, a) -> a)
+evalBXor ty | IntegralDict <- integralDict ty = uncurry xor
 
-runBNot :: IntegralType a -> (a -> a)
-runBNot ty | IntegralDict <- integralDict ty = complement
+evalBNot :: IntegralType a -> (a -> a)
+evalBNot ty | IntegralDict <- integralDict ty = complement
 
-runFDiv :: FloatingType a -> ((a, a) -> a)
-runFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
+evalFDiv :: FloatingType a -> ((a, a) -> a)
+evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
 
-runRecip :: FloatingType a -> (a -> a)
-runRecip ty | FloatingDict <- floatingDict ty = recip
+evalRecip :: FloatingType a -> (a -> a)
+evalRecip ty | FloatingDict <- floatingDict ty = recip
 
-runLt :: ScalarType a -> ((a, a) -> Bool)
-runLt (NumScalarType (IntegralNumType ty)) 
+evalLt :: ScalarType a -> ((a, a) -> Bool)
+evalLt (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (<)
-runLt (NumScalarType (FloatingNumType ty)) 
+evalLt (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (<)
-runLt (NonNumScalarType ty) 
+evalLt (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (<)
 
-runGt :: ScalarType a -> ((a, a) -> Bool)
-runGt (NumScalarType (IntegralNumType ty)) 
+evalGt :: ScalarType a -> ((a, a) -> Bool)
+evalGt (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (>)
-runGt (NumScalarType (FloatingNumType ty)) 
+evalGt (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (>)
-runGt (NonNumScalarType ty) 
+evalGt (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (>)
 
-runLtEq :: ScalarType a -> ((a, a) -> Bool)
-runLtEq (NumScalarType (IntegralNumType ty)) 
+evalLtEq :: ScalarType a -> ((a, a) -> Bool)
+evalLtEq (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (<=)
-runLtEq (NumScalarType (FloatingNumType ty)) 
+evalLtEq (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (<=)
-runLtEq (NonNumScalarType ty) 
+evalLtEq (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (<=)
 
-runGtEq :: ScalarType a -> ((a, a) -> Bool)
-runGtEq (NumScalarType (IntegralNumType ty)) 
+evalGtEq :: ScalarType a -> ((a, a) -> Bool)
+evalGtEq (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (>=)
-runGtEq (NumScalarType (FloatingNumType ty)) 
+evalGtEq (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (>=)
-runGtEq (NonNumScalarType ty) 
+evalGtEq (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (>=)
 
-runEq :: ScalarType a -> ((a, a) -> Bool)
-runEq (NumScalarType (IntegralNumType ty)) 
+evalEq :: ScalarType a -> ((a, a) -> Bool)
+evalEq (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (==)
-runEq (NumScalarType (FloatingNumType ty)) 
+evalEq (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (==)
-runEq (NonNumScalarType ty) 
+evalEq (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
-runNEq :: ScalarType a -> ((a, a) -> Bool)
-runNEq (NumScalarType (IntegralNumType ty)) 
+evalNEq :: ScalarType a -> ((a, a) -> Bool)
+evalNEq (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry (/=)
-runNEq (NumScalarType (FloatingNumType ty)) 
+evalNEq (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry (/=)
-runNEq (NonNumScalarType ty) 
+evalNEq (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry (/=)
 
-runMax :: ScalarType a -> ((a, a) -> a)
-runMax (NumScalarType (IntegralNumType ty)) 
+evalMax :: ScalarType a -> ((a, a) -> a)
+evalMax (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry max
-runMax (NumScalarType (FloatingNumType ty)) 
+evalMax (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry max
-runMax (NonNumScalarType ty) 
+evalMax (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry max
 
-runMin :: ScalarType a -> ((a, a) -> a)
-runMin (NumScalarType (IntegralNumType ty)) 
+evalMin :: ScalarType a -> ((a, a) -> a)
+evalMin (NumScalarType (IntegralNumType ty)) 
   | IntegralDict <- integralDict ty = uncurry min
-runMin (NumScalarType (FloatingNumType ty)) 
+evalMin (NumScalarType (FloatingNumType ty)) 
   | FloatingDict <- floatingDict ty = uncurry min
-runMin (NonNumScalarType ty) 
+evalMin (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry min

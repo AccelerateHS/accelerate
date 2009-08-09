@@ -1,11 +1,12 @@
 Name:			accelerate
-Version:		0.3.0
+Version:		0.4.0
 Synopsis:		An embedded language for accelerated array processing
 Description:	        This library defines an embedded language for
 			regular, multi-dimensional array computations with
 			multiple backends to facilitate high-performance
 			implementations.  Currently, the only backend is an
-			interpreter.
+			interpreter that serves as a reference implementation 
+			of the intended semantics of the language.
 License:		BSD3
 License-file:		LICENSE
 Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -30,4 +31,4 @@ ghc-options:     	-Wall -fno-warn-orphans
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,
-			BangPatterns, PatternGuards, TypeOperators
+			BangPatterns, PatternGuards, TypeOperators, RankNTypes
