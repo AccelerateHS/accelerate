@@ -131,7 +131,7 @@ fold :: Elem a
      -> Exp a 
      -> Acc (Vector a)
      -> Acc (Scalar a)
-fold f e arr = error "fold f e arr = scan f e arr >>= return . fst"
+fold = Fold
 
 permute :: (Ix dim, Ix dim', Elem a)
         => (Exp a -> Exp a -> Exp a) 

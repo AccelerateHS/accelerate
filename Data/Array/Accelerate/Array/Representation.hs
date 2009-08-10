@@ -76,30 +76,33 @@ type Vector e = Array DIM1 e
 -- |Class of index representations (which are nested pairs)
 --
 class Ix ix where
-  dim   :: ix -> Int           -- ^number of dimensions (>= 0)
-  size  :: ix -> Int           -- ^for a *shape* yield the total number of 
-                                   -- elements in that array
-  index :: ix -> ix -> Int     -- ^yield the index position in a linear, 
-                                   -- row-major representation of the array
-                                   -- (first argument is the shape)
+  dim       :: ix -> Int       -- ^number of dimensions (>= 0)
+  size      :: ix -> Int       -- ^for a *shape* yield the total number of 
+                               -- elements in that array
+  intersect :: ix -> ix -> ix  -- ^yield the intersection of two shapes
+  index     :: ix -> ix -> Int -- ^yield the index position in a linear, 
+                               -- row-major representation of the array
+                               -- (first argument is the shape)
   -- FIXME: we might want an unsafeIndex, too
-  iter  :: ix -> (ix -> a) -> (a -> a -> a)-> a -> a
+  iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
                                -- ^iterate through the entire shape, applying
                                -- the function; third argument combines results
                                -- and fourth is returned in case of an empty
                                -- iteration space
 
 instance Ix () where
-  dim   _       = 0
-  size  _       = 1
-  index _ _     = 0
-  iter  _ _ _ r = r
+  dim       ()       = 0
+  size      ()       = 1
+  intersect () ()    = ()
+  index     () ()    = 0
+  iter      () _ _ r = r
 
 instance Ix ix => Ix (ix, Int) where
-  dim   (sh, _)          = dim sh + 1
-  size  (sh, sz)         = size sh * sz
+  dim (sh, _)                       = dim sh + 1
+  size (sh, sz)                     = size sh * sz
+  (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   index (sh, sz) (ix, i) 
-    | i >= 0 && i < sz   = index sh ix + size sh * i
+    | i >= 0 && i < sz              = index sh ix + size sh * i
     | otherwise              
     = error "Data.Array.Accelerate.Array: index out of bounds"
   iter (sh, sz) f c r    = iter' 0

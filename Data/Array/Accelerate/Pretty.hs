@@ -62,6 +62,9 @@ prettyAcc lvl (ZipWith f acc1 acc2)
     prettyAcc lvl acc2
 prettyAcc lvl (Filter p acc)   
   = text "filter" <+> parens (prettyFun lvl p) <+> prettyAcc lvl acc
+prettyAcc lvl (Fold f e acc)   
+  = text "fold" <+> parens (prettyFun lvl f) <+> prettyExp lvl parens e <+> 
+    prettyAcc lvl acc
 prettyAcc lvl (Scan f e acc)   
   = text "scan" <+> parens (prettyFun lvl f) <+> prettyExp lvl parens e <+> 
     prettyAcc lvl acc

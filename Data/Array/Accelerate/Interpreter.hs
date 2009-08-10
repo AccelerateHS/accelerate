@@ -97,13 +97,40 @@ instance (Delay a1, Delay a2) => Delay (a1, a2) where
 -- Evaluate an open array expression
 --
 evalOpenAcc :: Delay a => OpenAcc aenv a -> Val aenv -> Delayed a
-evalOpenAcc (Let acc1 acc2) aenv = let !arr1 = force $ evalOpenAcc acc1 aenv
-                                   in evalOpenAcc acc2 (aenv `Push` arr1)
-evalOpenAcc (Avar idx)      aenv = delay $ prj idx aenv
-evalOpenAcc (Use arr)       aenv = delay arr
-evalOpenAcc (Unit e)        aenv = unit (evalExp e aenv)
-evalOpenAcc (Reshape e acc) aenv = reshape (evalExp e aenv) 
-                                           (evalOpenAcc acc aenv)
+
+evalOpenAcc (Let acc1 acc2) aenv 
+  = let !arr1 = force $ evalOpenAcc acc1 aenv
+    in evalOpenAcc acc2 (aenv `Push` arr1)
+
+evalOpenAcc (Avar idx) aenv = delay $ prj idx aenv
+
+evalOpenAcc (Use arr) aenv = delay arr
+
+evalOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
+
+evalOpenAcc (Reshape e acc) aenv 
+  = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (Replicate sliceIndex slix acc) aenv
+  = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
+  
+evalOpenAcc (Index sliceIndex acc slix) aenv
+  = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
+
+evalOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (ZipWith f acc1 acc2) aenv
+  = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+
+evalOpenAcc (Filter p acc) aenv
+  = filterOp (evalFun p aenv) (evalOpenAcc acc aenv)
+  
+evalOpenAcc (Fold f e acc) aenv
+  = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (Permute f dftAcc p acc) aenv
+  = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
+              (evalFun p aenv) (evalOpenAcc acc aenv)
 
 -- Evaluate a closed array expressions
 --
@@ -114,21 +141,115 @@ evalAcc acc = evalOpenAcc acc Empty
 -- Array primitives
 -- ----------------
 
-unit :: ArrayElem e => e -> Delayed (Scalar e)
-unit e = DelayedArray {shapeDA = (), repfDA = const e}
+unitOp :: ArrayElem e => e -> Delayed (Scalar e)
+unitOp e = DelayedArray {shapeDA = (), repfDA = const e}
 
-reshape :: Ix dim => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
-reshape newShape darr@(DelayedArray {shapeDA = oldShape})
+reshapeOp :: Ix dim => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
+reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
   | size newShape == size oldShape
   = let Array _ adata = force darr
     in 
     delay $ Array newShape adata
   | otherwise 
   = error "Data.Array.Accelerate.Interpreter.reshape: shape mismatch"
+
+replicateOp :: SliceIndex slix sl co dim 
+            -> slix 
+            -> Delayed (Array sl e)
+            -> Delayed (Array dim e)
+replicateOp = undefined -- FIXME:
+
+indexOp :: SliceIndex slix sl co dim 
+        -> Delayed (Array dim e)
+        -> slix 
+        -> Delayed (Array sl e)
+indexOp = undefined -- FIXME:
+
+mapOp :: ArrayElem e' 
+      => (e -> e') 
+      -> Delayed (Array dim e) 
+      -> Delayed (Array dim e')
+mapOp f (DelayedArray sh rf) = DelayedArray sh (f . rf)
+
+zipWithOp :: ArrayElem e3
+          => (e1 -> e2 -> e3) 
+          -> Delayed (Array dim e1) 
+          -> Delayed (Array dim e2) 
+          -> Delayed (Array dim e3)
+zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2) 
+  = DelayedArray (sh1 `intersect` sh2) (\ix -> f (rf1 ix) (rf2 ix))
+
+filterOp :: (e -> ElemRepr Bool)
+         -> Delayed (Vector e)
+         -> Delayed (Vector e)
+filterOp p (DelayedArray sh rf)
+  = error "Data.Array.Accelerate.Interpreter: filter: not yet implemented"
+
+foldOp :: (e -> e -> e)
+       -> e
+       -> Delayed (Array dim e)
+       -> Delayed (Scalar e)
+foldOp f e (DelayedArray sh rf)
+  = unitOp $ iter sh rf f e
+
+scanOp :: (e -> e -> e)
+       -> e
+       -> Delayed (Vector e)
+       -> Delayed (Vector e, Scalar e)
+scanOp f e (DelayedArray sh rf)
+  = undefined -- FIXME: DelayedPair (?) (unitOp ?)
   
+permuteOp :: (e -> e -> e)
+          -> Delayed (Array dim' e)
+          -> (dim -> dim')
+          -> Delayed (Array dim e)
+          -> Delayed (Array dim' e)
+permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
+  = delay $ adata `seq` Array dftsSh adata
+  where 
+    adata = runArrayData $ do
+
+                -- new array in target dimension
+              arr <- newArrayData (size dftsSh)
+
+                -- initialise it with the default values
+              let write ix = writeArrayData arr (index dftsSh ix) (dftsPf ix)      
+              iter dftsSh write (>>) (return ())
+
+                -- traverse the source dimension and project each element into
+                -- the target dimension (where it gets combined with the current
+                -- default)
+              let update ix = do
+                                let i = index dftsSh (p ix)
+                                e <- readArrayData arr i
+                                writeArrayData arr i (pf ix `f` e) 
+              iter sh update (>>) (return ())
+              
+                -- return the updated array
+              return arr
+
+backpermuteOp :: Ix dim'
+              => dim'
+              -> (dim' -> dim)
+              -> Delayed (Array dim e)
+              -> Delayed (Array dim' e)
+backpermuteOp sh' p (DelayedArray sh rf)
+  = DelayedArray sh' (rf . p)
+
 
 -- Expression evaluation
 -- ---------------------
+
+-- Evaluate open function
+--
+evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
+evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
+evalOpenFun (Lam f)  env aenv = \x -> evalOpenFun f (env `Push` x) aenv
+
+-- Evaluate a closed function
+--
+evalFun :: Fun aenv t -> Val aenv -> t
+evalFun f aenv = evalOpenFun f Empty aenv
 
 -- Evaluate an open expression
 --
@@ -139,27 +260,36 @@ reshape newShape darr@(DelayedArray {shapeDA = oldShape})
 --     leading to a large amount of wasteful recomputation.
 --  
 evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
-evalOpenExp (Var idx)            env _    = prj idx env
-evalOpenExp (Const c)            _   _    = c
-evalOpenExp (Pair ds dt e1 e2)   env aenv = evalPair ds dt
-                                                   (evalOpenExp e1 env aenv) 
-         									                         (evalOpenExp e2 env aenv)
-evalOpenExp (Fst ds dt e)        env aenv = evalFst ds dt 
-                                                    (evalOpenExp e env aenv)
-evalOpenExp (Snd ds dt e)        env aenv = evalSnd ds dt 
-                                                    (evalOpenExp e env aenv)
-evalOpenExp (Cond c t e)         env aenv = if toElem (evalOpenExp c env aenv) 
-                                            then evalOpenExp t env aenv
-                                            else evalOpenExp e env aenv
-evalOpenExp (PrimConst c)        _   _    = fromElem $ evalPrimConst c
-evalOpenExp (PrimApp p arg)      env aenv 
+
+evalOpenExp (Var idx) env _ = prj idx env
+  
+evalOpenExp (Const c) _ _ = c
+
+evalOpenExp (Pair ds dt e1 e2) env aenv 
+  = evalPair ds dt (evalOpenExp e1 env aenv) (evalOpenExp e2 env aenv)
+
+evalOpenExp (Fst ds dt e) env aenv 
+  = evalFst ds dt (evalOpenExp e env aenv)
+
+evalOpenExp (Snd ds dt e) env aenv 
+  = evalSnd ds dt (evalOpenExp e env aenv)
+
+evalOpenExp (Cond c t e) env aenv 
+  = if toElem (evalOpenExp c env aenv) 
+    then evalOpenExp t env aenv
+    else evalOpenExp e env aenv
+
+evalOpenExp (PrimConst c) _ _ = fromElem $ evalPrimConst c
+
+evalOpenExp (PrimApp p arg) env aenv 
   = fromElem $ evalPrim p (toElem (evalOpenExp arg env aenv))
+
 evalOpenExp (IndexScalar acc ix) env aenv 
   = (force $ evalOpenAcc acc aenv) ! (evalOpenExp ix env aenv)
-evalOpenExp (Shape acc)          _   aenv 
+
+evalOpenExp (Shape acc) _ aenv 
   = let Array sh _ = force $ evalOpenAcc acc aenv 
     in sh
-
 
 -- Evaluate a closed expression
 --

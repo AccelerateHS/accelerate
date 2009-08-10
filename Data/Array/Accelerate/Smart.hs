@@ -86,6 +86,11 @@ data Acc a where
               => (Exp e -> Exp Bool) 
               -> Acc (Vector e)
               -> Acc (Vector e)
+  Fold        :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> Acc (Array dim e)
+              -> Acc (Scalar e)
   Scan        :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
@@ -142,6 +147,8 @@ convertOpenAcc alyt (ZipWith f acc1 acc2)
                 (convertOpenAcc alyt acc2)
 convertOpenAcc alyt (Filter p acc) 
   = AST.Filter (convertFun1 alyt p) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Fold f e acc) 
+  = AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Scan f e acc) 
   = AST.Scan (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Permute f dftAcc perm acc) 

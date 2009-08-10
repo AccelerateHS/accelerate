@@ -146,16 +146,14 @@ data OpenAcc aenv a where
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: ArrayElem e
-              => SliceIndex slix sl co dim        -- ^slice type specification
+  Replicate   :: SliceIndex slix sl co dim        -- ^slice type specification
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)        -- ^data to be replicated
               -> OpenAcc aenv (Array dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: ArrayElem e
-              => SliceIndex slix sl co dim        -- ^slice type specification
+  Index       :: SliceIndex slix sl co dim        -- ^slice type specification
               -> OpenAcc aenv (Array dim e)       -- ^array to be indexed
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)
@@ -182,6 +180,14 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Vector e)
               -> OpenAcc aenv (Vector e)
 
+  -- Fold of an array with a given *associative* function and its neutral
+  -- element
+  Fold        :: Fun     aenv (e -> e -> e)          -- ^combination function
+              -> Exp     aenv e                      -- ^default value
+              -> OpenAcc aenv (Array dim e)          -- ^folded array
+              -> OpenAcc aenv (Scalar e)
+    -- FIXME: generalise to Gabi's mapFold
+
   -- Left-to-right prescan of a linear array with a given *associative*
   -- function and its neutral element; produces a rightmost fold value and a
   -- linear of the same shape (the fold value would be the rightmost element
@@ -206,7 +212,7 @@ data OpenAcc aenv a where
   Permute     :: Fun     aenv (e -> e -> e)        -- ^combination function
               -> OpenAcc aenv (Array dim' e)       -- ^default values
               -> Fun     aenv (dim -> dim')        -- ^permutation function
-              -> OpenAcc aenv (Array dim e)        -- ^linear array to permute
+              -> OpenAcc aenv (Array dim e)        -- ^source array
               -> OpenAcc aenv (Array dim' e)
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
