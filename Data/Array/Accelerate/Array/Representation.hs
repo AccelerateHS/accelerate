@@ -169,8 +169,8 @@ newArray :: (Ix dim, ArrayElem e) => dim -> (dim -> e) -> Array dim e
 newArray sh f 
   = adata `seq` Array sh adata
   where 
-    adata = runArrayData $ do
-              arr <- newArrayData (size sh)
-              let write ix = writeArrayData arr (index sh ix) (f ix)      
-              iter sh write (>>) (return ())
-              return arr
+    (adata, _) = runArrayData $ do
+                   arr <- newArrayData (size sh)
+                   let write ix = writeArrayData arr (index sh ix) (f ix)      
+                   iter sh write (>>) (return ())
+                   return (arr, undefined)

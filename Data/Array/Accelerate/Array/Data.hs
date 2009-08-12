@@ -233,5 +233,8 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a, b) where
 -- |Safe combination of creating and fast freezing of array data.
 --
 runArrayData :: ArrayElem e
-             => (forall s. ST s (MutableArrayData s e)) -> ArrayData e
-runArrayData st = runST (st >>= unsafeFreezeArrayData)
+             => (forall s. ST s (MutableArrayData s e, e)) -> (ArrayData e, e)
+runArrayData st = runST $ do
+                    (mad, r) <- st
+                    ad <- unsafeFreezeArrayData mad
+                    return (ad, r)

@@ -17,7 +17,7 @@
 --  backend-specific toplevel modules.  Currently, we have the following:
 --
 --  * 'Data.Array.Accelerate.Interpreter': simple interpreter in Haskell as a
---      reference implementation of the semantics of the array language
+--      reference implementation defining the semantics of the array language
 
 
 module Data.Array.Accelerate (

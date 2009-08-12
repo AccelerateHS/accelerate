@@ -146,14 +146,16 @@ data OpenAcc aenv a where
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: SliceIndex slix sl co dim        -- ^slice type specification
+  Replicate   :: Ix dim
+              => SliceIndex slix sl co dim        -- ^slice type specification
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)        -- ^data to be replicated
               -> OpenAcc aenv (Array dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: SliceIndex slix sl co dim        -- ^slice type specification
+  Index       :: Ix sl
+              => SliceIndex slix sl co dim        -- ^slice type specification
               -> OpenAcc aenv (Array dim e)       -- ^array to be indexed
               -> Exp     aenv slix                -- ^slice value specification
               -> OpenAcc aenv (Array sl e)

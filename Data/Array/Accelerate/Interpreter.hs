@@ -153,17 +153,55 @@ reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
   | otherwise 
   = error "Data.Array.Accelerate.Interpreter.reshape: shape mismatch"
 
-replicateOp :: SliceIndex slix sl co dim 
+replicateOp :: Ix dim
+            => SliceIndex slix sl co dim 
             -> slix 
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
-replicateOp = undefined -- FIXME:
-
-indexOp :: SliceIndex slix sl co dim 
+replicateOp sliceIndex slix (DelayedArray sh pf)
+  = DelayedArray sh' (pf . pf')
+  where
+    (sh', pf') = extend sliceIndex slix sh
+    
+    extend :: SliceIndex slix sl co dim
+           -> slix 
+           -> sl
+           -> (dim, dim -> sl)
+    extend SliceNil                ()         ()       = ((), const ())
+    extend (SliceAll sliceIndex)   (slix, ()) (sl, sz) 
+      = let (dim', pf') = extend sliceIndex slix sl
+        in
+        ((dim', sz), \(ix, i) -> (pf' ix, i))
+    extend (SliceFixed sliceIndex) (slix, sz) sl
+      = let (dim', pf') = extend sliceIndex slix sl
+        in
+        ((dim', sz), \(ix, _) -> pf' ix)
+    
+indexOp :: Ix sl
+        => SliceIndex slix sl co dim 
         -> Delayed (Array dim e)
         -> slix 
         -> Delayed (Array sl e)
-indexOp = undefined -- FIXME:
+indexOp sliceIndex (DelayedArray sh pf) slix 
+  = DelayedArray sh' (pf . pf')
+  where
+    (sh', pf') = restrict sliceIndex slix sh
+
+    restrict :: SliceIndex slix sl co dim
+             -> slix
+             -> dim
+             -> (sl, sl -> dim)
+    restrict SliceNil () () = ((), const ())
+    restrict (SliceAll sliceIndex) (slix, ()) (sh, sz)
+      = let (sl', pf') = restrict sliceIndex slix sh
+        in
+        ((sl', sz), \(ix, i) -> (pf' ix, i))
+    restrict (SliceFixed sliceIndex) (slix, i) (sh, sz)
+      | i < sz
+      = let (sl', pf') = restrict sliceIndex slix sh
+        in
+        (sl', \ix -> (pf' ix, i))
+      | otherwise = error "Index out of bounds"
 
 mapOp :: ArrayElem e' 
       => (e -> e') 
@@ -197,8 +235,20 @@ scanOp :: (e -> e -> e)
        -> Delayed (Vector e)
        -> Delayed (Vector e, Scalar e)
 scanOp f e (DelayedArray sh rf)
-  = undefined -- FIXME: DelayedPair (?) (unitOp ?)
-  
+  = (delay $ adata `seq` Array sh adata, unitOp final)
+  where
+    n = size sh
+    --
+    (odata, final) = runArrayData $ do
+                       arr <- newArrayData n
+                       final <- traverse arr 0 e
+                       return (arr, final)
+    traverse arr i v
+      | i >= n    = return v
+      | otherwise = do
+                      writeArrayData arr i v
+                      traverse arr (i + 1) (f v (rf ((), i)))
+    
 permuteOp :: (e -> e -> e)
           -> Delayed (Array dim' e)
           -> (dim -> dim')
@@ -207,26 +257,27 @@ permuteOp :: (e -> e -> e)
 permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
   = delay $ adata `seq` Array dftsSh adata
   where 
-    adata = runArrayData $ do
+    (adata, _) 
+      = runArrayData $ do
 
-                -- new array in target dimension
-              arr <- newArrayData (size dftsSh)
+            -- new array in target dimension
+          arr <- newArrayData (size dftsSh)
 
-                -- initialise it with the default values
-              let write ix = writeArrayData arr (index dftsSh ix) (dftsPf ix)      
-              iter dftsSh write (>>) (return ())
+            -- initialise it with the default values
+          let write ix = writeArrayData arr (index dftsSh ix) (dftsPf ix)      
+          iter dftsSh write (>>) (return ())
 
-                -- traverse the source dimension and project each element into
-                -- the target dimension (where it gets combined with the current
-                -- default)
-              let update ix = do
-                                let i = index dftsSh (p ix)
-                                e <- readArrayData arr i
-                                writeArrayData arr i (pf ix `f` e) 
-              iter sh update (>>) (return ())
-              
-                -- return the updated array
-              return arr
+            -- traverse the source dimension and project each element into
+            -- the target dimension (where it gets combined with the current
+            -- default)
+          let update ix = do
+                            let i = index dftsSh (p ix)
+                            e <- readArrayData arr i
+                            writeArrayData arr i (pf ix `f` e) 
+          iter sh update (>>) (return ())
+          
+            -- return the updated array
+          return (arr, undefined)
 
 backpermuteOp :: Ix dim'
               => dim'
@@ -285,7 +336,12 @@ evalOpenExp (PrimApp p arg) env aenv
   = fromElem $ evalPrim p (toElem (evalOpenExp arg env aenv))
 
 evalOpenExp (IndexScalar acc ix) env aenv 
-  = (force $ evalOpenAcc acc aenv) ! (evalOpenExp ix env aenv)
+  = let ix' = evalOpenExp ix env aenv
+    in
+    case evalOpenAcc acc aenv of
+      DelayedArray sh pf -> index sh ix' `seq` pf ix'
+                            -- FIXME: This is ugly, but (possibly) needed to
+                            --       ensure bounds checking
 
 evalOpenExp (Shape acc) _ aenv 
   = let Array sh _ = force $ evalOpenAcc acc aenv 
