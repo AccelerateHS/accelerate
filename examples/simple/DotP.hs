@@ -1,4 +1,4 @@
-module DotP where
+module DotP (dotp) where
 
 import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
 import qualified Prelude

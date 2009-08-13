@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs, BangPatterns, PatternGuards, RankNTypes #-}
-{-# LANGUAGE TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
+{-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 
 -- |Embedded array processing language: execution by a simple interpreter
 --
@@ -11,16 +11,13 @@
 --
 --  This interpreter is meant to be a reference implementation of the semantics
 --  of the embedded array language.  The emphasis is on defining the semantics
---  as clearly as possible, not on performance.
+--  clearly, not on performance.
 
 module Data.Array.Accelerate.Interpreter (
 
-  -- * Execute an array computation by interpretation
-  run,
+  -- * Interpret an array expression
+  run
   
-  -- * Delayed array class
-  Delay
-
 ) where
 
 -- standard libraries
@@ -31,8 +28,10 @@ import Data.Char                (chr, ord)
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (Elem(..), ElemRepr)
+import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
+import qualified Data.Array.Accelerate.Smart       as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 
 
 -- Program execution
@@ -40,8 +39,8 @@ import Data.Array.Accelerate.AST
 
 -- Run a complete array program
 --
-run :: Delay a => Acc a -> a
-run = force . evalAcc
+run :: Sugar.Arrays a => Sugar.Acc a -> a
+run = Sugar.toArrays . force . evalAcc . Sugar.convertAcc
 
 
 -- Environments
@@ -60,43 +59,12 @@ prj ZeroIdx       (Push val v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 
 
--- Delayed arrays
--- --------------
-
--- Delayed arrays are characterised by the domain of an array and its functional
--- representation
--- 
-
-class Delay a where
-  data Delayed a
-  delay :: a -> Delayed a
-  force :: Delayed a -> a
-  
-instance Delay () where
-  data Delayed () = DelayedUnit
-  delay ()          = DelayedUnit
-  force DelayedUnit = ()
-
-instance Delay (Array dim e) where
-  data Delayed (Array dim e) = (Ix dim, ArrayElem e) => 
-                               DelayedArray { shapeDA :: dim
-                                            , repfDA  :: (dim -> e)
-                                            }
-  delay arr@(Array sh _)    = DelayedArray sh (arr!)
-  force (DelayedArray sh f) = newArray sh f
-  
-instance (Delay a1, Delay a2) => Delay (a1, a2) where
-  data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
-  delay (a1, a2) = DelayedPair (delay a1) (delay a2)
-  force (DelayedPair a1 a2) = (force a1, force a2)
-
-
 -- Array expression evaluation
 -- ---------------------------
 
 -- Evaluate an open array expression
 --
-evalOpenAcc :: Delay a => OpenAcc aenv a -> Val aenv -> Delayed a
+evalOpenAcc :: Delayable a => OpenAcc aenv a -> Val aenv -> Delayed a
 
 evalOpenAcc (Let acc1 acc2) aenv 
   = let !arr1 = force $ evalOpenAcc acc1 aenv
@@ -134,7 +102,7 @@ evalOpenAcc (Permute f dftAcc p acc) aenv
 
 -- Evaluate a closed array expressions
 --
-evalAcc :: Delay a => Acc a -> Delayed a
+evalAcc :: Delayable a => Acc a -> Delayed a
 evalAcc acc = evalOpenAcc acc Empty
 
 
@@ -217,7 +185,7 @@ zipWithOp :: ArrayElem e3
 zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2) 
   = DelayedArray (sh1 `intersect` sh2) (\ix -> f (rf1 ix) (rf2 ix))
 
-filterOp :: (e -> ElemRepr Bool)
+filterOp :: (e -> Sugar.ElemRepr Bool)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
 filterOp p (DelayedArray sh rf)
@@ -326,14 +294,14 @@ evalOpenExp (Snd ds dt e) env aenv
   = evalSnd ds dt (evalOpenExp e env aenv)
 
 evalOpenExp (Cond c t e) env aenv 
-  = if toElem (evalOpenExp c env aenv) 
+  = if Sugar.toElem (evalOpenExp c env aenv) 
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
-evalOpenExp (PrimConst c) _ _ = fromElem $ evalPrimConst c
+evalOpenExp (PrimConst c) _ _ = Sugar.fromElem $ evalPrimConst c
 
 evalOpenExp (PrimApp p arg) env aenv 
-  = fromElem $ evalPrim p (toElem (evalOpenExp arg env aenv))
+  = Sugar.fromElem $ evalPrim p (Sugar.toElem (evalOpenExp arg env aenv))
 
 evalOpenExp (IndexScalar acc ix) env aenv 
   = let ix' = evalOpenExp ix env aenv
@@ -399,29 +367,29 @@ evalPrim PrimIntFloat      = evalIntFloat
 -- Pairing
 -- -------
 
-evalPair :: forall s t. (Elem s, Elem t)
+evalPair :: forall s t. (Sugar.Elem s, Sugar.Elem t)
         => s {- dummy to fix the type variable -}
         -> t {- dummy to fix the type variable -}
-        -> ElemRepr s
-        -> ElemRepr t
-        -> ElemRepr (s, t)
-evalPair _ _ x y = fromElem (toElem x :: s, toElem y :: t)
+        -> Sugar.ElemRepr s
+        -> Sugar.ElemRepr t
+        -> Sugar.ElemRepr (s, t)
+evalPair _ _ x y = Sugar.fromElem (Sugar.toElem x :: s, Sugar.toElem y :: t)
 
-evalFst :: forall s t. (Elem s, Elem t)
+evalFst :: forall s t. (Sugar.Elem s, Sugar.Elem t)
        => s {- dummy to fix the type variable -}
        -> t {- dummy to fix the type variable -}
-       -> ElemRepr (s, t)
-       -> ElemRepr s
-evalFst _ _ xy = let (x, !_) = toElem xy :: (s, t)
-                 in fromElem x
+       -> Sugar.ElemRepr (s, t)
+       -> Sugar.ElemRepr s
+evalFst _ _ xy = let (x, !_) = Sugar.toElem xy :: (s, t)
+                 in Sugar.fromElem x
 
-evalSnd :: forall s t. (Elem s, Elem t)
+evalSnd :: forall s t. (Sugar.Elem s, Sugar.Elem t)
        => s {- dummy to fix the type variable -}
        -> t {- dummy to fix the type variable -}
-       -> ElemRepr (s, t)
-       -> ElemRepr t
-evalSnd _ _ xy = let (!_, y) = toElem xy :: (s, t)
-                 in fromElem y
+       -> Sugar.ElemRepr (s, t)
+       -> Sugar.ElemRepr t
+evalSnd _ _ xy = let (!_, y) = Sugar.toElem xy :: (s, t)
+                 in Sugar.fromElem y
 
 
 -- Implementation of scalar primitives

@@ -17,6 +17,9 @@ module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
   Acc(..), Exp(..), 
+  
+  -- * HOAS -> de Bruijn conversion
+  convertAcc, convertClosedExp,
 
   -- * Smart constructors for literals
   constant,
@@ -112,25 +115,12 @@ data Acc a where
 -- |Conversion from HOAS to de Bruijn computation AST
 -- -
 
--- Type conversion for tuples of internal arrays
---
-type family ArrayRepr a :: *
-type instance ArrayRepr ()             = ()
-type instance ArrayRepr (Array dim e)  = AST.Array (ElemRepr dim) (ElemRepr e)
-type instance ArrayRepr (a, b)         = (ArrayRepr a, ArrayRepr b)
-type instance ArrayRepr (a, b, c)      
-  = ((ArrayRepr a, ArrayRepr b), ArrayRepr c)
-type instance ArrayRepr (a, b, c, d)
-  = (((ArrayRepr a, ArrayRepr b), ArrayRepr c), ArrayRepr d)
-type instance ArrayRepr (a, b, c, d, e) 
-  = ((((ArrayRepr a, ArrayRepr b), ArrayRepr c), ArrayRepr d), ArrayRepr e)
-
--- |Convert a computation with given array environment layout
+-- |Convert an array expression with given array environment layout
 --
 convertOpenAcc :: Layout aenv aenv 
                -> Acc a 
-               -> AST.OpenAcc aenv (ArrayRepr a)
-convertOpenAcc alyt (Use array)     = AST.Use (convertArray array)
+               -> AST.OpenAcc aenv (ArraysRepr a)
+convertOpenAcc alyt (Use array)     = AST.Use (fromArray array)
 convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
 convertOpenAcc alyt (Reshape e acc) 
   = AST.Reshape (convertExp alyt e) (convertOpenAcc alyt acc)
@@ -160,6 +150,11 @@ convertOpenAcc alyt (Backpermute newDim perm acc)
   = AST.Backpermute (convertExp alyt newDim)
                     (convertFun1 alyt perm)
                     (convertOpenAcc alyt acc)
+
+-- |Convert a closed array expression
+--
+convertAcc :: Acc a -> AST.Acc (ArraysRepr a)
+convertAcc = convertOpenAcc EmptyLayout
 
 
 -- Embedded expressions of the surface language
@@ -244,19 +239,16 @@ convertOpenExp lyt alyt = cvt
   
 -- |Convert an expression closed wrt to scalar variables
 --
-convertExp :: forall t env aenv. 
-              Layout aenv aenv      -- array environment
+convertExp :: Layout aenv aenv      -- array environment
            -> Exp t                 -- expression to be converted
            -> AST.Exp aenv (ElemRepr t)
 convertExp alyt = convertOpenExp EmptyLayout alyt
 
--- |Convert surface array representation to the internal one
+-- |Convert a closed expression
 --
-convertArray :: forall dim e. 
-                Array dim e -> AST.Array (ElemRepr dim) (ElemRepr e)
-convertArray (Array shape adata)
-  = AST.Array (fromElem shape) adata
-    
+convertClosedExp :: Exp t -> AST.Exp () (ElemRepr t)
+convertClosedExp = convertExp EmptyLayout
+
 -- |Convert a unary functions
 --
 convertFun1 :: forall a b aenv. Elem a
@@ -299,9 +291,9 @@ instance Show (Exp t) where
 mkIndex :: forall slix e env aenv. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
-        -> AST.OpenAcc aenv (ArrayRepr (Array (SliceDim slix) e))
+        -> AST.OpenAcc aenv (ArraysRepr (Array (SliceDim slix) e))
         -> AST.Exp     aenv (ElemRepr slix)
-        -> AST.OpenAcc aenv (ArrayRepr (Array (Slice slix) e))
+        -> AST.OpenAcc aenv (ArraysRepr (Array (Slice slix) e))
 mkIndex slix _ arr e 
   = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
 
@@ -309,8 +301,8 @@ mkReplicate :: forall slix e env aenv. (SliceIx slix, Elem e)
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
         -> AST.Exp     aenv (ElemRepr slix)
-        -> AST.OpenAcc aenv (ArrayRepr (Array (Slice slix) e))
-        -> AST.OpenAcc aenv (ArrayRepr (Array (SliceDim slix) e))
+        -> AST.OpenAcc aenv (ArraysRepr (Array (Slice slix) e))
+        -> AST.OpenAcc aenv (ArraysRepr (Array (SliceDim slix) e))
 mkReplicate slix _ e arr
   = AST.Replicate (convertSliceIndex slix (sliceIndex slix)) e arr
 

@@ -1,4 +1,4 @@
-module SAXPY where
+module SAXPY (saxpy) where
 
 import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
 import qualified Prelude

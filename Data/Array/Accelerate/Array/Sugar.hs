@@ -25,6 +25,9 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array indexing and slicing
   ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
   
+  -- * Conversion between the internal and surface array representation
+  fromArray, toArray, Arrays(..),
+  
   -- * Array indexing and conversion from and to 'IArray's
   (!), fromIArray, toIArray
 
@@ -41,6 +44,7 @@ import Unsafe.Coerce
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
+import qualified Data.Array.Accelerate.Array.Delayed        as Repr
 
 
 infixl 9 !
@@ -490,7 +494,7 @@ singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 -- |Multi-dimensional arrays for array processing
 --
 data Array dim e where
-  Array :: (Ix dim, Elem e {-, ArrayElem (ElemRepr e)-} ) 
+  Array :: (Ix dim, Elem e) 
         => dim                        -- ^extent of dimensions = shape
         -> ArrayData (ElemRepr e)     -- ^data, same layout as in
         -> Array dim e
@@ -621,8 +625,45 @@ instance SliceIxConv slix where
   convertSliceIndex _ = unsafeCoerce
     -- FIXME: the coercion is safe given the definition of the involved
     --   families, but we really ought to code a proof for that instead
+
+
+-- Conversion between internal and surface array representation
+-- ------------------------------------------------------------
+
+-- |Convert surface array representation to the internal one
+--
+fromArray :: Array dim e -> Repr.Array (ElemRepr dim) (ElemRepr e)
+fromArray (Array shape adata) = Repr.Array (fromElem shape) adata
     
+-- |Convert internal array representation to the surface one
+--
+toArray :: (Ix dim, Elem e)
+        => Repr.Array (ElemRepr dim) (ElemRepr e) -> Array dim e
+toArray (Repr.Array shape adata) = Array (toElem shape) adata
     
+-- Conversion for tuples of arrays
+--
+class Repr.Delayable (ArraysRepr as) => Arrays as where
+  type ArraysRepr as :: *
+  fromArrays :: as -> ArraysRepr as
+  toArrays   :: ArraysRepr as -> as
+  
+instance Arrays () where
+  type ArraysRepr () = ()
+  fromArrays () = ()
+  toArrays   () = ()
+  
+instance (Ix dim, Elem e) => Arrays (Array dim e) where
+  type ArraysRepr (Array dim e) = Repr.Array (ElemRepr dim) (ElemRepr e)
+  fromArrays = fromArray
+  toArrays   = toArray
+
+instance (Arrays as1, Arrays as2) => Arrays (as1, as2) where
+  type ArraysRepr (as1, as2) = (ArraysRepr as1, ArraysRepr as2)
+  fromArrays (as1, as2) = (fromArrays as1, fromArrays as2)
+  toArrays (as1, as2)   = (toArrays as1, toArrays as2)
+
+
 -- Conversion from and to 'IArray's
 -- --------------------------------
 
