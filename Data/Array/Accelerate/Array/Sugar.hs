@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable #-}
-{-# LANGUAGE UndecidableInstances #-}  -- for instance Slice sl
+{-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
 
 -- |Embedded array processing language: user-visible array operations
 --
@@ -23,11 +23,17 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
 
   -- * Array indexing and slicing
-  ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex
+  ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
+  
+  -- * Array indexing and conversion from and to 'IArray's
+  (!), fromIArray, toIArray
 
 ) where
 
 -- standard library
+import Data.Array.IArray (IArray)
+import qualified Data.Array.IArray as IArray
+import qualified Data.Ix           as IArray
 import Data.Typeable
 import Unsafe.Coerce
 
@@ -35,6 +41,9 @@ import Unsafe.Coerce
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
+
+
+infixl 9 !
 
 
 -- |Representation change for array element types
@@ -481,12 +490,10 @@ singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 -- |Multi-dimensional arrays for array processing
 --
 data Array dim e where
-  Array :: (Ix dim, Elem e, ArrayElem (ElemRepr e)) =>
-           { arrayShape    :: dim             -- ^extent of dimensions = shape
-           , arrayId       :: String          -- ^for pretty printing
-           , arrayData     :: ArrayData (ElemRepr e)
-                                              -- ^data, same layout as in
-           }               -> Array dim e
+  Array :: (Ix dim, Elem e {-, ArrayElem (ElemRepr e)-} ) 
+        => dim                        -- ^extent of dimensions = shape
+        -> ArrayData (ElemRepr e)     -- ^data, same layout as in
+        -> Array dim e
 
 -- |Scalars
 --
@@ -551,11 +558,21 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   index :: ix -> ix -> Int     -- ^corresponding index into a linear, row-major 
                                -- representation of the array (first argument
                                -- is the shape)
-  -- FIXME: we might want an unsafeIndex, too
+
+  rangeToShape ::  (ix, ix) -> ix   -- convert a minpoint-maxpoint index
+                                    -- into a shape
+  shapeToRange ::  ix -> (ix, ix)
 
   dim         = Repr.dim . fromElem
   size        = Repr.size . fromElem
   index sh ix = Repr.index (fromElem sh) (fromElem ix)
+  
+  rangeToShape (low, high) 
+    = toElem (Repr.rangeToShape (fromElem low, fromElem high))
+  shapeToRange ix
+    = let (low, high) = Repr.shapeToRange (fromElem ix)
+      in
+      (toElem low, toElem high)
 
 instance Ix ()
 instance Ix (Int)
@@ -604,3 +621,31 @@ instance SliceIxConv slix where
   convertSliceIndex _ = unsafeCoerce
     -- FIXME: the coercion is safe given the definition of the involved
     --   families, but we really ought to code a proof for that instead
+    
+    
+-- Conversion from and to 'IArray's
+-- --------------------------------
+
+-- |Array indexing
+--
+(!) :: Array dim e -> dim -> e
+(Array sh adata) ! ix = toElem (adata `indexArrayData` index sh ix)
+
+-- |Convert an 'IArray' to an accelerated array.
+--
+fromIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
+           => a dim e -> Array dim e
+fromIArray iarr = Array sh adata 
+  where
+    sh = rangeToShape (IArray.bounds iarr)
+    Repr.Array _ adata = Repr.newArray (fromElem sh)
+                                       (fromElem . (iarr IArray.!) . toElem)
+
+-- |Convert an accelerated array to an 'IArray'
+-- 
+toIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
+         => Array dim e -> a dim e
+toIArray arr@(Array sh _) 
+  = let bnds = shapeToRange sh
+    in
+    IArray.array bnds [(ix, arr!ix) | ix <- IArray.range bnds]

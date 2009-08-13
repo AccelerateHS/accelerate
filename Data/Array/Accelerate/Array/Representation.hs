@@ -83,12 +83,17 @@ class Ix ix where
   index     :: ix -> ix -> Int -- ^yield the index position in a linear, 
                                -- row-major representation of the array
                                -- (first argument is the shape)
-  -- FIXME: we might want an unsafeIndex, too
+
   iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
                                -- ^iterate through the entire shape, applying
                                -- the function; third argument combines results
                                -- and fourth is returned in case of an empty
                                -- iteration space
+
+  -- operations to facilitate conversion with IArray
+  rangeToShape :: (ix, ix) -> ix   -- convert a minpoint-maxpoint index
+                                   -- into a shape
+  shapeToRange :: ix -> (ix, ix)   -- ...the converse
 
 instance Ix () where
   dim       ()       = 0
@@ -96,6 +101,9 @@ instance Ix () where
   intersect () ()    = ()
   index     () ()    = 0
   iter      () _ _ r = r
+  
+  rangeToShape ((), ()) = ()
+  shapeToRange ()       = ((), ())
 
 instance Ix ix => Ix (ix, Int) where
   dim (sh, _)                       = dim sh + 1
@@ -109,6 +117,13 @@ instance Ix ix => Ix (ix, Int) where
     where
       iter' i | i >= sz   = r
               | otherwise = iter sh (\ix -> f (ix, i)) c r `c` iter' (i + 1)
+
+  rangeToShape ((sh1, sz1), (sh2, sz2)) 
+    = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
+  shapeToRange (sh, sz) 
+    = let (low, high) = shapeToRange sh
+      in 
+      ((low, 0), (high, sz - 1))
 
 
 -- |Slice representation

@@ -254,7 +254,7 @@ convertExp alyt = convertOpenExp EmptyLayout alyt
 --
 convertArray :: forall dim e. 
                 Array dim e -> AST.Array (ElemRepr dim) (ElemRepr e)
-convertArray (Array {arrayShape = shape, arrayId = id, arrayData = adata})
+convertArray (Array shape adata)
   = AST.Array (fromElem shape) adata
     
 -- |Convert a unary functions

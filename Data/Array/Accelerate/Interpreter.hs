@@ -235,11 +235,11 @@ scanOp :: (e -> e -> e)
        -> Delayed (Vector e)
        -> Delayed (Vector e, Scalar e)
 scanOp f e (DelayedArray sh rf)
-  = (delay $ adata `seq` Array sh adata, unitOp final)
+  = DelayedPair (delay $ adata `seq` Array sh adata) (unitOp final)
   where
     n = size sh
     --
-    (odata, final) = runArrayData $ do
+    (adata, final) = runArrayData $ do
                        arr <- newArrayData n
                        final <- traverse arr 0 e
                        return (arr, final)
