@@ -72,7 +72,7 @@ data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a) 
                                               (GArrayData ba b)
 
-class Show e => ArrayElem e where
+class ArrayElem e where
   indexArrayData        :: ArrayData e -> Int -> e
   --
   newArrayData          :: Int -> ST s (MutableArrayData s e)

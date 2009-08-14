@@ -137,9 +137,10 @@ type instance ElemRepr' (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
 
 -- |Identifier for entire dimensions in slice descriptors
 --
-data All = All deriving Typeable
+data All = All deriving (Typeable, Show)
 
-class (Typeable a, Typeable (ElemRepr a), Typeable (ElemRepr' a),
+class (Show a, Typeable a, 
+       Typeable (ElemRepr a), Typeable (ElemRepr' a),
        ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a)) 
       => Elem a where
   --elemType  :: {-dummy-} a -> TupleType (ElemRepr a)

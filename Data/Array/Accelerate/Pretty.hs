@@ -22,6 +22,7 @@ import Text.PrettyPrint
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.AST
 
 
@@ -44,36 +45,48 @@ instance Show (OpenExp env aenv t) where
 -- Pretty print an array expression
 --
 prettyAcc :: Int -> OpenAcc aenv a -> Doc
-prettyAcc lvl (Let acc1 acc2) = text "let a" <> int lvl <+> text " = " <+>
-                                prettyAcc lvl acc1 <+> text " in " <+>
-                                prettyAcc (lvl + 1) acc2
-prettyAcc lvl (Use arr)       = text "use" <+> prettyArray arr
-prettyAcc lvl (Unit e)        = text "unit" <+> prettyExp lvl parens e
+prettyAcc lvl (Let acc1 acc2) 
+  = text "let a" <> int lvl <+> text " = " <+> prettyAcc lvl acc1 <+>
+    text " in " <+> prettyAcc (lvl + 1) acc2
+prettyAcc lvl (Avar idx)       = text $ "a" ++ show (idxToInt idx)
+prettyAcc lvl (Use arr)        = prettyArrOp "use" [prettyArray arr]
+prettyAcc lvl (Unit e)         = prettyArrOp "unit" [prettyExp lvl parens e]
 prettyAcc lvl (Reshape sh acc)
-  = text "reshape" <+> prettyExp lvl parens sh <+> prettyAcc lvl acc
+  = prettyArrOp "reshape" [prettyExp lvl parens sh, prettyAccParens lvl acc]
 prettyAcc lvl (Replicate _ty ix acc) 
-  = text "replicate" <+> prettyExp lvl id ix <+> prettyAcc lvl acc
+  = prettyArrOp "replicate" [prettyExp lvl id ix, prettyAccParens lvl acc]
 prettyAcc lvl (Index _ty acc ix) 
-  = prettyAcc lvl acc <> char '!' <> prettyExp lvl id ix
+  = sep [prettyAccParens lvl acc, char '!', prettyExp lvl id ix]
 prettyAcc lvl (Map f acc)
-  = text "map" <+> parens (prettyFun lvl f) <+> prettyAcc lvl acc
+  = prettyArrOp "map" [parens (prettyFun lvl f), prettyAccParens lvl acc]
 prettyAcc lvl (ZipWith f acc1 acc2)    
-  = text "zipWith" <+> parens (prettyFun lvl f) <+> prettyAcc lvl acc1 <+> 
-    prettyAcc lvl acc2
+  = prettyArrOp "zipWith"
+      [parens (prettyFun lvl f), prettyAccParens lvl acc1, 
+       prettyAccParens lvl acc2]
 prettyAcc lvl (Filter p acc)   
-  = text "filter" <+> parens (prettyFun lvl p) <+> prettyAcc lvl acc
+  = prettyArrOp "filter" [parens (prettyFun lvl p), prettyAccParens lvl acc]
 prettyAcc lvl (Fold f e acc)   
-  = text "fold" <+> parens (prettyFun lvl f) <+> prettyExp lvl parens e <+> 
-    prettyAcc lvl acc
+  = prettyArrOp "fold" [parens (prettyFun lvl f), prettyExp lvl parens e,
+                        prettyAccParens lvl acc]
 prettyAcc lvl (Scan f e acc)   
-  = text "scan" <+> parens (prettyFun lvl f) <+> prettyExp lvl parens e <+> 
-    prettyAcc lvl acc
+  = prettyArrOp "scan" [parens (prettyFun lvl f), prettyExp lvl parens e,
+                        prettyAccParens lvl acc]
 prettyAcc lvl (Permute f dfts p acc) 
-  = text "permute" <+> parens (prettyFun lvl f) <+> prettyAcc lvl dfts <+> 
-    parens (prettyFun lvl p) <+> prettyAcc lvl acc
+  = prettyArrOp "permute" [parens (prettyFun lvl f), prettyAccParens lvl dfts,
+                           parens (prettyFun lvl p), prettyAccParens lvl acc]
 prettyAcc lvl (Backpermute sh p acc) 
-  = text "backpermute" <+> prettyExp lvl parens sh <+> 
-    parens (prettyFun lvl p) <+> prettyAcc lvl acc
+  = prettyArrOp "backpermute" [prettyExp lvl parens sh,
+                               parens (prettyFun lvl p),
+                               prettyAccParens lvl acc]
+    
+prettyArrOp :: String -> [Doc] -> Doc
+prettyArrOp name docs = hang (text name) 2 $ sep docs
+
+-- Wrap into parenthesis
+--    
+prettyAccParens :: Int -> OpenAcc aenv a -> Doc
+prettyAccParens lvl acc@(Avar _) = prettyAcc lvl acc
+prettyAccParens lvl acc          = parens (prettyAcc lvl acc)
 
 -- Pretty print a function over scalar expressions.
 --
@@ -93,7 +106,7 @@ prettyFun lvl fun =
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
 prettyExp :: Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
-prettyExp _   wrap (Var idx)         = text $ "x" ++ show (idxToInt idx)
+prettyExp _   _    (Var idx)         = text $ "x" ++ show (idxToInt idx)
 prettyExp _   _    (Const v)         = text $ show v
 prettyExp lvl _    e@(Pair _ _ _ _)  = prettyTuple lvl e
 prettyExp lvl wrap (Fst _ _ e)       
@@ -108,8 +121,8 @@ prettyExp _   _    (PrimConst a)     = prettyConst a
 prettyExp lvl wrap (PrimApp p a)     
   = wrap $ prettyPrim p <+> prettyExp lvl parens a
 prettyExp lvl wrap (IndexScalar idx i)
-  = wrap $ cat [prettyAcc lvl idx, char '!', prettyExp lvl parens i]
-prettyExp lvl wrap (Shape idx)       = wrap $ text "shape" <+> prettyAcc lvl idx
+  = wrap $ cat [prettyAccParens lvl idx, char '!', prettyExp lvl parens i]
+prettyExp lvl wrap (Shape idx)       = wrap $ text "shape" <+> prettyAccParens lvl idx
 
 -- Pretty print nested pairs as a proper tuple.
 --

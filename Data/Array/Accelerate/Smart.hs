@@ -222,7 +222,7 @@ convertOpenExp lyt alyt = cvt
   where
     cvt :: forall t'. Exp t' -> AST.OpenExp env aenv (ElemRepr t')
     cvt (Tag i)             = AST.Var (prjIdx i lyt)
-    cvt (Const v)           = AST.Const (fromElem v)
+    cvt (Const v)           = AST.Const v
     cvt (Pair (e1::Exp t1) 
               (e2::Exp t2)) = AST.Pair (undefined::t1)
                                        (undefined::t2)

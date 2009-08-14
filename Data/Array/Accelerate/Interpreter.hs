@@ -282,7 +282,7 @@ evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
 
 evalOpenExp (Var idx) env _ = prj idx env
   
-evalOpenExp (Const c) _ _ = c
+evalOpenExp (Const c) _ _ = Sugar.fromElem c
 
 evalOpenExp (Pair ds dt e1 e2) env aenv 
   = evalPair ds dt (evalOpenExp e1 env aenv) (evalOpenExp e2 env aenv)

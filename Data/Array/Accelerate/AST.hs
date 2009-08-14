@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, EmptyDataDecls, DeriveDataTypeable #-}
+{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts #-}
 
 -- |Embedded array processing language: accelerate AST with de Bruijn indices
 --
@@ -255,9 +255,9 @@ data OpenExp env aenv t where
               -> OpenExp env aenv t
 
   -- |Constant values
-  Const       :: ArrayElem t 
-              => t 
-              -> OpenExp env aenv t
+  Const       :: Elem t
+              => t                              -- not converted to ElemRepr yet
+              -> OpenExp env aenv (ElemRepr t)
 
   -- |Tuples
   Pair        :: (Elem s, Elem t)
