@@ -20,5 +20,5 @@ saxpy alpha xs ys
 
 saxpy_ref :: Float -> UArray Int Float -> UArray Int Float -> UArray Int Float
 saxpy_ref alpha xs ys
-  = listArray (bounds xs) [alpha * x * y | x <- elems xs | y <- elems xs]
+  = listArray (bounds xs) [alpha * x * y | x <- elems xs | y <- elems ys]
   

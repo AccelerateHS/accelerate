@@ -668,7 +668,7 @@ instance (Arrays as1, Arrays as2) => Arrays (as1, as2) where
 -- Array operations
 -- ----------------
 
--- |Yeild an array's shape
+-- |Yield an array's shape
 --
 shape :: Ix dim => Array dim e -> dim
 shape (Array sh _) = sh
