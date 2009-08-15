@@ -676,7 +676,9 @@ shape (Array sh _) = sh
 -- |Array indexing
 --
 (!) :: Array dim e -> dim -> e
-(Array sh adata) ! ix = toElem (adata `indexArrayData` index sh ix)
+-- (Array sh adata) ! ix = toElem (adata `indexArrayData` index sh ix)
+-- FIXME: using this due to a bug in 6.10.x
+(!) (Array sh adata) ix = toElem (adata `indexArrayData` index sh ix)
 
 -- |Convert an 'IArray' to an accelerated array.
 --
@@ -717,4 +719,4 @@ toList (Array sh adata) = Repr.iter sh' idx (.) id []
 -- Convert an array to a string
 --
 instance Show (Array dim e) where
-  show arr@(Array sh adata) = "Array " ++ show sh ++ " " ++ show (toList arr)
+  show arr@(Array sh _adata) = "Array " ++ show sh ++ " " ++ show (toList arr)

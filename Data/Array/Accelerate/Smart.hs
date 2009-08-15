@@ -47,8 +47,7 @@ import Data.Array.Accelerate.Array.Representation hiding (
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, OpenExp(..), Exp)
 import qualified Data.Array.Accelerate.AST                  as AST
-import qualified Data.Array.Accelerate.Array.Representation as AST
-import Data.Array.Accelerate.Pretty
+import Data.Array.Accelerate.Pretty ()
 
 
 -- Monadic array computations
@@ -98,7 +97,7 @@ data Acc a where
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
               -> Acc (Vector e)
-              -> Acc (Scalar e, Vector e)
+              -> Acc (Vector e, Scalar e)
   Permute     :: (Ix dim, Ix dim', Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> Acc (Array dim' e)
@@ -120,7 +119,7 @@ data Acc a where
 convertOpenAcc :: Layout aenv aenv 
                -> Acc a 
                -> AST.OpenAcc aenv (ArraysRepr a)
-convertOpenAcc alyt (Use array)     = AST.Use (fromArray array)
+convertOpenAcc _    (Use array)     = AST.Use (fromArray array)
 convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
 convertOpenAcc alyt (Reshape e acc) 
   = AST.Reshape (convertExp alyt e) (convertOpenAcc alyt acc)
@@ -288,7 +287,7 @@ instance Show (Exp t) where
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
-mkIndex :: forall slix e env aenv. (SliceIx slix, Elem e) 
+mkIndex :: forall slix e aenv. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
         -> AST.OpenAcc aenv (ArraysRepr (Array (SliceDim slix) e))
@@ -297,7 +296,7 @@ mkIndex :: forall slix e env aenv. (SliceIx slix, Elem e)
 mkIndex slix _ arr e 
   = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
 
-mkReplicate :: forall slix e env aenv. (SliceIx slix, Elem e) 
+mkReplicate :: forall slix e aenv. (SliceIx slix, Elem e) 
         => slix {- dummy to fix the type variable -}
         -> e    {- dummy to fix the type variable -}
         -> AST.Exp     aenv (ElemRepr slix)

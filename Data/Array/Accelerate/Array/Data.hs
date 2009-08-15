@@ -52,23 +52,23 @@ data instance GArrayData ba Word8   = AD_Word8   (ba Word8)
 data instance GArrayData ba Word16  = AD_Word16  (ba Word16)
 data instance GArrayData ba Word32  = AD_Word32  (ba Word32)
 data instance GArrayData ba Word64  = AD_Word64  (ba Word64)
-data instance GArrayData ba CShort  = AD_CShort  (ba CShort)
-data instance GArrayData ba CUShort = AD_CUShort (ba CUShort)
-data instance GArrayData ba CInt    = AD_CInt    (ba CInt)
-data instance GArrayData ba CUInt   = AD_CUInt   (ba CUInt)
-data instance GArrayData ba CLong   = AD_CLong   (ba CLong)
-data instance GArrayData ba CULong  = AD_CULong  (ba CULong)
-data instance GArrayData ba CLLong  = AD_CLLong  (ba CLLong)
-data instance GArrayData ba CULLong = AD_CULLong (ba CULLong)
+-- data instance GArrayData ba CShort  = AD_CShort  (ba CShort)
+-- data instance GArrayData ba CUShort = AD_CUShort (ba CUShort)
+-- data instance GArrayData ba CInt    = AD_CInt    (ba CInt)
+-- data instance GArrayData ba CUInt   = AD_CUInt   (ba CUInt)
+-- data instance GArrayData ba CLong   = AD_CLong   (ba CLong)
+-- data instance GArrayData ba CULong  = AD_CULong  (ba CULong)
+-- data instance GArrayData ba CLLong  = AD_CLLong  (ba CLLong)
+-- data instance GArrayData ba CULLong = AD_CULLong (ba CULLong)
 data instance GArrayData ba Float   = AD_Float   (ba Float)
 data instance GArrayData ba Double  = AD_Double  (ba Double)
-data instance GArrayData ba CFloat  = AD_CFloat  (ba CFloat)
-data instance GArrayData ba CDouble = AD_CDouble (ba CDouble)
+-- data instance GArrayData ba CFloat  = AD_CFloat  (ba CFloat)
+-- data instance GArrayData ba CDouble = AD_CDouble (ba CDouble)
 data instance GArrayData ba Bool    = AD_Bool    (ba Bool)
 data instance GArrayData ba Char    = AD_Char    (ba Char)
-data instance GArrayData ba CChar   = AD_CChar   (ba CChar)
-data instance GArrayData ba CSChar  = AD_CSChar  (ba CSChar)
-data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
+-- data instance GArrayData ba CChar   = AD_CChar   (ba CChar)
+-- data instance GArrayData ba CSChar  = AD_CSChar  (ba CSChar)
+-- data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a) 
                                               (GArrayData ba b)
 
@@ -82,9 +82,9 @@ class ArrayElem e where
 
 instance ArrayElem () where
   indexArrayData AD_Unit i = i `seq` ()
-  newArrayData size = return AD_Unit
+  newArrayData _ = return AD_Unit
   readArrayData AD_Unit i = i `seq` return ()
-  writeArrayData AD_Unit i () = return ()
+  writeArrayData AD_Unit i () = i `seq` return ()
   unsafeFreezeArrayData AD_Unit = return AD_Unit
 
 instance ArrayElem Int where

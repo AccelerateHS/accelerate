@@ -55,8 +55,10 @@ data Val env where
 -- Projection of a value from a valuation using a de Bruijn index
 --
 prj :: Idx env t -> Val env -> t
-prj ZeroIdx       (Push val v) = v
+prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
+prj _             _            = 
+  error "Data.Array.Accelerate.Interpreter: prj: inconsistent valuation"
 
 
 -- Array expression evaluation
@@ -72,7 +74,7 @@ evalOpenAcc (Let acc1 acc2) aenv
 
 evalOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
-evalOpenAcc (Use arr) aenv = delay arr
+evalOpenAcc (Use arr) _aenv = delay arr
 
 evalOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
 
@@ -96,9 +98,15 @@ evalOpenAcc (Filter p acc) aenv
 evalOpenAcc (Fold f e acc) aenv
   = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
+evalOpenAcc (Scan f e acc) aenv
+  = scanOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
 evalOpenAcc (Permute f dftAcc p acc) aenv
   = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
               (evalFun p aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (Backpermute e p acc) aenv
+  = backpermuteOp (evalExp e aenv) (evalFun p aenv) (evalOpenAcc acc aenv)
 
 -- Evaluate a closed array expressions
 --
@@ -252,7 +260,7 @@ backpermuteOp :: Ix dim'
               -> (dim' -> dim)
               -> Delayed (Array dim e)
               -> Delayed (Array dim' e)
-backpermuteOp sh' p (DelayedArray sh rf)
+backpermuteOp sh' p (DelayedArray _sh rf)
   = DelayedArray sh' (rf . p)
 
 

@@ -22,7 +22,6 @@ import Text.PrettyPrint
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.AST
 
 
@@ -48,8 +47,8 @@ prettyAcc :: Int -> OpenAcc aenv a -> Doc
 prettyAcc lvl (Let acc1 acc2) 
   = text "let a" <> int lvl <+> text " = " <+> prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 1) acc2
-prettyAcc lvl (Avar idx)       = text $ "a" ++ show (idxToInt idx)
-prettyAcc lvl (Use arr)        = prettyArrOp "use" [prettyArray arr]
+prettyAcc _   (Avar idx)       = text $ "a" ++ show (idxToInt idx)
+prettyAcc _   (Use arr)        = prettyArrOp "use" [prettyArray arr]
 prettyAcc lvl (Unit e)         = prettyArrOp "unit" [prettyExp lvl parens e]
 prettyAcc lvl (Reshape sh acc)
   = prettyArrOp "reshape" [prettyExp lvl parens sh, prettyAccParens lvl acc]
@@ -145,38 +144,45 @@ prettyConst (PrimPi       _) = text "pi"
 -- Pretty print a primitive operation
 --
 prettyPrim :: PrimFun a -> Doc
-prettyPrim (PrimAdd _)   = text "(+)"
-prettyPrim (PrimSub _)   = text "(-)"
-prettyPrim (PrimMul _)   = text "(*)"
-prettyPrim (PrimNeg _)   = text "negate"
-prettyPrim (PrimAbs _)   = text "abs"
-prettyPrim (PrimSig _)   = text "signum"
-prettyPrim (PrimQuot _)  = text "quot"
-prettyPrim (PrimRem _)   = text "rem"
-prettyPrim (PrimIDiv _)  = text "div"
-prettyPrim (PrimMod _)   = text "mod"
-prettyPrim (PrimBAnd _)  = text "(.&.)"
-prettyPrim (PrimBOr _)   = text "(.|.)"
-prettyPrim (PrimBXor _)  = text "xor"
-prettyPrim (PrimBNot _)  = text "complement"
-prettyPrim (PrimFDiv _)  = text "(/)"
-prettyPrim (PrimRecip _) = text "recip"
-prettyPrim (PrimLt _)    = text "(<*)"
-prettyPrim (PrimGt _)    = text "(>*)"
-prettyPrim (PrimLtEq _)  = text "(<=*)"
-prettyPrim (PrimGtEq _)  = text "(>=*)"
-prettyPrim (PrimEq _)    = text "(==*)"
-prettyPrim (PrimNEq _)   = text "(/=*)"
-prettyPrim (PrimMax _)   = text "max"
-prettyPrim (PrimMin _)   = text "min"
-prettyPrim PrimLAnd      = text "&&*"
-prettyPrim PrimLOr       = text "||*"
-prettyPrim PrimLNot      = text "not"
+prettyPrim (PrimAdd _)       = text "(+)"
+prettyPrim (PrimSub _)       = text "(-)"
+prettyPrim (PrimMul _)       = text "(*)"
+prettyPrim (PrimNeg _)       = text "negate"
+prettyPrim (PrimAbs _)       = text "abs"
+prettyPrim (PrimSig _)       = text "signum"
+prettyPrim (PrimQuot _)      = text "quot"
+prettyPrim (PrimRem _)       = text "rem"
+prettyPrim (PrimIDiv _)      = text "div"
+prettyPrim (PrimMod _)       = text "mod"
+prettyPrim (PrimBAnd _)      = text "(.&.)"
+prettyPrim (PrimBOr _)       = text "(.|.)"
+prettyPrim (PrimBXor _)      = text "xor"
+prettyPrim (PrimBNot _)      = text "complement"
+prettyPrim (PrimFDiv _)      = text "(/)"
+prettyPrim (PrimRecip _)     = text "recip"
+prettyPrim (PrimLt _)        = text "(<*)"
+prettyPrim (PrimGt _)        = text "(>*)"
+prettyPrim (PrimLtEq _)      = text "(<=*)"
+prettyPrim (PrimGtEq _)      = text "(>=*)"
+prettyPrim (PrimEq _)        = text "(==*)"
+prettyPrim (PrimNEq _)       = text "(/=*)"
+prettyPrim (PrimMax _)       = text "max"
+prettyPrim (PrimMin _)       = text "min"
+prettyPrim PrimLAnd          = text "&&*"
+prettyPrim PrimLOr           = text "||*"
+prettyPrim PrimLNot          = text "not"
+prettyPrim PrimOrd           = text "ord"
+prettyPrim PrimChr           = text "chr"
+prettyPrim PrimRoundFloatInt = text "round"
+prettyPrim PrimTruncFloatInt = text "trunc"
+prettyPrim PrimIntFloat      = text "intFloat"
 
+{-
 -- Pretty print type
 --
 prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
+-}
 
 prettyArray :: Array dim a -> Doc
 prettyArray (Array sh adata) 
@@ -206,15 +212,6 @@ idxToInt (SuccIdx idx) = 1 + idxToInt idx
 -- 
 
 {-
--- Show tuple values
---
-runTupleShow :: TupleType a -> (a -> String)
-runTupleShow UnitTuple       = show
-runTupleShow (SingleTuple x) = runScalarShow x
-runTupleShow (PairTuple ty1 ty2) 
-  = \(x, y) -> "(" ++ runTupleShow ty1 x ++ ", " ++ runTupleShow ty2 y ++ ")"
--}
-
 -- Show scalar values
 --
 runScalarShow :: ScalarType a -> (a -> String)
@@ -224,3 +221,4 @@ runScalarShow (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = show
 runScalarShow (NonNumScalarType ty)       
   | NonNumDict   <- nonNumDict ty   = show
+-}

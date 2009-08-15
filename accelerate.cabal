@@ -15,7 +15,7 @@ Category:		Concurrency, Data
 Build-type:		Simple
 extra-source-files:  	INSTALL
 
-Build-Depends:	        array, base, haskell98, mtl
+Build-Depends:	        array, base, ghc-prim, haskell98, mtl, pretty
 Exposed-modules:	Data.Array.Accelerate
 			Data.Array.Accelerate.Interpreter
 Other-modules:		Data.Array.Accelerate.Array.Data
@@ -26,10 +26,9 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Debug
 			Data.Array.Accelerate.Language
 			Data.Array.Accelerate.Pretty
-			Data.Array.Accelerate.Run
 			Data.Array.Accelerate.Smart
 			Data.Array.Accelerate.Type
-ghc-options:     	-O -Wall -fno-warn-orphans
+ghc-options:     	-O -Wall -fno-warn-orphans -fno-warn-name-shadowing
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,

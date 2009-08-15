@@ -28,10 +28,6 @@ module Data.Array.Accelerate.Array.Representation (
 -- GHC internals
 import GHC.Prim
 
--- standard libraries
-import Control.Monad.ST
-import Data.Typeable
-
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
@@ -177,7 +173,9 @@ data SliceIndex ix slice coSlice sliceDim where
 -- |Array indexing
 --
 (!) :: Array dim e -> dim -> e
-(Array sh adata) ! ix = adata `indexArrayData` index sh ix
+-- (Array sh adata) ! ix = adata `indexArrayData` index sh ix
+-- FIXME: using this due to a bug in 6.10.x
+(!) (Array sh adata) ix = adata `indexArrayData` index sh ix
 
 -- |Create an array from its representation function
 --

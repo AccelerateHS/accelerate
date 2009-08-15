@@ -30,9 +30,12 @@ module Data.Array.Accelerate.Language (
   -- * Shape manipulation
   reshape,
 
+  -- * Indexing
+  (!),
+
   -- * Collective array operations
   replicate, zip, map, zipWith, filter, scan, fold, permute, backpermute,
-
+  
   -- * Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
   --   Fractional, RealFrac, RealFloat
 
@@ -51,14 +54,12 @@ import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not,
 import qualified Prelude
 
 -- standard libraries
-import Control.Monad
 import Data.Bits
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Sugar hiding ((!))
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Pretty
 
 
 infixr 2 ||*
@@ -123,7 +124,7 @@ scan :: Elem a
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
      -> Acc (Vector a)
-     -> Acc (Scalar a, Vector a)
+     -> Acc (Vector a, Scalar a)
 scan = Scan
 
 fold :: Elem a 

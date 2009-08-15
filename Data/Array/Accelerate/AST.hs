@@ -74,14 +74,11 @@ module Data.Array.Accelerate.AST (
 
 ) where
   
--- standard library
-import Data.Typeable
-
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data  (ArrayElem)
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (Elem, ElemRepr, ElemRepr')
+import Data.Array.Accelerate.Array.Sugar (Elem, ElemRepr)
 
 
 -- Typed de Bruijn indices
@@ -197,7 +194,7 @@ data OpenAcc aenv a where
   Scan        :: Fun     aenv (e -> e -> e)          -- ^combination function
               -> Exp     aenv e                      -- ^default value
               -> OpenAcc aenv (Vector e)             -- ^linear array
-              -> OpenAcc aenv (Scalar e, Vector e)
+              -> OpenAcc aenv (Vector e, Scalar e)
     -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
   -- Generalised forward permutation is characterised by a permutation
