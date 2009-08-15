@@ -28,8 +28,8 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Conversion between the internal and surface array representation
   fromArray, toArray, Arrays(..),
   
-  -- * Array indexing and conversion from and to 'IArray's
-  (!), fromIArray, toIArray
+  -- * Array shape query, indexing, and conversions
+  shape, (!), fromIArray, toIArray, fromList, toList
 
 ) where
 
@@ -665,8 +665,13 @@ instance (Arrays as1, Arrays as2) => Arrays (as1, as2) where
   toArrays (as1, as2)   = (toArrays as1, toArrays as2)
 
 
--- Conversion from and to 'IArray's
--- --------------------------------
+-- Array operations
+-- ----------------
+
+-- |Yeild an array's shape
+--
+shape :: Ix dim => Array dim e -> dim
+shape (Array sh _) = sh
 
 -- |Array indexing
 --
@@ -691,3 +696,25 @@ toIArray arr@(Array sh _)
   = let bnds = shapeToRange sh
     in
     IArray.array bnds [(ix, arr!ix) | ix <- IArray.range bnds]
+    
+-- |Convert a list (with elements in row-major order) to an accelerated array.
+--
+fromList :: (Ix dim, Elem e) => dim -> [e] -> Array dim e
+fromList sh l = Array sh adata 
+  where
+    Repr.Array _ adata = Repr.newArray (fromElem sh) indexIntoList
+    --
+    indexIntoList ix = fromElem $ l!!(Repr.index (fromElem sh) ix)
+
+-- |Convert an accelerated array to a list in row-major order.
+--
+toList :: Array dim e -> [e]
+toList (Array sh adata) = Repr.iter sh' idx (.) id []
+  where
+    sh'    = fromElem sh
+    idx ix = \l -> toElem (adata `indexArrayData` Repr.index sh' ix) : l
+
+-- Convert an array to a string
+--
+instance Show (Array dim e) where
+  show arr@(Array sh adata) = "Array " ++ show sh ++ " " ++ show (toList arr)

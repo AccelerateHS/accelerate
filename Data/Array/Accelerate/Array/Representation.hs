@@ -88,7 +88,8 @@ class Ix ix where
                                -- ^iterate through the entire shape, applying
                                -- the function; third argument combines results
                                -- and fourth is returned in case of an empty
-                               -- iteration space
+                               -- iteration space; the index space is traversed
+                               -- in row-major order
 
   -- operations to facilitate conversion with IArray
   rangeToShape :: (ix, ix) -> ix   -- convert a minpoint-maxpoint index
@@ -100,7 +101,7 @@ instance Ix () where
   size      ()       = 1
   intersect () ()    = ()
   index     () ()    = 0
-  iter      () _ _ r = r
+  iter      () f _ _ = f ()
   
   rangeToShape ((), ()) = ()
   shapeToRange ()       = ((), ())

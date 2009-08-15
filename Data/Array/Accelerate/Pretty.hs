@@ -179,19 +179,13 @@ prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 
 prettyArray :: Array dim a -> Doc
-prettyArray arr = text "<array>"
-
+prettyArray (Array sh adata) 
+  = text "<array>"
 {-
--- Pretty print a generalised array index
---
-prettyIndex :: SliceIndex slice co dim -> Doc
-prettyIndex = parens . hsep . punctuate (char ',') . prettyIxs
-  where
-    prettyIxs :: SliceIndex slice co dim -> [Doc]
-    prettyIxs SliceNil           = [empty]
-    prettyIxs (SliceAll ixs)     = char '.' : prettyIxs ixs
-    prettyIxs (SliceFixed e ixs) = prettyExp noParens e : prettyIxs ixs
- -}
+  = hang (text "Array") 2 $
+      sep []
+-}
+
 
 -- Auxilliary pretty printing combinators
 -- 
