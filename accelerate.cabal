@@ -15,7 +15,7 @@ Category:		Concurrency, Data
 Build-type:		Simple
 extra-source-files:  	INSTALL
 
-Build-Depends:	        array, base, ghc-prim, haskell98, mtl, pretty
+Build-Depends:	        array, base, ghc-prim, haskell98, pretty
 Exposed-modules:	Data.Array.Accelerate
 			Data.Array.Accelerate.Interpreter
 Other-modules:		Data.Array.Accelerate.Array.Data

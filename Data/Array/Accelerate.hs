@@ -38,7 +38,7 @@ module Data.Array.Accelerate (
   Ix(..), All(..), SliceIx(..), DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
   
   -- * Array operations
-  shape, fromIArray, toIArray, fromList, toList, Arrays,
+  shape, indexArray, fromIArray, toIArray, fromList, toList, Arrays,
 
   -- * Surface language
   module Data.Array.Accelerate.Language,
@@ -48,4 +48,9 @@ module Data.Array.Accelerate (
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar hiding ((!))
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
+
+-- rename as (!) is already used by the EDSL for indexing
+indexArray :: Array dim e -> dim -> e
+indexArray = (Sugar.!)

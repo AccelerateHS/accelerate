@@ -26,7 +26,7 @@ evaluateUScalar uarr = evaluate (uarr!()) >> return ()
 -- To ensure that a singleton unboxed array is fully evaluated
 -- 
 evaluateScalar :: Acc.Scalar e -> IO ()
-evaluateScalar arr = evaluate (arr Acc.! ()) >> return ()
+evaluateScalar arr = evaluate (arr `Acc.indexArray` ()) >> return ()
 
 -- To ensure that an unboxed array is fully evaluated, just force one element
 -- 
@@ -36,7 +36,7 @@ evaluateUVector uarr = evaluate (uarr!0) >> return ()
 -- To ensure that an unboxed array is fully evaluated, just force one element
 -- 
 evaluateVector :: Acc.Vector e -> IO ()
-evaluateVector arr = evaluate (arr Acc.! 0) >> return ()
+evaluateVector arr = evaluate (arr `Acc.indexArray` 0) >> return ()
 
 randomUVector :: (Num e, Random e, IArray UArray e) => Int -> IO (UArray Int e)
 randomUVector n
