@@ -133,13 +133,14 @@ timeUVector testee
       putStrLn $ showMinAvgMax milliseconds [time1, time2, time3] ++
                  " (wall - cpu min/avg/max in ms)"
       return r
-  where
-    oneRun testee = do
-                      start <- getTime
-                      let r = testee ()
-                      evaluateUVector r
-                      end <- getTime
-                      return (r, end `minus` start)
+--  where
+{-# NOINLINE oneRun #-}
+oneRun testee = do
+                  start <- getTime
+                  let r = testee ()
+                  evaluateUVector r
+                  end <- getTime
+                  return (r, end `minus` start)
 
 timeVector :: (IArray UArray e, Acc.Elem e)
            => (() -> Acc.Vector e) -> IO (UArray Int e)
@@ -174,13 +175,18 @@ test_saxpy n
       v2_ref <- randomUVector n
       v2     <- convertUVector v2_ref
       putStrLn "Running reference code..."
-      ref_result <- timeUVector $ \_ -> saxpy_ref 1.5 v1_ref v2_ref
+      ref_result <- timeUVector $ saxpy_ref' 1.5 v1_ref v2_ref
       putStrLn "Running Accelerate code..."
-      result <- timeVector $ \_ -> saxpy_interp 1.5 v1 v2
+      result <- timeVector $ saxpy_interp 1.5 v1 v2
       putStrLn "Validating result..."
       validateFloats ref_result result
   where
-    saxpy_interp a arr1 arr2 = Interp.run (saxpy a arr1 arr2)
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE saxpy_ref' #-}
+    saxpy_ref' a arr1 arr2 () = saxpy_ref a arr1 arr2
+    {-# NOINLINE saxpy_interp #-}
+    saxpy_interp a arr1 arr2 () = Interp.run (saxpy a arr1 arr2)
 
 test_dotp :: Int -> IO ()
 test_dotp n
@@ -192,13 +198,18 @@ test_dotp n
       v2_ref <- randomUVector n
       v2     <- convertUVector v2_ref
       putStrLn "Running reference code..."
-      ref_result <- timeUScalar $ \_ -> dotp_ref v1_ref v2_ref
+      ref_result <- timeUScalar $ dotp_ref' v1_ref v2_ref
       putStrLn "Running Accelerate code..."
-      result <- timeScalar $ \_ -> dotp_interp v1 v2
+      result <- timeScalar $ dotp_interp v1 v2
       putStrLn "Validating result..."
       validateFloats ref_result result
   where
-    dotp_interp arr1 arr2 = Interp.run (dotp arr1 arr2)
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE dotp_ref' #-}
+    dotp_ref' arr1 arr2 () = dotp_ref arr1 arr2
+    {-# NOINLINE dotp_interp #-}
+    dotp_interp arr1 arr2 () = Interp.run (dotp arr1 arr2)
 
 main :: IO ()
 main
