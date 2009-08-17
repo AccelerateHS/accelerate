@@ -1,6 +1,6 @@
 Name:			accelerate
 Version:		0.4.0
-Cabal-version: 		>= 1.2.3
+Cabal-version: 		>= 1.6
 Synopsis:		An embedded language for accelerated array processing
 Description:	        This library defines an embedded language for
 			regular, multi-dimensional array computations with
@@ -16,7 +16,11 @@ Category:		Concurrency, Data
 Build-type:		Simple
 Extra-source-files:  	INSTALL
 
-Build-depends:	        array, base, ghc-prim, haskell98, pretty
+Build-depends:	        array, 
+			base == 3.*, 
+			ghc-prim, 
+			haskell98, 
+			pretty
 Exposed-modules:	Data.Array.Accelerate
 			Data.Array.Accelerate.Interpreter
 Other-modules:		Data.Array.Accelerate.Array.Data
