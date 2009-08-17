@@ -28,7 +28,7 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Pretty
 			Data.Array.Accelerate.Smart
 			Data.Array.Accelerate.Type
-ghc-options:     	-O -Wall -fno-warn-orphans -fno-warn-name-shadowing
+ghc-options:     	-Wall -fno-warn-orphans -fno-warn-name-shadowing
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,
