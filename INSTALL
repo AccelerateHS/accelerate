@@ -10,3 +10,10 @@ Standard Cabal installation:
 
 Then, to use the library, pass the flag "-package accelerate" to GHC.
 
+WARNING: This is at best an *alpha* release.  The library isn't actually useful
+	 for anything at this stage, except for people interested in writing
+	 a backend.  The API is also guaranteed to going to change a few 
+	 more times before settling down.  You have been warned.
+	
+Direct questions at Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+(aka ChilliX on #haskell and friends).
