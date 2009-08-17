@@ -1,6 +1,8 @@
 Name:			accelerate
 Version:		0.4.0
 Cabal-version: 		>= 1.6
+Tested-with: 		GHC >= 6.10.1
+
 Synopsis:		An embedded language for accelerated array processing
 Description:	        This library defines an embedded language for
 			regular, multi-dimensional array computations with
@@ -12,10 +14,11 @@ License:		BSD3
 License-file:		LICENSE
 Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 Maintainer:		Manuel M T Chakravarty <chak@cse.unsw.edu.au>
-Category:		Concurrency, Data
-Build-type:		Simple
-Extra-source-files:  	INSTALL
 
+Category:		Compilers/Interpreters, Concurrency, Data
+Stability: 		Experimental
+
+Build-type:		Simple
 Build-depends:	        array, 
 			base == 3.*, 
 			ghc-prim, 
@@ -33,6 +36,13 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Pretty
 			Data.Array.Accelerate.Smart
 			Data.Array.Accelerate.Type
+Extra-source-files:  	INSTALL
+			examples/simple/DotP.hs
+			examples/simple/Main.hs
+			examples/simple/Makefile
+			examples/simple/SAXPY.hs
+			examples/simple/Time.hs
+
 Ghc-options:     	-Wall -fno-warn-orphans -fno-warn-name-shadowing
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
