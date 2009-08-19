@@ -496,8 +496,8 @@ singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 --
 data Array dim e where
   Array :: (Ix dim, Elem e) 
-        => dim                        -- ^extent of dimensions = shape
-        -> ArrayData (ElemRepr e)     -- ^data, same layout as in
+        => dim                        -- extent of dimensions = shape
+        -> ArrayData (ElemRepr e)     -- data, same layout as in
         -> Array dim e
 
 -- |Scalars

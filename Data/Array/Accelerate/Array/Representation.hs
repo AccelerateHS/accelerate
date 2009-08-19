@@ -47,8 +47,8 @@ infixl 9 !
 --
 data Array dim e where
   Array :: (Ix dim, ArrayElem e) 
-        => dim             -- ^extent of dimensions = shape
-        -> ArrayData e     -- ^data
+        => dim             -- extent of dimensions = shape
+        -> ArrayData e     -- data
         -> Array dim e
 
 -- |Shorthand for common shape representations
@@ -72,16 +72,16 @@ type Vector e = Array DIM1 e
 -- |Class of index representations (which are nested pairs)
 --
 class Ix ix where
-  dim       :: ix -> Int       -- ^number of dimensions (>= 0)
-  size      :: ix -> Int       -- ^for a *shape* yield the total number of 
+  dim       :: ix -> Int       -- number of dimensions (>= 0)
+  size      :: ix -> Int       -- for a *shape* yield the total number of 
                                -- elements in that array
-  intersect :: ix -> ix -> ix  -- ^yield the intersection of two shapes
-  index     :: ix -> ix -> Int -- ^yield the index position in a linear, 
+  intersect :: ix -> ix -> ix  -- yield the intersection of two shapes
+  index     :: ix -> ix -> Int -- yield the index position in a linear, 
                                -- row-major representation of the array
                                -- (first argument is the shape)
 
   iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
-                               -- ^iterate through the entire shape, applying
+                               -- iterate through the entire shape, applying
                                -- the function; third argument combines results
                                -- and fourth is returned in case of an empty
                                -- iteration space; the index space is traversed

@@ -116,9 +116,9 @@ data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: OpenAcc aenv (Array dim e)         -- ^bound expressions 
+  Let         :: OpenAcc aenv (Array dim e)         -- bound expressions 
               -> OpenAcc (aenv, Array dim e) (Array dim' e')           
-                                                    -- ^the bound expr's scope
+                                                    -- the bound expr's scope
               -> OpenAcc aenv (Array dim' e')
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
@@ -135,26 +135,26 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Scalar e)
 
   -- Change the shape of an array without altering its contents
-  -- * precondition: size dim == size dim'
+  -- > precondition: size dim == size dim'
   Reshape     :: Ix dim
-              => Exp     aenv dim                 -- ^new shape
-              -> OpenAcc aenv (Array dim' e)      -- ^array to be reshaped
+              => Exp     aenv dim                 -- new shape
+              -> OpenAcc aenv (Array dim' e)      -- array to be reshaped
               -> OpenAcc aenv (Array dim e)
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: Ix dim
-              => SliceIndex slix sl co dim        -- ^slice type specification
-              -> Exp     aenv slix                -- ^slice value specification
-              -> OpenAcc aenv (Array sl e)        -- ^data to be replicated
+              => SliceIndex slix sl co dim        -- slice type specification
+              -> Exp     aenv slix                -- slice value specification
+              -> OpenAcc aenv (Array sl e)        -- data to be replicated
               -> OpenAcc aenv (Array dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
   Index       :: Ix sl
-              => SliceIndex slix sl co dim        -- ^slice type specification
-              -> OpenAcc aenv (Array dim e)       -- ^array to be indexed
-              -> Exp     aenv slix                -- ^slice value specification
+              => SliceIndex slix sl co dim        -- slice type specification
+              -> OpenAcc aenv (Array dim e)       -- array to be indexed
+              -> Exp     aenv slix                -- slice value specification
               -> OpenAcc aenv (Array sl e)
 
   -- Apply the given unary function to all elements of the given array
@@ -181,9 +181,9 @@ data OpenAcc aenv a where
 
   -- Fold of an array with a given *associative* function and its neutral
   -- element
-  Fold        :: Fun     aenv (e -> e -> e)          -- ^combination function
-              -> Exp     aenv e                      -- ^default value
-              -> OpenAcc aenv (Array dim e)          -- ^folded array
+  Fold        :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- default value
+              -> OpenAcc aenv (Array dim e)          -- folded array
               -> OpenAcc aenv (Scalar e)
     -- FIXME: generalise to Gabi's mapFold
 
@@ -191,9 +191,9 @@ data OpenAcc aenv a where
   -- function and its neutral element; produces a rightmost fold value and a
   -- linear of the same shape (the fold value would be the rightmost element
   -- in a scan, as opposed to a prescan)
-  Scan        :: Fun     aenv (e -> e -> e)          -- ^combination function
-              -> Exp     aenv e                      -- ^default value
-              -> OpenAcc aenv (Vector e)             -- ^linear array
+  Scan        :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- default value
+              -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)
     -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
@@ -207,19 +207,19 @@ data OpenAcc aenv a where
   -- functions).  Moroever, we have a combination function (in case some
   -- positions on the target array are picked multiple times by the
   -- permutation functions).  The combination functions needs to be
-  -- *associative* and *commutative*.  
-  Permute     :: Fun     aenv (e -> e -> e)        -- ^combination function
-              -> OpenAcc aenv (Array dim' e)       -- ^default values
-              -> Fun     aenv (dim -> dim')        -- ^permutation function
-              -> OpenAcc aenv (Array dim e)        -- ^source array
+  -- /associative/ and /commutative/.  
+  Permute     :: Fun     aenv (e -> e -> e)        -- combination function
+              -> OpenAcc aenv (Array dim' e)       -- default values
+              -> Fun     aenv (dim -> dim')        -- permutation function
+              -> OpenAcc aenv (Array dim e)        -- source array
               -> OpenAcc aenv (Array dim' e)
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
   Backpermute :: Ix dim'
-              => Exp     aenv dim'                 -- ^dimensions of the result
-              -> Fun     aenv (dim' -> dim)        -- ^permutation function
-              -> OpenAcc aenv (Array dim e)        -- ^source array
+              => Exp     aenv dim'                 -- dimensions of the result
+              -> Fun     aenv (dim' -> dim)        -- permutation function
+              -> OpenAcc aenv (Array dim e)        -- source array
               -> OpenAcc aenv (Array dim' e)
 
 -- |Closed array expression aka an array program
@@ -246,17 +246,17 @@ type Fun aenv t = OpenFun () aenv t
 --
 data OpenExp env aenv t where
 
-  -- |Variable index, ranging only over tuples or scalars
+  -- Variable index, ranging only over tuples or scalars
   Var         :: ArrayElem t
               => Idx env t 
               -> OpenExp env aenv t
 
-  -- |Constant values
+  -- Constant values
   Const       :: Elem t
               => t                              -- not converted to ElemRepr yet
               -> OpenExp env aenv (ElemRepr t)
 
-  -- |Tuples
+  -- Tuples
   Pair        :: (Elem s, Elem t)
               => s {- dummy to fix the type variable -}
               -> t {- dummy to fix the type variable -}
@@ -274,30 +274,30 @@ data OpenExp env aenv t where
               -> OpenExp env aenv (ElemRepr (s, t))
               -> OpenExp env aenv (ElemRepr t)
 
-  -- |Conditional expression (non-strict in 2nd and 3rd argument)
+  -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond        :: OpenExp env aenv (ElemRepr Bool) 
               -> OpenExp env aenv t 
               -> OpenExp env aenv t 
               -> OpenExp env aenv t
 
-  -- |Primitive constants
+  -- Primitive constants
   PrimConst   :: Elem t
               => PrimConst t -> OpenExp env aenv (ElemRepr t)
 
-  -- |Primitive scalar operations
+  -- Primitive scalar operations
   PrimApp     :: (Elem a, Elem r)
               => PrimFun (a -> r) 
               -> OpenExp env aenv (ElemRepr a) 
               -> OpenExp env aenv (ElemRepr r)
 
-  -- |Project a single scalar from an array
-  -- * the array expression cannot contain any free scalar variables
+  -- Project a single scalar from an array
+  -- the array expression cannot contain any free scalar variables
   IndexScalar :: OpenAcc aenv (Array dim t) 
               -> OpenExp env aenv dim 
               -> OpenExp env aenv t
 
-  -- |Array shape
-  -- * the array expression cannot contain any free scalar variables
+  -- Array shape
+  -- the array expression cannot contain any free scalar variables
   Shape       :: OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
             
