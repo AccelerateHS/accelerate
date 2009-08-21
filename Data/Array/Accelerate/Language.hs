@@ -30,11 +30,14 @@ module Data.Array.Accelerate.Language (
   -- * Shape manipulation
   reshape,
 
-  -- * Indexing
-  (!),
-
   -- * Collective array operations
-  replicate, zip, map, zipWith, filter, scan, fold, permute, backpermute,
+  slice, replicate, zip, map, zipWith, scan, fold, permute, backpermute,
+  
+  -- * Conditional expressions
+  (?),
+  
+  -- * Array operations with a scalar result
+  (!), shape,
   
   -- * Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
   --   Fractional, RealFrac, RealFloat
@@ -44,7 +47,13 @@ module Data.Array.Accelerate.Language (
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
 
   -- * Standard functions that we need to redefine as their signatures change
-  (&&*), (||*), not
+  (&&*), (||*), not,
+  
+  -- * Conversions
+  boolToInt,
+  
+  -- * Constants
+  ignore
 
 ) where
 
@@ -58,18 +67,13 @@ import Data.Bits
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar hiding ((!))
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape)
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
 
 
-infixr 2 ||*
-infixr 3 &&*
-infix  4 ==*, /=*, <*, <=*, >*, >=*
-infixl 9 !
-
-
--- |Collective operations
--- ----------------------
+-- Collective operations
+-- ---------------------
 
 use :: (Ix dim, Elem e) => Array dim e -> Acc (Array dim e)
 use = Use
@@ -89,11 +93,11 @@ replicate :: forall slix e. (SliceIx slix, Elem e)
           -> Acc (Array (SliceDim slix) e)
 replicate = Replicate (undefined::slix) (undefined::e)
 
-(!) :: forall slix e. (SliceIx slix, Elem e) 
-    => Acc (Array (SliceDim slix) e) 
-    -> Exp slix 
-    -> Acc (Array (Slice slix) e)
-(!) = Index (undefined::slix) (undefined::e) 
+slice :: forall slix e. (SliceIx slix, Elem e) 
+      => Acc (Array (SliceDim slix) e) 
+      -> Exp slix 
+      -> Acc (Array (Slice slix) e)
+slice = Index (undefined::slix) (undefined::e) 
 
 zip :: (Ix dim, Elem a, Elem b) 
     => Acc (Array dim a)
@@ -114,18 +118,12 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim c)
 zipWith = ZipWith
 
-filter :: Elem a 
-       => (Exp a -> Exp Bool) 
-       -> Acc (Vector a) 
-       -> Acc (Vector a)
-filter = Filter
-
 scan :: Elem a 
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
      -> Acc (Vector a)
      -> (Acc (Vector a), Acc (Scalar a))
-scan = unpair . Scan
+scan f e arr = unpair (Scan f e arr)
 
 fold :: Elem a 
      => (Exp a -> Exp a -> Exp a) 
@@ -150,8 +148,27 @@ backpermute :: (Ix dim, Ix dim', Elem a)
 backpermute = Backpermute
 
 
--- |Instances of all relevant H98 classes
--- --------------------------------------
+-- Conditional expressions
+-- -----------------------
+
+infix 0 ?
+(?) :: Elem t => Exp Bool -> (Exp t, Exp t) -> Exp t
+c ? (t, e) = Cond c t e
+
+
+-- Array operations with a scalar result
+-- -------------------------------------
+
+infixl 9 !
+(!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
+(!) = IndexScalar
+
+shape :: Ix dim => Acc (Array dim e) -> Exp dim
+shape = Shape
+
+
+-- Instances of all relevant H98 classes
+-- -------------------------------------
 
 instance (Elem t, IsBounded t) => Bounded (Exp t) where
   minBound = mkMinBound
@@ -214,8 +231,10 @@ instance (Elem t, IsFloating t) => RealFloat (Exp t)
   -- FIXME: add ops
 
 
--- |Methods from H98 classes, where we need other signatures
--- ---------------------------------------------------------
+-- Methods from H98 classes, where we need other signatures
+-- --------------------------------------------------------
+
+infix 4 ==*, /=*, <*, <=*, >*, >=*
 
 (==*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (==*) = mkEq
@@ -245,15 +264,30 @@ min :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
 
--- |Non-overloaded standard functions, where we need other signatures
--- ------------------------------------------------------------------
+-- Non-overloaded standard functions, where we need other signatures
+-- -----------------------------------------------------------------
 
+infixr 3 &&*
 (&&*) :: Exp Bool -> Exp Bool -> Exp Bool
 (&&*) = mkLAnd
 
+infixr 2 ||*
 (||*) :: Exp Bool -> Exp Bool -> Exp Bool
 (||*) = mkLOr
 
 not :: Exp Bool -> Exp Bool
 not = mkLNot
 
+
+-- Conversions
+-- -----------
+
+boolToInt :: Exp Bool -> Exp Int
+boolToInt = mkBoolToInt
+
+
+-- Constants
+-- ---------
+
+ignore :: Ix dim => Exp dim
+ignore = constant Sugar.ignore

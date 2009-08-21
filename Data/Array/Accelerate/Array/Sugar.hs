@@ -557,12 +557,13 @@ type instance FromShapeRepr ((((((), a), b), c), d), e)
 -- |Indices as n-tuples
 --
 class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
-  dim   :: ix -> Int           -- ^number of dimensions (>= 0)
-  size  :: ix -> Int           -- ^for a *shape* yield the total number of 
-                               -- elements in that array
-  index :: ix -> ix -> Int     -- ^corresponding index into a linear, row-major 
-                               -- representation of the array (first argument
-                               -- is the shape)
+  dim    :: ix -> Int           -- number of dimensions (>= 0)
+  size   :: ix -> Int           -- for a *shape* yield the total number of 
+                                -- elements in that array
+  ignore :: ix                  -- identifies ignored elements in 'permute'
+  index  :: ix -> ix -> Int     -- corresponding index into a linear, row-major 
+                                -- representation of the array (first argument
+                                -- is the shape)
 
   rangeToShape ::  (ix, ix) -> ix   -- convert a minpoint-maxpoint index
                                     -- into a shape
@@ -570,6 +571,7 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
 
   dim         = Repr.dim . fromElem
   size        = Repr.size . fromElem
+  ignore      = toElem Repr.ignore
   index sh ix = Repr.index (fromElem sh) (fromElem ix)
   
   rangeToShape (low, high) 

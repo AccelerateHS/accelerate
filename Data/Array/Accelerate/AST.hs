@@ -181,12 +181,6 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim e2)
               -> OpenAcc aenv (Array dim e3)
 
-  -- Remove all elements from a linear array that do not satisfy the given
-  -- predicate
-  Filter      :: Fun     aenv (e -> ElemRepr Bool) 
-              -> OpenAcc aenv (Vector e)
-              -> OpenAcc aenv (Vector e)
-
   -- Fold of an array with a given *associative* function and its neutral
   -- element
   Fold        :: Fun     aenv (e -> e -> e)          -- combination function
@@ -214,8 +208,9 @@ data OpenAcc aenv a where
   -- some positions in the target array are never picked by the permutation
   -- functions).  Moroever, we have a combination function (in case some
   -- positions on the target array are picked multiple times by the
-  -- permutation functions).  The combination functions needs to be
-  -- /associative/ and /commutative/.  
+  -- permutation functions).  The combination function needs to be
+  -- /associative/ and /commutative/ .  We drop every element for which the
+  -- permutation function yields -1 (i.e., a tuple of -1 values).
   Permute     :: Fun     aenv (e -> e -> e)        -- combination function
               -> OpenAcc aenv (Array dim' e)       -- default values
               -> Fun     aenv (dim -> dim')        -- permutation function
@@ -380,6 +375,9 @@ data PrimFun sig where
   --        ALSO: need to use overloading
 
   -- FIXME: conversions between various integer types
+  --        should we have an overloaded functions like 'toInt'?  
+  --        (or 'fromEnum' for enums?)
+  PrimBoolToInt     :: PrimFun (Bool -> Int)
 
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want

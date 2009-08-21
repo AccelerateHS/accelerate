@@ -2,6 +2,8 @@
 
 module Main where
 
+import Prelude hiding (filter)
+
 import Control.Exception
 import Data.Array.Unboxed
 import Data.Array.IArray
@@ -13,6 +15,7 @@ import qualified Data.Array.Accelerate.Interpreter as Interp
 import Time
 import SAXPY
 import DotP
+import Filter
 
 
 -- Auxilliary array functions
@@ -211,6 +214,27 @@ test_dotp n
     {-# NOINLINE dotp_interp #-}
     dotp_interp arr1 arr2 () = Interp.run (dotp arr1 arr2)
 
+test_filter :: Int -> IO ()
+test_filter n
+  = do
+      putStrLn "== Filter"
+      putStrLn $ "Generating data (n = " ++ show n ++ ")..."
+      v_ref <- randomUVector n
+      v     <- convertUVector v_ref
+      putStrLn "Running reference code..."
+      ref_result <- timeUVector $ filter_ref' (< 0) v_ref
+      putStrLn "Running Accelerate code..."
+      result <- timeVector $ filter_interp (Acc.<* Acc.constant 0) (Acc.use v)
+      putStrLn "Validating result..."
+      validateFloats ref_result result
+  where
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE filter_ref' #-}
+    filter_ref' p arr () = filter_ref p arr
+    {-# NOINLINE filter_interp #-}
+    filter_interp p arr () = Interp.run (filter p arr)
+
 main :: IO ()
 main
   = do
@@ -219,3 +243,4 @@ main
       
       test_saxpy 100000
       test_dotp  100000
+      test_filter 2000

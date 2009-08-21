@@ -33,7 +33,7 @@ module Data.Array.Accelerate.Smart (
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
-  mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot,
+  mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt
 
 ) where
 
@@ -43,10 +43,6 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
-{-
-import Data.Array.Accelerate.Array.Representation hiding (
-  Array(..), Scalar, Vector)
--}
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, OpenExp(..), Exp)
 import qualified Data.Array.Accelerate.AST                  as AST
@@ -92,10 +88,6 @@ data Acc a where
               -> Acc (Array dim e1)
               -> Acc (Array dim e2)
               -> Acc (Array dim e3)
-  Filter      :: Elem e
-              => (Exp e -> Exp Bool) 
-              -> Acc (Vector e)
-              -> Acc (Vector e)
   Fold        :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
@@ -146,8 +138,6 @@ convertOpenAcc alyt (ZipWith f acc1 acc2)
   = AST.ZipWith (convertFun2 alyt f) 
                 (convertOpenAcc alyt acc1)
                 (convertOpenAcc alyt acc2)
-convertOpenAcc alyt (Filter p acc) 
-  = AST.Filter (convertFun1 alyt p) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Fold f e acc) 
   = AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Scan f e acc) 
@@ -446,3 +436,9 @@ mkLNot x = PrimLNot `PrimApp` x
 -- FIXME: Character conversions
 
 -- FIXME: Numeric conversions
+
+-- FIXME: Other conversions
+
+mkBoolToInt :: Exp Bool -> Exp Int
+mkBoolToInt b = PrimBoolToInt `PrimApp` b
+

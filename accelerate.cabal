@@ -38,6 +38,7 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Type
 Extra-source-files:  	INSTALL
 			examples/simple/DotP.hs
+			examples/simple/Filter.hs
 			examples/simple/Main.hs
 			examples/simple/Makefile
 			examples/simple/SAXPY.hs

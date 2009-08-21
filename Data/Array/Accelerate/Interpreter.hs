@@ -21,6 +21,7 @@ module Data.Array.Accelerate.Interpreter (
 ) where
 
 -- standard libraries
+import Control.Monad
 import Data.Bits
 import Data.Char                (chr, ord)
 
@@ -96,9 +97,6 @@ evalOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 evalOpenAcc (ZipWith f acc1 acc2) aenv
   = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
-evalOpenAcc (Filter p acc) aenv
-  = filterOp (evalFun p aenv) (evalOpenAcc acc aenv)
-  
 evalOpenAcc (Fold f e acc) aenv
   = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
@@ -197,12 +195,6 @@ zipWithOp :: ArrayElem e3
 zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2) 
   = DelayedArray (sh1 `intersect` sh2) (\ix -> f (rf1 ix) (rf2 ix))
 
-filterOp :: (e -> Sugar.ElemRepr Bool)
-         -> Delayed (Vector e)
-         -> Delayed (Vector e)
-filterOp p (DelayedArray sh rf)
-  = error "Data.Array.Accelerate.Interpreter: filter: not yet implemented"
-
 foldOp :: (e -> e -> e)
        -> e
        -> Delayed (Array dim e)
@@ -251,9 +243,11 @@ permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
             -- the target dimension (where it gets combined with the current
             -- default)
           let update ix = do
-                            let i = index dftsSh (p ix)
-                            e <- readArrayData arr i
-                            writeArrayData arr i (pf ix `f` e) 
+                            let target = p ix
+                            unless (target == ignore) $ do
+                              let i = index dftsSh target
+                              e <- readArrayData arr i
+                              writeArrayData arr i (pf ix `f` e) 
           iter sh update (>>) (return ())
           
             -- return the updated array
@@ -374,6 +368,7 @@ evalPrim PrimChr           = evalChr
 evalPrim PrimRoundFloatInt = evalRoundFloatInt
 evalPrim PrimTruncFloatInt = evalTruncFloatInt
 evalPrim PrimIntFloat      = evalIntFloat
+evalPrim PrimBoolToInt     = evalBoolToInt
 
 
 -- Pairing
@@ -430,6 +425,9 @@ evalTruncFloatInt = truncate
 
 evalIntFloat :: Int -> Float
 evalIntFloat = fromIntegral
+
+evalBoolToInt :: Bool -> Int
+evalBoolToInt = fromEnum
 
 
 -- Extract methods from reified dictionaries

@@ -71,11 +71,12 @@ type Vector e = Array DIM1 e
 
 -- |Class of index representations (which are nested pairs)
 --
-class Ix ix where
+class Eq ix => Ix ix where
   dim       :: ix -> Int       -- number of dimensions (>= 0)
   size      :: ix -> Int       -- for a *shape* yield the total number of 
                                -- elements in that array
   intersect :: ix -> ix -> ix  -- yield the intersection of two shapes
+  ignore    :: ix              -- identifies ignored elements in 'permute'
   index     :: ix -> ix -> Int -- yield the index position in a linear, 
                                -- row-major representation of the array
                                -- (first argument is the shape)
@@ -96,6 +97,7 @@ instance Ix () where
   dim       ()       = 0
   size      ()       = 1
   intersect () ()    = ()
+  ignore             = ()
   index     () ()    = 0
   iter      () f _ _ = f ()
   
@@ -106,6 +108,7 @@ instance Ix ix => Ix (ix, Int) where
   dim (sh, _)                       = dim sh + 1
   size (sh, sz)                     = size sh * sz
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
+  ignore                            = (ignore, -1)
   index (sh, sz) (ix, i) 
     | i >= 0 && i < sz              = index sh ix + size sh * i
     | otherwise              

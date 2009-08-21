@@ -45,10 +45,10 @@ instance Show (OpenExp env aenv t) where
 --
 prettyAcc :: Int -> OpenAcc aenv a -> Doc
 prettyAcc lvl (Let acc1 acc2) 
-  = text "let a" <> int lvl <+> text " = " <+> prettyAcc lvl acc1 <+>
+  = text "let a" <> int lvl <+> char '=' <+> prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 1) acc2
 prettyAcc lvl (Let2 acc1 acc2) 
-  = text "let (a" <> int lvl <> text ", a" <> int (lvl + 1) <+> text " = " <+>
+  = text "let (a" <> int lvl <> text ", a" <> int (lvl + 1) <+> char '=' <+>
     prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 2) acc2
 prettyAcc _   (Avar idx)       = text $ "a" ++ show (idxToInt idx)
@@ -66,8 +66,6 @@ prettyAcc lvl (ZipWith f acc1 acc2)
   = prettyArrOp "zipWith"
       [parens (prettyFun lvl f), prettyAccParens lvl acc1, 
        prettyAccParens lvl acc2]
-prettyAcc lvl (Filter p acc)   
-  = prettyArrOp "filter" [parens (prettyFun lvl p), prettyAccParens lvl acc]
 prettyAcc lvl (Fold f e acc)   
   = prettyArrOp "fold" [parens (prettyFun lvl f), prettyExp lvl parens e,
                         prettyAccParens lvl acc]
@@ -180,6 +178,7 @@ prettyPrim PrimChr           = text "chr"
 prettyPrim PrimRoundFloatInt = text "round"
 prettyPrim PrimTruncFloatInt = text "trunc"
 prettyPrim PrimIntFloat      = text "intFloat"
+prettyPrim PrimBoolToInt     = text "boolToInt"
 
 {-
 -- Pretty print type
