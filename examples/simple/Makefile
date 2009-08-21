@@ -9,5 +9,5 @@ all:
 	ghc $(HCFLAGS) -o test Main.o Time.o SAXPY.o DotP.o Filter.o
 
 clean:
-	rm -f *.o *.hi time
+	rm -f *.o *.hi test
 	
