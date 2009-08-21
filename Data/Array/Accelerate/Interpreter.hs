@@ -72,6 +72,10 @@ evalOpenAcc (Let acc1 acc2) aenv
   = let !arr1 = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1)
 
+evalOpenAcc (Let2 acc1 acc2) aenv 
+  = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
+    in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
+
 evalOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
 evalOpenAcc (Use arr) _aenv = delay arr

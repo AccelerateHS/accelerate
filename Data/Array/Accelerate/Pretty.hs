@@ -47,6 +47,10 @@ prettyAcc :: Int -> OpenAcc aenv a -> Doc
 prettyAcc lvl (Let acc1 acc2) 
   = text "let a" <> int lvl <+> text " = " <+> prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 1) acc2
+prettyAcc lvl (Let2 acc1 acc2) 
+  = text "let (a" <> int lvl <> text ", a" <> int (lvl + 1) <+> text " = " <+>
+    prettyAcc lvl acc1 <+>
+    text " in " <+> prettyAcc (lvl + 2) acc2
 prettyAcc _   (Avar idx)       = text $ "a" ++ show (idxToInt idx)
 prettyAcc _   (Use arr)        = prettyArrOp "use" [prettyArray arr]
 prettyAcc lvl (Unit e)         = prettyArrOp "unit" [prettyExp lvl parens e]

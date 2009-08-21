@@ -20,6 +20,9 @@ module Data.Array.Accelerate.Smart (
   
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertClosedExp,
+  
+  -- * Smart constructors for unpairing
+  unpair,
 
   -- * Smart constructors for literals
   constant,
@@ -54,6 +57,11 @@ import Data.Array.Accelerate.Pretty ()
 -- --------------------------
 
 data Acc a where
+  
+  FstArray    :: Acc (Array dim1 e1, Array dim2 e2)
+              -> Acc (Array dim1 e1)
+  SndArray    :: Acc (Array dim1 e1, Array dim2 e2)
+              -> Acc (Array dim2 e2)
 
   Use         :: Array dim e -> Acc (Array dim e)
   Unit        :: Elem e
@@ -119,6 +127,10 @@ data Acc a where
 convertOpenAcc :: Layout aenv aenv 
                -> Acc a 
                -> AST.OpenAcc aenv (ArraysRepr a)
+convertOpenAcc alyt (FstArray acc)
+  = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
+convertOpenAcc alyt (SndArray acc)
+  = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar AST.ZeroIdx)
 convertOpenAcc _    (Use array)     = AST.Use (fromArray array)
 convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
 convertOpenAcc alyt (Reshape e acc) 
@@ -309,14 +321,22 @@ mkReplicate slix _ e arr
 -- |Smart constructors to construct HOAS AST expressions
 -- -----------------------------------------------------
 
--- |Smart constructor for literals
--- -
+-- Pushes the 'Acc' constructor through a pair
+--
+unpair :: (Ix dim1, Ix dim2, Elem e1, Elem e2)
+       => Acc (Array dim1 e1, Array dim2 e2) 
+       -> (Acc (Array dim1 e1), Acc (Array dim2 e2))
+unpair acc = (FstArray acc, SndArray acc)
+
+
+-- Smart constructor for literals
+-- 
 
 constant :: Elem t => t -> Exp t
 constant = Const
 
--- |Smart constructor for constants
--- -
+-- Smart constructor for constants
+-- 
 
 mkMinBound :: (Elem t, IsBounded t) => Exp t
 mkMinBound = PrimConst (PrimMinBound boundedType)
@@ -327,8 +347,8 @@ mkMaxBound = PrimConst (PrimMaxBound boundedType)
 mkPi :: (Elem r, IsFloating r) => Exp r
 mkPi = PrimConst (PrimPi floatingType)
 
--- |Smart constructors for primitive applications
--- -
+-- Smart constructors for primitive applications
+-- 
 
 -- Operators from Num
 

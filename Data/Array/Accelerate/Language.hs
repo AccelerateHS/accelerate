@@ -124,8 +124,8 @@ scan :: Elem a
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
      -> Acc (Vector a)
-     -> Acc (Vector a, Scalar a)
-scan = Scan
+     -> (Acc (Vector a), Acc (Scalar a))
+scan = unpair . Scan
 
 fold :: Elem a 
      => (Exp a -> Exp a -> Exp a) 

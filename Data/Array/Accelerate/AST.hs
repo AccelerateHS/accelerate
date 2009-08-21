@@ -116,9 +116,17 @@ data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: OpenAcc aenv (Array dim e)         -- bound expressions 
-              -> OpenAcc (aenv, Array dim e) (Array dim' e')           
-                                                    -- the bound expr's scope
+  Let         :: OpenAcc aenv (Array dim e)         -- bound expression
+              -> OpenAcc (aenv, Array dim e) 
+                         (Array dim' e')            -- the bound expr's scope           
+              -> OpenAcc aenv (Array dim' e')
+
+  -- Variant of 'Let' binding (and decomposing) a pair
+  Let2        :: OpenAcc aenv (Array dim1 e1, 
+                               Array dim2 e2)       -- bound expressions 
+              -> OpenAcc ((aenv, Array dim1 e1), 
+                                 Array dim2 e2)
+                         (Array dim' e')            -- the bound expr's scope           
               -> OpenAcc aenv (Array dim' e')
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
