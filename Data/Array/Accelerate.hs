@@ -38,7 +38,7 @@ module Data.Array.Accelerate (
   Ix(dim, size), All(..), SliceIx(..), DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
   
   -- * Array operations
-  arrayShape, indexArray, fromIArray, toIArray, fromList, toList, Arrays,
+  arrayShape, indexArray, fromIArray, toIArray, fromList, toList,
 
   -- * Surface language
   module Data.Array.Accelerate.Language,

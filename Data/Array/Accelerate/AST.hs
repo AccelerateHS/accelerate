@@ -76,9 +76,8 @@ module Data.Array.Accelerate.AST (
   
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Data  (ArrayElem)
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (Elem, ElemRepr)
+import Data.Array.Accelerate.Array.Representation (SliceIndex)
+import Data.Array.Accelerate.Array.Sugar 
 
 
 -- Typed de Bruijn indices
@@ -112,6 +111,9 @@ data Idx env t where
 --   need to hoist array expressions out of scalar expressions - they occur in
 --   scalar indexing and in determining an arrays shape.)
 --
+-- The data type is parametrised over the surface types (not the representation
+-- type).
+--
 data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
@@ -138,7 +140,7 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim e)
 
   -- Capture a Scalar (or a tuple of Scalars) in a Singleton Array  
-  Unit        :: ArrayElem e
+  Unit        :: Elem e
               => Exp     aenv e 
               -> OpenAcc aenv (Scalar e)
 
@@ -151,22 +153,28 @@ data OpenAcc aenv a where
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: Ix dim
-              => SliceIndex slix sl co dim        -- slice type specification
+  Replicate   :: (Ix dim, Elem slix)
+              => SliceIndex (ElemRepr slix)       -- slice type specification
+                            (ElemRepr sl) 
+                            co'
+                            (ElemRepr dim)
               -> Exp     aenv slix                -- slice value specification
               -> OpenAcc aenv (Array sl e)        -- data to be replicated
               -> OpenAcc aenv (Array dim e)
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: Ix sl
-              => SliceIndex slix sl co dim        -- slice type specification
+  Index       :: (Ix sl, Elem slix)
+              => SliceIndex (ElemRepr slix)       -- slice type specification
+                            (ElemRepr sl) 
+                            co'
+                            (ElemRepr dim)
               -> OpenAcc aenv (Array dim e)       -- array to be indexed
               -> Exp     aenv slix                -- slice value specification
               -> OpenAcc aenv (Array sl e)
 
   -- Apply the given unary function to all elements of the given array
-  Map         :: ArrayElem e'
+  Map         :: Elem e'
               => Fun     aenv (e -> e') 
               -> OpenAcc aenv (Array dim e) 
               -> OpenAcc aenv (Array dim e')
@@ -175,7 +183,7 @@ data OpenAcc aenv a where
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
-  ZipWith     :: ArrayElem e3
+  ZipWith     :: Elem e3
               => Fun     aenv (e1 -> e2 -> e3) 
               -> OpenAcc aenv (Array dim e1)
               -> OpenAcc aenv (Array dim e2)
@@ -236,8 +244,9 @@ type Acc a = OpenAcc () a
 -- |Function abstraction
 --
 data OpenFun env aenv t where
-  Body :: OpenExp env      aenv t -> OpenFun env aenv t
-  Lam  :: OpenFun (env, a) aenv t -> OpenFun env aenv (a -> t)
+  Body :: OpenExp env               aenv t -> OpenFun env aenv t
+  Lam  :: Elem a
+       => OpenFun (env, ElemRepr a) aenv t -> OpenFun env aenv (a -> t)
 
 -- |Function without free scalar variables
 --
@@ -247,55 +256,52 @@ type Fun aenv t = OpenFun () aenv t
 -- of scalars and arrays of tuples.  All code, except Cond, is evaluated
 -- eagerly.  N-tuples are represented as nested pairs. 
 --
+-- The data type is parametrised over the surface types (not the representation
+-- type).
+--
 data OpenExp env aenv t where
 
   -- Variable index, ranging only over tuples or scalars
-  Var         :: ArrayElem t
-              => Idx env t 
+  Var         :: Elem t
+              => Idx env (ElemRepr t)
               -> OpenExp env aenv t
 
   -- Constant values
   Const       :: Elem t
-              => t                              -- not converted to ElemRepr yet
-              -> OpenExp env aenv (ElemRepr t)
+              => ElemRepr t
+              -> OpenExp env aenv t
 
   -- Tuples
   Pair        :: (Elem s, Elem t)
-              => s {- dummy to fix the type variable -}
-              -> t {- dummy to fix the type variable -}
-              -> OpenExp env aenv (ElemRepr s) 
-              -> OpenExp env aenv (ElemRepr t) 
-              -> OpenExp env aenv (ElemRepr (s, t))
+              => OpenExp env aenv s 
+              -> OpenExp env aenv t
+              -> OpenExp env aenv (s, t)
   Fst         :: (Elem s, Elem t)
-              => s {- dummy to fix the type variable -}
-              -> t {- dummy to fix the type variable -}
-              -> OpenExp env aenv (ElemRepr (s, t))
-              -> OpenExp env aenv (ElemRepr s)
+              => OpenExp env aenv (s, t)
+              -> OpenExp env aenv s
   Snd         :: (Elem s, Elem t)
-              => s {- dummy to fix the type variable -}
-              -> t {- dummy to fix the type variable -}
-              -> OpenExp env aenv (ElemRepr (s, t))
-              -> OpenExp env aenv (ElemRepr t)
+              => OpenExp env aenv (s, t)
+              -> OpenExp env aenv t
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond        :: OpenExp env aenv (ElemRepr Bool) 
+  Cond        :: OpenExp env aenv Bool
               -> OpenExp env aenv t 
               -> OpenExp env aenv t 
               -> OpenExp env aenv t
 
   -- Primitive constants
   PrimConst   :: Elem t
-              => PrimConst t -> OpenExp env aenv (ElemRepr t)
+              => PrimConst t -> OpenExp env aenv t
 
   -- Primitive scalar operations
   PrimApp     :: (Elem a, Elem r)
               => PrimFun (a -> r) 
-              -> OpenExp env aenv (ElemRepr a) 
-              -> OpenExp env aenv (ElemRepr r)
+              -> OpenExp env aenv a
+              -> OpenExp env aenv r
 
   -- Project a single scalar from an array
   -- the array expression cannot contain any free scalar variables
-  IndexScalar :: OpenAcc aenv (Array dim t) 
+  IndexScalar :: OpenAcc aenv (Array dim t)
               -> OpenExp env aenv dim 
               -> OpenExp env aenv t
 

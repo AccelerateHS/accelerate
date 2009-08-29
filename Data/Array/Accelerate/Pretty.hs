@@ -21,7 +21,7 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 
 
@@ -106,13 +106,14 @@ prettyFun lvl fun =
 --
 -- * Apply the wrapping combinator (1st argument) to any compound expressions.
 --
-prettyExp :: Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
+prettyExp :: forall t env aenv. 
+             Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
 prettyExp _   _    (Var idx)         = text $ "x" ++ show (idxToInt idx)
-prettyExp _   _    (Const v)         = text $ show v
-prettyExp lvl _    e@(Pair _ _ _ _)  = prettyTuple lvl e
-prettyExp lvl wrap (Fst _ _ e)       
+prettyExp _   _    (Const v)         = text $ show (toElem v :: t)
+prettyExp lvl _    e@(Pair _ _)      = prettyTuple lvl e
+prettyExp lvl wrap (Fst e)       
   = wrap $ text "fst" <+> prettyExp lvl parens e
-prettyExp lvl wrap (Snd _ _ e)       
+prettyExp lvl wrap (Snd e)       
   = wrap $ text "snd" <+> prettyExp lvl parens e
 prettyExp lvl wrap (Cond c t e) 
   = wrap $ sep [prettyExp lvl parens c <+> char '?', 
@@ -133,8 +134,8 @@ prettyTuple lvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
     es = collect e
     --
     collect :: OpenExp env aenv t -> [Doc]
-    collect (Pair _ _ e1 e2) = collect e1 ++ collect e2
-    collect e                = [prettyExp lvl noParens e]
+    collect (Pair e1 e2) = collect e1 ++ collect e2
+    collect e            = [prettyExp lvl noParens e]
 
 -- Pretty print a primitive constant
 --
@@ -187,13 +188,17 @@ prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 -}
 
-prettyArray :: Array dim a -> Doc
-prettyArray (Array sh adata) 
-  = text "<array>"
-{-
+prettyArray :: forall dim a. Array dim a -> Doc
+prettyArray arr@(Array sh _) 
   = hang (text "Array") 2 $
-      sep []
--}
+      sep [showDoc $ (toElem sh :: dim), dataDoc]
+  where
+    showDoc :: forall a. Show a => a -> Doc
+    showDoc = text . show
+    l       = toList arr
+    dataDoc | length l <= 1000 = showDoc l
+            | otherwise        = showDoc (take 1000 l) <+> 
+                                 text "{truncated at 1000 elements}"
 
 
 -- Auxilliary pretty printing combinators

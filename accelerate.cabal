@@ -1,5 +1,5 @@
 Name:			accelerate
-Version:		0.5.0.0
+Version:		0.5.1.0
 Cabal-version: 		>= 1.6
 Tested-with: 		GHC >= 6.10.1
 
@@ -44,7 +44,7 @@ Extra-source-files:  	INSTALL
 			examples/simple/SAXPY.hs
 			examples/simple/Time.hs
 
-Ghc-options:     	-Wall -fno-warn-orphans -fno-warn-name-shadowing
+Ghc-options:     	-O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,

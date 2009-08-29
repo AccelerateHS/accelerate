@@ -16,7 +16,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  run
+  Arrays, run
   
 ) where
 
@@ -29,6 +29,7 @@ import Data.Char                (chr, ord)
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar          (Array(..), Scalar, Vector)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import qualified Data.Array.Accelerate.Smart       as Sugar
@@ -38,10 +39,18 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 -- Program execution
 -- -----------------
 
--- Run a complete array program
+-- |Characterises the types that may be returned when running an array program.
 --
-run :: Sugar.Arrays a => Sugar.Acc a -> a
-run = Sugar.toArrays . force . evalAcc . Sugar.convertAcc
+class Delayable as => Arrays as
+  
+instance Arrays ()  
+instance Arrays (Array dim e)
+instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
+
+-- |Run a complete embedded array program using the reference interpreter.
+--
+run :: Arrays a => Sugar.Acc a -> a
+run = force . evalAcc . Sugar.convertAcc
 
 
 -- Environments
@@ -119,27 +128,31 @@ evalAcc acc = evalOpenAcc acc Empty
 -- Array primitives
 -- ----------------
 
-unitOp :: ArrayElem e => e -> Delayed (Scalar e)
-unitOp e = DelayedArray {shapeDA = (), repfDA = const e}
+unitOp :: Sugar.Elem e => e -> Delayed (Scalar e)
+unitOp e = DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElem e)}
 
-reshapeOp :: Ix dim => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
+reshapeOp :: Sugar.Ix dim 
+          => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
 reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
-  | size newShape == size oldShape
+  | Sugar.size newShape == size oldShape
   = let Array _ adata = force darr
     in 
-    delay $ Array newShape adata
+    delay $ Array (Sugar.fromElem newShape) adata
   | otherwise 
   = error "Data.Array.Accelerate.Interpreter.reshape: shape mismatch"
 
-replicateOp :: Ix dim
-            => SliceIndex slix sl co dim 
+replicateOp :: (Sugar.Ix dim, Sugar.Elem slix)
+            => SliceIndex (Sugar.ElemRepr slix) 
+                          (Sugar.ElemRepr sl) 
+                          co
+                          (Sugar.ElemRepr dim)
             -> slix 
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
 replicateOp sliceIndex slix (DelayedArray sh pf)
   = DelayedArray sh' (pf . pf')
   where
-    (sh', pf') = extend sliceIndex slix sh
+    (sh', pf') = extend sliceIndex (Sugar.fromElem slix) sh
     
     extend :: SliceIndex slix sl co dim
            -> slix 
@@ -155,15 +168,18 @@ replicateOp sliceIndex slix (DelayedArray sh pf)
         in
         ((dim', sz), \(ix, _) -> pf' ix)
     
-indexOp :: Ix sl
-        => SliceIndex slix sl co dim 
+indexOp :: (Sugar.Ix sl, Sugar.Elem slix)
+        => SliceIndex (Sugar.ElemRepr slix) 
+                      (Sugar.ElemRepr sl) 
+                      co
+                      (Sugar.ElemRepr dim)
         -> Delayed (Array dim e)
         -> slix 
         -> Delayed (Array sl e)
 indexOp sliceIndex (DelayedArray sh pf) slix 
   = DelayedArray sh' (pf . pf')
   where
-    (sh', pf') = restrict sliceIndex slix sh
+    (sh', pf') = restrict sliceIndex (Sugar.fromElem slix) sh
 
     restrict :: SliceIndex slix sl co dim
              -> slix
@@ -181,45 +197,49 @@ indexOp sliceIndex (DelayedArray sh pf) slix
         (sl', \ix -> (pf' ix, i))
       | otherwise = error "Index out of bounds"
 
-mapOp :: ArrayElem e' 
+mapOp :: Sugar.Elem e' 
       => (e -> e') 
       -> Delayed (Array dim e) 
       -> Delayed (Array dim e')
-mapOp f (DelayedArray sh rf) = DelayedArray sh (f . rf)
+mapOp f (DelayedArray sh rf) = DelayedArray sh (Sugar.sinkFromElem f . rf)
 
-zipWithOp :: ArrayElem e3
+zipWithOp :: Sugar.Elem e3
           => (e1 -> e2 -> e3) 
           -> Delayed (Array dim e1) 
           -> Delayed (Array dim e2) 
           -> Delayed (Array dim e3)
 zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2) 
-  = DelayedArray (sh1 `intersect` sh2) (\ix -> f (rf1 ix) (rf2 ix))
+  = DelayedArray (sh1 `intersect` sh2) 
+                 (\ix -> (Sugar.sinkFromElem2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: (e -> e -> e)
        -> e
        -> Delayed (Array dim e)
        -> Delayed (Scalar e)
 foldOp f e (DelayedArray sh rf)
-  = unitOp $ iter sh rf f e
+  = unitOp $ 
+      Sugar.toElem (iter sh rf (Sugar.sinkFromElem2 f) (Sugar.fromElem e))
 
 scanOp :: (e -> e -> e)
        -> e
        -> Delayed (Vector e)
        -> Delayed (Vector e, Scalar e)
 scanOp f e (DelayedArray sh rf)
-  = DelayedPair (delay $ adata `seq` Array sh adata) (unitOp final)
+  = DelayedPair (delay $ adata `seq` Array sh adata) 
+                (unitOp (Sugar.toElem final))
   where
-    n = size sh
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
     --
     (adata, final) = runArrayData $ do
                        arr <- newArrayData n
-                       final <- traverse arr 0 e
+                       final <- traverse arr 0 (Sugar.fromElem e)
                        return (arr, final)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
                       writeArrayData arr i v
-                      traverse arr (i + 1) (f v (rf ((), i)))
+                      traverse arr (i + 1) (f' v (rf ((), i)))
     
 permuteOp :: (e -> e -> e)
           -> Delayed (Array dim' e)
@@ -229,6 +249,8 @@ permuteOp :: (e -> e -> e)
 permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
   = delay $ adata `seq` Array dftsSh adata
   where 
+    f' = Sugar.sinkFromElem2 f
+    --
     (adata, _) 
       = runArrayData $ do
 
@@ -243,23 +265,23 @@ permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
             -- the target dimension (where it gets combined with the current
             -- default)
           let update ix = do
-                            let target = p ix
+                            let target = (Sugar.sinkFromElem p) ix
                             unless (target == ignore) $ do
                               let i = index dftsSh target
                               e <- readArrayData arr i
-                              writeArrayData arr i (pf ix `f` e) 
+                              writeArrayData arr i (pf ix `f'` e) 
           iter sh update (>>) (return ())
           
             -- return the updated array
           return (arr, undefined)
 
-backpermuteOp :: Ix dim'
+backpermuteOp :: Sugar.Ix dim'
               => dim'
               -> (dim' -> dim)
               -> Delayed (Array dim e)
               -> Delayed (Array dim' e)
 backpermuteOp sh' p (DelayedArray _sh rf)
-  = DelayedArray sh' (rf . p)
+  = DelayedArray (Sugar.fromElem sh') (rf . Sugar.sinkFromElem p)
 
 
 -- Expression evaluation
@@ -269,7 +291,8 @@ backpermuteOp sh' p (DelayedArray _sh rf)
 --
 evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
-evalOpenFun (Lam f)  env aenv = \x -> evalOpenFun f (env `Push` x) aenv
+evalOpenFun (Lam f)  env aenv 
+  = \x -> evalOpenFun f (env `Push` Sugar.fromElem x) aenv
 
 -- Evaluate a closed function
 --
@@ -286,40 +309,41 @@ evalFun f aenv = evalOpenFun f Empty aenv
 --  
 evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
 
-evalOpenExp (Var idx) env _ = prj idx env
+evalOpenExp (Var idx) env _ = Sugar.toElem $ prj idx env
   
-evalOpenExp (Const c) _ _ = Sugar.fromElem c
+evalOpenExp (Const c) _ _ = Sugar.toElem c
 
-evalOpenExp (Pair ds dt e1 e2) env aenv 
-  = evalPair ds dt (evalOpenExp e1 env aenv) (evalOpenExp e2 env aenv)
+evalOpenExp (Pair e1 e2) env aenv 
+  = evalPair (evalOpenExp e1 env aenv) (evalOpenExp e2 env aenv)
 
-evalOpenExp (Fst ds dt e) env aenv 
-  = evalFst ds dt (evalOpenExp e env aenv)
+evalOpenExp (Fst e) env aenv 
+  = evalFst (evalOpenExp e env aenv)
 
-evalOpenExp (Snd ds dt e) env aenv 
-  = evalSnd ds dt (evalOpenExp e env aenv)
+evalOpenExp (Snd e) env aenv 
+  = evalSnd (evalOpenExp e env aenv)
 
 evalOpenExp (Cond c t e) env aenv 
-  = if Sugar.toElem (evalOpenExp c env aenv) 
+  = if evalOpenExp c env aenv
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
-evalOpenExp (PrimConst c) _ _ = Sugar.fromElem $ evalPrimConst c
+evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 
 evalOpenExp (PrimApp p arg) env aenv 
-  = Sugar.fromElem $ evalPrim p (Sugar.toElem (evalOpenExp arg env aenv))
+  = evalPrim p (evalOpenExp arg env aenv)
 
 evalOpenExp (IndexScalar acc ix) env aenv 
-  = let ix' = evalOpenExp ix env aenv
-    in
-    case evalOpenAcc acc aenv of
-      DelayedArray sh pf -> index sh ix' `seq` pf ix'
-                            -- FIXME: This is ugly, but (possibly) needed to
-                            --       ensure bounds checking
+  = case evalOpenAcc acc aenv of
+      DelayedArray sh pf -> 
+        let ix' = Sugar.fromElem $ evalOpenExp ix env aenv
+        in
+        index sh ix' `seq` (Sugar.toElem $ pf ix')
+                              -- FIXME: This is ugly, but (possibly) needed to
+                              --       ensure bounds checking
 
 evalOpenExp (Shape acc) _ aenv 
-  = let Array sh _ = force $ evalOpenAcc acc aenv 
-    in sh
+  = case force $ evalOpenAcc acc aenv of
+      Array sh _ -> Sugar.toElem sh
 
 -- Evaluate a closed expression
 --
@@ -374,29 +398,23 @@ evalPrim PrimBoolToInt     = evalBoolToInt
 -- Pairing
 -- -------
 
-evalPair :: forall s t. (Sugar.Elem s, Sugar.Elem t)
-        => s {- dummy to fix the type variable -}
-        -> t {- dummy to fix the type variable -}
-        -> Sugar.ElemRepr s
-        -> Sugar.ElemRepr t
-        -> Sugar.ElemRepr (s, t)
-evalPair _ _ x y = Sugar.fromElem (Sugar.toElem x :: s, Sugar.toElem y :: t)
+evalPair :: (Sugar.Elem s, Sugar.Elem t)
+        => s
+        -> t
+        -> (s, t)
+evalPair = (,)
 
-evalFst :: forall s t. (Sugar.Elem s, Sugar.Elem t)
-       => s {- dummy to fix the type variable -}
-       -> t {- dummy to fix the type variable -}
-       -> Sugar.ElemRepr (s, t)
-       -> Sugar.ElemRepr s
-evalFst _ _ xy = let (x, !_) = Sugar.toElem xy :: (s, t)
-                 in Sugar.fromElem x
+evalFst :: (Sugar.Elem s, Sugar.Elem t)
+        => (s, t)
+        -> s
+evalFst xy = let (x, !_) = xy
+             in x
 
 evalSnd :: forall s t. (Sugar.Elem s, Sugar.Elem t)
-       => s {- dummy to fix the type variable -}
-       -> t {- dummy to fix the type variable -}
-       -> Sugar.ElemRepr (s, t)
-       -> Sugar.ElemRepr t
-evalSnd _ _ xy = let (!_, y) = Sugar.toElem xy :: (s, t)
-                 in Sugar.fromElem y
+        => (s, t)
+        -> t
+evalSnd xy = let (!_, y) = xy
+             in y
 
 
 -- Implementation of scalar primitives

@@ -91,13 +91,13 @@ replicate :: forall slix e. (SliceIx slix, Elem e)
           => Exp slix 
           -> Acc (Array (Slice    slix) e) 
           -> Acc (Array (SliceDim slix) e)
-replicate = Replicate (undefined::slix) (undefined::e)
+replicate = Replicate
 
 slice :: forall slix e. (SliceIx slix, Elem e) 
       => Acc (Array (SliceDim slix) e) 
       -> Exp slix 
       -> Acc (Array (Slice slix) e)
-slice = Index (undefined::slix) (undefined::e) 
+slice = Index
 
 zip :: (Ix dim, Elem a, Elem b) 
     => Acc (Array dim a)

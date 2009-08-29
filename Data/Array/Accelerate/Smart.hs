@@ -68,15 +68,11 @@ data Acc a where
               -> Acc (Array dim' e)
               -> Acc (Array dim e)
   Replicate   :: (SliceIx slix, Elem e)
-              => slix {- dummy to fix the type variable -}
-              -> e    {- dummy to fix the type variable -}
-              -> Exp slix
+              => Exp slix
               -> Acc (Array (Slice slix)    e)
               -> Acc (Array (SliceDim slix) e)
   Index       :: (SliceIx slix, Elem e)
-              => slix {- dummy to fix the type variable -}
-              -> e    {- dummy to fix the type variable -}
-              -> Acc (Array (SliceDim slix) e)
+              => Acc (Array (SliceDim slix) e)
               -> Exp slix
               -> Acc (Array (Slice slix) e)
   Map         :: (Elem e, Elem e')
@@ -118,20 +114,19 @@ data Acc a where
 --
 convertOpenAcc :: Layout aenv aenv 
                -> Acc a 
-               -> AST.OpenAcc aenv (ArraysRepr a)
+               -> AST.OpenAcc aenv a
 convertOpenAcc alyt (FstArray acc)
   = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
 convertOpenAcc alyt (SndArray acc)
   = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar AST.ZeroIdx)
-convertOpenAcc _    (Use array)     = AST.Use (fromArray array)
+convertOpenAcc _    (Use array)     = AST.Use array
 convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
 convertOpenAcc alyt (Reshape e acc) 
   = AST.Reshape (convertExp alyt e) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Replicate slixType eType ix acc)
-  = mkReplicate slixType eType 
-                (convertExp alyt ix) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Index slixType eType acc ix)
-  = mkIndex slixType eType (convertOpenAcc alyt acc) (convertExp alyt ix)
+convertOpenAcc alyt (Replicate ix acc)
+  = mkReplicate (convertExp alyt ix) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Index acc ix)
+  = mkIndex (convertOpenAcc alyt acc) (convertExp alyt ix)
 convertOpenAcc alyt (Map f acc) 
   = AST.Map (convertFun1 alyt f) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (ZipWith f acc1 acc2) 
@@ -154,7 +149,7 @@ convertOpenAcc alyt (Backpermute newDim perm acc)
 
 -- |Convert a closed array expression
 --
-convertAcc :: Acc a -> AST.Acc (ArraysRepr a)
+convertAcc :: Acc a -> AST.Acc a
 convertAcc = convertOpenAcc EmptyLayout
 
 
@@ -218,20 +213,15 @@ convertOpenExp :: forall t env aenv.
                   Layout env  env       -- scalar environment
                -> Layout aenv aenv      -- array environment
                -> Exp t                 -- expression to be converted
-               -> AST.OpenExp env aenv (ElemRepr t)
+               -> AST.OpenExp env aenv t
 convertOpenExp lyt alyt = cvt
   where
-    cvt :: forall t'. Exp t' -> AST.OpenExp env aenv (ElemRepr t')
+    cvt :: Exp t' -> AST.OpenExp env aenv t'
     cvt (Tag i)             = AST.Var (prjIdx i lyt)
-    cvt (Const v)           = AST.Const v
-    cvt (Pair (e1::Exp t1) 
-              (e2::Exp t2)) = AST.Pair (undefined::t1)
-                                       (undefined::t2)
-                                       (cvt e1) (cvt e2)
-    cvt (Fst (e::Exp (t', t2)))             
-                            = AST.Fst (undefined::t') (undefined::t2) (cvt e)
-    cvt (Snd (e::Exp (t1, t')))             
-                            = AST.Snd (undefined::t1) (undefined::t') (cvt e)
+    cvt (Const v)           = AST.Const (fromElem v)
+    cvt (Pair e1 e2)        = AST.Pair (cvt e1) (cvt e2)
+    cvt (Fst e)             = AST.Fst (cvt e)
+    cvt (Snd e)             = AST.Snd (cvt e)
     cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)       = AST.PrimConst c
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
@@ -242,12 +232,12 @@ convertOpenExp lyt alyt = cvt
 --
 convertExp :: Layout aenv aenv      -- array environment
            -> Exp t                 -- expression to be converted
-           -> AST.Exp aenv (ElemRepr t)
+           -> AST.Exp aenv t
 convertExp alyt = convertOpenExp EmptyLayout alyt
 
 -- |Convert a closed expression
 --
-convertClosedExp :: Exp t -> AST.Exp () (ElemRepr t)
+convertClosedExp :: Exp t -> AST.Exp () t
 convertClosedExp = convertExp EmptyLayout
 
 -- |Convert a unary functions
@@ -255,7 +245,7 @@ convertClosedExp = convertExp EmptyLayout
 convertFun1 :: forall a b aenv. Elem a
             => Layout aenv aenv 
             -> (Exp a -> Exp b) 
-            -> AST.Fun aenv (ElemRepr a -> ElemRepr b)
+            -> AST.Fun aenv (a -> b)
 convertFun1 alyt f = Lam (Body openF)
   where
     a     = Tag 0
@@ -269,7 +259,7 @@ convertFun1 alyt f = Lam (Body openF)
 convertFun2 :: forall a b c aenv. (Elem a, Elem b) 
             => Layout aenv aenv 
             -> (Exp a -> Exp b -> Exp c) 
-            -> AST.Fun aenv (ElemRepr a -> ElemRepr b -> ElemRepr c)
+            -> AST.Fun aenv (a -> b -> c)
 convertFun2 alyt f = Lam (Lam (Body openF))
   where
     a     = Tag 1
@@ -283,29 +273,29 @@ convertFun2 alyt f = Lam (Lam (Body openF))
 
 instance Show (Exp t) where
   show e 
-    = show (convertExp EmptyLayout e :: AST.Exp () (ElemRepr t))
+    = show (convertExp EmptyLayout e :: AST.Exp () t)
 
 
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
 mkIndex :: forall slix e aenv. (SliceIx slix, Elem e) 
-        => slix {- dummy to fix the type variable -}
-        -> e    {- dummy to fix the type variable -}
-        -> AST.OpenAcc aenv (ArraysRepr (Array (SliceDim slix) e))
-        -> AST.Exp     aenv (ElemRepr slix)
-        -> AST.OpenAcc aenv (ArraysRepr (Array (Slice slix) e))
-mkIndex slix _ arr e 
+        => AST.OpenAcc aenv (Array (SliceDim slix) e)
+        -> AST.Exp     aenv slix
+        -> AST.OpenAcc aenv (Array (Slice slix) e)
+mkIndex arr e 
   = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
+  where
+    slix = undefined :: slix
 
 mkReplicate :: forall slix e aenv. (SliceIx slix, Elem e) 
-        => slix {- dummy to fix the type variable -}
-        -> e    {- dummy to fix the type variable -}
-        -> AST.Exp     aenv (ElemRepr slix)
-        -> AST.OpenAcc aenv (ArraysRepr (Array (Slice slix) e))
-        -> AST.OpenAcc aenv (ArraysRepr (Array (SliceDim slix) e))
-mkReplicate slix _ e arr
+        => AST.Exp     aenv slix
+        -> AST.OpenAcc aenv (Array (Slice slix) e)
+        -> AST.OpenAcc aenv (Array (SliceDim slix) e)
+mkReplicate e arr
   = AST.Replicate (convertSliceIndex slix (sliceIndex slix)) e arr
+  where
+    slix = undefined :: slix
 
 
 -- |Smart constructors to construct HOAS AST expressions

@@ -18,6 +18,9 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Class of element types and of array shapes
   Elem(..), ElemRepr, ElemRepr', FromShapeRepr,
+  
+  -- * Derived functions
+  liftToElem, liftToElem2, sinkFromElem, sinkFromElem2,
 
   -- * Array shapes
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
@@ -25,11 +28,8 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array indexing and slicing
   ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
   
-  -- * Conversion between the internal and surface array representation
-  fromArray, toArray, Arrays(..),
-  
   -- * Array shape query, indexing, and conversions
-  shape, (!), fromIArray, toIArray, fromList, toList
+  shape, (!), newArray, fromIArray, toIArray, fromList, toList
 
 ) where
 
@@ -44,10 +44,6 @@ import Unsafe.Coerce
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
-import qualified Data.Array.Accelerate.Array.Delayed        as Repr
-
-
-infixl 9 !
 
 
 -- |Representation change for array element types
@@ -488,15 +484,54 @@ singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 -}
 
+liftToElem :: (Elem a, Elem b) 
+           => (ElemRepr a -> ElemRepr b)
+           -> (a -> b)
+{-# INLINE liftToElem #-}
+liftToElem f = toElem . f . fromElem
+
+liftToElem2 :: (Elem a, Elem b, Elem c) 
+           => (ElemRepr a -> ElemRepr b -> ElemRepr c)
+           -> (a -> b -> c)
+{-# INLINE liftToElem2 #-}
+liftToElem2 f = \x y -> toElem $ f (fromElem x) (fromElem y)
+
+sinkFromElem :: (Elem a, Elem b) 
+             => (a -> b)
+             -> (ElemRepr a -> ElemRepr b)
+{-# INLINE sinkFromElem #-}
+sinkFromElem f = fromElem . f . toElem
+
+sinkFromElem2 :: (Elem a, Elem b, Elem c) 
+             => (a -> b -> c)
+             -> (ElemRepr a -> ElemRepr b -> ElemRepr c)
+{-# INLINE sinkFromElem2 #-}
+sinkFromElem2 f = \x y -> fromElem $ f (toElem x) (toElem y)
+
+{-# RULES
+
+"fromElem/toElem" forall e.
+  fromElem (toElem e) = e
+
+-- FIXME: Won't type like that (it's ambiguous due to the ElemRepr family):  
+-- "toElem/fromElem" forall e.
+--   toElem (fromElem e) = e
+  
+  #-}
+
 
 -- |Surface arrays
 -- ---------------
 
 -- |Multi-dimensional arrays for array processing
 --
+-- * If device and host memory are separate, arrays will be transferred to the
+--   device when necessary (if possible asynchronously and in parallel with
+--   other tasks) and cached on the device if sufficient memory is available.
+--
 data Array dim e where
   Array :: (Ix dim, Elem e) 
-        => dim                        -- extent of dimensions = shape
+        => ElemRepr dim               -- extent of dimensions = shape
         -> ArrayData (ElemRepr e)     -- data, same layout as in
         -> Array dim e
 
@@ -565,6 +600,13 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
                                 -- representation of the array (first argument
                                 -- is the shape)
 
+  iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
+                               -- iterate through the entire shape, applying
+                               -- the function; third argument combines results
+                               -- and fourth is returned in case of an empty
+                               -- iteration space; the index space is traversed
+                               -- in row-major order
+
   rangeToShape ::  (ix, ix) -> ix   -- convert a minpoint-maxpoint index
                                     -- into a shape
   shapeToRange ::  ix -> (ix, ix)
@@ -573,6 +615,8 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   size        = Repr.size . fromElem
   ignore      = toElem Repr.ignore
   index sh ix = Repr.index (fromElem sh) (fromElem ix)
+  
+  iter sh f c r = Repr.iter (fromElem sh) (f . toElem) c r
   
   rangeToShape (low, high) 
     = toElem (Repr.rangeToShape (fromElem low, fromElem high))
@@ -630,95 +674,71 @@ instance SliceIxConv slix where
     --   families, but we really ought to code a proof for that instead
 
 
--- Conversion between internal and surface array representation
--- ------------------------------------------------------------
-
--- |Convert surface array representation to the internal one
---
-fromArray :: Array dim e -> Repr.Array (ElemRepr dim) (ElemRepr e)
-fromArray (Array shape adata) = Repr.Array (fromElem shape) adata
-    
--- |Convert internal array representation to the surface one
---
-toArray :: (Ix dim, Elem e)
-        => Repr.Array (ElemRepr dim) (ElemRepr e) -> Array dim e
-toArray (Repr.Array shape adata) = Array (toElem shape) adata
-    
--- Conversion for tuples of arrays
---
-class Repr.Delayable (ArraysRepr as) => Arrays as where
-  type ArraysRepr as :: *
-  fromArrays :: as -> ArraysRepr as
-  toArrays   :: ArraysRepr as -> as
-  
-instance Arrays () where
-  type ArraysRepr () = ()
-  fromArrays () = ()
-  toArrays   () = ()
-  
-instance (Ix dim, Elem e) => Arrays (Array dim e) where
-  type ArraysRepr (Array dim e) = Repr.Array (ElemRepr dim) (ElemRepr e)
-  fromArrays = fromArray
-  toArrays   = toArray
-
-instance (Arrays as1, Arrays as2) => Arrays (as1, as2) where
-  type ArraysRepr (as1, as2) = (ArraysRepr as1, ArraysRepr as2)
-  fromArrays (as1, as2) = (fromArrays as1, fromArrays as2)
-  toArrays (as1, as2)   = (toArrays as1, toArrays as2)
-
-
 -- Array operations
 -- ----------------
 
 -- |Yield an array's shape
 --
 shape :: Ix dim => Array dim e -> dim
-shape (Array sh _) = sh
+shape (Array sh _) = toElem sh
 
 -- |Array indexing
 --
+infixl 9 !
 (!) :: Array dim e -> dim -> e
+{-# INLINE (!) #-}
 -- (Array sh adata) ! ix = toElem (adata `indexArrayData` index sh ix)
 -- FIXME: using this due to a bug in 6.10.x
-(!) (Array sh adata) ix = toElem (adata `indexArrayData` index sh ix)
+(!) (Array sh adata) ix = toElem (adata `indexArrayData` index (toElem sh) ix)
+
+-- |Create an array from its representation function
+--
+newArray :: (Ix dim, Elem e) => dim -> (dim -> e) -> Array dim e
+{-# INLINE newArray #-}
+newArray sh f 
+  = adata `seq` Array (fromElem sh) adata
+  where 
+    (adata, _) = runArrayData $ do
+                   arr <- newArrayData (size sh)
+                   let write ix = writeArrayData arr (index sh ix) 
+                                                     (fromElem (f ix))
+                   iter sh write (>>) (return ())
+                   return (arr, undefined)
 
 -- |Convert an 'IArray' to an accelerated array.
 --
 fromIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
            => a dim e -> Array dim e
-fromIArray iarr = Array sh adata 
+fromIArray iarr = newArray sh (iarr IArray.!)
   where
     sh = rangeToShape (IArray.bounds iarr)
-    Repr.Array _ adata = Repr.newArray (fromElem sh)
-                                       (fromElem . (iarr IArray.!) . toElem)
 
 -- |Convert an accelerated array to an 'IArray'
 -- 
 toIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
          => Array dim e -> a dim e
 toIArray arr@(Array sh _) 
-  = let bnds = shapeToRange sh
+  = let bnds = shapeToRange (toElem sh)
     in
     IArray.array bnds [(ix, arr!ix) | ix <- IArray.range bnds]
     
 -- |Convert a list (with elements in row-major order) to an accelerated array.
 --
 fromList :: (Ix dim, Elem e) => dim -> [e] -> Array dim e
-fromList sh l = Array sh adata 
+fromList sh l = newArray sh indexIntoList 
   where
-    Repr.Array _ adata = Repr.newArray (fromElem sh) indexIntoList
-    --
-    indexIntoList ix = fromElem $ l!!(Repr.index (fromElem sh) ix)
+    indexIntoList ix = l!!index sh ix
 
 -- |Convert an accelerated array to a list in row-major order.
 --
-toList :: Array dim e -> [e]
-toList (Array sh adata) = Repr.iter sh' idx (.) id []
+toList :: forall dim e. Array dim e -> [e]
+toList (Array sh adata) = iter sh' idx (.) id []
   where
-    sh'    = fromElem sh
-    idx ix = \l -> toElem (adata `indexArrayData` Repr.index sh' ix) : l
+    sh'    = toElem sh :: dim
+    idx ix = \l -> toElem (adata `indexArrayData` index sh' ix) : l
 
 -- Convert an array to a string
 --
 instance Show (Array dim e) where
-  show arr@(Array sh _adata) = "Array " ++ show sh ++ " " ++ show (toList arr)
+  show arr@(Array sh _adata) 
+    = "Array " ++ show (toElem sh :: dim) ++ " " ++ show (toList arr)

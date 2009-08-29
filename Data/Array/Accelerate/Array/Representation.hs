@@ -11,59 +11,13 @@
 
 module Data.Array.Accelerate.Array.Representation (
 
-  -- * Array representation
-  Array(..), Scalar, Vector,
-
-  -- * Array shapes
-  DIM0, DIM1, DIM2, 
-
   -- * Array indexing and slicing
   Ix(..), SliceIx(..), SliceIndex(..),
 
-  -- * Array operations
-  (!), newArray
-
 ) where
-
--- GHC internals
-import GHC.Prim
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Data
-
-
-infixl 9 !
-
-
--- |Arrays
--- -------
-
--- |Representation type for multi-dimensional arrays for array processing
---
--- * If device and host memory are separate, arrays will be transferred to the
---   device when necessary (if possible asynchronously and in parallel with
---   other tasks) and cached on the device if sufficient memory is available.
---
-data Array dim e where
-  Array :: (Ix dim, ArrayElem e) 
-        => dim             -- extent of dimensions = shape
-        -> ArrayData e     -- data
-        -> Array dim e
-
--- |Shorthand for common shape representations
---
-type DIM0 = ()
-type DIM1 = ((), Int)
-type DIM2 = (((), Int), Int)
-
--- Special case of singleton arrays
---
-type Scalar e = Array DIM0 e
-
--- Special case of one-dimensional arrays
---
-type Vector e = Array DIM1 e
 
 
 -- |Index representation
@@ -168,26 +122,3 @@ data SliceIndex ix slice coSlice sliceDim where
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
   SliceFixed :: 
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
-
-
--- Array operations
--- ----------------
-
--- |Array indexing
---
-(!) :: Array dim e -> dim -> e
--- (Array sh adata) ! ix = adata `indexArrayData` index sh ix
--- FIXME: using this due to a bug in 6.10.x
-(!) (Array sh adata) ix = adata `indexArrayData` index sh ix
-
--- |Create an array from its representation function
---
-newArray :: (Ix dim, ArrayElem e) => dim -> (dim -> e) -> Array dim e
-newArray sh f 
-  = adata `seq` Array sh adata
-  where 
-    (adata, _) = runArrayData $ do
-                   arr <- newArrayData (size sh)
-                   let write ix = writeArrayData arr (index sh ix) (f ix)      
-                   iter sh write (>>) (return ())
-                   return (arr, undefined)

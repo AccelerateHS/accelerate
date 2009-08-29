@@ -19,8 +19,7 @@ module Data.Array.Accelerate.Array.Delayed (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar
 
 
 -- Delayed arrays are characterised by the domain of an array and its functional
@@ -38,12 +37,13 @@ instance Delayable () where
   force DelayedUnit = ()
 
 instance Delayable (Array dim e) where
-  data Delayed (Array dim e) = (Ix dim, ArrayElem e) => 
-                               DelayedArray { shapeDA :: dim
-                                            , repfDA  :: (dim -> e)
-                                            }
-  delay arr@(Array sh _)    = DelayedArray sh (arr!)
-  force (DelayedArray sh f) = newArray sh f
+  data Delayed (Array dim e) 
+    = (Ix dim, Elem e) => 
+      DelayedArray { shapeDA :: ElemRepr dim
+                   , repfDA  :: (ElemRepr dim -> ElemRepr e)
+                   }
+  delay arr@(Array sh _)    = DelayedArray sh (fromElem . (arr!) . toElem)
+  force (DelayedArray sh f) = newArray (toElem sh) (toElem . f . fromElem)
   
 instance (Delayable a1, Delayable a2) => Delayable (a1, a2) where
   data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
