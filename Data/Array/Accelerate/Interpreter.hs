@@ -29,7 +29,8 @@ import Data.Char                (chr, ord)
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar          (Array(..), Scalar, Vector)
+import Data.Array.Accelerate.Array.Sugar (
+  Array(..), Scalar, Vector, Segments)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import qualified Data.Array.Accelerate.Smart       as Sugar
@@ -108,6 +109,10 @@ evalOpenAcc (ZipWith f acc1 acc2) aenv
 
 evalOpenAcc (Fold f e acc) aenv
   = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (FoldSeg f e acc1 acc2) aenv
+  = foldSegOp (evalFun f aenv) (evalExp e aenv) 
+              (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
 evalOpenAcc (Scan f e acc) aenv
   = scanOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
@@ -220,6 +225,14 @@ foldOp f e (DelayedArray sh rf)
   = unitOp $ 
       Sugar.toElem (iter sh rf (Sugar.sinkFromElem2 f) (Sugar.fromElem e))
 
+foldSegOp :: (e -> e -> e)
+          -> e
+          -> Delayed (Vector e)
+          -> Delayed Segments
+          -> Delayed (Vector e)
+foldSegOp f e (DelayedArray sh rf) (DelayedArray shSeg rfSeg)
+  = error "Data.Array.Accelerate.Interpreter: foldSegOp not yet implemented"
+  
 scanOp :: (e -> e -> e)
        -> e
        -> Delayed (Vector e)

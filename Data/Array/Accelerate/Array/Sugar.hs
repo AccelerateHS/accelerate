@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
-  Array(..), Scalar, Vector,
+  Array(..), Scalar, Vector, Segments,
 
   -- * Class of element types and of array shapes
   Elem(..), ElemRepr, ElemRepr', FromShapeRepr,
@@ -542,6 +542,10 @@ type Scalar e = Array DIM0 e
 -- |Vectors
 --
 type Vector e = Array DIM1 e
+
+-- |Segment descriptor
+--
+type Segments = Vector Int
 
 -- |Shorthand for common shape types
 --

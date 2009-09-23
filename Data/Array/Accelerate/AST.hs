@@ -197,6 +197,16 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Scalar e)
     -- FIXME: generalise to Gabi's mapFold
 
+  -- Segmented fold of an array with a given *associative* function and its
+  -- neutral element
+  FoldSeg     :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- default value
+              -> OpenAcc aenv (Vector e)             -- folded array
+              -> OpenAcc aenv Segments               -- segment descriptor
+              -> OpenAcc aenv (Vector e)
+    -- FIXME: Can we generalise this to multi-dimensional arrays and also
+    --        to Gabi's mapFold
+
   -- Left-to-right prescan of a linear array with a given *associative*
   -- function and its neutral element; produces a rightmost fold value and a
   -- linear of the same shape (the fold value would be the rightmost element

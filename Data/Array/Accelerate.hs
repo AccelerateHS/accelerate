@@ -29,7 +29,7 @@ module Data.Array.Accelerate (
   Bool, Char, CChar, CSChar, CUChar,
 
   -- * Array data types
-  Array, Scalar, Vector,
+  Array, Scalar, Vector, Segments,
 
   -- * Array element types
   Elem,
@@ -50,6 +50,10 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar hiding ((!), shape)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
+
+
+-- Renamings
+--
 
 -- rename as '(!)' is already used by the EDSL for indexing
 indexArray :: Array dim e -> dim -> e

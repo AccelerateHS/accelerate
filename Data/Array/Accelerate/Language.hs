@@ -31,7 +31,8 @@ module Data.Array.Accelerate.Language (
   reshape,
 
   -- * Collective array operations
-  slice, replicate, zip, map, zipWith, scan, fold, permute, backpermute,
+  slice, replicate, zip, unzip, map, zipWith, scan, fold, foldSeg, permute,
+  backpermute,
   
   -- * Conditional expressions
   (?),
@@ -58,8 +59,8 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, map, zipWith, filter, max, min, not,
-                         const)
+import Prelude   hiding (replicate, zip, unzip, map, zipWith, filter, max, min,
+                         not, const)
 import qualified Prelude
 
 -- standard libraries
@@ -105,6 +106,11 @@ zip :: (Ix dim, Elem a, Elem b)
     -> Acc (Array dim (a, b))
 zip = zipWith (\x y -> x `Pair` y)
 
+unzip :: (Ix dim, Elem a, Elem b) 
+      => Acc (Array dim (a, b))
+      -> (Acc (Array dim a), Acc (Array dim b))
+unzip arr = (map Fst arr, map Snd arr)
+
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) 
     -> Acc (Array dim a)
@@ -125,12 +131,20 @@ scan :: Elem a
      -> (Acc (Vector a), Acc (Scalar a))
 scan f e arr = unpair (Scan f e arr)
 
-fold :: Elem a 
+fold :: (Ix dim, Elem a)
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
-     -> Acc (Vector a)
+     -> Acc (Array dim a)
      -> Acc (Scalar a)
 fold = Fold
+
+foldSeg :: Elem a 
+        => (Exp a -> Exp a -> Exp a) 
+        -> Exp a 
+        -> Acc (Vector a)
+        -> Acc Segments
+        -> Acc (Vector a)
+foldSeg = FoldSeg
 
 permute :: (Ix dim, Ix dim', Elem a)
         => (Exp a -> Exp a -> Exp a) 

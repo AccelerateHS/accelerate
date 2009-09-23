@@ -89,6 +89,12 @@ data Acc a where
               -> Exp e
               -> Acc (Array dim e)
               -> Acc (Scalar e)
+  FoldSeg     :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> Acc (Vector e)
+              -> Acc Segments
+              -> Acc (Vector e)
   Scan        :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
@@ -135,6 +141,9 @@ convertOpenAcc alyt (ZipWith f acc1 acc2)
                 (convertOpenAcc alyt acc2)
 convertOpenAcc alyt (Fold f e acc) 
   = AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (FoldSeg f e acc1 acc2) 
+  = AST.FoldSeg (convertFun2 alyt f) (convertExp alyt e) 
+                (convertOpenAcc alyt acc1) (convertOpenAcc alyt acc2)
 convertOpenAcc alyt (Scan f e acc) 
   = AST.Scan (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Permute f dftAcc perm acc) 
@@ -271,9 +280,15 @@ convertFun2 alyt f = Lam (Lam (Body openF))
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
     openF = convertOpenExp lyt alyt (f a b)
 
-instance Show (Exp t) where
-  show e 
-    = show (convertExp EmptyLayout e :: AST.Exp () t)
+
+-- Pretty printing
+--
+
+instance Show (Acc as) where
+  show = show . convertAcc
+  
+instance Show (Exp a) where
+  show = show . convertClosedExp
 
 
 -- |Smart constructors to construct representation AST forms

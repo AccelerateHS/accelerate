@@ -11,16 +11,10 @@
 
 module Data.Array.Accelerate.Debug (
 
-  dumpAcc, dumpExp
+  -- currently empty
 
 ) where
 
 -- friends
-import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty ()
 
-dumpAcc :: Acc as -> String
-dumpAcc = show . convertAcc
-
-dumpExp :: Exp a -> String
-dumpExp = show . convertClosedExp
