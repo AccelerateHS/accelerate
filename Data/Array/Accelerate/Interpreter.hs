@@ -326,14 +326,11 @@ evalOpenExp (Var idx) env _ = Sugar.toElem $ prj idx env
   
 evalOpenExp (Const c) _ _ = Sugar.toElem c
 
-evalOpenExp (Pair e1 e2) env aenv 
-  = evalPair (evalOpenExp e1 env aenv) (evalOpenExp e2 env aenv)
+evalOpenExp (Tuple tup) env aenv 
+  = toTuple $ evalTuple tup env aenv
 
-evalOpenExp (Fst e) env aenv 
-  = evalFst (evalOpenExp e env aenv)
-
-evalOpenExp (Snd e) env aenv 
-  = evalSnd (evalOpenExp e env aenv)
+evalOpenExp (Prj idx e) env aenv 
+  = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
 
 evalOpenExp (Cond c t e) env aenv 
   = if evalOpenExp c env aenv
@@ -408,26 +405,20 @@ evalPrim PrimIntFloat      = evalIntFloat
 evalPrim PrimBoolToInt     = evalBoolToInt
 
 
--- Pairing
--- -------
+-- Tuple construction and projection
+-- ---------------------------------
 
-evalPair :: (Sugar.Elem s, Sugar.Elem t)
-        => s
-        -> t
-        -> (s, t)
-evalPair = (,)
+evalTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> t
+evalTuple NilTup            env aenv = ()
+evalTuple (tup `SnocTup` e) env aenv = (evalTuple tup env aenv, 
+                                        evalOpenExp e env aenv)
 
-evalFst :: (Sugar.Elem s, Sugar.Elem t)
-        => (s, t)
-        -> s
-evalFst xy = let (x, !_) = xy
-             in x
-
-evalSnd :: forall s t. (Sugar.Elem s, Sugar.Elem t)
-        => (s, t)
-        -> t
-evalSnd xy = let (!_, y) = xy
-             in y
+evalPrj :: TupleIdx t e -> t -> e
+evalPrj ZeroTupIdx       (!_, v)   = v
+evalPrj (SuccTupIdx idx) (tup, !_) = evalPrj idx tup
+  -- FIXME: Strictly speaking, we ought to force all components of a tuples;
+  --        not only those that we happen to encounter during the recursive
+  --        walk.
 
 
 -- Implementation of scalar primitives

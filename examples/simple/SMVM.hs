@@ -34,5 +34,6 @@ smvm_ref :: USparseMatrix Float
          -> UArray Int Float 
          -> UArray Int Float
 smvm_ref (segd, (inds, values)) vec
+  -- FIXME: implement reference version of the algorithm
   = undefined --listArray ((), ()) $ [sum [x * y | x <- elems xs | y <- elems ys]]
 

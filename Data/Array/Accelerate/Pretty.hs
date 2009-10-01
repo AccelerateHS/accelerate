@@ -22,6 +22,7 @@ import Text.PrettyPrint
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST
 
 
@@ -113,11 +114,9 @@ prettyExp :: forall t env aenv.
              Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
 prettyExp _   _    (Var idx)         = text $ "x" ++ show (idxToInt idx)
 prettyExp _   _    (Const v)         = text $ show (toElem v :: t)
-prettyExp lvl _    e@(Pair _ _)      = prettyTuple lvl e
-prettyExp lvl wrap (Fst e)       
-  = wrap $ text "fst" <+> prettyExp lvl parens e
-prettyExp lvl wrap (Snd e)       
-  = wrap $ text "snd" <+> prettyExp lvl parens e
+prettyExp lvl _    (Tuple tup)       = prettyTuple lvl tup
+prettyExp lvl wrap (Prj idx e)       
+  = wrap $ prettyTupleIdx idx <+> prettyExp lvl parens e
 prettyExp lvl wrap (Cond c t e) 
   = wrap $ sep [prettyExp lvl parens c <+> char '?', 
                 parens (prettyExp lvl noParens t <> comma <+> 
@@ -127,18 +126,28 @@ prettyExp lvl wrap (PrimApp p a)
   = wrap $ prettyPrim p <+> prettyExp lvl parens a
 prettyExp lvl wrap (IndexScalar idx i)
   = wrap $ cat [prettyAccParens lvl idx, char '!', prettyExp lvl parens i]
-prettyExp lvl wrap (Shape idx)       = wrap $ text "shape" <+> prettyAccParens lvl idx
+prettyExp lvl wrap (Shape idx)
+  = wrap $ text "shape" <+> prettyAccParens lvl idx
 
 -- Pretty print nested pairs as a proper tuple.
 --
-prettyTuple :: Int -> OpenExp env aenv t -> Doc
+prettyTuple :: Int -> Tuple (OpenExp env aenv) t -> Doc
 prettyTuple lvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
     es = collect e
     --
-    collect :: OpenExp env aenv t -> [Doc]
-    collect (Pair e1 e2) = collect e1 ++ collect e2
-    collect e            = [prettyExp lvl noParens e]
+    collect :: Tuple (OpenExp env aenv) t -> [Doc]
+    collect NilTup          = []
+    collect (SnocTup tup e) = collect tup ++ [prettyExp lvl noParens e]
+    
+-- Pretty print an index for a tuple projection
+--
+prettyTupleIdx :: TupleIdx t e -> Doc
+prettyTupleIdx = int . toInt
+  where
+    toInt  :: TupleIdx t e -> Int
+    toInt ZeroTupIdx       = 0
+    toInt (SuccTupIdx tup) = toInt tup + 1
 
 -- Pretty print a primitive constant
 --

@@ -1,6 +1,4 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-  -- nothing undecidable here; this is for `instance IsScalar a => IsTuple a'
 
 -- |Embedded array processing language: data types
 --
@@ -41,11 +39,11 @@ import Foreign.C.Types (
   -- in the future, CHalf
 
 
--- |Scalar types
--- -------------
+-- Scalar types
+-- ------------
 
--- |Reified dictionaries
--- -
+-- Reified dictionaries
+-- 
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
@@ -61,8 +59,8 @@ data FloatingDict a where
 data NonNumDict a where
   NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a) => NonNumDict a
 
--- |Scalar type representation
--- -
+-- Scalar type representation
+-- 
 
 -- |Integral types supported in array computations.
 --
@@ -121,8 +119,8 @@ data ScalarType a where
   NumScalarType    :: NumType a    -> ScalarType a
   NonNumScalarType :: NonNumType a -> ScalarType a
 
--- |Showing type names
--- -
+-- Showing type names
+-- 
 
 instance Show (IntegralType a) where
   show (TypeInt _)     = "Int"
@@ -169,10 +167,10 @@ instance Show (ScalarType a) where
   show (NumScalarType ty)    = show ty
   show (NonNumScalarType ty) = show ty
 
--- |Querying scalar type representations
--- -
+-- Querying scalar type representations
+-- 
 
--- Integral types
+-- |Integral types
 --
 class (IsScalar a, IsNum a, IsBounded a) => IsIntegral a where
   integralType :: IntegralType a
@@ -231,7 +229,7 @@ instance IsIntegral CLLong where
 instance IsIntegral CULLong where
   integralType = TypeCULLong IntegralDict
 
--- Floating types
+-- |Floating types
 --
 class (Floating a, IsScalar a, IsNum a) => IsFloating a where
   floatingType :: FloatingType a
@@ -248,7 +246,7 @@ instance IsFloating CFloat where
 instance IsFloating CDouble where
   floatingType = TypeCDouble FloatingDict
 
--- Non-numeric types
+-- |Non-numeric types
 --
 class IsNonNum a where
   nonNumType :: NonNumType a
@@ -268,7 +266,7 @@ instance IsNonNum CSChar where
 instance IsNonNum CUChar where
   nonNumType = TypeCUChar NonNumDict
 
--- Numeric types
+-- |Numeric types
 --
 class (Num a, IsScalar a) => IsNum a where
   numType :: NumType a
@@ -339,7 +337,7 @@ instance IsNum CFloat where
 instance IsNum CDouble where
   numType = FloatingNumType floatingType
 
--- Bounded types
+-- |Bounded types
 --
 class IsBounded a where
   boundedType :: BoundedType a
@@ -413,7 +411,7 @@ instance IsBounded CSChar where
 instance IsBounded CUChar where
   boundedType = NonNumBoundedType nonNumType
 
--- All scalar type
+-- |All scalar type
 --
 class Typeable a => IsScalar a where
   scalarType :: ScalarType a
@@ -499,8 +497,8 @@ instance IsScalar CSChar where
 instance IsScalar CUChar where
   scalarType = NonNumScalarType nonNumType
 
--- |Extract reified dictionaries
--- -
+-- Extract reified dictionaries
+-- 
 
 integralDict :: IntegralType a -> IntegralDict a
 integralDict (TypeInt     dict) = dict
@@ -536,8 +534,8 @@ nonNumDict (TypeCSChar dict) = dict
 nonNumDict (TypeCUChar dict) = dict
 
 {-
--- |Vector GPU data types
--- ----------------------
+-- Vector GPU data types
+-- ---------------------
 
 data CChar1 = CChar1 CChar
 data CChar2 = CChar2 CChar CChar

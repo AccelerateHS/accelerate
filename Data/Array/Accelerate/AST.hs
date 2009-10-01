@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts #-}
+{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies #-}
 
 -- |Embedded array processing language: accelerate AST with de Bruijn indices
 --
@@ -78,6 +78,7 @@ module Data.Array.Accelerate.AST (
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation (SliceIndex)
 import Data.Array.Accelerate.Array.Sugar 
+import Data.Array.Accelerate.Tuple
 
 
 -- Typed de Bruijn indices
@@ -135,11 +136,11 @@ data OpenAcc aenv a where
   Avar        :: Idx     aenv (Array dim e)
               -> OpenAcc aenv (Array dim e)
   
-  -- Array Inlet (Triggers Async Host->Device Transfer if Necessary)
+  -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Array dim e 
               -> OpenAcc aenv (Array dim e)
 
-  -- Capture a Scalar (or a tuple of Scalars) in a Singleton Array  
+  -- Capture a scalar (or a tuple of scalars) in a singleton array  
   Unit        :: Elem e
               => Exp     aenv e 
               -> OpenAcc aenv (Scalar e)
@@ -280,18 +281,15 @@ data OpenExp env aenv t where
   Const       :: Elem t
               => ElemRepr t
               -> OpenExp env aenv t
-
-  -- Tuples
-  Pair        :: (Elem s, Elem t)
-              => OpenExp env aenv s 
+              
+              -- Tuples
+  Tuple       :: (Elem t, IsTuple t)
+              => Tuple (OpenExp env aenv) (TupleRepr t)
               -> OpenExp env aenv t
-              -> OpenExp env aenv (s, t)
-  Fst         :: (Elem s, Elem t)
-              => OpenExp env aenv (s, t)
-              -> OpenExp env aenv s
-  Snd         :: (Elem s, Elem t)
-              => OpenExp env aenv (s, t)
+  Prj         :: (Elem t, IsTuple t)
+              => TupleIdx (TupleRepr t) e
               -> OpenExp env aenv t
+              -> OpenExp env aenv e
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond        :: OpenExp env aenv Bool
@@ -319,7 +317,7 @@ data OpenExp env aenv t where
   -- the array expression cannot contain any free scalar variables
   Shape       :: OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
-            
+
 -- |Expression without free scalar variables
 --
 type Exp aenv t = OpenExp () aenv t

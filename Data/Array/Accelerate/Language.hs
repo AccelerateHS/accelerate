@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 
 -- |Embedded array processing language: user-visible language
@@ -19,10 +20,10 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, Exp,             -- re-exporting from 'Smart'
+  Acc, Exp,                                 -- re-exporting from 'Smart'
 
   -- * Scalar introduction
-  constant,             -- re-exporting from 'Smart'
+  constant,                                 -- re-exporting from 'Smart'
 
   -- * Array introduction
   use, unit,
@@ -33,6 +34,9 @@ module Data.Array.Accelerate.Language (
   -- * Collective array operations
   slice, replicate, zip, unzip, map, zipWith, scan, fold, foldSeg, permute,
   backpermute,
+  
+  -- * Tuple construction and destruction
+  Tuple(..),
   
   -- * Conditional expressions
   (?),
@@ -76,24 +80,48 @@ import Data.Array.Accelerate.Smart
 -- Collective operations
 -- ---------------------
 
+-- |Array inlet: makes an array available for processing using the Accelerate
+-- language; triggers asynchronous host->device transfer if necessary.
+--
 use :: (Ix dim, Elem e) => Array dim e -> Acc (Array dim e)
 use = Use
 
+-- |Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
+-- array for use in the Accelerate language.
+--
 unit :: Elem e => Exp e -> Acc (Scalar e)
 unit = Unit
 
+-- |Change the shape of an array without altering its contents, where
+--
+-- > precondition: size dim == size dim'
+--
 reshape :: (Ix dim, Ix dim', Elem e) 
         => Exp dim 
         -> Acc (Array dim' e) 
         -> Acc (Array dim e)
 reshape = Reshape
 
+-- |Replicate an array across one or more dimensions as specified by the
+-- *generalised* array index provided as the first argument.
+--
+-- For example, assuming 'arr' is a vector (one-dimensional array),
+--
+-- > replicate (2, All, 3) arr
+--
+-- yields a three dimensional array, where 'arr' is replicated twice across the
+-- first and three times across the third dimension.
+--
 replicate :: forall slix e. (SliceIx slix, Elem e) 
           => Exp slix 
           -> Acc (Array (Slice    slix) e) 
           -> Acc (Array (SliceDim slix) e)
 replicate = Replicate
 
+-- |Index an array with a *generalised* array index (supplied as the second
+-- argument).  The result is a new array (possibly a singleton) containing
+-- all dimensions in their entirety.
+--
 slice :: forall slix e. (SliceIx slix, Elem e) 
       => Acc (Array (SliceDim slix) e) 
       -> Exp slix 
@@ -104,12 +132,18 @@ zip :: (Ix dim, Elem a, Elem b)
     => Acc (Array dim a)
     -> Acc (Array dim b)
     -> Acc (Array dim (a, b))
-zip = zipWith (\x y -> x `Pair` y)
+zip = zipWith (\x y -> tuple (x, y))
 
-unzip :: (Ix dim, Elem a, Elem b) 
+unzip :: forall a b dim. (Ix dim, Elem a, Elem b) 
       => Acc (Array dim (a, b))
       -> (Acc (Array dim a), Acc (Array dim b))
-unzip arr = (map Fst arr, map Snd arr)
+unzip arr = (map fst arr, map snd arr)
+  where
+    fst :: Exp (a, b) -> Exp a
+    fst e = let (x, _:: Exp b) = untuple e in x
+
+    snd :: Exp (a, b) -> Exp b
+    snd e = let (_ :: Exp a, y) = untuple e in y
 
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) 
@@ -160,6 +194,37 @@ backpermute :: (Ix dim, Ix dim', Elem a)
             -> Acc (Array dim  a) 
             -> Acc (Array dim' a)
 backpermute = Backpermute
+
+
+-- Tuples
+-- ------
+
+class Tuple tup where
+  type TupleT tup
+  tuple   :: tup -> TupleT tup
+  untuple :: TupleT tup -> tup
+  
+instance (Elem a, Elem b) => Tuple (Exp a, Exp b) where
+  type TupleT (Exp a, Exp b) = Exp (a, b)
+  tuple   = tup2
+  untuple = untup2
+
+instance (Elem a, Elem b, Elem c) => Tuple (Exp a, Exp b, Exp c) where
+  type TupleT (Exp a, Exp b, Exp c) = Exp (a, b, c)
+  tuple   = tup3
+  untuple = untup3
+
+instance (Elem a, Elem b, Elem c, Elem d) 
+  => Tuple (Exp a, Exp b, Exp c, Exp d) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d) = Exp (a, b, c, d)
+  tuple   = tup4
+  untuple = untup4
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e) 
+  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e) = Exp (a, b, c, d, e)
+  tuple   = tup5
+  untuple = untup5
 
 
 -- Conditional expressions

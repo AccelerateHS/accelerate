@@ -35,6 +35,7 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Language
 			Data.Array.Accelerate.Pretty
 			Data.Array.Accelerate.Smart
+			Data.Array.Accelerate.Tuple
 			Data.Array.Accelerate.Type
 Extra-source-files:  	INSTALL
 			examples/simple/DotP.hs
