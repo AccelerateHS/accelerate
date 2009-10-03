@@ -128,13 +128,15 @@ type instance ElemRepr' (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr' d)
 type instance ElemRepr' (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
 
 
--- |Surface types (tuples of scalars)
+-- Array elements (tuples of scalars)
 -- ----------------------------------
 
 -- |Identifier for entire dimensions in slice descriptors
 --
 data All = All deriving (Typeable, Show)
 
+-- |Class that characterises the types of values that can be array elements.
+--
 class (Show a, Typeable a, 
        Typeable (ElemRepr a), Typeable (ElemRepr' a),
        ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a)) 
@@ -520,8 +522,8 @@ sinkFromElem2 f = \x y -> fromElem $ f (toElem x) (toElem y)
   #-}
 
 
--- |Surface arrays
--- ---------------
+-- Surface arrays
+-- --------------
 
 -- |Multi-dimensional arrays for array processing
 --
@@ -547,7 +549,7 @@ type Vector e = Array DIM1 e
 --
 type Segments = Vector Int
 
--- |Shorthand for common shape types
+-- Shorthand for common shape types
 --
 type DIM0 = ()
 type DIM1 = (Int)
@@ -556,10 +558,10 @@ type DIM3 = (Int, Int, Int)
 type DIM4 = (Int, Int, Int, Int)
 type DIM5 = (Int, Int, Int, Int, Int)
 
--- |Shape constraints and indexing
--- -
+-- Shape constraints and indexing
+-- 
 
--- |Shape elements
+-- Shape elements
 --
 class Elem shb => ShapeBase shb
 instance ShapeBase Int
@@ -593,26 +595,33 @@ type instance FromShapeRepr ((((((), a), b), c), d), e)
   = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
      FromShapeBase e)
 
--- |Indices as n-tuples
+-- |Shapes and indices of multi-dimensional arrays
 --
 class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
-  dim    :: ix -> Int           -- number of dimensions (>= 0)
-  size   :: ix -> Int           -- for a *shape* yield the total number of 
-                                -- elements in that array
-  ignore :: ix                  -- identifies ignored elements in 'permute'
-  index  :: ix -> ix -> Int     -- corresponding index into a linear, row-major 
-                                -- representation of the array (first argument
-                                -- is the shape)
 
+  -- |Number of dimensions of a /shape/ or /index/ (>= 0)
+  dim    :: ix -> Int
+
+  -- Total number of elements in an array of the given /shape/
+  size   :: ix -> Int
+
+  -- |Magic value identifing elements ignored in 'permute'
+  ignore :: ix
+  
+  -- |Map a multi-dimensional index into one in a linear, row-major 
+  -- representation of the array (first argument is the /shape/, second 
+  -- argument is the index)
+  index  :: ix -> ix -> Int
+
+  -- |Iterate through the entire shape, applying the function; third argument
+  -- combines results and fourth is returned in case of an empty iteration
+  -- space; the index space is traversed in row-major order
   iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
-                               -- iterate through the entire shape, applying
-                               -- the function; third argument combines results
-                               -- and fourth is returned in case of an empty
-                               -- iteration space; the index space is traversed
-                               -- in row-major order
 
-  rangeToShape ::  (ix, ix) -> ix   -- convert a minpoint-maxpoint index
-                                    -- into a shape
+  -- |Convert a minpoint-maxpoint index into a /shape/
+  rangeToShape ::  (ix, ix) -> ix
+  
+  -- |Convert a /shape/ into a minpoint-maxpoint index
   shapeToRange ::  ix -> (ix, ix)
 
   dim         = Repr.dim . fromElem
@@ -636,7 +645,8 @@ instance Ix (Int, Int, Int)
 instance Ix (Int, Int, Int, Int)
 instance Ix (Int, Int, Int, Int, Int)
 
--- Slices -aka generalised indices- as n-tuples
+-- |Slices -aka generalised indices- as n-tuples and mappings of slice
+-- indicies to slices, co-slices, and slice dimensions
 --
 class (Shape sl, 
        Repr.SliceIx (ElemRepr sl), 

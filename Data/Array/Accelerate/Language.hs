@@ -19,46 +19,46 @@
 
 module Data.Array.Accelerate.Language (
 
-  -- * Array and scalar expressions
+  -- ** Array and scalar expressions
   Acc, Exp,                                 -- re-exporting from 'Smart'
 
-  -- * Scalar introduction
+  -- ** Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
 
-  -- * Array introduction
+  -- ** Array introduction
   use, unit,
 
-  -- * Shape manipulation
+  -- ** Shape manipulation
   reshape,
 
-  -- * Collective array operations
+  -- ** Collective array operations
   slice, replicate, zip, unzip, map, zipWith, scan, fold, foldSeg, permute,
   backpermute,
   
-  -- * Tuple construction and destruction
+  -- ** Tuple construction and destruction
   Tuple(..),
   
-  -- * Conditional expressions
+  -- ** Conditional expressions
   (?),
   
-  -- * Array operations with a scalar result
+  -- ** Array operations with a scalar result
   (!), shape,
   
-  -- * Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
-  --   Fractional, RealFrac, RealFloat
-
-  -- * Methods of H98 classes that we need to redefine as their signatures
+  -- ** Methods of H98 classes that we need to redefine as their signatures
   --   change 
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
 
-  -- * Standard functions that we need to redefine as their signatures change
+  -- ** Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
   
-  -- * Conversions
+  -- ** Conversions
   boolToInt,
   
-  -- * Constants
+  -- ** Constants
   ignore
+
+  -- ** Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
+  --    Fractional, RealFrac, RealFloat
 
 ) where
 
@@ -128,12 +128,18 @@ slice :: forall slix e. (SliceIx slix, Elem e)
       -> Acc (Array (Slice slix) e)
 slice = Index
 
+-- |Combine the elements of two arrays pairwise.  The shape of the result is 
+-- the intersection of the two argument shapes.
+--
 zip :: (Ix dim, Elem a, Elem b) 
     => Acc (Array dim a)
     -> Acc (Array dim b)
     -> Acc (Array dim (a, b))
 zip = zipWith (\x y -> tuple (x, y))
 
+-- |The converse of 'zip', but the shape of the two results is identical to the
+-- shape of the argument.
+-- 
 unzip :: forall a b dim. (Ix dim, Elem a, Elem b) 
       => Acc (Array dim (a, b))
       -> (Acc (Array dim a), Acc (Array dim b))
@@ -145,12 +151,16 @@ unzip arr = (map fst arr, map snd arr)
     snd :: Exp (a, b) -> Exp b
     snd e = let (_ :: Exp a, y) = untuple e in y
 
+-- |Apply the given function elementwise to the given array.
+-- 
 map :: (Ix dim, Elem a, Elem b) 
     => (Exp a -> Exp b) 
     -> Acc (Array dim a)
     -> Acc (Array dim b)
 map = Map
 
+-- |Apply the given binary function elementwise to the two arrays.
+--
 zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         => (Exp a -> Exp b -> Exp c) 
         -> Acc (Array dim a)
@@ -158,13 +168,24 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim c)
 zipWith = ZipWith
 
-scan :: Elem a 
+-- |Prescan of a vector.  The type 'a' together with the binary function (first
+-- argument) and value (second argument) must form a monoid; i.e., the 
+-- function must be /associative/ and the value must be its /neutral element/.
+--
+-- The resulting vector of prescan values has the same size as the argument 
+-- vector.  The resulting scalar is the reduction value.
+--  
+scan :: Elem a
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
      -> Acc (Vector a)
      -> (Acc (Vector a), Acc (Scalar a))
 scan f e arr = unpair (Scan f e arr)
 
+-- |Reduction of an array.  The type 'a' together with the binary function
+-- (first argument) and value (second argument) must form a monoid; i.e., the 
+-- function must be /associative/ and the value must be its /neutral element/.
+-- 
 fold :: (Ix dim, Elem a)
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
@@ -172,6 +193,8 @@ fold :: (Ix dim, Elem a)
      -> Acc (Scalar a)
 fold = Fold
 
+-- |Segmented reduction.
+--
 foldSeg :: Elem a 
         => (Exp a -> Exp a -> Exp a) 
         -> Exp a 
@@ -180,18 +203,27 @@ foldSeg :: Elem a
         -> Acc (Vector a)
 foldSeg = FoldSeg
 
+-- |Forward permutation specified by an index mapping.  The result array is
+-- initialised with the given defaults and any further values that are permuted
+-- into the result array are added to the current value using the given
+-- combination function.
+--
+-- The combination function must be /associative/.  Elements that are mapped to
+-- the magic value 'ignore' by the permutation function are being dropped.
+--
 permute :: (Ix dim, Ix dim', Elem a)
-        => (Exp a -> Exp a -> Exp a) 
-        -> Acc (Array dim' a) 
-        -> (Exp dim -> Exp dim') 
-        -> Acc (Array dim  a) 
+        => (Exp a -> Exp a -> Exp a)    -- ^combination function
+        -> Acc (Array dim' a)           -- ^array of default values
+        -> (Exp dim -> Exp dim')        -- ^permutation
+        -> Acc (Array dim  a)           -- ^permuted array
         -> Acc (Array dim' a)
 permute = Permute
 
+-- |Backward permutation 
 backpermute :: (Ix dim, Ix dim', Elem a)
-            => Exp dim' 
-            -> (Exp dim' -> Exp dim) 
-            -> Acc (Array dim  a) 
+            => Exp dim'                 -- ^shape of the result array
+            -> (Exp dim' -> Exp dim)    -- ^permutation
+            -> Acc (Array dim  a)       -- ^permuted array
             -> Acc (Array dim' a)
 backpermute = Backpermute
 
@@ -201,7 +233,14 @@ backpermute = Backpermute
 
 class Tuple tup where
   type TupleT tup
+
+  -- |Turn a tuple of scalar expressions into a scalar expressions that yields
+  -- a tuple.
+  -- 
   tuple   :: tup -> TupleT tup
+  
+  -- |Turn a scalar expression that yields a tuple into a tuple of scalar
+  -- expressions.
   untuple :: TupleT tup -> tup
   
 instance (Elem a, Elem b) => Tuple (Exp a, Exp b) where
@@ -230,6 +269,8 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e)
 -- Conditional expressions
 -- -----------------------
 
+-- |Conditional expression.
+--
 infix 0 ?
 (?) :: Elem t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = Cond c t e
@@ -238,6 +279,8 @@ c ? (t, e) = Cond c t e
 -- Array operations with a scalar result
 -- -------------------------------------
 
+-- |Expression form that extracts a scalar from an array.
+--
 infixl 9 !
 (!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
 (!) = IndexScalar
@@ -315,30 +358,46 @@ instance (Elem t, IsFloating t) => RealFloat (Exp t)
 
 infix 4 ==*, /=*, <*, <=*, >*, >=*
 
+-- |Equality lifted into Accelerate expressions.
+--
 (==*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (==*) = mkEq
 
+-- |Inequality lifted into Accelerate expressions.
+--
 (/=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (/=*) = mkNEq
 
 -- compare :: a -> a -> Ordering  -- we have no enumerations at the moment
 -- compare = ...
 
+-- |Smaller-than lifted into Accelerate expressions.
+--
 (<*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<*)  = mkLt
 
+-- |Greater-or-equal lifted into Accelerate expressions.
+--
 (>=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>=*) = mkGtEq
 
+-- |Greater-than lifted into Accelerate expressions.
+--
 (>*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>*)  = mkGt
 
+-- |Smaller-or-equal lifted into Accelerate expressions.
+--
 (<=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<=*) = mkLtEq
 
+-- |Determine the maximum of two scalars.
+--
 max :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 max = mkMax
 
+-- |Determine the minimum of two scalars.
+--
 min :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
@@ -346,14 +405,20 @@ min = mkMin
 -- Non-overloaded standard functions, where we need other signatures
 -- -----------------------------------------------------------------
 
+-- |Conjunction
+--
 infixr 3 &&*
 (&&*) :: Exp Bool -> Exp Bool -> Exp Bool
 (&&*) = mkLAnd
 
+-- |Disjunction
+--
 infixr 2 ||*
 (||*) :: Exp Bool -> Exp Bool -> Exp Bool
 (||*) = mkLOr
 
+-- |Negation
+--
 not :: Exp Bool -> Exp Bool
 not = mkLNot
 
@@ -361,6 +426,9 @@ not = mkLNot
 -- Conversions
 -- -----------
 
+-- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
+-- into '1'.
+-- 
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
 
@@ -368,5 +436,7 @@ boolToInt = mkBoolToInt
 -- Constants
 -- ---------
 
+-- |Magic value identifying elements that are ignored in a forward permutation
+--
 ignore :: Ix dim => Exp dim
 ignore = constant Sugar.ignore

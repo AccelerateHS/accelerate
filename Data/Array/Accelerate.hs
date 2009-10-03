@@ -1,24 +1,32 @@
--- |An embedded language of accelerated array computations 
+-- |
+-- Module      : Data.Array.Accelerate
+-- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
+-- This module defines an embedded language of array computations for
+-- high-performance computing.  Computations on multi-dimensional, regular
+-- arrays are expressed in the form of parameterised collective operations
+-- (such as maps, reductions, and permutations).  These computations are online
+-- compiled and executed on a range of architectures.
 --
---- Description ---------------------------------------------------------------
+-- /Abstract interface/
 --
---  Abstract interface
---  ~~~~~~~~~~~~~~~~~~
---  The types representing array computations are only exported abstractly.
---  This gives us more flexibility for later changes.
+-- The types representing array computations are only exported abstractly —
+-- i.e., client code can generate array computations and submit them for
+-- for execution, but it cannot inspect these computations.  This is to allow
+-- for more flexibility for future extensions of this library.
 --
---  Code execution
---  ~~~~~~~~~~~~~~
---  Access to the various backends is via the 'run' function in
---  backend-specific toplevel modules.  Currently, we have the following:
+-- /Code execution/
 --
---  * 'Data.Array.Accelerate.Interpreter': simple interpreter in Haskell as a
---      reference implementation defining the semantics of the array language
-
+-- Access to the various backends is via a 'run' function in
+-- backend-specific toplevel modules.  Currently, we have the following:
+--
+-- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
+--   reference implementation defining the semantics of the Accelerate language
 
 module Data.Array.Accelerate (
 
@@ -37,10 +45,10 @@ module Data.Array.Accelerate (
   -- * Array shapes & indices
   Ix(dim, size), All(..), SliceIx(..), DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
   
-  -- * Array operations
+  -- * Operations to use Accelerate arrays from plain Haskell
   arrayShape, indexArray, fromIArray, toIArray, fromList, toList,
 
-  -- * Surface language
+  -- * The /Accelerate/ language
   module Data.Array.Accelerate.Language,
 
 ) where
@@ -56,9 +64,15 @@ import Data.Array.Accelerate.Language
 --
 
 -- rename as '(!)' is already used by the EDSL for indexing
+
+-- |Array indexing in plain Haskell code
+--
 indexArray :: Array dim e -> dim -> e
 indexArray = (Sugar.!)
 
 -- rename as 'shape' is already used by the EDSL to query an array's shape
+
+-- |Array shape in plain Haskell code
+--
 arrayShape :: Ix dim => Array dim e -> dim
 arrayShape = Sugar.shape

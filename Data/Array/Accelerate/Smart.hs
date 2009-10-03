@@ -57,6 +57,8 @@ import Data.Array.Accelerate.Pretty ()
 -- Monadic array computations
 -- --------------------------
 
+-- |Array-valued collective computations
+--
 data Acc a where
   
   FstArray    :: Acc (Array dim1 e1, Array dim2 e2)
@@ -176,6 +178,9 @@ convertAcc = convertOpenAcc EmptyLayout
 -- constrain element types, whereas `AST.OpenExp' uses nested pairs and the 
 -- GADT 'TupleType'.
 --
+
+-- |Scalar expressions used to parametrise collective array operations
+--
 data Exp t where
     -- Needed for conversion to de Bruijn form
   Tag         :: Elem t
@@ -247,8 +252,8 @@ convertTuple :: Layout env env
              -> Layout aenv aenv 
              -> Tuple.Tuple Exp t 
              -> Tuple.Tuple (AST.OpenExp env aenv) t
-convertTuple lyt alyt NilTup           = NilTup
-convertTuple lyt alyt (es `SnocTup` e) 
+convertTuple _lyt _alyt NilTup           = NilTup
+convertTuple lyt  alyt  (es `SnocTup` e) 
   = convertTuple lyt alyt es `SnocTup` convertOpenExp lyt alyt e
 
 -- |Convert an expression closed wrt to scalar variables
@@ -341,6 +346,8 @@ unpair acc = (FstArray acc, SndArray acc)
 -- Smart constructor for literals
 -- 
 
+-- |Constant scalar expression
+--
 constant :: Elem t => t -> Exp t
 constant = Const
 

@@ -14,6 +14,7 @@ License:		BSD3
 License-file:		LICENSE
 Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 Maintainer:		Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Homepage:		http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
 Category:		Compilers/Interpreters, Concurrency, Data
 Stability: 		Experimental
@@ -43,9 +44,11 @@ Extra-source-files:  	INSTALL
 			examples/simple/Main.hs
 			examples/simple/Makefile
 			examples/simple/SAXPY.hs
+			examples/simple/SMVM.hs
 			examples/simple/Time.hs
 
 Ghc-options:     	-O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
+			-Werror
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,

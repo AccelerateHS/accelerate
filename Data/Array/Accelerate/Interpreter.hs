@@ -1,17 +1,17 @@
 {-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
 {-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
-
--- |Embedded array processing language: execution by a simple interpreter
+-- |
+-- Module      : Data.Array.Accelerate.Interpreter
+-- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
---  This interpreter is meant to be a reference implementation of the semantics
---  of the embedded array language.  The emphasis is on defining the semantics
---  clearly, not on performance.
+-- This interpreter is meant to be a reference implementation of the semantics
+-- of the embedded array language.  The emphasis is on defining the semantics
+-- clearly, not on performance.
 
 module Data.Array.Accelerate.Interpreter (
 
@@ -33,6 +33,7 @@ import Data.Array.Accelerate.Array.Sugar (
   Array(..), Scalar, Vector, Segments)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 
@@ -225,13 +226,29 @@ foldOp f e (DelayedArray sh rf)
   = unitOp $ 
       Sugar.toElem (iter sh rf (Sugar.sinkFromElem2 f) (Sugar.fromElem e))
 
-foldSegOp :: (e -> e -> e)
+foldSegOp :: forall e.
+             (e -> e -> e)
           -> e
           -> Delayed (Vector e)
           -> Delayed Segments
           -> Delayed (Vector e)
-foldSegOp f e (DelayedArray sh rf) (DelayedArray shSeg rfSeg)
-  = error "Data.Array.Accelerate.Interpreter: foldSegOp not yet implemented"
+foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
+  = delay arr
+  where
+    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanOp (+) 0 seg
+    arr = Sugar.newArray (Sugar.toElem shSeg) foldOne
+    --
+    foldOne :: Sugar.DIM1 -> e
+    foldOne i = let
+                  start = (Sugar.liftToElem rfStarts) i
+                  len   = (Sugar.liftToElem rfSeg) i
+              in
+              fold e start (start + len)
+    --
+    fold :: e -> Sugar.DIM1 -> Sugar.DIM1 -> e
+    fold v j end
+      | j >= end  = v
+      | otherwise = fold (f v ((Sugar.liftToElem rf) j)) (j + 1) end
   
 scanOp :: (e -> e -> e)
        -> e
@@ -409,9 +426,9 @@ evalPrim PrimBoolToInt     = evalBoolToInt
 -- ---------------------------------
 
 evalTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> t
-evalTuple NilTup            env aenv = ()
-evalTuple (tup `SnocTup` e) env aenv = (evalTuple tup env aenv, 
-                                        evalOpenExp e env aenv)
+evalTuple NilTup            _env _aenv = ()
+evalTuple (tup `SnocTup` e) env  aenv  = (evalTuple tup env aenv, 
+                                          evalOpenExp e env aenv)
 
 evalPrj :: TupleIdx t e -> t -> e
 evalPrj ZeroTupIdx       (!_, v)   = v
