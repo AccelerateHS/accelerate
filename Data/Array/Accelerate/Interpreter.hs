@@ -403,6 +403,9 @@ evalPrim (PrimBXor  ty)    = evalBXor ty
 evalPrim (PrimBNot  ty)    = evalBNot ty
 evalPrim (PrimFDiv  ty)    = evalFDiv ty
 evalPrim (PrimRecip ty)    = evalRecip ty
+evalPrim (PrimSin   ty)    = evalSin ty
+evalPrim (PrimCos   ty)    = evalCos ty
+evalPrim (PrimTan   ty)    = evalTan ty
 evalPrim (PrimLt    ty)    = evalLt ty
 evalPrim (PrimGt    ty)    = evalGt ty
 evalPrim (PrimLtEq  ty)    = evalLtEq ty
@@ -493,6 +496,15 @@ evalMaxBound (NonNumBoundedType   ty)
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
 
+evalSin :: FloatingType a -> (a -> a)
+evalSin ty | FloatingDict <- floatingDict ty = sin
+
+evalCos :: FloatingType a -> (a -> a)
+evalCos ty | FloatingDict <- floatingDict ty = cos
+
+evalTan :: FloatingType a -> (a -> a)
+evalTan ty | FloatingDict <- floatingDict ty = tan
+
 -- Methods of Num
 -- 
 
@@ -549,6 +561,8 @@ evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
 
 evalRecip :: FloatingType a -> (a -> a)
 evalRecip ty | FloatingDict <- floatingDict ty = recip
+
+
 
 evalLt :: ScalarType a -> ((a, a) -> Bool)
 evalLt (NumScalarType (IntegralNumType ty)) 

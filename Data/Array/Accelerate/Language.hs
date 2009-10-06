@@ -338,6 +338,9 @@ instance (Elem t, IsIntegral t) => Integral (Exp t) where
 
 instance (Elem t, IsFloating t) => Floating (Exp t) where
   pi  = mkPi
+  sin = mkSin
+  cos = mkCos
+  tan = mkTan
   -- FIXME: add other ops
 
 instance (Elem t, IsFloating t) => Fractional (Exp t) where

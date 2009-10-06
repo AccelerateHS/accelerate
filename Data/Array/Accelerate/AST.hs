@@ -359,6 +359,9 @@ data PrimFun sig where
   -- operators from Fractional, Floating, RealFrac & RealFloat
   PrimFDiv  :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimRecip :: FloatingType a -> PrimFun (a      -> a)
+  PrimSin   :: FloatingType a -> PrimFun (a      -> a)
+  PrimCos   :: FloatingType a -> PrimFun (a      -> a)
+  PrimTan   :: FloatingType a -> PrimFun (a      -> a)
   -- FIXME: add operations from Floating, RealFrac & RealFloat
 
   -- relational and equality operators

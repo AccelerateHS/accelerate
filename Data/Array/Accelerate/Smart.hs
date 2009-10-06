@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Smart (
   tup2, tup3, tup4, tup5, untup2, untup3, untup4, untup5,
 
   -- * Smart constructors for constants
-  mkMinBound, mkMaxBound, mkPi,
+  mkMinBound, mkMaxBound, mkPi, mkSin, mkCos, mkTan,
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
@@ -407,6 +407,15 @@ mkMaxBound = PrimConst (PrimMaxBound boundedType)
 mkPi :: (Elem r, IsFloating r) => Exp r
 mkPi = PrimConst (PrimPi floatingType)
 
+mkSin :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkSin x = PrimSin floatingType `PrimApp` x
+
+mkCos :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkCos x = PrimCos floatingType `PrimApp` x
+
+mkTan :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkTan x = PrimTan floatingType `PrimApp` x
+
 -- Smart constructors for primitive applications
 -- 
 
@@ -464,6 +473,7 @@ mkFDiv x y = PrimFDiv floatingType `PrimApp` tup2 (x, y)
 
 mkRecip :: (Elem t, IsFloating t) => Exp t -> Exp t
 mkRecip x = PrimRecip floatingType `PrimApp` x
+
   -- FIXME: add operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
