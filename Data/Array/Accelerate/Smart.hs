@@ -31,7 +31,12 @@ module Data.Array.Accelerate.Smart (
   tup2, tup3, tup4, tup5, untup2, untup3, untup4, untup5,
 
   -- * Smart constructors for constants
-  mkMinBound, mkMaxBound, mkPi, mkSin, mkCos, mkTan,
+  mkMinBound, mkMaxBound, mkPi, 
+  mkSin, mkCos, mkTan,
+  mkAsin, mkAcos, mkAtan,
+  mkAsinh, mkAcosh, mkAtanh,
+  mkExpFloating, mkSqrt, mkLog,
+  mkFPow, mkLogBase,
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
@@ -415,6 +420,39 @@ mkCos x = PrimCos floatingType `PrimApp` x
 
 mkTan :: (Elem t, IsFloating t) => Exp t -> Exp t
 mkTan x = PrimTan floatingType `PrimApp` x
+
+mkAsin :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAsin x = PrimAsin floatingType `PrimApp` x
+
+mkAcos :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAcos x = PrimAcos floatingType `PrimApp` x
+
+mkAtan :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAtan x = PrimAtan floatingType `PrimApp` x
+
+mkAsinh :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAsinh x = PrimAsinh floatingType `PrimApp` x
+
+mkAcosh :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAcosh x = PrimAcosh floatingType `PrimApp` x
+
+mkAtanh :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkAtanh x = PrimAtanh floatingType `PrimApp` x
+
+mkExpFloating :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkExpFloating x = PrimExpFloating floatingType `PrimApp` x
+
+mkSqrt :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkSqrt x = PrimSqrt floatingType `PrimApp` x
+
+mkLog :: (Elem t, IsFloating t) => Exp t -> Exp t
+mkLog x = PrimLog floatingType `PrimApp` x
+
+mkFPow :: (Elem t, IsFloating t) => Exp t -> Exp t -> Exp t
+mkFPow x y = PrimFPow floatingType `PrimApp` tup2 (x, y)
+
+mkLogBase :: (Elem t, IsFloating t) => Exp t -> Exp t -> Exp t
+mkLogBase x y = PrimLogBase floatingType `PrimApp` tup2 (x, y)
 
 -- Smart constructors for primitive applications
 -- 

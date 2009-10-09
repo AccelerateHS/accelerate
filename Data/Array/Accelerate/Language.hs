@@ -341,6 +341,17 @@ instance (Elem t, IsFloating t) => Floating (Exp t) where
   sin = mkSin
   cos = mkCos
   tan = mkTan
+  asin = mkAsin
+  acos = mkAcos
+  atan = mkAtan
+  asinh = mkAsinh
+  acosh = mkAcosh
+  atanh = mkAtanh
+  exp = mkExpFloating
+  sqrt = mkSqrt
+  log = mkLog
+  (**) = mkFPow
+  logBase = mkLogBase
   -- FIXME: add other ops
 
 instance (Elem t, IsFloating t) => Fractional (Exp t) where

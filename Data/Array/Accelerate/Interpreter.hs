@@ -387,42 +387,53 @@ evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
 
 evalPrim :: PrimFun p -> p
-evalPrim (PrimAdd   ty)    = evalAdd ty
-evalPrim (PrimSub   ty)    = evalSub ty
-evalPrim (PrimMul   ty)    = evalMul ty
-evalPrim (PrimNeg   ty)    = evalNeg ty
-evalPrim (PrimAbs   ty)    = evalAbs ty
-evalPrim (PrimSig   ty)    = evalSig ty
-evalPrim (PrimQuot  ty)    = evalQuot ty
-evalPrim (PrimRem   ty)    = evalRem ty
-evalPrim (PrimIDiv  ty)    = evalIDiv ty
-evalPrim (PrimMod   ty)    = evalMod ty
-evalPrim (PrimBAnd  ty)    = evalBAnd ty
-evalPrim (PrimBOr   ty)    = evalBOr ty
-evalPrim (PrimBXor  ty)    = evalBXor ty
-evalPrim (PrimBNot  ty)    = evalBNot ty
-evalPrim (PrimFDiv  ty)    = evalFDiv ty
-evalPrim (PrimRecip ty)    = evalRecip ty
-evalPrim (PrimSin   ty)    = evalSin ty
-evalPrim (PrimCos   ty)    = evalCos ty
-evalPrim (PrimTan   ty)    = evalTan ty
-evalPrim (PrimLt    ty)    = evalLt ty
-evalPrim (PrimGt    ty)    = evalGt ty
-evalPrim (PrimLtEq  ty)    = evalLtEq ty
-evalPrim (PrimGtEq  ty)    = evalGtEq ty
-evalPrim (PrimEq    ty)    = evalEq ty
-evalPrim (PrimNEq   ty)    = evalNEq ty
-evalPrim (PrimMax   ty)    = evalMax ty
-evalPrim (PrimMin   ty)    = evalMin ty
-evalPrim PrimLAnd          = evalLAnd
-evalPrim PrimLOr           = evalLOr
-evalPrim PrimLNot          = evalLNot
-evalPrim PrimOrd           = evalOrd
-evalPrim PrimChr           = evalChr
-evalPrim PrimRoundFloatInt = evalRoundFloatInt
-evalPrim PrimTruncFloatInt = evalTruncFloatInt
-evalPrim PrimIntFloat      = evalIntFloat
-evalPrim PrimBoolToInt     = evalBoolToInt
+evalPrim (PrimAdd         ty)   = evalAdd ty
+evalPrim (PrimSub         ty)   = evalSub ty
+evalPrim (PrimMul         ty)   = evalMul ty
+evalPrim (PrimNeg         ty)   = evalNeg ty
+evalPrim (PrimAbs         ty)   = evalAbs ty
+evalPrim (PrimSig         ty)   = evalSig ty
+evalPrim (PrimQuot        ty)   = evalQuot ty
+evalPrim (PrimRem         ty)   = evalRem ty
+evalPrim (PrimIDiv        ty)   = evalIDiv ty
+evalPrim (PrimMod         ty)   = evalMod ty
+evalPrim (PrimBAnd        ty)   = evalBAnd ty
+evalPrim (PrimBOr         ty)   = evalBOr ty
+evalPrim (PrimBXor        ty)   = evalBXor ty
+evalPrim (PrimBNot        ty)   = evalBNot ty
+evalPrim (PrimFDiv        ty)   = evalFDiv ty
+evalPrim (PrimRecip       ty)   = evalRecip ty
+evalPrim (PrimSin         ty)   = evalSin ty
+evalPrim (PrimCos         ty)   = evalCos ty
+evalPrim (PrimTan         ty)   = evalTan ty
+evalPrim (PrimAsin        ty)   = evalAsin ty
+evalPrim (PrimAcos        ty)   = evalAcos ty
+evalPrim (PrimAtan        ty)   = evalAtan ty
+evalPrim (PrimAsinh       ty)   = evalAsinh ty
+evalPrim (PrimAcosh       ty)   = evalAcosh ty
+evalPrim (PrimAtanh       ty)   = evalAtanh ty
+evalPrim (PrimExpFloating ty)   = evalExpFloating ty
+evalPrim (PrimSqrt        ty)   = evalSqrt ty
+evalPrim (PrimLog         ty)   = evalLog ty
+evalPrim (PrimFPow        ty)   = evalFPow ty
+evalPrim (PrimLogBase     ty)   = evalLogBase ty
+evalPrim (PrimLt          ty)   = evalLt ty
+evalPrim (PrimGt          ty)   = evalGt ty
+evalPrim (PrimLtEq        ty)   = evalLtEq ty
+evalPrim (PrimGtEq        ty)   = evalGtEq ty
+evalPrim (PrimEq          ty)   = evalEq ty
+evalPrim (PrimNEq         ty)   = evalNEq ty
+evalPrim (PrimMax         ty)   = evalMax ty
+evalPrim (PrimMin         ty)   = evalMin ty
+evalPrim PrimLAnd               = evalLAnd
+evalPrim PrimLOr                = evalLOr
+evalPrim PrimLNot               = evalLNot
+evalPrim PrimOrd                = evalOrd
+evalPrim PrimChr                = evalChr
+evalPrim PrimRoundFloatInt      = evalRoundFloatInt
+evalPrim PrimTruncFloatInt      = evalTruncFloatInt
+evalPrim PrimIntFloat           = evalIntFloat
+evalPrim PrimBoolToInt          = evalBoolToInt
 
 
 -- Tuple construction and projection
@@ -504,6 +515,40 @@ evalCos ty | FloatingDict <- floatingDict ty = cos
 
 evalTan :: FloatingType a -> (a -> a)
 evalTan ty | FloatingDict <- floatingDict ty = tan
+
+evalAsin :: FloatingType a -> (a -> a)
+evalAsin ty | FloatingDict <- floatingDict ty = asin
+
+evalAcos :: FloatingType a -> (a -> a)
+evalAcos ty | FloatingDict <- floatingDict ty = acos
+
+evalAtan :: FloatingType a -> (a -> a)
+evalAtan ty | FloatingDict <- floatingDict ty = atan
+
+evalAsinh :: FloatingType a -> (a -> a)
+evalAsinh ty | FloatingDict <- floatingDict ty = asinh
+
+evalAcosh :: FloatingType a -> (a -> a)
+evalAcosh ty | FloatingDict <- floatingDict ty = acosh
+
+evalAtanh :: FloatingType a -> (a -> a)
+evalAtanh ty | FloatingDict <- floatingDict ty = atanh
+
+evalExpFloating :: FloatingType a -> (a -> a)
+evalExpFloating ty | FloatingDict <- floatingDict ty = exp
+
+evalSqrt :: FloatingType a -> (a -> a)
+evalSqrt ty | FloatingDict <- floatingDict ty = sqrt
+
+evalLog :: FloatingType a -> (a -> a)
+evalLog ty | FloatingDict <- floatingDict ty = log
+
+evalFPow :: FloatingType a -> ((a, a) -> a)
+evalFPow ty | FloatingDict <- floatingDict ty = uncurry (**)
+
+evalLogBase :: FloatingType a -> ((a, a) -> a)
+evalLogBase ty | FloatingDict <- floatingDict ty = uncurry logBase
+
 
 -- Methods of Num
 -- 

@@ -357,11 +357,23 @@ data PrimFun sig where
   -- FIXME: add shifts
 
   -- operators from Fractional, Floating, RealFrac & RealFloat
-  PrimFDiv  :: FloatingType a -> PrimFun ((a, a) -> a)
-  PrimRecip :: FloatingType a -> PrimFun (a      -> a)
-  PrimSin   :: FloatingType a -> PrimFun (a      -> a)
-  PrimCos   :: FloatingType a -> PrimFun (a      -> a)
-  PrimTan   :: FloatingType a -> PrimFun (a      -> a)
+  
+  PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimRecip       :: FloatingType a -> PrimFun (a      -> a)
+  PrimSin         :: FloatingType a -> PrimFun (a      -> a)
+  PrimCos         :: FloatingType a -> PrimFun (a      -> a)
+  PrimTan         :: FloatingType a -> PrimFun (a      -> a)
+  PrimAsin        :: FloatingType a -> PrimFun (a      -> a)
+  PrimAcos        :: FloatingType a -> PrimFun (a      -> a)
+  PrimAtan        :: FloatingType a -> PrimFun (a      -> a)
+  PrimAsinh       :: FloatingType a -> PrimFun (a      -> a)
+  PrimAcosh       :: FloatingType a -> PrimFun (a      -> a)
+  PrimAtanh       :: FloatingType a -> PrimFun (a      -> a)
+  PrimExpFloating :: FloatingType a -> PrimFun (a      -> a)
+  PrimSqrt        :: FloatingType a -> PrimFun (a      -> a)
+  PrimLog         :: FloatingType a -> PrimFun (a      -> a)
+  PrimFPow        :: FloatingType a -> PrimFun ((a,a)  -> a)
+  PrimLogBase     :: FloatingType a -> PrimFun ((a,a)  -> a)
   -- FIXME: add operations from Floating, RealFrac & RealFloat
 
   -- relational and equality operators
