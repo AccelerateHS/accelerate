@@ -1,5 +1,5 @@
 Name:			accelerate
-Version:		0.6.0.1
+Version:		0.7.0.0
 Cabal-version: 		>= 1.6
 Tested-with: 		GHC >= 6.10.1
 
@@ -19,14 +19,23 @@ Homepage:		http://www.cse.unsw.edu.au/~chak/project/accelerate/
 Category:		Compilers/Interpreters, Concurrency, Data
 Stability: 		Experimental
 
+Flag llvm
+  Description:		enable the LLVM backend (sequential)
+
 Build-type:		Simple
 Build-depends:	        array, 
-			base == 3.*, 
+			base == 4.*, 
 			ghc-prim, 
 			haskell98, 
 			pretty
+If flag(llvm)
+  Build-depends:	llvm >= 0.6.8
+
 Exposed-modules:	Data.Array.Accelerate
 			Data.Array.Accelerate.Interpreter
+If flag(llvm)
+  Exposed-modules:	Data.Array.Accelerate.LLVM
+			
 Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Array.Delayed
 			Data.Array.Accelerate.Array.Representation
@@ -38,6 +47,9 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Smart
 			Data.Array.Accelerate.Tuple
 			Data.Array.Accelerate.Type
+If flag(llvm)
+  Other-modules:	Data.Array.Accelerate.LLVM.CodeGen
+
 Extra-source-files:  	INSTALL
 			examples/simple/DotP.hs
 			examples/simple/Filter.hs
@@ -48,7 +60,6 @@ Extra-source-files:  	INSTALL
 			examples/simple/Time.hs
 
 Ghc-options:     	-O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
-			-Werror
 Extensions:		FlexibleContexts, FlexibleInstances, 
 			ExistentialQuantification, GADTs, TypeFamilies, 
 			ScopedTypeVariables, DeriveDataTypeable,

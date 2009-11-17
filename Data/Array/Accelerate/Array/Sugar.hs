@@ -141,119 +141,119 @@ class (Show a, Typeable a,
        Typeable (ElemRepr a), Typeable (ElemRepr' a),
        ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a)) 
       => Elem a where
-  --elemType  :: {-dummy-} a -> TupleType (ElemRepr a)
+  elemType  :: {-dummy-} a -> TupleType (ElemRepr a)
   fromElem  :: a -> ElemRepr a
   toElem    :: ElemRepr a -> a
 
-  --elemType' :: {-dummy-} a -> TupleType (ElemRepr' a)
+  elemType' :: {-dummy-} a -> TupleType (ElemRepr' a)
   fromElem' :: a -> ElemRepr' a
   toElem'   :: ElemRepr' a -> a
 
 instance Elem () where
-  --elemType _ = UnitTuple
+  elemType _ = UnitTuple
   fromElem = id
   toElem   = id
 
-  --elemType' _ = UnitTuple
+  elemType' _ = UnitTuple
   fromElem' = id
   toElem'   = id
 
 instance Elem All where
-  --elemType _      = PairTuple UnitTuple UnitTuple
+  elemType _      = PairTuple UnitTuple UnitTuple
   fromElem All    = ((), ())
   toElem ((), ()) = All
 
-  --elemType' _      = UnitTuple
+  elemType' _      = UnitTuple
   fromElem' All    = ()
   toElem' ()       = All
 
 instance Elem Int where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Int8 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Int16 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Int32 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Int64 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Word where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Word8 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Word16 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Word32 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Word64 where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
@@ -332,20 +332,20 @@ instance Elem CULLong where
 -}
 
 instance Elem Float where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Double where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
@@ -370,20 +370,20 @@ instance Elem CDouble where
 -}
 
 instance Elem Bool where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
 instance Elem Char where
-  --elemType       = singletonScalarType
+  elemType       = singletonScalarType
   fromElem v     = ((), v)
   toElem ((), v) = v
 
-  --elemType' _    = SingleTuple scalarType
+  elemType' _    = SingleTuple scalarType
   fromElem'      = id
   toElem'        = id
 
@@ -417,74 +417,56 @@ instance Elem CUChar where
 -}
 
 instance (Elem a, Elem b) => Elem (a, b) where
-{-
   elemType (_::(a, b)) 
     = PairTuple (elemType (undefined :: a)) (elemType' (undefined :: b))
--}
   fromElem (a, b)  = (fromElem a, fromElem' b)
   toElem (a, b)  = (toElem a, toElem' b)
 
-{-
   elemType' (_::(a, b)) 
     = PairTuple (elemType (undefined :: a)) (elemType' (undefined :: b))
--}
   fromElem' (a, b) = (fromElem a, fromElem' b)
   toElem' (a, b) = (toElem a, toElem' b)
 
 instance (Elem a, Elem b, Elem c) => Elem (a, b, c) where
-{-
   elemType (_::(a, b, c)) 
     = PairTuple (elemType (undefined :: (a, b))) (elemType' (undefined :: c))
--}
   fromElem (a, b, c) = (fromElem (a, b), fromElem' c)
   toElem (ab, c) = let (a, b) = toElem ab in (a, b, toElem' c)
   
-{-
   elemType' (_::(a, b, c)) 
     = PairTuple (elemType (undefined :: (a, b))) (elemType' (undefined :: c))
--}
   fromElem' (a, b, c) = (fromElem (a, b), fromElem' c)
   toElem' (ab, c) = let (a, b) = toElem ab in (a, b, toElem' c)
   
 instance (Elem a, Elem b, Elem c, Elem d) => Elem (a, b, c, d) where
-{-
   elemType (_::(a, b, c, d)) 
     = PairTuple (elemType (undefined :: (a, b, c))) (elemType' (undefined :: d))
--}
   fromElem (a, b, c, d) = (fromElem (a, b, c), fromElem' d)
   toElem (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem' d)
 
-{-
   elemType' (_::(a, b, c, d)) 
     = PairTuple (elemType (undefined :: (a, b, c))) (elemType' (undefined :: d))
--}
   fromElem' (a, b, c, d) = (fromElem (a, b, c), fromElem' d)
   toElem' (abc, d) = let (a, b, c) = toElem abc in (a, b, c, toElem' d)
 
 instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
-{-
   elemType (_::(a, b, c, d, e)) 
     = PairTuple (elemType (undefined :: (a, b, c, d))) 
                 (elemType' (undefined :: e))
--}
   fromElem (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
   toElem (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
 
-{-
   elemType' (_::(a, b, c, d, e)) 
     = PairTuple (elemType (undefined :: (a, b, c, d))) 
                 (elemType' (undefined :: e))
--}
   fromElem' (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
   toElem' (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
 
-{-}
 -- |Convenience functions
 -- -
 
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
--}
 
 liftToElem :: (Elem a, Elem b) 
            => (ElemRepr a -> ElemRepr b)

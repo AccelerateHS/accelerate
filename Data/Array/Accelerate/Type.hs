@@ -533,6 +533,16 @@ nonNumDict (TypeCChar  dict) = dict
 nonNumDict (TypeCSChar dict) = dict
 nonNumDict (TypeCUChar dict) = dict
 
+
+-- Tuple type
+-- ----------
+
+data TupleType a where
+  UnitTuple   ::                               TupleType ()
+  SingleTuple :: ScalarType a               -> TupleType a
+  PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+
+
 {-
 -- Vector GPU data types
 -- ---------------------

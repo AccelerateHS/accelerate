@@ -282,7 +282,7 @@ data OpenExp env aenv t where
               => ElemRepr t
               -> OpenExp env aenv t
               
-              -- Tuples
+  -- Tuples
   Tuple       :: (Elem t, IsTuple t)
               => Tuple (OpenExp env aenv) (TupleRepr t)
               -> OpenExp env aenv t
