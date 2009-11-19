@@ -29,7 +29,10 @@ module Data.Array.Accelerate.Array.Sugar (
   ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
   
   -- * Array shape query, indexing, and conversions
-  shape, (!), newArray, fromIArray, toIArray, fromList, toList
+  shape, (!), newArray, fromIArray, toIArray, fromList, toList,
+  
+  -- * Array analysis
+  arrayType
 
 ) where
 
@@ -738,3 +741,12 @@ toList (Array sh adata) = iter sh' idx (.) id []
 instance Show (Array dim e) where
   show arr@(Array sh _adata) 
     = "Array " ++ show (toElem sh :: dim) ++ " " ++ show (toList arr)
+
+
+-- Array analysis
+-- --------------
+
+-- |Reify the element type of an array.
+--
+arrayType :: forall dim e. Array dim e -> TupleType (ElemRepr e)
+arrayType (Array _ _) = elemType (undefined::e)

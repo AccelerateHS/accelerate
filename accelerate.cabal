@@ -40,6 +40,7 @@ Other-modules:		Data.Array.Accelerate.Array.Data
 			Data.Array.Accelerate.Array.Delayed
 			Data.Array.Accelerate.Array.Representation
 			Data.Array.Accelerate.Array.Sugar
+			Data.Array.Accelerate.Analysis.Type
 			Data.Array.Accelerate.AST
 			Data.Array.Accelerate.Debug
 			Data.Array.Accelerate.Language

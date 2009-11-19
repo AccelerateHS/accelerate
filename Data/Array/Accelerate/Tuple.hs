@@ -38,8 +38,8 @@ data Tuple c t where
 -- NB: We index tuples by starting to count from the *right*!
 --
 data TupleIdx t e where
-  ZeroTupIdx ::                 TupleIdx (t, s) s
-  SuccTupIdx :: TupleIdx t e -> TupleIdx (t, s) e
+  ZeroTupIdx :: Elem s =>                 TupleIdx (t, s) s
+  SuccTupIdx ::           TupleIdx t e -> TupleIdx (t, s) e
 
 -- |Conversion between surface n-tuples and our tuple representation.
 --

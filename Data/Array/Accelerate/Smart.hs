@@ -207,7 +207,8 @@ data Exp t where
   PrimApp     :: (Elem a, Elem r)             
               => PrimFun (a -> r) -> Exp a     -> Exp r
   IndexScalar :: Acc (Array dim t) -> Exp dim  -> Exp t
-  Shape       :: Acc (Array dim e)             -> Exp dim
+  Shape       :: Elem dim
+              => Acc (Array dim e)             -> Exp dim
 
 
 -- |Conversion from HOAS to de Bruijn expression AST

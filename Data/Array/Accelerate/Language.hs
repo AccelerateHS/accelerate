@@ -285,7 +285,7 @@ infixl 9 !
 (!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
 (!) = IndexScalar
 
-shape :: Ix dim => Acc (Array dim e) -> Exp dim
+shape :: (Ix dim, Elem dim) => Acc (Array dim e) -> Exp dim
 shape = Shape
 
 

@@ -133,7 +133,8 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim' e')
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
-  Avar        :: Idx     aenv (Array dim e)
+  Avar        :: Elem e
+              => Idx     aenv (Array dim e)
               -> OpenAcc aenv (Array dim e)
   
   -- Array inlet (triggers async host->device transfer if necessary)
@@ -315,7 +316,8 @@ data OpenExp env aenv t where
 
   -- Array shape
   -- the array expression cannot contain any free scalar variables
-  Shape       :: OpenAcc aenv (Array dim e) 
+  Shape       :: Elem dim
+              => OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
 
 -- |Expression without free scalar variables
