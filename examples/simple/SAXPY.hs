@@ -16,9 +16,9 @@ saxpy alpha xs ys
       xs' = use xs
       ys' = use ys
     in 
-    zipWith (\x y -> constant alpha * x * y) xs' ys'
+    zipWith (\x y -> constant alpha * x + y) xs' ys'
 
 saxpy_ref :: Float -> UArray Int Float -> UArray Int Float -> UArray Int Float
 saxpy_ref alpha xs ys
-  = listArray (bounds xs) [alpha * x * y | x <- elems xs | y <- elems ys]
+  = listArray (bounds xs) [alpha * x + y | x <- elems xs | y <- elems ys]
   

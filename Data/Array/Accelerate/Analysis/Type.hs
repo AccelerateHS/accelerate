@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  accType, expType,
+  accType, accType2, expType,
   
 ) where
   
@@ -49,6 +49,9 @@ accType (Fold _ _ acc)        = accType acc
 accType (FoldSeg _ _ acc _)   = accType acc
 accType (Permute _ _ _ acc)   = accType acc
 accType (Backpermute _ _ acc) = accType acc
+accType _                     = error "we can never get here"
+  -- GHC's exaustivesness checker is not smart enough to exclude alternatives
+  -- in a GADT match that are impossible due to equality constraints
 
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
@@ -56,6 +59,9 @@ accType (Backpermute _ _ acc) = accType acc
 accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2) 
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
 accType2 (Scan _ e acc) = (accType acc, expType e)
+accType2 _              = error "we can never get here"
+  -- GHC's exaustivesness checker is not smart enough to exclude alternatives
+  -- in a GADT match that are impossible due to equality constraints
 
 -- |Reify the result type of a scalar expression.
 --

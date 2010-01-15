@@ -1,67 +1,69 @@
-Name:			accelerate
-Version:		0.7.0.0
-Cabal-version: 		>= 1.6
-Tested-with: 		GHC >= 6.10.1
+Name:                   accelerate
+Version:                0.7.0.1
+Cabal-version:          >= 1.6
+Tested-with:            GHC >= 6.10.4
+Build-type:             Simple
 
-Synopsis:		An embedded language for accelerated array processing
-Description:	        This library defines an embedded language for
-			regular, multi-dimensional array computations with
-			multiple backends to facilitate high-performance
-			implementations.  Currently, the only backend is an
-			interpreter that serves as a reference implementation 
-			of the intended semantics of the language.
-License:		BSD3
-License-file:		LICENSE
-Author:			Manuel M T Chakravarty, Gabriele Keller, Sean Lee
-Maintainer:		Manuel M T Chakravarty <chak@cse.unsw.edu.au>
-Homepage:		http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Synopsis:               An embedded language for accelerated array processing
+Description:            This library defines an embedded language for
+                        regular, multi-dimensional array computations with
+                        multiple backends to facilitate high-performance
+                        implementations.  Currently, the only backend is an
+                        interpreter that serves as a reference implementation 
+                        of the intended semantics of the language.
+License:                BSD3
+License-file:           LICENSE
+Author:                 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
-Category:		Compilers/Interpreters, Concurrency, Data
-Stability: 		Experimental
+Category:               Compilers/Interpreters, Concurrency, Data
+Stability:              Experimental
+
+Extra-source-files:     INSTALL
+                        examples/simple/DotP.hs
+                        examples/simple/Filter.hs
+                        examples/simple/Main.hs
+                        examples/simple/Makefile
+                        examples/simple/SAXPY.hs
+                        examples/simple/SMVM.hs
+                        examples/simple/Time.hs
 
 Flag llvm
-  Description:		enable the LLVM backend (sequential)
+  Description:          enable the LLVM backend (sequential)
+  Default:              False
 
-Build-type:		Simple
-Build-depends:	        array, 
-			base == 4.*, 
-			ghc-prim, 
-			haskell98, 
-			pretty
-If flag(llvm)
-  Build-depends:	llvm >= 0.6.8
+Library
+  Build-depends:        array, 
+                        base == 4.*, 
+                        ghc-prim, 
+                        haskell98, 
+                        pretty
+  If flag(llvm)
+    Build-depends:      llvm >= 0.6.8
 
-Exposed-modules:	Data.Array.Accelerate
-			Data.Array.Accelerate.Interpreter
-If flag(llvm)
-  Exposed-modules:	Data.Array.Accelerate.LLVM
-			
-Other-modules:		Data.Array.Accelerate.Array.Data
-			Data.Array.Accelerate.Array.Delayed
-			Data.Array.Accelerate.Array.Representation
-			Data.Array.Accelerate.Array.Sugar
-			Data.Array.Accelerate.Analysis.Type
-			Data.Array.Accelerate.AST
-			Data.Array.Accelerate.Debug
-			Data.Array.Accelerate.Language
-			Data.Array.Accelerate.Pretty
-			Data.Array.Accelerate.Smart
-			Data.Array.Accelerate.Tuple
-			Data.Array.Accelerate.Type
-If flag(llvm)
-  Other-modules:	Data.Array.Accelerate.LLVM.CodeGen
+  Exposed-modules:      Data.Array.Accelerate
+                        Data.Array.Accelerate.Interpreter
+  If flag(llvm)
+    Exposed-modules:    Data.Array.Accelerate.LLVM
+                        
+  Other-modules:        Data.Array.Accelerate.Array.Data
+                        Data.Array.Accelerate.Array.Delayed
+                        Data.Array.Accelerate.Array.Representation
+                        Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Analysis.Type
+                        Data.Array.Accelerate.AST
+                        Data.Array.Accelerate.Debug
+                        Data.Array.Accelerate.Language
+                        Data.Array.Accelerate.Pretty
+                        Data.Array.Accelerate.Smart
+                        Data.Array.Accelerate.Tuple
+                        Data.Array.Accelerate.Type
+  If flag(llvm)
+    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
 
-Extra-source-files:  	INSTALL
-			examples/simple/DotP.hs
-			examples/simple/Filter.hs
-			examples/simple/Main.hs
-			examples/simple/Makefile
-			examples/simple/SAXPY.hs
-			examples/simple/SMVM.hs
-			examples/simple/Time.hs
-
-Ghc-options:     	-O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
-Extensions:		FlexibleContexts, FlexibleInstances, 
-			ExistentialQuantification, GADTs, TypeFamilies, 
-			ScopedTypeVariables, DeriveDataTypeable,
-			BangPatterns, PatternGuards, TypeOperators, RankNTypes
+  Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
+  Extensions:           FlexibleContexts, FlexibleInstances, 
+                        ExistentialQuantification, GADTs, TypeFamilies, 
+                        ScopedTypeVariables, DeriveDataTypeable,
+                        BangPatterns, PatternGuards, TypeOperators, RankNTypes

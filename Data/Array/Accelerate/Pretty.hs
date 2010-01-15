@@ -99,8 +99,8 @@ prettyFun :: Int -> OpenFun env aenv fun -> Doc
 prettyFun lvl fun = 
   let (n, bodyDoc) = count fun
   in
-  char '\\' <> hsep [text $ "x" ++ show idx | idx <- [0..n]] <+> text "->" <+> 
-  bodyDoc
+  char '\\' <> hsep [text $ "x" ++ show idx | idx <- reverse [0..n]] <+> 
+  text "->" <+> bodyDoc
   where
      count :: OpenFun env aenv fun -> (Int, Doc)
      count (Body body) = (-1, prettyExp lvl noParens body)
