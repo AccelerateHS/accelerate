@@ -10,47 +10,48 @@ import Text.PrettyPrint
 -- NVIDIA CUDA Compute Unified Device Architecture
 -- (http://developer.download.nvidia.com/compute/cuda/1_0/NVIDIA_CUDA_Programming_Guide_1.0.pdf).
 data TransUnit   = TransUnit [Prepro] [ExtDecln]
+                 deriving Eq
 
 data Prepro      = Include Ident
                  | LocalInclude Ident
                  | Define Ident Exp
                  | IfNDef Ident
                  | EndIf
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data ExtDecln    = FuncDef [DeclnSpec] Declr [Decln] CompStmt
                  | GlobalDecln Decln
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data JumpStmt    = Goto Ident
                  | Continue
                  | Break
                  | Return (Maybe Exp)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data IterStmt    = While Exp Stmt
                  | DoWhile Stmt Exp
                  | For (Maybe Exp) (Maybe Exp) (Maybe Exp) Stmt
                  -- TODO: For Decln Exp Exp Stmt
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data SelectStmt  = If Exp Stmt
                  | IfElse Exp Stmt Stmt
                  | Switch Exp Stmt
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data BlkItem     = DeclnItem Decln
                  | StmtItem Stmt
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data CompStmt    = Blk [BlkItem]
                  | NestedBlk [BlkItem]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data LabeledStmt = IdentLabel Ident Stmt
                  | Case ConstExp Stmt
                  | Default Stmt
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Stmt        = LabeledStmt LabeledStmt
                  | CompStmt CompStmt
@@ -58,50 +59,50 @@ data Stmt        = LabeledStmt LabeledStmt
                  | SelectStmt SelectStmt
                  | IterStmt IterStmt
                  | JumpStmt JumpStmt
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Desr        = ConstDesr ConstExp
                  | DotDesr Ident
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Desn        = Desn [Desr]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Init        = AssignExp AssignExp
                  | BulkInit [(Maybe Desn, Init)]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data DirectAbstDeclr = NestedAbstDeclr AbstDeclr
                      -- TODO: direct-abstract-declarator [...]
                      -- TODO: direct-abstract-declarator (...)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data AbstDeclr   = AbstDeclrPointer Pointer
                  | DirectAbstDeclr (Maybe Pointer) DirectAbstDeclr
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data TyName      = TyName [SpecQual] (Maybe AbstDeclr)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data ParamDecln  = ParamDecln [DeclnSpec] Declr
                  | AbstParamDecln [DeclnSpec] (Maybe AbstDeclr)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Pointer     = Pointer [[TyQual]]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data DirectDeclr = IdentDeclr Ident
                  | NestedDeclr Declr
                  | ArrayDeclr DirectDeclr (Maybe [TyQual]) (Maybe AssignExp)
                  -- TODO: direct-declarator [...]
                  | FuncDeclr DirectDeclr [ParamDecln]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Declr       = Declr (Maybe Pointer) DirectDeclr
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data FnSpec      = Inline
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data TyQual      = Const
                  | Restrict
@@ -112,12 +113,12 @@ data TyQual      = Const
                  | Host
                  | Constant
                  | Shared
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data SpecQual    = SpecQualTySpec TySpec
                  | SpecQualVecTySpec VecTySpec
                  | SpecQualTyQual TyQual
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data TySpec      = Void
                  | Char     (Maybe SignSpec)
@@ -133,49 +134,49 @@ data TySpec      = Void
                  | Union  (Maybe Ident) (Maybe [StructDecln])
                  | Enum   (Maybe Ident) (Maybe [Enumerator])
                  | TypedefName Ident
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data SignSpec    = Signed
                  | Unsigned
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data StructDecln = StructDecln [SpecQual] [StructDeclr]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data StructDeclr = StructDeclr (Maybe Declr) (Maybe ConstExp)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Enumerator  = Enumerator Ident (Maybe ConstExp)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data VecTySpec   = Vector TySpec Int
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data StSpec      = Typedef
                  | Extern (Maybe StrLit)
                  | Static
                  | Auto
                  | Register
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data InitDeclr   = InitDeclr Declr (Maybe Init)
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data DeclnSpec   = DeclnFnSpec FnSpec
                  | DeclnTyQual TyQual
                  | DeclnTySpec TySpec
                  | DeclnVecTySpec VecTySpec
                  | DeclnStSpec StSpec
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Decln       = Decln [DeclnSpec] [InitDeclr]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data ConstExp    = ConstCondExp CondExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Exp         = Exp [AssignExp]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data AssignExp   = CondExp CondExp
                  | Assign UnaryExp AssignExp
@@ -189,63 +190,63 @@ data AssignExp   = CondExp CondExp
                  | AndAssign UnaryExp AssignExp
                  | XorAssign UnaryExp AssignExp
                  | OrAssign UnaryExp AssignExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data CondExp     = LgcOrExp LgcOrExp
                  | Cond LgcOrExp Exp CondExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data LgcOrExp    = LgcAndExp LgcAndExp
                  | LgcOr LgcOrExp LgcAndExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data LgcAndExp   = OrExp OrExp
                  | LgcAnd LgcAndExp OrExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data OrExp       = XorExp XorExp
                  | Or OrExp XorExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data XorExp      = AndExp AndExp
                  | Xor XorExp AndExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data AndExp      = EqExp EqExp
                  | And AndExp EqExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data EqExp       = RelExp RelExp
                  | Eq EqExp RelExp
                  | Neq EqExp RelExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data RelExp      = ShftExp ShftExp
                  | Lt RelExp ShftExp
                  | Gt RelExp ShftExp
                  | Le RelExp ShftExp
                  | Ge RelExp ShftExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data ShftExp     = AddExp AddExp
                  | LShft ShftExp AddExp
                  | RShft ShftExp AddExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data AddExp      = MulExp MulExp
                  | Add AddExp MulExp
                  | Sub AddExp MulExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data MulExp      = CastExp CastExp
                  | Mul MulExp CastExp
                  | Div MulExp CastExp
                  | Mod MulExp CastExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data CastExp     = UnaryExp UnaryExp
                  | TyCast TyName CastExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data UnaryExp    = PostfixExp PostfixExp
                  | UnaryInc UnaryExp
@@ -258,10 +259,10 @@ data UnaryExp    = PostfixExp PostfixExp
                  | LgcNot CastExp
                  | UnaryExpSize UnaryExp
                  | TySize TyName
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data ArgExpList  = ArgExpList [AssignExp]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data PostfixExp  = PrimaryExp PrimaryExp
                  | ArrayElem PostfixExp Exp
@@ -270,16 +271,16 @@ data PostfixExp  = PrimaryExp PrimaryExp
                  | StructPtrMem PostfixExp Ident
                  | PostInc PostfixExp
                  | PostDec PostfixExp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data PrimaryExp  = IdentExp Ident
                  | ConstExp Const
                  | StrLitExp StrLit
                  | NestedExp Exp
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data StrLit      = StrLit String
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Const       = IntegerConst Integer
                  | FloatConst Float
@@ -287,16 +288,178 @@ data Const       = IntegerConst Integer
                  | EnumConst Ident
                  | CharConst Char
                  | Dim3Const [AssignExp]
-                 deriving (Show, Eq)
+                 deriving Eq
 
 data Ident       = Ident String
-                 deriving (Show, Eq, Ord)
+                 deriving (Eq, Ord)
 
 ------------------------------------------------------------------------------
 -- Pretty Print
 ------------------------------------------------------------------------------
 instance Show TransUnit where
-  showsPrec d t = shows $ ptransunit t
+  showsPrec _ t = shows $ ptransunit t
+
+instance Show Prepro where
+  showsPrec _ p = shows $ pprepro p
+
+instance Show ExtDecln where
+  showsPrec _ e = shows $ pextdecln e
+
+instance Show JumpStmt where
+  showsPrec _ j = shows $ pjumpstmt j
+
+instance Show IterStmt where
+  showsPrec _ i = shows $ piterstmt i
+
+instance Show SelectStmt where
+  showsPrec _ s = shows $ pselectstmt s
+
+instance Show BlkItem where
+  showsPrec _ b = shows $ pblkitem b
+
+instance Show CompStmt where
+  showsPrec _ c = shows $ pcompstmt c
+
+instance Show LabeledStmt where
+  showsPrec _ l = shows $ plabeledstmt l
+
+instance Show Stmt where
+  showsPrec _ s = shows $ pstmt s
+
+instance Show Desr where
+  showsPrec _ d = shows $ pdesr d
+
+instance Show Desn where
+  showsPrec _ d = shows $ pdesn d
+
+instance Show Init where
+  showsPrec _ i = shows $ pinit i
+
+instance Show DirectAbstDeclr where
+  showsPrec _ d = shows $ pdirectabstdeclr d
+
+instance Show AbstDeclr where
+  showsPrec _ a = shows $ pabstdeclr a
+
+instance Show TyName where
+  showsPrec _ t = shows $ ptyname t
+
+instance Show ParamDecln where
+  showsPrec _ p = shows $ pparamdecln p
+
+instance Show Pointer where
+  showsPrec _ p = shows $ ppointer p
+
+instance Show DirectDeclr where
+  showsPrec _ d = shows $ pdirectdeclr d
+
+instance Show Declr where
+  showsPrec _ d = shows $ pdeclr d
+
+instance Show FnSpec where
+  showsPrec _ f = shows $ pfnspec f
+
+instance Show TyQual where
+  showsPrec _ t = shows $ ptyqual t
+
+instance Show SpecQual where
+  showsPrec _ s = shows $ pspecqual s
+
+instance Show TySpec where
+  showsPrec _ t = shows $ ptyspec t
+
+instance Show SignSpec where
+  showsPrec _ s = shows $ psignspec s
+
+instance Show StructDecln where
+  showsPrec _ s = shows $ pstructdecln s
+
+instance Show StructDeclr where
+  showsPrec _ s = shows $ pstructdeclr s
+
+instance Show Enumerator where
+  showsPrec _ e = shows $ penumerator e
+
+instance Show VecTySpec where
+  showsPrec _ v = shows $ pvectyspec v
+
+instance Show StSpec where
+  showsPrec _ s = shows $ pstspec s
+
+instance Show InitDeclr where
+  showsPrec _ i = shows $ pinitdeclr i
+
+instance Show DeclnSpec where
+  showsPrec _ d = shows $ pdeclnspec d
+
+instance Show Decln where
+  showsPrec _ d = shows $ pdecln d
+
+instance Show ConstExp where
+  showsPrec _ c = shows $ pconstexp c
+
+instance Show Exp where
+  showsPrec _ e = shows $ pexp e
+
+instance Show AssignExp where
+  showsPrec _ a = shows $ passignexp a
+
+instance Show CondExp where
+  showsPrec _ c = shows $ pcondexp c
+
+instance Show LgcOrExp where
+  showsPrec _ l = shows $ plgcorexp l
+
+instance Show LgcAndExp where
+  showsPrec _ l = shows $ plgcandexp l
+
+instance Show OrExp where
+  showsPrec _ o = shows $ porexp o
+
+instance Show XorExp where
+  showsPrec _ x = shows $ pxorexp x
+
+instance Show AndExp where
+  showsPrec _ a = shows $ pandexp a
+
+instance Show EqExp where
+  showsPrec _ e = shows $ peqexp e
+
+instance Show RelExp where
+  showsPrec _ r = shows $ prelexp r
+
+instance Show ShftExp where
+  showsPrec _ s = shows $ pshftexp s
+
+instance Show AddExp where
+  showsPrec _ a = shows $ paddexp a
+
+instance Show MulExp where
+  showsPrec _ m = shows $ pmulexp m
+
+instance Show CastExp where
+  showsPrec _ c = shows $ pcastexp c
+
+instance Show UnaryExp where
+  showsPrec _ u = shows $ punaryexp u
+
+instance Show ArgExpList where
+  showsPrec _ a = shows $ pargexplist a
+
+instance Show PostfixExp where
+  showsPrec _ p = shows $ ppostfixexp p
+
+instance Show PrimaryExp where
+  showsPrec _ p = shows $ pprimaryexp p
+
+instance Show StrLit where
+  showsPrec _ s = shows $ pstrlit s
+
+instance Show Const where
+  showsPrec _ c = shows $ pconst c
+
+instance Show Ident where
+  showsPrec _ i = shows $ pident i
 
 -- TransUnit
 ptransunit :: TransUnit -> Doc
