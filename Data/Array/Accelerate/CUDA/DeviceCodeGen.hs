@@ -289,18 +289,16 @@ map progName scalar = TransUnit
         , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "thid"
           , Just $ AssignExp $ toAssignExp $ StructMem
             (toPostfixExp $ Ident "threadIdx") (Ident "x"))
-        , ( [DeclnVecTySpec $ Vector xsTy 4], Nothing, "tempData0", Nothing)
-        , ( [DeclnVecTySpec $ Vector outTy' 4], Nothing, "tempData", Nothing)
-        , ( [DeclnVecTySpec $ Vector xsTy 4], Just $ Pointer [[]], "inData"
+        , ( [DeclnVecTySpec $ Vector xsTy 2], Just $ Pointer [[]], "inData"
           , Just $ AssignExp $ toAssignExp $ TyCast
             (TyName
-              [SpecQualVecTySpec $ Vector xsTy 4]
+              [SpecQualVecTySpec $ Vector xsTy 2]
               (Just $ AbstDeclrPointer $ Pointer[[]]))
             (toCastExp $ Ident "d_xs"))
-        , ( [DeclnVecTySpec $ Vector outTy' 4], Just $ Pointer [[]], "outData"
+        , ( [DeclnVecTySpec $ Vector outTy' 2], Just $ Pointer [[]], "outData"
           , Just $ AssignExp $ toAssignExp $ TyCast
             (TyName
-              [SpecQualVecTySpec $ Vector outTy' 4]
+              [SpecQualVecTySpec $ Vector outTy' 2]
               (Just $ AbstDeclrPointer $ Pointer[[]]))
             (toCastExp $ Ident "d_out"))
         , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "devOffset"
@@ -309,72 +307,52 @@ map progName scalar = TransUnit
             (ArgExpList
               [ toAssignExp $ StructMem
                 (toPostfixExp $ Ident "blockIdx") (Ident "x")
-              , toAssignExp $ LShft
-                (toShftExp $ StructMem
-                  (toPostfixExp $ Ident "blockDim") (Ident "x"))
-                (toAddExp $ IntegerConst 1)]))
+              , toAssignExp $ StructMem
+                  (toPostfixExp $ Ident "blockDim") (Ident "x")]))
         , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "aiDev"
           , Just $ AssignExp $ toAssignExp $ Add
-            (toAddExp $ Ident "devOffset") (toMulExp $ Ident "thid"))
-        , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "biDev"
-          , Just $ AssignExp $ toAssignExp $ Add
-            (toAddExp $ Ident "aiDev")
-            (toMulExp $ StructMem
-              (toPostfixExp $ Ident "blockDim") (Ident "x")))])
+            (toAddExp $ Ident "devOffset") (toMulExp $ Ident "thid"))])
       ++
-      (concatMap
-        (\ indexDev ->
-          [ StmtItem $ ExpStmt $ Just $ Exp
-            [toAssignExp $ FuncCall
-              (toPostfixExp $ Ident "__syncthreads") (ArgExpList [])]
-          , StmtItem $ ExpStmt $ Just $ Exp [Assign
-            (toUnaryExp $ Ident "i")
-            (toAssignExp $ Mul
-              (toMulExp $ indexDev) (toCastExp $ IntegerConst 4))]
-          , StmtItem $ ExpStmt $ Just $ Exp [Assign
-            (toUnaryExp $ Ident "tempData0")
-            (toAssignExp $ toArrayElem (Ident "inData") indexDev)]
-          , StmtItem $ SelectStmt $ IfElse
-            (Exp [toAssignExp $ LgcOr
-              (toLgcOrExp $ Ident "isFullBlock")
-              (toLgcAndExp $ Lt
-                (toRelExp $ Add
-                  (toAddExp $ Ident "i") (toMulExp $ IntegerConst 3))
-                (toShftExp $ Ident "n"))])
-            (CompStmt $ Blk $
-              (Prelude.map
-                (\ fieldName -> StmtItem $ ExpStmt $ Just $ Exp [Assign
-                  (toUnaryExp $ StructMem
-                    (toPostfixExp $ Ident "tempData") (Ident fieldName))
-                  (toAssignExp $ FuncCall
-                    (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
-                    (ArgExpList [toAssignExp $ StructMem
-                      (toPostfixExp $ Ident "tempData0")
-                      (Ident fieldName)]))])
-                ["x", "y", "z", "w"])
-              ++
-              [StmtItem $ ExpStmt $ Just $ Exp [Assign
-                (toUnaryExp $ toArrayElem (Ident "outData") indexDev)
-                (toAssignExp $ Ident "tempData")]])
-            (SelectStmt $ Prelude.foldr1
-              (\ (If exp stmt) x -> If
-                exp (CompStmt $ Blk [StmtItem stmt, StmtItem $ SelectStmt x]))
-              (Prelude.zipWith
-                (\ fieldName index -> If
-                  (Exp [toAssignExp $ Lt
-                    (toRelExp index) (toShftExp $ Ident "n")])
-                  (ExpStmt $ Just $ Exp [Assign
-                    (toUnaryExp $ toArrayElem (Ident "d_out") index)
-                    (toAssignExp $ FuncCall
-                      (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
-                      (ArgExpList [toAssignExp $ StructMem
-                        (toPostfixExp $ Ident "tempData0")
-                        (Ident fieldName)]))]))
-                [ "x", "y", "z"]
-                [ toAddExp $ Ident "i"
-                , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1)
-                , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 2)]))])
-        [Ident "aiDev", Ident "biDev"]))]
+      [ StmtItem $ ExpStmt $ Just $ Exp [Assign
+        (toUnaryExp $ Ident "i")
+        (toAssignExp $ Mul
+          (toMulExp $ Ident "aiDev") (toCastExp $ IntegerConst 4))]
+      , StmtItem $ SelectStmt $ IfElse
+        (Exp [toAssignExp $ LgcOr
+          (toLgcOrExp $ Ident "isFullBlock")
+          (toLgcAndExp $ Lt
+            (toRelExp $ Add
+              (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1))
+            (toShftExp $ Ident "n"))])
+        (CompStmt $ Blk $
+          [StmtItem $ ExpStmt $ Just $ Exp [Assign
+            (toUnaryExp $ toArrayElem (Ident "outData") (Ident "aiDev"))
+            (toAssignExp (FuncCall
+              (toPostfixExp $ Ident $ "make_" ++ (show $ Vector outTy' 2))
+              (ArgExpList $ Prelude.map
+                (\ fieldName -> toAssignExp $ FuncCall
+                  (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
+                  (ArgExpList [toAssignExp $ StructMem
+                    (toArrayElem (Ident "inData") (Ident "aiDev"))
+                    (Ident fieldName)]))
+                ["x", "y"])))]])
+        (SelectStmt $ Prelude.foldr1
+          (\ (If exp stmt) x -> If
+            exp (CompStmt $ Blk [StmtItem stmt, StmtItem $ SelectStmt x]))
+          (Prelude.zipWith
+            (\ fieldName index -> If
+              (Exp [toAssignExp $ Lt
+                (toRelExp index) (toShftExp $ Ident "n")])
+              (ExpStmt $ Just $ Exp [Assign
+                (toUnaryExp $ toArrayElem (Ident "d_out") index)
+                (toAssignExp $ FuncCall
+                  (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
+                  (ArgExpList [toAssignExp $ StructMem
+                    (toArrayElem (Ident "inData") (Ident "aiDev"))
+                    (Ident fieldName)]))]))
+            [ "x", "y"]
+            [ toAddExp $ Ident "i"
+            , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1)]))])]
   where
     (xsTy, xsName) = head $ params scalar
     outTy'         = outTy scalar
@@ -829,27 +807,23 @@ zipWith progName scalar =
           , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "thid"
             , Just $ AssignExp $ toAssignExp $ StructMem
               (toPostfixExp $ Ident "threadIdx") (Ident "x"))
-          , ( [DeclnVecTySpec $ Vector xsTy 4], Nothing, "tempData0", Nothing)
-          , ( [DeclnVecTySpec $ Vector ysTy 4], Nothing, "tempData1", Nothing)
-          , ( [DeclnVecTySpec $ Vector outTy' 4]
-            , Nothing, "tempData", Nothing)
-          , ( [DeclnVecTySpec $ Vector xsTy 4], Just $ Pointer [[]], "inData0"
+          , ( [DeclnVecTySpec $ Vector xsTy 2], Just $ Pointer [[]], "inData0"
             , Just $ AssignExp $ toAssignExp $ TyCast
               (TyName
-                [SpecQualVecTySpec $ Vector xsTy 4]
+                [SpecQualVecTySpec $ Vector xsTy 2]
                 (Just $ AbstDeclrPointer $ Pointer[[]]))
               (toCastExp $ Ident "d_xs"))
-          , ( [DeclnVecTySpec $ Vector ysTy 4], Just $ Pointer [[]], "inData1"
+          , ( [DeclnVecTySpec $ Vector ysTy 2], Just $ Pointer [[]], "inData1"
             , Just $ AssignExp $ toAssignExp $ TyCast
               (TyName
-                [SpecQualVecTySpec $ Vector ysTy 4]
+                [SpecQualVecTySpec $ Vector ysTy 2]
                 (Just $ AbstDeclrPointer $ Pointer[[]]))
               (toCastExp $ Ident "d_ys"))
-          , ( [DeclnVecTySpec $ Vector outTy' 4]
+          , ( [DeclnVecTySpec $ Vector outTy' 2]
             , Just $ Pointer [[]], "outData"
             , Just $ AssignExp $ toAssignExp $ TyCast
               (TyName
-                [SpecQualVecTySpec $ Vector outTy' 4]
+                [SpecQualVecTySpec $ Vector outTy' 2]
                 (Just $ AbstDeclrPointer $ Pointer[[]]))
               (toCastExp $ Ident "d_out"))
           , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "devOffset"
@@ -858,80 +832,56 @@ zipWith progName scalar =
               (ArgExpList
                 [ toAssignExp $ StructMem
                   (toPostfixExp $ Ident "blockIdx") (Ident "x")
-                , toAssignExp $ LShft
-                  (toShftExp $ StructMem
-                    (toPostfixExp $ Ident "blockDim") (Ident "x"))
-                  (toAddExp $ IntegerConst 1)]))
+                , toAssignExp $ StructMem
+                    (toPostfixExp $ Ident "blockDim") (Ident "x")]))
           , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "aiDev"
             , Just $ AssignExp $ toAssignExp $ Add
-              (toAddExp $ Ident "devOffset") (toMulExp $ Ident "thid"))
-          , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "biDev"
-            , Just $ AssignExp $ toAssignExp $ Add
-              (toAddExp $ Ident "aiDev")
-              (toMulExp $ StructMem
-                (toPostfixExp $ Ident "blockDim") (Ident "x")))])
+              (toAddExp $ Ident "devOffset") (toMulExp $ Ident "thid"))])
         ++
-        (concatMap
-          (\ indexDev ->
-            [ StmtItem $ ExpStmt $ Just $ Exp
-              [toAssignExp $ FuncCall
-                (toPostfixExp $ Ident "__syncthreads") (ArgExpList [])]
-            , StmtItem $ ExpStmt $ Just $ Exp [Assign
-              (toUnaryExp $ Ident "i")
-              (toAssignExp $ Mul
-                (toMulExp $ indexDev) (toCastExp $ IntegerConst 4))]]
-            ++
-            ( Prelude.map
-              (\ (dstVarName, srcVarName) ->
-                StmtItem $ ExpStmt $ Just $ Exp [Assign
-                  (toUnaryExp $ Ident dstVarName)
-                  (toAssignExp $ toArrayElem (Ident srcVarName) indexDev)])
-              [("tempData0", "inData0"), ("tempData1", "inData1")])
-            ++
-            [ StmtItem $ SelectStmt $ IfElse
-              (Exp [toAssignExp $ LgcOr
-                (toLgcOrExp $ Ident "isFullBlock")
-                (toLgcAndExp $ Lt
-                  (toRelExp $ Add
-                    (toAddExp $ Ident "i") (toMulExp $ IntegerConst 3))
-                  (toShftExp $ Ident "n"))])
-              (CompStmt $ Blk $
-                (Prelude.map
-                  (\ fieldName -> StmtItem $ ExpStmt $ Just $ Exp [Assign
-                    (toUnaryExp $ StructMem
-                      (toPostfixExp $ Ident "tempData") (Ident fieldName))
-                    (toAssignExp $ FuncCall
-                      (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
-                      (ArgExpList $ Prelude.map
-                        (\ arg -> toAssignExp $ StructMem
-                          (toPostfixExp $ Ident arg) (Ident fieldName))
-                        ["tempData0", "tempData1"]))])
-                  ["x", "y", "z", "w"])
-                ++
-                [StmtItem $ ExpStmt $ Just $ Exp [Assign
-                  (toUnaryExp $ toArrayElem (Ident "outData") indexDev)
-                  (toAssignExp $ Ident "tempData")]])
-              (SelectStmt $ Prelude.foldr1
-                (\ (If exp stmt) x -> If
-                  exp
-                  (CompStmt $ Blk [StmtItem stmt, StmtItem $ SelectStmt x]))
-                (Prelude.zipWith
-                  (\ fieldName index -> If
-                    (Exp [toAssignExp $ Lt
-                      (toRelExp index) (toShftExp $ Ident "n")])
-                    (ExpStmt $ Just $ Exp [Assign
-                      (toUnaryExp $ toArrayElem (Ident "d_out") index)
-                      (toAssignExp $ FuncCall
-                        (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
-                        (ArgExpList $ Prelude.map
-                          (\ arg -> toAssignExp $ StructMem
-                            (toPostfixExp $ Ident arg) (Ident fieldName))
-                          ["tempData0", "tempData1"]))]))
-                  [ "x", "y", "z"]
-                  [ toAddExp $ Ident "i"
-                  , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1)
-                  , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 2)]))])
-          [Ident "aiDev", Ident "biDev"]))]
+        [ StmtItem $ ExpStmt $ Just $ Exp [Assign
+          (toUnaryExp $ Ident "i")
+          (toAssignExp $ Mul
+            (toMulExp $ Ident "aiDev") (toCastExp $ IntegerConst 2))]
+        , StmtItem $ SelectStmt $ IfElse
+          (Exp [toAssignExp $ LgcOr
+            (toLgcOrExp $ Ident "isFullBlock")
+            (toLgcAndExp $ Lt
+              (toRelExp $ Add
+                (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1))
+              (toShftExp $ Ident "n"))])
+          (CompStmt $ Blk $
+            [StmtItem $ ExpStmt $ Just $ Exp [Assign
+              (toUnaryExp $ toArrayElem (Ident "outData") (Ident "aiDev"))
+              (toAssignExp (FuncCall
+                (toPostfixExp $ Ident $ "make_" ++ (show $ Vector outTy' 2))
+                (ArgExpList $ Prelude.map
+                  (\ fieldName -> toAssignExp $ FuncCall
+                    (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
+                    (ArgExpList $ Prelude.map
+                      (\ arg -> toAssignExp $ StructMem
+                        (toArrayElem (Ident arg) (Ident "aiDev"))
+                        (Ident fieldName))
+                      ["inData0", "inData1"]))
+                  ["x", "y"])))]])
+          (SelectStmt $ Prelude.foldr1
+            (\ (If exp stmt) x -> If
+              exp
+              (CompStmt $ Blk [StmtItem stmt, StmtItem $ SelectStmt x]))
+            (Prelude.zipWith
+              (\ fieldName index -> If
+                (Exp [toAssignExp $ Lt
+                  (toRelExp index) (toShftExp $ Ident "n")])
+                (ExpStmt $ Just $ Exp [Assign
+                  (toUnaryExp $ toArrayElem (Ident "d_out") index)
+                  (toAssignExp $ FuncCall
+                    (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
+                    (ArgExpList $ Prelude.map
+                      (\ arg -> toAssignExp $ StructMem
+                        (toArrayElem (Ident arg) (Ident "aiDev")) (Ident fieldName))
+                      ["inData0", "inData1"]))]))
+              [ "x", "y"]
+              [ toAddExp $ Ident "i"
+              , Add (toAddExp $ Ident "i") (toMulExp $ IntegerConst 1)]))])]
   where
     [(xsTy, _), (ysTy, _)] = params scalar
     outTy'                 = outTy scalar
