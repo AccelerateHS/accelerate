@@ -956,7 +956,7 @@ pstrlit (StrLit s) = doubleQuotes $ text s
 -- Constant
 pconst :: Const -> Doc
 pconst (IntegerConst i) = integer i
-pconst (FloatConst   f) = float  f
+pconst (FloatConst   f) = float  f <> text "f"
 pconst (DoubleConst  d) = double d
 pconst (EnumConst    e) = pident e
 pconst (CharConst    c) = quotes $ char c
