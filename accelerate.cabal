@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.7.0.2
+Version:                0.7.0.3
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 6.10.4
 Build-type:             Simple

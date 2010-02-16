@@ -18,6 +18,9 @@ module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
   ArrayElem(..), ArrayData, MutableArrayData, runArrayData,
+  
+  -- * Array tuple operations
+  fstArrayData, sndArrayData, pairArrayData
 
 ) where
 
@@ -317,6 +320,19 @@ runArrayData st = runST $ do
                     (mad, r) <- st
                     ad <- unsafeFreezeArrayData mad
                     return (ad, r)
+                    
+-- Array tuple operations
+-- ----------------------
+
+fstArrayData :: ArrayData (a, b) -> ArrayData a
+fstArrayData (AD_Pair x _) = x
+
+sndArrayData :: ArrayData (a, b) -> ArrayData b
+sndArrayData (AD_Pair _ y) = y
+
+pairArrayData :: ArrayData a -> ArrayData b -> ArrayData (a, b)
+pairArrayData = AD_Pair
+
 
 
 -- Auxilliary functions
