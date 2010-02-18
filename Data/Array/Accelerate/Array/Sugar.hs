@@ -48,6 +48,9 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
+-- FIXME: CUDA backend
+import qualified Data.Array.Accelerate.CUDA.Data as CUDA
+
 
 -- |Representation change for array element types
 -- ----------------------------------------------
@@ -142,7 +145,10 @@ data All = All deriving (Typeable, Show)
 --
 class (Show a, Typeable a, 
        Typeable (ElemRepr a), Typeable (ElemRepr' a),
-       ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a)) 
+       ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a),
+       CUDA.ArrayElem (ElemRepr a), CUDA.ArrayElem (ElemRepr' a))
+       -- FIXME: It is not ideal to introduce a dependency on a backend in
+       --        this module.
       => Elem a where
   elemType  :: {-dummy-} a -> TupleType (ElemRepr a)
   fromElem  :: a -> ElemRepr a
