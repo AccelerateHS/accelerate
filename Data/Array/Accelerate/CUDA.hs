@@ -22,9 +22,14 @@ module Data.Array.Accelerate.CUDA (
 import Control.Monad.State
 import Data.Bits
 import Data.Char            (chr, ord)
-import System.Exit          (exitFailure, ExitCode(ExitSuccess))
+import Data.Map             as M (empty, insert, lookup, member)
+import Data.Maybe           (fromJust)
+import Foreign.Ptr          (WordPtr)
+import System.Exit          (ExitCode(ExitSuccess), exitFailure)
 import System.Posix.Process (
-  executeFile, forkProcess, getProcessStatus, ProcessStatus(..))
+  ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
+import System.Posix.Types   (ProcessID)
+import Data.ByteString.Char8 as B
 
 -- friends
 import Data.Array.Accelerate.Analysis.Type
@@ -39,6 +44,7 @@ import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 
+import qualified Data.Array.Accelerate.CUDA.Data    as CUDA
 import qualified Data.Array.Accelerate.CUDA.Monad   as CUDA
 import qualified Data.Array.Accelerate.CUDA.Scalar  as CUDA
 import qualified Data.Array.Accelerate.CUDA.Syntax  as CUDA
@@ -46,98 +52,229 @@ import qualified Data.Array.Accelerate.CUDA.Fold    as CUDA
 import qualified Data.Array.Accelerate.CUDA.Map     as CUDA
 import qualified Data.Array.Accelerate.CUDA.ZipWith as CUDA
 
+import qualified Foreign.CUDA.Driver as CUDA (
+  AllocFlag(..), Context(..), ContextFlag(..), Device(..), FunParam(..),
+  count, create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
+  loadDataEx, maxGridSize, nullDevPtr, pop, props, setBlockShape, setParams,
+  sync)
+
 -- Program execution
 -- -----------------
 
 -- |Characterises the types that may be returned when running an array program.
 --
-class Delayable as => Arrays as
+class Delayable as => Arrays as where
   
 instance Arrays ()  
 instance Arrays (Array dim e)
 instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 
--- |Compile and run a complete embedded array program using the CUDA backend.
+-- |Compiles and runs a complete embedded array program using the CUDA backend.
 --
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc = do
-  (progName, _) <- runStateT (codeGenAcc $ Sugar.convertAcc acc) (CUDA.CGState 0)
-  compile progName
-  error $ show "Compilation done"
+  let ast       = Sugar.convertAcc acc
+      initState = CUDA.CGState 0 0 M.empty M.empty M.empty M.empty
+  (device, context) <- initCUDA
+  (_, state  ) <- runStateT (memHtoD    ast) initState
+  (_, state' ) <- runStateT (codeGenAcc ast) state
+  ((arr', arr), state'') <- runStateT (execute ast True) state'
+  finalise
+  Prelude.putStrLn $ (show $ CUDA.dataTransferHtoD state')
+                  ++ " host-to-device data transfer(s) triggered."
+  return arr
+
+-- |Initialises the CUDA device and the context.
+--
+initCUDA :: IO (CUDA.Device, CUDA.Context)
+initCUDA = do
+  CUDA.initialise []
+  count   <- CUDA.count
+  if count == 0
+    then finalise >> error "No CUDA device found."
+    else do
+      device  <- CUDA.device 0
+      context <- CUDA.create device [CUDA.SchedAuto]
+      return (device, context)
+
+-- |Finalises the CUDA device and the context.
+--
+finalise :: IO ()
+finalise = CUDA.pop >>= CUDA.destroy
+
+-- |Executes the generated code
+--
+execute :: (Delayable a)
+        => OpenAcc aenv a -> Bool -> CUDA.CGIO ([CUDA.FunParam WordPtr], a)
+--execute op@(Map     fun xs)        = return []
+execute op@(ZipWith fun xs ys) topLevel = do
+  currentState <- get
+  let zipWithMap = CUDA.zipWithMap currentState
+      key        = show fun
+  case M.lookup key zipWithMap of
+    Just  v -> do
+      getCompilerProcessStatus (CUDA.compilerPID v)
+      props     <- liftIO $ CUDA.device 0 >>= CUDA.props
+      ptx       <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
+      (m, _)    <- liftIO $ CUDA.loadDataEx ptx []
+      fun       <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
+      (xs', Array sh1 rf1) <- execute xs False
+      (ys', Array sh2 rf2) <- execute ys False
+      let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
+          newSh         = sh1 `intersect` sh2
+          n             = size newSh
+          ctaSize       = 128
+          numBlocks     = (n + ctaSize - 1) `div` ctaSize
+          gridDim       = ( max maxGridSizeX numBlocks
+                          , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          isFullBlock   = if n `mod` ctaSize == 0 then 1 else 0
+          zs@(Array sh3 rf3) = newArray_ (Sugar.toElem newSh)
+      dptr <- CUDA.mallocArray rf3 (size sh3)
+      let zs' = CUDA.toFunParams rf3 dptr
+      liftIO $ CUDA.setParams fun (xs' ++ ys' ++ zs' ++ [CUDA.IArg n, CUDA.IArg isFullBlock])
+      liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
+      liftIO $ CUDA.launch fun gridDim Nothing
+      liftIO $ CUDA.sync
+      -- If the operation is at the top level, the output needs to be
+      -- synchronously transferred from GPU memory to CPU memory.
+      if topLevel
+        then CUDA.peekArray rf3 n dptr
+        else return ()
+      return (zs', zs)
+    Nothing ->
+      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+--execute op@(Fold    fun left xs)   = return []
+execute op@(Use arr@(Array _ e)) _ = do
+  arr' <- CUDA.toFunParams' e
+  return (arr', arr)
+
+-- Create an array for output
+newArray_ :: (Sugar.Ix dim, Sugar.Elem e) => dim -> Array dim e
+{-# INLINE newArray_ #-}
+newArray_ sh
+  = adata `seq` Array (Sugar.fromElem sh) adata
+  where
+    (adata, _) = runArrayData $ do
+                   arr <- newArrayData (Sugar.size sh)
+                   return (arr, undefined)
+
+getCompilerProcessStatus :: ProcessID -> CUDA.CGIO ProcessStatus
+getCompilerProcessStatus pid = do
+  status <- liftIO $ getProcessStatus True True pid
+  case status of
+    Just s@(Exited ExitSuccess) -> return s
+    _ -> error $ "An nvcc process (PID=" ++ show pid
+              ++ ") terminated abnormally."
 
 --
--- CUDA code compilation
--- ---------------------
+-- Host To GPU data transfer
+-- -------------------------
 
-compile :: String -> IO ()
-compile progName = do
-  let checkStatus status ext = case status of
-        Just (Exited ExitSuccess) -> return()
-        _ -> putStrLn ("Failed to compile " ++ progName ++ ext ++ ".") >> exitFailure
-      cppFlags =
-        [ "-W", "-Wall", "-Wimplicit", "-Wswitch", "-Wformat"
-        , "-Wchar-subscripts", "-Wparentheses", "-Wmultichar", "-Wtrigraphs"
-        , "-Wpointer-arith", "-Wcast-align", "-Wreturn-type"
-        , "-Wno-unused-function", "-arch", "i386", "-fno-strict-aliasing"
-        , "-DUNIX", "-O2", "-o", progName ++ ".cpp.o", "-c"
-        , progName ++ ".cpp"]
-      cuFlags =
-        [ "-m32", "--compiler-options", "-fno-strict-aliasing", "-DUNIX"
-        , "-O2", "-o", progName ++ ".cubin", "-cubin", progName ++ ".cu"]
-  cppPid <- forkProcess $ executeFile "g++"  True cppFlags Nothing
-  cuPid  <- forkProcess $ executeFile "nvcc" True cuFlags  Nothing
-  cppStatus <- getProcessStatus True True cppPid
-  cuStatus  <- getProcessStatus True True cuPid
-  checkStatus cppStatus ".cpp"
-  checkStatus cuStatus  ".cu"
+-- |Allocates device memory and triggers asynchronous data transfer.
+--
+memHtoD :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
+memHtoD op@(Map     fun xs)        = memHtoD xs
+memHtoD op@(ZipWith fun xs ys)     = memHtoD xs >> memHtoD ys
+memHtoD op@(Fold    fun left xs)   = memHtoD xs
+memHtoD op@(Use     (Array dim e)) = do
+  let numElems  = size dim
+      allocFlag = [CUDA.Portable, CUDA.WriteCombined]
+  -- hptrs <- CUDA.mallocHostArray e allocFlag numElems
+  dptrs <- CUDA.mallocArray e numElems
+  CUDA.pokeArrayAsync e numElems dptrs Nothing
+memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 --
--- CUDA code generation
--- --------------------
+-- CUDA code compilation flags
+-- ---------------------------
 
--- Generate CUDA code for an array expression
+cuCompileFlags :: String -> [String]
+cuCompileFlags progName = 
+  [ "-m32", "--compiler-options", "-fno-strict-aliasing", "-DUNIX"
+  , "-O2", "-o", progName ++ ".ptx", "-ptx", progName ++ ".cu"]
+
 --
-codeGenAcc :: Delayable a => OpenAcc aenv a -> CUDA.CGIO String
+-- CUDA/PTX code generation and compilation
+-- ----------------------------------------
+
+-- Generate CUDA code and PTX code for an array expression
+--
+codeGenAcc :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
+codeGenAcc op@(Use acc   ) = return ()
 codeGenAcc op@(Map fun xs) = do
   currentState <- get
-  let uniqueID = CUDA.uniqueID currentState
-      progName = "CUDAMap" ++ show uniqueID
-      scalar = CUDA.Scalar
-        { CUDA.params =
+  let uniqueID    = CUDA.uniqueID currentState
+      progName    = "CUDAMap" ++ show uniqueID
+      mapMap      = CUDA.mapMap currentState
+      mapMapKey   = show fun
+      mapMapValue = case M.lookup mapMapKey mapMap of
+        Just  v -> v
+        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+      scalar   = CUDA.Scalar
+        { CUDA.params   =
           [ (codeGenTupleType $ accType xs, "x0")]
-        , CUDA.outTy = codeGenTupleType $ accType op
-        , CUDA.comp = codeGenFun fun
+        , CUDA.outTy    = codeGenTupleType $ accType op
+        , CUDA.comp     = codeGenFun fun
         , CUDA.identity = Nothing}
-  put $ currentState {CUDA.uniqueID = uniqueID + 1}
   liftIO $ CUDA.mapGen progName scalar
-  return progName
+  pid <- liftIO $ forkProcess $
+    executeFile "nvcc" True (cuCompileFlags progName) Nothing
+  let mapMapValue' = mapMapValue
+        {CUDA.compilerPID = pid, CUDA.progName  = progName}
+  put $ currentState
+    { CUDA.uniqueID = uniqueID + 1
+    , CUDA.mapMap   =
+      insert mapMapKey mapMapValue' mapMap}
 codeGenAcc op@(ZipWith fun xs ys) = do
   currentState <- get
-  let uniqueID = CUDA.uniqueID currentState
-      progName = "CUDAZipWith" ++ show uniqueID 
-      scalar = CUDA.Scalar
-        { CUDA.params =
+  let uniqueID        = CUDA.uniqueID currentState
+      progName        = "CUDAZipWith" ++ show uniqueID 
+      zipWithMap      = CUDA.zipWithMap currentState
+      zipWithMapKey   = show fun
+      zipWithMapValue = case M.lookup zipWithMapKey zipWithMap of
+        Just  v -> v
+        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+      scalar   = CUDA.Scalar
+        { CUDA.params   =
           [ (codeGenTupleType $ accType xs, "x1")
           , (codeGenTupleType $ accType ys, "x0")]
-        , CUDA.outTy = codeGenTupleType $ accType op
-        , CUDA.comp = codeGenFun fun
+        , CUDA.outTy    = codeGenTupleType $ accType op
+        , CUDA.comp     = codeGenFun fun
         , CUDA.identity = Nothing}
-  put $ currentState {CUDA.uniqueID = uniqueID + 1}
   liftIO $ CUDA.zipWithGen progName scalar
-  return progName
+  pid <- liftIO $ forkProcess $
+    executeFile "nvcc" True (cuCompileFlags progName) Nothing
+  let zipWithMapValue' = zipWithMapValue
+        {CUDA.compilerPID = pid, CUDA.progName  = progName}
+  put $ currentState
+    { CUDA.uniqueID   = uniqueID + 1
+    , CUDA.zipWithMap =
+      insert zipWithMapKey zipWithMapValue' zipWithMap}
 codeGenAcc op@(Fold fun left xs) = do
   currentState <- get
   let uniqueID = CUDA.uniqueID currentState
       progName = "CUDAFold" ++ show uniqueID
-      scalar = CUDA.Scalar
-        { CUDA.params =
+      foldMap      = CUDA.foldMap currentState
+      foldMapKey   = show fun
+      foldMapValue = case M.lookup foldMapKey foldMap of
+        Just  v -> v
+        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+      scalar   = CUDA.Scalar
+        { CUDA.params   =
           [ (codeGenTupleType $ accType xs, "x0")]
-        , CUDA.outTy = codeGenTupleType $ accType op
-        , CUDA.comp = codeGenFun fun
+        , CUDA.outTy    = codeGenTupleType $ accType op
+        , CUDA.comp     = codeGenFun fun
         , CUDA.identity = Nothing}
-  put $ currentState {CUDA.uniqueID = uniqueID + 1}
   liftIO $ CUDA.foldGen progName scalar (codeGenTupleType $ expType left, "left")
-  return progName
+  pid <- liftIO $ forkProcess $
+    executeFile "nvcc" True (cuCompileFlags progName) Nothing
+  let foldMapValue' = foldMapValue
+        {CUDA.compilerPID = pid, CUDA.progName  = progName}
+  put $ currentState
+    { CUDA.uniqueID = uniqueID + 1
+    , CUDA.foldMap  =
+      insert foldMapKey foldMapValue' foldMap}
+codeGenAcc op = error $ show op ++ " not supported yet by the code generator."
 
 -- Scalar function
 -- ---------------
@@ -175,7 +312,7 @@ codeGenExp e@(Cond e1 e2 e3) =
     (CUDA.toCondExp $ CUDA.NestedExp $ codeGenExp e3)]
 codeGenExp e@(PrimConst c) = codeGenPrimConst c
 codeGenExp e@(PrimApp f a@(Tuple (NilTup `SnocTup` e1 `SnocTup` e2))) =
-  codeGenPrim f $ map CUDA.NestedExp [codeGenExp e1, codeGenExp e2]
+  codeGenPrim f $ Prelude.map CUDA.NestedExp [codeGenExp e1, codeGenExp e2]
 codeGenExp e@(IndexScalar acc ix) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
 codeGenExp e@(Shape acc) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
 
@@ -223,7 +360,7 @@ codeGenFloatingType (TypeCFloat  _) = CUDA.Float
 codeGenFloatingType (TypeCDouble _) = CUDA.Double
 
 codeGenNonNumType :: NonNumType a -> CUDA.TySpec
-codeGenNonNumType (TypeBool   _) = CUDA.Int  Nothing
+codeGenNonNumType (TypeBool   _) = CUDA.Char $ Just CUDA.Unsigned
 codeGenNonNumType (TypeChar   _) = CUDA.Char Nothing
 codeGenNonNumType (TypeCChar  _) = CUDA.Char Nothing
 codeGenNonNumType (TypeCSChar _) = CUDA.Char $ Just CUDA.Signed
