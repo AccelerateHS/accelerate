@@ -775,7 +775,7 @@ zip progName scalar = TransUnit
 zipWith :: String -> Scalar -> TransUnit
 zipWith progName scalar =
   TransUnit
-    [ LocalInclude $ Ident $ progName ++ ".h"]
+    [ ]
     [ FuncDef
       [DeclnTyQual Device, DeclnTySpec outTy']
       (Declr Nothing (IdentDeclr $ Ident $ "_" ++ progName ++ "Scalar"))
