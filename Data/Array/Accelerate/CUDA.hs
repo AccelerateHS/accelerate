@@ -76,13 +76,14 @@ run acc = do
   let ast       = Sugar.convertAcc acc
       initState = CUDA.CGState 0 0 M.empty M.empty M.empty M.empty
   (device, context) <- initCUDA
-  (_, state  ) <- runStateT (memHtoD    ast) initState
-  (_, state' ) <- runStateT (codeGenAcc ast) state
-  ((arr', arr), state'') <- runStateT (execute ast True) state'
+  (_,             state   ) <- runStateT (memHtoD    ast)  initState
+  (_,             state'  ) <- runStateT (codeGenAcc ast)      state
+  (arr@(_, arr'), state'' ) <- runStateT (execute    ast)      state'
+  (_,             state''') <- runStateT (memDtoH    ast arr)  state''
   finalise
-  Prelude.putStrLn $ (show $ CUDA.dataTransferHtoD state')
+  Prelude.putStrLn $ (show $ CUDA.dataTransferHtoD state''')
                   ++ " host-to-device data transfer(s) triggered."
-  return arr
+  return arr'
 
 -- |Initialises the CUDA device and the context.
 --
@@ -105,9 +106,9 @@ finalise = CUDA.pop >>= CUDA.destroy
 -- |Executes the generated code
 --
 execute :: (Delayable a)
-        => OpenAcc aenv a -> Bool -> CUDA.CGIO ([CUDA.FunParam WordPtr], a)
+        => OpenAcc aenv a -> CUDA.CGIO ([CUDA.FunParam WordPtr], a)
 --execute op@(Map     fun xs)        = return []
-execute op@(ZipWith fun xs ys) topLevel = do
+execute op@(ZipWith fun xs ys) = do
   currentState <- get
   let zipWithMap = CUDA.zipWithMap currentState
       key        = show fun
@@ -118,8 +119,8 @@ execute op@(ZipWith fun xs ys) topLevel = do
       ptx       <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
       (m, _)    <- liftIO $ CUDA.loadDataEx ptx []
       fun       <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
-      (xs', Array sh1 rf1) <- execute xs False
-      (ys', Array sh2 rf2) <- execute ys False
+      xs'@(xsFunParams, Array sh1 rf1) <- execute xs
+      ys'@(ysFunParams, Array sh2 rf2) <- execute ys
       let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
           newSh         = sh1 `intersect` sh2
           n             = size newSh
@@ -130,21 +131,28 @@ execute op@(ZipWith fun xs ys) topLevel = do
           isFullBlock   = if n `mod` ctaSize == 0 then 1 else 0
           zs@(Array sh3 rf3) = newArray_ (Sugar.toElem newSh)
       dptr <- CUDA.mallocArray rf3 (size sh3)
-      let zs' = CUDA.toFunParams rf3 dptr
-      liftIO $ CUDA.setParams fun (xs' ++ ys' ++ zs' ++ [CUDA.IArg n, CUDA.IArg isFullBlock])
+      let zsFunParams = CUDA.toFunParams rf3 dptr
+      liftIO $ CUDA.setParams fun
+        (xsFunParams ++ ysFunParams ++ zsFunParams ++
+        [CUDA.IArg n, CUDA.IArg isFullBlock])
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
-      -- If the operation is at the top level, the output needs to be
-      -- synchronously transferred from GPU memory to CPU memory.
-      if topLevel
-        then CUDA.peekArray rf3 n dptr
+      CUDA.decUse rf1 >>= \ decUse -> if decUse == 0
+        then do
+          liftIO $ Prelude.putStrLn "free"
+          CUDA.free rf1 $ CUDA.fromFunParams rf1 xsFunParams
         else return ()
-      return (zs', zs)
+      CUDA.decUse rf2 >>= \ decUse -> if decUse == 0
+        then do
+          liftIO $ Prelude.putStrLn "free"
+          CUDA.free rf2 $ CUDA.fromFunParams rf2 ysFunParams
+        else return ()
+      return (zsFunParams, zs)
     Nothing ->
       error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
 --execute op@(Fold    fun left xs)   = return []
-execute op@(Use arr@(Array _ e)) _ = do
+execute op@(Use arr@(Array _ e)) = do
   arr' <- CUDA.toFunParams' e
   return (arr', arr)
 
@@ -183,6 +191,17 @@ memHtoD op@(Use     (Array dim e)) = do
   dptrs <- CUDA.mallocArray e numElems
   CUDA.pokeArrayAsync e numElems dptrs Nothing
 memHtoD op = error $ show op ++ " not supported yet by the code generator."
+
+--
+-- GPU To Host data transfer
+-- -------------------------
+
+-- |Transfers the result from GPU
+--
+memDtoH :: Delayable a
+        => OpenAcc aenv a -> ([CUDA.FunParam WordPtr], a) -> CUDA.CGIO ()
+memDtoH op@(ZipWith _ _ _) (wptr, Array sh rf) =
+  CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
 
 --
 -- CUDA code compilation flags

@@ -19,7 +19,8 @@ data OperationMapValue
     , devicePtr   :: WordPtr}   -- device pointer for the output
   | MemoryEntry
     --{ hostPtr     :: WordPtr    -- host pointer pinned by CUDA driver API
-    { devicePtr   :: WordPtr}   -- device pointer
+    { devicePtr   :: WordPtr    -- device pointer
+    , numUse      :: Int}
   deriving Show
 
 data CGState = CGState
