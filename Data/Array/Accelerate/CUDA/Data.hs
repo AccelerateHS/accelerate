@@ -956,8 +956,6 @@ instance ArrayElem Float where
         useMap = CUDA.useMap currentState
         key    = ptrToWordPtr aptr
         val    = Data.Map.lookup key useMap
-    liftIO $ putStrLn $ show useMap
-    liftIO $ putStrLn $ show key 
     case Data.Map.lookup key useMap of
       Just val ->
         return [CUDA.VArg $ CUDA.devicePtr val]
