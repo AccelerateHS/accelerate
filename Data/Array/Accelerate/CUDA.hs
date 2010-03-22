@@ -122,30 +122,30 @@ execute op@(ZipWith fun xs ys) = do
       xs'@(xsFunParams, Array sh1 rf1) <- execute xs
       ys'@(ysFunParams, Array sh2 rf2) <- execute ys
       let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
-          newSh         = sh1 `intersect` sh2
-          n             = size newSh
-          ctaSize       = 128
-          numBlocks     = (n + ctaSize - 1) `div` ctaSize
-          gridDim       = ( max maxGridSizeX numBlocks
+          newSh          = sh1 `intersect` sh2
+          n              = size newSh
+          ctaSize        = 128
+          numElemsPerCTA = ctaSize * 2
+          numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
+          gridDim        = ( min maxGridSizeX numBlocks
                           , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
-          isFullBlock   = if n `mod` ctaSize == 0 then 1 else 0
+          isFullBlock    = if n `mod` ctaSize == 0 then 1 else 0
           zs@(Array sh3 rf3) = newArray_ (Sugar.toElem newSh)
       dptr <- CUDA.mallocArray rf3 (size sh3)
       let zsFunParams = CUDA.toFunParams rf3 dptr
       liftIO $ CUDA.setParams fun
         (xsFunParams ++ ysFunParams ++ zsFunParams ++
         [CUDA.IArg n, CUDA.IArg isFullBlock])
+      liftIO $ Prelude.putStrLn $ show (numBlocks * numElemsPerCTA) ++ " " ++ show gridDim ++ " " ++ show numBlocks
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
       CUDA.decUse rf1 >>= \ decUse -> if decUse == 0
         then do
-          liftIO $ Prelude.putStrLn "free"
           CUDA.free rf1 $ CUDA.fromFunParams rf1 xsFunParams
         else return ()
       CUDA.decUse rf2 >>= \ decUse -> if decUse == 0
         then do
-          liftIO $ Prelude.putStrLn "free"
           CUDA.free rf2 $ CUDA.fromFunParams rf2 ysFunParams
         else return ()
       return (zsFunParams, zs)
@@ -189,7 +189,8 @@ memHtoD op@(Use     (Array dim e)) = do
       allocFlag = [CUDA.Portable, CUDA.WriteCombined]
   -- hptrs <- CUDA.mallocHostArray e allocFlag numElems
   dptrs <- CUDA.mallocArray e numElems
-  CUDA.pokeArrayAsync e numElems dptrs Nothing
+  --CUDA.pokeArrayAsync e numElems dptrs Nothing
+  CUDA.pokeArray e numElems dptrs
 memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 --
