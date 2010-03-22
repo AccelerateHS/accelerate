@@ -188,8 +188,7 @@ memHtoD op@(Use     (Array dim e)) = do
       allocFlag = [CUDA.Portable, CUDA.WriteCombined]
   -- hptrs <- CUDA.mallocHostArray e allocFlag numElems
   dptrs <- CUDA.mallocArray e numElems
-  --CUDA.pokeArrayAsync e numElems dptrs Nothing
-  CUDA.pokeArray e numElems dptrs
+  CUDA.pokeArrayAsync e numElems dptrs Nothing
 memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 --
@@ -200,8 +199,9 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 --
 memDtoH :: Delayable a
         => OpenAcc aenv a -> ([CUDA.FunParam WordPtr], a) -> CUDA.CGIO ()
-memDtoH op@(ZipWith _ _ _) (wptr, Array sh rf) =
+memDtoH op@(ZipWith _ _ _) (wptr, Array sh rf) = do
   CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
+  CUDA.free rf $ CUDA.fromFunParams rf wptr
 
 --
 -- CUDA code compilation flags
