@@ -136,7 +136,6 @@ execute op@(ZipWith fun xs ys) = do
       liftIO $ CUDA.setParams fun
         (xsFunParams ++ ysFunParams ++ zsFunParams ++
         [CUDA.IArg n, CUDA.IArg isFullBlock])
-      liftIO $ Prelude.putStrLn $ show (numBlocks * numElemsPerCTA) ++ " " ++ show gridDim ++ " " ++ show numBlocks
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
