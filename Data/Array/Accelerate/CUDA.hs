@@ -107,7 +107,42 @@ finalise = CUDA.pop >>= CUDA.destroy
 --
 execute :: (Delayable a)
         => OpenAcc aenv a -> CUDA.CGIO ([CUDA.FunParam WordPtr], a)
---execute op@(Map     fun xs)        = return []
+execute op@(Map fun xs) = do
+  currentState <- get
+  let mapMap = CUDA.mapMap currentState
+      key    = show fun
+  case M.lookup key mapMap of
+    Just  v -> do
+      getCompilerProcessStatus (CUDA.compilerPID v)
+      props  <- liftIO $ CUDA.device 0 >>= CUDA.props
+      ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
+      (m, _) <- liftIO $ CUDA.loadDataEx ptx []
+      fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
+      xs'@(xsFunParams, Array newSh rf) <- execute xs
+      let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
+          n              = size sh
+          ctaSize        = 128
+          numElemsPerCTA = ctaSize * 2
+          numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
+          gridDim        = ( min maxGridSizeX numBlocks
+                          , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          isFullBlock    = if n `mod` ctaSize == 0 then 1 else 0
+          ys@(Array sh rf) = newArray_ (Sugar.toElem newSh)
+      dptr <- CUDA.mallocArray rf (size sh)
+      let ysFunParams = CUDA.toFunParams rf dptr
+      liftIO $ CUDA.setParams fun
+        (xsFunParams ++ ysFunParams ++
+        [CUDA.IArg n, CUDA.IArg isFullBlock])
+      liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
+      liftIO $ CUDA.launch fun gridDim Nothing
+      liftIO $ CUDA.sync
+      CUDA.decUse rf >>= \ decUse -> if decUse == 0
+        then do
+          CUDA.free rf $ CUDA.fromFunParams rf xsFunParams
+        else return ()
+      return (ysFunParams, ys)
+    Nothing ->
+      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
 execute op@(ZipWith fun xs ys) = do
   currentState <- get
   let zipWithMap = CUDA.zipWithMap currentState
@@ -115,10 +150,10 @@ execute op@(ZipWith fun xs ys) = do
   case M.lookup key zipWithMap of
     Just  v -> do
       getCompilerProcessStatus (CUDA.compilerPID v)
-      props     <- liftIO $ CUDA.device 0 >>= CUDA.props
-      ptx       <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
-      (m, _)    <- liftIO $ CUDA.loadDataEx ptx []
-      fun       <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
+      props  <- liftIO $ CUDA.device 0 >>= CUDA.props
+      ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
+      (m, _) <- liftIO $ CUDA.loadDataEx ptx []
+      fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
       xs'@(xsFunParams, Array sh1 rf1) <- execute xs
       ys'@(ysFunParams, Array sh2 rf2) <- execute ys
       let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
@@ -199,6 +234,9 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 --
 memDtoH :: Delayable a
         => OpenAcc aenv a -> ([CUDA.FunParam WordPtr], a) -> CUDA.CGIO ()
+memDtoH op@(Map _ _) (wptr, Array sh rf) = do
+  CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
+  CUDA.free rf $ CUDA.fromFunParams rf wptr
 memDtoH op@(ZipWith _ _ _) (wptr, Array sh rf) = do
   CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
   CUDA.free rf $ CUDA.fromFunParams rf wptr
