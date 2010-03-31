@@ -11,9 +11,11 @@ import System.Random
 
 import qualified Data.Array.Accelerate as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
+import qualified Data.Array.Accelerate.CUDA as CUDA
 
 import System.Time
 import SAXPY
+import Square
 import DotP
 import Filter
 
@@ -179,10 +181,13 @@ test_saxpy n
       v2     <- convertUVector v2_ref
       putStrLn "Running reference code..."
       ref_result <- timeUVector $ saxpy_ref' 1.5 v1_ref v2_ref
-      putStrLn "Running Accelerate code..."
+      putStrLn "Running Accelerate code...[Interpreter]"
       result <- timeVector $ saxpy_interp 1.5 v1 v2
+      putStrLn "Running Accelerate code...[CUDA]"
+      result_cuda <- saxpy_cuda 1.5 v1 v2 >>= return . Acc.toIArray
       putStrLn "Validating result..."
       validateFloats ref_result result
+      validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
     -- from sharing results over multiple runs
@@ -190,6 +195,34 @@ test_saxpy n
     saxpy_ref' a arr1 arr2 () = saxpy_ref a arr1 arr2
     {-# NOINLINE saxpy_interp #-}
     saxpy_interp a arr1 arr2 () = Interp.run (saxpy a arr1 arr2)
+    {-# NOINLINE saxpy_cuda #-}
+    saxpy_cuda a arr1 arr2 = CUDA.run (saxpy a arr1 arr2)
+
+test_square :: Int -> IO ()
+test_square n
+  = do
+      putStrLn "== Square"
+      putStrLn $ "Generating data (n = " ++ show n ++ ")..."
+      v1_ref <- randomUVector n
+      v1     <- convertUVector v1_ref
+      putStrLn "Running reference code..."
+      ref_result <- timeUVector $ square_ref' v1_ref
+      putStrLn "Running Accelerate code...[Interpreter]"
+      result <- timeVector $ square_interp v1
+      putStrLn "Running Accelerate code...[CUDA]"
+      result_cuda <- square_cuda v1 >>= return . Acc.toIArray
+      putStrLn "Validating result..."
+      validateFloats ref_result result
+      validateFloats ref_result result_cuda
+  where
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE square_ref' #-}
+    square_ref' arr1 () = square_ref arr1
+    {-# NOINLINE square_interp #-}
+    square_interp arr1 () = Interp.run (square arr1)
+    {-# NOINLINE square_cuda #-}
+    square_cuda arr1 = CUDA.run (square arr1)
 
 test_dotp :: Int -> IO ()
 test_dotp n
