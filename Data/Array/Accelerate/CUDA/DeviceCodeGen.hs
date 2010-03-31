@@ -261,7 +261,7 @@ foldr1 progName scalar = TransUnit
 
 map :: String -> Scalar -> TransUnit
 map progName scalar = TransUnit
-  [ LocalInclude $ Ident $ progName ++ ".h"]
+  [ ]
   [ FuncDef
     [DeclnTyQual Device, DeclnTySpec outTy']
     (Declr Nothing (IdentDeclr $ Ident $ "_" ++ progName ++ "Scalar"))
@@ -316,7 +316,7 @@ map progName scalar = TransUnit
       [ StmtItem $ ExpStmt $ Just $ Exp [Assign
         (toUnaryExp $ Ident "i")
         (toAssignExp $ Mul
-          (toMulExp $ Ident "aiDev") (toCastExp $ IntegerConst 4))]
+          (toMulExp $ Ident "aiDev") (toCastExp $ IntegerConst 2))]
       , StmtItem $ SelectStmt $ IfElse
         (Exp [toAssignExp $ LgcOr
           (toLgcOrExp $ Ident "isFullBlock")
