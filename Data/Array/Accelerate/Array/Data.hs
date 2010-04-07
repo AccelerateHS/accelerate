@@ -26,17 +26,19 @@ module Data.Array.Accelerate.Array.Data (
 
 -- standard libraries
 import Foreign            (Ptr)
-import GHC.Prim           (ByteArray#, byteArrayContents#,
-                           unsafeFreezeByteArray#)
+import GHC.Base           (Int(..))
+import GHC.Prim           (ByteArray#, newPinnedByteArray#, byteArrayContents#,
+                           unsafeFreezeByteArray#, Int#, (+#), (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
 import Control.Monad
 import Control.Monad.ST
 import qualified Data.Array.IArray  as IArray
-import qualified Data.Array.MArray  as MArray
+import qualified Data.Array.MArray  as MArray hiding (newArray)
 import Data.Array.ST      (STUArray)
 import Data.Array.Unboxed (UArray)
-import Data.Array.Base    (UArray(UArray), STUArray(STUArray))
+import Data.Array.Base    (UArray(UArray), STUArray(STUArray), bOOL_SCALE,
+                           wORD_SCALE, fLOAT_SCALE, dOUBLE_SCALE)
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -118,7 +120,7 @@ instance ArrayElem Int where
   type ArrayPtrs Int = Ptr Int
   indexArrayData (AD_Int ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Int ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Int $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Int $ unsafeNewArray_ size wORD_SCALE
   readArrayData (AD_Int ba) i = MArray.readArray ba i
   writeArrayData (AD_Int ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int ba) = liftM AD_Int $ MArray.unsafeFreeze ba
@@ -128,7 +130,7 @@ instance ArrayElem Int8 where
   type ArrayPtrs Int8 = Ptr Int8
   indexArrayData (AD_Int8 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Int8 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Int8 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Int8 $ unsafeNewArray_ size (\x -> x)
   readArrayData (AD_Int8 ba) i = MArray.readArray ba i
   writeArrayData (AD_Int8 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int8 ba) = liftM AD_Int8 $ MArray.unsafeFreeze ba
@@ -138,7 +140,7 @@ instance ArrayElem Int16 where
   type ArrayPtrs Int16 = Ptr Int16
   indexArrayData (AD_Int16 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Int16 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Int16 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Int16 $ unsafeNewArray_ size (*# 2#)
   readArrayData (AD_Int16 ba) i = MArray.readArray ba i
   writeArrayData (AD_Int16 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int16 ba) = liftM AD_Int16 $ MArray.unsafeFreeze ba
@@ -148,7 +150,7 @@ instance ArrayElem Int32 where
   type ArrayPtrs Int32 = Ptr Int32
   indexArrayData (AD_Int32 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Int32 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Int32 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Int32 $ unsafeNewArray_ size (*# 4#)
   readArrayData (AD_Int32 ba) i = MArray.readArray ba i
   writeArrayData (AD_Int32 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int32 ba) = liftM AD_Int32 $ MArray.unsafeFreeze ba
@@ -158,7 +160,7 @@ instance ArrayElem Int64 where
   type ArrayPtrs Int64 = Ptr Int64
   indexArrayData (AD_Int64 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Int64 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Int64 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Int64 $ unsafeNewArray_ size (*# 8#)
   readArrayData (AD_Int64 ba) i = MArray.readArray ba i
   writeArrayData (AD_Int64 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int64 ba) = liftM AD_Int64 $ MArray.unsafeFreeze ba
@@ -168,7 +170,7 @@ instance ArrayElem Word where
   type ArrayPtrs Word = Ptr Word
   indexArrayData (AD_Word ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Word ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Word $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Word $ unsafeNewArray_ size wORD_SCALE
   readArrayData (AD_Word ba) i = MArray.readArray ba i
   writeArrayData (AD_Word ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word ba) = liftM AD_Word $ MArray.unsafeFreeze ba
@@ -178,7 +180,7 @@ instance ArrayElem Word8 where
   type ArrayPtrs Word8 = Ptr Word8
   indexArrayData (AD_Word8 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Word8 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Word8 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Word8 $ unsafeNewArray_ size (\x -> x)
   readArrayData (AD_Word8 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word8 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word8 ba) = liftM AD_Word8 $ MArray.unsafeFreeze ba
@@ -188,7 +190,7 @@ instance ArrayElem Word16 where
   type ArrayPtrs Word16 = Ptr Word16
   indexArrayData (AD_Word16 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Word16 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Word16 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Word16 $ unsafeNewArray_ size (*# 2#)
   readArrayData (AD_Word16 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word16 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word16 ba) 
@@ -199,7 +201,7 @@ instance ArrayElem Word32 where
   type ArrayPtrs Word32 = Ptr Word32
   indexArrayData (AD_Word32 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Word32 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Word32 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Word32 $ unsafeNewArray_ size (*# 4#)
   readArrayData (AD_Word32 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word32 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word32 ba) 
@@ -210,7 +212,7 @@ instance ArrayElem Word64 where
   type ArrayPtrs Word64 = Ptr Word64
   indexArrayData (AD_Word64 ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Word64 ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Word64 $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Word64 $ unsafeNewArray_ size (*# 8#)
   readArrayData (AD_Word64 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word64 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word64 ba) 
@@ -231,7 +233,7 @@ instance ArrayElem Float where
   type ArrayPtrs Float = Ptr Float
   indexArrayData (AD_Float ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Float ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Float $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Float $ unsafeNewArray_ size fLOAT_SCALE
   readArrayData (AD_Float ba) i = MArray.readArray ba i
   writeArrayData (AD_Float ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Float ba) = liftM AD_Float $ MArray.unsafeFreeze ba
@@ -241,7 +243,7 @@ instance ArrayElem Double where
   type ArrayPtrs Double = Ptr Double
   indexArrayData (AD_Double ba) i = ba IArray.! i
   ptrsOfArrayData (AD_Double ba) = uArrayPtr ba
-  newArrayData size = liftM AD_Double $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Double $ unsafeNewArray_ size dOUBLE_SCALE
   readArrayData (AD_Double ba) i = MArray.readArray ba i
   writeArrayData (AD_Double ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Double ba) 
@@ -261,7 +263,7 @@ instance ArrayElem Bool where
 --    - Do we want to represent 'Array sh Bool' differently or do we want to
 --      copy the array on marshaling (but then we also have to copy back
 --      results of the same type)
-  newArrayData size = liftM AD_Bool $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Bool $ unsafeNewArray_ size bOOL_SCALE
   readArrayData (AD_Bool ba) i = MArray.readArray ba i
   writeArrayData (AD_Bool ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Bool ba) = liftM AD_Bool $ MArray.unsafeFreeze ba
@@ -272,7 +274,7 @@ instance ArrayElem Char where
 --  type ArrayPtrs Char = ???unicode???
   indexArrayData (AD_Char ba) i = ba IArray.! i
 --  ptrsOfArrayData (AD_Char ba) = ???
-  newArrayData size = liftM AD_Char $ MArray.newArray_ (0, size - 1)
+  newArrayData size = liftM AD_Char $ unsafeNewArray_ size (*# 4#)
   readArrayData (AD_Char ba) i = MArray.readArray ba i
   writeArrayData (AD_Char ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Char ba) = liftM AD_Char $ MArray.unsafeFreeze ba
@@ -337,6 +339,16 @@ pairArrayData = AD_Pair
 
 -- Auxilliary functions
 -- --------------------
+
+-- Our own version of the 'STUArray' allocation that uses /pinned/ memory,
+-- which is aligned to 16 bytes.
+--
+unsafeNewArray_ :: Int -> (Int# -> Int#) -> ST s (STUArray s Int e)
+unsafeNewArray_ n@(I# n#) elemsToBytes
+ = ST $ \s1# ->
+     case newPinnedByteArray# (elemsToBytes n#) s1# of
+         (# s2#, marr# #) ->
+             (# s2#, STUArray 0 (n - 1) n marr# #)
 
 -- Obtains a pointer to the payload of an unboxed array.
 --
