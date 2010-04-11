@@ -24,6 +24,7 @@ import Data.Bits
 import Data.Char            (chr, ord)
 import Data.Map             as M (empty, insert, lookup, member)
 import Data.Maybe           (fromJust)
+import Foreign
 import Foreign.Ptr          (WordPtr)
 import System.Exit          (ExitCode(ExitSuccess), exitFailure)
 import System.Posix.Process (
@@ -37,7 +38,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar (
-  Array(..), Scalar, Vector, Segments)
+  Array(..), Scalar, Vector, Segments, DIM0)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
@@ -56,7 +57,7 @@ import qualified Foreign.CUDA.Driver as CUDA (
   AllocFlag(..), Context(..), ContextFlag(..), Device(..), FunParam(..),
   count, create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
   loadDataEx, maxGridSize, nullDevPtr, pop, props, setBlockShape, setParams,
-  sync)
+  setSharedSize, sync)
 
 -- Program execution
 -- -----------------
@@ -107,12 +108,55 @@ finalise = CUDA.pop >>= CUDA.destroy
 --
 execute :: (Delayable a)
         => OpenAcc aenv a -> CUDA.CGIO ([CUDA.FunParam WordPtr], a)
+execute op@(Fold fun def xs) = do
+  currentState <- get
+  let foldMap = CUDA.foldMap currentState
+      key     = show fun
+  case M.lookup key foldMap of
+    Just  v -> do
+      getCompilerProcessStatus (CUDA.compilerPID v)
+      props  <- liftIO $ CUDA.device 0 >>= CUDA.props
+      ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
+      (m, _) <- liftIO $ CUDA.loadDataEx ptx []
+      fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v ++ "Scan4")
+      xs'@(xsFunParams, Array sh rf) <- execute xs
+      let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
+          n              = size sh
+          ctaSize        = 128
+          numElemsPerCTA = ctaSize * 8
+          ys@(Array newSh newRf) = newArray_ (Sugar.toElem ())
+          execute' p e xsFunParams' n' = do
+            let isFullBlock = if n' `mod` numElemsPerCTA == 0 then 1 else 0
+                numBlocks   = (n' + numElemsPerCTA - 1) `div` numElemsPerCTA
+                gridDim     = ( min maxGridSizeX numBlocks
+                              , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+            dptr <- CUDA.mallocArray newRf numBlocks
+            let ysFunParams = CUDA.toFunParams newRf dptr
+            liftIO $ CUDA.setSharedSize fun (fromIntegral $ 256 * sizeOf (undefined::Float))
+            liftIO $ CUDA.setParams fun
+              ([CUDA.IArg e, CUDA.FArg 0] ++ xsFunParams' ++ ysFunParams ++
+              [CUDA.IArg n', CUDA.IArg isFullBlock])
+            liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
+            liftIO $ CUDA.launch fun gridDim Nothing
+            liftIO $ CUDA.sync
+            if p == 0
+              then CUDA.decUse rf >>= \ decUse -> if decUse == 0
+                then CUDA.free rf $ CUDA.fromFunParams rf xsFunParams'
+                else return ()
+              else CUDA.free newRf $ CUDA.fromFunParams newRf xsFunParams'
+            if numBlocks == 1
+              then return ysFunParams
+              else execute' (p + 1) 0 ysFunParams numBlocks
+      ysFunParams <- execute' 0 1 xsFunParams (n + 1)
+      return (ysFunParams, ys)
+    Nothing ->
+      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
 execute op@(Map fun xs) = do
   currentState <- get
   let mapMap = CUDA.mapMap currentState
       key    = show fun
   case M.lookup key mapMap of
-    Just  v -> do
+    Just v -> do
       getCompilerProcessStatus (CUDA.compilerPID v)
       props  <- liftIO $ CUDA.device 0 >>= CUDA.props
       ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
@@ -125,8 +169,8 @@ execute op@(Map fun xs) = do
           numElemsPerCTA = ctaSize * 2
           numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
           gridDim        = ( min maxGridSizeX numBlocks
-                          , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
-          isFullBlock    = if n `mod` ctaSize == 0 then 1 else 0
+                           , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
           ys@(Array sh rf) = newArray_ (Sugar.toElem newSh)
       dptr <- CUDA.mallocArray rf (size sh)
       let ysFunParams = CUDA.toFunParams rf dptr
@@ -137,8 +181,7 @@ execute op@(Map fun xs) = do
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
       CUDA.decUse rf >>= \ decUse -> if decUse == 0
-        then do
-          CUDA.free rf $ CUDA.fromFunParams rf xsFunParams
+        then CUDA.free rf $ CUDA.fromFunParams rf xsFunParams
         else return ()
       return (ysFunParams, ys)
     Nothing ->
@@ -148,7 +191,7 @@ execute op@(ZipWith fun xs ys) = do
   let zipWithMap = CUDA.zipWithMap currentState
       key        = show fun
   case M.lookup key zipWithMap of
-    Just  v -> do
+    Just v -> do
       getCompilerProcessStatus (CUDA.compilerPID v)
       props  <- liftIO $ CUDA.device 0 >>= CUDA.props
       ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
@@ -163,8 +206,8 @@ execute op@(ZipWith fun xs ys) = do
           numElemsPerCTA = ctaSize * 2
           numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
           gridDim        = ( min maxGridSizeX numBlocks
-                          , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
-          isFullBlock    = if n `mod` ctaSize == 0 then 1 else 0
+                           , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
           zs@(Array sh3 rf3) = newArray_ (Sugar.toElem newSh)
       dptr <- CUDA.mallocArray rf3 (size sh3)
       let zsFunParams = CUDA.toFunParams rf3 dptr
@@ -175,12 +218,10 @@ execute op@(ZipWith fun xs ys) = do
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
       CUDA.decUse rf1 >>= \ decUse -> if decUse == 0
-        then do
-          CUDA.free rf1 $ CUDA.fromFunParams rf1 xsFunParams
+        then CUDA.free rf1 $ CUDA.fromFunParams rf1 xsFunParams
         else return ()
       CUDA.decUse rf2 >>= \ decUse -> if decUse == 0
-        then do
-          CUDA.free rf2 $ CUDA.fromFunParams rf2 ysFunParams
+        then CUDA.free rf2 $ CUDA.fromFunParams rf2 ysFunParams
         else return ()
       return (zsFunParams, zs)
     Nothing ->
@@ -234,6 +275,9 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 --
 memDtoH :: Delayable a
         => OpenAcc aenv a -> ([CUDA.FunParam WordPtr], a) -> CUDA.CGIO ()
+memDtoH op@(Fold _ _ _) (wptr, Array sh rf) = do
+  CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
+  CUDA.free rf $ CUDA.fromFunParams rf wptr
 memDtoH op@(Map _ _) (wptr, Array sh rf) = do
   CUDA.peekArray rf (size sh) (CUDA.fromFunParams rf wptr)
   CUDA.free rf $ CUDA.fromFunParams rf wptr
@@ -257,7 +301,31 @@ cuCompileFlags progName =
 -- Generate CUDA code and PTX code for an array expression
 --
 codeGenAcc :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
-codeGenAcc op@(Use acc   ) = return ()
+codeGenAcc op@(Fold fun left xs) = do
+  currentState <- get
+  let uniqueID = CUDA.uniqueID currentState
+      progName = "CUDAFold" ++ show uniqueID
+      foldMap      = CUDA.foldMap currentState
+      foldMapKey   = show fun
+      foldMapValue = case M.lookup foldMapKey foldMap of
+        Just  v -> v
+        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+      scalar   = CUDA.Scalar
+        { CUDA.params   =
+          [ (codeGenTupleType $ expType left, "x1")
+          , (codeGenTupleType $ accType xs,   "x0")]
+        , CUDA.outTy    = codeGenTupleType $ accType op
+        , CUDA.comp     = codeGenFun fun
+        , CUDA.identity = Nothing}
+  liftIO $ CUDA.foldGen progName scalar (codeGenTupleType $ expType left, "left")
+  pid <- liftIO $ forkProcess $
+    executeFile "nvcc" True (cuCompileFlags progName) Nothing
+  let foldMapValue' = foldMapValue
+        {CUDA.compilerPID = pid, CUDA.progName  = progName}
+  put $ currentState
+    { CUDA.uniqueID = uniqueID + 1
+    , CUDA.foldMap  =
+      insert foldMapKey foldMapValue' foldMap}
 codeGenAcc op@(Map fun xs) = do
   currentState <- get
   let uniqueID    = CUDA.uniqueID currentState
@@ -307,30 +375,7 @@ codeGenAcc op@(ZipWith fun xs ys) = do
     { CUDA.uniqueID   = uniqueID + 1
     , CUDA.zipWithMap =
       insert zipWithMapKey zipWithMapValue' zipWithMap}
-codeGenAcc op@(Fold fun left xs) = do
-  currentState <- get
-  let uniqueID = CUDA.uniqueID currentState
-      progName = "CUDAFold" ++ show uniqueID
-      foldMap      = CUDA.foldMap currentState
-      foldMapKey   = show fun
-      foldMapValue = case M.lookup foldMapKey foldMap of
-        Just  v -> v
-        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
-      scalar   = CUDA.Scalar
-        { CUDA.params   =
-          [ (codeGenTupleType $ accType xs, "x0")]
-        , CUDA.outTy    = codeGenTupleType $ accType op
-        , CUDA.comp     = codeGenFun fun
-        , CUDA.identity = Nothing}
-  liftIO $ CUDA.foldGen progName scalar (codeGenTupleType $ expType left, "left")
-  pid <- liftIO $ forkProcess $
-    executeFile "nvcc" True (cuCompileFlags progName) Nothing
-  let foldMapValue' = foldMapValue
-        {CUDA.compilerPID = pid, CUDA.progName  = progName}
-  put $ currentState
-    { CUDA.uniqueID = uniqueID + 1
-    , CUDA.foldMap  =
-      insert foldMapKey foldMapValue' foldMap}
+codeGenAcc op@(Use acc   ) = return ()
 codeGenAcc op = error $ show op ++ " not supported yet by the code generator."
 
 -- Scalar function

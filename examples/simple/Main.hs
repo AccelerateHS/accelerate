@@ -18,6 +18,7 @@ import SAXPY
 import Square
 import DotP
 import Filter
+import Sum
 
 
 -- Auxilliary array functions
@@ -223,6 +224,32 @@ test_square n
     square_interp arr1 () = Interp.run (square arr1)
     {-# NOINLINE square_cuda #-}
     square_cuda arr1 = CUDA.run (square arr1)
+
+test_sum :: Int -> IO ()
+test_sum n
+  = do
+      putStrLn "== Sum"
+      putStrLn $ "Generating data (n = " ++ show n ++ ")..."
+      v1_ref <- randomUVector n
+      v1     <- convertUVector v1_ref
+      putStrLn "Running reference code..."
+      ref_result <- timeUScalar $ sum_ref' v1_ref
+      putStrLn "Running Accelerate code...[Interpreter]"
+      result <- timeScalar $ sum_interp v1
+      putStrLn "Running Accelerate code...[CUDA]"
+      result_cuda <- sum_cuda v1 >>= return . Acc.toIArray
+      putStrLn "Validating result..."
+      validateFloats ref_result result
+      validateFloats ref_result result_cuda
+  where
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE sum_ref' #-}
+    sum_ref' arr1 () = sum_ref arr1
+    {-# NOINLINE sum_interp #-}
+    sum_interp arr1 () = Interp.run (Sum.sum arr1)
+    {-# NOINLINE sum_cuda #-}
+    sum_cuda arr1 = CUDA.run (Sum.sum arr1)
 
 test_dotp :: Int -> IO ()
 test_dotp n

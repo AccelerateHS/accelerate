@@ -173,7 +173,7 @@ bpermute progName scalar = TransUnit
 
 fold :: String -> Scalar -> (TySpec, String) -> TransUnit
 fold progName scalar left = TransUnit
-  [ LocalInclude $ Ident $ progName ++ ".h"]
+  [ ]
   [ FuncDef
     [DeclnTyQual Device, DeclnTySpec outTy']
     (Declr Nothing (IdentDeclr $ Ident $ "_" ++ progName ++ "Scalar"))
@@ -187,7 +187,6 @@ fold progName scalar left = TransUnit
   , warpscan progName outTy' identity'
   , scanWarps progName outTy' True identity'
   , scanCTA progName outTy' True identity'
-  , storeSharedChunkToMem4 progName outTy' True False identity'
   , scan4 progName outTy' True identity']
   where
     outTy'    = outTy scalar
@@ -1590,10 +1589,11 @@ scanWarps progName ty exclusive identity = FuncDef
       (\ (val, idxName) -> StmtItem $ ExpStmt $ Just $ Exp [Assign
         (toUnaryExp $ toArrayElem
           (Ident "s_data")
-          (case identity of
-            Just _  -> toAddExp $ Ident idxName
-            Nothing -> Add
-              (toAddExp $ Ident idxName) (toMulExp $ IntegerConst 1)))
+          --(case identity of
+          --  Just _  -> toAddExp $ Ident idxName
+          --  Nothing -> Add
+          --    (toAddExp $ Ident idxName) (toMulExp $ IntegerConst 1)))
+          (Ident idxName))
         (toAssignExp $ Ident val)])
       [("val", "idx"), ("val2", "idx2")]))
 
@@ -1607,23 +1607,55 @@ scanCTA progName ty exclusive identity = FuncDef
     [ ([DeclnTySpec ty], Just $ Pointer [[]], "s_data")
     , ([DeclnTySpec ty], Just $ Pointer [[]], "d_blockSums")
     , ([DeclnTySpec (Int $ Just Unsigned)], Nothing, "blockSumIndex")
-    , ([DeclnTySpec (Int $ Just Unsigned)], Nothing, "writeSums")])
+    , ([DeclnTySpec (Int $ Just Unsigned)], Nothing, "numElements")])
   (Blk $
     (Prelude.map
-      (\ (varName, index) -> DeclnItem $ Decln
+      (\ (ty, varName, exp) -> DeclnItem $ Decln
         [DeclnTySpec ty]
-        [InitDeclr
-          (Declr Nothing (IdentDeclr $ Ident varName))
-          (Just $ AssignExp $ toAssignExp $ toArrayElem
-            (Ident "s_data") index)])
-      [ ( "val"
-        , toAddExp $ StructMem (toPostfixExp $ Ident "threadIdx") (Ident "x"))
-      , ( "val2"
-        , Add
-          (toAddExp $ (StructMem
-            (toPostfixExp $ Ident "threadIdx") (Ident "x")))
-          (toMulExp $ (StructMem
-            (toPostfixExp $ Ident "blockDim") (Ident "x"))))])
+        [InitDeclr (Declr Nothing (IdentDeclr $ Ident varName)) (Just exp)])
+      [ ( ty, "val"
+        , AssignExp $ toAssignExp $ toArrayElem
+          (Ident "s_data")
+          (StructMem (toPostfixExp $ Ident "threadIdx") (Ident "x")))
+      , ( ty, "val2"
+        , AssignExp $ toAssignExp $ toArrayElem
+          (Ident "s_data")
+          (Add
+            (toAddExp $ (StructMem
+              (toPostfixExp $ Ident "threadIdx") (Ident "x")))
+            (toMulExp $ (StructMem
+              (toPostfixExp $ Ident "blockDim") (Ident "x")))))
+      , ( Int $ Just Unsigned, "blkid"
+        , AssignExp $ toAssignExp $ Add
+          (toAddExp $ StructMem (toPostfixExp $ Ident "blockIdx") (Ident "x"))
+          (toMulExp $ FuncCall
+            (toPostfixExp $ Ident "__umul24")
+            (ArgExpList
+              [ toAssignExp $ StructMem
+                (toPostfixExp $ Ident "blockIdx") (Ident "y")
+              , toAssignExp $ StructMem
+                (toPostfixExp $ Ident "gridDim") (Ident "x")])))
+      , ( Int $ Just Unsigned, "gtid"
+        , AssignExp $ toAssignExp $ Add
+          (toAddExp $ StructMem (toPostfixExp $ Ident "threadIdx") (Ident "x"))
+          (toMulExp $ FuncCall
+            (toPostfixExp $ Ident "__umul24")
+            (ArgExpList
+              [ toAssignExp $ Ident "blkid"
+              , toAssignExp $ StructMem
+                (toPostfixExp $ Ident "blockDim") (Ident "x")])))
+      , ( Int $ Just Unsigned, "lastBlock"
+        , AssignExp $ toAssignExp $ RShft
+          (toShftExp $ Sub
+            (toAddExp $ Ident "numElements") (toMulExp $ IntegerConst 1))
+          (toAddExp $ IntegerConst 10))
+      , ( Int $ Just Unsigned, "lastElementTid"
+        , AssignExp $ toAssignExp $ And
+          (toAndExp $ RShft
+            (toShftExp $ Sub
+              (toAddExp $ Ident "numElements") (toMulExp $ IntegerConst 1))
+            (toAddExp $ IntegerConst 2))
+          (toEqExp $ IntegerConst 127))])
     ++
     [ StmtItem $ ExpStmt $ Just $ Exp [toAssignExp $ FuncCall
       (toPostfixExp $ Ident "__syncthreads") (ArgExpList [])]
@@ -1633,10 +1665,11 @@ scanCTA progName ty exclusive identity = FuncDef
         (toAssignExp . Ident) ["val", "val2", "s_data"])]
     , StmtItem $ ExpStmt $ Just $ Exp [toAssignExp $ FuncCall
       (toPostfixExp $ Ident "__syncthreads") (ArgExpList [])]
-    , StmtItem $ SelectStmt $ If
+    , StmtItem $ SelectStmt $ IfElse
       (Exp [toAssignExp $
         LgcAnd
-          (toLgcAndExp $ Ident "writeSums")
+          (toLgcAndExp $ Neq
+            (toEqExp $ Ident "blkid") (toRelExp $ Ident "lastBlock"))
           (toOrExp $ Eq
             (toEqExp $ StructMem
               (toPostfixExp $ Ident "threadIdx") (Ident "x"))
@@ -1647,17 +1680,44 @@ scanCTA progName ty exclusive identity = FuncDef
       (ExpStmt $ Just $ Exp [Assign
         (toUnaryExp $ toArrayElem
           (Ident "d_blockSums") (Ident "blockSumIndex"))
-        (toAssignExp $ FuncCall
-          (toPostfixExp $ Ident $ "_" ++ progName ++ "Scalar")
-          (ArgExpList
-            [ toAssignExp $ toArrayElem
-              (Ident "s_data")
-              (Add
+        (toAssignExp $ toArrayElem
+          (Ident "s_data")
+          (Add
+            (toAddExp $ StructMem
+              (toPostfixExp $ Ident "threadIdx") (Ident "x"))
+            (toMulExp $ StructMem
+              (toPostfixExp $ Ident "blockDim") (Ident "x"))))])
+      (SelectStmt $ If
+        (Exp [toAssignExp $ LgcAnd
+          (toLgcAndExp $ Eq
+            (toEqExp $ Ident "blkid") (toRelExp $ Ident "lastBlock"))
+          (toOrExp $ Eq
+            (toEqExp $ StructMem
+              (toPostfixExp $ Ident "threadIdx") (Ident "x"))
+            (toRelExp $ Ident "lastElementTid"))])
+        (CompStmt $ Blk
+          [ DeclnItem $ Decln
+            [DeclnTySpec $ Int $ Just Unsigned]
+            [InitDeclr
+              (Declr Nothing (IdentDeclr $ Ident "index"))
+              (Just $ AssignExp $ toAssignExp $ Add
                 (toAddExp $ StructMem
                   (toPostfixExp $ Ident "threadIdx") (Ident "x"))
-                (toMulExp $ StructMem
-                  (toPostfixExp $ Ident "blockDim") (Ident "x")))
-            , toAssignExp $ Ident "val2"]))])])
+                (toMulExp $ NestedExp $ Exp [toAssignExp $ Mul
+                  (toMulExp $ StructMem
+                    (toPostfixExp $ Ident "blockDim") (Ident "x"))
+                  (toCastExp $ NestedExp $ Exp [toAssignExp $ And
+                    (toAndExp $ RShft
+                      (toShftExp $ Sub
+                        (toAddExp $ Ident "numElements")
+                        (toMulExp $ IntegerConst 1))
+                      (toAddExp $ IntegerConst 9))
+                    (toEqExp $ IntegerConst 1)])]))]
+          , StmtItem $ ExpStmt $ Just $ Exp [Assign
+            (toUnaryExp $ toArrayElem
+              (Ident "d_blockSums") (Ident "blockSumIndex"))
+            (toAssignExp $ toArrayElem
+              (Ident "s_data") (Ident "index"))]]))])
 
 storeSharedChunkToMem4
   :: String -> TySpec -> Bool -> Bool -> Maybe Const -> ExtDecln
@@ -1838,9 +1898,7 @@ scan4 progName ty exclusive identity = FuncDef
     ++[ ( [DeclnTyQual Const, DeclnTySpec ty]
         , Just $ Pointer [[]], "d_xs")
       , ( [DeclnTySpec ty], Just $ Pointer [[]], "d_out")
-      , ( [DeclnTySpec ty], Just $ Pointer [[]], "d_blockSums")
       , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "numElements")
-      , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "writeSums")
       , ( [DeclnTySpec (Int $ Just Unsigned)], Nothing, "isFullBlock")]))
   (Blk $
     [ DeclnItem $ Decln
@@ -1926,8 +1984,8 @@ scan4 progName ty exclusive identity = FuncDef
       (toPostfixExp $ Ident $ "_" ++ progName ++ "ScanCTA")
       (ArgExpList $ Prelude.map
         (toAssignExp . Ident)
-        ["temp", "d_blockSums", "blockSumIndex", "writeSums"])]
-    , StmtItem $ ExpStmt $ Just $ Exp [toAssignExp $ FuncCall
+        ["temp", "d_out", "blockSumIndex", "numElements"])]
+    {-, StmtItem $ ExpStmt $ Just $ Exp [toAssignExp $ FuncCall
       (toPostfixExp $ Ident $ "_" ++ progName ++ "StoreSharedChunkToMem4")
       (ArgExpList $ Prelude.map
         (toAssignExp . Ident)
@@ -1943,7 +2001,7 @@ scan4 progName ty exclusive identity = FuncDef
               , "isFullBlock"]
           Nothing ->
             [ "d_out", "threadScan0", "threadScan1", "temp", "blockN"
-            , "devOffset", "ai", "bi", "aiDev", "biDev", "isFullBlock"]))]])
+            , "devOffset", "ai", "bi", "aiDev", "biDev", "isFullBlock"]))]-}])
 
 vectorAddUniform4 :: String -> TySpec -> Maybe Const -> ExtDecln
 vectorAddUniform4 progName ty identity = FuncDef
