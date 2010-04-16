@@ -121,30 +121,31 @@ execute op@(Fold fun def xs) = do
           n              = size sh
           ctaSize        = 128
           numElemsPerCTA = ctaSize * 8
-          execute' p e rf' n' = do
+          execute' e rf' n' = do
             let ys'@(Array newSh' newRf') = newArray_ (Sugar.toElem ())
                 isFullBlock = if n' `mod` numElemsPerCTA == 0 then 1 else 0
                 numBlocks   = (n' + numElemsPerCTA - 1) `div` numElemsPerCTA
                 gridDim     = ( min maxGridSizeX numBlocks
                               , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
-            xsDptrs <- CUDA.dptrsOfArrayData rf'
-            ysDptrs <- CUDA.mallocArray newRf' numBlocks
-            liftIO $ CUDA.setSharedSize fun (fromIntegral $ 256 * sizeOf (undefined::Float))
+            CUDA.mallocArray newRf' numBlocks
+            xsFunParams <- CUDA.toFunParams rf'
+            ysFunParams <- CUDA.toFunParams newRf'
+            liftIO $ CUDA.setSharedSize
+              fun (fromIntegral $ 256 * sizeOf (undefined::Float))
             liftIO $ CUDA.setParams fun $
               [CUDA.IArg e, CUDA.VArg (0::Float)] ++
-              (CUDA.toFunParams rf' xsDptrs) ++
-              (CUDA.toFunParams newRf' ysDptrs) ++
+              xsFunParams ++ ysFunParams ++
               [CUDA.IArg n', CUDA.IArg isFullBlock]
             liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
             liftIO $ CUDA.launch fun gridDim Nothing
             liftIO $ CUDA.sync
             CUDA.decUse rf' >>= \ decUse -> if decUse == 0
-              then CUDA.free rf' xsDptrs
+              then CUDA.free rf'
               else return ()
             if numBlocks == 1
               then return ys'
-              else execute' (p + 1) 0 newRf' numBlocks
-      ys <- execute' 0 1 rf (n + 1)
+              else execute' 0 newRf' numBlocks
+      ys <- execute' 1 rf (n + 1)
       return ys
     Nothing ->
       error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
@@ -167,17 +168,16 @@ execute op@(Map fun xs) = do
           gridDim        = ( min maxGridSizeX numBlocks
                            , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
           isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
-      xsDptrs <- CUDA.dptrsOfArrayData rf
-      ysDptrs <- CUDA.mallocArray newRf n
+      CUDA.mallocArray newRf n
+      xsFunParams <- CUDA.toFunParams rf
+      ysFunParams <- CUDA.toFunParams newRf
       liftIO $ CUDA.setParams fun $
-        (CUDA.toFunParams rf xsDptrs) ++
-        (CUDA.toFunParams newRf ysDptrs) ++
-        [CUDA.IArg n, CUDA.IArg isFullBlock]
+        xsFunParams ++ ysFunParams ++ [CUDA.IArg n, CUDA.IArg isFullBlock]
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
       CUDA.decUse rf >>= \ decUse -> if decUse == 0
-        then CUDA.free rf xsDptrs
+        then CUDA.free rf
         else return ()
       return ys
     Nothing ->
@@ -202,22 +202,21 @@ execute op@(ZipWith fun xs ys) = do
           gridDim        = ( min maxGridSizeX numBlocks
                            , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
           isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
-      xsDptrs <- CUDA.dptrsOfArrayData rf1
-      ysDptrs <- CUDA.dptrsOfArrayData rf2
-      zsDptrs <- CUDA.mallocArray newRf n
+      CUDA.mallocArray newRf n
+      xsFunParams <- CUDA.toFunParams rf1
+      ysFunParams <- CUDA.toFunParams rf2
+      zsFunParams <- CUDA.toFunParams newRf
       liftIO $ CUDA.setParams fun $
-        (CUDA.toFunParams rf1 xsDptrs) ++
-        (CUDA.toFunParams rf2 ysDptrs) ++
-        (CUDA.toFunParams newRf zsDptrs) ++
+        xsFunParams ++ ysFunParams ++ zsFunParams ++
         [CUDA.IArg n, CUDA.IArg isFullBlock]
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
       CUDA.decUse rf1 >>= \ decUse -> if decUse == 0
-        then CUDA.free rf1 xsDptrs
+        then CUDA.free rf1
         else return ()
       CUDA.decUse rf2 >>= \ decUse -> if decUse == 0
-        then CUDA.free rf2 ysDptrs
+        then CUDA.free rf2
         else return ()
       return zs
     Nothing ->
@@ -232,7 +231,9 @@ newArray_ sh
   = adata `seq` Array (Sugar.fromElem sh) adata
   where
     (adata, _) = runArrayData $ do
-                   arr <- newArrayData (Sugar.size sh)
+                   -- FIXME: (max 1024 $ Sugar.size sh), because small arrays
+                   -- are relocated by the GC.
+                   arr <- newArrayData (max 1024 $ Sugar.size sh)
                    return (arr, undefined)
 
 getCompilerProcessStatus :: ProcessID -> CUDA.CGIO ProcessStatus
@@ -253,12 +254,12 @@ memHtoD :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
 memHtoD op@(Map     fun xs)        = memHtoD xs
 memHtoD op@(ZipWith fun xs ys)     = memHtoD xs >> memHtoD ys
 memHtoD op@(Fold    fun left xs)   = memHtoD xs
-memHtoD op@(Use     (Array dim e)) = do
-  let numElems  = size dim
+memHtoD op@(Use     (Array sh rf)) = do
+  let numElems  = size sh
       allocFlag = [CUDA.Portable, CUDA.WriteCombined]
   -- hptrs <- CUDA.mallocHostArray e allocFlag numElems
-  dptrs <- CUDA.mallocArray e numElems
-  CUDA.pokeArrayAsync e numElems dptrs Nothing
+  CUDA.mallocArray rf numElems
+  CUDA.pokeArrayAsync rf numElems Nothing
 memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 --
@@ -267,22 +268,16 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 -- |Transfers the result from GPU
 --
-memDtoH :: Delayable a => OpenAcc aenv a -> a -> CUDA.CGIO a
-memDtoH op@(Fold _ _ _) (Array sh rf) = do
-  dptr <- CUDA.dptrsOfArrayData rf
-  CUDA.peekArray rf (size sh) dptr
-  CUDA.free rf dptr
-  return $ Array sh rf
-memDtoH op@(Map _ _) (Array sh rf) = do
-  dptr <- CUDA.dptrsOfArrayData rf
-  CUDA.peekArray rf (size sh) dptr
-  CUDA.free rf dptr
-  return $ Array sh rf
-memDtoH op@(ZipWith _ _ _) (Array sh  rf) = do
-  dptr <- CUDA.dptrsOfArrayData rf
-  CUDA.peekArray rf (size sh) dptr
-  CUDA.free rf dptr
-  return $ Array sh rf
+memDtoH :: Delayable a => OpenAcc aenv a -> a -> CUDA.CGIO ()
+memDtoH op@(Fold _ _ _) arr@(Array sh rf) = do
+  CUDA.peekArray rf (size sh)
+  CUDA.free rf
+memDtoH op@(Map _ _) arr@(Array sh rf) = do
+  CUDA.peekArray rf (size sh)
+  CUDA.free rf
+memDtoH op@(ZipWith _ _ _) arr@(Array sh  rf) = do
+  CUDA.peekArray rf (size sh)
+  CUDA.free rf
 
 --
 -- CUDA code compilation flags
