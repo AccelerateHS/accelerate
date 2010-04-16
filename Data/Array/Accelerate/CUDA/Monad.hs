@@ -29,5 +29,5 @@ data CGState = CGState
   , mapMap           :: Map String  OperationMapValue
   , zipWithMap       :: Map String  OperationMapValue
   , foldMap          :: Map String  OperationMapValue
-  , useMap           :: Map WordPtr OperationMapValue} -- accelerate array pointer is the key value
+  , memMap           :: Map WordPtr OperationMapValue} -- accelerate array pointer is the key value
   deriving Show

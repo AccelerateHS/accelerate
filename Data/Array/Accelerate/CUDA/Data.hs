@@ -29,20 +29,16 @@ import qualified Foreign.CUDA.Driver.Stream       as CUDA
 class Acc.ArrayElem e => ArrayElem e where
   type DevicePtrs e
   type HostPtrs   e
-  mallocArray     :: Acc.ArrayData e -> Int -> CUDA.CGIO (DevicePtrs e)
-  mallocHostArray :: Acc.ArrayData e -> [CUDA.AllocFlag] -> Int -> CUDA.CGIO (HostPtrs e)
-  pokeArray       :: Acc.ArrayData e -> Int -> DevicePtrs e -> CUDA.CGIO ()
-  -- pokeArrayAsync  :: Acc.ArrayData e -> Int -> Acc.ArrayPtrs e -> HostPtrs e -> DevicePtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
-  pokeArrayAsync  :: Acc.ArrayData e -> Int -> DevicePtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
-  peekArray       :: Acc.ArrayData e -> Int -> DevicePtrs e -> CUDA.CGIO ()
-  -- peekArrayAsync  :: Acc.ArrayData e -> Int -> DevicePtrs e -> HostPtrs e -> Acc.ArrayPtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
-  peekArrayAsync  :: Acc.ArrayData e -> Int -> DevicePtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
-  free            :: Acc.ArrayData e -> DevicePtrs e -> CUDA.CGIO ()
-  freeHost        :: Acc.ArrayData e -> HostPtrs e -> CUDA.CGIO ()
-  toFunParams'    :: Acc.ArrayData e -> CUDA.CGIO [CUDA.FunParam WordPtr]
-  toFunParams     :: Acc.ArrayData e -> DevicePtrs e -> [CUDA.FunParam WordPtr]
-  fromFunParams   :: Acc.ArrayData e -> [CUDA.FunParam WordPtr] -> DevicePtrs e
-  decUse          :: Acc.ArrayData e -> CUDA.CGIO Int
+  mallocArray      :: Acc.ArrayData e -> Int -> CUDA.CGIO (DevicePtrs e)
+  mallocHostArray  :: Acc.ArrayData e -> [CUDA.AllocFlag] -> Int -> CUDA.CGIO (HostPtrs e)
+  pokeArray        :: Acc.ArrayData e -> Int -> DevicePtrs e -> CUDA.CGIO ()
+  pokeArrayAsync   :: Acc.ArrayData e -> Int -> DevicePtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
+  peekArray        :: Acc.ArrayData e -> Int -> DevicePtrs e -> CUDA.CGIO ()
+  peekArrayAsync   :: Acc.ArrayData e -> Int -> DevicePtrs e -> Maybe CUDA.Stream -> CUDA.CGIO ()
+  free             :: Acc.ArrayData e -> DevicePtrs e -> CUDA.CGIO ()
+  toFunParams      :: Acc.ArrayData e -> DevicePtrs e -> [CUDA.FunParam]
+  dptrsOfArrayData :: Acc.ArrayData e -> CUDA.CGIO (DevicePtrs e)
+  decUse           :: Acc.ArrayData e -> CUDA.CGIO Int
 
 instance ArrayElem () where
   type DevicePtrs () = CUDA.DevicePtr ()
@@ -54,81 +50,83 @@ instance ArrayElem () where
   peekArray       _ _ _   = return ()
   peekArrayAsync  _ _ _ _ = return ()
   free            _ _     = return ()
-  freeHost        _ _     = return ()
-  toFunParams'    _       = return []
   toFunParams     _ _     = []
-  fromFunParams   _ _     = CUDA.nullDevPtr
-  decUse          _       = return 0
+  dptrsOfArrayData  _     = return CUDA.nullDevPtr
+  decUse            _     = return 0
 
 instance ArrayElem Int where
   type DevicePtrs Int = CUDA.DevicePtr Int
   type HostPtrs   Int = CUDA.HostPtr   Int
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -138,7 +136,7 @@ instance ArrayElem Int where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -146,72 +144,76 @@ instance ArrayElem Int where
 instance ArrayElem Int8 where
   type DevicePtrs Int8 = CUDA.DevicePtr Int8
   type HostPtrs   Int8 = CUDA.HostPtr   Int8
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -221,7 +223,7 @@ instance ArrayElem Int8 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -229,72 +231,76 @@ instance ArrayElem Int8 where
 instance ArrayElem Int16 where
   type DevicePtrs Int16 = CUDA.DevicePtr Int16
   type HostPtrs   Int16 = CUDA.HostPtr   Int16
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -304,7 +310,7 @@ instance ArrayElem Int16 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -312,72 +318,76 @@ instance ArrayElem Int16 where
 instance ArrayElem Int32 where
   type DevicePtrs Int32 = CUDA.DevicePtr Int32
   type HostPtrs   Int32 = CUDA.HostPtr   Int32
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -387,7 +397,7 @@ instance ArrayElem Int32 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -395,72 +405,76 @@ instance ArrayElem Int32 where
 instance ArrayElem Int64 where
   type DevicePtrs Int64 = CUDA.DevicePtr Int64
   type HostPtrs   Int64 = CUDA.HostPtr   Int64
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -470,7 +484,7 @@ instance ArrayElem Int64 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -478,72 +492,76 @@ instance ArrayElem Int64 where
 instance ArrayElem Word where
   type DevicePtrs Word = CUDA.DevicePtr Word
   type HostPtrs   Word = CUDA.HostPtr   Word
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -553,7 +571,7 @@ instance ArrayElem Word where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -561,72 +579,76 @@ instance ArrayElem Word where
 instance ArrayElem Word8 where
   type DevicePtrs Word8 = CUDA.DevicePtr Word8
   type HostPtrs   Word8 = CUDA.HostPtr   Word8
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -636,7 +658,7 @@ instance ArrayElem Word8 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -644,72 +666,76 @@ instance ArrayElem Word8 where
 instance ArrayElem Word16 where
   type DevicePtrs Word16 = CUDA.DevicePtr Word16
   type HostPtrs   Word16 = CUDA.HostPtr   Word16
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -719,7 +745,7 @@ instance ArrayElem Word16 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -727,72 +753,76 @@ instance ArrayElem Word16 where
 instance ArrayElem Word32 where
   type DevicePtrs Word32 = CUDA.DevicePtr Word32
   type HostPtrs   Word32 = CUDA.HostPtr   Word32
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -802,7 +832,7 @@ instance ArrayElem Word32 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -810,72 +840,76 @@ instance ArrayElem Word32 where
 instance ArrayElem Word64 where
   type DevicePtrs Word64 = CUDA.DevicePtr Word64
   type HostPtrs   Word64 = CUDA.HostPtr   Word64
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -885,7 +919,7 @@ instance ArrayElem Word64 where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -903,72 +937,76 @@ instance ArrayElem Word64 where
 instance ArrayElem Float where
   type DevicePtrs Float = CUDA.DevicePtr Float
   type HostPtrs   Float = CUDA.HostPtr   Float
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -978,7 +1016,7 @@ instance ArrayElem Float where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -986,72 +1024,76 @@ instance ArrayElem Float where
 instance ArrayElem Double where
   type DevicePtrs Double = CUDA.DevicePtr Double
   type HostPtrs   Double = CUDA.HostPtr   Double
-  mallocArray     _ n       = liftIO $ CUDA.mallocArray     n
+  mallocArray ad n = do
+    currentState <- get
+    dptr <- liftIO $ CUDA.mallocArray n
+    let aptr   = Acc.ptrsOfArrayData ad
+        memMap = CUDA.memMap currentState
+        key    = ptrToWordPtr aptr
+        val    = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 0
+    put $ currentState
+      {CUDA.memMap = insert key val memMap}
+    return dptr
   mallocHostArray _ flags n = liftIO $ CUDA.mallocHostArray flags n
   pokeArray ad n dptr = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
-      Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        liftIO $ CUDA.pokeArray n aptr dptr
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
-  -- pokeArrayAsync  _ n aptr hptr dptr s = do
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArray n aptr dptr
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
+      Nothing -> do
+        error "Memory allocation information lost."
   pokeArrayAsync ad n dptr s = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
-        let val' = val {CUDA.numUse = CUDA.numUse val + 1}
-        put $ currentState
-          { CUDA.useMap = insert key val' useMap}
+        if CUDA.numUse val == 0
+          then do
+            liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
+            let val' = val {CUDA.numUse = 1}
+            put $ currentState
+              { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
+              , CUDA.memMap = insert key val' memMap}
+          else do
+            let val' = val {CUDA.numUse = CUDA.numUse val + 1}
+            put $ currentState {CUDA.memMap = insert key val' memMap}
       Nothing  -> do
-        let -- hval = ptrToWordPtr $ CUDA.useHostPtr hptr
-            -- dval = CUDA.devPtrToWordPtr dptr
-            -- val  = CUDA.MemoryEntry hval dval
-            val = CUDA.MemoryEntry (CUDA.devPtrToWordPtr dptr) 1
-        -- liftIO $ CUDA.pokeArrayAsync n hptr dptr s
-        liftIO $ CUDA.pokeArrayAsync n (CUDA.HostPtr aptr) dptr s
-        put $ currentState
-          { CUDA.dataTransferHtoD = CUDA.dataTransferHtoD currentState + 1
-          , CUDA.useMap = insert key val useMap}
+        error "Memory allocation information lost."
   peekArray ad n dptr = liftIO $ CUDA.peekArray n dptr (Acc.ptrsOfArrayData ad)
-  -- peekArrayAsync  _ n dptr hptr s = liftIO $ CUDA.peekArrayAsync  n dptr hptr s
   peekArrayAsync ad n dptr s = liftIO $ CUDA.peekArrayAsync n dptr (CUDA.HostPtr $ Acc.ptrsOfArrayData ad) s
   free     _ dptr = liftIO $ CUDA.free     dptr
-  freeHost _ hptr = liftIO $ CUDA.freeHost hptr
-  toFunParams' ad = do
+  toFunParams ad dptr = [CUDA.VArg dptr]
+  dptrsOfArrayData ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-        val    = Data.Map.lookup key useMap
-    case Data.Map.lookup key useMap of
+        val    = Data.Map.lookup key memMap
+    case Data.Map.lookup key memMap of
       Just val ->
-        return [CUDA.VArg $ CUDA.devicePtr val]
+        return $ CUDA.wordPtrToDevPtr $ CUDA.devicePtr val
       Nothing  ->
         error "All input arrays need to be transferred to GPUs before use."
-  toFunParams ad dptr = [CUDA.VArg $ CUDA.devPtrToWordPtr dptr]
-  fromFunParams ad [CUDA.VArg wordPtr] = CUDA.wordPtrToDevPtr wordPtr
   decUse ad = do
     currentState <- get
     let aptr   = Acc.ptrsOfArrayData ad
-        useMap = CUDA.useMap currentState
+        memMap = CUDA.memMap currentState
         key    = ptrToWordPtr aptr
-    case Data.Map.lookup key useMap of
+    case Data.Map.lookup key memMap of
       Just val -> do
         let numUse = CUDA.numUse val
         if numUse == 0
@@ -1061,7 +1103,7 @@ instance ArrayElem Double where
             let numUse' = numUse - 1
                 val' = val {CUDA.numUse = numUse'}
             put $ currentState
-              { CUDA.useMap = insert key val' useMap}
+              { CUDA.memMap = insert key val' memMap}
             return numUse'
       Nothing  ->
         return 0
@@ -1094,9 +1136,6 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a, b) where
   pokeArray ad n (dptrA, dptrB) = do
     pokeArray (Acc.fstArrayData ad) n dptrA
     pokeArray (Acc.sndArrayData ad) n dptrB
-  -- pokeArrayAsync ad n (aptrA, aptrB) (hptrA, hptrB) (dptrA, dptrB) s = do
-    -- pokeArrayAsync (Acc.fstArrayData ad) n aptrA hptrA dptrA s
-    -- pokeArrayAsync (Acc.sndArrayData ad) n aptrB hptrB dptrB s
   pokeArrayAsync ad n (dptrA, dptrB) s = do
     pokeArrayAsync (Acc.fstArrayData ad) n dptrA s
     pokeArrayAsync (Acc.sndArrayData ad) n dptrB s
@@ -1109,21 +1148,14 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a, b) where
   free ad (dptrA, dptrB) = do
     free (Acc.fstArrayData ad) dptrA
     free (Acc.sndArrayData ad) dptrB
-  freeHost ad (hptrA, hptrB) = do
-    freeHost (Acc.fstArrayData ad) hptrA
-    freeHost (Acc.sndArrayData ad) hptrB
-  toFunParams' ad = do
-    paramsA <- toFunParams' (Acc.fstArrayData ad)
-    paramsB <- toFunParams' (Acc.sndArrayData ad)
-    return $ paramsA ++ paramsB
   toFunParams ad (dptrA, dptrB) =
     let paramsA = toFunParams (Acc.fstArrayData ad) dptrA
         paramsB = toFunParams (Acc.sndArrayData ad) dptrB
     in  paramsA ++ paramsB
-  fromFunParams ad params =
-    let dptrA = fromFunParams (Acc.fstArrayData ad) (init params)
-        dptrB = fromFunParams (Acc.sndArrayData ad) [last params]
-    in  (dptrA, dptrB)
+  dptrsOfArrayData ad = do
+    dptrA <- dptrsOfArrayData (Acc.fstArrayData ad)
+    dptrB <- dptrsOfArrayData (Acc.sndArrayData ad)
+    return (dptrA, dptrB)
   decUse ad = do
     decUseA <- decUse (Acc.fstArrayData ad)
     decUseB <- decUse (Acc.sndArrayData ad)
