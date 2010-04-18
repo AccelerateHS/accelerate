@@ -54,7 +54,8 @@ import qualified Data.Array.Accelerate.CUDA.Map     as CUDA
 import qualified Data.Array.Accelerate.CUDA.ZipWith as CUDA
 
 import qualified Foreign.CUDA.Driver as CUDA (
-  AllocFlag(..), Context(..), ContextFlag(..), Device(..), FunParam(..),
+  AllocFlag(..), Context(..), ContextFlag(..), Device(..), DeviceProperties(..),
+  FunParam(..),
   count, create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
   loadDataEx, maxGridSize, nullDevPtr, pop, props, setBlockShape, setParams,
   setSharedSize, sync)
@@ -117,16 +118,14 @@ execute op@(Fold fun def xs) = do
       (m, _) <- liftIO $ CUDA.loadDataEx ptx []
       fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v ++ "Scan4")
       xs'@(Array sh rf) <- execute xs
-      let (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
-          n              = size sh
+      let n              = size sh
           ctaSize        = 128
           numElemsPerCTA = ctaSize * 8
           execute' e rf' n' = do
             let ys'@(Array newSh' newRf') = newArray_ (Sugar.toElem ())
                 isFullBlock = if n' `mod` numElemsPerCTA == 0 then 1 else 0
                 numBlocks   = (n' + numElemsPerCTA - 1) `div` numElemsPerCTA
-                gridDim     = ( min maxGridSizeX numBlocks
-                              , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+                gridDim     = getGridDim props numBlocks
             CUDA.mallocArray newRf' numBlocks
             xsFunParams <- CUDA.toFunParams rf'
             ysFunParams <- CUDA.toFunParams newRf'
@@ -160,13 +159,11 @@ execute op@(Map fun xs) = do
       fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
       (Array sh rf) <- execute xs
       let ys@(Array newSh newRf) = newArray_ (Sugar.toElem sh)
-          (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
           n              = size newSh
           ctaSize        = 128
           numElemsPerCTA = ctaSize * 2
           numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
-          gridDim        = ( min maxGridSizeX numBlocks
-                           , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          gridDim        = getGridDim props numBlocks
           isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
       CUDA.mallocArray newRf n
       xsFunParams <- CUDA.toFunParams rf
@@ -194,13 +191,11 @@ execute op@(ZipWith fun xs ys) = do
       (Array sh1 rf1) <- execute xs
       (Array sh2 rf2) <- execute ys
       let zs@(Array newSh newRf) = newArray_ (Sugar.toElem $ intersect sh1 sh2)
-          (maxGridSizeX, maxGridSizeY, maxGridSizeZ) = CUDA.maxGridSize props
           n              = size newSh
           ctaSize        = 128
           numElemsPerCTA = ctaSize * 2
           numBlocks      = (n + numElemsPerCTA - 1) `div` numElemsPerCTA
-          gridDim        = ( min maxGridSizeX numBlocks
-                           , (numBlocks + maxGridSizeY - 1) `div` maxGridSizeY)
+          gridDim        = getGridDim props numBlocks
           isFullBlock    = if n `mod` numElemsPerCTA == 0 then 1 else 0
       CUDA.mallocArray newRf n
       xsFunParams <- CUDA.toFunParams rf1
@@ -223,6 +218,11 @@ execute op@(ZipWith fun xs ys) = do
       error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
 execute op@(Use arr) = do
   return arr
+
+getGridDim :: CUDA.DeviceProperties -> Int -> (Int, Int)
+getGridDim props numBlocks =
+  let (maxX, maxY, _) = CUDA.maxGridSize props
+  in  (min maxX numBlocks, (numBlocks + maxY - 1) `div` maxY)
 
 -- Create an array for output
 newArray_ :: (Sugar.Ix dim, Sugar.Elem e) => dim -> Array dim e
