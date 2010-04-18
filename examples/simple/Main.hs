@@ -82,10 +82,14 @@ validate arr_ref arr | arr_ref == arr = putStrLn "Valid."
 validateFloats :: Ix ix
                => UArray ix Float -> UArray ix Float -> IO ()
 validateFloats arr_ref arr | arr_ref `similar` arr = putStrLn "Valid."
-                           | otherwise             = putStrLn "INVALID!"
+                           | otherwise             = putStrLn "INVALID!" >> diff arr_ref arr
   where
     similar arr1 arr2 = all (< epsilon) [abs ((x - y) / x) | x <- elems arr1 
                                                            | y <- elems arr2]
+    diff arr1 arr2 = sequence_ [if abs ((x - y) / x) < epsilon
+                       then return ()
+                       else putStrLn $ ">>> " ++ "(" ++ show x ++ ", " ++ show y ++ ")"
+                     | x <- elems arr1 | y <- elems arr2]
     epsilon = 0.0001
 
 
@@ -129,6 +133,25 @@ timeScalar testee
                       end <- getTime
                       return (r, end `minus` start)
 
+timeScalar' :: (IArray UArray e, Acc.Elem e)
+            => (() -> IO (Acc.Scalar e)) -> IO (UArray () e)
+{-# NOINLINE timeScalar' #-}
+timeScalar' testee 
+  = do
+      (r, time1) <- oneRun testee
+      (r, time2) <- oneRun testee
+      (r, time3) <- oneRun testee
+      putStrLn $ showMinAvgMax milliseconds [time1, time2, time3] ++
+                 " (wall - cpu min/avg/max in ms)"
+      return $ Acc.toIArray r
+  where
+    oneRun testee = do
+                      start <- getTime
+                      r <- testee ()
+                      evaluateScalar r
+                      end <- getTime
+                      return (r, end `minus` start)
+
 timeUVector :: IArray UArray e => (() -> UArray Int e) -> IO (UArray Int e)
 {-# NOINLINE timeUVector #-}
 timeUVector testee 
@@ -168,6 +191,25 @@ timeVector testee
                       return (r, end `minus` start)
 
 
+timeVector' :: (IArray UArray e, Acc.Elem e)
+            => (() -> IO (Acc.Vector e)) -> IO (UArray Int e)
+{-# NOINLINE timeVector' #-}
+timeVector' testee 
+  = do
+      (r, time1) <- oneRun testee
+      (r, time2) <- oneRun testee
+      (r, time3) <- oneRun testee
+      putStrLn $ showMinAvgMax milliseconds [time1, time2, time3] ++
+                 " (wall - cpu min/avg/max in ms)"
+      return $ Acc.toIArray r
+  where
+    oneRun testee = do
+                      start <- getTime
+                      r <- testee ()
+                      evaluateVector r
+                      end <- getTime
+                      return (r, end `minus` start)
+
 -- Tests
 -- -----
 
@@ -182,12 +224,15 @@ test_saxpy n
       v2     <- convertUVector v2_ref
       putStrLn "Running reference code..."
       ref_result <- timeUVector $ saxpy_ref' 1.5 v1_ref v2_ref
-      putStrLn "Running Accelerate code...[Interpreter]"
+      putStrLn "[Interpreter]"
+      putStrLn "Running Accelerate code..."
       result <- timeVector $ saxpy_interp 1.5 v1 v2
-      putStrLn "Running Accelerate code...[CUDA]"
-      result_cuda <- saxpy_cuda 1.5 v1 v2 >>= return . Acc.toIArray
       putStrLn "Validating result..."
       validateFloats ref_result result
+      putStrLn "[CUDA]"
+      putStrLn "Running Accelerate code..."
+      result_cuda <- timeVector' $ saxpy_cuda 1.5 v1 v2
+      putStrLn "Validating result..."
       validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
@@ -197,7 +242,7 @@ test_saxpy n
     {-# NOINLINE saxpy_interp #-}
     saxpy_interp a arr1 arr2 () = Interp.run (saxpy a arr1 arr2)
     {-# NOINLINE saxpy_cuda #-}
-    saxpy_cuda a arr1 arr2 = CUDA.run (saxpy a arr1 arr2)
+    saxpy_cuda a arr1 arr2 () = CUDA.run (saxpy a arr1 arr2)
 
 test_square :: Int -> IO ()
 test_square n
@@ -208,12 +253,15 @@ test_square n
       v1     <- convertUVector v1_ref
       putStrLn "Running reference code..."
       ref_result <- timeUVector $ square_ref' v1_ref
-      putStrLn "Running Accelerate code...[Interpreter]"
+      putStrLn "[Interpreter]"
+      putStrLn "Running Accelerate code..."
       result <- timeVector $ square_interp v1
-      putStrLn "Running Accelerate code...[CUDA]"
-      result_cuda <- square_cuda v1 >>= return . Acc.toIArray
       putStrLn "Validating result..."
       validateFloats ref_result result
+      putStrLn "[CUDA]"
+      putStrLn "Running Accelerate code..."
+      result_cuda <- timeVector' $ square_cuda v1
+      putStrLn "Validating result..."
       validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
@@ -223,7 +271,7 @@ test_square n
     {-# NOINLINE square_interp #-}
     square_interp arr1 () = Interp.run (square arr1)
     {-# NOINLINE square_cuda #-}
-    square_cuda arr1 = CUDA.run (square arr1)
+    square_cuda arr1 () = CUDA.run (square arr1)
 
 test_sum :: Int -> IO ()
 test_sum n
@@ -234,12 +282,15 @@ test_sum n
       v1     <- convertUVector v1_ref
       putStrLn "Running reference code..."
       ref_result <- timeUScalar $ sum_ref' v1_ref
-      putStrLn "Running Accelerate code...[Interpreter]"
+      putStrLn "[Interpreter]"
+      putStrLn "Running Accelerate code..."
       result <- timeScalar $ sum_interp v1
-      putStrLn "Running Accelerate code...[CUDA]"
-      result_cuda <- sum_cuda v1 >>= return . Acc.toIArray
       putStrLn "Validating result..."
       validateFloats ref_result result
+      putStrLn "[CUDA]"
+      putStrLn "Running Accelerate code..."
+      result_cuda <- timeScalar' $ sum_cuda v1
+      putStrLn "Validating result..."
       validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
@@ -249,7 +300,7 @@ test_sum n
     {-# NOINLINE sum_interp #-}
     sum_interp arr1 () = Interp.run (Sum.sum arr1)
     {-# NOINLINE sum_cuda #-}
-    sum_cuda arr1 = CUDA.run (Sum.sum arr1)
+    sum_cuda arr1 () = CUDA.run (Sum.sum arr1)
 
 test_dotp :: Int -> IO ()
 test_dotp n
