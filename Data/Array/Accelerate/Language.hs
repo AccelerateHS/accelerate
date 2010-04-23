@@ -303,11 +303,13 @@ instance (Elem t, IsScalar t) => Enum (Exp t)
 --  pred = mkPred
   -- FIXME: ops
 
-instance (Elem t, IsScalar t) => Prelude.Eq (Exp t)
+instance (Elem t, IsScalar t) => Prelude.Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
+  (==)        = error "Prelude.Eq.== applied to EDSL types"
 
-instance (Elem t, IsScalar t) => Prelude.Ord (Exp t)
+instance (Elem t, IsScalar t) => Prelude.Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
+  compare     = error "Prelude.Ord.compare applied to EDSL types"
 
 instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd
