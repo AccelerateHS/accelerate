@@ -44,9 +44,10 @@ module Data.Array.Accelerate.Language (
   -- ** Array operations with a scalar result
   (!), shape,
   
-  -- ** Methods of H98 classes that we need to redefine as their signatures
-  --   change 
+  -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
+  shift,  shiftL,  shiftR,
+  rotate, rotateL, rotateR,
 
   -- ** Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
@@ -68,7 +69,8 @@ import Prelude   hiding (replicate, zip, unzip, map, zipWith, filter, max, min,
 import qualified Prelude
 
 -- standard libraries
-import Data.Bits
+import Data.Bits hiding (shift, shiftL, shiftR, rotate, rotateL, rotateR)
+import qualified Bits
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -313,6 +315,19 @@ instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
   xor        = mkBXor
   complement = mkBNot
   -- FIXME: argh, the rest have fixed types in their signatures
+  shift      = error "Data.Bits.shift: use Accelerate equivalent"
+  rotate     = error "Data.Bits.rotate: use Accelerate equivalent"
+
+shift, shiftL, shiftR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shift      = mkBShift
+shiftL x i = x `shift` i
+shiftR x i = x `shift` (-i)
+
+rotate, rotateL, rotateR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotate      = mkBRotate
+rotateL x i = x `rotate` i
+rotateR x i = x `rotate` (-i)
+
 
 instance (Elem t, IsNum t) => Num (Exp t) where
   (+)         = mkAdd

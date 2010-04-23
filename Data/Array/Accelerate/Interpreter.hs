@@ -401,6 +401,8 @@ evalPrim (PrimBAnd        ty)   = evalBAnd ty
 evalPrim (PrimBOr         ty)   = evalBOr ty
 evalPrim (PrimBXor        ty)   = evalBXor ty
 evalPrim (PrimBNot        ty)   = evalBNot ty
+evalPrim (PrimBShift      ty)   = evalBShift ty
+evalPrim (PrimBRotate     ty)   = evalBRotate ty
 evalPrim (PrimFDiv        ty)   = evalFDiv ty
 evalPrim (PrimRecip       ty)   = evalRecip ty
 evalPrim (PrimSin         ty)   = evalSin ty
@@ -600,6 +602,12 @@ evalBXor ty | IntegralDict <- integralDict ty = uncurry xor
 
 evalBNot :: IntegralType a -> (a -> a)
 evalBNot ty | IntegralDict <- integralDict ty = complement
+
+evalBShift :: IntegralType a -> ((a, Int) -> a)
+evalBShift ty | IntegralDict <- integralDict ty = uncurry shift
+
+evalBRotate :: IntegralType a -> ((a, Int) -> a)
+evalBRotate ty | IntegralDict <- integralDict ty = uncurry rotate
 
 evalFDiv :: FloatingType a -> ((a, a) -> a)
 evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)

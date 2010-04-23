@@ -40,7 +40,8 @@ module Data.Array.Accelerate.Smart (
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
-  mkBAnd, mkBOr, mkBXor, mkBNot, mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
+  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShift, mkBRotate,
+  mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt
 
 ) where
@@ -505,6 +506,12 @@ mkBXor x y = PrimBXor integralType `PrimApp` tup2 (x, y)
 
 mkBNot :: (Elem t, IsIntegral t) => Exp t -> Exp t
 mkBNot x = PrimBNot integralType `PrimApp` x
+
+mkBShift :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBShift x i = PrimBShift integralType `PrimApp` tup2 (x, i)
+
+mkBRotate :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBRotate x i = PrimBRotate integralType `PrimApp` tup2 (x, i)
   -- FIXME: add shifts
 
 -- Operators from Fractional, Floating, RealFrac & RealFloat
