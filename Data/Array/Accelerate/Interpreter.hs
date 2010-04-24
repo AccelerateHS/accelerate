@@ -118,6 +118,9 @@ evalOpenAcc (FoldSeg f e acc1 acc2) aenv
 evalOpenAcc (Scan f e acc) aenv
   = scanOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
+evalOpenAcc (Scanr f e acc) aenv
+  = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
 evalOpenAcc (Permute f dftAcc p acc) aenv
   = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
               (evalFun p aenv) (evalOpenAcc acc aenv)
@@ -249,7 +252,7 @@ foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
     fold v j end
       | j >= end  = v
       | otherwise = fold (f v ((Sugar.liftToElem rf) j)) (j + 1) end
-  
+
 scanOp :: (e -> e -> e)
        -> e
        -> Delayed (Vector e)
@@ -262,7 +265,7 @@ scanOp f e (DelayedArray sh rf)
     f' = Sugar.sinkFromElem2 f
     --
     (adata, final) = runArrayData $ do
-                       arr <- newArrayData n
+                       arr   <- newArrayData n
                        final <- traverse arr 0 (Sugar.fromElem e)
                        return (arr, final)
     traverse arr i v
@@ -270,7 +273,28 @@ scanOp f e (DelayedArray sh rf)
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
-    
+
+scanrOp :: (e -> e -> e)
+        -> e
+        -> Delayed (Vector e)
+        -> Delayed (Vector e, Scalar e)
+scanrOp f e (DelayedArray sh rf)
+  = DelayedPair (delay $ adata `seq` Array sh adata)
+                (unitOp (Sugar.toElem final))
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, final) = runArrayData $ do
+                       arr   <- newArrayData n
+                       final <- traverse arr (n-1) (Sugar.fromElem e)
+                       return (arr, final)
+    traverse arr i v
+      | i < 0     = return v
+      | otherwise = do
+                      writeArrayData arr i v
+                      traverse arr (i - 1) (f' v (rf ((), i)))
+
 permuteOp :: (e -> e -> e)
           -> Delayed (Array dim' e)
           -> (dim -> dim')

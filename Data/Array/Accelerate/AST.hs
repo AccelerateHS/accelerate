@@ -219,6 +219,12 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Vector e, Scalar e)
     -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
+  -- Right-to-left prescan of a linear array
+  Scanr       :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- default value
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e, Scalar e)
+
   -- Generalised forward permutation is characterised by a permutation
   -- function that determines for each element of the source array where it
   -- should go in the target; the permutation can be between arrays of varying

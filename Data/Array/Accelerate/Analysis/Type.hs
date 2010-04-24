@@ -58,8 +58,9 @@ accType _                     = error "we can never get here"
 --
 accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2) 
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
-accType2 (Scan _ e acc) = (accType acc, expType e)
-accType2 _              = error "we can never get here"
+accType2 (Scan _ e acc)  = (accType acc, expType e)
+accType2 (Scanr _ e acc) = (accType acc, expType e)
+accType2 _               = error "we can never get here"
   -- GHC's exaustivesness checker is not smart enough to exclude alternatives
   -- in a GADT match that are impossible due to equality constraints
 

@@ -115,6 +115,11 @@ data Acc a where
               -> Exp e
               -> Acc (Vector e)
               -> Acc (Vector e, Scalar e)
+  Scanr       :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> Acc (Vector e)
+              -> Acc (Vector e, Scalar e)
   Permute     :: (Ix dim, Ix dim', Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> Acc (Array dim' e)
@@ -161,6 +166,8 @@ convertOpenAcc alyt (FoldSeg f e acc1 acc2)
                 (convertOpenAcc alyt acc1) (convertOpenAcc alyt acc2)
 convertOpenAcc alyt (Scan f e acc) 
   = AST.Scan (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Scanr f e acc)
+  = AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Permute f dftAcc perm acc) 
   = AST.Permute (convertFun2 alyt f) 
                 (convertOpenAcc alyt dftAcc)
