@@ -213,7 +213,7 @@ data OpenAcc aenv a where
   -- function and its neutral element; produces a rightmost fold value and a
   -- linear of the same shape (the fold value would be the rightmost element
   -- in a scan, as opposed to a prescan)
-  Scan        :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanl       :: Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- default value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)

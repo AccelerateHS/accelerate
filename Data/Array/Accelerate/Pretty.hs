@@ -73,8 +73,8 @@ prettyAcc lvl (Fold f e acc)
 prettyAcc lvl (FoldSeg f e acc1 acc2)   
   = prettyArrOp "foldSeg" [parens (prettyFun lvl f), prettyExp lvl parens e,
                            prettyAccParens lvl acc1, prettyAccParens lvl acc2]
-prettyAcc lvl (Scan f e acc)   
-  = prettyArrOp "scan" [parens (prettyFun lvl f), prettyExp lvl parens e,
+prettyAcc lvl (Scanl f e acc)
+  = prettyArrOp "scanl" [parens (prettyFun lvl f), prettyExp lvl parens e,
                         prettyAccParens lvl acc]
 prettyAcc lvl (Scanr f e acc)
   = prettyArrOp "scanr" [parens (prettyFun lvl f), prettyExp lvl parens e,

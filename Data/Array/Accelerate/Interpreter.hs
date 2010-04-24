@@ -115,8 +115,8 @@ evalOpenAcc (FoldSeg f e acc1 acc2) aenv
   = foldSegOp (evalFun f aenv) (evalExp e aenv) 
               (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
-evalOpenAcc (Scan f e acc) aenv
-  = scanOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalOpenAcc (Scanl f e acc) aenv
+  = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
 evalOpenAcc (Scanr f e acc) aenv
   = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
@@ -238,7 +238,7 @@ foldSegOp :: forall e.
 foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
   = delay arr
   where
-    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanOp (+) 0 seg
+    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanlOp (+) 0 seg
     arr = Sugar.newArray (Sugar.toElem shSeg) foldOne
     --
     foldOne :: Sugar.DIM1 -> e
@@ -253,11 +253,11 @@ foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
       | j >= end  = v
       | otherwise = fold (f v ((Sugar.liftToElem rf) j)) (j + 1) end
 
-scanOp :: (e -> e -> e)
-       -> e
-       -> Delayed (Vector e)
-       -> Delayed (Vector e, Scalar e)
-scanOp f e (DelayedArray sh rf)
+scanlOp :: (e -> e -> e)
+        -> e
+        -> Delayed (Vector e)
+        -> Delayed (Vector e, Scalar e)
+scanlOp f e (DelayedArray sh rf)
   = DelayedPair (delay $ adata `seq` Array sh adata) 
                 (unitOp (Sugar.toElem final))
   where

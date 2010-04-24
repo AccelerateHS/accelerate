@@ -110,7 +110,7 @@ data Acc a where
               -> Acc (Vector e)
               -> Acc Segments
               -> Acc (Vector e)
-  Scan        :: Elem e
+  Scanl       :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
               -> Acc (Vector e)
@@ -164,8 +164,8 @@ convertOpenAcc alyt (Fold f e acc)
 convertOpenAcc alyt (FoldSeg f e acc1 acc2) 
   = AST.FoldSeg (convertFun2 alyt f) (convertExp alyt e) 
                 (convertOpenAcc alyt acc1) (convertOpenAcc alyt acc2)
-convertOpenAcc alyt (Scan f e acc) 
-  = AST.Scan (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Scanl f e acc)
+  = AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Scanr f e acc)
   = AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
 convertOpenAcc alyt (Permute f dftAcc perm acc) 

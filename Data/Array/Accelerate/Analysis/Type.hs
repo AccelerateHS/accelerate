@@ -56,9 +56,9 @@ accType _                     = error "we can never get here"
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
 --
-accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2) 
+accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2)
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
-accType2 (Scan _ e acc)  = (accType acc, expType e)
+accType2 (Scanl _ e acc) = (accType acc, expType e)
 accType2 (Scanr _ e acc) = (accType acc, expType e)
 accType2 _               = error "we can never get here"
   -- GHC's exaustivesness checker is not smart enough to exclude alternatives

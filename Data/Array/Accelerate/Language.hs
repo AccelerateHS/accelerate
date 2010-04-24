@@ -32,7 +32,7 @@ module Data.Array.Accelerate.Language (
   reshape,
 
   -- ** Collective array operations
-  slice, replicate, zip, unzip, map, zipWith, scan, scanr, fold, foldSeg,
+  slice, replicate, zip, unzip, map, zipWith, scanl, scanr, fold, foldSeg,
   permute, backpermute,
   
   -- ** Tuple construction and destruction
@@ -64,7 +64,7 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, map, scanr, zipWith,
+import Prelude   hiding (replicate, zip, unzip, map, scanl, scanr, zipWith,
                         filter, max, min, not, const)
 import qualified Prelude
 
@@ -170,21 +170,21 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim c)
 zipWith = ZipWith
 
--- |Prescan of a vector.  The type 'a' together with the binary function (first
--- argument) and value (second argument) must form a monoid; i.e., the 
+-- |Prescan of a vector.  The type \'a\' together with the binary function
+-- (first argument) and value (second argument) must form a monoid; i.e., the
 -- function must be /associative/ and the value must be its /neutral element/.
 --
 -- The resulting vector of prescan values has the same size as the argument 
 -- vector.  The resulting scalar is the reduction value.
---  
-scan :: Elem a
-     => (Exp a -> Exp a -> Exp a) 
-     -> Exp a 
-     -> Acc (Vector a)
-     -> (Acc (Vector a), Acc (Scalar a))
-scan f e arr = unpair (Scan f e arr)
+--
+scanl :: Elem a
+      => (Exp a -> Exp a -> Exp a)
+      -> Exp a
+      -> Acc (Vector a)
+      -> (Acc (Vector a), Acc (Scalar a))
+scanl f e arr = unpair (Scanl f e arr)
 
--- |The right-to-left dual of 'scan'.
+-- |The right-to-left dual of 'scanl'.
 --
 scanr :: Elem a
       => (Exp a -> Exp a -> Exp a)
