@@ -65,7 +65,7 @@ import qualified Foreign.CUDA.Driver as CUDA (
 
 -- |Characterises the types that may be returned when running an array program.
 --
-class Delayable as => Arrays as where
+class Arrays as where
 
 instance Arrays ()
 instance Arrays (Array dim e)
@@ -94,7 +94,7 @@ run acc = do
 
 -- |Executes the generated code
 --
-execute :: Delayable a => OpenAcc aenv a -> CUDA.CGIO a
+execute :: OpenAcc aenv a -> CUDA.CGIO a
 execute op@(Fold fun def xs) = do
   currentState <- get
   case M.lookup (show fun) (CUDA.foldMap currentState) of
@@ -119,7 +119,7 @@ execute op@(Fold fun def xs) = do
             liftIO $ CUDA.setSharedSize
               fun (fromIntegral $ 256 * sizeOf (undefined::Float))
             liftIO $ CUDA.setParams fun $
-              [CUDA.IArg e, CUDA.VArg (0::Float)] ++
+              [CUDA.IArg e] ++ (toFunParams def) ++
               xsFunParams ++ ysFunParams ++
               [CUDA.IArg n', CUDA.IArg isFullBlock]
             liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
@@ -237,7 +237,7 @@ getCompilerProcessStatus pid = do
 
 -- |Allocates device memory and triggers asynchronous data transfer.
 --
-memHtoD :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
+memHtoD :: OpenAcc aenv a -> CUDA.CGIO ()
 memHtoD op@(Map     fun xs)        = memHtoD xs
 memHtoD op@(ZipWith fun xs ys)     = memHtoD xs >> memHtoD ys
 memHtoD op@(Fold    fun left xs)   = memHtoD xs
@@ -255,7 +255,7 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 
 -- |Transfers the result from GPU
 --
-memDtoH :: Delayable a => OpenAcc aenv a -> a -> CUDA.CGIO ()
+memDtoH :: OpenAcc aenv a -> a -> CUDA.CGIO ()
 memDtoH op@(Fold _ _ _) arr@(Array sh rf) = do
   CUDA.peekArray rf (size sh)
   CUDA.free rf
@@ -281,7 +281,7 @@ cuCompileFlags progName =
 
 -- Generate CUDA code and PTX code for an array expression
 --
-codeGenAcc :: Delayable a => OpenAcc aenv a -> CUDA.CGIO ()
+codeGenAcc :: OpenAcc aenv a -> CUDA.CGIO ()
 codeGenAcc op@(Fold fun left xs) = do
   currentState <- get
   let uniqueID = CUDA.uniqueID currentState
@@ -398,6 +398,21 @@ codeGenExp e@(PrimApp f a@(Tuple (NilTup `SnocTup` e1 `SnocTup` e2))) =
   codeGenPrim f $ Prelude.map CUDA.NestedExp [codeGenExp e1, codeGenExp e2]
 codeGenExp e@(IndexScalar acc ix) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
 codeGenExp e@(Shape acc) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
+
+toFunParams :: forall env aenv t . OpenExp env aenv t -> [CUDA.FunParam]
+toFunParams e@(Const c) =
+  let valStr = show (Sugar.toElem c :: t)
+      toFunParams' (CUDA.Float)        = [CUDA.FArg (read valStr :: Float)]
+      toFunParams' (CUDA.Double)       = [CUDA.VArg (read valStr :: Double)]
+      toFunParams' (CUDA.Char Nothing) = [CUDA.VArg (read valStr :: Char)]
+      toFunParams' (CUDA.Int  Nothing) | valStr == "True"  = [CUDA.IArg 1]
+                                       | valStr == "False" = [CUDA.IArg 0]
+                                       | otherwise = [CUDA.IArg (read valStr :: Int)]
+      toFunParams' t' = error $ (show t') ++ " not supported yet as a const type"
+  in  toFunParams' $ codeGenTupleType $ expType e
+toFunParams e = error $
+  "the expression, " ++ (show e) ++
+  ", could not be marshalled as a kernel parameter."
 
 -- Types
 -- -----

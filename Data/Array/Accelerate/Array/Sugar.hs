@@ -705,7 +705,7 @@ newArray sh f
   = adata `seq` Array (fromElem sh) adata
   where 
     (adata, _) = runArrayData $ do
-                   arr <- newArrayData (size sh)
+                   arr <- newArrayData (max 1024 $ size sh)
                    let write ix = writeArrayData arr (index sh ix) 
                                                      (fromElem (f ix))
                    iter sh write (>>) (return ())
