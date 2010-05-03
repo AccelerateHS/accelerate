@@ -33,6 +33,10 @@ Flag llvm
   Description:          enable the LLVM backend (sequential)
   Default:              False
 
+Flag cuda
+  Description:          enable the CUDA parallel backend for NVIDIA GPUs
+  Default:              False
+
 Library
   Build-depends:        array, 
                         base == 4.*, 
@@ -41,10 +45,20 @@ Library
   If flag(llvm)
     Build-depends:      llvm >= 0.6.8
 
+  if flag(cuda)
+    Build-depends:      cuda >= 0.1.2,
+                        bytestring,
+                        containers,
+                        mtl,
+                        unix
+
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
   If flag(llvm)
     Exposed-modules:    Data.Array.Accelerate.LLVM
+
+  If flag(cuda)
+    Exposed-modules:    Data.Array.Accelerate.CUDA
                         
   Other-modules:        Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Delayed
@@ -60,6 +74,18 @@ Library
                         Data.Array.Accelerate.Type
   If flag(llvm)
     Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
+
+  If flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    Other-modules:      Data.Array.Accelerate.CUDA.Data
+                        Data.Array.Accelerate.CUDA.DeviceCodeGen
+                        Data.Array.Accelerate.CUDA.HostCodeGen
+                        Data.Array.Accelerate.CUDA.Fold
+                        Data.Array.Accelerate.CUDA.Map
+                        Data.Array.Accelerate.CUDA.Monad
+                        Data.Array.Accelerate.CUDA.Scalar
+                        Data.Array.Accelerate.CUDA.Syntax
+                        Data.Array.Accelerate.CUDA.ZipWith
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
   Extensions:           FlexibleContexts, FlexibleInstances, 

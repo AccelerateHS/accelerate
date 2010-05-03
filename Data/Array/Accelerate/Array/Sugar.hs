@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
 
 -- |Embedded array processing language: user-visible array operations
@@ -48,8 +48,9 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
--- FIXME: CUDA backend
-import qualified Data.Array.Accelerate.CUDA.Data as CUDA
+#ifdef ACCELERATE_CUDA_BACKEND
+import qualified Data.Array.Accelerate.CUDA.Data            as CUDA
+#endif
 
 
 -- |Representation change for array element types
@@ -144,11 +145,11 @@ data All = All deriving (Typeable, Show)
 -- |Class that characterises the types of values that can be array elements.
 --
 class (Show a, Typeable a, 
-       Typeable (ElemRepr a), Typeable (ElemRepr' a),
-       ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a),
-       CUDA.ArrayElem (ElemRepr a), CUDA.ArrayElem (ElemRepr' a))
-       -- FIXME: It is not ideal to introduce a dependency on a backend in
-       --        this module.
+#ifdef ACCELERATE_CUDA_BACKEND
+       CUDA.ArrayElem (ElemRepr a), CUDA.ArrayElem (ElemRepr' a),
+#endif
+       Typeable  (ElemRepr a), Typeable  (ElemRepr' a),
+       ArrayElem (ElemRepr a), ArrayElem (ElemRepr' a))
       => Elem a where
   elemType  :: {-dummy-} a -> TupleType (ElemRepr a)
   fromElem  :: a -> ElemRepr a
