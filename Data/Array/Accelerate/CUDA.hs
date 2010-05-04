@@ -15,36 +15,35 @@ module Data.Array.Accelerate.CUDA (
 
   -- * Generate CUDA code and execute it
   Arrays, run
-  
+
 ) where
 
 -- standard libraries
 import Control.Monad.State
 import Data.Bits
 import Data.Char            (chr, ord)
-import Data.Map             as M (empty, insert, lookup, member)
 import Data.Maybe           (fromJust)
 import Foreign
 import Foreign.Ptr          (WordPtr)
 import System.Exit          (ExitCode(ExitSuccess), exitFailure)
-import System.Posix.Process (
-  ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
+import System.Posix.Process (ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
 import System.Posix.Types   (ProcessID)
-import Data.ByteString.Char8 as B
 import Control.Exception
+
+import qualified Data.Map              as M (empty, insert, lookup, member)
+import qualified Data.ByteString.Char8 as B
 
 -- friends
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (
-  Array(..), Scalar, Vector, Segments, DIM0)
+import Data.Array.Accelerate.Array.Sugar (Array(..), Scalar, Vector, Segments, DIM0)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
-import qualified Data.Array.Accelerate.Smart       as Sugar
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
+import qualified Data.Array.Accelerate.Smart        as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
 
 import qualified Data.Array.Accelerate.CUDA.Data    as CUDA
 import qualified Data.Array.Accelerate.CUDA.Monad   as CUDA
@@ -67,8 +66,8 @@ import qualified Foreign.CUDA.Driver as CUDA (
 -- |Characterises the types that may be returned when running an array program.
 --
 class Delayable as => Arrays as where
-  
-instance Arrays ()  
+
+instance Arrays ()
 instance Arrays (Array dim e)
 instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 
@@ -272,7 +271,7 @@ memDtoH op@(ZipWith _ _ _) arr@(Array sh  rf) = do
 -- ---------------------------
 
 cuCompileFlags :: String -> [String]
-cuCompileFlags progName = 
+cuCompileFlags progName =
   [ "-m32", "--compiler-options", "-fno-strict-aliasing", "-DUNIX"
   , "-O2", "-o", progName ++ ".ptx", "-ptx", progName ++ ".cu"]
 
@@ -307,7 +306,7 @@ codeGenAcc op@(Fold fun left xs) = do
   put $ currentState
     { CUDA.uniqueID = uniqueID + 1
     , CUDA.foldMap  =
-      insert foldMapKey foldMapValue' foldMap}
+      M.insert foldMapKey foldMapValue' foldMap}
 codeGenAcc op@(Map fun xs) = do
   currentState <- get
   let uniqueID    = CUDA.uniqueID currentState
@@ -331,11 +330,11 @@ codeGenAcc op@(Map fun xs) = do
   put $ currentState
     { CUDA.uniqueID = uniqueID + 1
     , CUDA.mapMap   =
-      insert mapMapKey mapMapValue' mapMap}
+      M.insert mapMapKey mapMapValue' mapMap}
 codeGenAcc op@(ZipWith fun xs ys) = do
   currentState <- get
   let uniqueID        = CUDA.uniqueID currentState
-      progName        = "CUDAZipWith" ++ show uniqueID 
+      progName        = "CUDAZipWith" ++ show uniqueID
       zipWithMap      = CUDA.zipWithMap currentState
       zipWithMapKey   = show fun
       zipWithMapValue = case M.lookup zipWithMapKey zipWithMap of
@@ -356,7 +355,7 @@ codeGenAcc op@(ZipWith fun xs ys) = do
   put $ currentState
     { CUDA.uniqueID   = uniqueID + 1
     , CUDA.zipWithMap =
-      insert zipWithMapKey zipWithMapValue' zipWithMap}
+      M.insert zipWithMapKey zipWithMapValue' zipWithMap}
 codeGenAcc op@(Use acc   ) = return ()
 codeGenAcc op = error $ show op ++ " not supported yet by the code generator."
 
