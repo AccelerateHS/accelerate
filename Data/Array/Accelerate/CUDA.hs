@@ -31,6 +31,7 @@ import System.Posix.Process (
   ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
 import System.Posix.Types   (ProcessID)
 import Data.ByteString.Char8 as B
+import Control.Exception
 
 -- friends
 import Data.Array.Accelerate.Analysis.Type
@@ -75,35 +76,22 @@ instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 --
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc = do
-  let ast       = Sugar.convertAcc acc
-      initState = CUDA.CGState 0 0 M.empty M.empty M.empty M.empty
-  (device, context) <- initCUDA
-  (_,   state   ) <- runStateT (memHtoD    ast) initState
-  (_,   state'  ) <- runStateT (codeGenAcc ast)     state
-  (arr, state'' ) <- runStateT (execute    ast)     state'
-  (_,   state''') <- runStateT (memDtoH    ast arr) state''
-  finalise
-  Prelude.putStrLn $ (show $ CUDA.dataTransferHtoD state''')
-                  ++ " host-to-device data transfer(s) triggered."
-  return arr
+  bracket (initialise Nothing) finalise $ \_ ->
+    execStateT (memHtoD    ast) ist >>=
+    execStateT (codeGenAcc ast)     >>=
+    runStateT  (execute    ast)     >>= \(a,s) ->
+    execStateT (memDtoH    ast a) s >>  return a
+  where
+    ast = Sugar.convertAcc acc
+    ist = CUDA.CGState 0 0 M.empty M.empty M.empty M.empty
 
--- |Initialises the CUDA device and the context.
---
-initCUDA :: IO (CUDA.Device, CUDA.Context)
-initCUDA = do
-  CUDA.initialise []
-  count   <- CUDA.count
-  if count == 0
-    then finalise >> error "No CUDA device found."
-    else do
-      device  <- CUDA.device 0
-      context <- CUDA.create device [CUDA.SchedAuto]
-      return (device, context)
+    finalise     = CUDA.destroy . snd
+    initialise n = do
+      CUDA.initialise []
+      dev <- CUDA.device (maybe 0 id n)
+      ctx <- CUDA.create dev [CUDA.SchedAuto]
+      return (dev, ctx)
 
--- |Finalises the CUDA device and the context.
---
-finalise :: IO ()
-finalise = CUDA.pop >>= CUDA.destroy
 
 -- |Executes the generated code
 --
