@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
-{-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, GADTs, PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables, TypeFamilies      #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA
 -- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -19,18 +19,16 @@ module Data.Array.Accelerate.CUDA (
 ) where
 
 -- standard libraries
+import Control.Monad
 import Control.Monad.State
-import Data.Bits
-import Data.Char            (chr, ord)
-import Data.Maybe           (fromJust)
+import Data.Maybe           (fromMaybe)
 import Foreign
-import Foreign.Ptr          (WordPtr)
-import System.Exit          (ExitCode(ExitSuccess), exitFailure)
+import System.Exit          (ExitCode(ExitSuccess))
 import System.Posix.Process (ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
 import System.Posix.Types   (ProcessID)
 import Control.Exception
 
-import qualified Data.Map              as M (empty, insert, lookup, member)
+import qualified Data.Map              as M (empty, insert, lookup)
 import qualified Data.ByteString.Char8 as B
 
 -- friends
@@ -38,8 +36,7 @@ import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (Array(..), Scalar, Vector, Segments, DIM0)
-import Data.Array.Accelerate.Array.Delayed
+import Data.Array.Accelerate.Array.Sugar (Array(..))
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart        as Sugar
@@ -53,12 +50,14 @@ import qualified Data.Array.Accelerate.CUDA.Fold    as CUDA
 import qualified Data.Array.Accelerate.CUDA.Map     as CUDA
 import qualified Data.Array.Accelerate.CUDA.ZipWith as CUDA
 
-import qualified Foreign.CUDA.Driver as CUDA (
-  AllocFlag(..), Context(..), ContextFlag(..), Device(..), DeviceProperties(..),
-  FunParam(..),
-  count, create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
-  loadDataEx, maxGridSize, nullDevPtr, pop, props, setBlockShape, setParams,
-  setSharedSize, sync)
+import qualified Foreign.CUDA.Driver                as CUDA
+  (
+    ContextFlag(..), DeviceProperties(..), FunParam(..),
+    create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
+    loadDataEx, maxGridSize, nullDevPtr, props, setBlockShape, setParams,
+    setSharedSize, sync
+  )
+
 
 -- Program execution
 -- -----------------
@@ -74,7 +73,7 @@ instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 -- |Compiles and runs a complete embedded array program using the CUDA backend.
 --
 run :: Arrays a => Sugar.Acc a -> IO a
-run acc = do
+run acc =
   bracket (initialise Nothing) finalise $ \_ ->
     execStateT (memHtoD    ast) ist >>=
     execStateT (codeGenAcc ast)     >>=
@@ -87,7 +86,7 @@ run acc = do
     finalise     = CUDA.destroy . snd
     initialise n = do
       CUDA.initialise []
-      dev <- CUDA.device (maybe 0 id n)
+      dev <- CUDA.device (fromMaybe 0 n)
       ctx <- CUDA.create dev [CUDA.SchedAuto]
       return (dev, ctx)
 
@@ -98,18 +97,19 @@ execute :: OpenAcc aenv a -> CUDA.CGIO a
 execute op@(Fold fun def xs) = do
   currentState <- get
   case M.lookup (show fun) (CUDA.foldMap currentState) of
-    Just  v -> do
-      getCompilerProcessStatus (CUDA.compilerPID v)
+    Nothing -> error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+    Just v  -> do
+      _      <- getCompilerProcessStatus (CUDA.compilerPID v)
       props  <- liftIO $ CUDA.device 0 >>= CUDA.props
       ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
       (m, _) <- liftIO $ CUDA.loadDataEx ptx []
       fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v ++ "Scan4")
-      xs'@(Array sh rf) <- execute xs
+      Array sh rf <- execute xs
       let n              = size sh
           ctaSize        = 128
           numElemsPerCTA = ctaSize * 8
           execute' e rf' n' = do
-            let ys'@(Array newSh' newRf') = newArray_ (Sugar.toElem ())
+            let ys'@(Array _newSh' newRf') = newArray_ (Sugar.toElem ())
                 isFullBlock = if n' `mod` numElemsPerCTA == 0 then 1 else 0
                 numBlocks   = (n' + numElemsPerCTA - 1) `div` numElemsPerCTA
                 gridDim     = getGridDim props numBlocks
@@ -119,31 +119,27 @@ execute op@(Fold fun def xs) = do
             liftIO $ CUDA.setSharedSize
               fun (fromIntegral $ 256 * sizeOf (undefined::Float))
             liftIO $ CUDA.setParams fun $
-              [CUDA.IArg e] ++ (toFunParams def) ++
-              xsFunParams ++ ysFunParams ++
+              [CUDA.IArg e] ++ toFunParams def ++ xsFunParams ++ ysFunParams ++
               [CUDA.IArg n', CUDA.IArg isFullBlock]
             liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
             liftIO $ CUDA.launch fun gridDim Nothing
             liftIO $ CUDA.sync
-            CUDA.decUse rf' >>= \ decUse -> if decUse == 0
-              then CUDA.free rf'
-              else return ()
+            CUDA.decUse rf' >>= \ decUse -> when (decUse == 0) $ CUDA.free rf'
             if numBlocks == 1
               then return ys'
               else execute' 0 newRf' numBlocks
-      ys <- execute' 1 rf (n + 1)
-      return ys
-    Nothing ->
-      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+      execute' 1 rf (n + 1)
+
 execute op@(Map fun xs) = do
   currentState <- get
   case M.lookup (show fun) (CUDA.mapMap currentState) of
-    Just v -> do
-      getCompilerProcessStatus (CUDA.compilerPID v)
+    Nothing -> error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+    Just v  -> do
+      _      <- getCompilerProcessStatus (CUDA.compilerPID v)
       props  <- liftIO $ CUDA.device 0 >>= CUDA.props
       ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
       (m, _) <- liftIO $ CUDA.loadDataEx ptx []
-      fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
+      fun    <- liftIO $ CUDA.getFun m ('_' : CUDA.progName v)
       (Array sh rf) <- execute xs
       let ys@(Array newSh newRf) = newArray_ (Sugar.toElem sh)
           n              = size newSh
@@ -160,21 +156,19 @@ execute op@(Map fun xs) = do
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
-      CUDA.decUse rf >>= \ decUse -> if decUse == 0
-        then CUDA.free rf
-        else return ()
+      CUDA.decUse rf >>= \ decUse -> when (decUse == 0) $ CUDA.free rf
       return ys
-    Nothing ->
-      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+
 execute op@(ZipWith fun xs ys) = do
   currentState <- get
   case M.lookup (show fun) (CUDA.zipWithMap currentState) of
-    Just v -> do
-      getCompilerProcessStatus (CUDA.compilerPID v)
+    Nothing -> error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
+    Just v  -> do
+      _      <- getCompilerProcessStatus (CUDA.compilerPID v)
       props  <- liftIO $ CUDA.device 0 >>= CUDA.props
       ptx    <- liftIO $ B.readFile (CUDA.progName v ++ ".ptx")
       (m, _) <- liftIO $ CUDA.loadDataEx ptx []
-      fun    <- liftIO $ CUDA.getFun m ("_" ++ CUDA.progName v)
+      fun    <- liftIO $ CUDA.getFun m ('_' : CUDA.progName v)
       (Array sh1 rf1) <- execute xs
       (Array sh2 rf2) <- execute ys
       let zs@(Array newSh newRf) = newArray_ (Sugar.toElem $ intersect sh1 sh2)
@@ -194,16 +188,11 @@ execute op@(ZipWith fun xs ys) = do
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
-      CUDA.decUse rf1 >>= \ decUse -> if decUse == 0
-        then CUDA.free rf1
-        else return ()
-      CUDA.decUse rf2 >>= \ decUse -> if decUse == 0
-        then CUDA.free rf2
-        else return ()
+      CUDA.decUse rf1 >>= \ decUse -> when (decUse == 0) $ CUDA.free rf1
+      CUDA.decUse rf2 >>= \ decUse -> when (decUse == 0) $ CUDA.free rf2
       return zs
-    Nothing ->
-      error $ "Code generation for \n\t" ++ show op ++ "\nfailed."
-execute op@(Use arr) = do
+
+execute (Use arr) =
   return arr
 
 getGridDim :: CUDA.DeviceProperties -> Int -> (Int, Int)
@@ -238,16 +227,17 @@ getCompilerProcessStatus pid = do
 -- |Allocates device memory and triggers asynchronous data transfer.
 --
 memHtoD :: OpenAcc aenv a -> CUDA.CGIO ()
-memHtoD op@(Map     fun xs)        = memHtoD xs
-memHtoD op@(ZipWith fun xs ys)     = memHtoD xs >> memHtoD ys
-memHtoD op@(Fold    fun left xs)   = memHtoD xs
-memHtoD op@(Use     (Array sh rf)) = do
+memHtoD (Map     _ xs)          = memHtoD xs
+memHtoD (ZipWith _ xs ys)       = memHtoD xs >> memHtoD ys
+memHtoD (Fold    _ _  xs)       = memHtoD xs
+memHtoD (Use     (Array sh rf)) = do
   let numElems  = size sh
-      allocFlag = [CUDA.Portable, CUDA.WriteCombined]
-  -- hptrs <- CUDA.mallocHostArray e allocFlag numElems
-  CUDA.mallocArray rf numElems
+--      allocFlag = [CUDA.Portable, CUDA.WriteCombined]
+--  hptrs <- CUDA.mallocHostArray e allocFlag numElems
+  CUDA.mallocArray    rf numElems
   CUDA.pokeArrayAsync rf numElems Nothing
-memHtoD op = error $ show op ++ " not supported yet by the code generator."
+
+memHtoD op = error $ shows op " not supported yet by the code generator."
 
 --
 -- GPU To Host data transfer
@@ -256,15 +246,9 @@ memHtoD op = error $ show op ++ " not supported yet by the code generator."
 -- |Transfers the result from GPU
 --
 memDtoH :: OpenAcc aenv a -> a -> CUDA.CGIO ()
-memDtoH op@(Fold _ _ _) arr@(Array sh rf) = do
-  CUDA.peekArray rf (size sh)
-  CUDA.free rf
-memDtoH op@(Map _ _) arr@(Array sh rf) = do
-  CUDA.peekArray rf (size sh)
-  CUDA.free rf
-memDtoH op@(ZipWith _ _ _) arr@(Array sh  rf) = do
-  CUDA.peekArray rf (size sh)
-  CUDA.free rf
+memDtoH (Fold _ _ _)    (Array sh rf) = CUDA.peekArray rf (size sh) >> CUDA.free rf
+memDtoH (Map _ _)       (Array sh rf) = CUDA.peekArray rf (size sh) >> CUDA.free rf
+memDtoH (ZipWith _ _ _) (Array sh rf) = CUDA.peekArray rf (size sh) >> CUDA.free rf
 
 --
 -- CUDA code compilation flags
@@ -356,14 +340,14 @@ codeGenAcc op@(ZipWith fun xs ys) = do
     { CUDA.uniqueID   = uniqueID + 1
     , CUDA.zipWithMap =
       M.insert zipWithMapKey zipWithMapValue' zipWithMap}
-codeGenAcc op@(Use acc   ) = return ()
-codeGenAcc op = error $ show op ++ " not supported yet by the code generator."
+codeGenAcc (Use _   ) = return ()
+codeGenAcc op = error $ shows op " not supported yet by the code generator."
 
 -- Scalar function
 -- ---------------
 
 codeGenFun :: OpenFun env aenv t -> [CUDA.BlkItem]
-codeGenFun f@(Lam lam) = codeGenFun lam
+codeGenFun (Lam lam)   = codeGenFun lam
 codeGenFun (Body body) =
   [CUDA.StmtItem $ CUDA.JumpStmt $ CUDA.Return $ Just $ codeGenExp body]
 
@@ -371,11 +355,11 @@ codeGenFun (Body body) =
 -- ----------
 
 codeGenExp :: forall t env aenv . OpenExp env aenv t -> CUDA.Exp
-codeGenExp e@(Var idx) =
+codeGenExp (Var idx) =
   let idxToInt :: Idx env' t' -> Int
       idxToInt ZeroIdx        = 0
       idxToInt (SuccIdx idx') = 1 + idxToInt idx'
-  in  CUDA.Exp [CUDA.toAssignExp $ CUDA.Ident $ "x" ++ show (idxToInt idx)]
+  in  CUDA.Exp [CUDA.toAssignExp $ CUDA.Ident $ 'x' : show (idxToInt idx)]
 codeGenExp e@(Const c) =
   let valStr = show (Sugar.toElem c :: t)
       getCUDAConst (CUDA.Float)        = CUDA.FloatConst   $ read valStr
@@ -384,20 +368,20 @@ codeGenExp e@(Const c) =
       getCUDAConst (CUDA.Int  Nothing) | valStr == "True"  = CUDA.IntegerConst 1
                                        | valStr == "False" = CUDA.IntegerConst 0
                                        | otherwise = CUDA.IntegerConst $ read valStr
-      getCUDAConst t' = error $ (show t') ++ " not supported yet as a const type"
+      getCUDAConst t' = error $ shows t' " not supported yet as a const type"
   in  CUDA.Exp [CUDA.toAssignExp $ getCUDAConst $ codeGenTupleType $ expType e]
-codeGenExp e@(Tuple tup) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
-codeGenExp e@(Prj idx e') = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
-codeGenExp e@(Cond e1 e2 e3) =
+codeGenExp e@(Tuple _) = error $ "the expression, " ++ shows e ", not supported yet by the code generator."
+codeGenExp e@(Prj _ _) = error $ "the expression, " ++ shows e ", not supported yet by the code generator."
+codeGenExp (Cond e1 e2 e3) =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.Cond
     (CUDA.toLgcOrExp $ CUDA.NestedExp $ codeGenExp e1)
     (codeGenExp e2)
     (CUDA.toCondExp $ CUDA.NestedExp $ codeGenExp e3)]
-codeGenExp e@(PrimConst c) = codeGenPrimConst c
-codeGenExp e@(PrimApp f a@(Tuple (NilTup `SnocTup` e1 `SnocTup` e2))) =
+codeGenExp (PrimConst c) = codeGenPrimConst c
+codeGenExp (PrimApp f (Tuple (NilTup `SnocTup` e1 `SnocTup` e2))) =
   codeGenPrim f $ Prelude.map CUDA.NestedExp [codeGenExp e1, codeGenExp e2]
-codeGenExp e@(IndexScalar acc ix) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
-codeGenExp e@(Shape acc) = error $ "the expression, " ++ (show e) ++ ", not supported yet by the code generator."
+codeGenExp e@(IndexScalar _ _) = error $ "the expression, " ++ shows e ", not supported yet by the code generator."
+codeGenExp e@(Shape _)         = error $ "the expression, " ++ shows e ", not supported yet by the code generator."
 
 toFunParams :: forall env aenv t . OpenExp env aenv t -> [CUDA.FunParam]
 toFunParams e@(Const c) =
@@ -408,11 +392,10 @@ toFunParams e@(Const c) =
       toFunParams' (CUDA.Int  Nothing) | valStr == "True"  = [CUDA.IArg 1]
                                        | valStr == "False" = [CUDA.IArg 0]
                                        | otherwise = [CUDA.IArg (read valStr :: Int)]
-      toFunParams' t' = error $ (show t') ++ " not supported yet as a const type"
+      toFunParams' t' = error $ shows t' " not supported yet as a const type"
   in  toFunParams' $ codeGenTupleType $ expType e
 toFunParams e = error $
-  "the expression, " ++ (show e) ++
-  ", could not be marshalled as a kernel parameter."
+  "the expression, " ++ shows e ", could not be marshalled as a kernel parameter."
 
 -- Types
 -- -----
@@ -567,10 +550,10 @@ codeGenPrim (PrimSig         _) [x] =
         (CUDA.toRelExp x) (CUDA.toShftExp $ CUDA.IntegerConst 0))
       (CUDA.Exp [CUDA.toAssignExp $ CUDA.IntegerConst 1])
       (CUDA.toCondExp $ CUDA.IntegerConst 0))]
-codeGenPrim (PrimQuot        _) [x, y] = error "the code generation of PrimQuot not implemented yet."
-codeGenPrim (PrimRem         _) [x, y] = error "the code generation of PrimRem not implemented yet."
-codeGenPrim (PrimIDiv        _) [x, y] = error "the code generation of PrimIDiv not implemented yet."
-codeGenPrim (PrimMod         _) [x, y] = error "the code generation of PrimMod not implemented yet."
+codeGenPrim (PrimQuot        _) [_, _] = error "the code generation of PrimQuot not implemented yet."
+codeGenPrim (PrimRem         _) [_, _] = error "the code generation of PrimRem not implemented yet."
+codeGenPrim (PrimIDiv        _) [_, _] = error "the code generation of PrimIDiv not implemented yet."
+codeGenPrim (PrimMod         _) [_, _] = error "the code generation of PrimMod not implemented yet."
 codeGenPrim (PrimBAnd        _) [x, y] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.And (CUDA.toAndExp x) (CUDA.toEqExp y)]
 codeGenPrim (PrimBOr         _) [x, y] =
@@ -579,22 +562,22 @@ codeGenPrim (PrimBXor        _) [x, y] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.Xor (CUDA.toXorExp x) (CUDA.toAndExp y)]
 codeGenPrim (PrimBNot        _) [x] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.BitNot (CUDA.toCastExp x)]
-codeGenPrim (PrimFDiv        _) [x, y] = error "the code generation of PrimFDiv not implemented yet."
-codeGenPrim (PrimRecip       _) [x] = error "the code generation of PrimRecip not implemented yet."
-codeGenPrim (PrimSin         _) [x] = error "the code generation of PrimSin not implemented yet."
-codeGenPrim (PrimCos         _) [x] = error "the code generation of PrimCos not implemented yet."
-codeGenPrim (PrimTan         _) [x] = error "the code generation of PrimTan not implemented yet."
-codeGenPrim (PrimAsin        _) [x] = error "the code generation of PrimAsin not implemented yet."
-codeGenPrim (PrimAcos        _) [x] = error "the code generation of PrimAcos not implemented yet."
-codeGenPrim (PrimAtan        _) [x] = error "the code generation of PrimAtan not implemented yet."
-codeGenPrim (PrimAsinh       _) [x] = error "the code generation of PrimAsinh not implemented yet."
-codeGenPrim (PrimAcosh       _) [x] = error "the code generation of PrimAcosh not implemented yet."
-codeGenPrim (PrimAtanh       _) [x] = error "the code generation of PrimAtanh not implemented yet."
-codeGenPrim (PrimExpFloating _) [x] = error "the code generation of PrimExpFloating not implemented yet."
-codeGenPrim (PrimSqrt        _) [x] = error "the code generation of PrimSqrt not implemented yet."
-codeGenPrim (PrimLog         _) [x] = error "the code generation of PrimLog not implemented yet."
-codeGenPrim (PrimFPow        _) [x, y] = error "the code generation of PrimFPow not implemented yet."
-codeGenPrim (PrimLogBase     _) [x, y] = error "the code generation of PrimLogBase not implemented yet."
+codeGenPrim (PrimFDiv        _) [_, _] = error "the code generation of PrimFDiv not implemented yet."
+codeGenPrim (PrimRecip       _) [_]    = error "the code generation of PrimRecip not implemented yet."
+codeGenPrim (PrimSin         _) [_]    = error "the code generation of PrimSin not implemented yet."
+codeGenPrim (PrimCos         _) [_]    = error "the code generation of PrimCos not implemented yet."
+codeGenPrim (PrimTan         _) [_]    = error "the code generation of PrimTan not implemented yet."
+codeGenPrim (PrimAsin        _) [_]    = error "the code generation of PrimAsin not implemented yet."
+codeGenPrim (PrimAcos        _) [_]    = error "the code generation of PrimAcos not implemented yet."
+codeGenPrim (PrimAtan        _) [_]    = error "the code generation of PrimAtan not implemented yet."
+codeGenPrim (PrimAsinh       _) [_]    = error "the code generation of PrimAsinh not implemented yet."
+codeGenPrim (PrimAcosh       _) [_]    = error "the code generation of PrimAcosh not implemented yet."
+codeGenPrim (PrimAtanh       _) [_]    = error "the code generation of PrimAtanh not implemented yet."
+codeGenPrim (PrimExpFloating _) [_]    = error "the code generation of PrimExpFloating not implemented yet."
+codeGenPrim (PrimSqrt        _) [_]    = error "the code generation of PrimSqrt not implemented yet."
+codeGenPrim (PrimLog         _) [_]    = error "the code generation of PrimLog not implemented yet."
+codeGenPrim (PrimFPow        _) [_, _] = error "the code generation of PrimFPow not implemented yet."
+codeGenPrim (PrimLogBase     _) [_, _] = error "the code generation of PrimLogBase not implemented yet."
 codeGenPrim (PrimLt          _) [x, y] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.Lt (CUDA.toRelExp x) (CUDA.toShftExp y)]
 codeGenPrim (PrimGt          _) [x, y] =
@@ -633,8 +616,8 @@ codeGenPrim (PrimChr          ) [x] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.TyCast
     (CUDA.TyName [CUDA.SpecQualTySpec (CUDA.Char Nothing)] Nothing)
     (CUDA.toCastExp x)]
-codeGenPrim (PrimRoundFloatInt) [x] = error "the code generation of PrimRoundFloatInt not implemented yet."
-codeGenPrim (PrimTruncFloatInt) [x] = error "the code generation of PrimTruncFloatInt not implemented yet."
+codeGenPrim (PrimRoundFloatInt) [_] = error "the code generation of PrimRoundFloatInt not implemented yet."
+codeGenPrim (PrimTruncFloatInt) [_] = error "the code generation of PrimTruncFloatInt not implemented yet."
 codeGenPrim (PrimIntFloat     ) [x] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.TyCast
     (CUDA.TyName [CUDA.SpecQualTySpec CUDA.Float] Nothing)
