@@ -39,18 +39,16 @@ import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar (Array(..))
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
-import qualified Data.Array.Accelerate.Smart        as Sugar
-import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
+import qualified Data.Array.Accelerate.Smart           as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar     as Sugar
 
-import qualified Data.Array.Accelerate.CUDA.Data    as CUDA
-import qualified Data.Array.Accelerate.CUDA.Monad   as CUDA
-import qualified Data.Array.Accelerate.CUDA.Scalar  as CUDA
-import qualified Data.Array.Accelerate.CUDA.Syntax  as CUDA
-import qualified Data.Array.Accelerate.CUDA.Fold    as CUDA
-import qualified Data.Array.Accelerate.CUDA.Map     as CUDA
-import qualified Data.Array.Accelerate.CUDA.ZipWith as CUDA
+import qualified Data.Array.Accelerate.CUDA.Monad      as CUDA
+import qualified Data.Array.Accelerate.CUDA.Scalar     as CUDA
+import qualified Data.Array.Accelerate.CUDA.Syntax     as CUDA
+import qualified Data.Array.Accelerate.CUDA.Kernel     as CUDA
+import qualified Data.Array.Accelerate.CUDA.Array.Data as CUDA
 
-import qualified Foreign.CUDA.Driver                as CUDA
+import qualified Foreign.CUDA.Driver                   as CUDA
   (
     ContextFlag(..), DeviceProperties(..), FunParam(..),
     create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,

@@ -77,15 +77,15 @@ Library
 
   If flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    Other-modules:      Data.Array.Accelerate.CUDA.Data
-                        Data.Array.Accelerate.CUDA.DeviceCodeGen
-                        Data.Array.Accelerate.CUDA.HostCodeGen
-                        Data.Array.Accelerate.CUDA.Fold
-                        Data.Array.Accelerate.CUDA.Map
+    Other-modules:      Data.Array.Accelerate.CUDA.Array.Data
+                        Data.Array.Accelerate.CUDA.CodeGen.Host
+                        Data.Array.Accelerate.CUDA.CodeGen.Device
+                        Data.Array.Accelerate.CUDA.Kernel.Fold
+                        Data.Array.Accelerate.CUDA.Kernel.Map
+                        Data.Array.Accelerate.CUDA.Kernel.ZipWith
                         Data.Array.Accelerate.CUDA.Monad
                         Data.Array.Accelerate.CUDA.Scalar
                         Data.Array.Accelerate.CUDA.Syntax
-                        Data.Array.Accelerate.CUDA.ZipWith
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
   Extensions:           FlexibleContexts, FlexibleInstances, 

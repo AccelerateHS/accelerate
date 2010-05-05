@@ -1,10 +1,19 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples #-}
+-- |
+-- Module      : Data.Array.Accelerate.CUDA.Array.Data
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Data.Array.Accelerate.CUDA.Data (
- 
-  ArrayElem(..)
-) where
+module Data.Array.Accelerate.CUDA.Array.Data
+  (
+    ArrayElem(..)
+  ) where
 
 -- standard libraries
 

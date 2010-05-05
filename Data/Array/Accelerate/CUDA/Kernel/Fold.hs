@@ -1,9 +1,9 @@
-module Data.Array.Accelerate.CUDA.Fold (foldGen, foldDot) where
+
+module Data.Array.Accelerate.CUDA.Kernel.Fold (foldGen, foldDot) where
 
 import Data.Array.Accelerate.CUDA.Scalar
 import Data.Array.Accelerate.CUDA.Syntax
-import Data.Array.Accelerate.CUDA.DeviceCodeGen
-import Data.Array.Accelerate.CUDA.HostCodeGen
+import Data.Array.Accelerate.CUDA.CodeGen.Device as CG
 
 ------------------------------------------------------------------------------
 -- CodeGen
@@ -38,4 +38,4 @@ foldDot progName scalar left =
 -- Device Code
 ------------------------------------------------------------------------------
 deviceCode :: String -> Scalar -> (TySpec, String) -> TransUnit
-deviceCode = Data.Array.Accelerate.CUDA.DeviceCodeGen.fold
+deviceCode = CG.fold

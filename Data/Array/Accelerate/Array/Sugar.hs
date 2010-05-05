@@ -49,7 +49,7 @@ import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
 #ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA.Data            as CUDA
+import qualified Data.Array.Accelerate.CUDA.Array.Data      as CUDA
 #endif
 
 

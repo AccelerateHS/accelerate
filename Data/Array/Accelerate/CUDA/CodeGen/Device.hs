@@ -1,27 +1,16 @@
-module Data.Array.Accelerate.CUDA.DeviceCodeGen (
+
+module Data.Array.Accelerate.CUDA.CodeGen.Device
+  (
   -- The available kernels
   Kernel(..),
+
   -- The operations
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.bpermute,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.filter,
-  Data.Array.Accelerate.CUDA.DeviceCodeGen.fold,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.foldl1,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.foldl1S,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.foldr,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.foldr1,
-  Data.Array.Accelerate.CUDA.DeviceCodeGen.map,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.permute,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.replicate,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanl,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanl1,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanr,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanr1,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanlS,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.scanl1S,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.zip,
-  Data.Array.Accelerate.CUDA.DeviceCodeGen.zipWith,
-  --Data.Array.Accelerate.CUDA.DeviceCodeGen.zipWith3
-) where
+  fold, map, zipWith,
+  )
+  where
+
+import Prelude   hiding (map, zipWith)
+import qualified Prelude
 
 import Data.Array.Accelerate.CUDA.Scalar
 import Data.Array.Accelerate.CUDA.Syntax

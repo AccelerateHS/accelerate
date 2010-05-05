@@ -1,13 +1,17 @@
-module Data.Array.Accelerate.CUDA.HostCodeGen (
+
+module Data.Array.Accelerate.CUDA.CodeGen.Host (
   -- Data structures
   HostCodeConfig(..), Param(..), Associativity(..), Operation(..),
   -- The host code generator
   hostCodeGen
 ) where
 
+import Prelude   hiding (init, Either(..))
+
 import Data.Array.Accelerate.CUDA.Scalar
 import Data.Array.Accelerate.CUDA.Syntax
-import qualified Data.Array.Accelerate.CUDA.DeviceCodeGen as DeviceCodeGen
+
+import qualified Data.Array.Accelerate.CUDA.CodeGen.Device as DeviceCodeGen
 
 --
 -- The Host Code Configuration
@@ -208,7 +212,7 @@ hostFunc conf = [FuncDef
         in  ( [DeclnTySpec $ paramType param]
             , Just $ Pointer [[]], paramName param)]
     ++[([DeclnTySpec (Int $ Just Unsigned)], Nothing, "n")]))
-  (Blk $ decl conf ++ Data.Array.Accelerate.CUDA.HostCodeGen.init conf
+  (Blk $ decl conf ++ init conf
       ++ malloc conf ++ multiPassExec conf ++ free conf ++ finalise)]
 
 --
@@ -266,12 +270,12 @@ decl conf =
             , ( Int Nothing, Nothing, "level"
               , Just $ AssignExp $ toAssignExp $ IntegerConst 0)]
           ++case associativity $ op conf of
-            Data.Array.Accelerate.CUDA.HostCodeGen.Left leftVarName ->
+            Left leftVarName ->
               [ ( paramType param, Nothing, "startingVal"
                 , Just $ AssignExp $ toAssignExp $ Ident $ paramName param)
               | param@(Variable {}) <- inParams conf
               , paramName param == leftVarName]
-            Data.Array.Accelerate.CUDA.HostCodeGen.Right rightVarName ->
+            Right rightVarName ->
               [ ( paramType param, Nothing, "startingVal"
                 , Just $ AssignExp $ toAssignExp $ Ident $ paramName param)
               | param@(Variable {}) <- inParams conf
@@ -736,12 +740,12 @@ exec conf op@(Fold {}) =
         (CompStmt $ Blk $
           ( case identity' of -- This is for isExclusive.
             Just _  -> case associativity op of
-              Data.Array.Accelerate.CUDA.HostCodeGen.Left1  -> isExclusive False
-              Data.Array.Accelerate.CUDA.HostCodeGen.Right1 -> isExclusive False
+              Left1  -> isExclusive False
+              Right1 -> isExclusive False
               _                  -> []
             Nothing -> case associativity op of
-              Data.Array.Accelerate.CUDA.HostCodeGen.Left _  -> isExclusive True
-              Data.Array.Accelerate.CUDA.HostCodeGen.Right _ -> isExclusive True
+              Left _  -> isExclusive True
+              Right _ -> isExclusive True
               _                   -> [])
           ++
           map
@@ -768,11 +772,11 @@ exec conf op@(Fold {}) =
                   [SpecQualTySpec $ paramType param] Nothing
                 , toAssignExp $ AddrOf $ toCastExp $ Ident
                 $ case associativity op of
-                  Data.Array.Accelerate.CUDA.HostCodeGen.Left leftVarName ->
+                  Left leftVarName ->
                     if leftVarName == paramName param
                       then "startingVal"
                       else paramName param
-                  Data.Array.Accelerate.CUDA.HostCodeGen.Right rightVarName ->
+                  Right rightVarName ->
                     if rightVarName == paramName param
                       then "startingVal"
                       else paramName param
@@ -813,12 +817,12 @@ exec conf op@(Fold {}) =
         (CompStmt $ Blk $
           ( case identity' of -- This is for isExclusive.
             Just _  -> case associativity op of
-              Data.Array.Accelerate.CUDA.HostCodeGen.Left1  -> isExclusive True
-              Data.Array.Accelerate.CUDA.HostCodeGen.Right1 -> isExclusive True
+              Left1  -> isExclusive True
+              Right1 -> isExclusive True
               _                  -> []
             Nothing -> case associativity op of
-              Data.Array.Accelerate.CUDA.HostCodeGen.Left _  -> isExclusive False
-              Data.Array.Accelerate.CUDA.HostCodeGen.Right _ -> isExclusive False
+              Left _  -> isExclusive False
+              Right _ -> isExclusive False
               _                   -> [])
           ++
           map
@@ -847,11 +851,11 @@ exec conf op@(Fold {}) =
                   [SpecQualTySpec $ paramType param] Nothing
                 , toAssignExp $ AddrOf $ toCastExp $ Ident
                 $ case associativity op of
-                  Data.Array.Accelerate.CUDA.HostCodeGen.Left leftVarName ->
+                  Left leftVarName ->
                     if leftVarName == paramName param
                       then "startingVal"
                       else paramName param
-                  Data.Array.Accelerate.CUDA.HostCodeGen.Right rightVarName ->
+                  Right rightVarName ->
                     if rightVarName == paramName param
                       then "startingVal"
                       else paramName param
@@ -1057,7 +1061,7 @@ memcpyDtoH conf = map
 adjust :: HostCodeConfig -> Operation -> [BlkItem]
 adjust conf op@(Map {}) = []
 adjust conf op@(Fold {}) = []
-adjust conf op@(Scan {associativity = Data.Array.Accelerate.CUDA.HostCodeGen.Left _}) =
+adjust conf op@(Scan {associativity = Left _}) =
   [StmtItem $ ExpStmt $ Just $ Exp [Assign
     (toUnaryExp $ Ident "startingVal")
     (toAssignExp $ FuncCall
@@ -1071,7 +1075,7 @@ adjust conf op@(Scan {associativity = Data.Array.Accelerate.CUDA.HostCodeGen.Lef
               (toMulExp $ toArrayElem (Ident "d_n") (IntegerConst 0)))
             (toMulExp $ IntegerConst 1))
         | param@(Array {}) <- (outParam conf):(inParams conf)]))]]
-adjust conf op@(Scan {associativity = Data.Array.Accelerate.CUDA.HostCodeGen.Left1}) =
+adjust conf op@(Scan {associativity = Left1}) =
   [StmtItem $ ExpStmt $ Just $ Exp [Assign
     (toUnaryExp $ toArrayElem (Ident "xs")
       (Add
