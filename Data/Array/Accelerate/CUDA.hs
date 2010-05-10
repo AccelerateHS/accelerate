@@ -73,8 +73,8 @@ instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc =
   bracket (initialise Nothing) finalise $ \_ ->
-    execStateT (memHtoD    ast) ist >>=
-    execStateT (codeGenAcc ast)     >>=
+    execStateT (codeGenAcc ast) ist >>=
+    execStateT (memHtoD    ast)     >>=
     runStateT  (execute    ast)     >>= \(a,s) ->
     execStateT (memDtoH    ast a) s >>  return a
   where
