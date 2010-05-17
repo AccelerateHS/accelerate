@@ -15,8 +15,7 @@ type CGIO = StateT CGState IO
 data OperationMapValue
   = OperationValue
     { compilerPID :: ProcessID  -- the PID of the compiler
-    , progName    :: String     -- generated CUDA kernel name
-    , devicePtr   :: WordPtr}   -- device pointer for the output
+    , progName    :: String}     -- generated CUDA kernel name
   | MemoryEntry
     --{ hostPtr     :: WordPtr    -- host pointer pinned by CUDA driver API
     { devicePtr   :: WordPtr    -- device pointer

@@ -272,7 +272,7 @@ codeGenAcc op@(Fold fun left xs) = do
       foldMapKey   = show fun
       foldMapValue = case M.lookup foldMapKey foldMap of
         Just  v -> v
-        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+        Nothing -> CUDA.OperationValue 0 progName
       scalar   = CUDA.Scalar
         { CUDA.params   =
           [ (codeGenTupleType $ expType left, "x1")
@@ -297,7 +297,7 @@ codeGenAcc op@(Map fun xs) = do
       mapMapKey   = show fun
       mapMapValue = case M.lookup mapMapKey mapMap of
         Just  v -> v
-        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+        Nothing -> CUDA.OperationValue 0 progName
       scalar   = CUDA.Scalar
         { CUDA.params   =
           [ (codeGenTupleType $ accType xs, "x0")]
@@ -321,7 +321,7 @@ codeGenAcc op@(ZipWith fun xs ys) = do
       zipWithMapKey   = show fun
       zipWithMapValue = case M.lookup zipWithMapKey zipWithMap of
         Just  v -> v
-        Nothing -> CUDA.OperationValue 0 progName (CUDA.devPtrToWordPtr CUDA.nullDevPtr)
+        Nothing -> CUDA.OperationValue 0 progName
       scalar   = CUDA.Scalar
         { CUDA.params   =
           [ (codeGenTupleType $ accType xs, "x1")
