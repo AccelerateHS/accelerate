@@ -12,7 +12,7 @@ import System.Random
 import qualified Data.Array.Accelerate as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
 
-import Time
+import System.Time
 import SAXPY
 import DotP
 import Filter
