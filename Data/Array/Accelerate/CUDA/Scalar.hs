@@ -18,3 +18,4 @@ data Scalar = Scalar
   , comp     :: [BlkItem]
   , identity :: Maybe Const}
   deriving Show
+

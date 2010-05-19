@@ -10,6 +10,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This module is the CUDA backend for the embedded array language.
+--
 
 module Data.Array.Accelerate.CUDA (
 
@@ -36,7 +37,7 @@ import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar (Array(..))
+import Data.Array.Accelerate.Array.Sugar               (Array(..))
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart           as Sugar
@@ -122,7 +123,7 @@ execute op@(Fold fun def xs) = do
             liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
             liftIO $ CUDA.launch fun gridDim Nothing
             liftIO $ CUDA.sync
-            CUDA.decUse rf' >>= \ decUse -> when (decUse == 0) $ CUDA.free rf'
+            CUDA.decUse rf' >>= \decUse -> when (decUse == 0) $ CUDA.free rf'
             if numBlocks == 1
               then return ys'
               else execute' 0 newRf' numBlocks
@@ -154,7 +155,7 @@ execute op@(Map fun xs) = do
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
-      CUDA.decUse rf >>= \ decUse -> when (decUse == 0) $ CUDA.free rf
+      CUDA.decUse rf >>= \decUse -> when (decUse == 0) $ CUDA.free rf
       return ys
 
 execute op@(ZipWith fun xs ys) = do
@@ -186,8 +187,8 @@ execute op@(ZipWith fun xs ys) = do
       liftIO $ CUDA.setBlockShape fun (ctaSize, 1, 1)
       liftIO $ CUDA.launch fun gridDim Nothing
       liftIO $ CUDA.sync
-      CUDA.decUse rf1 >>= \ decUse -> when (decUse == 0) $ CUDA.free rf1
-      CUDA.decUse rf2 >>= \ decUse -> when (decUse == 0) $ CUDA.free rf2
+      CUDA.decUse rf1 >>= \decUse -> when (decUse == 0) $ CUDA.free rf1
+      CUDA.decUse rf2 >>= \decUse -> when (decUse == 0) $ CUDA.free rf2
       return zs
 
 execute (Use arr) =
@@ -624,3 +625,4 @@ codeGenPrim (PrimBoolToInt    ) [x] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.TyCast
     (CUDA.TyName [CUDA.SpecQualTySpec (CUDA.Int Nothing)] Nothing)
     (CUDA.toCastExp x)]
+

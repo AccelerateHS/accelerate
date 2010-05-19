@@ -5,10 +5,12 @@ import Text.PrettyPrint
 ------------------------------------------------------------------------------
 -- Abstract Syntax
 ------------------------------------------------------------------------------
+--
 -- This abstract syntax definition is based on ISO/IEC 9899:TC2
 -- (http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1124.pdf), and
 -- NVIDIA CUDA Compute Unified Device Architecture
 -- (http://developer.download.nvidia.com/compute/cuda/1_0/NVIDIA_CUDA_Programming_Guide_1.0.pdf).
+--
 data TransUnit   = TransUnit [Prepro] [ExtDecln]
                  deriving Eq
 
@@ -474,11 +476,11 @@ ptransunit (TransUnit ps es) =
 
 -- Prepro
 pprepro :: Prepro -> Doc
-pprepro (Include i) = text "#include" <+> char '<' <> pident i <> char '>'
+pprepro (Include i)      = text "#include" <+> char '<' <> pident i <> char '>'
 pprepro (LocalInclude i) = text "#include" <+> doubleQuotes (pident i)
-pprepro (Define  i e) = text "#define" <+> pident i <+> pexp e
-pprepro (IfNDef i) = text "#ifndef" <+> pident i
-pprepro (EndIf) = text "#endif"
+pprepro (Define i e)     = text "#define"  <+> pident i <+> pexp e
+pprepro (IfNDef i)       = text "#ifndef"  <+> pident i
+pprepro (EndIf)          = text "#endif"
 
 -- ExtDecln
 pextdecln :: ExtDecln -> Doc
@@ -494,11 +496,10 @@ pdeclns (d:ds) = pdecln d <> hcat (map ((comma <+>) . pdecln) ds)
 
 -- JumpStmt
 pjumpstmt :: JumpStmt -> Doc
-pjumpstmt (Goto     i) = text "goto" <+> pident i <> semi
-pjumpstmt (Continue  ) = text "continue" <> semi
-pjumpstmt (Break     ) = text "break" <> semi
-pjumpstmt (Return Nothing ) = text "return" <> semi
-pjumpstmt (Return (Just e)) = text "return" <+> pexp e <> semi
+pjumpstmt (Goto     i) = text "goto"     <+> pident i <> semi
+pjumpstmt (Continue  ) = text "continue" <>  semi
+pjumpstmt (Break     ) = text "break"    <>  semi
+pjumpstmt (Return   e) = text "return"   <+> maybe empty pexp e <> semi
 
 -- IterStmt
 piterstmt :: IterStmt -> Doc
@@ -535,7 +536,7 @@ pblkitem (StmtItem  s) = pstmt s
 pcompstmt :: CompStmt -> Doc
 pcompstmt (Blk []    ) = empty
 pcompstmt (Blk (b:bs)) = pblkitem b $$ vcat (map pblkitem bs)
-pcompstmt (NestedBlk []    ) = braces (empty)
+pcompstmt (NestedBlk []    ) = braces empty
 pcompstmt (NestedBlk (b:bs)) =
   lbrace $+$ nest 2 (pblkitem b $$ vcat (map pblkitem bs)) $+$ rbrace
 
@@ -575,7 +576,7 @@ pinit (BulkInit (i:is)) = braces (peleminit i <>
     where
         peleminit :: (Maybe Desn, Init) -> Doc
         peleminit (Nothing , i) = pinit i
-        peleminit ((Just d), i) = pdesn d <+> pinit i
+        peleminit (Just d, i) = pdesn d <+> pinit i
 
 -- DirectAbstDeclr
 pdirectabstdeclr :: DirectAbstDeclr -> Doc
@@ -614,10 +615,10 @@ pdirectdeclr (IdentDeclr i)  = pident i
 pdirectdeclr (NestedDeclr d) = parens $ pdeclr d
 pdirectdeclr (ArrayDeclr d ts a) =
     let
-        popttyquals :: (Maybe [TyQual]) -> Doc
+        popttyquals :: Maybe [TyQual] -> Doc
         popttyquals (Nothing) = empty
         popttyquals (Just ts) = ptyquals ts
-        poptassignexp :: (Maybe AssignExp) -> Doc
+        poptassignexp :: Maybe AssignExp -> Doc
         poptassignexp (Nothing) = empty
         poptassignexp (Just  a) = passignexp a
     in pdirectdeclr d <> brackets (popttyquals ts <+> poptassignexp a)
@@ -725,7 +726,7 @@ psignspec (Unsigned) = text "unsigned"
 pstructdeclns :: [StructDecln] -> Doc
 pstructdeclns []     = empty
 pstructdeclns (s:ss) =
-  pstructdecln s $$ vcat (map (pstructdecln) ss)
+  pstructdecln s $$ vcat (map pstructdecln ss)
 
 -- StructDecln
 pstructdecln :: StructDecln -> Doc
@@ -740,14 +741,8 @@ pstructdeclrs (s:ss) =
 
 -- StructDeclr
 pstructdeclr :: StructDeclr -> Doc
-pstructdeclr (StructDeclr d c) =
-  case d of
-    Just d' -> pdeclr d'
-    Nothing -> empty
-  <>
-  case c of
-    Just c' -> colon <+> pconstexp c'
-    Nothing -> empty
+pstructdeclr (StructDeclr d c)
+  =  maybe empty pdeclr d <> maybe empty ((<+>) colon . pconstexp) c
 
 -- [Enumerator]
 penumerators :: [Enumerator] -> Doc
@@ -757,10 +752,7 @@ penumerators (e:es) = penumerator e <> comma $$ penumerators es
 -- Enumerator
 penumerator :: Enumerator -> Doc
 penumerator (Enumerator i c) =
-  pident i <>
-  case c of
-    Just c' -> colon <+> pconstexp c'
-    Nothing -> empty
+  pident i <> maybe empty ((<+>) colon . pconstexp) c
 
 -- VecTySpec
 pvectyspec :: VecTySpec -> Doc

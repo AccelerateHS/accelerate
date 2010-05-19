@@ -16,12 +16,10 @@ module Data.Array.Accelerate.CUDA.Array.Data
   ) where
 
 -- standard libraries
-
-import Control.Monad.State (get, liftIO, put)
-import Data.Map (adjust, delete, insert, lookup, notMember)
-import Foreign (Ptr, nullPtr)
-import Foreign.Ptr (ptrToWordPtr)
-import Foreign.Storable (Storable)
+import Control.Monad.State
+import Data.Map                 (adjust, delete, insert, lookup, notMember)
+import Foreign.Storable         (Storable)
+import Foreign.Ptr
 
 import GHC.Int
 import GHC.Ptr (Ptr(Ptr))
@@ -30,7 +28,6 @@ import qualified Data.Array.Accelerate.Array.Data as Acc
 import qualified Data.Array.Accelerate.CUDA.Monad as CUDA
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Type
-import Foreign.Ptr
 
 import qualified Foreign.CUDA.Driver              as CUDA
 import qualified Foreign.CUDA.Driver.Stream       as CUDA
@@ -57,7 +54,7 @@ instance ArrayElem () where
   peekArrayAsync  _ _ _ = return ()
   free            _     = return ()
   toFunParams     _     = return []
-  decUse            _   = return 0
+  decUse          _     = return 0
 
 instance ArrayElem Int where
   type DevicePtrs Int = CUDA.DevicePtr Int
