@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators #-}
 -- |
--- Module      : Data.Array.Accelerate.CUDA.CodeGen.Scalar
+-- Module      : Data.Array.Accelerate.CUDA.CodeGen.Expr
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
@@ -11,13 +11,16 @@
 -- A scalar function, to be applied by a kernel skeleton
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Scalar
+module Data.Array.Accelerate.CUDA.CodeGen.Expr
+  (
+    Expr(Expr), outputTy, argumentTy, body, identity
+  )
   where
 
 import Data.Record.Label
 import Data.Array.Accelerate.CUDA.Syntax
 
-data Scalar = Scalar
+data Expr = Expr
   {
     _outputTy   :: TySpec,
     _argumentTy :: [TySpec],
@@ -26,10 +29,10 @@ data Scalar = Scalar
   }
   deriving (Show)
 
-$(mkLabels [''Scalar])
+$(mkLabels [''Expr])
 
-outputTy   :: Scalar :-> TySpec
-argumentTy :: Scalar :-> [TySpec]
-body       :: Scalar :-> [BlkItem]
-identity   :: Scalar :-> Maybe Const
+outputTy   :: Expr :-> TySpec
+argumentTy :: Expr :-> [TySpec]
+body       :: Expr :-> [BlkItem]
+identity   :: Expr :-> Maybe Const
 
