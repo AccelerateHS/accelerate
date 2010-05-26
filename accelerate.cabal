@@ -46,10 +46,15 @@ Library
     Build-depends:      llvm >= 0.6.8
 
   if flag(cuda)
-    Build-depends:      cuda >= 0.1.2,
+    Build-depends:      cuda >= 0.1.4,
                         bytestring,
                         containers,
-                        mtl,
+                        directory,
+                        extensible-exceptions,
+                        fclabels,
+                        filepath,
+                        monads-fd,
+                        transformers >= 0.2 && < 0.3,
                         unix
 
   Exposed-modules:      Data.Array.Accelerate
@@ -77,14 +82,14 @@ Library
 
   If flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    Other-modules:      Data.Array.Accelerate.CUDA.Array.Data
-                        Data.Array.Accelerate.CUDA.CodeGen.Host
-                        Data.Array.Accelerate.CUDA.CodeGen.Device
-                        Data.Array.Accelerate.CUDA.Kernel.Fold
-                        Data.Array.Accelerate.CUDA.Kernel.Map
-                        Data.Array.Accelerate.CUDA.Kernel.ZipWith
-                        Data.Array.Accelerate.CUDA.Monad
-                        Data.Array.Accelerate.CUDA.Scalar
+    Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Launch
+                        Data.Array.Accelerate.CUDA.Array.Data
+                        Data.Array.Accelerate.CUDA.CodeGen.Expr
+                        Data.Array.Accelerate.CUDA.CodeGen.Map
+                        Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+                        Data.Array.Accelerate.CUDA.CodeGen
+                        Data.Array.Accelerate.CUDA.Execute
+                        Data.Array.Accelerate.CUDA.State
                         Data.Array.Accelerate.CUDA.Syntax
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
@@ -92,3 +97,4 @@ Library
                         ExistentialQuantification, GADTs, TypeFamilies, 
                         ScopedTypeVariables, DeriveDataTypeable,
                         BangPatterns, PatternGuards, TypeOperators, RankNTypes
+
