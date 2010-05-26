@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts, GADTs, PatternGuards #-}
-{-# LANGUAGE ScopedTypeVariables, TypeFamilies      #-}
+{-# LANGUAGE GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA
 -- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -19,49 +18,30 @@ module Data.Array.Accelerate.CUDA (
 
 ) where
 
--- standard libraries
-import Control.Monad
-import Control.Monad.State
-import Data.Maybe           (fromMaybe)
-import Foreign
-import System.Exit          (ExitCode(ExitSuccess))
-import System.Posix.Process (ProcessStatus(..), executeFile, forkProcess, getProcessStatus)
-import System.Posix.Types   (ProcessID)
 import Control.Exception
+import Control.Monad.State
+import Data.Maybe               (fromMaybe)
 
-import qualified Data.Map              as M (empty, insert, lookup)
-import qualified Data.ByteString.Char8 as B
+import qualified Data.Map       as M  (empty)
+import qualified Data.IntMap    as IM (empty)
 
--- friends
-import Data.Array.Accelerate.Analysis.Type
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar               (Array(..))
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
-import qualified Data.Array.Accelerate.Smart           as Sugar
-import qualified Data.Array.Accelerate.Array.Sugar     as Sugar
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar                (Array(..))
+import qualified Data.Array.Accelerate.Smart            as Sugar
 
-import qualified Data.Array.Accelerate.CUDA.Monad      as CUDA
-import qualified Data.Array.Accelerate.CUDA.Scalar     as CUDA
-import qualified Data.Array.Accelerate.CUDA.Syntax     as CUDA
-import qualified Data.Array.Accelerate.CUDA.Kernel     as CUDA
-import qualified Data.Array.Accelerate.CUDA.Array.Data as CUDA
+import Data.Array.Accelerate.CUDA.State
+import Data.Array.Accelerate.CUDA.Execute
+import Data.Array.Accelerate.CUDA.Array.Data
 
-import qualified Foreign.CUDA.Driver                   as CUDA
-  (
-    ContextFlag(..), DeviceProperties(..), FunParam(..),
-    create, destroy, device, devPtrToWordPtr, getFun, initialise, launch,
-    loadDataEx, maxGridSize, nullDevPtr, props, setBlockShape, setParams,
-    setSharedSize, sync
-  )
+import qualified Foreign.CUDA.Driver                    as CUDA
 
 
--- Program execution
--- -----------------
+-- Accelerate: CUDA
+-- ~~~~~~~~~~~~~~~~
 
--- |Characterises the types that may be returned when running an array program.
+-- |
+-- Characterises the types that may be returned when executing an array program
 --
 class Arrays as where
 
@@ -69,19 +49,38 @@ instance Arrays ()
 instance Arrays (Array dim e)
 instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
 
--- |Compiles and runs a complete embedded array program using the CUDA backend.
+
+-- |
+-- Compiles and runs a complete embedded array program using the CUDA backend
 --
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc =
-  bracket (initialise Nothing) finalise $ \_ ->
-    execStateT (codeGenAcc ast) ist >>=
-    execStateT (memHtoD    ast)     >>=
-    runStateT  (execute    ast)     >>= \(a,s) ->
-    execStateT (memDtoH    ast a) s >>  return a
-  where
-    ast = Sugar.convertAcc acc
-    ist = CUDA.CGState 0 0 M.empty M.empty M.empty M.empty
+  let ast = Sugar.convertAcc acc
+  in  evalCUDA $
+        compile    ast   >>     -- generally takes longer than memcpy, initiate first (in background)
+        memcpyHtoD ast   >>
+        execute    ast   >>= \r ->
+        memcpyDtoH ast r >>  return r
 
+-- |
+-- Evaluate a CUDA array computation under a newly initialised environment,
+-- discarding the final state.
+--
+
+-- TLM: migrate these to State.hs ?
+--
+evalCUDA :: CIO a -> IO a
+evalCUDA =  liftM fst . runCUDA
+
+-- TLM: Optionally choose which device to use, or select the "best"?
+--
+runCUDA :: CIO a -> IO (a, CUDAState)
+runCUDA acc =
+  bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
+    props <- CUDA.props dev
+    runStateT acc (CUDAState 0 props IM.empty M.empty)
+
+  where
     finalise     = CUDA.destroy . snd
     initialise n = do
       CUDA.initialise []
@@ -90,6 +89,38 @@ run acc =
       return (dev, ctx)
 
 
+-- Marshalling
+-- ~~~~~~~~~~~
+
+-- |
+-- Allocates device memory and triggers asynchronous data transfer to the device
+--
+memcpyHtoD :: OpenAcc aenv a -> CIO ()
+memcpyHtoD (Map     _ xs)          = memcpyHtoD xs
+memcpyHtoD (ZipWith _ xs ys)       = memcpyHtoD xs >> memcpyHtoD ys
+memcpyHtoD (Fold    _ _  xs)       = memcpyHtoD xs
+memcpyHtoD (Use     (Array sh ad)) =
+  let n = size sh
+  in do
+    mallocArray    ad n
+    pokeArrayAsync ad n Nothing
+
+memcpyHtoD op = error $ shows op " not supported"
+
+
+-- |
+-- Synchronous transfer from device to host
+--
+memcpyDtoH :: OpenAcc aenv a -> a -> CIO ()
+memcpyDtoH (Fold _ _ _)    (Array sh ad) = peekArray ad (size sh) >> free ad
+memcpyDtoH (Map _ _)       (Array sh ad) = peekArray ad (size sh) >> free ad
+memcpyDtoH (ZipWith _ _ _) (Array sh ad) = peekArray ad (size sh) >> free ad
+memcpyDtoH op _                          = error $ shows op " not supported"
+
+
+
+
+{-
 -- |Executes the generated code
 --
 execute :: OpenAcc aenv a -> CUDA.CGIO a
@@ -625,4 +656,5 @@ codeGenPrim (PrimBoolToInt    ) [x] =
   CUDA.Exp [CUDA.toAssignExp $ CUDA.TyCast
     (CUDA.TyName [CUDA.SpecQualTySpec (CUDA.Int Nothing)] Nothing)
     (CUDA.toCastExp x)]
+-}
 
