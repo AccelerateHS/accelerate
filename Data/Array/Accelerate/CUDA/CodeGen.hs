@@ -47,7 +47,7 @@ codeGenAcc :: AST.OpenAcc aenv a -> String -> TransUnit
 codeGenAcc op@(AST.Map fn xs) name = Sk.map name (Expr out param code Nothing)
   where
     out   = codeGenTupleType (accType op)
-    param = map codeGenTupleType [accType xs]
+    param = [codeGenTupleType (accType xs)]
     code  = codeGenFun fn
 
 

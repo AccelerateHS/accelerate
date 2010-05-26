@@ -21,5 +21,6 @@ import Data.Array.Accelerate.AST
 -- can be used by the occupancy calculator to optimise kernel launch shape.
 --
 launchResources :: OpenAcc aenv a -> (Int -> Int, Int -> Int)
-launchResources _ = (const 8, (*4))
+launchResources (Map _ _) = (const 8, const 0)
+--launchResources _         = (const 8, (*4))
 
