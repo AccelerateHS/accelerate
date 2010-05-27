@@ -19,12 +19,11 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
-import qualified Data.Array.Accelerate.AST              as AST
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Array.Accelerate.AST                      as AST
+import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 
-import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Syntax
-import Data.Array.Accelerate.CUDA.CodeGen.Expr (Expr(..))
+import Data.Array.Accelerate.CUDA.CodeGen.Expr                  (Expr(..))
 import qualified Data.Array.Accelerate.CUDA.CodeGen.Skeleton    as Sk
 
 import Foreign.Marshal.Utils (fromBool)

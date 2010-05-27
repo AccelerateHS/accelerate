@@ -68,4 +68,3 @@ sharedMem (ZipWith _ _ _) _ = 0
 --sharedMem (Fold _ x _)    t = 2 * t * sizeOf (toElem $ expType x) --Elem ~ Storable ??
 sharedMem (Use _)         _ = undefined
 
-
