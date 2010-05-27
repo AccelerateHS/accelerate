@@ -190,6 +190,23 @@ dispatch acc@(Map _ ad) fn = do
   free   xs
   return res
 
+dispatch acc@(ZipWith _ ad1 ad2) fn = do
+  (Array sh1 xs) <- execute ad1
+  (Array sh2 ys) <- execute ad2
+  let res@(Array sh' zs) = newArray (Sugar.toElem (sh1 `intersect` sh2))
+      n    = size sh'
+      full = fromBool False
+
+  mallocArray zs n
+  d_xs <- devicePtrs xs
+  d_ys <- devicePtrs ys
+  d_zs <- devicePtrs zs
+
+  launch acc fn (d_xs ++ d_ys ++ d_zs ++ [CUDA.IArg n, CUDA.IArg full])
+  free   xs
+  free   ys
+  return res
+
 
 -- Initiate the device computation. First parameter is the work size, typically
 -- something like (array size / elements per thread)

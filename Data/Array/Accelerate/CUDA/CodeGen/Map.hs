@@ -17,6 +17,7 @@ import Prelude   hiding (id, (.), mod, map, zipWith, zipWith3)
 import qualified Prelude
 
 import Control.Category
+import Control.Exception.Extensible
 import Data.Record.Label
 
 import Data.Array.Accelerate.CUDA.Syntax
@@ -25,9 +26,9 @@ import Data.Array.Accelerate.CUDA.CodeGen.Expr
 
 
 map, zipWith, zipWith3 :: String -> Expr -> TransUnit
-map      = mapK
-zipWith  = mapK
-zipWith3 = mapK
+map      name expr = assert (1 == length (get argumentTy expr)) $ mapK name expr
+zipWith  name expr = assert (2 == length (get argumentTy expr)) $ mapK name expr
+zipWith3 name expr = assert (3 == length (get argumentTy expr)) $ mapK name expr
 
 
 -- |

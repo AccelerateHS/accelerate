@@ -45,10 +45,14 @@ idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 --
 codeGenAcc :: AST.OpenAcc aenv a -> String -> TransUnit
 codeGenAcc op@(AST.Map fn xs) name = Sk.map name (Expr out param code Nothing)
-  where
-    out   = codeGenTupleType (accType op)
-    param = [codeGenTupleType (accType xs)]
-    code  = codeGenFun fn
+  where out   = codeGenTupleType (accType op)
+        param = [codeGenTupleType (accType xs)]
+        code  = codeGenFun fn
+
+codeGenAcc op@(AST.ZipWith fn xs ys) name = Sk.zipWith name (Expr out param code Nothing)
+  where out   = codeGenTupleType (accType op)
+        param = [codeGenTupleType (accType xs), codeGenTupleType (accType ys)]
+        code  = codeGenFun fn
 
 
 {-
