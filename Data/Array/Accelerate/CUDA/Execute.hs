@@ -186,7 +186,7 @@ dispatch acc@(Map _ ad) fn = do
   d_xs <- devicePtrs xs
   d_ys <- devicePtrs ys
 
-  launch (n+1 `div` 2) acc fn (d_xs ++ d_ys ++ [CUDA.IArg n, CUDA.IArg full])
+  launch acc fn (d_xs ++ d_ys ++ [CUDA.IArg n, CUDA.IArg full])
   free   xs
   return res
 
@@ -194,12 +194,9 @@ dispatch acc@(Map _ ad) fn = do
 -- Initiate the device computation. First parameter is the work size, typically
 -- something like (array size / elements per thread)
 --
--- TLM: first parameter as a hack, subsume into launchConfig
---
-launch :: Int -> OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
-launch n acc fn args = do
-  (cta,_grid,smem) <- launchConfig acc fn
-  let grid = (n+cta-1) `div` cta
+launch :: OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
+launch acc fn args = do
+  (cta,grid,smem) <- launchConfig acc fn
 
   liftIO $ do
     CUDA.setParams     fn args
