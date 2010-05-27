@@ -42,7 +42,6 @@ import Data.Array.Accelerate.CUDA.Analysis.Launch
 
 import Foreign.Marshal.Utils
 import Foreign.CUDA.Analysis.Device
-import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
 
 
@@ -176,18 +175,18 @@ execute acc      = do
 -- rather than the actual functions. So ZipWith and Map should resolve to the
 -- same procedure, for example (more or less, hopefully ... *vague*).
 --
-dispatch :: OpenAcc aenv a -> KernelEntry -> CUDA.Fun -> CIO a
-dispatch (Map _ ad) krn fn = do
+dispatch :: OpenAcc aenv a -> CUDA.Fun -> CIO a
+dispatch acc@(Map _ ad) fn = do
   (Array sh xs) <- execute ad
   let res@(Array sh' ys) = newArray (Sugar.toElem sh)
       n    = size sh'
-      full = fromBool (False)   -- TLM: totally useless parameter
+      full = fromBool False     -- TLM: totally useless parameter
 
   mallocArray ys n
   d_xs <- devicePtrs xs
   d_ys <- devicePtrs ys
 
-  launch (n+1 `div` 2) krn fn (d_xs ++ d_ys ++ [CUDA.IArg n, CUDA.IArg full])
+  launch (n+1 `div` 2) acc fn (d_xs ++ d_ys ++ [CUDA.IArg n, CUDA.IArg full])
   free   xs
   return res
 
@@ -195,23 +194,18 @@ dispatch (Map _ ad) krn fn = do
 -- Initiate the device computation. First parameter is the work size, typically
 -- something like (array size / elements per thread)
 --
--- TLM: shared memory allocation requires that launchResources is *accurate*
---      which isn't necessarily the case (or intention?)
+-- TLM: first parameter as a hack, subsume into launchConfig
 --
-launch :: Int -> KernelEntry -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
-launch n krn fn args = do
-  cta <- blockDim <$> getM deviceProps
+launch :: Int -> OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
+launch n acc fn args = do
+  (cta,_grid,smem) <- launchConfig acc fn
+  let grid = (n+cta-1) `div` cta
 
   liftIO $ do
     CUDA.setParams     fn args
+    CUDA.setSharedSize fn smem
     CUDA.setBlockShape fn (cta,1,1)
-    CUDA.setSharedSize fn (sharedMem cta)
-    CUDA.launch        fn (gridDim cta,1) Nothing
-
-  where
-    sharedMem  = toInteger . snd (get kernelConfig krn)
-    blockDim p = fst $ uncurry (CUDA.optimalBlockSize p) (get kernelConfig krn)
-    gridDim  t = (n + t - 1) `div` t
+    CUDA.launch        fn (grid,1) Nothing
 
 
 -- Create a new array (obviously...)
