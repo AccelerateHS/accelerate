@@ -17,7 +17,7 @@ module Data.Array.Accelerate.CUDA.State
   (
     CIO,
     CUDAState(CUDAState),     unique, deviceProps, memoryEntry, kernelEntry,
-    KernelEntry(KernelEntry), compilerPID, kernelName,  kernelConfig, Key,
+    KernelEntry(KernelEntry), Key, kernelName, kernelStatus,
     MemoryEntry(MemoryEntry), refcount, arena,
 
     module Data.Record.Label, modM'
@@ -35,7 +35,7 @@ import Text.Show.Functions              ()
 import Data.Record.Label
 
 import Foreign.Ptr
-import qualified Foreign.CUDA           as CUDA
+import qualified Foreign.CUDA.Driver    as CUDA
 
 
 -- |
@@ -49,20 +49,18 @@ data CUDAState = CUDAState
     _memoryEntry :: IntMap MemoryEntry,
     _kernelEntry :: Map Key KernelEntry
   }
-  deriving (Show)
 
 -- |
--- Associate an array expression with an external compilation tool (nvcc) and
--- parameters for optimal execution.
+-- Associate an array expression with an external compilation tool (nvcc) or the
+-- loaded function
 --
 type Key         = (Int, String)
 data KernelEntry = KernelEntry
   {
-    _compilerPID  :: ProcessID,
     _kernelName   :: String,
-    _kernelConfig :: (Int -> Int, Int -> Int)
+    _kernelStatus :: Either ProcessID CUDA.Fun
   }
-  deriving (Show)
+
 
 -- |
 -- Reference tracking for device memory allocations. Associates the products of
@@ -77,7 +75,6 @@ data MemoryEntry = MemoryEntry
     _refcount :: Int,
     _arena    :: WordPtr
   }
-  deriving (Show)
 
 $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
 
@@ -92,9 +89,9 @@ kernelEntry  :: CUDAState :-> Map Key KernelEntry
 refcount     :: MemoryEntry :-> Int
 arena        :: MemoryEntry :-> WordPtr
 
-compilerPID  :: KernelEntry :-> ProcessID
 kernelName   :: KernelEntry :-> String
-kernelConfig :: KernelEntry :-> (Int -> Int, Int -> Int)
+kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Fun
+
 
 -- |
 -- Modify a value with a function in the state pointed to by the specified

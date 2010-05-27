@@ -87,8 +87,7 @@ compile acc = do
               writeFile cufile . show $ codeGenAcc acc (takeBaseName cufile)
               forkProcess $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
-  modM kernelEntry
-    $ M.insert (accToKey acc) (KernelEntry pid cufile (launchResources acc))
+  modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))
 
 
 -- Determine the appropriate command line flags to pass to the compiler process
@@ -144,21 +143,31 @@ outputDir = do
 
 
 -- |
--- Execute an embedded array program using the CUDA backend
+-- Execute an embedded array program using the CUDA backend. The function will
+-- block if the compilation has not yet completed, but subsequent invocations of
+-- the same kernel will be able to extract the loaded kernel directly.
 --
 execute :: OpenAcc aenv a -> CIO a
 execute (Use xs) = return xs
 execute acc      = do
   krn <- fromMaybe (error "code generation failed") . M.lookup (accToKey acc) <$> getM kernelEntry
-  liftIO . waitFor $ get compilerPID krn
+  fun <- either' (get kernelStatus krn) return $ \pid -> do
+    let name = get kernelName krn
 
-  let name = get kernelName krn
-  mdl <- liftIO $ CUDA.loadFile   (replaceExtension name ".cubin")
-  fun <- liftIO $ CUDA.getFun mdl (takeBaseName name)
+    liftIO (waitFor pid)
+    mdl <- liftIO $ CUDA.loadFile   (replaceExtension name ".cubin")
+    fun <- liftIO $ CUDA.getFun mdl (takeBaseName name)
+
+    modM kernelEntry $ M.insert (accToKey acc) (set kernelStatus (Right fun) krn)
+    return fun
 
   -- determine dispatch pattern, extract parameters, allocate storage
   --
-  dispatch acc krn fun
+  dispatch acc fun
+
+  where
+    either' :: Either a b -> (b -> c) -> (a -> c) -> c
+    either' e r l = either l r e
 
 
 -- Setup and initiate the computation. This may require several kernel launches.
