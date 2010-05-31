@@ -10,13 +10,17 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    module Data.Array.Accelerate.CUDA.CodeGen.Map,
     module Data.Array.Accelerate.CUDA.CodeGen.Fold,
-    module Data.Array.Accelerate.CUDA.CodeGen.Permute
+    module Data.Array.Accelerate.CUDA.CodeGen.Map,
+    module Data.Array.Accelerate.CUDA.CodeGen.Permute,
+    module Data.Array.Accelerate.CUDA.CodeGen.Scan,
+    module Data.Array.Accelerate.CUDA.CodeGen.Vector
   )
   where
 
-import Data.Array.Accelerate.CUDA.CodeGen.Map
 import Data.Array.Accelerate.CUDA.CodeGen.Fold
+import Data.Array.Accelerate.CUDA.CodeGen.Map
 import Data.Array.Accelerate.CUDA.CodeGen.Permute
+import Data.Array.Accelerate.CUDA.CodeGen.Scan
+import Data.Array.Accelerate.CUDA.CodeGen.Vector
 

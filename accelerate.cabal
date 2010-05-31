@@ -85,9 +85,11 @@ Library
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
-                        Data.Array.Accelerate.CUDA.CodeGen.Map
                         Data.Array.Accelerate.CUDA.CodeGen.Fold
+                        Data.Array.Accelerate.CUDA.CodeGen.Map
                         Data.Array.Accelerate.CUDA.CodeGen.Permute
+                        Data.Array.Accelerate.CUDA.CodeGen.Scan
+                        Data.Array.Accelerate.CUDA.CodeGen.Vector
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
                         Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.CodeGen
