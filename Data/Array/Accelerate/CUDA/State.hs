@@ -25,7 +25,7 @@ module Data.Array.Accelerate.CUDA.State
   where
 
 import Prelude hiding (id, (.), mod)
-import Control.Category
+--import Control.Category
 
 import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)

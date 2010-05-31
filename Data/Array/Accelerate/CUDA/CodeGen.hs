@@ -15,6 +15,9 @@ module Data.Array.Accelerate.CUDA.CodeGen (codeGenAcc)
 import Prelude hiding (id, (.), mod)
 import Control.Category
 
+import Data.Char
+import Language.C
+
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
@@ -22,9 +25,8 @@ import Data.Array.Accelerate.Analysis.Type
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 
-import Data.Array.Accelerate.CUDA.Syntax
-import Data.Array.Accelerate.CUDA.CodeGen.Expr                  (Expr(..))
-import qualified Data.Array.Accelerate.CUDA.CodeGen.Skeleton    as Sk
+import Data.Array.Accelerate.CUDA.CodeGen.Util
+import qualified Data.Array.Accelerate.CUDA.CodeGen.Skeleton    as SK
 
 import Foreign.Marshal.Utils (fromBool)
 
@@ -35,229 +37,327 @@ idxToInt :: AST.Idx env t -> Int
 idxToInt AST.ZeroIdx       = 0
 idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 
+-- reverse cons
+--
+snoc :: [a] -> a -> [a]
+snoc xs x = xs ++ [x]
 
 -- |
 -- Generate CUDA device code for an array expression
 --
--- TLM: extracting resource usage estimates as we go?
---      also, decide if we want to run under with the state token
---
-codeGenAcc :: AST.OpenAcc aenv a -> String -> TransUnit
-codeGenAcc op@(AST.Map fn xs) name = Sk.map name (Expr out param code Nothing)
-  where out   = codeGenTupleType (accType op)
-        param = [codeGenTupleType (accType xs)]
-        code  = codeGenFun fn
+codeGenAcc :: AST.OpenAcc aenv a -> String -> CTranslUnit
+codeGenAcc op@(AST.Map fn _) name =
+  CTranslUnit
+    (codeGenType op
+      `snoc` mkApply 1 (codeGenFun fn)
+      `snoc` SK.map name)
+    (mkNodeInfo (initPos "map.cu") (Name 0))
 
-codeGenAcc op@(AST.ZipWith fn xs ys) name = Sk.zipWith name (Expr out param code Nothing)
-  where out   = codeGenTupleType (accType op)
-        param = [codeGenTupleType (accType xs), codeGenTupleType (accType ys)]
-        code  = codeGenFun fn
+codeGenAcc op@(AST.ZipWith fn _ _) name =
+  CTranslUnit
+    (codeGenType op
+      `snoc` mkApply 2 (codeGenFun fn)
+      `snoc` SK.zipWith name)
+    (mkNodeInfo (initPos "zipwith.cu") (Name 0))
 
+codeGenAcc op@(AST.Fold fn e _) name =
+  CTranslUnit
+    (codeGenType op
+      `snoc` mkIdentity (codeGenExp e)
+      `snoc` mkApply 2  (codeGenFun fn)
+      `snoc` SK.map name)
+    (mkNodeInfo (initPos "fold.cu") (Name 0))
 
-{-
-codeGenParams :: forall env aenv t. AST.OpenExp env aenv t -> [CUDA.FunParam]
-codeGenParams e@(AST.Const c) = case ty of
-  Float        -> [CUDA.FArg (read val :: Float)]
-  Double       -> [CUDA.VArg (read val :: Double)]
-  Char Nothing -> [CUDA.VArg (read val :: Char)]
-  Int  Nothing -> [CUDA.IArg (read val :: Int)]
-  Bool         -> [CUDA.IArg (fromBool (read val))]
-  _            -> error (shows ty " not implemented yet")
-  where
-    ty  = codeGenTupleType (expType e)
-    val = show (Sugar.toElem c :: t)    -- TLM: would be nice if we didn't go via strings
-
-codeGenParams e = error (shows e " could not be marshalled as a kernel parameter")
--}
+codeGenAcc _ _ =
+  error "Data.Array.Accelerate.CUDA: interval error"
 
 
 -- Scalar Functions
 -- ~~~~~~~~~~~~~~~~
 --
-codeGenFun :: AST.OpenFun env aenv t -> [BlkItem]
+
+-- TLM: return an actual function (:: CExtDecl) ??
+--
+codeGenFun :: AST.OpenFun env aenv t -> CExpr
 codeGenFun (AST.Lam  lam)  = codeGenFun lam
-codeGenFun (AST.Body body) = [StmtItem . JumpStmt . Return $ Just (codeGenExp body)]
+codeGenFun (AST.Body body) = codeGenExp body
 
 
 -- Expressions
 -- ~~~~~~~~~~~
 --
-assign :: CUDAExp a => a -> Exp
-assign x = Exp [toAssignExp x]
+codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CExpr
+codeGenExp (AST.Var   i) = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
+codeGenExp (AST.Const c) =
+  codeGenConst (Sugar.elemType' (undefined::t)) (Sugar.fromElem' (Sugar.toElem c :: t))
 
-codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> Exp
-codeGenExp (AST.Var i) = assign . Ident $ 'x' : show (idxToInt i)
+codeGenExp (AST.Cond p e1 e2) =
+  CCond (codeGenExp p) (Just (codeGenExp e1)) (codeGenExp e2) internalNode
 
-codeGenExp e@(AST.Const c) = case ty of
-  Float        -> assign . FloatConst   $ read val
-  Double       -> assign . DoubleConst  $ read val
-  Char Nothing -> assign . CharConst    $ read val
-  Int  Nothing -> assign . IntegerConst $ read val
-  Bool         -> assign . IntegerConst $ fromBool (read val)
-  _            -> error (shows ty " not implemented yet")
-  where
-    ty  = codeGenTupleType (expType e)
-    val = show (Sugar.toElem c :: t)    -- TLM: would be nice if we didn't go via strings
+codeGenExp (AST.PrimConst c)  = codeGenPrimConst c
 
-codeGenExp (AST.Cond p e1 e2) = assign $ Cond
-  (toLgcOrExp . NestedExp $ codeGenExp p)
-  (codeGenExp e1)
-  (toCondExp  . NestedExp $ codeGenExp e2)
+codeGenExp (AST.PrimApp f (AST.Tuple arg))
+  | NilTup `SnocTup` x `SnocTup` y <- arg = codeGenPrim f [codeGenExp x, codeGenExp y]
+codeGenExp (AST.PrimApp f x)              = codeGenPrim f [codeGenExp x]
 
-codeGenExp (AST.PrimConst c) = codeGenPrimConst c
-
-codeGenExp (AST.PrimApp f (AST.Tuple (NilTup `SnocTup` x `SnocTup` y))) =
-  codeGenPrim f $ map NestedExp [codeGenExp x, codeGenExp y]
-
-codeGenExp e@(AST.PrimApp _ _)     = error (shows e " not supported yet")
-codeGenExp e@(AST.Tuple _)         = error (shows e " not supported yet")
-codeGenExp e@(AST.Prj _ _)         = error (shows e " not supported yet")
-codeGenExp e@(AST.IndexScalar _ _) = error (shows e " not supported yet")
-codeGenExp e@(AST.Shape _)         = error (shows e " not supported yet")
+codeGenExp e =
+  error $ "Data.Array.Accelerate.CUDA: unsupported: " ++ show e
 
 
 -- Types
 -- ~~~~~
 
-codeGenTupleType :: TupleType a -> TySpec
-codeGenTupleType (UnitTuple)             = undefined
-codeGenTupleType (SingleTuple t)         = codeGenScalarType t
-codeGenTupleType (PairTuple UnitTuple t) = codeGenTupleType  t
-codeGenTupleType (PairTuple _ _)         = undefined
+codeGenType :: AST.OpenAcc aenv a -> [CExtDecl]
+codeGenType op@(AST.Map _ xs) =
+  [ mkTypedef "tyOut" (codeGenAccType op)
+  , mkTypedef "tyIn0" (codeGenAccType xs) ]
 
-codeGenScalarType :: ScalarType a -> TySpec
-codeGenScalarType (NumScalarType t)    = codeGenNumType t
-codeGenScalarType (NonNumScalarType t) = codeGenNonNumType t
+codeGenType op@(AST.ZipWith _ xs ys) =
+  [ mkTypedef "tyOut" (codeGenAccType op)
+  , mkTypedef "tyIn0" (codeGenAccType xs)
+  , mkTypedef "tyIn1" (codeGenAccType ys) ]
 
-codeGenNumType :: NumType a -> TySpec
-codeGenNumType (IntegralNumType t) = codeGenIntegralType t
-codeGenNumType (FloatingNumType t) = codeGenFloatingType t
+codeGenType op@(AST.Fold _ _ _) =
+  [ mkTypedef "T"     (codeGenAccType op)
+  , mkTypedef "tyOut" [CTypeDef (internalIdent "T") internalNode]
+  , mkTypedef "tyIn0" [CTypeDef (internalIdent "T") internalNode]
+  , mkTypedef "tyIn1" [CTypeDef (internalIdent "T") internalNode] ]
 
-codeGenIntegralType :: IntegralType a -> TySpec
-codeGenIntegralType (TypeInt     _) = Int      Nothing
-codeGenIntegralType (TypeInt8    _) = Char     Nothing
-codeGenIntegralType (TypeInt16   _) = Short    Nothing
-codeGenIntegralType (TypeInt32   _) = Long     Nothing
-codeGenIntegralType (TypeInt64   _) = LongLong Nothing
-codeGenIntegralType (TypeWord    _) = Int      $ Just Unsigned
-codeGenIntegralType (TypeWord8   _) = Char     $ Just Unsigned
-codeGenIntegralType (TypeWord16  _) = Short    $ Just Unsigned
-codeGenIntegralType (TypeWord32  _) = Long     $ Just Unsigned
-codeGenIntegralType (TypeWord64  _) = LongLong $ Just Unsigned
-codeGenIntegralType (TypeCShort  _) = Short    Nothing
-codeGenIntegralType (TypeCUShort _) = Short    $ Just Unsigned
-codeGenIntegralType (TypeCInt    _) = Int      Nothing
-codeGenIntegralType (TypeCUInt   _) = Int      $ Just Unsigned
-codeGenIntegralType (TypeCLong   _) = Long     Nothing
-codeGenIntegralType (TypeCULong  _) = Long     $ Just Unsigned
-codeGenIntegralType (TypeCLLong  _) = LongLong Nothing
-codeGenIntegralType (TypeCULLong _) = LongLong $ Just Unsigned
+codeGenType _ = error "Data.Array.Accelerate.CUDA: internal error"
 
-codeGenFloatingType :: FloatingType a -> TySpec
-codeGenFloatingType (TypeFloat   _) = Float
-codeGenFloatingType (TypeDouble  _) = Double
-codeGenFloatingType (TypeCFloat  _) = Float
-codeGenFloatingType (TypeCDouble _) = Double
 
-codeGenNonNumType :: NonNumType a -> TySpec
-codeGenNonNumType (TypeBool   _) = Bool
-codeGenNonNumType (TypeChar   _) = Char Nothing
-codeGenNonNumType (TypeCChar  _) = Char Nothing
-codeGenNonNumType (TypeCSChar _) = Char $ Just Signed
-codeGenNonNumType (TypeCUChar _) = Char $ Just Unsigned
+-- Generate types for the reified elements of an array computation
+--
+codeGenAccType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CTypeSpec]
+codeGenAccType =  codeGenTupleType . accType
+
+codeGenAccType2 :: AST.OpenAcc aenv (Sugar.Array dim1 e1, Sugar.Array dim2 e2)
+                -> ([CTypeSpec], [CTypeSpec])
+codeGenAccType2 (AST.Scan _ e acc) = (codeGenAccType acc, codeGenExpType e)
+
+codeGenExpType :: AST.OpenExp aenv env t -> [CTypeSpec]
+codeGenExpType =  codeGenTupleType . expType
+
+
+-- Implementation
+--
+codeGenTupleType :: TupleType a -> [CTypeSpec]
+codeGenTupleType (UnitTuple)              = undefined
+codeGenTupleType (SingleTuple         ty) = codeGenScalarType ty
+codeGenTupleType (PairTuple UnitTuple ty) = codeGenTupleType  ty
+codeGenTupleType (PairTuple _ _)          = undefined
+
+codeGenScalarType :: ScalarType a -> [CTypeSpec]
+codeGenScalarType (NumScalarType    ty) = codeGenNumType ty
+codeGenScalarType (NonNumScalarType ty) = codeGenNonNumType ty
+
+codeGenNumType :: NumType a -> [CTypeSpec]
+codeGenNumType (IntegralNumType ty) = codeGenIntegralType ty
+codeGenNumType (FloatingNumType ty) = codeGenFloatingType ty
+
+codeGenIntegralType :: IntegralType a -> [CTypeSpec]
+codeGenIntegralType (TypeInt     _) = [CIntType   internalNode]
+codeGenIntegralType (TypeInt8    _) = [CCharType  internalNode]
+codeGenIntegralType (TypeInt16   _) = [CShortType internalNode]
+codeGenIntegralType (TypeInt32   _) = [CIntType   internalNode]
+codeGenIntegralType (TypeInt64   _) = [CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeWord    _) = [CUnsigType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeWord8   _) = [CUnsigType internalNode, CCharType  internalNode]
+codeGenIntegralType (TypeWord16  _) = [CUnsigType internalNode, CShortType internalNode]
+codeGenIntegralType (TypeWord32  _) = [CUnsigType internalNode, CIntType   internalNode]
+codeGenIntegralType (TypeWord64  _) = [CUnsigType internalNode, CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCShort  _) = [CShortType internalNode]
+codeGenIntegralType (TypeCUShort _) = [CUnsigType internalNode, CShortType internalNode]
+codeGenIntegralType (TypeCInt    _) = [CIntType   internalNode]
+codeGenIntegralType (TypeCUInt   _) = [CUnsigType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCLong   _) = [CLongType  internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCULong  _) = [CUnsigType internalNode, CLongType  internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCLLong  _) = [CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCULLong _) = [CUnsigType internalNode, CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+
+codeGenFloatingType :: FloatingType a -> [CTypeSpec]
+codeGenFloatingType (TypeFloat   _) = [CFloatType  internalNode]
+codeGenFloatingType (TypeDouble  _) = [CDoubleType internalNode]
+codeGenFloatingType (TypeCFloat  _) = [CFloatType  internalNode]
+codeGenFloatingType (TypeCDouble _) = [CDoubleType internalNode]
+
+codeGenNonNumType :: NonNumType a -> [CTypeSpec]
+codeGenNonNumType (TypeBool   _) = [CUnsigType internalNode, CCharType internalNode]
+codeGenNonNumType (TypeChar   _) = [CCharType internalNode]
+codeGenNonNumType (TypeCChar  _) = [CCharType internalNode]
+codeGenNonNumType (TypeCSChar _) = [CSignedType internalNode, CCharType internalNode]
+codeGenNonNumType (TypeCUChar _) = [CUnsigType  internalNode, CCharType internalNode]
 
 
 -- Scalar Primitives
 -- ~~~~~~~~~~~~~~~~~
 
-codeGenPrimConst :: AST.PrimConst a -> Exp
+codeGenPrimConst :: AST.PrimConst a -> CExpr
 codeGenPrimConst (AST.PrimMinBound ty) = codeGenMinBound ty
 codeGenPrimConst (AST.PrimMaxBound ty) = codeGenMaxBound ty
 codeGenPrimConst (AST.PrimPi       ty) = codeGenPi ty
 
-codeGenPi :: FloatingType a -> Exp
-codeGenPi (TypeFloat   _) = assign (FloatConst  pi)
-codeGenPi (TypeDouble  _) = assign (DoubleConst pi)
-codeGenPi _               = undefined
 
-codeGenMinBound :: forall a. BoundedType a -> Exp
-codeGenMinBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = assign . IntegerConst $ fromIntegral (minBound :: a)
-codeGenMinBound _ = undefined
+codeGenPrim :: AST.PrimFun p -> [CExpr] -> CExpr
+codeGenPrim (AST.PrimAdd          _) [a,b] = CBinary CAddOp a b internalNode
+codeGenPrim (AST.PrimSub          _) [a,b] = CBinary CSubOp a b internalNode
+codeGenPrim (AST.PrimMul          _) [a,b] = CBinary CMulOp a b internalNode
+codeGenPrim (AST.PrimNeg          _) [a]   = CUnary  CMinOp a   internalNode
+codeGenPrim (AST.PrimAbs         ty) [a]   = codeGenAbs ty a
+codeGenPrim (AST.PrimSig         ty) [a]   = codeGenSig ty a
+codeGenPrim (AST.PrimQuot        ty) [a,b] = codeGenQuot ty a b
+codeGenPrim (AST.PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
+codeGenPrim (AST.PrimIDiv         _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (AST.PrimMod         ty) [a,b] = codeGenMod ty a b
+codeGenPrim (AST.PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
+codeGenPrim (AST.PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
+codeGenPrim (AST.PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
+codeGenPrim (AST.PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
+codeGenPrim (AST.PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (AST.PrimRecip       ty) [a]   = codeGenRecip ty a
+codeGenPrim (AST.PrimSin         ty) [a]   = ccall (FloatingNumType ty) "sin"   [a]
+codeGenPrim (AST.PrimCos         ty) [a]   = ccall (FloatingNumType ty) "cos"   [a]
+codeGenPrim (AST.PrimTan         ty) [a]   = ccall (FloatingNumType ty) "tan"   [a]
+codeGenPrim (AST.PrimAsin        ty) [a]   = ccall (FloatingNumType ty) "asin"  [a]
+codeGenPrim (AST.PrimAcos        ty) [a]   = ccall (FloatingNumType ty) "acos"  [a]
+codeGenPrim (AST.PrimAtan        ty) [a]   = ccall (FloatingNumType ty) "atan"  [a]
+codeGenPrim (AST.PrimAsinh       ty) [a]   = ccall (FloatingNumType ty) "asinh" [a]
+codeGenPrim (AST.PrimAcosh       ty) [a]   = ccall (FloatingNumType ty) "acosh" [a]
+codeGenPrim (AST.PrimAtanh       ty) [a]   = ccall (FloatingNumType ty) "atanh" [a]
+codeGenPrim (AST.PrimExpFloating ty) [a]   = ccall (FloatingNumType ty) "exp"   [a]
+codeGenPrim (AST.PrimSqrt        ty) [a]   = ccall (FloatingNumType ty) "sqrt"  [a]
+codeGenPrim (AST.PrimLog         ty) [a]   = ccall (FloatingNumType ty) "log"   [a]
+codeGenPrim (AST.PrimFPow        ty) [a,b] = ccall (FloatingNumType ty) "pow"   [a,b]
+codeGenPrim (AST.PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
+codeGenPrim (AST.PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
+codeGenPrim (AST.PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
+codeGenPrim (AST.PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode
+codeGenPrim (AST.PrimGtEq         _) [a,b] = CBinary CGeqOp a b internalNode
+codeGenPrim (AST.PrimEq           _) [a,b] = CBinary CEqOp  a b internalNode
+codeGenPrim (AST.PrimNEq          _) [a,b] = CBinary CNeqOp a b internalNode
+codeGenPrim (AST.PrimMax         ty) [a,b] = codeGenMax ty a b
+codeGenPrim (AST.PrimMin         ty) [a,b] = codeGenMin ty a b
+codeGenPrim AST.PrimLAnd             [a,b] = CBinary CLndOp a b internalNode
+codeGenPrim AST.PrimLOr              [a,b] = CBinary CLorOp a b internalNode
+codeGenPrim AST.PrimLNot             [a]   = CUnary  CNegOp a   internalNode
+codeGenPrim AST.PrimOrd              [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
+codeGenPrim AST.PrimChr              [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
+codeGenPrim AST.PrimRoundFloatInt    [a]   = CCall (CVar (internalIdent "lroundf") internalNode) [a] internalNode -- TLM: (int) rintf(x) ??
+codeGenPrim AST.PrimTruncFloatInt    [a]   = CCall (CVar (internalIdent "ltruncf") internalNode) [a] internalNode
+codeGenPrim AST.PrimIntFloat         [a]   = CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode) a internalNode -- TLM: __int2float_[rn,rz,ru,rd](a) ??
+codeGenPrim AST.PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType   internalNode)] [] internalNode) a internalNode
 
-codeGenMaxBound :: forall a. BoundedType a -> Exp
-codeGenMaxBound (IntegralBoundedType ty) | IntegralDict <- integralDict ty = assign . IntegerConst $ fromIntegral (maxBound :: a)
-codeGenMaxBound _ = undefined
+-- If the argument lists are not the correct length
+codeGenPrim _ _ =
+  error "Data.Array.Accelerate.CUDA: inconsistent valuation"
 
 
-codeGenPrim :: AST.PrimFun sig -> [PrimaryExp] -> Exp
--- operators from Num
-codeGenPrim (AST.PrimAdd         _) [x,y] = assign $ Add  (toAddExp x) (toMulExp y)
-codeGenPrim (AST.PrimSub         _) [x,y] = assign $ Sub  (toAddExp x) (toMulExp y)
-codeGenPrim (AST.PrimMul         _) [x,y] = assign $ Mul  (toMulExp x) (toCastExp y)
-codeGenPrim (AST.PrimNeg         _) [x]   = assign $ Sub  (toAddExp (IntegerConst 0)) (toMulExp x)
-codeGenPrim (AST.PrimAbs         _) [x]   = assign $ Cond (toLgcOrExp $ Lt  (toRelExp x) (toShftExp (IntegerConst 0)))
-                                                          (assign     $ Sub (toAddExp (IntegerConst 0)) (toMulExp x))
-                                                          (toCondExp x)
-codeGenPrim (AST.PrimSig         _) [x]   = assign $ Cond (toLgcOrExp $ Lt  (toRelExp x) (toShftExp (IntegerConst 0)))
-                                                          (assign (IntegerConst (-1)))
-                                                          (Cond (toLgcOrExp $ Gt (toRelExp x) (toShftExp $ IntegerConst 0))
-                                                                (Exp [toAssignExp $ IntegerConst 1])
-                                                                (toCondExp (IntegerConst 0)))
--- Integral & Bitwise
-codeGenPrim (AST.PrimQuot        _) [_,_] = error "AST.PrimQuot"
-codeGenPrim (AST.PrimRem         _) [_,_] = error "AST.PrimRem"
-codeGenPrim (AST.PrimIDiv        _) [_,_] = error "AST.PrimIDiv"
-codeGenPrim (AST.PrimMod         _) [_,_] = error "AST.PrimMod"
-codeGenPrim (AST.PrimBAnd        _) [x,y] = assign $ And    (toAndExp x) (toEqExp  y)
-codeGenPrim (AST.PrimBOr         _) [x,y] = assign $ Or     (toOrExp  x) (toXorExp y)
-codeGenPrim (AST.PrimBXor        _) [x,y] = assign $ Xor    (toXorExp x) (toAndExp y)
-codeGenPrim (AST.PrimBNot        _) [x]   = assign $ BitNot (toCastExp x)
+-- Implementation
+--
 
--- Fractional, Floating, RealFrac & RealFloat
-codeGenPrim (AST.PrimFDiv        _) [_,_] = error "AST.PrimFDiv"
-codeGenPrim (AST.PrimRecip       _) [_]   = error "AST.PrimRecip"
-codeGenPrim (AST.PrimSin         _) [_]   = error "AST.PrimSin"
-codeGenPrim (AST.PrimCos         _) [_]   = error "AST.PrimCos"
-codeGenPrim (AST.PrimTan         _) [_]   = error "AST.PrimTan"
-codeGenPrim (AST.PrimAsin        _) [_]   = error "AST.PrimAsin"
-codeGenPrim (AST.PrimAcos        _) [_]   = error "AST.PrimAcos"
-codeGenPrim (AST.PrimAtan        _) [_]   = error "AST.PrimAtan"
-codeGenPrim (AST.PrimAsinh       _) [_]   = error "AST.PrimAsinh"
-codeGenPrim (AST.PrimAcosh       _) [_]   = error "AST.PrimAcosh"
-codeGenPrim (AST.PrimAtanh       _) [_]   = error "AST.PrimAtanh"
-codeGenPrim (AST.PrimExpFloating _) [_]   = error "AST.PrimExpFloating"
-codeGenPrim (AST.PrimSqrt        _) [_]   = error "AST.PrimSqrt"
-codeGenPrim (AST.PrimLog         _) [_]   = error "AST.PrimLog"
-codeGenPrim (AST.PrimFPow        _) [_,_] = error "AST.PrimFPow"
-codeGenPrim (AST.PrimLogBase     _) [_,_] = error "AST.PrimLogBase"
--- FIXME: add operations from Floating, RealFrac & RealFloat
+-- Need to use an ElemRepr' representation here, so that the SingleTuple
+-- type matches the type of the actual constant.
+--
+codeGenConst :: TupleType a -> a -> CExpr
+codeGenConst UnitTuple        _ = undefined             -- void* ??
+codeGenConst (SingleTuple ty) c = codeGenScalar ty c
+codeGenConst (PairTuple  _ _) _ = undefined
 
--- Relational & Equality
-codeGenPrim (AST.PrimLt          _) [x,y] = assign $ Lt  (toRelExp x) (toShftExp y)
-codeGenPrim (AST.PrimGt          _) [x,y] = assign $ Gt  (toRelExp x) (toShftExp y)
-codeGenPrim (AST.PrimLtEq        _) [x,y] = assign $ Le  (toRelExp x) (toShftExp y)
-codeGenPrim (AST.PrimGtEq        _) [x,y] = assign $ Ge  (toRelExp x) (toShftExp y)
-codeGenPrim (AST.PrimEq          _) [x,y] = assign $ Eq  (toEqExp x)  (toRelExp y)
-codeGenPrim (AST.PrimNEq         _) [x,y] = assign $ Neq (toEqExp x)  (toRelExp y)
-codeGenPrim (AST.PrimMax         _) [x,y] = assign $ Cond (toLgcOrExp $ Gt (toRelExp x) (toShftExp y))
-                                                          (assign x)
-                                                          (toCondExp y)
-codeGenPrim (AST.PrimMin         _) [x,y] = assign $ Cond (toLgcOrExp $ Lt (toRelExp x) (toShftExp y))
-                                                          (assign x)
-                                                          (toCondExp y)
 
--- Logical
-codeGenPrim (AST.PrimLAnd         ) [x,y] = assign $ LgcAnd (toLgcAndExp x) (toOrExp y)
-codeGenPrim (AST.PrimLOr          ) [x,y] = assign $ LgcOr  (toLgcOrExp  x) (toLgcAndExp y)
-codeGenPrim (AST.PrimLNot         ) [x]   = assign $ LgcNot (toCastExp x)
+codeGenScalar :: ScalarType a -> a -> CExpr
+codeGenScalar (NumScalarType (IntegralNumType ty))
+  | IntegralDict <- integralDict ty
+  = CConst . flip CIntConst   internalNode . cInteger . fromIntegral
+codeGenScalar (NumScalarType (FloatingNumType ty))
+  | FloatingDict <- floatingDict ty
+  = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
+codeGenScalar (NonNumScalarType (TypeBool _))   =
+  CConst . flip CIntConst  internalNode . cInteger . fromBool
+codeGenScalar (NonNumScalarType (TypeChar _))   =
+  CConst . flip CCharConst internalNode . cChar
+codeGenScalar (NonNumScalarType (TypeCChar _))  =
+  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
+codeGenScalar (NonNumScalarType (TypeCUChar _)) =
+  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
+codeGenScalar (NonNumScalarType (TypeCSChar _)) =
+  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
 
--- Conversions
-codeGenPrim (AST.PrimOrd          ) [x]   = assign $ TyCast (TyName [SpecQualTySpec (Int  Nothing)] Nothing) (toCastExp x)
-codeGenPrim (AST.PrimChr          ) [x]   = assign $ TyCast (TyName [SpecQualTySpec (Char Nothing)] Nothing) (toCastExp x)
-codeGenPrim (AST.PrimIntFloat     ) [x]   = assign $ TyCast (TyName [SpecQualTySpec Float] Nothing) (toCastExp x)
-codeGenPrim (AST.PrimBoolToInt    ) [x]   = assign $ TyCast (TyName [SpecQualTySpec (Int Nothing)] Nothing) (toCastExp x)
-codeGenPrim (AST.PrimRoundFloatInt) [_]   = error "AST.PrimRoundFloatInt"
-codeGenPrim (AST.PrimTruncFloatInt) [_]   = error "AST.PrimTruncFloatInt"
 
-codeGenPrim _ _                           = error "internal error"
+codeGenPi :: FloatingType a -> CExpr
+codeGenPi ty | FloatingDict <- floatingDict ty
+  = codeGenScalar (NumScalarType (FloatingNumType ty)) pi
+
+codeGenMinBound :: BoundedType a -> CExpr
+codeGenMinBound (IntegralBoundedType ty)
+  | IntegralDict <- integralDict ty
+  = codeGenScalar (NumScalarType (IntegralNumType ty)) minBound
+codeGenMinBound (NonNumBoundedType   ty)
+  | NonNumDict   <- nonNumDict   ty
+  = codeGenScalar (NonNumScalarType ty) minBound
+
+codeGenMaxBound :: BoundedType a -> CExpr
+codeGenMaxBound (IntegralBoundedType ty)
+  | IntegralDict <- integralDict ty
+  = codeGenScalar (NumScalarType (IntegralNumType ty)) maxBound
+codeGenMaxBound (NonNumBoundedType   ty)
+  | NonNumDict   <- nonNumDict   ty
+  = codeGenScalar (NonNumScalarType ty) maxBound
+
+
+codeGenAbs :: NumType a -> CExpr -> CExpr
+codeGenAbs ty@(IntegralNumType _) x = ccall ty "abs"  [x]
+codeGenAbs ty@(FloatingNumType _) x = ccall ty "fabs" [x]
+
+codeGenSig :: NumType a -> CExpr -> CExpr
+codeGenSig ty@(IntegralNumType t) a
+  | IntegralDict <- integralDict t
+  = CCond (CBinary CGeqOp a (codeGenScalar (NumScalarType ty) 0) internalNode)
+          (Just (codeGenScalar (NumScalarType ty) 1))
+          (codeGenScalar (NumScalarType ty) 0)
+          internalNode
+codeGenSig ty@(FloatingNumType t) a
+  | FloatingDict <- floatingDict t
+  = CCond (CBinary CGeqOp a (codeGenScalar (NumScalarType ty) 0) internalNode)
+          (Just (codeGenScalar (NumScalarType ty) 1))
+          (codeGenScalar (NumScalarType ty) 0)
+          internalNode
+
+codeGenQuot :: IntegralType a -> CExpr -> CExpr -> CExpr
+codeGenQuot = error "Data.Array.Accelerate.CUDA.CodeGen: PrimQuot"
+
+codeGenMod :: IntegralType a -> CExpr -> CExpr -> CExpr
+codeGenMod = error "Data.Array.Accelerate.CUDA.CodeGen: PrimMod"
+
+codeGenRecip :: FloatingType a -> CExpr -> CExpr
+codeGenRecip ty x | FloatingDict <- floatingDict ty
+  = CBinary CDivOp (codeGenScalar (NumScalarType (FloatingNumType ty)) 1) x internalNode
+
+codeGenLogBase :: FloatingType a -> CExpr -> CExpr -> CExpr
+codeGenLogBase ty x y = let a = ccall (FloatingNumType ty) "log" [x]
+                            b = ccall (FloatingNumType ty) "log" [y]
+                        in
+                        CBinary CDivOp b a internalNode
+
+codeGenMin :: ScalarType a -> CExpr -> CExpr -> CExpr
+codeGenMin (NumScalarType ty@(IntegralNumType _)) a b = ccall ty "min"  [a,b]
+codeGenMin (NumScalarType ty@(FloatingNumType _)) a b = ccall ty "fmin" [a,b]
+codeGenMin (NonNumScalarType _)                   _ _ = undefined
+
+codeGenMax :: ScalarType a -> CExpr -> CExpr -> CExpr
+codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall ty "max"  [a,b]
+codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall ty "fmax" [a,b]
+codeGenMax (NonNumScalarType _)                   _ _ = undefined
+
+
+-- Helper Functions
+-- ~~~~~~~~~~~~~~~~
+--
+ccall :: NumType a -> String -> [CExpr] -> CExpr
+ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode
+ccall (FloatingNumType ty) fn args = CCall (CVar (internalIdent (fn `postfix` ty)) internalNode) args internalNode
+  where
+    postfix :: String -> FloatingType a -> String
+    postfix x (TypeFloat   _) = x ++ "f"
+    postfix x (TypeCFloat  _) = x ++ "f"
+    postfix x _               = x
 

@@ -22,11 +22,15 @@ import Control.Monad.IO.Class
 import Control.Exception.Extensible
 import qualified Data.Map                               as M
 
+import Language.C.Pretty
+import Text.PrettyPrint
+
 import System.Directory
 import System.FilePath
 import System.Posix.Process
 import System.Exit                                      (ExitCode(..))
 import System.Posix.Types                               (ProcessID)
+import System.IO
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Pretty ()
@@ -82,11 +86,35 @@ compile acc = do
   dir    <- liftIO outputDir
   cufile <- outputName acc (dir </> "dragon.cu")
   flags  <- compileFlags nvcc
-  pid    <- liftIO . withFilePath dir $ do
-              writeFile cufile . show $ codeGenAcc acc (takeBaseName cufile)
+  pid    <- liftIO . withFilePath dir   $ do
+              writeCode cufile . pretty $ codeGenAcc acc (takeBaseName cufile)
               forkProcess $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
   modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))
+
+
+-- stolen from $fptools/ghc/compiler/utils/Pretty.lhs
+--
+-- This code has a BSD-style license
+--
+printDoc :: Mode -> Handle -> Doc -> IO ()
+printDoc m hdl doc = do
+  fullRender m cols 1.5 put done doc
+  hFlush hdl
+  where
+    put (Chr c)  next = hPutChar hdl c >> next
+    put (Str s)  next = hPutStr  hdl s >> next
+    put (PStr s) next = hPutStr  hdl s >> next
+
+    done = hPutChar hdl '\n'
+    cols = 100
+
+writeCode :: FilePath -> Doc -> IO ()
+writeCode f doc
+  = withFile f WriteMode $ \hdl -> do
+      hPutStrLn "extern \"C\" {"
+      printDoc PageMode hdl doc
+      hPutStrLn "}"
 
 
 -- Determine the appropriate command line flags to pass to the compiler process
@@ -155,7 +183,7 @@ execute acc      = do
 
     liftIO (waitFor pid)
     mdl <- liftIO $ CUDA.loadFile   (replaceExtension name ".cubin")
-    fun <- liftIO $ CUDA.getFun mdl (takeBaseName name)
+    fun <- liftIO $ CUDA.getFun mdl (takeBaseName name) -- TLM: really only needs to be "fold" or "map", etc...
 
     modM kernelEntry $ M.insert (accToKey acc) (set kernelStatus (Right fun) krn)
     return fun

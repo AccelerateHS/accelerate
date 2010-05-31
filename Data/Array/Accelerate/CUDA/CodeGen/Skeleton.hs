@@ -10,9 +10,11 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    module Data.Array.Accelerate.CUDA.CodeGen.Map
+    module Data.Array.Accelerate.CUDA.CodeGen.Map,
+    module Data.Array.Accelerate.CUDA.CodeGen.Fold
   )
   where
 
 import Data.Array.Accelerate.CUDA.CodeGen.Map
+import Data.Array.Accelerate.CUDA.CodeGen.Fold
 

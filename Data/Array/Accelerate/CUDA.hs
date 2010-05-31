@@ -20,10 +20,10 @@ module Data.Array.Accelerate.CUDA (
 
 import Control.Exception
 import Control.Monad.State
-import Data.Maybe               (fromMaybe)
+import Data.Maybe					(fromMaybe)
 
-import qualified Data.Map       as M  (empty)
-import qualified Data.IntMap    as IM (empty)
+import qualified Data.Map       			as M  (empty)
+import qualified Data.IntMap    			as IM (empty)
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Representation

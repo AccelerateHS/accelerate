@@ -53,6 +53,7 @@ Library
                         extensible-exceptions,
                         fclabels,
                         filepath,
+                        language-c,
                         monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
@@ -84,13 +85,13 @@ Library
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
-                        Data.Array.Accelerate.CUDA.CodeGen.Expr
                         Data.Array.Accelerate.CUDA.CodeGen.Map
+                        Data.Array.Accelerate.CUDA.CodeGen.Fold
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+                        Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.CodeGen
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
-                        Data.Array.Accelerate.CUDA.Syntax
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
   Extensions:           FlexibleContexts, FlexibleInstances, 
