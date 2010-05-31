@@ -109,19 +109,19 @@ codeGenExp e =
 
 codeGenType :: AST.OpenAcc aenv a -> [CExtDecl]
 codeGenType op@(AST.Map _ xs) =
-  [ mkTypedef "tyOut" (codeGenAccType op)
-  , mkTypedef "tyIn0" (codeGenAccType xs) ]
+  [ mkTypedef "TyOut" (codeGenAccType op)
+  , mkTypedef "TyIn0" (codeGenAccType xs) ]
 
 codeGenType op@(AST.ZipWith _ xs ys) =
-  [ mkTypedef "tyOut" (codeGenAccType op)
-  , mkTypedef "tyIn0" (codeGenAccType xs)
-  , mkTypedef "tyIn1" (codeGenAccType ys) ]
+  [ mkTypedef "TyOut" (codeGenAccType op)
+  , mkTypedef "TyIn0" (codeGenAccType xs)
+  , mkTypedef "TyIn1" (codeGenAccType ys) ]
 
 codeGenType op@(AST.Fold _ _ _) =
   [ mkTypedef "T"     (codeGenAccType op)
-  , mkTypedef "tyOut" [CTypeDef (internalIdent "T") internalNode]
-  , mkTypedef "tyIn0" [CTypeDef (internalIdent "T") internalNode]
-  , mkTypedef "tyIn1" [CTypeDef (internalIdent "T") internalNode] ]
+  , mkTypedef "TyOut" [CTypeDef (internalIdent "T") internalNode]
+  , mkTypedef "TyIn0" [CTypeDef (internalIdent "T") internalNode]
+  , mkTypedef "TyIn1" [CTypeDef (internalIdent "T") internalNode] ]
 
 codeGenType _ = error "Data.Array.Accelerate.CUDA: internal error"
 

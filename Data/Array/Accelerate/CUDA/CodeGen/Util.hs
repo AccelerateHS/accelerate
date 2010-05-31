@@ -35,14 +35,14 @@ mkApply = mkDeviceFun "apply"
 mkDeviceFun :: String -> Int -> CExpr -> CExtDecl
 mkDeviceFun name argc expr =
   CFDefExt
-    (CFunDef [ CTypeQual (CAttrQual (CAttr device [] internalNode)), CStorageSpec (CStatic internalNode), CTypeSpec (CTypeDef (internalIdent "tyOut") internalNode)]
+    (CFunDef [ CTypeQual (CAttrQual (CAttr device [] internalNode)), CStorageSpec (CStatic internalNode), CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
              (CDeclr (Just (internalIdent name)) [CFunDeclr (Right (argv, False)) [] internalNode] Nothing [] internalNode)
              []
              (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode)
              internalNode)
   where
     argv = take argc . (flip map) (enumFrom 0 :: [Int]) $ \n ->
-      let ty  = "tyIn" ++ show n
+      let ty  = "TyIn" ++ show n
           var = 'x'    :  show n
       in
       CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ty) internalNode)]
