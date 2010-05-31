@@ -19,6 +19,9 @@ device = builtinIdent "device"
 global = builtinIdent "global"
 
 
+--
+-- typedef ty var;
+--
 mkTypedef :: String -> [CTypeSpec] -> CExtDecl
 mkTypedef var ty =
   CDeclExt
@@ -26,11 +29,48 @@ mkTypedef var ty =
            [(Just (CDeclr (Just (internalIdent var)) [] Nothing [] internalNode), Nothing, Nothing)]
            internalNode)
 
+--
+-- struct __attribute__((aligned(n * sizeof(ty)))) var {
+--     ty [x, y, z, w];
+-- }
+-- typedef struct var var;
+--
+makeVector :: Int -> String -> [CTypeSpec] -> CExtDecl
+makeVector n var ty =
+  CDeclExt
+    (CDecl [ CStorageSpec (CTypedef internalNode)
+           , CTypeSpec
+               (CSUType
+                 (CStruct CStructTag
+                   (Just (internalIdent var))
+                   (Just [CDecl (map CTypeSpec ty) fields internalNode])
+                   [CAttr (internalIdent "aligned") [CBinary CMulOp (CConst (CIntConst (cInteger (toInteger n)) internalNode)) (CSizeofType (CDecl (map CTypeSpec ty) [] internalNode) internalNode) internalNode] internalNode]
+                   internalNode)
+                 internalNode)]
+           [ (Just (CDeclr (Just (internalIdent var)) [] Nothing [] internalNode), Nothing, Nothing)]
+           internalNode)
+  where
+    fields = take n . (flip map) "xyzw" $ \f ->
+      (Just (CDeclr (Just (internalIdent [f])) [] Nothing [] internalNode), Nothing, Nothing)
+
+--
+-- static __attribute__((device)) TyOut identity()
+-- {
+--   return expr;
+-- }
+--
 mkIdentity :: CExpr -> CExtDecl
 mkIdentity = mkDeviceFun "identity" 0
 
+--
+-- static __attribute__((device)) TyOut apply(TyIn0 x0, TyIn1 x1 ..)
+-- {
+--   return expr;
+-- }
+--
 mkApply :: Int -> CExpr -> CExtDecl
 mkApply = mkDeviceFun "apply"
+
 
 mkDeviceFun :: String -> Int -> CExpr -> CExtDecl
 mkDeviceFun name argc expr =
