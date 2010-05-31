@@ -1,5 +1,4 @@
-{-# LANGUAGE GADTs, TypeOperators #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TemplateHaskell, TypeOperators #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -31,7 +30,6 @@ import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)
 import System.Posix.Types               (ProcessID)
 import Control.Monad.State              (StateT, MonadState)
-import Text.Show.Functions              ()
 import Data.Record.Label
 
 import Foreign.Ptr
