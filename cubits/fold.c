@@ -9,7 +9,7 @@
 #include "utils.h"
 
 #ifndef blockSize
-#define blockSize       128
+#define blockSize       blockDim.x
 #endif
 
 #ifndef lengthIsPow2
