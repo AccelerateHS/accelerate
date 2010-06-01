@@ -31,6 +31,7 @@ import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import qualified Data.Array.Accelerate.Smart            as Sugar
 
 import Data.Array.Accelerate.CUDA.State
+import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Execute
 import Data.Array.Accelerate.CUDA.Array.Data
 

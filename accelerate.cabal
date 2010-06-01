@@ -93,6 +93,7 @@ Library
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
                         Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.CodeGen
+                        Data.Array.Accelerate.CUDA.Compile
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
 
