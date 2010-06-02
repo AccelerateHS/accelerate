@@ -33,6 +33,7 @@ import Data.Bits
 import Data.Int
 import Data.Typeable
 import Data.Word
+import Foreign.Storable
 import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
   CLLong, CULLong, CFloat, CDouble)
@@ -47,17 +48,18 @@ import Foreign.C.Types (
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
-                  , Bits a, Integral a, Num a, Real a) 
+                  , Bits a, Integral a, Num a, Real a, Storable a)
                => IntegralDict a
 
 data FloatingDict a where
   FloatingDict :: ( Enum a, Eq a, Ord a, Show a
                   , Floating a, Fractional a, Num a, Real a, RealFrac a
-                  , RealFloat a)
+                  , RealFloat a, Storable a)
                => FloatingDict a
 
 data NonNumDict a where
-  NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a) => NonNumDict a
+  NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a, Storable a)
+             => NonNumDict a
 
 -- Scalar type representation
 -- 
