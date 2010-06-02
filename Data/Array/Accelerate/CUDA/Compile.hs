@@ -36,7 +36,7 @@ import Data.Array.Accelerate.CUDA.CodeGen
 import Foreign.CUDA.Analysis.Device
 
 
--- Generate a unique key for each kernel computation
+-- | Generate a unique key for each kernel computation
 --
 accToKey :: OpenAcc aenv a -> Key
 --accToKey (Let  _ _)          = 0
@@ -45,10 +45,10 @@ accToKey :: OpenAcc aenv a -> Key
 --accToKey (Use  _)            = 3
 --accToKey (Unit _)            = 4
 --accToKey (Reshape _ _)       = 5
-accToKey (Replicate _ e _)   = (6, show e)
+accToKey (Replicate _ e _)   = (6,  show e)
 --accToKey (Index _ _ _)       = 7
-accToKey (Map f _)           = (8, show f)
-accToKey (ZipWith f _ _)     = (9, show f)
+accToKey (Map f _)           = (8,  show f)
+accToKey (ZipWith f _ _)     = (9,  show f)
 accToKey (Fold f e _)        = (10, show f ++ show e)
 accToKey (FoldSeg f e _ _)   = (11, show f ++ show e)
 accToKey (Scan f e _)        = (12, show f ++ show e)
@@ -56,6 +56,7 @@ accToKey (Scan f e _)        = (12, show f ++ show e)
 accToKey (Permute c e p _)   = (14, show c ++ show e ++ show p)
 accToKey (Backpermute p _ _) = (15, show p)
 
+accToKey _ = error "Data.Array.Accelerate.CUDA.accToKey: internal error"
 
 
 -- | Generate and compile code for an array expression
