@@ -135,8 +135,8 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
                           touch (Acc.sndArrayData ad)
   free ad               = free (Acc.fstArrayData ad) >>
                           free (Acc.sndArrayData ad)
-  devicePtrs ad         = liftM2 (++) (devicePtrs (Acc.fstArrayData ad))
-                                      (devicePtrs (Acc.sndArrayData ad))
+  devicePtrs ad         = (++) <$> devicePtrs (Acc.fstArrayData ad)
+                               <*> devicePtrs (Acc.sndArrayData ad)
 
 
 --

@@ -19,6 +19,7 @@ module Data.Array.Accelerate.CUDA (
   ) where
 
 import Control.Exception
+import Control.Applicative
 import Control.Monad.State
 import Data.Maybe					(fromMaybe)
 
@@ -139,8 +140,5 @@ getArr :: Array dim e -> CIO (Array dim e)
 getArr arr@(Array sh ad) = peekArray ad (size sh) >> free ad >> return arr
 
 getArr2 :: (Array dim1 e1, Array dim2 e2) -> CIO (Array dim1 e1, Array dim2 e2)
-getArr2 (a1,a2) = do
-  r1 <- getArr a1
-  r2 <- getArr a2
-  return (r1,r2)
+getArr2 (a1,a2) = (,) <$> getArr a1 <*> getArr a2
 
