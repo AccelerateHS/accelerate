@@ -10,11 +10,25 @@
 -- Reduce an array to a single value
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Fold (fold)
+module Data.Array.Accelerate.CUDA.CodeGen.Fold (mkFold)
   where
 
 import Language.C
 import Language.C.Data.Ident
+import Data.Array.Accelerate.CUDA.CodeGen.Util
+
+
+mkFold :: String -> [CTypeSpec] -> CExpr -> CExpr -> CTranslUnit
+mkFold name ty identity apply =
+  CTranslUnit
+    [ mkTypedef "T"     ty
+    , mkTypedef "TyOut" [CTypeDef (internalIdent "T") internalNode]
+    , mkTypedef "TyIn0" [CTypeDef (internalIdent "T") internalNode]
+    , mkTypedef "TyIn1" [CTypeDef (internalIdent "T") internalNode]
+    , mkIdentity identity
+    , mkApply 2 apply
+    , fold name ]
+    (mkNodeInfo (initPos "fold.cu") (Name 0))
 
 
 -- Automatically generated

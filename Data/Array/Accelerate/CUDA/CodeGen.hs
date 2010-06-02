@@ -24,8 +24,6 @@ import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
-
-import Data.Array.Accelerate.CUDA.CodeGen.Util
 import qualified Data.Array.Accelerate.CUDA.CodeGen.Skeleton    as SK
 
 import Foreign.Marshal.Utils (fromBool)
@@ -37,37 +35,15 @@ idxToInt :: AST.Idx env t -> Int
 idxToInt AST.ZeroIdx       = 0
 idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 
--- reverse cons
---
-snoc :: [a] -> a -> [a]
-snoc xs x = xs ++ [x]
-
 
 -- |
 -- Generate CUDA device code for an array expression
 --
 codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
-codeGenAcc op@(AST.Map fn _) =
-  CTranslUnit
-    (codeGenType op
-      `snoc` mkApply 1 (codeGenFun fn)
-      `snoc` SK.map "map")
-    (mkNodeInfo (initPos "map.cu") (Name 0))
-
-codeGenAcc op@(AST.ZipWith fn _ _) =
-  CTranslUnit
-    (codeGenType op
-      `snoc` mkApply 2 (codeGenFun fn)
-      `snoc` SK.zipWith "zipWith")
-    (mkNodeInfo (initPos "zipWith.cu") (Name 0))
-
-codeGenAcc op@(AST.Fold fn e _) =
-  CTranslUnit
-    (codeGenType op
-      `snoc` mkIdentity (codeGenExp e)
-      `snoc` mkApply 2  (codeGenFun fn)
-      `snoc` SK.fold "fold")
-    (mkNodeInfo (initPos "fold.cu") (Name 0))
+codeGenAcc op@(AST.Map fn xs)        = SK.mkMap     "map"     (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
+codeGenAcc op@(AST.ZipWith fn xs ys) = SK.mkZipWith "zipWith" (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
+codeGenAcc (AST.Fold fn e _)         = SK.mkFold    "fold"    (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scan fn e _)         = SK.mkScan    "scan"    (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
 
 codeGenAcc op =
   error ("Data.Array.Accelerate.CUDA: interval error: " ++ show op)
@@ -107,25 +83,6 @@ codeGenExp e =
 
 -- Types
 -- ~~~~~
-
-codeGenType :: AST.OpenAcc aenv a -> [CExtDecl]
-codeGenType op@(AST.Map _ xs) =
-  [ mkTypedef "TyOut" (codeGenAccType op)
-  , mkTypedef "TyIn0" (codeGenAccType xs) ]
-
-codeGenType op@(AST.ZipWith _ xs ys) =
-  [ mkTypedef "TyOut" (codeGenAccType op)
-  , mkTypedef "TyIn0" (codeGenAccType xs)
-  , mkTypedef "TyIn1" (codeGenAccType ys) ]
-
-codeGenType op@(AST.Fold _ _ _) =
-  [ mkTypedef "T"     (codeGenAccType op)
-  , mkTypedef "TyOut" [CTypeDef (internalIdent "T") internalNode]
-  , mkTypedef "TyIn0" [CTypeDef (internalIdent "T") internalNode]
-  , mkTypedef "TyIn1" [CTypeDef (internalIdent "T") internalNode] ]
-
-codeGenType _ = error "Data.Array.Accelerate.CUDA: internal error"
-
 
 -- Generate types for the reified elements of an array computation
 --

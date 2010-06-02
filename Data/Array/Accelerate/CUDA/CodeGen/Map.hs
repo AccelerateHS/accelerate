@@ -10,13 +10,34 @@
 -- Device code for zipWith_k class of functions
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Map (map, zipWith)
+module Data.Array.Accelerate.CUDA.CodeGen.Map (mkMap, mkZipWith)
   where
 
 import Prelude hiding (map, zipWith)
 
 import Language.C
 import Language.C.Data.Ident
+import Data.Array.Accelerate.CUDA.CodeGen.Util
+
+
+mkMap :: String -> [CTypeSpec] -> [CTypeSpec] -> CExpr -> CTranslUnit
+mkMap name tyOut tyIn0 apply =
+  CTranslUnit
+    [ mkTypedef "TyOut" tyOut
+    , mkTypedef "TyIn0" tyIn0
+    , mkApply 1 apply
+    , map name ]
+    (mkNodeInfo (initPos "map.cu") (Name 0))
+
+mkZipWith :: String -> [CTypeSpec] -> [CTypeSpec] -> [CTypeSpec] -> CExpr -> CTranslUnit
+mkZipWith name tyOut tyIn0 tyIn1 apply =
+  CTranslUnit
+    [ mkTypedef "TyOut" tyOut
+    , mkTypedef "TyIn0" tyIn0
+    , mkTypedef "TyIn1" tyIn1
+    , mkApply 2 apply
+    , zipWith name ]
+    (mkNodeInfo (initPos "zipWith.cu") (Name 0))
 
 
 -- Automatically generated
