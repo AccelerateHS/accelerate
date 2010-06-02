@@ -36,7 +36,6 @@ import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Launch
 
-import Foreign.Marshal.Utils
 import qualified Foreign.CUDA.Driver                    as CUDA
 
 
@@ -49,19 +48,15 @@ execute :: OpenAcc aenv a -> CIO a
 execute (Use xs) = return xs
 execute acc      = do
   krn <- fromMaybe (error "code generation failed") . M.lookup (accToKey acc) <$> getM kernelEntry
-  fun <- either' (get kernelStatus krn) return $ \pid -> do
-    let name = get kernelName krn
-
+  mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
-    mdl <- liftIO $ CUDA.loadFile   (replaceExtension name ".cubin")
-    fun <- liftIO $ CUDA.getFun mdl (takeBaseName name) -- TLM: really only needs to be "fold" or "map", etc...
+    mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
+    modM kernelEntry $ M.insert (accToKey acc) (set kernelStatus (Right mdl) krn)
+    return mdl
 
-    modM kernelEntry $ M.insert (accToKey acc) (set kernelStatus (Right fun) krn)
-    return fun
-
-  -- determine dispatch pattern, extract parameters, allocate storage
+  -- determine dispatch pattern, extract parameters, allocate storage, run
   --
-  dispatch acc fun
+  dispatch acc mdl
 
   where
     either' :: Either a b -> (b -> c) -> (a -> c) -> c
@@ -70,14 +65,9 @@ execute acc      = do
 
 -- Setup and initiate the computation. This may require several kernel launches.
 --
--- TLM: focus more on dispatch patterns (reduction, permutation, map, etc),
---      rather than the actual functions. So ZipWith and Map should resolve to
---      the same procedure, for example (more or less, hopefully ... *vague*).
---
-dispatch :: OpenAcc aenv a -> CUDA.Fun -> CIO a
-
--- Map
-dispatch acc@(Map _ ad) fn = do
+dispatch :: OpenAcc aenv a -> CUDA.Module -> CIO a
+dispatch acc@(Map _ ad) mdl = do
+  fn             <- liftIO $ CUDA.getFun mdl "map"
   (Array sh in0) <- execute ad
   let res@(Array sh' out) = newArray (Sugar.toElem sh)
       n                   = size sh'
@@ -90,8 +80,8 @@ dispatch acc@(Map _ ad) fn = do
   free   in0
   return res
 
--- ZipWith
-dispatch acc@(ZipWith _ ad0 ad1) fn = do
+dispatch acc@(ZipWith _ ad0 ad1) mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "zipWith"
   (Array sh0 in0) <- execute ad0
   (Array sh1 in1) <- execute ad1
   let res@(Array sh' out) = newArray (Sugar.toElem (sh0 `intersect` sh1))
@@ -107,11 +97,10 @@ dispatch acc@(ZipWith _ ad0 ad1) fn = do
   free   in1
   return res
 
--- Fold
-dispatch acc@(Fold _ x ad) fn = do
+dispatch acc@(Fold _ x ad) mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "fold"
   (Array sh in0)  <- execute ad
   (cta,grid,smem) <- launchConfig acc fn
-
   let res@(Array _ out) = newArray grid
 
   mallocArray out grid
@@ -120,7 +109,7 @@ dispatch acc@(Fold _ x ad) fn = do
 
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ [CUDA.IArg (size sh)])
   free in0
-  if grid > 1 then dispatch (Fold undefined x (Use res)) fn
+  if grid > 1 then dispatch (Fold undefined x (Use res)) mdl
               else return (Array (Sugar.fromElem ()) out)
 
 

@@ -71,10 +71,10 @@ compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
   dir    <- liftIO outputDir
-  cufile <- outputName acc (dir </> "dragon.cu")
+  cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
   flags  <- compileFlags nvcc
   pid    <- liftIO . withFilePath dir $ do
-              writeCode cufile $ codeGenAcc acc (takeBaseName cufile)
+              writeCode cufile $ codeGenAcc acc
               forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
   modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))

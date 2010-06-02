@@ -42,34 +42,35 @@ idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 snoc :: [a] -> a -> [a]
 snoc xs x = xs ++ [x]
 
+
 -- |
 -- Generate CUDA device code for an array expression
 --
-codeGenAcc :: AST.OpenAcc aenv a -> String -> CTranslUnit
-codeGenAcc op@(AST.Map fn _) name =
+codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
+codeGenAcc op@(AST.Map fn _) =
   CTranslUnit
     (codeGenType op
       `snoc` mkApply 1 (codeGenFun fn)
-      `snoc` SK.map name)
+      `snoc` SK.map "map")
     (mkNodeInfo (initPos "map.cu") (Name 0))
 
-codeGenAcc op@(AST.ZipWith fn _ _) name =
+codeGenAcc op@(AST.ZipWith fn _ _) =
   CTranslUnit
     (codeGenType op
       `snoc` mkApply 2 (codeGenFun fn)
-      `snoc` SK.zipWith name)
-    (mkNodeInfo (initPos "zipwith.cu") (Name 0))
+      `snoc` SK.zipWith "zipWith")
+    (mkNodeInfo (initPos "zipWith.cu") (Name 0))
 
-codeGenAcc op@(AST.Fold fn e _) name =
+codeGenAcc op@(AST.Fold fn e _) =
   CTranslUnit
     (codeGenType op
       `snoc` mkIdentity (codeGenExp e)
       `snoc` mkApply 2  (codeGenFun fn)
-      `snoc` SK.fold name)
+      `snoc` SK.fold "fold")
     (mkNodeInfo (initPos "fold.cu") (Name 0))
 
-codeGenAcc _ _ =
-  error "Data.Array.Accelerate.CUDA: interval error"
+codeGenAcc op =
+  error ("Data.Array.Accelerate.CUDA: interval error: " ++ show op)
 
 
 -- Scalar Functions

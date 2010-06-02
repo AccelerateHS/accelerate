@@ -58,7 +58,7 @@ type Key         = (Int, String)
 data KernelEntry = KernelEntry
   {
     _kernelName   :: String,
-    _kernelStatus :: Either ProcessID CUDA.Fun
+    _kernelStatus :: Either ProcessID CUDA.Module
   }
 
 
@@ -90,7 +90,7 @@ refcount     :: MemoryEntry :-> Int
 arena        :: MemoryEntry :-> WordPtr
 
 kernelName   :: KernelEntry :-> String
-kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Fun
+kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Module
 
 
 -- |
