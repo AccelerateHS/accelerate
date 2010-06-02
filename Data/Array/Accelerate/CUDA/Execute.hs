@@ -107,14 +107,34 @@ dispatch acc@(ZipWith _ ad0 ad1) fn = do
   free   in1
   return res
 
-
--- Initiate the device computation. First parameter is the work size, typically
--- something like (array size / elements per thread)
---
-launch :: OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
-launch acc fn args = do
+-- Fold
+dispatch acc@(Fold _ x ad) fn = do
+  (Array sh in0)  <- execute ad
   (cta,grid,smem) <- launchConfig acc fn
 
+  let res@(Array _ out) = newArray grid
+
+  mallocArray out grid
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+
+  launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ [CUDA.IArg (size sh)])
+  free in0
+  if grid > 1 then dispatch (Fold undefined x (Use res)) fn
+              else return (Array (Sugar.fromElem ()) out)
+
+
+-- Initiate the device computation. The first version selects launch parameters
+-- automatically, the second requires them explicitly. This tuple contains
+-- threads per block, grid size, and dynamic shared memory, respectively.
+--
+launch :: OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
+launch acc fn args =
+  launchConfig acc fn >>= \cfg ->
+  launch' cfg fn args
+
+launch' :: (Int,Int,Integer) -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
+launch' (cta,grid,smem) fn args =
   liftIO $ do
     CUDA.setParams     fn args
     CUDA.setSharedSize fn smem

@@ -65,7 +65,7 @@ codeGenAcc op@(AST.Fold fn e _) name =
     (codeGenType op
       `snoc` mkIdentity (codeGenExp e)
       `snoc` mkApply 2  (codeGenFun fn)
-      `snoc` SK.map name)
+      `snoc` SK.fold name)
     (mkNodeInfo (initPos "fold.cu") (Name 0))
 
 codeGenAcc _ _ =

@@ -113,9 +113,9 @@ memcpyHtoD op = error $ shows op " not supported"
 -- Synchronous transfer from device to host
 --
 memcpyDtoH :: OpenAcc aenv a -> a -> CIO ()
-memcpyDtoH (Fold _ _ _)    (Array sh ad) = peekArray ad (size sh) >> free ad
 memcpyDtoH (Map _ _)       (Array sh ad) = peekArray ad (size sh) >> free ad
 memcpyDtoH (ZipWith _ _ _) (Array sh ad) = peekArray ad (size sh) >> free ad
+memcpyDtoH (Fold _ _ _)    (Array sh ad) = peekArray ad (size sh) >> free ad
 memcpyDtoH op _                          = error $ shows op " not supported"
 
 
