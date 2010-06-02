@@ -16,7 +16,6 @@ import Prelude hiding (id, (.), mod)
 import Control.Category
 
 import Data.Maybe
-import Control.Arrow
 import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
@@ -37,32 +36,25 @@ import Data.Array.Accelerate.CUDA.CodeGen
 import Foreign.CUDA.Analysis.Device
 
 
--- This is going to be annoying to maintain...
---
-accToInt :: OpenAcc aenv a -> Int
-accToInt (Let  _ _)          = 0
-accToInt (Let2 _ _)          = 1
-accToInt (Avar _)            = 2
-accToInt (Use  _)            = 3
-accToInt (Unit _)            = 4
-accToInt (Reshape _ _)       = 5
-accToInt (Replicate _ _ _)   = 6
-accToInt (Index _ _ _)       = 7
-accToInt (Map _ _)           = 8
-accToInt (ZipWith _ _ _)     = 9
-accToInt (Fold _ _ _)        = 10
-accToInt (FoldSeg _ _ _ _)   = 11
-accToInt (Scan _ _ _)        = 12
---accToInt (Scanr _ _ _)       = 13
-accToInt (Permute _ _ _ _)   = 14
-accToInt (Backpermute _ _ _) = 15
-
-
--- Maybe the sub-expression (for example, the function argument to `fold`) is
--- sufficient, and/or accToInt is unnecessary.
+-- Generate a unique key for each kernel computation
 --
 accToKey :: OpenAcc aenv a -> Key
-accToKey = accToInt &&& show
+--accToKey (Let  _ _)          = 0
+--accToKey (Let2 _ _)          = 1
+--accToKey (Avar _)            = 2
+--accToKey (Use  _)            = 3
+--accToKey (Unit _)            = 4
+--accToKey (Reshape _ _)       = 5
+accToKey (Replicate _ e _)   = (6, show e)
+--accToKey (Index _ _ _)       = 7
+accToKey (Map f _)           = (8, show f)
+accToKey (ZipWith f _ _)     = (9, show f)
+accToKey (Fold f e _)        = (10, show f ++ show e)
+accToKey (FoldSeg f e _ _)   = (11, show f ++ show e)
+accToKey (Scan f e _)        = (12, show f ++ show e)
+--accToKey (Scanr f e _)       = (13, show f ++ show e)
+accToKey (Permute c e p _)   = (14, show c ++ show e ++ show p)
+accToKey (Backpermute p _ _) = (15, show p)
 
 
 -- |
@@ -91,7 +83,8 @@ compile acc@(Backpermute _ _ xs) = compile xs >> compile' acc
 --
 compile' :: OpenAcc aenv a -> CIO ()
 compile' acc = do
-  compiled <- M.member (accToKey acc) <$> getM kernelEntry
+  let key = accToKey acc
+  compiled <- M.member key <$> getM kernelEntry
   when (not compiled) $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- liftIO outputDir
@@ -101,7 +94,7 @@ compile' acc = do
                 writeCode cufile $ codeGenAcc acc
                 forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
-    modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))
+    modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file, exporting C symbols

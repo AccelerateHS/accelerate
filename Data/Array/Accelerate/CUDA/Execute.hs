@@ -47,11 +47,11 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 execute :: OpenAcc aenv a -> CIO a
 execute (Use xs) = return xs
 execute acc      = do
-  krn <- fromMaybe (error "code generation failed") . M.lookup (accToKey acc) <$> getM kernelEntry
+  krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
     mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
-    modM kernelEntry $ M.insert (accToKey acc) (set kernelStatus (Right mdl) krn)
+    modM kernelEntry $ M.insert key  (set kernelStatus (Right mdl) krn)
     return mdl
 
   -- determine dispatch pattern, extract parameters, allocate storage, run
@@ -59,7 +59,7 @@ execute acc      = do
   dispatch acc mdl
 
   where
-    either' :: Either a b -> (b -> c) -> (a -> c) -> c
+    key           = accToKey acc
     either' e r l = either l r e
 
 
