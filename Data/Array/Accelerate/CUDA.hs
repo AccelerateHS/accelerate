@@ -13,10 +13,10 @@
 
 module Data.Array.Accelerate.CUDA (
 
-  -- * Generate and execute CUDA code for an array expression
-  Arrays, run
+    -- * Generate and execute CUDA code for an array expression
+    Arrays, run
 
-) where
+  ) where
 
 import Control.Exception
 import Control.Monad.State
@@ -58,17 +58,16 @@ run :: Arrays a => Sugar.Acc a -> IO a
 run acc =
   let ast = Sugar.convertAcc acc
   in  evalCUDA $
-        compile    ast   >>     -- generally takes longer than memcpy, initiate first (in background)
-        memcpyHtoD ast   >>
-        execute    ast   >>= \r ->
-        memcpyDtoH ast r >>  return r
+        generate ast >> execute ast >>= collect ast
+
+
+-- Initialisation
+-- ~~~~~~~~~~~~~~
+--
 
 -- |
 -- Evaluate a CUDA array computation under a newly initialised environment,
 -- discarding the final state.
---
-
--- TLM: migrate these to State.hs ?
 --
 evalCUDA :: CIO a -> IO a
 evalCUDA =  liftM fst . runCUDA
@@ -90,34 +89,60 @@ runCUDA acc =
       return (dev, ctx)
 
 
--- Marshalling
--- ~~~~~~~~~~~
-
--- |
--- Allocates device memory and triggers asynchronous data transfer to the device
+-- Evaluation
+-- ~~~~~~~~~~
 --
-memcpyHtoD :: OpenAcc aenv a -> CIO ()
-memcpyHtoD (Map     _ xs)          = memcpyHtoD xs
-memcpyHtoD (ZipWith _ xs ys)       = memcpyHtoD xs >> memcpyHtoD ys
-memcpyHtoD (Fold    _ _  xs)       = memcpyHtoD xs
-memcpyHtoD (Use     (Array sh ad)) =
+
+-- Traverse the array expression in depth-first order, initiating asynchronous
+-- code generation and data transfer.
+--
+generate :: OpenAcc aenv a -> CIO ()
+generate (Use (Array sh ad)) =
   let n = size sh
   in do
     mallocArray    ad n
     pokeArrayAsync ad n Nothing
 
-memcpyHtoD op = error $ shows op " not supported"
+generate (Let  xs ys)   = generate xs >> generate ys
+generate (Let2 xs ys)   = generate xs >> generate ys
+generate (Avar _)       = return ()		-- TLM: ??
+generate (Unit _)       = return ()      	-- TLM: ??
+generate (Reshape _ xs) = generate xs		-- TLM: ??
+generate (Index _ xs _) = generate xs     	-- TLM: ??
+
+generate acc@(Replicate _ _ xs)   = generate xs >> compile acc
+generate acc@(Map _ xs)           = generate xs >> compile acc
+generate acc@(ZipWith _ xs ys)    = generate xs >> generate ys >> compile acc
+generate acc@(Fold _ _ xs)        = generate xs >> compile acc
+generate acc@(FoldSeg _ _ xs ys)  = generate xs >> generate ys >> compile acc
+generate acc@(Scan _ _ xs)        = generate xs >> compile acc
+generate acc@(Permute _ xs _ ys)  = generate xs >> generate ys >> compile acc
+generate acc@(Backpermute _ _ xs) = generate xs >> compile acc
 
 
 -- |
--- Synchronous transfer from device to host
+-- Collect the result of an array computation
 --
-memcpyDtoH :: OpenAcc aenv a -> a -> CIO ()
-memcpyDtoH (Map _ _)       (Array sh ad) = peekArray ad (size sh) >> free ad
-memcpyDtoH (ZipWith _ _ _) (Array sh ad) = peekArray ad (size sh) >> free ad
-memcpyDtoH (Fold _ _ _)    (Array sh ad) = peekArray ad (size sh) >> free ad
-memcpyDtoH op _                          = error $ shows op " not supported"
+collect :: OpenAcc aenv a -> a -> CIO a
+collect (Replicate _ _ _)   = getArr
+collect (Map _ _)           = getArr
+collect (ZipWith _ _ _)     = getArr
+collect (Fold _ _ _)        = getArr
+collect (FoldSeg _ _ _ _)   = getArr
+collect (Scan _ _ _)        = getArr2
+collect (Permute _ _ _ _)   = getArr
+collect (Backpermute _ _ _) = getArr
+collect _ = error "Data.Array.Accelerate.CUDA: internal error"
 
+
+getArr :: Array dim e -> CIO (Array dim e)
+getArr arr@(Array sh ad) = peekArray ad (size sh) >> free ad >> return arr
+
+getArr2 :: (Array dim1 e1, Array dim2 e2) -> CIO (Array dim1 e1, Array dim2 e2)
+getArr2 (a1,a2) = do
+  r1 <- getArr a1
+  r2 <- getArr a2
+  return (r1,r2)
 
 
 

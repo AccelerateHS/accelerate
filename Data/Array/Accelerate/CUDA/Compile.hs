@@ -57,32 +57,11 @@ accToKey (Permute c e p _)   = (14, show c ++ show e ++ show p)
 accToKey (Backpermute p _ _) = (15, show p)
 
 
--- |
--- Traverse the expression tree, generating and compiling code
+
+-- | Generate and compile code for an array expression
 --
 compile :: OpenAcc aenv a -> CIO ()
-compile (Let  xs ys)   = compile xs >> compile ys
-compile (Let2 xs ys)   = compile xs >> compile ys
-compile (Avar _)       = return ()      -- TLM: ??
-compile (Use  _)       = return ()
-compile (Unit _)       = return ()      -- TLM: ??
-compile (Reshape _ xs) = compile xs     -- TLM: ??
-compile (Index _ xs _) = compile xs     -- TLM: ??
-
-compile acc@(Replicate _ _ xs)   = compile xs >> compile' acc
-compile acc@(Map _ xs)           = compile xs >> compile' acc
-compile acc@(ZipWith _ xs ys)    = compile xs >> compile ys >> compile' acc
-compile acc@(Fold _ _ xs)        = compile xs >> compile' acc
-compile acc@(FoldSeg _ _ xs ys)  = compile xs >> compile ys >> compile' acc
-compile acc@(Scan _ _ xs)        = compile xs >> compile' acc
-compile acc@(Permute _ xs _ ys)  = compile xs >> compile ys >> compile' acc
-compile acc@(Backpermute _ _ xs) = compile xs >> compile' acc
-
-
--- Generate and compile code for an array expression
---
-compile' :: OpenAcc aenv a -> CIO ()
-compile' acc = do
+compile acc = do
   let key = accToKey acc
   compiled <- M.member key <$> getM kernelEntry
   when (not compiled) $ do
