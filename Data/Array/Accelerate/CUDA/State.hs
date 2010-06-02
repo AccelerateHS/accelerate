@@ -19,7 +19,8 @@ module Data.Array.Accelerate.CUDA.State
     KernelEntry(KernelEntry), Key, kernelName, kernelStatus,
     MemoryEntry(MemoryEntry), refcount, arena,
 
-    module Data.Record.Label, modM'
+    freshVar,
+    module Data.Record.Label
   )
   where
 
@@ -30,6 +31,7 @@ import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)
 import System.Posix.Types               (ProcessID)
 import Control.Monad.State              (StateT, MonadState)
+import Control.Applicative
 import Data.Record.Label
 
 import Foreign.Ptr
@@ -92,12 +94,8 @@ kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Fun
 
 
 -- |
--- Modify a value with a function in the state pointed to by the specified
--- label, returning the old value
+-- A unique name supply
 --
-modM' :: MonadState s m => s :-> b -> (b -> b) -> m b
-modM' l f = do
-  v <- getM l
-  modM l f
-  return v
+freshVar :: CIO Int
+freshVar =  getM unique <* modM unique (+1)
 

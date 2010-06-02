@@ -145,7 +145,6 @@ outputName acc cufile = do
        else return (base ++ show n <.> suffix)
   where
     (base,suffix) = splitExtension cufile
-    freshVar      = getM unique <* modM unique (+1)
 
 
 -- Return the output directory for compilation by-products. This currently maps
