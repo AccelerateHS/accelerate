@@ -13,7 +13,7 @@
 
 module Data.Array.Accelerate.CUDA (
 
-  -- * Generate CUDA code and execute it
+  -- * Generate and execute CUDA code for an array expression
   Arrays, run
 
 ) where

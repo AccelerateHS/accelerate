@@ -75,35 +75,36 @@ execute acc      = do
 --      the same procedure, for example (more or less, hopefully ... *vague*).
 --
 dispatch :: OpenAcc aenv a -> CUDA.Fun -> CIO a
+
+-- Map
 dispatch acc@(Map _ ad) fn = do
-  (Array sh xs) <- execute ad
-  let res@(Array sh' ys) = newArray (Sugar.toElem sh)
-      n    = size sh'
-      full = fromBool False     -- TLM: totally useless parameter
+  (Array sh in0) <- execute ad
+  let res@(Array sh' out) = newArray (Sugar.toElem sh)
+      n                   = size sh'
 
-  mallocArray ys n
-  d_xs <- devicePtrs xs
-  d_ys <- devicePtrs ys
+  mallocArray out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
 
-  launch acc fn (d_xs ++ d_ys ++ [CUDA.IArg n, CUDA.IArg full])
-  free   xs
+  launch acc fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  free   in0
   return res
 
-dispatch acc@(ZipWith _ ad1 ad2) fn = do
-  (Array sh1 xs) <- execute ad1
-  (Array sh2 ys) <- execute ad2
-  let res@(Array sh' zs) = newArray (Sugar.toElem (sh1 `intersect` sh2))
+-- ZipWith
+dispatch acc@(ZipWith _ ad0 ad1) fn = do
+  (Array sh0 in0) <- execute ad0
+  (Array sh1 in1) <- execute ad1
+  let res@(Array sh' out) = newArray (Sugar.toElem (sh0 `intersect` sh1))
       n    = size sh'
-      full = fromBool False
 
-  mallocArray zs n
-  d_xs <- devicePtrs xs
-  d_ys <- devicePtrs ys
-  d_zs <- devicePtrs zs
+  mallocArray out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  d_in1 <- devicePtrs in1
 
-  launch acc fn (d_xs ++ d_ys ++ d_zs ++ [CUDA.IArg n, CUDA.IArg full])
-  free   xs
-  free   ys
+  launch acc fn (d_out ++ d_in0 ++ d_in1 ++ [CUDA.IArg n])
+  free   in0
+  free   in1
   return res
 
 
