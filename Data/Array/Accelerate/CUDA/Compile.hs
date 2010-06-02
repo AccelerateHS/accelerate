@@ -17,6 +17,7 @@ import Control.Category
 
 import Data.Maybe
 import Control.Arrow
+import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Exception.Extensible
@@ -65,25 +66,45 @@ accToKey = accToInt &&& show
 
 
 -- |
--- Generate and compile code for an array expression
+-- Traverse the expression tree, generating and compiling code
 --
 compile :: OpenAcc aenv a -> CIO ()
-compile acc = do
-  nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
-  dir    <- liftIO outputDir
-  cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
-  flags  <- compileFlags nvcc
-  pid    <- liftIO . withFilePath dir $ do
-              writeCode cufile $ codeGenAcc acc
-              forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
+compile (Let  xs ys)   = compile xs >> compile ys
+compile (Let2 xs ys)   = compile xs >> compile ys
+compile (Avar _)       = return ()      -- TLM: ??
+compile (Use  _)       = return ()
+compile (Unit _)       = return ()      -- TLM: ??
+compile (Reshape _ xs) = compile xs     -- TLM: ??
+compile (Index _ xs _) = compile xs     -- TLM: ??
 
-  modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))
+compile acc@(Replicate _ _ xs)   = compile xs >> compile' acc
+compile acc@(Map _ xs)           = compile xs >> compile' acc
+compile acc@(ZipWith _ xs ys)    = compile xs >> compile ys >> compile' acc
+compile acc@(Fold _ _ xs)        = compile xs >> compile' acc
+compile acc@(FoldSeg _ _ xs ys)  = compile xs >> compile ys >> compile' acc
+compile acc@(Scan _ _ xs)        = compile xs >> compile' acc
+compile acc@(Permute _ xs _ ys)  = compile xs >> compile ys >> compile' acc
+compile acc@(Backpermute _ _ xs) = compile xs >> compile' acc
+
+
+-- Generate and compile code for an array expression
+--
+compile' :: OpenAcc aenv a -> CIO ()
+compile' acc = do
+  compiled <- M.member (accToKey acc) <$> getM kernelEntry
+  when (not compiled) $ do
+    nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
+    dir    <- liftIO outputDir
+    cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
+    flags  <- compileFlags nvcc
+    pid    <- liftIO . withFilePath dir $ do
+                writeCode cufile $ codeGenAcc acc
+                forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
+
+    modM kernelEntry $ M.insert (accToKey acc) (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file, exporting C symbols
---
--- TLM: The nasty __global__ attribute resolution issue is only present for
---      cuda < 3.0, might want to add #undefs?
 --
 writeCode :: FilePath -> CTranslUnit -> IO ()
 writeCode f code
