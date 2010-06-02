@@ -30,7 +30,7 @@ import Prelude hiding (id, (.), mod)
 import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)
 import System.Posix.Types               (ProcessID)
-import Control.Monad.State              (StateT, MonadState)
+import Control.Monad.State              (StateT)
 import Control.Applicative
 import Data.Record.Label
 
