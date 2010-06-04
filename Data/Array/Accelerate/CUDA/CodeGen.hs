@@ -24,9 +24,9 @@ import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
-import qualified Data.Array.Accelerate.CUDA.CodeGen.Skeleton    as SK
 
-import Foreign.Marshal.Utils (fromBool)
+import Data.Array.Accelerate.CUDA.CodeGen.Util
+import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
 
 -- Convert a typed de Brujin index to the corresponding integer
@@ -40,10 +40,15 @@ idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 -- Generate CUDA device code for an array expression
 --
 codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
-codeGenAcc op@(AST.Map fn xs)        = SK.mkMap     "map"     (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
-codeGenAcc op@(AST.ZipWith fn xs ys) = SK.mkZipWith "zipWith" (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
-codeGenAcc (AST.Fold fn e _)         = SK.mkFold    "fold"    (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Scanl fn e _)        = SK.mkScanl   "scanl"   (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc op@(AST.Map fn xs)        = mkMap       "map"       (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
+codeGenAcc op@(AST.ZipWith fn xs ys) = mkZipWith   "zipWith"   (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
+--codeGenAcc (AST.Replicate _ _ xs)    = mkReplicate "replicate"
+codeGenAcc (AST.Fold fn e _)         = mkFold      "fold"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+--codeGenAcc (AST.FoldSeg fn e xs s)   = mkFoldSeg   "foldSeg"
+codeGenAcc (AST.Scanl fn e _)        = mkScanl     "scanl"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scanr fn e _)        = mkScanr     "scanr"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+--codeGenAcc (AST.Permute cf ds pf xs) = mkPermute   "permute"
+--codeGenAcc (AST.Backpermute _ fn xs) = mkBackpermute "backpermute"
 
 codeGenAcc op =
   error ("Data.Array.Accelerate.CUDA: interval error: " ++ show op)
@@ -65,6 +70,9 @@ codeGenExp (AST.Var   i) = CVar (internalIdent ('x' : show (idxToInt i))) intern
 codeGenExp (AST.Const c) =
   codeGenConst (Sugar.elemType' (undefined::t)) (Sugar.fromElem' (Sugar.toElem c :: t))
 
+codeGenExp (AST.Tuple _) = error "codeGen AST.Tuple"
+codeGenExp (AST.Prj _ _) = error "codeGen AST.Prj"
+
 codeGenExp (AST.Cond p e1 e2) =
   CCond (codeGenExp p) (Just (codeGenExp e1)) (codeGenExp e2) internalNode
 
@@ -74,8 +82,8 @@ codeGenExp (AST.PrimApp f (AST.Tuple arg))
   | NilTup `SnocTup` x `SnocTup` y <- arg = codeGenPrim f [codeGenExp x, codeGenExp y]
 codeGenExp (AST.PrimApp f x)              = codeGenPrim f [codeGenExp x]
 
-codeGenExp e =
-  error $ "Data.Array.Accelerate.CUDA: unsupported: " ++ show e
+codeGenExp (AST.IndexScalar _ _) = error "codeGen AST.IndexScalar"
+codeGenExp (AST.Shape _)         = error "codeGen AST.Shape"
 
 
 -- Types
@@ -153,7 +161,6 @@ codeGenPrimConst (AST.PrimMinBound ty) = codeGenMinBound ty
 codeGenPrimConst (AST.PrimMaxBound ty) = codeGenMaxBound ty
 codeGenPrimConst (AST.PrimPi       ty) = codeGenPi ty
 
-
 codeGenPrim :: AST.PrimFun p -> [CExpr] -> CExpr
 codeGenPrim (AST.PrimAdd          _) [a,b] = CBinary CAddOp a b internalNode
 codeGenPrim (AST.PrimSub          _) [a,b] = CBinary CSubOp a b internalNode
@@ -227,8 +234,7 @@ codeGenScalar (NumScalarType (IntegralNumType ty))
 codeGenScalar (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty
   = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
-codeGenScalar (NonNumScalarType (TypeBool _))   =
-  CConst . flip CIntConst  internalNode . cInteger . fromBool
+codeGenScalar (NonNumScalarType (TypeBool _))   = fromBool
 codeGenScalar (NonNumScalarType (TypeChar _))   =
   CConst . flip CCharConst internalNode . cChar
 codeGenScalar (NonNumScalarType (TypeCChar _))  =
