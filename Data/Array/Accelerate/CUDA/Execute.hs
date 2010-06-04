@@ -16,6 +16,7 @@ import Prelude hiding (id, (.), mod)
 import Control.Category
 
 import Data.Maybe
+import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
 import qualified Data.Map                               as M
@@ -45,7 +46,12 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 -- the same kernel will be able to extract the loaded kernel directly.
 --
 execute :: OpenAcc aenv a -> CIO a
-execute (Use xs) = return xs
+execute (Let  x y) = execute x >> execute y
+execute (Let2 x y) = execute x >> execute y
+execute (Avar _)   = error "execute: avar"
+execute (Unit _)   = error "execute: unit"
+execute (Use xs)   = return xs
+
 execute acc      = do
   krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
@@ -111,6 +117,40 @@ dispatch acc@(Fold _ x ad) mdl = do
   free in0
   if grid > 1 then dispatch (Fold undefined x (Use res)) mdl
               else return (Array (Sugar.fromElem ()) out)
+
+dispatch acc@(Scan _ x ad) mdl = do
+  fscan           <- liftIO $ CUDA.getFun mdl "scan"
+  fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
+  (Array sh in0)  <- execute ad
+  (cta,grid,smem) <- launchConfig acc fscan
+  let res@(Array _ out)  = newArray (Sugar.toElem sh)
+      bks@(Array _ sums) = newArray grid
+      n                  = size sh
+
+  mallocArray out (size sh)
+  mallocArray sums grid
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  d_bks <- devicePtrs sums
+
+  -- Single row, multi-block, non-full block scan
+  --
+  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ map CUDA.IArg [n,1,1])
+  free in0
+  free sums
+
+  -- Now, take the last value of all of the sub-blocks and scan those. This will
+  -- give a new value that must be added to each block to get the final result
+  --
+  when (grid > 1) $ do
+    (Array _ sums') <- fst <$> dispatch (Scan undefined x (Use bks)) mdl
+    d_bks'          <- devicePtrs sums'
+    launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
+
+  -- What to do about the reduction parameter? Seems like the block sums could
+  -- be useful, but might require additional code generation in earlier phases
+  --
+  return (res, undefined)
 
 
 -- Initiate the device computation. The first version selects launch parameters

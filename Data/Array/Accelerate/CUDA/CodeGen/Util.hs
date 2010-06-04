@@ -35,8 +35,8 @@ mkTypedef var ty =
 -- }
 -- typedef struct var var;
 --
-makeVector :: Int -> String -> [CTypeSpec] -> CExtDecl
-makeVector n var ty =
+mkTyVector :: String -> Int -> [CTypeSpec] -> CExtDecl
+mkTyVector var n ty =
   CDeclExt
     (CDecl [ CStorageSpec (CTypedef internalNode)
            , CTypeSpec

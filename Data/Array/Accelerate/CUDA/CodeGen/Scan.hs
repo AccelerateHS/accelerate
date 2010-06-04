@@ -19,10 +19,11 @@ import Data.Array.Accelerate.CUDA.CodeGen.Util
 mkScan :: String -> [CTypeSpec] -> CExpr -> CExpr -> CTranslUnit
 mkScan name ty identity apply =
   CTranslUnit
-    [ mkTypedef "T"     ty
-    , mkTypedef "TyOut" [CTypeDef (internalIdent "T") internalNode]
-    , mkTypedef "TyIn0" [CTypeDef (internalIdent "T") internalNode]
-    , mkTypedef "TyIn1" [CTypeDef (internalIdent "T") internalNode]
+    [ mkTypedef  "T" ty
+    , mkTyVector "T4" 4 ty
+    , mkTypedef  "TyOut" [CTypeDef (internalIdent "T") internalNode]
+    , mkTypedef  "TyIn0" [CTypeDef (internalIdent "T") internalNode]
+    , mkTypedef  "TyIn1" [CTypeDef (internalIdent "T") internalNode]
     , mkIdentity identity
     , mkApply 2 apply
     , loadSharedChunkFromMem4

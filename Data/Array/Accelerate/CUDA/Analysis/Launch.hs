@@ -39,6 +39,8 @@ import Foreign.Storable
 -- TLM: this could probably be stored in the KernelEntry
 --
 launchConfig :: OpenAcc aenv a -> CUDA.Fun -> CIO (Int, Int, Integer)
+launchConfig acc@(Scan _ _ _) _ = return (128, gridSize acc 128, toInteger (sharedMem acc 128))
+
 launchConfig acc fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
@@ -66,8 +68,10 @@ arraySize (Use (Array sh _)) = size sh
 arraySize (Map _ xs)         = arraySize xs
 arraySize (ZipWith _ xs ys)  = arraySize xs `min` arraySize ys   -- TLM: intersect??
 arraySize (Fold _ _ xs)      = arraySize xs
+arraySize (Scan _ _ xs)      = arraySize xs
 
 elementsPerThread :: OpenAcc aenv a -> Int
+elementsPerThread (Scan _ _ _) = 8
 elementsPerThread _            = 1
 
 
@@ -80,6 +84,7 @@ sharedMem :: forall aenv a. OpenAcc aenv a -> Int -> Int
 sharedMem (Map _ _)       _ = 0
 sharedMem (ZipWith _ _ _) _ = 0
 sharedMem (Fold _ x _)    t = sizeOfElem (expType x) * t
+sharedMem (Scan _ x _)    t = sizeOfElem (expType x) * t * 2
 
 
 sizeOfElem :: TupleType a -> Int

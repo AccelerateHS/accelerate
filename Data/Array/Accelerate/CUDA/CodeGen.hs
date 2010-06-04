@@ -52,9 +52,6 @@ codeGenAcc op =
 -- Scalar Functions
 -- ~~~~~~~~~~~~~~~~
 --
-
--- TLM: return an actual function (:: CExtDecl) ??
---
 codeGenFun :: AST.OpenFun env aenv t -> CExpr
 codeGenFun (AST.Lam  lam)  = codeGenFun lam
 codeGenFun (AST.Body body) = codeGenExp body
