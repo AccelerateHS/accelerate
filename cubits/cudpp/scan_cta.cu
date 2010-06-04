@@ -39,11 +39,11 @@
 /**
  * @brief Macro to insert necessary __syncthreads() in device emulation mode
  */
-#ifdef __DEVICE_EMULATION__
-#define __EMUSYNC __syncthreads()
-#else
-#define __EMUSYNC
-#endif
+//#ifdef __DEVICE_EMULATION__
+//#define __EMUSYNC __syncthreads()
+//#else
+//#define __EMUSYNC
+//#endif
 
 #if 0
 /**
@@ -148,10 +148,10 @@ __device__ void loadSharedChunkFromMem4(T        *s_out,
     *bi = thid + blockDim.x;
 
     // read into tempData;
-    if (IsBackward)
+    if (IS_BACKWARD)
     {
         int i = *aiDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             tempData       = inData[*aiDev];
             threadScan0[3] = tempData.w;
@@ -174,7 +174,7 @@ __device__ void loadSharedChunkFromMem4(T        *s_out,
 #endif
 
         i = *biDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             tempData       = inData[*biDev];
             threadScan1[3] = tempData.w;
@@ -211,7 +211,7 @@ __device__ void loadSharedChunkFromMem4(T        *s_out,
     else
     {
         int i = *aiDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             tempData       = inData[*aiDev];
             threadScan0[0] = tempData.x;
@@ -235,7 +235,7 @@ __device__ void loadSharedChunkFromMem4(T        *s_out,
 #endif
 
         i = *biDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             tempData       = inData[*biDev];
             threadScan1[0] = tempData.x;
@@ -301,7 +301,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
     T4* outData = (T4*)d_out;
 
     // write results to global memory
-    if (IsBackward)
+    if (IS_BACKWARD)
     {
         if (ai < CTA_SIZE)
         {
@@ -320,7 +320,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
 
         T temp = s_in[ai];
 
-        if (IsExclusive)
+        if (IS_EXCLUSIVE)
         {
             tempData.w = temp;
             tempData.z = apply(temp, threadScan0[3]);
@@ -336,7 +336,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
         }
 
         int i = aiDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             outData[aiDev] = tempData;
         }
@@ -353,7 +353,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
 
         temp = s_in[bi];
 
-        if (IsExclusive)
+        if (IS_EXCLUSIVE)
         {
             tempData.w = temp;
             tempData.z = apply(temp, threadScan1[3]);
@@ -369,7 +369,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
         }
 
         i = biDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             outData[biDev] = tempData;
         }
@@ -385,7 +385,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
         T temp;
         temp = s_in[ai];
 
-        if (IsExclusive)
+        if (IS_EXCLUSIVE)
         {
             tempData.x = temp;
             tempData.y = apply(temp, threadScan0[0]);
@@ -401,7 +401,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
         }
 
         int i = aiDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             outData[aiDev] = tempData;
         }
@@ -420,7 +420,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
 
         temp       = s_in[bi];
 
-        if (IsExclusive)
+        if (IS_EXCLUSIVE)
         {
             tempData.x = temp;
             tempData.y = apply(temp, threadScan1[0]);
@@ -436,7 +436,7 @@ __device__ void storeSharedChunkToMem4(T   *d_out,
         }
 
         i = biDev * 4;
-        if (IsFullBlock || i + 3 < numElements)
+        if (IS_FULLBLOCK || i + 3 < numElements)
         {
             outData[biDev] = tempData;
         }
@@ -511,11 +511,11 @@ __device__ T warpscan(T val, volatile T* s_data)
     t = s_data[idx - 16]; __EMUSYNC;
     s_data[idx] = apply(s_data[idx],t); __EMUSYNC;
 #else
-    if (0 <= MaxLevel) { s_data[idx] = t = apply(t, s_data[idx - 1]); }
-    if (1 <= MaxLevel) { s_data[idx] = t = apply(t, s_data[idx - 2]); }
-    if (2 <= MaxLevel) { s_data[idx] = t = apply(t, s_data[idx - 4]); }
-    if (3 <= MaxLevel) { s_data[idx] = t = apply(t, s_data[idx - 8]); }
-    if (4 <= MaxLevel) { s_data[idx] = t = apply(t, s_data[idx -16]); }
+    if (0 <= MAX_LEVEL) { s_data[idx] = t = apply(t, s_data[idx - 1]); }
+    if (1 <= MAX_LEVEL) { s_data[idx] = t = apply(t, s_data[idx - 2]); }
+    if (2 <= MAX_LEVEL) { s_data[idx] = t = apply(t, s_data[idx - 4]); }
+    if (3 <= MAX_LEVEL) { s_data[idx] = t = apply(t, s_data[idx - 8]); }
+    if (4 <= MAX_LEVEL) { s_data[idx] = t = apply(t, s_data[idx -16]); }
 #endif
 
     return s_data[idx-1];      // convert inclusive -> exclusive
@@ -598,7 +598,7 @@ __device__ void scanCTA(T            *s_data,
     scanWarps(val, val2, s_data);
     __syncthreads();
 
-    if (IsMultiBlock && threadIdx.x == blockDim.x - 1)
+    if (IS_MULTIBLOCK && threadIdx.x == blockDim.x - 1)
     {
         d_blockSums[blockSumIndex] = apply(val2, s_data[threadIdx.x + blockDim.x]);
     }
@@ -607,7 +607,7 @@ __device__ void scanCTA(T            *s_data,
 #ifdef __DEVICE_EMULATION__
     // must sync in emulation mode when doing backward scans, because otherwise the
     // shared memory array will get reversed before the block sums are read!
-    if (IsBackward)
+    if (IS_BACKWARD)
         __syncthreads();
 #endif
 }

@@ -153,12 +153,12 @@ __global__ void vectorAddUniform4(T       *d_vector,
     //int width = __mul24(gridDim.x,(blockDim.x << 1));
 
     unsigned int address = baseIndex + __umul24(vectorRowPitch, blockIdx.y)
-        + threadIdx.x + __umul24(blockIdx.x, (blockDim.x * ElementsPerThread));
+        + threadIdx.x + __umul24(blockIdx.x, (blockDim.x * ELEMENTS_PER_THREAD));
     numElements += __umul24(vectorRowPitch, blockIdx.y);
 
     __syncthreads();
 
-    for (int i = 0; i < ElementsPerThread && address < numElements; i++)
+    for (int i = 0; i < ELEMENTS_PER_THREAD && address < numElements; i++)
     {
         d_vector[address] = apply(uni, d_vector[address]);
         address += blockDim.x;
@@ -282,7 +282,7 @@ __global__ void vectorSegmentedAddUniform4(T                  *d_vector,
     }
     else
     {
-        if (!IsFullBlock && isLastBlock)
+        if (!IS_FULLBLOCK && isLastBlock)
         {
             for (unsigned int i = 0; i < 8; ++i)
             {
@@ -404,7 +404,7 @@ __global__ void vectorSegmentedAddUniformToRight4(T                  *d_vector,
     }
     else
     {
-        if (!IsFullBlock && isLastBlock)
+        if (!IS_FULLBLOCK && isLastBlock)
         {
             for (unsigned int i = 0; i < 8; ++i)
             {

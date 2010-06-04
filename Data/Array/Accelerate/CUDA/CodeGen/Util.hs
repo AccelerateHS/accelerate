@@ -19,6 +19,11 @@ device = builtinIdent "device"
 global = builtinIdent "global"
 
 
+fromBool :: Bool -> CExpr
+fromBool True  = CConst $ CIntConst (cInteger 1) internalNode
+fromBool False = CConst $ CIntConst (cInteger 0) internalNode
+
+
 --
 -- typedef ty var;
 --

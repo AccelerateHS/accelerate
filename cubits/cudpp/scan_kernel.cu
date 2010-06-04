@@ -79,7 +79,7 @@ __global__ void scan4(T            *d_out,
     unsigned int blockN = numElements;
     unsigned int blockSumIndex = blockIdx.x;
 
-    if (IsMultiRow)
+    if (IS_MULTIROW)
     {
         //int width = __mul24(gridDim.x, blockDim.x) << 1;
         int yIndex     = __umul24(blockDim.y, blockIdx.y) + threadIdx.y;
