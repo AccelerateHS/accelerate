@@ -8,7 +8,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Scan (mkScan)
+module Data.Array.Accelerate.CUDA.CodeGen.Scan (mkScanl)
   where
 
 import Language.C
@@ -16,8 +16,8 @@ import Language.C.Data.Ident
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 
-mkScan :: String -> [CTypeSpec] -> CExpr -> CExpr -> CTranslUnit
-mkScan name ty identity apply =
+mkScanl :: String -> [CTypeSpec] -> CExpr -> CExpr -> CTranslUnit
+mkScanl name ty identity apply =
   CTranslUnit
     [ mkTypedef  "T" ty
     , mkTyVector "T4" 4 ty

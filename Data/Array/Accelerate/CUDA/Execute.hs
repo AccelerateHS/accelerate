@@ -52,7 +52,7 @@ execute (Avar _)   = error "execute: avar"
 execute (Unit _)   = error "execute: unit"
 execute (Use xs)   = return xs
 
-execute acc      = do
+execute acc = do
   krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
@@ -118,8 +118,8 @@ dispatch acc@(Fold _ x ad) mdl = do
   if grid > 1 then dispatch (Fold undefined x (Use res)) mdl
               else return (Array (Sugar.fromElem ()) out)
 
-dispatch acc@(Scan _ x ad) mdl = do
-  fscan           <- liftIO $ CUDA.getFun mdl "scan"
+dispatch acc@(Scanl _ x ad) mdl = do
+  fscan           <- liftIO $ CUDA.getFun mdl "scanl"
   fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
   (Array sh in0)  <- execute ad
   (cta,grid,smem) <- launchConfig acc fscan
@@ -143,7 +143,7 @@ dispatch acc@(Scan _ x ad) mdl = do
   -- give a new value that must be added to each block to get the final result
   --
   when (grid > 1) $ do
-    (Array _ sums') <- fst <$> dispatch (Scan undefined x (Use bks)) mdl
+    (Array _ sums') <- fst <$> dispatch (Scanl undefined x (Use bks)) mdl
     d_bks'          <- devicePtrs sums'
     launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
 

@@ -43,7 +43,7 @@ codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
 codeGenAcc op@(AST.Map fn xs)        = SK.mkMap     "map"     (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
 codeGenAcc op@(AST.ZipWith fn xs ys) = SK.mkZipWith "zipWith" (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
 codeGenAcc (AST.Fold fn e _)         = SK.mkFold    "fold"    (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Scan fn e _)         = SK.mkScan    "scan"    (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scanl fn e _)        = SK.mkScanl   "scanl"   (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
 
 codeGenAcc op =
   error ("Data.Array.Accelerate.CUDA: interval error: " ++ show op)
@@ -88,7 +88,8 @@ codeGenAccType =  codeGenTupleType . accType
 
 codeGenAccType2 :: AST.OpenAcc aenv (Sugar.Array dim1 e1, Sugar.Array dim2 e2)
                 -> ([CTypeSpec], [CTypeSpec])
-codeGenAccType2 (AST.Scan _ e acc) = (codeGenAccType acc, codeGenExpType e)
+codeGenAccType2 (AST.Scanl _ e acc) = (codeGenAccType acc, codeGenExpType e)
+codeGenAccType2 (AST.Scanr _ e acc) = (codeGenAccType acc, codeGenExpType e)
 
 codeGenExpType :: AST.OpenExp aenv env t -> [CTypeSpec]
 codeGenExpType =  codeGenTupleType . expType
