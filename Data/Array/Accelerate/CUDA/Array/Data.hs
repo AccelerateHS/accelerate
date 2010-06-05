@@ -121,22 +121,14 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   type DevicePtrs (a,b) = (DevicePtrs a, DevicePtrs b)
   type HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
 
-  mallocArray ad n      = mallocArray (Acc.fstArrayData ad) n >>
-                          mallocArray (Acc.sndArrayData ad) n
-  pokeArray ad n        = pokeArray (Acc.fstArrayData ad) n >>
-                          pokeArray (Acc.sndArrayData ad) n
-  pokeArrayAsync ad n s = pokeArrayAsync (Acc.fstArrayData ad) n s >>
-                          pokeArrayAsync (Acc.sndArrayData ad) n s
-  peekArray ad n        = peekArray (Acc.fstArrayData ad) n >>
-                          peekArray (Acc.sndArrayData ad) n
-  peekArrayAsync ad n s = peekArrayAsync (Acc.fstArrayData ad) n s >>
-                          peekArrayAsync (Acc.sndArrayData ad) n s
-  touch ad              = touch (Acc.fstArrayData ad) >>
-                          touch (Acc.sndArrayData ad)
-  free ad               = free (Acc.fstArrayData ad) >>
-                          free (Acc.sndArrayData ad)
-  devicePtrs ad         = (++) <$> devicePtrs (Acc.fstArrayData ad)
-                               <*> devicePtrs (Acc.sndArrayData ad)
+  mallocArray ad n      = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
+  peekArray ad n        = peekArray (fst' ad) n   *> peekArray (snd' ad) n
+  pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
+  peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
+  pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
+  touch ad              = touch (fst' ad) *> touch (snd' ad)
+  free ad               = free  (fst' ad) *> free  (snd' ad)
+  devicePtrs ad         = (++) <$> devicePtrs (fst' ad) <*> devicePtrs (snd' ad)
 
 
 --
@@ -226,4 +218,12 @@ touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <
 devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
             => Acc.ArrayData e -> CIO [CUDA.FunParam]
 devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> getArray ad
+
+-- Array tuple extraction
+--
+fst' :: Acc.ArrayData (a,b) -> Acc.ArrayData a
+fst' = Acc.fstArrayData
+
+snd' :: Acc.ArrayData (a,b) -> Acc.ArrayData b
+snd' = Acc.sndArrayData
 
