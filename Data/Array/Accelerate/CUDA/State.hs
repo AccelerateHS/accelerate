@@ -16,7 +16,7 @@ module Data.Array.Accelerate.CUDA.State
   (
     CIO,
     CUDAState(CUDAState),     unique, deviceProps, memoryEntry, kernelEntry,
-    KernelEntry(KernelEntry), kernelName, kernelStatus,
+    KernelEntry(KernelEntry), kernelName, kernelStatus, Key,
     MemoryEntry(MemoryEntry), refcount, arena,
 
     freshVar,
@@ -27,6 +27,7 @@ module Data.Array.Accelerate.CUDA.State
 import Prelude hiding (id, (.), mod)
 --import Control.Category
 
+import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)
 import System.Posix.Types               (ProcessID)
 import Control.Monad.State              (StateT)
@@ -46,13 +47,14 @@ data CUDAState = CUDAState
     _unique      :: Int,
     _deviceProps :: CUDA.DeviceProperties,
     _memoryEntry :: IntMap MemoryEntry,
-    _kernelEntry :: IntMap KernelEntry
+    _kernelEntry :: Map Key KernelEntry
   }
 
 -- |
 -- Associate an array expression with an external compilation tool (nvcc) or the
 -- loaded function
 --
+type Key = String
 data KernelEntry = KernelEntry
   {
     _kernelName   :: String,
@@ -82,7 +84,7 @@ $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
 unique       :: CUDAState :-> Int
 deviceProps  :: CUDAState :-> CUDA.DeviceProperties
 memoryEntry  :: CUDAState :-> IntMap MemoryEntry
-kernelEntry  :: CUDAState :-> IntMap KernelEntry
+kernelEntry  :: CUDAState :-> Map Key KernelEntry
 
 refcount     :: MemoryEntry :-> Int
 arena        :: MemoryEntry :-> WordPtr

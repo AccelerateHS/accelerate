@@ -13,7 +13,6 @@ module Data.Array.Accelerate.CUDA.Compile (accToKey, compile)
   where
 
 import Prelude   hiding (id, (.), mod)
-import qualified Prelude
 import Control.Category
 
 import Data.Char
@@ -24,7 +23,7 @@ import Control.Exception
 import Control.Applicative
 import Language.C
 import Text.PrettyPrint
-import qualified Data.IntMap                            as IM
+import qualified Data.Map                               as M
 
 import System.Directory
 import System.FilePath
@@ -43,31 +42,28 @@ import Foreign.CUDA.Analysis.Device
 -- |
 -- Generate a unique key for each kernel computation (not extensively tested...)
 --
-accToKey :: OpenAcc aenv a -> Int
-accToKey = quad . accKey
-  where
-    accKey :: OpenAcc aenv a -> String
-    accKey (Unit e)            = chr 2   : showTy (expType e) ++ show e
-    accKey (Reshape _ a)       = chr 7   : showTy (accType a)
-    accKey (Replicate _ e a)   = chr 17  : showTy (accType a) ++ show e
-    accKey (Index _ a e)       = chr 29  : showTy (accType a) ++ show e
-    accKey (Map f a)           = chr 41  : showTy (accType a) ++ show f
-    accKey (ZipWith f x y)     = chr 53  : showTy (accType x) ++ showTy (accType y) ++ show f
-    accKey (Fold f e a)        = chr 67  : showTy (accType a) ++ show f ++ show e
-    accKey (FoldSeg f e _ a)   = chr 79  : showTy (accType a) ++ show f ++ show e
-    accKey (Scanl f e a)       = chr 97  : showTy (accType a) ++ show f ++ show e
-    accKey (Scanr f e a)       = chr 107 : showTy (accType a) ++ show f ++ show e
-    accKey (Permute c e p a)   = chr 127 : showTy (accType a) ++ show c ++ show e ++ show p
-    accKey (Backpermute p _ a) = chr 139 : showTy (accType a) ++ show p
-    accKey _ =
-      error "we should never get here"
+accToKey :: OpenAcc aenv a -> Key
+accToKey (Unit e)            = chr 2   : showTy (expType e) ++ show e
+accToKey (Reshape _ a)       = chr 7   : showTy (accType a)
+accToKey (Replicate _ e a)   = chr 17  : showTy (accType a) ++ show e
+accToKey (Index _ a e)       = chr 29  : showTy (accType a) ++ show e
+accToKey (Map f a)           = chr 41  : showTy (accType a) ++ show f
+accToKey (ZipWith f x y)     = chr 53  : showTy (accType x) ++ showTy (accType y) ++ show f
+accToKey (Fold f e a)        = chr 67  : showTy (accType a) ++ show f ++ show e
+accToKey (FoldSeg f e _ a)   = chr 79  : showTy (accType a) ++ show f ++ show e
+accToKey (Scanl f e a)       = chr 97  : showTy (accType a) ++ show f ++ show e
+accToKey (Scanr f e a)       = chr 107 : showTy (accType a) ++ show f ++ show e
+accToKey (Permute c e p a)   = chr 127 : showTy (accType a) ++ show c ++ show e ++ show p
+accToKey (Backpermute p _ a) = chr 139 : showTy (accType a) ++ show p
+accToKey _ =
+  error "we should never get here"
 
-    showTy :: TupleType a -> String
-    showTy UnitTuple = []
-    showTy (SingleTuple ty) = show ty
-    showTy (PairTuple a b)  = showTy a ++ showTy b
+showTy :: TupleType a -> String
+showTy UnitTuple = []
+showTy (SingleTuple ty) = show ty
+showTy (PairTuple a b)  = showTy a ++ showTy b
 
-
+{-
 -- hash function from the dragon book pp437; assumes 7 bit characters and needs
 -- the (nearly) full range of values guaranteed for `Int' by the Haskell
 -- language definition; can handle 8 bit characters provided we have 29 bit for
@@ -90,14 +86,14 @@ bits7  = 2^(7 ::Int)
 bits14 = 2^(14::Int)
 bits21 = 2^(21::Int)
 bits28 = 2^(28::Int)
-
+-}
 
 -- | Generate and compile code for an array expression
 --
 compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   let key = accToKey acc
-  compiled <- IM.member key <$> getM kernelEntry
+  compiled <- M.member key <$> getM kernelEntry
   when (not compiled) $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- liftIO outputDir
@@ -107,7 +103,7 @@ compile acc = do
                 writeCode cufile $ codeGenAcc acc
                 forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
-    modM kernelEntry $ IM.insert key (KernelEntry cufile (Left pid))
+    modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file, exporting C symbols
