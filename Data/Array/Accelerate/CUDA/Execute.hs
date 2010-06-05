@@ -40,29 +40,64 @@ import Data.Array.Accelerate.CUDA.Analysis.Launch
 import qualified Foreign.CUDA.Driver                    as CUDA
 
 
+-- Environments
+-- ~~~~~~~~~~~~
+
+-- Valuation for an environment
+--
+data Val env where
+  Empty :: Val ()
+  Push  :: Val env -> t -> Val (env, t)
+
+-- Projection of a value from a valuation using a de Bruijn index
+--
+prj :: Idx env t -> Val env -> t
+prj ZeroIdx       (Push _   v) = v
+prj (SuccIdx idx) (Push val _) = prj idx val
+prj _             _            =
+  error "Data.Array.Accelerate.CUDA: prj: inconsistent valuation"
+
+
+-- Array expression evaluation
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-- |
+-- Evaluate a closed array expression
+--
+execute :: Acc a -> CIO a
+execute acc = executeOpenAcc acc Empty
+
 -- |
 -- Execute an embedded array program using the CUDA backend. The function will
 -- block if the compilation has not yet completed, but subsequent invocations of
 -- the same kernel will be able to extract the loaded kernel directly.
 --
-execute :: OpenAcc aenv a -> CIO a
-execute (Let  x y) = execute x >> execute y
-execute (Let2 x y) = execute x >> execute y
-execute (Avar _)   = error "execute: avar"
-execute (Unit _)   = error "execute: unit"
-execute (Use xs)   = return xs
+executeOpenAcc :: OpenAcc aenv a -> Val aenv -> CIO a
+executeOpenAcc (Let  x y) env = do
+  ax <- executeOpenAcc x env
+  executeOpenAcc y (env `Push` ax)
 
-execute acc = do
+executeOpenAcc (Let2 x y) env = do
+  (ax1,ax2) <- executeOpenAcc x env
+  executeOpenAcc y (env `Push` ax1 `Push` ax2)
+
+executeOpenAcc (Avar ix)  env = return $ prj ix env
+executeOpenAcc (Unit _)  _env = error "executeOpenAcc: unit"
+executeOpenAcc (Use xs)  _env = return xs
+
+executeOpenAcc acc env = do
   krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
     mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
     modM kernelEntry $ M.insert key  (set kernelStatus (Right mdl) krn)
     return mdl
+    --
+    -- TLM 2010-06-02: delete the temporary files??
 
   -- determine dispatch pattern, extract parameters, allocate storage, run
   --
-  dispatch acc mdl
+  dispatch acc env mdl
 
   where
     key           = accToKey acc
@@ -71,10 +106,10 @@ execute acc = do
 
 -- Setup and initiate the computation. This may require several kernel launches.
 --
-dispatch :: OpenAcc aenv a -> CUDA.Module -> CIO a
-dispatch acc@(Map _ ad) mdl = do
+dispatch :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
+dispatch acc@(Map _ ad) env mdl = do
   fn             <- liftIO $ CUDA.getFun mdl "map"
-  (Array sh in0) <- execute ad
+  (Array sh in0) <- executeOpenAcc ad env
   let res@(Array sh' out) = newArray (Sugar.toElem sh)
       n                   = size sh'
 
@@ -86,10 +121,10 @@ dispatch acc@(Map _ ad) mdl = do
   free   in0
   return res
 
-dispatch acc@(ZipWith _ ad0 ad1) mdl = do
+dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "zipWith"
-  (Array sh0 in0) <- execute ad0
-  (Array sh1 in1) <- execute ad1
+  (Array sh0 in0) <- executeOpenAcc ad0 env
+  (Array sh1 in1) <- executeOpenAcc ad1 env
   let res@(Array sh' out) = newArray (Sugar.toElem (sh0 `intersect` sh1))
       n    = size sh'
 
@@ -103,9 +138,9 @@ dispatch acc@(ZipWith _ ad0 ad1) mdl = do
   free   in1
   return res
 
-dispatch acc@(Fold _ x ad) mdl = do
+dispatch acc@(Fold _ x ad) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "fold"
-  (Array sh in0)  <- execute ad
+  (Array sh in0)  <- executeOpenAcc ad env
   (cta,grid,smem) <- launchConfig acc fn
   let res@(Array _ out) = newArray grid
 
@@ -115,13 +150,13 @@ dispatch acc@(Fold _ x ad) mdl = do
 
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ [CUDA.IArg (size sh)])
   free in0
-  if grid > 1 then dispatch (Fold undefined x (Use res)) mdl
+  if grid > 1 then dispatch (Fold undefined x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
-dispatch acc@(Scanl _ x ad) mdl = do
+dispatch acc@(Scanl _ x ad) env mdl = do
   fscan           <- liftIO $ CUDA.getFun mdl "scanl"
   fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
-  (Array sh in0)  <- execute ad
+  (Array sh in0)  <- executeOpenAcc ad env
   (cta,grid,smem) <- launchConfig acc fscan
   let res@(Array _ out)  = newArray (Sugar.toElem sh)
       bks@(Array _ sums) = newArray grid
@@ -143,7 +178,7 @@ dispatch acc@(Scanl _ x ad) mdl = do
   -- give a new value that must be added to each block to get the final result
   --
   when (grid > 1) $ do
-    (Array _ sums') <- fst <$> dispatch (Scanl undefined x (Use bks)) mdl
+    (Array _ sums') <- fst <$> dispatch (Scanl undefined x (Use bks)) env mdl
     d_bks'          <- devicePtrs sums'
     launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
 
@@ -151,6 +186,10 @@ dispatch acc@(Scanl _ x ad) mdl = do
   -- be useful, but might require additional code generation in earlier phases
   --
   return (res, undefined)
+
+dispatch _ _ _ =
+  error "Data.Array.Accelerate.CUDA: dispatch: internal error"
+
 
 
 -- Initiate the device computation. The first version selects launch parameters

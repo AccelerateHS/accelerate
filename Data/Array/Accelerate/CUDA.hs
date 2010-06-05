@@ -19,7 +19,6 @@ module Data.Array.Accelerate.CUDA (
   ) where
 
 import Control.Exception
-import Control.Applicative
 import Control.Monad.State
 import Data.Maybe					(fromMaybe)
 
@@ -47,10 +46,8 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 -- Compiles and runs a complete embedded array program using the CUDA backend
 --
 run :: Arrays a => Sugar.Acc a -> IO a
-run acc =
-  let ast = Sugar.convertAcc acc
-  in  evalCUDA $
-        generate ast >> execute ast >>= collect ast
+run acc = evalCUDA
+        $ executeAcc (Sugar.convertAcc acc) >>= collect
 
 
 -- Initialisation
@@ -71,9 +68,11 @@ runCUDA acc =
   bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
     props <- CUDA.props dev
     runStateT acc (CUDAState 0 props IM.empty M.empty)
+    --
+    -- TLM 2010-06-05: assert all memory has been released ??
 
   where
-    finalise     = CUDA.destroy . snd
+    finalise     = CUDA.destroy . snd   -- TLM 2010-06-05: does this release all memory?
     initialise n = do
       CUDA.initialise []
       dev <- CUDA.device (fromMaybe 0 n)
@@ -85,53 +84,33 @@ runCUDA acc =
 -- ~~~~~~~~~~
 --
 
+executeAcc :: Arrays a => Acc a -> CIO a
+executeAcc acc = prepare acc >> execute acc
+
 -- Traverse the array expression in depth-first order, initiating asynchronous
 -- code generation and data transfer.
 --
-generate :: OpenAcc aenv a -> CIO ()
-generate (Use (Array sh ad)) =
+prepare :: OpenAcc aenv a -> CIO ()
+prepare (Use (Array sh ad)) =
   let n = size sh
   in do
     mallocArray    ad n
     pokeArrayAsync ad n Nothing
 
-generate (Let  xs ys)   = generate xs >> generate ys
-generate (Let2 xs ys)   = generate xs >> generate ys
-generate (Avar _)       = return ()		-- TLM: ??
-generate (Unit _)       = return ()      	-- TLM: ??
-generate (Reshape _ xs) = generate xs		-- TLM: ??
-generate (Index _ xs _) = generate xs     	-- TLM: ??
+prepare (Let  xs ys)   = prepare xs >> prepare ys
+prepare (Let2 xs ys)   = prepare xs >> prepare ys
+prepare (Avar _)       = return ()		-- TLM: ??
+prepare (Unit _)       = return ()      	-- TLM: ??
+prepare (Reshape _ xs) = prepare xs		-- TLM: ??
+prepare (Index _ xs _) = prepare xs     	-- TLM: ??
 
-generate acc@(Replicate _ _ xs)   = generate xs >> compile acc
-generate acc@(Map _ xs)           = generate xs >> compile acc
-generate acc@(ZipWith _ xs ys)    = generate xs >> generate ys >> compile acc
-generate acc@(Fold _ _ xs)        = generate xs >> compile acc
-generate acc@(FoldSeg _ _ xs ys)  = generate xs >> generate ys >> compile acc
-generate acc@(Scanl _ _ xs)       = generate xs >> compile acc
-generate acc@(Scanr _ _ xs)       = generate xs >> compile acc
-generate acc@(Permute _ xs _ ys)  = generate xs >> generate ys >> compile acc
-generate acc@(Backpermute _ _ xs) = generate xs >> compile acc
-
-
--- |
--- Collect the result of an array computation
---
-collect :: OpenAcc aenv a -> a -> CIO a
-collect (Replicate _ _ _)   = getArr
-collect (Map _ _)           = getArr
-collect (ZipWith _ _ _)     = getArr
-collect (Fold _ _ _)        = getArr
-collect (FoldSeg _ _ _ _)   = getArr
-collect (Scanl _ _ _)       = getArr2
-collect (Scanr _ _ _)       = getArr2
-collect (Permute _ _ _ _)   = getArr
-collect (Backpermute _ _ _) = getArr
-collect _ = error "Data.Array.Accelerate.CUDA: internal error"
-
-
-getArr :: Array dim e -> CIO (Array dim e)
-getArr arr@(Array sh ad) = peekArray ad (size sh) >> free ad >> return arr
-
-getArr2 :: (Array dim1 e1, Array dim2 e2) -> CIO (Array dim1 e1, Array dim2 e2)
-getArr2 (a1,a2) = (,) <$> getArr a1 <*> getArr a2
+prepare acc@(Replicate _ _ xs)   = prepare xs >> compile acc
+prepare acc@(Map _ xs)           = prepare xs >> compile acc
+prepare acc@(ZipWith _ xs ys)    = prepare xs >> prepare ys >> compile acc
+prepare acc@(Fold _ _ xs)        = prepare xs >> compile acc
+prepare acc@(FoldSeg _ _ xs ys)  = prepare xs >> prepare ys >> compile acc
+prepare acc@(Scanl _ _ xs)       = prepare xs >> compile acc
+prepare acc@(Scanr _ _ xs)       = prepare xs >> compile acc
+prepare acc@(Permute _ xs _ ys)  = prepare xs >> prepare ys >> compile acc
+prepare acc@(Backpermute _ _ xs) = prepare xs >> compile acc
 
