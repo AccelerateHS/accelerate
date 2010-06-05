@@ -41,6 +41,7 @@ Library
   Build-depends:        array, 
                         base == 4.*, 
                         ghc-prim, 
+                        haskell98,
                         pretty
   If flag(llvm)
     Build-depends:      llvm >= 0.6.8
