@@ -1,5 +1,4 @@
 {-# LANGUAGE TypeFamilies #-}
-
 -- |
 -- Module      : Data.Array.Accelerate.CUDA
 -- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -21,8 +20,8 @@ import Control.Applicative
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Array.Data
-import Data.Array.Accelerate.Array.Sugar		(Array(..))
 import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar (Array(..))
 
 
 -- |

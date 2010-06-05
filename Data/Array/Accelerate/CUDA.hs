@@ -98,10 +98,10 @@ prepare (Use (Array sh ad)) =
 
 prepare (Let  xs ys)   = prepare xs >> prepare ys
 prepare (Let2 xs ys)   = prepare xs >> prepare ys
-prepare (Avar _)       = return ()		-- TLM: ??
-prepare (Unit _)       = return ()      	-- TLM: ??
-prepare (Reshape _ xs) = prepare xs		-- TLM: ??
-prepare (Index _ xs _) = prepare xs     	-- TLM: ??
+prepare (Avar _)       = return ()              -- TLM: ??
+prepare (Unit _)       = return ()              -- TLM: ??
+prepare (Reshape _ xs) = prepare xs             -- TLM: ??
+prepare (Index _ xs _) = prepare xs             -- TLM: ??
 
 prepare acc@(Replicate _ _ xs)   = prepare xs >> compile acc
 prepare acc@(Map _ xs)           = prepare xs >> compile acc
