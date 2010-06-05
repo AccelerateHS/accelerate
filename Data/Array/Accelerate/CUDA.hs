@@ -35,22 +35,13 @@ import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Execute
 import Data.Array.Accelerate.CUDA.Array.Data
+import Data.Array.Accelerate.CUDA.Array.Device
 
 import qualified Foreign.CUDA.Driver                    as CUDA
 
 
 -- Accelerate: CUDA
 -- ~~~~~~~~~~~~~~~~
-
--- |
--- Characterises the types that may be returned when executing an array program
---
-class Arrays as where
-
-instance Arrays ()
-instance Arrays (Array dim e)
-instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
-
 
 -- |
 -- Compiles and runs a complete embedded array program using the CUDA backend
