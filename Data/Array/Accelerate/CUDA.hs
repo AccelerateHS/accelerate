@@ -21,8 +21,6 @@ module Data.Array.Accelerate.CUDA (
 import Control.Exception
 import Control.Monad.State
 import Data.Maybe					(fromMaybe)
-
-import qualified Data.Map       			as M  (empty)
 import qualified Data.IntMap    			as IM (empty)
 
 import Data.Array.Accelerate.AST
@@ -67,7 +65,7 @@ runCUDA :: CIO a -> IO (a, CUDAState)
 runCUDA acc =
   bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
     props <- CUDA.props dev
-    runStateT acc (CUDAState 0 props IM.empty M.empty)
+    runStateT acc (CUDAState 0 props IM.empty IM.empty)
     --
     -- TLM 2010-06-05: assert all memory has been released ??
 

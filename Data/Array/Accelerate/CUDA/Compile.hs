@@ -12,9 +12,11 @@
 module Data.Array.Accelerate.CUDA.Compile (accToKey, compile)
   where
 
-import Prelude hiding (id, (.), mod)
+import Prelude   hiding (id, (.), mod)
+import qualified Prelude
 import Control.Category
 
+import Data.Char
 import Data.Maybe
 import Control.Monad
 import Control.Applicative
@@ -22,7 +24,7 @@ import Control.Monad.IO.Class
 import Control.Exception.Extensible
 import Language.C
 import Text.PrettyPrint
-import qualified Data.Map                               as M
+import qualified Data.IntMap                            as IM
 
 import System.Directory
 import System.FilePath
@@ -30,33 +32,64 @@ import System.Posix.Process
 import System.IO
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
 
 import Foreign.CUDA.Analysis.Device
 
 
--- | Generate a unique key for each kernel computation
+-- |
+-- Generate a unique key for each kernel computation (not extensively tested...)
 --
-accToKey :: OpenAcc aenv a -> Key
---accToKey (Let  _ _)          = 0
---accToKey (Let2 _ _)          = 1
---accToKey (Avar _)            = 2
---accToKey (Use  _)            = 3
---accToKey (Unit _)            = 4
---accToKey (Reshape _ _)       = 5
-accToKey (Replicate _ e _)   = (6,  show e)
---accToKey (Index _ _ _)       = 7
-accToKey (Map f _)           = (8,  show f)
-accToKey (ZipWith f _ _)     = (9,  show f)
-accToKey (Fold f e _)        = (10, show f ++ show e)
-accToKey (FoldSeg f e _ _)   = (11, show f ++ show e)
-accToKey (Scanl f e _)       = (12, show f ++ show e)
-accToKey (Scanr f e _)       = (13, show f ++ show e)
-accToKey (Permute c e p _)   = (14, show c ++ show e ++ show p)
-accToKey (Backpermute p _ _) = (15, show p)
+accToKey :: OpenAcc aenv a -> Int
+accToKey = quad . accKey
+  where
+    accKey :: OpenAcc aenv a -> String
+    accKey (Unit e)            = chr 2   : showTy (expType e) ++ show e
+    accKey (Reshape _ a)       = chr 7   : showTy (accType a)
+    accKey (Replicate _ e a)   = chr 17  : showTy (accType a) ++ show e
+    accKey (Index _ a e)       = chr 29  : showTy (accType a) ++ show e
+    accKey (Map f a)           = chr 41  : showTy (accType a) ++ show f
+    accKey (ZipWith f x y)     = chr 53  : showTy (accType x) ++ showTy (accType y) ++ show f
+    accKey (Fold f e a)        = chr 67  : showTy (accType a) ++ show f ++ show e
+    accKey (FoldSeg f e _ a)   = chr 79  : showTy (accType a) ++ show f ++ show e
+    accKey (Scanl f e a)       = chr 97  : showTy (accType a) ++ show f ++ show e
+    accKey (Scanr f e a)       = chr 107 : showTy (accType a) ++ show f ++ show e
+    accKey (Permute c e p a)   = chr 127 : showTy (accType a) ++ show c ++ show e ++ show p
+    accKey (Backpermute p _ a) = chr 139 : showTy (accType a) ++ show p
+    accKey _ =
+      error "we should never get here"
 
-accToKey _ = error "Data.Array.Accelerate.CUDA.accToKey: internal error"
+    showTy :: TupleType a -> String
+    showTy UnitTuple = []
+    showTy (SingleTuple ty) = show ty
+    showTy (PairTuple a b)  = showTy a ++ showTy b
+
+
+-- hash function from the dragon book pp437; assumes 7 bit characters and needs
+-- the (nearly) full range of values guaranteed for `Int' by the Haskell
+-- language definition; can handle 8 bit characters provided we have 29 bit for
+-- the `Int's without sign
+--
+quad :: String -> Int
+quad (c1:c2:c3:c4:s)  = (( ord c4 * bits21
+                         + ord c3 * bits14
+                         + ord c2 * bits7
+                         + ord c1)
+                         `Prelude.mod` bits28)
+                        + (quad s `Prelude.mod` bits28)
+quad (c1:c2:c3:[]  )  = ord c3 * bits14 + ord c2 * bits7 + ord c1
+quad (c1:c2:[]     )  = ord c2 * bits7 + ord c1
+quad (c1:[]        )  = ord c1
+quad ([]           )  = 0
+
+bits7, bits14, bits21, bits28 :: Int
+bits7  = 2^(7 ::Int)
+bits14 = 2^(14::Int)
+bits21 = 2^(21::Int)
+bits28 = 2^(28::Int)
 
 
 -- | Generate and compile code for an array expression
@@ -64,7 +97,7 @@ accToKey _ = error "Data.Array.Accelerate.CUDA.accToKey: internal error"
 compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   let key = accToKey acc
-  compiled <- M.member key <$> getM kernelEntry
+  compiled <- IM.member key <$> getM kernelEntry
   when (not compiled) $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- liftIO outputDir
@@ -74,7 +107,7 @@ compile acc = do
                 writeCode cufile $ codeGenAcc acc
                 forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
 
-    modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
+    modM kernelEntry $ IM.insert key (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file, exporting C symbols

@@ -19,7 +19,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
-import qualified Data.Map                               as M
+import qualified Data.IntMap                            as IM
 
 import System.FilePath
 import System.Posix.Process
@@ -86,11 +86,11 @@ executeOpenAcc (Unit _)  _env = error "executeOpenAcc: unit"
 executeOpenAcc (Use xs)  _env = return xs
 
 executeOpenAcc acc env = do
-  krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
+  krn <- fromMaybe (error "code generation failed") . IM.lookup key <$> getM kernelEntry
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
     mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
-    modM kernelEntry $ M.insert key  (set kernelStatus (Right mdl) krn)
+    modM kernelEntry $ IM.insert key (set kernelStatus (Right mdl) krn)
     return mdl
     --
     -- TLM 2010-06-02: delete the temporary files??
