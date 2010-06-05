@@ -51,7 +51,6 @@ Library
                         bytestring,
                         containers,
                         directory,
-                        extensible-exceptions,
                         fclabels,
                         filepath,
                         language-c,

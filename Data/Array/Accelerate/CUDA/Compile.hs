@@ -19,9 +19,9 @@ import Control.Category
 import Data.Char
 import Data.Maybe
 import Control.Monad
-import Control.Applicative
 import Control.Monad.IO.Class
-import Control.Exception.Extensible
+import Control.Exception
+import Control.Applicative
 import Language.C
 import Text.PrettyPrint
 import qualified Data.IntMap                            as IM
