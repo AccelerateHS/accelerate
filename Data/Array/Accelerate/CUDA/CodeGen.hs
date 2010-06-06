@@ -45,8 +45,8 @@ codeGenAcc op@(AST.ZipWith fn xs ys) = mkZipWith   "zipWith"   (codeGenAccType o
 --codeGenAcc (AST.Replicate _ _ xs)    = mkReplicate "replicate"
 codeGenAcc (AST.Fold fn e _)         = mkFold      "fold"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
 --codeGenAcc (AST.FoldSeg fn e xs s)   = mkFoldSeg   "foldSeg"
-codeGenAcc (AST.Scanl fn e _)        = mkScanl     "scanl"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Scanr fn e _)        = mkScanr     "scanr"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scanl fn e _)        = mkScanl     "scan"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scanr fn e _)        = mkScanr     "scan"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
 --codeGenAcc (AST.Permute cf ds pf xs) = mkPermute   "permute"
 --codeGenAcc (AST.Backpermute _ fn xs) = mkBackpermute "backpermute"
 
