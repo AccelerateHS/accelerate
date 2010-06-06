@@ -185,6 +185,39 @@ dispatch acc@(Scanl _ x ad) env mdl = do
        free sum'
        return (arr,r)
 
+dispatch acc@(Scanr _ x ad) env mdl = do
+  fscan           <- liftIO $ CUDA.getFun mdl "scanr"
+  fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
+  (Array sh in0)  <- executeOpenAcc ad env
+  (cta,grid,smem) <- launchConfig acc fscan
+  let arr@(Array _ out) = newArray (Sugar.toElem sh)
+      bks@(Array _ sum) = newArray grid
+      n                 = size sh
+
+  mallocArray out (size sh)
+  mallocArray sum grid
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  d_bks <- devicePtrs sum
+
+  -- Single row, multi-block, non-full block scan
+  --
+  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ map CUDA.IArg [n,1,1])
+  free in0
+
+  -- Now, take the last value of all of the sub-blocks and scan those. This will
+  -- give a new value that must be added to each block to get the final result
+  --
+  if grid <= 1
+     then return (arr, Array () sum)
+     else do
+       (Array _ sum', r) <- dispatch (Scanr undefined x (Use bks)) env mdl
+       d_bks'            <- devicePtrs sum'
+
+       launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
+       free sum'
+       return (arr,r)
+
 
 dispatch _ _ _ =
   error "Data.Array.Accelerate.CUDA: dispatch: internal error"
