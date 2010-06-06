@@ -589,6 +589,7 @@ __device__ void scanWarps(T x, T y,
 */
 __device__ void scanCTA(T            *s_data,
                         T            *d_blockSums,
+                        unsigned int numElements,
                         unsigned int blockSumIndex)
 {
     T val  = s_data[threadIdx.x];
@@ -598,9 +599,15 @@ __device__ void scanCTA(T            *s_data,
     scanWarps(val, val2, s_data);
     __syncthreads();
 
-    if (IS_MULTIBLOCK && threadIdx.x == blockDim.x - 1)
+    if (IS_MULTIBLOCK)
     {
-        d_blockSums[blockSumIndex] = apply(val2, s_data[threadIdx.x + blockDim.x]);
+        // TLM: added second conditional and introduction of numElements
+        // parameter to support Accelerate's return of the reduction value with
+        // the inclusive scan result
+        if (threadIdx.x == blockDim.x - 1 || threadIdx.x == numElements - 1)
+        {
+            d_blockSums[blockSumIndex] = apply(val2, s_data[threadIdx.x + blockDim.x]);
+        }
     }
 
 

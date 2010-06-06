@@ -12,11 +12,10 @@
 module Data.Array.Accelerate.CUDA.Execute (execute)
   where
 
-import Prelude hiding (id, (.), mod)
+import Prelude hiding (id, (.), mod, sum)
 import Control.Category
 
 import Data.Maybe
-import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
 import qualified Data.Map                               as M
@@ -158,34 +157,34 @@ dispatch acc@(Scanl _ x ad) env mdl = do
   fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
   (Array sh in0)  <- executeOpenAcc ad env
   (cta,grid,smem) <- launchConfig acc fscan
-  let res@(Array _ out)  = newArray (Sugar.toElem sh)
-      bks@(Array _ sums) = newArray grid
-      n                  = size sh
+  let arr@(Array _ out) = newArray (Sugar.toElem sh)
+      bks@(Array _ sum) = newArray grid
+      n                 = size sh
 
   mallocArray out (size sh)
-  mallocArray sums grid
+  mallocArray sum grid
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
-  d_bks <- devicePtrs sums
+  d_bks <- devicePtrs sum
 
   -- Single row, multi-block, non-full block scan
   --
   launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ map CUDA.IArg [n,1,1])
   free in0
-  free sums
 
   -- Now, take the last value of all of the sub-blocks and scan those. This will
   -- give a new value that must be added to each block to get the final result
   --
-  when (grid > 1) $ do
-    (Array _ sums') <- fst <$> dispatch (Scanl undefined x (Use bks)) env mdl
-    d_bks'          <- devicePtrs sums'
-    launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
+  if grid <= 1
+     then return (arr, Array () sum)
+     else do
+       (Array _ sum', r) <- dispatch (Scanl undefined x (Use bks)) env mdl
+       d_bks'            <- devicePtrs sum'
 
-  -- What to do about the reduction parameter? Seems like the block sums could
-  -- be useful, but might require additional code generation in earlier phases
-  --
-  return (res, undefined)
+       launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
+       free sum'
+       return (arr,r)
+
 
 dispatch _ _ _ =
   error "Data.Array.Accelerate.CUDA: dispatch: internal error"

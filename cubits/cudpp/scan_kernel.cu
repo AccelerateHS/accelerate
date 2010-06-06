@@ -98,7 +98,7 @@ __global__ void scan4(T            *d_out,
         (temp, threadScan0, threadScan1, d_in,
          blockN, devOffset, &ai, &bi, &aiDev, &biDev);
 
-    scanCTA(temp, d_blockSums, blockSumIndex);
+    scanCTA(temp, d_blockSums, blockN, blockSumIndex);
 
     // write results to device memory
     storeSharedChunkToMem4
