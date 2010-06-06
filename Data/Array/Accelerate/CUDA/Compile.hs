@@ -98,10 +98,10 @@ compile acc = do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- liftIO outputDir
     cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
-    flags  <- compileFlags nvcc
+    flags  <- compileFlags cufile
     pid    <- liftIO . withFilePath dir $ do
                 writeCode cufile $ codeGenAcc acc
-                forkProcess      $ executeFile nvcc False (takeFileName cufile : flags) Nothing
+                forkProcess      $ executeFile nvcc False flags Nothing
 
     modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
 
@@ -134,16 +134,14 @@ printDoc m hdl doc = do
 
 -- Determine the appropriate command line flags to pass to the compiler process
 --
--- TLM: the system include is probably automatic?
---
 compileFlags :: FilePath -> CIO [String]
-compileFlags nvcc = do
+compileFlags cufile = do
   arch <- computeCapability <$> getM deviceProps
-  return [ "-I.", "-I" ++ dropFileName nvcc </> ".." </> "include"
-         , "-O3", "-m32", "--compiler-options", "-fno-strict-aliasing"
+  return [ "-O3", "-m32", "--compiler-options", "-fno-strict-aliasing"
          , "-arch=sm_" ++ show (round (arch * 10) :: Int)
          , "-DUNIX"
-         , "-cubin" ]
+         , "-cubin"
+         , takeFileName cufile ]
 
 
 -- Execute the IO action under the given directory
