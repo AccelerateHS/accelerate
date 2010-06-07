@@ -17,8 +17,6 @@ import Control.Monad.IO.Class
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Analysis.Type
-import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar                (Array(..))
 
 import Data.Array.Accelerate.CUDA.State
 import qualified Foreign.CUDA.Analysis                  as CUDA
@@ -38,11 +36,11 @@ import Foreign.Storable
 --
 -- TLM: this could probably be stored in the KernelEntry
 --
-launchConfig :: OpenAcc aenv a -> CUDA.Fun -> CIO (Int, Int, Integer)
-launchConfig acc@(Scanl _ _ _) _ = return (128, gridSize acc 128, toInteger (sharedMem acc 128))
-launchConfig acc@(Scanr _ _ _) _ = return (128, gridSize acc 128, toInteger (sharedMem acc 128))
+launchConfig :: OpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
+launchConfig acc@(Scanl _ _ _) n _ = return (128, gridSize acc n 128, toInteger (sharedMem acc 128))
+launchConfig acc@(Scanr _ _ _) n _ = return (128, gridSize acc n 128, toInteger (sharedMem acc 128))
 
-launchConfig acc fn = do
+launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
   prop <- getM deviceProps
@@ -51,7 +49,7 @@ launchConfig acc fn = do
       (cta, occ) = CUDA.optimalBlockSize prop (const regs) ((stat+) . dyn)
       mbk        = CUDA.multiProcessorCount prop * CUDA.activeThreadBlocks occ
 
-  return (cta, mbk `min` gridSize acc cta, toInteger (dyn cta))
+  return (cta, mbk `min` gridSize acc n cta, toInteger (dyn cta))
 
 
 -- |
@@ -59,18 +57,10 @@ launchConfig acc fn = do
 -- given array expression. This should understand things like #elements per
 -- thread for the various kernels.
 --
-gridSize :: OpenAcc aenv a -> Int -> Int
-gridSize acc cta =
+gridSize :: OpenAcc aenv a -> Int -> Int -> Int
+gridSize acc size cta =
   let between arr n = (n+arr-1) `div` n
-  in  1 `max` ((cta - 1 + (arraySize acc `between` elementsPerThread acc)) `div` cta)
-
-arraySize :: OpenAcc aenv a -> Int
-arraySize (Use (Array sh _)) = size sh
-arraySize (Map _ xs)         = arraySize xs
-arraySize (ZipWith _ xs ys)  = arraySize xs `min` arraySize ys   -- TLM: intersect??
-arraySize (Fold  _ _ xs)     = arraySize xs
-arraySize (Scanl _ _ xs)     = arraySize xs
-arraySize (Scanr _ _ xs)     = arraySize xs
+  in  1 `max` ((cta - 1 + (size `between` elementsPerThread acc)) `div` cta)
 
 elementsPerThread :: OpenAcc aenv a -> Int
 elementsPerThread (Scanl _ _ _) = 8
@@ -83,12 +73,11 @@ elementsPerThread _             = 1
 -- memory usage as a function of thread block size. This can be used by the
 -- occupancy calculator to optimise kernel launch shape.
 --
-sharedMem :: forall aenv a. OpenAcc aenv a -> Int -> Int
-sharedMem (Map _ _)       _ = 0
-sharedMem (ZipWith _ _ _) _ = 0
+sharedMem :: OpenAcc aenv a -> Int -> Int
 sharedMem (Fold  _ x _)   t = sizeOfElem (expType x) * t
 sharedMem (Scanl _ x _)   t = sizeOfElem (expType x) * t * 2
 sharedMem (Scanr _ x _)   t = sizeOfElem (expType x) * t * 2
+sharedMem _               _ = 0
 
 
 sizeOfElem :: TupleType a -> Int

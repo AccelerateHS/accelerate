@@ -116,7 +116,7 @@ dispatch acc@(Map _ ad) env mdl = do
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
 
-  launch acc fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
   free   in0
   return res
 
@@ -132,7 +132,7 @@ dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
   d_in0 <- devicePtrs in0
   d_in1 <- devicePtrs in1
 
-  launch acc fn (d_out ++ d_in0 ++ d_in1 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ d_in1 ++ [CUDA.IArg n])
   free   in0
   free   in1
   return res
@@ -140,7 +140,7 @@ dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
 dispatch acc@(Fold _ x ad) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "fold"
   (Array sh in0)  <- executeOpenAcc ad env
-  (cta,grid,smem) <- launchConfig acc fn
+  (cta,grid,smem) <- launchConfig acc (size sh) fn
   let res@(Array _ out) = newArray grid
 
   mallocArray out grid
@@ -169,7 +169,7 @@ dispatchScan acc@(Scanl _ x ad) env mdl = do
   fscan           <- liftIO $ CUDA.getFun mdl "scan"
   fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
   (Array sh in0)  <- executeOpenAcc ad env
-  (cta,grid,smem) <- launchConfig acc fscan
+  (cta,grid,smem) <- launchConfig acc (size sh) fscan
   let arr@(Array _ out) = newArray (Sugar.toElem sh)
       bks@(Array _ sum) = newArray grid
       n                 = size sh
@@ -206,9 +206,9 @@ dispatchScan _ _ _ =
 -- automatically, the second requires them explicitly. This tuple contains
 -- threads per block, grid size, and dynamic shared memory, respectively.
 --
-launch :: OpenAcc aenv a -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
-launch acc fn args =
-  launchConfig acc fn >>= \cfg ->
+launch :: OpenAcc aenv a -> Int -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
+launch acc n fn args =
+  launchConfig acc n fn >>= \cfg ->
   launch' cfg fn args
 
 launch' :: (Int,Int,Integer) -> CUDA.Fun -> [CUDA.FunParam] -> CIO ()
