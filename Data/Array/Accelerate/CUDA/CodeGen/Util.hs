@@ -59,7 +59,7 @@ mkTyVector var n ty =
       (Just (CDeclr (Just (internalIdent [f])) [] Nothing [] internalNode), Nothing, Nothing)
 
 --
--- static __attribute__((device)) TyOut identity()
+-- __attribute__((device)) static TyOut identity()
 -- {
 --   return expr;
 -- }
@@ -68,7 +68,7 @@ mkIdentity :: CExpr -> CExtDecl
 mkIdentity = mkDeviceFun "identity" 0
 
 --
--- static __attribute__((device)) TyOut apply(TyIn0 x0, TyIn1 x1 ..)
+-- __attribute__((device)) static TyOut apply(TyIn0 x0, TyIn1 x1 ..)
 -- {
 --   return expr;
 -- }

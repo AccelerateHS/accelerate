@@ -9,7 +9,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Execute (execute)
+module Data.Array.Accelerate.CUDA.Execute (executeAcc)
   where
 
 import Prelude hiding (id, (.), mod, sum)
@@ -63,8 +63,8 @@ prj _             _            =
 -- |
 -- Evaluate a closed array expression
 --
-execute :: Acc a -> CIO a
-execute acc = executeOpenAcc acc Empty
+executeAcc :: Acc a -> CIO a
+executeAcc acc = executeOpenAcc acc Empty
 
 -- |
 -- Execute an embedded array program using the CUDA backend. The function will

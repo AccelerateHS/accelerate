@@ -94,7 +94,7 @@ compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   let key = accToKey acc
   compiled <- M.member key <$> getM kernelEntry
-  when (not compiled) $ do
+  unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- liftIO outputDir
     cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!

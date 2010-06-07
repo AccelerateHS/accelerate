@@ -36,8 +36,7 @@ idxToInt AST.ZeroIdx       = 0
 idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 
 
--- |
--- Generate CUDA device code for an array expression
+-- | Generate CUDA device code for an array expression
 --
 codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
 codeGenAcc op@(AST.Map fn xs)        = mkMap       "map"       (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)

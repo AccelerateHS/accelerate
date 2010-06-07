@@ -41,21 +41,19 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 -- Accelerate: CUDA
 -- ~~~~~~~~~~~~~~~~
 
--- |
--- Compiles and runs a complete embedded array program using the CUDA backend
+-- | Compiles and runs a complete embedded array program using the CUDA backend
 --
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc = evalCUDA
-        $ executeAcc (Sugar.convertAcc acc) >>= collect
+        $ execute (Sugar.convertAcc acc) >>= collect
 
 
 -- Initialisation
 -- ~~~~~~~~~~~~~~
 --
 
--- |
--- Evaluate a CUDA array computation under a newly initialised environment,
--- discarding the final state.
+-- | Evaluate a CUDA array computation under a newly initialised environment,
+--   discarding the final state.
 --
 evalCUDA :: CIO a -> IO a
 evalCUDA =  liftM fst . runCUDA
@@ -83,8 +81,8 @@ runCUDA acc =
 -- ~~~~~~~~~~
 --
 
-executeAcc :: Arrays a => Acc a -> CIO a
-executeAcc acc = prepare acc >> execute acc
+execute :: Arrays a => Acc a -> CIO a
+execute acc = prepare acc >> executeAcc acc
 
 -- Traverse the array expression in depth-first order, initiating asynchronous
 -- code generation and data transfer.
