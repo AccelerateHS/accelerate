@@ -18,12 +18,6 @@ module Data.Array.Accelerate.CUDA (
 
   ) where
 
-import Control.Exception
-import Control.Monad.State
-import Data.Maybe                                       (fromMaybe)
-import qualified Data.Map                               as M  (empty)
-import qualified Data.IntMap                            as IM (empty)
-
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar                (Array(..))
@@ -35,8 +29,6 @@ import Data.Array.Accelerate.CUDA.Execute
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Array.Device
 
-import qualified Foreign.CUDA.Driver                    as CUDA
-
 
 -- Accelerate: CUDA
 -- ~~~~~~~~~~~~~~~~
@@ -46,35 +38,6 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc = evalCUDA
         $ execute (Sugar.convertAcc acc) >>= collect
-
-
--- Initialisation
--- ~~~~~~~~~~~~~~
---
-
--- | Evaluate a CUDA array computation under a newly initialised environment,
---   discarding the final state.
---
-evalCUDA :: CIO a -> IO a
-evalCUDA =  liftM fst . runCUDA
-
--- TLM: Optionally choose which device to use, or select the "best"?
---
-runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc =
-  bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
-    props <- CUDA.props dev
-    runStateT acc (CUDAState 0 props IM.empty M.empty)
-    --
-    -- TLM 2010-06-05: assert all memory has been released ??
-
-  where
-    finalise     = CUDA.destroy . snd   -- TLM 2010-06-05: does this release all memory?
-    initialise n = do
-      CUDA.initialise []
-      dev <- CUDA.device (fromMaybe 0 n)
-      ctx <- CUDA.create dev [CUDA.SchedAuto]
-      return (dev, ctx)
 
 
 -- Evaluation

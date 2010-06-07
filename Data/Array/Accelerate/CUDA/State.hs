@@ -14,8 +14,7 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    CIO,
-    CUDAState(CUDAState),     unique, deviceProps, memoryEntry, kernelEntry,
+    evalCUDA, runCUDA, CIO,   unique, deviceProps, memoryEntry, kernelEntry,
     KernelEntry(KernelEntry), kernelName, kernelStatus, Key,
     MemoryEntry(MemoryEntry), refcount, arena,
 
@@ -25,21 +24,52 @@ module Data.Array.Accelerate.CUDA.State
   where
 
 import Prelude hiding (id, (.), mod)
---import Control.Category
+import Control.Category
 
+import Data.Maybe
+import Data.Record.Label
+import Control.Applicative
+import Control.Exception
+import Control.Monad.State              (StateT(..), liftM)
+import System.Posix.Types               (ProcessID)
 import Data.Map                         (Map)
 import Data.IntMap                      (IntMap)
-import System.Posix.Types               (ProcessID)
-import Control.Monad.State              (StateT)
-import Control.Applicative
-import Data.Record.Label
+import qualified Data.Map               as M  (empty)
+import qualified Data.IntMap            as IM (empty)
 
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver    as CUDA
 
 
+-- The CUDA State Monad
+-- ~~~~~~~~~~~~~~~~~~~~
+
 -- |
--- The state token for accelerated CUDA array operations
+-- Evaluate a CUDA array computation under a newly initialised environment,
+-- discarding the final state.
+--
+evalCUDA :: CIO a -> IO a
+evalCUDA =  liftM fst . runCUDA
+
+runCUDA :: CIO a -> IO (a, CUDAState)
+runCUDA acc =
+  bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
+    props <- CUDA.props dev
+    runStateT acc (CUDAState 0 props IM.empty M.empty)
+    --
+    -- TLM 2010-06-05: assert all memory has been released ??
+    --                 does CUDA.destroy release memory ??
+
+  where
+    finalise     = CUDA.destroy . snd
+    initialise n = do
+      CUDA.initialise []
+      dev <- CUDA.device (fromMaybe 0 n)        -- TLM: select the "best" device ??
+      ctx <- CUDA.create dev [CUDA.SchedAuto]
+      return (dev, ctx)
+
+
+-- | The state token for accelerated CUDA array operations
 --
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
@@ -52,9 +82,9 @@ data CUDAState = CUDAState
 
 -- |
 -- Associate an array expression with an external compilation tool (nvcc) or the
--- loaded function
+-- loaded function module
 --
-type Key = String
+type Key         = String
 data KernelEntry = KernelEntry
   {
     _kernelName   :: String,
@@ -93,8 +123,7 @@ kernelName   :: KernelEntry :-> String
 kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Module
 
 
--- |
--- A unique name supply
+-- | A unique name supply
 --
 freshVar :: CIO Int
 freshVar =  getM unique <* modM unique (+1)
