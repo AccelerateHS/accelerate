@@ -16,7 +16,7 @@ import Prelude hiding (id, (.), mod, sum)
 import Control.Category
 
 import Data.Maybe
-import Control.Applicative
+import Control.Applicative                              hiding (Const)
 import Control.Monad.IO.Class
 import qualified Data.Map                               as M
 
@@ -57,11 +57,23 @@ prj _             _            =
   error "Data.Array.Accelerate.CUDA: prj: inconsistent valuation"
 
 
--- Array expression evaluation
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Expression evaluation
+-- ~~~~~~~~~~~~~~~~~~~~~
 
--- |
--- Evaluate a closed array expression
+-- Evaluate a closed scalar expression
+--
+executeExp :: Exp aenv t -> Val aenv -> CIO t
+executeExp e aenv = executeOpenExp e Empty aenv
+
+executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
+executeOpenExp (Var idx) env _       = return . Sugar.toElem $ prj idx env
+executeOpenExp (Const c) _ _         = return $ Sugar.toElem c
+
+
+-- Array evaluation
+-- ~~~~~~~~~~~~~~~
+
+-- | Evaluate a closed array expression
 --
 executeAcc :: Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
@@ -154,6 +166,38 @@ dispatch acc@(Fold _ x ad) env mdl = do
 
 dispatch acc@(Scanl _ _ _) env mdl = dispatchScan acc env mdl
 dispatch acc@(Scanr _ _ _) env mdl = dispatchScan acc env mdl
+
+dispatch acc@(Permute _ df _ ad) env mdl = do
+  fn             <- liftIO $ CUDA.getFun mdl "permute"
+  (Array sh def) <- executeOpenAcc df env
+  (Array _  in0) <- executeOpenAcc ad env
+  let res@(Array _ out) = newArray (Sugar.toElem sh)
+      n                 = size sh
+
+  mallocArray out n
+  copyArray def out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+
+  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  free in0              -- TLM 2010-06-08: also free `def' ??
+  return res
+
+
+dispatch acc@(Backpermute e _ ad) env mdl = do
+  fn            <- liftIO $ CUDA.getFun mdl "backpermute"
+  sh            <- executeExp e env
+  (Array _ in0) <- executeOpenAcc ad env
+  let res@(Array sh' out) = newArray sh
+      n                   = size sh'
+
+  mallocArray out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+
+  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  free in0
+  return res
 
 dispatch _ _ _ =
   error "Data.Array.Accelerate.CUDA: dispatch: internal error"

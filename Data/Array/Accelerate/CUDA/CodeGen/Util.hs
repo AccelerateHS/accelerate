@@ -94,3 +94,18 @@ mkDeviceFun name argc expr =
             [(Just (CDeclr (Just (internalIdent var)) [] Nothing [] internalNode), Nothing, Nothing)]
             internalNode
 
+--
+-- __attribute__((device)) Ix project(const Ix x0)
+-- {
+--   return expr;
+-- }
+--
+mkIndexFun :: CExpr -> CExtDecl
+mkIndexFun expr =
+  CFDefExt
+    (CFunDef [CTypeQual (CAttrQual (CAttr device [] internalNode)),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)]
+             (CDeclr (Just (internalIdent "project")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "x0")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode)
+             []
+             (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode)
+             internalNode)
+

@@ -39,23 +39,23 @@ idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 -- | Generate CUDA device code for an array expression
 --
 codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
-codeGenAcc op@(AST.Map fn xs)        = mkMap       "map"       (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
-codeGenAcc op@(AST.ZipWith fn xs ys) = mkZipWith   "zipWith"   (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
---codeGenAcc (AST.Replicate _ _ xs)    = mkReplicate "replicate"
-codeGenAcc (AST.Fold fn e _)         = mkFold      "fold"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
---codeGenAcc (AST.FoldSeg fn e xs s)   = mkFoldSeg   "foldSeg"
-codeGenAcc (AST.Scanl fn e _)        = mkScanl     "scan"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Scanr fn e _)        = mkScanr     "scan"     (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
---codeGenAcc (AST.Permute cf ds pf xs) = mkPermute   "permute"
---codeGenAcc (AST.Backpermute _ fn xs) = mkBackpermute "backpermute"
+codeGenAcc op@(AST.Map fn xs)        = mkMap         "map"       (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
+codeGenAcc op@(AST.ZipWith fn xs ys) = mkZipWith     "zipWith"   (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
+--codeGenAcc (AST.Replicate _ _ xs)    = mkReplicate   "replicate"
+codeGenAcc (AST.Fold fn e _)         = mkFold        "fold"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+--codeGenAcc (AST.FoldSeg fn e xs s)   = mkFoldSeg     "foldSeg"
+codeGenAcc (AST.Scanl fn e _)        = mkScanl       "scan"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Scanr fn e _)        = mkScanr       "scan"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
+codeGenAcc (AST.Permute cf _ pf xs)  = mkPermute     "permute"   (codeGenAccType xs) (codeGenFun cf) (codeGenFun pf)
+codeGenAcc (AST.Backpermute _ fn xs) = mkBackpermute "backpermute" (codeGenAccType xs) (codeGenFun fn)
 
 codeGenAcc op =
-  error ("Data.Array.Accelerate.CUDA: interval error: " ++ show op)
+  error ("Data.Array.Accelerate.CUDA: CodeGen: " ++ show op)
 
 
 -- Scalar Functions
 -- ~~~~~~~~~~~~~~~~
---
+
 codeGenFun :: AST.OpenFun env aenv t -> CExpr
 codeGenFun (AST.Lam  lam)  = codeGenFun lam
 codeGenFun (AST.Body body) = codeGenExp body
@@ -63,7 +63,7 @@ codeGenFun (AST.Body body) = codeGenExp body
 
 -- Expressions
 -- ~~~~~~~~~~~
---
+
 codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CExpr
 codeGenExp (AST.Var   i) = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
 codeGenExp (AST.Const c) =
@@ -312,7 +312,7 @@ codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
 -- Helper Functions
 -- ~~~~~~~~~~~~~~~~
---
+
 ccall :: NumType a -> String -> [CExpr] -> CExpr
 ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode
 ccall (FloatingNumType ty) fn args = CCall (CVar (internalIdent (fn `postfix` ty)) internalNode) args internalNode
