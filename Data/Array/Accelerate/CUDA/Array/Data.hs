@@ -1,5 +1,4 @@
-{-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE CPP, RankNTypes, MagicHash, TypeOperators, UnboxedTuples #-}
+{-# LANGUAGE CPP, FlexibleContexts, TypeFamilies #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Data
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
