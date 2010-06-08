@@ -19,7 +19,7 @@ import Prelude hiding (id, (.), mod)
 import Control.Category
 
 import Foreign.Ptr
-import Foreign.Storable                                 (Storable)
+import Foreign.Storable                                 (Storable, sizeOf)
 
 import Data.Int
 import Data.Word
@@ -35,7 +35,6 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.CUDA.Driver.Stream             as CUDA
 
 
---
 -- Instances
 -- ~~~~~~~~~
 
@@ -43,6 +42,7 @@ class Acc.ArrayElem e => ArrayElem e where
   type DevicePtrs e
   type HostPtrs   e
   mallocArray    :: Acc.ArrayData e -> Int -> CIO ()
+  copyArray      :: Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
   peekArray      :: Acc.ArrayData e -> Int -> CIO ()
   pokeArray      :: Acc.ArrayData e -> Int -> CIO ()
   peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
@@ -56,6 +56,7 @@ instance ArrayElem () where
   type DevicePtrs () = CUDA.DevicePtr ()
   type HostPtrs   () = CUDA.HostPtr   ()
   mallocArray    _ _   = return ()
+  copyArray      _ _ _ = return ()
   peekArray      _ _   = return ()
   pokeArray      _ _   = return ()
   peekArrayAsync _ _ _ = return ()
@@ -70,6 +71,7 @@ instance ArrayElem ty where {                                                  \
   type DevicePtrs ty = CUDA.DevicePtr con                                      \
 ; type HostPtrs   ty = CUDA.HostPtr   con                                      \
 ; mallocArray ad n = insertArray ad =<< liftIO (CUDA.mallocArray n)            \
+; copyArray        = copyArray'                                                \
 ; peekArray        = peekArray'                                                \
 ; pokeArray        = pokeArray'                                                \
 ; peekArrayAsync   = peekArrayAsync'                                           \
@@ -122,6 +124,7 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   type HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
 
   mallocArray ad n      = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
+  copyArray src dst n   = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
   peekArray ad n        = peekArray (fst' ad) n   *> peekArray (snd' ad) n
   pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
   peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
@@ -148,6 +151,17 @@ getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO
 getArray ad = fromMaybe (error "ArrayElem: internal error")
             . IM.lookup (arrayToKey ad) <$> getM memoryEntry
 {-# INLINE getArray #-}
+
+-- Copy data between two device arrays
+--
+copyArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
+           => Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
+copyArray' ads add n =
+  let bytes = n * sizeOf (undefined :: a)
+  in do
+  src <- extractArray ads
+  dst <- extractArray add
+  liftIO $ CUDA.copyArrayAsync bytes src dst
 
 
 -- Copy data from the device into the associated Accelerate array
@@ -196,6 +210,10 @@ pokeArrayAsync' ad n st =
 insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
             => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
 insertArray ad = modM memoryEntry . IM.insert (arrayToKey ad) . MemoryEntry 0 . CUDA.devPtrToWordPtr
+
+extractArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
+             => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
+extractArray ad = CUDA.wordPtrToDevPtr . get arena <$> getArray ad
 
 -- Release a device array, when its reference counter drops to zero
 --
