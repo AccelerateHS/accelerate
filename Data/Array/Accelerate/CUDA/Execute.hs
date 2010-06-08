@@ -180,7 +180,8 @@ dispatch acc@(Permute _ df _ ad) env mdl = do
   d_in0 <- devicePtrs in0
 
   launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
-  free in0              -- TLM 2010-06-08: also free `def' ??
+  free def
+  free in0
   return res
 
 

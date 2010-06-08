@@ -70,7 +70,7 @@ instance ArrayElem () where
 instance ArrayElem ty where {                                                  \
   type DevicePtrs ty = CUDA.DevicePtr con                                      \
 ; type HostPtrs   ty = CUDA.HostPtr   con                                      \
-; mallocArray ad n = insertArray ad =<< liftIO (CUDA.mallocArray n)            \
+; mallocArray      = mallocArray'                                              \
 ; copyArray        = copyArray'                                                \
 ; peekArray        = peekArray'                                                \
 ; pokeArray        = pokeArray'                                                \
@@ -134,8 +134,99 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   devicePtrs ad         = (++) <$> devicePtrs (fst' ad) <*> devicePtrs (snd' ad)
 
 
+
+-- Implementation
+-- ~~~~~~~~~~~~~~
+
+-- Allocate a new device array to accompany the given host-side Accelerate array
 --
--- Machinery
+mallocArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
+mallocArray' ad n = do
+  exists <- IM.member key <$> getM memoryEntry
+  unless exists $ insertArray ad =<< liftIO (CUDA.mallocArray n)
+  where
+    insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
+    insertArray _ = modM memoryEntry . IM.insert key . MemoryEntry 0 . CUDA.devPtrToWordPtr
+    key           = arrayToKey ad
+
+
+-- Copy data between two device arrays
+--
+copyArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
+copyArray' src' dst' n = do
+  src <- extractArray src'
+  dst <- extractArray dst'
+  liftIO $ CUDA.copyArrayAsync bytes src dst
+  where
+    extractArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
+    extractArray ad = CUDA.wordPtrToDevPtr . get arena <$> getArray ad
+    bytes           = n * sizeOf (undefined::a)
+
+
+-- Copy data from the device into the associated Accelerate array
+--
+peekArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
+peekArray' ad n =
+  let dst = Acc.ptrsOfArrayData ad
+      src = CUDA.wordPtrToDevPtr . get arena
+  in
+  getArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
+
+peekArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+peekArrayAsync' ad n st =
+  let dst = CUDA.HostPtr . Acc.ptrsOfArrayData
+      src = CUDA.wordPtrToDevPtr . get arena
+  in
+  getArray ad >>= \me -> liftIO $ CUDA.peekArrayAsync n (src me) (dst ad) st
+
+
+-- Copy data from an Accelerate array to the associated device array. The data
+-- will only be copied once, with subsequent invocations incrementing the
+-- reference counter.
+--
+pokeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
+pokeArray' ad n =
+  let src = Acc.ptrsOfArrayData ad
+      dst = CUDA.wordPtrToDevPtr . get arena
+  in do
+    me <- mod refcount (+1) <$> getArray ad
+    when (get refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
+    modM memoryEntry (IM.insert (arrayToKey ad) me)
+
+pokeArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+pokeArrayAsync' ad n st =
+  let src = CUDA.HostPtr . Acc.ptrsOfArrayData
+      dst = CUDA.wordPtrToDevPtr . get arena
+  in do
+    me <- mod refcount (+1) <$> getArray ad
+    when (get refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
+    modM memoryEntry (IM.insert (arrayToKey ad) me)
+
+
+-- Release a device array, when its reference counter drops to zero
+--
+free' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
+free' ad = do
+  me <- mod refcount (subtract 1) <$> getArray ad
+  if get refcount me > 0
+     then modM memoryEntry (IM.insert (arrayToKey ad) me)
+     else do liftIO . CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
+             modM memoryEntry (IM.delete (arrayToKey ad))
+
+
+-- Increase reference count of an array
+--
+touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
+touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> getArray ad
+
+
+-- Return the device pointers wrapped in a list of function parameters
+--
+devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO [CUDA.FunParam]
+devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> getArray ad
+
+
+-- Utilities
 -- ~~~~~~~~~
 
 -- Generate a memory map key from the given ArrayData
@@ -145,103 +236,19 @@ arrayToKey = fromIntegral . ptrToWordPtr . Acc.ptrsOfArrayData
 {-# INLINE arrayToKey #-}
 
 -- Retrieve the device array from the state structure associated with a
--- particular Accelerate array
+-- particular Accelerate array.
 --
 getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO MemoryEntry
-getArray ad = fromMaybe (error "ArrayElem: internal error")
-            . IM.lookup (arrayToKey ad) <$> getM memoryEntry
+getArray ad = fromMaybe (error "ArrayElem: internal error") . IM.lookup (arrayToKey ad) <$> getM memoryEntry
 {-# INLINE getArray #-}
-
--- Copy data between two device arrays
---
-copyArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
-           => Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
-copyArray' ads add n =
-  let bytes = n * sizeOf (undefined :: a)
-  in do
-  src <- extractArray ads
-  dst <- extractArray add
-  liftIO $ CUDA.copyArrayAsync bytes src dst
-
-
--- Copy data from the device into the associated Accelerate array
---
-peekArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
-           => Acc.ArrayData e -> Int -> CIO ()
-peekArray' ad n =
-  let dst = Acc.ptrsOfArrayData ad
-      src = CUDA.wordPtrToDevPtr . get arena
-  in
-  getArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
-
-peekArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
-                => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-peekArrayAsync' ad n st =
-  let dst = CUDA.HostPtr . Acc.ptrsOfArrayData
-      src = CUDA.wordPtrToDevPtr . get arena
-  in
-  getArray ad >>= \me -> liftIO $ CUDA.peekArrayAsync n (src me) (dst ad) st
-
-
--- Copy data from an Accelerate array to the associated device array
---
-pokeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
-           => Acc.ArrayData e -> Int -> CIO ()
-pokeArray' ad n =
-  let src = Acc.ptrsOfArrayData ad
-      dst = CUDA.wordPtrToDevPtr . get arena
-  in do
-    me <- mod refcount (+1) <$> getArray ad
-    when (get refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
-    modM memoryEntry (IM.insert (arrayToKey ad) me)
-
-pokeArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
-                => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-pokeArrayAsync' ad n st =
-  let src = CUDA.HostPtr . Acc.ptrsOfArrayData
-      dst = CUDA.wordPtrToDevPtr . get arena
-  in do
-    me <- mod refcount (+1) <$> getArray ad
-    when (get refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
-    modM memoryEntry (IM.insert (arrayToKey ad) me)
-
--- Insert the ArrayData / DevicePtr couple into the memory map
---
-insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
-            => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
-insertArray ad = modM memoryEntry . IM.insert (arrayToKey ad) . MemoryEntry 0 . CUDA.devPtrToWordPtr
-
-extractArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
-             => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
-extractArray ad = CUDA.wordPtrToDevPtr . get arena <$> getArray ad
-
--- Release a device array, when its reference counter drops to zero
---
-free' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
-      => Acc.ArrayData e -> CIO ()
-free' ad = do
-  me <- mod refcount (subtract 1) <$> getArray ad
-  if get refcount me > 0
-     then modM memoryEntry (IM.insert (arrayToKey ad) me)
-     else do liftIO . CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
-             modM memoryEntry (IM.delete (arrayToKey ad))
-
--- Increase reference count of an array
---
-touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
-touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> getArray ad
-
--- Return the device pointers wrapped in a list of function parameters
---
-devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e)
-            => Acc.ArrayData e -> CIO [CUDA.FunParam]
-devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> getArray ad
 
 -- Array tuple extraction
 --
 fst' :: Acc.ArrayData (a,b) -> Acc.ArrayData a
 fst' = Acc.fstArrayData
+{-# INLINE fst' #-}
 
 snd' :: Acc.ArrayData (a,b) -> Acc.ArrayData b
 snd' = Acc.sndArrayData
+{-# INLINE snd' #-}
 
