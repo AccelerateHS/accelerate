@@ -48,7 +48,6 @@ class Acc.ArrayElem e => ArrayElem e where
   peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   pokeArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   devicePtrs     :: Acc.ArrayData e -> CIO [CUDA.FunParam]
-  touch          :: Acc.ArrayData e -> CIO ()
   free           :: Acc.ArrayData e -> CIO ()
 
 
@@ -62,7 +61,6 @@ instance ArrayElem () where
   peekArrayAsync _ _ _ = return ()
   pokeArrayAsync _ _ _ = return ()
   devicePtrs     _     = return []
-  touch          _     = return ()
   free           _     = return ()
 
 
@@ -77,7 +75,6 @@ instance ArrayElem ty where {                                                  \
 ; peekArrayAsync   = peekArrayAsync'                                           \
 ; pokeArrayAsync   = pokeArrayAsync'                                           \
 ; devicePtrs       = devicePtrs'                                               \
-; touch            = touch'                                                    \
 ; free             = free' }
 
 #define primArrayElem(ty) primArrayElem_(ty,ty)
@@ -129,7 +126,6 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
   peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
   pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
-  touch ad              = touch (fst' ad) *> touch (snd' ad)
   free ad               = free  (fst' ad) *> free  (snd' ad)
   devicePtrs ad         = (++) <$> devicePtrs (fst' ad) <*> devicePtrs (snd' ad)
 
@@ -216,8 +212,8 @@ free' ad = do
 
 -- Increase reference count of an array
 --
-touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
-touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> getArray ad
+--touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
+--touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> getArray ad
 
 
 -- Return the device pointers wrapped in a list of function parameters
