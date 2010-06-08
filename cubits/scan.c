@@ -5,6 +5,7 @@
  * License   : BSD
  *
  * The CUDPP parallel implementation of scan, hoisted out of C++ template-land
+ * <http://code.google.com/p/cudpp/> (v1.1.1)
  *
  * ---------------------------------------------------------------------------*/
 
