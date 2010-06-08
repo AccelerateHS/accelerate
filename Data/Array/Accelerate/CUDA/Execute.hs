@@ -129,7 +129,7 @@ dispatch acc@(Map _ ad) env mdl = do
   d_in0 <- devicePtrs in0
 
   launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
-  free   in0
+  freeArray in0
   return res
 
 dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
@@ -145,8 +145,8 @@ dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
   d_in1 <- devicePtrs in1
 
   launch acc n fn (d_out ++ d_in0 ++ d_in1 ++ [CUDA.IArg n])
-  free   in0
-  free   in1
+  freeArray in0
+  freeArray in1
   return res
 
 dispatch acc@(Fold _ x ad) env mdl = do
@@ -160,7 +160,7 @@ dispatch acc@(Fold _ x ad) env mdl = do
   d_in0 <- devicePtrs in0
 
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ [CUDA.IArg (size sh)])
-  free in0
+  freeArray in0
   if grid > 1 then dispatch (Fold undefined x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
@@ -180,10 +180,9 @@ dispatch acc@(Permute _ df _ ad) env mdl = do
   d_in0 <- devicePtrs in0
 
   launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
-  free def
-  free in0
+  freeArray def
+  freeArray in0
   return res
-
 
 dispatch acc@(Backpermute e _ ad) env mdl = do
   fn            <- liftIO $ CUDA.getFun mdl "backpermute"
@@ -197,7 +196,7 @@ dispatch acc@(Backpermute e _ ad) env mdl = do
   d_in0 <- devicePtrs in0
 
   launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
-  free in0
+  freeArray in0
   return res
 
 dispatch _ _ _ =
@@ -228,7 +227,7 @@ dispatchScan acc@(Scanl _ x ad) env mdl = do
   -- Single row, multi-block, non-full block scan
   --
   launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ map CUDA.IArg [n,1,1])
-  free in0
+  freeArray in0
 
   -- Now, take the last value of all of the sub-blocks and scan those. This will
   -- give a new value that must be added to each block to get the final result
@@ -240,7 +239,7 @@ dispatchScan acc@(Scanl _ x ad) env mdl = do
        d_bks'            <- devicePtrs sum'
 
        launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
-       free sum'
+       freeArray sum'
        return (arr,r)
 
 dispatchScan _ _ _ =

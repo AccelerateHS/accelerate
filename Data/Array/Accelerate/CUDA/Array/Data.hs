@@ -47,7 +47,7 @@ class Acc.ArrayElem e => ArrayElem e where
   peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   pokeArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   devicePtrs     :: Acc.ArrayData e -> CIO [CUDA.FunParam]
-  free           :: Acc.ArrayData e -> CIO ()
+  freeArray      :: Acc.ArrayData e -> CIO ()
 
 
 instance ArrayElem () where
@@ -60,7 +60,7 @@ instance ArrayElem () where
   peekArrayAsync _ _ _ = return ()
   pokeArrayAsync _ _ _ = return ()
   devicePtrs     _     = return []
-  free           _     = return ()
+  freeArray      _     = return ()
 
 
 #define primArrayElem_(ty,con)                                                 \
@@ -74,7 +74,7 @@ instance ArrayElem ty where {                                                  \
 ; peekArrayAsync   = peekArrayAsync'                                           \
 ; pokeArrayAsync   = pokeArrayAsync'                                           \
 ; devicePtrs       = devicePtrs'                                               \
-; free             = free' }
+; freeArray        = freeArray' }
 
 #define primArrayElem(ty) primArrayElem_(ty,ty)
 
@@ -125,7 +125,7 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
   peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
   pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
-  free ad               = free  (fst' ad) *> free  (snd' ad)
+  freeArray ad          = freeArray  (fst' ad) *> freeArray  (snd' ad)
   devicePtrs ad         = (++) <$> devicePtrs (fst' ad) <*> devicePtrs (snd' ad)
 
 
@@ -200,8 +200,8 @@ pokeArrayAsync' ad n st =
 
 -- Release a device array, when its reference counter drops to zero
 --
-free' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
-free' ad = do
+freeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
+freeArray' ad = do
   me <- mod refcount (subtract 1) <$> getArray ad
   if get refcount me > 0
      then modM memoryEntry (IM.insert (arrayToKey ad) me)
