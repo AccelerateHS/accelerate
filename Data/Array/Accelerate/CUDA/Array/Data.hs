@@ -148,14 +148,12 @@ mallocArray' ad n = do
 -- Copy data between two device arrays
 --
 copyArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
-copyArray' src' dst' n = do
-  src <- extractArray src'
-  dst <- extractArray dst'
+copyArray' src' dst' n =
+  let bytes = n * sizeOf (undefined::a)
+  in do
+  src <- getArray src'
+  dst <- getArray dst'
   liftIO $ CUDA.copyArrayAsync bytes src dst
-  where
-    extractArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
-    extractArray ad = CUDA.wordPtrToDevPtr . get arena <$> getArray ad
-    bytes           = n * sizeOf (undefined::a)
 
 
 -- Copy data from the device into the associated Accelerate array
@@ -165,14 +163,14 @@ peekArray' ad n =
   let dst = Acc.ptrsOfArrayData ad
       src = CUDA.wordPtrToDevPtr . get arena
   in
-  getArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
+  lookupArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
 
 peekArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
 peekArrayAsync' ad n st =
   let dst = CUDA.HostPtr . Acc.ptrsOfArrayData
       src = CUDA.wordPtrToDevPtr . get arena
   in
-  getArray ad >>= \me -> liftIO $ CUDA.peekArrayAsync n (src me) (dst ad) st
+  lookupArray ad >>= \me -> liftIO $ CUDA.peekArrayAsync n (src me) (dst ad) st
 
 
 -- Copy data from an Accelerate array to the associated device array. The data
@@ -184,7 +182,7 @@ pokeArray' ad n =
   let src = Acc.ptrsOfArrayData ad
       dst = CUDA.wordPtrToDevPtr . get arena
   in do
-    me <- mod refcount (+1) <$> getArray ad
+    me <- mod refcount (+1) <$> lookupArray ad
     when (get refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
     modM memoryEntry (IM.insert (arrayToKey ad) me)
 
@@ -193,7 +191,7 @@ pokeArrayAsync' ad n st =
   let src = CUDA.HostPtr . Acc.ptrsOfArrayData
       dst = CUDA.wordPtrToDevPtr . get arena
   in do
-    me <- mod refcount (+1) <$> getArray ad
+    me <- mod refcount (+1) <$> lookupArray ad
     when (get refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
     modM memoryEntry (IM.insert (arrayToKey ad) me)
 
@@ -202,7 +200,7 @@ pokeArrayAsync' ad n st =
 --
 freeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
 freeArray' ad = do
-  me <- mod refcount (subtract 1) <$> getArray ad
+  me <- mod refcount (subtract 1) <$> lookupArray ad
   if get refcount me > 0
      then modM memoryEntry (IM.insert (arrayToKey ad) me)
      else do liftIO . CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
@@ -212,13 +210,13 @@ freeArray' ad = do
 -- Increase reference count of an array
 --
 --touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
---touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> getArray ad
+--touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> lookupArray ad
 
 
 -- Return the device pointers wrapped in a list of function parameters
 --
 devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO [CUDA.FunParam]
-devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> getArray ad
+devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
 
 
 -- Utilities
@@ -230,12 +228,17 @@ arrayToKey :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> I
 arrayToKey = fromIntegral . ptrToWordPtr . Acc.ptrsOfArrayData
 {-# INLINE arrayToKey #-}
 
--- Retrieve the device array from the state structure associated with a
+-- Retrieve the device memory entry from the state structure associated with a
 -- particular Accelerate array.
 --
-getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO MemoryEntry
-getArray ad = fromMaybe (error "ArrayElem: internal error") . IM.lookup (arrayToKey ad) <$> getM memoryEntry
-{-# INLINE getArray #-}
+lookupArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO MemoryEntry
+lookupArray ad = fromMaybe (error "ArrayElem: internal error") . IM.lookup (arrayToKey ad) <$> getM memoryEntry
+{-# INLINE lookupArray #-}
+
+-- Return the device pointer associated with a host-side Accelerate array
+--
+getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
+getArray ad = CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
 
 -- Array tuple extraction
 --
