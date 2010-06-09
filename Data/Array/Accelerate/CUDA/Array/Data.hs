@@ -19,6 +19,7 @@ import Control.Category
 
 import Foreign.Ptr
 import Foreign.Storable                                 (Storable, sizeOf)
+import qualified Foreign                                as F
 
 import Data.Int
 import Data.Word
@@ -41,6 +42,7 @@ class Acc.ArrayElem e => ArrayElem e where
   type DevicePtrs e
   type HostPtrs   e
   mallocArray    :: Acc.ArrayData e -> Int -> CIO ()
+  indexArray     :: Acc.ArrayData e -> Int -> CIO e
   copyArray      :: Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
   peekArray      :: Acc.ArrayData e -> Int -> CIO ()
   pokeArray      :: Acc.ArrayData e -> Int -> CIO ()
@@ -54,6 +56,7 @@ instance ArrayElem () where
   type DevicePtrs () = CUDA.DevicePtr ()
   type HostPtrs   () = CUDA.HostPtr   ()
   mallocArray    _ _   = return ()
+  indexArray     _ _   = return ()
   copyArray      _ _ _ = return ()
   peekArray      _ _   = return ()
   pokeArray      _ _   = return ()
@@ -68,6 +71,7 @@ instance ArrayElem ty where {                                                  \
   type DevicePtrs ty = CUDA.DevicePtr con                                      \
 ; type HostPtrs   ty = CUDA.HostPtr   con                                      \
 ; mallocArray      = mallocArray'                                              \
+; indexArray       = indexArray'                                               \
 ; copyArray        = copyArray'                                                \
 ; peekArray        = peekArray'                                                \
 ; pokeArray        = pokeArray'                                                \
@@ -107,7 +111,7 @@ primArrayElem(Double)
 -- CFloat
 -- CDouble
 
-primArrayElem_(Bool,Word8)
+primArrayElem_(Bool,Word8)      -- TLM 2010-06-07 ??
 primArrayElem_(Char,Word32)
 
 -- FIXME:
@@ -126,8 +130,8 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
   pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
   freeArray ad          = freeArray  (fst' ad) *> freeArray  (snd' ad)
-  devicePtrs ad         = (++) <$> devicePtrs (fst' ad) <*> devicePtrs (snd' ad)
-
+  indexArray ad n       = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
+  devicePtrs ad         = (++) <$> devicePtrs (fst' ad)   <*> devicePtrs (snd' ad)
 
 
 -- Implementation
@@ -143,6 +147,16 @@ mallocArray' ad n = do
     insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
     insertArray _ = modM memoryEntry . IM.insert key . MemoryEntry 0 . CUDA.devPtrToWordPtr
     key           = arrayToKey ad
+
+
+-- Array indexing
+--
+indexArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO a
+indexArray' ad n = do
+  dp <- getArray ad
+  liftIO . F.alloca $ \p -> do
+    CUDA.peekArray 1 (dp `CUDA.advanceDevPtr` n) p
+    F.peek p
 
 
 -- Copy data between two device arrays
