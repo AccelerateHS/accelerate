@@ -165,9 +165,9 @@ copyArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e)
 copyArray' src' dst' n =
   let bytes = n * sizeOf (undefined::a)
   in do
-  src <- getArray src'
-  dst <- getArray dst'
-  liftIO $ CUDA.copyArrayAsync bytes src dst
+    src <- getArray src'
+    dst <- getArray dst'
+    liftIO $ CUDA.copyArrayAsync bytes src dst
 
 
 -- Copy data from the device into the associated Accelerate array
