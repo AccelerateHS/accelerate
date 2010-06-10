@@ -49,6 +49,7 @@ class Acc.ArrayElem e => ArrayElem e where
   peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   pokeArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   devicePtrs     :: Acc.ArrayData e -> CIO [CUDA.FunParam]
+  touchArray     :: Acc.ArrayData e -> CIO ()
   freeArray      :: Acc.ArrayData e -> CIO ()
 
 
@@ -63,6 +64,7 @@ instance ArrayElem () where
   peekArrayAsync _ _ _ = return ()
   pokeArrayAsync _ _ _ = return ()
   devicePtrs     _     = return []
+  touchArray     _     = return ()
   freeArray      _     = return ()
 
 
@@ -78,6 +80,7 @@ instance ArrayElem ty where {                                                  \
 ; peekArrayAsync   = peekArrayAsync'                                           \
 ; pokeArrayAsync   = pokeArrayAsync'                                           \
 ; devicePtrs       = devicePtrs'                                               \
+; touchArray       = touchArray'                                               \
 ; freeArray        = freeArray' }
 
 #define primArrayElem(ty) primArrayElem_(ty,ty)
@@ -129,6 +132,7 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
   peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
   pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
+  touchArray ad         = touchArray (fst' ad) *> touchArray (snd' ad)
   freeArray ad          = freeArray  (fst' ad) *> freeArray  (snd' ad)
   indexArray ad n       = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
   devicePtrs ad         = (++) <$> devicePtrs (fst' ad)   <*> devicePtrs (snd' ad)
@@ -221,10 +225,11 @@ freeArray' ad = do
              modM memoryEntry (IM.delete (arrayToKey ad))
 
 
--- Increase reference count of an array
+-- Increase the reference count of an array. You may wish to call this right
+-- before another method that will implicitly attempt to release the array.
 --
---touch' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
---touch' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> lookupArray ad
+touchArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
+touchArray' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> lookupArray ad
 
 
 -- Return the device pointers wrapped in a list of function parameters
