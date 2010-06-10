@@ -34,6 +34,7 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Array.Data
+import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Analysis.Launch
 
 import qualified Foreign.CUDA.Driver                    as CUDA
