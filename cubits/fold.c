@@ -6,8 +6,6 @@
  *
  * ---------------------------------------------------------------------------*/
 
-#include "utils.h"
-
 #ifndef blockSize
 #define blockSize       blockDim.x
 #endif

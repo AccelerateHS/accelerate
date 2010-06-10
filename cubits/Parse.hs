@@ -62,5 +62,6 @@ parseCUFile cpp tmp opts file = parseCFile cpp tmp (opts ++ extras) file
              , "-DCUDA_NO_SM_13_DOUBLE_INTRINSICS"
              , "-D__CUDACC__"
              , "-include", "cuda_runtime.h"
+             , "-include", "accelerate_cuda_extras.h"
              ]
 

@@ -1,18 +1,77 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Utils
- * Copyright : (c) 2009 Trevor L. McDonell
+ * Module    : Extras
+ * Copyright : (c) [2009..2010] Trevor L. McDonell
  * License   : BSD
  *
  * ---------------------------------------------------------------------------*/
 
-
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __ACCELERATE_CUDA_EXTRAS_H__
+#define __ACCELERATE_CUDA_EXTRAS_H__
 
 #include <math.h>
 #include <stdio.h>
+#include <stdint.h>
 
+#include <cuda_runtime.h>
+
+/* -----------------------------------------------------------------------------
+ * Textures
+ * -----------------------------------------------------------------------------
+ *
+ * CUDA texture definitions and access functions are defined in terms of
+ * templates, and hence only available through the C++ interface. Expose some
+ * dummy wrappers to enable parsing with language-c.
+ */
+#ifdef __cplusplus
+
+typedef texture<uint32_t, 1> TexWord;
+typedef texture<uint32_t, 1> TexWord32;
+typedef texture<uint16_t, 1> TexWord16;
+typedef texture<uint8_t,  1> TexWord8;
+
+typedef texture<int32_t, 1> TexInt;
+typedef texture<int32_t, 1> TexInt32;
+typedef texture<int16_t, 1> TexInt16;
+typedef texture<int8_t,  1> TexInt8;
+
+typedef texture<float, 1> TexFloat;
+typedef texture<int2,  1> TexDouble;
+
+#else
+
+typedef void* TexWord;
+typedef void* TexWord32;
+typedef void* TexWord16;
+typedef void* TexWord8;
+
+typedef void* TexInt;
+typedef void* TexInt32;
+typedef void* TexInt16;
+typedef void* TexInt8;
+
+typedef void* TexFloat;
+typedef void* TexDouble;
+
+void* tex1D(const void*, int);
+void* tex2D(const void*, int, int);
+void* tex3D(const void*, int, int, int);
+
+#endif
+
+/* -----------------------------------------------------------------------------
+ * Indices
+ * -------------------------------------------------------------------------- */
+
+
+/* -----------------------------------------------------------------------------
+ * Tuple Types
+ * -------------------------------------------------------------------------- */
+
+
+/* -----------------------------------------------------------------------------
+ * Utilities
+ * -------------------------------------------------------------------------- */
 
 /*
  * Core assert function. Don't let this escape...
@@ -35,7 +94,6 @@
     ((void) ((e) ? (void(0)) : __assert (#e, __FILE__, __LINE__)))
 #endif
 
-
 /*
  * Macro to insert __syncthreads() in device emulation mode
  */
@@ -44,7 +102,6 @@
 #else
 #define __EMUSYNC
 #endif
-
 
 /*
  * Check the return status of CUDA API calls, and abort with an appropriate
@@ -79,7 +136,6 @@ isPow2(unsigned int x)
     return ((x&(x-1)) == 0);
 }
 
-
 /*
  * Compute the next highest power of two
  */
@@ -99,7 +155,6 @@ ceilPow2(unsigned int x)
     return (isPow2(x)) ? x : 1u << (int) ceil(log2((double)x));
 }
 
-
 /*
  * Compute the next lowest power of two
  */
@@ -116,7 +171,6 @@ floorPow2(unsigned int x)
     return 1 << (exp - 1);
 }
 
-
 /*
  * computes next highest multiple of f from x
  */
@@ -125,7 +179,6 @@ multiple(unsigned int x, unsigned int f)
 {
     return ((x + (f-1)) / f);
 }
-
 
 /*
  * MS Excel-style CEIL() function. Rounds x up to nearest multiple of f
@@ -136,11 +189,9 @@ ceiling(unsigned int x, unsigned int f)
     return multiple(x, f) * f;
 }
 
-
-#undef __asert
-
+#undef __assert
 #ifdef __cplusplus
 }
 #endif
-#endif
+#endif  // __ACCELERATE_CUDA_EXTRAS_H__
 
