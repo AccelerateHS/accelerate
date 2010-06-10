@@ -47,13 +47,13 @@ Library
     Build-depends:      llvm >= 0.6.8
 
   if flag(cuda)
-    Build-depends:      cuda >= 0.1.4,
+    Build-depends:      cuda >= 0.1.5,
                         bytestring,
                         containers,
                         directory,
                         fclabels,
                         filepath,
-                        language-c,
+                        language-c == 0.3.1.*,
                         monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
@@ -86,6 +86,7 @@ Library
     Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Hash
                         Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
+                        Data.Array.Accelerate.CUDA.Array.Device
                         Data.Array.Accelerate.CUDA.CodeGen.Fold
                         Data.Array.Accelerate.CUDA.CodeGen.Map
                         Data.Array.Accelerate.CUDA.CodeGen.Permute
