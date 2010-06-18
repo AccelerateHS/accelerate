@@ -19,7 +19,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Exception
-import Control.Applicative
+import Control.Applicative                              hiding (Const)
 import Language.C
 import Text.PrettyPrint
 import qualified Data.Map                               as M
@@ -30,19 +30,72 @@ import System.Posix.Process
 import System.IO
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
+import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
 import Foreign.CUDA.Analysis.Device
 
 
 
+
+-- | Initiate code generation, compilation, and data transfer for an array
+-- expression
+--
 compileAcc :: OpenAcc aenv a -> CIO ()
-compileAcc = compile
+compileAcc (Use (Array sh ad)) =
+  let n = size sh
+  in do
+    mallocArray    ad n
+    pokeArrayAsync ad n Nothing
+
+compileAcc (Let  a1 a2)    = compileAcc a1 >> compileAcc a2
+compileAcc (Let2 a1 a2)    = compileAcc a1 >> compileAcc a2
+compileAcc (Avar _)        = return ()
+compileAcc (Unit e1)       = compileExp e1
+compileAcc (Reshape e1 a1) = compileExp e1 >> compileAcc a1
+
+compileAcc op@(Replicate _ e1 a1)    = compileExp e1 >> compileAcc a1 >> compile op
+compileAcc op@(Index _ a1 e1)        = compileAcc a1 >> compileExp e1 >> compile op
+compileAcc op@(Map f1 a1)            = compileFun f1 >> compileAcc a1 >> compile op
+compileAcc op@(ZipWith f1 a1 a2)     = compileFun f1 >> compileAcc a1 >> compileAcc a2 >> compile op
+compileAcc op@(Fold f1 e1 a1)        = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
+compileAcc op@(Scanl f1 e1 a1)       = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
+compileAcc op@(Scanr f1 e1 a1)       = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
+compileAcc op@(Backpermute e1 f1 a1) = compileExp e1 >> compileFun f1 >> compileAcc a1 >> compile op
+compileAcc op@(Permute f1 a1 f2 a2)  = compileFun f1 >> compileAcc a1 >> compileFun f2 >> compileAcc a2 >> compile op
+compileAcc op@(FoldSeg f1 e1 a1 a2)  = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compileAcc a2 >> compile op
 
 
--- | Generate and compile code for an array expression
+-- | Lift array expressions out of closed functions for code generation
+--
+compileFun :: OpenFun env aenv t -> CIO ()
+compileFun (Body e) = compileExp e
+compileFun (Lam f)  = compileFun f
+
+
+-- | Lift array computations out of scalar expressions for code generation. The
+-- array expression must not contain any free scalar variables.
+--
+compileExp :: OpenExp env aenv a -> CIO ()
+compileExp (Tuple t)           = compileTup t
+compileExp (Prj _ e1)          = compileExp e1
+compileExp (PrimApp _ e1)      = compileExp e1
+compileExp (Cond e1 e2 e3)     = compileExp e1 >> compileExp e2 >> compileExp e3
+compileExp (IndexScalar a1 e1) = compileAcc a1 >> compileExp e1
+compileExp (Shape a1)          = compileAcc a1
+compileExp _                   = return ()
+
+compileTup :: Tuple (OpenExp env aenv) a -> CIO ()
+compileTup NilTup          = return ()
+compileTup (t `SnocTup` e) = compileExp e >> compileTup t
+
+
+-- | Generate and compile code for a single open array expression
 --
 compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
