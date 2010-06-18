@@ -33,6 +33,7 @@ import Data.Array.Accelerate.CUDA.State
 import qualified Data.Array.Accelerate.Array.Data       as Acc
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.CUDA.Driver.Stream             as CUDA
+import qualified Foreign.CUDA.Driver.Texture            as CUDA
 
 
 -- Instances
@@ -48,24 +49,39 @@ class Acc.ArrayElem e => ArrayElem e where
   pokeArray      :: Acc.ArrayData e -> Int -> CIO ()
   peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
   pokeArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+  textureRefs    :: Acc.ArrayData e -> CUDA.Module -> Int -> Int -> CIO [CUDA.FunParam]
   devicePtrs     :: Acc.ArrayData e -> CIO [CUDA.FunParam]
   touchArray     :: Acc.ArrayData e -> CIO ()
   freeArray      :: Acc.ArrayData e -> CIO ()
+
+  -- FIXME: remove once all ArrayElem instances are concrete
+  mallocArray    = undefined
+  indexArray     = undefined
+  copyArray      = undefined
+  peekArray      = undefined
+  pokeArray      = undefined
+  peekArrayAsync = undefined
+  pokeArrayAsync = undefined
+  textureRefs    = undefined
+  devicePtrs     = undefined
+  touchArray     = undefined
+  freeArray      = undefined
 
 
 instance ArrayElem () where
   type DevicePtrs () = CUDA.DevicePtr ()
   type HostPtrs   () = CUDA.HostPtr   ()
-  mallocArray    _ _   = return ()
-  indexArray     _ _   = return ()
-  copyArray      _ _ _ = return ()
-  peekArray      _ _   = return ()
-  pokeArray      _ _   = return ()
-  peekArrayAsync _ _ _ = return ()
-  pokeArrayAsync _ _ _ = return ()
-  devicePtrs     _     = return []
-  touchArray     _     = return ()
-  freeArray      _     = return ()
+  mallocArray    _ _     = return ()
+  indexArray     _ _     = return ()
+  copyArray      _ _ _   = return ()
+  peekArray      _ _     = return ()
+  pokeArray      _ _     = return ()
+  peekArrayAsync _ _ _   = return ()
+  pokeArrayAsync _ _ _   = return ()
+  textureRefs    _ _ _ _ = return []
+  devicePtrs     _       = return []
+  touchArray     _       = return ()
+  freeArray      _       = return ()
 
 
 #define primArrayElem_(ty,con)                                                 \
@@ -79,6 +95,7 @@ instance ArrayElem ty where {                                                  \
 ; pokeArray        = pokeArray'                                                \
 ; peekArrayAsync   = peekArrayAsync'                                           \
 ; pokeArrayAsync   = pokeArrayAsync'                                           \
+; textureRefs      = textureRefs'                                              \
 ; devicePtrs       = devicePtrs'                                               \
 ; touchArray       = touchArray'                                               \
 ; freeArray        = freeArray' }
@@ -114,8 +131,11 @@ primArrayElem(Double)
 -- CFloat
 -- CDouble
 
-primArrayElem_(Bool,Word8)      -- TLM 2010-06-07 ??
-primArrayElem_(Char,Word32)
+-- FIXME:
+-- No concrete implementation in Data.Array.Accelerate.Array.Data
+--
+instance ArrayElem Bool
+instance ArrayElem Char
 
 -- FIXME:
 -- CChar
@@ -126,16 +146,20 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   type DevicePtrs (a,b) = (DevicePtrs a, DevicePtrs b)
   type HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
 
-  mallocArray ad n      = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
-  copyArray src dst n   = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
-  peekArray ad n        = peekArray (fst' ad) n   *> peekArray (snd' ad) n
-  pokeArray ad n        = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
-  peekArrayAsync ad n s = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
-  pokeArrayAsync ad n s = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
-  touchArray ad         = touchArray (fst' ad) *> touchArray (snd' ad)
-  freeArray ad          = freeArray  (fst' ad) *> freeArray  (snd' ad)
-  indexArray ad n       = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
-  devicePtrs ad         = (++) <$> devicePtrs (fst' ad)   <*> devicePtrs (snd' ad)
+  mallocArray ad n       = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
+  peekArray ad n         = peekArray (fst' ad) n   *> peekArray (snd' ad) n
+  pokeArray ad n         = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
+  copyArray src dst n    = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
+  peekArrayAsync ad n s  = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
+  pokeArrayAsync ad n s  = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
+  touchArray ad          = touchArray (fst' ad) *> touchArray (snd' ad)
+  freeArray ad           = freeArray  (fst' ad) *> freeArray  (snd' ad)
+  indexArray ad n        = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
+  devicePtrs ad          = (++) <$> devicePtrs (fst' ad)   <*> devicePtrs (snd' ad)
+  textureRefs ad mdl n t = do   -- PRETTY ME
+    t1 <- textureRefs (fst' ad) mdl n t
+    t2 <- textureRefs (snd' ad) mdl n (t+ length t1)
+    return (t1 ++ t2)
 
 
 -- Implementation
@@ -238,6 +262,18 @@ devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> 
 devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
 
 
+-- Retrieve texture references from the module (beginning with the given seed),
+-- bind device pointers, and return as a list of function arguments.
+--
+textureRefs' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e, Storable a, CUDA.Format a)
+             => Acc.ArrayData e -> CUDA.Module -> Int -> Int -> CIO [CUDA.FunParam]
+textureRefs' ad mdl n t = do
+  ptr <- getArray ad
+  tex <- liftIO $ CUDA.getTex mdl ("tex" ++ show t)
+  liftIO $ CUDA.setPtr tex ptr (n * sizeOf (undefined :: a))
+  return [CUDA.TArg tex]
+
+
 -- Utilities
 -- ~~~~~~~~~
 
@@ -258,6 +294,7 @@ lookupArray ad = fromMaybe (error "ArrayElem: internal error") . IM.lookup (arra
 --
 getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
 getArray ad = CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
+{-# INLINE getArray #-}
 
 -- Array tuple extraction
 --
