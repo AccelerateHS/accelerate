@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, PatternGuards #-}
+{-# LANGUAGE GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Analysis.Launch
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -15,13 +15,11 @@ module Data.Array.Accelerate.CUDA.Analysis.Launch (launchConfig)
 import Control.Monad.IO.Class
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Analysis.Type
 
 import Data.Array.Accelerate.CUDA.State
 import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
-import Foreign.Storable
 
 
 -- |
@@ -74,20 +72,8 @@ elementsPerThread _             = 1
 -- occupancy calculator to optimise kernel launch shape.
 --
 sharedMem :: OpenAcc aenv a -> Int -> Int
-sharedMem (Fold  _ x _)   t = sizeOfElem (expType x) * t
-sharedMem (Scanl _ x _)   t = sizeOfElem (expType x) * t * 2
-sharedMem (Scanr _ x _)   t = sizeOfElem (expType x) * t * 2
-sharedMem _               _ = 0
-
-
-sizeOfElem :: TupleType a -> Int
-sizeOfElem UnitTuple       = 0
-sizeOfElem (PairTuple a b) = sizeOfElem a + sizeOfElem b
-
-sizeOfElem (SingleTuple (NumScalarType (IntegralNumType t)))
-  | IntegralDict <- integralDict t = sizeOf $ (undefined :: IntegralType a -> a) t
-sizeOfElem (SingleTuple (NumScalarType (FloatingNumType t)))
-  | FloatingDict <- floatingDict t = sizeOf $ (undefined :: FloatingType a -> a) t
-sizeOfElem (SingleTuple (NonNumScalarType t))
-  | NonNumDict   <- nonNumDict t   = sizeOf $ (undefined :: NonNumType a   -> a) t
+sharedMem (Fold  _ x _) t = sizeOf (expType x) * t
+sharedMem (Scanl _ x _) t = sizeOf (expType x) * t * 2
+sharedMem (Scanr _ x _) t = sizeOf (expType x) * t * 2
+sharedMem _             _ = 0
 

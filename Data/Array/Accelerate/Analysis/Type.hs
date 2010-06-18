@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, GADTs, TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables, GADTs, TypeFamilies, PatternGuards #-}
 
 -- |Embedded array processing language: type analysis
 --
@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  accType, accType2, expType,
+  accType, accType2, expType, sizeOf
   
 ) where
   
@@ -26,6 +26,9 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
+
+-- neighbours
+import qualified Foreign.Storable as F
 
 
 -- Determine the type of an expressions
@@ -82,3 +85,18 @@ expType (Shape _)           = elemType (undefined::t)
 tupleIdxType :: forall t e. TupleIdx t e -> TupleType (ElemRepr e)
 tupleIdxType ZeroTupIdx       = elemType (undefined::e)
 tupleIdxType (SuccTupIdx idx) = tupleIdxType idx
+
+
+-- |Size of a tuple type, in bytes
+--
+sizeOf :: TupleType a -> Int
+sizeOf UnitTuple       = 0
+sizeOf (PairTuple a b) = sizeOf a + sizeOf b
+
+sizeOf (SingleTuple (NumScalarType (IntegralNumType t)))
+  | IntegralDict <- integralDict t = F.sizeOf $ (undefined :: IntegralType a -> a) t
+sizeOf (SingleTuple (NumScalarType (FloatingNumType t)))
+  | FloatingDict <- floatingDict t = F.sizeOf $ (undefined :: FloatingType a -> a) t
+sizeOf (SingleTuple (NonNumScalarType t))
+  | NonNumDict   <- nonNumDict t   = F.sizeOf $ (undefined :: NonNumType a   -> a) t
+
