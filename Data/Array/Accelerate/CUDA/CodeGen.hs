@@ -90,35 +90,34 @@ codeGenExp (AST.Shape _)         = error "codeGen AST.Shape"
 
 -- Generate types for the reified elements of an array computation
 --
-codeGenAccType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CTypeSpec]
+codeGenAccType :: AST.OpenAcc aenv (Sugar.Array dim e) -> CType
 codeGenAccType =  codeGenTupleType . accType
 
-codeGenAccType2 :: AST.OpenAcc aenv (Sugar.Array dim1 e1, Sugar.Array dim2 e2)
-                -> ([CTypeSpec], [CTypeSpec])
+codeGenAccType2 :: AST.OpenAcc aenv (Sugar.Array dim1 e1, Sugar.Array dim2 e2) -> (CType, CType)
 codeGenAccType2 (AST.Scanl _ e acc) = (codeGenAccType acc, codeGenExpType e)
 codeGenAccType2 (AST.Scanr _ e acc) = (codeGenAccType acc, codeGenExpType e)
 
-codeGenExpType :: AST.OpenExp aenv env t -> [CTypeSpec]
+codeGenExpType :: AST.OpenExp aenv env t -> CType
 codeGenExpType =  codeGenTupleType . expType
 
 
 -- Implementation
 --
-codeGenTupleType :: TupleType a -> [CTypeSpec]
+codeGenTupleType :: TupleType a -> CType
 codeGenTupleType (UnitTuple)              = undefined
 codeGenTupleType (SingleTuple         ty) = codeGenScalarType ty
 codeGenTupleType (PairTuple UnitTuple ty) = codeGenTupleType  ty
 codeGenTupleType (PairTuple _ _)          = undefined
 
-codeGenScalarType :: ScalarType a -> [CTypeSpec]
+codeGenScalarType :: ScalarType a -> CType
 codeGenScalarType (NumScalarType    ty) = codeGenNumType ty
 codeGenScalarType (NonNumScalarType ty) = codeGenNonNumType ty
 
-codeGenNumType :: NumType a -> [CTypeSpec]
+codeGenNumType :: NumType a -> CType
 codeGenNumType (IntegralNumType ty) = codeGenIntegralType ty
 codeGenNumType (FloatingNumType ty) = codeGenFloatingType ty
 
-codeGenIntegralType :: IntegralType a -> [CTypeSpec]
+codeGenIntegralType :: IntegralType a -> CType
 codeGenIntegralType (TypeInt     _) = [CIntType   internalNode]
 codeGenIntegralType (TypeInt8    _) = [CCharType  internalNode]
 codeGenIntegralType (TypeInt16   _) = [CShortType internalNode]
@@ -134,17 +133,17 @@ codeGenIntegralType (TypeCUShort _) = [CUnsigType internalNode, CShortType inter
 codeGenIntegralType (TypeCInt    _) = [CIntType   internalNode]
 codeGenIntegralType (TypeCUInt   _) = [CUnsigType internalNode, CIntType internalNode]
 codeGenIntegralType (TypeCLong   _) = [CLongType  internalNode, CIntType internalNode]
-codeGenIntegralType (TypeCULong  _) = [CUnsigType internalNode, CLongType  internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCULong  _) = [CUnsigType internalNode, CLongType internalNode, CIntType internalNode]
 codeGenIntegralType (TypeCLLong  _) = [CLongType  internalNode, CLongType internalNode, CIntType internalNode]
-codeGenIntegralType (TypeCULLong _) = [CUnsigType internalNode, CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeCULLong _) = [CUnsigType internalNode, CLongType internalNode, CLongType internalNode, CIntType internalNode]
 
-codeGenFloatingType :: FloatingType a -> [CTypeSpec]
+codeGenFloatingType :: FloatingType a -> CType
 codeGenFloatingType (TypeFloat   _) = [CFloatType  internalNode]
 codeGenFloatingType (TypeDouble  _) = [CDoubleType internalNode]
 codeGenFloatingType (TypeCFloat  _) = [CFloatType  internalNode]
 codeGenFloatingType (TypeCDouble _) = [CDoubleType internalNode]
 
-codeGenNonNumType :: NonNumType a -> [CTypeSpec]
+codeGenNonNumType :: NonNumType a -> CType
 codeGenNonNumType (TypeBool   _) = [CUnsigType internalNode, CCharType internalNode]
 codeGenNonNumType (TypeChar   _) = [CCharType internalNode]
 codeGenNonNumType (TypeCChar  _) = [CCharType internalNode]

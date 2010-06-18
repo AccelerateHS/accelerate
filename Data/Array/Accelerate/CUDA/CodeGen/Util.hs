@@ -55,7 +55,7 @@ mkTyVector var n ty =
            [ (Just (CDeclr (Just (internalIdent var)) [] Nothing [] internalNode), Nothing, Nothing)]
            internalNode)
   where
-    fields = take n . (flip map) "xyzw" $ \f ->
+    fields = take n . flip map "xyzw" $ \f ->
       (Just (CDeclr (Just (internalIdent [f])) [] Nothing [] internalNode), Nothing, Nothing)
 
 --
@@ -86,7 +86,7 @@ mkDeviceFun name argc expr =
              (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode)
              internalNode)
   where
-    argv = take argc . (flip map) (enumFrom 0 :: [Int]) $ \n ->
+    argv = take argc . flip map (enumFrom 0 :: [Int]) $ \n ->
       let ty  = "TyIn" ++ show n
           var = 'x'    :  show n
       in
