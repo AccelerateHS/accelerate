@@ -20,6 +20,9 @@ Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
 
+-- Should be in the Library stanza, and only enabled for the CUDA backend
+Data-dir:               cubits
+Data-files:             accelerate_cuda_extras.h
 Extra-source-files:     INSTALL
                         examples/simple/DotP.hs
                         examples/simple/Filter.hs

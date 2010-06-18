@@ -12,11 +12,12 @@
 module Data.Array.Accelerate.CUDA.CodeGen (codeGenAcc)
   where
 
-import Prelude hiding (id, (.), mod)
-import Control.Category
+import Prelude hiding (mod)
 
 import Data.Char
 import Language.C
+import Control.Applicative
+import Control.Monad.State
 
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
@@ -28,62 +29,90 @@ import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
+type CType = [CTypeSpec]
+type CG a  = State [CType] a
+
+
+-- Array expressions
+-- ~~~~~~~~~~~~~~~~~
+
+-- | Generate CUDA device code for an array expression
+--
+codeGenAcc :: AST.OpenAcc aenv a -> (CTranslUnit, [CType])
+codeGenAcc acc = runState (codeGenAcc' acc) []
+
+-- FIXME
+--  The actual code generation workhorse. We run under a state which keeps track
+--  of the types of the free array variables encountered so far. This is used to
+--  direct the final stages of code generation, and to determine which reference
+--  to texture read from. Assumes the same traversal behaviour during execution.
+--
+--  FRAGILE.
+--
+codeGenAcc' :: AST.OpenAcc aenv a -> CG CTranslUnit
+codeGenAcc' op@(AST.Map f1 a1)        = mkMap         "map"         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
+codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     "zipWith"     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
+codeGenAcc' (AST.Replicate _ e1 a1)   = mkReplicate   "replicate"   (codeGenAccType a1) <$> codeGenExp e1
+codeGenAcc' (AST.Index _ a1 e1)       = mkIndex       "index"       (codeGenAccType a1) <$> codeGenExp e1
+codeGenAcc' (AST.Fold  f1 e1 _)       = mkFold        "fold"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.FoldSeg f1 e1 _ _)   = mkFoldSeg     "foldSeg"     (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     "permute"     (codeGenAccType a1) <$> codeGenFun f1 <*> codeGenFun f2
+codeGenAcc' (AST.Backpermute _ f1 a1) = mkBackpermute "backpermute" (codeGenAccType a1) <$> codeGenFun f1
+
+codeGenAcc' _ =
+  error "codeGenAcc: internal error"
+
+
+-- Embedded expressions
+-- ~~~~~~~~~~~~~~~~~~~~
+
+-- Function abstraction
+--
+codeGenFun :: AST.OpenFun env aenv t -> CG CExpr
+codeGenFun (AST.Lam  lam)  = codeGenFun lam
+codeGenFun (AST.Body body) = codeGenExp body
+
+
+-- Implementation of 'IndexScalar' and 'Shape' demonstrate that array
+-- computations must be hoisted out of scalar expressions before code generation
+-- or execution: kernel functions can not invoke other array computations.
+--
+codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG CExpr
+codeGenExp (AST.Var i)       = return $ CVar (internalIdent ('x' : show (idxToInt i))) internalNode
+codeGenExp (AST.PrimConst c) = return $ codeGenPrimConst c
+codeGenExp (AST.Const c)     = return $
+  codeGenConst (Sugar.elemType' (undefined::t)) (Sugar.fromElem' (Sugar.toElem c :: t))
+
+codeGenExp (AST.Cond p e1 e2) =
+  (\a b c -> CCond a (Just b) c internalNode) <$> codeGenExp p <*> codeGenExp e1 <*> codeGenExp e2
+
+codeGenExp (AST.PrimApp f (AST.Tuple arg))
+  | NilTup `SnocTup` x `SnocTup` y <- arg = codeGenPrim f <$> sequence [codeGenExp x, codeGenExp y]
+codeGenExp (AST.PrimApp f x)              = codeGenPrim f <$> sequence [codeGenExp x]
+
+codeGenExp (AST.IndexScalar a1 e1) = do
+  n <- length <$> get <* modify (++ [codeGenAccType a1])        -- TLM: tuple types?
+  a <- codeGenExp e1
+  return $ CCall (CVar (internalIdent "tex1Dfetch") internalNode)
+                 [CVar (internalIdent ("tex" ++ show n)) internalNode, a] internalNode
+  -- TLM 2010-06-07:
+  --  * named arrays (environment projection)
+  --  * bounds checking
+
+codeGenExp (AST.Tuple _) = error "codeGen AST.Tuple"
+codeGenExp (AST.Prj _ _) = error "codeGen AST.Prj"
+codeGenExp (AST.Shape _) = error "codeGen AST.Shape"
+  -- TLM 2010-06-08:
+  --  * generalise `length` kernel parameter to a `shape` type ??
+
 
 -- Convert a typed de Brujin index to the corresponding integer
 --
 idxToInt :: AST.Idx env t -> Int
 idxToInt AST.ZeroIdx       = 0
 idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
-
-
--- | Generate CUDA device code for an array expression
---
-codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
-codeGenAcc op@(AST.Map fn xs)        = mkMap         "map"       (codeGenAccType op) (codeGenAccType xs) (codeGenFun fn)
-codeGenAcc op@(AST.ZipWith fn xs ys) = mkZipWith     "zipWith"   (codeGenAccType op) (codeGenAccType xs) (codeGenAccType ys) (codeGenFun fn)
---codeGenAcc (AST.Replicate _ _ xs)    = mkReplicate   "replicate"
-codeGenAcc (AST.Fold fn e _)         = mkFold        "fold"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
---codeGenAcc (AST.FoldSeg fn e xs s)   = mkFoldSeg     "foldSeg"
-codeGenAcc (AST.Scanl fn e _)        = mkScanl       "scan"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Scanr fn e _)        = mkScanr       "scan"      (codeGenExpType e) (codeGenExp e) (codeGenFun fn)
-codeGenAcc (AST.Permute cf _ pf xs)  = mkPermute     "permute"   (codeGenAccType xs) (codeGenFun cf) (codeGenFun pf)
-codeGenAcc (AST.Backpermute _ fn xs) = mkBackpermute "backpermute" (codeGenAccType xs) (codeGenFun fn)
-
-codeGenAcc op =
-  error ("Data.Array.Accelerate.CUDA: CodeGen: " ++ show op)
-
-
--- Scalar Functions
--- ~~~~~~~~~~~~~~~~
-
-codeGenFun :: AST.OpenFun env aenv t -> CExpr
-codeGenFun (AST.Lam  lam)  = codeGenFun lam
-codeGenFun (AST.Body body) = codeGenExp body
-
-
--- Expressions
--- ~~~~~~~~~~~
-
-codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CExpr
-codeGenExp (AST.Var   i) = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
-codeGenExp (AST.Const c) =
-  codeGenConst (Sugar.elemType' (undefined::t)) (Sugar.fromElem' (Sugar.toElem c :: t))
-
-codeGenExp (AST.Tuple _) = error "codeGen AST.Tuple"
-codeGenExp (AST.Prj _ _) = error "codeGen AST.Prj"
-
-codeGenExp (AST.Cond p e1 e2) =
-  CCond (codeGenExp p) (Just (codeGenExp e1)) (codeGenExp e2) internalNode
-
-codeGenExp (AST.PrimConst c)  = codeGenPrimConst c
-
-codeGenExp (AST.PrimApp f (AST.Tuple arg))
-  | NilTup `SnocTup` x `SnocTup` y <- arg = codeGenPrim f [codeGenExp x, codeGenExp y]
-codeGenExp (AST.PrimApp f x)              = codeGenPrim f [codeGenExp x]
-
-codeGenExp (AST.IndexScalar _ _) = error "codeGen AST.IndexScalar"
-codeGenExp (AST.Shape _)         = error "codeGen AST.Shape"
-
 
 -- Types
 -- ~~~~~

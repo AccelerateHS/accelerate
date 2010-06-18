@@ -22,15 +22,19 @@
  * CUDA texture definitions and access functions are defined in terms of
  * templates, and hence only available through the C++ interface. Expose some
  * dummy wrappers to enable parsing with language-c.
+ *
+ * FIXME: We need extra code generation support for 64-bit types
  */
 #ifdef __cplusplus
 
 typedef texture<uint32_t, 1> TexWord;
+typedef texture<uint32_t, 2> TexWord64;
 typedef texture<uint32_t, 1> TexWord32;
 typedef texture<uint16_t, 1> TexWord16;
 typedef texture<uint8_t,  1> TexWord8;
 
 typedef texture<int32_t, 1> TexInt;
+typedef texture<int32_t, 2> TexInt64;
 typedef texture<int32_t, 1> TexInt32;
 typedef texture<int16_t, 1> TexInt16;
 typedef texture<int8_t,  1> TexInt8;
@@ -53,9 +57,10 @@ typedef void* TexInt8;
 typedef void* TexFloat;
 typedef void* TexDouble;
 
-void* tex1D(const void*, int);
-void* tex2D(const void*, int, int);
-void* tex3D(const void*, int, int, int);
+void* tex1Dfetch(const void*, const int);
+void* tex1D(const void*, const float);
+void* tex2D(const void*, const float, const float);
+void* tex3D(const void*, const float, const float, const float);
 
 #endif
 
@@ -195,3 +200,4 @@ ceiling(unsigned int x, unsigned int f)
 #endif
 #endif  // __ACCELERATE_CUDA_EXTRAS_H__
 
+// vim: filetype=cuda.c

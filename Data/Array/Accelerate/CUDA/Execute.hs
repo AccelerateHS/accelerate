@@ -16,8 +16,9 @@ import Prelude hiding (id, (.), mod, sum)
 import Control.Category
 
 import Data.Maybe
+import Control.Monad
+import Control.Monad.Trans
 import Control.Applicative                              hiding (Const)
-import Control.Monad.IO.Class
 import qualified Data.Map                               as M
 
 import System.FilePath
@@ -26,13 +27,13 @@ import System.Exit                                      (ExitCode(..))
 import System.Posix.Types                               (ProcessID)
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 import Data.Array.Accelerate.CUDA.State
-import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Analysis.Launch
@@ -61,20 +62,32 @@ prj _             _            =
 -- Expression evaluation
 -- ~~~~~~~~~~~~~~~~~~~~~
 
--- Evaluate a closed scalar expression
+-- Evaluate a closed scalar expression. This is a small subset of the scalar
+-- language, for computations that are to be made available on the host.
 --
 executeExp :: Exp aenv t -> Val aenv -> CIO t
-executeExp e aenv = executeOpenExp e Empty aenv
+executeExp e = executeOpenExp e Empty
 
 executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
-executeOpenExp (Var idx) env _       = return . Sugar.toElem $ prj idx env
-executeOpenExp (Const c) _ _         = return $ Sugar.toElem c
+executeOpenExp (Var idx) env _            = return . Sugar.toElem $ prj idx env
+executeOpenExp (Const c) _ _              = return $ Sugar.toElem c
+executeOpenExp (IndexScalar a e) env aenv = do
+  (Array sh ad) <- executeOpenAcc a aenv
+  ix            <- executeOpenExp e env aenv
+  Sugar.toElem <$> ad `indexArray` index sh (Sugar.fromElem ix)
+
+executeOpenExp (Shape a) _ aenv = do
+  (Array sh _)  <- executeOpenAcc a aenv
+  return (Sugar.toElem sh)
+
+executeOpenExp _ _ _ =
+  error "executeOpenExp: internal error"
 
 
 -- Array evaluation
 -- ~~~~~~~~~~~~~~~
 
--- | Evaluate a closed array expression
+-- | Execute a closed array expression
 --
 executeAcc :: Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
@@ -104,8 +117,6 @@ executeOpenAcc acc env = do
     mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
     modM kernelEntry $ M.insert key  (set kernelStatus (Right mdl) krn)
     return mdl
-    --
-    -- TLM 2010-06-02: delete the temporary files??
 
   -- determine dispatch pattern, extract parameters, allocate storage, run
   --
@@ -116,10 +127,48 @@ executeOpenAcc acc env = do
     either' e r l = either l r e
 
 
+-- Dispatch
+-- ~~~~~~~~
+
+data FVar where
+  FArr :: Array dim e -> FVar
+
+-- Lift free array variables out of scalar computations. Returns a list of the
+-- arrays in the order that they are encountered, which also corresponds to the
+-- texture reference index they should be bound to.
+--
+liftFun :: OpenFun env aenv a -> Val aenv -> CIO [FVar]
+liftFun (Body e) = liftExp e
+liftFun (Lam f)  = liftFun f
+
+liftExp :: OpenExp env aenv a -> Val aenv -> CIO [FVar]
+liftExp (Tuple t)         aenv = liftTup t aenv
+liftExp (PrimApp _ e)     aenv = liftExp e aenv
+liftExp (Cond e1 e2 e3)   aenv = concat <$> sequence [liftExp e1 aenv, liftExp e2 aenv, liftExp e3 aenv]
+liftExp (IndexScalar a e) aenv = (:) . FArr <$> executeOpenAcc a aenv <*> liftExp e aenv
+liftExp _ _ =
+  return []
+
+liftTup :: Tuple (OpenExp env aenv) a -> Val aenv -> CIO [FVar]
+liftTup NilTup _             = return []
+liftTup (t `SnocTup` e) aenv = (++) <$> liftExp e aenv <*> liftTup t aenv
+
+
+-- Extract texture references from the compiled module and bind an array to it
+--
+bind :: CUDA.Module -> [FVar] -> CIO [CUDA.FunParam]
+bind mdl var =
+  let tex n (FArr (Array sh ad)) = textureRefs ad mdl (size sh) n
+  in  concat <$> zipWithM tex [0..] var
+
+release :: [FVar] -> CIO ()
+release = mapM_ (\(FArr (Array _ ad)) -> freeArray ad)
+
+
 -- Setup and initiate the computation. This may require several kernel launches.
 --
 dispatch :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
-dispatch acc@(Map _ ad) env mdl = do
+dispatch acc@(Map f ad) env mdl = do
   fn             <- liftIO $ CUDA.getFun mdl "map"
   (Array sh in0) <- executeOpenAcc ad env
   let res@(Array sh' out) = newArray (Sugar.toElem sh)
@@ -128,29 +177,35 @@ dispatch acc@(Map _ ad) env mdl = do
   mallocArray out n
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
+  f_var <- liftFun f env
+  t_var <- bind mdl f_var
 
-  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg n])
   freeArray in0
+  release f_var
   return res
 
-dispatch acc@(ZipWith _ ad0 ad1) env mdl = do
+dispatch acc@(ZipWith f ad0 ad1) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "zipWith"
   (Array sh0 in0) <- executeOpenAcc ad0 env
   (Array sh1 in1) <- executeOpenAcc ad1 env
   let res@(Array sh' out) = newArray (Sugar.toElem (sh0 `intersect` sh1))
-      n    = size sh'
+      n                   = size sh'
 
   mallocArray out n
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
   d_in1 <- devicePtrs in1
+  f_var <- liftFun f env
+  t_var <- bind mdl f_var
 
-  launch acc n fn (d_out ++ d_in0 ++ d_in1 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ d_in1 ++ t_var ++ [CUDA.IArg n])
   freeArray in0
   freeArray in1
+  release f_var
   return res
 
-dispatch acc@(Fold _ x ad) env mdl = do
+dispatch acc@(Fold f x ad) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "fold"
   (Array sh in0)  <- executeOpenAcc ad env
   (cta,grid,smem) <- launchConfig acc (size sh) fn
@@ -159,33 +214,39 @@ dispatch acc@(Fold _ x ad) env mdl = do
   mallocArray out grid
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
+  f_arr <- liftFun f env
+  t_var <- bind mdl f_arr
 
-  launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ [CUDA.IArg (size sh)])
+  launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg (size sh)])
   freeArray in0
+  release f_arr
   if grid > 1 then dispatch (Fold undefined x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
 dispatch acc@(Scanl _ _ _) env mdl = dispatchScan acc env mdl
 dispatch acc@(Scanr _ _ _) env mdl = dispatchScan acc env mdl
 
-dispatch acc@(Permute _ df _ ad) env mdl = do
-  fn             <- liftIO $ CUDA.getFun mdl "permute"
-  (Array sh def) <- executeOpenAcc df env
-  (Array _  in0) <- executeOpenAcc ad env
+dispatch acc@(Permute f1 df f2 ad) env mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "permute"
+  (Array sh  def) <- executeOpenAcc df env
+  (Array sh' in0) <- executeOpenAcc ad env
   let res@(Array _ out) = newArray (Sugar.toElem sh)
-      n                 = size sh
+      n                 = size sh'
 
   mallocArray out n
   copyArray def out n
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
+  f_arr <- (++) <$> liftFun f1 env <*> liftFun f2 env
+  t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg n])
   freeArray def
   freeArray in0
+  release f_arr
   return res
 
-dispatch acc@(Backpermute e _ ad) env mdl = do
+dispatch acc@(Backpermute e f ad) env mdl = do
   fn            <- liftIO $ CUDA.getFun mdl "backpermute"
   sh            <- executeExp e env
   (Array _ in0) <- executeOpenAcc ad env
@@ -195,9 +256,12 @@ dispatch acc@(Backpermute e _ ad) env mdl = do
   mallocArray out n
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
+  f_arr <- liftFun f env
+  t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg n])
   freeArray in0
+  release f_arr
   return res
 
 dispatch _ _ _ =
@@ -205,8 +269,8 @@ dispatch _ _ _ =
 
 
 -- Unified dispatch handler for left/right scan. This is a little awkward, but
--- the execution semantics between the two are the same, and all differences
--- have been established during code generation.
+-- the execution semantics between the two are the same, as all differences have
+-- been established during code generation.
 --
 dispatchScan :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
 dispatchScan     (Scanr _ x ad) env mdl = dispatchScan (Scanl undefined x ad) env mdl
@@ -275,8 +339,7 @@ newArray sh = ad `seq` Array (Sugar.fromElem sh) ad
     ad = fst . runArrayData $ (,undefined) <$> newArrayData (1024 `max` Sugar.size sh)
 
 
--- |
--- Wait for the compilation process to finish
+-- | Wait for the compilation process to finish
 --
 waitFor :: ProcessID -> IO ()
 waitFor pid = do
