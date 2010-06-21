@@ -13,7 +13,7 @@ Description:            This library defines an embedded language for
                         of the intended semantics of the language.
 License:                BSD3
 License-file:           LICENSE
-Author:                 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+Author:                 Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
