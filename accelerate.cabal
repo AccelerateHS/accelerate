@@ -81,6 +81,7 @@ Library
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
+                        Paths_accelerate
   If flag(llvm)
     Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
 
