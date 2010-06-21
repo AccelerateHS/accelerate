@@ -162,6 +162,39 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
     return (t1 ++ t2)
 
 
+-- Texture References
+-- ~~~~~~~~~~~~~~~~~~
+
+-- This representation must match the code generator's understanding of how to
+-- utilise the texture cache.
+--
+-- FIXME: Code generation for 64-bit types.
+--
+class TextureData a where
+  format :: a -> (CUDA.Format, Int)
+
+instance TextureData Int8   where format _ = (CUDA.Int8,   1)
+instance TextureData Int16  where format _ = (CUDA.Int16,  1)
+instance TextureData Int32  where format _ = (CUDA.Int32,  1)
+instance TextureData Int64  where format _ = (CUDA.Int32,  2)
+instance TextureData Word8  where format _ = (CUDA.Word8,  1)
+instance TextureData Word16 where format _ = (CUDA.Word16, 1)
+instance TextureData Word32 where format _ = (CUDA.Word32, 1)
+instance TextureData Word64 where format _ = (CUDA.Word32, 2)
+instance TextureData Float  where format _ = (CUDA.Float,  1)
+instance TextureData Double where format _ = (CUDA.Int32,  2)
+
+instance TextureData Int where
+  format _ = case sizeOf (undefined :: Int) of
+                  4 -> (CUDA.Int32, 1)
+                  8 -> (CUDA.Int32, 2)
+
+instance TextureData Word where
+  format _ = case sizeOf (undefined :: Word) of
+                  4 -> (CUDA.Word32, 1)
+                  8 -> (CUDA.Word32, 2)
+
+
 -- Implementation
 -- ~~~~~~~~~~~~~~
 
@@ -265,12 +298,13 @@ devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> looku
 -- Retrieve texture references from the module (beginning with the given seed),
 -- bind device pointers, and return as a list of function arguments.
 --
-textureRefs' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e, Storable a, CUDA.Format a)
+textureRefs' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e, Storable a, TextureData a)
              => Acc.ArrayData e -> CUDA.Module -> Int -> Int -> CIO [CUDA.FunParam]
 textureRefs' ad mdl n t = do
   ptr <- getArray ad
   tex <- liftIO $ CUDA.getTex mdl ("tex" ++ show t)
-  liftIO $ CUDA.setPtr tex ptr (n * sizeOf (undefined :: a))
+  liftIO $ uncurry (CUDA.setFormat tex) (format (undefined :: a))
+  liftIO $ CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
   return [CUDA.TArg tex]
 
 
