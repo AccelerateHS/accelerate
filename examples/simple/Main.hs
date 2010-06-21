@@ -13,7 +13,7 @@ import qualified Data.Array.Accelerate as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
 import qualified Data.Array.Accelerate.CUDA as CUDA
 
-import System.Time
+import Time
 import SAXPY
 import Square
 import DotP

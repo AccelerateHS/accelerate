@@ -2,7 +2,7 @@
 
 module Filter (filter, filter_ref) where
 
-import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
+import Prelude   hiding (replicate, scanl, zip, map, filter, max, min, not, zipWith)
 import qualified Prelude
 
 import Data.Array.Unboxed (UArray)
@@ -17,7 +17,7 @@ filter :: Elem a
        -> Acc (Vector a)
 filter p arr
   = let flags               = map (boolToInt . p) arr
-        (targetIdx, length) = scan (+) 0 flags
+        (targetIdx, length) = scanl (+) 0 flags
         arr'                = backpermute (length!(constant ())) id arr
     in
     permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, targetIdx!ix)) arr
