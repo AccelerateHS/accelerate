@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Language (
   permute, backpermute,
   
   -- ** Tuple construction and destruction
-  Tuple(..),
+  Tuple(..), fst, snd, curry, uncurry,
   
   -- ** Conditional expressions
   (?),
@@ -65,7 +65,7 @@ module Data.Array.Accelerate.Language (
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanr, zipWith,
-                        filter, max, min, not, const)
+                        filter, max, min, not, const, fst, snd, curry, uncurry)
 import qualified Prelude
 
 -- standard libraries
@@ -142,16 +142,10 @@ zip = zipWith (\x y -> tuple (x, y))
 -- |The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 -- 
-unzip :: forall a b dim. (Ix dim, Elem a, Elem b) 
+unzip :: (Ix dim, Elem a, Elem b)
       => Acc (Array dim (a, b))
       -> (Acc (Array dim a), Acc (Array dim b))
 unzip arr = (map fst arr, map snd arr)
-  where
-    fst :: Exp (a, b) -> Exp a
-    fst e = let (x, _:: Exp b) = untuple e in x
-
-    snd :: Exp (a, b) -> Exp b
-    snd e = let (_ :: Exp a, y) = untuple e in y
 
 -- |Apply the given function elementwise to the given array.
 -- 
@@ -275,6 +269,26 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e)
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e) = Exp (a, b, c, d, e)
   tuple   = tup5
   untuple = untup5
+
+
+-- |Extract the first component of a pair
+--
+fst :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp a
+fst e = let (x, _:: Exp b) = untuple e in x
+
+-- |Extract the second component of a pair
+snd :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp b
+snd e = let (_ :: Exp a, y) = untuple e in y
+
+-- |Converts an uncurried function to a curried function
+--
+curry :: (Elem a, Elem b) => (Exp (a,b) -> Exp c) -> Exp a -> Exp b -> Exp c
+curry f x y = f (tuple (x,y))
+
+-- |Converts a curried function to a function on pairs
+--
+uncurry :: (Elem a, Elem b) => (Exp a -> Exp b -> Exp c) -> Exp (a,b) -> Exp c
+uncurry f t = let (x,y) = untuple t in f x y
 
 
 -- Conditional expressions
