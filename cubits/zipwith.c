@@ -10,10 +10,28 @@ typedef unsigned int TyOut;
 typedef unsigned int TyIn0;
 typedef unsigned int TyIn1;
 
-__device__ static TyOut
-apply(const TyIn0 in0, const TyIn1 in1)
+typedef TyOut* ArrOut;
+typedef TyIn0* ArrIn0;
+typedef TyIn1* ArrIn1;
+
+static __inline__ __device__ void
+set(ArrOut d_out, const Ix idx, const TyOut val)
 {
-    return in0 + in1;
+}
+
+static __inline__ __device__ TyIn0
+get0(const ArrIn0 d_in0, const Ix idx)
+{
+}
+
+static __inline__ __device__ TyIn1
+get1(const ArrIn1 d_in1, const Ix idx)
+{
+}
+
+static __inline__ __device__ TyOut
+apply(const TyIn0 in1, const TyIn1 in0, const Ix shape)
+{
 }
 
 
@@ -24,18 +42,18 @@ apply(const TyIn0 in0, const TyIn1 in1)
 __global__ void
 zipWith
 (
-    TyOut               *d_out,
-    const TyIn0         *d_in0,
-    const TyIn1         *d_in1,
-    const unsigned int  length
+    ArrOut              d_out,
+    const ArrIn1        d_in1,
+    const ArrIn0        d_in0,
+    const Ix		shape
 )
 {
-    unsigned int       idx;
-    const unsigned int gridSize = __umul24(blockDim.x, gridDim.x);
+    Ix       idx;
+    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < length; idx += gridSize)
+    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        d_out[idx] = apply(d_in0[idx], d_in1[idx]);
+	set(d_out, idx, apply(get1(d_in1, idx), get0(d_in0, idx), shape));
     }
 }
 

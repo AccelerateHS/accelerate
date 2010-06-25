@@ -9,10 +9,22 @@
 typedef unsigned int TyOut;
 typedef unsigned int TyIn0;
 
-__device__ static TyOut
-apply(const TyIn0 in0)
+typedef TyOut*  ArrOut;
+typedef TyIn0*  ArrIn0;
+
+static __inline__ __device__ void
+set(ArrOut d_out, const Ix idx, const TyOut val)
 {
-    return in0;
+}
+
+static __inline__ __device__ TyIn0
+get0(const ArrIn0 d_in0, const Ix idx)
+{
+}
+
+static __inline__ __device__ TyOut
+apply(const TyIn0 in0, const Ix shape)
+{
 }
 
 
@@ -23,17 +35,17 @@ apply(const TyIn0 in0)
 __global__ void
 map
 (
-    TyOut               *d_out,
-    const TyIn0         *d_in0,
-    const unsigned int  length
+    ArrOut              d_out,
+    const ArrIn0        d_in0,
+    const Ix            shape
 )
 {
-    unsigned int       idx;
-    const unsigned int gridSize = __umul24(blockDim.x, gridDim.x);
+    Ix       idx;
+    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < length; idx += gridSize)
+    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        d_out[idx] = apply(d_in0[idx]);
+        set(d_out, idx, apply(get0(d_in0, idx), shape));
     }
 }
 

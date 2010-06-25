@@ -185,21 +185,21 @@ dispatch acc@(Map f ad) env mdl = do
   release f_var
   return res
 
-dispatch acc@(ZipWith f ad0 ad1) env mdl = do
+dispatch acc@(ZipWith f ad1 ad0) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "zipWith"
-  (Array sh0 in0) <- executeOpenAcc ad0 env
   (Array sh1 in1) <- executeOpenAcc ad1 env
+  (Array sh0 in0) <- executeOpenAcc ad0 env
   let res@(Array sh' out) = newArray (Sugar.toElem (sh0 `intersect` sh1))
       n                   = size sh'
 
   mallocArray out n
   d_out <- devicePtrs out
-  d_in0 <- devicePtrs in0
   d_in1 <- devicePtrs in1
+  d_in0 <- devicePtrs in0
   f_var <- liftFun f env
   t_var <- bind mdl f_var
 
-  launch acc n fn (d_out ++ d_in0 ++ d_in1 ++ t_var ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in1 ++ d_in0 ++ t_var ++ [CUDA.IArg n])
   freeArray in0
   freeArray in1
   release f_var
@@ -296,6 +296,7 @@ dispatchScan acc@(Scanl _ x ad) env mdl = do
 
   -- Now, take the last value of all of the sub-blocks and scan those. This will
   -- give a new value that must be added to each block to get the final result
+  --
   --
   if grid <= 1
      then return (arr, Array () sum)

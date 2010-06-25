@@ -99,6 +99,7 @@ Library
                         Data.Array.Accelerate.CUDA.CodeGen.Replicate
                         Data.Array.Accelerate.CUDA.CodeGen.Scan
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+                        Data.Array.Accelerate.CUDA.CodeGen.Tuple
                         Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.CodeGen.Vector
                         Data.Array.Accelerate.CUDA.CodeGen
