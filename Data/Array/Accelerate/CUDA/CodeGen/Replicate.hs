@@ -14,8 +14,9 @@ module Data.Array.Accelerate.CUDA.CodeGen.Replicate (mkReplicate)
   where
 
 import Language.C
+import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 
-mkReplicate :: String -> [CTypeSpec] -> CExpr -> CTranslUnit
+mkReplicate :: String -> [CType] -> [CExpr] -> CTranslUnit
 mkReplicate _name _ty _slix = undefined
 

@@ -51,11 +51,11 @@ codeGenAcc acc = runState (codeGenAcc' acc) []
 codeGenAcc' :: AST.OpenAcc aenv a -> CG CTranslUnit
 codeGenAcc' op@(AST.Map f1 a1)        = mkMap         "map"         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     "zipWith"     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
-{-
 codeGenAcc' (AST.Replicate _ e1 a1)   = mkReplicate   "replicate"   (codeGenAccType a1) <$> codeGenExp e1
 codeGenAcc' (AST.Index _ a1 e1)       = mkIndex       "index"       (codeGenAccType a1) <$> codeGenExp e1
 codeGenAcc' (AST.Fold  f1 e1 _)       = mkFold        "fold"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.FoldSeg f1 e1 _ _)   = mkFoldSeg     "foldSeg"     (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+{-
 codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     "permute"     (codeGenAccType a1) <$> codeGenFun f1 <*> codeGenFun f2
@@ -88,8 +88,7 @@ codeGenExp (AST.Var i)         = return . unit $ CVar (internalIdent ('x' : show
 codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
 codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
 codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
-codeGenExp (AST.Const c)       = return . unit $
-  codeGenConst (Sugar.elemType' (undefined::t)) (Sugar.fromElem' (Sugar.toElem c :: t))
+codeGenExp (AST.Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
 
 codeGenExp (AST.Cond p e1 e2) = do
   [a] <- codeGenExp p
@@ -264,10 +263,10 @@ codeGenPrim _ _ =
 -- Need to use an ElemRepr' representation here, so that the SingleTuple
 -- type matches the type of the actual constant.
 --
-codeGenConst :: TupleType a -> a -> CExpr
-codeGenConst UnitTuple        _ = undefined             -- void* ??
-codeGenConst (SingleTuple ty) c = codeGenScalar ty c
-codeGenConst (PairTuple  _ _) _ = undefined
+codeGenConst :: TupleType a -> a -> [CExpr]
+codeGenConst UnitTuple           _      = []
+codeGenConst (SingleTuple ty)    c      = [codeGenScalar ty c]
+codeGenConst (PairTuple ty1 ty0) (cs,c) = codeGenConst ty1 cs ++ codeGenConst ty0 c
 
 
 codeGenScalar :: ScalarType a -> a -> CExpr

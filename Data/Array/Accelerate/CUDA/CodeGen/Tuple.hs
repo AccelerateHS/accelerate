@@ -8,7 +8,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Tuple (mkTupleType)
+module Data.Array.Accelerate.CUDA.CodeGen.Tuple (mkTupleType, mkTupleTypeAsc)
   where
 
 import Language.C
@@ -16,14 +16,28 @@ import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 
 mkTupleType :: Maybe Int -> [CType] -> [CExtDecl]
-mkTupleType subscript xs = types ++ [accessor]
+mkTupleType subscript ty = types ++ [accessor]
   where
-    n        = length xs
+    n        = length ty
     base     = maybe "Out" (\p -> "In" ++ show p) subscript
     accessor = maybe (mkSet n) (mkGet n) subscript
     types
-      | n <= 1    = [ mkTypedef ("Ty"  ++ base) False (head xs), mkTypedef ("Arr" ++ base) True (head xs)]
-      | otherwise = [ mkStruct  ("Ty"  ++ base) False xs,        mkStruct  ("Arr" ++ base) True  xs]
+      | n <= 1    = [ mkTypedef ("Ty"  ++ base) False (head ty), mkTypedef ("Arr" ++ base) True (head ty)]
+      | otherwise = [ mkStruct  ("Ty"  ++ base) False ty,        mkStruct  ("Arr" ++ base) True ty]
+
+-- A variant of tuple generation for associative array computations, generating
+-- base get and set functions, and the given number of type synonyms.
+--
+mkTupleTypeAsc :: Int -> [CType] -> [CExtDecl]
+mkTupleTypeAsc syn ty = types ++ synonyms ++ [mkSet n, mkGet n 0]
+  where
+    n	     = length ty
+    synonyms = concat . take syn . flip map ([0..] :: [Int]) $ \v ->
+      [ mkTypedef ("TyIn"  ++ show v) False [CTypeDef (internalIdent "TyOut")  internalNode]
+      , mkTypedef ("ArrIn" ++ show v) False [CTypeDef (internalIdent "ArrOut") internalNode] ]
+    types
+      | n <= 1    = [ mkTypedef "TyOut" False (head ty), mkTypedef "ArrOut" True (head ty)]
+      | otherwise = [ mkStruct  "TyOut" False ty,        mkStruct  "ArrOut" True ty]
 
 
 -- Getter and setter functions for reading and writing (respectively) to global

@@ -14,8 +14,9 @@ module Data.Array.Accelerate.CUDA.CodeGen.Index (mkIndex)
   where
 
 import Language.C
+import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 
-mkIndex :: String -> [CTypeSpec] -> CExpr -> CTranslUnit
+mkIndex :: String -> [CType] -> [CExpr] -> CTranslUnit
 mkIndex _name _ty _slix = undefined
 

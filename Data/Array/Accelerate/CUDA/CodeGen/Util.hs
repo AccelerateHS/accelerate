@@ -89,14 +89,18 @@ mkTyVector var n ty =
 --   return expr;
 -- }
 --
-mkIdentity :: CExpr -> CExtDecl
+mkIdentity :: [CExpr] -> CExtDecl
 mkIdentity expr =
   CFDefExt
     (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr device [] internalNode)),CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
              (CDeclr (Just (internalIdent "identity")) [CFunDeclr (Right ([],False)) [] internalNode] Nothing [] internalNode)
              []
-             (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode)
+             (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just initr,Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode)
              internalNode)
+  where
+    initr
+      | length expr <= 1 = CInitExpr (head expr) internalNode
+      | otherwise        = CInitList (map (\e -> ([],CInitExpr e internalNode)) expr) internalNode
 
 
 -- static inline __attribute__((device)) TyOut
@@ -115,11 +119,10 @@ mkApply argc expr =
              (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just initr,Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode)
              internalNode)
   where
-    n     = length expr
     shape = CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "shape")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode
     initr
-      | n <= 1    = CInitExpr (head expr) internalNode
-      | otherwise = CInitList (map (\e -> ([],CInitExpr e internalNode)) expr) internalNode
+      | length expr <= 1 = CInitExpr (head expr) internalNode
+      | otherwise        = CInitList (map (\e -> ([],CInitExpr e internalNode)) expr) internalNode
 
     argv  = reverse . (shape:) . take argc . flip map (enumFrom 0 :: [Int]) $ \x ->
       let ty  = "TyIn" ++ show x

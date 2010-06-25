@@ -14,19 +14,38 @@
 #define lengthIsPow2    0
 #endif
 
-typedef unsigned int T;
+typedef int  TyOut;
+typedef int  TyIn0;
+typedef int  TyIn1;
+
+typedef int* ArrOut;
+typedef int* ArrIn0;
+typedef int* ArrIn1;
 
 
-__device__ static T
-identity()
+static __inline__ __device__ void
+set(ArrOut d_out, const Ix idx, const TyOut val)
 {
-    return 0;
 }
 
-__device__ static T
-apply(const T x, const T y)
+static __inline__ __device__ TyIn0
+get0(const ArrIn0 d_in0, const Ix idx)
 {
-    return x + y;
+}
+
+static __inline__ __device__ TyIn1
+get1(const ArrIn1 d_in1, const Ix idx)
+{
+}
+
+static __inline__ __device__ static TyOut
+identity()
+{
+}
+
+static __inline__ __device__ TyOut
+apply(const TyIn1 in1, const TyIn0 in0, const Ix shape)
+{
 }
 
 
@@ -40,19 +59,19 @@ apply(const T x, const T y)
 __global__ void
 fold
 (
-    T                   *d_out,
-    const T             *d_in0,
-    const unsigned int  length
+    ArrOut              d_out,
+    const ArrIn0        d_in0,
+    const Ix            shape
 )
 {
-    extern __shared__ T scratch[];
+    extern __shared__ TyOut scratch[];
 
     /*
      * Calculate first level of reduction reading into shared memory
      */
-    unsigned int       i;
-    const unsigned int tid      = threadIdx.x;
-    const unsigned int gridSize = blockSize * 2 * gridDim.x;
+    Ix       i;
+    const Ix tid      = threadIdx.x;
+    const Ix gridSize = blockSize * 2 * gridDim.x;
 
     scratch[tid] = identity();
 
@@ -63,43 +82,43 @@ fold
      *
      * The loop stride of `gridSize' is used to maintain coalescing.
      */
-    for (i =  blockIdx.x * blockSize * 2 + tid; i <  length; i += gridSize)
+    for (i =  blockIdx.x * blockSize * 2 + tid; i <  shape; i += gridSize)
     {
-        scratch[tid] = apply(scratch[tid], d_in0[i]);
+        scratch[tid] = apply(scratch[tid], get0(d_in0, i), shape);
 
         /*
          * Ensure we don't read out of bounds. This is optimised away if the
          * input length is a power of two
          */
-        if (lengthIsPow2 || i + blockSize < length)
-            scratch[tid] = apply(scratch[tid], d_in0[i+blockSize]);
+        if (lengthIsPow2 || i + blockSize < shape)
+            scratch[tid] = apply(scratch[tid], get0(d_in0, i+blockSize), shape);
     }
     __syncthreads();
 
     /*
      * Now, calculate the reduction in shared memory
      */
-    if (blockSize >= 512) { if (tid < 256) { scratch[tid] = apply(scratch[tid], scratch[tid+256]); } __syncthreads(); }
-    if (blockSize >= 256) { if (tid < 128) { scratch[tid] = apply(scratch[tid], scratch[tid+128]); } __syncthreads(); }
-    if (blockSize >= 128) { if (tid <  64) { scratch[tid] = apply(scratch[tid], scratch[tid+ 64]); } __syncthreads(); }
+    if (blockSize >= 512) { if (tid < 256) { scratch[tid] = apply(scratch[tid], scratch[tid+256], shape); } __syncthreads(); }
+    if (blockSize >= 256) { if (tid < 128) { scratch[tid] = apply(scratch[tid], scratch[tid+128], shape); } __syncthreads(); }
+    if (blockSize >= 128) { if (tid <  64) { scratch[tid] = apply(scratch[tid], scratch[tid+ 64], shape); } __syncthreads(); }
 
 #ifndef __DEVICE_EMULATION__
     if (tid < 32)
 #endif
     {
-        if (blockSize >= 64) { scratch[tid] = apply(scratch[tid], scratch[tid+32]);  __EMUSYNC; }
-        if (blockSize >= 32) { scratch[tid] = apply(scratch[tid], scratch[tid+16]);  __EMUSYNC; }
-        if (blockSize >= 16) { scratch[tid] = apply(scratch[tid], scratch[tid+ 8]);  __EMUSYNC; }
-        if (blockSize >=  8) { scratch[tid] = apply(scratch[tid], scratch[tid+ 4]);  __EMUSYNC; }
-        if (blockSize >=  4) { scratch[tid] = apply(scratch[tid], scratch[tid+ 2]);  __EMUSYNC; }
-        if (blockSize >=  2) { scratch[tid] = apply(scratch[tid], scratch[tid+ 1]);  __EMUSYNC; }
+        if (blockSize >= 64) { scratch[tid] = apply(scratch[tid], scratch[tid+32], shape);  __EMUSYNC; }
+        if (blockSize >= 32) { scratch[tid] = apply(scratch[tid], scratch[tid+16], shape);  __EMUSYNC; }
+        if (blockSize >= 16) { scratch[tid] = apply(scratch[tid], scratch[tid+ 8], shape);  __EMUSYNC; }
+        if (blockSize >=  8) { scratch[tid] = apply(scratch[tid], scratch[tid+ 4], shape);  __EMUSYNC; }
+        if (blockSize >=  4) { scratch[tid] = apply(scratch[tid], scratch[tid+ 2], shape);  __EMUSYNC; }
+        if (blockSize >=  2) { scratch[tid] = apply(scratch[tid], scratch[tid+ 1], shape);  __EMUSYNC; }
     }
 
     /*
      * Write the results of this block back to global memory
      */
     if (tid == 0)
-        d_out[blockIdx.x] = scratch[0];
+        set(d_out, blockIdx.x, scratch[0]);
 }
 
 // vim:filetype=cuda.c

@@ -14,8 +14,9 @@ module Data.Array.Accelerate.CUDA.CodeGen.FoldSeg (mkFoldSeg)
   where
 
 import Language.C
+import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 
-mkFoldSeg :: String -> [CTypeSpec] -> CExpr -> CExpr -> CTranslUnit
+mkFoldSeg :: String -> [CType] -> [CExpr] -> [CExpr] -> CTranslUnit
 mkFoldSeg _name _ty _identity _apply = undefined
 

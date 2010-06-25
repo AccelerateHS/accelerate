@@ -45,7 +45,7 @@ zipWith
     ArrOut              d_out,
     const ArrIn1        d_in1,
     const ArrIn0        d_in0,
-    const Ix		shape
+    const Ix            shape
 )
 {
     Ix       idx;
@@ -53,7 +53,7 @@ zipWith
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-	set(d_out, idx, apply(get1(d_in1, idx), get0(d_in0, idx), shape));
+        set(d_out, idx, apply(get1(d_in1, idx), get0(d_in0, idx), shape));
     }
 }
 
