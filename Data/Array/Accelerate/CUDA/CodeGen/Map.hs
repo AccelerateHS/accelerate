@@ -24,20 +24,20 @@ import Data.Array.Accelerate.CUDA.CodeGen.Tuple
 mkMap :: String -> [CType] -> [CType] -> [CExpr] -> CTranslUnit
 mkMap name tyOut tyIn0 apply =
   CTranslUnit
-    (  mkTupleType Nothing  tyOut
-    ++ mkTupleType (Just 0) tyIn0
-    ++ [mkApply 1 apply]
-    ++ [map name] )
+    ( mkTupleType Nothing  tyOut ++
+      mkTupleType (Just 0) tyIn0 ++
+    [ mkApply 1 apply
+    , map name ])
     (mkNodeInfo (initPos "map.cu") (Name 0))
 
 mkZipWith :: String -> [CType] -> [CType] -> [CType] -> [CExpr] -> CTranslUnit
 mkZipWith name tyOut tyIn1 tyIn0 apply =
   CTranslUnit
-    (  mkTupleType Nothing  tyOut
-    ++ mkTupleType (Just 1) tyIn1
-    ++ mkTupleType (Just 0) tyIn0
-    ++ [mkApply 2 apply]
-    ++ [zipWith name] )
+    ( mkTupleType Nothing  tyOut ++
+      mkTupleType (Just 1) tyIn1 ++
+      mkTupleType (Just 0) tyIn0 ++
+    [ mkApply 2 apply
+    , zipWith name ])
     (mkNodeInfo (initPos "zipWith.cu") (Name 0))
 
 

@@ -58,9 +58,10 @@ codeGenAcc' (AST.FoldSeg f1 e1 _ _)   = mkFoldSeg     "foldSeg"     (codeGenExpT
 {-
 codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       "scan"        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+-}
 codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     "permute"     (codeGenAccType a1) <$> codeGenFun f1 <*> codeGenFun f2
 codeGenAcc' (AST.Backpermute _ f1 a1) = mkBackpermute "backpermute" (codeGenAccType a1) <$> codeGenFun f1
--}
+
 codeGenAcc' _ =
   error "codeGenAcc: internal error"
 

@@ -22,10 +22,10 @@ import Data.Array.Accelerate.CUDA.CodeGen.Tuple
 mkFold :: String -> [CType] -> [CExpr] -> [CExpr] -> CTranslUnit
 mkFold name ty identity apply =
   CTranslUnit
-    (  mkTupleTypeAsc 2 ty
-    ++ [mkIdentity identity]
-    ++ [mkApply 2 apply]
-    ++ [fold name] )
+    ( mkTupleTypeAsc 2 ty ++
+    [ mkIdentity identity
+    , mkApply 2 apply
+    , fold name ])
     (mkNodeInfo (initPos "fold.cu") (Name 0))
 
 

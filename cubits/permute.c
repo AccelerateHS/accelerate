@@ -6,29 +6,42 @@
  *
  * ---------------------------------------------------------------------------*/
 
-typedef int             T;
-typedef unsigned int    Ix;
 
 const Ix ignore = (Ix) -1;
+
+typedef int  TyOut;
+typedef int  TyIn0;
+typedef int  TyIn1;
+
+typedef int* ArrOut;
+typedef int* ArrIn0;
+typedef int* ArrIn1;
+
+static __inline__ __device__ void
+set(ArrOut d_out, const Ix idx, const TyOut val)
+{
+}
+
+static __inline__ __device__ TyIn0
+get0(const ArrIn0 d_in0, const Ix idx)
+{
+}
 
 /*
  * Index projection source -> destination
  */
-__device__ Ix
-project(const Ix idx)
+static __inline__ __device__ Ix
+project(const Ix idx, const Ix shape)
 {
-    return idx;
 }
 
 /*
  * Combination function
  */
-__device__ static T
-apply(const T x, const T y)
+static __inline__ __device__ static TyOut
+apply(const TyIn1 x1, const TyIn0 x0, const Ix shape)
 {
-    return x + y;
 }
-
 
 /*
  * Forward permutation, characterised by a function that determines for each
@@ -42,22 +55,22 @@ apply(const T x, const T y)
 __global__ void
 permute
 (
-    T                   *d_out,
-    const T             *d_in0,
-    const unsigned int  length
+    ArrOut              d_out,
+    const ArrIn0        d_in0,
+    const Ix            shape
 )
 {
-    Ix                 dst;
-    unsigned int       idx;
-    const unsigned int gridSize = __umul24(blockDim.x, gridDim.x);
+    Ix       dst;
+    Ix       idx;
+    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < length; idx += gridSize)
+    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        dst = project(idx);
+        dst = project(idx, shape);
 
         if (dst != ignore)
         {
-           d_out[dst] = apply(d_out[dst], d_in0[idx]);
+            set(d_out, dst, apply(get0(d_in0, idx), get0(d_out, dst), shape));
         }
     }
 }

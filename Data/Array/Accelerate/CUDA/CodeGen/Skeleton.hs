@@ -14,7 +14,7 @@ module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
     module Data.Array.Accelerate.CUDA.CodeGen.FoldSeg,
     module Data.Array.Accelerate.CUDA.CodeGen.Index,
     module Data.Array.Accelerate.CUDA.CodeGen.Map,
---    module Data.Array.Accelerate.CUDA.CodeGen.Permute,
+    module Data.Array.Accelerate.CUDA.CodeGen.Permute,
     module Data.Array.Accelerate.CUDA.CodeGen.Replicate,
 --    module Data.Array.Accelerate.CUDA.CodeGen.Scan,
 --    module Data.Array.Accelerate.CUDA.CodeGen.Vector
@@ -33,7 +33,7 @@ import Data.Array.Accelerate.CUDA.CodeGen.Fold
 import Data.Array.Accelerate.CUDA.CodeGen.FoldSeg
 import Data.Array.Accelerate.CUDA.CodeGen.Index
 import Data.Array.Accelerate.CUDA.CodeGen.Map
---import Data.Array.Accelerate.CUDA.CodeGen.Permute
+import Data.Array.Accelerate.CUDA.CodeGen.Permute
 import Data.Array.Accelerate.CUDA.CodeGen.Replicate
 --import Data.Array.Accelerate.CUDA.CodeGen.Scan
 --import Data.Array.Accelerate.CUDA.CodeGen.Vector

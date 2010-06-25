@@ -33,11 +33,6 @@ get0(const ArrIn0 d_in0, const Ix idx)
 {
 }
 
-static __inline__ __device__ TyIn1
-get1(const ArrIn1 d_in1, const Ix idx)
-{
-}
-
 static __inline__ __device__ static TyOut
 identity()
 {

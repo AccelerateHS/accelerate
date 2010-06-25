@@ -9,13 +9,28 @@
 typedef unsigned int T;
 typedef unsigned int Ix;
 
+typedef int  TyOut;
+typedef int  TyIn0;
+
+typedef int* ArrOut;
+typedef int* ArrIn0;
+
+static __inline__ __device__ void
+set(ArrOut d_out, const Ix idx, const TyOut val)
+{
+}
+
+static __inline__ __device__ TyIn0
+get0(const ArrIn0 d_in0, const Ix idx)
+{
+}
+
 /*
  * Index projection from destination -> source
  */
-__device__ Ix
-project(const Ix x0)
+static __inline__ __device__ Ix
+project(const Ix idx, const Ix shape)
 {
-    return x0;
 }
 
 
@@ -32,19 +47,17 @@ project(const Ix x0)
 __global__ void
 backpermute
 (
-    T                   *d_out,
-    const T             *d_in0,
-    const unsigned int  length
+    ArrOut              d_out,
+    const ArrIn0        d_in0,
+    const Ix            shape
 )
 {
-    Ix                 src;
-    unsigned int       idx;
-    const unsigned int gridSize = __umul24(blockDim.x, gridDim.x);
+    Ix       idx;
+    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < length; idx += gridSize)
+    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        src        = project(idx);
-        d_out[idx] = d_in0[src];
+        set(d_out, idx, get0(d_in0, project(idx, shape)));
     }
 }
 
