@@ -344,14 +344,14 @@ instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
   rotate     = error "Data.Bits.rotate: use Accelerate equivalent"
 
 shift, shiftL, shiftR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shift      = mkBShift
-shiftL x i = x `shift` i
-shiftR x i = x `shift` (-i)
+shift  x i = i ==* 0 ? (x, i <* 0 ? (x `shiftR` (-i), x `shiftL` i))
+shiftL     = mkBShiftL
+shiftR     = mkBShiftR
 
 rotate, rotateL, rotateR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotate      = mkBRotate
-rotateL x i = x `rotate` i
-rotateR x i = x `rotate` (-i)
+rotate  x i = i ==* 0 ? (x, i <* 0 ? (x `rotateR` (-i), x `rotateL` i))
+rotateL     = mkBRotateL
+rotateR     = mkBRotateR
 
 
 instance (Elem t, IsNum t) => Num (Exp t) where

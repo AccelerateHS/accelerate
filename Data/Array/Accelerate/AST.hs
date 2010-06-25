@@ -354,16 +354,18 @@ data PrimFun sig where
   PrimSig  :: NumType a -> PrimFun (a      -> a)
 
   -- operators from Integral & Bits
-  PrimQuot    :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimRem     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimIDiv    :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimMod     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBAnd    :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBOr     :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBXor    :: IntegralType a -> PrimFun ((a, a)   -> a)
-  PrimBNot    :: IntegralType a -> PrimFun (a        -> a)
-  PrimBShift  :: IntegralType a -> PrimFun ((a, Int) -> a)
-  PrimBRotate :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimIDiv     :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimMod      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBAnd     :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBOr      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBXor     :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimBNot     :: IntegralType a -> PrimFun (a        -> a)
+  PrimBShiftL  :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBShiftR  :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateL :: IntegralType a -> PrimFun ((a, Int) -> a)
+  PrimBRotateR :: IntegralType a -> PrimFun ((a, Int) -> a)
 
   -- operators from Fractional, Floating, RealFrac & RealFloat
   

@@ -40,7 +40,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
-  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShift, mkBRotate,
+  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt
 
@@ -514,12 +514,17 @@ mkBXor x y = PrimBXor integralType `PrimApp` tup2 (x, y)
 mkBNot :: (Elem t, IsIntegral t) => Exp t -> Exp t
 mkBNot x = PrimBNot integralType `PrimApp` x
 
-mkBShift :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBShift x i = PrimBShift integralType `PrimApp` tup2 (x, i)
+mkBShiftL :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBShiftL x i = PrimBShiftL integralType `PrimApp` tup2 (x, i)
 
-mkBRotate :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-mkBRotate x i = PrimBRotate integralType `PrimApp` tup2 (x, i)
-  -- FIXME: add shifts
+mkBShiftR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBShiftR x i = PrimBShiftR integralType `PrimApp` tup2 (x, i)
+
+mkBRotateL :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBRotateL x i = PrimBRotateL integralType `PrimApp` tup2 (x, i)
+
+mkBRotateR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+mkBRotateR x i = PrimBRotateR integralType `PrimApp` tup2 (x, i)
 
 -- Operators from Fractional, Floating, RealFrac & RealFloat
 
