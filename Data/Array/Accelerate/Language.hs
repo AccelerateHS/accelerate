@@ -46,6 +46,7 @@ module Data.Array.Accelerate.Language (
   
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
+  bit, setBit, clearBit, complementBit, testBit,
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
 
@@ -69,7 +70,7 @@ import Prelude   hiding (replicate, zip, unzip, map, scanl, scanr, zipWith,
 import qualified Prelude
 
 -- standard libraries
-import Data.Bits hiding (shift, shiftL, shiftR, rotate, rotateL, rotateR)
+import Data.Bits (Bits((.&.), (.|.), xor, complement))
 import qualified Bits
 
 -- friends
@@ -340,8 +341,6 @@ instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
   xor        = mkBXor
   complement = mkBNot
   -- FIXME: argh, the rest have fixed types in their signatures
-  shift      = error "Data.Bits.shift: use Accelerate equivalent"
-  rotate     = error "Data.Bits.rotate: use Accelerate equivalent"
 
 shift, shiftL, shiftR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shift  x i = i ==* 0 ? (x, i <* 0 ? (x `shiftR` (-i), x `shiftL` i))
@@ -352,6 +351,17 @@ rotate, rotateL, rotateR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotate  x i = i ==* 0 ? (x, i <* 0 ? (x `rotateR` (-i), x `rotateL` i))
 rotateL     = mkBRotateL
 rotateR     = mkBRotateR
+
+bit :: (Elem t, IsIntegral t) => Exp Int -> Exp t
+bit x = 1 `shiftL` x
+
+setBit, clearBit, complementBit :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+x `setBit` i        = x .|. bit i
+x `clearBit` i      = x .&. complement (bit i)
+x `complementBit` i = x `xor` bit i
+
+testBit :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
+x `testBit` i       = (x .&. bit i) /=* 0
 
 
 instance (Elem t, IsNum t) => Num (Exp t) where
