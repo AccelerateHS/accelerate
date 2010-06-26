@@ -22,17 +22,18 @@
  * templates, and hence only available through the C++ interface. Expose some
  * dummy wrappers to enable parsing with language-c.
  *
- * FIXME: We need extra code generation support for 64-bit types
+ * NOTE ON 64-BIT TYPES
+ *   The CUDA device uses little-endian arithmetic. We haven't accounted for the
+ *   fact that this may be different on the host, for both initial data transfer
+ *   and the unpacking below.
  */
 #if defined(__cplusplus) && defined(__CUDACC__)
 
-typedef texture<uint32_t, 1> TexWord;
 typedef texture<uint32_t, 2> TexWord64;
 typedef texture<uint32_t, 1> TexWord32;
 typedef texture<uint16_t, 1> TexWord16;
 typedef texture<uint8_t,  1> TexWord8;
 
-typedef texture<int32_t, 1> TexInt;
 typedef texture<int32_t, 2> TexInt64;
 typedef texture<int32_t, 1> TexInt32;
 typedef texture<int16_t, 1> TexInt16;
@@ -41,23 +42,45 @@ typedef texture<int8_t,  1> TexInt8;
 typedef texture<float, 1> TexFloat;
 typedef texture<int2,  1> TexDouble;
 
+static __inline__ __device__  uint8_t indexArray(TexWord8  t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ uint16_t indexArray(TexWord16 t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ uint32_t indexArray(TexWord32 t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ uint64_t indexArray(TexWord64 t, const int x)
+{
+  union { uint2 x; uint64_t y; } v;
+  v.x = tex1Dfetch(t,x);
+  return v.y;
+}
+
+static __inline__ __device__  int8_t indexArray(TexInt8  t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ int16_t indexArray(TexInt16 t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ int32_t indexArray(TexInt32 t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ int64_t indexArray(TexInt64 t, const int x)
+{
+  union { int2 x; int64_t y; } v;
+  v.x = tex1Dfetch(t,x);
+  return v.y;
+}
+
+static __inline__ __device__ float  indexArray(TexFloat  t, const int x) { return tex1Dfetch(t,x); }
+static __inline__ __device__ double indexArray(TexDouble t, const int x)
+{
+  int2 v = tex1Dfetch(t,x);
+  return __hiloint2double(v.y,v.x);
+}
+
 #else
 
-typedef void* TexWord;
 typedef void* TexWord32;
 typedef void* TexWord16;
 typedef void* TexWord8;
-typedef void* TexInt;
 typedef void* TexInt32;
 typedef void* TexInt16;
 typedef void* TexInt8;
 typedef void* TexFloat;
 typedef void* TexDouble;
 
-void* tex1Dfetch(const void*, const int);
-void* tex1D(const void*, const float);
-void* tex2D(const void*, const float, const float);
-void* tex3D(const void*, const float, const float, const float);
+void* indexArray(const void*, const int);
 
 #endif
 
@@ -119,11 +142,12 @@ static __inline__ __device__ int index(DIM5 sh, DIM5 ix)
     return index(sh_, ix_) + ix.e * size(sh_);
 }
 
-
 #else
+
 int dim(Ix sh);
 int size(Ix sh);
 int index(Ix sh, Ix ix);
+
 #endif
 
 

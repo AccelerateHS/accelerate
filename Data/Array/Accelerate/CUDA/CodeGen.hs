@@ -100,7 +100,7 @@ codeGenExp (AST.Cond p e1 e2) = do
 codeGenExp (AST.IndexScalar a1 e1) = do
   n   <- length <$> get <* modify (++ codeGenAccType a1)
   [a] <- codeGenExp e1
-  return . unit $ CCall (CVar (internalIdent "tex1Dfetch") internalNode)
+  return . unit $ CCall (CVar (internalIdent "indexArray") internalNode)
                         [CVar (internalIdent ("tex" ++ show n)) internalNode, a] internalNode
 
 codeGenExp (AST.Tuple t)   = codeGenTup t
