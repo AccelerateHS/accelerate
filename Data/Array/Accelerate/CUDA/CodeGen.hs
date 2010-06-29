@@ -25,11 +25,10 @@ import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
+import qualified Foreign.Storable                               as F
 
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
-
-type CG a  = State [CType] a
 
 
 -- Array expressions
@@ -37,17 +36,21 @@ type CG a  = State [CType] a
 
 -- | Generate CUDA device code for an array expression
 --
-codeGenAcc :: AST.OpenAcc aenv a -> (CTranslUnit, [CType])
-codeGenAcc acc = runState (codeGenAcc' acc) []
+codeGenAcc :: AST.OpenAcc aenv a -> CTranslUnit
+codeGenAcc acc =
+  let (CTranslUnit decl node, fvar) = runState (codeGenAcc' acc) []
+  in CTranslUnit (fvar ++ decl) node
 
 -- FIXME:
 --  The actual code generation workhorse. We run under a state which keeps track
---  of the types of the free array variables encountered so far. This is used to
---  direct the final stages of code generation, and to determine which reference
---  to texture read from. Assumes the same traversal behaviour during execution.
+--  of the free array variables encountered so far. This is used to determine
+--  which reference to texture read from. Assumes the same traversal behaviour
+--  during execution.
 --
 --  FRAGILE.
 --
+type CG a = State [CExtDecl] a
+
 codeGenAcc' :: AST.OpenAcc aenv a -> CG CTranslUnit
 codeGenAcc' op@(AST.Map f1 a1)        = mkMap         "map"         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     "zipWith"     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
@@ -98,10 +101,14 @@ codeGenExp (AST.Cond p e1 e2) = do
   return [CCond a (Just b) c internalNode]
 
 codeGenExp (AST.IndexScalar a1 e1) = do
-  n   <- length <$> get <* modify (++ codeGenAccType a1)
-  [a] <- codeGenExp e1
-  return . unit $ CCall (CVar (internalIdent "indexArray") internalNode)
-                        [CVar (internalIdent ("tex" ++ show n)) internalNode, a] internalNode
+  n   <- length <$> get
+  [i] <- codeGenExp e1
+  let ty = codeGenTupleTex (accType a1)
+      fv = zipWith (\_ x -> "tex" ++ show x) ty [n..]
+
+  modify (++ zipWith globalDecl ty fv)
+  return . flip map fv $ \a -> CCall (CVar (internalIdent "indexArray") internalNode)
+                                     [CVar (internalIdent a) internalNode, i] internalNode
 
 codeGenExp (AST.Tuple t)   = codeGenTup t
 codeGenExp (AST.Prj idx e) = do
@@ -148,7 +155,7 @@ codeGenExpType =  codeGenTupleType . expType
 -- Implementation
 --
 codeGenTupleType :: TupleType a -> [CType]
-codeGenTupleType (UnitTuple)       = []
+codeGenTupleType UnitTuple         = []
 codeGenTupleType (SingleTuple  ty) = [codeGenScalarType ty]
 codeGenTupleType (PairTuple t1 t0) = codeGenTupleType t1 ++ codeGenTupleType t0
 
@@ -192,6 +199,69 @@ codeGenNonNumType (TypeChar   _) = [CCharType internalNode]
 codeGenNonNumType (TypeCChar  _) = [CCharType internalNode]
 codeGenNonNumType (TypeCSChar _) = [CSignedType internalNode, CCharType internalNode]
 codeGenNonNumType (TypeCUChar _) = [CUnsigType  internalNode, CCharType internalNode]
+
+
+-- Texture types
+--
+codeGenTupleTex :: TupleType a -> [CType]
+codeGenTupleTex UnitTuple         = []
+codeGenTupleTex (SingleTuple t)   = [codeGenScalarTex t]
+codeGenTupleTex (PairTuple t1 t0) = codeGenTupleTex t1 ++ codeGenTupleTex t0
+
+codeGenScalarTex :: ScalarType a -> CType
+codeGenScalarTex (NumScalarType    ty) = codeGenNumTex ty
+codeGenScalarTex (NonNumScalarType ty) = codeGenNonNumTex ty;
+
+codeGenNumTex :: NumType a -> CType
+codeGenNumTex (IntegralNumType ty) = codeGenIntegralTex ty
+codeGenNumTex (FloatingNumType ty) = codeGenFloatingTex ty
+
+codeGenIntegralTex :: IntegralType a -> CType
+codeGenIntegralTex (TypeInt8    _) = [CTypeDef (internalIdent "TexInt8")    internalNode]
+codeGenIntegralTex (TypeInt16   _) = [CTypeDef (internalIdent "TexInt16")   internalNode]
+codeGenIntegralTex (TypeInt32   _) = [CTypeDef (internalIdent "TexInt32")   internalNode]
+codeGenIntegralTex (TypeInt64   _) = [CTypeDef (internalIdent "TexInt64")   internalNode]
+codeGenIntegralTex (TypeWord8   _) = [CTypeDef (internalIdent "TexWord8")   internalNode]
+codeGenIntegralTex (TypeWord16  _) = [CTypeDef (internalIdent "TexWord16")  internalNode]
+codeGenIntegralTex (TypeWord32  _) = [CTypeDef (internalIdent "TexWord32")  internalNode]
+codeGenIntegralTex (TypeWord64  _) = [CTypeDef (internalIdent "TexWord64")  internalNode]
+codeGenIntegralTex (TypeCShort  _) = [CTypeDef (internalIdent "TexCShort")  internalNode]
+codeGenIntegralTex (TypeCUShort _) = [CTypeDef (internalIdent "TexCUShort") internalNode]
+codeGenIntegralTex (TypeCInt    _) = [CTypeDef (internalIdent "TexCInt")    internalNode]
+codeGenIntegralTex (TypeCUInt   _) = [CTypeDef (internalIdent "TexCUInt")   internalNode]
+codeGenIntegralTex (TypeCLong   _) = [CTypeDef (internalIdent "TexCLong")   internalNode]
+codeGenIntegralTex (TypeCULong  _) = [CTypeDef (internalIdent "TexCULong")  internalNode]
+codeGenIntegralTex (TypeCLLong  _) = [CTypeDef (internalIdent "TexCLLong")  internalNode]
+codeGenIntegralTex (TypeCULLong _) = [CTypeDef (internalIdent "TexCULLong") internalNode]
+
+codeGenIntegralTex (TypeInt     _) =
+  case F.sizeOf (undefined::Int) of
+       4 -> [CTypeDef (internalIdent "TexInt32") internalNode]
+       8 -> [CTypeDef (internalIdent "TexInt64") internalNode]
+       _ -> error "we can never get here"
+
+codeGenIntegralTex (TypeWord    _) =
+  case F.sizeOf (undefined::Word) of
+       4 -> [CTypeDef (internalIdent "TexWord32") internalNode]
+       8 -> [CTypeDef (internalIdent "TexWord64") internalNode]
+       _ -> error "we can never get here"
+
+codeGenFloatingTex :: FloatingType a -> CType
+codeGenFloatingTex (TypeFloat   _) = [CTypeDef (internalIdent "TexFloat")   internalNode]
+codeGenFloatingTex (TypeCFloat  _) = [CTypeDef (internalIdent "TexCFloat")  internalNode]
+codeGenFloatingTex (TypeDouble  _) = [CTypeDef (internalIdent "TexDouble")  internalNode]
+codeGenFloatingTex (TypeCDouble _) = [CTypeDef (internalIdent "TexCDouble") internalNode]
+
+-- TLM 2010-06-29:
+--   Bool and Char can be implemented once the array types in
+--   Data.Array.Accelerate.[CUDA.]Array.Data are made concrete.
+--
+codeGenNonNumTex :: NonNumType a -> CType
+codeGenNonNumTex (TypeBool   _) = error "codeGenNonNumTex :: Bool"
+codeGenNonNumTex (TypeChar   _) = error "codeGenNonNumTex :: Char"
+codeGenNonNumTex (TypeCChar  _) = [CTypeDef (internalIdent "TexCChar")  internalNode]
+codeGenNonNumTex (TypeCSChar _) = [CTypeDef (internalIdent "TexCSChar") internalNode]
+codeGenNonNumTex (TypeCUChar _) = [CTypeDef (internalIdent "TexCUChar") internalNode]
 
 
 -- Scalar Primitives
@@ -261,10 +331,6 @@ codeGenPrim _ _ =
 
 
 -- Implementation
---
-
--- Need to use an ElemRepr' representation here, so that the SingleTuple
--- type matches the type of the actual constant.
 --
 codeGenConst :: TupleType a -> a -> [CExpr]
 codeGenConst UnitTuple           _      = []
@@ -381,6 +447,11 @@ codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
 -- Helper Functions
 -- ~~~~~~~~~~~~~~~~
+
+globalDecl :: CType -> String -> CExtDecl
+globalDecl ty name =
+  CDeclExt (CDecl (map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
+
 
 ccall :: NumType a -> String -> [CExpr] -> CExpr
 ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode

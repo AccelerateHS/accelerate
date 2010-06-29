@@ -100,10 +100,8 @@ compileTup (t `SnocTup` e) = compileExp e >> compileTup t
 -- | Generate and compile code for a single open array expression
 --
 compile :: OpenAcc aenv a -> CIO ()
-compile acc =
-  let key       = accToKey acc
-      (code,ty) = codeGenAcc acc
-  in do
+compile acc = do
+  let key = accToKey acc
   compiled <- M.member key <$> getM kernelEntry
   unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
@@ -111,28 +109,18 @@ compile acc =
     cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
     flags  <- compileFlags cufile
     pid    <- liftIO . withFilePath dir $ do
-                writeCode cufile ty code
-                forkProcess $ executeFile nvcc False flags Nothing
+                writeCode cufile $ codeGenAcc acc
+                forkProcess      $ executeFile nvcc False flags Nothing
 
     modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
 
 
--- Write the generated code to file, exporting C symbols. Also prepend texture
--- reference declarations for any free array variables.
+-- Write the generated code to file, exporting C symbols.
 --
--- FIXME: Textures are only available through the C++ interface. This
---        straightforwardly builds the template declarations, but this is not
---        correct for 64-bit types. In future, use the typedefs from the extras
---        header, which also needs to match the cuda bindings package.
---
-writeCode :: FilePath -> [CType] -> CTranslUnit -> IO ()
-writeCode f ty code =
-  let tex t n  = "texture<" ++ (render . hsep . map pretty) t ++ "> tex" ++ shows n ";"
-      freeVars = zipWith tex ty (enumFrom 0 :: [Int])
-  in
+writeCode :: FilePath -> CTranslUnit -> IO ()
+writeCode f code =
   withFile f WriteMode $ \hdl -> do
     hPutStrLn hdl "#include <accelerate_cuda_extras.h>"
-    hPutStrLn hdl (unlines freeVars)
     hPutStrLn hdl "extern \"C\" {"
     printDoc PageMode hdl (pretty code)
     hPutStrLn hdl "}"

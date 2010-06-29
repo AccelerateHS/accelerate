@@ -167,6 +167,18 @@ release = mapM_ (\(FArr (Array _ ad)) -> freeArray ad)
 
 -- Setup and initiate the computation. This may require several kernel launches.
 --
+-- A NOTE ON TUPLES TYPES
+--
+--   The astute reader may be wondering, if arrays of tuples are stored as a
+--   tuple of arrays, how exactly are we telling the kernel function about this?
+--
+--   From Haskell land, the tuple components are passed to the kernel function
+--   individually. The C function, however, interprets these into a structure of
+--   pointers. While this is a nasty sleight-of-hand, it should indeed be safe.
+--   Pointer types will all have the same size and alignment, and C structures
+--   are defined to keep their fields adjacent in memory (modulo alignment
+--   restrictions, which don't concern us).
+--
 dispatch :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
 dispatch acc@(Map f ad) env mdl = do
   fn             <- liftIO $ CUDA.getFun mdl "map"
