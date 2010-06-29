@@ -144,10 +144,6 @@ prjToInt (SuccTupIdx idx) = 1 + prjToInt idx
 codeGenAccType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CType]
 codeGenAccType =  codeGenTupleType . accType
 
-codeGenAccType2 :: AST.OpenAcc aenv (Sugar.Array dim1 e1, Sugar.Array dim2 e2) -> ([CType], [CType])
-codeGenAccType2 (AST.Scanl _ e acc) = (codeGenAccType acc, codeGenExpType e)
-codeGenAccType2 (AST.Scanr _ e acc) = (codeGenAccType acc, codeGenExpType e)
-
 codeGenExpType :: AST.OpenExp aenv env t -> [CType]
 codeGenExpType =  codeGenTupleType . expType
 
