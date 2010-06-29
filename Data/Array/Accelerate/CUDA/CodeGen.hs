@@ -217,8 +217,10 @@ codeGenPrim (AST.PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
 codeGenPrim (AST.PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
 codeGenPrim (AST.PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
 codeGenPrim (AST.PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
-codeGenPrim (AST.PrimBShift       _) [a,b] = codeGenBShift a b
-codeGenPrim (AST.PrimBRotate      _) [a,b] = codeGenBRotate a b
+codeGenPrim (AST.PrimBShiftL      _) [a,b] = CBinary CShlOp a b internalNode
+codeGenPrim (AST.PrimBShiftR      _) [a,b] = CBinary CShrOp a b internalNode
+codeGenPrim (AST.PrimBRotateL     _) [a,b] = codeGenBRotateL a b
+codeGenPrim (AST.PrimBRotateR     _) [a,b] = codeGenBRotateR a b
 codeGenPrim (AST.PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
 codeGenPrim (AST.PrimRecip       ty) [a]   = codeGenRecip ty a
 codeGenPrim (AST.PrimSin         ty) [a]   = ccall (FloatingNumType ty) "sin"   [a]
@@ -333,25 +335,28 @@ codeGenQuot = error "Data.Array.Accelerate.CUDA.CodeGen: PrimQuot"
 codeGenMod :: IntegralType a -> CExpr -> CExpr -> CExpr
 codeGenMod = error "Data.Array.Accelerate.CUDA.CodeGen: PrimMod"
 
-codeGenBShift :: CExpr -> CExpr -> CExpr
-codeGenBShift x i =
-  CCond (CBinary CLeOp i (CConst (CIntConst (cInteger 0) internalNode)) internalNode)
-        (Just (CBinary CShrOp x (CUnary CMinOp i internalNode) internalNode))
-        (CCond (CBinary CGrOp i (CConst (CIntConst (cInteger 0) internalNode)) internalNode)
-               (Just (CBinary CShlOp x i internalNode))
-               x
-               internalNode)
-        internalNode
+-- TLM 2010-06-29:
+--   It would be nice we could use something like Language.C.Parser.execParser
+--   to suck in the C code directly, instead of storing this long and messy
+--   abstract syntax. The problem lies in injecting our `x' and `i' expressions.
+--
+-- T rotl(T x, int i)
+-- {
+--   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x << i | x >> 8 * sizeof(x) - i;
+-- }
+--
+codeGenBRotateL :: CExpr -> CExpr -> CExpr
+codeGenBRotateL x i =
+  CCond (CBinary CEqOp (CAssign CAndAssOp i (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) (CConst (CIntConst (cInteger 1) internalNode)) internalNode) internalNode) (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (Just x) (CBinary COrOp (CBinary CShlOp x i internalNode) (CBinary CShrOp x (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) i internalNode) internalNode) internalNode) internalNode
 
-codeGenBRotate :: CExpr -> CExpr -> CExpr
-codeGenBRotate x i =
-  CCond (CBinary CEqOp (CAssign CAndAssOp i (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) (CConst (CIntConst (cInteger 1) internalNode)) internalNode) internalNode) (CConst (CIntConst (cInteger 0) internalNode)) internalNode)
-        (Just x)
-        (CCond (CBinary CGrOp i (CConst (CIntConst (cInteger 0) internalNode)) internalNode)
-               (Just (CBinary COrOp (CBinary CShlOp x i internalNode) (CBinary CShrOp x (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) i internalNode) internalNode) internalNode))
-               (CBinary COrOp (CBinary CShrOp x (CUnary CMinOp i internalNode) internalNode) (CBinary CShlOp x (CBinary CAddOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) i internalNode) internalNode) internalNode)
-               internalNode)
-        internalNode
+-- T rotr(T x, int i)
+-- {
+--   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x >> i | x << 8 * sizeof(x) - i;
+-- }
+--
+codeGenBRotateR :: CExpr -> CExpr -> CExpr
+codeGenBRotateR x i =
+  CCond (CBinary CEqOp (CAssign CAndAssOp i (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) (CConst (CIntConst (cInteger 1) internalNode)) internalNode) internalNode) (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (Just x) (CBinary COrOp (CBinary CShrOp x i internalNode) (CBinary CShlOp x (CBinary CSubOp (CBinary CMulOp (CConst (CIntConst (cInteger 8) internalNode)) (CSizeofExpr x internalNode) internalNode) i internalNode) internalNode) internalNode) internalNode
 
 codeGenRecip :: FloatingType a -> CExpr -> CExpr
 codeGenRecip ty x | FloatingDict <- floatingDict ty
