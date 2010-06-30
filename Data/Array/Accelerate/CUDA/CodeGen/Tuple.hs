@@ -12,6 +12,7 @@ module Data.Array.Accelerate.CUDA.CodeGen.Tuple (mkTupleType, mkTupleTypeAsc)
   where
 
 import Language.C
+import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 
 

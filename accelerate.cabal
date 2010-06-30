@@ -23,6 +23,17 @@ Stability:              Experimental
 -- Should be in the Library stanza, and only enabled for the CUDA backend
 Data-dir:               cubits
 Data-files:             accelerate_cuda_extras.h
+                        backpermute.inl
+                        fold.inl
+                        map.inl
+                        permute.inl
+                        scan.inl
+                        zipWith.inl
+                        cudpp/globals.h
+                        cudpp/scan_cta.cu
+                        cudpp/scan_kernel.cu
+                        cudpp/vector_kernel.cu
+
 Extra-source-files:     INSTALL
                         examples/simple/DotP.hs
                         examples/simple/Filter.hs
@@ -91,6 +102,7 @@ Library
                         Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
                         Data.Array.Accelerate.CUDA.Array.Device
+                        Data.Array.Accelerate.CUDA.CodeGen.Data
                         Data.Array.Accelerate.CUDA.CodeGen.Fold
                         Data.Array.Accelerate.CUDA.CodeGen.FoldSeg
                         Data.Array.Accelerate.CUDA.CodeGen.Index

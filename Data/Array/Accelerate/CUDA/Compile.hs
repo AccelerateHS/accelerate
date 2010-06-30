@@ -42,8 +42,6 @@ import Foreign.CUDA.Analysis.Device
 
 import Paths_accelerate                                 (getDataDir)
 
-type CType = [CTypeSpec]
-
 
 -- | Initiate code generation, compilation, and data transfer for an array
 -- expression
@@ -109,21 +107,18 @@ compile acc = do
     cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
     flags  <- compileFlags cufile
     pid    <- liftIO . withFilePath dir $ do
-                writeCode cufile $ codeGenAcc acc
-                forkProcess      $ executeFile nvcc False flags Nothing
+                writeCode cufile (codeGenAcc acc)
+                forkProcess $ executeFile nvcc False flags Nothing
 
     modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
 
 
--- Write the generated code to file, exporting C symbols.
+-- Write the generated code to file
 --
-writeCode :: FilePath -> CTranslUnit -> IO ()
+writeCode :: FilePath -> CUTranslSkel -> IO ()
 writeCode f code =
-  withFile f WriteMode $ \hdl -> do
-    hPutStrLn hdl "#include <accelerate_cuda_extras.h>"
-    hPutStrLn hdl "extern \"C\" {"
-    printDoc PageMode hdl (pretty code)
-    hPutStrLn hdl "}"
+  withFile f WriteMode $ \hdl ->
+  printDoc PageMode hdl (pretty code)
 
 
 -- stolen from $fptools/ghc/compiler/utils/Pretty.lhs

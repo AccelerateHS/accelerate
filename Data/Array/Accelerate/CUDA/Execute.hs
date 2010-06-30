@@ -151,7 +151,7 @@ liftExp _ _ =
 
 liftTup :: Tuple (OpenExp env aenv) a -> Val aenv -> CIO [FVar]
 liftTup NilTup _             = return []
-liftTup (t `SnocTup` e) aenv = (++) <$> liftExp e aenv <*> liftTup t aenv
+liftTup (t `SnocTup` e) aenv = (++) <$> liftTup t aenv <*> liftExp e aenv
 
 
 -- Extract texture references from the compiled module and bind an array to it
