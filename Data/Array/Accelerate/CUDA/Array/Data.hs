@@ -188,11 +188,13 @@ instance TextureData Int where
   format _ = case sizeOf (undefined :: Int) of
                   4 -> (CUDA.Int32, 1)
                   8 -> (CUDA.Int32, 2)
+                  _ -> error "we can never get here"
 
 instance TextureData Word where
   format _ = case sizeOf (undefined :: Word) of
                   4 -> (CUDA.Word32, 1)
                   8 -> (CUDA.Word32, 2)
+                  _ -> error "we can never get here"
 
 
 -- Implementation
