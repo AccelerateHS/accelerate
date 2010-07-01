@@ -33,7 +33,7 @@ permute
 
         if (dst != ignore)
         {
-            set(d_out, dst, apply(get0(d_in0, idx), get0(d_out, dst), shape));
+            set(d_out, dst, apply(get0(d_in0, idx), get0(d_out, dst)));
         }
     }
 }

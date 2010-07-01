@@ -29,7 +29,7 @@ backpermute
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        set(d_out, idx, get0(d_in0, project(idx, shape)));
+        set(d_out, idx, get0(d_in0, project(idx)));
     }
 }
 

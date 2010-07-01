@@ -67,7 +67,7 @@ mkIdentity expr =
 
 
 -- static inline __attribute__((device)) TyOut
--- apply(..., const TyIn1 x1, const TyIn0 x0, const Ix shape)
+-- apply(..., const TyIn1 x1, const TyIn0 x0)
 -- {
 --   TyOut x; x.a = x0; x.b = x1; ...
 --   return x;
@@ -75,7 +75,7 @@ mkIdentity expr =
 --
 mkApply :: Int -> [CExpr] -> CExtDecl
 mkApply argc expr =
-  CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] (CDeclr (Just (internalIdent "apply")) [CFunDeclr (Right (argv ++ [CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "shape")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just (mkInitList expr),Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode) internalNode)
+  CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] (CDeclr (Just (internalIdent "apply")) [CFunDeclr (Right (argv,False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just (mkInitList expr),Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode) internalNode)
   where
     argv = reverse . take argc . flip map (enumFrom 0 :: [Int]) $ \x ->
       let ty  = "TyIn" ++ show x
@@ -93,12 +93,12 @@ mkInitList xs  = CInitList (map (\e -> ([],CInitExpr e internalNode)) xs) intern
 
 
 -- static inline __attribute__((device)) Ix
--- project(const Ix x0, const Ix shape)
+-- project(const Ix x0)
 -- {
 --   return expr;
 -- }
 --
 mkIndexFun :: [CExpr] -> CExtDecl
-mkIndexFun [expr] = CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] (CDeclr (Just (internalIdent "project")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "x0")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "shape")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode) internalNode)
+mkIndexFun [expr] = CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] (CDeclr (Just (internalIdent "project")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "x0")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode) internalNode)
 mkIndexFun _      = error "mkIndexFun: internal error"
 
