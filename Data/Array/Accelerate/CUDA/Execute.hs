@@ -280,45 +280,55 @@ dispatch _ _ _ =
   error "Data.Array.Accelerate.CUDA: dispatch: internal error"
 
 
--- Unified dispatch handler for left/right scan. This is a little awkward, but
--- the execution semantics between the two are the same, as all differences have
--- been established during code generation.
+-- Unified dispatch handler for left/right scan.
+--
+-- TLM 2010-07-02:
+--   This is a little awkward. At its core we have an inclusive scan routine,
+--   whereas accelerate actually returns an exclusive scan result. Multi-block
+--   arrays require the inclusive scan when calculating the partial block sums,
+--   which are then added to every element of an interval. Single-block arrays
+--   on the other hand need to be "converted" to an exclusive result in the
+--   second pass.
+--
+--   This optimised could be implemented by enabling some some extra code to the
+--   skeleton, and dispatching accordingly.
 --
 dispatchScan :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
-dispatchScan     (Scanr _ x ad) env mdl = dispatchScan (Scanl undefined x ad) env mdl
-dispatchScan acc@(Scanl _ x ad) env mdl = do
-  fscan           <- liftIO $ CUDA.getFun mdl "scan"
-  fadd            <- liftIO $ CUDA.getFun mdl "vectorAddUniform4"
+dispatchScan     (Scanr f _ ad) env mdl = dispatchScan (Scanl f undefined ad) env mdl
+dispatchScan acc@(Scanl f _ ad) env mdl = do
+  fscan           <- liftIO $ CUDA.getFun mdl "inclusive_scan"
+  fadd            <- liftIO $ CUDA.getFun mdl "exclusive_update"
   (Array sh in0)  <- executeOpenAcc ad env
   (cta,grid,smem) <- launchConfig acc (size sh) fscan
-  let arr@(Array _ out) = newArray (Sugar.toElem sh)
-      bks@(Array _ sum) = newArray grid
-      n                 = size sh
+  let a_out@(Array _ out) = newArray (Sugar.toElem sh)
+      a_sum@(Array _ sum) = newArray ()
+      a_bks@(Array _ bks) = newArray grid
+      n                   = size sh
+      units               = (n + cta - 1) `div` cta
+      interval            = cta * ((units + grid - 1) `div` grid)
 
-  mallocArray out (size sh)
-  mallocArray sum grid
+      unify :: Array dim e -> Array dim' e -> CIO ()
+      unify _ _ = return ()
+
+  unify a_sum a_bks -- TLM: *cough*
+
+  mallocArray out n
+  mallocArray sum 1
+  mallocArray bks grid
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
-  d_bks <- devicePtrs sum
+  d_bks <- devicePtrs bks
+  d_sum <- devicePtrs sum
+  f_arr <- liftFun f env
+  t_var <- bind mdl f_arr
 
-  -- Single row, multi-block, non-full block scan
-  --
-  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ map CUDA.IArg [n,1,1])
+  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ t_var ++ map CUDA.IArg [n,interval])
+  launch' (cta,1,smem)    fscan (d_bks ++ d_bks ++ d_sum ++ map CUDA.IArg [grid,interval])
+  launch' (cta,grid,smem) fadd  (d_out ++ d_bks ++ map CUDA.IArg [n,interval])
+
   freeArray in0
-
-  -- Now, take the last value of all of the sub-blocks and scan those. This will
-  -- give a new value that must be added to each block to get the final result
-  --
-  --
-  if grid <= 1
-     then return (arr, Array () sum)
-     else do
-       (Array _ sum', r) <- dispatchScan (Scanl undefined x (Use bks)) env mdl
-       d_bks'            <- devicePtrs sum'
-
-       launch' (cta,grid,0) fadd (d_out ++ d_bks' ++ map CUDA.IArg [n,4,4,0,0])
-       freeArray sum'
-       return (arr,r)
+  freeArray bks
+  return (a_out, a_sum)
 
 dispatchScan _ _ _ =
   error "Data.Array.Accelerate.CUDA: internal error"

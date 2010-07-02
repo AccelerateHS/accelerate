@@ -35,9 +35,6 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 -- TLM: this could probably be stored in the KernelEntry
 --
 launchConfig :: OpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
-launchConfig acc@(Scanl _ _ _) n _ = return (128, gridSize acc n 128, toInteger (sharedMem acc 128))
-launchConfig acc@(Scanr _ _ _) n _ = return (128, gridSize acc n 128, toInteger (sharedMem acc 128))
-
 launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
@@ -61,9 +58,7 @@ gridSize acc size cta =
   in  1 `max` ((cta - 1 + (size `between` elementsPerThread acc)) `div` cta)
 
 elementsPerThread :: OpenAcc aenv a -> Int
-elementsPerThread (Scanl _ _ _) = 8
-elementsPerThread (Scanr _ _ _) = 8
-elementsPerThread _             = 1
+elementsPerThread _ = 1
 
 
 -- |
@@ -73,7 +68,7 @@ elementsPerThread _             = 1
 --
 sharedMem :: OpenAcc aenv a -> Int -> Int
 sharedMem (Fold  _ x _) t = sizeOf (expType x) * t
-sharedMem (Scanl _ x _) t = sizeOf (expType x) * t * 2
-sharedMem (Scanr _ x _) t = sizeOf (expType x) * t * 2
+sharedMem (Scanl _ x _) t = sizeOf (expType x) * t
+sharedMem (Scanr _ x _) t = sizeOf (expType x) * t
 sharedMem _             _ = 0
 

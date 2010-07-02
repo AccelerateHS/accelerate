@@ -17,39 +17,34 @@ import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
 
 
-mkScan :: Bool -> Bool -> Bool -> Bool -> Bool -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScan isBackward isExclusive isMultiRow isMultiBlock isFullBlock ty identity apply =
+mkScan :: Bool -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScan isBackward ty identity apply =
   CUTranslSkel code skel
   where
-    skel = "scan.inl"
+    skel | length ty == 1 = "thrust/scan_safe.inl"      -- TODO: use fast scan for primitive types
+         | otherwise      = "thrust/scan_safe.inl"
+
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTypedef  "T"  False [CTypeDef (internalIdent "TyOut") internalNode]
-            , mkTyVector "T4" 4     [CTypeDef (internalIdent "TyOut") internalNode]
-            , mkIdentity identity
+            [ mkIdentity identity
             , mkApply 2 apply
-            , mkFlag "IS_BACKWARD"   (fromBool isBackward)
-            , mkFlag "IS_EXCLUSIVE"  (fromBool isExclusive)
-            , mkFlag "IS_MULTIROW"   (fromBool isMultiRow)
-            , mkFlag "IS_MULTIBLOCK" (fromBool isMultiBlock)
-            , mkFlag "IS_FULLBLOCK"  (fromBool isFullBlock) ])
+            , mkFlag "reverse" (fromBool isBackward) ])
             (mkNodeInfo (initPos "scan.cu") (Name 0))
 
 
 mkScanl :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanl = mkScan False True False True False
+mkScanl = mkScan False
 
 mkScanr :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanr = mkScan True True False True False
+mkScanr = mkScan True
 
 -- TLM 2010-06-30:
---   These are meant to be #define declarations, but the compiler may yet be
---   smart enough to inline them.
+--   Test whether the compiler will use this to avoid branching
 --
 mkFlag :: String -> CExpr -> CExtDecl
 mkFlag name val =
   CDeclExt (CDecl
-    [CTypeQual (CConstQual internalNode),CTypeSpec (CIntType internalNode)]
+    [CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CStorageSpec (CStatic internalNode), CTypeQual (CConstQual internalNode), CTypeSpec (CIntType internalNode)]
     [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Just (CInitExpr val internalNode),Nothing)]
     internalNode)
 

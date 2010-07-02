@@ -27,12 +27,8 @@ Data-files:             accelerate_cuda_extras.h
                         fold.inl
                         map.inl
                         permute.inl
-                        scan.inl
                         zipWith.inl
-                        cudpp/globals.h
-                        cudpp/scan_cta.cu
-                        cudpp/scan_kernel.cu
-                        cudpp/vector_kernel.cu
+                        thrust/scan_safe.inl
 
 Extra-source-files:     INSTALL
                         examples/simple/DotP.hs
