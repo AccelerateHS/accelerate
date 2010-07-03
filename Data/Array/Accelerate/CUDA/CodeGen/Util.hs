@@ -23,9 +23,8 @@ fromBool False = CConst $ CIntConst (cInteger 0) internalNode
 -- typedef ty (*?) var;
 --
 mkTypedef :: String -> Bool -> CType -> CExtDecl
-mkTypedef var p ty =
-  let ptr = if p then [CPtrDeclr [] internalNode] else []
-  in  CDeclExt (CDecl (CStorageSpec (CTypedef internalNode) : map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent var)) ptr Nothing [] internalNode), Nothing, Nothing)] internalNode)
+mkTypedef var ptr ty =
+  CDeclExt (CDecl (CStorageSpec (CTypedef internalNode) : map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent var)) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode), Nothing, Nothing)] internalNode)
 
 
 -- typedef struct {
@@ -36,12 +35,11 @@ mkTypedef var p ty =
 --       field of the structure is named 'a' instead of the first.
 --
 mkStruct :: String -> Bool -> [CType] -> CExtDecl
-mkStruct name p types =
+mkStruct name ptr types =
   CDeclExt (CDecl [ CStorageSpec (CTypedef internalNode) , CTypeSpec (CSUType (CStruct CStructTag Nothing (Just (zipWith field names types)) [] internalNode) internalNode)] [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
   where
-    ptr        = if p then [CPtrDeclr [] internalNode] else []
     names      = reverse . take (length types) $ enumFrom 'a'
-    field v ty = CDecl (map CTypeSpec ty)  [(Just (CDeclr (Just (internalIdent [v])) ptr Nothing [] internalNode),Nothing,Nothing)] internalNode
+    field v ty = CDecl (map CTypeSpec ty)  [(Just (CDeclr (Just (internalIdent [v])) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode),Nothing,Nothing)] internalNode
 
 
 -- typedef struct __attribute__((aligned(n * sizeof(ty)))) {
