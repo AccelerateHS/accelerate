@@ -10,7 +10,7 @@
 -- Reduce an array to a single value
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen.Fold (mkFold)
+module Data.Array.Accelerate.CUDA.CodeGen.Fold (mkFold, mkFoldSeg)
   where
 
 import Language.C
@@ -28,4 +28,7 @@ mkFold ty identity apply = CUTranslSkel code skel
             [ mkIdentity identity
             , mkApply 2 apply ])
             (mkNodeInfo (initPos "fold.cu") (Name 0))
+
+mkFoldSeg :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkFoldSeg _ty _identity _apply = undefined
 

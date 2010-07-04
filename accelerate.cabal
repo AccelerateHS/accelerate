@@ -100,7 +100,6 @@ Library
                         Data.Array.Accelerate.CUDA.Array.Device
                         Data.Array.Accelerate.CUDA.CodeGen.Data
                         Data.Array.Accelerate.CUDA.CodeGen.Fold
-                        Data.Array.Accelerate.CUDA.CodeGen.FoldSeg
                         Data.Array.Accelerate.CUDA.CodeGen.Index
                         Data.Array.Accelerate.CUDA.CodeGen.Map
                         Data.Array.Accelerate.CUDA.CodeGen.Permute
