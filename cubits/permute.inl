@@ -29,7 +29,7 @@ permute
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {
-        dst = project(idx, shape);
+        dst = project(idx);
 
         if (dst != ignore)
         {
