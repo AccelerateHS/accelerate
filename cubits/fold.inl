@@ -8,6 +8,8 @@
  *
  * ---------------------------------------------------------------------------*/
 
+#include <accelerate_cuda_utils.h>
+
 #ifndef BLOCK_SIZE
 #define BLOCK_SIZE              blockDim.x
 #endif

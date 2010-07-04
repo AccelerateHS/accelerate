@@ -23,6 +23,7 @@ Stability:              Experimental
 -- Should be in the Library stanza, and only enabled for the CUDA backend
 Data-dir:               cubits
 Data-files:             accelerate_cuda_extras.h
+                        accelerate_cuda_utils.h
                         backpermute.inl
                         fold.inl
                         map.inl
