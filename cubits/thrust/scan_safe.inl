@@ -81,14 +81,15 @@ scan_intervals
     const Ix interval_begin = interval_size * blockIdx.x;
     const Ix interval_end   = min(interval_begin + interval_size, N);
 
-    Ix    base = interval_begin;
-    TyOut val  = identity();
+    TyOut val = identity();
+    Ix base   = interval_begin;
+    Ix output = reverse ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
 
     // process full blocks
     for(; base + blockDim.x <= interval_end; base += blockDim.x)
     {
         // read data
-        val = get0(d_in0, base + threadIdx.x);
+        val = get0(d_in0, output);
 
         // carry in
         if (threadIdx.x == 0 && base != interval_begin)
@@ -102,7 +103,11 @@ scan_intervals
         val = scan_block<inclusive>(sdata, val);
 
         // write data
-        set(d_out, base + threadIdx.x, val);
+        set(d_out, output, val);
+
+        // update output iterator
+        if (reverse) output -= blockDim.x;
+        else         output += blockDim.x;
     }
 
     // process partially full block at end of input (if necessary)
@@ -111,7 +116,7 @@ scan_intervals
         // read data
         if (base + threadIdx.x < interval_end)
         {
-            val = get0(d_in0, base + threadIdx.x);
+            val = get0(d_in0, output);
         }
 
         // carry in
@@ -128,15 +133,23 @@ scan_intervals
         // write data
         if (base + threadIdx.x < interval_end)
         {
-            set(d_out, base + threadIdx.x, val);
+            set(d_out, output, val);
         }
     }
     __syncthreads();
 
     if (threadIdx.x == 0)
     {
-        TyOut tmp = get0(d_out, interval_end - 1);
-        set(d_block_results, blockIdx.x, tmp);
+        if (reverse)
+        {
+            TyOut tmp = get0(d_out, interval_begin);
+            set(d_block_results, blockIdx.x, tmp);
+        }
+        else
+        {
+            TyOut tmp = get0(d_out, interval_end - 1);
+            set(d_block_results, blockIdx.x, tmp);
+        }
     }
 }
 
@@ -225,12 +238,26 @@ exclusive_update
 
     // value to add to this segment
     TyOut carry = identity();
-    if (blockIdx.x != 0)
+
+    if (reverse)
     {
-        TyOut tmp = get0(d_in0, blockIdx.x - 1);
-        carry     = apply(carry, tmp);
+        if (blockIdx.x != gridDim.x - 1)
+        {
+            TyOut tmp = get0(d_in0, blockIdx.x + 1);
+            carry     = apply(carry, tmp);
+        }
+    }
+    else
+    {
+        if (blockIdx.x != 0)
+        {
+            TyOut tmp = get0(d_in0, blockIdx.x - 1);
+            carry     = apply(carry, tmp);
+        }
     }
 
+    // advance result iterator
+    Ix output = reverse ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
     TyOut val = carry;
 
     for (Ix base = interval_begin; base < interval_end; base += blockDim.x)
@@ -239,7 +266,7 @@ exclusive_update
 
         if (i < interval_end)
         {
-            TyOut tmp          = get0(d_out, i);
+            TyOut tmp          = get0(d_out, output);
             sdata[threadIdx.x] = apply(carry, tmp);
         }
         __syncthreads();
@@ -248,12 +275,15 @@ exclusive_update
             val = sdata[threadIdx.x - 1];
 
         if (i < interval_end)
-            set(d_out, i, val);
+            set(d_out, output, val);
 
         if (threadIdx.x == 0)
             val = sdata[blockDim.x - 1];
 
         __syncthreads();
+
+        if (reverse) output -= blockDim.x;
+        else         output += blockDim.x;
     }
 }
 

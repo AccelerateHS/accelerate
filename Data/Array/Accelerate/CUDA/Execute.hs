@@ -294,7 +294,7 @@ dispatch _ _ _ =
 --   skeleton, and dispatching accordingly.
 --
 dispatchScan :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
-dispatchScan     (Scanr f _ ad) env mdl = dispatchScan (Scanl f undefined ad) env mdl
+dispatchScan     (Scanr f x ad) env mdl = dispatchScan (Scanl f x ad) env mdl
 dispatchScan acc@(Scanl f _ ad) env mdl = do
   fscan           <- liftIO $ CUDA.getFun mdl "inclusive_scan"
   fadd            <- liftIO $ CUDA.getFun mdl "exclusive_update"
