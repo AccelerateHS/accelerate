@@ -314,9 +314,14 @@ test_dotp n
       putStrLn "Running reference code..."
       ref_result <- timeUScalar $ dotp_ref' v1_ref v2_ref
       putStrLn "Running Accelerate code..."
+      putStrLn "[Interpreter]"
       result <- timeScalar $ dotp_interp v1 v2
       putStrLn "Validating result..."
       validateFloats ref_result result
+      putStrLn "[CUDA]"
+      result_cuda <- timeScalar' $ dotp_cuda v1 v2
+      putStrLn "Validating result..."
+      validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
     -- from sharing results over multiple runs
@@ -324,6 +329,8 @@ test_dotp n
     dotp_ref' arr1 arr2 () = dotp_ref arr1 arr2
     {-# NOINLINE dotp_interp #-}
     dotp_interp arr1 arr2 () = Interp.run (dotp arr1 arr2)
+    {-# NOINLINE dotp_cuda #-}
+    dotp_cuda arr1 arr2 () = CUDA.run (dotp arr1 arr2)
 
 test_filter :: Int -> IO ()
 test_filter n
@@ -335,9 +342,14 @@ test_filter n
       putStrLn "Running reference code..."
       ref_result <- timeUVector $ filter_ref' (< 0) v_ref
       putStrLn "Running Accelerate code..."
+      putStrLn "[Interpreter]"
       result <- timeVector $ filter_interp (Acc.<* Acc.constant 0) (Acc.use v)
       putStrLn "Validating result..."
       validateFloats ref_result result
+      putStrLn "[CUDA]"
+      result_cuda <- timeVector' $ filter_cuda (Acc.<* Acc.constant 0) (Acc.use v)
+      putStrLn "Validating result..."
+      validateFloats ref_result result_cuda
   where
     -- idiom with NOINLINE and extra parameter needed to prevent optimisations
     -- from sharing results over multiple runs
@@ -345,6 +357,8 @@ test_filter n
     filter_ref' p arr () = filter_ref p arr
     {-# NOINLINE filter_interp #-}
     filter_interp p arr () = Interp.run (filter p arr)
+    {-# NOINLINE filter_cuda #-}
+    filter_cuda p arr () = CUDA.run (filter p arr)
 
 main :: IO ()
 main
