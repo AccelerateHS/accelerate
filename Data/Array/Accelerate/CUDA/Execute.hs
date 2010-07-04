@@ -232,7 +232,7 @@ dispatch acc@(Fold f x ad) env mdl = do
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg (size sh)])
   freeArray in0
   release f_arr
-  if grid > 1 then dispatch (Fold undefined x (Use res)) env mdl
+  if grid > 1 then dispatch (Fold f x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
 dispatch acc@(Scanl _ _ _) env mdl = dispatchScan acc env mdl
