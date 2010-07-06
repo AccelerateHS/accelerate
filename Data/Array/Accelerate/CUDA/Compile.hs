@@ -103,7 +103,7 @@ compile acc = do
   compiled <- M.member key <$> getM kernelEntry
   unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
-    dir    <- liftIO outputDir
+    dir    <- getM outputDir
     cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
     flags  <- compileFlags cufile
     pid    <- liftIO . withFilePath dir $ do
@@ -174,17 +174,4 @@ outputName acc cufile = do
        else return (base ++ show n <.> suffix)
   where
     (base,suffix) = splitExtension cufile
-
-
--- Return the output directory for compilation by-products. This currently maps
--- to a temporary directory, but could be mode to point towards a persistent
--- cache (eg: getAppUserDataDirectory)
---
-outputDir :: IO FilePath
-outputDir = do
-  tmp <- getTemporaryDirectory
-  pid <- getProcessID
-  dir <- canonicalizePath $ tmp </> "ac" ++ show pid
-  createDirectoryIfMissing True dir
-  return dir
 
