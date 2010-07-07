@@ -58,13 +58,14 @@ Library
     Build-depends:      llvm >= 0.6.8
 
   if flag(cuda)
-    Build-depends:      bytestring,
+    Build-depends:      binary,
+                        bytestring,
                         containers,
                         cuda >= 0.2 && < 0.3,
                         directory,
                         fclabels,
                         filepath,
-                        language-c >= 0.3.1.1 && < 0.4,
+                        language-c >= 0.3 && < 0.4,
                         monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
