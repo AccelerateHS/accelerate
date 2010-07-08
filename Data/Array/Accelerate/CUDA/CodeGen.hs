@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, PatternGuards #-}
+{-# LANGUAGE GADTs, PatternGuards, ExistentialQuantification, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.CodeGen
 -- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Data
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
