@@ -164,16 +164,14 @@ codeGenNumType (IntegralNumType ty) = codeGenIntegralType ty
 codeGenNumType (FloatingNumType ty) = codeGenFloatingType ty
 
 codeGenIntegralType :: IntegralType a -> CType
-codeGenIntegralType (TypeInt     _) = [CIntType   internalNode]
-codeGenIntegralType (TypeInt8    _) = [CCharType  internalNode]
-codeGenIntegralType (TypeInt16   _) = [CShortType internalNode]
-codeGenIntegralType (TypeInt32   _) = [CIntType   internalNode]
-codeGenIntegralType (TypeInt64   _) = [CLongType  internalNode, CLongType internalNode, CIntType internalNode]
-codeGenIntegralType (TypeWord    _) = [CUnsigType internalNode, CIntType internalNode]
-codeGenIntegralType (TypeWord8   _) = [CUnsigType internalNode, CCharType  internalNode]
-codeGenIntegralType (TypeWord16  _) = [CUnsigType internalNode, CShortType internalNode]
-codeGenIntegralType (TypeWord32  _) = [CUnsigType internalNode, CIntType   internalNode]
-codeGenIntegralType (TypeWord64  _) = [CUnsigType internalNode, CLongType  internalNode, CLongType internalNode, CIntType internalNode]
+codeGenIntegralType (TypeInt8    _) = [CTypeDef (internalIdent "int8_t")   internalNode]
+codeGenIntegralType (TypeInt16   _) = [CTypeDef (internalIdent "int16_t")  internalNode]
+codeGenIntegralType (TypeInt32   _) = [CTypeDef (internalIdent "int32_t")  internalNode]
+codeGenIntegralType (TypeInt64   _) = [CTypeDef (internalIdent "int64_t")  internalNode]
+codeGenIntegralType (TypeWord8   _) = [CTypeDef (internalIdent "uint8_t")  internalNode]
+codeGenIntegralType (TypeWord16  _) = [CTypeDef (internalIdent "uint16_t") internalNode]
+codeGenIntegralType (TypeWord32  _) = [CTypeDef (internalIdent "uint32_t") internalNode]
+codeGenIntegralType (TypeWord64  _) = [CTypeDef (internalIdent "uint64_t") internalNode]
 codeGenIntegralType (TypeCShort  _) = [CShortType internalNode]
 codeGenIntegralType (TypeCUShort _) = [CUnsigType internalNode, CShortType internalNode]
 codeGenIntegralType (TypeCInt    _) = [CIntType   internalNode]
@@ -182,6 +180,18 @@ codeGenIntegralType (TypeCLong   _) = [CLongType  internalNode, CIntType interna
 codeGenIntegralType (TypeCULong  _) = [CUnsigType internalNode, CLongType internalNode, CIntType internalNode]
 codeGenIntegralType (TypeCLLong  _) = [CLongType  internalNode, CLongType internalNode, CIntType internalNode]
 codeGenIntegralType (TypeCULLong _) = [CUnsigType internalNode, CLongType internalNode, CLongType internalNode, CIntType internalNode]
+
+codeGenIntegralType (TypeInt     _) =
+  case F.sizeOf (undefined::Int) of
+       4 -> [CTypeDef (internalIdent "int32_t") internalNode]
+       8 -> [CTypeDef (internalIdent "int64_t") internalNode]
+       _ -> error "we can never get here"
+
+codeGenIntegralType (TypeWord    _) =
+  case F.sizeOf (undefined::Int) of
+       4 -> [CTypeDef (internalIdent "uint32_t") internalNode]
+       8 -> [CTypeDef (internalIdent "uint64_t") internalNode]
+       _ -> error "we can never get here"
 
 codeGenFloatingType :: FloatingType a -> CType
 codeGenFloatingType (TypeFloat   _) = [CFloatType  internalNode]
