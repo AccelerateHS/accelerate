@@ -145,7 +145,7 @@ compileFlags cufile = do
   arch <- computeCapability <$> getM deviceProps
   ddir <- liftIO getDataDir
   return [ "-I.", "-I", ddir
-         , "-O3", "-m32", "--compiler-options", "-fno-strict-aliasing"
+         , "-O2", "--compiler-options", "-fno-strict-aliasing"
          , "-arch=sm_" ++ show (round (arch * 10) :: Int)
          , "-DUNIX"
          , "-cubin"
