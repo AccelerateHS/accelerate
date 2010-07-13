@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
 {-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
@@ -16,8 +17,11 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run
-  
+  Arrays, run,
+
+  -- Internal
+  evalPrim, evalPrimConst, evalPrj
+
 ) where
 
 -- standard libraries

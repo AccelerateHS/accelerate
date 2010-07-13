@@ -32,6 +32,7 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Array.Accelerate.Interpreter      as I
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Array.Data
@@ -62,8 +63,12 @@ prj _             _            =
 -- Expression evaluation
 -- ~~~~~~~~~~~~~~~~~~~~~
 
--- Evaluate a closed scalar expression. This is a small subset of the scalar
--- language, for computations that are to be made available on the host.
+-- Evaluate a closed scalar expression. Expressions are evaluated on the host,
+-- but may require some interaction with the device (such as array indexing).
+--
+-- TLM 2010-07-13:
+--   We sneakily use the Interpreter backend for primitive operations, but maybe
+--   we don't want to...?
 --
 executeExp :: Exp aenv t -> Val aenv -> CIO t
 executeExp e = executeOpenExp e Empty
@@ -71,6 +76,10 @@ executeExp e = executeOpenExp e Empty
 executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
 executeOpenExp (Var idx) env _            = return . Sugar.toElem $ prj idx env
 executeOpenExp (Const c) _ _              = return $ Sugar.toElem c
+executeOpenExp (PrimConst c) _ _          = return $ I.evalPrimConst c
+executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
+executeOpenExp (Prj idx e) env aenv       = I.evalPrj idx . fromTuple <$> executeOpenExp e env aenv
+executeOpenExp (Tuple tup) env aenv       = toTuple                   <$> executeTuple tup env aenv
 executeOpenExp (IndexScalar a e) env aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   ix            <- executeOpenExp e env aenv
@@ -80,8 +89,15 @@ executeOpenExp (Shape a) _ aenv = do
   (Array sh _)  <- executeOpenAcc a aenv
   return (Sugar.toElem sh)
 
-executeOpenExp _ _ _ =
-  error "executeOpenExp: internal error"
+executeOpenExp (Cond c t e) env aenv = do
+  p <- executeOpenExp c env aenv
+  if p then executeOpenExp t env aenv
+       else executeOpenExp e env aenv
+
+
+executeTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> CIO t
+executeTuple NilTup            _    _     = return ()
+executeTuple (tup `SnocTup` e) env  aenv  = (,) <$> executeTuple tup env aenv <*> executeOpenExp e env aenv
 
 
 -- Array evaluation
