@@ -554,7 +554,7 @@ mkEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 mkEq x y = PrimEq scalarType `PrimApp` tup2 (x, y)
 
 mkNEq :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-mkNEq x y = PrimLt scalarType `PrimApp` tup2 (x, y)
+mkNEq x y = PrimNEq scalarType `PrimApp` tup2 (x, y)
 
 mkMax :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
 mkMax x y = PrimMax scalarType `PrimApp` tup2 (x, y)
