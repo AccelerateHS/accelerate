@@ -101,20 +101,24 @@ codeGenExp (AST.Cond p e1 e2) = do
   [c] <- codeGenExp e2
   return [CCond a (Just b) c internalNode]
 
-codeGenExp (AST.IndexScalar a1 e1) = do
-  n   <- length <$> get
-  [i] <- codeGenExp e1
-  let ty = codeGenTupleTex (accType a1)
-      fv = zipWith (\_ x -> "tex" ++ show x) ty [n..]
-
-  modify (++ zipWith globalDecl ty fv)
-  return . flip map fv $ \a -> CCall (CVar (internalIdent "indexArray") internalNode)
-                                     [CVar (internalIdent a) internalNode, i] internalNode
-
 codeGenExp (AST.Tuple t)   = codeGenTup t
 codeGenExp (AST.Prj idx e) = do
   [var] <- codeGenExp e
   return [CMember var (internalIdent [enumFrom 'a' !! prjToInt idx]) False internalNode]
+
+codeGenExp (AST.IndexScalar a1 e1) = do
+  n   <- length <$> get
+  [i] <- codeGenExp e1
+  let ty = codeGenTupleTex (accType a1)
+      fv = map (\x -> "tex" ++ show x) [n..]
+
+  modify (++ zipWith globalDecl ty fv)
+  return (zipWith (indexArray i) fv ty)
+
+  where
+    globalDecl ty name = CDeclExt (CDecl (map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
+    indexArray idx name [CDoubleType _] = CCall (CVar (internalIdent "indexDArray") internalNode) [CVar (internalIdent name) internalNode, idx] internalNode
+    indexArray idx name _               = CCall (CVar (internalIdent "indexArray")  internalNode) [CVar (internalIdent name) internalNode, idx] internalNode
 
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
@@ -454,11 +458,6 @@ codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
 -- Helper Functions
 -- ~~~~~~~~~~~~~~~~
-
-globalDecl :: CType -> String -> CExtDecl
-globalDecl ty name =
-  CDeclExt (CDecl (map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
-
 
 ccall :: NumType a -> String -> [CExpr] -> CExpr
 ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode

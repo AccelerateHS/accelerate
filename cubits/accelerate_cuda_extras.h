@@ -91,10 +91,10 @@ typedef TexFloat  TexCFloat;
  * Doubles, only available when compiled for Compute 1.3 and greater
  */
 #if !defined(CUDA_NO_SM_13_DOUBLE_INTRINSICS)
-typedef texture<int2,  1> TexDouble;
-typedef TexDouble         TexCDouble;
+typedef texture<int2, 1> TexDouble;
+typedef TexDouble        TexCDouble;
 
-static __inline__ __device__ double indexArray(TexDouble t, const int x)
+static __inline__ __device__ double indexDArray(TexDouble t, const int x)
 {
   int2 v = tex1Dfetch(t,x);
   return __hiloint2double(v.y,v.x);
