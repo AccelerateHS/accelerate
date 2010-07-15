@@ -4,14 +4,11 @@
  * Copyright : (c) [2009..2010] Trevor L. McDonell
  * License   : BSD
  *
- * Permute an array according to the permutation indices. This handles both
- * forward (scatter) and backward (gather) permutation, where:
+ * Backwards permutation (gather) an array according to the permutation
+ * function. The input `shape' is that of the output array.
  *
  *   bpermute :: [a] -> [Int] -> [a]
  *   bpermute v is = [ v!i | i <- is ]
- *
- * In this case, `length' specifies the number of elements in the `indices' and
- * `out' arrays.
  *
  * ---------------------------------------------------------------------------*/
 
