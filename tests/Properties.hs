@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, NoMonomorphismRestriction, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 

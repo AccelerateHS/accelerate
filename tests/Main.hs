@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables, CPP, FlexibleContexts #-}
 
 module Main where
 
@@ -136,7 +136,7 @@ prop_comps _dummy =
   , testPair prop_ScanlPair
   , testPair prop_ScanrPair
 #ifdef ACCELERATE_CUDA_BACKEND
-  , ("arbitrary", quickCheck (test_arbitrary dummy))
+  , ("arbitrary", quickCheck (test_arbitrary _dummy))
 #endif
   ]
   where
