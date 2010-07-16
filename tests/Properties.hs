@@ -138,6 +138,11 @@ prop_BShiftR  = ("shiftR",     forAll (listOf (choose (0,31))) . (zipWith shiftR
 prop_BRotateL = ("rotateL",    forAll (listOf (choose (0,31))) . (zipWith rotateL `eq2` Acc.zipWith Acc.rotateL))
 prop_BRotateR = ("rotateR",    forAll (listOf (choose (0,31))) . (zipWith rotateR `eq2` Acc.zipWith Acc.rotateR))
 
+-- operators from Int
+prop_intToFloat      = ("intToFloat", map fromIntegral `eq1` Acc.map Acc.intToFloat)
+prop_roundFloatToInt = ("roundFloatToInt", map round `eq1` Acc.map Acc.roundFloatToInt)
+prop_truncateFloatToInt = ("truncateFloatToInt", map truncate `eq1` Acc.map Acc.truncateFloatToInt)
+
 -- operators from Fractional, Floating, RealFrac & RealFloat
 prop_FDiv     = ("(/)",     \xs ys -> all (/= 0) ys ==> eq2 (zipWith (/)) (Acc.zipWith (/)) xs ys)
 prop_Recip    = ("recip",   \xs    -> all (/= 0) xs ==> eq1 (map recip) (Acc.map recip) xs)

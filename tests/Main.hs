@@ -16,7 +16,8 @@ import Data.Array.Accelerate.Type
 main :: IO ()
 main = do
   mapM_ (\(s,t) -> printf "===> %s\n" s >> runTests t >> putStrLn "") $
-    [ ("Int",    prop_integral (undefined :: Int))
+    [ ("Int",    prop_integral (undefined :: Int) ++
+                 prop_Int)
     , ("Int8",   prop_integral (undefined :: Int8))
     , ("Int16",  prop_integral (undefined :: Int16))
     , ("Int32",  prop_integral (undefined :: Int32))
@@ -26,7 +27,8 @@ main = do
     , ("Word16", prop_integral (undefined :: Word16))
     , ("Word32", prop_integral (undefined :: Word32))
     , ("Word64", prop_integral (undefined :: Word64))
-    , ("Float",  prop_floating (undefined :: Float))
+    , ("Float",  prop_floating (undefined :: Float) ++
+                 prop_Float)
     , ("Double", prop_floating (undefined :: Double))
     ]
 
@@ -73,6 +75,12 @@ prop_integral dummy =
     test1 (s,t) = (s, quickCheck (t :: [a] -> Property))
     test2 (s,t) = (s, quickCheck (t :: [a] -> [a] -> Property))
 
+prop_Int :: [(String, IO ())]
+prop_Int =
+  [ test1 prop_intToFloat ]
+  where
+    test1 (s,t) = (s, quickCheck (t :: [Int] -> Property))
+
 prop_floating :: forall a. (RealFrac a, IsFloating a, Elem a, Similar a, Arbitrary a, Arbitrary (Acc (Vector a)))
                 => a -> [(String, IO ())]
 prop_floating dummy =
@@ -112,6 +120,13 @@ prop_floating dummy =
     test1 (s,t) = (s, quickCheck (t :: [a] -> Property))
     test2 (s,t) = (s, quickCheck (t :: [a] -> [a] -> Property))
 
+prop_Float :: [(String, IO ())]
+prop_Float =
+  [ test1 prop_roundFloatToInt
+  , test1 prop_truncateFloatToInt
+  ]
+  where
+    test1 (s,t) = (s, quickCheck (t :: [Float] -> Property))
 
 prop_comps :: forall a. (IsNum a, Ord a, Elem a, Similar a, Arbitrary a, Arbitrary (Acc (Vector a)))
            => a -> [(String, IO ())]

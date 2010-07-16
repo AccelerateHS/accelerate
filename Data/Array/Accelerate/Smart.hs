@@ -42,7 +42,8 @@ module Data.Array.Accelerate.Smart (
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
-  mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt
+  mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt, mkIntFloat,
+  mkRoundFloatInt, mkTruncFloatInt
 
 ) where
 
@@ -581,4 +582,13 @@ mkLNot x = PrimLNot `PrimApp` x
 
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = PrimBoolToInt `PrimApp` b
+
+mkIntFloat :: Exp Int -> Exp Float
+mkIntFloat x = PrimIntFloat `PrimApp` x
+
+mkRoundFloatInt :: Exp Float -> Exp Int
+mkRoundFloatInt x = PrimRoundFloatInt `PrimApp` x
+
+mkTruncFloatInt :: Exp Float -> Exp Int
+mkTruncFloatInt x = PrimTruncFloatInt `PrimApp` x
 

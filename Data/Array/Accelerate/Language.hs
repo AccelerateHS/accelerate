@@ -54,8 +54,8 @@ module Data.Array.Accelerate.Language (
   (&&*), (||*), not,
   
   -- ** Conversions
-  boolToInt,
-  
+  boolToInt, intToFloat, roundFloatToInt, truncateFloatToInt,
+
   -- ** Constants
   ignore
 
@@ -495,6 +495,18 @@ not = mkLNot
 -- 
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
+
+-- |Convert an Int to a Float
+intToFloat :: Exp Int -> Exp Float
+intToFloat = mkIntFloat
+
+-- |Round Float to Int
+roundFloatToInt :: Exp Float -> Exp Int
+roundFloatToInt = mkRoundFloatInt
+
+-- |Truncate Float to Int
+truncateFloatToInt :: Exp Float -> Exp Int
+truncateFloatToInt = mkTruncFloatInt
 
 
 -- Constants
