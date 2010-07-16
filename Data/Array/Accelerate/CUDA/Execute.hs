@@ -114,6 +114,8 @@ executeAcc acc = executeOpenAcc acc Empty
 -- the same kernel will be able to extract the loaded kernel directly.
 --
 executeOpenAcc :: OpenAcc aenv a -> Val aenv -> CIO a
+executeOpenAcc (Use xs)  _env = return xs
+executeOpenAcc (Avar ix)  env = return $ prj ix env
 executeOpenAcc (Let  x y) env = do
   ax <- executeOpenAcc x env
   executeOpenAcc y (env `Push` ax)
@@ -122,9 +124,17 @@ executeOpenAcc (Let2 x y) env = do
   (ax1,ax2) <- executeOpenAcc x env
   executeOpenAcc y (env `Push` ax1 `Push` ax2)
 
-executeOpenAcc (Avar ix)  env = return $ prj ix env
-executeOpenAcc (Unit _)  _env = error "executeOpenAcc: unit"
-executeOpenAcc (Use xs)  _env = return xs
+executeOpenAcc (Unit e)   env = do
+  v  <- executeExp e env
+  let ad = fst . runArrayData $ (,undefined) <$> do
+        arr <- newArrayData 1
+        writeArrayData  arr 0 (Sugar.fromElem v)
+        return arr
+
+  mallocArray    ad 1
+  pokeArrayAsync ad 1 Nothing
+  return (Array (Sugar.fromElem ()) ad)
+
 
 executeOpenAcc acc env = do
   krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
