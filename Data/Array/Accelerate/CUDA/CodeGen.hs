@@ -89,11 +89,16 @@ unit x = [x]
 -- TLM 2010-06-24: Shape for free array variables??
 --
 codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG [CExpr]
-codeGenExp (AST.Var i)         = return . unit $ CVar (internalIdent ('x' : show (idxToInt i))) internalNode
 codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
 codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
 codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
 codeGenExp (AST.Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
+codeGenExp (AST.Var i)         =
+  let var = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
+  in case codeGenTupleType (Sugar.elemType (undefined::t)) of
+          [_] -> return [var]
+          cps -> return . reverse . take (length cps) . flip map ['a'..] $
+            \c -> CMember var (internalIdent [c]) False internalNode
 
 codeGenExp (AST.Cond p e1 e2) = do
   [a] <- codeGenExp p
