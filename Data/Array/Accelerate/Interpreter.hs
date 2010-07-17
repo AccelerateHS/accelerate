@@ -59,24 +59,6 @@ run :: Arrays a => Sugar.Acc a -> a
 run = force . evalAcc . Sugar.convertAcc
 
 
--- Environments
--- ------------
-
--- Valuation for an environment
---
-data Val env where
-  Empty :: Val ()
-  Push  :: Val env -> t -> Val (env, t)
-
--- Projection of a value from a valuation using a de Bruijn index
---
-prj :: Idx env t -> Val env -> t
-prj ZeroIdx       (Push _   v) = v
-prj (SuccIdx idx) (Push val _) = prj idx val
-prj _             _            = 
-  error "Data.Array.Accelerate.Interpreter: prj: inconsistent valuation"
-
-
 -- Array expression evaluation
 -- ---------------------------
 

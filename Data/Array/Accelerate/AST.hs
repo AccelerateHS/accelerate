@@ -65,10 +65,13 @@ module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
   Idx(..),
-  
+
+  -- * Valuation environment
+  Val(..), prj,
+
   -- * Accelerated array expressions
   OpenAcc(..), Acc,
-  
+
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
 
@@ -90,6 +93,24 @@ import Data.Array.Accelerate.Tuple
 data Idx env t where
   ZeroIdx ::              Idx (env, t) t
   SuccIdx :: Idx env t -> Idx (env, s) t
+
+
+-- Environments
+-- ------------
+
+-- Valuation for an environment
+--
+data Val env where
+  Empty :: Val ()
+  Push  :: Val env -> t -> Val (env, t)
+
+-- Projection of a value from a valuation using a de Bruijn index
+--
+prj :: Idx env t -> Val env -> t
+prj ZeroIdx       (Push _   v) = v
+prj (SuccIdx idx) (Push val _) = prj idx val
+prj _             _            =
+  error "Data.Array.Accelerate: prj: inconsistent valuation"
 
 
 -- Array expressions
