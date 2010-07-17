@@ -407,7 +407,7 @@ instance (Elem t, IsFloating t) => Floating (Exp t) where
 instance (Elem t, IsFloating t) => Fractional (Exp t) where
   (/)          = mkFDiv
   recip        = mkRecip
-  fromRational = exp . fromRational
+  fromRational = constant . fromRational
   -- FIXME: add other ops
 
 instance (Elem t, IsFloating t) => RealFrac (Exp t)
