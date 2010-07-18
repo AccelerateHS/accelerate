@@ -1,4 +1,7 @@
-Requirements: Glasgow Haskell Compiler (GHC), 6.10.1 or later
+Requirements: 
+- Glasgow Haskell Compiler (GHC), 6.12.1 or later
+- Haskell libraries as specified in 'accelerate.cabal'
+- For the CUDA backend, CUDA version 3.0 or later
 
 Standard Cabal installation:
 
@@ -10,10 +13,13 @@ Standard Cabal installation:
 
 Then, to use the library, pass the flag "-package accelerate" to GHC.
 
-WARNING: This is at best an *alpha* release.  The library isn't actually useful
-	 for anything at this stage, except for people interested in writing
-	 a backend.  The API is also guaranteed to going to change a few 
-	 more times before settling down.  You have been warned.
-	
+WARNING: This is an early beta release.  Most features are implemented 
+         in both the interpreter and CUDA backend.  The code has been
+         lightly tested.  The Accelerate API will surely change a few
+	     more times before settling down.  You have been warned.
+	     
+Please report bugs at http://trac.haskell.org/accelerate
+The project web page is at http://www.cse.unsw.edu.au/~chak/project/accelerate/
+
 Direct questions at Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 (aka TacticalGrace on #haskell and friends).

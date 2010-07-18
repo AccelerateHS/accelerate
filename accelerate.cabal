@@ -1,16 +1,26 @@
 Name:                   accelerate
-Version:                0.7.0.4
+Version:                0.7.1.0
 Cabal-version:          >= 1.6
-Tested-with:            GHC >= 6.10.4
+Tested-with:            GHC >= 6.12.1
 Build-type:             Simple
 
 Synopsis:               An embedded language for accelerated array processing
 Description:            This library defines an embedded language for
                         regular, multi-dimensional array computations with
                         multiple backends to facilitate high-performance
-                        implementations.  Currently, the only backend is an
-                        interpreter that serves as a reference implementation 
-                        of the intended semantics of the language.
+                        implementations.  Currently, there are two backends:
+                        (1) an interpreter that serves as a reference 
+                        implementation of the intended semantics of the
+                        language and (2) a CUDA backend generating code for
+                        CUDA-capable NVIDIA GPUs.
+                        .
+                        To use the CUDA backend, you need to have CUDA version 3.x
+                        installed.  The CUDA backend still misses some features of
+                        the full language.
+                        .
+                        Known bugs in this version:    http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority
+                        .
+                        * New in 0.7.1.0: the CUDA backend and a number of scalar functions
 License:                BSD3
 License-file:           LICENSE
 Author:                 Manuel M T Chakravarty, 
@@ -19,6 +29,12 @@ Author:                 Manuel M T Chakravarty,
                         Trevor L. McDonell
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Bug-reports:            http://trac.haskell.org/accelerate
+
+source-repository head
+  type:                 darcs
+  location:             http://code.haskell.org/accelerate
+
 
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
@@ -50,7 +66,7 @@ Flag llvm
 
 Flag cuda
   Description:          enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              False
+  Default:              True
 
 Library
   Build-depends:        array, 
