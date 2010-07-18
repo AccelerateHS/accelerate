@@ -16,7 +16,8 @@ Description:            This library defines an embedded language for
                         .
                         To use the CUDA backend, you need to have CUDA version 3.x
                         installed.  The CUDA backend still misses some features of
-                        the full language.
+                        the full language; in particular, the array operations
+                        'replicate', 'slice', and 'foldSeg' are not yet supported.
                         .
                         Known bugs in this version:    http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority
                         .
@@ -30,11 +31,6 @@ Author:                 Manuel M T Chakravarty,
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 Bug-reports:            http://trac.haskell.org/accelerate
-
-source-repository head
-  type:                 darcs
-  location:             http://code.haskell.org/accelerate
-
 
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
@@ -58,7 +54,15 @@ Extra-source-files:     INSTALL
                         examples/simple/Makefile
                         examples/simple/SAXPY.hs
                         examples/simple/SMVM.hs
+                        examples/simple/Square.hs
+                        examples/simple/Sum.hs
                         examples/simple/Time.hs
+                        examples/rasterize/RasterizeAcc.hs
+                        examples/rasterize/rasterize-test1.txt
+                        examples/rasterize/rasterize-test2.txt
+                        examples/rasterize/rasterize-test3.txt
+                        examples/rasterize/rasterize-test4.txt
+                        examples/rasterize/rasterize.hs
 
 Flag llvm
   Description:          enable the LLVM backend (sequential)
@@ -92,8 +96,8 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
-  If flag(llvm)
-    Exposed-modules:    Data.Array.Accelerate.LLVM
+--  If flag(llvm)
+--    Exposed-modules:    Data.Array.Accelerate.LLVM
 
   If flag(cuda)
     Exposed-modules:    Data.Array.Accelerate.CUDA
@@ -111,8 +115,8 @@ Library
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
                         Paths_accelerate
-  If flag(llvm)
-    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
+--  If flag(llvm)
+--    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
 
   If flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
@@ -135,3 +139,6 @@ Library
                         ScopedTypeVariables, DeriveDataTypeable,
                         BangPatterns, PatternGuards, TypeOperators, RankNTypes
 
+source-repository head
+  type:                 darcs
+  location:             http://code.haskell.org/accelerate

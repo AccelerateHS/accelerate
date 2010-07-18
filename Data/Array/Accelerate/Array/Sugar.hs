@@ -39,7 +39,6 @@ module Data.Array.Accelerate.Array.Sugar (
 -- standard library
 import Data.Array.IArray (IArray)
 import qualified Data.Array.IArray as IArray
-import qualified Data.Ix           as IArray
 import Data.Typeable
 import Unsafe.Coerce
 
