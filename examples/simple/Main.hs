@@ -84,8 +84,9 @@ validateFloats :: Ix ix
 validateFloats arr_ref arr | arr_ref `similar` arr = putStrLn "Valid."
                            | otherwise             = putStrLn "INVALID!" >> diff arr_ref arr
   where
-    similar arr1 arr2 = all (< epsilon) [abs ((x - y) / x) | x <- elems arr1 
-                                                           | y <- elems arr2]
+    similar arr1 arr2 = all (< epsilon) [abs ((x - y) / (x + y + epsilon)) 
+                                        | x <- elems arr1 
+                                        | y <- elems arr2]
     diff arr1 arr2 = sequence_ [if abs ((x - y) / x) < epsilon
                        then return ()
                        else putStrLn $ ">>> " ++ "(" ++ show x ++ ", " ++ show y ++ ")"
@@ -368,4 +369,4 @@ main
       
       test_saxpy 100000
       test_dotp  100000
-      test_filter 2000
+      test_filter 1800

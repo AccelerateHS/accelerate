@@ -13,14 +13,18 @@ Description:            This library defines an embedded language for
                         of the intended semantics of the language.
 License:                BSD3
 License-file:           LICENSE
-Author:                 Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+Author:                 Manuel M T Chakravarty, 
+                        Gabriele Keller, 
+                        Sean Lee, 
+                        Trevor L. McDonell
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
 
--- Should be in the Library stanza, and only enabled for the CUDA backend
+-- Should be in the Library stanza, and only enabled for the CUDA backend,
+-- but Cabal does not support that.
 Data-dir:               cubits
 Data-files:             accelerate_cuda_extras.h
                         accelerate_cuda_utils.h

@@ -11,6 +11,7 @@ import qualified Data.Array.IArray as IArray
 
 import Data.Array.Accelerate
 
+
 filter :: Elem a 
        => (Exp a -> Exp Bool) 
        -> Acc (Vector a)
@@ -27,6 +28,7 @@ filter p arr
     --        Instead, we should have a primitive that directly encodes the
     --        compaction pattern of the permutation function.
 
+    
 filter_ref :: IArray UArray e 
            => (e -> Bool)
            -> UArray Int e 

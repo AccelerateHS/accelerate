@@ -27,8 +27,8 @@ module Data.Array.Accelerate.Array.Data (
 -- standard libraries
 import Foreign            (Ptr)
 import GHC.Base           (Int(..))
-import GHC.Prim           (ByteArray#, newPinnedByteArray#, byteArrayContents#,
-                           unsafeFreezeByteArray#, Int#, (+#), (*#))
+import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
+                           unsafeFreezeByteArray#, Int#, (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
 import Control.Monad

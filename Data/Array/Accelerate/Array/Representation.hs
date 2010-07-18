@@ -16,9 +16,6 @@ module Data.Array.Accelerate.Array.Representation (
 
 ) where
 
--- friends
-import Data.Array.Accelerate.Type
-
 
 -- |Index representation
 -- -

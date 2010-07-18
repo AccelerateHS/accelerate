@@ -20,7 +20,6 @@ module Data.Array.Accelerate.Pretty (
 import Text.PrettyPrint
 
 -- friends
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST

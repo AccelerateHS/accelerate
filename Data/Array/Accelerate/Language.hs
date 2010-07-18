@@ -66,12 +66,10 @@ module Data.Array.Accelerate.Language (
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanr, zipWith,
-                        filter, max, min, not, const, fst, snd, curry, uncurry)
-import qualified Prelude
+                         filter, max, min, not, const, fst, snd, curry, uncurry)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
-import qualified Bits
 
 -- friends
 import Data.Array.Accelerate.Type
