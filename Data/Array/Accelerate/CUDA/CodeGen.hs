@@ -353,13 +353,29 @@ codeGenConst UnitTuple           _      = []
 codeGenConst (SingleTuple ty)    c      = [codeGenScalar ty c]
 codeGenConst (PairTuple ty1 ty0) (cs,c) = codeGenConst ty1 cs ++ codeGenConst ty0 c
 
-
+-- SL:
+-- Removed the warnings about demoting double constants to float constants by
+-- explicitly specifying the type for the float constants, e.g. (float) 1.5
+--   * The generated (language-c) code isn't pretty-printing floating constants
+--     with a trailing 'f' (i.e. '1.5f'), and nvcc considers them as double
+--     constants and demotes them to float constants with warnings.
+--   * So, I changed the code generator to explicitly specify the type of the
+--     float constants by prefix them with (float). For example, a float
+--     constant 1.5 appears as (float) 1.5 in the generated code whereas a
+--     double constant 1.5 appears as it is.
 codeGenScalar :: ScalarType a -> a -> CExpr
 codeGenScalar (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty
   = CConst . flip CIntConst   internalNode . cInteger . fromIntegral
-codeGenScalar (NumScalarType (FloatingNumType ty))
-  | FloatingDict <- floatingDict ty
+codeGenScalar (NumScalarType (FloatingNumType (TypeFloat _)))
+  = flip (CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode)) internalNode
+  . CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
+codeGenScalar (NumScalarType (FloatingNumType (TypeDouble _)))
+  = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
+codeGenScalar (NumScalarType (FloatingNumType (TypeCFloat _)))
+  = flip (CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode)) internalNode
+  . CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
+codeGenScalar (NumScalarType (FloatingNumType (TypeCDouble _)))
   = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
 codeGenScalar (NonNumScalarType (TypeBool _))   = fromBool
 codeGenScalar (NonNumScalarType (TypeChar _))   =
