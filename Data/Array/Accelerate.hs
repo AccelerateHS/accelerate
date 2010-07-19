@@ -40,6 +40,9 @@ module Data.Array.Accelerate (
   Float, Double, CFloat, CDouble,
   Bool, Char, CChar, CSChar, CUChar,
 
+  -- * Scalar type classes
+  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
+
   -- * Array data types
   Array, Scalar, Vector, Segments,
 
