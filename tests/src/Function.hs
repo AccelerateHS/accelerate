@@ -1,9 +1,11 @@
 
-module Filter (filter) where
+module Function (filter) where
 
 import Prelude hiding (scanl, map, filter, length)
 import Data.Array.Accelerate
 
+-- stolen from examples/simple/Filter.hs
+--
 filter :: Elem a
        => (Exp a -> Exp Bool)
        -> Acc (Vector a)

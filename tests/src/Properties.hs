@@ -1,15 +1,19 @@
-{-# LANGUAGE CPP, NoMonomorphismRestriction, FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction, CPP, FlexibleContexts, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-
 
 module Properties where
 
 import Data.Bits
 import Test.QuickCheck                             hiding ((.&.))
+import qualified Test.QuickCheck                   as QC
 
-import Data.Array.Accelerate.Type
+import Data.Int
+import Data.Word
+import Foreign.C.Types
+
 import Data.Array.Accelerate                       (Elem, Acc, Vector, Array)
+import Data.Array.Accelerate.Test.QuickCheck
+
 import qualified Data.Array.Accelerate             as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
 
@@ -18,11 +22,8 @@ import qualified Data.Array.Accelerate.CUDA        as CUDA
 import System.IO.Unsafe (unsafePerformIO)
 #endif
 
-
--- Test modules
--- ------------
-import Arbitrary                                   ()
-import qualified Filter                            as Acc
+-- friends
+import qualified Function                          as Acc
 
 
 -- Auxiliary functions
@@ -56,10 +57,10 @@ instance Similar CULong  where sim = (==)
 instance Similar CLLong  where sim = (==)
 instance Similar CULLong where sim = (==)
 
-instance Similar Float   where sim = (=~)
-instance Similar CFloat  where sim = (=~)
-instance Similar Double  where sim = (=~)
-instance Similar CDouble where sim = (=~)
+instance Similar Float   where sim = (=~) 0.001
+instance Similar CFloat  where sim = (=~) 0.001
+instance Similar Double  where sim = (=~) 0.00001
+instance Similar CDouble where sim = (=~) 0.00001
 
 instance Similar Bool    where sim = (==)
 instance Similar Char    where sim = (==)
@@ -68,9 +69,8 @@ instance Similar CSChar  where sim = (==)
 instance Similar CUChar  where sim = (==)
 
 
-(=~) :: (Fractional a, Ord a) => a -> a -> Bool
-(=~) x y = abs ((x-y) / (x+y+epsilon)) < epsilon
-  where epsilon = 0.0001        -- adjust for Float vs. Double ?
+(=~) :: (Fractional a, Ord a) => a -> a -> a -> Bool
+(=~) epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 trivial :: Testable a => Bool -> a -> Property
 trivial = (`classify` "trivial")
@@ -87,7 +87,7 @@ eq1 f g xs = not (null xs) ==>
       interp = Acc.toList (Interp.run expr)
 #ifdef ACCELERATE_CUDA_BACKEND
       cuda   = unsafePerformIO $ Acc.toList `fmap` (CUDA.run expr)
-  in (ref `sim` interp) && (ref `sim` cuda)
+  in (ref `sim` interp) QC..&. (ref `sim` cuda)
 #else
   in (ref `sim` interp)
 #endif
@@ -102,7 +102,7 @@ eq2 f g xs ys = not (null xs) && not (null ys) ==>
       interp = Acc.toList (Interp.run expr)
 #ifdef ACCELERATE_CUDA_BACKEND
       cuda   = unsafePerformIO $ Acc.toList `fmap` (CUDA.run expr)
-  in (ref `sim` interp) && (ref `sim` cuda)
+  in (ref `sim` interp) QC..&. (ref `sim` cuda)
 #else
   in (ref `sim` interp)
 #endif
@@ -139,9 +139,9 @@ prop_BRotateL = ("rotateL",    forAll (listOf (choose (0,31))) . (zipWith rotate
 prop_BRotateR = ("rotateR",    forAll (listOf (choose (0,31))) . (zipWith rotateR `eq2` Acc.zipWith Acc.rotateR))
 
 -- operators from Int
-prop_intToFloat      = ("intToFloat", map fromIntegral `eq1` Acc.map Acc.intToFloat)
-prop_roundFloatToInt = ("roundFloatToInt", map round `eq1` Acc.map Acc.roundFloatToInt)
-prop_truncateFloatToInt = ("truncateFloatToInt", map truncate `eq1` Acc.map Acc.truncateFloatToInt)
+prop_intToFloat         = ("intToFloat",         map fromIntegral `eq1` Acc.map Acc.intToFloat)
+prop_roundFloatToInt    = ("roundFloatToInt",    map round        `eq1` Acc.map Acc.roundFloatToInt)
+prop_truncateFloatToInt = ("truncateFloatToInt", map truncate     `eq1` Acc.map Acc.truncateFloatToInt)
 
 -- operators from Fractional, Floating, RealFrac & RealFloat
 prop_FDiv     = ("(/)",     \xs ys -> all (/= 0) ys ==> eq2 (zipWith (/)) (Acc.zipWith (/)) xs ys)

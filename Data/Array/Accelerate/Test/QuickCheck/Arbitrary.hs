@@ -1,18 +1,32 @@
 {-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+-- |
+-- Module      : Data.Array.Accelerate.Test.QuickCheck.Arbitrary
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
-module Arbitrary where
+module Data.Array.Accelerate.Test.QuickCheck.Arbitrary
+  (
+    -- Instances of Arbitrary
+    arbitraryIntegralExp, arbitraryIntegralVector,
+    arbitraryFloatingExp, arbitraryFloatingVector
+  )
+  where
 
 import Data.Array.Accelerate
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 
-import Test.QuickCheck
-import Control.Monad
 import Control.Applicative                      hiding (Const)
-import Data.List                                (mapAccumL)
+import Control.Monad
+import Data.List
 import Foreign.Storable
+import Test.QuickCheck
 
 
 -- Primitive Types
@@ -167,8 +181,8 @@ unaryIntegral = sized $ \n -> oneof
   , flip clearBit      . constant <$> choose (0,wordSize)
   , flip complementBit . constant <$> choose (0,wordSize)
   , unaryNum
-  , binaryNum      `ap` arbitraryIntegralExp (n `div` 2)
-  , binaryIntegral `ap` arbitraryIntegralExp (n `div` 2)
+  , binaryNum      <*> arbitraryIntegralExp (n `div` 2)
+  , binaryIntegral <*> arbitraryIntegralExp (n `div` 2)
   ]
 
 binaryIntegral :: (Elem t, IsIntegral t) => Gen (Exp t -> Exp t -> Exp t)
@@ -190,7 +204,7 @@ unaryFloating = sized $ \n -> oneof
   [ return mkSin
   , return mkCos
   , return mkTan
---  , return mkAsin
+--  , return mkAsin     -- can't be sure inputs will be in the valid range
 --  , return mkAcos
   , return mkAtan
   , return mkAsinh

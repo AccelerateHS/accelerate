@@ -73,6 +73,10 @@ Flag cuda
   Description:          enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
+Flag test-suite
+  Description:          export extra test modules
+  Default:              False
+
 Library
   Build-depends:        array, 
                         base == 4.*, 
@@ -95,6 +99,9 @@ Library
                         transformers >= 0.2 && < 0.3,
                         unix
 
+  if flag(test-suite)
+    Build-depends:      QuickCheck >= 2
+
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
 --  If flag(llvm)
@@ -102,7 +109,12 @@ Library
 
   If flag(cuda)
     Exposed-modules:    Data.Array.Accelerate.CUDA
-                        
+
+  If flag(test-suite)
+    Exposed-modules:    Data.Array.Accelerate.Test
+                        Data.Array.Accelerate.Test.QuickCheck
+                        Data.Array.Accelerate.Test.QuickCheck.Arbitrary
+
   Other-modules:        Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Delayed
                         Data.Array.Accelerate.Array.Representation

@@ -4,11 +4,10 @@ module Main where
 
 import Data.Bits
 import Properties
-import Test.QuickCheck
 import Text.Printf
+import Test.QuickCheck
 
 import Data.Array.Accelerate
-import Data.Array.Accelerate.Type
 
 
 -- All tests, all element types (coffee time!)
