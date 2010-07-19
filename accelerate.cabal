@@ -19,7 +19,8 @@ Description:            This library defines an embedded language for
                         the full language; in particular, the array operations
                         'replicate', 'slice', and 'foldSeg' are not yet supported.
                         .
-                        Known bugs in this version:    http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority
+                        Known bugs in this version:
+                        <http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority>
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
 License:                BSD3
