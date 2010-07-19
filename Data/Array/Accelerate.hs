@@ -27,6 +27,10 @@
 --
 -- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
 --   reference implementation defining the semantics of the Accelerate language
+--
+-- * "Data.Array.Accelerate.CUDA": an implementation supporting parallel
+--    execution on CUDA-capable NVIDIA GPUs
+--
 
 module Data.Array.Accelerate (
 
