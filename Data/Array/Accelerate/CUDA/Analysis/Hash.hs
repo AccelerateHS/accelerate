@@ -35,7 +35,7 @@ accToKey (FoldSeg f e _ a)   = chr 79  : showTy (accType a) ++ show f ++ show e
 accToKey (Scanl f e a)       = chr 97  : showTy (accType a) ++ show f ++ show e
 accToKey (Scanr f e a)       = chr 107 : showTy (accType a) ++ show f ++ show e
 accToKey (Permute c e p a)   = chr 127 : showTy (accType a) ++ show c ++ show e ++ show p
-accToKey (Backpermute p _ a) = chr 139 : showTy (accType a) ++ show p
+accToKey (Backpermute _ p a) = chr 139 : showTy (accType a) ++ show p
 accToKey _ =
   error "we should never get here"
 
