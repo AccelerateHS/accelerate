@@ -16,7 +16,7 @@ module Data.Array.Accelerate.CUDA.State
   (
     evalCUDA, runCUDA, CIO,   unique, outputDir, deviceProps, memoryEntry, kernelEntry,
     KernelEntry(KernelEntry), kernelName, kernelStatus, Key,
-    MemoryEntry(MemoryEntry), refcount, arena,
+    MemoryEntry(MemoryEntry), refcount, memsize, arena,
 
     freshVar,
     module Data.Record.Label
@@ -26,6 +26,7 @@ module Data.Array.Accelerate.CUDA.State
 import Prelude hiding (id, (.), mod)
 import Control.Category
 
+import Data.Int
 import Data.Maybe
 import Data.Binary
 import Data.Record.Label
@@ -146,6 +147,7 @@ data KernelEntry = KernelEntry
 data MemoryEntry = MemoryEntry
   {
     _refcount :: Int,
+    _memsize  :: Int64,
     _arena    :: WordPtr
   }
 
@@ -161,6 +163,7 @@ memoryEntry  :: CUDAState :-> IntMap MemoryEntry
 kernelEntry  :: CUDAState :-> Map Key KernelEntry
 
 refcount     :: MemoryEntry :-> Int
+memsize      :: MemoryEntry :-> Int64
 arena        :: MemoryEntry :-> WordPtr
 
 kernelName   :: KernelEntry :-> String

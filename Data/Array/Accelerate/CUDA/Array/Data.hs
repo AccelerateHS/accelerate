@@ -203,13 +203,14 @@ instance TextureData Word where
 
 -- Allocate a new device array to accompany the given host-side Accelerate array
 --
-mallocArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
+mallocArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
 mallocArray' ad n = do
   exists <- IM.member key <$> getM memoryEntry
   unless exists $ insertArray ad =<< liftIO (CUDA.mallocArray n)
   where
     insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
-    insertArray _ = modM memoryEntry . IM.insert key . MemoryEntry 0 . CUDA.devPtrToWordPtr
+    insertArray _ = modM memoryEntry . IM.insert key . MemoryEntry 0 bytes . CUDA.devPtrToWordPtr
+    bytes         = fromIntegral $ n * sizeOf (undefined :: a)
     key           = arrayToKey ad
 
 
