@@ -66,15 +66,27 @@ Extra-source-files:     INSTALL
                         examples/rasterize/rasterize.hs
 
 Flag llvm
-  Description:          enable the LLVM backend (sequential)
+  Description:          Enable the LLVM backend (sequential)
   Default:              False
 
 Flag cuda
-  Description:          enable the CUDA parallel backend for NVIDIA GPUs
+  Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
 Flag test-suite
-  Description:          export extra test modules
+  Description:          Export extra test modules
+  Default:              False
+
+Flag bounds-checks
+  Description:          Enable bounds checking
+  Default:              True
+
+Flag unsafe-checks
+  Description:          Enable bounds checking in unsafe operations
+  Default:              False
+
+Flag internal-checks
+  Description:          Enable internal consistency checks
   Default:              False
 
 Library
@@ -83,6 +95,10 @@ Library
                         ghc-prim, 
                         haskell98,
                         pretty
+
+  Include-Dirs:         include
+  Install-Includes:     accelerate.h
+
   If flag(llvm)
     Build-depends:      llvm >= 0.6.8
 
@@ -100,7 +116,7 @@ Library
                         unix
 
   if flag(test-suite)
-    Build-depends:      QuickCheck >= 2
+    Build-depends:      QuickCheck == 2.*
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
@@ -145,6 +161,15 @@ Library
                         Data.Array.Accelerate.CUDA.Compile
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
+
+  if flag(bounds-checks)
+    cpp-options:        -DACCELERATE_BOUNDS_CHECKS
+
+  if flag(unsafe-checks)
+    cpp-options:        -DACCELERATE_UNSAFE_CHECKS
+
+  if flag(internal-checks)
+    cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
   Extensions:           FlexibleContexts, FlexibleInstances, 
