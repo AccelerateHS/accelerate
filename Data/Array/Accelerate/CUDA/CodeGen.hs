@@ -9,7 +9,11 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.CodeGen (codeGenAcc, CUTranslSkel)
+module Data.Array.Accelerate.CUDA.CodeGen
+  (
+    CUTranslSkel,
+    codeGenAcc, codeGenFun, codeGenExp
+  )
   where
 
 import Prelude hiding (mod)
@@ -52,14 +56,12 @@ codeGenAcc acc =
 --
 --  FRAGILE.
 --
-type CG a = State [CExtDecl] a
-
-codeGenAcc' :: AST.OpenAcc aenv a -> CG CUTranslSkel
+codeGenAcc' :: AST.OpenAcc aenv a -> State [CExtDecl] CUTranslSkel
 codeGenAcc' op@(AST.Map f1 a1)        = mkMap         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
 codeGenAcc' (AST.Replicate _ e1 a1)   = mkReplicate   (codeGenAccType a1) <$> codeGenExp e1
 codeGenAcc' (AST.Index _ a1 e1)       = mkIndex       (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Fold  f1 e1 _)       = mkFold        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Fold f1 e1 _)        = mkFold        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.FoldSeg f1 e1 _ _)   = mkFoldSeg     (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
@@ -75,7 +77,7 @@ codeGenAcc' _ =
 
 -- Function abstraction
 --
-codeGenFun :: AST.OpenFun env aenv t -> CG [CExpr]
+codeGenFun :: AST.OpenFun env aenv t -> State [CExtDecl] [CExpr]
 codeGenFun (AST.Lam  lam)  = codeGenFun lam
 codeGenFun (AST.Body body) = codeGenExp body
 
@@ -88,7 +90,7 @@ unit x = [x]
 --
 -- TLM 2010-06-24: Shape for free array variables??
 --
-codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG [CExpr]
+codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> State [CExtDecl] [CExpr]
 codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
 codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
 codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
@@ -126,7 +128,7 @@ codeGenExp (AST.IndexScalar a1 e1) = do
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
 --
-codeGenTup :: Tuple (AST.OpenExp env aenv) t -> CG [CExpr]
+codeGenTup :: Tuple (AST.OpenExp env aenv) t -> State [CExtDecl] [CExpr]
 codeGenTup NilTup          = return []
 codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
 
