@@ -97,7 +97,6 @@ Library
                         pretty
 
   Include-Dirs:         include
-  Install-Includes:     accelerate.h
 
   If flag(llvm)
     Build-depends:      llvm >= 0.6.8
@@ -131,7 +130,8 @@ Library
                         Data.Array.Accelerate.Test.QuickCheck
                         Data.Array.Accelerate.Test.QuickCheck.Arbitrary
 
-  Other-modules:        Data.Array.Accelerate.Array.Data
+  Other-modules:        Data.Array.Accelerate.Internal.Check
+                        Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Delayed
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
