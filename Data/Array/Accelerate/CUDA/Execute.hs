@@ -19,7 +19,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.Trans
 import Control.Applicative                              hiding (Const)
-import qualified Data.Map                               as M
+import qualified Data.HashTable                         as HT
 
 import System.FilePath
 import System.Posix.Process
@@ -119,11 +119,12 @@ executeOpenAcc (Unit e)   env = do
 
 
 executeOpenAcc acc env = do
-  krn <- fromMaybe (error "code generation failed") . M.lookup key <$> getM kernelEntry
+  tab <- getM kernelTable
+  krn <- fromMaybe (error "code generation failed") <$> liftIO (HT.lookup tab key)
   mdl <- either' (get kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
-    mdl <- liftIO    $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
-    modM kernelEntry $ M.insert key  (set kernelStatus (Right mdl) krn)
+    mdl <- liftIO $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
+    liftIO        $ HT.insert tab key (set kernelStatus (Right mdl) krn)
     return mdl
 
   -- determine dispatch pattern, extract parameters, allocate storage, run

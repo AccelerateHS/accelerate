@@ -22,7 +22,7 @@ import Control.Exception
 import Control.Applicative                              hiding (Const)
 import Language.C
 import Text.PrettyPrint
-import qualified Data.Map                               as M
+import qualified Data.HashTable                         as HT
 
 import System.Directory
 import System.FilePath
@@ -100,7 +100,8 @@ compileTup (t `SnocTup` e) = compileExp e >> compileTup t
 compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   let key = accToKey acc
-  compiled <- M.member key <$> getM kernelEntry
+  table    <- getM kernelTable
+  compiled <- isJust <$> liftIO (HT.lookup table key)
   unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- getM outputDir
@@ -110,7 +111,7 @@ compile acc = do
                 writeCode cufile (codeGenAcc acc)
                 forkProcess $ executeFile nvcc False flags Nothing
 
-    modM kernelEntry $ M.insert key (KernelEntry cufile (Left pid))
+    liftIO $ HT.insert table key (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file

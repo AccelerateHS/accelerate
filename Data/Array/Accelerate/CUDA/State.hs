@@ -8,15 +8,16 @@
 -- Stability   : experimental
 -- Portability : non-partable (GHC extensions)
 --
--- This module defines a state monad which keeps track of the code generator
--- state, including memory transfers and external compilation processes.
+-- This module defines a state monad token which keeps track of the code
+-- generator state, including memory transfers and external compilation
+-- processes.
 --
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, CIO,   unique, outputDir, deviceProps, memoryEntry, kernelEntry,
-    KernelEntry(KernelEntry), kernelName, kernelStatus, Key,
-    MemoryEntry(MemoryEntry), refcount, memsize, arena,
+    evalCUDA, runCUDA, CIO, unique, outputDir, deviceProps, memoryTable, kernelTable,
+    AccTable, KernelEntry(KernelEntry), kernelName, kernelStatus,
+    MemTable, MemoryEntry(MemoryEntry), refcount, memsize, arena,
 
     freshVar,
     module Data.Record.Label
@@ -34,10 +35,8 @@ import Control.Arrow
 import Control.Applicative
 import Control.Exception
 import Control.Monad.State              (StateT(..), liftM)
-import Data.Map                         (Map)
-import Data.IntMap                      (IntMap)
-import qualified Data.Map               as M
-import qualified Data.IntMap            as IM
+import Data.HashTable                   (HashTable)
+import qualified Data.HashTable         as HT
 
 import System.Directory
 import System.FilePath
@@ -46,6 +45,51 @@ import System.Posix.Types               (ProcessID)
 
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver    as CUDA
+
+
+-- Types
+-- ~~~~~
+
+type AccTable = HashTable String  KernelEntry
+type MemTable = HashTable WordPtr MemoryEntry
+
+-- | The state token for accelerated CUDA array operations
+--
+type CIO       = StateT CUDAState IO
+data CUDAState = CUDAState
+  {
+    _unique      :: Int,
+    _outputDir   :: FilePath,
+    _deviceProps :: CUDA.DeviceProperties,
+    _memoryTable :: MemTable,
+    _kernelTable :: AccTable
+  }
+
+-- |
+-- Associate an array expression with an external compilation tool (nvcc) or the
+-- loaded function module
+--
+data KernelEntry = KernelEntry
+  {
+    _kernelName   :: String,
+    _kernelStatus :: Either ProcessID CUDA.Module
+  }
+
+-- |
+-- Reference tracking for device memory allocations. Associates the products of
+-- an `Array dim e' with data stored on the graphics device. Facilitates reuse
+-- and delayed allocation at the cost of explicit release.
+--
+-- This maps to a single concrete array. Arrays of pairs, for example, which are
+-- represented internally as pairs of arrays, will generate two entries.
+--
+data MemoryEntry = MemoryEntry
+  {
+    _refcount :: Int,
+    _memsize  :: Int64,
+    _arena    :: WordPtr
+  }
+
 
 
 -- The CUDA State Monad
@@ -65,8 +109,8 @@ getOutputDir = do
 
 -- Store the kernel module map to file to the given directory
 --
-save :: FilePath -> Map Key KernelEntry -> IO ()
-save f m = encodeFile f . map (second _kernelName) . filter compiled $ M.toAscList m
+save :: FilePath -> AccTable -> IO ()
+save f m = encodeFile f . map (second _kernelName) . filter compiled =<< HT.toList m
   where
     compiled (_,KernelEntry _ (Right _)) = True
     compiled _                           = False
@@ -74,14 +118,17 @@ save f m = encodeFile f . map (second _kernelName) . filter compiled $ M.toAscLi
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
 --
-load :: FilePath -> IO (Map Key KernelEntry)
+load :: FilePath -> IO (AccTable, Int)
 load f = do
   x <- doesFileExist f
-  if x then M.fromDistinctAscList <$> (mapM reload =<< decodeFile f)
-       else return M.empty
+  e <- if x then mapM reload =<< decodeFile f
+            else return []
+
+  (,length e) <$> HT.fromList HT.hashString e
   where
     reload (k,n) =
       (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
+
 
 -- |
 -- Evaluate a CUDA array computation under a newly initialised environment,
@@ -95,12 +142,13 @@ runCUDA acc =
   bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
     props <- CUDA.props dev
     dir   <- getOutputDir
-    dict  <- load (dir </> ".dict")
-    (a,s) <- runStateT acc (CUDAState (M.size dict) dir props IM.empty dict)
+    tab   <- HT.new (==) fromIntegral
+    (k,n) <- load (dir </> "_index")
+    (a,s) <- runStateT acc (CUDAState n dir props tab k)
     --
     -- TLM 2010-06-05: assert all memory has been released ??
     --                 does CUDA.destroy release memory ??
-    save (dir </> ".dict") (_kernelEntry s)
+    save (dir </> "_index") (_kernelTable s)
     return (a,s)
 
   where
@@ -112,55 +160,15 @@ runCUDA acc =
       return (dev, ctx)
 
 
--- | The state token for accelerated CUDA array operations
---
-type CIO       = StateT CUDAState IO
-data CUDAState = CUDAState
-  {
-    _unique      :: Int,
-    _outputDir   :: FilePath,
-    _deviceProps :: CUDA.DeviceProperties,
-    _memoryEntry :: IntMap MemoryEntry,
-    _kernelEntry :: Map Key KernelEntry
-  }
-
--- |
--- Associate an array expression with an external compilation tool (nvcc) or the
--- loaded function module
---
-type Key         = String
-data KernelEntry = KernelEntry
-  {
-    _kernelName   :: String,
-    _kernelStatus :: Either ProcessID CUDA.Module
-  }
-
-
--- |
--- Reference tracking for device memory allocations. Associates the products of
--- an `Array dim e' with data stored on the graphics device. Facilitates reuse
--- and delayed allocation at the cost of explicit release.
---
--- This maps to a single concrete array. Arrays of pairs, for example, which are
--- represented internally as pairs of arrays, will generate two entries.
---
-data MemoryEntry = MemoryEntry
-  {
-    _refcount :: Int,
-    _memsize  :: Int64,
-    _arena    :: WordPtr
-  }
-
 $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
-
 
 -- The derived labels (documentation goes here)
 --
 unique       :: CUDAState :-> Int
 outputDir    :: CUDAState :-> FilePath
 deviceProps  :: CUDAState :-> CUDA.DeviceProperties
-memoryEntry  :: CUDAState :-> IntMap MemoryEntry
-kernelEntry  :: CUDAState :-> Map Key KernelEntry
+memoryTable  :: CUDAState :-> MemTable
+kernelTable  :: CUDAState :-> AccTable
 
 refcount     :: MemoryEntry :-> Int
 memsize      :: MemoryEntry :-> Int64

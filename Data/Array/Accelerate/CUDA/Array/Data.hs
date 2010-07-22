@@ -28,13 +28,15 @@ import Data.Maybe
 import Control.Monad
 import Control.Applicative
 import Control.Monad.IO.Class
-import qualified Data.IntMap                            as IM
+import qualified Data.HashTable                         as HT
 
 import Data.Array.Accelerate.CUDA.State
 import qualified Data.Array.Accelerate.Array.Data       as Acc
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.CUDA.Driver.Stream             as CUDA
 import qualified Foreign.CUDA.Driver.Texture            as CUDA
+
+#include "accelerate.h"
 
 
 -- Instances
@@ -205,13 +207,14 @@ instance TextureData Word where
 --
 mallocArray' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
 mallocArray' ad n = do
-  exists <- IM.member key <$> getM memoryEntry
-  unless exists $ insertArray ad =<< liftIO (CUDA.mallocArray n)
+  table  <- getM memoryTable
+  exists <- isJust <$> liftIO (HT.lookup table key)
+  unless exists . liftIO $ insertArray ad table =<< CUDA.mallocArray n
   where
-    insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CUDA.DevicePtr a -> CIO ()
-    insertArray _ = modM memoryEntry . IM.insert key . MemoryEntry 0 bytes . CUDA.devPtrToWordPtr
-    bytes         = fromIntegral $ n * sizeOf (undefined :: a)
-    key           = arrayToKey ad
+    insertArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> MemTable -> CUDA.DevicePtr a -> IO ()
+    insertArray _ t = HT.insert t key . MemoryEntry 0 bytes . CUDA.devPtrToWordPtr
+    bytes           = fromIntegral $ n * sizeOf (undefined :: a)
+    key             = arrayToKey ad
 
 
 -- Array indexing
@@ -261,36 +264,41 @@ pokeArray' ad n =
   let src = Acc.ptrsOfArrayData ad
       dst = CUDA.wordPtrToDevPtr . get arena
   in do
-    me <- mod refcount (+1) <$> lookupArray ad
+    tab <- getM memoryTable
+    me  <- mod refcount (+1) <$> lookupArray ad
     when (get refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
-    modM memoryEntry (IM.insert (arrayToKey ad) me)
+    liftIO $ HT.insert tab (arrayToKey ad) me
 
 pokeArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
 pokeArrayAsync' ad n st =
   let src = CUDA.HostPtr . Acc.ptrsOfArrayData
       dst = CUDA.wordPtrToDevPtr . get arena
   in do
-    me <- mod refcount (+1) <$> lookupArray ad
+    tab <- getM memoryTable
+    me  <- mod refcount (+1) <$> lookupArray ad
     when (get refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
-    modM memoryEntry (IM.insert (arrayToKey ad) me)
+    liftIO $ HT.insert tab (arrayToKey ad) me
 
 
 -- Release a device array, when its reference counter drops to zero
 --
 freeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
 freeArray' ad = do
-  me <- mod refcount (subtract 1) <$> lookupArray ad
-  if get refcount me > 0
-     then modM memoryEntry (IM.insert (arrayToKey ad) me)
-     else do liftIO . CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
-             modM memoryEntry (IM.delete (arrayToKey ad))
+  tab <- getM memoryTable
+  me  <- mod refcount (subtract 1) <$> lookupArray ad
+  liftIO $ if get refcount me > 0
+              then HT.insert tab (arrayToKey ad) me
+              else do CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
+                      HT.delete tab (arrayToKey ad)
 
 
 -- Increase the reference count of an array. You may wish to call this right
 -- before another method that will implicitly attempt to release the array.
 --
 touchArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
-touchArray' ad = modM memoryEntry =<< IM.insert (arrayToKey ad) . mod refcount (+1) <$> lookupArray ad
+touchArray' ad = do
+  tab <- getM memoryTable
+  liftIO . HT.insert tab (arrayToKey ad) . mod refcount (+1) =<< lookupArray ad
 
 
 -- Return the device pointers wrapped in a list of function parameters
@@ -317,16 +325,21 @@ textureRefs' ad mdl n t = do
 
 -- Generate a memory map key from the given ArrayData
 --
-arrayToKey :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> IM.Key
-arrayToKey = fromIntegral . ptrToWordPtr . Acc.ptrsOfArrayData
+arrayToKey :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> WordPtr
+arrayToKey = ptrToWordPtr . Acc.ptrsOfArrayData
 {-# INLINE arrayToKey #-}
 
 -- Retrieve the device memory entry from the state structure associated with a
 -- particular Accelerate array.
 --
 lookupArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO MemoryEntry
-lookupArray ad = fromMaybe (error "ArrayElem: internal error") . IM.lookup (arrayToKey ad) <$> getM memoryEntry
 {-# INLINE lookupArray #-}
+lookupArray ad = do
+  t <- getM memoryTable
+  x <- liftIO $ HT.lookup t (arrayToKey ad)
+  case x of
+       Just e -> return e
+       _      -> INTERNAL_ERROR(error) "lookupArray" "lost device memory reference"
 
 -- Return the device pointer associated with a host-side Accelerate array
 --
