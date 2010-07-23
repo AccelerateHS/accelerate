@@ -296,10 +296,10 @@ codeGenPrim (AST.PrimMul          _) [a,b] = CBinary CMulOp a b internalNode
 codeGenPrim (AST.PrimNeg          _) [a]   = CUnary  CMinOp a   internalNode
 codeGenPrim (AST.PrimAbs         ty) [a]   = codeGenAbs ty a
 codeGenPrim (AST.PrimSig         ty) [a]   = codeGenSig ty a
-codeGenPrim (AST.PrimQuot        ty) [a,b] = codeGenQuot ty a b
+codeGenPrim (AST.PrimQuot         _) [a,b] = CBinary CDivOp a b internalNode
 codeGenPrim (AST.PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
-codeGenPrim (AST.PrimIDiv         _) [a,b] = CBinary CDivOp a b internalNode
-codeGenPrim (AST.PrimMod         ty) [a,b] = codeGenMod ty a b
+codeGenPrim (AST.PrimIDiv         _) [a,b] = codeGenDiv a b
+codeGenPrim (AST.PrimMod          _) [a,b] = codeGenMod a b
 codeGenPrim (AST.PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
 codeGenPrim (AST.PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
 codeGenPrim (AST.PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
@@ -428,11 +428,31 @@ codeGenSig ty@(FloatingNumType t) a
           (codeGenScalar (NumScalarType ty) 0)
           internalNode
 
-codeGenQuot :: IntegralType a -> CExpr -> CExpr -> CExpr
-codeGenQuot = error "Data.Array.Accelerate.CUDA.CodeGen: PrimQuot"
+-- GHC.Int
+--
+-- divInt :: Int -> Int -> Int
+-- x `divInt` y
+--   | x > 0 && y < 0 = ((x-y) - 1) `quot` y
+--   | x < 0 && y > 0 = ((x-y) + 1) `quot` y
+--   | otherwise      = x `quot` y
+--
+codeGenDiv :: CExpr -> CExpr -> CExpr
+codeGenDiv x y =
+  CCond (CBinary CLndOp (CBinary CGrOp x (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (CBinary CLeOp y (CConst (CIntConst (cInteger 0) internalNode)) internalNode) internalNode) (Just (CBinary CDivOp (CBinary CSubOp (CBinary CSubOp x y internalNode) (CConst (CIntConst (cInteger 1) internalNode)) internalNode) y internalNode)) (CCond (CBinary CLndOp (CBinary CLeOp x (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (CBinary CGrOp y (CConst (CIntConst (cInteger 0) internalNode)) internalNode) internalNode) (Just (CBinary CDivOp (CBinary CAddOp (CBinary CSubOp x y internalNode) (CConst (CIntConst (cInteger 1) internalNode)) internalNode) y internalNode)) (CBinary CDivOp x y internalNode) internalNode) internalNode
 
-codeGenMod :: IntegralType a -> CExpr -> CExpr -> CExpr
-codeGenMod = error "Data.Array.Accelerate.CUDA.CodeGen: PrimMod"
+-- GHC.Int
+--
+-- modInt :: Int -> Int -> Int
+-- x `modInt` y
+--   | x > 0 && y < 0 || x < 0 && y > 0 = if r /= 0 then r + y else 0
+--   | otherwise                        = r
+--   where
+--     r = x `rem` y
+--
+codeGenMod :: CExpr -> CExpr -> CExpr
+codeGenMod x y =
+  (CCond (CBinary CLorOp (CBinary CLndOp (CBinary CGrOp x (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (CBinary CLeOp y (CConst (CIntConst (cInteger 0) internalNode)) internalNode) internalNode) (CBinary CLndOp (CBinary CLeOp x (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (CBinary CGrOp y (CConst (CIntConst (cInteger 0) internalNode)) internalNode) internalNode) internalNode) (Just (CCond (CBinary CNeqOp (CBinary CRmdOp x y internalNode) (CConst (CIntConst (cInteger 0) internalNode)) internalNode) (Just (CBinary CAddOp (CBinary CRmdOp x y internalNode) y internalNode)) (CConst (CIntConst (cInteger 0) internalNode)) internalNode)) (CBinary CRmdOp x y internalNode) internalNode)
+
 
 -- TLM 2010-06-29:
 --   It would be nice we could use something like Language.C.Parser.execParser
