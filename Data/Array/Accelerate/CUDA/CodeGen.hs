@@ -23,6 +23,7 @@ import Data.Char
 import Language.C
 import Control.Applicative
 import Control.Monad.State
+import Text.PrettyPrint
 
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
@@ -35,6 +36,8 @@ import qualified Foreign.Storable                               as F
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+
+#include "accelerate.h"
 
 
 -- Array expressions
@@ -68,9 +71,9 @@ codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       (codeGenExpType e1) <$> co
 codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
 codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     (codeGenAccType a1) <$> codeGenFun f1 <*> codeGenFun f2
 codeGenAcc' (AST.Backpermute _ f1 a1) = mkBackpermute (codeGenAccType a1) <$> codeGenFun f1
-
-codeGenAcc' _ =
-  error "codeGenAcc: internal error"
+codeGenAcc' x =
+  INTERNAL_ERROR(error) "codeGenAcc"
+  (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])
 
 
 -- Embedded expressions
@@ -344,7 +347,7 @@ codeGenPrim AST.PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType  
 
 -- If the argument lists are not the correct length
 codeGenPrim _ _ =
-  error "Data.Array.Accelerate.CUDA: inconsistent valuation"
+  INTERNAL_ERROR(error) "codeGenPrim" "inconsistent valuation"
 
 
 -- Implementation
