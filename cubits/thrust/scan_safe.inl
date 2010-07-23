@@ -42,6 +42,7 @@ T scan_block(T* array, T val)
     else           return threadIdx.x > 0 ? array[threadIdx.x - 1] : identity();
 }
 
+#if 0
 template <bool inclusive, typename T>
 __device__
 T scan_block_n(T* array, const unsigned int n, T val)
@@ -64,6 +65,7 @@ T scan_block_n(T* array, const unsigned int n, T val)
     if (inclusive) return val;
     else           return threadIdx.x > 0 ? array[threadIdx.x - 1] : identity();
 }
+#endif
 
 
 template <bool inclusive>
@@ -81,12 +83,11 @@ scan_intervals
     const Ix interval_begin = interval_size * blockIdx.x;
     const Ix interval_end   = min(interval_begin + interval_size, N);
 
-    TyOut val = identity();
-    Ix base   = interval_begin;
+    TyOut val;
     Ix output = reverse ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
 
-    // process full blocks
-    for(; base + blockDim.x <= interval_end; base += blockDim.x)
+    // process intervals
+    for(Ix base = interval_begin + threadIdx.x; base < interval_end; base += blockDim.x)
     {
         // read data
         val = get0(d_in0, output);
@@ -109,35 +110,9 @@ scan_intervals
         if (reverse) output -= blockDim.x;
         else         output += blockDim.x;
     }
-
-    // process partially full block at end of input (if necessary)
-    if (base < interval_end)
-    {
-        // read data
-        if (base + threadIdx.x < interval_end)
-        {
-            val = get0(d_in0, output);
-        }
-
-        // carry in
-        if (threadIdx.x == 0 && base != interval_begin)
-        {
-            TyOut tmp = sdata[blockDim.x - 1];
-            val       = apply(tmp, val);
-        }
-        __syncthreads();
-
-        // scan block
-        val = scan_block_n<inclusive>(sdata, interval_end - base, val);
-
-        // write data
-        if (base + threadIdx.x < interval_end)
-        {
-            set(d_out, output, val);
-        }
-    }
     __syncthreads();
 
+    // write block sum
     if (threadIdx.x == 0)
     {
         if (reverse)

@@ -313,8 +313,7 @@ dispatchScan acc@(Scanl f _ ad) env mdl = do
       a_sum@(Array _ sum) = newArray ()
       a_bks@(Array _ bks) = newArray grid
       n                   = size sh
-      units               = (n + cta - 1) `div` cta
-      interval            = cta * ((units + grid - 1) `div` grid)
+      interval            = (n + grid - 1) `div` grid
 
       unify :: Array dim e -> Array dim' e -> CIO ()
       unify _ _ = return ()
