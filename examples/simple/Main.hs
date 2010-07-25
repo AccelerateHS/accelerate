@@ -13,12 +13,13 @@ import qualified Data.Array.Accelerate as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
 import qualified Data.Array.Accelerate.CUDA as CUDA
 
-import Time
-import SAXPY
-import Square
 import DotP
 import Filter
+import SAXPY
+import SMVM
+import Square
 import Sum
+import Time
 
 
 -- Auxilliary array functions
@@ -361,6 +362,55 @@ test_filter n
     {-# NOINLINE filter_cuda #-}
     filter_cuda p arr () = CUDA.run (filter p arr)
 
+
+-- We don't check whether an index occurs multiple times in a given matrix row.
+-- The first parameter specifies the range of how many non-zero elements may be
+-- generated per row, second is the matrix size.
+--
+test_smvm :: (Int,Int) -> (Int,Int) -> IO ()
+test_smvm (n,m) (rows,cols) = do
+  putStrLn "== SMVM"
+  putStr $ "Generating data for " ++ shows rows " x " ++ shows cols " sparse-matrix"
+  vec  <- randomUVector rows
+  seg_ <- (take rows . randomRs (n,m)) `fmap` newStdGen
+  let nnz  = Prelude.sum seg_
+      segd = listArray (0,rows-1) seg_
+  ind_ <- (take nnz . randomRs (0,rows-1)) `fmap` newStdGen
+  val_ <- (take nnz . randomRs (-100,100)) `fmap` newStdGen
+  putStrLn $ ", " ++ shows nnz " non-zero elements"
+  --
+  let inds = listArray (0,nnz-1) ind_
+      vals = listArray (0,nnz-1) val_
+  evaluateUVector segd
+  evaluateUVector inds
+  evaluateUVector vals
+  --
+  a_segd <- convertUVector segd
+  a_vec  <- convertUVector vec
+  let a_smat = Acc.fromList nnz (zip ind_ val_)
+  evaluateVector a_smat
+  --
+  putStrLn "Running reference code ..."
+  res_ref <- timeUVector $ smvm_ref' segd inds vals vec
+
+  putStrLn "Running Accelerate code ..."
+  putStrLn "[Interpreter]"
+  res_int <- timeVector  $ smvm_int' a_segd a_smat a_vec
+  validateFloats res_ref res_int
+
+  putStrLn "[CUDA]"
+  res_cuda <- timeVector' $ smvm_cuda' a_segd a_smat a_vec
+  validateFloats res_ref res_cuda
+  where
+    -- idiom with NOINLINE and extra parameter needed to prevent optimisations
+    -- from sharing results over multiple runs
+    {-# NOINLINE smvm_ref'  #-}
+    smvm_ref'  d i m v () = smvm_ref (d, (i,m)) v
+    {-# NOINLINE smvm_int'  #-}
+    smvm_int'  d m v   () = Interp.run (smvm (d,m) v)
+    {-# NOINLINE smvm_cuda' #-}
+    smvm_cuda' d m v   () = CUDA.run (smvm (d,m) v)
+
 main :: IO ()
 main
   = do
@@ -370,3 +420,5 @@ main
       test_saxpy 100000
       test_dotp  100000
       test_filter 1800
+      test_smvm (0,42) (2400,400)
+
