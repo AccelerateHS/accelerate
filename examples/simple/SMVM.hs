@@ -2,14 +2,10 @@
 
 module SMVM (smvm, smvm_ref) where
 
-import Prelude   hiding (replicate, zip, unzip, map, filter, max, min, not,
-                         zipWith)
-import qualified Prelude
+import Data.Array.Unboxed
 
-import Data.Array.Unboxed hiding ((!))
-import Data.Array.IArray  hiding ((!))
-
-import Data.Array.Accelerate
+import Data.Array.Accelerate           (Vector, Segments, Acc)
+import qualified Data.Array.Accelerate as Acc
 
 
 type SparseVector a = Vector (Int, a)
@@ -18,14 +14,14 @@ type SparseMatrix a = (Segments, SparseVector a)
 smvm :: SparseMatrix Float -> Vector Float -> Acc (Vector Float)
 smvm (segd', smat') vec'
   = let
-      segd         = use segd'
-      (inds, vals) = unzip (use smat')
-      vec          = use vec'
+      segd         = Acc.use segd'
+      (inds, vals) = Acc.unzip (Acc.use smat')
+      vec          = Acc.use vec'
       ---
-      vecVals  = backpermute (shape inds) (\i -> inds!i) vec
-      products = zipWith (*) vecVals vals
+      vecVals  = Acc.backpermute (Acc.shape inds) (\i -> inds Acc.! i) vec
+      products = Acc.zipWith (*) vecVals vals
     in
-    foldSeg (+) 0 products segd
+    Acc.foldSeg (+) 0 products segd
 
 
 type USparseMatrix a = (UArray Int Int, (UArray Int Int, UArray Int a))
@@ -34,6 +30,10 @@ smvm_ref :: USparseMatrix Float
          -> UArray Int Float 
          -> UArray Int Float
 smvm_ref (segd, (inds, values)) vec
-  -- FIXME: implement reference version of the algorithm
-  = undefined --listArray ((), ()) $ [sum [x * y | x <- elems xs | y <- elems ys]]
+  = listArray (0, rangeSize (bounds segd) - 1)
+  $ [sum [ values!i * vec!(inds!i) | i <- range seg] | seg <- segd' ]
+  where
+    segbegin = scanl  (+) 0 $ elems segd
+    segend   = scanl1 (+)   $ elems segd
+    segd'    = zipWith (\x y -> (x,y-1)) segbegin segend
 
