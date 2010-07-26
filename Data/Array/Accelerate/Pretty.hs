@@ -48,7 +48,7 @@ prettyAcc lvl (Let acc1 acc2)
   = text "let a" <> int lvl <+> char '=' <+> prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 1) acc2
 prettyAcc lvl (Let2 acc1 acc2) 
-  = text "let (a" <> int lvl <> text ", a" <> int (lvl + 1) <+> char '=' <+>
+  = text "let (a" <> int lvl <> text ", a" <> int (lvl + 1) <> char ')' <+> char '=' <+>
     prettyAcc lvl acc1 <+>
     text " in " <+> prettyAcc (lvl + 2) acc2
 prettyAcc _   (Avar idx)       = text $ "a" ++ show (idxToInt idx)
