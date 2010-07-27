@@ -45,19 +45,22 @@ evaluateUVector uarr = evaluate (uarr!0) >> return ()
 evaluateVector :: Acc.Vector e -> IO ()
 evaluateVector arr = evaluate (arr `Acc.indexArray` 0) >> return ()
 
-randomUVector :: (Num e, Random e, IArray UArray e) => Int -> IO (UArray Int e)
-randomUVector n
+randomUVectorR :: (Num e, Random e, IArray UArray e) => (e,e) -> Int -> IO (UArray Int e)
+randomUVectorR lim n
   = do
       rg <- newStdGen
       let -- The std random function is too slow to generate really big vectors
           -- with.  Instead, we generate a short random vector and repeat that.
-          randvec = take k (randomRs (-100, 100) rg)
+          randvec = take k (randomRs lim rg)
           vec     = listArray (0, n - 1) 
                               [randvec !! (i `mod` k) | i <- [0..n - 1]]
       evaluateUVector vec
       return vec
   where
     k = 1000
+
+randomUVector :: (Num e, Random e, IArray UArray e) => Int -> IO (UArray Int e)
+randomUVector = randomUVectorR (-100,100)
 
 convertUScalar :: (IArray UArray e, Acc.Elem e) 
                => UArray () e -> IO (Acc.Scalar e)
@@ -372,22 +375,17 @@ test_smvm (n,m) (rows,cols) = do
   putStrLn "== SMVM"
   putStr $ "Generating data for " ++ shows rows " x " ++ shows cols " sparse-matrix"
   vec  <- randomUVector rows
-  seg_ <- (take rows . randomRs (n,m)) `fmap` newStdGen
-  let nnz  = Prelude.sum seg_
-      segd = listArray (0,rows-1) seg_
-  ind_ <- (take nnz . randomRs (0,rows-1)) `fmap` newStdGen
-  val_ <- (take nnz . randomRs (-100,100)) `fmap` newStdGen
+  segd <- randomUVectorR (n,m) rows
+
+  let nnz = Prelude.sum (elems segd)
   putStrLn $ ", " ++ shows nnz " non-zero elements"
-  --
-  let inds = listArray (0,nnz-1) ind_
-      vals = listArray (0,nnz-1) val_
-  evaluateUVector segd
-  evaluateUVector inds
-  evaluateUVector vals
+
+  inds <- randomUVectorR (0,rows-1) nnz
+  vals <- randomUVector nnz
   --
   a_segd <- convertUVector segd
   a_vec  <- convertUVector vec
-  let a_smat = Acc.fromList nnz (zip ind_ val_)
+  let a_smat = Acc.fromList nnz (zip (elems inds) (elems vals))
   evaluateVector a_smat
   --
   putStrLn "Running reference code ..."
