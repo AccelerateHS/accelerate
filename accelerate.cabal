@@ -43,6 +43,7 @@ Data-files:             accelerate_cuda_extras.h
                         accelerate_cuda_utils.h
                         backpermute.inl
                         fold.inl
+                        fold_segmented.inl
                         map.inl
                         permute.inl
                         zipWith.inl
@@ -160,6 +161,7 @@ Library
                         Data.Array.Accelerate.CUDA.CodeGen
                         Data.Array.Accelerate.CUDA.Compile
                         Data.Array.Accelerate.CUDA.Execute
+                        Data.Array.Accelerate.CUDA.Smart
                         Data.Array.Accelerate.CUDA.State
 
   if flag(bounds-checks)

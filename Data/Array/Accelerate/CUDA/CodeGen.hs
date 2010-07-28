@@ -1,5 +1,4 @@
-{-# LANGUAGE CPP, GADTs, PatternGuards #-}
-{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, GADTs, PatternGuards, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.CodeGen
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -65,11 +64,11 @@ codeGenAcc' op@(AST.Map f1 a1)        = mkMap         (codeGenAccType op) (codeG
 codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
 codeGenAcc' (AST.Replicate _ e1 a1)   = mkReplicate   (codeGenAccType a1) <$> codeGenExp e1
 codeGenAcc' (AST.Index _ a1 e1)       = mkIndex       (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Fold f1 e1 _)        = mkFold        (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.FoldSeg f1 e1 _ _)   = mkFoldSeg     (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       (codeGenExpType e1) <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     (codeGenAccType a1) <$> codeGenFun f1 <*> codeGenFun f2
+codeGenAcc' (AST.Fold f1 e1 _)        = mkFold        (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
+codeGenAcc' (AST.FoldSeg f1 e1 _ s)   = mkFoldSeg     (codeGenExpType e1) (codeGenAccType s) <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
+codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
+codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     (codeGenAccType a1) <$> codeGenFun f1  <*> codeGenFun f2
 codeGenAcc' (AST.Backpermute _ f1 a1) = mkBackpermute (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' x =
   INTERNAL_ERROR(error) "codeGenAcc"

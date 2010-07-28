@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TupleSections #-}
+{-# LANGUAGE CPP, GADTs, TupleSections #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -25,6 +25,7 @@ import System.FilePath
 import System.Posix.Process
 import System.Exit                                      (ExitCode(..))
 import System.Posix.Types                               (ProcessID)
+import Text.PrettyPrint
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
@@ -40,6 +41,8 @@ import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Analysis.Launch
 
 import qualified Foreign.CUDA.Driver                    as CUDA
+
+#include "accelerate.h"
 
 
 -- Expression evaluation
@@ -244,6 +247,27 @@ dispatch acc@(Fold f x ad) env mdl = do
   if grid > 1 then dispatch (Fold f x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
+dispatch acc@(FoldSeg f _ ad sd) env mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "fold_segmented"
+  (Array sh  in0) <- executeOpenAcc ad env
+  (Array sh' seg) <- executeOpenAcc sd env
+  (cta,grid,smem) <- launchConfig acc (size sh') fn
+  let res@(Array _ out) = newArray (size sh')
+
+  mallocArray out (size sh')
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  d_seg <- devicePtrs seg
+  f_arr <- liftFun f env
+  t_var <- bind mdl f_arr
+
+  launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ d_seg ++ t_var ++ map (CUDA.IArg . size) [sh', sh])
+  freeArray in0
+  freeArray seg
+  release f_arr
+  return res
+
+
 dispatch acc@(Scanl _ _ _) env mdl = dispatchScan acc env mdl
 dispatch acc@(Scanr _ _ _) env mdl = dispatchScan acc env mdl
 
@@ -285,8 +309,9 @@ dispatch acc@(Backpermute e f ad) env mdl = do
   release f_arr
   return res
 
-dispatch _ _ _ =
-  error "Data.Array.Accelerate.CUDA: dispatch: internal error"
+dispatch x _ _ =
+  INTERNAL_ERROR(error) "dispatch"
+  (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])
 
 
 -- Unified dispatch handler for left/right scan.
@@ -339,7 +364,7 @@ dispatchScan acc@(Scanl f _ ad) env mdl = do
   return (a_out, a_sum)
 
 dispatchScan _ _ _ =
-  error "Data.Array.Accelerate.CUDA: internal error"
+  error "we can never get here"
 
 
 -- Initiate the device computation. The first version selects launch parameters

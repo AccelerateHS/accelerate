@@ -55,11 +55,11 @@ doChecks Internal = doInternalChecks
 
 error :: String -> Int -> Checks -> String -> String -> a
 error file line kind loc msg
-  = P.error $ unlines $
+  = P.error . unlines $
       (if kind == Internal
          then (["*** Internal error in package accelerate ***"
                ,"*** Please submit a bug report at http://trac.haskell.org/accelerate"]++)
-         else id) $
+         else id)
       [ file ++ ":" ++ show line ++ " (" ++ loc ++ "): " ++ msg ]
 
 check :: String -> Int -> Checks -> String -> String -> Bool -> a -> a

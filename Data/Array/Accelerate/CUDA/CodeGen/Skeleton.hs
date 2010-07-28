@@ -36,8 +36,16 @@ mkFold ty identity apply = CUTranslSkel code skel
             , mkApply 2 apply ])
             (mkNodeInfo (initPos "fold.cu") (Name 0))
 
-mkFoldSeg :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkFoldSeg _ty _identity _apply = undefined
+mkFoldSeg :: [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkFoldSeg ty int identity apply = CUTranslSkel code skel
+  where
+    skel = "fold_segmented.inl"
+    code = CTranslUnit
+	    ( mkTupleTypeAsc 2 ty ++
+	    [ mkTypedef "Int" False (head int)
+	    , mkIdentity identity
+	    , mkApply 2 apply ])
+	    (mkNodeInfo (initPos "fold_segmented.cu") (Name 0))
 
 
 --------------------------------------------------------------------------------

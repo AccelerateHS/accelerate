@@ -49,9 +49,9 @@ import Paths_accelerate                                 (getDataDir)
 compileAcc :: OpenAcc aenv a -> CIO ()
 compileAcc (Use (Array sh ad)) =
   let n = size sh
-  in do
-    mallocArray    ad n
-    pokeArrayAsync ad n Nothing
+  in  when (n > 0) $ do
+        mallocArray    ad n
+        pokeArrayAsync ad n Nothing
 
 compileAcc (Let  a1 a2)    = compileAcc a1 >> compileAcc a2
 compileAcc (Let2 a1 a2)    = compileAcc a1 >> compileAcc a2

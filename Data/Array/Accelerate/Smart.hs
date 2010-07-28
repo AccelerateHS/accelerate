@@ -20,7 +20,8 @@ module Data.Array.Accelerate.Smart (
   
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertClosedExp,
-  
+  convertExp, convertFun1, convertFun2,
+
   -- * Smart constructors for unpairing
   unpair,
 
