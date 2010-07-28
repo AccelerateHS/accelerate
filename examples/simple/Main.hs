@@ -374,13 +374,13 @@ test_smvm :: (Int,Int) -> (Int,Int) -> IO ()
 test_smvm (n,m) (rows,cols) = do
   putStrLn "== SMVM"
   putStr $ "Generating data for " ++ shows rows " x " ++ shows cols " sparse-matrix"
-  vec  <- randomUVector rows
+  vec  <- randomUVector cols
   segd <- randomUVectorR (n,m) rows
 
   let nnz = Prelude.sum (elems segd)
   putStrLn $ ", " ++ shows nnz " non-zero elements"
 
-  inds <- randomUVectorR (0,rows-1) nnz
+  inds <- randomUVectorR (0,cols-1) nnz
   vals <- randomUVector nnz
   --
   a_segd <- convertUVector segd
