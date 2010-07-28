@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -17,12 +18,19 @@ module Data.Array.Accelerate.CUDA (
 
   ) where
 
+import Prelude hiding (catch)
+import Control.Exception
+
+import Foreign.CUDA.Driver.Error
+
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Execute
 import Data.Array.Accelerate.CUDA.Array.Device
 import qualified Data.Array.Accelerate.Smart as Sugar
+
+#include "accelerate.h"
 
 
 -- Accelerate: CUDA
@@ -31,8 +39,10 @@ import qualified Data.Array.Accelerate.Smart as Sugar
 -- | Compiles and run a complete embedded array program using the CUDA backend
 --
 run :: Arrays a => Sugar.Acc a -> IO a
-run acc = evalCUDA
-        $ execute (Sugar.convertAcc acc) >>= collect
+run acc =
+  (evalCUDA $ execute (Sugar.convertAcc acc) >>= collect)
+            `catch`
+            \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
 execute :: Arrays a => Acc a -> CIO a
 execute acc = compileAcc acc >> executeAcc acc
