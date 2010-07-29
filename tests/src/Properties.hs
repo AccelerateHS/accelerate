@@ -9,6 +9,7 @@ import qualified Test.QuickCheck                   as QC
 
 import Data.Int
 import Data.Word
+import Data.List
 import Foreign.C.Types
 
 import Data.Array.Accelerate                       (Elem, Acc, Vector, Array)
@@ -182,6 +183,7 @@ prop_LNot     = ("not",  map not `eq1` Acc.map Acc.not)
 
 unit x           = [x]
 backpermute v is = [ v!!i | i <- is]
+foldSeg v        = snd . mapAccumL (\a i -> let (x,r) = splitAt i a in (r,sum x)) v
 
 prop_Sum         = ("sum",               (unit . sum)     `eq1` Acc.fold (+) 0)
 prop_Product     = ("product",           (unit . product) `eq1` Acc.fold (*) 1)
@@ -203,6 +205,9 @@ prop_MapAddPair  = ("map (uncurry (+))", map (uncurry (+)) `eq1` Acc.map (Acc.un
 prop_ScanlPair   = ("scanl (+,*) (0,1)", (init . scanl (\a b -> (fst a + fst b, snd a * snd b)) (0,1)) `eq1` (fst . Acc.scanl (\a b -> Acc.tuple (Acc.fst a + Acc.fst b, Acc.snd a * Acc.snd b)) (Acc.constant (0,1))))
 prop_ScanrPair   = ("scanr (+,*) (0,1)", (tail . scanr (\a b -> (fst a + fst b, snd a * snd b)) (0,1)) `eq1` (fst . Acc.scanr (\a b -> Acc.tuple (Acc.fst a + Acc.fst b, Acc.snd a * Acc.snd b)) (Acc.constant (0,1))))
 
+prop_FoldSeg :: forall a. (Arbitrary a, Similar a, Acc.IsNum a, Elem a) => (String, [a] -> Property)
+prop_FoldSeg = ("foldSeg", const $ (map (\i -> abs i `rem` 250) `fmap` listOf arbitrary) >>=
+                                   \is -> forAll (vector (sum is) :: Gen [a]) (\xs -> eq2 foldSeg (Acc.foldSeg (+) 0) xs is))
 
 -- Arbitrarily Generated
 -- ---------------------

@@ -134,6 +134,7 @@ prop_comps _dummy =
   , test1 prop_Product
   , test1 prop_Minimum
   , test1 prop_Maximum
+  , test1 prop_FoldSeg
   , test2 prop_Zip
   , testPair prop_FstUnzip
   , testPair prop_SndUnzip
