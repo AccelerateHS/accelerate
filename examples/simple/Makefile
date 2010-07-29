@@ -1,17 +1,17 @@
-HCFLAGS = -O -package accelerate
+
+GHC	 = ghc
+HCFLAGS  = -O2 -package accelerate
+SRCDIR   = src
+BUILDDIR = dist
+HSMAIN   = src/Main.hs
+TARGET   = test
+
 
 all:
-	ghc $(HCFLAGS) -c Time.hs
-	ghc $(HCFLAGS) -c Square.hs
-	ghc $(HCFLAGS) -c Sum.hs
-	ghc $(HCFLAGS) -c SAXPY.hs
-	ghc $(HCFLAGS) -c SMVM.hs
-	ghc $(HCFLAGS) -c DotP.hs
-	ghc $(HCFLAGS) -c Filter.hs
-	ghc $(HCFLAGS) -c Main.hs
-	ghc $(HCFLAGS) -o test Main.o Time.o Square.o Sum.o SAXPY.o SMVM.o DotP.o \
-	                       Filter.o
+	@mkdir -p $(BUILDDIR)
+	$(GHC) --make $(HCFLAGS) -odir $(BUILDDIR) -hidir $(BUILDDIR) -i$(SRCDIR) $(HSMAIN) -o $(TARGET)
 
 clean:
-	rm -f *.o *.hi test
-	
+	$(RM) -r $(BUILDDIR)
+	$(RM) $(TARGET)
+

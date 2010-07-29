@@ -2,7 +2,7 @@
 
 module Filter (filter, filter_ref) where
 
-import Prelude   hiding (replicate, scanl, zip, map, filter, max, min, not, zipWith)
+import Prelude   hiding (length, scanl, map, filter)
 import qualified Prelude
 
 import Data.Array.Unboxed (UArray)
@@ -14,10 +14,11 @@ import Data.Array.Accelerate
 
 filter :: Elem a 
        => (Exp a -> Exp Bool) 
+       -> Vector a
        -> Acc (Vector a)
-       -> Acc (Vector a)
-filter p arr
-  = let flags               = map (boolToInt . p) arr
+filter p vec
+  = let arr                 = use vec
+        flags               = map (boolToInt . p) arr
         (targetIdx, length) = scanl (+) 0 flags
         arr'                = backpermute (length!(constant ())) id arr
     in
@@ -36,4 +37,4 @@ filter_ref :: IArray UArray e
 filter_ref p xs
   = let xs' = Prelude.filter p (IArray.elems xs)
     in
-    IArray.listArray (0, length xs' - 1) xs'
+    IArray.listArray (0, Prelude.length xs' - 1) xs'

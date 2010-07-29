@@ -2,12 +2,9 @@
 
 module DotP (dotp, dotp_ref) where
 
-import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
-import qualified Prelude
+import Prelude hiding (zipWith)
 
 import Data.Array.Unboxed
-import Data.Array.IArray
-
 import Data.Array.Accelerate
 
 dotp :: Vector Float -> Vector Float -> Acc (Scalar Float)
