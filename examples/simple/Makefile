@@ -1,6 +1,6 @@
 
 GHC	 = ghc
-HCFLAGS  = -O2 -package accelerate
+HCFLAGS  = -O2 -Wall -package accelerate
 SRCDIR   = src
 BUILDDIR = dist
 HSMAIN   = src/Main.hs

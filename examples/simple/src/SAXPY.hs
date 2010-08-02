@@ -2,12 +2,9 @@
 
 module SAXPY (saxpy, saxpy_ref) where
 
-import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
-import qualified Prelude
+import Prelude hiding (replicate, zip, map, filter, max, min, not, zipWith)
 
 import Data.Array.Unboxed
-import Data.Array.IArray
-
 import Data.Array.Accelerate
 
 saxpy :: Float -> Vector Float -> Vector Float -> Acc (Vector Float)
