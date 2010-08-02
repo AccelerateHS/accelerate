@@ -38,7 +38,7 @@ benchmark name sim ref acc = do
      then return $ bgroup "" []
      else return $ bgroup name
                      [ bench "ref"    $ whnf ref ()
-                     , bench "interp" $ whnf (Interp.run . acc) ()
+--                     , bench "interp" $ whnf (Interp.run . acc) ()
                      , bench "cuda"   $ (CUDA.run . acc) ()
                      ]
 
