@@ -18,8 +18,8 @@
  * index beyond the input data without using any branch instructions.
  */
 template <typename T>
-static __device__
-T reduce_warp(T* s_data, T sum)
+static __inline__ __device__
+T reduce_warp(volatile T* s_data, T sum)
 {
     s_data[threadIdx.x] = sum;
     s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x + 16]);
