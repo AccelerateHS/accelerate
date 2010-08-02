@@ -8,10 +8,12 @@
  *
  * ---------------------------------------------------------------------------*/
 
-#include <accelerate_cuda_utils.h>
-
+/*
+ * We require block sizes are a power of two. This value gives maximum occupancy
+ * for both 1.x and 2.x class devices.
+ */
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE              blockDim.x
+#define BLOCK_SIZE              256
 #endif
 
 #ifndef LENGTH_IS_POW_2
@@ -33,16 +35,15 @@ fold
     const Ix            shape
 )
 {
-    extern __shared__ TyOut scratch[];
+    extern volatile __shared__ TyOut s_data[];
 
     /*
      * Calculate first level of reduction reading into shared memory
      */
     Ix       i;
+    TyOut    sum      = identity();
     const Ix tid      = threadIdx.x;
     const Ix gridSize = BLOCK_SIZE * 2 * gridDim.x;
-
-    scratch[tid] = identity();
 
     /*
      * Reduce multiple elements per thread. The number is determined by the
@@ -53,40 +54,45 @@ fold
      */
     for (i =  blockIdx.x * BLOCK_SIZE * 2 + tid; i <  shape; i += gridSize)
     {
-        scratch[tid] = apply(scratch[tid], get0(d_in0, i));
+        sum = apply(sum, get0(d_in0, i));
 
         /*
          * Ensure we don't read out of bounds. This is optimised away if the
          * input length is a power of two
          */
         if (LENGTH_IS_POW_2 || i + BLOCK_SIZE < shape)
-            scratch[tid] = apply(scratch[tid], get0(d_in0, i+BLOCK_SIZE));
+            sum = apply(sum, get0(d_in0, i+BLOCK_SIZE));
     }
-    __syncthreads();
 
     /*
-     * Now, calculate the reduction in shared memory
+     * Each thread puts its local sum into shared memory, then threads
+     * cooperatively reduce the shared array to a single value.
      */
-    if (BLOCK_SIZE >= 512) { if (tid < 256) { scratch[tid] = apply(scratch[tid], scratch[tid+256]); } __syncthreads(); }
-    if (BLOCK_SIZE >= 256) { if (tid < 128) { scratch[tid] = apply(scratch[tid], scratch[tid+128]); } __syncthreads(); }
-    if (BLOCK_SIZE >= 128) { if (tid <  64) { scratch[tid] = apply(scratch[tid], scratch[tid+ 64]); } __syncthreads(); }
+    s_data[tid] = sum;
+    __syncthreads();
 
-#ifndef __DEVICE_EMULATION__
+    if (BLOCK_SIZE >= 512) { if (tid < 256) { s_data[tid] = sum = apply(sum, s_data[tid+256]); } __syncthreads(); }
+    if (BLOCK_SIZE >= 256) { if (tid < 128) { s_data[tid] = sum = apply(sum, s_data[tid+128]); } __syncthreads(); }
+    if (BLOCK_SIZE >= 128) { if (tid <  64) { s_data[tid] = sum = apply(sum, s_data[tid+ 64]); } __syncthreads(); }
+
     if (tid < 32)
-#endif
     {
-        if (BLOCK_SIZE >= 64) { scratch[tid] = apply(scratch[tid], scratch[tid+32]);  __EMUSYNC; }
-        if (BLOCK_SIZE >= 32) { scratch[tid] = apply(scratch[tid], scratch[tid+16]);  __EMUSYNC; }
-        if (BLOCK_SIZE >= 16) { scratch[tid] = apply(scratch[tid], scratch[tid+ 8]);  __EMUSYNC; }
-        if (BLOCK_SIZE >=  8) { scratch[tid] = apply(scratch[tid], scratch[tid+ 4]);  __EMUSYNC; }
-        if (BLOCK_SIZE >=  4) { scratch[tid] = apply(scratch[tid], scratch[tid+ 2]);  __EMUSYNC; }
-        if (BLOCK_SIZE >=  2) { scratch[tid] = apply(scratch[tid], scratch[tid+ 1]);  __EMUSYNC; }
+        /*
+         * Use an extra warps worth of elements of shared memory, to let threads
+         * index beyond the input data without using any branch instructions.
+         */
+        s_data[tid] = sum = apply(sum, s_data[tid + 32]);
+        s_data[tid] = sum = apply(sum, s_data[tid + 16]);
+        s_data[tid] = sum = apply(sum, s_data[tid +  8]);
+        s_data[tid] = sum = apply(sum, s_data[tid +  4]);
+        s_data[tid] = sum = apply(sum, s_data[tid +  2]);
+        s_data[tid] = sum = apply(sum, s_data[tid +  1]);
     }
 
     /*
      * Write the results of this block back to global memory
      */
     if (tid == 0)
-        set(d_out, blockIdx.x, scratch[0]);
+        set(d_out, blockIdx.x, sum);
 }
 
