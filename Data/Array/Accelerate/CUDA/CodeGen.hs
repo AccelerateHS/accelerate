@@ -112,7 +112,7 @@ codeGenExp (AST.Cond p e1 e2) = do
   return [CCond a (Just b) c internalNode]
 
 codeGenExp (AST.Tuple t)   = codeGenTup t
-codeGenExp (AST.Prj idx e) = unit . (!! prjToInt idx) <$> codeGenExp e
+codeGenExp (AST.Prj idx e) = unit . (!! prjToInt idx) . reverse <$> codeGenExp e
 
 codeGenExp (AST.IndexScalar a1 e1) = do
   n   <- length <$> get
