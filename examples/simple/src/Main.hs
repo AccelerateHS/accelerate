@@ -15,10 +15,15 @@ import qualified Data.Array.Accelerate             as Acc
 import qualified Data.Array.Accelerate.CUDA        as CUDA
 import qualified Data.Array.Accelerate.Interpreter as Interp
 
-import Data.Array.Unboxed       (IArray, UArray, Ix, elems)
-import Control.Exception        (evaluate)
+import Data.Array.Unboxed       (IArray, UArray, Ix, elems, indices, (!))
 import System.Random.MWC        (create, uniform, GenIO)
+import Control.Exception        (evaluate)
+import Control.DeepSeq
 import Criterion.Main
+
+
+instance (Ix dim, IArray UArray e) => NFData (UArray dim e) where
+  rnf a = a ! (head (indices a)) `seq` ()
 
 
 -- Generate a benchmark test iff the reference and accelerate tests succeed.
@@ -37,9 +42,8 @@ benchmark name sim ref acc = do
   if not (v1 && v2)
      then return $ bgroup "" []
      else return $ bgroup name
-                     [ bench "ref"    $ whnf ref ()
---                     , bench "interp" $ whnf (Interp.run . acc) ()
-                     , bench "cuda"   $ (CUDA.run . acc) ()
+                     [ bench "ref"  $ nf ref ()
+                     , bench "cuda" $ (CUDA.run . acc) ()
                      ]
 
 
