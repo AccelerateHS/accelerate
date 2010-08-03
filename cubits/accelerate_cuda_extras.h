@@ -144,63 +144,139 @@ typedef struct { Ix a,b,c,d,e; } DIM5;
 
 #ifdef __cplusplus
 
+/*
+ * Number of dimensions of a shape
+ */
 static __inline__ __device__ int dim(DIM1 sh) { return 1; }
 static __inline__ __device__ int dim(DIM2 sh) { return 2; }
 static __inline__ __device__ int dim(DIM3 sh) { return 3; }
 static __inline__ __device__ int dim(DIM4 sh) { return 4; }
 static __inline__ __device__ int dim(DIM5 sh) { return 5; }
 
+/*
+ * Yield the total number of elements in a shape
+ */
 static __inline__ __device__ int size(DIM1 sh) { return sh; }
 static __inline__ __device__ int size(DIM2 sh) { return sh.a * sh.b; }
 static __inline__ __device__ int size(DIM3 sh) { return sh.a * sh.b * sh.c; }
 static __inline__ __device__ int size(DIM4 sh) { return sh.a * sh.b * sh.c * sh.d; }
 static __inline__ __device__ int size(DIM5 sh) { return sh.a * sh.b * sh.c * sh.d * sh.e; }
 
-static __inline__ __device__ int index(DIM1 sh, DIM1 ix)
+/*
+ * Convert the individual dimensions of a linear array into a shape
+ */
+static __inline__ __device__ DIM1 shape(Ix a)
+{
+    return a;
+}
+
+static __inline__ __device__ DIM2 shape(Ix a, Ix b)
+{
+    DIM2 sh = { a, b };
+    return sh;
+}
+
+static __inline__ __device__ DIM3 shape(Ix a, Ix b, Ix c)
+{
+    DIM3 sh = { a, b, c };
+    return sh;
+}
+
+static __inline__ __device__ DIM4 shape(Ix a, Ix b, Ix c, Ix d)
+{
+    DIM4 sh = { a, b, c, d };
+    return sh;
+}
+
+static __inline__ __device__ DIM5 shape(Ix a, Ix b, Ix c, Ix d, Ix e)
+{
+    DIM5 sh = { a, b, c, d, e };
+    return sh;
+}
+
+/*
+ * Yield the index position in a linear, row-major representation of the array.
+ * First argument is the shape of the array, the second the index
+ */
+static __inline__ __device__ int toIndex(DIM1 sh, DIM1 ix)
 {
     return ix;
 }
 
-static __inline__ __device__ int index(DIM2 sh, DIM2 ix)
+static __inline__ __device__ int toIndex(DIM2 sh, DIM2 ix)
 {
     DIM1 sh_ = sh.a;
     DIM1 ix_ = ix.a;
-    return index(sh_, ix_) + ix.b * size(sh_);
+    return toIndex(sh_, ix_) + ix.b * size(sh_);
 }
 
-static __inline__ __device__ int index(DIM3 sh, DIM3 ix)
+static __inline__ __device__ int toIndex(DIM3 sh, DIM3 ix)
 {
     DIM2 sh_ = { sh.a, sh.b };
     DIM2 ix_ = { ix.a, ix.b };
-    return index(sh_, ix_) + ix.c * size(sh_);
+    return toIndex(sh_, ix_) + ix.c * size(sh_);
 }
 
-static __inline__ __device__ int index(DIM4 sh, DIM4 ix)
+static __inline__ __device__ int toIndex(DIM4 sh, DIM4 ix)
 {
     DIM3 sh_ = { sh.a, sh.b, sh.c };
     DIM3 ix_ = { ix.a, ix.b, ix.c };
-    return index(sh_, ix_) + ix.d * size(sh_);
+    return toIndex(sh_, ix_) + ix.d * size(sh_);
 }
 
-static __inline__ __device__ int index(DIM5 sh, DIM5 ix)
+static __inline__ __device__ int toIndex(DIM5 sh, DIM5 ix)
 {
     DIM4 sh_ = { sh.a, sh.b, sh.c, sh.d };
     DIM4 ix_ = { ix.a, ix.b, ix.c, ix.d };
-    return index(sh_, ix_) + ix.e * size(sh_);
+    return toIndex(sh_, ix_) + ix.e * size(sh_);
 }
+
+/*
+ * Inverse of 'toIndex'
+ */
+static __inline__ __device__ DIM1 fromIndex(DIM1 sh, Ix ix)
+{
+    return ix;
+}
+
+static __inline__ __device__ DIM2 fromIndex(DIM2 sh, Ix ix)
+{
+    DIM1 sh_ = shape(sh.a);
+    DIM1 ix_ = fromIndex(sh_, ix / sh.b);
+    return shape(ix_, ix % sh.b);
+}
+
+static __inline__ __device__ DIM3 fromIndex(DIM3 sh, Ix ix)
+{
+    DIM2 sh_ = shape(sh.a, sh.b);
+    DIM2 ix_ = fromIndex(sh_, ix / sh.c);
+    return shape(ix_.a, ix_.b, ix % sh.c);
+}
+
+static __inline__ __device__ DIM4 fromIndex(DIM4 sh, Ix ix)
+{
+    DIM3 sh_ = shape(sh.a, sh.b, sh.c);
+    DIM3 ix_ = fromIndex(sh_, ix / sh.d);
+    return shape(ix_.a, ix_.b, ix_.c, ix % sh.d);
+}
+
+static __inline__ __device__ DIM5 fromIndex(DIM5 sh, Ix ix)
+{
+    DIM4 sh_ = shape(sh.a, sh.b, sh.c, sh.d);
+    DIM4 ix_ = fromIndex(sh_, ix / sh.e);
+    return shape(ix_.a, ix_.b, ix_.c, ix_.d, ix % sh.e);
+}
+
 
 #else
 
 int dim(Ix sh);
 int size(Ix sh);
-int index(Ix sh, Ix ix);
+int shape(Ix sh);
+int toIndex(Ix sh, Ix ix);
+int fromIndex(Ix sh, Ix ix);
 
 #endif
-
-
-/* -----------------------------------------------------------------------------
- * Tuple Types
- * -------------------------------------------------------------------------- */
 
 #endif  // __ACCELERATE_CUDA_EXTRAS_H__
 
