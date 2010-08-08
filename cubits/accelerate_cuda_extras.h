@@ -268,6 +268,35 @@ static __inline__ __device__ DIM5 fromIndex(DIM5 sh, Ix ix)
 }
 
 
+/*
+ * Test for the magic index `ignore`
+ */
+static __inline__ __device__ int ignore(DIM1 ix)
+{
+    return ix == -1;
+}
+
+static __inline__ __device__ int ignore(DIM2 ix)
+{
+    return ix.a == -1 && ix.b == -1;
+}
+
+static __inline__ __device__ int ignore(DIM3 ix)
+{
+    return ix.a == -1 && ix.b == -1 && ix.c == -1;
+}
+
+static __inline__ __device__ int ignore(DIM4 ix)
+{
+    return ix.a == -1 && ix.b == -1 && ix.c == -1 && ix.d == -1;
+}
+
+static __inline__ __device__ int ignore(DIM5 ix)
+{
+    return ix.a == -1 && ix.b == -1 && ix.c == -1 && ix.d == -1 && ix.e == -1;
+}
+
+
 #else
 
 int dim(Ix sh);
