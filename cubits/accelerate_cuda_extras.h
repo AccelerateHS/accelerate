@@ -241,30 +241,30 @@ static __inline__ __device__ DIM1 fromIndex(DIM1 sh, Ix ix)
 
 static __inline__ __device__ DIM2 fromIndex(DIM2 sh, Ix ix)
 {
-    DIM1 sh_ = shape(sh.a);
-    DIM1 ix_ = fromIndex(sh_, ix / sh.b);
-    return shape(ix_, ix % sh.b);
+    DIM1 sh_ = shape(sh.b);
+    DIM1 ix_ = fromIndex(sh_, ix / sh.a);
+    return shape(ix % sh.a, ix_);
 }
 
 static __inline__ __device__ DIM3 fromIndex(DIM3 sh, Ix ix)
 {
-    DIM2 sh_ = shape(sh.a, sh.b);
-    DIM2 ix_ = fromIndex(sh_, ix / sh.c);
-    return shape(ix_.a, ix_.b, ix % sh.c);
+    DIM2 sh_ = shape(sh.b, sh.c);
+    DIM2 ix_ = fromIndex(sh_, ix / sh.a);
+    return shape(ix % sh.a, ix_.a, ix_.b);
 }
 
 static __inline__ __device__ DIM4 fromIndex(DIM4 sh, Ix ix)
 {
-    DIM3 sh_ = shape(sh.a, sh.b, sh.c);
-    DIM3 ix_ = fromIndex(sh_, ix / sh.d);
-    return shape(ix_.a, ix_.b, ix_.c, ix % sh.d);
+    DIM3 sh_ = shape(sh.b, sh.c, sh.d);
+    DIM3 ix_ = fromIndex(sh_, ix / sh.a);
+    return shape(ix % sh.a, ix_.a, ix_.b, ix_.c);
 }
 
 static __inline__ __device__ DIM5 fromIndex(DIM5 sh, Ix ix)
 {
-    DIM4 sh_ = shape(sh.a, sh.b, sh.c, sh.d);
-    DIM4 ix_ = fromIndex(sh_, ix / sh.e);
-    return shape(ix_.a, ix_.b, ix_.c, ix_.d, ix % sh.e);
+    DIM4 sh_ = shape(sh.b, sh.c, sh.d, sh.e);
+    DIM4 ix_ = fromIndex(sh_, ix / sh.a);
+    return shape(ix % sh.a, ix_.a, ix_.b, ix_.c, ix_.d);
 }
 
 
