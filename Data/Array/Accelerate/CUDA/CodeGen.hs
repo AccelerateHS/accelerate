@@ -365,16 +365,13 @@ codeGenConst UnitTuple           _      = []
 codeGenConst (SingleTuple ty)    c      = [codeGenScalar ty c]
 codeGenConst (PairTuple ty1 ty0) (cs,c) = codeGenConst ty1 cs ++ codeGenConst ty0 c
 
--- SL:
--- Removed the warnings about demoting double constants to float constants by
--- explicitly specifying the type for the float constants, e.g. (float) 1.5
---   * The generated (language-c) code isn't pretty-printing floating constants
---     with a trailing 'f' (i.e. '1.5f'), and nvcc considers them as double
---     constants and demotes them to float constants with warnings.
---   * So, I changed the code generator to explicitly specify the type of the
---     float constants by prefix them with (float). For example, a float
---     constant 1.5 appears as (float) 1.5 in the generated code whereas a
---     double constant 1.5 appears as it is.
+-- FIXME:
+--  Language-c isn't pretty printing float constants with a trailing 'f', so as
+--  per the C spec nvcc considers them to be double constants. This causes
+--  warnings on pre-1.3 series devices, and unnecessary runtime conversion and
+--  register pressure on later hardware. Work around this with an explicit type
+--  cast. This is quite ugly and should be fixed, but appears to work for now.
+--
 codeGenScalar :: ScalarType a -> a -> CExpr
 codeGenScalar (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty
