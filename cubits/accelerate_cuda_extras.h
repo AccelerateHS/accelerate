@@ -198,33 +198,33 @@ static __inline__ __device__ DIM5 shape(Ix a, Ix b, Ix c, Ix d, Ix e)
  * Yield the index position in a linear, row-major representation of the array.
  * First argument is the shape of the array, the second the index
  */
-static __inline__ __device__ int toIndex(DIM1 sh, DIM1 ix)
+static __inline__ __device__ Ix toIndex(DIM1 sh, DIM1 ix)
 {
     return ix;
 }
 
-static __inline__ __device__ int toIndex(DIM2 sh, DIM2 ix)
+static __inline__ __device__ Ix toIndex(DIM2 sh, DIM2 ix)
 {
     DIM1 sh_ = sh.a;
     DIM1 ix_ = ix.a;
     return toIndex(sh_, ix_) + ix.b * size(sh_);
 }
 
-static __inline__ __device__ int toIndex(DIM3 sh, DIM3 ix)
+static __inline__ __device__ Ix toIndex(DIM3 sh, DIM3 ix)
 {
     DIM2 sh_ = { sh.a, sh.b };
     DIM2 ix_ = { ix.a, ix.b };
     return toIndex(sh_, ix_) + ix.c * size(sh_);
 }
 
-static __inline__ __device__ int toIndex(DIM4 sh, DIM4 ix)
+static __inline__ __device__ Ix toIndex(DIM4 sh, DIM4 ix)
 {
     DIM3 sh_ = { sh.a, sh.b, sh.c };
     DIM3 ix_ = { ix.a, ix.b, ix.c };
     return toIndex(sh_, ix_) + ix.d * size(sh_);
 }
 
-static __inline__ __device__ int toIndex(DIM5 sh, DIM5 ix)
+static __inline__ __device__ Ix toIndex(DIM5 sh, DIM5 ix)
 {
     DIM4 sh_ = { sh.a, sh.b, sh.c, sh.d };
     DIM4 ix_ = { ix.a, ix.b, ix.c, ix.d };
