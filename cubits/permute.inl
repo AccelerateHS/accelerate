@@ -20,20 +20,22 @@ permute
 (
     ArrOut              d_out,
     const ArrIn0        d_in0,
-    const Ix            shape
+    const DimOut        shOut,
+    const DimIn0        shIn0
 )
 {
-    Ix       dst;
-    Ix       idx;
+    Ix shapeSize      = size(shIn0);
     const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
+    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
-        dst = project(idx);
+        DimIn0 src = fromIndex(shIn0, ix);
+        DimOut dst = project(src);
 
         if (!ignore(dst))
         {
-            set(d_out, dst, apply(get0(d_in0, idx), get0(d_out, dst)));
+            Ix j = toIndex(shOut, dst);
+            set(d_out, j, apply(get0(d_in0, ix), get0(d_out, j)));
         }
     }
 }

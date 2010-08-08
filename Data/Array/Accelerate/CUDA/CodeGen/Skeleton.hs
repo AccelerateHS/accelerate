@@ -35,18 +35,18 @@ mkFold ty identity apply = CUTranslSkel code skel
             ( mkTupleTypeAsc 2 ty ++
             [ mkIdentity identity
             , mkApply 2 apply ])
-            (mkNodeInfo (initPos "fold.cu") (Name 0))
+            (mkNodeInfo (initPos skel) (Name 0))
 
 mkFoldSeg :: [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
 mkFoldSeg ty int identity apply = CUTranslSkel code skel
   where
     skel = "fold_segmented.inl"
     code = CTranslUnit
-	    ( mkTupleTypeAsc 2 ty ++
-	    [ mkTypedef "Int" False (head int)
-	    , mkIdentity identity
-	    , mkApply 2 apply ])
-	    (mkNodeInfo (initPos "fold_segmented.cu") (Name 0))
+            ( mkTupleTypeAsc 2 ty ++
+            [ mkTypedef "Int" False (head int)
+            , mkIdentity identity
+            , mkApply 2 apply ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
 
 --------------------------------------------------------------------------------
@@ -61,19 +61,22 @@ mkMap tyOut tyIn0 apply = CUTranslSkel code skel
             ( mkTupleType Nothing  tyOut ++
               mkTupleType (Just 0) tyIn0 ++
             [ mkApply 1 apply ])
-            (mkNodeInfo (initPos "map.cu") (Name 0))
+            (mkNodeInfo (initPos skel) (Name 0))
 
 
-mkZipWith :: [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
-mkZipWith tyOut tyIn1 tyIn0 apply = CUTranslSkel code skel
+mkZipWith :: [CType] -> [CType] -> [CType] -> [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkZipWith tyOut shOut tyIn1 shIn1 tyIn0 shIn0 apply = CUTranslSkel code skel
   where
     skel = "zipWith.inl"
     code = CTranslUnit
             ( mkTupleType Nothing  tyOut ++
               mkTupleType (Just 1) tyIn1 ++
               mkTupleType (Just 0) tyIn0 ++
-            [ mkApply 2 apply ])
-            (mkNodeInfo (initPos "zipWith.cu") (Name 0))
+            [ mkApply 2 apply
+            , mkDim "DimOut" shOut
+            , mkDim "DimIn1" shIn1
+            , mkDim "DimIn0" shIn0 ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
 
 --------------------------------------------------------------------------------
@@ -92,7 +95,7 @@ mkScan isBackward ty identity apply =
             [ mkIdentity identity
             , mkApply 2 apply
             , mkFlag "reverse" (fromBool isBackward) ])
-            (mkNodeInfo (initPos "scan.cu") (Name 0))
+            (mkNodeInfo (initPos (takeFileName skel)) (Name 0))
 
 
 mkScanl :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
@@ -116,35 +119,28 @@ mkFlag name val =
 -- Permutation
 --------------------------------------------------------------------------------
 
-mkPermute :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkPermute ty combine index = CUTranslSkel code skel
+mkPermute :: [CType] -> [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
   where
     skel = "permute.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkIgnore (-1)
-            , mkIndexFun index
-            , mkApply 2 combine ])
-            (mkNodeInfo (initPos "permute.cu") (Name 0))
+            [ mkDim "DimOut" dimOut
+            , mkDim "DimIn0" dimIn0
+            , mkProject indexfn
+            , mkApply 2 combinefn ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
--- TLM 2010-07-10:
---   should generate from Sugar.Ix (or Representation.Ix) notion of ignore
---
-mkIgnore :: Integer -> CExtDecl
-mkIgnore n =
-  CDeclExt
-    (CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)]
-           [(Just (CDeclr (Just (internalIdent "ignore")) [] Nothing [] internalNode),Just (CInitExpr (CCast (CDecl [CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [] internalNode) (CConst (CIntConst (cInteger n) internalNode)) internalNode) internalNode),Nothing)]
-           internalNode)
-
-mkBackpermute :: [CType] -> [CExpr] -> CUTranslSkel
-mkBackpermute ty index = CUTranslSkel code skel
+mkBackpermute :: [CType] ->[CType] ->  [CType] -> [CExpr] -> CUTranslSkel
+mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
   where
     skel = "backpermute.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 1 ty ++
-            [ mkIndexFun index ])
-            (mkNodeInfo (initPos "backpermute.cu") (Name 0))
+            [ mkDim "DimOut" dimOut
+            , mkDim "DimIn0" dimIn0
+            , mkProject index ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
 
 --------------------------------------------------------------------------------

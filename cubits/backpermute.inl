@@ -18,15 +18,19 @@ backpermute
 (
     ArrOut              d_out,
     const ArrIn0        d_in0,
-    const Ix            shape
+    const DimOut        shOut,
+    const DimIn0        shIn0
 )
 {
-    Ix       idx;
+    Ix shapeSize      = size(shOut);
     const Ix gridSize = __umul24(blockDim.x, gridDim.x);
 
-    for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
+    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
-        set(d_out, idx, get0(d_in0, project(idx)));
+        DimOut dst = fromIndex(shOut, ix);
+        DimIn0 src = project(dst);
+
+        set(d_out, ix, get0(d_in0, toIndex(shIn0, src)));
     }
 }
 

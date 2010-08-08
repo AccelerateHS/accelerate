@@ -60,16 +60,28 @@ codeGenAcc acc =
 --  FRAGILE.
 --
 codeGenAcc' :: AST.OpenAcc aenv a -> State [CExtDecl] CUTranslSkel
-codeGenAcc' op@(AST.Map f1 a1)        = mkMap         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
-codeGenAcc' op@(AST.ZipWith f1 a1 a2) = mkZipWith     (codeGenAccType op) (codeGenAccType a1) (codeGenAccType a2) <$> codeGenFun f1
-codeGenAcc' (AST.Replicate _ e1 a1)   = mkReplicate   (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Index _ a1 e1)       = mkIndex       (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Fold f1 e1 _)        = mkFold        (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
-codeGenAcc' (AST.FoldSeg f1 e1 _ s)   = mkFoldSeg     (codeGenExpType e1) (codeGenAccType s) <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Scanl f1 e1 _)       = mkScanl       (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
-codeGenAcc' (AST.Scanr f1 e1 _)       = mkScanr       (codeGenExpType e1) <$> codeGenExp e1  <*> codeGenFun f1
-codeGenAcc' (AST.Permute f1 _ f2 a1)  = mkPermute     (codeGenAccType a1) <$> codeGenFun f1  <*> codeGenFun f2
-codeGenAcc' (AST.Backpermute _ f1 a1) = mkBackpermute (codeGenAccType a1) <$> codeGenFun f1
+codeGenAcc' (AST.Replicate _ e1 a1) = mkReplicate   (codeGenAccType a1) <$> codeGenExp e1
+codeGenAcc' (AST.Index _ a1 e1)     = mkIndex       (codeGenAccType a1) <$> codeGenExp e1
+codeGenAcc' (AST.Fold f1 e1 _)      = mkFold        (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' (AST.FoldSeg f1 e1 _ s) = mkFoldSeg     (codeGenExpType e1) (codeGenAccType s)  <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Scanl f1 e1 _)     = mkScanl       (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' (AST.Scanr f1 e1 _)     = mkScanr       (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' op@(AST.Map f1 a1)      = mkMap         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
+codeGenAcc' op@(AST.ZipWith f1 a1 a0)
+  = mkZipWith (codeGenAccType op) (codeGenShapeType op)
+              (codeGenAccType a1) (codeGenShapeType a1)
+              (codeGenAccType a0) (codeGenShapeType a0)
+              <$> codeGenFun f1
+
+codeGenAcc' op@(AST.Permute f1 _ f2 a1)
+  = mkPermute (codeGenAccType a1) (codeGenShapeType op) (codeGenShapeType a1)
+  <$> codeGenFun f1
+  <*> codeGenFun f2
+
+codeGenAcc' op@(AST.Backpermute _ f1 a1)
+  = mkBackpermute (codeGenAccType a1) (codeGenShapeType op) (codeGenShapeType a1)
+  <$> codeGenFun f1
+
 codeGenAcc' x =
   INTERNAL_ERROR(error) "codeGenAcc"
   (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])

@@ -20,6 +20,11 @@ fromBool True  = CConst $ CIntConst (cInteger 1) internalNode
 fromBool False = CConst $ CIntConst (cInteger 0) internalNode
 
 
+mkDim :: String -> [CType] -> CExtDecl
+mkDim name ty =
+  mkTypedef name False [CTypeDef (internalIdent ("DIM" ++ show (length ty))) internalNode]
+
+
 -- typedef ty (*?) var;
 --
 mkTypedef :: String -> Bool -> CType -> CExtDecl
@@ -84,20 +89,22 @@ mkApply argc expr =
             [(Just (CDeclr (Just (internalIdent var)) [] Nothing [] internalNode), Nothing, Nothing)]
             internalNode
 
+
+-- static inline __attribute__((device)) DimOut
+-- project(const DimIn0 x0)
+-- {
+--   DimOut x = expr;
+--   return x;
+-- }
+--
+mkProject :: [CExpr] -> CExtDecl
+mkProject expr =
+  CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "DimOut") internalNode)] (CDeclr (Just (internalIdent "project")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "x0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "DimOut") internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just (mkInitList expr),Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode) internalNode)
+
+
 -- Not strictly necessary, just attention to detail
 --
 mkInitList :: [CExpr] -> CInit
 mkInitList [x] = CInitExpr x internalNode
 mkInitList xs  = CInitList (map (\e -> ([],CInitExpr e internalNode)) xs) internalNode
-
-
--- static inline __attribute__((device)) Ix
--- project(const Ix x0)
--- {
---   return expr;
--- }
---
-mkIndexFun :: [CExpr] -> CExtDecl
-mkIndexFun [expr] = CFDefExt (CFunDef [CStorageSpec (CStatic internalNode),CTypeQual (CInlineQual internalNode),CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode)),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] (CDeclr (Just (internalIdent "project")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode),CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "x0")) [] Nothing [] internalNode),Nothing,Nothing)] internalNode],False)) [] internalNode] Nothing [] internalNode) [] (CCompound [] [CBlockStmt (CReturn (Just expr) internalNode)] internalNode) internalNode)
-mkIndexFun _      = error "mkIndexFun: internal error"
 
