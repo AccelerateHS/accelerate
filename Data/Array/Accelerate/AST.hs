@@ -154,7 +154,7 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim' e')
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
-  Avar        :: Elem e
+  Avar        :: (Ix dim, Elem e)
               => Idx     aenv (Array dim e)
               -> OpenAcc aenv (Array dim e)
   

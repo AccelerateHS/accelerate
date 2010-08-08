@@ -168,6 +168,9 @@ codeGenAccType =  codeGenTupleType . accType
 codeGenExpType :: AST.OpenExp aenv env t -> [CType]
 codeGenExpType =  codeGenTupleType . expType
 
+codeGenShapeType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CType]
+codeGenShapeType = codeGenTupleType . accShapeType
+
 
 -- Implementation
 --

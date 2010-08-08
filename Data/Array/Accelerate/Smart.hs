@@ -70,10 +70,10 @@ import Data.Array.Accelerate.Pretty ()
 --
 data Acc a where
   
-  FstArray    :: (Elem e1, Elem e2)
+  FstArray    :: (Ix dim1, Elem e1, Elem e2)
               => Acc (Array dim1 e1, Array dim2 e2)
               -> Acc (Array dim1 e1)
-  SndArray    :: (Elem e1, Elem e2)
+  SndArray    :: (Ix dim2, Elem e1, Elem e2)
               => Acc (Array dim1 e1, Array dim2 e2)
               -> Acc (Array dim2 e2)
 
