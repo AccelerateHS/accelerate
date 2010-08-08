@@ -18,6 +18,7 @@ module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   where
 
 import Language.C
+import System.FilePath
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
@@ -83,8 +84,8 @@ mkScan :: Bool -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
 mkScan isBackward ty identity apply =
   CUTranslSkel code skel
   where
-    skel | length ty == 1 = "thrust/scan_safe.inl"      -- TODO: use fast scan for primitive types
-         | otherwise      = "thrust/scan_safe.inl"
+    skel | length ty == 1 = "thrust" </> "scan_safe.inl"        -- TODO: use fast scan for primitive types
+         | otherwise      = "thrust" </> "scan_safe.inl"
 
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
