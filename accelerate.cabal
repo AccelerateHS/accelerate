@@ -112,6 +112,8 @@ Library
                         filepath,
                         language-c >= 0.3 && < 0.4,
                         monads-fd,
+                        storable-record,
+                        storable-tuple,
                         transformers >= 0.2 && < 0.3,
                         unix
 
