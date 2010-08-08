@@ -341,10 +341,10 @@ dispatchScan acc@(Scanl f x ad) env mdl = do
       n                   = size sh
       interval            = (n + grid - 1) `div` grid
 
-      unify :: Array dim e -> Array dim' e -> CIO ()
+      unify :: Array dim e -> Array dim e -> CIO ()
       unify _ _ = return ()
 
-  unify a_sum a_bks -- TLM: *cough*
+  unify a_out a_bks -- TLM: *cough*
 
   mallocArray out n
   mallocArray sum 1
