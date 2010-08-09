@@ -44,6 +44,10 @@ class Eq ix => Ix ix where
                                    -- into a shape
   shapeToRange :: ix -> (ix, ix)   -- ...the converse
 
+  -- other conversions
+  shapeToList :: ix -> [Int]    -- convert a shape into its list of dimensions
+  listToShape :: [Int] -> ix    -- convert a list of dimensions into a shape
+
 instance Ix () where
   dim       ()       = 0
   size      ()       = 1
@@ -54,6 +58,10 @@ instance Ix () where
   
   rangeToShape ((), ()) = ()
   shapeToRange ()       = ((), ())
+
+  shapeToList () = []
+  listToShape [] = ()
+  listToShape _  = error "Data.Array.Accelerate.Array: non-empty list when converting to unit"
 
 instance Ix ix => Ix (ix, Int) where
   dim (sh, _)                       = dim sh + 1
@@ -75,6 +83,10 @@ instance Ix ix => Ix (ix, Int) where
     = let (low, high) = shapeToRange sh
       in 
       ((low, 0), (high, sz - 1))
+
+  shapeToList (sh,sz) = sz : shapeToList sh
+  listToShape []      = error "Data.Array.Accelerate.Array: empty list when converting to Ix"
+  listToShape (x:xs)  = (listToShape xs,x)
 
 
 -- |Slice representation

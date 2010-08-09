@@ -642,6 +642,12 @@ class (Shape ix, Storable ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   -- |Convert a /shape/ into a minpoint-maxpoint index
   shapeToRange ::  ix -> (ix, ix)
 
+  -- |Convert a shape to a list of dimensions
+  shapeToList :: ix -> [Int]
+
+  -- |Convert a list of dimensions into a shape
+  listToShape :: [Int] -> ix
+
   dim         = Repr.dim . fromElem
   size        = Repr.size . fromElem
   ignore      = toElem Repr.ignore
@@ -655,6 +661,9 @@ class (Shape ix, Storable ix, Repr.Ix (ElemRepr ix)) => Ix ix where
     = let (low, high) = Repr.shapeToRange (fromElem ix)
       in
       (toElem low, toElem high)
+
+  shapeToList = Repr.shapeToList . fromElem
+  listToShape = toElem . Repr.listToShape
 
 instance Ix ()
 instance Ix (Int)
