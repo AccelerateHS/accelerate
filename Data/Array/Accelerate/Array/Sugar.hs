@@ -623,7 +623,7 @@ class (Shape ix, Storable ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   -- Total number of elements in an array of the given /shape/
   size   :: ix -> Int
 
-  -- |Magic value identifing elements ignored in 'permute'
+  -- |Magic value identifying elements ignored in 'permute'
   ignore :: ix
   
   -- |Map a multi-dimensional index into one in a linear, row-major 
@@ -652,9 +652,9 @@ class (Shape ix, Storable ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   size        = Repr.size . fromElem
   ignore      = toElem Repr.ignore
   index sh ix = Repr.index (fromElem sh) (fromElem ix)
-  
+
   iter sh f c r = Repr.iter (fromElem sh) (f . toElem) c r
-  
+
   rangeToShape (low, high) 
     = toElem (Repr.rangeToShape (fromElem low, fromElem high))
   shapeToRange ix

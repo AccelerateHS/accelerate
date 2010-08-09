@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Array.Representation (
 
 
 -- |Index representation
--- -
+--
 
 -- |Class of index representations (which are nested pairs)
 --
@@ -90,7 +90,7 @@ instance Ix ix => Ix (ix, Int) where
 
 
 -- |Slice representation
--- -
+--
 
 -- |Class of slice representations (which are nested pairs)
 --

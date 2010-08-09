@@ -253,7 +253,7 @@ data OpenAcc aenv a where
   --
   -- The target array is initialised from an array of default values (in case
   -- some positions in the target array are never picked by the permutation
-  -- functions).  Moroever, we have a combination function (in case some
+  -- functions).  Moreover, we have a combination function (in case some
   -- positions on the target array are picked multiple times by the
   -- permutation functions).  The combination function needs to be
   -- /associative/ and /commutative/ .  We drop every element for which the
