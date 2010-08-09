@@ -137,10 +137,10 @@ void* indexArray(const void*, const int);
 
 typedef int32_t                  Ix;
 typedef Ix                       DIM1;
-typedef struct { Ix a,b; }       DIM2;
-typedef struct { Ix a,b,c; }     DIM3;
-typedef struct { Ix a,b,c,d; }   DIM4;
-typedef struct { Ix a,b,c,d,e; } DIM5;
+typedef struct { Ix b,a; }       DIM2;
+typedef struct { Ix c,b,a; }     DIM3;
+typedef struct { Ix d,c,b,a; }   DIM4;
+typedef struct { Ix e,d,c,b,a; } DIM5;
 
 #ifdef __cplusplus
 
@@ -170,27 +170,27 @@ static __inline__ __device__ DIM1 shape(Ix a)
     return a;
 }
 
-static __inline__ __device__ DIM2 shape(Ix a, Ix b)
+static __inline__ __device__ DIM2 shape(Ix b, Ix a)
 {
-    DIM2 sh = { a, b };
+    DIM2 sh = { b, a };
     return sh;
 }
 
-static __inline__ __device__ DIM3 shape(Ix a, Ix b, Ix c)
+static __inline__ __device__ DIM3 shape(Ix c, Ix b, Ix a)
 {
-    DIM3 sh = { a, b, c };
+    DIM3 sh = { c, b, a };
     return sh;
 }
 
-static __inline__ __device__ DIM4 shape(Ix a, Ix b, Ix c, Ix d)
+static __inline__ __device__ DIM4 shape(Ix d, Ix c, Ix b, Ix a)
 {
-    DIM4 sh = { a, b, c, d };
+    DIM4 sh = { d, c, b, a };
     return sh;
 }
 
-static __inline__ __device__ DIM5 shape(Ix a, Ix b, Ix c, Ix d, Ix e)
+static __inline__ __device__ DIM5 shape(Ix e, Ix d, Ix c, Ix b, Ix a)
 {
-    DIM5 sh = { a, b, c, d, e };
+    DIM5 sh = { e, d, c, b, a };
     return sh;
 }
 
@@ -205,30 +205,30 @@ static __inline__ __device__ Ix toIndex(DIM1 sh, DIM1 ix)
 
 static __inline__ __device__ Ix toIndex(DIM2 sh, DIM2 ix)
 {
-    DIM1 sh_ = sh.a;
-    DIM1 ix_ = ix.a;
-    return toIndex(sh_, ix_) + ix.b * size(sh_);
+    DIM1 sh_ = sh.b;
+    DIM1 ix_ = ix.b;
+    return toIndex(sh_, ix_) * sh.a + ix.a;
 }
 
 static __inline__ __device__ Ix toIndex(DIM3 sh, DIM3 ix)
 {
-    DIM2 sh_ = { sh.a, sh.b };
-    DIM2 ix_ = { ix.a, ix.b };
-    return toIndex(sh_, ix_) + ix.c * size(sh_);
+    DIM2 sh_ = { sh.c, sh.b };
+    DIM2 ix_ = { ix.c, ix.b };
+    return toIndex(sh_, ix_) * sh.a + ix.a;
 }
 
 static __inline__ __device__ Ix toIndex(DIM4 sh, DIM4 ix)
 {
-    DIM3 sh_ = { sh.a, sh.b, sh.c };
-    DIM3 ix_ = { ix.a, ix.b, ix.c };
-    return toIndex(sh_, ix_) + ix.d * size(sh_);
+    DIM3 sh_ = { sh.d, sh.c, sh.b };
+    DIM3 ix_ = { ix.d, ix.c, ix.b };
+    return toIndex(sh_, ix_) * sh.a + ix.a;
 }
 
 static __inline__ __device__ Ix toIndex(DIM5 sh, DIM5 ix)
 {
-    DIM4 sh_ = { sh.a, sh.b, sh.c, sh.d };
-    DIM4 ix_ = { ix.a, ix.b, ix.c, ix.d };
-    return toIndex(sh_, ix_) + ix.e * size(sh_);
+    DIM4 sh_ = { sh.e, sh.d, sh.c, sh.b };
+    DIM4 ix_ = { ix.e, ix.d, ix.c, ix.b };
+    return toIndex(sh_, ix_) * sh.a + ix.a;
 }
 
 /*
@@ -243,28 +243,28 @@ static __inline__ __device__ DIM2 fromIndex(DIM2 sh, Ix ix)
 {
     DIM1 sh_ = shape(sh.b);
     DIM1 ix_ = fromIndex(sh_, ix / sh.a);
-    return shape(ix % sh.a, ix_);
+    return shape(ix_, ix % sh.a);
 }
 
 static __inline__ __device__ DIM3 fromIndex(DIM3 sh, Ix ix)
 {
-    DIM2 sh_ = shape(sh.b, sh.c);
+    DIM2 sh_ = shape(sh.c, sh.b);
     DIM2 ix_ = fromIndex(sh_, ix / sh.a);
-    return shape(ix % sh.a, ix_.a, ix_.b);
+    return shape(ix_.b, ix_.a, ix % sh.a);
 }
 
 static __inline__ __device__ DIM4 fromIndex(DIM4 sh, Ix ix)
 {
-    DIM3 sh_ = shape(sh.b, sh.c, sh.d);
+    DIM3 sh_ = shape(sh.d, sh.c, sh.b);
     DIM3 ix_ = fromIndex(sh_, ix / sh.a);
-    return shape(ix % sh.a, ix_.a, ix_.b, ix_.c);
+    return shape(ix_.c, ix_.b, ix_.a, ix % sh.a);
 }
 
 static __inline__ __device__ DIM5 fromIndex(DIM5 sh, Ix ix)
 {
-    DIM4 sh_ = shape(sh.b, sh.c, sh.d, sh.e);
+    DIM4 sh_ = shape(sh.e, sh.d, sh.c, sh.b);
     DIM4 ix_ = fromIndex(sh_, ix / sh.a);
-    return shape(ix % sh.a, ix_.a, ix_.b, ix_.c, ix_.d);
+    return shape(ix_.d, ix_.c, ix_.b, ix_.a, ix % sh.a);
 }
 
 
