@@ -155,6 +155,7 @@ liftFun (Lam f)  = liftFun f
 
 liftExp :: OpenExp env aenv a -> Val aenv -> CIO [FVar]
 liftExp (Tuple t)         aenv = liftTup t aenv
+liftExp (Prj _ e)         aenv = liftExp e aenv
 liftExp (PrimApp _ e)     aenv = liftExp e aenv
 liftExp (Cond e1 e2 e3)   aenv = concat <$> sequence [liftExp e1 aenv, liftExp e2 aenv, liftExp e3 aenv]
 liftExp (IndexScalar a e) aenv = (:) . FArr <$> executeOpenAcc a aenv <*> liftExp e aenv
@@ -171,7 +172,7 @@ liftTup (t `SnocTup` e) aenv = (++) <$> liftTup t aenv <*> liftExp e aenv
 bind :: CUDA.Module -> [FVar] -> CIO [CUDA.FunParam]
 bind mdl var =
   let tex n (FArr (Array sh ad)) = textureRefs ad mdl (size sh) n
-  in  concat <$> zipWithM tex [0..] var
+  in  foldM (\texs farr -> (texs ++) <$> tex (length texs) farr) [] var
 
 release :: [FVar] -> CIO ()
 release = mapM_ (\(FArr (Array _ ad)) -> freeArray ad)
