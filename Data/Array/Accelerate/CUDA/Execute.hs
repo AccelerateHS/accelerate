@@ -239,7 +239,7 @@ dispatch acc@(Fold f x ad) env mdl = do
   mallocArray out grid
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
-  f_arr <- liftFun f env
+  f_arr <- (++) <$> liftExp x env <*> liftFun f env
   t_var <- bind mdl f_arr
 
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg (size sh)])
@@ -248,7 +248,7 @@ dispatch acc@(Fold f x ad) env mdl = do
   if grid > 1 then dispatch (Fold f x (Use res)) env mdl
               else return (Array (Sugar.fromElem ()) out)
 
-dispatch acc@(FoldSeg f _ ad sd) env mdl = do
+dispatch acc@(FoldSeg f x ad sd) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "fold_segmented"
   (Array sh  in0) <- executeOpenAcc ad env
   (Array sh' seg) <- executeOpenAcc sd env
@@ -259,7 +259,7 @@ dispatch acc@(FoldSeg f _ ad sd) env mdl = do
   d_out <- devicePtrs out
   d_in0 <- devicePtrs in0
   d_seg <- devicePtrs seg
-  f_arr <- liftFun f env
+  f_arr <- (++) <$> liftExp x env <*> liftFun f env
   t_var <- bind mdl f_arr
 
   launch' (cta,grid,smem) fn (d_out ++ d_in0 ++ d_seg ++ t_var ++ map (CUDA.IArg . size) [sh', sh])
@@ -330,7 +330,7 @@ dispatch x _ _ =
 --
 dispatchScan :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
 dispatchScan     (Scanr f x ad) env mdl = dispatchScan (Scanl f x ad) env mdl
-dispatchScan acc@(Scanl f _ ad) env mdl = do
+dispatchScan acc@(Scanl f x ad) env mdl = do
   fscan           <- liftIO $ CUDA.getFun mdl "inclusive_scan"
   fadd            <- liftIO $ CUDA.getFun mdl "exclusive_update"
   (Array sh in0)  <- executeOpenAcc ad env
@@ -353,7 +353,7 @@ dispatchScan acc@(Scanl f _ ad) env mdl = do
   d_in0 <- devicePtrs in0
   d_bks <- devicePtrs bks
   d_sum <- devicePtrs sum
-  f_arr <- liftFun f env
+  f_arr <- (++) <$> liftExp x env <*> liftFun f env
   t_var <- bind mdl f_arr
 
   launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ t_var ++ map CUDA.IArg [n,interval])
@@ -362,6 +362,7 @@ dispatchScan acc@(Scanl f _ ad) env mdl = do
 
   freeArray in0
   freeArray bks
+  release f_arr
   return (a_out, a_sum)
 
 dispatchScan _ _ _ =
