@@ -108,7 +108,7 @@ Library
                         containers,
                         cuda >= 0.2 && < 0.3,
                         directory,
-                        fclabels,
+                        fclabels >= 0.9 && < 1.0,
                         filepath,
                         language-c >= 0.3 && < 0.4,
                         monads-fd,

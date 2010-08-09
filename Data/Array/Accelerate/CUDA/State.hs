@@ -24,7 +24,7 @@ module Data.Array.Accelerate.CUDA.State
   )
   where
 
-import Prelude hiding (id, (.), mod)
+import Prelude hiding (id, (.))
 import Control.Category
 
 import Data.Int
@@ -161,21 +161,6 @@ runCUDA acc =
 
 
 $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
-
--- The derived labels (documentation goes here)
---
-unique       :: CUDAState :-> Int
-outputDir    :: CUDAState :-> FilePath
-deviceProps  :: CUDAState :-> CUDA.DeviceProperties
-memoryTable  :: CUDAState :-> MemTable
-kernelTable  :: CUDAState :-> AccTable
-
-refcount     :: MemoryEntry :-> Int
-memsize      :: MemoryEntry :-> Int64
-arena        :: MemoryEntry :-> WordPtr
-
-kernelName   :: KernelEntry :-> String
-kernelStatus :: KernelEntry :-> Either ProcessID CUDA.Module
 
 
 -- | A unique name supply

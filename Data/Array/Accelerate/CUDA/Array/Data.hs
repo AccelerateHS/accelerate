@@ -15,7 +15,7 @@ module Data.Array.Accelerate.CUDA.Array.Data
     ArrayElem(..)
   ) where
 
-import Prelude hiding (id, (.), mod)
+import Prelude hiding (id, (.))
 import Control.Category
 
 import Foreign.Ptr
@@ -243,14 +243,14 @@ copyArray' src' dst' n =
 peekArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
 peekArray' ad n =
   let dst = Acc.ptrsOfArrayData ad
-      src = CUDA.wordPtrToDevPtr . get arena
+      src = CUDA.wordPtrToDevPtr . getL arena
   in
   lookupArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
 
 peekArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
 peekArrayAsync' ad n st =
   let dst = CUDA.HostPtr . Acc.ptrsOfArrayData
-      src = CUDA.wordPtrToDevPtr . get arena
+      src = CUDA.wordPtrToDevPtr . getL arena
   in
   lookupArray ad >>= \me -> liftIO $ CUDA.peekArrayAsync n (src me) (dst ad) st
 
@@ -262,21 +262,21 @@ peekArrayAsync' ad n st =
 pokeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> CIO ()
 pokeArray' ad n =
   let src = Acc.ptrsOfArrayData ad
-      dst = CUDA.wordPtrToDevPtr . get arena
+      dst = CUDA.wordPtrToDevPtr . getL arena
   in do
     tab <- getM memoryTable
-    me  <- mod refcount (+1) <$> lookupArray ad
-    when (get refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
+    me  <- modL refcount (+1) <$> lookupArray ad
+    when (getL refcount me <= 1) . liftIO $ CUDA.pokeArray n src (dst me)
     liftIO $ HT.insert tab (arrayToKey ad) me
 
 pokeArrayAsync' :: (Acc.ArrayPtrs e ~ Ptr a, Storable a, Acc.ArrayElem e) => Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
 pokeArrayAsync' ad n st =
   let src = CUDA.HostPtr . Acc.ptrsOfArrayData
-      dst = CUDA.wordPtrToDevPtr . get arena
+      dst = CUDA.wordPtrToDevPtr . getL arena
   in do
     tab <- getM memoryTable
-    me  <- mod refcount (+1) <$> lookupArray ad
-    when (get refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
+    me  <- modL refcount (+1) <$> lookupArray ad
+    when (getL refcount me <= 1) . liftIO $ CUDA.pokeArrayAsync n (src ad) (dst me) st
     liftIO $ HT.insert tab (arrayToKey ad) me
 
 
@@ -285,10 +285,10 @@ pokeArrayAsync' ad n st =
 freeArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
 freeArray' ad = do
   tab <- getM memoryTable
-  me  <- mod refcount (subtract 1) <$> lookupArray ad
-  liftIO $ if get refcount me > 0
+  me  <- modL refcount (subtract 1) <$> lookupArray ad
+  liftIO $ if getL refcount me > 0
               then HT.insert tab (arrayToKey ad) me
-              else do CUDA.free . CUDA.wordPtrToDevPtr $ get arena me
+              else do CUDA.free . CUDA.wordPtrToDevPtr $ getL arena me
                       HT.delete tab (arrayToKey ad)
 
 
@@ -298,13 +298,13 @@ freeArray' ad = do
 touchArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
 touchArray' ad = do
   tab <- getM memoryTable
-  liftIO . HT.insert tab (arrayToKey ad) . mod refcount (+1) =<< lookupArray ad
+  liftIO . HT.insert tab (arrayToKey ad) . modL refcount (+1) =<< lookupArray ad
 
 
 -- Return the device pointers wrapped in a list of function parameters
 --
 devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO [CUDA.FunParam]
-devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
+devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . getL arena <$> lookupArray ad
 
 
 -- Retrieve texture references from the module (beginning with the given seed),
@@ -344,7 +344,7 @@ lookupArray ad = do
 -- Return the device pointer associated with a host-side Accelerate array
 --
 getArray :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO (CUDA.DevicePtr a)
-getArray ad = CUDA.wordPtrToDevPtr . get arena <$> lookupArray ad
+getArray ad = CUDA.wordPtrToDevPtr . getL arena <$> lookupArray ad
 {-# INLINE getArray #-}
 
 -- Array tuple extraction

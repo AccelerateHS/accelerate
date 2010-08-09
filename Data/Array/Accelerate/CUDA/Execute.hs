@@ -12,7 +12,7 @@
 module Data.Array.Accelerate.CUDA.Execute (executeAcc)
   where
 
-import Prelude hiding (id, (.), mod, sum)
+import Prelude hiding (id, (.), sum)
 import Control.Category
 
 import Data.Maybe
@@ -124,10 +124,10 @@ executeOpenAcc (Unit e)   env = do
 executeOpenAcc acc env = do
   tab <- getM kernelTable
   krn <- fromMaybe (error "code generation failed") <$> liftIO (HT.lookup tab key)
-  mdl <- either' (get kernelStatus krn) return $ \pid -> do
+  mdl <- either' (getL kernelStatus krn) return $ \pid -> do
     liftIO (waitFor pid)
-    mdl <- liftIO $ CUDA.loadFile (get kernelName krn `replaceExtension` ".cubin")
-    liftIO        $ HT.insert tab key (set kernelStatus (Right mdl) krn)
+    mdl <- liftIO $ CUDA.loadFile (getL kernelName krn `replaceExtension` ".cubin")
+    liftIO        $ HT.insert tab key (setL kernelStatus (Right mdl) krn)
     return mdl
 
   -- determine dispatch pattern, extract parameters, allocate storage, run
