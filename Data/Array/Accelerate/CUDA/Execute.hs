@@ -99,7 +99,7 @@ executeAcc acc = executeOpenAcc acc Empty
 -- the same kernel will be able to extract the loaded kernel directly.
 --
 executeOpenAcc :: OpenAcc aenv a -> Val aenv -> CIO a
-executeOpenAcc (Use xs)  _env = return xs
+executeOpenAcc (Use  xs) _env = return xs
 executeOpenAcc (Avar ix)  env = return $ prj ix env
 executeOpenAcc (Let  x y) env = do
   ax <- executeOpenAcc x env
@@ -224,7 +224,7 @@ dispatch acc@(ZipWith f ad1 ad0) env mdl = do
   f_var <- liftFun f env
   t_var <- bind mdl f_var
 
-  launch acc n fn (d_out ++ d_in1 ++ d_in0 ++ t_var ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in1 ++ d_in0 ++ t_var ++ shape sh' ++ shape sh1 ++ shape sh0)
   freeArray in0
   freeArray in1
   release f_var
@@ -275,9 +275,9 @@ dispatch acc@(Scanr _ _ _) env mdl = dispatchScan acc env mdl
 dispatch acc@(Permute f1 df f2 ad) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "permute"
   (Array sh  def) <- executeOpenAcc df env
-  (Array sh' in0) <- executeOpenAcc ad env
+  (Array sh0 in0) <- executeOpenAcc ad env
   let res@(Array _ out) = newArray (Sugar.toElem sh)
-      n                 = size sh'
+      n                 = size sh0
 
   mallocArray out n
   copyArray def out n
@@ -286,16 +286,16 @@ dispatch acc@(Permute f1 df f2 ad) env mdl = do
   f_arr <- (++) <$> liftFun f1 env <*> liftFun f2 env
   t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ shape sh ++ shape sh0)
   freeArray def
   freeArray in0
   release f_arr
   return res
 
 dispatch acc@(Backpermute e f ad) env mdl = do
-  fn            <- liftIO $ CUDA.getFun mdl "backpermute"
-  sh            <- executeExp e env
-  (Array _ in0) <- executeOpenAcc ad env
+  fn              <- liftIO $ CUDA.getFun mdl "backpermute"
+  sh              <- executeExp e env
+  (Array sh0 in0) <- executeOpenAcc ad env
   let res@(Array sh' out) = newArray sh
       n                   = size sh'
 
@@ -305,7 +305,7 @@ dispatch acc@(Backpermute e f ad) env mdl = do
   f_arr <- liftFun f env
   t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ t_var ++ [CUDA.IArg n])
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ shape sh' ++ shape sh0)
   freeArray in0
   release f_arr
   return res
@@ -396,6 +396,11 @@ newArray sh = ad `seq` Array (Sugar.fromElem sh) ad
     -- FIXME: small arrays are relocated by the GC
     ad = fst . runArrayData $ (,undefined) <$> newArrayData (1024 `max` Sugar.size sh)
 
+-- Extract shape dimensions as a list of function parameters. Not that this will
+-- convert to the base integer width of the device, namely, 32-bits.
+--
+shape :: Ix dim => dim -> [CUDA.FunParam]
+shape = map CUDA.IArg . shapeToList
 
 -- | Wait for the compilation process to finish
 --
