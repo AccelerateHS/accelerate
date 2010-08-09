@@ -42,11 +42,6 @@ import qualified Data.Array.IArray as IArray
 import Data.Typeable
 import Unsafe.Coerce
 
-import Control.Applicative
-import Foreign.Storable                  (Storable(..))
-import Foreign.Storable.Tuple            ()
-import qualified Foreign.Storable.Record as Store
-
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
@@ -476,28 +471,6 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
   fromElem' (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
   toElem' (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
 
-
--- Storable instance for 4-tuple, which should be binary compatible with C.
--- Instances for pair and triple are imported from Foreign.Storable.Tuple.
---
-instance (Storable a, Storable b, Storable c, Storable d, Storable e) => Storable (a,b,c,d,e) where
-  sizeOf    = Store.sizeOf storeQuintuple
-  alignment = Store.alignment storeQuintuple
-  peek      = Store.peek storeQuintuple
-  poke      = Store.poke storeQuintuple
-
-storeQuintuple
-  :: (Storable a, Storable b, Storable c, Storable d, Storable e)
-  => Store.Dictionary (a,b,c,d,e)
-
-storeQuintuple = Store.run $ (,,,,)
-  <$> Store.element (\(a,_,_,_,_) -> a)
-  <*> Store.element (\(_,b,_,_,_) -> b)
-  <*> Store.element (\(_,_,c,_,_) -> c)
-  <*> Store.element (\(_,_,_,d,_) -> d)
-  <*> Store.element (\(_,_,_,_,e) -> e)
-
-
 -- |Convenience functions
 --
 
@@ -615,7 +588,7 @@ type instance FromShapeRepr ((((((), a), b), c), d), e)
 
 -- |Shapes and indices of multi-dimensional arrays
 --
-class (Shape ix, Storable ix, Repr.Ix (ElemRepr ix)) => Ix ix where
+class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0)
   dim    :: ix -> Int
