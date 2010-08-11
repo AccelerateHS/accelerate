@@ -28,7 +28,7 @@ mkTypedef var ptr ty =
 
 
 -- typedef struct {
---   ... ty1 (*?) b; ty0 (*?) a;
+--   ... ty1 (*?) a1; ty0 (*?) a0;
 -- } var;
 --
 -- NOTE: The Accelerate language uses snoc based tuple projection, so the last
@@ -38,10 +38,11 @@ mkStruct :: String -> Bool -> [CType] -> CExtDecl
 mkStruct name ptr types =
   CDeclExt (CDecl [ CStorageSpec (CTypedef internalNode) , CTypeSpec (CSUType (CStruct CStructTag Nothing (Just (zipWith field names types)) [] internalNode) internalNode)] [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
   where
-    names      = reverse . take (length types) $ enumFrom 'a'
-    field v ty = CDecl (map CTypeSpec ty)  [(Just (CDeclr (Just (internalIdent [v])) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode),Nothing,Nothing)] internalNode
+    names      = reverse . take (length types) $ (enumFrom 0 :: [Int])
+    field v ty = CDecl (map CTypeSpec ty)  [(Just (CDeclr (Just (internalIdent ('a':show v))) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode),Nothing,Nothing)] internalNode
 
 
+{-
 -- typedef struct __attribute__((aligned(n * sizeof(ty)))) {
 --     ty [x, y, z, w];
 -- } var;
@@ -52,7 +53,7 @@ mkTyVector var n ty =
   where
     fields = take n . flip map "xyzw" $ \f ->
       (Just (CDeclr (Just (internalIdent [f])) [] Nothing [] internalNode), Nothing, Nothing)
-
+-}
 
 -- static inline __attribute__((device)) TyOut identity()
 -- {

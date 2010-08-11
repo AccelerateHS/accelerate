@@ -66,8 +66,8 @@ mkGet n prj =
     arrIn         = internalIdent ("d_in" ++ show prj)
     initList
       | n <= 1    = CInitExpr (CIndex (CVar arrIn internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode
-      | otherwise = flip CInitList internalNode . reverse . take n . flip map (enumFrom 'a') $ \v ->
-                      ([], CInitExpr (CIndex (CMember (CVar arrIn internalNode) (internalIdent [v]) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode)
+      | otherwise = flip CInitList internalNode . reverse . take n . flip map (enumFrom 0 :: [Int]) $ \v ->
+                      ([], CInitExpr (CIndex (CMember (CVar arrIn internalNode) (internalIdent ('a':show v)) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode)
 
 
 mkSet :: Int -> CExtDecl
@@ -82,6 +82,6 @@ mkSet n =
   where
   assignList
     | n <= 1    = [CBlockStmt (CExpr (Just (CAssign CAssignOp (CIndex (CVar (internalIdent "d_out") internalNode) (CVar (internalIdent "idx") internalNode) internalNode) (CVar (internalIdent "val") internalNode) internalNode)) internalNode)]
-    | otherwise = reverse . take n . flip map (enumFrom 'a') $ \v ->
-                    CBlockStmt (CExpr (Just (CAssign CAssignOp (CIndex (CMember (CVar (internalIdent "d_out") internalNode) (internalIdent [v]) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) (CMember (CVar (internalIdent "val") internalNode) (internalIdent [v]) False internalNode) internalNode)) internalNode)
+    | otherwise = reverse . take n . flip map (enumFrom 0 :: [Int]) $ \v ->
+                    CBlockStmt (CExpr (Just (CAssign CAssignOp (CIndex (CMember (CVar (internalIdent "d_out") internalNode) (internalIdent ('a':show v)) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) (CMember (CVar (internalIdent "val") internalNode) (internalIdent ('a':show v)) False internalNode) internalNode)) internalNode)
 

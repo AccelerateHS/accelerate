@@ -102,8 +102,8 @@ codeGenExp (AST.Var i)         =
   let var = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
   in case codeGenTupleType (Sugar.elemType (undefined::t)) of
           [_] -> return [var]
-          cps -> return . reverse . take (length cps) . flip map ['a'..] $
-            \c -> CMember var (internalIdent [c]) False internalNode
+          cps -> return . reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
+            \c -> CMember var (internalIdent ('a':show c)) False internalNode
 
 codeGenExp (AST.Cond p e1 e2) = do
   [a] <- codeGenExp p
