@@ -431,6 +431,7 @@ evalPrim (PrimSqrt        ty)   = evalSqrt ty
 evalPrim (PrimLog         ty)   = evalLog ty
 evalPrim (PrimFPow        ty)   = evalFPow ty
 evalPrim (PrimLogBase     ty)   = evalLogBase ty
+evalPrim (PrimAtan2       ty)   = evalAtan2 ty
 evalPrim (PrimLt          ty)   = evalLt ty
 evalPrim (PrimGt          ty)   = evalGt ty
 evalPrim (PrimLtEq        ty)   = evalLtEq ty
@@ -562,6 +563,9 @@ evalFPow ty | FloatingDict <- floatingDict ty = uncurry (**)
 
 evalLogBase :: FloatingType a -> ((a, a) -> a)
 evalLogBase ty | FloatingDict <- floatingDict ty = uncurry logBase
+
+evalAtan2 :: FloatingType a -> ((a, a) -> a)
+evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
 
 -- Methods of Num

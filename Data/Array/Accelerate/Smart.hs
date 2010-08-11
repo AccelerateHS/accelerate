@@ -38,6 +38,7 @@ module Data.Array.Accelerate.Smart (
   mkAsinh, mkAcosh, mkAtanh,
   mkExpFloating, mkSqrt, mkLog,
   mkFPow, mkLogBase,
+  mkAtan2,
 
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
@@ -425,6 +426,9 @@ mkMaxBound = PrimConst (PrimMaxBound boundedType)
 mkPi :: (Elem r, IsFloating r) => Exp r
 mkPi = PrimConst (PrimPi floatingType)
 
+-- Operators from Floating
+--
+
 mkSin :: (Elem t, IsFloating t) => Exp t -> Exp t
 mkSin x = PrimSin floatingType `PrimApp` x
 
@@ -535,6 +539,9 @@ mkFDiv x y = PrimFDiv floatingType `PrimApp` tup2 (x, y)
 
 mkRecip :: (Elem t, IsFloating t) => Exp t -> Exp t
 mkRecip x = PrimRecip floatingType `PrimApp` x
+
+mkAtan2 :: (Elem t, IsFloating t) => Exp t -> Exp t -> Exp t
+mkAtan2 x y = PrimAtan2 floatingType `PrimApp` tup2 (x, y)
 
   -- FIXME: add operations from Floating, RealFrac & RealFloat
 

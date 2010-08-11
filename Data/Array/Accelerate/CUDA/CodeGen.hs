@@ -326,6 +326,7 @@ codeGenPrim (AST.PrimSqrt        ty) [a]   = ccall (FloatingNumType ty) "sqrt"  
 codeGenPrim (AST.PrimLog         ty) [a]   = ccall (FloatingNumType ty) "log"   [a]
 codeGenPrim (AST.PrimFPow        ty) [a,b] = ccall (FloatingNumType ty) "pow"   [a,b]
 codeGenPrim (AST.PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
+codeGenPrim (AST.PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty) "atan2" [a,b]
 codeGenPrim (AST.PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
 codeGenPrim (AST.PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
 codeGenPrim (AST.PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode

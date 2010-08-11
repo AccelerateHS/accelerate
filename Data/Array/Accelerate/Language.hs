@@ -411,7 +411,8 @@ instance (Elem t, IsFloating t) => Fractional (Exp t) where
 instance (Elem t, IsFloating t) => RealFrac (Exp t)
   -- FIXME: add ops
 
-instance (Elem t, IsFloating t) => RealFloat (Exp t)
+instance (Elem t, IsFloating t) => RealFloat (Exp t) where
+  atan2 = mkAtan2
   -- FIXME: add ops
 
 
