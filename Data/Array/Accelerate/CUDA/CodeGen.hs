@@ -98,6 +98,14 @@ codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") in
 codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
 codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
 codeGenExp (AST.Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
+codeGenExp (AST.Tuple t)       = codeGenTup t
+codeGenExp prj@(AST.Prj idx e)
+  = reverse
+  . take (length $ codeGenTupleType (expType prj))
+  . drop (prjToInt idx (expType e))
+  . reverse
+  <$> codeGenExp e
+
 codeGenExp (AST.Var i)         =
   let var = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
   in case codeGenTupleType (Sugar.elemType (undefined::t)) of
@@ -110,9 +118,6 @@ codeGenExp (AST.Cond p e1 e2) = do
   [b] <- codeGenExp e1
   [c] <- codeGenExp e2
   return [CCond a (Just b) c internalNode]
-
-codeGenExp (AST.Tuple t)   = codeGenTup t
-codeGenExp (AST.Prj idx e) = unit . (!! prjToInt idx) . reverse <$> codeGenExp e
 
 codeGenExp (AST.IndexScalar a1 e1) = do
   n   <- length <$> get
@@ -135,18 +140,21 @@ codeGenTup :: Tuple (AST.OpenExp env aenv) t -> State [CExtDecl] [CExpr]
 codeGenTup NilTup          = return []
 codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
 
-
 -- Convert a typed de Brujin index to the corresponding integer
 --
 idxToInt :: AST.Idx env t -> Int
 idxToInt AST.ZeroIdx       = 0
 idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
 
--- Convert a tuple index into the corresponding integer
+-- Convert a tuple index into the corresponding integer. Since the internal
+-- representation is flat, be sure to walk over all sub components when indexing
+-- past nested tuples.
 --
-prjToInt :: TupleIdx t e -> Int
-prjToInt ZeroTupIdx       = 0
-prjToInt (SuccTupIdx idx) = 1 + prjToInt idx
+prjToInt :: TupleIdx t e -> TupleType a -> Int
+prjToInt ZeroTupIdx     _                 = 0
+prjToInt (SuccTupIdx i) (b `PairTuple` a) = length (codeGenTupleType a) + prjToInt i b
+prjToInt _ _ =
+  INTERNAL_ERROR(error) "prjToInt" "inconsistent valuation"
 
 
 -- Types
