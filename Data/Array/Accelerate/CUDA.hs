@@ -40,9 +40,9 @@ import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 --
 run :: Arrays a => Sugar.Acc a -> IO a
 run acc =
-  (evalCUDA $ execute (Sugar.convertAcc acc) >>= collect)
-            `catch`
-            \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+  evalCUDA (execute (Sugar.convertAcc acc) >>= collect)
+           `catch`
+           \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
 execute :: Arrays a => Acc a -> CIO a
 execute acc = compileAcc acc >> executeAcc acc
