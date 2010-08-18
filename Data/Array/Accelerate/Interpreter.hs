@@ -13,6 +13,15 @@
 -- This interpreter is meant to be a reference implementation of the semantics
 -- of the embedded array language.  The emphasis is on defining the semantics
 -- clearly, not on performance.
+--
+-- /Surface types versus representation types/
+--
+-- As a general rule, we perform all computations on representation types and we store all data
+-- as values of representation types.  To guarantee the type safety of the interpreter, this
+-- currently implies a lot of conversions between surface and representation types.  Optimising
+-- the code by eliminating back and forth conversions is fine, but only where it doesn't
+-- negatively affects clarity — after all, the main purpose of the interpreter is to serve as an
+-- executable specification.
 
 module Data.Array.Accelerate.Interpreter (
 
@@ -113,6 +122,9 @@ evalOpenAcc (Permute f dftAcc p acc) aenv
 
 evalOpenAcc (Backpermute e p acc) aenv
   = backpermuteOp (evalExp e aenv) (evalFun p aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (Stencil sten bndy acc) aenv
+  = stencilOp (evalFun sten aenv) bndy (evalOpenAcc acc aenv)
 
 -- Evaluate a closed array expressions
 --
@@ -322,6 +334,22 @@ backpermuteOp :: Sugar.Ix dim'
               -> Delayed (Array dim' e)
 backpermuteOp sh' p (DelayedArray _sh rf)
   = DelayedArray (Sugar.fromElem sh') (rf . Sugar.sinkFromElem p)
+
+stencilOp :: forall dim e e' stencil. (Sugar.Elem e, Sugar.Elem e', Stencil dim e stencil)
+          => (stencil -> e')
+          -> Boundary (Sugar.ElemRepr e)
+          -> Delayed (Array dim e)
+          -> Delayed (Array dim e')
+stencilOp sten bndy (DelayedArray sh rf)
+  = DelayedArray sh rf'
+  where
+    rf' = Sugar.sinkFromElem (sten . stencilAccess rfBounded)
+
+    -- add a boundary to the source array as specified by the boundary condition
+    rfBounded :: dim -> e
+    rfBounded ix = Sugar.toElem $ case Sugar.bound (Sugar.toElem sh) ix bndy of
+                                    Left v    -> v
+                                    Right ix' -> rf (Sugar.fromElem ix')
 
 
 -- Expression evaluation

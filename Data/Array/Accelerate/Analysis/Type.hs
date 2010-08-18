@@ -52,6 +52,7 @@ accType (Fold _ _ acc)        = accType acc
 accType (FoldSeg _ _ acc _)   = accType acc
 accType (Permute _ _ _ acc)   = accType acc
 accType (Backpermute _ _ acc) = accType acc
+accType (Stencil _ _ _)       = elemType (undefined::e)
 
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.

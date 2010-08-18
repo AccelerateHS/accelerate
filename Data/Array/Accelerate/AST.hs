@@ -1,65 +1,66 @@
-{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 
--- |Embedded array processing language: accelerate AST with de Bruijn indices
+-- Module      : Data.Array.Accelerate.AST
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
+-- /Scalar versus collective operations/
 --
---- Description ---------------------------------------------------------------
+-- The embedded array processing language is a two-level language.  It
+-- combines a language of scalar expressions and functions with a language of
+-- collective array operations.  Scalar expressions are used to compute
+-- arguments for collective operations and scalar functions are used to
+-- parametrise higher-order, collective array operations.  The two-level
+-- structure, in particular, ensures that collective operations cannot be
+-- parametrised with collective operations; hence, we are following a flat
+-- data-parallel model.  The collective operations manipulate
+-- multi-dimensional arrays whose shape is explicitly tracked in their types.
+-- In fact, collective operations cannot produce any values other than
+-- multi-dimensional arrays; when they yield a scalar, this is in the form of
+-- a 0-dimensional, singleton array.  Similarly, scalar expression can -as
+-- their name indicates- only produce tuples of scalar, but not arrays. 
 --
---  Scalar versus collective operations
---  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
---  The embedded array processing language is a two-level language.  It
---  combines a language of scalar expressions and functions with a language of
---  collective array operations.  Scalar expressions are used to compute
---  arguments for collective operations and scalar functions are used to
---  parametrise higher-order, collective array operations.  The two-level
---  structure, in particular, ensures that collective operations cannot be
---  parametrised with collective operations; hence, we are following a flat
---  data-parallel model.  The collective operations manipulate
---  multi-dimensional arrays whose shape is explicitly tracked in their types.
---  In fact, collective operations cannot produce any values other than
---  multi-dimensional arrays; when they yield a scalar, this is in the form of
---  a 0-dimensional, singleton array.  Similarly, scalar expression can -as
---  their name indicates- only produce tuples of scalar, but not arrays. 
+-- There are, however, two expression forms that take arrays as arguments.  As
+-- a result scalar and array expressions are recursively dependent.  As we
+-- cannot and don't want to compute arrays in the middle of scalar
+-- computations, array computations will always be hoisted out of scalar
+-- expressions.  So that this is always possible, these array expressions may
+-- not contain any free scalar variables.  To express that condition in the
+-- type structure, we use separate environments for scalar and array variables.
 --
---  There are, however, two expression forms that take arrays as arguments.  As
---  a result scalar and array expressions are recursively dependent.  As we
---  cannot and don't want to compute arrays in the middle of scalar
---  computations, array computations will always be hoisted out of scalar
---  expressions.  So that this is always possible, these array expressions may
---  not contain any free scalar variables.  To express that condition in the
---  type structure, we use separate environments for scalar and array variables.
+-- /Programs/
 --
---  Programs
---  ~~~~~~~~
---  Collective array programs comprise closed expressions of array operations.
---  There is no explicit sharing in the initial AST form, but sharing is
---  introduced subsequently by common subexpression elimination and floating
---  of array computations.
+-- Collective array programs comprise closed expressions of array operations.
+-- There is no explicit sharing in the initial AST form, but sharing is
+-- introduced subsequently by common subexpression elimination and floating
+-- of array computations.
 --
---  Functions
---  ~~~~~~~~~
---  The array expression language is first-order and only provides limited
---  control structures to ensure that it can be efficiently executed on
---  compute-acceleration hardware, such as GPUs.  To restrict functions to
---  first-order, we separate function abstraction from the main expression
---  type.  Functions are represented using de Bruijn indices.
+-- /Functions/
 --
---  Parametric and ad-hoc polymorphism
---  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
---  The array language features paramatric polymophism (e.g., pairing and
---  projections) as well as ad-hoc polymorphism (e.g., arithmetic operations).
---  All ad-hoc polymorphic constructs include reified dictionaries (c.f.,
---  module 'Types').  Reified dictionaries also ensure that constants
---  (constructor 'Const') are representable on compute acceleration hardware.
+-- The array expression language is first-order and only provides limited
+-- control structures to ensure that it can be efficiently executed on
+-- compute-acceleration hardware, such as GPUs.  To restrict functions to
+-- first-order, we separate function abstraction from the main expression
+-- type.  Functions are represented using de Bruijn indices.
 --
---  The AST contains both reified dictionaries and type class constraints.  
---  Type classes are used for array-related functionality that is uniformly
---  available for all supported types.  In contrast, reified dictionaries are
---  used for functionality that is only available for certain types, such as
---  arithmetic operations.
+-- /Parametric and ad-hoc polymorphism/
+--
+-- The array language features paramatric polymophism (e.g., pairing and
+-- projections) as well as ad-hoc polymorphism (e.g., arithmetic operations).
+-- All ad-hoc polymorphic constructs include reified dictionaries (c.f.,
+-- module 'Types').  Reified dictionaries also ensure that constants
+-- (constructor 'Const') are representable on compute acceleration hardware.
+--
+-- The AST contains both reified dictionaries and type class constraints.  
+-- Type classes are used for array-related functionality that is uniformly
+-- available for all supported types.  In contrast, reified dictionaries are
+-- used for functionality that is only available for certain types, such as
+-- arithmetic operations.
 
 module Data.Array.Accelerate.AST (
 
@@ -70,7 +71,7 @@ module Data.Array.Accelerate.AST (
   Val(..), prj,
 
   -- * Accelerated array expressions
-  OpenAcc(..), Acc,
+  OpenAcc(..), Acc, Stencil(..),
 
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
@@ -272,9 +273,70 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim e)        -- source array
               -> OpenAcc aenv (Array dim' e)
 
+  -- Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
+  -- entire /neighbourhood/ of each array element.
+  Stencil :: (Elem e, Elem e', Stencil dim e stencil)
+          => Fun      aenv (stencil -> e')         -- stencil function
+          -> Boundary (ElemRepr e)                 -- boundary condition
+          -> OpenAcc  aenv (Array dim e)           -- source array
+          -> OpenAcc  aenv (Array dim e')
+
 -- |Closed array expression aka an array program
 --
 type Acc a = OpenAcc () a
+
+class IsTuple stencil => Stencil dim e stencil where
+  stencilAccess :: (dim -> e) -> dim -> stencil
+
+-- DIM1
+instance Stencil DIM1 a (a, a, a) where
+  stencilAccess rf ix = (rf (ix - 1), rf ix, rf (ix + 1))
+instance Stencil DIM1 a (a, a, a, a, a) where
+  stencilAccess rf ix = (rf (ix - 2), rf (ix - 1), rf ix, rf (ix + 1), rf (ix + 2))
+
+-- DIM2
+instance (Stencil DIM1 a row2, 
+          Stencil DIM1 a row1,
+          Stencil DIM1 a row0) => Stencil DIM2 a (row2, row1, row0) where
+  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 1)) x, 
+                             stencilAccess (rf' y      ) x,
+                             stencilAccess (rf' (y + 1)) x)
+    where
+      rf' y x = rf (x, y)
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5) => Stencil DIM2 a (row1, row2, row3, row4, row5) where
+  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 2)) x, 
+                             stencilAccess (rf' (y - 1)) x, 
+                             stencilAccess (rf' y      ) x,
+                             stencilAccess (rf' (y + 1)) x,
+                             stencilAccess (rf' (y + 2)) x)
+    where
+      rf' y x = rf (x, y)
+
+-- DIM3
+instance (Stencil DIM2 a row1, 
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3) => Stencil DIM3 a (row1, row2, row3) where
+  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 1)) (x, y), 
+                                stencilAccess (rf' z      ) (x, y),
+                                stencilAccess (rf' (z + 1)) (x, y))
+    where
+      rf' z (x, y) = rf (x, y, z)
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5) => Stencil DIM3 a (row1, row2, row3, row4, row5) where
+  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 2)) (x, y), 
+                                stencilAccess (rf' (z - 1)) (x, y), 
+                                stencilAccess (rf' z      ) (x, y),
+                                stencilAccess (rf' (z + 1)) (x, y),
+                                stencilAccess (rf' (z + 2)) (x, y))
+    where
+      rf' z (x, y) = rf (x, y, z)
 
               
 -- Embedded expressions

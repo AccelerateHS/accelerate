@@ -545,6 +545,17 @@ data TupleType a where
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
 
 
+-- Stencil support
+-- ---------------
+
+-- |Boundary condition specification for stencil operations.
+--
+data Boundary a = Clamp               -- ^clamp coordinates to the extent of the array
+                | Mirror              -- ^mirror coordinates beyond the array extent
+                | Wrap                -- ^wrap coordinates around on each dimension
+                | Constant a          -- ^use a constant value for outlying coordinates 
+                deriving Show
+
 {-
 -- Vector GPU data types
 -- ---------------------

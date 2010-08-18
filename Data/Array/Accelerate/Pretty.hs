@@ -23,6 +23,7 @@ import Text.PrettyPrint
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
 
 
 -- |Show instances
@@ -85,6 +86,16 @@ prettyAcc lvl (Backpermute sh p acc)
   = prettyArrOp "backpermute" [prettyExp lvl parens sh,
                                parens (prettyFun lvl p),
                                prettyAccParens lvl acc]
+    
+prettyAcc lvl (Stencil sten bndy (acc :: OpenAcc aenv (Array dim e))) 
+  = prettyArrOp "stencil" [parens (prettyFun lvl sten),
+                           prettyBoundary bndy,
+                           prettyAccParens lvl acc]
+  where
+    prettyBoundary Clamp        = text "Clamp"
+    prettyBoundary Mirror       = text "Mirror"
+    prettyBoundary Wrap         = text "Wrap"
+    prettyBoundary (Constant e) = parens $ text "Wrap" <+> text (show (toElem e :: e))
     
 prettyArrOp :: String -> [Doc] -> Doc
 prettyArrOp name docs = hang (text name) 2 $ sep docs

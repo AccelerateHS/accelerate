@@ -1,14 +1,14 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 
--- |Embedded array processing language: user-visible language
+-- Module      : Data.Array.Accelerate.Language
+-- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---
---  License: BSD3
---
---- Description ---------------------------------------------------------------
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
 -- We use the dictionary view of overloaded operations (such as arithmetic and
 -- bit manipulation) to reify such expressions.  With non-overloaded
@@ -21,6 +21,15 @@ module Data.Array.Accelerate.Language (
 
   -- ** Array and scalar expressions
   Acc, Exp,                                 -- re-exporting from 'Smart'
+  
+  -- ** Stencil specification
+  Boundary(..), Stencil(..),                -- re-exporting from 'Smart'
+
+  -- ** Common stencil types
+  Stencil3, Stencil5,
+  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
+  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
+  Stencil3x5x5, Stencil5x5x5,
 
   -- ** Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -33,7 +42,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Collective array operations
   slice, replicate, zip, unzip, map, zipWith, scanl, scanr, fold, foldSeg,
-  permute, backpermute,
+  permute, backpermute, stencil,
   
   -- ** Tuple construction and destruction
   Tuple(..), fst, snd, curry, uncurry,
@@ -113,7 +122,7 @@ reshape = Reshape
 -- yields a three dimensional array, where 'arr' is replicated twice across the
 -- first and three times across the third dimension.
 --
-replicate :: forall slix e. (SliceIx slix, Elem e) 
+replicate :: (SliceIx slix, Elem e) 
           => Exp slix 
           -> Acc (Array (Slice    slix) e) 
           -> Acc (Array (SliceDim slix) e)
@@ -123,7 +132,7 @@ replicate = Replicate
 -- argument).  The result is a new array (possibly a singleton) containing
 -- all dimensions in their entirety.
 --
-slice :: forall slix e. (SliceIx slix, Elem e) 
+slice :: (SliceIx slix, Elem e) 
       => Acc (Array (SliceDim slix) e) 
       -> Exp slix 
       -> Acc (Array (Slice slix) e)
@@ -163,7 +172,7 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim c)
 zipWith = ZipWith
 
--- |Prescan of a vector.  The type \'a\' together with the binary function
+-- |Prescan of a vector.  The type 'a' together with the binary function
 -- (first argument) and value (second argument) must form a monoid; i.e., the
 -- function must be /associative/ and the value must be its /neutral element/.
 --
@@ -224,12 +233,55 @@ permute :: (Ix dim, Ix dim', Elem a)
 permute = Permute
 
 -- |Backward permutation 
+--
 backpermute :: (Ix dim, Ix dim', Elem a)
             => Exp dim'                 -- ^shape of the result array
             -> (Exp dim' -> Exp dim)    -- ^permutation
             -> Acc (Array dim  a)       -- ^permuted array
             -> Acc (Array dim' a)
 backpermute = Backpermute
+
+
+-- Common stencil types
+--
+
+-- DIM1 stencil type
+type Stencil3 a = (Exp a, Exp a, Exp a)
+type Stencil5 a = (Exp a, Exp a, Exp a, Exp a, Exp a)
+
+-- DIM2 stencil type
+type Stencil3x3 a = (Stencil3 a, Stencil3 a, Stencil3 a)
+type Stencil5x3 a = (Stencil5 a, Stencil5 a, Stencil5 a)
+type Stencil3x5 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
+type Stencil5x5 a = (Stencil5 a, Stencil5 a, Stencil5 a, Stencil5 a, Stencil5 a)
+
+-- DIM3 stencil type
+type Stencil3x3x3 a = (Stencil3x3 a, Stencil3x3 a, Stencil3x3 a)
+type Stencil5x3x3 a = (Stencil5x3 a, Stencil5x3 a, Stencil5x3 a)
+type Stencil3x5x3 a = (Stencil3x5 a, Stencil3x5 a, Stencil3x5 a)
+type Stencil3x3x5 a = (Stencil3x3 a, Stencil3x3 a, Stencil3x3 a, Stencil3x3 a, Stencil3x3 a)
+type Stencil5x5x3 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a)
+type Stencil5x3x5 a = (Stencil5x3 a, Stencil5x3 a, Stencil5x3 a, Stencil5x3 a, Stencil5x3 a)
+type Stencil3x5x5 a = (Stencil3x5 a, Stencil3x5 a, Stencil3x5 a, Stencil3x5 a, Stencil3x5 a)
+type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a)
+
+-- |Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
+--  entire /neighbourhood/ of each array element.  Neighbourhoods are sub-arrays centred around a
+--  focal point.  They are not necessarily rectangular, but they are symmetric in each dimension
+--  and have an extent of at least three in each dimensions — due to the symmetry requirement, the
+--  extent is necessarily odd.  The focal point is the array position that is determined by the
+--  stencil.
+--
+--  For those array positions where the neighbourhood extends past the boundaries of the source
+--  array, a boundary condition determines the contents of the out-of-bounds neighbourhood
+--  positions.
+--
+stencil :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
+        => (stencil -> Exp b)          -- ^stencil function
+        -> Boundary a                  -- ^boundary condition
+        -> Acc (Array dim a)           -- ^source array
+        -> Acc (Array dim b)           -- ^destination array
+stencil = Stencil
 
 
 -- Tuples

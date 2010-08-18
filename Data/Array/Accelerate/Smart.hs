@@ -1,25 +1,25 @@
 {-# LANGUAGE GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 
--- |Embedded array processing language: smart expression constructors
+-- Module      : Data.Array.Accelerate.Smart
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
---  This modules defines the AST of the user-visible embedded language using
---  more convenient higher-order abstract syntax (instead of de Bruijn
---  indices). Moreover, it defines smart constructors to construct programs.
+-- This modules defines the AST of the user-visible embedded language using
+-- more convenient higher-order abstract syntax (instead of de Bruijn
+-- indices). Moreover, it defines smart constructors to construct programs.
 
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), Exp(..), 
+  Acc(..), Exp(..), Boundary(..), Stencil(..),
   
   -- * HOAS -> de Bruijn conversion
-  convertAcc, convertClosedExp,
+  convertAcc,
   convertExp, convertFun1, convertFun2,
 
   -- * Smart constructors for unpairing
@@ -58,7 +58,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple hiding    (Tuple)
 import qualified Data.Array.Accelerate.Tuple as Tuple
-import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, OpenExp(..), Exp)
+import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, Stencil, OpenExp(..), Exp)
 import qualified Data.Array.Accelerate.AST                  as AST
 import Data.Array.Accelerate.Pretty ()
 
@@ -134,6 +134,11 @@ data Acc a where
               -> (Exp dim' -> Exp dim)
               -> Acc (Array dim e)
               -> Acc (Array dim' e)
+  Stencil     :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
+              => (stencil -> Exp b)
+              -> Boundary a
+              -> Acc (Array dim a)
+              -> Acc (Array dim b)
 
 
 -- |Conversion from HOAS to de Bruijn computation AST
@@ -180,6 +185,15 @@ convertOpenAcc alyt (Backpermute newDim perm acc)
   = AST.Backpermute (convertExp alyt newDim)
                     (convertFun1 alyt perm)
                     (convertOpenAcc alyt acc)
+convertOpenAcc alyt (Stencil stencil boundary acc) 
+  = AST.Stencil (convertStencilFun acc alyt stencil) 
+                (convertBoundary boundary) 
+                (convertOpenAcc alyt acc)
+  where
+    convertBoundary Clamp        = Clamp
+    convertBoundary Mirror       = Mirror
+    convertBoundary Wrap         = Wrap
+    convertBoundary (Constant e) = Constant (fromElem e)
 
 -- |Convert a closed array expression
 --
@@ -318,6 +332,23 @@ convertFun2 alyt f = Lam (Lam (Body openF))
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
     openF = convertOpenExp lyt alyt (f a b)
 
+-- Convert a stencil function
+--
+convertStencilFun :: forall dim a stencil b aenv. (Elem a, Stencil dim a stencil)
+                  => Acc (Array dim a)                  -- just passed to fix the type variables
+                  -> Layout aenv aenv 
+                  -> (stencil -> Exp b)
+                  -> AST.Fun aenv (StencilRepr dim stencil -> b)
+convertStencilFun _ alyt stencilFun = Lam (Body openStencilFun)
+  where
+    stencil = Tag 0 :: Exp (StencilRepr dim stencil)
+    lyt     = EmptyLayout 
+              `PushLayout` 
+              (ZeroIdx :: Idx ((), ElemRepr (StencilRepr dim stencil)) 
+                              (ElemRepr (StencilRepr dim stencil)))
+    openStencilFun = convertOpenExp lyt alyt $
+                       stencilFun (stencilPrj (undefined::dim) (undefined::a) stencil)
+
 
 -- Pretty printing
 --
@@ -351,8 +382,87 @@ mkReplicate e arr
     slix = undefined :: slix
 
 
--- |Smart constructors to construct HOAS AST expressions
--- -----------------------------------------------------
+-- |Smart constructors for stencil reification
+-- -------------------------------------------
+
+-- Stencil reification
+--
+-- In the AST representation, we turn the stencil type from nested tuples of Accelerate expressions
+-- into an Accelerate expression whose type is a tuple nested in the same manner.  This enables us
+-- to represent the stencil function as a unary function (which also only needs one de Bruijn
+-- index). The various positions in the stencil are accessed via tuple indices (i.e., projections).
+
+class (Elem (StencilRepr dim stencil), AST.Stencil dim a (StencilRepr dim stencil)) 
+  => Stencil dim a stencil where
+  type StencilRepr dim stencil :: *
+  stencilPrj :: dim{-dummy-} -> a{-dummy-} -> Exp (StencilRepr dim stencil) -> stencil
+  
+-- DIM1
+instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a) where
+  type StencilRepr DIM1 (Exp a, Exp a, Exp a) = (a, a, a)
+  stencilPrj _ _ s = (Prj tix2 s, Prj tix1 s, Prj tix0 s)
+instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a) where
+  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a) = (a, a, a, a, a)
+  stencilPrj _ _ s = (Prj tix4 s, Prj tix3 s, Prj tix2 s, Prj tix1 s, Prj tix0 s)
+
+-- DIM2
+instance (Stencil DIM1 a row2, 
+          Stencil DIM1 a row1,
+          Stencil DIM1 a row0) => Stencil DIM2 a (row2, row1, row0) where
+  type StencilRepr DIM2 (row2, row1, row0) 
+    = (StencilRepr DIM1 row2, StencilRepr DIM1 row1, StencilRepr DIM1 row0)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5) => Stencil DIM2 a (row1, row2, row3, row4, row5) where
+  type StencilRepr DIM2 (row1, row2, row3, row4, row5) 
+    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
+       StencilRepr DIM1 row5)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
+
+-- DIM3
+instance (Stencil DIM2 a row1, 
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3) => Stencil DIM3 a (row1, row2, row3) where
+  type StencilRepr DIM3 (row1, row2, row3) 
+    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5) => Stencil DIM3 a (row1, row2, row3, row4, row5) where
+  type StencilRepr DIM3 (row1, row2, row3, row4, row5) 
+    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
+       StencilRepr DIM2 row5)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
+
+-- Auxilliary tuple index constants
+--
+tix0 :: Elem s => TupleIdx (t, s) s
+tix0 = ZeroTupIdx
+tix1 :: Elem s => TupleIdx ((t, s), s1) s
+tix1 = SuccTupIdx tix0
+tix2 :: Elem s => TupleIdx (((t, s), s1), s2) s
+tix2 = SuccTupIdx tix1
+tix3 :: Elem s => TupleIdx ((((t, s), s1), s2), s3) s
+tix3 = SuccTupIdx tix2
+tix4 :: Elem s => TupleIdx (((((t, s), s1), s2), s3), s4) s
+tix4 = SuccTupIdx tix3
 
 -- Pushes the 'Acc' constructor through a pair
 --

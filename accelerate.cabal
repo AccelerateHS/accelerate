@@ -174,8 +174,8 @@ Library
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
-  Extensions:           FlexibleContexts, FlexibleInstances, 
-                        ExistentialQuantification, GADTs, TypeFamilies, 
+  Extensions:           FlexibleContexts, FlexibleInstances, TypeSynonymInstances,
+                        ExistentialQuantification, GADTs, TypeFamilies, MultiParamTypeClasses,
                         ScopedTypeVariables, DeriveDataTypeable,
                         BangPatterns, PatternGuards, TypeOperators, RankNTypes
 

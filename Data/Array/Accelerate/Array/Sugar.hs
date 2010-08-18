@@ -604,6 +604,9 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   -- argument is the index)
   index  :: ix -> ix -> Int
 
+  -- |Apply a boundary condition to an index
+  bound  :: ix -> ix -> Boundary a -> Either a ix
+
   -- |Iterate through the entire shape, applying the function; third argument
   -- combines results and fourth is returned in case of an empty iteration
   -- space; the index space is traversed in row-major order
@@ -621,10 +624,13 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   -- |Convert a list of dimensions into a shape
   listToShape :: [Int] -> ix
 
-  dim         = Repr.dim . fromElem
-  size        = Repr.size . fromElem
-  ignore      = toElem Repr.ignore
-  index sh ix = Repr.index (fromElem sh) (fromElem ix)
+  dim              = Repr.dim . fromElem
+  size             = Repr.size . fromElem
+  ignore           = toElem Repr.ignore
+  index sh ix      = Repr.index (fromElem sh) (fromElem ix)
+  bound sh ix bndy = case Repr.bound (fromElem sh) (fromElem ix) bndy of
+                       Left v    -> Left v
+                       Right ix' -> Right $ toElem ix'
 
   iter sh f c r = Repr.iter (fromElem sh) (f . toElem) c r
 

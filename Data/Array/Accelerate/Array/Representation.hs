@@ -16,6 +16,9 @@ module Data.Array.Accelerate.Array.Representation (
 
 ) where
 
+-- friends 
+import Data.Array.Accelerate.Type
+
 
 -- |Index representation
 --
@@ -31,8 +34,10 @@ class Eq ix => Ix ix where
   index     :: ix -> ix -> Int -- yield the index position in a linear, 
                                -- row-major representation of the array
                                -- (first argument is the shape)
+  bound     :: ix -> ix -> Boundary e -> Either e ix
+                               -- apply a boundary condition to an index
 
-  iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
+  iter      :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
                                -- iterate through the entire shape, applying
                                -- the function; third argument combines results
                                -- and fourth is returned in case of an empty
@@ -43,18 +48,20 @@ class Eq ix => Ix ix where
   rangeToShape :: (ix, ix) -> ix   -- convert a minpoint-maxpoint index
                                    -- into a shape
   shapeToRange :: ix -> (ix, ix)   -- ...the converse
+  
 
   -- other conversions
   shapeToList :: ix -> [Int]    -- convert a shape into its list of dimensions
   listToShape :: [Int] -> ix    -- convert a list of dimensions into a shape
 
 instance Ix () where
-  dim       ()       = 0
-  size      ()       = 1
-  intersect () ()    = ()
-  ignore             = ()
-  index     () ()    = 0
-  iter      () f _ _ = f ()
+  dim ()            = 0
+  size ()           = 1
+  () `intersect` () = ()
+  ignore            = ()
+  index () ()       = 0
+  bound () () _     = Right ()
+  iter () f _ _     = f ()
   
   rangeToShape ((), ()) = ()
   shapeToRange ()       = ((), ())
@@ -72,6 +79,21 @@ instance Ix ix => Ix (ix, Int) where
     | i >= 0 && i < sz              = index sh ix + size sh * i
     | otherwise              
     = error "Data.Array.Accelerate.Array: index out of bounds"
+  bound (sh, sz) (ix, i) bndy
+    | i < 0                         = case bndy of
+                                        Clamp      -> bound sh ix bndy `addDim` 0
+                                        Mirror     -> bound sh ix bndy `addDim` (-i)
+                                        Wrap       -> bound sh ix bndy `addDim` (sz-i)
+                                        Constant e -> Left e
+    | i >= sz                       = case bndy of
+                                        Clamp      -> bound sh ix bndy `addDim` (sz-1)
+                                        Mirror     -> bound sh ix bndy `addDim` (sz-(i-sz+1))
+                                        Wrap       -> bound sh ix bndy `addDim` (i-sz)
+                                        Constant e -> Left e
+    | otherwise                     = bound sh ix bndy `addDim` i
+    where
+      Right ix `addDim` i = Right (ix, i)
+      Left e   `addDim` _ = Left e
   iter (sh, sz) f c r    = iter' 0
     where
       iter' i | i >= sz   = r
