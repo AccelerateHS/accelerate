@@ -308,6 +308,37 @@ int fromIndex(Ix sh, Ix ix);
 
 #endif
 
+/* -----------------------------------------------------------------------------
+ * Functions
+ * -------------------------------------------------------------------------- */
+
+#ifdef __cplusplus
+template <typename T>
+static __inline__ __device__ T rotateL(const T x, int32_t i)
+{
+   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x << i | x >> 8 * sizeof(x) - i;
+}
+
+template <typename T>
+static __inline__ __device__ T rotateR(const T x, int32_t i)
+{
+   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x >> i | x << 8 * sizeof(x) - i;
+}
+
+template <typename T>
+static __inline__ __device__ T idiv(const T x, const T y)
+{
+    return x > 0 && y < 0 ? (x - y - 1) / y : (x < 0 && y > 0 ? (x - y + 1) / y : x / y);
+}
+
+template <typename T>
+static __inline__ __device__ T mod(const T x, const T y)
+{
+    const T r = x % y;
+    return x > 0 && y < 0 || x < 0 && y > 0 ? (r != 0 ? r + y : 0) : r;
+}
+#endif
+
 #endif  // __ACCELERATE_CUDA_EXTRAS_H__
 
 // vim: filetype=cuda.c
