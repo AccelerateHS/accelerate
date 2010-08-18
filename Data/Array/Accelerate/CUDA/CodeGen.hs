@@ -28,6 +28,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
@@ -38,6 +39,7 @@ import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
 #include "accelerate.h"
 
+type CG a = State [CExtDecl] a
 
 -- Array expressions
 -- ~~~~~~~~~~~~~~~~~
@@ -59,14 +61,18 @@ codeGenAcc acc =
 --
 --  FRAGILE.
 --
-codeGenAcc' :: AST.OpenAcc aenv a -> State [CExtDecl] CUTranslSkel
-codeGenAcc' (AST.Replicate _ e1 a1) = mkReplicate   (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Index _ a1 e1)     = mkIndex       (codeGenAccType a1) <$> codeGenExp e1
-codeGenAcc' (AST.Fold f1 e1 _)      = mkFold        (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' (AST.FoldSeg f1 e1 _ s) = mkFoldSeg     (codeGenExpType e1) (codeGenAccType s)  <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Scanl f1 e1 _)     = mkScanl       (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' (AST.Scanr f1 e1 _)     = mkScanr       (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' op@(AST.Map f1 a1)      = mkMap         (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
+--  TLM 2010-07-16:
+--    Make AST.Acc an instance of Traversable, and use mapAccumL to collect the
+--    types of free array variables ??
+--
+codeGenAcc' :: AST.OpenAcc aenv a -> CG CUTranslSkel
+codeGenAcc' op@(AST.Replicate sl e1 a1) = codeGenReplicate sl e1 a1 op <* codeGenExp e1
+codeGenAcc' op@(AST.Index sl a1 e1)     = codeGenIndex     sl a1 op e1 <* codeGenExp e1
+codeGenAcc' (AST.Fold f1 e1 _)          = mkFold    (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' (AST.FoldSeg f1 e1 _ s)     = mkFoldSeg (codeGenExpType e1) (codeGenAccType s)  <$> codeGenExp e1 <*> codeGenFun f1
+codeGenAcc' (AST.Scanl f1 e1 _)         = mkScanl   (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' (AST.Scanr f1 e1 _)         = mkScanr   (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
+codeGenAcc' op@(AST.Map f1 a1)          = mkMap     (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' op@(AST.ZipWith f1 a1 a0)
   = mkZipWith (codeGenAccType op) (codeGenShapeType op)
               (codeGenAccType a1) (codeGenShapeType a1)
@@ -92,7 +98,7 @@ codeGenAcc' x =
 
 -- Function abstraction
 --
-codeGenFun :: AST.OpenFun env aenv t -> State [CExtDecl] [CExpr]
+codeGenFun :: AST.OpenFun env aenv t -> CG [CExpr]
 codeGenFun (AST.Lam  lam)  = codeGenFun lam
 codeGenFun (AST.Body body) = codeGenExp body
 
@@ -105,7 +111,7 @@ unit x = [x]
 --
 -- TLM 2010-06-24: Shape for free array variables??
 --
-codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> State [CExtDecl] [CExpr]
+codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG [CExpr]
 codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
 codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
 codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
@@ -148,7 +154,7 @@ codeGenExp (AST.IndexScalar a1 e1) = do
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
 --
-codeGenTup :: Tuple (AST.OpenExp env aenv) t -> State [CExtDecl] [CExpr]
+codeGenTup :: Tuple (AST.OpenExp env aenv) t -> CG [CExpr]
 codeGenTup NilTup          = return []
 codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
 
@@ -167,6 +173,64 @@ prjToInt ZeroTupIdx     _                 = 0
 prjToInt (SuccTupIdx i) (b `PairTuple` a) = length (codeGenTupleType a) + prjToInt i b
 prjToInt _ _ =
   INTERNAL_ERROR(error) "prjToInt" "inconsistent valuation"
+
+
+-- multidimensional array slice and index
+--
+codeGenIndex
+  :: SliceIndex (Sugar.ElemRepr slix)
+                (Sugar.ElemRepr sl)
+                co
+                (Sugar.ElemRepr dim)
+  -> AST.OpenAcc aenv (Sugar.Array dim e)
+  -> AST.OpenAcc aenv (Sugar.Array sl e)
+  -> AST.Exp aenv slix
+  -> CG CUTranslSkel
+codeGenIndex sl acc acc' slix =
+  return . mkIndex ty dimSl dimCo dimIn0 $ restrict sl (length dimCo-1,length dimSl-1)
+  where
+    ty     = codeGenAccType acc
+    dimCo  = codeGenExpType slix
+    dimSl  = codeGenShapeType acc'
+    dimIn0 = codeGenShapeType acc
+
+    restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
+    restrict (SliceNil)            _     = []
+    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n-1)
+    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m-1,n)
+
+
+-- multidimensional replicate
+--
+codeGenReplicate
+  :: SliceIndex (Sugar.ElemRepr slix)
+                (Sugar.ElemRepr sl)
+                co
+                (Sugar.ElemRepr dim)
+  -> AST.Exp aenv slix
+  -> AST.OpenAcc aenv (Sugar.Array sl e)
+  -> AST.OpenAcc aenv (Sugar.Array dim e)
+  -> CG CUTranslSkel
+codeGenReplicate sl _slix acc acc' =
+  return . mkReplicate ty dimSl dimOut . post $ extend sl (length dimOut-1)
+  where
+    ty     = codeGenAccType acc
+    dimSl  = codeGenShapeType acc
+    dimOut = codeGenShapeType acc'
+
+    extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
+    extend (SliceNil)            _ = []
+    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n-1)
+    extend (SliceFixed sliceIdx) n = extend sliceIdx (n-1)
+
+    post [] = [CConst (CIntConst (cInteger 0) internalNode)]
+    post xs = xs
+
+
+mkPrj :: [CType] -> String -> Int -> CExpr
+mkPrj ty var c
+ | length ty <= 1 = CVar (internalIdent var) internalNode
+ | otherwise      = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
 
 
 -- Types

@@ -30,7 +30,7 @@ import Text.PrettyPrint
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
 import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Interpreter      as I
@@ -310,6 +310,57 @@ dispatch acc@(Backpermute e f ad) env mdl = do
   release f_arr
   return res
 
+dispatch acc@(Replicate sliceIndex e ad) env mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "replicate"
+  slix            <- executeExp e env
+  (Array sh0 in0) <- executeOpenAcc ad env
+
+  let block               = extend sliceIndex (Sugar.fromElem slix) sh0
+      res@(Array sh' out) = newArray (Sugar.toElem block)
+      n                   = size sh'
+
+      extend :: SliceIndex slix sl co dim -> slix -> sl -> dim
+      extend (SliceNil)            ()       ()      = ()
+      extend (SliceAll sliceIdx)   (slx,()) (sl,sz) = (extend sliceIdx slx sl, sz)
+      extend (SliceFixed sliceIdx) (slx,sz) sl      = (extend sliceIdx slx sl, sz)
+
+  mallocArray out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  f_arr <- liftExp e env
+  t_var <- bind mdl f_arr
+
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ convertIx sh0 ++ convertIx sh')
+  freeArray in0
+  release f_arr
+  return res
+
+dispatch acc@(Index sliceIndex ad e) env mdl = do
+  fn              <- liftIO $ CUDA.getFun mdl "slice"
+  slix            <- executeExp e env
+  (Array sh0 in0) <- executeOpenAcc ad env
+  let slice               = restrict sliceIndex (Sugar.fromElem slix) sh0
+      slix'               = convertSliceIndex sliceIndex (Sugar.fromElem slix)
+      res@(Array sh' out) = newArray (Sugar.toElem slice)
+      n                   = size sh'
+
+      restrict :: SliceIndex slix sl co dim -> slix -> dim -> sl
+      restrict (SliceNil)            ()       ()      = ()
+      restrict (SliceAll sliceIdx)   (slx,()) (sh,sz) = (restrict sliceIdx slx sh, sz)
+      restrict (SliceFixed sliceIdx) (slx,i)  (sh,sz)
+        = BOUNDS_CHECK(checkIndex) "slice" i sz $ restrict sliceIdx slx sh
+
+  mallocArray out n
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  f_arr <- liftExp e env
+  t_var <- bind mdl f_arr
+
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ convertIx sh' ++ slix' ++ convertIx sh0)
+  freeArray in0
+  release f_arr
+  return res
+
 dispatch x _ _ =
   INTERNAL_ERROR(error) "dispatch"
   (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])
@@ -404,6 +455,14 @@ convertIx :: Ix dim => dim -> [CUDA.FunParam]
 convertIx = post . map CUDA.IArg . shapeToList
   where post [] = [CUDA.IArg 1]
         post xs = xs
+
+-- Convert a slice specification into storable index projection components.
+-- Note: implicit conversion Int -> Int32
+--
+convertSliceIndex :: SliceIndex slix sl co dim -> slix -> [CUDA.FunParam]
+convertSliceIndex (SliceNil)            ()     = []
+convertSliceIndex (SliceAll   sliceIdx) (s,()) = convertSliceIndex sliceIdx s
+convertSliceIndex (SliceFixed sliceIdx) (s,i)  = CUDA.IArg i : convertSliceIndex sliceIdx s
 
 -- | Wait for the compilation process to finish
 --

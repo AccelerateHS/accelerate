@@ -30,6 +30,14 @@ mkApply argc
 mkProject :: [CExpr] -> CExtDecl
 mkProject = mkDeviceFun "project" (typename "DimOut") [(typename "DimIn0","x0")]
 
+mkSliceIndex :: [CExpr] -> CExtDecl
+mkSliceIndex =
+  mkDeviceFun "sliceIndex" (typename "SliceDim") [(typename "Slice","sl"), (typename "CoSlice","co")]
+
+mkSliceReplicate :: [CExpr] -> CExtDecl
+mkSliceReplicate =
+  mkDeviceFun "sliceIndex" (typename "Slice") [(typename "SliceDim","dim")]
+
 
 --------------------------------------------------------------------------------
 -- Helper functions

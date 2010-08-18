@@ -131,7 +131,7 @@ mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
             , mkApply 2 combinefn ])
             (mkNodeInfo (initPos skel) (Name 0))
 
-mkBackpermute :: [CType] ->[CType] ->  [CType] -> [CExpr] -> CUTranslSkel
+mkBackpermute :: [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
 mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
   where
     skel = "backpermute.inl"
@@ -147,9 +147,27 @@ mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
 -- Multidimensional Index and Replicate
 --------------------------------------------------------------------------------
 
-mkIndex :: [CType] -> [CExpr] -> CUTranslSkel
-mkIndex _ty _slix = undefined
+mkIndex :: [CType] -> [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code skel
+  where
+    skel = "slice.inl"
+    code = CTranslUnit
+            ( mkTupleTypeAsc 1 ty ++
+            [ mkDim "Slice"    dimSl
+            , mkDim "CoSlice"  dimCo
+            , mkDim "SliceDim" dimIn0
+            , mkSliceIndex slix ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
-mkReplicate :: [CType] -> [CExpr] -> CUTranslSkel
-mkReplicate _ty _slix = undefined
+
+mkReplicate :: [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkReplicate ty dimSl dimOut slix = CUTranslSkel code skel
+  where
+    skel = "replicate.inl"
+    code = CTranslUnit
+	    ( mkTupleTypeAsc 1 ty ++
+	    [ mkDim "Slice"    dimSl
+	    , mkDim "SliceDim" dimOut
+	    , mkSliceReplicate slix ])
+	    (mkNodeInfo (initPos skel) (Name 0))
 
