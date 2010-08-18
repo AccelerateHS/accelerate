@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Language (
   Acc, Exp,                                 -- re-exporting from 'Smart'
   
   -- ** Stencil specification
-  Boundary(..), Stencil(..),                -- re-exporting from 'Smart'
+  Boundary(..), Stencil,                    -- re-exporting from 'Smart'
 
   -- ** Common stencil types
   Stencil3, Stencil5,

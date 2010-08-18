@@ -1,7 +1,7 @@
 Name:                   accelerate
-Version:                0.7.1.0
+Version:                0.8.0.0
 Cabal-version:          >= 1.6
-Tested-with:            GHC >= 6.12.1
+Tested-with:            GHC >= 6.12.3
 Build-type:             Simple
 
 Synopsis:               An embedded language for accelerated array processing
@@ -15,12 +15,14 @@ Description:            This library defines an embedded language for
                         CUDA-capable NVIDIA GPUs.
                         .
                         To use the CUDA backend, you need to have CUDA version 3.x
-                        installed.  The CUDA backend still misses some features of
-                        the full language; in particular, the array operations
-                        'replicate', 'slice', and 'foldSeg' are not yet supported.
+                        installed.  The CUDA backend currently doesn't support 'Char'
+                        and 'Bool' arrays.
                         .
                         Known bugs in this version:
                         <http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority>
+                        .
+                        * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the 
+                            CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
 License:                BSD3

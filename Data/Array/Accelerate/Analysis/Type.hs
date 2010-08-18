@@ -80,6 +80,7 @@ accShapeType (Fold _ _ _)        = elemType (undefined::DIM0)
 accShapeType (FoldSeg _ _ _ _)   = elemType (undefined::DIM1)
 accShapeType (Permute _ acc _ _) = accShapeType acc
 accShapeType (Backpermute _ _ _) = elemType (undefined::dim)
+accShapeType (Stencil _ _ acc)   = accShapeType acc
 
 -- |Reify the shape type of the results of a computation that yields two arrays
 --
