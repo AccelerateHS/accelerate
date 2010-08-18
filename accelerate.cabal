@@ -48,6 +48,8 @@ Data-files:             accelerate_cuda_extras.h
                         fold_segmented.inl
                         map.inl
                         permute.inl
+                        replicate.inl
+                        slice.inl
                         zipWith.inl
                         thrust/scan_safe.inl
 
