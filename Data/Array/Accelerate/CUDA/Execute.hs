@@ -224,7 +224,7 @@ dispatch acc@(ZipWith f ad1 ad0) env mdl = do
   f_var <- liftFun f env
   t_var <- bind mdl f_var
 
-  launch acc n fn (d_out ++ d_in1 ++ d_in0 ++ t_var ++ shape sh' ++ shape sh1 ++ shape sh0)
+  launch acc n fn (d_out ++ d_in1 ++ d_in0 ++ t_var ++ convertIx sh' ++ convertIx sh1 ++ convertIx sh0)
   freeArray in0
   freeArray in1
   release f_var
@@ -286,7 +286,7 @@ dispatch acc@(Permute f1 df f2 ad) env mdl = do
   f_arr <- (++) <$> liftFun f1 env <*> liftFun f2 env
   t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ t_var ++ shape sh ++ shape sh0)
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ convertIx sh ++ convertIx sh0)
   freeArray def
   freeArray in0
   release f_arr
@@ -305,7 +305,7 @@ dispatch acc@(Backpermute e f ad) env mdl = do
   f_arr <- liftFun f env
   t_var <- bind mdl f_arr
 
-  launch acc n fn (d_out ++ d_in0 ++ t_var ++ shape sh' ++ shape sh0)
+  launch acc n fn (d_out ++ d_in0 ++ t_var ++ convertIx sh' ++ convertIx sh0)
   freeArray in0
   release f_arr
   return res
@@ -397,10 +397,13 @@ newArray sh = ad `seq` Array (Sugar.fromElem sh) ad
     ad = fst . runArrayData $ (,undefined) <$> newArrayData (1024 `max` Sugar.size sh)
 
 -- Extract shape dimensions as a list of function parameters. Not that this will
--- convert to the base integer width of the device, namely, 32-bits.
+-- convert to the base integer width of the device, namely, 32-bits. Singleton
+-- dimensions are considered to be of unit size.
 --
-shape :: Ix dim => dim -> [CUDA.FunParam]
-shape = map CUDA.IArg . shapeToList
+convertIx :: Ix dim => dim -> [CUDA.FunParam]
+convertIx = post . map CUDA.IArg . shapeToList
+  where post [] = [CUDA.IArg 1]
+        post xs = xs
 
 -- | Wait for the compilation process to finish
 --

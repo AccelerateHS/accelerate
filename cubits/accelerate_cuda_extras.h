@@ -136,6 +136,7 @@ void* indexArray(const void*, const int);
  * -------------------------------------------------------------------------- */
 
 typedef int32_t                       Ix;
+typedef Ix                            DIM0;
 typedef Ix                            DIM1;
 typedef struct { Ix a1,a0; }          DIM2;
 typedef struct { Ix a2,a1,a0; }       DIM3;
