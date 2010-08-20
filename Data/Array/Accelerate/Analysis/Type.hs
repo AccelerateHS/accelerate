@@ -53,6 +53,7 @@ accType (FoldSeg _ _ acc _)   = accType acc
 accType (Permute _ _ _ acc)   = accType acc
 accType (Backpermute _ _ acc) = accType acc
 accType (Stencil _ _ _)       = elemType (undefined::e)
+accType (Stencil2 _ _ _ _ _)  = elemType (undefined::e)
 
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
@@ -66,21 +67,22 @@ accType2 (Scanr _ e acc) = (accType acc, expType e)
 --
 accShapeType :: forall aenv dim e.
                 OpenAcc aenv (Array dim e) -> TupleType (ElemRepr dim)
-accShapeType (Let _ acc)         = accShapeType acc
-accShapeType (Let2 _ acc)        = accShapeType acc
-accShapeType (Avar _)            = elemType (undefined::dim)
-accShapeType (Use (Array _ _))   = elemType (undefined::dim)
-accShapeType (Unit _)            = elemType (undefined::DIM0)
-accShapeType (Reshape _ _)       = elemType (undefined::dim)
-accShapeType (Replicate _ _ _)   = elemType (undefined::dim)
-accShapeType (Index _ _ _)       = elemType (undefined::dim)
-accShapeType (Map _ acc)         = accShapeType acc
-accShapeType (ZipWith _ _ acc)   = accShapeType acc
-accShapeType (Fold _ _ _)        = elemType (undefined::DIM0)
-accShapeType (FoldSeg _ _ _ _)   = elemType (undefined::DIM1)
-accShapeType (Permute _ acc _ _) = accShapeType acc
-accShapeType (Backpermute _ _ _) = elemType (undefined::dim)
-accShapeType (Stencil _ _ acc)   = accShapeType acc
+accShapeType (Let _ acc)            = accShapeType acc
+accShapeType (Let2 _ acc)           = accShapeType acc
+accShapeType (Avar _)               = elemType (undefined::dim)
+accShapeType (Use (Array _ _))      = elemType (undefined::dim)
+accShapeType (Unit _)               = elemType (undefined::DIM0)
+accShapeType (Reshape _ _)          = elemType (undefined::dim)
+accShapeType (Replicate _ _ _)      = elemType (undefined::dim)
+accShapeType (Index _ _ _)          = elemType (undefined::dim)
+accShapeType (Map _ acc)            = accShapeType acc
+accShapeType (ZipWith _ _ acc)      = accShapeType acc
+accShapeType (Fold _ _ _)           = elemType (undefined::DIM0)
+accShapeType (FoldSeg _ _ _ _)      = elemType (undefined::DIM1)
+accShapeType (Permute _ acc _ _)    = accShapeType acc
+accShapeType (Backpermute _ _ _)    = elemType (undefined::dim)
+accShapeType (Stencil _ _ acc)      = accShapeType acc
+accShapeType (Stencil2 _ _ acc _ _) = accShapeType acc
 
 -- |Reify the shape type of the results of a computation that yields two arrays
 --

@@ -449,6 +449,16 @@ instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a) where
 instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a) where
   type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a) = (a, a, a, a, a)
   stencilPrj _ _ s = (Prj tix4 s, Prj tix3 s, Prj tix2 s, Prj tix1 s, Prj tix0 s)
+instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
+  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) = (a, a, a, a, a, a, a)
+  stencilPrj _ _ s = (Prj tix6 s, Prj tix5 s, Prj tix4 s, Prj tix3 s, Prj tix2 s, Prj tix1 s, 
+                      Prj tix0 s)
+instance Elem a 
+  => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
+  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) 
+    = (a, a, a, a, a, a, a, a, a)
+  stencilPrj _ _ s = (Prj tix8 s, Prj tix7 s, Prj tix6 s, Prj tix5 s, Prj tix4 s, Prj tix3 s,
+                      Prj tix2 s, Prj tix1 s, Prj tix0 s)
 
 -- DIM2
 instance (Stencil DIM1 a row2, 
@@ -468,6 +478,46 @@ instance (Stencil DIM1 a row1,
     = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
        StencilRepr DIM1 row5)
   stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5,
+          Stencil DIM1 a row6,
+          Stencil DIM1 a row7) => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7) where
+  type StencilRepr DIM2 (row1, row2, row3, row4, row5, row6, row7) 
+    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
+       StencilRepr DIM1 row5, StencilRepr DIM1 row6, StencilRepr DIM1 row7)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix6 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix5 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5,
+          Stencil DIM1 a row6,
+          Stencil DIM1 a row7,
+          Stencil DIM1 a row8,
+          Stencil DIM1 a row9) 
+  => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  type StencilRepr DIM2 (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
+    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
+       StencilRepr DIM1 row5, StencilRepr DIM1 row6, StencilRepr DIM1 row7, StencilRepr DIM1 row8,
+       StencilRepr DIM1 row9)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix8 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix7 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix6 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix5 s), 
+                      stencilPrj (undefined::DIM1) a (Prj tix4 s), 
                       stencilPrj (undefined::DIM1) a (Prj tix3 s), 
                       stencilPrj (undefined::DIM1) a (Prj tix2 s), 
                       stencilPrj (undefined::DIM1) a (Prj tix1 s), 
@@ -495,6 +545,46 @@ instance (Stencil DIM2 a row1,
                       stencilPrj (undefined::DIM2) a (Prj tix2 s), 
                       stencilPrj (undefined::DIM2) a (Prj tix1 s), 
                       stencilPrj (undefined::DIM2) a (Prj tix0 s))
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5,
+          Stencil DIM2 a row6,
+          Stencil DIM2 a row7) => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7) where
+  type StencilRepr DIM3 (row1, row2, row3, row4, row5, row6, row7) 
+    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
+       StencilRepr DIM2 row5, StencilRepr DIM2 row6, StencilRepr DIM2 row7)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix6 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix5 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5,
+          Stencil DIM2 a row6,
+          Stencil DIM2 a row7,
+          Stencil DIM2 a row8,
+          Stencil DIM2 a row9) 
+  => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  type StencilRepr DIM3 (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
+    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
+       StencilRepr DIM2 row5, StencilRepr DIM2 row6, StencilRepr DIM2 row7, StencilRepr DIM2 row8,
+       StencilRepr DIM2 row9)
+  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix8 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix7 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix6 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix5 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix4 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
+                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
 
 -- Auxilliary tuple index constants
 --
@@ -508,6 +598,14 @@ tix3 :: Elem s => TupleIdx ((((t, s), s1), s2), s3) s
 tix3 = SuccTupIdx tix2
 tix4 :: Elem s => TupleIdx (((((t, s), s1), s2), s3), s4) s
 tix4 = SuccTupIdx tix3
+tix5 :: Elem s => TupleIdx ((((((t, s), s1), s2), s3), s4), s5) s
+tix5 = SuccTupIdx tix4
+tix6 :: Elem s => TupleIdx (((((((t, s), s1), s2), s3), s4), s5), s6) s
+tix6 = SuccTupIdx tix5
+tix7 :: Elem s => TupleIdx ((((((((t, s), s1), s2), s3), s4), s5), s6), s7) s
+tix7 = SuccTupIdx tix6
+tix8 :: Elem s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
+tix8 = SuccTupIdx tix7
 
 -- Pushes the 'Acc' constructor through a pair
 --

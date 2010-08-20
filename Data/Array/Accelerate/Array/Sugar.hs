@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Array.Sugar (
   liftToElem, liftToElem2, sinkFromElem, sinkFromElem2,
 
   -- * Array shapes
-  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
+  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
   ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
@@ -94,6 +94,11 @@ type instance ElemRepr (a, b) = (ElemRepr a, ElemRepr' b)
 type instance ElemRepr (a, b, c) = (ElemRepr (a, b), ElemRepr' c)
 type instance ElemRepr (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr' d)
 type instance ElemRepr (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
+type instance ElemRepr (a, b, c, d, e, f) = (ElemRepr (a, b, c, d, e), ElemRepr' f)
+type instance ElemRepr (a, b, c, d, e, f, g) = (ElemRepr (a, b, c, d, e, f), ElemRepr' g)
+type instance ElemRepr (a, b, c, d, e, f, g, h) = (ElemRepr (a, b, c, d, e, f, g), ElemRepr' h)
+type instance ElemRepr (a, b, c, d, e, f, g, h, i) 
+  = (ElemRepr (a, b, c, d, e, f, g, h), ElemRepr' i)
 
 -- To avoid overly nested pairs, we use a flattened representation at the
 -- leaves.
@@ -132,6 +137,11 @@ type instance ElemRepr' (a, b) = (ElemRepr a, ElemRepr' b)
 type instance ElemRepr' (a, b, c) = (ElemRepr (a, b), ElemRepr' c)
 type instance ElemRepr' (a, b, c, d) = (ElemRepr (a, b, c), ElemRepr' d)
 type instance ElemRepr' (a, b, c, d, e) = (ElemRepr (a, b, c, d), ElemRepr' e)
+type instance ElemRepr' (a, b, c, d, e, f) = (ElemRepr (a, b, c, d, e), ElemRepr' f)
+type instance ElemRepr' (a, b, c, d, e, f, g) = (ElemRepr (a, b, c, d, e, f), ElemRepr' g)
+type instance ElemRepr' (a, b, c, d, e, f, g, h) = (ElemRepr (a, b, c, d, e, f, g), ElemRepr' h)
+type instance ElemRepr' (a, b, c, d, e, f, g, h, i) 
+  = (ElemRepr (a, b, c, d, e, f, g, h), ElemRepr' i)
 
 
 -- Array elements (tuples of scalars)
@@ -471,6 +481,65 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e) => Elem (a, b, c, d, e) where
   fromElem' (a, b, c, d, e) = (fromElem (a, b, c, d), fromElem' e)
   toElem' (abcd, e) = let (a, b, c, d) = toElem abcd in (a, b, c, d, toElem' e)
 
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f) => Elem (a, b, c, d, e, f) where
+  elemType (_::(a, b, c, d, e, f)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e))) 
+                (elemType' (undefined :: f))
+  fromElem (a, b, c, d, e, f) = (fromElem (a, b, c, d, e), fromElem' f)
+  toElem (abcde, f) = let (a, b, c, d, e) = toElem abcde in (a, b, c, d, e, toElem' f)
+
+  elemType' (_::(a, b, c, d, e, f)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e))) 
+                (elemType' (undefined :: f))
+  fromElem' (a, b, c, d, e, f) = (fromElem (a, b, c, d, e), fromElem' f)
+  toElem' (abcde, f) = let (a, b, c, d, e) = toElem abcde in (a, b, c, d, e, toElem' f)
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g) 
+  => Elem (a, b, c, d, e, f, g) where
+  elemType (_::(a, b, c, d, e, f, g)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f))) 
+                (elemType' (undefined :: g))
+  fromElem (a, b, c, d, e, f, g) = (fromElem (a, b, c, d, e, f), fromElem' g)
+  toElem (abcdef, g) = let (a, b, c, d, e, f) = toElem abcdef in (a, b, c, d, e, f, toElem' g)
+
+  elemType' (_::(a, b, c, d, e, f, g)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f))) 
+                (elemType' (undefined :: g))
+  fromElem' (a, b, c, d, e, f, g) = (fromElem (a, b, c, d, e, f), fromElem' g)
+  toElem' (abcdef, g) = let (a, b, c, d, e, f) = toElem abcdef in (a, b, c, d, e, f, toElem' g)
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h) 
+  => Elem (a, b, c, d, e, f, g, h) where
+  elemType (_::(a, b, c, d, e, f, g, h)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f, g))) 
+                (elemType' (undefined :: h))
+  fromElem (a, b, c, d, e, f, g, h) = (fromElem (a, b, c, d, e, f, g), fromElem' h)
+  toElem (abcdefg, h) = let (a, b, c, d, e, f, g) = toElem abcdefg 
+                        in (a, b, c, d, e, f, g, toElem' h)
+
+  elemType' (_::(a, b, c, d, e, f, g, h)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f, g))) 
+                (elemType' (undefined :: h))
+  fromElem' (a, b, c, d, e, f, g, h) = (fromElem (a, b, c, d, e, f, g), fromElem' h)
+  toElem' (abcdefg, h) = let (a, b, c, d, e, f, g) = toElem abcdefg 
+                         in (a, b, c, d, e, f, g, toElem' h)
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i) 
+  => Elem (a, b, c, d, e, f, g, h, i) where
+  elemType (_::(a, b, c, d, e, f, g, h, i)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f, g, h))) 
+                (elemType' (undefined :: i))
+  fromElem (a, b, c, d, e, f, g, h, i) = (fromElem (a, b, c, d, e, f, g, h), fromElem' i)
+  toElem (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElem abcdefgh
+                        in (a, b, c, d, e, f, g, h, toElem' i)
+
+  elemType' (_::(a, b, c, d, e, f, g, h, i)) 
+    = PairTuple (elemType (undefined :: (a, b, c, d, e, f, g, h))) 
+                (elemType' (undefined :: i))
+  fromElem' (a, b, c, d, e, f, g, h, i) = (fromElem (a, b, c, d, e, f, g, h), fromElem' i)
+  toElem' (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElem abcdefgh
+                         in (a, b, c, d, e, f, g, h, toElem' i)
+
 -- |Convenience functions
 --
 
@@ -548,6 +617,10 @@ type DIM2 = (Int, Int)
 type DIM3 = (Int, Int, Int)
 type DIM4 = (Int, Int, Int, Int)
 type DIM5 = (Int, Int, Int, Int, Int)
+type DIM6 = (Int, Int, Int, Int, Int, Int)
+type DIM7 = (Int, Int, Int, Int, Int, Int, Int)
+type DIM8 = (Int, Int, Int, Int, Int, Int, Int, Int)
+type DIM9 = (Int, Int, Int, Int, Int, Int, Int, Int, Int)
 
 -- Shape constraints and indexing
 -- 
@@ -569,6 +642,17 @@ instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d)
   => Shape (a, b, c, d)
 instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e) 
   => Shape (a, b, c, d, e)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f) 
+  => Shape (a, b, c, d, e, f)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
+          ShapeBase g) 
+  => Shape (a, b, c, d, e, f, g)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
+          ShapeBase g, ShapeBase h) 
+  => Shape (a, b, c, d, e, f, g, h)
+instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
+          ShapeBase g, ShapeBase h, ShapeBase i) 
+  => Shape (a, b, c, d, e, f, g, h, i)
 
 type family FromShapeBase shb :: *
 type instance FromShapeBase Int = Int
@@ -585,6 +669,19 @@ type instance FromShapeRepr (((((), a), b), c), d)
 type instance FromShapeRepr ((((((), a), b), c), d), e) 
   = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
      FromShapeBase e)
+type instance FromShapeRepr (((((((), a), b), c), d), e), f) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
+     FromShapeBase e, FromShapeBase f)
+type instance FromShapeRepr ((((((((), a), b), c), d), e), f), g) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
+     FromShapeBase e, FromShapeBase f, FromShapeBase g)
+type instance FromShapeRepr (((((((((), a), b), c), d), e), f), g), h) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
+     FromShapeBase e, FromShapeBase f, FromShapeBase g, FromShapeBase h)
+type instance FromShapeRepr ((((((((((), a), b), c), d), e), f), g), h), i) 
+  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
+     FromShapeBase e, FromShapeBase f, FromShapeBase g, FromShapeBase h,
+     FromShapeBase i)
 
 -- |Shapes and indices of multi-dimensional arrays
 --
@@ -650,6 +747,10 @@ instance Ix (Int, Int)
 instance Ix (Int, Int, Int)
 instance Ix (Int, Int, Int, Int)
 instance Ix (Int, Int, Int, Int, Int)
+instance Ix (Int, Int, Int, Int, Int, Int)
+instance Ix (Int, Int, Int, Int, Int, Int, Int)
+instance Ix (Int, Int, Int, Int, Int, Int, Int, Int)
+instance Ix (Int, Int, Int, Int, Int, Int, Int, Int, Int)
 
 
 -- |Slices -aka generalised indices- as n-tuples and mappings of slice

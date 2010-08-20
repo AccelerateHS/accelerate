@@ -87,15 +87,24 @@ prettyAcc lvl (Backpermute sh p acc)
                                parens (prettyFun lvl p),
                                prettyAccParens lvl acc]
     
-prettyAcc lvl (Stencil sten bndy (acc :: OpenAcc aenv (Array dim e))) 
+prettyAcc lvl (Stencil sten bndy acc)
   = prettyArrOp "stencil" [parens (prettyFun lvl sten),
-                           prettyBoundary bndy,
+                           prettyBoundary acc bndy,
                            prettyAccParens lvl acc]
-  where
-    prettyBoundary Clamp        = text "Clamp"
-    prettyBoundary Mirror       = text "Mirror"
-    prettyBoundary Wrap         = text "Wrap"
-    prettyBoundary (Constant e) = parens $ text "Wrap" <+> text (show (toElem e :: e))
+
+prettyAcc lvl (Stencil2 sten bndy1 acc1 bndy2 acc2)
+  = prettyArrOp "stencil2" [parens (prettyFun lvl sten),
+                            prettyBoundary acc1 bndy1,
+                            prettyAccParens lvl acc1,
+                            prettyBoundary acc2 bndy2,
+                            prettyAccParens lvl acc2]
+
+prettyBoundary :: forall aenv dim e. Elem e 
+               => {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (ElemRepr e) -> Doc
+prettyBoundary _ Clamp        = text "Clamp"
+prettyBoundary _ Mirror       = text "Mirror"
+prettyBoundary _ Wrap         = text "Wrap"
+prettyBoundary _ (Constant e) = parens $ text "Wrap" <+> text (show (toElem e :: e))
     
 prettyArrOp :: String -> [Doc] -> Doc
 prettyArrOp name docs = hang (text name) 2 $ sep docs

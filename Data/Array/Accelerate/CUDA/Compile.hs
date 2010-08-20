@@ -71,6 +71,8 @@ compileAcc op@(Permute f1 a1 f2 a2)  = compileFun f1 >> compileAcc a1 >> compile
 compileAcc op@(FoldSeg f1 e1 a1 a2)  = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compileAcc a2 >> compile op
 compileAcc (Stencil _ _ _)           = 
   error "D.A.Accelerate.CUDA.Compile: the CUDA backend does not support 'stencil' operations yet"
+compileAcc (Stencil2 _ _ _ _ _)      = 
+  error "D.A.Accelerate.CUDA.Compile: the CUDA backend does not support 'stencil2' operations yet"
 
 
 -- | Lift array expressions out of closed functions for code generation

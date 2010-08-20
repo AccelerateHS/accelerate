@@ -1,15 +1,15 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
 
--- |Embedded array processing language: data types
+-- Module      : Data.Array.Accelerate.Type
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
+--  /Scalar types supported in array computations/
 --
---- Description ---------------------------------------------------------------
---
---  Scalar types supported in array computations
---  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --  Integral types: Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32,
 --    Word64, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong
 --
@@ -17,8 +17,8 @@
 --
 --  Non-numeric types: Bool, Char, CChar, CSChar, CUChar
 --
---  `Int' has the same bitwidth as in plain Haskell computations, and `Float'
---  and `Double' represent IEEE single and double precision floating point
+--  'Int' has the same bitwidth as in plain Haskell computations, and 'Float'
+--  and 'Double' represent IEEE single and double precision floating point
 --  numbers, respectively.
 
 module Data.Array.Accelerate.Type (
@@ -38,6 +38,42 @@ import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
   CLLong, CULLong, CFloat, CDouble)
   -- in the future, CHalf
+
+
+-- Extend Typeable support for 8- and 9-tuple
+-- ------------------------------------------
+
+class Typeable8 t where
+  typeOf8 :: t a b c d e f g h -> TypeRep
+
+instance Typeable8 (,,,,,,,) where
+  typeOf8 _ = mkTyCon "(,,,,,,,)" `mkTyConApp` []
+
+typeOf7Default :: (Typeable8 t, Typeable a) => t a b c d e f g h -> TypeRep
+typeOf7Default x = typeOf7 x `mkAppTy` typeOf (argType x)
+ where
+   argType :: t a b c d e f g h -> a
+   argType =  undefined
+
+instance (Typeable8 s, Typeable a)
+       => Typeable7 (s a) where
+  typeOf7 = typeOf7Default
+  
+class Typeable9 t where
+  typeOf9 :: t a b c d e f g h i -> TypeRep
+
+instance Typeable9 (,,,,,,,,) where
+  typeOf9 _ = mkTyCon "(,,,,,,,,)" `mkTyConApp` []
+
+typeOf8Default :: (Typeable9 t, Typeable a) => t a b c d e f g h i -> TypeRep
+typeOf8Default x = typeOf8 x `mkAppTy` typeOf (argType x)
+ where
+   argType :: t a b c d e f g h i -> a
+   argType =  undefined
+
+instance (Typeable9 s, Typeable a)
+       => Typeable8 (s a) where
+  typeOf8 = typeOf8Default
 
 
 -- Scalar types

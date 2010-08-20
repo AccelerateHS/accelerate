@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Language (
   Boundary(..), Stencil,                    -- re-exporting from 'Smart'
 
   -- ** Common stencil types
-  Stencil3, Stencil5,
+  Stencil3, Stencil5, Stencil7, Stencil9,
   Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
   Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
   Stencil3x5x5, Stencil5x5x5,
@@ -249,6 +249,8 @@ backpermute = Backpermute
 -- DIM1 stencil type
 type Stencil3 a = (Exp a, Exp a, Exp a)
 type Stencil5 a = (Exp a, Exp a, Exp a, Exp a, Exp a)
+type Stencil7 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
+type Stencil9 a = (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a)
 
 -- DIM2 stencil type
 type Stencil3x3 a = (Stencil3 a, Stencil3 a, Stencil3 a)

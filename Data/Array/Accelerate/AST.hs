@@ -305,6 +305,12 @@ instance Stencil DIM1 a (a, a, a) where
   stencilAccess rf ix = (rf (ix - 1), rf ix, rf (ix + 1))
 instance Stencil DIM1 a (a, a, a, a, a) where
   stencilAccess rf ix = (rf (ix - 2), rf (ix - 1), rf ix, rf (ix + 1), rf (ix + 2))
+instance Stencil DIM1 a (a, a, a, a, a, a, a) where
+  stencilAccess rf ix = (rf (ix - 3), rf (ix - 2), rf (ix - 1), rf ix, 
+                         rf (ix + 1), rf (ix + 2), rf (ix + 3))
+instance Stencil DIM1 a (a, a, a, a, a, a, a, a, a) where
+  stencilAccess rf ix = (rf (ix - 4), rf (ix - 3), rf (ix - 2), rf (ix - 1), rf ix, 
+                         rf (ix + 1), rf (ix + 2), rf (ix + 3), rf (ix + 4))
 
 -- DIM2
 instance (Stencil DIM1 a row2, 
@@ -327,6 +333,43 @@ instance (Stencil DIM1 a row1,
                              stencilAccess (rf' (y + 2)) x)
     where
       rf' y x = rf (x, y)
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5,
+          Stencil DIM1 a row6,
+          Stencil DIM1 a row7) => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7) where
+  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 3)) x, 
+                             stencilAccess (rf' (y - 2)) x, 
+                             stencilAccess (rf' (y - 1)) x, 
+                             stencilAccess (rf' y      ) x,
+                             stencilAccess (rf' (y + 1)) x,
+                             stencilAccess (rf' (y + 2)) x,
+                             stencilAccess (rf' (y + 3)) x)
+    where
+      rf' y x = rf (x, y)
+instance (Stencil DIM1 a row1,
+          Stencil DIM1 a row2,
+          Stencil DIM1 a row3,
+          Stencil DIM1 a row4,
+          Stencil DIM1 a row5,
+          Stencil DIM1 a row6,
+          Stencil DIM1 a row7,
+          Stencil DIM1 a row8,
+          Stencil DIM1 a row9) 
+  => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 4)) x, 
+                             stencilAccess (rf' (y - 3)) x, 
+                             stencilAccess (rf' (y - 2)) x, 
+                             stencilAccess (rf' (y - 1)) x, 
+                             stencilAccess (rf' y      ) x,
+                             stencilAccess (rf' (y + 1)) x,
+                             stencilAccess (rf' (y + 2)) x,
+                             stencilAccess (rf' (y + 3)) x,
+                             stencilAccess (rf' (y + 4)) x)
+    where
+      rf' y x = rf (x, y)
 
 -- DIM3
 instance (Stencil DIM2 a row1, 
@@ -347,6 +390,43 @@ instance (Stencil DIM2 a row1,
                                 stencilAccess (rf' z      ) (x, y),
                                 stencilAccess (rf' (z + 1)) (x, y),
                                 stencilAccess (rf' (z + 2)) (x, y))
+    where
+      rf' z (x, y) = rf (x, y, z)
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5,
+          Stencil DIM2 a row6,
+          Stencil DIM2 a row7) => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7) where
+  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 3)) (x, y), 
+                                stencilAccess (rf' (z - 2)) (x, y), 
+                                stencilAccess (rf' (z - 1)) (x, y), 
+                                stencilAccess (rf' z      ) (x, y),
+                                stencilAccess (rf' (z + 1)) (x, y),
+                                stencilAccess (rf' (z + 2)) (x, y),
+                                stencilAccess (rf' (z + 3)) (x, y))
+    where
+      rf' z (x, y) = rf (x, y, z)
+instance (Stencil DIM2 a row1,
+          Stencil DIM2 a row2,
+          Stencil DIM2 a row3,
+          Stencil DIM2 a row4,
+          Stencil DIM2 a row5,
+          Stencil DIM2 a row6,
+          Stencil DIM2 a row7,
+          Stencil DIM2 a row8,
+          Stencil DIM2 a row9) 
+  => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 4)) (x, y), 
+                                stencilAccess (rf' (z - 3)) (x, y), 
+                                stencilAccess (rf' (z - 2)) (x, y), 
+                                stencilAccess (rf' (z - 1)) (x, y), 
+                                stencilAccess (rf' z      ) (x, y),
+                                stencilAccess (rf' (z + 1)) (x, y),
+                                stencilAccess (rf' (z + 2)) (x, y),
+                                stencilAccess (rf' (z + 3)) (x, y),
+                                stencilAccess (rf' (z + 4)) (x, y))
     where
       rf' z (x, y) = rf (x, y, z)
 

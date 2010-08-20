@@ -1,17 +1,17 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
 
--- |Embedded array processing language: tuple representation
+-- Module      : Data.Array.Accelerate.Tuple
+-- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
---  Our representation of tuples are heterogenous snoc lists, which are typed 
---  by type lists, where '()' and '(,)' are type-level nil and snoc,
---  respectively.  The components may only be drawn from types that can be
---  used as array elements.
+-- Our representation of tuples are heterogenous snoc lists, which are typed 
+-- by type lists, where '()' and '(,)' are type-level nil and snoc,
+-- respectively.  The components may only be drawn from types that can be
+-- used as array elements.
 
 module Data.Array.Accelerate.Tuple (
 
@@ -67,3 +67,26 @@ instance IsTuple (a, b, c, d, e) where
   type TupleRepr (a, b, c, d, e)      = (TupleRepr (a, b, c, d), e)
   fromTuple (x, y, z, v, w)           = ((((((), x), y), z), v), w)
   toTuple ((((((), x), y), z), v), w) = (x, y, z, v, w)
+
+instance IsTuple (a, b, c, d, e, f) where
+  type TupleRepr (a, b, c, d, e, f)        = (TupleRepr (a, b, c, d, e), f)
+  fromTuple (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
+  toTuple (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
+
+instance IsTuple (a, b, c, d, e, f, g) where
+  type TupleRepr (a, b, c, d, e, f, g)          = (TupleRepr (a, b, c, d, e, f), g)
+  fromTuple (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
+  toTuple ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
+
+instance IsTuple (a, b, c, d, e, f, g, h) where
+  type TupleRepr (a, b, c, d, e, f, g, h)            = (TupleRepr (a, b, c, d, e, f, g), h)
+  fromTuple (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
+  toTuple (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
+
+instance IsTuple (a, b, c, d, e, f, g, h, i) where
+  type TupleRepr (a, b, c, d, e, f, g, h, i) = (TupleRepr (a, b, c, d, e, f, g, h), i)
+  fromTuple (x, y, z, v, w, r, s, t, u)                 
+    = ((((((((((), x), y), z), v), w), r), s), t), u)
+  toTuple ((((((((((), x), y), z), v), w), r), s), t), u) 
+    = (x, y, z, v, w, r, s, t, u)
+
