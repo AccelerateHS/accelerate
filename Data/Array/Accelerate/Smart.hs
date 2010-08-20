@@ -139,6 +139,14 @@ data Acc a where
               -> Boundary a
               -> Acc (Array dim a)
               -> Acc (Array dim b)
+  Stencil2   :: (Ix dim, Elem a, Elem b, Elem c, 
+                 Stencil dim a stencil1, Stencil dim b stencil2)
+              => (stencil1 -> stencil2 -> Exp c)
+              -> Boundary a
+              -> Acc (Array dim a)
+              -> Boundary b
+              -> Acc (Array dim b)
+              -> Acc (Array dim c)
 
 
 -- |Conversion from HOAS to de Bruijn computation AST
@@ -189,11 +197,20 @@ convertOpenAcc alyt (Stencil stencil boundary acc)
   = AST.Stencil (convertStencilFun acc alyt stencil) 
                 (convertBoundary boundary) 
                 (convertOpenAcc alyt acc)
-  where
-    convertBoundary Clamp        = Clamp
-    convertBoundary Mirror       = Mirror
-    convertBoundary Wrap         = Wrap
-    convertBoundary (Constant e) = Constant (fromElem e)
+convertOpenAcc alyt (Stencil2 stencil bndy1 acc1 bndy2 acc2) 
+  = AST.Stencil2 (convertStencilFun2 acc1 acc2 alyt stencil) 
+                 (convertBoundary bndy1) 
+                 (convertOpenAcc alyt acc1)
+                 (convertBoundary bndy2) 
+                 (convertOpenAcc alyt acc2)
+
+-- |Convert a boundary condition
+--
+convertBoundary :: Elem e => Boundary e -> Boundary (ElemRepr e)
+convertBoundary Clamp        = Clamp
+convertBoundary Mirror       = Mirror
+convertBoundary Wrap         = Wrap
+convertBoundary (Constant e) = Constant (fromElem e)
 
 -- |Convert a closed array expression
 --
@@ -332,7 +349,7 @@ convertFun2 alyt f = Lam (Lam (Body openF))
             (ZeroIdx         :: Idx (((), ElemRepr a), ElemRepr b) (ElemRepr b))
     openF = convertOpenExp lyt alyt (f a b)
 
--- Convert a stencil function
+-- Convert a unary stencil function
 --
 convertStencilFun :: forall dim a stencil b aenv. (Elem a, Stencil dim a stencil)
                   => Acc (Array dim a)                  -- just passed to fix the type variables
@@ -348,6 +365,34 @@ convertStencilFun _ alyt stencilFun = Lam (Body openStencilFun)
                               (ElemRepr (StencilRepr dim stencil)))
     openStencilFun = convertOpenExp lyt alyt $
                        stencilFun (stencilPrj (undefined::dim) (undefined::a) stencil)
+
+-- Convert a binary stencil function
+--
+convertStencilFun2 :: forall dim a b stencil1 stencil2 c aenv. 
+                      (Elem a, Stencil dim a stencil1,
+                       Elem b, Stencil dim b stencil2)
+                   => Acc (Array dim a)                  -- just passed to fix the type variables
+                   -> Acc (Array dim b)                  -- just passed to fix the type variables
+                   -> Layout aenv aenv 
+                   -> (stencil1 -> stencil2 -> Exp c)
+                   -> AST.Fun aenv (StencilRepr dim stencil1 ->
+                                    StencilRepr dim stencil2 -> c)
+convertStencilFun2 _ _ alyt stencilFun = Lam (Lam (Body openStencilFun))
+  where
+    stencil1 = Tag 1 :: Exp (StencilRepr dim stencil1)
+    stencil2 = Tag 0 :: Exp (StencilRepr dim stencil2)
+    lyt     = EmptyLayout 
+              `PushLayout` 
+              (SuccIdx ZeroIdx :: Idx (((), ElemRepr (StencilRepr dim stencil1)),
+                                            ElemRepr (StencilRepr dim stencil2)) 
+                                       (ElemRepr (StencilRepr dim stencil1)))
+              `PushLayout` 
+              (ZeroIdx         :: Idx (((), ElemRepr (StencilRepr dim stencil1)),
+                                            ElemRepr (StencilRepr dim stencil2)) 
+                                       (ElemRepr (StencilRepr dim stencil2)))
+    openStencilFun = convertOpenExp lyt alyt $
+                       stencilFun (stencilPrj (undefined::dim) (undefined::a) stencil1)
+                                  (stencilPrj (undefined::dim) (undefined::b) stencil2)
 
 
 -- Pretty printing

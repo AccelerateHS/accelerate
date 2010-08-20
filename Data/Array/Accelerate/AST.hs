@@ -281,6 +281,18 @@ data OpenAcc aenv a where
           -> OpenAcc  aenv (Array dim e)           -- source array
           -> OpenAcc  aenv (Array dim e')
 
+  -- Map a binary stencil over an array.
+  Stencil2 :: (Elem e1, Elem e2, Elem e', 
+               Stencil dim e1 stencil1,
+               Stencil dim e2 stencil2)
+           => Fun      aenv (stencil1 -> 
+                             stencil2 -> e')        -- stencil function
+           -> Boundary (ElemRepr e1)                -- boundary condition #1
+           -> OpenAcc  aenv (Array dim e1)          -- source array #1
+           -> Boundary (ElemRepr e2)                -- boundary condition #2
+           -> OpenAcc  aenv (Array dim e2)          -- source array #2
+           -> OpenAcc  aenv (Array dim e')
+
 -- |Closed array expression aka an array program
 --
 type Acc a = OpenAcc () a

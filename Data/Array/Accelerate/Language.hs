@@ -42,7 +42,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Collective array operations
   slice, replicate, zip, unzip, map, zipWith, scanl, scanr, fold, foldSeg,
-  permute, backpermute, stencil,
+  permute, backpermute, stencil, stencil2,
   
   -- ** Tuple construction and destruction
   Tuple(..), fst, snd, curry, uncurry,
@@ -163,7 +163,8 @@ map :: (Ix dim, Elem a, Elem b)
     -> Acc (Array dim b)
 map = Map
 
--- |Apply the given binary function elementwise to the two arrays.
+-- |Apply the given binary function elementwise to the two arrays.  The extent of the resulting
+-- array is the intersection of the extents of the two source arrays.
 --
 zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         => (Exp a -> Exp b -> Exp c) 
@@ -277,11 +278,25 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --  positions.
 --
 stencil :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
-        => (stencil -> Exp b)          -- ^stencil function
-        -> Boundary a                  -- ^boundary condition
-        -> Acc (Array dim a)           -- ^source array
-        -> Acc (Array dim b)           -- ^destination array
+        => (stencil -> Exp b)                 -- ^stencil function
+        -> Boundary a                         -- ^boundary condition
+        -> Acc (Array dim a)                  -- ^source array
+        -> Acc (Array dim b)                  -- ^destination array
 stencil = Stencil
+
+-- |Map a binary stencil of an array.  The extent of the resulting array is the intersection of
+-- the extents of the two source arrays.
+--
+stencil2 :: (Ix dim, Elem a, Elem b, Elem c, 
+             Stencil dim a stencil1, 
+             Stencil dim b stencil2)
+        => (stencil1 -> stencil2 -> Exp c)    -- ^binary stencil function
+        -> Boundary a                         -- ^boundary condition #1
+        -> Acc (Array dim a)                  -- ^source array #1
+        -> Boundary b                         -- ^boundary condition #2
+        -> Acc (Array dim b)                  -- ^source array #2
+        -> Acc (Array dim c)                  -- ^destination array
+stencil2 = Stencil2
 
 
 -- Tuples

@@ -126,6 +126,9 @@ evalOpenAcc (Backpermute e p acc) aenv
 evalOpenAcc (Stencil sten bndy acc) aenv
   = stencilOp (evalFun sten aenv) bndy (evalOpenAcc acc aenv)
 
+evalOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
+  = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
+
 -- Evaluate a closed array expressions
 --
 evalAcc :: Delayable a => Acc a -> Delayed a
@@ -350,6 +353,33 @@ stencilOp sten bndy (DelayedArray sh rf)
     rfBounded ix = Sugar.toElem $ case Sugar.bound (Sugar.toElem sh) ix bndy of
                                     Left v    -> v
                                     Right ix' -> rf (Sugar.fromElem ix')
+
+stencil2Op :: forall dim e1 e2 e' stencil1 stencil2. 
+              (Sugar.Elem e1, Sugar.Elem e2, Sugar.Elem e', 
+               Stencil dim e1 stencil1, Stencil dim e2 stencil2)
+           => (stencil1 -> stencil2 -> e')
+           -> Boundary (Sugar.ElemRepr e1)
+           -> Delayed (Array dim e1)
+           -> Boundary (Sugar.ElemRepr e2)
+           -> Delayed (Array dim e2)
+           -> Delayed (Array dim e')
+stencil2Op sten bndy1 (DelayedArray sh1 rf1) bndy2 (DelayedArray sh2 rf2)
+  = DelayedArray (sh1 `intersect` sh2) rf'
+  where
+    rf' = Sugar.sinkFromElem (\ix -> sten (stencilAccess rf1Bounded ix)
+                                          (stencilAccess rf2Bounded ix))
+
+    -- add a boundary to the source arrays as specified by the boundary conditions
+    
+    rf1Bounded :: dim -> e1
+    rf1Bounded ix = Sugar.toElem $ case Sugar.bound (Sugar.toElem sh1) ix bndy1 of
+                                     Left v    -> v
+                                     Right ix' -> rf1 (Sugar.fromElem ix')
+
+    rf2Bounded :: dim -> e2
+    rf2Bounded ix = Sugar.toElem $ case Sugar.bound (Sugar.toElem sh2) ix bndy2 of
+                                     Left v    -> v
+                                     Right ix' -> rf2 (Sugar.fromElem ix')
 
 
 -- Expression evaluation
