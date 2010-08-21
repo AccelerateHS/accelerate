@@ -60,6 +60,7 @@ Extra-source-files:     INSTALL
                         examples/simple/Makefile
                         examples/simple/SAXPY.hs
                         examples/simple/SMVM.hs
+                        examples/simple/Stencil.hs
                         examples/simple/Square.hs
                         examples/simple/Sum.hs
                         examples/simple/Time.hs
