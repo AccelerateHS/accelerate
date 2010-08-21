@@ -274,9 +274,58 @@ dispatch acc@(FoldSeg f x ad sd) env mdl = do
   release f_arr
   return res
 
+-- Unified dispatch handler for left/right scan.
+--
+-- TLM 2010-07-02:
+--   This is a little awkward. At its core we have an inclusive scan routine,
+--   whereas accelerate actually returns an exclusive scan result. Multi-block
+--   arrays require the inclusive scan when calculating the partial block sums,
+--   which are then added to every element of an interval. Single-block arrays
+--   on the other hand need to be "converted" to an exclusive result in the
+--   second pass.
+--
+--   This optimised could be implemented by enabling some some extra code to the
+--   skeleton, and dispatching accordingly.
+--
+-- TLM 2010-08-19:
+--   On the other hand, the inclusive scan core provides a way in which we could
+--   add support for non-identic seed elements.
+--
+dispatch     (Scanr f x ad) env mdl = dispatch (Scanl f x ad) env mdl
+dispatch acc@(Scanl f x ad) env mdl = do
+  fscan           <- liftIO $ CUDA.getFun mdl "inclusive_scan"
+  fadd            <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  (Array sh in0)  <- executeOpenAcc ad env
+  (cta,grid,smem) <- launchConfig acc (size sh) fscan
+  let a_out@(Array _ out) = newArray (Sugar.toElem sh)
+      a_sum@(Array _ sum) = newArray ()
+      a_bks@(Array _ bks) = newArray grid
+      n                   = size sh
+      interval            = (n + grid - 1) `div` grid
 
-dispatch acc@(Scanl _ _ _) env mdl = dispatchScan acc env mdl
-dispatch acc@(Scanr _ _ _) env mdl = dispatchScan acc env mdl
+      unify :: Array dim e -> Array dim e -> CIO ()
+      unify _ _ = return ()
+
+  unify a_out a_bks -- TLM: *cough*
+
+  mallocArray out n
+  mallocArray sum 1
+  mallocArray bks grid
+  d_out <- devicePtrs out
+  d_in0 <- devicePtrs in0
+  d_bks <- devicePtrs bks
+  d_sum <- devicePtrs sum
+  f_arr <- (++) <$> liftExp x env <*> liftFun f env
+  t_var <- bind mdl f_arr
+
+  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ t_var ++ map CUDA.IArg [n,interval])
+  launch' (cta,1,smem)    fscan (d_bks ++ d_bks ++ d_sum ++ map CUDA.IArg [grid,interval])
+  launch' (cta,grid,smem) fadd  (d_out ++ d_bks ++ map CUDA.IArg [n,interval])
+
+  freeArray in0
+  freeArray bks
+  release f_arr
+  return (a_out, a_sum)
 
 dispatch acc@(Permute f1 df f2 ad) env mdl = do
   fn              <- liftIO $ CUDA.getFun mdl "permute"
@@ -370,60 +419,6 @@ dispatch acc@(Index sliceIndex ad e) env mdl = do
 dispatch x _ _ =
   INTERNAL_ERROR(error) "dispatch"
   (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])
-
-
--- Unified dispatch handler for left/right scan.
---
--- TLM 2010-07-02:
---   This is a little awkward. At its core we have an inclusive scan routine,
---   whereas accelerate actually returns an exclusive scan result. Multi-block
---   arrays require the inclusive scan when calculating the partial block sums,
---   which are then added to every element of an interval. Single-block arrays
---   on the other hand need to be "converted" to an exclusive result in the
---   second pass.
---
---   This optimised could be implemented by enabling some some extra code to the
---   skeleton, and dispatching accordingly.
---
-dispatchScan :: OpenAcc aenv a -> Val aenv -> CUDA.Module -> CIO a
-dispatchScan     (Scanr f x ad) env mdl = dispatchScan (Scanl f x ad) env mdl
-dispatchScan acc@(Scanl f x ad) env mdl = do
-  fscan           <- liftIO $ CUDA.getFun mdl "inclusive_scan"
-  fadd            <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  (Array sh in0)  <- executeOpenAcc ad env
-  (cta,grid,smem) <- launchConfig acc (size sh) fscan
-  let a_out@(Array _ out) = newArray (Sugar.toElem sh)
-      a_sum@(Array _ sum) = newArray ()
-      a_bks@(Array _ bks) = newArray grid
-      n                   = size sh
-      interval            = (n + grid - 1) `div` grid
-
-      unify :: Array dim e -> Array dim e -> CIO ()
-      unify _ _ = return ()
-
-  unify a_out a_bks -- TLM: *cough*
-
-  mallocArray out n
-  mallocArray sum 1
-  mallocArray bks grid
-  d_out <- devicePtrs out
-  d_in0 <- devicePtrs in0
-  d_bks <- devicePtrs bks
-  d_sum <- devicePtrs sum
-  f_arr <- (++) <$> liftExp x env <*> liftFun f env
-  t_var <- bind mdl f_arr
-
-  launch' (cta,grid,smem) fscan (d_out ++ d_in0 ++ d_bks ++ t_var ++ map CUDA.IArg [n,interval])
-  launch' (cta,1,smem)    fscan (d_bks ++ d_bks ++ d_sum ++ map CUDA.IArg [grid,interval])
-  launch' (cta,grid,smem) fadd  (d_out ++ d_bks ++ map CUDA.IArg [n,interval])
-
-  freeArray in0
-  freeArray bks
-  release f_arr
-  return (a_out, a_sum)
-
-dispatchScan _ _ _ =
-  error "we can never get here"
 
 
 -- Initiate the device computation. The first version selects launch parameters
