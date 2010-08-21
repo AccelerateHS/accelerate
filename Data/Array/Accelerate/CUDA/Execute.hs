@@ -109,6 +109,12 @@ executeOpenAcc (Let2 x y) env = do
   (ax1,ax2) <- executeOpenAcc x env
   executeOpenAcc y (env `Push` ax1 `Push` ax2)
 
+executeOpenAcc (Reshape e a) env = do
+  ix            <- executeExp e env
+  (Array sh ad) <- executeOpenAcc a env
+  BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
+    $ return (Array (Sugar.fromElem ix) ad)
+
 executeOpenAcc (Unit e)   env = do
   v  <- executeExp e env
   let ad = fst . runArrayData $ (,undefined) <$> do
