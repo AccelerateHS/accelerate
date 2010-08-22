@@ -19,7 +19,7 @@ Description:            This library defines an embedded language for
                         and 'Bool' arrays.
                         .
                         Known bugs in this version:
-                        <http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.7.1.0&order=priority>
+                        <http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.8.0.0&order=priority>
                         .
                         * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the 
                             CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
