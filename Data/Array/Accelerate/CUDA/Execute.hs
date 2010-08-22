@@ -447,9 +447,9 @@ newArray sh = ad `seq` Array (Sugar.fromElem sh) ad
     -- FIXME: small arrays are relocated by the GC
     ad = fst . runArrayData $ (,undefined) <$> newArrayData (1024 `max` Sugar.size sh)
 
--- Extract shape dimensions as a list of function parameters. Not that this will
--- convert to the base integer width of the device, namely, 32-bits. Singleton
--- dimensions are considered to be of unit size.
+-- Extract shape dimensions as a list of function parameters. Note that this
+-- will convert to the base integer width of the device, namely, 32-bits.
+-- Singleton dimensions are considered to be of unit size.
 --
 convertIx :: Ix dim => dim -> [CUDA.FunParam]
 convertIx = post . map CUDA.IArg . shapeToList

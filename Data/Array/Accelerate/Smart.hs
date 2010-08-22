@@ -140,7 +140,7 @@ data Acc a where
               -> Boundary a
               -> Acc (Array dim a)
               -> Acc (Array dim b)
-  Stencil2   :: (Ix dim, Elem a, Elem b, Elem c, 
+  Stencil2    :: (Ix dim, Elem a, Elem b, Elem c,
                  Stencil dim a stencil1, Stencil dim b stencil2)
               => (stencil1 -> stencil2 -> Exp c)
               -> Boundary a

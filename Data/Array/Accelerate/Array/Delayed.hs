@@ -40,7 +40,7 @@ instance Delayable (Array dim e) where
   data Delayed (Array dim e) 
     = (Ix dim, Elem e) => 
       DelayedArray { shapeDA :: ElemRepr dim
-                   , repfDA  :: (ElemRepr dim -> ElemRepr e)
+                   , repfDA  :: ElemRepr dim -> ElemRepr e
                    }
   delay arr@(Array sh _)    = DelayedArray sh (fromElem . (arr!) . toElem)
   force (DelayedArray sh f) = newArray (toElem sh) (toElem . f . fromElem)
