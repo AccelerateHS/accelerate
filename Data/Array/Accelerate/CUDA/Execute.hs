@@ -115,13 +115,12 @@ executeOpenAcc (Reshape e a) env = do
   BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
     $ return (Array (Sugar.fromElem ix) ad)
 
-executeOpenAcc (Unit e)   env = do
+executeOpenAcc (Unit e) env = do
   v  <- executeExp e env
   let ad = fst . runArrayData $ (,undefined) <$> do
-        arr <- newArrayData 1
-        writeArrayData  arr 0 (Sugar.fromElem v)
+        arr <- newArrayData 1024    -- FIXME: small arrays moved by the GC
+        writeArrayData arr 0 (Sugar.fromElem v)
         return arr
-
   mallocArray    ad 1
   pokeArrayAsync ad 1 Nothing
   return (Array (Sugar.fromElem ()) ad)
