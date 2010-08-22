@@ -54,6 +54,7 @@ Data-files:             accelerate_cuda_extras.h
                         thrust/scan_safe.inl
 
 Extra-source-files:     INSTALL
+                        include/accelerate.h
                         examples/simple/src/DotP.hs
                         examples/simple/src/Filter.hs
                         examples/simple/src/Main.hs
