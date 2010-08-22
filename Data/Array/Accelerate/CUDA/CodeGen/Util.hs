@@ -50,9 +50,9 @@ fromBool :: Bool -> CExpr
 fromBool True  = CConst $ CIntConst (cInteger 1) internalNode
 fromBool False = CConst $ CIntConst (cInteger 0) internalNode
 
-mkDim :: String -> [CType] -> CExtDecl
-mkDim name ty =
-  mkTypedef name False [CTypeDef (internalIdent ("DIM" ++ show (length ty))) internalNode]
+mkDim :: String -> Int -> CExtDecl
+mkDim name n =
+  mkTypedef name False [CTypeDef (internalIdent ("DIM" ++ show n)) internalNode]
 
 mkTypedef :: String -> Bool -> CType -> CExtDecl
 mkTypedef var ptr ty =

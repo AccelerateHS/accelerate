@@ -28,6 +28,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.AST                      as AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
@@ -74,18 +75,18 @@ codeGenAcc' (AST.Scanl f1 e1 _)         = mkScanl   (codeGenExpType e1) <$> code
 codeGenAcc' (AST.Scanr f1 e1 _)         = mkScanr   (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
 codeGenAcc' op@(AST.Map f1 a1)          = mkMap     (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
 codeGenAcc' op@(AST.ZipWith f1 a1 a0)
-  = mkZipWith (codeGenAccType op) (codeGenShapeType op)
-              (codeGenAccType a1) (codeGenShapeType a1)
-              (codeGenAccType a0) (codeGenShapeType a0)
+  = mkZipWith (codeGenAccType op) (accDim op)
+              (codeGenAccType a1) (accDim a1)
+              (codeGenAccType a0) (accDim a0)
               <$> codeGenFun f1
 
 codeGenAcc' op@(AST.Permute f1 _ f2 a1)
-  = mkPermute (codeGenAccType a1) (codeGenShapeType op) (codeGenShapeType a1)
+  = mkPermute (codeGenAccType a1) (accDim op) (accDim a1)
   <$> codeGenFun f1
   <*> codeGenFun f2
 
 codeGenAcc' op@(AST.Backpermute _ f1 a1)
-  = mkBackpermute (codeGenAccType a1) (codeGenShapeType op) (codeGenShapeType a1)
+  = mkBackpermute (codeGenAccType a1) (accDim op) (accDim a1)
   <$> codeGenFun f1
 
 codeGenAcc' x =
@@ -187,12 +188,12 @@ codeGenIndex
   -> AST.Exp aenv slix
   -> CG CUTranslSkel
 codeGenIndex sl acc acc' slix =
-  return . mkIndex ty dimSl dimCo dimIn0 $ restrict sl (length dimCo-1,length dimSl-1)
+  return . mkIndex ty dimSl dimCo dimIn0 $ restrict sl (dimCo-1,dimSl-1)
   where
     ty     = codeGenAccType acc
-    dimCo  = codeGenExpType slix
-    dimSl  = codeGenShapeType acc'
-    dimIn0 = codeGenShapeType acc
+    dimCo  = length (codeGenExpType slix)
+    dimSl  = accDim acc'
+    dimIn0 = accDim acc
 
     restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
     restrict (SliceNil)            _     = []
@@ -212,11 +213,11 @@ codeGenReplicate
   -> AST.OpenAcc aenv (Sugar.Array dim e)
   -> CG CUTranslSkel
 codeGenReplicate sl _slix acc acc' =
-  return . mkReplicate ty dimSl dimOut . post $ extend sl (length dimOut-1)
+  return . mkReplicate ty dimSl dimOut . post $ extend sl (dimOut-1)
   where
     ty     = codeGenAccType acc
-    dimSl  = codeGenShapeType acc
-    dimOut = codeGenShapeType acc'
+    dimSl  = accDim acc
+    dimOut = accDim acc'
 
     extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
     extend (SliceNil)            _ = []
@@ -227,10 +228,10 @@ codeGenReplicate sl _slix acc acc' =
     post xs = xs
 
 
-mkPrj :: [CType] -> String -> Int -> CExpr
-mkPrj ty var c
- | length ty <= 1 = CVar (internalIdent var) internalNode
- | otherwise      = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
+mkPrj :: Int -> String -> Int -> CExpr
+mkPrj ndim var c
+ | ndim <= 1 = CVar (internalIdent var) internalNode
+ | otherwise = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
 
 
 -- Types
@@ -243,9 +244,6 @@ codeGenAccType =  codeGenTupleType . accType
 
 codeGenExpType :: AST.OpenExp aenv env t -> [CType]
 codeGenExpType =  codeGenTupleType . expType
-
-codeGenShapeType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CType]
-codeGenShapeType = codeGenTupleType . accShapeType
 
 
 -- Implementation

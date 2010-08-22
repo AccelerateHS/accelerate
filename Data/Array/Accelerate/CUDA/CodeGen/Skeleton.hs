@@ -64,8 +64,8 @@ mkMap tyOut tyIn0 apply = CUTranslSkel code skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
-mkZipWith :: [CType] -> [CType] -> [CType] -> [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
-mkZipWith tyOut shOut tyIn1 shIn1 tyIn0 shIn0 apply = CUTranslSkel code skel
+mkZipWith :: [CType] -> Int -> [CType] -> Int -> [CType] -> Int -> [CExpr] -> CUTranslSkel
+mkZipWith tyOut dimOut tyIn1 dimIn1 tyIn0 dimIn0 apply = CUTranslSkel code skel
   where
     skel = "zipWith.inl"
     code = CTranslUnit
@@ -73,9 +73,9 @@ mkZipWith tyOut shOut tyIn1 shIn1 tyIn0 shIn0 apply = CUTranslSkel code skel
               mkTupleType (Just 1) tyIn1 ++
               mkTupleType (Just 0) tyIn0 ++
             [ mkApply 2 apply
-            , mkDim "DimOut" shOut
-            , mkDim "DimIn1" shIn1
-            , mkDim "DimIn0" shIn0 ])
+            , mkDim "DimOut" dimOut
+            , mkDim "DimIn1" dimIn1
+            , mkDim "DimIn0" dimIn0 ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 
@@ -119,7 +119,7 @@ mkFlag name val =
 -- Permutation
 --------------------------------------------------------------------------------
 
-mkPermute :: [CType] -> [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkPermute :: [CType] -> Int -> Int -> [CExpr] -> [CExpr] -> CUTranslSkel
 mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
   where
     skel = "permute.inl"
@@ -131,7 +131,7 @@ mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
             , mkApply 2 combinefn ])
             (mkNodeInfo (initPos skel) (Name 0))
 
-mkBackpermute :: [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkBackpermute :: [CType] -> Int -> Int -> [CExpr] -> CUTranslSkel
 mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
   where
     skel = "backpermute.inl"
@@ -147,7 +147,7 @@ mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
 -- Multidimensional Index and Replicate
 --------------------------------------------------------------------------------
 
-mkIndex :: [CType] -> [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkIndex :: [CType] -> Int -> Int -> Int -> [CExpr] -> CUTranslSkel
 mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code skel
   where
     skel = "slice.inl"
@@ -160,7 +160,7 @@ mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
-mkReplicate :: [CType] -> [CType] -> [CType] -> [CExpr] -> CUTranslSkel
+mkReplicate :: [CType] -> Int -> Int -> [CExpr] -> CUTranslSkel
 mkReplicate ty dimSl dimOut slix = CUTranslSkel code skel
   where
     skel = "replicate.inl"

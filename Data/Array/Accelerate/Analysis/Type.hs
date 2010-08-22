@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  accType, accType2, accShapeType, accShapeType2, expType, sizeOf
+  accType, accType2, expType, sizeOf
   
 ) where
   
@@ -62,35 +62,6 @@ accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2)
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
 accType2 (Scanl _ e acc) = (accType acc, expType e)
 accType2 (Scanr _ e acc) = (accType acc, expType e)
-
--- |Reify the shape type of the result of an array computation
---
-accShapeType :: forall aenv dim e.
-                OpenAcc aenv (Array dim e) -> TupleType (ElemRepr dim)
-accShapeType (Let _ acc)            = accShapeType acc
-accShapeType (Let2 _ acc)           = accShapeType acc
-accShapeType (Avar _)               = elemType (undefined::dim)
-accShapeType (Use (Array _ _))      = elemType (undefined::dim)
-accShapeType (Unit _)               = elemType (undefined::DIM0)
-accShapeType (Reshape _ _)          = elemType (undefined::dim)
-accShapeType (Replicate _ _ _)      = elemType (undefined::dim)
-accShapeType (Index _ _ _)          = elemType (undefined::dim)
-accShapeType (Map _ acc)            = accShapeType acc
-accShapeType (ZipWith _ _ acc)      = accShapeType acc
-accShapeType (Fold _ _ _)           = elemType (undefined::DIM0)
-accShapeType (FoldSeg _ _ _ _)      = elemType (undefined::DIM1)
-accShapeType (Permute _ acc _ _)    = accShapeType acc
-accShapeType (Backpermute _ _ _)    = elemType (undefined::dim)
-accShapeType (Stencil _ _ acc)      = accShapeType acc
-accShapeType (Stencil2 _ _ acc _ _) = accShapeType acc
-
--- |Reify the shape type of the results of a computation that yields two arrays
---
-accShapeType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2)
-              -> (TupleType (ElemRepr dim1), TupleType (ElemRepr dim2))
-accShapeType2 (Scanl _ _ acc) = (accShapeType acc, elemType (undefined::()))
-accShapeType2 (Scanr _ _ acc) = (accShapeType acc, elemType (undefined::()))
-
 
 -- |Reify the result type of a scalar expression.
 --
