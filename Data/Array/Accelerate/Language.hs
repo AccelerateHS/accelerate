@@ -338,6 +338,34 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e)
   tuple   = tup5
   untuple = untup5
 
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f)
+  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
+    = Exp (a, b, c, d, e, f)
+  tuple   = tup6
+  untuple = untup6
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g)
+  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
+    = Exp (a, b, c, d, e, f, g)
+  tuple   = tup7
+  untuple = untup7
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h)
+  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
+    = Exp (a, b, c, d, e, f, g, h)
+  tuple   = tup8
+  untuple = untup8
+
+instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i)
+  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
+  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
+    = Exp (a, b, c, d, e, f, g, h, i)
+  tuple   = tup9
+  untuple = untup9
+
 
 -- |Extract the first component of a pair
 --

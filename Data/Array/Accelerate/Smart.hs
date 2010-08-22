@@ -29,7 +29,8 @@ module Data.Array.Accelerate.Smart (
   constant,
   
   -- * Smart constructors and destructors for tuples
-  tup2, tup3, tup4, tup5, untup2, untup3, untup4, untup5,
+  tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9,
+  untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9,
 
   -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi, 
@@ -643,6 +644,36 @@ tup5 (x1, x2, x3, x4, x5)
   = Tuple $
       NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4 `SnocTup` x5
 
+tup6 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) -> Exp (a, b, c, d, e, f)
+tup6 (x1, x2, x3, x4, x5, x6)
+  = Tuple $
+      NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4 `SnocTup` x5 `SnocTup` x6
+
+tup7 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
+     -> Exp (a, b, c, d, e, f, g)
+tup7 (x1, x2, x3, x4, x5, x6, x7)
+  = Tuple $
+      NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3
+	     `SnocTup` x4 `SnocTup` x5 `SnocTup` x6 `SnocTup` x7
+
+tup8 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
+     -> Exp (a, b, c, d, e, f, g, h)
+tup8 (x1, x2, x3, x4, x5, x6, x7, x8)
+  = Tuple $
+      NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4
+	     `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8
+
+tup9 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i)
+     => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
+     -> Exp (a, b, c, d, e, f, g, h, i)
+tup9 (x1, x2, x3, x4, x5, x6, x7, x8, x9)
+  = Tuple $
+      NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4
+	     `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8 `SnocTup` x9
+
 untup2 :: (Elem a, Elem b) => Exp (a, b) -> (Exp a, Exp b)
 untup2 e = ((SuccTupIdx ZeroTupIdx) `Prj` e, ZeroTupIdx `Prj` e)
 
@@ -665,6 +696,48 @@ untup5 e = (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))
             SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e, 
             SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e, 
             SuccTupIdx ZeroTupIdx `Prj` e, 
+            ZeroTupIdx `Prj` e)
+
+untup6 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f)
+       => Exp (a, b, c, d, e, f) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
+untup6 e = (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e,
+            SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e,
+            SuccTupIdx ZeroTupIdx `Prj` e,
+            ZeroTupIdx `Prj` e)
+
+untup7 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g)
+       => Exp (a, b, c, d, e, f, g) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
+untup7 e = (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e,
+            SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e,
+            SuccTupIdx ZeroTupIdx `Prj` e,
+            ZeroTupIdx `Prj` e)
+
+untup8 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h)
+       => Exp (a, b, c, d, e, f, g, h) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
+untup8 e = (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e,
+            SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e,
+            SuccTupIdx ZeroTupIdx `Prj` e,
+            ZeroTupIdx `Prj` e)
+
+untup9 :: (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i)
+       => Exp (a, b, c, d, e, f, g, h, i) -> (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
+untup9 e = (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Prj` e,
+            SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Prj` e,
+            SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e,
+            SuccTupIdx ZeroTupIdx `Prj` e,
             ZeroTupIdx `Prj` e)
 
 -- Smart constructor for constants
