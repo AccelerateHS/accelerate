@@ -23,7 +23,7 @@ import Criterion.Main
 
 
 instance (Ix dim, IArray UArray e) => NFData (UArray dim e) where
-  rnf a = a ! (head (indices a)) `seq` ()
+  rnf a = a ! head (indices a) `seq` ()
 
 
 -- Generate a benchmark test iff the reference and accelerate tests succeed.
@@ -58,6 +58,7 @@ test_dotp gen n = do
   ys' <- convertVector ys
   benchmark "dotp" similar (run_ref xs ys) (run_acc xs' ys')
   where
+    {-# NOINLINE run_ref #-}
     run_ref x y () = dotp_ref x y
     run_acc x y () = dotp x y
 
@@ -72,6 +73,7 @@ test_saxpy gen n = do
   alpha <- uniform gen
   benchmark "saxpy" similar (run_ref alpha xs ys) (run_acc alpha xs' ys')
   where
+    {-# NOINLINE run_ref #-}
     run_ref alpha x y () = saxpy_ref alpha x y
     run_acc alpha x y () = saxpy alpha x y
 
@@ -83,6 +85,7 @@ test_filter gen n = do
   xs' <- convertVector xs
   benchmark "filter" similar (run_ref xs) (run_acc xs')
   where
+    {-# NOINLINE run_ref #-}
     run_ref x () = filter_ref (< 0.5) x
     run_acc x () = filter (Acc.<* 0.5) x
 
@@ -102,6 +105,7 @@ test_smvm gen (n,m) (rows,cols) = do
            in  evaluate (v `Acc.indexArray` 0) >> return v
   benchmark "smvm" similar (run_ref segd inds vals vec) (run_acc segd' mat' vec')
   where
+    {-# NOINLINE run_ref #-}
     run_ref d i x v () = smvm_ref (d, (i,x)) v
     run_acc d x v   () = smvm (d,x) v
 
