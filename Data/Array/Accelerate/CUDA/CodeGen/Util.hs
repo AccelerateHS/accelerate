@@ -62,7 +62,7 @@ mkTypedef var ptr ty =
     internalNode
 
 mkInitList :: [CExpr] -> CInit
-mkInitList []  = mkInitList [CConst (CIntConst (cInteger 0) internalNode)]
+mkInitList []  = CInitExpr (CConst (CIntConst (cInteger 0) internalNode)) internalNode
 mkInitList [x] = CInitExpr x internalNode
 mkInitList xs  = CInitList (map (\e -> ([],CInitExpr e internalNode)) xs) internalNode
 
