@@ -208,12 +208,12 @@ codeGenReplicate
                 (Sugar.ElemRepr sl)
                 co
                 (Sugar.ElemRepr dim)
-  -> AST.Exp aenv slix
+  -> AST.Exp aenv slix                          -- dummy to fix type variables
   -> AST.OpenAcc aenv (Sugar.Array sl e)
   -> AST.OpenAcc aenv (Sugar.Array dim e)
   -> CG CUTranslSkel
 codeGenReplicate sl _slix acc acc' =
-  return . mkReplicate ty dimSl dimOut . post $ extend sl (dimOut-1)
+  return . mkReplicate ty dimSl dimOut $ extend sl (dimOut-1)
   where
     ty     = codeGenAccType acc
     dimSl  = accDim acc
@@ -223,9 +223,6 @@ codeGenReplicate sl _slix acc acc' =
     extend (SliceNil)            _ = []
     extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n-1)
     extend (SliceFixed sliceIdx) n = extend sliceIdx (n-1)
-
-    post [] = [CConst (CIntConst (cInteger 0) internalNode)]
-    post xs = xs
 
 
 mkPrj :: Int -> String -> Int -> CExpr
