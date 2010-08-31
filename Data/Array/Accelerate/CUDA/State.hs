@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TupleSections, TypeOperators #-}
+{-# LANGUAGE TemplateHaskell, TupleSections, TypeOperators, CPP #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -45,6 +45,13 @@ import System.Posix.Types               (ProcessID)
 
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver    as CUDA
+
+#ifdef ACCELERATE_CUDA_BACKEND_PCACHE
+import System.Environment
+#else
+import System.Posix.Process
+#endif
+
 
 
 -- Types
@@ -101,9 +108,14 @@ data MemoryEntry = MemoryEntry
 --
 getOutputDir :: IO FilePath
 getOutputDir = do
+#ifdef ACCELERATE_CUDA_BACKEND_PCACHE
+  tmp <- getProgName >>= getAppUserDataDirectory
+  dir <- canonicalizePath tmp
+#else
   tmp <- getTemporaryDirectory
   pid <- getProcessID
   dir <- canonicalizePath $ tmp </> "ac" ++ show pid
+#endif
   createDirectoryIfMissing True dir
   return dir
 

@@ -80,6 +80,10 @@ Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
+Flag pcache
+  Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
+  Default:              False
+
 Flag test-suite
   Description:          Export extra test modules
   Default:              False
@@ -170,6 +174,8 @@ Library
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.Smart
                         Data.Array.Accelerate.CUDA.State
+    if flag(pcache)
+      CPP-options:        -DACCELERATE_CUDA_BACKEND_PCACHE
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS
