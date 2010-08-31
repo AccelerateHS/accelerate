@@ -173,8 +173,9 @@ Library
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.Smart
                         Data.Array.Accelerate.CUDA.State
-    if flag(pcache)
-      CPP-options:        -DACCELERATE_CUDA_BACKEND_PCACHE
+
+  if flag(pcache)
+    CPP-options:        -DACCELERATE_CUDA_PERSISTENT_CACHE
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS

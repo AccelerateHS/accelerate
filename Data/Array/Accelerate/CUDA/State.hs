@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TupleSections, TypeOperators, CPP #-}
+{-# LANGUAGE CPP, TemplateHaskell, TupleSections, TypeOperators #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -40,18 +40,16 @@ import qualified Data.HashTable         as HT
 
 import System.Directory
 import System.FilePath
-import System.Posix.Process
 import System.Posix.Types               (ProcessID)
 
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver    as CUDA
 
-#ifdef ACCELERATE_CUDA_BACKEND_PCACHE
-import System.Environment
+#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+import Paths_accelerate                 (getDataDir)
 #else
-import System.Posix.Process
+import System.Posix.Process             (getProcessID)
 #endif
-
 
 
 -- Types
@@ -98,7 +96,6 @@ data MemoryEntry = MemoryEntry
   }
 
 
-
 -- The CUDA State Monad
 -- ~~~~~~~~~~~~~~~~~~~~
 
@@ -108,9 +105,9 @@ data MemoryEntry = MemoryEntry
 --
 getOutputDir :: IO FilePath
 getOutputDir = do
-#ifdef ACCELERATE_CUDA_BACKEND_PCACHE
-  tmp <- getProgName >>= getAppUserDataDirectory
-  dir <- canonicalizePath tmp
+#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+  tmp <- getDataDir
+  dir <- canonicalizePath $ tmp </> "cache"
 #else
   tmp <- getTemporaryDirectory
   pid <- getProcessID
