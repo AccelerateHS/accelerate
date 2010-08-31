@@ -149,7 +149,7 @@ compileFlags :: FilePath -> CIO [String]
 compileFlags cufile = do
   arch <- computeCapability <$> getM deviceProps
   ddir <- liftIO getDataDir
-  return [ "-I.", "-I", ddir
+  return [ "-I.", "-I", ddir </> "cubits"
          , "-O2", "--compiler-options", "-fno-strict-aliasing"
          , "-arch=sm_" ++ show (round (arch * 10) :: Int)
          , "-DUNIX"

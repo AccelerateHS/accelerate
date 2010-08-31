@@ -40,18 +40,17 @@ Stability:              Experimental
 
 -- Should be in the Library stanza, and only enabled for the CUDA backend,
 -- but Cabal does not support that.
-Data-dir:               cubits
-Data-files:             accelerate_cuda_extras.h
-                        accelerate_cuda_utils.h
-                        backpermute.inl
-                        fold.inl
-                        fold_segmented.inl
-                        map.inl
-                        permute.inl
-                        replicate.inl
-                        slice.inl
-                        zipWith.inl
-                        thrust/scan_safe.inl
+Data-files:             cubits/accelerate_cuda_extras.h
+                        cubits/accelerate_cuda_utils.h
+                        cubits/backpermute.inl
+                        cubits/fold.inl
+                        cubits/fold_segmented.inl
+                        cubits/map.inl
+                        cubits/permute.inl
+                        cubits/replicate.inl
+                        cubits/slice.inl
+                        cubits/zipWith.inl
+                        cubits/thrust/scan_safe.inl
 
 Extra-source-files:     INSTALL
                         include/accelerate.h
