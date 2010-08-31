@@ -34,6 +34,7 @@ import Data.Record.Label
 import Control.Arrow
 import Control.Applicative
 import Control.Exception
+import Control.Monad                    (filterM)
 import Control.Monad.State              (StateT(..), liftM)
 import Data.HashTable                   (HashTable)
 import qualified Data.HashTable         as HT
@@ -119,10 +120,10 @@ getOutputDir = do
 -- Store the kernel module map to file to the given directory
 --
 save :: FilePath -> AccTable -> IO ()
-save f m = encodeFile f . map (second _kernelName) . filter compiled =<< HT.toList m
+save f m = encodeFile f . map (second _kernelName) =<< filterM compiled =<< HT.toList m
   where
-    compiled (_,KernelEntry _ (Right _)) = True
-    compiled _                           = False
+    compiled (_,KernelEntry _ (Right _)) = return True
+    compiled (_,KernelEntry n (Left  _)) = removeFile n >> return False
 
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
