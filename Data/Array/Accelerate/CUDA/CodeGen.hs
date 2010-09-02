@@ -110,7 +110,13 @@ unit x = [x]
 -- computations must be hoisted out of scalar expressions before code generation
 -- or execution: kernel functions can not invoke other array computations.
 --
--- TLM 2010-06-24: Shape for free array variables??
+-- TLM 2010-06-24:
+--   Shape for free array variables??
+--
+-- TLM 2010-09-03:
+--   We push a conditional expression into each component of a tuple, in order
+--   to support tuples as the result of a branch. However, I doubt nvcc is
+--   clever enough to do CSE on this expression.
 --
 codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG [CExpr]
 codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
@@ -134,9 +140,7 @@ codeGenExp (AST.Var i)         =
 
 codeGenExp (AST.Cond p e1 e2) = do
   [a] <- codeGenExp p
-  [b] <- codeGenExp e1
-  [c] <- codeGenExp e2
-  return [CCond a (Just b) c internalNode]
+  zipWith (\b c -> CCond a (Just b) c internalNode) <$> codeGenExp e1 <*> codeGenExp e2
 
 codeGenExp (AST.IndexScalar a1 e1) = do
   n   <- length <$> get
