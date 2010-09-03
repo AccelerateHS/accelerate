@@ -106,6 +106,8 @@ data MemoryEntry = MemoryEntry
 -- action for each device. Initialising a context is relatively expensive, so we
 -- would like to only have to do this once per program execution.
 --
+-- Note that once created, a context is never destroyed (by the driver).
+--
 -- This uses the method proposed by Claus Reinke
 -- <http://haskell.org/haskellwiki/Top_level_mutable_state>
 --
