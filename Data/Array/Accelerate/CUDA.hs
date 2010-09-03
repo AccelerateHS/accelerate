@@ -20,6 +20,7 @@ module Data.Array.Accelerate.CUDA (
 
 import Prelude hiding (catch)
 import Control.Exception
+import System.IO.Unsafe
 
 import Foreign.CUDA.Driver.Error
 
@@ -36,13 +37,15 @@ import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 -- Accelerate: CUDA
 -- ~~~~~~~~~~~~~~~~
 
--- | Compiles and run a complete embedded array program using the CUDA backend
+-- | Compile and run a complete embedded array program using the CUDA backend
 --
-run :: Arrays a => Sugar.Acc a -> IO a
-run acc =
-  evalCUDA (execute (Sugar.convertAcc acc) >>= collect)
-           `catch`
-           \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+{-# NOINLINE run #-}
+run :: Arrays a => Sugar.Acc a -> a
+run acc
+  = unsafePerformIO
+  $ evalCUDA (execute (Sugar.convertAcc acc) >>= collect)
+             `catch`
+             \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
 execute :: Arrays a => Acc a -> CIO a
 execute acc = compileAcc acc >> executeAcc acc
