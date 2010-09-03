@@ -33,6 +33,7 @@ import Data.Binary
 import Data.Record.Label
 import Control.Arrow
 import Control.Applicative
+import Control.Concurrent
 import Control.Exception
 import Control.Monad                    (filterM)
 import Control.Monad.State              (StateT(..), liftM)
@@ -42,6 +43,7 @@ import qualified Data.HashTable         as HT
 import System.Directory
 import System.FilePath
 import System.Posix.Types               (ProcessID)
+import System.IO.Unsafe
 
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver    as CUDA
@@ -97,6 +99,33 @@ data MemoryEntry = MemoryEntry
   }
 
 
+-- Top-Level Mutable State
+-- ~~~~~~~~~~~~~~~~~~~~~~~
+
+-- We want the CUDA execution context to be generated as a shared on-demand IO
+-- action for each device. Initialising a context is relatively expensive, so we
+-- would like to only have to do this once per program execution.
+--
+-- This uses the method proposed by Claus Reinke
+-- <http://haskell.org/haskellwiki/Top_level_mutable_state>
+--
+mkOnceIO :: IO a -> IO (IO a)
+mkOnceIO io = do
+  mvar   <- newEmptyMVar
+  demand <- newEmptyMVar
+  _      <- forkIO $ takeMVar demand >> io >>= putMVar mvar
+  return $  tryPutMVar demand () >> readMVar mvar
+
+
+{-# NOINLINE deviceContext #-}
+deviceContext :: CUDA.Device -> IO (CUDA.Context)
+deviceContext (CUDA.Device dev) =
+  let ctx = mapM (\n -> CUDA.create (CUDA.Device n) [CUDA.SchedAuto])
+          =<< enumFromTo 0 . subtract 1 . fromIntegral <$> CUDA.count
+  in
+  (!! fromIntegral dev) <$> unsafePerformIO (mkOnceIO ctx)
+
+
 -- The CUDA State Monad
 -- ~~~~~~~~~~~~~~~~~~~~
 
@@ -149,16 +178,20 @@ evalCUDA =  liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
 runCUDA acc =
-  bracket (initialise Nothing) finalise $ \(dev,_ctx) -> do
+  bracketOnError (initialise Nothing) finalise $ \(dev,_ctx) -> do
     props <- CUDA.props dev
     dir   <- getOutputDir
     tab   <- HT.new (==) fromIntegral
     (k,n) <- load (dir </> "_index")
     (a,s) <- runStateT acc (CUDAState n dir props tab k)
-    --
-    -- TLM 2010-06-05: assert all memory has been released ??
-    --                 does CUDA.destroy release memory ??
     save (dir </> "_index") (_kernelTable s)
+
+    -- TLM 2010-09-03:
+    --   In case of memory leaks (which we should fix), manually release any
+    --   lingering device arrays. These would otherwise remain until the next
+    --   context release.
+    --
+    mapM_ (CUDA.free . CUDA.wordPtrToDevPtr . _arena . snd) =<< HT.toList (_memoryTable s)
     return (a,s)
 
   where
@@ -166,7 +199,7 @@ runCUDA acc =
     initialise n = do
       CUDA.initialise []
       dev <- CUDA.device (fromMaybe 0 n)        -- TLM: select the "best" device ??
-      ctx <- CUDA.create dev [CUDA.SchedAuto]
+      ctx <- deviceContext dev
       return (dev, ctx)
 
 
