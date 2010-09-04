@@ -28,7 +28,6 @@ import Prelude hiding (id, (.))
 import Control.Category
 
 import Data.Int
-import Data.Maybe
 import Data.Binary
 import Data.Record.Label
 import Control.Arrow
@@ -39,6 +38,8 @@ import Control.Monad                    (filterM)
 import Control.Monad.State              (StateT(..), liftM)
 import Data.HashTable                   (HashTable)
 import qualified Data.HashTable         as HT
+
+import Data.Array.Accelerate.CUDA.Analysis.Device
 
 import System.Directory
 import System.FilePath
@@ -180,8 +181,7 @@ evalCUDA =  liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
 runCUDA acc =
-  bracketOnError (initialise Nothing) finalise $ \(dev,_ctx) -> do
-    props <- CUDA.props dev
+  bracketOnError initialise finalise $ \(_,props,_) -> do
     dir   <- getOutputDir
     tab   <- HT.new (==) fromIntegral
     (k,n) <- load (dir </> "_index")
@@ -197,16 +197,15 @@ runCUDA acc =
     return (a,s)
 
   where
-    finalise     = CUDA.destroy . snd
-    initialise n = do
+    finalise (_,_,ctx) = CUDA.destroy ctx
+    initialise         = do
       CUDA.initialise []
-      dev <- CUDA.device (fromMaybe 0 n)        -- TLM: select the "best" device ??
-      ctx <- deviceContext dev
-      return (dev, ctx)
+      (dev,props) <- selectBestDevice
+      ctx         <- deviceContext dev
+      return (dev,props,ctx)
 
 
 $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
-
 
 -- | A unique name supply
 --

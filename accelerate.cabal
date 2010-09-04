@@ -160,7 +160,8 @@ Library
 
   If flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Hash
+    Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Device
+                        Data.Array.Accelerate.CUDA.Analysis.Hash
                         Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
                         Data.Array.Accelerate.CUDA.Array.Device
