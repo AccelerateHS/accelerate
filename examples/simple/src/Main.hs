@@ -37,13 +37,13 @@ benchmark
   -> IO Benchmark
 
 benchmark name sim ref acc = do
-  putStr "Interpreter : " ; v1 <- validate sim (ref ())  (Acc.toIArray $  Interp.run (acc ()))
-  putStr "CUDA        : " ; v2 <- validate sim (ref ()) . Acc.toIArray =<< (CUDA.run (acc ()))
+  putStr "Interpreter : " ; v1 <- validate sim (ref ()) (Acc.toIArray $ Interp.run (acc ()))
+  putStr "CUDA        : " ; v2 <- validate sim (ref ()) (Acc.toIArray $ CUDA.run   (acc ()))
   if not (v1 && v2)
      then return $ bgroup "" []
      else return $ bgroup name
                      [ bench "ref"  $ nf ref ()
-                     , bench "cuda" $ (CUDA.run . acc) ()
+                     , bench "cuda" $ whnf (CUDA.run . acc) ()
                      ]
 
 
