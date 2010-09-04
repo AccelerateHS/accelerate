@@ -149,13 +149,15 @@ getOutputDir = do
   createDirectoryIfMissing True dir
   return dir
 
--- Store the kernel module map to file to the given directory
+-- Store the kernel module map to file. Additionally, this will unload the
+-- compiled modules from the current context, and delete source files that
+-- failed to compile.
 --
 save :: FilePath -> AccTable -> IO ()
 save f m = encodeFile f . map (second _kernelName) =<< filterM compiled =<< HT.toList m
   where
-    compiled (_,KernelEntry _ (Right _)) = return True
-    compiled (_,KernelEntry n (Left  _)) = removeFile n >> return False
+    compiled (_,KernelEntry _ (Right h)) = CUDA.unload h >> return True
+    compiled (_,KernelEntry n (Left  _)) = removeFile n  >> return False
 
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
