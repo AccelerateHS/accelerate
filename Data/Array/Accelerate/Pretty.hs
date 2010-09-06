@@ -104,7 +104,7 @@ prettyBoundary :: forall aenv dim e. Elem e
 prettyBoundary _ Clamp        = text "Clamp"
 prettyBoundary _ Mirror       = text "Mirror"
 prettyBoundary _ Wrap         = text "Wrap"
-prettyBoundary _ (Constant e) = parens $ text "Wrap" <+> text (show (toElem e :: e))
+prettyBoundary _ (Constant e) = parens $ text "Constant" <+> text (show (toElem e :: e))
     
 prettyArrOp :: String -> [Doc] -> Doc
 prettyArrOp name docs = hang (text name) 2 $ sep docs
