@@ -14,6 +14,7 @@ module Data.Array.Accelerate.CUDA.CodeGen.Util
 import Language.C
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 
+data Direction = Forward | Backward
 
 --------------------------------------------------------------------------------
 -- Common device functions
@@ -27,8 +28,9 @@ mkApply argc
   = mkDeviceFun "apply" (typename "TyOut")
   $ map (\n -> (typename ("TyIn"++show n), 'x':show n)) [argc-1,argc-2..0]
 
-mkProject :: [CExpr] -> CExtDecl
-mkProject = mkDeviceFun "project" (typename "DimOut") [(typename "DimIn0","x0")]
+mkProject :: Direction -> [CExpr] -> CExtDecl
+mkProject Forward  = mkDeviceFun "project" (typename "DimOut") [(typename "DimIn0","x0")]
+mkProject Backward = mkDeviceFun "project" (typename "DimIn0") [(typename "DimOut","x0")]
 
 mkSliceIndex :: [CExpr] -> CExtDecl
 mkSliceIndex =

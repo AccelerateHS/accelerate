@@ -127,19 +127,19 @@ mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
             ( mkTupleTypeAsc 2 ty ++
             [ mkDim "DimOut" dimOut
             , mkDim "DimIn0" dimIn0
-            , mkProject indexfn
+            , mkProject Forward indexfn
             , mkApply 2 combinefn ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkBackpermute :: [CType] -> Int -> Int -> [CExpr] -> CUTranslSkel
-mkBackpermute ty dimOut dimIn0 index = CUTranslSkel code skel
+mkBackpermute ty dimOut dimIn0 indexFn = CUTranslSkel code skel
   where
     skel = "backpermute.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 1 ty ++
             [ mkDim "DimOut" dimOut
             , mkDim "DimIn0" dimIn0
-            , mkProject index ])
+            , mkProject Backward indexFn ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 
