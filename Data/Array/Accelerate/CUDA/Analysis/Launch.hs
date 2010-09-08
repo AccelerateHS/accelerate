@@ -36,19 +36,28 @@ import qualified Foreign.Storable                       as F
 -- TLM: this could probably be stored in the KernelEntry
 --
 launchConfig :: OpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
-launchConfig acc@(Fold _ _ _) n _ =
-  return (256, gridSize undefined acc n 256, toInteger (sharedMem undefined acc 256))
-
 launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
   prop <- getM deviceProps
 
   let dyn        = sharedMem prop acc
-      (cta, occ) = CUDA.optimalBlockSize prop (const regs) ((stat+) . dyn)
+      (cta, occ) = blockSize prop acc regs ((stat+) . dyn)
       mbk        = CUDA.multiProcessorCount prop * CUDA.activeThreadBlocks occ
 
   return (cta, mbk `min` gridSize prop acc n cta, toInteger (dyn cta))
+
+
+-- |
+-- Determine the optimal thread block size for a given array computation. Fold
+-- requires blocks with a power-of-two number of threads; the magic value chosen
+-- here allows for maximum occupancy on 1.x and 2.x class devices.
+--
+-- TLM: metrics for fold may be invalidated for complex types?
+--
+blockSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
+blockSize p (Fold _ _ _) r s = (256, CUDA.occupancy p 256 r (s 256))
+blockSize p _            r s = CUDA.optimalBlockSize p (const r) s
 
 
 -- |
