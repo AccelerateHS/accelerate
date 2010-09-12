@@ -11,6 +11,7 @@
 module Data.Array.Accelerate.CUDA.Analysis.Device
   where
 
+import Data.Ord
 import Data.List
 import Data.Function
 import Foreign.CUDA.Driver.Device
@@ -31,8 +32,10 @@ selectBestDevice = do
   prop <- mapM CUDA.props dev
   return . head . sortBy (cmp `on` snd) $ zip dev prop
   where
-    flops d = multiProcessorCount d * clockRate d
     compute = computeCapability
-    cmp x y | compute x == compute y = flops x   `compare` flops y
-            | otherwise              = compute x `compare` compute y
+    flops d = multiProcessorCount d * clockRate d * cores d
+    cores d | compute d < 2 = 8
+            | otherwise     = 32
+    cmp x y | compute x == compute y = comparing flops x y
+            | otherwise              = comparing compute x y
 
