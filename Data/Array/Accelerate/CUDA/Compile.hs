@@ -174,9 +174,11 @@ withFilePath fp action =
 outputName :: OpenAcc aenv a -> FilePath -> CIO FilePath
 outputName acc cufile = do
   n <- freshVar
-  x <- liftIO $ doesFileExist (base ++ show n <.> suffix)
+  x <- liftIO $ doesFileExist (filename n)
   if x then outputName acc cufile
-       else return (base ++ show n <.> suffix)
+       else return (filename n)
   where
     (base,suffix) = splitExtension cufile
+    filename n    = base ++ pad (show n) <.> suffix
+    pad s         = replicate (4-length s) '0' ++ s
 
