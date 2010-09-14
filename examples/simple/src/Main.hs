@@ -121,7 +121,7 @@ main = do
   defaultMain =<< sequence
     [ test_dotp   gen 100000
     , test_saxpy  gen 100000
-    , test_filter gen 1800
+    , test_filter gen 10000
     , test_smvm   gen (0,42) (2400,400)
     ]
 
