@@ -28,28 +28,26 @@ import Prelude hiding (id, (.))
 import Control.Category
 
 import Data.Int
-import Data.Binary
+import Data.IORef
 import Data.Record.Label
-import Control.Arrow
 import Control.Applicative
-import Control.Concurrent
-import Control.Exception
-import Control.Monad                    (filterM)
-import Control.Monad.State              (StateT(..), liftM)
+import Control.Monad
+import Control.Monad.State              (StateT(..))
 import Data.HashTable                   (HashTable)
+import Foreign.Ptr
 import qualified Data.HashTable         as HT
-
-import Data.Array.Accelerate.CUDA.Analysis.Device
+import qualified Foreign.CUDA.Driver    as CUDA
 
 import System.Directory
 import System.FilePath
 import System.Posix.Types               (ProcessID)
 import System.IO.Unsafe
 
-import Foreign.Ptr
-import qualified Foreign.CUDA.Driver    as CUDA
+import Data.Array.Accelerate.CUDA.Analysis.Device
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+import Data.Binary                      (encodeFile, decodeFile)
+import Control.Arrow                    (second)
 import Paths_accelerate                 (getDataDir)
 #else
 import System.Posix.Process             (getProcessID)
@@ -99,42 +97,14 @@ data MemoryEntry = MemoryEntry
     _arena    :: WordPtr
   }
 
-
--- Top-Level Mutable State
--- ~~~~~~~~~~~~~~~~~~~~~~~
-
--- We want the CUDA execution context to be generated as a shared on-demand IO
--- action for each device. Initialising a context is relatively expensive, so we
--- would like to only have to do this once per program execution.
---
--- Note that once created, a context is never destroyed (by the driver).
---
--- This uses the method proposed by Claus Reinke
--- <http://haskell.org/haskellwiki/Top_level_mutable_state>
---
-mkOnceIO :: IO a -> IO (IO a)
-mkOnceIO io = do
-  mvar   <- newEmptyMVar
-  demand <- newEmptyMVar
-  _      <- forkIO $ takeMVar demand >> io >>= putMVar mvar
-  return $  tryPutMVar demand () >> readMVar mvar
+$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
 
 
-{-# NOINLINE deviceContext #-}
-deviceContext :: CUDA.Device -> IO (CUDA.Context)
-deviceContext (CUDA.Device dev) =
-  let ctx = mapM (\n -> CUDA.create (CUDA.Device n) [CUDA.SchedAuto])
-          =<< enumFromTo 0 . subtract 1 . fromIntegral <$> CUDA.count
-  in
-  (!! fromIntegral dev) <$> unsafePerformIO (mkOnceIO ctx)
-
-
--- The CUDA State Monad
--- ~~~~~~~~~~~~~~~~~~~~
+-- Execution State
+-- ~~~~~~~~~~~~~~~
 
 -- Return the output directory for compilation by-products, creating if it does
--- not exist. This currently maps to a temporary directory, but could be mode to
--- point towards a persistent cache (eg: getAppUserDataDirectory)
+-- not exist.
 --
 getOutputDir :: IO FilePath
 getOutputDir = do
@@ -149,29 +119,45 @@ getOutputDir = do
   createDirectoryIfMissing True dir
   return dir
 
--- Store the kernel module map to file. Additionally, this will unload the
--- compiled modules from the current context, and delete source files that
--- failed to compile.
+-- Store the kernel module map to file
 --
-save :: FilePath -> AccTable -> IO ()
-save f m = encodeFile f . map (second _kernelName) =<< filterM compiled =<< HT.toList m
-  where
-    compiled (_,KernelEntry _ (Right h)) = CUDA.unload h >> return True
-    compiled (_,KernelEntry n (Left  _)) = removeFile n  >> return False
+saveIndexFile :: CUDAState -> IO ()
+#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+saveIndexFile s = encodeFile (_outputDir s </> "_index") . map (second _kernelName) =<< HT.toList (_kernelTable s)
+#else
+saveIndexFile _ = return ()
+#endif
 
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
 --
-load :: FilePath -> IO (AccTable, Int)
-load f = do
+loadIndexFile :: FilePath -> IO (AccTable, Int)
+#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+loadIndexFile f = do
   x <- doesFileExist f
   e <- if x then mapM reload =<< decodeFile f
             else return []
-
   (,length e) <$> HT.fromList HT.hashString e
   where
-    reload (k,n) =
-      (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
+    reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
+#else
+loadIndexFile _  = (,0) <$> HT.new (==) HT.hashString
+#endif
+
+
+-- Select and initialise the CUDA device, and create a new execution context.
+-- This will be done only once per program execution, as initialising the CUDA
+-- context is relatively expensive.
+--
+initialise :: IO CUDAState
+initialise = do
+  CUDA.initialise []
+  (d,prp) <- selectBestDevice
+  _       <- CUDA.create d [CUDA.SchedAuto]
+  dir     <- getOutputDir
+  mem     <- HT.new (==) fromIntegral
+  (knl,n) <- loadIndexFile (dir </> "_index")
+  return $ CUDAState n dir prp mem knl
 
 
 -- |
@@ -179,35 +165,34 @@ load f = do
 -- discarding the final state.
 --
 evalCUDA :: CIO a -> IO a
-evalCUDA =  liftM fst . runCUDA
+evalCUDA = liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
 runCUDA acc =
-  bracketOnError initialise finalise $ \(_,props,_) -> do
-    dir   <- getOutputDir
-    tab   <- HT.new (==) fromIntegral
-    (k,n) <- load (dir </> "_index")
-    (a,s) <- runStateT acc (CUDAState n dir props tab k)
-    save (dir </> "_index") (_kernelTable s)
-
-    -- TLM 2010-09-03:
-    --   In case of memory leaks (which we should fix), manually release any
-    --   lingering device arrays. These would otherwise remain until the next
-    --   context release.
-    --
-    mapM_ (CUDA.free . CUDA.wordPtrToDevPtr . _arena . snd) =<< HT.toList (_memoryTable s)
+  let {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
+      ref = unsafePerformIO (initialise >>= newIORef)
+  in do
+    state <- readIORef ref
+    clearMemTable state
+    (a,s) <- runStateT acc state
+    saveIndexFile s
+    writeIORef ref s
     return (a,s)
 
-  where
-    finalise (_,_,ctx) = CUDA.destroy ctx
-    initialise         = do
-      CUDA.initialise []
-      (dev,props) <- selectBestDevice
-      ctx         <- deviceContext dev
-      return (dev,props,ctx)
+
+-- In case of memory leaks, which we should fix, manually release any lingering
+-- device arrays. These would otherwise remain until the program exits.
+--
+clearMemTable :: CUDAState -> IO ()
+clearMemTable st = do
+  entries <- HT.toList (_memoryTable st)
+  forM_ entries $ \(k,v) -> do
+    HT.delete (_memoryTable st) k
+    CUDA.free (CUDA.wordPtrToDevPtr (_arena v))
 
 
-$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
+-- Utility
+-- ~~~~~~~
 
 -- | A unique name supply
 --
