@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 
 -- Module      : Data.Array.Accelerate.AST
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -84,6 +84,8 @@ import Data.Array.Accelerate.Array.Representation (SliceIndex)
 import Data.Array.Accelerate.Array.Sugar 
 import Data.Array.Accelerate.Tuple
 
+#include "accelerate.h"
+
 
 -- Typed de Bruijn indices
 -- -----------------------
@@ -111,7 +113,7 @@ prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 prj _             _            =
-  error "Data.Array.Accelerate: prj: inconsistent valuation"
+  INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
 
 -- Array expressions

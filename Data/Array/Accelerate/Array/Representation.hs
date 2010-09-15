@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE CPP, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 
 -- |Embedded array processing language: array representation
 --
@@ -18,6 +18,8 @@ module Data.Array.Accelerate.Array.Representation (
 
 -- friends 
 import Data.Array.Accelerate.Type
+
+#include "accelerate.h"
 
 
 -- |Index representation
@@ -75,10 +77,8 @@ instance Ix ix => Ix (ix, Int) where
   size (sh, sz)                     = size sh * sz
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
-  index (sh, sz) (ix, i) 
-    | i >= 0 && i < sz              = index sh ix + size sh * i
-    | otherwise              
-    = error "Data.Array.Accelerate.Array: index out of bounds"
+  index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
+                                    $ index sh ix + size sh * i
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` 0

@@ -57,7 +57,8 @@ error :: String -> Int -> Checks -> String -> String -> a
 error file line kind loc msg
   = P.error . unlines $
       (if kind == Internal
-         then (["*** Internal error in package accelerate ***"
+         then ([""
+               ,"*** Internal error in package accelerate ***"
                ,"*** Please submit a bug report at http://trac.haskell.org/accelerate"]++)
          else id)
       [ file ++ ":" ++ show line ++ " (" ++ loc ++ "): " ++ msg ]

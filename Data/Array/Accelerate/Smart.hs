@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 
 -- Module      : Data.Array.Accelerate.Smart
@@ -62,6 +62,8 @@ import qualified Data.Array.Accelerate.Tuple as Tuple
 import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, Stencil, OpenExp(..), Exp)
 import qualified Data.Array.Accelerate.AST                  as AST
 import Data.Array.Accelerate.Pretty ()
+
+#include "accelerate.h"
 
 
 -- Monadic array computations
@@ -274,8 +276,8 @@ prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
 prjIdx 0 (PushLayout _ ix) = fromJust (gcast ix)
                                -- can't go wrong unless the library is wrong!
 prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
-prjIdx _ EmptyLayout       
-  = error "Data.Array.Accelerate.Smart.prjIdx: internal error"
+prjIdx _ EmptyLayout       =
+  INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
 
 -- |Convert an open expression with given environment layouts.
 --

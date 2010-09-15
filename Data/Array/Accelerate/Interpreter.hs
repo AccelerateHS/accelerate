@@ -1,5 +1,5 @@
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE GADTs, BangPatterns, PatternGuards #-}
+{-# LANGUAGE CPP, GADTs, BangPatterns, PatternGuards #-}
 {-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
@@ -49,6 +49,8 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
+
+#include "accelerate.h"
 
 
 -- Program execution
@@ -144,12 +146,10 @@ unitOp e = DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElem e)}
 reshapeOp :: Sugar.Ix dim 
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
 reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
-  | Sugar.size newShape == size oldShape
   = let Array _ adata = force darr
     in 
-    delay $ Array (Sugar.fromElem newShape) adata
-  | otherwise 
-  = error "Data.Array.Accelerate.Interpreter.reshape: shape mismatch"
+    BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
+    $ delay $ Array (Sugar.fromElem newShape) adata
 
 replicateOp :: (Sugar.Ix dim, Sugar.Elem slix)
             => SliceIndex (Sugar.ElemRepr slix) 
@@ -201,11 +201,9 @@ indexOp sliceIndex (DelayedArray sh pf) slix
         in
         ((sl', sz), \(ix, i) -> (pf' ix, i))
     restrict (SliceFixed sliceIndex) (slix, i) (sh, sz)
-      | i < sz
       = let (sl', pf') = restrict sliceIndex slix sh
         in
-        (sl', \ix -> (pf' ix, i))
-      | otherwise = error "Index out of bounds"
+        BOUNDS_CHECK(checkIndex) "index" i sz $ (sl', \ix -> (pf' ix, i))
 
 mapOp :: Sugar.Elem e' 
       => (e -> e') 
