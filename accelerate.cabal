@@ -137,7 +137,7 @@ Library
 
   If flag(test-suite)
     Exposed-modules:    Data.Array.Accelerate.Test
-                        Data.Array.Accelerate.Test.QuickCheck
+    Other-modules:      Data.Array.Accelerate.Test.QuickCheck
                         Data.Array.Accelerate.Test.QuickCheck.Arbitrary
 
   Other-modules:        Data.Array.Accelerate.Internal.Check

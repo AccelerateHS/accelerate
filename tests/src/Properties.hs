@@ -20,7 +20,6 @@ import qualified Data.Array.Accelerate.Interpreter as Interp
 
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA        as CUDA
-import System.IO.Unsafe (unsafePerformIO)
 #endif
 
 -- friends
@@ -87,7 +86,7 @@ eq1 f g xs = not (null xs) ==>
       expr   = g (vec xs)
       interp = Acc.toList (Interp.run expr)
 #ifdef ACCELERATE_CUDA_BACKEND
-      cuda   = unsafePerformIO $ Acc.toList `fmap` (CUDA.run expr)
+      cuda   = Acc.toList (CUDA.run expr)
   in (ref `sim` interp) QC..&. (ref `sim` cuda)
 #else
   in (ref `sim` interp)
@@ -102,7 +101,7 @@ eq2 f g xs ys = not (null xs) && not (null ys) ==>
       expr   = g (vec xs) (vec ys)
       interp = Acc.toList (Interp.run expr)
 #ifdef ACCELERATE_CUDA_BACKEND
-      cuda   = unsafePerformIO $ Acc.toList `fmap` (CUDA.run expr)
+      cuda   = Acc.toList (CUDA.run expr)
   in (ref `sim` interp) QC..&. (ref `sim` cuda)
 #else
   in (ref `sim` interp)
@@ -217,7 +216,7 @@ test_arbitrary :: forall e. (Arbitrary (Acc (Vector e)), Similar e) => e -> Prop
 test_arbitrary _ =
   forAll (arbitrary :: Gen (Acc (Vector e))) $ \expr ->
     let interp = Acc.toList (Interp.run expr)
-        cuda   = unsafePerformIO $ Acc.toList `fmap` CUDA.run expr
+        cuda   = Acc.toList (CUDA.run expr)
     in
     interp `sim` cuda
 #endif

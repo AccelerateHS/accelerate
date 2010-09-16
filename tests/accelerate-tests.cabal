@@ -1,5 +1,5 @@
 Name:                   accelerate-tests
-Version:                0.7.1.0
+Version:                0.8.1.0
 License:                BSD3
 License-file:           LICENSE
 Category:               Compilers/Interpreters, Concurrency, Data
@@ -18,7 +18,7 @@ Executable accelerate-tests
   HS-source-dirs:       src
   Main-is:              Main.hs
 
-  Build-depends:        accelerate == 0.7.1.0,
+  Build-depends:        accelerate == 0.8.1.0,
                         base == 4.*,
                         QuickCheck >= 2
 
