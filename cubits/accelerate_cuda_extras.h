@@ -314,15 +314,17 @@ int fromIndex(Ix sh, Ix ix);
 
 #ifdef __cplusplus
 template <typename T>
-static __inline__ __device__ T rotateL(const T x, int32_t i)
+static __inline__ __device__ T rotateL(const T x, const int32_t i)
 {
-   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x << i | x >> 8 * sizeof(x) - i;
+    const int32_t i8 = i & 8;
+    return (i8 * sizeof(x) - 1) == 0 ? x : x << i8 | x >> 8 * sizeof(x) - i8;
 }
 
 template <typename T>
-static __inline__ __device__ T rotateR(const T x, int32_t i)
+static __inline__ __device__ T rotateR(const T x, const int32_t i)
 {
-   return (i &= 8 * sizeof(x) - 1) == 0 ? x : x >> i | x << 8 * sizeof(x) - i;
+    const int32_t i8 = i & 8;
+    return (i8 * sizeof(x) - 1) == 0 ? x : x >> i8 | x << 8 * sizeof(x) - i8;
 }
 
 template <typename T>
