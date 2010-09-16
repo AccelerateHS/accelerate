@@ -13,7 +13,7 @@ import Data.List
 import Foreign.C.Types
 
 import Data.Array.Accelerate                       (Elem, Acc, Vector, Array)
-import Data.Array.Accelerate.Test.QuickCheck
+import Data.Array.Accelerate.Test
 
 import qualified Data.Array.Accelerate             as Acc
 import qualified Data.Array.Accelerate.Interpreter as Interp
