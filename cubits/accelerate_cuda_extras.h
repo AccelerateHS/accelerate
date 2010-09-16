@@ -316,15 +316,15 @@ int fromIndex(Ix sh, Ix ix);
 template <typename T>
 static __inline__ __device__ T rotateL(const T x, const int32_t i)
 {
-    const int32_t i8 = i & 8;
-    return (i8 * sizeof(x) - 1) == 0 ? x : x << i8 | x >> 8 * sizeof(x) - i8;
+    const int32_t i8 = i & 8 * sizeof(x) - 1;
+    return i8 == 0 ? x : x << i8 | x >> 8 * sizeof(x) - i8;
 }
 
 template <typename T>
 static __inline__ __device__ T rotateR(const T x, const int32_t i)
 {
-    const int32_t i8 = i & 8;
-    return (i8 * sizeof(x) - 1) == 0 ? x : x >> i8 | x << 8 * sizeof(x) - i8;
+    const int32_t i8 = i & 8 * sizeof(x) - 1;
+    return i8 == 0 ? x : x >> i8 | x << 8 * sizeof(x) - i8;
 }
 
 template <typename T>
