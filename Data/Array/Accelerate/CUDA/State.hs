@@ -168,16 +168,19 @@ evalCUDA :: CIO a -> IO a
 evalCUDA = liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc =
-  let {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
-      ref = unsafePerformIO (initialise >>= newIORef)
-  in do
-    state <- readIORef ref
-    clearMemTable state
-    (a,s) <- runStateT acc state
-    saveIndexFile s
-    writeIORef ref s
-    return (a,s)
+runCUDA acc = do
+  state <- readIORef ref
+  clearMemTable state   -- ugly kludge
+  (a,s) <- runStateT acc state
+  saveIndexFile s
+  writeIORef ref s
+  return (a,s)
+  where
+    {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
+    ref = unsafePerformIO $ do
+      r <- initialise >>= newIORef
+      _ <- mkWeakIORef r (CUDA.pop >>= CUDA.destroy)
+      return r
 
 
 -- In case of memory leaks, which we should fix, manually release any lingering
@@ -185,6 +188,7 @@ runCUDA acc =
 --
 clearMemTable :: CUDAState -> IO ()
 clearMemTable st = do
+  CUDA.sync     -- TLM: not blocking??
   entries <- HT.toList (_memoryTable st)
   forM_ entries $ \(k,v) -> do
     HT.delete (_memoryTable st) k
