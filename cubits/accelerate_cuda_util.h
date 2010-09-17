@@ -1,13 +1,13 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Utils
+ * Module    : Util
  * Copyright : (c) [2009..2010] Trevor L. McDonell
  * License   : BSD
  *
  * ---------------------------------------------------------------------------*/
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __ACCELERATE_CUDA_UTIL_H__
+#define __ACCELERATE_CUDA_UTIL_H__
 
 #include <math.h>
 #include <cuda_runtime.h>
@@ -61,76 +61,6 @@
         CUDA_SAFE_CALL_NO_SYNC(cudaThreadSynchronize());                       \
     } while (0)
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- * Determine if the input is a power of two
- */
-inline int
-isPow2(unsigned int x)
-{
-    return ((x&(x-1)) == 0);
-}
-
-/*
- * Compute the next highest power of two
- */
-inline unsigned int
-ceilPow2(unsigned int x)
-{
-#if 0
-    --x;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    return ++x;
-#endif
-
-    return (isPow2(x)) ? x : 1u << (int) ceil(log2((double)x));
-}
-
-/*
- * Compute the next lowest power of two
- */
-inline unsigned int
-floorPow2(unsigned int x)
-{
-#if 0
-    float nf = (float) n;
-    return 1 << (((*(int*)&nf) >> 23) - 127);
-#endif
-
-    int exp;
-    frexp(x, &exp);
-    return 1 << (exp - 1);
-}
-
-/*
- * computes next highest multiple of f from x
- */
-inline unsigned int
-multiple(unsigned int x, unsigned int f)
-{
-    return ((x + (f-1)) / f);
-}
-
-/*
- * MS Excel-style CEIL() function. Rounds x up to nearest multiple of f
- */
-inline unsigned int
-ceiling(unsigned int x, unsigned int f)
-{
-    return multiple(x, f) * f;
-}
-
 #undef __assert
-#ifdef __cplusplus
-}
-#endif
-#endif
+#endif  // __ACCELERATE_CUDA_UTIL_H__
 

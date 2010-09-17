@@ -41,7 +41,10 @@ Stability:              Experimental
 -- Should be in the Library stanza, and only enabled for the CUDA backend,
 -- but Cabal does not support that.
 Data-files:             cubits/accelerate_cuda_extras.h
-                        cubits/accelerate_cuda_utils.h
+                        cubits/accelerate_cuda_function.h
+                        cubits/accelerate_cuda_shape.h
+                        cubits/accelerate_cuda_texture.h
+                        cubits/accelerate_cuda_util.h
                         cubits/backpermute.inl
                         cubits/fold.inl
                         cubits/fold_segmented.inl
