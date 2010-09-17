@@ -22,6 +22,8 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.CUDA.CodeGen
+import Data.Array.Accelerate.Array.Representation
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 
 #include "accelerate.h"
 
@@ -30,8 +32,8 @@ import Data.Array.Accelerate.CUDA.CodeGen
 -- Generate a unique key for each kernel computation (not extensively tested...)
 --
 accToKey :: OpenAcc aenv a -> String
-accToKey (Replicate _ e a)   = chr 17  : showTy (accType a) ++ showExp e
-accToKey (Index _ a e)       = chr 29  : showTy (accType a) ++ showExp e
+accToKey r@(Replicate s e a) = chr 17  : showTy (accType a) ++ showExp e ++ showSI s e a r
+accToKey r@(Index s a e)     = chr 29  : showTy (accType a) ++ showExp e ++ showSI s e r a
 accToKey (Map f a)           = chr 41  : showTy (accType a) ++ showFun f
 accToKey (ZipWith f x y)     = chr 53  : showTy (accType x) ++ showTy (accType y) ++ showFun f
 accToKey (Fold f e a)        = chr 67  : showTy (accType a) ++ showFun f ++ showExp e
@@ -54,6 +56,19 @@ showFun f = render . hcat . map pretty $ evalState (codeGenFun f) []
 
 showExp :: OpenExp env aenv a -> String
 showExp e = render . hcat . map pretty $ evalState (codeGenExp e) []
+
+showSI :: SliceIndex (Sugar.ElemRepr slix) (Sugar.ElemRepr sl) co (Sugar.ElemRepr dim)
+       -> Exp aenv slix                         {- dummy -}
+       -> OpenAcc aenv (Sugar.Array sl e)       {- dummy -}
+       -> OpenAcc aenv (Sugar.Array dim e)      {- dummy -}
+       -> String
+showSI sl _ _ _ = slice sl 0
+  where
+    slice :: SliceIndex slix sl co dim -> Int -> String
+    slice (SliceNil)            _ = []
+    slice (SliceAll   sliceIdx) n = '_'    :  slice sliceIdx n
+    slice (SliceFixed sliceIdx) n = show n ++ slice sliceIdx (n+1)
+
 
 {-
 -- hash function from the dragon book pp437; assumes 7 bit characters and needs
