@@ -451,10 +451,14 @@ newArray sh = ad `seq` Array (Sugar.fromElem sh) ad
 -- will convert to the base integer width of the device, namely, 32-bits.
 -- Singleton dimensions are considered to be of unit size.
 --
+-- Internally, Accelerate uses snoc-based tuple projection, while the data
+-- itself is stored in reading order. Ensure we match the behaviour of regular
+-- tuples and code generation thereof.
+--
 convertIx :: Ix dim => dim -> [CUDA.FunParam]
 convertIx = post . map CUDA.IArg . shapeToList
   where post [] = [CUDA.IArg 1]
-        post xs = xs
+        post xs = reverse xs
 
 -- Convert a slice specification into storable index projection components.
 -- Note: implicit conversion Int -> Int32
