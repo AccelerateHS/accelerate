@@ -33,7 +33,8 @@ mkFold ty identity apply = CUTranslSkel code skel
     skel = "fold.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkIdentity identity
+            [ mkTuplePartition ty
+            , mkIdentity identity
             , mkApply 2 apply ])
             (mkNodeInfo (initPos skel) (Name 0))
 
@@ -43,7 +44,8 @@ mkFoldSeg ty int identity apply = CUTranslSkel code skel
     skel = "fold_segmented.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTypedef "Int" False (head int)
+            [ mkTuplePartition ty
+            , mkTypedef "Int" False (head int)
             , mkIdentity identity
             , mkApply 2 apply ])
             (mkNodeInfo (initPos skel) (Name 0))

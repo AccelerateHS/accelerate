@@ -35,7 +35,8 @@ fold
     const Ix            shape
 )
 {
-    extern volatile __shared__ TyOut s_data[];
+    extern volatile __shared__ void* s_ptr[];
+    ArrOut s_data = partition(s_ptr, blockDim.x);
 
     /*
      * Calculate first level of reduction reading into shared memory
@@ -68,12 +69,12 @@ fold
      * Each thread puts its local sum into shared memory, then threads
      * cooperatively reduce the shared array to a single value.
      */
-    s_data[tid] = sum;
+    set(s_data, tid, sum);
     __syncthreads();
 
-    if (BLOCK_SIZE >= 512) { if (tid < 256) { s_data[tid] = sum = apply(sum, s_data[tid+256]); } __syncthreads(); }
-    if (BLOCK_SIZE >= 256) { if (tid < 128) { s_data[tid] = sum = apply(sum, s_data[tid+128]); } __syncthreads(); }
-    if (BLOCK_SIZE >= 128) { if (tid <  64) { s_data[tid] = sum = apply(sum, s_data[tid+ 64]); } __syncthreads(); }
+    if (BLOCK_SIZE >= 512) { if (tid < 256) { sum = apply(sum, get0(s_data, tid+256)); set(s_data, tid, sum); } __syncthreads(); }
+    if (BLOCK_SIZE >= 256) { if (tid < 128) { sum = apply(sum, get0(s_data, tid+128)); set(s_data, tid, sum); } __syncthreads(); }
+    if (BLOCK_SIZE >= 128) { if (tid <  64) { sum = apply(sum, get0(s_data, tid+ 64)); set(s_data, tid, sum); } __syncthreads(); }
 
     if (tid < 32)
     {
@@ -81,12 +82,12 @@ fold
          * Use an extra warps worth of elements of shared memory, to let threads
          * index beyond the input data without using any branch instructions.
          */
-        s_data[tid] = sum = apply(sum, s_data[tid + 32]);
-        s_data[tid] = sum = apply(sum, s_data[tid + 16]);
-        s_data[tid] = sum = apply(sum, s_data[tid +  8]);
-        s_data[tid] = sum = apply(sum, s_data[tid +  4]);
-        s_data[tid] = sum = apply(sum, s_data[tid +  2]);
-        s_data[tid] = sum = apply(sum, s_data[tid +  1]);
+        sum = apply(sum, get0(s_data, tid+32)); set(s_data, tid, sum);
+        sum = apply(sum, get0(s_data, tid+16)); set(s_data, tid, sum);
+        sum = apply(sum, get0(s_data, tid+ 8)); set(s_data, tid, sum);
+        sum = apply(sum, get0(s_data, tid+ 4)); set(s_data, tid, sum);
+        sum = apply(sum, get0(s_data, tid+ 2)); set(s_data, tid, sum);
+        sum = apply(sum, get0(s_data, tid+ 1));
     }
 
     /*

@@ -17,16 +17,15 @@
  * extra half-warp worth of elements of shared memory per block, to let threads
  * index beyond the input data without using any branch instructions.
  */
-template <typename T>
 static __inline__ __device__
-T reduce_warp(volatile T* s_data, T sum)
+TyOut reduce_warp(ArrOut s_data, TyOut sum)
 {
-    s_data[threadIdx.x] = sum;
-    s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x + 16]);
-    s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x +  8]);
-    s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x +  4]);
-    s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x +  2]);
-    s_data[threadIdx.x] = sum = apply(sum, s_data[threadIdx.x +  1]);
+    set(s_data, threadIdx.x, sum);
+    sum = apply(sum, get0(s_data, threadIdx.x + 16)); set(s_data, threadIdx.x, sum);
+    sum = apply(sum, get0(s_data, threadIdx.x +  8)); set(s_data, threadIdx.x, sum);
+    sum = apply(sum, get0(s_data, threadIdx.x +  4)); set(s_data, threadIdx.x, sum);
+    sum = apply(sum, get0(s_data, threadIdx.x +  2)); set(s_data, threadIdx.x, sum);
+    sum = apply(sum, get0(s_data, threadIdx.x +  1));
 
     return sum;
 }
@@ -73,8 +72,8 @@ fold_segmented
     /*
      * Manually partition (dynamically-allocated) shared memory
      */
-    extern __shared__ Ix s_ptrs[][2];
-    TyOut* s_data = (TyOut*) &s_ptrs[vectors_per_block][2];
+    extern volatile __shared__ Ix s_ptrs[][2];
+    ArrOut s_data = partition((void*) &s_ptrs[vectors_per_block][2], blockDim.x);
 
     for (Ix seg = vector_id; seg < num_segments; seg += num_vectors)
     {
