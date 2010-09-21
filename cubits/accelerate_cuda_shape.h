@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Shape
- * Copyright : (c) [2009..2010] Trevor L. McDonell
- * License   : BSD
+ * Module      : Shape
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * ---------------------------------------------------------------------------*/
 

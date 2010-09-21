@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : FoldSeg
- * Copyright : (c) [2009..2010] Trevor L. McDonell, Rami G. Mukhtar
- * License   : BSD
+ * Kernel      : FoldSeg
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * Reduction an array to a single value for each segment, using a binary
  * associative function

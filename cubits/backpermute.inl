@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Backpermute
- * Copyright : (c) [2009..2010] Trevor L. McDonell
- * License   : BSD
+ * Kernel      : Backpermute
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * Backwards permutation (gather) an array according to the permutation
  * function. The input `shape' is that of the output array.

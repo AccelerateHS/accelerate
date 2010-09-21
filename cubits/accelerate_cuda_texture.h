@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Textures
- * Copyright : (c) [2009..2010] Trevor L. McDonell
- * License   : BSD
+ * Module      : Texture
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * CUDA texture definitions and access functions are defined in terms of
  * templates, and hence only available through the C++ interface. Expose some

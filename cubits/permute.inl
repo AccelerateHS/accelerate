@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : Permute
- * Copyright : (c) [2009..2010] Trevor L. McDonell
- * License   : BSD
+ * Kernel      : Permute
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * Forward permutation, characterised by a function that determines for each
  * element in the source array where it should go in the target. The output

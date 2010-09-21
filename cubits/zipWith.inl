@@ -1,8 +1,11 @@
 /* -----------------------------------------------------------------------------
  *
- * Module    : ZipWith
- * Copyright : (c) 2010 Trevor L. McDonell
- * License   : BSD
+ * Kernel      : ZipWith
+ * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+ * License     : BSD3
+ *
+ * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+ * Stability   : experimental
  *
  * Combine two arrays using the given binary operator. Each thread processes
  * multiple elements, striding the array by the grid size.
