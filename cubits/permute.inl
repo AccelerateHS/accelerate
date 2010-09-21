@@ -24,8 +24,8 @@ permute
     const DimIn0        shIn0
 )
 {
-    Ix shapeSize      = size(shIn0);
-    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
+    const Ix shapeSize = size(shIn0);
+    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
 
     for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {

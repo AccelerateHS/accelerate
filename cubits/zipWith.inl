@@ -21,8 +21,8 @@ zipWith
     const DimIn0        shIn0
 )
 {
-    Ix shapeSize      = size(shOut);
-    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
+    const Ix shapeSize = size(shOut);
+    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
 
     for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
