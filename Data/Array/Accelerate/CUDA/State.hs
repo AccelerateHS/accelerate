@@ -41,6 +41,7 @@ import qualified Foreign.CUDA.Driver    as CUDA
 import System.Directory
 import System.FilePath
 import System.Posix.Types               (ProcessID)
+import System.Mem.Weak
 import System.IO.Unsafe
 
 import Data.Array.Accelerate.CUDA.Analysis.Device
@@ -153,11 +154,13 @@ initialise :: IO CUDAState
 initialise = do
   CUDA.initialise []
   (d,prp) <- selectBestDevice
-  _       <- CUDA.create d [CUDA.SchedAuto]
+  ctx     <- CUDA.create d [CUDA.SchedAuto]
   dir     <- getOutputDir
   mem     <- HT.new (==) fromIntegral
   (knl,n) <- loadIndexFile (dir </> "_index")
-  return $ CUDAState n dir prp mem knl
+  let state = CUDAState n dir prp mem knl
+  addFinalizer state (CUDA.destroy ctx)
+  return state
 
 
 -- |
@@ -168,19 +171,17 @@ evalCUDA :: CIO a -> IO a
 evalCUDA = liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc = do
-  state <- readIORef ref
-  clearMemTable state   -- ugly kludge
-  (a,s) <- runStateT acc state
-  saveIndexFile s
-  writeIORef ref s
-  return (a,s)
-  where
+runCUDA acc =
+  let
     {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
-    ref = unsafePerformIO $ do
-      r <- initialise >>= newIORef
-      _ <- mkWeakIORef r (CUDA.pop >>= CUDA.destroy)
-      return r
+    ref = unsafePerformIO (initialise >>= newIORef)
+  in do
+    state <- readIORef ref
+    clearMemTable state   -- ugly kludge
+    (a,s) <- runStateT acc state
+    saveIndexFile s
+    writeIORef ref s
+    return (a,s)
 
 
 -- In case of memory leaks, which we should fix, manually release any lingering
