@@ -15,7 +15,7 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, CIO, unique, outputDir, deviceProps, memoryTable, kernelTable,
+    evalCUDA, runCUDA, CIO, unique, outputDir, deviceProps, deviceContext, memoryTable, kernelTable,
     AccTable, KernelEntry(KernelEntry), kernelName, kernelStatus,
     MemTable, MemoryEntry(MemoryEntry), refcount, memsize, arena,
 
@@ -66,11 +66,12 @@ type MemTable = HashTable WordPtr MemoryEntry
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
   {
-    _unique      :: Int,
-    _outputDir   :: FilePath,
-    _deviceProps :: CUDA.DeviceProperties,
-    _memoryTable :: MemTable,
-    _kernelTable :: AccTable
+    _unique        :: Int,
+    _outputDir     :: FilePath,
+    _deviceProps   :: CUDA.DeviceProperties,
+    _deviceContext :: CUDA.Context,
+    _memoryTable   :: MemTable,
+    _kernelTable   :: AccTable
   }
 
 -- |
@@ -150,6 +151,11 @@ loadIndexFile _  = (,0) <$> HT.new (==) HT.hashString
 -- This will be done only once per program execution, as initialising the CUDA
 -- context is relatively expensive.
 --
+-- Would like to put the finaliser on the state token, since finalising the
+-- context affects the various hash tables. However, this places the finaliser
+-- on the CUDAState "box", and the box is removed by optimisations causing the
+-- finaliser to fire prematurely.
+--
 initialise :: IO CUDAState
 initialise = do
   CUDA.initialise []
@@ -158,9 +164,8 @@ initialise = do
   dir     <- getOutputDir
   mem     <- HT.new (==) fromIntegral
   (knl,n) <- loadIndexFile (dir </> "_index")
-  let state = CUDAState n dir prp mem knl
-  addFinalizer state (CUDA.destroy ctx)
-  return state
+  addFinalizer ctx (CUDA.destroy ctx)
+  return $ CUDAState n dir prp ctx mem knl
 
 
 -- |
