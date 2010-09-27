@@ -8,14 +8,6 @@
  *
  * ---------------------------------------------------------------------------*/
 
-/*
- * We require block sizes are a power of two. This value gives maximum occupancy
- * for both 1.x and 2.x class devices.
- */
-#ifndef BLOCK_SIZE
-#define BLOCK_SIZE              256
-#endif
-
 #ifndef LENGTH_IS_POW_2
 #define LENGTH_IS_POW_2         0
 #endif
@@ -44,7 +36,7 @@ fold
     Ix       i;
     TyOut    sum      = identity();
     const Ix tid      = threadIdx.x;
-    const Ix gridSize = BLOCK_SIZE * 2 * gridDim.x;
+    const Ix gridSize = blockDim.x * 2 * gridDim.x;
 
     /*
      * Reduce multiple elements per thread. The number is determined by the
@@ -53,7 +45,7 @@ fold
      *
      * The loop stride of `gridSize' is used to maintain coalescing.
      */
-    for (i =  blockIdx.x * BLOCK_SIZE * 2 + tid; i <  shape; i += gridSize)
+    for (i =  blockIdx.x * blockDim.x * 2 + tid; i <  shape; i += gridSize)
     {
         sum = apply(sum, get0(d_in0, i));
 
@@ -61,8 +53,8 @@ fold
          * Ensure we don't read out of bounds. This is optimised away if the
          * input length is a power of two
          */
-        if (LENGTH_IS_POW_2 || i + BLOCK_SIZE < shape)
-            sum = apply(sum, get0(d_in0, i+BLOCK_SIZE));
+        if (LENGTH_IS_POW_2 || i + blockDim.x < shape)
+            sum = apply(sum, get0(d_in0, i+blockDim.x));
     }
 
     /*
@@ -72,9 +64,9 @@ fold
     set(s_data, tid, sum);
     __syncthreads();
 
-    if (BLOCK_SIZE >= 512) { if (tid < 256) { sum = apply(sum, get0(s_data, tid+256)); set(s_data, tid, sum); } __syncthreads(); }
-    if (BLOCK_SIZE >= 256) { if (tid < 128) { sum = apply(sum, get0(s_data, tid+128)); set(s_data, tid, sum); } __syncthreads(); }
-    if (BLOCK_SIZE >= 128) { if (tid <  64) { sum = apply(sum, get0(s_data, tid+ 64)); set(s_data, tid, sum); } __syncthreads(); }
+    if (blockDim.x >= 512) { if (tid < 256) { sum = apply(sum, get0(s_data, tid+256)); set(s_data, tid, sum); } __syncthreads(); }
+    if (blockDim.x >= 256) { if (tid < 128) { sum = apply(sum, get0(s_data, tid+128)); set(s_data, tid, sum); } __syncthreads(); }
+    if (blockDim.x >= 128) { if (tid <  64) { sum = apply(sum, get0(s_data, tid+ 64)); set(s_data, tid, sum); } __syncthreads(); }
 
     if (tid < 32)
     {

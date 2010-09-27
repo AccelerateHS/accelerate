@@ -118,7 +118,7 @@ Library
     Build-depends:      binary,
                         bytestring,
                         containers,
-                        cuda >= 0.2 && < 0.3,
+                        cuda >= 0.2.2 && < 0.3,
                         directory,
                         fclabels >= 0.9 && < 1.0,
                         filepath,

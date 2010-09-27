@@ -50,13 +50,10 @@ launchConfig acc n fn = do
 
 -- |
 -- Determine the optimal thread block size for a given array computation. Fold
--- requires blocks with a power-of-two number of threads; the magic value chosen
--- here allows for maximum occupancy on 1.x and 2.x class devices.
---
--- TLM: metrics for fold may be invalidated for complex types?
+-- requires blocks with a power-of-two number of threads.
 --
 blockSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
-blockSize p (Fold _ _ _) r s = (256, CUDA.occupancy p 256 r (s 256))
+blockSize p (Fold _ _ _) r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
 blockSize p _            r s = CUDA.optimalBlockSize p (const r) s
 
 
