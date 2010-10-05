@@ -9,8 +9,6 @@
  *
  * ---------------------------------------------------------------------------*/
 
-#define WARP_SIZE       32
-
 
 /*
  * Cooperatively reduce an array to a single value. The computation requires an
@@ -62,12 +60,12 @@ fold_segmented
     const Ix            length                  // of input array d_in0
 )
 {
-    const Ix vectors_per_block = blockDim.x / WARP_SIZE;
+    const Ix vectors_per_block = blockDim.x / warpSize;
     const Ix num_vectors       = vectors_per_block * gridDim.x;
     const Ix thread_id         = blockDim.x * blockIdx.x + threadIdx.x;
-    const Ix vector_id         = thread_id / WARP_SIZE;
-    const Ix thread_lane       = threadIdx.x & (WARP_SIZE - 1);
-    const Ix vector_lane       = threadIdx.x / WARP_SIZE;
+    const Ix vector_id         = thread_id / warpSize;
+    const Ix thread_lane       = threadIdx.x & (warpSize - 1);
+    const Ix vector_lane       = threadIdx.x / warpSize;
 
     /*
      * Manually partition (dynamically-allocated) shared memory
@@ -104,7 +102,7 @@ fold_segmented
          * local sum. This is then reduced cooperatively in shared memory.
          */
         TyOut sum = identity();
-        for (Ix i = start + thread_lane; i < end; i += WARP_SIZE)
+        for (Ix i = start + thread_lane; i < end; i += warpSize)
             sum   = apply(sum, get0(d_in0, i));
 
         sum = reduce_warp(s_data, sum);
