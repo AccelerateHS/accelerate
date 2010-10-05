@@ -54,7 +54,7 @@ launchConfig acc n fn = do
 --
 blockSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
 blockSize p (Fold _ _ _) r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
-blockSize p _            r s = CUDA.optimalBlockSize p (const r) s
+blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) s
 
 
 -- |
