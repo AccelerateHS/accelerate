@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, Rank2Types #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -9,11 +9,8 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Compile (compileAcc)
+module Data.Array.Accelerate.CUDA.Compile (compileAcc, precompileAcc)
   where
-
-import Prelude   hiding (id, (.), mod)
-import Control.Category
 
 import Data.Maybe
 import Control.Monad
@@ -47,56 +44,66 @@ import Paths_accelerate                                 (getDataDir)
 -- expression
 --
 compileAcc :: OpenAcc aenv a -> CIO ()
-compileAcc (Use (Array sh ad)) =
-  let n = size sh
-  in  when (n > 0) $ do
-        mallocArray    ad n
-        pokeArrayAsync ad n Nothing
-
-compileAcc (Let  a1 a2)    = compileAcc a1 >> compileAcc a2
-compileAcc (Let2 a1 a2)    = compileAcc a1 >> compileAcc a2
-compileAcc (Avar _)        = return ()
-compileAcc (Unit e1)       = compileExp e1
-compileAcc (Reshape e1 a1) = compileExp e1 >> compileAcc a1
-
-compileAcc op@(Replicate _ e1 a1)    = compileExp e1 >> compileAcc a1 >> compile op
-compileAcc op@(Index _ a1 e1)        = compileAcc a1 >> compileExp e1 >> compile op
-compileAcc op@(Map f1 a1)            = compileFun f1 >> compileAcc a1 >> compile op
-compileAcc op@(ZipWith f1 a1 a2)     = compileFun f1 >> compileAcc a1 >> compileAcc a2 >> compile op
-compileAcc op@(Fold f1 e1 a1)        = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
-compileAcc op@(Scanl f1 e1 a1)       = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
-compileAcc op@(Scanr f1 e1 a1)       = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compile op
-compileAcc op@(Backpermute e1 f1 a1) = compileExp e1 >> compileFun f1 >> compileAcc a1 >> compile op
-compileAcc op@(Permute f1 a1 f2 a2)  = compileFun f1 >> compileAcc a1 >> compileFun f2 >> compileAcc a2 >> compile op
-compileAcc op@(FoldSeg f1 e1 a1 a2)  = compileFun f1 >> compileExp e1 >> compileAcc a1 >> compileAcc a2 >> compile op
-compileAcc (Stencil _ _ _)           = 
-  error "D.A.Accelerate.CUDA.Compile: the CUDA backend does not support 'stencil' operations yet"
-compileAcc (Stencil2 _ _ _ _ _)      = 
-  error "D.A.Accelerate.CUDA.Compile: the CUDA backend does not support 'stencil2' operations yet"
+compileAcc = travA k
+  where
+    k :: OpenAcc aenv a -> CIO ()
+    k (Use (Array sh ad)) = let n = size sh
+                            in  when (n > 0) $ do
+                                  mallocArray    ad n
+                                  pokeArrayAsync ad n Nothing
+    k acc = compile acc
 
 
--- | Lift array expressions out of closed functions for code generation
+-- | Initiate code generation and compilation for an embedded expression, but do
+-- not transfer any data
 --
-compileFun :: OpenFun env aenv t -> CIO ()
-compileFun (Body e) = compileExp e
-compileFun (Lam f)  = compileFun f
+precompileAcc :: OpenAcc aenv a -> CIO ()
+precompileAcc = travA k
+  where
+    k :: OpenAcc aenv a -> CIO ()
+    k (Use _) = return ()
+    k acc     = compile acc
 
 
--- | Lift array computations out of scalar expressions for code generation. The
--- array expression must not contain any free scalar variables.
+-- Depth-first traversal of the term tree, searching for array expressions to
+-- apply the given function to.
 --
-compileExp :: OpenExp env aenv a -> CIO ()
-compileExp (Tuple t)           = compileTup t
-compileExp (Prj _ e1)          = compileExp e1
-compileExp (PrimApp _ e1)      = compileExp e1
-compileExp (Cond e1 e2 e3)     = compileExp e1 >> compileExp e2 >> compileExp e3
-compileExp (IndexScalar a1 e1) = compileAcc a1 >> compileExp e1
-compileExp (Shape a1)          = compileAcc a1
-compileExp _                   = return ()
+travA :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> OpenAcc aenv a -> CIO ()
+travA _ (Avar _)                 = return ()
+travA f (Unit e)                 = travE f e
+travA f (Let a b)                = travA f a >> travA f b
+travA f (Let2 a b)               = travA f a >> travA f b
+travA f (Reshape e a)            = travE f e >> travA f a
+travA f acc@(Use _)              = f acc
+travA f acc@(Replicate _ e a)    = travE f e >> travA f a >> f acc
+travA f acc@(Index _ a e)        = travA f a >> travE f e >> f acc
+travA f acc@(Map g a)            = travF f g >> travA f a >> f acc
+travA f acc@(ZipWith g a b)      = travF f g >> travA f a >> travA f b >> f acc
+travA f acc@(Fold g e a)         = travF f g >> travE f e >> travA f a >> f acc
+travA f acc@(FoldSeg g e a s)    = travF f g >> travE f e >> travA f a >> travA f s >> f acc
+travA f acc@(Scanl g e a)        = travF f g >> travE f e >> travA f a >> f acc
+travA f acc@(Scanr g e a)        = travF f g >> travE f e >> travA f a >> f acc
+travA f acc@(Permute g a h b)    = travF f g >> travA f a >> travF f h >> travA f b >> f acc
+travA f acc@(Backpermute e g a)  = travE f e >> travF f g >> travA f a >> f acc
+travA f acc@(Stencil g _ a)      = travF f g >> travA f a >> f acc
+travA f acc@(Stencil2 g _ a _ b) = travF f g >> travA f a >> travA f b >> f acc
 
-compileTup :: Tuple (OpenExp env aenv) a -> CIO ()
-compileTup NilTup          = return ()
-compileTup (t `SnocTup` e) = compileExp e >> compileTup t
+travE :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> OpenExp env aenv e -> CIO ()
+travE f (Tuple t)         = travT f t
+travE f (Prj _ e)         = travE f e
+travE f (PrimApp _ e)     = travE f e
+travE f (Cond p t e)      = travE f p >> travE f t >> travE f e
+travE f (IndexScalar a e) = travA f a >> travE f e
+travE f (Shape a)         = travA f a
+travE _ _                 = return ()
+
+travT :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> Tuple (OpenExp env aenv) t -> CIO ()
+travT _ NilTup        = return ()
+travT f (SnocTup t e) = travE f e >> travT f t
+
+travF :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> OpenFun env aenv t -> CIO ()
+travF f (Body e) = travE f e
+travF f (Lam b)  = travF f b
 
 
 -- | Generate and compile code for a single open array expression
@@ -109,7 +116,7 @@ compile acc = do
   unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- getM outputDir
-    cufile <- outputName acc (dir </> "dragon.cu")        -- here be dragons!
+    cufile <- outputName acc (dir </> "dragon.cu")        -- rawr!
     flags  <- compileFlags cufile
     pid    <- liftIO . withFilePath dir $ do
                 writeCode cufile (codeGenAcc acc)

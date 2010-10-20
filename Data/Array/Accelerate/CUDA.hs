@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
     -- * Generate and execute CUDA code for an array expression
-    Arrays, run
+    Arrays, precompile, run
 
   ) where
 
@@ -49,4 +49,31 @@ run acc
 
 execute :: Arrays a => Acc a -> CIO a
 execute acc = compileAcc acc >> executeAcc acc
+
+
+-- | Populate the internal cache with the compiled functions required to execute
+-- the given array program. This is the same as 'run', except that (1) no data
+-- is transferred to the device, and (2) the generated code is not invoked.
+--
+
+-- TODO: we would like the following to hold, but falls over in 
+-- D.A.A.Array.Sugar.arrayType
+--
+-- Note that it is not necessary to create an unused array argument. For
+-- example:
+--
+-- > dotp :: Vector a -> Vector a -> Acc (Scalar a)
+-- > dotp xs ys = fold (+) 0 $ zipWith (*) (use xs) (use ys)
+--
+-- It is sufficient to:
+--
+-- > precompile (dotp undefined undefined :: Acc (Scalar Float))
+--
+{-# NOINLINE precompile #-}
+precompile :: Arrays a => Sugar.Acc a -> ()
+precompile acc
+  = unsafePerformIO
+  $ evalCUDA (precompileAcc (Sugar.convertAcc acc) >> return ())
+             `catch`
+             \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
