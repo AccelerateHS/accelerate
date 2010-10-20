@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
     -- * Generate and execute CUDA code for an array expression
-    Arrays, precompile, run
+    Arrays, precompile, run, stream
 
   ) where
 
@@ -49,6 +49,29 @@ run acc
 
 execute :: Arrays a => Acc a -> CIO a
 execute acc = compileAcc acc >> executeAcc acc
+
+
+-- | Stream a lazily read list of input arrays through the given program,
+-- collecting results as we go
+--
+-- TODO:
+--  * avoid re-analysing the array code in the frontend
+--  * overlap host-device & device->host transfers, as well as computation
+--
+{-# NOINLINE stream #-}
+stream :: (Arrays a, Arrays b) => (a -> Sugar.Acc b) -> [a] -> [b]
+stream acc as
+  = unsafePerformIO
+  $ sequence' . flip map as
+  $ \s -> evalCUDA (execute (Sugar.convertAcc (acc s)) >>= collect)
+                   `catch`
+                   \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+
+-- A lazier version of Control.Monad.sequence
+--
+sequence' :: [IO a] -> IO [a]
+sequence' ms = foldr k (return []) ms
+    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
 
 
 -- | Populate the internal cache with the compiled functions required to execute
