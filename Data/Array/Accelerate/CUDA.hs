@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
     -- * Generate and execute CUDA code for an array expression
-    Arrays, precompile, run, stream
+    Arrays, run, stream, precompile
 
   ) where
 
@@ -24,7 +24,6 @@ import System.IO.Unsafe
 
 import Foreign.CUDA.Driver.Error
 
-import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Execute
@@ -41,34 +40,28 @@ import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 --
 {-# NOINLINE run #-}
 run :: Arrays a => Sugar.Acc a -> a
-run acc
-  = unsafePerformIO
-  $ evalCUDA (execute (Sugar.convertAcc acc) >>= collect)
-             `catch`
-             \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
-
-execute :: Arrays a => Acc a -> CIO a
-execute acc = compileAcc acc >> executeAcc acc
-
+run = unsafePerformIO . execute
 
 -- | Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
 --
+
 -- TODO:
 --  * avoid re-analysing the array code in the frontend
 --  * overlap host-device & device->host transfers, as well as computation
 --
 {-# NOINLINE stream #-}
 stream :: (Arrays a, Arrays b) => (a -> Sugar.Acc b) -> [a] -> [b]
-stream acc as
-  = unsafePerformIO
-  $ sequence' . flip map as
-  $ \s -> evalCUDA (execute (Sugar.convertAcc (acc s)) >>= collect)
-                   `catch`
-                   \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+stream acc = unsafePerformIO . sequence' . map (execute . acc)
 
--- A lazier version of Control.Monad.sequence
---
+
+execute :: Arrays a => Sugar.Acc a -> IO a
+execute a =
+  let acc = Sugar.convertAcc a
+  in  evalCUDA (compileAcc acc >> executeAcc acc >>= collect)
+      `catch`
+      \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+
 sequence' :: [IO a] -> IO [a]
 sequence' ms = foldr k (return []) ms
     where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
