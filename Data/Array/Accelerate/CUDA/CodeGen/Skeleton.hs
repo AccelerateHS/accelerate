@@ -66,8 +66,8 @@ mkMap tyOut tyIn0 apply = CUTranslSkel code skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
-mkZipWith :: [CType] -> Int -> [CType] -> Int -> [CType] -> Int -> [CExpr] -> CUTranslSkel
-mkZipWith tyOut dimOut tyIn1 dimIn1 tyIn0 dimIn0 apply = CUTranslSkel code skel
+mkZipWith :: ([CType], Int) -> ([CType], Int) -> ([CType], Int) -> [CExpr] -> CUTranslSkel
+mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code skel
   where
     skel = "zipWith.inl"
     code = CTranslUnit

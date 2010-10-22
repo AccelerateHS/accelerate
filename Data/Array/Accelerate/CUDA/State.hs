@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskell, TupleSections, TypeOperators #-}
+{-# LANGUAGE CPP, TemplateHaskell, TupleSections #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell

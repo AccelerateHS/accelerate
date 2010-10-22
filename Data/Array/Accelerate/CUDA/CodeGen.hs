@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs, PatternGuards, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, GADTs, PatternGuards, ScopedTypeVariables, TemplateHaskell #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.CodeGen
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -12,15 +12,17 @@
 module Data.Array.Accelerate.CUDA.CodeGen
   (
     CUTranslSkel,
-    codeGenAcc, codeGenFun, codeGenExp
+    runCodeGen, codeGenAcc, codeGenFun, codeGenExp
   )
   where
 
-import Prelude hiding (mod)
+import Prelude hiding (id, (.))
+import Control.Category
 
+import Data.Record.Label
 import Data.Char
 import Language.C
-import Control.Applicative
+import Control.Applicative                                      hiding (Const)
 import Control.Monad.State
 import Text.PrettyPrint
 
@@ -30,7 +32,7 @@ import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Representation
-import qualified Data.Array.Accelerate.AST                      as AST
+import Data.Array.Accelerate.AST
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
 
@@ -40,134 +42,171 @@ import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
 #include "accelerate.h"
 
-type CG a = State [CExtDecl] a
 
 -- Array expressions
 -- ~~~~~~~~~~~~~~~~~
 
--- | Generate CUDA device code for an array expression
+type CodeGen a = State CodeGenState a
+
+data CodeGenState = CodeGenState
+  { _arrays :: [CExtDecl]
+  , _shapes :: [CExtDecl]
+  }
+
+$(mkLabels [''CodeGenState])
+
+
+-- | Instantiate an array computation with a set of concrete function and type
+-- definitions to fix the parameters of an algorithmic skeleton. The generated
+-- code can then be pretty-printed to file, and compiled to object code
+-- executable on the device.
 --
-codeGenAcc :: AST.OpenAcc aenv a -> CUTranslSkel
+codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
-  let (CUTranslSkel code skel, fvar) = runState (codeGenAcc' acc) []
-      CTranslUnit decl node          = code
+  let (CUTranslSkel code skel, st) = runCodeGen (codeGen acc)
+      (CTranslUnit decl node)      = code
+      fvars                        = getL arrays st ++ getL shapes st
   in
-  CUTranslSkel (CTranslUnit (fvar ++ decl) node) skel
+  CUTranslSkel (CTranslUnit (fvars ++ decl) node) skel
 
--- FIXME:
---  The actual code generation workhorse. We run under a state which keeps track
---  of the free array variables encountered so far. This is used to determine
---  which reference to texture read from. Assumes the same traversal behaviour
---  during execution.
+runCodeGen :: CodeGen a -> (a,CodeGenState)
+runCodeGen = flip runState (CodeGenState [] [])
+
+
+-- The code generator, which needs to track any array references from scalar
+-- code, to produce the appropriate binding hooks. Such references must be
+-- lifted out in depth-first order.
 --
---  FRAGILE.
+codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
+codeGen (Fold f e _)          = mkFold (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (FoldSeg f e _ s)     = mkFoldSeg (codeGenExpType e) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanl f e _)         = mkScanl (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanr f e _)         = mkScanr (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen b@(Map f a)           = mkMap (codeGenAccType b) (codeGenAccType a) <$> codeGenFun f
+codeGen c@(ZipWith f a b)     = mkZipWith (codeGenAccTypeDim c) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
+codeGen b@(Permute f _ g a)   = mkPermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f <*> codeGenFun g
+codeGen b@(Backpermute _ f a) = mkBackpermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f
+codeGen b@(Replicate sl _ a)  = return . mkReplicate (codeGenAccType a) dimSl dimOut $ extend sl (dimOut-1)
+  where
+    dimSl  = accDim a
+    dimOut = accDim b
+
+    extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
+    extend (SliceNil)            _ = []
+    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n-1)
+    extend (SliceFixed sliceIdx) n = extend sliceIdx (n-1)
+
+codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 $ restrict sl (dimCo-1,dimSl-1)
+  where
+    dimCo  = length (codeGenExpType slix)
+    dimSl  = accDim b
+    dimIn0 = accDim a
+
+    restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
+    restrict (SliceNil)            _     = []
+    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n-1)
+    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m-1,n)
+
+codeGen (Stencil _ _ _)      = error "codeGenAcc: 'stencil' is not supported by the CUDA backend yet"
+codeGen (Stencil2 _ _ _ _ _) = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
+
+-- We should never get here: Use, Let, Let2, Avar, Unit, Reshape
 --
---  TLM 2010-07-16:
---    Make AST.Acc an instance of Traversable, and use mapAccumL to collect the
---    types of free array variables ??
---
-codeGenAcc' :: AST.OpenAcc aenv a -> CG CUTranslSkel
-codeGenAcc' op@(AST.Replicate sl e1 a1) = codeGenReplicate sl e1 a1 op <* codeGenExp e1
-codeGenAcc' op@(AST.Index sl a1 e1)     = codeGenIndex     sl a1 op e1 <* codeGenExp e1
-codeGenAcc' (AST.Fold f1 e1 _)          = mkFold    (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' (AST.FoldSeg f1 e1 _ s)     = mkFoldSeg (codeGenExpType e1) (codeGenAccType s)  <$> codeGenExp e1 <*> codeGenFun f1
-codeGenAcc' (AST.Scanl f1 e1 _)         = mkScanl   (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' (AST.Scanr f1 e1 _)         = mkScanr   (codeGenExpType e1) <$> codeGenExp e1   <*> codeGenFun f1
-codeGenAcc' op@(AST.Map f1 a1)          = mkMap     (codeGenAccType op) (codeGenAccType a1) <$> codeGenFun f1
-codeGenAcc' op@(AST.ZipWith f1 a1 a0)
-  = mkZipWith (codeGenAccType op) (accDim op)
-              (codeGenAccType a1) (accDim a1)
-              (codeGenAccType a0) (accDim a0)
-              <$> codeGenFun f1
-
-codeGenAcc' op@(AST.Permute f1 _ f2 a1)
-  = mkPermute (codeGenAccType a1) (accDim op) (accDim a1)
-  <$> codeGenFun f1
-  <*> codeGenFun f2
-
-codeGenAcc' op@(AST.Backpermute _ f1 a1)
-  = mkBackpermute (codeGenAccType a1) (accDim op) (accDim a1)
-  <$> codeGenFun f1
-
-codeGenAcc' x =
+codeGen x =
   INTERNAL_ERROR(error) "codeGenAcc"
-  (unlines ["unsupported array primitive", render . nest 2 $ text (show x)])
+  (unlines ["unsupported array primitive", render (nest 2 doc)])
+  where
+    acc = show x
+    doc | length acc <= 250 = text acc
+        | otherwise         = text (take 250 acc) <+> text "... {truncated}"
 
 
--- Embedded expressions
--- ~~~~~~~~~~~~~~~~~~~~
+mkPrj :: Int -> String -> Int -> CExpr
+mkPrj ndim var c
+ | ndim <= 1 = CVar (internalIdent var) internalNode
+ | otherwise = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
+
+
+-- Scalar Expressions
+-- ~~~~~~~~~~~~~~~~~~
 
 -- Function abstraction
 --
-codeGenFun :: AST.OpenFun env aenv t -> CG [CExpr]
-codeGenFun (AST.Lam  lam)  = codeGenFun lam
-codeGenFun (AST.Body body) = codeGenExp body
+codeGenFun :: OpenFun env aenv t -> CodeGen [CExpr]
+codeGenFun (Lam  lam)  = codeGenFun lam
+codeGenFun (Body body) = codeGenExp body
 
-unit :: a -> [a]
-unit x = [x]
 
--- Implementation of 'IndexScalar' and 'Shape' demonstrate that array
--- computations must be hoisted out of scalar expressions before code generation
--- or execution: kernel functions can not invoke other array computations.
+-- Embedded scalar computations
 --
--- TLM 2010-06-24:
---   Shape for free array variables??
+-- The state is used here to track array expressions that have been hoisted out
+-- of the scalar computation; namely, the arguments to 'IndexScalar' and 'Shape'
 --
--- TLM 2010-09-03:
---   We push a conditional expression into each component of a tuple, in order
---   to support tuples as the result of a branch. However, I doubt nvcc is
---   clever enough to do CSE on this expression.
---
-codeGenExp :: forall env aenv t. AST.OpenExp env aenv t -> CG [CExpr]
-codeGenExp (AST.Shape _)       = return . unit $ CVar (internalIdent "shape") internalNode
-codeGenExp (AST.PrimConst c)   = return . unit $ codeGenPrimConst c
-codeGenExp (AST.PrimApp f arg) = unit   . codeGenPrim f <$> codeGenExp arg
-codeGenExp (AST.Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
-codeGenExp (AST.Tuple t)       = codeGenTup t
-codeGenExp prj@(AST.Prj idx e)
+codeGenExp :: forall env aenv t. OpenExp env aenv t -> CodeGen [CExpr]
+codeGenExp (PrimConst c)   = pure . unit $ codeGenPrimConst c
+codeGenExp (PrimApp f arg) = unit . codeGenPrim f <$> codeGenExp arg
+codeGenExp (Const c)       = pure $ codeGenConst (Sugar.elemType (undefined::t)) c
+codeGenExp (Tuple t)       = codeGenTup t
+codeGenExp p@(Prj idx e)
   = reverse
-  . take (length $ codeGenTupleType (expType prj))
+  . take (length $ codeGenTupleType (expType p))
   . drop (prjToInt idx (expType e))
   . reverse
   <$> codeGenExp e
 
-codeGenExp (AST.Var i)         =
+codeGenExp (Var i) =
   let var = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
-  in case codeGenTupleType (Sugar.elemType (undefined::t)) of
-          [_] -> return [var]
-          cps -> return . reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
-            \c -> CMember var (internalIdent ('a':show c)) False internalNode
+  in
+  case codeGenTupleType (Sugar.elemType (undefined::t)) of
+       [_] -> return [var]
+       cps -> return . reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
+         \c -> CMember var (internalIdent ('a':show c)) False internalNode
 
-codeGenExp (AST.Cond p e1 e2) = do
-  [a] <- codeGenExp p
-  zipWith (\b c -> CCond a (Just b) c internalNode) <$> codeGenExp e1 <*> codeGenExp e2
+codeGenExp (Cond p t e) =
+  zipWith . (\[a] b c -> CCond a (Just b) c internalNode) <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
 
-codeGenExp (AST.IndexScalar a1 e1) = do
-  n   <- length <$> get
-  [i] <- codeGenExp e1
-  let ty = codeGenTupleTex (accType a1)
+codeGenExp (IndexScalar a e) = do
+  n   <- length <$> getM arrays
+  [i] <- codeGenExp e
+  let ty = codeGenTupleTex (accType a)
       fv = map (\x -> "tex" ++ show x) [n..]
 
-  modify (++ zipWith globalDecl ty fv)
+  modM arrays (zipWith array ty fv ++)
   return (zipWith (indexArray i) fv ty)
-
   where
-    globalDecl ty name = CDeclExt (CDecl (map CTypeSpec ty) [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
-    indexArray idx name [CDoubleType _] = CCall (CVar (internalIdent "indexDArray") internalNode) [CVar (internalIdent name) internalNode, idx] internalNode
-    indexArray idx name _               = CCall (CVar (internalIdent "indexArray")  internalNode) [CVar (internalIdent name) internalNode, idx] internalNode
+    array ty fv             = mkGlobal (map CTypeSpec ty) fv
+    indexArray i n t        = CCall (indexer t) [CVar (internalIdent n) internalNode, i] internalNode
+    indexer [CDoubleType _] = CVar (internalIdent "indexDArray") internalNode
+    indexer _               = CVar (internalIdent "indexArray")  internalNode
 
+codeGenExp (Shape a) = do
+  sh <- ((++) "shape") . show . length <$> getM shapes
+  modM shapes (shape (accDim a) sh :)
+  return [CVar (internalIdent sh) internalNode]
+  where
+    constant    = CTypeQual (CAttrQual (CAttr (internalIdent "constant") [] internalNode))
+    dimension d = CTypeSpec (CTypeDef (internalIdent ("DIM" ++ show d)) internalNode)
+    shape d n   = mkGlobal [constant,dimension d] n
+
+
+mkGlobal :: [CDeclSpec] -> String -> CExtDecl
+mkGlobal ty name =
+  CDeclExt (CDecl ty [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
+
+unit :: a -> [a]
+unit x = [x]
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
 --
-codeGenTup :: Tuple (AST.OpenExp env aenv) t -> CG [CExpr]
+codeGenTup :: Tuple (OpenExp env aenv) t -> CodeGen [CExpr]
 codeGenTup NilTup          = return []
 codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
 
 -- Convert a typed de Brujin index to the corresponding integer
 --
-idxToInt :: AST.Idx env t -> Int
-idxToInt AST.ZeroIdx       = 0
-idxToInt (AST.SuccIdx idx) = 1 + idxToInt idx
+idxToInt :: Idx env t -> Int
+idxToInt ZeroIdx       = 0
+idxToInt (SuccIdx idx) = 1 + idxToInt idx
 
 -- Convert a tuple index into the corresponding integer. Since the internal
 -- representation is flat, be sure to walk over all sub components when indexing
@@ -180,71 +219,19 @@ prjToInt _ _ =
   INTERNAL_ERROR(error) "prjToInt" "inconsistent valuation"
 
 
--- multidimensional array slice and index
---
-codeGenIndex
-  :: SliceIndex (Sugar.ElemRepr slix)
-                (Sugar.ElemRepr sl)
-                co
-                (Sugar.ElemRepr dim)
-  -> AST.OpenAcc aenv (Sugar.Array dim e)
-  -> AST.OpenAcc aenv (Sugar.Array sl e)
-  -> AST.Exp aenv slix
-  -> CG CUTranslSkel
-codeGenIndex sl acc acc' slix =
-  return . mkIndex ty dimSl dimCo dimIn0 $ restrict sl (dimCo-1,dimSl-1)
-  where
-    ty     = codeGenAccType acc
-    dimCo  = length (codeGenExpType slix)
-    dimSl  = accDim acc'
-    dimIn0 = accDim acc
-
-    restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
-    restrict (SliceNil)            _     = []
-    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n-1)
-    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m-1,n)
-
-
--- multidimensional replicate
---
-codeGenReplicate
-  :: SliceIndex (Sugar.ElemRepr slix)
-                (Sugar.ElemRepr sl)
-                co
-                (Sugar.ElemRepr dim)
-  -> AST.Exp aenv slix                          -- dummy to fix type variables
-  -> AST.OpenAcc aenv (Sugar.Array sl e)
-  -> AST.OpenAcc aenv (Sugar.Array dim e)
-  -> CG CUTranslSkel
-codeGenReplicate sl _slix acc acc' =
-  return . mkReplicate ty dimSl dimOut $ extend sl (dimOut-1)
-  where
-    ty     = codeGenAccType acc
-    dimSl  = accDim acc
-    dimOut = accDim acc'
-
-    extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
-    extend (SliceNil)            _ = []
-    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n-1)
-    extend (SliceFixed sliceIdx) n = extend sliceIdx (n-1)
-
-
-mkPrj :: Int -> String -> Int -> CExpr
-mkPrj ndim var c
- | ndim <= 1 = CVar (internalIdent var) internalNode
- | otherwise = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
-
-
 -- Types
 -- ~~~~~
 
 -- Generate types for the reified elements of an array computation
 --
-codeGenAccType :: AST.OpenAcc aenv (Sugar.Array dim e) -> [CType]
+codeGenAccType :: OpenAcc aenv (Sugar.Array dim e) -> [CType]
 codeGenAccType =  codeGenTupleType . accType
 
-codeGenExpType :: AST.OpenExp aenv env t -> [CType]
+codeGenExpType :: OpenExp aenv env t -> [CType]
 codeGenExpType =  codeGenTupleType . expType
+
+codeGenAccTypeDim :: OpenAcc aenv (Sugar.Array dim e) -> ([CType],Int)
+codeGenAccTypeDim acc = (codeGenAccType acc, accDim acc)
 
 
 -- Implementation
@@ -372,64 +359,64 @@ codeGenNonNumTex (TypeCUChar _) = [CTypeDef (internalIdent "TexCUChar") internal
 -- Scalar Primitives
 -- ~~~~~~~~~~~~~~~~~
 
-codeGenPrimConst :: AST.PrimConst a -> CExpr
-codeGenPrimConst (AST.PrimMinBound ty) = codeGenMinBound ty
-codeGenPrimConst (AST.PrimMaxBound ty) = codeGenMaxBound ty
-codeGenPrimConst (AST.PrimPi       ty) = codeGenPi ty
+codeGenPrimConst :: PrimConst a -> CExpr
+codeGenPrimConst (PrimMinBound ty) = codeGenMinBound ty
+codeGenPrimConst (PrimMaxBound ty) = codeGenMaxBound ty
+codeGenPrimConst (PrimPi       ty) = codeGenPi ty
 
-codeGenPrim :: AST.PrimFun p -> [CExpr] -> CExpr
-codeGenPrim (AST.PrimAdd          _) [a,b] = CBinary CAddOp a b internalNode
-codeGenPrim (AST.PrimSub          _) [a,b] = CBinary CSubOp a b internalNode
-codeGenPrim (AST.PrimMul          _) [a,b] = CBinary CMulOp a b internalNode
-codeGenPrim (AST.PrimNeg          _) [a]   = CUnary  CMinOp a   internalNode
-codeGenPrim (AST.PrimAbs         ty) [a]   = codeGenAbs ty a
-codeGenPrim (AST.PrimSig         ty) [a]   = codeGenSig ty a
-codeGenPrim (AST.PrimQuot         _) [a,b] = CBinary CDivOp a b internalNode
-codeGenPrim (AST.PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
-codeGenPrim (AST.PrimIDiv         _) [a,b] = CCall (CVar (internalIdent "idiv") internalNode) [a,b] internalNode
-codeGenPrim (AST.PrimMod          _) [a,b] = CCall (CVar (internalIdent "mod")  internalNode) [a,b] internalNode
-codeGenPrim (AST.PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
-codeGenPrim (AST.PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
-codeGenPrim (AST.PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
-codeGenPrim (AST.PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
-codeGenPrim (AST.PrimBShiftL      _) [a,b] = CBinary CShlOp a b internalNode
-codeGenPrim (AST.PrimBShiftR      _) [a,b] = CBinary CShrOp a b internalNode
-codeGenPrim (AST.PrimBRotateL     _) [a,b] = CCall (CVar (internalIdent "rotateL") internalNode) [a,b] internalNode
-codeGenPrim (AST.PrimBRotateR     _) [a,b] = CCall (CVar (internalIdent "rotateR") internalNode) [a,b] internalNode
-codeGenPrim (AST.PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
-codeGenPrim (AST.PrimRecip       ty) [a]   = codeGenRecip ty a
-codeGenPrim (AST.PrimSin         ty) [a]   = ccall (FloatingNumType ty) "sin"   [a]
-codeGenPrim (AST.PrimCos         ty) [a]   = ccall (FloatingNumType ty) "cos"   [a]
-codeGenPrim (AST.PrimTan         ty) [a]   = ccall (FloatingNumType ty) "tan"   [a]
-codeGenPrim (AST.PrimAsin        ty) [a]   = ccall (FloatingNumType ty) "asin"  [a]
-codeGenPrim (AST.PrimAcos        ty) [a]   = ccall (FloatingNumType ty) "acos"  [a]
-codeGenPrim (AST.PrimAtan        ty) [a]   = ccall (FloatingNumType ty) "atan"  [a]
-codeGenPrim (AST.PrimAsinh       ty) [a]   = ccall (FloatingNumType ty) "asinh" [a]
-codeGenPrim (AST.PrimAcosh       ty) [a]   = ccall (FloatingNumType ty) "acosh" [a]
-codeGenPrim (AST.PrimAtanh       ty) [a]   = ccall (FloatingNumType ty) "atanh" [a]
-codeGenPrim (AST.PrimExpFloating ty) [a]   = ccall (FloatingNumType ty) "exp"   [a]
-codeGenPrim (AST.PrimSqrt        ty) [a]   = ccall (FloatingNumType ty) "sqrt"  [a]
-codeGenPrim (AST.PrimLog         ty) [a]   = ccall (FloatingNumType ty) "log"   [a]
-codeGenPrim (AST.PrimFPow        ty) [a,b] = ccall (FloatingNumType ty) "pow"   [a,b]
-codeGenPrim (AST.PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
-codeGenPrim (AST.PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty) "atan2" [a,b]
-codeGenPrim (AST.PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
-codeGenPrim (AST.PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
-codeGenPrim (AST.PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode
-codeGenPrim (AST.PrimGtEq         _) [a,b] = CBinary CGeqOp a b internalNode
-codeGenPrim (AST.PrimEq           _) [a,b] = CBinary CEqOp  a b internalNode
-codeGenPrim (AST.PrimNEq          _) [a,b] = CBinary CNeqOp a b internalNode
-codeGenPrim (AST.PrimMax         ty) [a,b] = codeGenMax ty a b
-codeGenPrim (AST.PrimMin         ty) [a,b] = codeGenMin ty a b
-codeGenPrim AST.PrimLAnd             [a,b] = CBinary CLndOp a b internalNode
-codeGenPrim AST.PrimLOr              [a,b] = CBinary CLorOp a b internalNode
-codeGenPrim AST.PrimLNot             [a]   = CUnary  CNegOp a   internalNode
-codeGenPrim AST.PrimOrd              [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
-codeGenPrim AST.PrimChr              [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
-codeGenPrim AST.PrimRoundFloatInt    [a]   = CCall (CVar (internalIdent "lroundf") internalNode) [a] internalNode -- TLM: (int) rintf(x) ??
-codeGenPrim AST.PrimTruncFloatInt    [a]   = CCall (CVar (internalIdent "ltruncf") internalNode) [a] internalNode
-codeGenPrim AST.PrimIntFloat         [a]   = CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode) a internalNode -- TLM: __int2float_[rn,rz,ru,rd](a) ??
-codeGenPrim AST.PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType   internalNode)] [] internalNode) a internalNode
+codeGenPrim :: PrimFun p -> [CExpr] -> CExpr
+codeGenPrim (PrimAdd          _) [a,b] = CBinary CAddOp a b internalNode
+codeGenPrim (PrimSub          _) [a,b] = CBinary CSubOp a b internalNode
+codeGenPrim (PrimMul          _) [a,b] = CBinary CMulOp a b internalNode
+codeGenPrim (PrimNeg          _) [a]   = CUnary  CMinOp a   internalNode
+codeGenPrim (PrimAbs         ty) [a]   = codeGenAbs ty a
+codeGenPrim (PrimSig         ty) [a]   = codeGenSig ty a
+codeGenPrim (PrimQuot         _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
+codeGenPrim (PrimIDiv         _) [a,b] = CCall (CVar (internalIdent "idiv") internalNode) [a,b] internalNode
+codeGenPrim (PrimMod          _) [a,b] = CCall (CVar (internalIdent "mod")  internalNode) [a,b] internalNode
+codeGenPrim (PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
+codeGenPrim (PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
+codeGenPrim (PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
+codeGenPrim (PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
+codeGenPrim (PrimBShiftL      _) [a,b] = CBinary CShlOp a b internalNode
+codeGenPrim (PrimBShiftR      _) [a,b] = CBinary CShrOp a b internalNode
+codeGenPrim (PrimBRotateL     _) [a,b] = CCall (CVar (internalIdent "rotateL") internalNode) [a,b] internalNode
+codeGenPrim (PrimBRotateR     _) [a,b] = CCall (CVar (internalIdent "rotateR") internalNode) [a,b] internalNode
+codeGenPrim (PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (PrimRecip       ty) [a]   = codeGenRecip ty a
+codeGenPrim (PrimSin         ty) [a]   = ccall (FloatingNumType ty) "sin"   [a]
+codeGenPrim (PrimCos         ty) [a]   = ccall (FloatingNumType ty) "cos"   [a]
+codeGenPrim (PrimTan         ty) [a]   = ccall (FloatingNumType ty) "tan"   [a]
+codeGenPrim (PrimAsin        ty) [a]   = ccall (FloatingNumType ty) "asin"  [a]
+codeGenPrim (PrimAcos        ty) [a]   = ccall (FloatingNumType ty) "acos"  [a]
+codeGenPrim (PrimAtan        ty) [a]   = ccall (FloatingNumType ty) "atan"  [a]
+codeGenPrim (PrimAsinh       ty) [a]   = ccall (FloatingNumType ty) "asinh" [a]
+codeGenPrim (PrimAcosh       ty) [a]   = ccall (FloatingNumType ty) "acosh" [a]
+codeGenPrim (PrimAtanh       ty) [a]   = ccall (FloatingNumType ty) "atanh" [a]
+codeGenPrim (PrimExpFloating ty) [a]   = ccall (FloatingNumType ty) "exp"   [a]
+codeGenPrim (PrimSqrt        ty) [a]   = ccall (FloatingNumType ty) "sqrt"  [a]
+codeGenPrim (PrimLog         ty) [a]   = ccall (FloatingNumType ty) "log"   [a]
+codeGenPrim (PrimFPow        ty) [a,b] = ccall (FloatingNumType ty) "pow"   [a,b]
+codeGenPrim (PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
+codeGenPrim (PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty) "atan2" [a,b]
+codeGenPrim (PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
+codeGenPrim (PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
+codeGenPrim (PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode
+codeGenPrim (PrimGtEq         _) [a,b] = CBinary CGeqOp a b internalNode
+codeGenPrim (PrimEq           _) [a,b] = CBinary CEqOp  a b internalNode
+codeGenPrim (PrimNEq          _) [a,b] = CBinary CNeqOp a b internalNode
+codeGenPrim (PrimMax         ty) [a,b] = codeGenMax ty a b
+codeGenPrim (PrimMin         ty) [a,b] = codeGenMin ty a b
+codeGenPrim PrimLAnd             [a,b] = CBinary CLndOp a b internalNode
+codeGenPrim PrimLOr              [a,b] = CBinary CLorOp a b internalNode
+codeGenPrim PrimLNot             [a]   = CUnary  CNegOp a   internalNode
+codeGenPrim PrimOrd              [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
+codeGenPrim PrimChr              [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
+codeGenPrim PrimRoundFloatInt    [a]   = CCall (CVar (internalIdent "lroundf") internalNode) [a] internalNode -- TLM: (int) rintf(x) ??
+codeGenPrim PrimTruncFloatInt    [a]   = CCall (CVar (internalIdent "ltruncf") internalNode) [a] internalNode
+codeGenPrim PrimIntFloat         [a]   = CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode) a internalNode -- TLM: __int2float_[rn,rz,ru,rd](a) ??
+codeGenPrim PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType   internalNode)] [] internalNode) a internalNode
 
 -- If the argument lists are not the correct length
 codeGenPrim _ _ =
@@ -534,9 +521,6 @@ codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall ty "max"  [a,b]
 codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall ty "fmax" [a,b]
 codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
-
--- Helper Functions
--- ~~~~~~~~~~~~~~~~
 
 ccall :: NumType a -> String -> [CExpr] -> CExpr
 ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode

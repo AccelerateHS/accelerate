@@ -14,7 +14,6 @@ module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey)
 
 import Data.Char
 import Language.C
-import Control.Monad.State
 import Text.PrettyPrint
 
 import Data.Array.Accelerate.AST
@@ -52,10 +51,10 @@ showTy (SingleTuple ty) = show ty
 showTy (PairTuple a b)  = showTy a ++ showTy b
 
 showFun :: OpenFun env aenv a -> String
-showFun f = render . hcat . map pretty $ evalState (codeGenFun f) []
+showFun f = render . hcat . map pretty . fst $ runCodeGen (codeGenFun f)
 
 showExp :: OpenExp env aenv a -> String
-showExp e = render . hcat . map pretty $ evalState (codeGenExp e) []
+showExp e = render . hcat . map pretty . fst $ runCodeGen (codeGenExp e)
 
 showSI :: SliceIndex (Sugar.ElemRepr slix) (Sugar.ElemRepr sl) co (Sugar.ElemRepr dim)
        -> Exp aenv slix                         {- dummy -}
