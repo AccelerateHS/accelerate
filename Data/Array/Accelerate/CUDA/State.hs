@@ -32,7 +32,7 @@ import Data.IORef
 import Data.Record.Label
 import Control.Applicative
 import Control.Monad
-import Control.Monad.State              (StateT(..))
+import Control.Monad.State.Strict       (StateT(..))
 import Data.HashTable                   (HashTable)
 import Foreign.Ptr
 import qualified Data.HashTable         as HT

@@ -23,7 +23,7 @@ import Data.Record.Label
 import Data.Char
 import Language.C
 import Control.Applicative                                      hiding (Const)
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Text.PrettyPrint
 
 import Data.Array.Accelerate.Type
