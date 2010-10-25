@@ -94,13 +94,13 @@ import Data.Array.Accelerate.Smart
 -- language; triggers asynchronous host->device transfer if necessary.
 --
 use :: (Ix dim, Elem e) => Array dim e -> Acc (Array dim e)
-use = Use
+use = Acc . Use
 
 -- |Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
 -- array for use in the Accelerate language.
 --
 unit :: Elem e => Exp e -> Acc (Scalar e)
-unit = Unit
+unit = Acc . Unit
 
 -- |Change the shape of an array without altering its contents, where
 --
@@ -110,7 +110,7 @@ reshape :: (Ix dim, Ix dim', Elem e)
         => Exp dim 
         -> Acc (Array dim' e) 
         -> Acc (Array dim e)
-reshape = Reshape
+reshape = Acc $$ Reshape
 
 -- |Replicate an array across one or more dimensions as specified by the
 -- *generalised* array index provided as the first argument.
@@ -126,7 +126,7 @@ replicate :: (SliceIx slix, Elem e)
           => Exp slix 
           -> Acc (Array (Slice    slix) e) 
           -> Acc (Array (SliceDim slix) e)
-replicate = Replicate
+replicate = Acc $$ Replicate
 
 -- |Index an array with a *generalised* array index (supplied as the second
 -- argument).  The result is a new array (possibly a singleton) containing
@@ -136,7 +136,7 @@ slice :: (SliceIx slix, Elem e)
       => Acc (Array (SliceDim slix) e) 
       -> Exp slix 
       -> Acc (Array (Slice slix) e)
-slice = Index
+slice = Acc $$ Index
 
 -- |Combine the elements of two arrays pairwise.  The shape of the result is 
 -- the intersection of the two argument shapes.
@@ -161,7 +161,7 @@ map :: (Ix dim, Elem a, Elem b)
     => (Exp a -> Exp b) 
     -> Acc (Array dim a)
     -> Acc (Array dim b)
-map = Map
+map = Acc $$ Map
 
 -- |Apply the given binary function elementwise to the two arrays.  The extent of the resulting
 -- array is the intersection of the extents of the two source arrays.
@@ -171,7 +171,7 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim a)
         -> Acc (Array dim b)
         -> Acc (Array dim c)
-zipWith = ZipWith
+zipWith = Acc $$$ ZipWith
 
 -- |Prescan of a vector.  The type 'a' together with the binary function
 -- (first argument) and value (second argument) must form a monoid; i.e., the
@@ -185,7 +185,7 @@ scanl :: Elem a
       -> Exp a
       -> Acc (Vector a)
       -> (Acc (Vector a), Acc (Scalar a))
-scanl f e arr = unpair (Scanl f e arr)
+scanl = unpair . Acc $$$ Scanl
 
 -- |The right-to-left dual of 'scanl'.
 --
@@ -194,7 +194,7 @@ scanr :: Elem a
       -> Exp a
       -> Acc (Vector a)
       -> (Acc (Vector a), Acc (Scalar a))
-scanr f e arr = unpair (Scanr f e arr)
+scanr = unpair . Acc $$$ Scanr
 
 -- |Reduction of an array.  The type 'a' together with the binary function
 -- (first argument) and value (second argument) must form a monoid; i.e., the 
@@ -205,7 +205,7 @@ fold :: (Ix dim, Elem a)
      -> Exp a 
      -> Acc (Array dim a)
      -> Acc (Scalar a)
-fold = Fold
+fold = Acc $$$ Fold
 
 -- |Segmented reduction.
 --
@@ -215,7 +215,7 @@ foldSeg :: Elem a
         -> Acc (Vector a)
         -> Acc Segments
         -> Acc (Vector a)
-foldSeg = FoldSeg
+foldSeg = Acc $$$$ FoldSeg
 
 -- |Forward permutation specified by an index mapping.  The result array is
 -- initialised with the given defaults and any further values that are permuted
@@ -231,7 +231,7 @@ permute :: (Ix dim, Ix dim', Elem a)
         -> (Exp dim -> Exp dim')        -- ^permutation
         -> Acc (Array dim  a)           -- ^permuted array
         -> Acc (Array dim' a)
-permute = Permute
+permute = Acc $$$$ Permute
 
 -- |Backward permutation 
 --
@@ -240,7 +240,7 @@ backpermute :: (Ix dim, Ix dim', Elem a)
             -> (Exp dim' -> Exp dim)    -- ^permutation
             -> Acc (Array dim  a)       -- ^permuted array
             -> Acc (Array dim' a)
-backpermute = Backpermute
+backpermute = Acc $$$ Backpermute
 
 
 -- Common stencil types
@@ -284,7 +284,7 @@ stencil :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
         -> Boundary a                         -- ^boundary condition
         -> Acc (Array dim a)                  -- ^source array
         -> Acc (Array dim b)                  -- ^destination array
-stencil = Stencil
+stencil = Acc $$$ Stencil
 
 -- |Map a binary stencil of an array.  The extent of the resulting array is the intersection of
 -- the extents of the two source arrays.
@@ -298,7 +298,7 @@ stencil2 :: (Ix dim, Elem a, Elem b, Elem c,
         -> Boundary b                         -- ^boundary condition #2
         -> Acc (Array dim b)                  -- ^source array #2
         -> Acc (Array dim c)                  -- ^destination array
-stencil2 = Stencil2
+stencil2 = Acc $$$$$ Stencil2
 
 
 -- Tuples
@@ -406,7 +406,7 @@ infixl 9 !
 (!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
 (!) = IndexScalar
 
-shape :: (Ix dim, Elem dim) => Acc (Array dim e) -> Exp dim
+shape :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim
 shape = Shape
 
 
@@ -593,14 +593,17 @@ boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
 
 -- |Convert an Int to a Float
+--
 intToFloat :: Exp Int -> Exp Float
 intToFloat = mkIntFloat
 
 -- |Round Float to Int
+--
 roundFloatToInt :: Exp Float -> Exp Int
 roundFloatToInt = mkRoundFloatInt
 
 -- |Truncate Float to Int
+--
 truncateFloatToInt :: Exp Float -> Exp Int
 truncateFloatToInt = mkTruncFloatInt
 

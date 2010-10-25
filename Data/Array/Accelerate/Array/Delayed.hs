@@ -1,15 +1,15 @@
-{-# LANGUAGE TypeFamilies, RankNTypes #-}
-
--- |Embedded array processing language: delayed arrays
+{-# LANGUAGE TypeFamilies #-}
+-- |
+-- Module      : Data.Array.Accelerate
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
---  Delayed arrays are represented by their representation function, which
---  enables the simple composition of many array operations.
+-- Delayed arrays are represented by their representation function, which enables the simple
+-- composition of many array operations.
 
 module Data.Array.Accelerate.Array.Delayed (
 

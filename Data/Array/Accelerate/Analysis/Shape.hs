@@ -40,7 +40,7 @@ accDim (Stencil2 _ _ acc _ _) = accDim acc
 -- |Reify the dimensionality of the results of a computation that yields two
 -- arrays
 --
-accDim2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2) -> (Int,Int)
+accDim2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2) -> (Int, Int)
 accDim2 (Scanl _ _ acc) = (accDim acc, 0)
 accDim2 (Scanr _ _ acc) = (accDim acc, 0)
 

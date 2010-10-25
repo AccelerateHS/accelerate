@@ -71,17 +71,21 @@ module Data.Array.Accelerate.AST (
   Val(..), prj,
 
   -- * Accelerated array expressions
-  OpenAcc(..), Acc, Stencil(..),
+  Arrays(..), OpenAcc(..), Acc, Stencil(..),
 
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
 
 ) where
-  
+
+--standard library
+import Data.Typeable
+
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation (SliceIndex)
 import Data.Array.Accelerate.Array.Sugar 
+import Data.Array.Accelerate.Array.Delayed        (Delayable)
 import Data.Array.Accelerate.Tuple
 
 #include "accelerate.h"
@@ -119,12 +123,18 @@ prj _             _            =
 -- Array expressions
 -- -----------------
 
+-- |Tuples of arrays (of type 'Array dim e').  This characterises the domain of results of Accelerate
+-- array computations.
+--
+class (Delayable arrs, Typeable arrs) => Arrays arrs
+  
+instance Arrays ()  
+instance (Typeable dim, Typeable e) => Arrays (Array dim e)
+instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2)
+
+
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
---
--- * We have no fold, only scan which returns the fold result and scan array.
---   We assume that the code generator is clever enough to eliminate any dead
---   code, when only one of the two values is needed.
 --
 -- * Scalar functions and expressions embedded in well-formed array
 --   computations cannot contain free scalar variable indices.  The latter
@@ -136,30 +146,29 @@ prj _             _            =
 --   need to hoist array expressions out of scalar expressions - they occur in
 --   scalar indexing and in determining an arrays shape.)
 --
--- The data type is parametrised over the surface types (not the representation
+-- The data type is parameterised over the surface types (not the representation
 -- type).
 --
 data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: OpenAcc aenv (Array dim e)         -- bound expression
-              -> OpenAcc (aenv, Array dim e) 
-                         (Array dim' e')            -- the bound expr's scope           
-              -> OpenAcc aenv (Array dim' e')
+  Let         :: Arrays bndArrs
+              => OpenAcc aenv bndArrs                  -- bound expression
+              -> OpenAcc (aenv, bndArrs) 
+                         bodyArrs                      -- the bound expr's scope           
+              -> OpenAcc aenv bodyArrs
 
   -- Variant of 'Let' binding (and decomposing) a pair
-  Let2        :: OpenAcc aenv (Array dim1 e1, 
-                               Array dim2 e2)       -- bound expressions 
-              -> OpenAcc ((aenv, Array dim1 e1), 
-                                 Array dim2 e2)
-                         (Array dim' e')            -- the bound expr's scope           
-              -> OpenAcc aenv (Array dim' e')
+  Let2        :: (Arrays bndArrs1, Arrays bndArrs2)
+              => OpenAcc aenv (bndArrs1, bndArrs2)     -- bound expressions 
+              -> OpenAcc ((aenv, bndArrs1), bndArrs2)
+                         bodyArrs                      -- the bound expr's scope           
+              -> OpenAcc aenv bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
-  Avar        :: (Ix dim, Elem e)
-              => Idx     aenv (Array dim e)
-              -> OpenAcc aenv (Array dim e)
+  Avar        :: Idx     aenv arrs
+              -> OpenAcc aenv arrs
   
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Array dim e 

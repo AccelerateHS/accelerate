@@ -1,5 +1,6 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RankNTypes #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, PatternGuards #-}
 
 -- Module      : Data.Array.Accelerate.Smart
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -16,7 +17,7 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), Exp(..), Boundary(..), Stencil(..),
+  Acc(..), PreAcc(..), Exp(..), Boundary(..), Stencil(..),
   
   -- * HOAS -> de Bruijn conversion
   convertAcc,
@@ -46,12 +47,22 @@ module Data.Array.Accelerate.Smart (
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt, mkIntFloat,
-  mkRoundFloatInt, mkTruncFloatInt
+  mkRoundFloatInt, mkTruncFloatInt,
+  
+  -- * Auxilliary functions
+  ($$), ($$$), ($$$$), ($$$$$)
 
 ) where
+  
+import Debug.Trace
 
 -- standard library
+import Control.Monad
+import Data.List
+import Data.HashTable as Hash
 import Data.Maybe
+import System.Mem.StableName
+import System.IO.Unsafe         (unsafePerformIO)
 import Data.Typeable
 
 -- friends
@@ -66,146 +77,190 @@ import Data.Array.Accelerate.Pretty ()
 #include "accelerate.h"
 
 
--- Monadic array computations
--- --------------------------
+-- Array computations
+-- ------------------
 
--- |Array-valued collective computations
+-- |Array-valued collective computations without a recursive knot
 --
-data Acc a where
+data PreAcc acc a where
   
-  FstArray    :: (Ix dim1, Elem e1, Elem e2)
-              => Acc (Array dim1 e1, Array dim2 e2)
-              -> Acc (Array dim1 e1)
-  SndArray    :: (Ix dim2, Elem e1, Elem e2)
-              => Acc (Array dim1 e1, Array dim2 e2)
-              -> Acc (Array dim2 e2)
+  FstArray    :: (Ix dim1, Ix dim2, Elem e1, Elem e2)
+              => acc (Array dim1 e1, Array dim2 e2)
+              -> PreAcc acc (Array dim1 e1)
+  SndArray    :: (Ix dim1, Ix dim2, Elem e1, Elem e2)
+              => acc (Array dim1 e1, Array dim2 e2)
+              -> PreAcc acc (Array dim2 e2)
 
-  Use         :: Array dim e -> Acc (Array dim e)
+  Use         :: (Ix dim, Elem e)
+              => Array dim e -> PreAcc acc (Array dim e)
   Unit        :: Elem e
               => Exp e 
-              -> Acc (Scalar e)
-  Reshape     :: Ix dim
+              -> PreAcc acc (Scalar e)
+  Reshape     :: (Ix dim, Ix dim', Elem e)
               => Exp dim
-              -> Acc (Array dim' e)
-              -> Acc (Array dim e)
-  Replicate   :: (SliceIx slix, Elem e)
+              -> acc (Array dim' e)
+              -> PreAcc acc (Array dim e)
+  Replicate   :: (SliceIx slix, Elem e,
+                  Typeable (Slice slix), Typeable (SliceDim slix))
+                  -- the Typeable constraints shouldn't be necessary as they are implied by 
+                  -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
               => Exp slix
-              -> Acc (Array (Slice slix)    e)
-              -> Acc (Array (SliceDim slix) e)
-  Index       :: (SliceIx slix, Elem e)
-              => Acc (Array (SliceDim slix) e)
+              -> acc (Array (Slice slix)    e)
+              -> PreAcc acc (Array (SliceDim slix) e)
+  Index       :: (SliceIx slix, Elem e, 
+                  Typeable (Slice slix), Typeable (SliceDim slix))
+                  -- the Typeable constraints shouldn't be necessary as they are implied by 
+                  -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
+              => acc (Array (SliceDim slix) e)
               -> Exp slix
-              -> Acc (Array (Slice slix) e)
-  Map         :: (Elem e, Elem e')
+              -> PreAcc acc (Array (Slice slix) e)
+  Map         :: (Ix dim, Elem e, Elem e')
               => (Exp e -> Exp e') 
-              -> Acc (Array dim e)
-              -> Acc (Array dim e')
-  ZipWith     :: (Elem e1, Elem e2, Elem e3)
+              -> acc (Array dim e)
+              -> PreAcc acc (Array dim e')
+  ZipWith     :: (Ix dim, Elem e1, Elem e2, Elem e3)
               => (Exp e1 -> Exp e2 -> Exp e3) 
-              -> Acc (Array dim e1)
-              -> Acc (Array dim e2)
-              -> Acc (Array dim e3)
-  Fold        :: Elem e
+              -> acc (Array dim e1)
+              -> acc (Array dim e2)
+              -> PreAcc acc (Array dim e3)
+  Fold        :: (Ix dim, Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> Acc (Array dim e)
-              -> Acc (Scalar e)
+              -> acc (Array dim e)
+              -> PreAcc acc (Scalar e)
   FoldSeg     :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> Acc (Vector e)
-              -> Acc Segments
-              -> Acc (Vector e)
+              -> acc (Vector e)
+              -> acc Segments
+              -> PreAcc acc (Vector e)
   Scanl       :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> Acc (Vector e)
-              -> Acc (Vector e, Scalar e)
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e, Scalar e)
   Scanr       :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> Acc (Vector e)
-              -> Acc (Vector e, Scalar e)
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e, Scalar e)
   Permute     :: (Ix dim, Ix dim', Elem e)
               => (Exp e -> Exp e -> Exp e)
-              -> Acc (Array dim' e)
+              -> acc (Array dim' e)
               -> (Exp dim -> Exp dim')
-              -> Acc (Array dim e)
-              -> Acc (Array dim' e)
+              -> acc (Array dim e)
+              -> PreAcc acc (Array dim' e)
   Backpermute :: (Ix dim, Ix dim', Elem e)
               => Exp dim'
               -> (Exp dim' -> Exp dim)
-              -> Acc (Array dim e)
-              -> Acc (Array dim' e)
+              -> acc (Array dim e)
+              -> PreAcc acc (Array dim' e)
   Stencil     :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
               => (stencil -> Exp b)
               -> Boundary a
-              -> Acc (Array dim a)
-              -> Acc (Array dim b)
+              -> acc (Array dim a)
+              -> PreAcc acc (Array dim b)
   Stencil2    :: (Ix dim, Elem a, Elem b, Elem c,
                  Stencil dim a stencil1, Stencil dim b stencil2)
               => (stencil1 -> stencil2 -> Exp c)
               -> Boundary a
-              -> Acc (Array dim a)
+              -> acc (Array dim a)
               -> Boundary b
-              -> Acc (Array dim b)
-              -> Acc (Array dim c)
+              -> acc (Array dim b)
+              -> PreAcc acc (Array dim c)
 
+-- |Array-valued collective computations
+--
+newtype Acc a = Acc (PreAcc Acc a)
+
+deriving instance Typeable1 Acc
 
 -- |Conversion from HOAS to de Bruijn computation AST
 -- -
 
--- |Convert an array expression with given array environment layout
+-- |Convert a closed array expression to de Bruijn form while also incorporating sharing information.
 --
-convertOpenAcc :: Layout aenv aenv 
-               -> Acc a 
-               -> AST.OpenAcc aenv a
-convertOpenAcc alyt (FstArray acc)
-  = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
-convertOpenAcc alyt (SndArray acc)
-  = AST.Let2 (convertOpenAcc alyt acc) (AST.Avar AST.ZeroIdx)
-convertOpenAcc _    (Use array)     = AST.Use array
-convertOpenAcc alyt (Unit e)        = AST.Unit (convertExp alyt e)
-convertOpenAcc alyt (Reshape e acc) 
-  = AST.Reshape (convertExp alyt e) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Replicate ix acc)
-  = mkReplicate (convertExp alyt ix) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Index acc ix)
-  = mkIndex (convertOpenAcc alyt acc) (convertExp alyt ix)
-convertOpenAcc alyt (Map f acc) 
-  = AST.Map (convertFun1 alyt f) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (ZipWith f acc1 acc2) 
-  = AST.ZipWith (convertFun2 alyt f) 
-                (convertOpenAcc alyt acc1)
-                (convertOpenAcc alyt acc2)
-convertOpenAcc alyt (Fold f e acc) 
-  = AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (FoldSeg f e acc1 acc2) 
-  = AST.FoldSeg (convertFun2 alyt f) (convertExp alyt e) 
-                (convertOpenAcc alyt acc1) (convertOpenAcc alyt acc2)
-convertOpenAcc alyt (Scanl f e acc)
-  = AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Scanr f e acc)
-  = AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Permute f dftAcc perm acc) 
-  = AST.Permute (convertFun2 alyt f) 
-                (convertOpenAcc alyt dftAcc)
-                (convertFun1 alyt perm) 
-                (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Backpermute newDim perm acc) 
-  = AST.Backpermute (convertExp alyt newDim)
-                    (convertFun1 alyt perm)
-                    (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Stencil stencil boundary acc) 
-  = AST.Stencil (convertStencilFun acc alyt stencil) 
-                (convertBoundary boundary) 
-                (convertOpenAcc alyt acc)
-convertOpenAcc alyt (Stencil2 stencil bndy1 acc1 bndy2 acc2) 
-  = AST.Stencil2 (convertStencilFun2 acc1 acc2 alyt stencil) 
-                 (convertBoundary bndy1) 
-                 (convertOpenAcc alyt acc1)
-                 (convertBoundary bndy2) 
-                 (convertOpenAcc alyt acc2)
+convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
+convertAcc = convertOpenAcc EmptyLayout
+
+-- |Convert a closed array expression to de Bruijn form while also incorporating sharing information.
+--
+convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
+convertOpenAcc alyt = convertSharingAcc alyt . recoverSharing
+
+-- |Convert an array expression with given array environment layout and sharing information into
+-- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
+-- bindings).  The latter implements the third phase of sharing recovery.
+--
+convertSharingAcc :: Layout aenv aenv 
+                  -> SharingAcc a 
+                  -> AST.OpenAcc aenv a
+convertSharingAcc alyt = convert alyt []
+  where
+    -- The sharing environment 'env' keeps track of all currently bound sharing variables,
+    -- keeping them in reverse chronological order (outermost variable is at the end of the list)
+    --
+    convert :: Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
+    convert alyt env (VarSharing sa)
+      | Just i <- findIndex (matchStableAcc sa) env = AST.Avar (prjIdx i alyt)
+      | otherwise                                   = unknownSharingVar sa env
+    convert alyt env (LetSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
+      = let alyt' = incLayout alyt `PushLayout` ZeroIdx
+        in
+        AST.Let (convert alyt env boundAcc) (convert alyt' (sa:env) bodyAcc)
+    convert alyt env (AccSharing _ preAcc)
+      = case preAcc of
+          FstArray acc
+            -> AST.Let2 (convert alyt env acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
+          SndArray acc
+            -> AST.Let2 (convert alyt env acc) (AST.Avar AST.ZeroIdx)
+          Use array
+            -> AST.Use array
+          Unit e
+            -> AST.Unit (convertExp alyt e)
+          Reshape e acc
+            -> AST.Reshape (convertExp alyt e) (convert alyt env acc)
+          Replicate ix acc
+            -> mkReplicate (convertExp alyt ix) (convert alyt env acc)
+          Index acc ix
+            -> mkIndex (convert alyt env acc) (convertExp alyt ix)
+          Map f acc 
+            -> AST.Map (convertFun1 alyt f) (convert alyt env acc)
+          ZipWith f acc1 acc2
+            -> AST.ZipWith (convertFun2 alyt f) (convert alyt env acc1) (convert alyt env acc2)
+          Fold f e acc
+            -> AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          FoldSeg f e acc1 acc2
+            -> AST.FoldSeg (convertFun2 alyt f) (convertExp alyt e) 
+                           (convert alyt env acc1) (convert alyt env acc2)
+          Scanl f e acc
+            -> AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Scanr f e acc
+            -> AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Permute f dftAcc perm acc
+            -> AST.Permute (convertFun2 alyt f) 
+                           (convert alyt env dftAcc)
+                           (convertFun1 alyt perm) 
+                           (convert alyt env acc)
+          Backpermute newDim perm acc
+            -> AST.Backpermute (convertExp alyt newDim)
+                               (convertFun1 alyt perm) 
+                               (convert alyt env acc)
+          Stencil stencil boundary acc
+            -> AST.Stencil (convertStencilFun acc alyt stencil) 
+                           (convertBoundary boundary) 
+                           (convert alyt env acc)
+          Stencil2 stencil bndy1 acc1 bndy2 acc2
+            -> AST.Stencil2 (convertStencilFun2 acc1 acc2 alyt stencil) 
+                            (convertBoundary bndy1) 
+                            (convert alyt env acc1)
+                            (convertBoundary bndy2) 
+                            (convert alyt env acc2)
+    
+unknownSharingVar 
+  = error "Data.Array.Accelerate.Smart.convertSharingAcc: INTERNAL ERROR (unbound sharing variable)"
+typeMismatch
+  = error "Data.Array.Accelerate.Smart.convertSharingAcc: INTERNAL ERROR (type mismatch)"
 
 -- |Convert a boundary condition
 --
@@ -215,10 +270,343 @@ convertBoundary Mirror       = Mirror
 convertBoundary Wrap         = Wrap
 convertBoundary (Constant e) = Constant (fromElem e)
 
--- |Convert a closed array expression
+
+-- Sharing recovery
+-- ----------------
+
+-- Sharing recovery proceeds in two phases:
 --
-convertAcc :: Acc a -> AST.Acc a
-convertAcc = convertOpenAcc EmptyLayout
+-- /Phase One: build the occurence map/
+--
+-- This is a top-down traversal of the AST that computes a map from AST nodes to the number of
+-- occurences of that AST node in the overall Accelerate program.  An occurrences count of two or
+-- more indicates sharing.  (Implemented by 'makeOccMap'.)
+--
+-- /Phase Two: determine scopes and inject sharing information/
+--
+-- This is a bottom-up traversal that determines the scope for every binding to be introduced
+-- to share a subterm.  It uses the occurence map to determine, for every shared subtree, the
+-- lowest AST node at which the binding for that shared subtree can be placed — it's the meet of
+-- all the shared subtree occurences.  (Implemented by 'determineScopes'.)
+--
+-- The second phase is also injecting the sharing information into the HOAS AST using sharing let and 
+-- variable annotations (see 'SharingAcc' below).
+--
+-- We use hash tables (instead of Data.Map) as computing stable names forces us to live in IO anyway.
+
+-- Opaque stable name for an array computation — used to key the occurence map.
+--
+data StableAccName where
+  StableAccName :: Typeable arrs => StableName (Acc arrs) -> StableAccName
+
+instance Eq StableAccName where
+  StableAccName sn1 == StableAccName sn2
+    | Just sn1' <- gcast sn1 = sn1' == sn2
+    | otherwise              = False
+
+makeStableAcc :: Acc arrs -> IO (StableName (Acc arrs))
+makeStableAcc acc = acc `seq` makeStableName acc
+
+-- Interleave sharing annotations into an array computation AST.  Subtrees can be marked as being
+-- represented by variable (binding a shared subtree) using 'VarSharing' and as being prefixed by
+-- a let binding (for a shared subtree) using 'LetSharing'.
+--
+data SharingAcc arrs where
+  VarSharing :: Typeable arrs => StableName (Acc arrs)                           -> SharingAcc arrs
+  LetSharing ::                  StableSharingAcc -> SharingAcc arrs             -> SharingAcc arrs
+  AccSharing :: Typeable arrs => StableName (Acc arrs) -> PreAcc SharingAcc arrs -> SharingAcc arrs
+
+-- Stable name for an array computation associated with its sharing-annotated version.
+--
+data StableSharingAcc where
+  StableSharingAcc :: (Typeable arrs, Arrays arrs) 
+                   => StableName (Acc arrs) -> SharingAcc arrs -> StableSharingAcc
+
+instance Show StableSharingAcc where
+  show (StableSharingAcc sn _) = show $ hashStableName sn
+
+instance Eq StableSharingAcc where
+  StableSharingAcc sn1 _ == StableSharingAcc sn2 _
+    | Just sn1' <- gcast sn1 = sn1' == sn2
+    | otherwise              = False
+
+-- Test whether the given stable names matches an array computation with sharing.
+--
+matchStableAcc :: Typeable arrs => StableName (Acc arrs) -> StableSharingAcc -> Bool
+matchStableAcc sn1 (StableSharingAcc sn2 _)
+  | Just sn1' <- gcast sn1 = sn1' == sn2
+  | otherwise              = False
+
+-- Hash table keyed on the stable names of array computations.
+--    
+type AccHashTable v = Hash.HashTable StableAccName v
+
+-- The occurrence map associates each AST node with an occurence count.
+--
+type OccMap = AccHashTable Int
+
+-- Create a new hash table keyed by array computations.
+--
+newAccHashTable :: IO (AccHashTable v)
+newAccHashTable = Hash.new (==) hashStableAcc
+  where
+    hashStableAcc (StableAccName sn) = fromIntegral (hashStableName sn)
+    
+-- Look up a hash table keyed by array computations using a sharing array computation.
+--
+lookupWithSharingAcc :: AccHashTable v -> StableSharingAcc -> IO (Maybe v)
+lookupWithSharingAcc oc (StableSharingAcc sn _) = Hash.lookup oc (StableAccName sn)
+
+-- Higher-order combinators to traverse array computations.
+--
+traverseAcc :: forall a res. Typeable a 
+            => (StableAccName -> IO res)           -- process current node (before subtree traversal)
+            -> (StableAccName -> [res] -> IO res)  -- combine results
+            -> Acc a
+            -> IO res
+traverseAcc process combine acc@(Acc pacc)
+  = do
+      sa <- liftM StableAccName $ makeStableAcc acc
+      case pacc of
+        FstArray acc             -> trav sa acc
+        SndArray acc             -> trav sa acc
+        Use _                    -> process sa
+        Unit _                   -> process sa
+        Reshape _ acc            -> trav sa acc
+        Replicate _ acc          -> trav sa acc
+        Index acc _              -> trav sa acc
+        Map _ acc                -> trav sa acc
+        ZipWith _ acc1 acc2      -> trav2 sa acc1 acc2
+        Fold _ _ acc             -> trav sa acc
+        FoldSeg _ _ acc1 acc2    -> trav2 sa acc1 acc2
+        Scanl _ _ acc            -> trav sa acc
+        Scanr _ _ acc            -> trav sa acc
+        Permute _ acc1 _ acc2    -> trav2 sa acc1 acc2
+        Backpermute _ _ acc      -> trav sa acc
+        Stencil _ _ acc          -> trav sa acc
+        Stencil2 _ _ acc1 _ acc2 -> trav2 sa acc1 acc2
+  where
+    trav :: Typeable b => StableAccName -> Acc b -> IO res
+    trav sa acc
+      = do
+          thisRes <- process sa
+          subRes  <- traverseAcc process combine acc
+          combine sa [subRes, thisRes]                  -- local result must be last
+
+    trav2 :: (Typeable b, Typeable c) => StableAccName -> Acc b -> Acc c -> IO res
+    trav2 sa acc1 acc2
+      = do
+          thisRes <- process sa
+          subRes1 <- traverseAcc process combine acc1
+          subRes2 <- traverseAcc process combine acc2
+          combine sa [subRes1, subRes2, thisRes]        -- local result must be last
+
+-- Compute the occurence map (Phase One).
+--
+makeOccMap :: Typeable arrs => Acc arrs -> IO OccMap
+makeOccMap acc
+  = do
+      occMap <- newAccHashTable
+      traverseAcc (enterOcc occMap) (\_ _ -> return ()) acc
+      return occMap
+  where
+    -- Enter one AST node occurences into an occurence map.
+    --
+    enterOcc :: OccMap -> StableAccName -> IO ()
+    enterOcc occMap sa 
+      = do
+          entry <- Hash.lookup occMap sa
+          case entry of
+            Nothing -> Hash.insert occMap sa 1
+            Just n  -> Hash.update occMap sa (n + 1) >> return ()
+
+type NodeCounts = [(StableSharingAcc, Int)]
+
+-- Determine the scopes of all variables representing shared subterms (Phase Two).
+--
+determineScopes :: Typeable a => OccMap -> Acc a -> IO (SharingAcc a)
+determineScopes occMap acc
+  = do
+      accWithLets <- liftM fst $ injectBindings acc
+      liftM fst $ pruneSharedSubtrees occMap Nothing accWithLets
+  where
+    injectBindings :: forall arrs. Acc arrs -> IO (SharingAcc arrs, NodeCounts)
+    injectBindings acc@(Acc pacc)
+      = case pacc of
+          FstArray acc                    -> trav FstArray acc
+          SndArray acc                    -> trav SndArray acc
+          Use arr                         -> reconstruct (Use arr) []
+          Unit e                          -> reconstruct (Unit e) []
+          Reshape sh acc                  -> trav (Reshape sh) acc
+          Replicate n acc                 -> trav (Replicate n) acc
+          Index acc i                     -> trav (\a -> Index a i) acc
+          Map f acc                       -> trav (Map f) acc
+          ZipWith f acc1 acc2             -> trav2 (ZipWith f) acc1 acc2
+          Fold f z acc                    -> trav (Fold f z) acc
+          FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
+          Scanl f z acc                   -> trav (Scanl f z) acc
+          Scanr f z acc                   -> trav (Scanr f z) acc
+          Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
+          Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
+          Stencil st bnd acc              -> trav (Stencil st bnd) acc
+          Stencil2 st bnd1 acc1 bnd2 acc2 -> trav2 (\a1 a2 -> Stencil2 st bnd1 a1 bnd2 a2) acc1 acc2
+      where
+        trav :: Arrays arrs 
+             => (SharingAcc arrs' -> PreAcc SharingAcc arrs) 
+             -> Acc arrs' 
+             -> IO (SharingAcc arrs, NodeCounts)
+        trav c acc
+          = do
+              (acc', accCount) <- injectBindings acc
+              reconstruct (c acc') accCount
+
+        trav2 :: Arrays arrs 
+              => (SharingAcc arrs1 -> SharingAcc arrs2 -> PreAcc SharingAcc arrs) 
+              -> Acc arrs1 
+              -> Acc arrs2 
+              -> IO (SharingAcc arrs, NodeCounts)
+        trav2 c acc1 acc2
+          = do
+              (acc1', accCount1) <- injectBindings acc1
+              (acc2', accCount2) <- injectBindings acc2
+              reconstruct (c acc1' acc2') (accCount1 ++ accCount2)
+        
+        reconstruct :: Arrays arrs 
+                    => PreAcc SharingAcc arrs -> NodeCounts -> IO (SharingAcc arrs, NodeCounts)
+        reconstruct newAcc subCount
+          = do
+              sn <- makeStableAcc acc
+              Just occCount <- Hash.lookup occMap (StableAccName sn)
+              let sharingAcc = AccSharing sn newAcc
+                  --
+                  thisCount | occCount > 1 = [(StableSharingAcc sn sharingAcc, 1)] 
+                            | otherwise    = []
+
+              (newCount, bindHere) <- filterCompleted . merge $ thisCount ++ subCount
+              let lets = foldl (flip (.)) id . map LetSharing $ bindHere
+                           -- bind the innermost subterm with the outermost let
+              return (lets sharingAcc, newCount)
+
+    -- Combine node counts that belong to the same node.
+    -- * We must preserve the ordering (as nested subterms must come after their parents).
+    -- * We achieve that by using a 'foldl', while 'insert' extends the list at its end.
+    merge :: NodeCounts -> NodeCounts
+    merge = foldl insert []
+      where
+        insert []                       sub'               = [sub']
+        insert (sub@(sa, count) : subs) sub'@(sa', count')
+          | sa == sa' = (sa, count + count') : subs
+          | otherwise = sub : insert subs sub'
+
+    -- Extract nodes that have a complete node count (i.e., there node count is equal to the number
+    -- of occurences of that node in the overall expression) => the node should be let bound at the
+    -- present node.
+    filterCompleted :: NodeCounts -> IO (NodeCounts, [StableSharingAcc])
+    filterCompleted []                 = return ([], [])
+    filterCompleted (sub@(sa, n):subs)
+      = do
+          (subs', bindHere) <- filterCompleted subs
+          Just occCount <- lookupWithSharingAcc occMap sa
+          if occCount > 1 && occCount == n
+            then -- current node is the binding point for the shared node 'sa'
+              return (subs', sa:bindHere)
+            else -- not a binding point
+              return (sub:subs, bindHere)
+
+    -- Top-down traversal:
+    -- (1) Replace every subtree that has an occurence count greater than one (which implies that
+    --     the subtree is shared) by a sharing variable.
+    -- (2) Drop all let bindings that are unused.
+    -- The conversion of shared subtrees is performed at their abstraction point (i.e., as part of
+    -- processing the let-binding where they are bound).
+    --
+    -- During the traversal we maintain the /sharing factor/ of the currently processed subtree;
+    -- that is the number of times the currently processed subtree is used.  The occurence count of
+    -- a let-bound subtree determines the sharing factor when processing that subtree.
+    --
+    -- To drop all unused let bindings, we collect all subtrees that we do replace by a sharing
+    -- variable.
+    --
+    pruneSharedSubtrees :: OccMap -> Maybe Int -> SharingAcc arrs 
+                        -> IO (SharingAcc arrs, [StableAccName])
+    pruneSharedSubtrees _ _ (VarSharing _)
+      -- before pruning, a tree may not have sharing variables
+      = error "Data.Array.Accelerate.Smart.replaceSharedByVariables: INTERNAL ERROR"
+    pruneSharedSubtrees occMap sharingFactor (LetSharing (StableSharingAcc sn boundAcc) bodyAcc)
+      -- prune a let binding (both it's body and binding); might drop the binding altogether
+      = do
+          let sa = StableAccName sn
+          result@(bodyAcc', bodyUsed) <- pruneSharedSubtrees occMap sharingFactor bodyAcc
+          -- Drop current binding if it is not used
+          if sa `elem` bodyUsed
+            then do
+              -- prune the bound computation, reseting the sharing factor
+              (boundAcc', boundUsed) <- pruneSharedSubtrees occMap Nothing boundAcc
+              return (LetSharing (StableSharingAcc sn boundAcc') bodyAcc', 
+                      filter (/= sa) bodyUsed ++ boundUsed)
+            else
+              return result
+    pruneSharedSubtrees occMap Nothing acc@(AccSharing sn _)
+      -- new root: establish the current sharing factor
+      = do
+        trace "-=ROOT" $ return ()
+        Just occCount <- Hash.lookup occMap (StableAccName sn)
+        pruneSharedSubtrees occMap (Just occCount) acc
+    pruneSharedSubtrees occMap sf@(Just sharingFactor) acc@(AccSharing sn pacc)
+      -- prune tree node
+      = do
+          let sa = StableAccName sn
+          Just occCount <- Hash.lookup occMap sa
+          trace ("SF=" ++ show sharingFactor ++ "; oC=" ++ show occCount) $ return ()
+          if occCount > sharingFactor
+            then
+              return (VarSharing sn, [sa])
+            else
+              case pacc of
+                FstArray acc                    -> trav FstArray acc
+                SndArray acc                    -> trav SndArray acc
+                Use arr                         -> return (AccSharing sn $ Use arr, [])
+                Unit e                          -> return (AccSharing sn $ Unit e, [])
+                Reshape sh acc                  -> trav (Reshape sh) acc
+                Replicate n acc                 -> trav (Replicate n) acc
+                Index acc i                     -> trav (\a -> Index a i) acc
+                Map f acc                       -> trav (Map f) acc
+                ZipWith f acc1 acc2             -> trav2 (ZipWith f) acc1 acc2
+                Fold f z acc                    -> trav (Fold f z) acc
+                FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
+                Scanl f z acc                   -> trav (Scanl f z) acc
+                Scanr f z acc                   -> trav (Scanr f z) acc
+                Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
+                Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
+                Stencil st bnd acc              -> trav (Stencil st bnd) acc
+                Stencil2 st bnd1 acc1 bnd2 acc2 -> trav2 (\a1 a2 -> Stencil2 st bnd1 a1 bnd2 a2) 
+                                                     acc1 acc2
+      where
+        trav c acc
+          = do
+              (acc', used) <- pruneSharedSubtrees occMap sf acc
+              return (AccSharing sn $ c acc', used)
+    
+        trav2 c acc1 acc2
+          = do
+              (acc1', used1) <- pruneSharedSubtrees occMap sf acc1
+              (acc2', used2) <- pruneSharedSubtrees occMap sf acc2
+              return (AccSharing sn $ c acc1' acc2', used1 ++ used2)
+
+-- |Recover sharing information and annotate the HOAS AST with variable and let binding annotations.
+--
+-- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to determine
+-- the sharing of subterms.  The stable pointer API does not guarantee its completeness; i.e., it may
+-- miss some equalities, which implies that we may fail to discover some sharing.  However, sharing
+-- does not affect the denotational meaning of the array computation; hence, we will never compromise
+-- denotational correctness.
+--
+recoverSharing :: Typeable a => Acc a -> SharingAcc a
+{-# NOINLINE recoverSharing #-}
+recoverSharing acc 
+  = unsafePerformIO $ do          -- as we need to use stable pointers; it's safe as explained above
+      occMap <- makeOccMap acc
+      determineScopes occMap acc
 
 
 -- Embedded expressions of the surface language
@@ -253,15 +641,16 @@ data Exp t where
               => PrimConst t                   -> Exp t
   PrimApp     :: (Elem a, Elem r)             
               => PrimFun (a -> r) -> Exp a     -> Exp r
-  IndexScalar :: Acc (Array dim t) -> Exp dim  -> Exp t
-  Shape       :: Elem dim
+  IndexScalar :: (Ix dim, Elem t)
+              => Acc (Array dim t) -> Exp dim  -> Exp t
+  Shape       :: (Ix dim, Elem e)
               => Acc (Array dim e)             -> Exp dim
 
 
 -- |Conversion from HOAS to de Bruijn expression AST
 -- -
 
--- A layout of an environment an entry for each entry of the environment.
+-- A layout of an environment has an entry for each entry of the environment.
 -- Each entry in the layout holds the deBruijn index that refers to the
 -- corresponding entry in the environment.
 --
@@ -273,11 +662,17 @@ data Layout env env' where
 -- Project the nth index out of an environment layout.
 --
 prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
-prjIdx 0 (PushLayout _ ix) = fromJust (gcast ix)
-                               -- can't go wrong unless the library is wrong!
+prjIdx 0 (PushLayout _ ix) = case gcast ix of
+                               Just ix' -> ix'
+                               Nothing  -> INTERNAL_ERROR(error) "prjIdx" "type mismatch"
 prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
-prjIdx _ EmptyLayout       =
-  INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
+prjIdx _ EmptyLayout       = INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
+
+-- Add an entry to a layout, incrementing all indices
+--
+incLayout :: Layout env env' -> Layout (env, t) env'
+incLayout EmptyLayout         = EmptyLayout
+incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 
 -- |Convert an open expression with given environment layouts.
 --
@@ -355,7 +750,7 @@ convertFun2 alyt f = Lam (Lam (Body openF))
 -- Convert a unary stencil function
 --
 convertStencilFun :: forall dim a stencil b aenv. (Elem a, Stencil dim a stencil)
-                  => Acc (Array dim a)                  -- just passed to fix the type variables
+                  => SharingAcc (Array dim a)            -- just passed to fix the type variables
                   -> Layout aenv aenv 
                   -> (stencil -> Exp b)
                   -> AST.Fun aenv (StencilRepr dim stencil -> b)
@@ -374,8 +769,8 @@ convertStencilFun _ alyt stencilFun = Lam (Body openStencilFun)
 convertStencilFun2 :: forall dim a b stencil1 stencil2 c aenv. 
                       (Elem a, Stencil dim a stencil1,
                        Elem b, Stencil dim b stencil2)
-                   => Acc (Array dim a)                  -- just passed to fix the type variables
-                   -> Acc (Array dim b)                  -- just passed to fix the type variables
+                   => SharingAcc (Array dim a)           -- just passed to fix the type variables
+                   -> SharingAcc (Array dim b)           -- just passed to fix the type variables
                    -> Layout aenv aenv 
                    -> (stencil1 -> stencil2 -> Exp c)
                    -> AST.Fun aenv (StencilRepr dim stencil1 ->
@@ -401,7 +796,7 @@ convertStencilFun2 _ _ alyt stencilFun = Lam (Lam (Body openStencilFun))
 -- Pretty printing
 --
 
-instance Show (Acc as) where
+instance Arrays arrs => Show (Acc arrs) where
   show = show . convertAcc
   
 instance Show (Exp a) where
@@ -615,7 +1010,7 @@ tix8 = SuccTupIdx tix7
 unpair :: (Ix dim1, Ix dim2, Elem e1, Elem e2)
        => Acc (Array dim1 e1, Array dim2 e2) 
        -> (Acc (Array dim1 e1), Acc (Array dim2 e2))
-unpair acc = (FstArray acc, SndArray acc)
+unpair acc = (Acc $ FstArray acc, Acc $ SndArray acc)
 
 
 -- Smart constructor for literals
@@ -871,7 +1266,7 @@ mkRecip x = PrimRecip floatingType `PrimApp` x
 mkAtan2 :: (Elem t, IsFloating t) => Exp t -> Exp t -> Exp t
 mkAtan2 x y = PrimAtan2 floatingType `PrimApp` tup2 (x, y)
 
-  -- FIXME: add operations from Floating, RealFrac & RealFloat
+-- FIXME: add operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
@@ -927,4 +1322,24 @@ mkRoundFloatInt x = PrimRoundFloatInt `PrimApp` x
 
 mkTruncFloatInt :: Exp Float -> Exp Int
 mkTruncFloatInt x = PrimTruncFloatInt `PrimApp` x
+
+
+-- Auxilliary functions
+-- --------------------
+
+infixr 0 $$
+($$) :: (b -> a) -> (c -> d -> b) -> c -> d -> a
+(f $$ g) x y = f $ (g x y)
+
+infixr 0 $$$
+($$$) :: (b -> a) -> (c -> d -> e -> b) -> c -> d -> e -> a
+(f $$$ g) x y z = f $ (g x y z)
+
+infixr 0 $$$$
+($$$$) :: (b -> a) -> (c -> d -> e -> f -> b) -> c -> d -> e -> f -> a
+(f $$$$ g) x y z u = f $ (g x y z u)
+
+infixr 0 $$$$$
+($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
+(f $$$$$ g) x y z u v = f $ (g x y z u v)
 

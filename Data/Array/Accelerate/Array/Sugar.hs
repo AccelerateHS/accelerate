@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE CPP, ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
 
 -- |Embedded array processing language: user-visible array operations
@@ -596,6 +596,8 @@ data Array dim e where
         => ElemRepr dim               -- extent of dimensions = shape
         -> ArrayData (ElemRepr e)     -- data, same layout as in
         -> Array dim e
+
+deriving instance Typeable2 Array 
 
 -- |Scalars
 --

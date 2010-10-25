@@ -56,14 +56,6 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 -- Program execution
 -- -----------------
 
--- |Characterises the types that may be returned when running an array program.
---
-class Delayable as => Arrays as
-  
-instance Arrays ()  
-instance Arrays (Array dim e)
-instance (Arrays as1, Arrays as2) => Arrays (as1, as2)
-
 -- |Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
