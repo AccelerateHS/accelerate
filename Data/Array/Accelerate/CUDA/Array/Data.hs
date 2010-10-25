@@ -1,5 +1,4 @@
-{-# LANGUAGE CPP, FlexibleContexts, TypeFamilies #-}
-{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Data
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -10,10 +9,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Array.Data
-  (
-    ArrayElem(..)
-  ) where
+module Data.Array.Accelerate.CUDA.Array.Data (ArrayElem(..)) where
 
 import Prelude hiding (id, (.))
 import Control.Category
@@ -39,69 +35,65 @@ import qualified Foreign.CUDA.Driver.Texture            as CUDA
 #include "accelerate.h"
 
 
--- Instances
--- ~~~~~~~~~
+-- Array Operations
+-- ----------------
 
 class Acc.ArrayElem e => ArrayElem e where
   type DevicePtrs e
   type HostPtrs   e
-  mallocArray    :: Acc.ArrayData e -> Int -> CIO ()
-  indexArray     :: Acc.ArrayData e -> Int -> CIO e
-  copyArray      :: Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
-  peekArray      :: Acc.ArrayData e -> Int -> CIO ()
-  pokeArray      :: Acc.ArrayData e -> Int -> CIO ()
-  peekArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-  pokeArrayAsync :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-  textureRefs    :: Acc.ArrayData e -> CUDA.Module -> Int -> Int -> CIO [CUDA.FunParam]
-  devicePtrs     :: Acc.ArrayData e -> CIO [CUDA.FunParam]
-  touchArray     :: Acc.ArrayData e -> CIO ()
-  freeArray      :: Acc.ArrayData e -> CIO ()
+  mallocArray        :: Acc.ArrayData e -> Int -> CIO ()
+  indexArray         :: Acc.ArrayData e -> Int -> CIO e
+  copyArray          :: Acc.ArrayData e -> Acc.ArrayData e -> Int -> CIO ()
+  peekArray          :: Acc.ArrayData e -> Int -> CIO ()
+  pokeArray          :: Acc.ArrayData e -> Int -> CIO ()
+  peekArrayAsync     :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+  pokeArrayAsync     :: Acc.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+  marshalArrayData   :: Acc.ArrayData e -> CIO [CUDA.FunParam]
+  marshalTextureData :: Acc.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
+  freeArray          :: Acc.ArrayData e -> CIO ()
 
   -- FIXME: remove once all ArrayElem instances are concrete
-  mallocArray    = undefined
-  indexArray     = undefined
-  copyArray      = undefined
-  peekArray      = undefined
-  pokeArray      = undefined
-  peekArrayAsync = undefined
-  pokeArrayAsync = undefined
-  textureRefs    = undefined
-  devicePtrs     = undefined
-  touchArray     = undefined
-  freeArray      = undefined
+  mallocArray        = undefined
+  indexArray         = undefined
+  copyArray          = undefined
+  peekArray          = undefined
+  pokeArray          = undefined
+  peekArrayAsync     = undefined
+  pokeArrayAsync     = undefined
+  marshalArrayData   = undefined
+  marshalTextureData = undefined
+  freeArray          = undefined
 
 
 instance ArrayElem () where
-  type DevicePtrs () = CUDA.DevicePtr ()
-  type HostPtrs   () = CUDA.HostPtr   ()
-  mallocArray    _ _     = return ()
-  indexArray     _ _     = return ()
-  copyArray      _ _ _   = return ()
-  peekArray      _ _     = return ()
-  pokeArray      _ _     = return ()
-  peekArrayAsync _ _ _   = return ()
-  pokeArrayAsync _ _ _   = return ()
-  textureRefs    _ _ _ _ = return []
-  devicePtrs     _       = return []
-  touchArray     _       = return ()
-  freeArray      _       = return ()
+  type DevicePtrs () = ()
+  type HostPtrs   () = ()
+  mallocArray        _ _   = return ()
+  indexArray         _ _   = return ()
+  copyArray          _ _ _ = return ()
+  peekArray          _ _   = return ()
+  pokeArray          _ _   = return ()
+  peekArrayAsync     _ _ _ = return ()
+  pokeArrayAsync     _ _ _ = return ()
+  marshalArrayData   _     = return []
+  marshalTextureData _ _ _ = return 0
+  freeArray          _     = return ()
 
 
 #define primArrayElem_(ty,con)                                                 \
 instance ArrayElem ty where {                                                  \
   type DevicePtrs ty = CUDA.DevicePtr con                                      \
 ; type HostPtrs   ty = CUDA.HostPtr   con                                      \
-; mallocArray      = mallocArray'                                              \
-; indexArray       = indexArray'                                               \
-; copyArray        = copyArray'                                                \
-; peekArray        = peekArray'                                                \
-; pokeArray        = pokeArray'                                                \
-; peekArrayAsync   = peekArrayAsync'                                           \
-; pokeArrayAsync   = pokeArrayAsync'                                           \
-; textureRefs      = textureRefs'                                              \
-; devicePtrs       = devicePtrs'                                               \
-; touchArray       = touchArray'                                               \
-; freeArray        = freeArray' }
+; mallocArray             = mallocArray'                                       \
+; indexArray              = indexArray'                                        \
+; copyArray               = copyArray'                                         \
+; peekArray               = peekArray'                                         \
+; pokeArray               = pokeArray'                                         \
+; peekArrayAsync          = peekArrayAsync'                                    \
+; pokeArrayAsync          = pokeArrayAsync'                                    \
+; marshalArrayData        = marshalArrayData'                                  \
+; marshalTextureData ad n = marshalTextureData' ad n . head                    \
+; freeArray               = freeArray' }
 
 #define primArrayElem(ty) primArrayElem_(ty,ty)
 
@@ -149,29 +141,26 @@ instance (ArrayElem a, ArrayElem b) => ArrayElem (a,b) where
   type DevicePtrs (a,b) = (DevicePtrs a, DevicePtrs b)
   type HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
 
-  mallocArray ad n       = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
-  peekArray ad n         = peekArray (fst' ad) n   *> peekArray (snd' ad) n
-  pokeArray ad n         = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
-  copyArray src dst n    = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
-  peekArrayAsync ad n s  = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
-  pokeArrayAsync ad n s  = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
-  touchArray ad          = touchArray (fst' ad) *> touchArray (snd' ad)
-  freeArray ad           = freeArray  (fst' ad) *> freeArray  (snd' ad)
-  indexArray ad n        = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
-  devicePtrs ad          = (++) <$> devicePtrs (fst' ad)   <*> devicePtrs (snd' ad)
-  textureRefs ad mdl n t = do   -- PRETTY ME
-    t1 <- textureRefs (fst' ad) mdl n t
-    t2 <- textureRefs (snd' ad) mdl n (t+ length t1)
-    return (t1 ++ t2)
+  mallocArray ad n          = mallocArray (fst' ad) n *> mallocArray (snd' ad) n
+  peekArray ad n            = peekArray (fst' ad) n   *> peekArray (snd' ad) n
+  pokeArray ad n            = pokeArray (fst' ad) n   *> pokeArray (snd' ad) n
+  copyArray src dst n       = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
+  peekArrayAsync ad n s     = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
+  pokeArrayAsync ad n s     = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
+  freeArray ad              = freeArray  (fst' ad) *> freeArray  (snd' ad)
+  indexArray ad n           = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
+  marshalArrayData ad       = (++) <$> marshalArrayData (fst' ad) <*> marshalArrayData (snd' ad)
+  marshalTextureData ad n t = do
+    k <- marshalTextureData (fst' ad) n t
+    l <- marshalTextureData (snd' ad) n (drop k t)
+    return (k+l)
 
 
 -- Texture References
--- ~~~~~~~~~~~~~~~~~~
+-- ------------------
 
 -- This representation must match the code generator's understanding of how to
 -- utilise the texture cache.
---
--- FIXME: Code generation for 64-bit types.
 --
 class TextureData a where
   format :: a -> (CUDA.Format, Int)
@@ -201,7 +190,7 @@ instance TextureData Word where
 
 
 -- Implementation
--- ~~~~~~~~~~~~~~
+-- --------------
 
 -- Allocate a new device array to accompany the given host-side Accelerate array
 --
@@ -292,36 +281,30 @@ freeArray' ad = do
                       HT.delete tab (arrayToKey ad)
 
 
--- Increase the reference count of an array. You may wish to call this right
--- before another method that will implicitly attempt to release the array.
+-- Wrap the device pointers corresponding to a host-side array into arguments
+-- that can be passed to a kernel on invocation.
 --
-touchArray' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO ()
-touchArray' ad = do
-  tab <- getM memoryTable
-  liftIO . HT.insert tab (arrayToKey ad) . modL refcount (+1) =<< lookupArray ad
+marshalArrayData' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO [CUDA.FunParam]
+marshalArrayData' ad = return . CUDA.VArg <$> getArray ad
 
 
--- Return the device pointers wrapped in a list of function parameters
+-- Bind device memory to the given texture reference, setting appropriate type
 --
-devicePtrs' :: (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e) => Acc.ArrayData e -> CIO [CUDA.FunParam]
-devicePtrs' ad = (: []) . CUDA.VArg . CUDA.wordPtrToDevPtr . getL arena <$> lookupArray ad
-
-
--- Retrieve texture references from the module (beginning with the given seed),
--- bind device pointers, and return as a list of function arguments.
---
-textureRefs' :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e, Storable a, TextureData a)
-             => Acc.ArrayData e -> CUDA.Module -> Int -> Int -> CIO [CUDA.FunParam]
-textureRefs' ad mdl n t = do
+marshalTextureData'
+  :: forall a e. (Acc.ArrayPtrs e ~ Ptr a, Acc.ArrayElem e, Storable a, TextureData a)
+  => Acc.ArrayData e -> Int -> CUDA.Texture -> CIO Int
+marshalTextureData' ad n tex =
+  let (fmt,c) = format (undefined :: a)
+  in do
   ptr <- getArray ad
-  tex <- liftIO $ CUDA.getTex mdl ("tex" ++ show t)
-  liftIO $ uncurry (CUDA.setFormat tex) (format (undefined :: a))
-  liftIO $ CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
-  return [CUDA.TArg tex]
+  liftIO $ do
+    CUDA.setFormat tex fmt c
+    CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
+    return 1
 
 
 -- Utilities
--- ~~~~~~~~~
+-- ---------
 
 -- Generate a memory map key from the given ArrayData
 --

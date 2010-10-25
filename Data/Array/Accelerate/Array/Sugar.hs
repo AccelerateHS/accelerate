@@ -873,3 +873,4 @@ instance Show (Array dim e) where
 --
 arrayType :: forall dim e. Array dim e -> TupleType (ElemRepr e)
 arrayType (Array _ _) = elemType (undefined::e)
+

@@ -56,7 +56,7 @@ import System.Posix.Process             (getProcessID)
 
 
 -- Types
--- ~~~~~
+-- -----
 
 type AccTable = HashTable String  KernelEntry
 type MemTable = HashTable WordPtr MemoryEntry
@@ -74,9 +74,8 @@ data CUDAState = CUDAState
     _kernelTable   :: AccTable
   }
 
--- |
--- Associate an array expression with an external compilation tool (nvcc) or the
--- loaded function module
+-- | Associate an array expression with an external compilation tool (nvcc) or
+-- the loaded function module
 --
 data KernelEntry = KernelEntry
   {
@@ -84,10 +83,9 @@ data KernelEntry = KernelEntry
     _kernelStatus :: Either ProcessID CUDA.Module
   }
 
--- |
--- Reference tracking for device memory allocations. Associates the products of
--- an `Array dim e' with data stored on the graphics device. Facilitates reuse
--- and delayed allocation at the cost of explicit release.
+-- | Reference tracking for device memory allocations. Associates the products
+-- of an `Array dim e' with data stored on the graphics device. Facilitates
+-- reuse and delayed allocation at the cost of explicit release.
 --
 -- This maps to a single concrete array. Arrays of pairs, for example, which are
 -- represented internally as pairs of arrays, will generate two entries.
@@ -103,7 +101,7 @@ $(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
 
 
 -- Execution State
--- ~~~~~~~~~~~~~~~
+-- ---------------
 
 -- Return the output directory for compilation by-products, creating if it does
 -- not exist.
@@ -168,8 +166,7 @@ initialise = do
   return $ CUDAState n dir prp ctx mem knl
 
 
--- |
--- Evaluate a CUDA array computation under a newly initialised environment,
+-- | Evaluate a CUDA array computation under a newly initialised environment,
 -- discarding the final state.
 --
 evalCUDA :: CIO a -> IO a
@@ -194,7 +191,7 @@ runCUDA acc =
 --
 clearMemTable :: CUDAState -> IO ()
 clearMemTable st = do
-  CUDA.sync     -- TLM: not blocking??
+  CUDA.sync
   entries <- HT.toList (_memoryTable st)
   forM_ entries $ \(k,v) -> do
     HT.delete (_memoryTable st) k
@@ -202,7 +199,7 @@ clearMemTable st = do
 
 
 -- Utility
--- ~~~~~~~
+-- -------
 
 -- | A unique name supply
 --

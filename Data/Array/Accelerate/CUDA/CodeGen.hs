@@ -44,7 +44,7 @@ import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
 
 -- Array expressions
--- ~~~~~~~~~~~~~~~~~
+-- -----------------
 
 type CodeGen a = State CodeGenState a
 
@@ -65,7 +65,7 @@ codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
   let (CUTranslSkel code skel, st) = runCodeGen (codeGen acc)
       (CTranslUnit decl node)      = code
-      fvars                        = getL arrays st ++ getL shapes st
+      fvars                        = reverse $ getL arrays st ++ getL shapes st
   in
   CUTranslSkel (CTranslUnit (fvars ++ decl) node) skel
 
@@ -128,7 +128,7 @@ mkPrj ndim var c
 
 
 -- Scalar Expressions
--- ~~~~~~~~~~~~~~~~~~
+-- ------------------
 
 -- Function abstraction
 --
@@ -143,9 +143,9 @@ codeGenFun (Body body) = codeGenExp body
 -- of the scalar computation; namely, the arguments to 'IndexScalar' and 'Shape'
 --
 codeGenExp :: forall env aenv t. OpenExp env aenv t -> CodeGen [CExpr]
-codeGenExp (PrimConst c)   = pure . unit $ codeGenPrimConst c
-codeGenExp (PrimApp f arg) = unit . codeGenPrim f <$> codeGenExp arg
-codeGenExp (Const c)       = pure $ codeGenConst (Sugar.elemType (undefined::t)) c
+codeGenExp (PrimConst c)   = return . return $ codeGenPrimConst c
+codeGenExp (PrimApp f arg) = return . codeGenPrim f <$> codeGenExp arg
+codeGenExp (Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
 codeGenExp (Tuple t)       = codeGenTup t
 codeGenExp p@(Prj idx e)
   = reverse
@@ -165,13 +165,20 @@ codeGenExp (Var i) =
 codeGenExp (Cond p t e) =
   zipWith . (\[a] b c -> CCond a (Just b) c internalNode) <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
 
+codeGenExp (Shape a) = do
+  sh <- ("shape"++) . show . length <$> getM shapes
+  modM shapes (mkShape (accDim a) sh :)
+  return [CVar (internalIdent sh) internalNode]
+
 codeGenExp (IndexScalar a e) = do
+  [i] <- codeGenExp e                   -- TLM TODO: multidimensional indexing
   n   <- length <$> getM arrays
-  [i] <- codeGenExp e
+  sh  <- ("shape"++) . show . length <$> getM shapes
   let ty = codeGenTupleTex (accType a)
-      fv = map (\x -> "tex" ++ show x) [n..]
+      fv = reverse . take (length ty) $ map (("tex"++) . show) [n..]
 
   modM arrays (zipWith array ty fv ++)
+  modM shapes (mkShape (accDim a) sh :)
   return (zipWith (indexArray i) fv ty)
   where
     array ty fv             = mkGlobal (map CTypeSpec ty) fv
@@ -179,22 +186,17 @@ codeGenExp (IndexScalar a e) = do
     indexer [CDoubleType _] = CVar (internalIdent "indexDArray") internalNode
     indexer _               = CVar (internalIdent "indexArray")  internalNode
 
-codeGenExp (Shape a) = do
-  sh <- ((++) "shape") . show . length <$> getM shapes
-  modM shapes (shape (accDim a) sh :)
-  return [CVar (internalIdent sh) internalNode]
-  where
-    constant    = CTypeQual (CAttrQual (CAttr (internalIdent "constant") [] internalNode))
-    dimension d = CTypeSpec (CTypeDef (internalIdent ("DIM" ++ show d)) internalNode)
-    shape d n   = mkGlobal [constant,dimension d] n
 
+mkShape :: Int -> String -> CExtDecl
+mkShape d n = mkGlobal [constant,dimension] n
+  where
+    constant  = CTypeQual (CAttrQual (CAttr (internalIdent "constant") [] internalNode))
+    dimension = CTypeSpec (CTypeDef (internalIdent ("DIM" ++ show d)) internalNode)
 
 mkGlobal :: [CDeclSpec] -> String -> CExtDecl
-mkGlobal ty name =
-  CDeclExt (CDecl ty [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
-
-unit :: a -> [a]
-unit x = [x]
+mkGlobal spec name =
+  CDeclExt (CDecl (CStorageSpec (CStatic internalNode) : spec)
+           [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
 --
@@ -220,7 +222,7 @@ prjToInt _ _ =
 
 
 -- Types
--- ~~~~~
+-- -----
 
 -- Generate types for the reified elements of an array computation
 --
@@ -357,7 +359,7 @@ codeGenNonNumTex (TypeCUChar _) = [CTypeDef (internalIdent "TexCUChar") internal
 
 
 -- Scalar Primitives
--- ~~~~~~~~~~~~~~~~~
+-- -----------------
 
 codeGenPrimConst :: PrimConst a -> CExpr
 codeGenPrimConst (PrimMinBound ty) = codeGenMinBound ty

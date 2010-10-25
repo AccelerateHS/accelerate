@@ -33,8 +33,6 @@ import qualified Foreign.Storable                       as F
 -- physically resident blocks. Hence, kernels may need to process multiple
 -- elements per thread.
 --
--- TLM: this could probably be stored in the KernelEntry
---
 launchConfig :: OpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
 launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs

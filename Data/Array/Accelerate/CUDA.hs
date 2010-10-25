@@ -34,7 +34,7 @@ import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 
 
 -- Accelerate: CUDA
--- ~~~~~~~~~~~~~~~~
+-- ----------------
 
 -- | Compile and run a complete embedded array program using the CUDA backend
 --
@@ -89,7 +89,7 @@ sequence' ms = foldr k (return []) ms
 precompile :: Arrays a => Sugar.Acc a -> ()
 precompile acc
   = unsafePerformIO
-  $ evalCUDA (precompileAcc (Sugar.convertAcc acc) >> return ())
+  $ evalCUDA (precompileAcc (Sugar.convertAcc acc))
              `catch`
              \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 

@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
   ArrayElem(..), ArrayData, MutableArrayData, runArrayData,
-  
+
   -- * Array tuple operations
   fstArrayData, sndArrayData, pairArrayData
 
@@ -337,8 +337,8 @@ pairArrayData = AD_Pair
 
 
 
--- Auxilliary functions
--- --------------------
+-- Auxiliary functions
+-- -------------------
 
 -- Our own version of the 'STUArray' allocation that uses /pinned/ memory,
 -- which is aligned to 16 bytes.
