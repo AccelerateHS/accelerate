@@ -123,8 +123,8 @@ codeGen x =
 
 mkPrj :: Int -> String -> Int -> CExpr
 mkPrj ndim var c
- | ndim <= 1 = CVar (internalIdent var) internalNode
- | otherwise = CMember (CVar (internalIdent var) internalNode) (internalIdent ('a':show c)) False internalNode
+ | ndim <= 1 = cvar var
+ | otherwise = CMember (cvar var) (internalIdent ('a':show c)) False internalNode
 
 
 -- Scalar Expressions
@@ -155,7 +155,7 @@ codeGenExp p@(Prj idx e)
   <$> codeGenExp e
 
 codeGenExp (Var i) =
-  let var = CVar (internalIdent ('x' : show (idxToInt i))) internalNode
+  let var = cvar ('x' : show (idxToInt i))
   in
   case codeGenTupleType (Sugar.elemType (undefined::t)) of
        [_] -> return [var]
@@ -168,23 +168,23 @@ codeGenExp (Cond p t e) =
 codeGenExp (Shape a) = do
   sh <- ("shape"++) . show . length <$> getM shapes
   modM shapes (mkShape (accDim a) sh :)
-  return [CVar (internalIdent sh) internalNode]
+  return [cvar sh]
 
 codeGenExp (IndexScalar a e) = do
-  [i] <- codeGenExp e                   -- TLM TODO: multidimensional indexing
-  n   <- length <$> getM arrays
-  sh  <- ("shape"++) . show . length <$> getM shapes
+  ix <- codeGenExp e
+  n  <- length <$> getM arrays
+  sh <- ("shape"++) . show . length <$> getM shapes
   let ty = codeGenTupleTex (accType a)
       fv = reverse . take (length ty) $ map (("tex"++) . show) [n..]
 
   modM arrays (zipWith array ty fv ++)
   modM shapes (mkShape (accDim a) sh :)
-  return (zipWith (indexArray i) fv ty)
+  return (zipWith (indexArray sh ix) fv ty)
   where
     array ty fv             = mkGlobal (map CTypeSpec ty) fv
-    indexArray i n t        = CCall (indexer t) [CVar (internalIdent n) internalNode, i] internalNode
-    indexer [CDoubleType _] = CVar (internalIdent "indexDArray") internalNode
-    indexer _               = CVar (internalIdent "indexArray")  internalNode
+    indexArray sh ix n t    = ccall (indexer t) [cvar n, ccall "toIndex" [cvar sh, ccall "shape" ix]]
+    indexer [CDoubleType _] = "indexDArray"
+    indexer _               = "indexArray"
 
 
 mkShape :: Int -> String -> CExtDecl
@@ -375,33 +375,33 @@ codeGenPrim (PrimAbs         ty) [a]   = codeGenAbs ty a
 codeGenPrim (PrimSig         ty) [a]   = codeGenSig ty a
 codeGenPrim (PrimQuot         _) [a,b] = CBinary CDivOp a b internalNode
 codeGenPrim (PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
-codeGenPrim (PrimIDiv         _) [a,b] = CCall (CVar (internalIdent "idiv") internalNode) [a,b] internalNode
-codeGenPrim (PrimMod          _) [a,b] = CCall (CVar (internalIdent "mod")  internalNode) [a,b] internalNode
+codeGenPrim (PrimIDiv         _) [a,b] = ccall "idiv" [a,b]
+codeGenPrim (PrimMod          _) [a,b] = ccall "mod"  [a,b]
 codeGenPrim (PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
 codeGenPrim (PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
 codeGenPrim (PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
 codeGenPrim (PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
 codeGenPrim (PrimBShiftL      _) [a,b] = CBinary CShlOp a b internalNode
 codeGenPrim (PrimBShiftR      _) [a,b] = CBinary CShrOp a b internalNode
-codeGenPrim (PrimBRotateL     _) [a,b] = CCall (CVar (internalIdent "rotateL") internalNode) [a,b] internalNode
-codeGenPrim (PrimBRotateR     _) [a,b] = CCall (CVar (internalIdent "rotateR") internalNode) [a,b] internalNode
+codeGenPrim (PrimBRotateL     _) [a,b] = ccall "rotateL" [a,b]
+codeGenPrim (PrimBRotateR     _) [a,b] = ccall "rotateR" [a,b]
 codeGenPrim (PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
 codeGenPrim (PrimRecip       ty) [a]   = codeGenRecip ty a
-codeGenPrim (PrimSin         ty) [a]   = ccall (FloatingNumType ty) "sin"   [a]
-codeGenPrim (PrimCos         ty) [a]   = ccall (FloatingNumType ty) "cos"   [a]
-codeGenPrim (PrimTan         ty) [a]   = ccall (FloatingNumType ty) "tan"   [a]
-codeGenPrim (PrimAsin        ty) [a]   = ccall (FloatingNumType ty) "asin"  [a]
-codeGenPrim (PrimAcos        ty) [a]   = ccall (FloatingNumType ty) "acos"  [a]
-codeGenPrim (PrimAtan        ty) [a]   = ccall (FloatingNumType ty) "atan"  [a]
-codeGenPrim (PrimAsinh       ty) [a]   = ccall (FloatingNumType ty) "asinh" [a]
-codeGenPrim (PrimAcosh       ty) [a]   = ccall (FloatingNumType ty) "acosh" [a]
-codeGenPrim (PrimAtanh       ty) [a]   = ccall (FloatingNumType ty) "atanh" [a]
-codeGenPrim (PrimExpFloating ty) [a]   = ccall (FloatingNumType ty) "exp"   [a]
-codeGenPrim (PrimSqrt        ty) [a]   = ccall (FloatingNumType ty) "sqrt"  [a]
-codeGenPrim (PrimLog         ty) [a]   = ccall (FloatingNumType ty) "log"   [a]
-codeGenPrim (PrimFPow        ty) [a,b] = ccall (FloatingNumType ty) "pow"   [a,b]
+codeGenPrim (PrimSin         ty) [a]   = ccall (FloatingNumType ty `postfix` "sin")   [a]
+codeGenPrim (PrimCos         ty) [a]   = ccall (FloatingNumType ty `postfix` "cos")   [a]
+codeGenPrim (PrimTan         ty) [a]   = ccall (FloatingNumType ty `postfix` "tan")   [a]
+codeGenPrim (PrimAsin        ty) [a]   = ccall (FloatingNumType ty `postfix` "asin")  [a]
+codeGenPrim (PrimAcos        ty) [a]   = ccall (FloatingNumType ty `postfix` "acos")  [a]
+codeGenPrim (PrimAtan        ty) [a]   = ccall (FloatingNumType ty `postfix` "atan")  [a]
+codeGenPrim (PrimAsinh       ty) [a]   = ccall (FloatingNumType ty `postfix` "asinh") [a]
+codeGenPrim (PrimAcosh       ty) [a]   = ccall (FloatingNumType ty `postfix` "acosh") [a]
+codeGenPrim (PrimAtanh       ty) [a]   = ccall (FloatingNumType ty `postfix` "atanh") [a]
+codeGenPrim (PrimExpFloating ty) [a]   = ccall (FloatingNumType ty `postfix` "exp")   [a]
+codeGenPrim (PrimSqrt        ty) [a]   = ccall (FloatingNumType ty `postfix` "sqrt")  [a]
+codeGenPrim (PrimLog         ty) [a]   = ccall (FloatingNumType ty `postfix` "log")   [a]
+codeGenPrim (PrimFPow        ty) [a,b] = ccall (FloatingNumType ty `postfix` "pow")   [a,b]
 codeGenPrim (PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
-codeGenPrim (PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty) "atan2" [a,b]
+codeGenPrim (PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty `postfix` "atan2") [a,b]
 codeGenPrim (PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
 codeGenPrim (PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
 codeGenPrim (PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode
@@ -415,8 +415,8 @@ codeGenPrim PrimLOr              [a,b] = CBinary CLorOp a b internalNode
 codeGenPrim PrimLNot             [a]   = CUnary  CNegOp a   internalNode
 codeGenPrim PrimOrd              [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
 codeGenPrim PrimChr              [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
-codeGenPrim PrimRoundFloatInt    [a]   = CCall (CVar (internalIdent "lroundf") internalNode) [a] internalNode -- TLM: (int) rintf(x) ??
-codeGenPrim PrimTruncFloatInt    [a]   = CCall (CVar (internalIdent "ltruncf") internalNode) [a] internalNode
+codeGenPrim PrimRoundFloatInt    [a]   = ccall "lroundf" [a] -- TLM: (int) rintf(x) ??
+codeGenPrim PrimTruncFloatInt    [a]   = ccall "ltruncf" [a]
 codeGenPrim PrimIntFloat         [a]   = CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode) a internalNode -- TLM: __int2float_[rn,rz,ru,rd](a) ??
 codeGenPrim PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType   internalNode)] [] internalNode) a internalNode
 
@@ -486,8 +486,8 @@ codeGenMaxBound (NonNumBoundedType   ty)
 
 
 codeGenAbs :: NumType a -> CExpr -> CExpr
-codeGenAbs ty@(IntegralNumType _) x = ccall ty "abs"  [x]
-codeGenAbs ty@(FloatingNumType _) x = ccall ty "fabs" [x]
+codeGenAbs ty@(IntegralNumType _) x = ccall (ty `postfix` "abs")  [x]
+codeGenAbs ty@(FloatingNumType _) x = ccall (ty `postfix` "fabs") [x]
 
 codeGenSig :: NumType a -> CExpr -> CExpr
 codeGenSig ty@(IntegralNumType t) a
@@ -508,28 +508,32 @@ codeGenRecip ty x | FloatingDict <- floatingDict ty
   = CBinary CDivOp (codeGenScalar (NumScalarType (FloatingNumType ty)) 1) x internalNode
 
 codeGenLogBase :: FloatingType a -> CExpr -> CExpr -> CExpr
-codeGenLogBase ty x y = let a = ccall (FloatingNumType ty) "log" [x]
-                            b = ccall (FloatingNumType ty) "log" [y]
+codeGenLogBase ty x y = let a = ccall (FloatingNumType ty `postfix` "log") [x]
+                            b = ccall (FloatingNumType ty `postfix` "log") [y]
                         in
                         CBinary CDivOp b a internalNode
 
 codeGenMin :: ScalarType a -> CExpr -> CExpr -> CExpr
-codeGenMin (NumScalarType ty@(IntegralNumType _)) a b = ccall ty "min"  [a,b]
-codeGenMin (NumScalarType ty@(FloatingNumType _)) a b = ccall ty "fmin" [a,b]
+codeGenMin (NumScalarType ty@(IntegralNumType _)) a b = ccall (ty `postfix` "min")  [a,b]
+codeGenMin (NumScalarType ty@(FloatingNumType _)) a b = ccall (ty `postfix` "fmin") [a,b]
 codeGenMin (NonNumScalarType _)                   _ _ = undefined
 
 codeGenMax :: ScalarType a -> CExpr -> CExpr -> CExpr
-codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall ty "max"  [a,b]
-codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall ty "fmax" [a,b]
+codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall (ty `postfix` "max")  [a,b]
+codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall (ty `postfix` "fmax") [a,b]
 codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
+-- Auxiliary Functions
+-- -------------------
 
-ccall :: NumType a -> String -> [CExpr] -> CExpr
-ccall (IntegralNumType  _) fn args = CCall (CVar (internalIdent fn)                internalNode) args internalNode
-ccall (FloatingNumType ty) fn args = CCall (CVar (internalIdent (fn `postfix` ty)) internalNode) args internalNode
-  where
-    postfix :: String -> FloatingType a -> String
-    postfix x (TypeFloat   _) = x ++ "f"
-    postfix x (TypeCFloat  _) = x ++ "f"
-    postfix x _               = x
+cvar :: String -> CExpr
+cvar x = CVar (internalIdent x) internalNode
+
+ccall :: String -> [CExpr] -> CExpr
+ccall fn args = CCall (cvar fn) args internalNode
+
+postfix :: NumType a -> String -> String
+postfix (FloatingNumType (TypeFloat _))  = (++ "f")
+postfix (FloatingNumType (TypeCFloat _)) = (++ "f")
+postfix _                                = id
 
