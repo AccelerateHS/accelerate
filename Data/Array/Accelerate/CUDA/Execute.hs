@@ -253,11 +253,11 @@ data Lifted where
 liftAcc :: OpenAcc aenv a -> Val aenv -> CIO [Lifted]
 liftAcc (Map f _)            aenv = liftFun f aenv
 liftAcc (ZipWith f _ _)      aenv = liftFun f aenv
-liftAcc (Fold f e _)         aenv = msum [liftExp e aenv, liftFun f aenv]
-liftAcc (FoldSeg f e _ _)    aenv = msum [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanl f e _)        aenv = msum [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanr f e _)        aenv = msum [liftExp e aenv, liftFun f aenv]
-liftAcc (Permute f _ g _)    aenv = msum [liftFun f aenv, liftFun g aenv]
+liftAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftAcc (FoldSeg f e _ _)    aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftAcc (Scanl f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftAcc (Scanr f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftAcc (Permute f _ g _)    aenv = concatM [liftFun f aenv, liftFun g aenv]
 liftAcc (Backpermute _ f _)  aenv = liftFun f aenv
 liftAcc (Stencil f _ _)      aenv = liftFun f aenv
 liftAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
@@ -275,7 +275,7 @@ liftExp :: OpenExp env aenv a -> Val aenv -> CIO [Lifted]
 liftExp (Tuple t)         aenv = liftTup t aenv
 liftExp (Prj _ e)         aenv = liftExp e aenv
 liftExp (PrimApp _ e)     aenv = liftExp e aenv
-liftExp (Cond p t e)      aenv = msum [liftExp p aenv, liftExp t aenv, liftExp e aenv]
+liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
 liftExp (Shape a)         aenv = do
   (Array sh _) <- executeOpenAcc a aenv
   return [Shapes sh]
@@ -295,14 +295,11 @@ bind :: CUDA.Module -> [Lifted] -> CIO ()
 bind mdl = foldM_ go (0,0)
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
-    go (n,m) (Shapes sh)            = bindDim n sh >> return (n+1,m)
-    go (n,m) (Arrays (Array sh ad)) = do
-      bindDim n sh
-      bindTex m sh ad >>= \m' ->
-        return (n+1,m+m')
+    go (n,m) (Shapes sh)            = bindDim n sh    >>  return (n+1,m)
+    go (n,m) (Arrays (Array sh ad)) = bindTex m sh ad >>= \m' -> return (n,m+m')
 
     bindDim n sh = liftIO $
-      CUDA.getPtr mdl ("shape"++show n) >>= \(p,_) ->
+      CUDA.getPtr mdl ("sh"++show n) >>= \(p,_) ->
       CUDA.pokeListArray (convertIx sh) p
 
     bindTex m sh ad
@@ -385,7 +382,7 @@ instance (Marshalable a, Marshalable b, Marshalable c
 -- and binding of array references from scalar expressions.
 --
 execute :: Marshalable args => String -> OpenAcc aenv a -> Val aenv -> Int -> args -> CIO ()
-execute name acc aenv n args = do
+execute name acc aenv n args =
   configure name acc aenv n >>= flip dispatch args
 
 -- Pre-execution configuration and kernel linking
@@ -457,15 +454,21 @@ waitFor pid = do
 unify :: a -> a -> ()
 unify _ _ = ()
 
+-- Special version of msum, which doesn't behave as we would like for CIO [a]
+--
+concatM :: Monad m => [m [a]] -> m [a]
+concatM ms = concat `liftM` sequence ms
+
 -- Generalise concatMap to arbitrary monads
 --
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM f xs = concat `liftM` mapM f xs
 
--- Special version of msum, which doesn't behave as we would like for CIO [a]
+-- A lazier version of 'Control.Monad.sequence'
 --
-concatM :: Monad m => [m [a]] -> m [a]
-concatM ms = concat `liftM` sequence ms
+sequence' :: [IO a] -> IO [a]
+sequence' ms = foldr k (return []) ms
+    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
 
 -- Create a new host array, and associated device memory area
 -- FIXME: small arrays are relocated by the GC
@@ -496,10 +499,4 @@ convertSliceIndex :: SliceIndex slix sl co dim -> slix -> [Int32]
 convertSliceIndex (SliceNil)            ()     = []
 convertSliceIndex (SliceAll   sliceIdx) (s,()) = convertSliceIndex sliceIdx s
 convertSliceIndex (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSliceIndex sliceIdx s
-
--- A lazier version of 'Control.Monad.sequence'
---
-sequence' :: [IO a] -> IO [a]
-sequence' ms = foldr k (return []) ms
-    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
 

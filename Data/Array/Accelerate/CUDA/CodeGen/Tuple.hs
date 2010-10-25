@@ -102,5 +102,5 @@ mkTuplePartition ty =
     initp = mkInitList (map var names)
     stmts = zipWith  (\l r -> CBlockDecl (CDecl (map CTypeSpec l) r internalNode)) ty
           . zipWith3 (\p t s -> [(Just (CDeclr (Just (internalIdent p)) [CPtrDeclr [] internalNode] Nothing [] internalNode),Just (CInitExpr (CCast (CDecl (map CTypeSpec t) [(Just (CDeclr Nothing [CPtrDeclr [] internalNode] Nothing [] internalNode),Nothing,Nothing)] internalNode) s internalNode) internalNode),Nothing)]) names ty
-          $ var "s_data" : map (\v -> (CUnary CAdrOp (CIndex (var v) (CVar (internalIdent "n") internalNode) internalNode) internalNode)) names
+          $ var "s_data" : map (\v -> CUnary CAdrOp (CIndex (var v) (CVar (internalIdent "n") internalNode) internalNode) internalNode) names
 

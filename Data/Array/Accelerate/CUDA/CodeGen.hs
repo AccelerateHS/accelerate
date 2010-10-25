@@ -65,7 +65,7 @@ codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
   let (CUTranslSkel code skel, st) = runCodeGen (codeGen acc)
       (CTranslUnit decl node)      = code
-      fvars                        = reverse $ getL arrays st ++ getL shapes st
+      fvars                        = getL arrays st ++ getL shapes st
   in
   CUTranslSkel (CTranslUnit (fvars ++ decl) node) skel
 
@@ -132,6 +132,11 @@ mkPrj ndim var c
 
 -- Function abstraction
 --
+-- Although Accelerate includes lambda abstractions, it does not include a
+-- general application form. That is, lambda abstractions of scalar expressions
+-- are only introduced as arguments to collective operations, so lambdas are
+-- always outermost, and can always be translated into plain C functions.
+--
 codeGenFun :: OpenFun env aenv t -> CodeGen [CExpr]
 codeGenFun (Lam  lam)  = codeGenFun lam
 codeGenFun (Body body) = codeGenExp body
@@ -166,22 +171,22 @@ codeGenExp (Cond p t e) =
   zipWith . (\[a] b c -> CCond a (Just b) c internalNode) <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
 
 codeGenExp (Shape a) = do
-  sh <- ("shape"++) . show . length <$> getM shapes
+  sh <- ("sh"++) . show . length <$> getM shapes
   modM shapes (mkShape (accDim a) sh :)
   return [cvar sh]
 
 codeGenExp (IndexScalar a e) = do
   ix <- codeGenExp e
   n  <- length <$> getM arrays
-  sh <- ("shape"++) . show . length <$> getM shapes
+  sh <- ("sh"++) . show . length <$> getM shapes
   let ty = codeGenTupleTex (accType a)
-      fv = reverse . take (length ty) $ map (("tex"++) . show) [n..]
+      fv = map (("tex"++) . show) [n..]
 
   modM arrays (zipWith array ty fv ++)
   modM shapes (mkShape (accDim a) sh :)
   return (zipWith (indexArray sh ix) fv ty)
   where
-    array ty fv             = mkGlobal (map CTypeSpec ty) fv
+    array t                 = mkGlobal (map CTypeSpec t)
     indexArray sh ix n t    = ccall (indexer t) [cvar n, ccall "toIndex" [cvar sh, ccall "shape" ix]]
     indexer [CDoubleType _] = "indexDArray"
     indexer _               = "indexArray"
