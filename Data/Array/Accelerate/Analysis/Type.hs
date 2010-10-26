@@ -75,7 +75,7 @@ accType2 :: forall aenv dim1 e1 dim2 e2. OpenAcc aenv (Array dim1 e1, Array dim2
 accType2 (Let _ acc)     = accType2 acc
 accType2 (Let2 _ acc)    = accType2 acc
 accType2 (Avar _)        = -- (elemType (undefined::e1), elemType (undefined::e2))
-                           -- ^^should work - GHC 6.12 bug?
+                           -- should work - GHC 6.12 bug?
                            case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
                              ArraysRpair ArraysRarray ArraysRarray 
                                -> (elemType (undefined::e1), elemType (undefined::e2))
