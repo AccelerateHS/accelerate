@@ -9,7 +9,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Compile (compileAcc, precompileAcc)
+module Data.Array.Accelerate.CUDA.Compile (compileAcc)
   where
 
 import Data.Maybe
@@ -53,9 +53,24 @@ compileAcc = travA k
                                   pokeArrayAsync ad n Nothing
     k acc = compile acc
 
-
+{-
 -- | Initiate code generation and compilation for an embedded expression, but do
--- not transfer any data
+-- not transfer any data.
+--
+-- TODO: we would like the following to hold, but falls over in 
+-- D.A.A.Analysis.Type.arrayType
+--  * We could provide a 'undefinedArray' (or 'noArray') value that has the 'Array' constructor, 
+--    but no payload   -=chak
+--
+-- Note that it is not necessary to create an unused array argument. For
+-- example:
+--
+-- > dotp :: Vector a -> Vector a -> Acc (Scalar a)
+-- > dotp xs ys = fold (+) 0 $ zipWith (*) (use xs) (use ys)
+--
+-- It is sufficient to:
+--
+-- > precompile (dotp undefined undefined :: Acc (Scalar Float))
 --
 precompileAcc :: OpenAcc aenv a -> CIO ()
 precompileAcc = travA k
@@ -63,7 +78,7 @@ precompileAcc = travA k
     k :: OpenAcc aenv a -> CIO ()
     k (Use _) = return ()
     k acc     = compile acc
-
+-}
 
 -- Depth-first traversal of the term tree, searching for array expressions to
 -- apply the given function to.

@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
   -- * Generate and execute CUDA code for an array expression
-  run, stream, precompile
+  run, stream
 
 ) where
 
@@ -55,7 +55,7 @@ run = unsafePerformIO . execute
 
 -- TODO:
 --  * avoid re-analysing the array code in the frontend
---  * overlap host-device & device->host transfers, as well as computation
+--  * overlap host->device & device->host transfers, as well as computation
 --
 stream :: (Arrays a, Arrays b) => (a -> Sugar.Acc b) -> [a] -> [b]
 {-# NOINLINE stream #-}
@@ -85,31 +85,3 @@ sequence' :: [IO a] -> IO [a]
 sequence' ms = foldr k (return []) ms
     where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
 
-
--- | Populate the internal cache with the compiled functions required to execute
--- the given array program. This is the same as 'run', except that (1) no data
--- is transferred to the device, and (2) the generated code is not invoked.
---
-
--- TODO: we would like the following to hold, but falls over in 
--- D.A.A.Analysis.Type.arrayType
---  * We could provide a 'undefinedArray' (or 'noArray') value that has the 'Array' constructor, 
---    but no payload   -=chak
---
--- Note that it is not necessary to create an unused array argument. For
--- example:
---
--- > dotp :: Vector a -> Vector a -> Acc (Scalar a)
--- > dotp xs ys = fold (+) 0 $ zipWith (*) (use xs) (use ys)
---
--- It is sufficient to:
---
--- > precompile (dotp undefined undefined :: Acc (Scalar Float))
---
-precompile :: Arrays a => Sugar.Acc a -> ()
-{-# NOINLINE precompile #-}
-precompile acc
-  = unsafePerformIO
-  $ evalCUDA (precompileAcc (Sugar.convertAcc acc))
-             `catch`
-             \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
