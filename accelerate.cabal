@@ -192,10 +192,13 @@ Library
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
   Ghc-options:          -O2 -Wall -fno-warn-orphans -fno-warn-name-shadowing
-  Extensions:           FlexibleContexts, FlexibleInstances, TypeSynonymInstances,
-                        ExistentialQuantification, GADTs, TypeFamilies, MultiParamTypeClasses,
-                        ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving,
-                        BangPatterns, PatternGuards, TypeOperators, RankNTypes, CPP
+  Extensions:           BangPatterns, CPP, DeriveDataTypeable, EmptyDataDecls,
+                        FlexibleContexts, FlexibleInstances, GADTs, MagicHash,
+                        MultiParamTypeClasses, PatternGuards, RankNTypes,
+                        ScopedTypeVariables, StandaloneDeriving,
+                        TemplateHaskell, TupleSections, TypeFamilies,
+                        TypeOperators, TypeSynonymInstances, UnboxedTuples,
+                        UndecidableInstances
 
 source-repository head
   type:                 darcs
