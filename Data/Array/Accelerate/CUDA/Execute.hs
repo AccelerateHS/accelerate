@@ -192,11 +192,16 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
       restrict (SliceFixed sliceIdx) (slx,i)  (sh,sz)
         = BOUNDS_CHECK(checkIndex) "slice" i sz $ restrict sliceIdx slx sh
 
+      convertSlix :: SliceIndex slix sl co dim -> slix -> [Int32]
+      convertSlix (SliceNil)            ()     = []
+      convertSlix (SliceAll   sliceIdx) (s,()) = convertSlix sliceIdx s
+      convertSlix (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSlix sliceIdx s
+
   slix            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
   r@(Array s out) <- newArray (toElem $ restrict sliceIndex (fromElem slix) sh0)
   execute "slice" acc aenv (size s)
-    (out,in0,convertIx s,convertSliceIndex sliceIndex (fromElem slix),convertIx sh0)
+    (out,in0,convertIx s,convertSlix sliceIndex (fromElem slix),convertIx sh0)
   freeArray in0
   return r
 
@@ -492,11 +497,4 @@ convertIx :: Ix dim => dim -> [Int32]
 convertIx = post . map fromIntegral . shapeToList
   where post [] = [1]
         post xs = reverse xs
-
--- Convert a slice specification into storable index projection components
---
-convertSliceIndex :: SliceIndex slix sl co dim -> slix -> [Int32]
-convertSliceIndex (SliceNil)            ()     = []
-convertSliceIndex (SliceAll   sliceIdx) (s,()) = convertSliceIndex sliceIdx s
-convertSliceIndex (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSliceIndex sliceIdx s
 

@@ -86,17 +86,17 @@ codeGen b@(Map f a)           = mkMap (codeGenAccType b) (codeGenAccType a) <$> 
 codeGen c@(ZipWith f a b)     = mkZipWith (codeGenAccTypeDim c) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
 codeGen b@(Permute f _ g a)   = mkPermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f <*> codeGenFun g
 codeGen b@(Backpermute _ f a) = mkBackpermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f
-codeGen b@(Replicate sl _ a)  = return . mkReplicate (codeGenAccType a) dimSl dimOut $ extend sl (dimOut-1)
+codeGen b@(Replicate sl _ a)  = return . mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
   where
     dimSl  = accDim a
     dimOut = accDim b
 
     extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
     extend (SliceNil)            _ = []
-    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n-1)
-    extend (SliceFixed sliceIdx) n = extend sliceIdx (n-1)
+    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n+1)
+    extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
 
-codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 $ restrict sl (dimCo-1,dimSl-1)
+codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
   where
     dimCo  = length (codeGenExpType slix)
     dimSl  = accDim b
@@ -104,8 +104,8 @@ codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo 
 
     restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
     restrict (SliceNil)            _     = []
-    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n-1)
-    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m-1,n)
+    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
+    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
 
 codeGen (Stencil _ _ _)      = error "codeGenAcc: 'stencil' is not supported by the CUDA backend yet"
 codeGen (Stencil2 _ _ _ _ _) = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
