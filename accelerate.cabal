@@ -169,7 +169,6 @@ Library
                         Data.Array.Accelerate.CUDA.Analysis.Hash
                         Data.Array.Accelerate.CUDA.Analysis.Launch
                         Data.Array.Accelerate.CUDA.Array.Data
-                        Data.Array.Accelerate.CUDA.Array.Device
                         Data.Array.Accelerate.CUDA.CodeGen.Data
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
                         Data.Array.Accelerate.CUDA.CodeGen.Tuple
@@ -196,7 +195,7 @@ Library
   Extensions:           FlexibleContexts, FlexibleInstances, TypeSynonymInstances,
                         ExistentialQuantification, GADTs, TypeFamilies, MultiParamTypeClasses,
                         ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving,
-                        BangPatterns, PatternGuards, TypeOperators, RankNTypes
+                        BangPatterns, PatternGuards, TypeOperators, RankNTypes, CPP
 
 source-repository head
   type:                 darcs

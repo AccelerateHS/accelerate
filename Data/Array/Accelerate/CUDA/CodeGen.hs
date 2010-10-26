@@ -32,7 +32,7 @@ import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST hiding (arrays)
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
 

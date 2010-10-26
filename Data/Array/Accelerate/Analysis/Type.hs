@@ -1,38 +1,48 @@
 {-# LANGUAGE ScopedTypeVariables, GADTs, TypeFamilies, PatternGuards #-}
-
--- |Embedded array processing language: type analysis
+-- |
+-- Module      : Data.Array.Accelerate.Analysis.Type
+-- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
---  The Accelerate AST does not explicitly store much type information.  Most of
---  it is only indirectly through type class constraints -especially, Elem
---  constraints- available.  This module provides functions that reify that 
---  type information in the form of a 'TupleType' value.  This is, for example,
---  needed to emit type information in a backend.
+-- The Accelerate AST does not explicitly store much type information.  Most of
+-- it is only indirectly through type class constraints -especially, 'Elem'
+-- constraints- available.  This module provides functions that reify that 
+-- type information in the form of a 'TupleType' value.  This is, for example,
+-- needed to emit type information in a backend.
 
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  accType, accType2, expType, sizeOf
+  arrayType, accType, accType2, expType, sizeOf
   
 ) where
   
+-- standard library
+import qualified Foreign.Storable as F
+
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 
--- neighbours
-import qualified Foreign.Storable as F
 
 
--- Determine the type of an expressions
--- ------------------------------------
+-- |Determine an array type
+-- ------------------------
+
+-- |Reify the element type of an array.
+--
+arrayType :: forall dim e. Array dim e -> TupleType (ElemRepr e)
+arrayType (Array _ _) = elemType (undefined::e)
+
+
+-- |Determine the type of an expressions
+-- -------------------------------------
 
 -- |Reify the element type of the result of an array computation.
 --
@@ -40,7 +50,9 @@ accType :: forall aenv dim e.
            OpenAcc aenv (Array dim e) -> TupleType (ElemRepr e)
 accType (Let _ acc)           = accType acc
 accType (Let2 _ acc)          = accType acc
-accType (Avar _)              = elemType (undefined::e)
+accType (Avar _)              = -- elemType (undefined::e)   -- should work - GHC 6.12 bug?
+                                case arrays :: ArraysR (Array dim e) of 
+                                  ArraysRarray -> elemType (undefined::e)
 accType (Use arr)             = arrayType arr
 accType (Unit _)              = elemType (undefined::e)
 accType (Reshape _ acc)       = accType acc
@@ -58,8 +70,16 @@ accType (Stencil2 _ _ _ _ _)  = elemType (undefined::e)
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
 --
-accType2 :: OpenAcc aenv (Array dim1 e1, Array dim2 e2)
+accType2 :: forall aenv dim1 e1 dim2 e2. OpenAcc aenv (Array dim1 e1, Array dim2 e2)
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
+accType2 (Let _ acc)     = accType2 acc
+accType2 (Let2 _ acc)    = accType2 acc
+accType2 (Avar _)        = -- (elemType (undefined::e1), elemType (undefined::e2))
+                           -- ^^should work - GHC 6.12 bug?
+                           case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
+                             ArraysRpair ArraysRarray ArraysRarray 
+                               -> (elemType (undefined::e1), elemType (undefined::e2))
+                             _ -> error "GHC is too dumb to realise that this is dead code"
 accType2 (Scanl _ e acc) = (accType acc, expType e)
 accType2 (Scanr _ e acc) = (accType acc, expType e)
 

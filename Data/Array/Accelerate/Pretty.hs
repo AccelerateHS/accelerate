@@ -157,7 +157,7 @@ prettyExp lvl alvl wrap (PrimApp p a)
   = wrap $ prettyPrim p <+> prettyExp lvl alvl parens a
 prettyExp lvl alvl wrap (IndexScalar idx i)
   = wrap $ cat [prettyAccParens alvl idx, char '!', prettyExp lvl alvl parens i]
-prettyExp lvl alvl wrap (Shape idx)
+prettyExp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> prettyAccParens alvl idx
 
 -- Pretty print nested pairs as a proper tuple.

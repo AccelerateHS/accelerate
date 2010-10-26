@@ -20,7 +20,7 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 
 -- Convert a closed array expression from HOAS to de Bruijn form AST
 --
-convertAcc :: Sugar.Acc a -> Acc a
+convertAcc :: Arrays arrs => Sugar.Acc arrs -> Acc arrs
 convertAcc =  refineAcc . Sugar.convertAcc
 
 

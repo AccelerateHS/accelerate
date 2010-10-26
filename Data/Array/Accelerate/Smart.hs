@@ -60,7 +60,6 @@ import Debug.Trace
 import Control.Monad
 import Data.List
 import Data.HashTable as Hash
-import Data.Maybe
 import System.Mem.StableName
 import System.IO.Unsafe         (unsafePerformIO)
 import Data.Typeable
@@ -202,8 +201,10 @@ convertSharingAcc alyt = convert alyt []
     --
     convert :: Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
     convert alyt env (VarSharing sa)
-      | Just i <- findIndex (matchStableAcc sa) env = AST.Avar (prjIdx i alyt)
-      | otherwise                                   = unknownSharingVar sa env
+      | Just i <- findIndex (matchStableAcc sa) env 
+      = AST.Avar (prjIdx i alyt)
+      | otherwise                                   
+      = INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
     convert alyt env (LetSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
       = let alyt' = incLayout alyt `PushLayout` ZeroIdx
         in
@@ -256,11 +257,6 @@ convertSharingAcc alyt = convert alyt []
                             (convert alyt env acc1)
                             (convertBoundary bndy2) 
                             (convert alyt env acc2)
-    
-unknownSharingVar 
-  = error "Data.Array.Accelerate.Smart.convertSharingAcc: INTERNAL ERROR (unbound sharing variable)"
-typeMismatch
-  = error "Data.Array.Accelerate.Smart.convertSharingAcc: INTERNAL ERROR (type mismatch)"
 
 -- |Convert a boundary condition
 --
@@ -312,9 +308,9 @@ makeStableAcc acc = acc `seq` makeStableName acc
 -- a let binding (for a shared subtree) using 'LetSharing'.
 --
 data SharingAcc arrs where
-  VarSharing :: Typeable arrs => StableName (Acc arrs)                           -> SharingAcc arrs
-  LetSharing ::                  StableSharingAcc -> SharingAcc arrs             -> SharingAcc arrs
-  AccSharing :: Typeable arrs => StableName (Acc arrs) -> PreAcc SharingAcc arrs -> SharingAcc arrs
+  VarSharing :: Arrays arrs => StableName (Acc arrs)                           -> SharingAcc arrs
+  LetSharing ::                StableSharingAcc -> SharingAcc arrs             -> SharingAcc arrs
+  AccSharing :: Arrays arrs => StableName (Acc arrs) -> PreAcc SharingAcc arrs -> SharingAcc arrs
 
 -- Stable name for an array computation associated with its sharing-annotated version.
 --
@@ -531,7 +527,7 @@ determineScopes occMap acc
                         -> IO (SharingAcc arrs, [StableAccName])
     pruneSharedSubtrees _ _ (VarSharing _)
       -- before pruning, a tree may not have sharing variables
-      = error "Data.Array.Accelerate.Smart.replaceSharedByVariables: INTERNAL ERROR"
+      = INTERNAL_ERROR(error) "replaceSharedByVariables" "unexpected sharing variable"
     pruneSharedSubtrees occMap sharingFactor (LetSharing (StableSharingAcc sn boundAcc) bodyAcc)
       -- prune a let binding (both it's body and binding); might drop the binding altogether
       = do
@@ -552,7 +548,7 @@ determineScopes occMap acc
         trace "-=ROOT" $ return ()
         Just occCount <- Hash.lookup occMap (StableAccName sn)
         pruneSharedSubtrees occMap (Just occCount) acc
-    pruneSharedSubtrees occMap sf@(Just sharingFactor) acc@(AccSharing sn pacc)
+    pruneSharedSubtrees occMap sf@(Just sharingFactor) (AccSharing sn pacc)
       -- prune tree node
       = do
           let sa = StableAccName sn

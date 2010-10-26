@@ -71,7 +71,7 @@ module Data.Array.Accelerate.AST (
   Val(..), prj,
 
   -- * Accelerated array expressions
-  Arrays(..), OpenAcc(..), Acc, Stencil(..),
+  Arrays(..), ArraysR(..), OpenAcc(..), Acc, Stencil(..),
 
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
@@ -116,8 +116,7 @@ data Val env where
 prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
-prj _             _            =
-  INTERNAL_ERROR(error) "prj" "inconsistent valuation"
+prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
 
 -- Array expressions
@@ -126,11 +125,22 @@ prj _             _            =
 -- |Tuples of arrays (of type 'Array dim e').  This characterises the domain of results of Accelerate
 -- array computations.
 --
-class (Delayable arrs, Typeable arrs) => Arrays arrs
+class (Delayable arrs, Typeable arrs) => Arrays arrs where
+  arrays :: ArraysR arrs
   
-instance Arrays ()  
-instance (Typeable dim, Typeable e) => Arrays (Array dim e)
-instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2)
+-- |GADT reifying the 'Arrays' class.
+--
+data ArraysR arrs where
+  ArraysRunit  :: ArraysR ()
+  ArraysRarray :: (Ix dim, Elem e) => ArraysR (Array dim e)
+  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
+  
+instance Arrays () where
+  arrays = ArraysRunit
+instance (Ix dim, Elem e) => Arrays (Array dim e) where
+  arrays = ArraysRarray
+instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2) where
+  arrays = ArraysRpair arrays arrays
 
 
 -- |Collective array computations parametrised over array variables
@@ -167,7 +177,8 @@ data OpenAcc aenv a where
               -> OpenAcc aenv bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index              
-  Avar        :: Idx     aenv arrs
+  Avar        :: Arrays arrs
+              => Idx     aenv arrs
               -> OpenAcc aenv arrs
   
   -- Array inlet (triggers async host->device transfer if necessary)

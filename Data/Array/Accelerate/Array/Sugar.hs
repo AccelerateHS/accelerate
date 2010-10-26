@@ -1,15 +1,14 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE CPP, ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
-
--- |Embedded array processing language: user-visible array operations
+-- |
+-- Module      : Data.Array.Accelerate.Array.Sugar
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 
 module Data.Array.Accelerate.Array.Sugar (
 
@@ -30,9 +29,6 @@ module Data.Array.Accelerate.Array.Sugar (
   
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, fromIArray, toIArray, fromList, toList,
-  
-  -- * Array analysis
-  arrayType
 
 ) where
 
@@ -866,13 +862,3 @@ toList (Array sh adata) = iter sh' idx (.) id []
 instance Show (Array dim e) where
   show arr@(Array sh _adata) 
     = "Array " ++ show (toElem sh :: dim) ++ " " ++ show (toList arr)
-
-
--- Array analysis
--- --------------
-
--- |Reify the element type of an array.
---
-arrayType :: forall dim e. Array dim e -> TupleType (ElemRepr e)
-arrayType (Array _ _) = elemType (undefined::e)
-

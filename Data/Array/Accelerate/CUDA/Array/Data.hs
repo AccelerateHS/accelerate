@@ -9,7 +9,9 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Array.Data (ArrayElem(..)) where
+module Data.Array.Accelerate.CUDA.Array.Data (
+  ArrayElem(..)
+) where
 
 import Prelude hiding (id, (.))
 import Control.Category
