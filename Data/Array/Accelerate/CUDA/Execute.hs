@@ -32,7 +32,7 @@ import System.IO.Unsafe
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
-import Data.Array.Accelerate.Array.Sugar                (Array(..),toElem,fromElem)
+import Data.Array.Accelerate.Array.Sugar                (Array(..),toElem,fromElem,Scalar,Vector)
 import qualified Data.Array.Accelerate.Array.Data       as AD
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Interpreter      as I
@@ -134,25 +134,8 @@ executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
   freeArray seg
   return r
 
-executeOpenAcc     (Scanr f x a0) aenv = executeOpenAcc (Scanl f x a0) aenv
-executeOpenAcc acc@(Scanl _ _ a0) aenv = do     -- difference in left/right done at code gen
-  (Array sh0 in0)         <- executeOpenAcc a0 aenv
-  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
-  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (toElem sh0)
-  b@(Array _ bks)         <- newArray g
-  s@(Array _ sum)         <- unify a b `seq` newArray ()
-  let n   = size sh0
-      itv = (n + g - 1) `div` g
-
-  bind mdl fvs
-  launch (t,g,m) fscan (out,in0,bks,n,itv)      -- inclusive scan of input array
-  launch (t,1,m) fscan (bks,bks,sum,g,itv)      -- inclusive scan block-level sums
-  launch (t,g,m) fadd  (out,bks,n,itv)          -- distribute partial results
-  release fvs
-  freeArray in0
-  freeArray bks
-  return (a,s)
+executeOpenAcc acc@(Scanr _ _ a0) aenv = executePrescan acc a0 aenv
+executeOpenAcc acc@(Scanl _ _ a0) aenv = executePrescan acc a0 aenv
 
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
@@ -204,6 +187,30 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
     (out,in0,convertIx s,convertSlix sliceIndex (fromElem slix),convertIx sh0)
   freeArray in0
   return r
+
+-- Differences in left/right scan incorporated during code generation
+--
+executePrescan
+  :: OpenAcc aenv (Vector e, Scalar e) -> OpenAcc aenv (Vector e) -> Val aenv
+  -> CIO (Vector e, Scalar e)
+executePrescan acc a0 aenv = do
+  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
+  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  a@(Array _ out)         <- newArray (toElem sh0)
+  b@(Array _ bks)         <- newArray g
+  s@(Array _ sum)         <- unify a b `seq` newArray ()
+  let n   = size sh0
+      itv = (n + g - 1) `div` g
+
+  bind mdl fvs
+  launch (t,g,m) fscan (out,in0,bks,n,itv)      -- inclusive scan of input array
+  launch (t,1,m) fscan (bks,bks,sum,g,itv)      -- inclusive scan block-level sums
+  launch (t,g,m) fadd  (out,bks,n,itv)          -- distribute partial results
+  release fvs
+  freeArray in0
+  freeArray bks
+  return (a,s)
 
 
 -- Scalar expression evaluation
