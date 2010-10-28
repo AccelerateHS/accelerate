@@ -38,6 +38,8 @@ accDim (Permute _ acc _ _)    = accDim acc
 accDim (Backpermute _ _ _)    = ndim (elemType (undefined::dim))
 accDim (Stencil _ _ acc)      = accDim acc
 accDim (Stencil2 _ _ acc _ _) = accDim acc
+accDim (PostScanl _ acc)      = accDim acc
+accDim (PostScanr _ acc)      = accDim acc
 
 -- |Reify the dimensionality of the results of a computation that yields two
 -- arrays

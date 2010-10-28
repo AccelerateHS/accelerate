@@ -66,6 +66,8 @@ accType (Permute _ _ _ acc)   = accType acc
 accType (Backpermute _ _ acc) = accType acc
 accType (Stencil _ _ _)       = elemType (undefined::e)
 accType (Stencil2 _ _ _ _ _)  = elemType (undefined::e)
+accType (PostScanl _ acc)     = accType acc
+accType (PostScanr _ acc)     = accType acc
 
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.

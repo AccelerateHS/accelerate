@@ -35,6 +35,7 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
+import Control.Monad.ST
 import Data.Bits
 import Data.Char                (chr, ord)
 
@@ -109,6 +110,12 @@ evalOpenAcc (Scanl f e acc) aenv
 
 evalOpenAcc (Scanr f e acc) aenv
   = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (PostScanl f acc) aenv
+  = postScanlOp (evalFun f aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (PostScanr f acc) aenv
+  = postScanrOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
 evalOpenAcc (Permute f dftAcc p acc) aenv
   = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
@@ -285,6 +292,56 @@ scanrOp f e (DelayedArray sh rf)
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i - 1) (f' v (rf ((), i)))
+
+postScanlOp :: (e -> e -> e)
+            -> Delayed (Vector e)
+            -> Delayed (Vector e)
+postScanlOp f (DelayedArray sh rf)
+  = delay $ adata `seq` Array sh adata
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, _) = runArrayData $ do
+                   arr <- newArrayData n
+                   traverse arr 0 undefined
+                   return (arr, undefined)
+
+    traverse arr i v
+      | i >= n    = return ()
+      | i == 0    = do
+                      let e = rf ((), i)
+                      writeArrayData arr i e
+                      traverse arr (i + 1) e
+      | otherwise = do
+                      let e = f' v (rf ((), i))
+                      writeArrayData arr i e
+                      traverse arr (i + 1) e
+
+postScanrOp :: (e -> e -> e)
+            -> Delayed (Vector e)
+            -> Delayed (Vector e)
+postScanrOp f (DelayedArray sh rf)
+  = delay $ adata `seq` Array sh adata
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, _) = runArrayData $ do
+                   arr <- newArrayData n
+                   traverse arr (n - 1) undefined
+                   return (arr, undefined)
+
+    traverse arr i v
+      | i < 0        = return ()
+      | i == (n - 1) = do
+                         let e = rf ((), i)
+                         writeArrayData arr i e
+                         traverse arr (i - 1) e
+      | otherwise    = do
+                         let e = f' v (rf ((), i))
+                         writeArrayData arr i e
+                         traverse arr (i - 1) e
 
 permuteOp :: (e -> e -> e)
           -> Delayed (Array dim' e)

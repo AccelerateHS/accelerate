@@ -9,6 +9,7 @@ import Filter
 import Random
 import SAXPY
 import SMVM
+import ScanSeg
 
 import Data.Array.Accelerate                       (Acc)
 import qualified Data.Array.Accelerate             as Acc
@@ -110,6 +111,20 @@ test_smvm gen (n,m) (rows,cols) = do
     run_acc d x v   () = smvm (d,x) v
 
 
+test_prefixSumSeg :: GenIO -> Int -> Int -> IO Benchmark
+test_prefixSumSeg gen n r = do
+  putStrLn $ "== PrefixSumSeg (n = " ++ shows n ") =="
+  seg  <- randomVector gen (\x -> abs x `rem` r) n :: IO (UArray Int Int)
+  seg' <- convertVector seg
+  xs   <- randomVector gen id (sum $ elems seg) :: IO (UArray Int Float)
+  xs'  <- convertVector xs
+  benchmark "prefixSumSeg" similar (run_ref xs seg) (run_acc xs' seg')
+  where
+    {-# NOINLINE run_ref #-}
+    run_ref x s () = prefixSumSeg_ref x s
+    run_acc x s () = prefixSumSeg x s
+
+
 -- Main
 --
 main :: IO ()
@@ -123,5 +138,6 @@ main = do
     , test_saxpy  gen 100000
     , test_filter gen 10000
     , test_smvm   gen (0,42) (2400,400)
+     test_prefixSumSeg gen 10 100
     ]
 

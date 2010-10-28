@@ -269,6 +269,17 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)
 
+  -- Left-to-right postscan of a linear array with a given *associative*
+  -- function.
+  PostScanl   :: Fun     aenv (e -> e -> e)          -- combination function
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e)
+
+  -- Right-to-left postscan of a linear array
+  PostScanr   :: Fun     aenv (e -> e -> e)          -- combination function
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e)
+
   -- Generalised forward permutation is characterised by a permutation
   -- function that determines for each element of the source array where it
   -- should go in the target; the permutation can be between arrays of varying

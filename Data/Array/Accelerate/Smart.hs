@@ -143,6 +143,14 @@ data PreAcc acc a where
               -> Exp e
               -> acc (Vector e)
               -> PreAcc acc (Vector e, Scalar e)
+  PostScanl   :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e)
+  PostScanr   :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e)
   Permute     :: (Ix dim, Ix dim', Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> acc (Array dim' e)
@@ -239,6 +247,10 @@ convertSharingAcc alyt = convert alyt []
             -> AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
           Scanr f e acc
             -> AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          PostScanl f acc
+            -> AST.PostScanl (convertFun2 alyt f) (convert alyt env acc)
+          PostScanr f acc
+            -> AST.PostScanr (convertFun2 alyt f) (convert alyt env acc)
           Permute f dftAcc perm acc
             -> AST.Permute (convertFun2 alyt f) 
                            (convert alyt env dftAcc)
@@ -378,6 +390,8 @@ traverseAcc process combine acc@(Acc pacc)
         FoldSeg _ _ acc1 acc2    -> trav2 sa acc1 acc2
         Scanl _ _ acc            -> trav sa acc
         Scanr _ _ acc            -> trav sa acc
+        PostScanl _ acc          -> trav sa acc
+        PostScanr _ acc          -> trav sa acc
         Permute _ acc1 _ acc2    -> trav2 sa acc1 acc2
         Backpermute _ _ acc      -> trav sa acc
         Stencil _ _ acc          -> trav sa acc
@@ -443,6 +457,8 @@ determineScopes occMap acc
           FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
           Scanl f z acc                   -> trav (Scanl f z) acc
           Scanr f z acc                   -> trav (Scanr f z) acc
+          PostScanl f acc                 -> trav (PostScanl f) acc
+          PostScanr f acc                 -> trav (PostScanr f) acc
           Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
           Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
           Stencil st bnd acc              -> trav (Stencil st bnd) acc
@@ -573,6 +589,8 @@ determineScopes occMap acc
                 FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
                 Scanl f z acc                   -> trav (Scanl f z) acc
                 Scanr f z acc                   -> trav (Scanr f z) acc
+                PostScanl f acc                 -> trav (PostScanl f) acc
+                PostScanr f acc                 -> trav (PostScanr f) acc
                 Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
                 Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
                 Stencil st bnd acc              -> trav (Stencil st bnd) acc
