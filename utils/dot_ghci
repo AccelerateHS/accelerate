@@ -1,0 +1,5 @@
+:set -DACCELERATE_CUDA_BACKEND
+:set -DACCELERATE_BOUNDS_CHECKS
+:set -hide-package mtl
+:set -iutils
+:set -Iinclude
