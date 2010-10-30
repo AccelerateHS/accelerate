@@ -163,14 +163,14 @@ data OpenAcc aenv a where
   
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: Arrays bndArrs
+  Let         :: (Arrays bndArrs, Arrays bodyArrs)
               => OpenAcc aenv bndArrs                  -- bound expression
               -> OpenAcc (aenv, bndArrs) 
                          bodyArrs                      -- the bound expr's scope           
               -> OpenAcc aenv bodyArrs
 
   -- Variant of 'Let' binding (and decomposing) a pair
-  Let2        :: (Arrays bndArrs1, Arrays bndArrs2)
+  Let2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
               => OpenAcc aenv (bndArrs1, bndArrs2)     -- bound expressions 
               -> OpenAcc ((aenv, bndArrs1), bndArrs2)
                          bodyArrs                      -- the bound expr's scope           

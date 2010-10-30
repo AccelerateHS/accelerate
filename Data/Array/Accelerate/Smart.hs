@@ -49,7 +49,7 @@ module Data.Array.Accelerate.Smart (
   mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt, mkIntFloat,
   mkRoundFloatInt, mkTruncFloatInt,
   
-  -- * Auxilliary functions
+  -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$)
 
 ) where
@@ -191,15 +191,16 @@ convertOpenAcc alyt = convertSharingAcc alyt . recoverSharing
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
 -- bindings).  The latter implements the third phase of sharing recovery.
 --
-convertSharingAcc :: Layout aenv aenv 
-                  -> SharingAcc a 
+convertSharingAcc :: Arrays a
+                  => Layout aenv aenv
+                  -> SharingAcc a
                   -> AST.OpenAcc aenv a
 convertSharingAcc alyt = convert alyt []
   where
     -- The sharing environment 'env' keeps track of all currently bound sharing variables,
     -- keeping them in reverse chronological order (outermost variable is at the end of the list)
     --
-    convert :: Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
+    convert :: Arrays a => Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
     convert alyt env (VarSharing sa)
       | Just i <- findIndex (matchStableAcc sa) env 
       = AST.Avar (prjIdx i alyt)
