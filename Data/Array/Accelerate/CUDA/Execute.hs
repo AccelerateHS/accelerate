@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, GADTs, TupleSections, TypeSynonymInstances #-}
+{-# LANGUAGE PatternGuards, TupleSections #-}
+{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -21,7 +22,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.Trans                              (liftIO)
 import Control.Applicative                              hiding (Const)
-import qualified Data.HashTable                         as HT
+import qualified Data.HashTable                         as Hash
 
 import System.FilePath
 import System.Posix.Process
@@ -32,7 +33,7 @@ import System.IO.Unsafe
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
-import Data.Array.Accelerate.Array.Sugar                (Array(..),toElem,fromElem,Scalar,Vector)
+import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector)
 import qualified Data.Array.Accelerate.Array.Data       as AD
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Interpreter      as I
@@ -62,7 +63,7 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 --
 -- 3. If it is a skeleton node, the associated binary object is retrieved,
 --    memory allocated for the result, and the kernel(s) that implement the
---    skeleton are invoked 
+--    skeleton are invoked
 --
 executeAcc :: Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
@@ -73,44 +74,49 @@ executeOpenAcc (Use a)    _    = return a
 
 ---- (2) Non-skeleton nodes ----
 executeOpenAcc (Avar ix)  aenv = return (prj ix aenv)
-executeOpenAcc (Let  x y) aenv =
-  executeOpenAcc x aenv >>= \a ->
-  executeOpenAcc y (aenv `Push` a)
 
-executeOpenAcc (Let2 x y) aenv =
-  executeOpenAcc x aenv >>= \(a,b) ->
-  executeOpenAcc y (aenv `Push` a `Push` b)
+executeOpenAcc (Let  x y) aenv = do
+  a0  <- executeOpenAcc x aenv
+  acc <- withBoundArrays a0 $ executeOpenAcc y (aenv `Push` a0)
+  withBoundArrays acc       $ freeArraysR a0
+  return acc
+
+executeOpenAcc (Let2 x y) aenv = do
+  (a1,a0) <- executeOpenAcc x aenv
+  acc     <- withBoundArrays2 a1 a0 $ executeOpenAcc y (aenv `Push` a1 `Push` a0)
+  withBoundArrays acc               $ freeArraysR a1 >> freeArraysR a0
+  return acc
 
 executeOpenAcc (Reshape e a) aenv = do
   ix            <- executeExp e aenv
   (Array sh ad) <- executeOpenAcc a aenv
   BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
-    $ return (Array (fromElem ix) ad)
+    $ return (Array (Sugar.fromElem ix) ad)
 
 executeOpenAcc (Unit e) aenv = do
   v <- executeExp e aenv
   let ad = fst . AD.runArrayData $ (,undefined) <$> do
         arr <- AD.newArrayData 1024    -- FIXME: small arrays moved by the GC
-        AD.writeArrayData arr 0 (fromElem v)
+        AD.writeArrayData arr 0 (Sugar.fromElem v)
         return arr
   mallocArray    ad 1
   pokeArrayAsync ad 1 Nothing
-  return (Array (fromElem ()) ad)
+  return (Array (Sugar.fromElem ()) ad)
 
 ---- (3) Array computations ----
 executeOpenAcc acc@(Map _ a0) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array _ out) <- newArray (toElem sh0)
+  r@(Array _ out) <- newArray (Sugar.toElem sh0)
   let n = size sh0
-  execute "map" acc aenv n (out,in0,n)
+  execute "map" acc aenv n ((((),out),in0),n)
   freeArray in0
   return r
 
 executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
   (Array sh1 in1) <- executeOpenAcc a1 aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (toElem (sh1 `intersect` sh0))
-  execute "zipWith" acc aenv (size s) (out,in1,in0,convertIx s,convertIx sh1,convertIx sh0)
+  r@(Array s out) <- newArray (Sugar.toElem (sh1 `intersect` sh0))
+  execute "zipWith" acc aenv (size s) (((((((),out),in1),in0),convertIx s),convertIx sh1),convertIx sh0)
   freeArray in1
   freeArray in0
   return r
@@ -119,17 +125,17 @@ executeOpenAcc acc@(Fold f x a0) aenv = do
   (Array sh0 in0)   <- executeOpenAcc a0 aenv
   c@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
   r@(Array _ out)   <- newArray g
-  dispatch c (out,in0,size sh0)
+  dispatch c ((((),out),in0),size sh0)
   freeArray in0
   if g > 1 then executeOpenAcc (Fold f x (Use r)) aenv
-           else return (Array (fromElem ()) out)
+           else return (Array (Sugar.fromElem ()) out)
 
 executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
   (Array shs seg) <- executeOpenAcc s0 aenv
   r@(Array _ out) <- newArray (size shs)
   let n = size shs
-  execute "fold_segmented" acc aenv n (out,in0,seg,n,size sh0)
+  execute "fold_segmented" acc aenv n ((((((),out),in0),seg),n),size sh0)
   freeArray in0
   freeArray seg
   return r
@@ -140,9 +146,9 @@ executeOpenAcc acc@(Scanl _ _ a0) aenv = executePrescan acc a0 aenv
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
   (Array sh1 in1) <- executeOpenAcc a1 aenv     -- permuted array
-  r@(Array _ out) <- newArray (toElem sh0)
+  r@(Array _ out) <- newArray (Sugar.toElem sh0)
   copyArray in0 out (size sh0)
-  execute "permute" acc aenv (size sh0) (out,in1,convertIx sh0,convertIx sh1)
+  execute "permute" acc aenv (size sh0) (((((),out),in1),convertIx sh0),convertIx sh1)
   freeArray in0
   freeArray in1
   return r
@@ -151,7 +157,7 @@ executeOpenAcc acc@(Backpermute e _ a0) aenv = do
   dim'            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
   r@(Array s out) <- newArray dim'
-  execute "backpermute" acc aenv (size s) (out,in0,convertIx s,convertIx sh0)
+  execute "backpermute" acc aenv (size s) (((((),out),in0),convertIx s),convertIx sh0)
   freeArray in0
   return r
 
@@ -163,8 +169,8 @@ executeOpenAcc acc@(Replicate sliceIndex e a0) aenv = do
 
   slix            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (toElem $ extend sliceIndex (fromElem slix) sh0)
-  execute "replicate" acc aenv (size s) (out,in0,convertIx sh0,convertIx s)
+  r@(Array s out) <- newArray (Sugar.toElem $ extend sliceIndex (Sugar.fromElem slix) sh0)
+  execute "replicate" acc aenv (size s) (((((),out),in0),convertIx sh0),convertIx s)
   freeArray in0
   return r
 
@@ -182,9 +188,9 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
 
   slix            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (toElem $ restrict sliceIndex (fromElem slix) sh0)
+  r@(Array s out) <- newArray (Sugar.toElem $ restrict sliceIndex (Sugar.fromElem slix) sh0)
   execute "slice" acc aenv (size s)
-    (out,in0,convertIx s,convertSlix sliceIndex (fromElem slix),convertIx sh0)
+    ((((((),out),in0),convertIx s),convertSlix sliceIndex (Sugar.fromElem slix)),convertIx sh0)
   freeArray in0
   return r
 
@@ -197,20 +203,47 @@ executePrescan acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (toElem sh0)
+  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
   b@(Array _ bks)         <- newArray g
   s@(Array _ sum)         <- unify a b `seq` newArray ()
   let n   = size sh0
       itv = (n + g - 1) `div` g
 
-  bind mdl fvs
-  launch (t,g,m) fscan (out,in0,bks,n,itv)      -- inclusive scan of input array
-  launch (t,1,m) fscan (bks,bks,sum,g,itv)      -- inclusive scan block-level sums
-  launch (t,g,m) fadd  (out,bks,n,itv)          -- distribute partial results
-  release fvs
+  bindLifted mdl fvs
+  launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
+  launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
+  launch (t,g,m) fadd  (((((),out),bks),n),itv)         -- distribute partial results
+  freeLifted fvs
   freeArray in0
   freeArray bks
   return (a,s)
+
+
+-- Apply a function to a set of Arrays
+--
+applyArraysR :: Arrays arrs => (forall e. ArrayElem e => AD.ArrayData e -> CIO ()) -> arrs -> CIO ()
+applyArraysR f arrs = applyR arrays arrs
+  where
+    applyR :: ArraysR arrs -> arrs -> CIO ()
+    applyR ArraysRunit         ()           = return ()
+    applyR ArraysRarray        (Array _ ad) = f ad
+    applyR (ArraysRpair r1 r0) (a1,a0)      = applyR r1 a1 >> applyR r0 a0
+
+-- Execute an action under which the given set of Arrays will not be released by
+-- a call to 'freeArray'. This is used to ensure that let-bound arrays remain
+-- active for the duration of the sub-computation.
+--
+withBoundArrays :: Arrays arrs => arrs -> CIO a -> CIO a
+withBoundArrays arrs action =
+  applyArraysR bindArray   arrs >> action >>= \r ->
+  applyArraysR unbindArray arrs >> return r
+
+withBoundArrays2 :: (Arrays arrs1, Arrays arrs2) => arrs1 -> arrs2 -> CIO a -> CIO a
+withBoundArrays2 arrs1 arrs2 action =
+  withBoundArrays arrs1 $ withBoundArrays arrs2 action
+
+freeArraysR :: Arrays arrs => arrs -> CIO ()
+freeArraysR = applyArraysR freeArray
 
 
 -- Scalar expression evaluation
@@ -223,8 +256,8 @@ executeExp :: Exp aenv t -> Val aenv -> CIO t
 executeExp e = executeOpenExp e Empty
 
 executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
-executeOpenExp (Var idx)         env _    = return . toElem $ prj idx env
-executeOpenExp (Const c)         _   _    = return $ toElem c
+executeOpenExp (Var idx)         env _    = return . Sugar.toElem $ prj idx env
+executeOpenExp (Const c)         _   _    = return $ Sugar.toElem c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
 executeOpenExp (Prj idx e)       env aenv = I.evalPrj idx . fromTuple <$> executeOpenExp e env aenv
@@ -232,11 +265,14 @@ executeOpenExp (Tuple tup)       env aenv = toTuple                   <$> execut
 executeOpenExp (IndexScalar a e) env aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   ix            <- executeOpenExp e env aenv
-  toElem <$> ad `indexArray` index sh (fromElem ix)
+  res           <- Sugar.toElem <$> ad `indexArray` index sh (Sugar.fromElem ix)
+  freeArray ad
+  return res
 
 executeOpenExp (Shape a) _ aenv = do
-  (Array sh _) <- executeOpenAcc a aenv
-  return (toElem sh)
+  (Array sh ad) <- executeOpenAcc a aenv
+  freeArray ad
+  return (Sugar.toElem sh)
 
 executeOpenExp (Cond c t e) env aenv = do
   p <- executeOpenExp c env aenv
@@ -303,8 +339,8 @@ liftExp _ _ = return []
 -- Bind array variables to the appropriate module references, where binding
 -- names are simply derived "in order", c.f. code generation.
 --
-bind :: CUDA.Module -> [Lifted] -> CIO ()
-bind mdl = foldM_ go (0,0)
+bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
+bindLifted mdl = foldM_ go (0,0)
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
     go (n,m) (Shapes sh)            = bindDim n sh    >>  return (n+1,m)
@@ -320,8 +356,8 @@ bind mdl = foldM_ go (0,0)
 
 -- Release arrays lifted from scalar expressions
 --
-release :: [Lifted] -> CIO ()
-release = mapM_ go
+freeLifted :: [Lifted] -> CIO ()
+freeLifted = mapM_ go
   where go :: Lifted -> CIO ()
         go (Shapes _)            = return ()
         go (Arrays (Array _ ad)) = freeArray ad
@@ -338,8 +374,6 @@ class Marshalable a where
 instance Marshalable () where
   marshal _ = return []
 
--- There are "special" argument types for int and float, but this is sufficient
---
 #define primMarshalable(ty)                                                    \
 instance Marshalable ty where {                                                \
   marshal x = return [CUDA.VArg x] }
@@ -362,31 +396,14 @@ primMarshalable((CUDA.DevicePtr a))
 instance Marshalable CUDA.FunParam where
   marshal x = return [x]
 
+instance ArrayElem e => Marshalable (AD.ArrayData e) where
+  marshal = marshalArrayData    -- Marshalable (DevicePtrs a) does not type )=
+
 instance Marshalable a => Marshalable [a] where
   marshal = concatMapM marshal
 
--- Marshalable DevicePtrs (or ArrayPtrs) does not type, so have the ArrayElem
--- class return the wrapped device pointers as function arguments directly. boo.
---
-instance ArrayElem e => Marshalable (AD.ArrayData e) where
-  marshal = marshalArrayData
-
 instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
-  marshal (a,b) = concatM [marshal a, marshal b]
-
-instance (Marshalable a, Marshalable b, Marshalable c) => Marshalable (a,b,c) where
-  marshal (a,b,c) = concatM [marshal a, marshal b, marshal c]
-
-instance (Marshalable a, Marshalable b, Marshalable c, Marshalable d) => Marshalable (a,b,c,d) where
-  marshal (a,b,c,d) = concatM [marshal a, marshal b, marshal c, marshal d]
-
-instance (Marshalable a, Marshalable b, Marshalable c
-         ,Marshalable d, Marshalable e) => Marshalable (a,b,c,d,e) where
-  marshal (a,b,c,d,e) = concatM [marshal a, marshal b, marshal c, marshal d, marshal e]
-
-instance (Marshalable a, Marshalable b, Marshalable c
-         ,Marshalable d, Marshalable e ,Marshalable f) => Marshalable (a,b,c,d,e,f) where
-  marshal (a,b,c,d,e,f) = concatM [marshal a, marshal b, marshal c, marshal d, marshal e, marshal f]
+  marshal (a,b) = (++) <$> marshal a <*> marshal b
 
 
 -- Link the binary object implementing the computation, configure the kernel
@@ -411,9 +428,9 @@ configure name acc aenv n = do
 --
 dispatch :: Marshalable args => ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer)) -> args -> CIO ()
 dispatch (fvs, mdl, fun, cfg) args = do
-  bind mdl fvs
+  bindLifted mdl fvs
   launch cfg fun args
-  release fvs
+  freeLifted fvs
 
 -- Execute a device function, with the given thread configuration and function
 -- parameters. The tuple contains (threads per block, grid size, shared memory)
@@ -438,13 +455,14 @@ loadKernel :: OpenAcc aenv a -> CIO CUDA.Module
 loadKernel acc =
   let key           = accToKey acc
       either' e r l = either l r e
+      intErr        = INTERNAL_ERROR(error) "loadKernel" "code generation failed"
   in do
     tab <- getM kernelTable
-    krn <- fromMaybe (error "code generation failed") <$> liftIO (HT.lookup tab key)
+    krn <- fromMaybe intErr <$> liftIO (Hash.lookup tab key)
     either' (getL kernelStatus krn) return $ \pid -> liftIO $ do
       waitFor pid
       mdl <- CUDA.loadFile (getL kernelName krn `replaceExtension` ".cubin")
-      HT.insert tab key (setL kernelStatus (Right mdl) krn)
+      Hash.insert tab key (setL kernelStatus (Right mdl) krn)
       return mdl
 
 -- Wait for the compilation process to finish
@@ -479,8 +497,9 @@ concatMapM f xs = concat `liftM` mapM f xs
 -- A lazier version of 'Control.Monad.sequence'
 --
 sequence' :: [IO a] -> IO [a]
-sequence' ms = foldr k (return []) ms
-    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
+sequence' = foldr k (return [])
+  where k m ms = do { x <- m; xs <- unsafeInterleaveIO ms; return (x:xs) }
+
 
 -- Create a new host array, and associated device memory area
 -- FIXME: small arrays are relocated by the GC
@@ -491,6 +510,7 @@ newArray sh =
   in do
     ad `seq` mallocArray ad (Sugar.size sh)
     return $ Array (Sugar.fromElem sh) ad
+
 
 -- Extract shape dimensions as a list of 32-bit integers (the base integer width
 -- of the device, and used for index calculations). Singleton dimensions are

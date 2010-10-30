@@ -76,12 +76,12 @@ execute a =
       where
         collectR :: ArraysR arrs -> arrs -> CIO arrs
         collectR ArraysRunit         ()                = return ()
-        collectR ArraysRarray        arr@(Array sh ad) 
+        collectR ArraysRarray        arr@(Array sh ad)
           = peekArray ad (size sh) >> freeArray ad >> return arr
-        collectR (ArraysRpair r1 r2) (arrs1, arrs2)    
+        collectR (ArraysRpair r1 r2) (arrs1, arrs2)
           = (,) <$> collectR r1 arrs1 <*> collectR r2 arrs2
 
 sequence' :: [IO a] -> IO [a]
-sequence' ms = foldr k (return []) ms
-    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
+sequence' = foldr k (return [])
+  where k m ms = do { x <- m; xs <- unsafeInterleaveIO ms; return (x:xs) }
 

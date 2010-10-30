@@ -27,8 +27,11 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 #include "accelerate.h"
 
 
--- |
--- Generate a unique key for each kernel computation (not extensively tested...)
+-- | Generate a unique key for each kernel computation
+--
+-- The first radical identifies the skeleton type (actually, this is arithmetic
+-- sequence A031377 = primes p(3n-2)), followed by the salient features that
+-- parameterise skeleton instantiation.
 --
 accToKey :: OpenAcc aenv a -> String
 accToKey r@(Replicate s e a) = chr 17  : showTy (accType a) ++ showExp e ++ showSI s e a r
@@ -43,7 +46,12 @@ accToKey (Permute c _ p a)   = chr 127 : showTy (accType a) ++ showFun c ++ show
 accToKey (Backpermute _ p a) = chr 139 : showTy (accType a) ++ showFun p
 accToKey x =
   INTERNAL_ERROR(error) "accToKey"
-  (unlines ["incomplete patterns for key generation", render . nest 2 $ text (show x)])
+  (unlines ["incomplete patterns for key generation", render (nest 2 doc)])
+  where
+    acc = show x
+    doc | length acc <= 250 = text acc
+        | otherwise         = text (take 250 acc) <+> text "... {truncated}"
+
 
 showTy :: TupleType a -> String
 showTy UnitTuple = []
@@ -68,29 +76,30 @@ showSI sl _ _ _ = slice sl 0
     slice (SliceAll   sliceIdx) n = '_'    :  slice sliceIdx n
     slice (SliceFixed sliceIdx) n = show n ++ slice sliceIdx (n+1)
 
-
 {-
 -- hash function from the dragon book pp437; assumes 7 bit characters and needs
 -- the (nearly) full range of values guaranteed for `Int' by the Haskell
 -- language definition; can handle 8 bit characters provided we have 29 bit for
 -- the `Int's without sign
 --
-quad :: String -> Int
-quad (c1:c2:c3:c4:s)  = (( ord c4 * bits21
-                         + ord c3 * bits14
-                         + ord c2 * bits7
-                         + ord c1)
-                         `Prelude.mod` bits28)
-                        + (quad s `Prelude.mod` bits28)
-quad (c1:c2:c3:[]  )  = ord c3 * bits14 + ord c2 * bits7 + ord c1
-quad (c1:c2:[]     )  = ord c2 * bits7  + ord c1
-quad (c1:[]        )  = ord c1
+quad :: String -> Int32
+quad (c1:c2:c3:c4:s)  = (( ord' c4 * bits21
+                         + ord' c3 * bits14
+                         + ord' c2 * bits7
+                         + ord' c1)
+                         `mod` bits28)
+                        + (quad s `mod` bits28)
+quad (c1:c2:c3:[]  )  = ord' c3 * bits14 + ord' c2 * bits7 + ord' c1
+quad (c1:c2:[]     )  = ord' c2 * bits7  + ord' c1
+quad (c1:[]        )  = ord' c1
 quad ([]           )  = 0
 
-bits7, bits14, bits21, bits28 :: Int
-bits7  = 2^(7 ::Int)
-bits14 = 2^(14::Int)
-bits21 = 2^(21::Int)
-bits28 = 2^(28::Int)
--}
+ord' :: Char -> Int32
+ord' = fromIntegral . ord
 
+bits7, bits14, bits21, bits28 :: Int32
+bits7  = 2^(7 ::Int32)
+bits14 = 2^(14::Int32)
+bits21 = 2^(21::Int32)
+bits28 = 2^(28::Int32)
+-}

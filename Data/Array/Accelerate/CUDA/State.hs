@@ -15,7 +15,9 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, CIO, unique, outputDir, deviceProps, deviceContext, memoryTable, kernelTable,
+    evalCUDA, runCUDA, CIO,
+    unique, outputDir, deviceProps, deviceContext, memoryTable, kernelTable,
+
     AccTable, KernelEntry(KernelEntry), kernelName, kernelStatus,
     MemTable, MemoryEntry(MemoryEntry), refcount, memsize, arena,
 
@@ -26,16 +28,16 @@ module Data.Array.Accelerate.CUDA.State
 
 import Prelude hiding (id, (.))
 import Control.Category
+import Data.Record.Label
 
 import Data.Int
 import Data.IORef
-import Data.Record.Label
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict       (StateT(..))
 import Data.HashTable                   (HashTable)
 import Foreign.Ptr
-import qualified Data.HashTable         as HT
+import qualified Data.HashTable         as Hash
 import qualified Foreign.CUDA.Driver    as CUDA
 
 import System.Directory
@@ -54,11 +56,14 @@ import Paths_accelerate                 (getDataDir)
 import System.Posix.Process             (getProcessID)
 #endif
 
+#include "accelerate.h"
+
 
 -- Types
 -- -----
 
-type AccTable = HashTable String  KernelEntry
+type AccKey   = String
+type AccTable = HashTable AccKey  KernelEntry
 type MemTable = HashTable WordPtr MemoryEntry
 
 -- | The state token for accelerated CUDA array operations
@@ -87,12 +92,12 @@ data KernelEntry = KernelEntry
 -- of an `Array dim e' with data stored on the graphics device. Facilitates
 -- reuse and delayed allocation at the cost of explicit release.
 --
--- This maps to a single concrete array. Arrays of pairs, for example, which are
--- represented internally as pairs of arrays, will generate two entries.
+-- This maps to a single concrete array. Arrays of tuples, which are represented
+-- internally as tuples of arrays, will generate multiple entries.
 --
 data MemoryEntry = MemoryEntry
   {
-    _refcount :: Int,
+    _refcount :: Maybe Int,     -- let bound arrays have no reference count
     _memsize  :: Int64,
     _arena    :: WordPtr
   }
@@ -123,7 +128,7 @@ getOutputDir = do
 --
 saveIndexFile :: CUDAState -> IO ()
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-saveIndexFile s = encodeFile (_outputDir s </> "_index") . map (second _kernelName) =<< HT.toList (_kernelTable s)
+saveIndexFile s = encodeFile (_outputDir s </> "_index") . map (second _kernelName) =<< Hash.toList (_kernelTable s)
 #else
 saveIndexFile _ = return ()
 #endif
@@ -137,11 +142,11 @@ loadIndexFile f = do
   x <- doesFileExist f
   e <- if x then mapM reload =<< decodeFile f
             else return []
-  (,length e) <$> HT.fromList HT.hashString e
+  (,length e) <$> Hash.fromList Hash.hashString e
   where
     reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
 #else
-loadIndexFile _  = (,0) <$> HT.new (==) HT.hashString
+loadIndexFile _  = (,0) <$> Hash.new (==) Hash.hashString
 #endif
 
 
@@ -160,7 +165,7 @@ initialise = do
   (d,prp) <- selectBestDevice
   ctx     <- CUDA.create d [CUDA.SchedAuto]
   dir     <- getOutputDir
-  mem     <- HT.new (==) fromIntegral
+  mem     <- Hash.new (==) fromIntegral
   (knl,n) <- loadIndexFile (dir </> "_index")
   addFinalizer ctx (CUDA.destroy ctx)
   return $ CUDAState n dir prp ctx mem knl
@@ -179,24 +184,33 @@ runCUDA acc =
     ref = unsafePerformIO (initialise >>= newIORef)
   in do
     state <- readIORef ref
-    clearMemTable state   -- ugly kludge
     (a,s) <- runStateT acc state
     saveIndexFile s
     writeIORef ref s
+    debugMemTable s
     return (a,s)
 
 
+debugMemTable :: CUDAState -> IO ()
+debugMemTable st = do
+  entries <- length <$> Hash.toList (_memoryTable st)
+  INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return ()
+
+
+-- runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
+-- runCUDAWith = error "not implemented yet"
+{-
 -- In case of memory leaks, which we should fix, manually release any lingering
 -- device arrays. These would otherwise remain until the program exits.
 --
 clearMemTable :: CUDAState -> IO ()
 clearMemTable st = do
   CUDA.sync
-  entries <- HT.toList (_memoryTable st)
+  entries <- Hash.toList (_memoryTable st)
   forM_ entries $ \(k,v) -> do
-    HT.delete (_memoryTable st) k
+    Hash.delete (_memoryTable st) k
     CUDA.free (CUDA.wordPtrToDevPtr (_arena v))
-
+-}
 
 -- Utility
 -- -------

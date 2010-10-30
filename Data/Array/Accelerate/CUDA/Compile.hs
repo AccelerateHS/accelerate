@@ -19,7 +19,7 @@ import Control.Exception
 import Control.Applicative                              hiding (Const)
 import Language.C
 import Text.PrettyPrint
-import qualified Data.HashTable                         as HT
+import qualified Data.HashTable                         as Hash
 
 import System.Directory
 import System.FilePath
@@ -85,9 +85,9 @@ precompileAcc = travA k
 --
 travA :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> OpenAcc aenv a -> CIO ()
 travA _ (Avar _)                 = return ()
-travA f (Unit e)                 = travE f e
 travA f (Let a b)                = travA f a >> travA f b
 travA f (Let2 a b)               = travA f a >> travA f b
+travA f (Unit e)                 = travE f e
 travA f (Reshape e a)            = travE f e >> travA f a
 travA f acc@(Use _)              = f acc
 travA f acc@(Replicate _ e a)    = travE f e >> travA f a >> f acc
@@ -126,8 +126,8 @@ travF f (Lam b)  = travF f b
 compile :: OpenAcc aenv a -> CIO ()
 compile acc = do
   let key = accToKey acc
-  table    <- getM kernelTable
-  compiled <- isJust <$> liftIO (HT.lookup table key)
+  kernels  <- getM kernelTable
+  compiled <- isJust <$> liftIO (Hash.lookup kernels key)
   unless compiled $ do
     nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
     dir    <- getM outputDir
@@ -137,7 +137,7 @@ compile acc = do
                 writeCode cufile (codeGenAcc acc)
                 forkProcess $ executeFile nvcc False flags Nothing
 
-    liftIO $ HT.insert table key (KernelEntry cufile (Left pid))
+    liftIO $ Hash.insert kernels key (KernelEntry cufile (Left pid))
 
 
 -- Write the generated code to file
