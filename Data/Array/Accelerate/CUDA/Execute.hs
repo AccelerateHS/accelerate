@@ -1,5 +1,4 @@
-{-# LANGUAGE PatternGuards, TupleSections #-}
-{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, RankNTypes #-}
+{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections, RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -16,6 +15,7 @@ module Data.Array.Accelerate.CUDA.Execute (executeAcc)
 import Prelude hiding (id, (.), sum)
 import Control.Category
 
+import Data.Bits
 import Data.Int
 import Data.Word
 import Data.Maybe
@@ -24,10 +24,11 @@ import Control.Monad.Trans                              (liftIO)
 import Control.Applicative                              hiding (Const)
 import qualified Data.HashTable                         as Hash
 
-import System.FilePath
+import System.FilePath                                  hiding (combine)
 import System.Posix.Process
 import System.Exit                                      (ExitCode(..))
 import System.Posix.Types                               (ProcessID)
+import System.Mem.StableName
 import System.IO.Unsafe
 
 import Data.Array.Accelerate.AST
@@ -448,11 +449,37 @@ launch (cta,grid,smem) fn a = do
 -- Dynamic kernel loading
 -- ----------------------
 
+-- Hash value for an Acc node
+--
+makeStableAcc :: OpenAcc aenv a -> IO Int32
+makeStableAcc acc = combine accID . fromIntegral . hashStableName <$> makeStableName acc
+  where
+    combine a b = (a `rotate` 1) `xor` b
+    accID       = Hash.hashInt (accToID acc)
+
+-- Kernel module lookup with fast association to particular AST nodes
+--
+loadKernel :: OpenAcc aenv a -> CIO CUDA.Module
+loadKernel acc = do
+  tab <- getM computeTable
+  key <- liftIO $ makeStableAcc acc
+  mdl <- liftIO $ Hash.lookup tab key
+  case mdl of
+    Just e  -> INTERNAL_ASSERT "loadKernel" (getL accKey e == accToKey acc) $ return (getL accKernel e)
+    Nothing -> do
+      m <- linkKernel acc
+#ifdef ACCELERATE_INTERNAL_CHECKS
+      liftIO $ Hash.insert tab key (AccEntry (accToKey acc) m)
+#else
+      liftIO $ Hash.insert tab key (AccEntry undefined m)
+#endif
+      return m
+
 -- Link the CUDA binary object implementing the kernel for the given array
 -- computation. This may entail waiting for the external compilation process.
 --
-loadKernel :: OpenAcc aenv a -> CIO CUDA.Module
-loadKernel acc =
+linkKernel :: OpenAcc aenv a -> CIO CUDA.Module
+linkKernel acc =
   let key           = accToKey acc
       either' e r l = either l r e
       intErr        = INTERNAL_ERROR(error) "loadKernel" "code generation failed"

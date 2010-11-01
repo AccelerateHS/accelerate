@@ -9,7 +9,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey)
+module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey, accToID)
   where
 
 import Data.Char
@@ -34,16 +34,16 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 -- parameterise skeleton instantiation.
 --
 accToKey :: OpenAcc aenv a -> String
-accToKey r@(Replicate s e a) = chr 17  : showTy (accType a) ++ showExp e ++ showSI s e a r
-accToKey r@(Index s a e)     = chr 29  : showTy (accType a) ++ showExp e ++ showSI s e r a
-accToKey (Map f a)           = chr 41  : showTy (accType a) ++ showFun f
-accToKey (ZipWith f x y)     = chr 53  : showTy (accType x) ++ showTy (accType y) ++ showFun f
-accToKey (Fold f e a)        = chr 67  : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (FoldSeg f e _ a)   = chr 79  : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl f e a)       = chr 97  : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanr f e a)       = chr 107 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Permute c _ p a)   = chr 127 : showTy (accType a) ++ showFun c ++ showFun p
-accToKey (Backpermute _ p a) = chr 139 : showTy (accType a) ++ showFun p
+accToKey r@(Replicate s e a)   = chr (accToID r) : showTy (accType a) ++ showExp e ++ showSI s e a r
+accToKey r@(Index s a e)       = chr (accToID r) : showTy (accType a) ++ showExp e ++ showSI s e r a
+accToKey r@(Map f a)           = chr (accToID r) : showTy (accType a) ++ showFun f
+accToKey r@(ZipWith f x y)     = chr (accToID r) : showTy (accType x) ++ showTy (accType y) ++ showFun f
+accToKey r@(Fold f e a)        = chr (accToID r) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey r@(FoldSeg f e _ a)   = chr (accToID r) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey r@(Scanl f e a)       = chr (accToID r) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey r@(Scanr f e a)       = chr (accToID r) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey r@(Permute c _ p a)   = chr (accToID r) : showTy (accType a) ++ showFun c ++ showFun p
+accToKey r@(Backpermute _ p a) = chr (accToID r) : showTy (accType a) ++ showFun p
 accToKey x =
   INTERNAL_ERROR(error) "accToKey"
   (unlines ["incomplete patterns for key generation", render (nest 2 doc)])
@@ -51,6 +51,20 @@ accToKey x =
     acc = show x
     doc | length acc <= 250 = text acc
         | otherwise         = text (take 250 acc) <+> text "... {truncated}"
+
+accToID :: OpenAcc aenv a -> Int
+accToID (Replicate _ _ _)   = 17
+accToID (Index _ _ _)       = 29
+accToID (Map _ _)           = 41
+accToID (ZipWith _ _ _)     = 53
+accToID (Fold _ _ _)        = 67
+accToID (FoldSeg _ _ _ _)   = 79
+accToID (Scanl _ _ _)       = 97
+accToID (Scanr _ _ _)       = 107
+accToID (Permute _ _ _ _)   = 127
+accToID (Backpermute _ _ _) = 139
+accToID _                   =
+  INTERNAL_ERROR(error) "accToID" "incomplete patterns for ID generation"
 
 
 showTy :: TupleType a -> String

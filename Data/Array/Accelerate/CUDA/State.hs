@@ -16,10 +16,12 @@
 module Data.Array.Accelerate.CUDA.State
   (
     evalCUDA, runCUDA, CIO,
-    unique, outputDir, deviceProps, deviceContext, memoryTable, kernelTable,
+    unique, outputDir, deviceProps, deviceContext,
+    memoryTable, kernelTable, computeTable,
 
-    AccTable, KernelEntry(KernelEntry), kernelName, kernelStatus,
-    MemTable, MemoryEntry(MemoryEntry), refcount, memsize, arena,
+    MemoryEntry(MemoryEntry), refcount, memsize, arena,
+    KernelEntry(KernelEntry), kernelName, kernelStatus,
+    AccEntry(AccEntry), accKey, accKernel,
 
     freshVar,
     module Data.Record.Label
@@ -62,9 +64,9 @@ import System.Posix.Process             (getProcessID)
 -- Types
 -- -----
 
-type AccKey   = String
-type AccTable = HashTable AccKey  KernelEntry
-type MemTable = HashTable WordPtr MemoryEntry
+type MemoryTable  = HashTable WordPtr MemoryEntry
+type KernelTable  = HashTable String  KernelEntry
+type ComputeTable = HashTable Int32   AccEntry
 
 -- | The state token for accelerated CUDA array operations
 --
@@ -75,8 +77,9 @@ data CUDAState = CUDAState
     _outputDir     :: FilePath,
     _deviceProps   :: CUDA.DeviceProperties,
     _deviceContext :: CUDA.Context,
-    _memoryTable   :: MemTable,
-    _kernelTable   :: AccTable
+    _memoryTable   :: MemoryTable,
+    _kernelTable   :: KernelTable,
+    _computeTable  :: ComputeTable
   }
 
 -- | Associate an array expression with an external compilation tool (nvcc) or
@@ -84,8 +87,23 @@ data CUDAState = CUDAState
 --
 data KernelEntry = KernelEntry
   {
-    _kernelName   :: String,
+    _kernelName   :: FilePath,
     _kernelStatus :: Either ProcessID CUDA.Module
+  }
+
+-- | In contrast to the kernel entry table, which relates Accelerate
+-- computations to kernel functions invariantly, the Acc computation table
+-- associates the nodes of a particular AST directly to the object code that
+-- will be used to realise the result.
+--
+-- Its function is to provide a fast cache of compiled modules for streaming
+-- applications, avoiding (string-based) key generation for fast,
+-- not-quite-exact comparisons.
+--
+data AccEntry = AccEntry
+  {
+    _accKey    :: String,       -- for assertions
+    _accKernel :: CUDA.Module
   }
 
 -- | Reference tracking for device memory allocations. Associates the products
@@ -102,7 +120,8 @@ data MemoryEntry = MemoryEntry
     _arena    :: WordPtr
   }
 
-$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry])
+
+$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry, ''AccEntry])
 
 
 -- Execution State
@@ -136,7 +155,7 @@ saveIndexFile _ = return ()
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
 --
-loadIndexFile :: FilePath -> IO (AccTable, Int)
+loadIndexFile :: FilePath -> IO (KernelTable, Int)
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
 loadIndexFile f = do
   x <- doesFileExist f
@@ -168,7 +187,14 @@ initialise = do
   mem     <- Hash.new (==) fromIntegral
   (knl,n) <- loadIndexFile (dir </> "_index")
   addFinalizer ctx (CUDA.destroy ctx)
-  return $ CUDAState n dir prp ctx mem knl
+  return $ CUDAState n dir prp ctx mem knl undefined
+
+
+sanitise :: CUDAState -> IO CUDAState
+sanitise st = do
+  compute <- Hash.new (==) fromIntegral
+  entries <- length <$> Hash.toList (getL memoryTable st)
+  INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return (setL computeTable compute st)
 
 
 -- | Evaluate a CUDA array computation under a newly initialised environment,
@@ -183,34 +209,16 @@ runCUDA acc =
     {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
     ref = unsafePerformIO (initialise >>= newIORef)
   in do
-    state <- readIORef ref
+    state <- sanitise =<< readIORef ref
     (a,s) <- runStateT acc state
     saveIndexFile s
     writeIORef ref s
-    debugMemTable s
     return (a,s)
-
-
-debugMemTable :: CUDAState -> IO ()
-debugMemTable st = do
-  entries <- length <$> Hash.toList (_memoryTable st)
-  INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return ()
 
 
 -- runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
 -- runCUDAWith = error "not implemented yet"
-{-
--- In case of memory leaks, which we should fix, manually release any lingering
--- device arrays. These would otherwise remain until the program exits.
---
-clearMemTable :: CUDAState -> IO ()
-clearMemTable st = do
-  CUDA.sync
-  entries <- Hash.toList (_memoryTable st)
-  forM_ entries $ \(k,v) -> do
-    Hash.delete (_memoryTable st) k
-    CUDA.free (CUDA.wordPtrToDevPtr (_arena v))
--}
+
 
 -- Utility
 -- -------
