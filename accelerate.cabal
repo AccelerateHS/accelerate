@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.8.2.0
+Version:                0.9.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 6.12.3
 Build-type:             Simple
@@ -155,6 +155,7 @@ Library
                         Data.Array.Accelerate.AST
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Language
+                        Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple

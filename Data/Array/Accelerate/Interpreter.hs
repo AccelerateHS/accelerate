@@ -35,7 +35,6 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
-import Control.Monad.ST
 import Data.Bits
 import Data.Char                (chr, ord)
 
@@ -108,14 +107,20 @@ evalOpenAcc (FoldSeg f e acc1 acc2) aenv
 evalOpenAcc (Scanl f e acc) aenv
   = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
+evalOpenAcc (Scanl' f e acc) aenv
+  = scanl'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+
+evalOpenAcc (Scanl1 f acc) aenv
+  = scanl1Op (evalFun f aenv) (evalOpenAcc acc aenv)
+
 evalOpenAcc (Scanr f e acc) aenv
   = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (PostScanl f acc) aenv
-  = postScanlOp (evalFun f aenv) (evalOpenAcc acc aenv)
+evalOpenAcc (Scanr' f e acc) aenv
+  = scanr'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (PostScanr f acc) aenv
-  = postScanrOp (evalFun f aenv) (evalOpenAcc acc aenv)
+evalOpenAcc (Scanr1 f acc) aenv
+  = scanr1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
 evalOpenAcc (Permute f dftAcc p acc) aenv
   = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
@@ -236,7 +241,7 @@ foldSegOp :: forall e.
 foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
   = delay arr
   where
-    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanlOp (+) 0 seg
+    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
     arr = Sugar.newArray (Sugar.toElem shSeg) foldOne
     --
     foldOne :: Sugar.DIM1 -> e
@@ -254,8 +259,30 @@ foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
 scanlOp :: (e -> e -> e)
         -> e
         -> Delayed (Vector e)
-        -> Delayed (Vector e, Scalar e)
+        -> Delayed (Vector e)
 scanlOp f e (DelayedArray sh rf)
+  = delay $ adata `seq` Array ((), n + 1) adata
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, _) = runArrayData $ do
+                   arr   <- newArrayData (n + 1)
+                   final <- traverse arr 0 (Sugar.fromElem e)
+                   writeArrayData arr n final
+                   return (arr, undefined)
+               
+    traverse arr i v
+      | i >= n    = return v
+      | otherwise = do
+                      writeArrayData arr i v
+                      traverse arr (i + 1) (f' v (rf ((), i)))
+
+scanl'Op :: (e -> e -> e)
+         -> e
+         -> Delayed (Vector e)
+         -> Delayed (Vector e, Scalar e)
+scanl'Op f e (DelayedArray sh rf)
   = DelayedPair (delay $ adata `seq` Array sh adata) 
                 (unitOp (Sugar.toElem final))
   where
@@ -272,31 +299,10 @@ scanlOp f e (DelayedArray sh rf)
                       writeArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
 
-scanrOp :: (e -> e -> e)
-        -> e
-        -> Delayed (Vector e)
-        -> Delayed (Vector e, Scalar e)
-scanrOp f e (DelayedArray sh rf)
-  = DelayedPair (delay $ adata `seq` Array sh adata)
-                (unitOp (Sugar.toElem final))
-  where
-    n  = size sh
-    f' = Sugar.sinkFromElem2 f
-    --
-    (adata, final) = runArrayData $ do
-                       arr   <- newArrayData n
-                       final <- traverse arr (n-1) (Sugar.fromElem e)
-                       return (arr, final)
-    traverse arr i v
-      | i < 0     = return v
-      | otherwise = do
-                      writeArrayData arr i v
-                      traverse arr (i - 1) (f' v (rf ((), i)))
-
-postScanlOp :: (e -> e -> e)
-            -> Delayed (Vector e)
-            -> Delayed (Vector e)
-postScanlOp f (DelayedArray sh rf)
+scanl1Op :: (e -> e -> e)
+         -> Delayed (Vector e)
+         -> Delayed (Vector e)
+scanl1Op f (DelayedArray sh rf)
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -318,10 +324,53 @@ postScanlOp f (DelayedArray sh rf)
                       writeArrayData arr i e
                       traverse arr (i + 1) e
 
-postScanrOp :: (e -> e -> e)
-            -> Delayed (Vector e)
-            -> Delayed (Vector e)
-postScanrOp f (DelayedArray sh rf)
+scanrOp :: (e -> e -> e)
+        -> e
+        -> Delayed (Vector e)
+        -> Delayed (Vector e)
+scanrOp f e (DelayedArray sh rf)
+  = delay $ adata `seq` Array ((), n + 1) adata
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, _) = runArrayData $ do
+                   arr   <- newArrayData (n + 1)
+                   final <- traverse arr n (Sugar.fromElem e)
+                   writeArrayData arr 0 final
+                   return (arr, undefined)
+                        
+    traverse arr i v
+      | i == 0    = return v
+      | otherwise = do
+                      writeArrayData arr i v
+                      traverse arr (i - 1) (f' v (rf ((), i)))
+
+scanr'Op :: (e -> e -> e)
+         -> e
+         -> Delayed (Vector e)
+         -> Delayed (Vector e, Scalar e)
+scanr'Op f e (DelayedArray sh rf)
+  = DelayedPair (delay $ adata `seq` Array sh adata)
+                (unitOp (Sugar.toElem final))
+  where
+    n  = size sh
+    f' = Sugar.sinkFromElem2 f
+    --
+    (adata, final) = runArrayData $ do
+                       arr   <- newArrayData n
+                       final <- traverse arr (n-1) (Sugar.fromElem e)
+                       return (arr, final)
+    traverse arr i v
+      | i < 0     = return v
+      | otherwise = do
+                      writeArrayData arr i v
+                      traverse arr (i - 1) (f' v (rf ((), i)))
+
+scanr1Op :: (e -> e -> e)
+         -> Delayed (Vector e)
+         -> Delayed (Vector e)
+scanr1Op f (DelayedArray sh rf)
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh

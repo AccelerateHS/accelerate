@@ -253,30 +253,41 @@ data OpenAcc aenv a where
     -- FIXME: Can we generalise this to multi-dimensional arrays and also
     --        to Gabi's mapFold
 
-  -- Left-to-right prescan of a linear array with a given *associative*
-  -- function and its neutral element; produces a rightmost fold value and a
-  -- linear of the same shape (the fold value would be the rightmost element
-  -- in a scan, as opposed to a prescan)
+  -- Left-to-right Haskell-style scan of a linear array with a given *associative*
+  -- function and an initial element (which does not need to be the neutral of the
+  -- associative operations)
   Scanl       :: Fun     aenv (e -> e -> e)          -- combination function
-              -> Exp     aenv e                      -- default value
+              -> Exp     aenv e                      -- initial value
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e)
+    -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?  
+  
+  -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
+  -- array (the fold value would be the rightmost element in a Haskell-style scan)
+  Scanl'      :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)
-    -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?
 
-  -- Right-to-left prescan of a linear array
-  Scanr       :: Fun     aenv (e -> e -> e)          -- combination function
-              -> Exp     aenv e                      -- default value
-              -> OpenAcc aenv (Vector e)             -- linear array
-              -> OpenAcc aenv (Vector e, Scalar e)
-
-  -- Left-to-right postscan of a linear array with a given *associative*
-  -- function.
-  PostScanl   :: Fun     aenv (e -> e -> e)          -- combination function
+  -- Haskell-style scan without an initial value
+  Scanl1      :: Fun     aenv (e -> e -> e)          -- combination function
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
 
-  -- Right-to-left postscan of a linear array
-  PostScanr   :: Fun     aenv (e -> e -> e)          -- combination function
+  -- Right-to-left version of 'Scanl'
+  Scanr       :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- initial value
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e)
+  
+  -- Right-to-left version of 'Scanl\''
+  Scanr'      :: Fun     aenv (e -> e -> e)          -- combination function
+              -> Exp     aenv e                      -- initial value
+              -> OpenAcc aenv (Vector e)             -- linear array
+              -> OpenAcc aenv (Vector e, Scalar e)
+
+  -- Right-to-left version of 'Scanl1'
+  Scanr1      :: Fun     aenv (e -> e -> e)          -- combination function
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
 

@@ -141,8 +141,13 @@ executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
   freeArray seg
   return r
 
-executeOpenAcc acc@(Scanr _ _ a0) aenv = executePrescan acc a0 aenv
-executeOpenAcc acc@(Scanl _ _ a0) aenv = executePrescan acc a0 aenv
+executeOpenAcc _acc@(Scanl _ _ _a0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "Scanl NOT YET IMPLEMENTED"
+executeOpenAcc acc@(Scanl' _ _ a0) aenv   = executePrescan acc a0 aenv
+executeOpenAcc _acc@(Scanl1 _ _a0) _aenv  = INTERNAL_ERROR(error) "executeOpenAcc" "Scanl1 NOT YET IMPLEMENTED"
+
+executeOpenAcc _acc@(Scanr _ _ _a0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "Scanr NOT YET IMPLEMENTED"
+executeOpenAcc acc@(Scanr' _ _ a0) aenv   = executePrescan acc a0 aenv
+executeOpenAcc _acc@(Scanr1 _ _a0) _aenv  = INTERNAL_ERROR(error) "executeOpenAcc" "Scanr1 NOT YET IMPLEMENTED"
 
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
@@ -194,6 +199,11 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
     ((((((),out),in0),convertIx s),convertSlix sliceIndex (Sugar.fromElem slix)),convertIx sh0)
   freeArray in0
   return r
+
+executeOpenAcc _acc@(Stencil _ _ _a0) _aenv
+  = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil NOT YET IMPLEMENTED"
+executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
+  = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil2 NOT YET IMPLEMENTED"
 
 -- Differences in left/right scan incorporated during code generation
 --

@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
-
+-- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
@@ -41,11 +41,9 @@ module Data.Array.Accelerate.Language (
   reshape,
 
   -- ** Collective array operations
-  slice, replicate, zip, unzip, map, zipWith,
-  scanl, scanr, -- legacy
-  prescanl, prescanlSeg, postscanl, postscanlSeg,
-  prescanr, prescanrSeg, postscanr, postscanrSeg,
+  slice, replicate, map, zipWith,
   fold, foldSeg,
+  scanl, scanl', scanl1, scanr, scanr', scanr1,
   permute, backpermute, stencil, stencil2,
   
   -- ** Tuple construction and destruction
@@ -78,12 +76,11 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, map, scanl, scanr, zipWith,
+import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
                          filter, max, min, not, const, fst, snd, curry, uncurry)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
-import qualified Data.Tuple as Tuple
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -143,22 +140,8 @@ slice :: (SliceIx slix, Elem e)
       -> Acc (Array (Slice slix) e)
 slice = Acc $$ Index
 
--- |Combine the elements of two arrays pairwise.  The shape of the result is 
--- the intersection of the two argument shapes.
---
-zip :: (Ix dim, Elem a, Elem b) 
-    => Acc (Array dim a)
-    -> Acc (Array dim b)
-    -> Acc (Array dim (a, b))
-zip = zipWith (\x y -> tuple (x, y))
-
--- |The converse of 'zip', but the shape of the two results is identical to the
--- shape of the argument.
--- 
-unzip :: (Ix dim, Elem a, Elem b)
-      => Acc (Array dim (a, b))
-      -> (Acc (Array dim a), Acc (Array dim b))
-unzip arr = (map fst arr, map snd arr)
+-- Map-like functions
+-- ------------------
 
 -- |Apply the given function elementwise to the given array.
 -- 
@@ -178,127 +161,8 @@ zipWith :: (Ix dim, Elem a, Elem b, Elem c)
         -> Acc (Array dim c)
 zipWith = Acc $$$ ZipWith
 
--- |Prescan (exclusive scan) of a vector. The type 'a' together with the binary
--- function (first argument) and value (second argument) must form a monoid;
--- i.e., the function must be /associative/ and the value must be its /neutral
--- element/.
---
--- The resulting vector of prescan values has the same size as the argument 
--- vector.  The resulting scalar is the reduction value.
---
-prescanl :: Elem a
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> (Acc (Vector a), Acc (Scalar a))
-prescanl = unpair . Acc $$$ Scanl
-
--- |Legacy function. Same as prescanl.
-scanl :: Elem a
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> (Acc (Vector a), Acc (Scalar a))
-scanl = prescanl
-
--- |The right-to-left dual of 'prescanl'.
---
-prescanr :: Elem a
-         => (Exp a -> Exp a -> Exp a)
-         -> Exp a
-         -> Acc (Vector a)
-         -> (Acc (Vector a), Acc (Scalar a))
-prescanr = unpair . Acc $$$ Scanr
-
--- |Legacy function. Same as prescanr.
-scanr :: Elem a
-      => (Exp a -> Exp a -> Exp a)
-      -> Exp a
-      -> Acc (Vector a)
-      -> (Acc (Vector a), Acc (Scalar a))
-scanr = prescanr
-
--- |Segmented prescan (exclusive scan) of a vector.
---
--- The first element of the resulting tuple is a vector of scanned values. The
--- second element is a vector of segment scan totals and has the same size as
--- the segment vector.
---
-prescanlSeg :: Elem a
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc Segments
-            -> (Acc (Vector a), Acc (Vector a))
-prescanlSeg f e arr seg = (scans, sums)
-  where
-    -- Segmented prescan implemented by performing segmented postscan on vector
-    -- fromed by inserting identity element in at the start of each vector and
-    -- shifting elements right.
-    scans = postscanlSeg f idShftArr seg
-    idShftArr = permute f idsArr (\ix -> (((mkTailFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix + (constant 1))) arr
-    idsArr = backpermute (shape arr) (\_ -> constant ()) $ unit e 
-
-    -- Sum of each segment is computed by performing a segmented postscan on
-    -- the original vector and taking the tail elements.
-    sums = backpermute (shape seg) (\ix -> sumOffsets ! ix)
-         $ postscanlSeg f arr seg
-    sumOffsets = map (\v -> v - (constant 1)) $ postscanl (+) seg
-
--- |The right-to-left dual of 'prescanlSeg'.
---
-prescanrSeg :: Elem a
-            => (Exp a -> Exp a -> Exp a)
-            -> Exp a
-            -> Acc (Vector a)
-            -> Acc Segments
-            -> (Acc (Vector a), Acc (Vector a))
-prescanrSeg f e arr seg = (scans, sums)
-  where
-    -- Using technique described for prescanlSeg.
-    scans = postscanrSeg f idShftArr seg
-    idShftArr = permute f idsArr (\ix -> (((mkHeadFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix - (constant 1))) arr
-    idsArr = backpermute (shape arr) (\_ -> constant ()) $ unit e 
-
-    --
-    sums = backpermute (shape seg) (\ix -> sumOffsets ! ix)
-         $ postscanrSeg f arr seg
-    sumOffsets = Tuple.fst $ prescanl (+) (constant 0) seg
-
--- |Postscan (inclusive scan) of a vector.  The binary function (first argument)
--- must be /associative/.
---
-postscanl :: Elem a
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Vector a)
-postscanl = Acc $$ PostScanl
-
--- |The right-to-left dual of 'postscanl'.
---
-postscanr :: Elem a
-          => (Exp a -> Exp a -> Exp a)
-          -> Acc (Vector a)
-          -> Acc (Vector a)
-postscanr = Acc $$ PostScanr
-
--- |Segmented postscan (inclusive scan) of a vector.
---
-postscanlSeg :: Elem a
-             => (Exp a -> Exp a -> Exp a)
-             -> Acc (Vector a)
-             -> Acc Segments
-             -> Acc (Vector a)
-postscanlSeg f arr seg = map snd $ postscanl (mkSegApply f) $ zip (mkHeadFlags seg) arr
-
--- |The right-to-left dual of 'postscanlSeg'.
---
-postscanrSeg :: Elem a
-             => (Exp a -> Exp a -> Exp a)
-             -> Acc (Vector a)
-             -> Acc Segments
-             -> Acc (Vector a)
-postscanrSeg f arr seg = map snd $ postscanr (mkSegApply f) $ zip (mkTailFlags seg) arr
+-- Reductions
+-- ----------
 
 -- |Reduction of an array.  The type 'a' together with the binary function
 -- (first argument) and value (second argument) must form a monoid; i.e., the 
@@ -320,6 +184,78 @@ foldSeg :: Elem a
         -> Acc Segments
         -> Acc (Vector a)
 foldSeg = Acc $$$$ FoldSeg
+
+-- Scan functions
+-- --------------
+
+-- |'Data.List'-style left-to-right scan, but with the additional restriction that the first argument
+-- needs to be an /associative/ function to enable an efficient parallel implementation.  The initial
+-- value (second argument) may be aribitrary.
+--
+scanl :: Elem a
+      => (Exp a -> Exp a -> Exp a)
+      -> Exp a
+      -> Acc (Vector a)
+      -> Acc (Vector a)
+scanl = Acc $$$ Scanl
+
+-- |Variant of 'scanl', where the final result of the reduction is returned separately. 
+-- Denotationally, we have
+--
+-- > scanl' f e arr = (crop 0 (len - 1) res, unit (res!len))
+-- >   where
+-- >     len = shape arr
+-- >     res = scanl f e arr in 
+--
+scanl' :: Elem a
+       => (Exp a -> Exp a -> Exp a)
+       -> Exp a
+       -> Acc (Vector a)
+       -> (Acc (Vector a), Acc (Scalar a))
+scanl' = unpair . Acc $$$ Scanl'
+
+-- |'Data.List' style left-to-right scan without an intial value (aka inclusive scan).  Again, the
+-- first argument needs to be an /associative/ function.  Denotationally, we have
+--
+-- > scanl1 f e arr = crop 1 len res
+-- >   where
+-- >     len = shape arr
+-- >     res = scanl f e arr in 
+--
+scanl1 :: Elem a
+       => (Exp a -> Exp a -> Exp a)
+       -> Acc (Vector a)
+       -> Acc (Vector a)
+scanl1 = Acc $$ Scanl1
+
+-- |Right-to-left variant of 'scanl'.
+--
+scanr :: Elem a
+      => (Exp a -> Exp a -> Exp a)
+      -> Exp a
+      -> Acc (Vector a)
+      -> Acc (Vector a)
+scanr = Acc $$$ Scanr
+
+-- |Right-to-left variant of 'scanl\''. 
+--
+scanr' :: Elem a
+       => (Exp a -> Exp a -> Exp a)
+       -> Exp a
+       -> Acc (Vector a)
+       -> (Acc (Vector a), Acc (Scalar a))
+scanr' = unpair . Acc $$$ Scanr'
+
+-- |Right-to-left variant of 'scanl1'.
+--
+scanr1 :: Elem a
+       => (Exp a -> Exp a -> Exp a)
+       -> Acc (Vector a)
+       -> Acc (Vector a)
+scanr1 = Acc $$ Scanr1
+
+-- Permutations
+-- ------------
 
 -- |Forward permutation specified by an index mapping.  The result array is
 -- initialised with the given defaults and any further values that are permuted
@@ -346,6 +282,8 @@ backpermute :: (Ix dim, Ix dim', Elem a)
             -> Acc (Array dim' a)
 backpermute = Acc $$$ Backpermute
 
+-- Stencil operations
+-- ------------------
 
 -- Common stencil types
 --
@@ -403,44 +341,6 @@ stencil2 :: (Ix dim, Elem a, Elem b, Elem c,
         -> Acc (Array dim b)                  -- ^source array #2
         -> Acc (Array dim c)                  -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
-
-
--- Segmented scan helpers
--- ----------------------
--- |Compute head flags vector from segment vector for left-scans.
---
-mkHeadFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
-mkHeadFlags seg = permute (\_ _ -> constant 1) zerosArr (\ix -> segOffsets ! ix) segOffsets
-  where
-    (segOffsets, len) = prescanl (+) (constant 0) seg
-    zerosArr = backpermute (len ! (constant ())) (\_ -> constant ()) $ unit $ constant (0 :: Int)
-
-
--- |Compute tail flags vector from segment vector for right-scans.
---
-mkTailFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
-mkTailFlags seg = permute (\_ _ -> constant 1) zerosArr (\ix -> (segOffsets ! ix) - (constant 1)) segOffsets
-  where
-    segOffsets = postscanl (+) seg
-    len = segOffsets ! ((shape seg) - (constant 1))
-    zerosArr = backpermute len (\_ -> constant ()) $ unit $ constant (0 :: Int)
-
-
--- |Construct a segmented version of apply from a non-segmented version. The segmented apply
--- operates on a head-flag value tuple.
---
-mkSegApply :: (Elem e)
-         => (Exp e -> Exp e -> Exp e)
-         -> (Exp (Int, e) -> Exp (Int, e) -> Exp (Int, e))
-mkSegApply op = apply
-  where
-    apply a b = tuple ((aF ==* (constant 1) ||* (bF ==* constant 1)) ? (constant 1, constant 0),
-                       (bF ==* constant 1) ? (bV, aV `op` bV))
-      where
-        aF = fst a
-        aV = snd a
-        bF = fst b
-        bV = snd b
 
 
 -- Tuples

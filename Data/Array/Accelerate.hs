@@ -57,6 +57,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ language
   module Data.Array.Accelerate.Language,
+  module Data.Array.Accelerate.Prelude
 
 ) where
 
@@ -65,6 +66,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar hiding ((!), shape)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Prelude
 
 
 -- Renamings

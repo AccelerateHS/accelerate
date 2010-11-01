@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RankNTypes #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, PatternGuards #-}
-
+-- |
 -- Module      : Data.Array.Accelerate.Smart
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
@@ -54,8 +54,6 @@ module Data.Array.Accelerate.Smart (
 
 ) where
   
-import Debug.Trace
-
 -- standard library
 import Control.Monad
 import Data.List
@@ -137,17 +135,27 @@ data PreAcc acc a where
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
               -> acc (Vector e)
-              -> PreAcc acc (Vector e, Scalar e)
-  Scanr       :: Elem e
+              -> PreAcc acc (Vector e)
+  Scanl'      :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
               -> acc (Vector e)
               -> PreAcc acc (Vector e, Scalar e)
-  PostScanl   :: Elem e
+  Scanl1      :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> acc (Vector e)
               -> PreAcc acc (Vector e)
-  PostScanr   :: Elem e
+  Scanr       :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e)
+  Scanr'      :: Elem e
+              => (Exp e -> Exp e -> Exp e)
+              -> Exp e
+              -> acc (Vector e)
+              -> PreAcc acc (Vector e, Scalar e)
+  Scanr1      :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> acc (Vector e)
               -> PreAcc acc (Vector e)
@@ -245,12 +253,16 @@ convertSharingAcc alyt = convert alyt []
                            (convert alyt env acc1) (convert alyt env acc2)
           Scanl f e acc
             -> AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Scanl' f e acc
+            -> AST.Scanl' (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Scanl1 f acc
+            -> AST.Scanl1 (convertFun2 alyt f) (convert alyt env acc)
           Scanr f e acc
             -> AST.Scanr (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
-          PostScanl f acc
-            -> AST.PostScanl (convertFun2 alyt f) (convert alyt env acc)
-          PostScanr f acc
-            -> AST.PostScanr (convertFun2 alyt f) (convert alyt env acc)
+          Scanr' f e acc
+            -> AST.Scanr' (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Scanr1 f acc
+            -> AST.Scanr1 (convertFun2 alyt f) (convert alyt env acc)
           Permute f dftAcc perm acc
             -> AST.Permute (convertFun2 alyt f) 
                            (convert alyt env dftAcc)
@@ -389,9 +401,11 @@ traverseAcc process combine acc@(Acc pacc)
         Fold _ _ acc             -> trav sa acc
         FoldSeg _ _ acc1 acc2    -> trav2 sa acc1 acc2
         Scanl _ _ acc            -> trav sa acc
+        Scanl' _ _ acc           -> trav sa acc
+        Scanl1 _ acc             -> trav sa acc
         Scanr _ _ acc            -> trav sa acc
-        PostScanl _ acc          -> trav sa acc
-        PostScanr _ acc          -> trav sa acc
+        Scanr' _ _ acc           -> trav sa acc
+        Scanr1 _ acc             -> trav sa acc
         Permute _ acc1 _ acc2    -> trav2 sa acc1 acc2
         Backpermute _ _ acc      -> trav sa acc
         Stencil _ _ acc          -> trav sa acc
@@ -456,9 +470,11 @@ determineScopes occMap acc
           Fold f z acc                    -> trav (Fold f z) acc
           FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
           Scanl f z acc                   -> trav (Scanl f z) acc
+          Scanl' f z acc                  -> trav (Scanl' f z) acc
+          Scanl1 f acc                    -> trav (Scanl1 f) acc
           Scanr f z acc                   -> trav (Scanr f z) acc
-          PostScanl f acc                 -> trav (PostScanl f) acc
-          PostScanr f acc                 -> trav (PostScanr f) acc
+          Scanr' f z acc                  -> trav (Scanr' f z) acc
+          Scanr1 f acc                    -> trav (Scanr1 f) acc
           Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
           Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
           Stencil st bnd acc              -> trav (Stencil st bnd) acc
@@ -562,7 +578,6 @@ determineScopes occMap acc
     pruneSharedSubtrees occMap Nothing acc@(AccSharing sn _)
       -- new root: establish the current sharing factor
       = do
-        trace "-=ROOT" $ return ()
         Just occCount <- Hash.lookup occMap (StableAccName sn)
         pruneSharedSubtrees occMap (Just occCount) acc
     pruneSharedSubtrees occMap sf@(Just sharingFactor) (AccSharing sn pacc)
@@ -570,7 +585,6 @@ determineScopes occMap acc
       = do
           let sa = StableAccName sn
           Just occCount <- Hash.lookup occMap sa
-          trace ("SF=" ++ show sharingFactor ++ "; oC=" ++ show occCount) $ return ()
           if occCount > sharingFactor
             then
               return (VarSharing sn, [sa])
@@ -588,9 +602,11 @@ determineScopes occMap acc
                 Fold f z acc                    -> trav (Fold f z) acc
                 FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
                 Scanl f z acc                   -> trav (Scanl f z) acc
+                Scanl' f z acc                  -> trav (Scanl' f z) acc
+                Scanl1 f acc                    -> trav (Scanl1 f) acc
                 Scanr f z acc                   -> trav (Scanr f z) acc
-                PostScanl f acc                 -> trav (PostScanl f) acc
-                PostScanr f acc                 -> trav (PostScanr f) acc
+                Scanr' f z acc                  -> trav (Scanr' f z) acc
+                Scanr1 f acc                    -> trav (Scanr1 f) acc
                 Permute fc acc1 fp acc2         -> trav2 (\a1 a2 -> Permute fc a1 fp a2) acc1 acc2
                 Backpermute sh fp acc           -> trav (Backpermute sh fp) acc
                 Stencil st bnd acc              -> trav (Stencil st bnd) acc

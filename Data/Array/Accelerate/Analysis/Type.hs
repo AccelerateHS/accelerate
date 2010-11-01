@@ -62,28 +62,30 @@ accType (Map _ _)             = elemType (undefined::e)
 accType (ZipWith _ _ _)       = elemType (undefined::e)
 accType (Fold _ _ acc)        = accType acc
 accType (FoldSeg _ _ acc _)   = accType acc
+accType (Scanl _ _ acc)       = accType acc
+accType (Scanl1 _ acc)        = accType acc
+accType (Scanr _ _ acc)       = accType acc
+accType (Scanr1 _ acc)        = accType acc
 accType (Permute _ _ _ acc)   = accType acc
 accType (Backpermute _ _ acc) = accType acc
 accType (Stencil _ _ _)       = elemType (undefined::e)
 accType (Stencil2 _ _ _ _ _)  = elemType (undefined::e)
-accType (PostScanl _ acc)     = accType acc
-accType (PostScanr _ acc)     = accType acc
 
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
 --
 accType2 :: forall aenv dim1 e1 dim2 e2. OpenAcc aenv (Array dim1 e1, Array dim2 e2)
          -> (TupleType (ElemRepr e1), TupleType (ElemRepr e2))
-accType2 (Let _ acc)     = accType2 acc
-accType2 (Let2 _ acc)    = accType2 acc
-accType2 (Avar _)        = -- (elemType (undefined::e1), elemType (undefined::e2))
-                           -- should work - GHC 6.12 bug?
-                           case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
-                             ArraysRpair ArraysRarray ArraysRarray 
-                               -> (elemType (undefined::e1), elemType (undefined::e2))
-                             _ -> error "GHC is too dumb to realise that this is dead code"
-accType2 (Scanl _ e acc) = (accType acc, expType e)
-accType2 (Scanr _ e acc) = (accType acc, expType e)
+accType2 (Let _ acc)      = accType2 acc
+accType2 (Let2 _ acc)     = accType2 acc
+accType2 (Avar _)         = -- (elemType (undefined::e1), elemType (undefined::e2))
+                            -- should work - GHC 6.12 bug?
+                            case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
+                              ArraysRpair ArraysRarray ArraysRarray 
+                                -> (elemType (undefined::e1), elemType (undefined::e2))
+                              _ -> error "GHC is too dumb to realise that this is dead code"
+accType2 (Scanl' _ e acc) = (accType acc, expType e)
+accType2 (Scanr' _ e acc) = (accType acc, expType e)
 
 -- |Reify the result type of a scalar expression.
 --

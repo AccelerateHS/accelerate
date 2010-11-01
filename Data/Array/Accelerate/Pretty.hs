@@ -82,10 +82,20 @@ prettyAcc alvl (FoldSeg f e acc1 acc2)
                            prettyAccParens alvl acc1, prettyAccParens alvl acc2]
 prettyAcc alvl (Scanl f e acc)
   = prettyArrOp "scanl" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                        prettyAccParens alvl acc]
+                         prettyAccParens alvl acc]
+prettyAcc alvl (Scanl' f e acc)
+  = prettyArrOp "scanl'" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
+                          prettyAccParens alvl acc]
+prettyAcc alvl (Scanl1 f acc)
+  = prettyArrOp "scanl1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
 prettyAcc alvl (Scanr f e acc)
   = prettyArrOp "scanr" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                        prettyAccParens alvl acc]
+                         prettyAccParens alvl acc]
+prettyAcc alvl (Scanr' f e acc)
+  = prettyArrOp "scanr'" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
+                          prettyAccParens alvl acc]
+prettyAcc alvl (Scanr1 f acc)
+  = prettyArrOp "scanr1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
 prettyAcc alvl (Permute f dfts p acc) 
   = prettyArrOp "permute" [parens (prettyFun alvl f), prettyAccParens alvl dfts,
                            parens (prettyFun alvl p), prettyAccParens alvl acc]

@@ -9,8 +9,9 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Analysis.Shape (accDim, accDim2)
-  where
+module Data.Array.Accelerate.Analysis.Shape (
+  accDim, accDim2
+) where
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -34,28 +35,30 @@ accDim (Map _ acc)            = accDim acc
 accDim (ZipWith _ _ acc)      = accDim acc
 accDim (Fold _ _ _)           = 0
 accDim (FoldSeg _ _ _ _)      = 1
+accDim (Scanl _ _ acc)        = accDim acc
+accDim (Scanl1 _ acc)         = accDim acc
+accDim (Scanr _ _ acc)        = accDim acc
+accDim (Scanr1 _ acc)         = accDim acc
 accDim (Permute _ acc _ _)    = accDim acc
 accDim (Backpermute _ _ _)    = ndim (elemType (undefined::dim))
 accDim (Stencil _ _ acc)      = accDim acc
 accDim (Stencil2 _ _ acc _ _) = accDim acc
-accDim (PostScanl _ acc)      = accDim acc
-accDim (PostScanr _ acc)      = accDim acc
 
 -- |Reify the dimensionality of the results of a computation that yields two
 -- arrays
 --
 accDim2 :: forall aenv dim1 e1 dim2 e2. OpenAcc aenv (Array dim1 e1, Array dim2 e2) -> (Int, Int)
-accDim2 (Let _ acc)     = accDim2 acc
-accDim2 (Let2 _ acc)    = accDim2 acc
-accDim2 (Avar _)        = -- (ndim (elemType (undefined::dim1)), ndim (elemType (undefined::dim2)))
-                          -- should work - GHC 6.12 bug?
-                           case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
-                             ArraysRpair ArraysRarray ArraysRarray 
-                               -> (ndim (elemType (undefined::dim1)), 
-                                   ndim (elemType (undefined::dim2)))
-                             _ -> error "GHC is too dumb to realise that this is dead code"
-accDim2 (Scanl _ _ acc) = (accDim acc, 0)
-accDim2 (Scanr _ _ acc) = (accDim acc, 0)
+accDim2 (Let _ acc)      = accDim2 acc
+accDim2 (Let2 _ acc)     = accDim2 acc
+accDim2 (Avar _)         = -- (ndim (elemType (undefined::dim1)), ndim (elemType (undefined::dim2)))
+                           -- should work - GHC 6.12 bug?
+                            case arrays :: ArraysR (Array dim1 e1, Array dim2 e2) of 
+                              ArraysRpair ArraysRarray ArraysRarray 
+                                -> (ndim (elemType (undefined::dim1)), 
+                                    ndim (elemType (undefined::dim2)))
+                              _ -> error "GHC is too dumb to realise that this is dead code"
+accDim2 (Scanl' _ _ acc) = (accDim acc, 0)
+accDim2 (Scanr' _ _ acc) = (accDim acc, 0)
 
 -- Count the number of components to a tuple type
 --
