@@ -28,14 +28,14 @@ import System.IO.Unsafe
 import Foreign.CUDA.Driver.Error
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar          (Array(..))
+import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))
+import Data.Array.Accelerate.Smart                (Acc, convertAcc)
 import Data.Array.Accelerate.Array.Representation (size)
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Array.Sugar          (Array(..))
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.Execute
-import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 
 #include "accelerate.h"
 
@@ -45,7 +45,7 @@ import qualified Data.Array.Accelerate.CUDA.Smart as Sugar
 
 -- | Compile and run a complete embedded array program using the CUDA backend
 --
-run :: Arrays a => Sugar.Acc a -> a
+run :: Arrays a => Acc a -> a
 {-# NOINLINE run #-}
 run = unsafePerformIO . execute
 
@@ -57,14 +57,14 @@ run = unsafePerformIO . execute
 --  * avoid re-analysing the array code in the frontend
 --  * overlap host->device & device->host transfers, as well as computation
 --
-stream :: (Arrays a, Arrays b) => (a -> Sugar.Acc b) -> [a] -> [b]
+stream :: (Arrays a, Arrays b) => (a -> Acc b) -> [a] -> [b]
 {-# NOINLINE stream #-}
 stream acc = unsafePerformIO . sequence' . map (execute . acc)
 
 
-execute :: Arrays a => Sugar.Acc a -> IO a
+execute :: Arrays a => Acc a -> IO a
 execute a =
-  let acc = Sugar.convertAcc a
+  let acc = convertAcc a
   in  evalCUDA (compileAcc acc >> executeAcc acc >>= collect)
       `catch`
       \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))

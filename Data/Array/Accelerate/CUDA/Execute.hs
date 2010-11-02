@@ -33,6 +33,7 @@ import System.IO.Unsafe
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
 import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector)
 import qualified Data.Array.Accelerate.Array.Data       as AD
@@ -132,10 +133,12 @@ executeOpenAcc acc@(Fold f x a0) aenv = do
            else return (Array (Sugar.fromElem ()) out)
 
 executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  (Array shs seg) <- executeOpenAcc s0 aenv
-  r@(Array _ out) <- newArray (size shs)
+  let scan = Scanl' (convertFun2 undefined mkAdd) (Const (Sugar.fromElem (0::Int))) . Use
+  (Array sh0 in0)            <- executeOpenAcc a0 aenv
+  (Array shs seg, Array _ x) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
+  r@(Array _ out)            <- newArray (size shs)
   let n = size shs
+  freeArray x
   execute "fold_segmented" acc aenv n ((((((),out),in0),seg),n),size sh0)
   freeArray in0
   freeArray seg

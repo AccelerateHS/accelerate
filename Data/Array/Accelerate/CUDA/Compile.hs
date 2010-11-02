@@ -28,8 +28,9 @@ import System.IO
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
+import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, fromElem)
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.Array.Sugar                (Array(..))
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Data
@@ -47,11 +48,16 @@ compileAcc :: OpenAcc aenv a -> CIO ()
 compileAcc = travA k
   where
     k :: OpenAcc aenv a -> CIO ()
-    k (Use (Array sh ad)) = let n = size sh
-                            in  when (n > 0) $ do
-                                  mallocArray    ad n
-                                  pokeArrayAsync ad n Nothing
-    k acc = compile acc
+    k (Use (Array sh ad))   = let n = size sh
+                              in  when (n > 0) $ do
+                                    mallocArray    ad n
+                                    pokeArrayAsync ad n Nothing
+    k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
+    k acc                   = compile acc
+
+    scan = Scanl' (convertFun2 undefined mkAdd)
+                  (Const (fromElem (0::Int)))
+                  (Use (Array undefined undefined :: Segments))
 
 {-
 -- | Initiate code generation and compilation for an embedded expression, but do
