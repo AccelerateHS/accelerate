@@ -19,7 +19,7 @@ filter :: Elem a
 filter p vec
   = let arr                 = use vec
         flags               = map (boolToInt . p) arr
-        (targetIdx, length) = scanl (+) 0 flags
+        (targetIdx, length) = scanl' (+) 0 flags
         arr'                = backpermute (length!(constant ())) id arr
     in
     permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, targetIdx!ix)) arr

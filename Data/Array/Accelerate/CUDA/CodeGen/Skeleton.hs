@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkFold, mkFoldSeg, mkMap, mkZipWith, mkScanl, mkScanr,
+    mkFold, mkFoldSeg, mkMap, mkZipWith, mkScanl', mkScanr',
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
   where
@@ -100,11 +100,11 @@ mkScan isBackward ty identity apply =
             (mkNodeInfo (initPos (takeFileName skel)) (Name 0))
 
 
-mkScanl :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanl = mkScan False
+mkScanl' :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanl' = mkScan False
 
-mkScanr :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanr = mkScan True
+mkScanr' :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanr' = mkScan True
 
 -- TLM 2010-06-30:
 --   Test whether the compiler will use this to avoid branching

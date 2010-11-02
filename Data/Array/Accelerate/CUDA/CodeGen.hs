@@ -80,8 +80,8 @@ runCodeGen = flip runState (CodeGenState [] [])
 codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
 codeGen (Fold f e _)          = mkFold (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (FoldSeg f e _ s)     = mkFoldSeg (codeGenExpType e) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanl f e _)         = mkScanl (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanr f e _)         = mkScanr (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanl' f e _)        = mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanr' f e _)        = mkScanr' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen b@(Map f a)           = mkMap (codeGenAccType b) (codeGenAccType a) <$> codeGenFun f
 codeGen c@(ZipWith f a b)     = mkZipWith (codeGenAccTypeDim c) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
 codeGen b@(Permute f _ g a)   = mkPermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f <*> codeGenFun g
