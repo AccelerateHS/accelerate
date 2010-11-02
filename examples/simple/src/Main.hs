@@ -9,7 +9,7 @@ import Filter
 import Random
 import SAXPY
 import SMVM
-import ScanSeg
+-- import ScanSeg   -- module seems to be missing in the darcs repo -=chak
 
 import Data.Array.Accelerate                       (Acc)
 import qualified Data.Array.Accelerate             as Acc
@@ -111,6 +111,7 @@ test_smvm gen (n,m) (rows,cols) = do
     run_acc d x v   () = smvm (d,x) v
 
 
+{- missing module ScanSeg
 test_prefixSumSeg :: GenIO -> Int -> Int -> IO Benchmark
 test_prefixSumSeg gen n r = do
   putStrLn $ "== PrefixSumSeg (n = " ++ shows n ") =="
@@ -123,7 +124,7 @@ test_prefixSumSeg gen n r = do
     {-# NOINLINE run_ref #-}
     run_ref x s () = prefixSumSeg_ref x s
     run_acc x s () = prefixSumSeg x s
-
+-}
 
 -- Main
 --
@@ -138,6 +139,6 @@ main = do
     , test_saxpy  gen 100000
     , test_filter gen 10000
     , test_smvm   gen (0,42) (2400,400)
-     test_prefixSumSeg gen 10 100
+     -- test_prefixSumSeg gen 10 100  -- missing module ScanSeg
     ]
 
