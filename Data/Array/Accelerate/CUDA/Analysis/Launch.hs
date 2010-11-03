@@ -79,8 +79,8 @@ elementsPerThread _ = 1
 --
 sharedMem :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int
 sharedMem _ (Fold  _ x _)     blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanl _ x _)     blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanr _ x _)     blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanl' _ x _)    blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanr' _ x _)    blockDim = sizeOf (expType x) * blockDim
 sharedMem p (FoldSeg _ x _ _) blockDim =
   let warp = CUDA.warpSize p
   in
