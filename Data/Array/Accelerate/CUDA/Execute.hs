@@ -17,6 +17,7 @@ import Control.Category
 
 import Data.Bits
 import Data.Int
+import Data.Char
 import Data.Word
 import Data.Maybe
 import Control.Monad
@@ -468,7 +469,7 @@ makeStableAcc :: OpenAcc aenv a -> IO Int32
 makeStableAcc acc = combine accID . fromIntegral . hashStableName <$> makeStableName acc
   where
     combine a b = (a `rotate` 1) `xor` b
-    accID       = Hash.hashInt (accToID acc)
+    accID       = Hash.hashInt . ord . head $ accToKey acc
 
 -- Kernel module lookup with fast association to particular AST nodes
 --
