@@ -381,7 +381,8 @@ freeLifted = mapM_ go
 -- Kernel execution
 -- ----------------
 
--- Data which can be marshalled as arguments to a kernel invocation
+-- Data which can be marshalled as arguments to a kernel invocation. For Int and
+-- Word, we match the device bit-width of these types.
 --
 class Marshalable a where
   marshal :: a -> CIO [CUDA.FunParam]
@@ -389,16 +390,20 @@ class Marshalable a where
 instance Marshalable () where
   marshal _ = return []
 
+instance Marshalable Int where
+  marshal x = marshal (fromIntegral x :: Int32)
+
+instance Marshalable Word where
+  marshal x = marshal (fromIntegral x :: Word32)
+
 #define primMarshalable(ty)                                                    \
 instance Marshalable ty where {                                                \
   marshal x = return [CUDA.VArg x] }
 
-primMarshalable(Int)
 primMarshalable(Int8)
 primMarshalable(Int16)
 primMarshalable(Int32)
 primMarshalable(Int64)
-primMarshalable(Word)
 primMarshalable(Word8)
 primMarshalable(Word16)
 primMarshalable(Word32)
