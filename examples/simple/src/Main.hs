@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
@@ -9,7 +10,7 @@ import Filter
 import Random
 import SAXPY
 import SMVM
--- import ScanSeg   -- module seems to be missing in the darcs repo -=chak
+import ScanSeg
 
 import Data.Array.Accelerate                       (Acc)
 import qualified Data.Array.Accelerate             as Acc
@@ -111,20 +112,21 @@ test_smvm gen (n,m) (rows,cols) = do
     run_acc d x v   () = smvm (d,x) v
 
 
-{- missing module ScanSeg
-test_prefixSumSeg :: GenIO -> Int -> Int -> IO Benchmark
-test_prefixSumSeg gen n r = do
-  putStrLn $ "== PrefixSumSeg (n = " ++ shows n ") =="
+test_scanlSeg :: GenIO -> Int -> Int -> IO Benchmark
+test_scanlSeg gen n r = do
+  putStr $ "== Segmented Prescan (" ++ shows n " segments, "
   seg  <- randomVector gen (\x -> abs x `rem` r) n :: IO (UArray Int Int)
   seg' <- convertVector seg
-  xs   <- randomVector gen id (sum $ elems seg) :: IO (UArray Int Float)
+  let ne = sum (elems seg)
+  putStrLn $ shows ne " elements)"
+  xs   <- randomVector gen id ne :: IO (UArray Int Float)
   xs'  <- convertVector xs
-  benchmark "prefixSumSeg" similar (run_ref xs seg) (run_acc xs' seg')
+  benchmark "prescanlSeg" similar (run_ref xs seg) (run_acc xs' seg')
   where
     {-# NOINLINE run_ref #-}
     run_ref x s () = prefixSumSeg_ref x s
     run_acc x s () = prefixSumSeg x s
--}
+
 
 -- Main
 --
@@ -135,10 +137,10 @@ main = do
 
   gen <- create
   defaultMain =<< sequence
-    [ test_dotp   gen 100000
-    , test_saxpy  gen 100000
-    , test_filter gen 10000
-    , test_smvm   gen (0,42) (2400,400)
-     -- test_prefixSumSeg gen 10 100  -- missing module ScanSeg
+    [ test_dotp     gen 100000
+    , test_saxpy    gen 100000
+    , test_filter   gen 10000
+    , test_smvm     gen (0,42) (2400,400)
+--    , test_scanlSeg gen 100 200
     ]
 
