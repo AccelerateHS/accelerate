@@ -140,7 +140,7 @@ scanlSeg' f e arr seg = (scans, sums)
     -- shifting elements right.
     scans     = scanl1Seg f idShftArr seg
     idShftArr = permute f idsArr 
-                  (\ix -> (((mkTailFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix + (constant 1)))
+                  (\ix -> (((mkTailFlags seg) ! ix) ==* 1) ? (ignore, ix + 1))
                   arr
     idsArr    = replicate (shape arr) $ unit e
 
@@ -148,7 +148,7 @@ scanlSeg' f e arr seg = (scans, sums)
     -- the original vector and taking the tail elements.
     sums       = backpermute (shape seg) (\ix -> sumOffsets ! ix) $ 
                    scanl1Seg f arr seg
-    sumOffsets = map (\v -> v - (constant 1)) $ scanl1 (+) seg
+    sumOffsets = map (\v -> v - 1) $ scanl1 (+) seg
 
 -- |Segmented version of 'scanl1'.
 --
@@ -199,17 +199,17 @@ scanrSeg' :: Elem a
             -> (Acc (Vector a), Acc (Vector a))
 scanrSeg' f e arr seg = (scans, sums)
   where
-    -- Using technique described for prescanlSeg.
+    -- Using technique described for scanlSeg'.
     scans     = scanr1Seg f idShftArr seg
     idShftArr = permute f idsArr 
-                  (\ix -> (((mkHeadFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix - (constant 1)))
+                  (\ix -> (((mkHeadFlags seg) ! ix) ==* 1) ? (ignore, ix - 1))
                   arr
     idsArr    = replicate (shape arr) $ unit e
 
     --
     sums       = backpermute (shape seg) (\ix -> sumOffsets ! ix) $ 
                    scanr1Seg f arr seg
-    sumOffsets = Prelude.fst $ scanl' (+) (constant 0) seg
+    sumOffsets = Prelude.fst $ scanl' (+) 0 seg
 
 -- |Segmented version of 'scanr1'.
 --
@@ -247,9 +247,9 @@ postscanrSeg f e arr seg = map (`f` e) $ scanr1Seg f arr seg
 -- |Compute head flags vector from segment vector for left-scans.
 --
 mkHeadFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
-mkHeadFlags seg = permute (\_ _ -> constant 1) zerosArr (\ix -> segOffsets ! ix) segOffsets
+mkHeadFlags seg = permute (\_ _ -> 1) zerosArr (\ix -> segOffsets ! ix) segOffsets
   where
-    (segOffsets, len) = scanl' (+) (constant 0) seg
+    (segOffsets, len) = scanl' (+) 0 seg
     zerosArr          = replicate (len ! (constant ())) $ unit 0
 
 
@@ -257,10 +257,10 @@ mkHeadFlags seg = permute (\_ _ -> constant 1) zerosArr (\ix -> segOffsets ! ix)
 --
 mkTailFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
 mkTailFlags seg
-  = permute (\_ _ -> constant 1) zerosArr (\ix -> (segOffsets ! ix) - (constant 1)) segOffsets
+  = permute (\_ _ -> 1) zerosArr (\ix -> (segOffsets ! ix) - 1) segOffsets
   where
     segOffsets = scanl1 (+) seg
-    len        = segOffsets ! ((shape seg) - (constant 1))
+    len        = segOffsets ! ((shape seg) - 1)
     zerosArr   = replicate len $ unit 0
 
 
@@ -272,8 +272,7 @@ mkSegApply :: (Elem e)
          -> (Exp (Int, e) -> Exp (Int, e) -> Exp (Int, e))
 mkSegApply op = apply
   where
-    apply a b = tuple ((aF ==* (constant 1) ||* (bF ==* constant 1)) ? (constant 1, constant 0),
-                       (bF ==* constant 1) ? (bV, aV `op` bV))
+    apply a b = tuple (((aF ==* 1) ||* (bF ==* 1)) ? (1, 0), (bF ==* 1) ? (bV, aV `op` bV))
       where
         aF = fst a
         aV = snd a
