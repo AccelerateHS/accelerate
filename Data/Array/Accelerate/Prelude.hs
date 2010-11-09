@@ -142,7 +142,7 @@ scanlSeg' f e arr seg = (scans, sums)
     idShftArr = permute f idsArr 
                   (\ix -> (((mkTailFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix + (constant 1)))
                   arr
-    idsArr    = backpermute (shape arr) (\_ -> constant ()) $ unit e 
+    idsArr    = replicate (shape arr) $ unit e
 
     -- Sum of each segment is computed by performing a segmented postscan on
     -- the original vector and taking the tail elements.
@@ -204,7 +204,7 @@ scanrSeg' f e arr seg = (scans, sums)
     idShftArr = permute f idsArr 
                   (\ix -> (((mkHeadFlags seg) ! ix) ==* (constant 1)) ? (ignore, ix - (constant 1)))
                   arr
-    idsArr    = backpermute (shape arr) (\_ -> constant ()) $ unit e 
+    idsArr    = replicate (shape arr) $ unit e
 
     --
     sums       = backpermute (shape seg) (\ix -> sumOffsets ! ix) $ 
@@ -250,9 +250,7 @@ mkHeadFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
 mkHeadFlags seg = permute (\_ _ -> constant 1) zerosArr (\ix -> segOffsets ! ix) segOffsets
   where
     (segOffsets, len) = scanl' (+) (constant 0) seg
-    zerosArr          =   backpermute (len ! (constant ())) (\_ -> constant ())
-                        . unit
-                        $ constant (0 :: Int)
+    zerosArr          = replicate (len ! (constant ())) $ unit 0
 
 
 -- |Compute tail flags vector from segment vector for right-scans.
@@ -263,7 +261,7 @@ mkTailFlags seg
   where
     segOffsets = scanl1 (+) seg
     len        = segOffsets ! ((shape seg) - (constant 1))
-    zerosArr   = backpermute len (\_ -> constant ()) $ unit $ constant (0 :: Int)
+    zerosArr   = replicate len $ unit 0
 
 
 -- |Construct a segmented version of apply from a non-segmented version. The segmented apply
