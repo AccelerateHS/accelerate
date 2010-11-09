@@ -12,13 +12,15 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkFold, mkFoldSeg, mkMap, mkZipWith, mkScanl', mkScanr',
+    mkFold, mkFoldSeg, mkMap, mkZipWith,
+    mkScanl, mkScanr, mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
   where
 
 import Language.C
 import System.FilePath
+import Data.Maybe
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
@@ -85,7 +87,7 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
 -- Scan
 --------------------------------------------------------------------------------
 
-mkScan :: Bool -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScan :: Bool -> [CType] -> Maybe [CExpr] -> [CExpr] -> CUTranslSkel
 mkScan isBackward ty identity apply =
   CUTranslSkel code skel
   where
@@ -94,17 +96,25 @@ mkScan isBackward ty identity apply =
 
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkIdentity identity
+            [ mkIdentity ident
             , mkApply 2 apply
             , mkFlag "reverse" (fromBool isBackward) ])
             (mkNodeInfo (initPos (takeFileName skel)) (Name 0))
 
+    ident = if isJust identity then (fromJust identity) else (map mkDefaultExpr ty)
 
-mkScanl' :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanl' = mkScan False
 
-mkScanr' :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanr' = mkScan True
+mkScanl :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanl ty identity apply = mkScan False ty (Just identity) apply
+
+mkScanr :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanr ty identity apply = mkScan True ty (Just identity) apply
+
+mkScanl1 :: [CType] -> [CExpr] -> CUTranslSkel
+mkScanl1 ty apply = mkScan False ty Nothing apply
+
+mkScanr1 :: [CType] -> [CExpr] -> CUTranslSkel
+mkScanr1 ty apply = mkScan True ty Nothing apply
 
 -- TLM 2010-06-30:
 --   Test whether the compiler will use this to avoid branching
@@ -115,6 +125,16 @@ mkFlag name val =
     [CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CStorageSpec (CStatic internalNode), CTypeQual (CConstQual internalNode), CTypeSpec (CIntType internalNode)]
     [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Just (CInitExpr val internalNode),Nothing)]
     internalNode)
+
+-- For the scan1 case, an identity element is not required. However, the
+-- skeleton functions *do* expect that an identity function is implemented.
+-- Thus, in the scan1 case, a default identity expression is created.
+-- Forunately the C type checker is much less restricitve than Haskell such
+-- that we can get away with always specifying a constant 'int' indepent of
+-- the array type.
+--
+mkDefaultExpr :: CType -> CExpr
+mkDefaultExpr _ = CConst $ CIntConst (cInteger 0) internalNode
 
 
 --------------------------------------------------------------------------------

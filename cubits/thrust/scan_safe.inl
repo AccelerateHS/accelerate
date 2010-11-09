@@ -160,7 +160,7 @@ exclusive_scan
     scan_intervals<false>(sdata, d_out, d_in0, d_block_results, N, interval_size);
 }
 #endif
-#if 0
+
 extern "C"
 __global__ void
 inclusive_update
@@ -173,12 +173,23 @@ inclusive_update
 {
     const Ix interval_begin = interval_size * blockIdx.x;
     const Ix interval_end   = min(interval_begin + interval_size, N);
+    TyOut sum;
 
-    if (blockIdx.x == 0)
-        return;
+    // ignore first block and get value to add to this segment
+    if (reverse)
+    {
+        if (blockIdx.x == gridDim.x - 1)
+            return;
 
-    // value to add to this segment
-    TyOut sum = get0(d_in0, blockIdx.x - 1);
+        sum = get0(d_in0, blockIdx.x + 1);
+    }
+    else
+    {
+        if (blockIdx.x == 0)
+            return;
+
+        sum = get0(d_in0, blockIdx.x - 1);
+    }
 
     // advance result iterator
     for(Ix base = interval_begin; base < interval_end; base += blockDim.x)
@@ -193,7 +204,7 @@ inclusive_update
         __syncthreads();
     }
 }
-#endif
+
 
 
 extern "C"
@@ -259,6 +270,89 @@ exclusive_update
 
         if (reverse) output -= blockDim.x;
         else         output += blockDim.x;
+    }
+}
+
+
+
+extern "C"
+__global__ void
+exclusive_update_with_sum
+(
+    ArrOut              d_out,
+    ArrIn0              d_in0,
+    ArrIn0              d_sum,
+    const Ix            N,
+    const Ix            interval_size
+)
+{
+    extern __shared__ TyOut sdata[];
+
+    const Ix interval_begin = interval_size * blockIdx.x;
+    const Ix interval_end   = min(interval_begin + interval_size, N);
+
+    // value to add to this segment
+    TyOut carry = identity();
+
+    if (reverse)
+    {
+        if (blockIdx.x != gridDim.x - 1)
+        {
+            TyOut tmp = get0(d_in0, blockIdx.x + 1);
+            carry     = apply(carry, tmp);
+        }
+    }
+    else
+    {
+        if (blockIdx.x != 0)
+        {
+            TyOut tmp = get0(d_in0, blockIdx.x - 1);
+            carry     = apply(carry, tmp);
+        }
+    }
+
+    // advance result iterator
+    Ix output = reverse ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
+    TyOut val = carry;
+
+    for (Ix base = interval_begin; base < interval_end; base += blockDim.x)
+    {
+        const Ix i = base + threadIdx.x;
+
+        if (i < interval_end)
+        {
+            TyOut tmp          = get0(d_out, output);
+            sdata[threadIdx.x] = apply(carry, tmp);
+        }
+        __syncthreads();
+
+        if (threadIdx.x != 0)
+            val = sdata[threadIdx.x - 1];
+
+        if (i < interval_end)
+        {
+            if (reverse)
+                set(d_out, output + 1, val);
+            else
+                set(d_out, output, val);
+        }
+
+        if (threadIdx.x == 0)
+            val = sdata[blockDim.x - 1];
+
+        __syncthreads();
+
+        if (reverse) output -= blockDim.x;
+        else         output += blockDim.x;
+    }
+
+    // Use a single thread to set the overall scan result.
+    if (blockIdx.x == 0 && threadIdx.x == 0)
+    {
+        if (reverse)
+            set(d_out, 0, get0(d_sum, 0));
+        else
+            set(d_out, N, get0(d_sum, 0));
     }
 }
 
