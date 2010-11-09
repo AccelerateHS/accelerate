@@ -135,9 +135,9 @@ scanlSeg' :: Elem a
           -> (Acc (Vector a), Acc (Vector a))
 scanlSeg' f e arr seg = (scans, sums)
   where
-    -- Segmented prescan implemented by performing segmented postscan on vector
-    -- fromed by inserting identity element in at the start of each vector and
-    -- shifting elements right.
+    -- Segmented scan' implemented by performing segmented exclusive-scan on vector
+    -- fromed by inserting identity element in at the start of each segment, shifting
+    -- elements right, with the final element in the segment being removed.
     scans     = scanl1Seg f idShftArr seg
     idShftArr = permute f idsArr 
                   (\ix -> (((mkTailFlags seg) ! ix) ==* 1) ? (ignore, ix + 1))
