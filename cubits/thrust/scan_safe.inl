@@ -213,6 +213,7 @@ exclusive_update
 (
     ArrOut              d_out,
     ArrIn0              d_in0,
+    ArrIn0              d_sum,
     const Ix            N,
     const Ix            interval_size
 )
@@ -270,6 +271,12 @@ exclusive_update
 
         if (reverse) output -= blockDim.x;
         else         output += blockDim.x;
+    }
+
+    // Use a single thread to set the overall scan result.
+    if (blockIdx.x == 0 && threadIdx.x == 0)
+    {
+        set(d_sum, 0, apply(identity(), get0(d_sum, 0)));
     }
 }
 
@@ -349,10 +356,12 @@ exclusive_update_with_sum
     // Use a single thread to set the overall scan result.
     if (blockIdx.x == 0 && threadIdx.x == 0)
     {
+        TyOut sum = apply(identity(), get0(d_sum, 0));
+
         if (reverse)
-            set(d_out, 0, get0(d_sum, 0));
+            set(d_out, 0, sum);
         else
-            set(d_out, N, get0(d_sum, 0));
+            set(d_out, N, sum);
     }
 }
 

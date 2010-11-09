@@ -248,7 +248,7 @@ executeScan' acc a0 aenv = do
   bindLifted mdl fvs
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
-  launch (t,g,m) fadd  (((((),out),bks),n),itv)         -- distribute partial results
+  launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
   freeLifted fvs
   freeArray in0
   freeArray bks
