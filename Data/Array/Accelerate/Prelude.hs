@@ -111,7 +111,7 @@ postscanr f e = map (`f` e) . scanr1 f
 -- Segmented scans
 -- ---------------
 
--- |Segmented version of 'scanl'.  NOT YET IMPLEMENTED!
+-- |Segmented version of 'scanl'.
 --
 scanlSeg :: Elem a
          => (Exp a -> Exp a -> Exp a)
@@ -119,7 +119,25 @@ scanlSeg :: Elem a
          -> Acc (Vector a)
          -> Acc Segments
          -> Acc (Vector a)
-scanlSeg = INTERNAL_ERROR(error) "scanlSeg" "NOT YET IMPLEMENTED"
+scanlSeg f e arr seg = scans
+  where
+    -- Segmented scan implemented by performing segmented exclusive-scan (scan1)
+    -- on a vector formed by injecting the identity element at the start of each
+    -- segment.
+    scans     = scanl1Seg f idInjArr seg'
+    seg'      = map (+ 1) seg
+    idInjArr  = permute f idsArr (\ix -> ix + (offsetArr ! ix) + 1) arr
+    idsArr    = replicate n $ unit e
+    n         = (shape arr) + (shape seg)
+
+    -- As the identity elements are injected in to the vector for each segment, the
+    -- remaining elemnets must be shifted forwarded (to the left). offsetArr specifies
+    -- by how much each element is shifted.
+    offsetArr = scanl1 (max) $ permute (+) zerosArr (\ix -> segOffsets ! ix) segIxs
+    zerosArr  = replicate (shape arr) $ unit 0
+
+    segOffsets = Prelude.fst $ scanl' (+) 0 seg
+    segIxs     = Prelude.fst $ scanl' (+) 0 $ replicate (shape seg) $ unit 1
 
 -- |Segmented version of 'scanl\''.
 --
@@ -179,7 +197,7 @@ postscanlSeg :: Elem a
              -> Acc (Vector a)
 postscanlSeg f e arr seg = map (e `f`) $ scanl1Seg f arr seg
 
--- |Segmented version of 'scanr'.  NOT YET IMPLEMENTED!
+-- |Segmented version of 'scanr'.
 --
 scanrSeg :: Elem a
          => (Exp a -> Exp a -> Exp a)
@@ -187,7 +205,21 @@ scanrSeg :: Elem a
          -> Acc (Vector a)
          -> Acc Segments
          -> Acc (Vector a)
-scanrSeg = INTERNAL_ERROR(error) "scanrSeg" "NOT YET IMPLEMENTED"
+scanrSeg f e arr seg = scans
+  where
+    -- Using technique described for scanlSeg.
+    scans     = scanr1Seg f idInjArr seg'
+    seg'      = map (+ 1) seg
+    idInjArr  = permute f idsArr (\ix -> ix + (offsetArr ! ix)) arr
+    idsArr    = replicate n $ unit e
+    n         = (shape arr) + (shape seg)
+
+    --
+    offsetArr = scanl1 (max) $ permute (+) zerosArr (\ix -> segOffsets ! ix) segIxs
+    zerosArr  = replicate (shape arr) $ unit 0
+
+    segOffsets = Prelude.fst $ scanl' (+) 0 seg
+    segIxs     = Prelude.fst $ scanl' (+) 0 $ replicate (shape seg) $ unit 1
 
 -- |Segmented version of 'scanrSeg\''.
 --
