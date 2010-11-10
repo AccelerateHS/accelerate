@@ -55,9 +55,9 @@ compileAcc = travA k
     k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
     k acc                   = compile acc
 
-    scan = Scanl' (convertFun2 undefined mkAdd)
-                  (Const (fromElem (0::Int)))
-                  (Use (Array undefined undefined :: Segments))
+    scan = Scanl (convertFun2 undefined mkAdd)
+                 (Const (fromElem (0::Int)))
+                 (Use (Array undefined undefined :: Segments))
 
 {-
 -- | Initiate code generation and compilation for an embedded expression, but do

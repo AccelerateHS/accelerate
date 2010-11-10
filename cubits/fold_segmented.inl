@@ -59,8 +59,7 @@ fold_segmented
     ArrOut              d_out,
     const ArrIn0        d_in0,
     const Int*          d_offset,
-    const Ix            num_segments,
-    const Ix            length                  // of input array d_in0
+    const Ix            num_segments
 )
 {
     const Ix vectors_per_block = blockDim.x / warpSize;
@@ -81,21 +80,10 @@ fold_segmented
         /*
          * Use two threads to fetch the indices of the start and end of this
          * segment. This results in single coalesced global read, instead of two
-         * separate transactions. If we are the last segment, the final index is
-         * taken from the overall array length.
+         * separate transactions.
          */
-        if (seg < num_segments - 1)
-        {
-            if (thread_lane < 2)
-                s_ptrs[vector_lane][thread_lane] = d_offset[seg + thread_lane];
-        }
-        else
-        {
-            if (thread_lane == 0)
-                s_ptrs[vector_lane][0] = d_offset[seg];
-
-            s_ptrs[vector_lane][1] = length;
-        }
+        if (thread_lane < 2)
+            s_ptrs[vector_lane][thread_lane] = d_offset[seg + thread_lane];
 
         const Ix start = s_ptrs[vector_lane][0];
         const Ix end   = s_ptrs[vector_lane][1];

@@ -131,13 +131,12 @@ executeOpenAcc acc@(Fold f x a0) aenv = do
            else return (Array (Sugar.fromElem ()) out)
 
 executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
-  let scan = Scanl' (convertFun2 undefined mkAdd) (Const (Sugar.fromElem (0::Int))) . Use
-  (Array sh0 in0)            <- executeOpenAcc a0 aenv
-  (Array shs seg, Array _ x) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
-  r@(Array _ out)            <- newArray (size shs)
-  let n = size shs
-  freeArray x
-  execute "fold_segmented" acc aenv n ((((((),out),in0),seg),n),size sh0)
+  let scan = Scanl (convertFun2 undefined mkAdd) (Const (Sugar.fromElem (0::Int))) . Use
+  (Array _   in0) <- executeOpenAcc a0 aenv
+  (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
+  r@(Array _ out) <- newArray (size shs)
+  let n = size shs - 1
+  execute "fold_segmented" acc aenv n (((((),out),in0),seg),n)
   freeArray in0
   freeArray seg
   return r
