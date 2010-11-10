@@ -1,5 +1,5 @@
 
-GHC	 = ghc
+GHC      = ghc
 HCFLAGS  = -O2 -Wall -package accelerate
 SRCDIR   = src
 BUILDDIR = dist

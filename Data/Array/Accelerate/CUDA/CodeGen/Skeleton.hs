@@ -13,14 +13,13 @@
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
     mkFold, mkFoldSeg, mkMap, mkZipWith,
-    mkScanl, mkScanr, mkScanl1, mkScanr1,
+    mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
   where
 
 import Language.C
 import System.FilePath
-import Data.Maybe
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
@@ -30,7 +29,7 @@ import Data.Array.Accelerate.CUDA.CodeGen.Tuple
 --------------------------------------------------------------------------------
 
 mkFold :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkFold ty identity apply = CUTranslSkel code skel
+mkFold ty identity apply = CUTranslSkel code [] skel
   where
     skel = "fold.inl"
     code = CTranslUnit
@@ -41,7 +40,7 @@ mkFold ty identity apply = CUTranslSkel code skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkFoldSeg :: [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkFoldSeg ty int identity apply = CUTranslSkel code skel
+mkFoldSeg ty int identity apply = CUTranslSkel code [] skel
   where
     skel = "fold_segmented.inl"
     code = CTranslUnit
@@ -58,7 +57,7 @@ mkFoldSeg ty int identity apply = CUTranslSkel code skel
 --------------------------------------------------------------------------------
 
 mkMap :: [CType] -> [CType] -> [CExpr] -> CUTranslSkel
-mkMap tyOut tyIn0 apply = CUTranslSkel code skel
+mkMap tyOut tyIn0 apply = CUTranslSkel code [] skel
   where
     skel = "map.inl"
     code = CTranslUnit
@@ -69,7 +68,7 @@ mkMap tyOut tyIn0 apply = CUTranslSkel code skel
 
 
 mkZipWith :: ([CType], Int) -> ([CType], Int) -> ([CType], Int) -> [CExpr] -> CUTranslSkel
-mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code skel
+mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code [] skel
   where
     skel = "zipWith.inl"
     code = CTranslUnit
@@ -87,54 +86,41 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
 -- Scan
 --------------------------------------------------------------------------------
 
-mkScan :: Bool -> [CType] -> Maybe [CExpr] -> [CExpr] -> CUTranslSkel
-mkScan isBackward ty identity apply =
-  CUTranslSkel code skel
+-- TODO: use a fast scan for primitive types
+--
+mkExclusiveScan :: Bool -> Bool -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkExclusiveScan isReverse isHaskellStyle ty identity apply = CUTranslSkel code defs skel
   where
-    skel | length ty == 1 = "thrust" </> "scan_safe.inl"        -- TODO: use fast scan for primitive types
-         | otherwise      = "thrust" </> "scan_safe.inl"
-
+    skel = "scan.inl"
+    defs = [(internalIdent "REVERSE",       Just (fromBool isReverse))
+           ,(internalIdent "HASKELL_STYLE", Just (fromBool isHaskellStyle))]
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkIdentity ident
-            , mkApply 2 apply
-            , mkFlag "reverse" (fromBool isBackward) ])
+            [ mkIdentity identity
+            , mkApply 2 apply ])
             (mkNodeInfo (initPos (takeFileName skel)) (Name 0))
 
-    ident = if isJust identity then (fromJust identity) else (map mkDefaultExpr ty)
+mkInclusiveScan :: Bool -> [CType] -> [CExpr] -> CUTranslSkel
+mkInclusiveScan isReverse ty apply = CUTranslSkel code [rev] skel
+  where
+    skel = "scan1.inl"
+    rev  = (internalIdent "REVERSE", Just (fromBool isReverse))
+    code = CTranslUnit
+            ( mkTupleTypeAsc 2 ty ++
+            [ mkApply 2 apply ])
+            (mkNodeInfo (initPos (takeFileName skel)) (Name 0))
 
+mkScanl, mkScanr :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanl = mkExclusiveScan False True
+mkScanr = mkExclusiveScan True  True
 
-mkScanl :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanl ty identity apply = mkScan False ty (Just identity) apply
+mkScanl', mkScanr' :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkScanl' = mkExclusiveScan False False
+mkScanr' = mkExclusiveScan True  False
 
-mkScanr :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkScanr ty identity apply = mkScan True ty (Just identity) apply
-
-mkScanl1 :: [CType] -> [CExpr] -> CUTranslSkel
-mkScanl1 ty apply = mkScan False ty Nothing apply
-
-mkScanr1 :: [CType] -> [CExpr] -> CUTranslSkel
-mkScanr1 ty apply = mkScan True ty Nothing apply
-
--- TLM 2010-06-30:
---   Test whether the compiler will use this to avoid branching
---
-mkFlag :: String -> CExpr -> CExtDecl
-mkFlag name val =
-  CDeclExt (CDecl
-    [CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CStorageSpec (CStatic internalNode), CTypeQual (CConstQual internalNode), CTypeSpec (CIntType internalNode)]
-    [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Just (CInitExpr val internalNode),Nothing)]
-    internalNode)
-
--- For the scan1 case, an identity element is not required. However, the
--- skeleton functions *do* expect that an identity function is implemented.
--- Thus, in the scan1 case, a default identity expression is created.
--- Forunately the C type checker is much less restricitve than Haskell such
--- that we can get away with always specifying a constant 'int' indepent of
--- the array type.
---
-mkDefaultExpr :: CType -> CExpr
-mkDefaultExpr _ = CConst $ CIntConst (cInteger 0) internalNode
+mkScanl1, mkScanr1 :: [CType] -> [CExpr] -> CUTranslSkel
+mkScanl1 = mkInclusiveScan False
+mkScanr1 = mkInclusiveScan True
 
 
 --------------------------------------------------------------------------------
@@ -142,7 +128,7 @@ mkDefaultExpr _ = CConst $ CIntConst (cInteger 0) internalNode
 --------------------------------------------------------------------------------
 
 mkPermute :: [CType] -> Int -> Int -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
+mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code [] skel
   where
     skel = "permute.inl"
     code = CTranslUnit
@@ -154,7 +140,7 @@ mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkBackpermute :: [CType] -> Int -> Int -> [CExpr] -> CUTranslSkel
-mkBackpermute ty dimOut dimIn0 indexFn = CUTranslSkel code skel
+mkBackpermute ty dimOut dimIn0 indexFn = CUTranslSkel code [] skel
   where
     skel = "backpermute.inl"
     code = CTranslUnit
@@ -170,7 +156,7 @@ mkBackpermute ty dimOut dimIn0 indexFn = CUTranslSkel code skel
 --------------------------------------------------------------------------------
 
 mkIndex :: [CType] -> Int -> Int -> Int -> [CExpr] -> CUTranslSkel
-mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code skel
+mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code [] skel
   where
     skel = "slice.inl"
     code = CTranslUnit
@@ -183,7 +169,7 @@ mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code skel
 
 
 mkReplicate :: [CType] -> Int -> Int -> [CExpr] -> CUTranslSkel
-mkReplicate ty dimSl dimOut slix = CUTranslSkel code skel
+mkReplicate ty dimSl dimOut slix = CUTranslSkel code [] skel
   where
     skel = "replicate.inl"
     code = CTranslUnit

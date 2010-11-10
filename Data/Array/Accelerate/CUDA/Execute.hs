@@ -142,14 +142,12 @@ executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
   freeArray seg
   return r
 
-executeOpenAcc acc@(Scanr _ _ a0) aenv = executeScan acc a0 aenv
-executeOpenAcc acc@(Scanl _ _ a0) aenv = executeScan acc a0 aenv
-
-executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
+executeOpenAcc acc@(Scanl _ _ a0) aenv  = executeScan  acc a0 aenv
+executeOpenAcc acc@(Scanr _ _ a0) aenv  = executeScan  acc a0 aenv
 executeOpenAcc acc@(Scanl' _ _ a0) aenv = executeScan' acc a0 aenv
-
-executeOpenAcc acc@(Scanr1 _ a0) aenv = executeScan1 acc a0 aenv
-executeOpenAcc acc@(Scanl1 _ a0) aenv = executeScan1 acc a0 aenv
+executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
+executeOpenAcc acc@(Scanl1 _ a0) aenv   = executeScan1 acc a0 aenv
+executeOpenAcc acc@(Scanr1 _ a0) aenv   = executeScan1 acc a0 aenv
 
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
@@ -214,8 +212,8 @@ executeScan :: OpenAcc aenv (Vector e) -> OpenAcc aenv (Vector e) -> Val aenv ->
 executeScan acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
-  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update_with_sum"
-  a@(Array _ out)         <- newArray $ (Sugar.toElem sh0) + 1
+  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  a@(Array _ out)         <- newArray (size sh0 + 1)
   b@(Array _ bks)         <- newArray g
   s@(Array _ sum)         <- newArray ()
   let n   = size sh0
@@ -238,7 +236,7 @@ executeScan' acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  a@(Array _ out)         <- newArray (size sh0)
   b@(Array _ bks)         <- newArray g
   s@(Array _ sum)         <- newArray ()
   let n   = size sh0
@@ -259,7 +257,7 @@ executeScan1 acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  a@(Array _ out)         <- newArray (size sh0)
   b@(Array _ bks)         <- newArray g
   s@(Array _ sum)         <- newArray ()
   let n   = size sh0

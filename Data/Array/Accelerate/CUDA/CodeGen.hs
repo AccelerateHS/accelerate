@@ -63,11 +63,11 @@ $(mkLabels [''CodeGenState])
 --
 codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
-  let (CUTranslSkel code skel, st) = runCodeGen (codeGen acc)
-      (CTranslUnit decl node)      = code
-      fvars                        = getL arrays st ++ getL shapes st
+  let (CUTranslSkel code defs skel, st) = runCodeGen (codeGen acc)
+      (CTranslUnit decl node)           = code
+      fvars                             = getL arrays st ++ getL shapes st
   in
-  CUTranslSkel (CTranslUnit (fvars ++ decl) node) skel
+  CUTranslSkel (CTranslUnit (fvars ++ decl) node) defs skel
 
 runCodeGen :: CodeGen a -> (a,CodeGenState)
 runCodeGen = flip runState (CodeGenState [] [])
@@ -80,10 +80,10 @@ runCodeGen = flip runState (CodeGenState [] [])
 codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
 codeGen (Fold f e _)          = mkFold (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (FoldSeg f e _ s)     = mkFoldSeg (codeGenExpType e) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanl f e _)         = mkScanl (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanr f e _)         = mkScanr (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanl' f e _)        = mkScanl (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanr' f e _)        = mkScanr (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanl f e _)         = mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanr f e _)         = mkScanr  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanl' f e _)        = mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+codeGen (Scanr' f e _)        = mkScanr' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (Scanl1 f a)          = mkScanl1 (codeGenAccType a) <$> codeGenFun f
 codeGen (Scanr1 f a)          = mkScanr1 (codeGenAccType a) <$> codeGenFun f
 codeGen b@(Map f a)           = mkMap (codeGenAccType b) (codeGenAccType a) <$> codeGenFun f

@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import Data.Array.Accelerate as Acc
-import Data.Array.Accelerate.CUDA as CUDA
+import Data.Array.Accelerate                       as Acc
+import qualified Data.Array.Accelerate.CUDA        as CUDA
+import qualified Data.Array.Accelerate.Interpreter as Interp
 
 
 -- |The value of each element in an integral image is the sum of all input elements
@@ -47,6 +48,13 @@ image = Acc.fromList (20, 40) $ repeat 1
 --
 main :: IO ()
 main = do
-  print image
-  print $ CUDA.run $ integralImage $ use image
+  let cuda = CUDA.run   $ integralImage (use image)
+      int  = Interp.run $ integralImage (use image)
+
+  if toList cuda == toList int
+     then putStrLn "Valid"
+     else do
+       putStrLn "INVALID!!"
+       putStrLn $ " Interpreter: " ++ show int
+       putStrLn $ " CUDA:        " ++ show cuda
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
 -- Copyright   : [2010] Manuel M T Chakravarty, Ben Lever
@@ -33,8 +32,6 @@ import qualified Prelude
 -- friends  
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape)
 import Data.Array.Accelerate.Language
-
-#include "accelerate.h"
 
 
 -- Map-like composites

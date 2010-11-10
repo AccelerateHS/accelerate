@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Data
   (
-    CType, CUTranslSkel(..)
+    CType, CMacro, CUTranslSkel(..)
   )
   where
 
@@ -20,15 +20,22 @@ import Language.C
 import Text.PrettyPrint
 
 type CType        = [CTypeSpec]
-data CUTranslSkel = CUTranslSkel CTranslUnit FilePath
+type CMacro       = (Ident, Maybe CExpr)
+data CUTranslSkel = CUTranslSkel CTranslUnit [CMacro] FilePath
 
 instance Pretty CUTranslSkel where
-  pretty (CUTranslSkel code skel) =
+  pretty (CUTranslSkel code defs skel) =
     vcat [ include "accelerate_cuda_extras.h"
+         , vcat (map macro defs)
          , pretty code
-         , include skel ]
+         , include skel
+         ]
 
 
-include :: String -> Doc
+include :: FilePath -> Doc
 include hdr = text "#include <" <> text hdr <> text ">"
+
+macro :: CMacro -> Doc
+macro (d,v) = text "#define" <+> text (identToString d)
+                             <+> maybe empty (parens . pretty) v
 
