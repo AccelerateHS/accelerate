@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleInstances #-}
 
 -- Module      : Data.Array.Accelerate.Type
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -580,6 +580,14 @@ data TupleType a where
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
 
+
+-- -- Tuple extension
+-- -- ---------------
+-- 
+-- infix 8 :#
+-- data ix:#i = ix:#i
+--   deriving (Show, Typeable)
+-- 
 
 -- Stencil support
 -- ---------------

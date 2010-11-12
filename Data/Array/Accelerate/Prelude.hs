@@ -15,6 +15,9 @@ module Data.Array.Accelerate.Prelude (
   -- ** Map-like
   zip, unzip,
   
+  -- ** Reductions
+  foldAll, fold1All,
+  
   -- ** Scans
   prescanl, postscanl, prescanr, postscanr, 
 
@@ -30,7 +33,7 @@ import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr
 import qualified Prelude
 
 -- friends  
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import Data.Array.Accelerate.Language
 
 
@@ -53,6 +56,29 @@ unzip :: (Ix dim, Elem a, Elem b)
       => Acc (Array dim (a, b))
       -> (Acc (Array dim a), Acc (Array dim b))
 unzip arr = (map fst arr, map snd arr)
+
+
+-- Reductions
+-- ----------
+
+-- |Reduction of an array of arbitrary rank to a single scalar value.  The first argument needs to be
+-- an /associative/ function to enable an efficient parallel implementation.
+-- 
+foldAll :: (Ix dim, Elem a)
+        => (Exp a -> Exp a -> Exp a) 
+        -> Exp a 
+        -> Acc (Array dim a)
+        -> Acc (Scalar a)
+foldAll f e arr = fold f e (reshape (index1 $ size arr) arr)
+
+-- |Variant of 'foldAll' that requires the reduced array to be non-empty and doesn't need an default
+-- value.
+-- 
+fold1All :: (Ix dim, Elem a)
+         => (Exp a -> Exp a -> Exp a) 
+         -> Acc (Array dim a)
+         -> Acc (Scalar a)
+fold1All f arr = fold1 f (reshape (index1 $ size arr) arr)
 
 
 -- Composite scans
@@ -124,31 +150,31 @@ scanlSeg f e arr seg = scans
     scans      = scanl1Seg f idInjArr seg'
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) headFlags $ zip idsArr arrShifted
 
-    headFlags  = permute (+) zerosArr' (\ix -> segOffsets' ! ix)
+    headFlags  = permute (+) zerosArr' (\ix -> index1 $ segOffsets' ! ix)
                $ replicate (shape seg) $ unit 1
 
-    arrShifted = backpermute n (\ix -> shiftCoords ! ix) arr
+    arrShifted = backpermute nSh (\ix -> index1 $ shiftCoords ! ix) arr
 
-    idsArr     = replicate n $ unit e
+    idsArr     = replicate nSh $ unit e
 
     -- As the identity elements are injected in to the vector for each segment, the
     -- remaining elements must be shifted forwarded (to the left). shiftCoords specifies
     -- how each element is backpermuted to its shifted position.
-    shiftCoords = permute (+) zerosArr' (\ix -> ix + (offsetArr ! ix) + 1) coords
+    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1 i) + 1) coords
     coords      = Prelude.fst $ scanl' (+) 0 onesArr
 
-    offsetArr   = scanl1 (max) $ permute (+) zerosArr (\ix -> segOffsets ! ix) segIxs
-    segIxs      = Prelude.fst $ scanl' (+) 0 $ replicate (shape seg) $ unit 1
+    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix) segIxs
+    segIxs      = Prelude.fst $ scanl' (+) 0 $ replicate (index1 $ size seg) $ unit 1
 
     segOffsets' = Prelude.fst $ scanl' (+) 0 seg'
     segOffsets  = Prelude.fst $ scanl' (+) 0 seg
 
     --
-    n         = (shape arr) + (shape seg)
+    nSh       = index1 $ size arr + size seg
     seg'      = map (+ 1) seg
     onesArr   = replicate (shape arr) $ unit 1
     zerosArr  = replicate (shape arr) $ unit 0
-    zerosArr' = replicate n $ unit 0
+    zerosArr' = replicate nSh $ unit 0
 
 -- |Segmented version of 'scanl\''.
 --
@@ -170,11 +196,11 @@ scanlSeg' f e arr seg = (scans, sums)
     scans      = scanl1Seg f idInjArr seg
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) headFlags $ zip idsArr arrShifted
 
-    headFlags  = permute (+) zerosArr (\ix -> segOffsets ! ix)
-               $ replicate (shape seg) $ unit (constant (1 :: Int))
+    headFlags  = permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix)
+               $ replicate (shape seg) $ unit (1 :: Exp Int)
     segOffsets = Prelude.fst $ scanl' (+) 0 seg
 
-    arrShifted = backpermute (shape arr) (\ix -> ix ==* 0 ? (ix, ix - 1)) arr
+    arrShifted = backpermute (shape arr) (ilift1 $ \i -> i ==* 0 ? (i, i - 1)) arr
 
     idsArr     = replicate (shape arr) $ unit e
     zerosArr   = replicate (shape arr) $ unit 0
@@ -182,9 +208,9 @@ scanlSeg' f e arr seg = (scans, sums)
     -- Sum of each segment is computed by performing a segmented postscan on
     -- the original vector and taking the tail elements.
     sums       = map (`f` e)
-               $ backpermute (shape seg) (\ix -> sumOffsets ! ix)
+               $ backpermute (shape seg) (\ix -> index1 $ sumOffsets ! ix)
                $ scanl1Seg f arr seg
-    sumOffsets = map (\v -> v - 1) $ scanl1 (+) seg
+    sumOffsets = map (subtract 1) $ scanl1 (+) seg
 
 -- |Segmented version of 'scanl1'.
 --
@@ -229,29 +255,29 @@ scanrSeg f e arr seg = scans
     scans      = scanr1Seg f idInjArr seg'
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) tailFlags $ zip idsArr arrShifted
 
-    tailFlags  = permute (+) zerosArr' (\ix -> (segOffsets' ! ix) - 1)
+    tailFlags  = permute (+) zerosArr' (\ix -> index1 $ (segOffsets' ! ix) - 1)
                $ replicate (shape seg) $ unit 1
 
-    arrShifted = backpermute n (\ix -> shiftCoords ! ix) arr
+    arrShifted = backpermute nSh (\ix -> index1 $ shiftCoords ! ix) arr
 
-    idsArr     = replicate n $ unit e
+    idsArr     = replicate nSh $ unit e
 
     --
-    shiftCoords = permute (+) zerosArr' (\ix -> ix + (offsetArr ! ix)) coords
+    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1 i)) coords
     coords      = Prelude.fst $ scanl' (+) 0 onesArr
 
-    offsetArr   = scanl1 (max) $ permute (+) zerosArr (\ix -> segOffsets ! ix) segIxs
+    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix) segIxs
     segIxs      = Prelude.fst $ scanl' (+) 0 $ replicate (shape seg) $ unit 1
 
     segOffsets' = scanl1 (+) seg'
     segOffsets  = Prelude.fst $ scanl' (+) 0 seg
 
     --
-    n         = (shape arr) + (shape seg)
+    nSh       = index1 $ size arr + size seg
     seg'      = map (+ 1) seg
     onesArr   = replicate (shape arr) $ unit 1
     zerosArr  = replicate (shape arr) $ unit 0
-    zerosArr' = replicate n $ unit 0
+    zerosArr' = replicate nSh $ unit 0
 
 -- |Segmented version of 'scanrSeg\''.
 --
@@ -267,17 +293,17 @@ scanrSeg' f e arr seg = (scans, sums)
     scans      = scanr1Seg f idInjArr seg
     idInjArr   = zipWith (\t x -> t ==* 1 ? (fst x, snd x)) tailFlags $ zip idsArr arrShifted
 
-    tailFlags  = permute (+) zerosArr (\ix -> (segOffsets ! ix) - 1)
-               $ replicate (shape seg) $ unit (constant (1 :: Int))
+    tailFlags  = permute (+) zerosArr (\ix -> index1 $ (segOffsets ! ix) - 1)
+               $ replicate (shape seg) $ unit (1 :: Exp Int)
     segOffsets = scanl1 (+) seg
 
-    arrShifted = backpermute (shape arr) (\ix -> ix ==* ((shape arr) - 1) ? (ix, ix + 1)) arr
+    arrShifted = backpermute (shape arr) (ilift1 $ \i -> i ==* (size arr - 1) ? (i, i + 1)) arr
 
     idsArr     = replicate (shape arr) $ unit e
     zerosArr   = replicate (shape arr) $ unit 0
 
     --
-    sums       = map (`f` e) $  backpermute (shape seg) (\ix -> sumOffsets ! ix)
+    sums       = map (`f` e) $  backpermute (shape seg) (\ix -> index1 $ sumOffsets ! ix)
                $ scanr1Seg f arr seg
     sumOffsets = Prelude.fst $ scanl' (+) 0 seg
 
@@ -317,22 +343,20 @@ postscanrSeg f e arr seg = map (`f` e) $ scanr1Seg f arr seg
 -- |Compute head flags vector from segment vector for left-scans.
 --
 mkHeadFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
-mkHeadFlags seg = permute (\_ _ -> 1) zerosArr (\ix -> segOffsets ! ix) segOffsets
+mkHeadFlags seg = permute (\_ _ -> 1) zerosArr (\ix -> index1 (segOffsets ! ix)) segOffsets
   where
     (segOffsets, len) = scanl' (+) 0 seg
-    zerosArr          = replicate (len ! (constant ())) $ unit 0
-
+    zerosArr          = replicate (index1 $ the len) $ unit 0
 
 -- |Compute tail flags vector from segment vector for right-scans.
 --
 mkTailFlags :: Acc (Array DIM1 Int) -> Acc (Array DIM1 Int)
 mkTailFlags seg
-  = permute (\_ _ -> 1) zerosArr (\ix -> (segOffsets ! ix) - 1) segOffsets
+  = permute (\_ _ -> 1) zerosArr (ilift1 $ \i -> (segOffsets ! index1 i) - 1) segOffsets
   where
     segOffsets = scanl1 (+) seg
-    len        = segOffsets ! ((shape seg) - 1)
-    zerosArr   = replicate len $ unit 0
-
+    len        = segOffsets ! index1 (size seg - 1)
+    zerosArr   = replicate (index1 len) $ unit 0
 
 -- |Construct a segmented version of apply from a non-segmented version. The segmented apply
 -- operates on a head-flag value tuple.

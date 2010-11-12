@@ -62,6 +62,8 @@ accType (Map _ _)             = elemType (undefined::e)
 accType (ZipWith _ _ _)       = elemType (undefined::e)
 accType (Fold _ _ acc)        = accType acc
 accType (FoldSeg _ _ acc _)   = accType acc
+accType (Fold1 _ acc)         = accType acc
+accType (Fold1Seg _ acc _)    = accType acc
 accType (Scanl _ _ acc)       = accType acc
 accType (Scanl1 _ acc)        = accType acc
 accType (Scanr _ _ acc)       = accType acc
@@ -94,11 +96,16 @@ expType (Var _)             = elemType (undefined::t)
 expType (Const _)           = elemType (undefined::t)
 expType (Tuple _)           = elemType (undefined::t)
 expType (Prj idx _)         = tupleIdxType idx
+expType IndexNil            = elemType (undefined::t)
+expType (IndexCons _ _)     = elemType (undefined::t)
+expType (IndexHead _)       = elemType (undefined::t)
+expType (IndexTail _)       = elemType (undefined::t)
 expType (Cond _ t _)        = expType t
 expType (PrimConst _)       = elemType (undefined::t)
 expType (PrimApp _ _)       = elemType (undefined::t)
 expType (IndexScalar acc _) = accType acc
 expType (Shape _)           = elemType (undefined::t)
+expType (Size _)            = elemType (undefined::t)
 
 -- |Reify the result type of a tuple projection.
 --

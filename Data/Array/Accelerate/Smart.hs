@@ -1,5 +1,6 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RankNTypes #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, PatternGuards #-}
 -- |
 -- Module      : Data.Array.Accelerate.Smart
@@ -123,14 +124,23 @@ data PreAcc acc a where
   Fold        :: (Ix dim, Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> acc (Array dim e)
-              -> PreAcc acc (Scalar e)
-  FoldSeg     :: Elem e
+              -> acc (Array (dim:.Int) e)
+              -> PreAcc acc (Array dim e)
+  Fold1       :: (Ix dim, Elem e)
+              => (Exp e -> Exp e -> Exp e)
+              -> acc (Array (dim:.Int) e)
+              -> PreAcc acc (Array dim e)
+  FoldSeg     :: (Ix dim, Elem e)
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
-              -> acc (Vector e)
+              -> acc (Array (dim:.Int) e)
               -> acc Segments
-              -> PreAcc acc (Vector e)
+              -> PreAcc acc (Array (dim:.Int) e)
+  Fold1Seg    :: (Ix dim, Elem e)
+              => (Exp e -> Exp e -> Exp e)
+              -> acc (Array (dim:.Int) e)
+              -> acc Segments
+              -> PreAcc acc (Array (dim:.Int) e)
   Scanl       :: Elem e
               => (Exp e -> Exp e -> Exp e)
               -> Exp e
@@ -216,7 +226,8 @@ convertSharingAcc alyt = convert alyt []
     -- The sharing environment 'env' keeps track of all currently bound sharing variables,
     -- keeping them in reverse chronological order (outermost variable is at the end of the list)
     --
-    convert :: Arrays a => Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
+    convert :: Arrays a 
+            => Layout aenv aenv -> [StableSharingAcc] -> SharingAcc a -> AST.OpenAcc aenv a
     convert alyt env (VarSharing sa)
       | Just i <- findIndex (matchStableAcc sa) env 
       = AST.Avar (prjIdx i alyt)
@@ -248,9 +259,13 @@ convertSharingAcc alyt = convert alyt []
             -> AST.ZipWith (convertFun2 alyt f) (convert alyt env acc1) (convert alyt env acc2)
           Fold f e acc
             -> AST.Fold (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
+          Fold1 f acc
+            -> AST.Fold1 (convertFun2 alyt f) (convert alyt env acc)
           FoldSeg f e acc1 acc2
             -> AST.FoldSeg (convertFun2 alyt f) (convertExp alyt e) 
                            (convert alyt env acc1) (convert alyt env acc2)
+          Fold1Seg f acc1 acc2
+            -> AST.Fold1Seg (convertFun2 alyt f) (convert alyt env acc1) (convert alyt env acc2)
           Scanl f e acc
             -> AST.Scanl (convertFun2 alyt f) (convertExp alyt e) (convert alyt env acc)
           Scanl' f e acc
@@ -399,7 +414,9 @@ traverseAcc process combine acc@(Acc pacc)
         Map _ acc                -> trav sa acc
         ZipWith _ acc1 acc2      -> trav2 sa acc1 acc2
         Fold _ _ acc             -> trav sa acc
+        Fold1 _ acc              -> trav sa acc
         FoldSeg _ _ acc1 acc2    -> trav2 sa acc1 acc2
+        Fold1Seg _ acc1 acc2     -> trav2 sa acc1 acc2
         Scanl _ _ acc            -> trav sa acc
         Scanl' _ _ acc           -> trav sa acc
         Scanl1 _ acc             -> trav sa acc
@@ -468,7 +485,9 @@ determineScopes occMap acc
           Map f acc                       -> trav (Map f) acc
           ZipWith f acc1 acc2             -> trav2 (ZipWith f) acc1 acc2
           Fold f z acc                    -> trav (Fold f z) acc
+          Fold1 f acc                     -> trav (Fold1 f) acc
           FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
+          Fold1Seg f acc1 acc2            -> trav2 (Fold1Seg f) acc1 acc2
           Scanl f z acc                   -> trav (Scanl f z) acc
           Scanl' f z acc                  -> trav (Scanl' f z) acc
           Scanl1 f acc                    -> trav (Scanl1 f) acc
@@ -600,7 +619,9 @@ determineScopes occMap acc
                 Map f acc                       -> trav (Map f) acc
                 ZipWith f acc1 acc2             -> trav2 (ZipWith f) acc1 acc2
                 Fold f z acc                    -> trav (Fold f z) acc
+                Fold1 f acc                     -> trav (Fold1 f) acc
                 FoldSeg f z acc1 acc2           -> trav2 (FoldSeg f z) acc1 acc2
+                Fold1Seg f acc1 acc2            -> trav2 (Fold1Seg f) acc1 acc2
                 Scanl f z acc                   -> trav (Scanl f z) acc
                 Scanl' f z acc                  -> trav (Scanl' f z) acc
                 Scanl1 f acc                    -> trav (Scanl1 f) acc
@@ -666,7 +687,14 @@ data Exp t where
               => Tuple.Tuple Exp (TupleRepr t) -> Exp t
   Prj         :: (Elem t, IsTuple t)
               => TupleIdx (TupleRepr t) e     
-              -> Exp t                         -> Exp e              
+              -> Exp t                         -> Exp e
+  IndexNil    ::                                  Exp Z
+  IndexCons   :: Ix sh
+              => Exp sh -> Exp Int             -> Exp (sh:.Int)
+  IndexHead   :: Ix sh
+              => Exp (sh:.Int)                 -> Exp Int
+  IndexTail   :: Ix sh
+              => Exp (sh:.Int)                 -> Exp sh
   Cond        :: Exp Bool -> Exp t -> Exp t    -> Exp t
   PrimConst   :: Elem t                       
               => PrimConst t                   -> Exp t
@@ -676,6 +704,8 @@ data Exp t where
               => Acc (Array dim t) -> Exp dim  -> Exp t
   Shape       :: (Ix dim, Elem e)
               => Acc (Array dim e)             -> Exp dim
+  Size        :: (Ix dim, Elem e)
+              => Acc (Array dim e)             -> Exp Int
 
 
 -- |Conversion from HOAS to de Bruijn expression AST
@@ -719,11 +749,16 @@ convertOpenExp lyt alyt = cvt
     cvt (Const v)           = AST.Const (fromElem v)
     cvt (Tuple tup)         = AST.Tuple (convertTuple lyt alyt tup)
     cvt (Prj idx e)         = AST.Prj idx (cvt e)
+    cvt IndexNil            = AST.IndexNil
+    cvt (IndexCons ix i)    = AST.IndexCons (cvt ix) (cvt i)
+    cvt (IndexHead i)       = AST.IndexHead (cvt i)
+    cvt (IndexTail ix)      = AST.IndexTail (cvt ix)
     cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)       = AST.PrimConst c
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
     cvt (IndexScalar a e)   = AST.IndexScalar (convertOpenAcc alyt a) (cvt e)
     cvt (Shape a)           = AST.Shape (convertOpenAcc alyt a)
+    cvt (Size a)            = AST.Size (convertOpenAcc alyt a)
 
 -- |Convert a tuple expression
 --
@@ -870,151 +905,75 @@ class (Elem (StencilRepr dim stencil), AST.Stencil dim a (StencilRepr dim stenci
   => Stencil dim a stencil where
   type StencilRepr dim stencil :: *
   stencilPrj :: dim{-dummy-} -> a{-dummy-} -> Exp (StencilRepr dim stencil) -> stencil
+
+-- DIM0
+instance (Elem res, IsTuple res) => Stencil Z res (Exp res) where
+  type StencilRepr Z (Exp res) = res
+  stencilPrj _ _ res = res
+
+-- DIM(n+1)
+instance (Stencil sh a row2, 
+          Stencil sh a row1,
+          Stencil sh a row0) => Stencil (sh:.Int) a (row2, row1, row0) where
+  type StencilRepr (sh:.Int) (row2, row1, row0) 
+    = (StencilRepr sh row2, StencilRepr sh row1, StencilRepr sh row0)
+  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix2 s), 
+                      stencilPrj (undefined::sh) a (Prj tix1 s), 
+                      stencilPrj (undefined::sh) a (Prj tix0 s))
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5) where
+  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5) 
+    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
+       StencilRepr sh row5)
+  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix4 s), 
+                      stencilPrj (undefined::sh) a (Prj tix3 s), 
+                      stencilPrj (undefined::sh) a (Prj tix2 s), 
+                      stencilPrj (undefined::sh) a (Prj tix1 s), 
+                      stencilPrj (undefined::sh) a (Prj tix0 s))
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5,
+          Stencil sh a row6,
+          Stencil sh a row7) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5, row6, row7) 
+    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
+       StencilRepr sh row5, StencilRepr sh row6, StencilRepr sh row7)
+  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix6 s), 
+                      stencilPrj (undefined::sh) a (Prj tix5 s), 
+                      stencilPrj (undefined::sh) a (Prj tix4 s), 
+                      stencilPrj (undefined::sh) a (Prj tix3 s), 
+                      stencilPrj (undefined::sh) a (Prj tix2 s), 
+                      stencilPrj (undefined::sh) a (Prj tix1 s), 
+                      stencilPrj (undefined::sh) a (Prj tix0 s))
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5,
+          Stencil sh a row6,
+          Stencil sh a row7,
+          Stencil sh a row8,
+          Stencil sh a row9) 
+  => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
+    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
+       StencilRepr sh row5, StencilRepr sh row6, StencilRepr sh row7, StencilRepr sh row8,
+       StencilRepr sh row9)
+  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix8 s), 
+                      stencilPrj (undefined::sh) a (Prj tix7 s), 
+                      stencilPrj (undefined::sh) a (Prj tix6 s), 
+                      stencilPrj (undefined::sh) a (Prj tix5 s), 
+                      stencilPrj (undefined::sh) a (Prj tix4 s), 
+                      stencilPrj (undefined::sh) a (Prj tix3 s), 
+                      stencilPrj (undefined::sh) a (Prj tix2 s), 
+                      stencilPrj (undefined::sh) a (Prj tix1 s), 
+                      stencilPrj (undefined::sh) a (Prj tix0 s))
   
--- DIM1
-instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a) where
-  type StencilRepr DIM1 (Exp a, Exp a, Exp a) = (a, a, a)
-  stencilPrj _ _ s = (Prj tix2 s, Prj tix1 s, Prj tix0 s)
-instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a) where
-  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a) = (a, a, a, a, a)
-  stencilPrj _ _ s = (Prj tix4 s, Prj tix3 s, Prj tix2 s, Prj tix1 s, Prj tix0 s)
-instance Elem a => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
-  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) = (a, a, a, a, a, a, a)
-  stencilPrj _ _ s = (Prj tix6 s, Prj tix5 s, Prj tix4 s, Prj tix3 s, Prj tix2 s, Prj tix1 s, 
-                      Prj tix0 s)
-instance Elem a 
-  => Stencil DIM1 a (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) where
-  type StencilRepr DIM1 (Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a, Exp a) 
-    = (a, a, a, a, a, a, a, a, a)
-  stencilPrj _ _ s = (Prj tix8 s, Prj tix7 s, Prj tix6 s, Prj tix5 s, Prj tix4 s, Prj tix3 s,
-                      Prj tix2 s, Prj tix1 s, Prj tix0 s)
-
--- DIM2
-instance (Stencil DIM1 a row2, 
-          Stencil DIM1 a row1,
-          Stencil DIM1 a row0) => Stencil DIM2 a (row2, row1, row0) where
-  type StencilRepr DIM2 (row2, row1, row0) 
-    = (StencilRepr DIM1 row2, StencilRepr DIM1 row1, StencilRepr DIM1 row0)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5) => Stencil DIM2 a (row1, row2, row3, row4, row5) where
-  type StencilRepr DIM2 (row1, row2, row3, row4, row5) 
-    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
-       StencilRepr DIM1 row5)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5,
-          Stencil DIM1 a row6,
-          Stencil DIM1 a row7) => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7) where
-  type StencilRepr DIM2 (row1, row2, row3, row4, row5, row6, row7) 
-    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
-       StencilRepr DIM1 row5, StencilRepr DIM1 row6, StencilRepr DIM1 row7)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix6 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix5 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5,
-          Stencil DIM1 a row6,
-          Stencil DIM1 a row7,
-          Stencil DIM1 a row8,
-          Stencil DIM1 a row9) 
-  => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  type StencilRepr DIM2 (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
-    = (StencilRepr DIM1 row1, StencilRepr DIM1 row2, StencilRepr DIM1 row3, StencilRepr DIM1 row4,
-       StencilRepr DIM1 row5, StencilRepr DIM1 row6, StencilRepr DIM1 row7, StencilRepr DIM1 row8,
-       StencilRepr DIM1 row9)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM1) a (Prj tix8 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix7 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix6 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix5 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM1) a (Prj tix0 s))
-
--- DIM3
-instance (Stencil DIM2 a row1, 
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3) => Stencil DIM3 a (row1, row2, row3) where
-  type StencilRepr DIM3 (row1, row2, row3) 
-    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5) => Stencil DIM3 a (row1, row2, row3, row4, row5) where
-  type StencilRepr DIM3 (row1, row2, row3, row4, row5) 
-    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
-       StencilRepr DIM2 row5)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5,
-          Stencil DIM2 a row6,
-          Stencil DIM2 a row7) => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7) where
-  type StencilRepr DIM3 (row1, row2, row3, row4, row5, row6, row7) 
-    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
-       StencilRepr DIM2 row5, StencilRepr DIM2 row6, StencilRepr DIM2 row7)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix6 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix5 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5,
-          Stencil DIM2 a row6,
-          Stencil DIM2 a row7,
-          Stencil DIM2 a row8,
-          Stencil DIM2 a row9) 
-  => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  type StencilRepr DIM3 (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
-    = (StencilRepr DIM2 row1, StencilRepr DIM2 row2, StencilRepr DIM2 row3, StencilRepr DIM2 row4,
-       StencilRepr DIM2 row5, StencilRepr DIM2 row6, StencilRepr DIM2 row7, StencilRepr DIM2 row8,
-       StencilRepr DIM2 row9)
-  stencilPrj _ a s = (stencilPrj (undefined::DIM2) a (Prj tix8 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix7 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix6 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix5 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix4 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix3 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix2 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix1 s), 
-                      stencilPrj (undefined::DIM2) a (Prj tix0 s))
-
 -- Auxilliary tuple index constants
 --
 tix0 :: Elem s => TupleIdx (t, s) s

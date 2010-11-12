@@ -1,5 +1,6 @@
-{-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE CPP, ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving, TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -15,7 +16,7 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array representation
   Array(..), Scalar, Vector, Segments,
 
-  -- * Class of element types and of array shapes
+  -- * Class of supported surface element types and their mapping to representation types
   Elem(..), ElemRepr, ElemRepr', FromShapeRepr,
   
   -- * Derived functions
@@ -25,7 +26,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  ShapeBase, Shape, Ix(..), All(..), SliceIx(..), convertSliceIndex,
+  Z(..), (:.)(..), All(..), Any(..), Shape, Ix(..), SliceIx(..), convertSliceIndex,
   
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, fromIArray, toIArray, fromList, toList,
@@ -48,17 +49,49 @@ import qualified Data.Array.Accelerate.CUDA.Array.Data      as CUDA
 #endif
 
 
+-- |Surface types representing array indices and slices
+-- ----------------------------------------------------
+
+-- |Array indices are snoc type lists
+--
+-- For example, the type of a rank-2 array index is 'Z :.Int :. Int'.
+
+-- |Rank-0 index
+--
+data Z = Z
+  deriving (Typeable, Show)
+
+-- |Increase an index rank by one dimension
+--
+infixl 3 :.
+data tail :. head = tail :. head
+  deriving (Typeable, Show)
+
+-- |Marker for entire dimensions in slice descriptors
+--
+data All = All 
+  deriving (Typeable, Show)
+
+-- |Marker for arbitrary shapes in slice descriptors
+--
+data Any sh = Any
+  deriving (Typeable, Show)
+
+
 -- |Representation change for array element types
 -- ----------------------------------------------
 
 -- |Type representation mapping
 --
--- The idea is to use '()' and '(,)' as type-level nil and snoc to construct 
+-- We represent tuples by using '()' and '(,)' as type-level nil and snoc to construct 
 -- snoc-lists of types.
 --
 type family ElemRepr a :: *
 type instance ElemRepr () = ()
+type instance ElemRepr Z = ()
+type instance ElemRepr (t:.h) = (ElemRepr t, ElemRepr' h)
 type instance ElemRepr All = ((), ())
+type instance ElemRepr (Any sh) = ()
 type instance ElemRepr Int = ((), Int)
 type instance ElemRepr Int8 = ((), Int8)
 type instance ElemRepr Int16 = ((), Int16)
@@ -101,7 +134,10 @@ type instance ElemRepr (a, b, c, d, e, f, g, h, i)
 --
 type family ElemRepr' a :: *
 type instance ElemRepr' () = ()
+type instance ElemRepr' Z = ()
+type instance ElemRepr' (t:.h) = (ElemRepr t, ElemRepr' h)
 type instance ElemRepr' All = ()
+type instance ElemRepr' (Any sh) = ()
 type instance ElemRepr' Int = Int
 type instance ElemRepr' Int8 = Int8
 type instance ElemRepr' Int16 = Int16
@@ -143,10 +179,6 @@ type instance ElemRepr' (a, b, c, d, e, f, g, h, i)
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
--- |Identifier for entire dimensions in slice descriptors
---
-data All = All deriving (Typeable, Show)
-
 -- |Class that characterises the types of values that can be array elements.
 --
 class (Show a, Typeable a, 
@@ -173,6 +205,24 @@ instance Elem () where
   fromElem' = id
   toElem'   = id
 
+instance Elem Z where
+  elemType _ = UnitTuple
+  fromElem Z = ()
+  toElem ()  = Z
+
+  elemType' _ = UnitTuple
+  fromElem' Z = ()
+  toElem' ()  = Z
+
+instance (Elem t, Elem h) => Elem (t:.h) where
+  elemType (_::(t:.h)) = PairTuple (elemType (undefined :: t)) (elemType' (undefined :: h))
+  fromElem (t:.h)      = (fromElem t, fromElem' h)
+  toElem (t, h)        = toElem t :. toElem' h
+
+  elemType' (_::(t:.h)) = PairTuple (elemType (undefined :: t)) (elemType' (undefined :: h))
+  fromElem' (t:.h)      = (fromElem t, fromElem' h)
+  toElem' (t, h)        = toElem t :. toElem' h
+
 instance Elem All where
   elemType _      = PairTuple UnitTuple UnitTuple
   fromElem All    = ((), ())
@@ -181,6 +231,15 @@ instance Elem All where
   elemType' _      = UnitTuple
   fromElem' All    = ()
   toElem' ()       = All
+
+instance Elem sh => Elem (Any sh) where
+  elemType (_::Any sh) = UnitTuple
+  fromElem Any         = ()
+  toElem ()            = Any
+
+  elemType' _   = UnitTuple
+  fromElem' Any = ()
+  toElem' ()    = Any
 
 instance Elem Int where
   elemType       = singletonScalarType
@@ -571,10 +630,6 @@ sinkFromElem2 f = \x y -> fromElem $ f (toElem x) (toElem y)
 "fromElem/toElem" forall e.
   fromElem (toElem e) = e
 
--- FIXME: Won't type like that (it's ambiguous due to the ElemRepr family):  
--- "toElem/fromElem" forall e.
---   toElem (fromElem e) = e
-  
   #-}
 
 
@@ -590,7 +645,7 @@ sinkFromElem2 f = \x y -> fromElem $ f (toElem x) (toElem y)
 data Array dim e where
   Array :: (Ix dim, Elem e) 
         => ElemRepr dim               -- extent of dimensions = shape
-        -> ArrayData (ElemRepr e)     -- data, same layout as in
+        -> ArrayData (ElemRepr e)     -- array payload
         -> Array dim e
 
 deriving instance Typeable2 Array 
@@ -609,118 +664,79 @@ type Segments = Vector Int
 
 -- Shorthand for common shape types
 --
-type DIM0 = ()
-type DIM1 = (Int)
-type DIM2 = (Int, Int)
-type DIM3 = (Int, Int, Int)
-type DIM4 = (Int, Int, Int, Int)
-type DIM5 = (Int, Int, Int, Int, Int)
-type DIM6 = (Int, Int, Int, Int, Int, Int)
-type DIM7 = (Int, Int, Int, Int, Int, Int, Int)
-type DIM8 = (Int, Int, Int, Int, Int, Int, Int, Int)
-type DIM9 = (Int, Int, Int, Int, Int, Int, Int, Int, Int)
+type DIM0 = Z
+type DIM1 = DIM0:.Int
+type DIM2 = DIM1:.Int
+type DIM3 = DIM2:.Int
+type DIM4 = DIM3:.Int
+type DIM5 = DIM4:.Int
+type DIM6 = DIM5:.Int
+type DIM7 = DIM6:.Int
+type DIM8 = DIM7:.Int
+type DIM9 = DIM8:.Int
 
 -- Shape constraints and indexing
 -- 
 
--- Shape elements
+-- Shapes
 --
-class Elem shb => ShapeBase shb
-instance ShapeBase Int
-instance ShapeBase All
-
 class Elem sh => Shape sh
 
-instance Shape ()
-instance Shape Int
-instance Shape All
-instance (ShapeBase a, ShapeBase b) => Shape (a, b)
-instance (ShapeBase a, ShapeBase b, ShapeBase c) => Shape (a, b, c)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d) 
-  => Shape (a, b, c, d)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e) 
-  => Shape (a, b, c, d, e)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f) 
-  => Shape (a, b, c, d, e, f)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
-          ShapeBase g) 
-  => Shape (a, b, c, d, e, f, g)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
-          ShapeBase g, ShapeBase h) 
-  => Shape (a, b, c, d, e, f, g, h)
-instance (ShapeBase a, ShapeBase b, ShapeBase c, ShapeBase d, ShapeBase e, ShapeBase f, 
-          ShapeBase g, ShapeBase h, ShapeBase i) 
-  => Shape (a, b, c, d, e, f, g, h, i)
-
-type family FromShapeBase shb :: *
-type instance FromShapeBase Int = Int
-type instance FromShapeBase ()  = All
+instance Shape Z
+instance Shape sh => Shape (sh:.Int)
+instance Shape sh => Shape (sh:.All)
+instance Shape sh => Shape (Any sh)
 
 type family FromShapeRepr shr :: *
-type instance FromShapeRepr ()           = ()
-type instance FromShapeRepr ((), a)      = FromShapeBase a
-type instance FromShapeRepr (((), a), b) = (FromShapeBase a, FromShapeBase b)
-type instance FromShapeRepr ((((), a), b), c) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c)
-type instance FromShapeRepr (((((), a), b), c), d) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d)
-type instance FromShapeRepr ((((((), a), b), c), d), e) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
-     FromShapeBase e)
-type instance FromShapeRepr (((((((), a), b), c), d), e), f) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
-     FromShapeBase e, FromShapeBase f)
-type instance FromShapeRepr ((((((((), a), b), c), d), e), f), g) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
-     FromShapeBase e, FromShapeBase f, FromShapeBase g)
-type instance FromShapeRepr (((((((((), a), b), c), d), e), f), g), h) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
-     FromShapeBase e, FromShapeBase f, FromShapeBase g, FromShapeBase h)
-type instance FromShapeRepr ((((((((((), a), b), c), d), e), f), g), h), i) 
-  = (FromShapeBase a, FromShapeBase b, FromShapeBase c, FromShapeBase d, 
-     FromShapeBase e, FromShapeBase f, FromShapeBase g, FromShapeBase h,
-     FromShapeBase i)
+type instance FromShapeRepr ()        = Z
+type instance FromShapeRepr (sh, Int) = FromShapeRepr sh :. Int
+type instance FromShapeRepr (sh, All) = FromShapeRepr sh :. All
+-- we cannot recover 'Any'
 
 -- |Shapes and indices of multi-dimensional arrays
 --
 class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
 
-  -- |Number of dimensions of a /shape/ or /index/ (>= 0)
+  -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   dim    :: ix -> Int
-
-  -- Total number of elements in an array of the given /shape/
+  
+  -- Total number of elements in an array of the given /shape/.
   size   :: ix -> Int
 
-  -- |Magic value identifying elements ignored in 'permute'
+  -- |Magic value identifying elements ignored in 'permute'.
   ignore :: ix
   
   -- |Map a multi-dimensional index into one in a linear, row-major 
   -- representation of the array (first argument is the /shape/, second 
-  -- argument is the index)
+  -- argument is the index).
   index  :: ix -> ix -> Int
 
-  -- |Apply a boundary condition to an index
+  -- |Apply a boundary condition to an index.
   bound  :: ix -> ix -> Boundary a -> Either a ix
 
   -- |Iterate through the entire shape, applying the function; third argument
   -- combines results and fourth is returned in case of an empty iteration
-  -- space; the index space is traversed in row-major order
+  -- space; the index space is traversed in row-major order.
   iter  :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
 
-  -- |Convert a minpoint-maxpoint index into a /shape/
+  -- |Convert a minpoint-maxpoint index into a /shape/.
   rangeToShape ::  (ix, ix) -> ix
   
-  -- |Convert a /shape/ into a minpoint-maxpoint index
+  -- |Convert a /shape/ into a minpoint-maxpoint index.
   shapeToRange ::  ix -> (ix, ix)
 
-  -- |Convert a shape to a list of dimensions
+  -- |Convert a shape to a list of dimensions.
   shapeToList :: ix -> [Int]
 
-  -- |Convert a list of dimensions into a shape
+  -- |Convert a list of dimensions into a shape.
   listToShape :: [Int] -> ix
+  
 
   dim              = Repr.dim . fromElem
   size             = Repr.size . fromElem
+  -- (#) must be individually defined, as it only hold for all instances *except* the one with the
+  -- largest arity
+
   ignore           = toElem Repr.ignore
   index sh ix      = Repr.index (fromElem sh) (fromElem ix)
   bound sh ix bndy = case Repr.bound (fromElem sh) (fromElem ix) bndy of
@@ -739,18 +755,9 @@ class (Shape ix, Repr.Ix (ElemRepr ix)) => Ix ix where
   shapeToList = Repr.shapeToList . fromElem
   listToShape = toElem . Repr.listToShape
 
-instance Ix ()
-instance Ix (Int)
-instance Ix (Int, Int)
-instance Ix (Int, Int, Int)
-instance Ix (Int, Int, Int, Int)
-instance Ix (Int, Int, Int, Int, Int)
-instance Ix (Int, Int, Int, Int, Int, Int)
-instance Ix (Int, Int, Int, Int, Int, Int, Int)
-instance Ix (Int, Int, Int, Int, Int, Int, Int, Int)
-instance Ix (Int, Int, Int, Int, Int, Int, Int, Int, Int)
-
-
+instance Ix Z
+instance Ix sh => Ix (sh:.Int)
+  
 -- |Slices -aka generalised indices- as n-tuples and mappings of slice
 -- indicies to slices, co-slices, and slice dimensions
 --
@@ -767,15 +774,39 @@ class (Shape sl,
                                       (Repr.CoSlice (ElemRepr  sl))
                                       (Repr.SliceDim (ElemRepr sl))
 
-instance (Shape sl, 
-          Repr.SliceIx (ElemRepr sl), 
-          Ix (Slice sl), Ix (CoSlice sl), Ix (SliceDim sl), 
-          SliceIxConv sl)
-  => SliceIx sl where
-  type Slice    sl = FromShapeRepr (Repr.Slice    (ElemRepr sl))
-  type CoSlice  sl = FromShapeRepr (Repr.CoSlice  (ElemRepr sl))
-  type SliceDim sl = FromShapeRepr (Repr.SliceDim (ElemRepr sl))
-  sliceIndex = Repr.sliceIndex . fromElem
+-- instance (Shape sl, 
+--           Repr.SliceIx (ElemRepr sl), 
+--           Ix (Slice sl), Ix (CoSlice sl), Ix (SliceDim sl), 
+--           SliceIxConv sl)
+--   => SliceIx sl where
+--   type Slice    sl = FromShapeRepr (Repr.Slice    (ElemRepr sl))
+--   type CoSlice  sl = FromShapeRepr (Repr.CoSlice  (ElemRepr sl))
+--   type SliceDim sl = FromShapeRepr (Repr.SliceDim (ElemRepr sl))
+--   sliceIndex = Repr.sliceIndex . fromElem
+
+instance SliceIx Z where
+  type Slice    Z = Z
+  type CoSlice  Z = Z
+  type SliceDim Z = Z
+  sliceIndex _ = Repr.SliceNil
+
+instance SliceIx sl => SliceIx (sl:.All) where
+  type Slice    (sl:.All) = Slice sl :. Int
+  type CoSlice  (sl:.All) = CoSlice sl
+  type SliceDim (sl:.All) = SliceDim sl :. Int
+  sliceIndex _ = Repr.SliceAll (sliceIndex (undefined::sl))
+
+instance SliceIx sl => SliceIx (sl:.Int) where
+  type Slice    (sl:.Int) = Slice sl
+  type CoSlice  (sl:.Int) = CoSlice sl :. Int
+  type SliceDim (sl:.Int) = SliceDim sl :. Int
+  sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined::sl))
+
+instance Ix sh => SliceIx (Any sh) where
+  type Slice    (Any sh) = sh
+  type CoSlice  (Any sh) = Z
+  type SliceDim (Any sh) = sh
+  sliceIndex _ = Repr.SliceNil
 
 class SliceIxConv slix where
   convertSliceIndex :: slix {- dummy to fix the type variable -}

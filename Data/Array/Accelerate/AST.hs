@@ -1,5 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
-{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 
 -- Module      : Data.Array.Accelerate.AST
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -224,7 +225,6 @@ data OpenAcc aenv a where
               => Fun     aenv (e -> e') 
               -> OpenAcc aenv (Array dim e) 
               -> OpenAcc aenv (Array dim e')
-    -- FIXME: generalise to mapFold
 
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
@@ -235,23 +235,31 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim e2)
               -> OpenAcc aenv (Array dim e3)
 
-  -- Fold of an array with a given *associative* function and its neutral
-  -- element
-  Fold        :: Fun     aenv (e -> e -> e)          -- combination function
+  -- Fold along the innermost dimension of an array with a given /associative/ function.
+  Fold        :: Ix dim
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- default value
-              -> OpenAcc aenv (Array dim e)          -- folded array
-              -> OpenAcc aenv (Scalar e)
-    -- FIXME: generalise to Gabi's mapFold
+              -> OpenAcc aenv (Array (dim:.Int) e)   -- folded array
+              -> OpenAcc aenv (Array dim e)
 
-  -- Segmented fold of an array with a given *associative* function and its
-  -- neutral element
-  FoldSeg     :: Fun     aenv (e -> e -> e)          -- combination function
-              -> Exp     aenv e                      -- default value
-              -> OpenAcc aenv (Vector e)             -- folded array
-              -> OpenAcc aenv Segments               -- segment descriptor
-              -> OpenAcc aenv (Vector e)
-    -- FIXME: Can we generalise this to multi-dimensional arrays and also
-    --        to Gabi's mapFold
+  -- 'Fold' without a default value
+  Fold1       :: Ix dim
+              => Fun     aenv (e -> e -> e)          -- combination function
+              -> OpenAcc aenv (Array (dim:.Int) e)   -- folded array
+              -> OpenAcc aenv (Array dim e)
+
+  -- Segmented fold along the innermost dimension of an array with a given /associative/ function
+  FoldSeg     :: Fun     aenv (e -> e -> e)           -- combination function
+              -> Exp     aenv e                       -- default value
+              -> OpenAcc aenv (Array (dim:.Int) e)    -- folded array
+              -> OpenAcc aenv Segments                -- segment descriptor
+              -> OpenAcc aenv (Array (dim:.Int) e)
+
+  -- 'FoldSeg' without a default value
+  Fold1Seg   :: Fun     aenv (e -> e -> e)            -- combination function
+             -> OpenAcc aenv (Array (dim:.Int) e)     -- folded array
+             -> OpenAcc aenv Segments                 -- segment descriptor
+             -> OpenAcc aenv (Array (dim:.Int) e)
 
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
@@ -260,7 +268,7 @@ data OpenAcc aenv a where
               -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
-    -- FIXME: generalised multi-dimensional scan?  And/or a generalised mapScan?  
+    -- FIXME: Make the scans rank-polymorphic?
   
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
@@ -344,135 +352,68 @@ type Acc a = OpenAcc () a
 class IsTuple stencil => Stencil dim e stencil where
   stencilAccess :: (dim -> e) -> dim -> stencil
 
--- DIM1
-instance Stencil DIM1 a (a, a, a) where
-  stencilAccess rf ix = (rf (ix - 1), rf ix, rf (ix + 1))
-instance Stencil DIM1 a (a, a, a, a, a) where
-  stencilAccess rf ix = (rf (ix - 2), rf (ix - 1), rf ix, rf (ix + 1), rf (ix + 2))
-instance Stencil DIM1 a (a, a, a, a, a, a, a) where
-  stencilAccess rf ix = (rf (ix - 3), rf (ix - 2), rf (ix - 1), rf ix, 
-                         rf (ix + 1), rf (ix + 2), rf (ix + 3))
-instance Stencil DIM1 a (a, a, a, a, a, a, a, a, a) where
-  stencilAccess rf ix = (rf (ix - 4), rf (ix - 3), rf (ix - 2), rf (ix - 1), rf ix, 
-                         rf (ix + 1), rf (ix + 2), rf (ix + 3), rf (ix + 4))
+-- DIM0
+instance IsTuple res => Stencil DIM0 res res where
+  stencilAccess rf Z = rf Z
 
--- DIM2
-instance (Stencil DIM1 a row2, 
-          Stencil DIM1 a row1,
-          Stencil DIM1 a row0) => Stencil DIM2 a (row2, row1, row0) where
-  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 1)) x, 
-                             stencilAccess (rf' y      ) x,
-                             stencilAccess (rf' (y + 1)) x)
+-- DIM(n+1)
+instance (Stencil sh a row2, 
+          Stencil sh a row1,
+          Stencil sh a row0) => Stencil (sh:.Int) a (row2, row1, row0) where
+  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 1)) ix, 
+                              stencilAccess (rf' y      ) ix,
+                              stencilAccess (rf' (y + 1)) ix)
     where
-      rf' y x = rf (x, y)
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5) => Stencil DIM2 a (row1, row2, row3, row4, row5) where
-  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 2)) x, 
-                             stencilAccess (rf' (y - 1)) x, 
-                             stencilAccess (rf' y      ) x,
-                             stencilAccess (rf' (y + 1)) x,
-                             stencilAccess (rf' (y + 2)) x)
+      rf' y ix = rf (ix:.y)
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5) where
+  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 2)) ix, 
+                              stencilAccess (rf' (y - 1)) ix, 
+                              stencilAccess (rf' y      ) ix,
+                              stencilAccess (rf' (y + 1)) ix,
+                              stencilAccess (rf' (y + 2)) ix)
     where
-      rf' y x = rf (x, y)
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5,
-          Stencil DIM1 a row6,
-          Stencil DIM1 a row7) => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7) where
-  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 3)) x, 
-                             stencilAccess (rf' (y - 2)) x, 
-                             stencilAccess (rf' (y - 1)) x, 
-                             stencilAccess (rf' y      ) x,
-                             stencilAccess (rf' (y + 1)) x,
-                             stencilAccess (rf' (y + 2)) x,
-                             stencilAccess (rf' (y + 3)) x)
-    where
-      rf' y x = rf (x, y)
-instance (Stencil DIM1 a row1,
-          Stencil DIM1 a row2,
-          Stencil DIM1 a row3,
-          Stencil DIM1 a row4,
-          Stencil DIM1 a row5,
-          Stencil DIM1 a row6,
-          Stencil DIM1 a row7,
-          Stencil DIM1 a row8,
-          Stencil DIM1 a row9) 
-  => Stencil DIM2 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  stencilAccess rf (x, y) = (stencilAccess (rf' (y - 4)) x, 
-                             stencilAccess (rf' (y - 3)) x, 
-                             stencilAccess (rf' (y - 2)) x, 
-                             stencilAccess (rf' (y - 1)) x, 
-                             stencilAccess (rf' y      ) x,
-                             stencilAccess (rf' (y + 1)) x,
-                             stencilAccess (rf' (y + 2)) x,
-                             stencilAccess (rf' (y + 3)) x,
-                             stencilAccess (rf' (y + 4)) x)
-    where
-      rf' y x = rf (x, y)
-
--- DIM3
-instance (Stencil DIM2 a row1, 
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3) => Stencil DIM3 a (row1, row2, row3) where
-  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 1)) (x, y), 
-                                stencilAccess (rf' z      ) (x, y),
-                                stencilAccess (rf' (z + 1)) (x, y))
-    where
-      rf' z (x, y) = rf (x, y, z)
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5) => Stencil DIM3 a (row1, row2, row3, row4, row5) where
-  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 2)) (x, y), 
-                                stencilAccess (rf' (z - 1)) (x, y), 
-                                stencilAccess (rf' z      ) (x, y),
-                                stencilAccess (rf' (z + 1)) (x, y),
-                                stencilAccess (rf' (z + 2)) (x, y))
-    where
-      rf' z (x, y) = rf (x, y, z)
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5,
-          Stencil DIM2 a row6,
-          Stencil DIM2 a row7) => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7) where
-  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 3)) (x, y), 
-                                stencilAccess (rf' (z - 2)) (x, y), 
-                                stencilAccess (rf' (z - 1)) (x, y), 
-                                stencilAccess (rf' z      ) (x, y),
-                                stencilAccess (rf' (z + 1)) (x, y),
-                                stencilAccess (rf' (z + 2)) (x, y),
-                                stencilAccess (rf' (z + 3)) (x, y))
-    where
-      rf' z (x, y) = rf (x, y, z)
-instance (Stencil DIM2 a row1,
-          Stencil DIM2 a row2,
-          Stencil DIM2 a row3,
-          Stencil DIM2 a row4,
-          Stencil DIM2 a row5,
-          Stencil DIM2 a row6,
-          Stencil DIM2 a row7,
-          Stencil DIM2 a row8,
-          Stencil DIM2 a row9) 
-  => Stencil DIM3 a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  stencilAccess rf (x, y, z) = (stencilAccess (rf' (z - 4)) (x, y), 
-                                stencilAccess (rf' (z - 3)) (x, y), 
-                                stencilAccess (rf' (z - 2)) (x, y), 
-                                stencilAccess (rf' (z - 1)) (x, y), 
-                                stencilAccess (rf' z      ) (x, y),
-                                stencilAccess (rf' (z + 1)) (x, y),
-                                stencilAccess (rf' (z + 2)) (x, y),
-                                stencilAccess (rf' (z + 3)) (x, y),
-                                stencilAccess (rf' (z + 4)) (x, y))
-    where
-      rf' z (x, y) = rf (x, y, z)
+      rf' y ix = rf (ix:.y)
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5,
+          Stencil sh a row6,
+          Stencil sh a row7) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 3)) ix, 
+                              stencilAccess (rf' (y - 2)) ix, 
+                              stencilAccess (rf' (y - 1)) ix, 
+                              stencilAccess (rf' y      ) ix,
+                              stencilAccess (rf' (y + 1)) ix,
+                              stencilAccess (rf' (y + 2)) ix,
+                              stencilAccess (rf' (y + 3)) ix)
+     where
+       rf' y ix = rf (ix:.y)
+instance (Stencil sh a row1,
+          Stencil sh a row2,
+          Stencil sh a row3,
+          Stencil sh a row4,
+          Stencil sh a row5,
+          Stencil sh a row6,
+          Stencil sh a row7,
+          Stencil sh a row8,
+          Stencil sh a row9) 
+  => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 4)) ix, 
+                              stencilAccess (rf' (y - 3)) ix, 
+                              stencilAccess (rf' (y - 2)) ix, 
+                              stencilAccess (rf' (y - 1)) ix, 
+                              stencilAccess (rf' y      ) ix,
+                              stencilAccess (rf' (y + 1)) ix,
+                              stencilAccess (rf' (y + 2)) ix,
+                              stencilAccess (rf' (y + 3)) ix,
+                              stencilAccess (rf' (y + 4)) ix)
+     where
+       rf' y ix = rf (ix:.y)
 
               
 -- Embedded expressions
@@ -517,6 +458,19 @@ data OpenExp env aenv t where
               -> OpenExp env aenv t
               -> OpenExp env aenv e
 
+  -- Array indices & shapes
+  IndexNil    :: OpenExp env aenv Z
+  IndexCons   :: Ix sh
+              => OpenExp env aenv sh 
+              -> OpenExp env aenv Int
+              -> OpenExp env aenv (sh:.Int)
+  IndexHead   :: Ix sh
+              => OpenExp env aenv (sh:.Int)
+              -> OpenExp env aenv Int
+  IndexTail   :: Ix sh
+              => OpenExp env aenv (sh:.Int)
+              -> OpenExp env aenv sh
+  
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond        :: OpenExp env aenv Bool
               -> OpenExp env aenv t 
@@ -534,16 +488,21 @@ data OpenExp env aenv t where
               -> OpenExp env aenv r
 
   -- Project a single scalar from an array
-  -- the array expression cannot contain any free scalar variables
+  -- * the array expression cannot contain any free scalar variables
   IndexScalar :: OpenAcc aenv (Array dim t)
               -> OpenExp env aenv dim 
               -> OpenExp env aenv t
 
   -- Array shape
-  -- the array expression cannot contain any free scalar variables
+  -- * the array expression cannot contain any free scalar variables
   Shape       :: Elem dim
               => OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
+
+  -- Number of elements of an array
+  -- * the array expression cannot contain any free scalar variables
+  Size        :: OpenAcc aenv (Array dim e) 
+              -> OpenExp env aenv Int
 
 -- |Expression without free scalar variables
 --

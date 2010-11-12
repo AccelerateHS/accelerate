@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-
--- |Embedded array processing language: array representation
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
+-- |
+-- Module      : Data.Array.Accelerate.Array.Representation
+-- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---
---  License: BSD3
---
---- Description ---------------------------------------------------------------
---
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 
 module Data.Array.Accelerate.Array.Representation (
 
@@ -28,23 +28,27 @@ import Data.Array.Accelerate.Type
 -- |Class of index representations (which are nested pairs)
 --
 class Eq ix => Ix ix where
-  dim       :: ix -> Int       -- number of dimensions (>= 0)
-  size      :: ix -> Int       -- for a *shape* yield the total number of 
-                               -- elements in that array
+  -- user-facing methods
+  dim       :: ix -> Int             -- number of dimensions (>= 0)
+  size      :: ix -> Int             -- for a *shape* yield the total number of 
+                                     -- elements in that array
+
+  -- internal methods
   intersect :: ix -> ix -> ix  -- yield the intersection of two shapes
   ignore    :: ix              -- identifies ignored elements in 'permute'
-  index     :: ix -> ix -> Int -- yield the index position in a linear, 
-                               -- row-major representation of the array
-                               -- (first argument is the shape)
+  index     :: ix -> ix -> Int -- yield the index position in a linear, row-major representation of
+                               -- the array (first argument is the shape)
   bound     :: ix -> ix -> Boundary e -> Either e ix
                                -- apply a boundary condition to an index
 
   iter      :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
-                               -- iterate through the entire shape, applying
-                               -- the function; third argument combines results
-                               -- and fourth is returned in case of an empty
-                               -- iteration space; the index space is traversed
-                               -- in row-major order
+                               -- iterate through the entire shape, applying the function in the
+                               -- second argument; third argument combines results and fourth is an
+                               -- initial value that is combined with the results; the index space
+                               -- is traversed in row-major order
+
+  iter1     :: ix -> (ix -> a) -> (a -> a -> a) -> a
+                               -- variant of 'iter' without an initial value
 
   -- operations to facilitate conversion with IArray
   rangeToShape :: (ix, ix) -> ix   -- convert a minpoint-maxpoint index
@@ -59,22 +63,25 @@ class Eq ix => Ix ix where
 instance Ix () where
   dim ()            = 0
   size ()           = 1
+  
   () `intersect` () = ()
   ignore            = ()
   index () ()       = 0
   bound () () _     = Right ()
-  iter () f _ _     = f ()
+  iter  () f c e    = e `c` f ()
+  iter1 () f _      = f ()
   
   rangeToShape ((), ()) = ()
   shapeToRange ()       = ((), ())
 
   shapeToList () = []
   listToShape [] = ()
-  listToShape _  = error "Data.Array.Accelerate.Array: non-empty list when converting to unit"
+  listToShape _  = INTERNAL_ERROR(error) "listToShape" "non-empty list when converting to unit"
 
 instance Ix ix => Ix (ix, Int) where
   dim (sh, _)                       = dim sh + 1
   size (sh, sz)                     = size sh * sz
+  
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
   index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
@@ -94,10 +101,17 @@ instance Ix ix => Ix (ix, Int) where
     where
       Right ix `addDim` i = Right (ix, i)
       Left e   `addDim` _ = Left e
-  iter (sh, sz) f c r    = iter' 0
+
+  iter (sh, sz) f c r = iter' 0 r
     where
-      iter' i | i >= sz   = r
-              | otherwise = iter sh (\ix -> f (ix, i)) c r `c` iter' (i + 1)
+      iter' i v | i >= sz   = v
+                | otherwise = iter' (i + 1) $ iter sh (\ix -> f (ix, i)) c v
+
+  iter1 (_sh, 0)  _f _c = BOUNDS_ERROR(error) "iter1" "empty iteration space"
+  iter1 (sh , sz) f  c  = iter1' (sz - 1)
+    where
+      iter1' i | i == 0    = iter1 sh (\ix -> f (ix, 0)) c
+               | otherwise = iter1' (i - 1) `c` iter1 sh (\ix -> f (ix, i)) c
 
   rangeToShape ((sh1, sz1), (sh2, sz2)) 
     = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
@@ -107,7 +121,7 @@ instance Ix ix => Ix (ix, Int) where
       ((low, 0), (high, sz - 1))
 
   shapeToList (sh,sz) = sz : shapeToList sh
-  listToShape []      = error "Data.Array.Accelerate.Array: empty list when converting to Ix"
+  listToShape []      = INTERNAL_ERROR(error) "listToShape" "empty list when converting to Ix"
   listToShape (x:xs)  = (listToShape xs,x)
 
 

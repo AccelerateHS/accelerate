@@ -77,9 +77,14 @@ prettyAcc alvl (ZipWith f acc1 acc2)
 prettyAcc alvl (Fold f e acc)   
   = prettyArrOp "fold" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
                         prettyAccParens alvl acc]
+prettyAcc alvl (Fold1 f acc)   
+  = prettyArrOp "fold1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
 prettyAcc alvl (FoldSeg f e acc1 acc2)   
   = prettyArrOp "foldSeg" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
                            prettyAccParens alvl acc1, prettyAccParens alvl acc2]
+prettyAcc alvl (Fold1Seg f acc1 acc2)   
+  = prettyArrOp "fold1Seg" [parens (prettyFun alvl f), 
+                            prettyAccParens alvl acc1, prettyAccParens alvl acc2]
 prettyAcc alvl (Scanl f e acc)
   = prettyArrOp "scanl" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
                          prettyAccParens alvl acc]
@@ -157,6 +162,16 @@ prettyExp lvl alvl _ (Tuple tup)
   = prettyTuple lvl alvl tup
 prettyExp lvl alvl wrap (Prj idx e)       
   = wrap $ prettyTupleIdx idx <+> prettyExp lvl alvl parens e
+prettyExp _lvl _alvl wrap IndexNil       
+  = wrap $ text "index Z"
+prettyExp lvl alvl wrap (IndexCons t h)
+  = wrap $ 
+      text "index" <+> 
+      parens (prettyExp lvl alvl parens t <+> text ":." <+> prettyExp lvl alvl parens h)
+prettyExp lvl alvl wrap (IndexHead ix)       
+  = wrap $ text "indexHead" <+> prettyExp lvl alvl parens ix
+prettyExp lvl alvl wrap (IndexTail ix)       
+  = wrap $ text "indexTail" <+> prettyExp lvl alvl parens ix
 prettyExp lvl alvl wrap (Cond c t e) 
   = wrap $ sep [prettyExp lvl alvl parens c <+> char '?', 
                 parens (prettyExp lvl alvl noParens t <> comma <+> 
@@ -169,6 +184,8 @@ prettyExp lvl alvl wrap (IndexScalar idx i)
   = wrap $ cat [prettyAccParens alvl idx, char '!', prettyExp lvl alvl parens i]
 prettyExp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> prettyAccParens alvl idx
+prettyExp _lvl alvl wrap (Size idx)
+  = wrap $ text "size" <+> prettyAccParens alvl idx
 
 -- Pretty print nested pairs as a proper tuple.
 --

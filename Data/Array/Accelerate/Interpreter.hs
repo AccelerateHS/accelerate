@@ -1,5 +1,6 @@
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE CPP, GADTs, BangPatterns, PatternGuards #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators, GADTs, BangPatterns, PatternGuards #-}
 {-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
@@ -43,7 +44,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.Array.Sugar (
-  Array(..), Scalar, Vector, Segments)
+  Z(..), (:.)(..), Array(..), Scalar, Vector, Segments)
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
@@ -100,9 +101,15 @@ evalOpenAcc (ZipWith f acc1 acc2) aenv
 evalOpenAcc (Fold f e acc) aenv
   = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
+evalOpenAcc (Fold1 f acc) aenv
+  = fold1Op (evalFun f aenv) (evalOpenAcc acc aenv)
+
 evalOpenAcc (FoldSeg f e acc1 acc2) aenv
   = foldSegOp (evalFun f aenv) (evalExp e aenv) 
               (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+
+evalOpenAcc (Fold1Seg f acc1 acc2) aenv
+  = fold1SegOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
 evalOpenAcc (Scanl f e acc) aenv
   = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
@@ -224,37 +231,74 @@ zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2)
   = DelayedArray (sh1 `intersect` sh2) 
                  (\ix -> (Sugar.sinkFromElem2 f) (rf1 ix) (rf2 ix))
 
-foldOp :: (e -> e -> e)
+foldOp :: Sugar.Ix dim 
+       => (e -> e -> e)
        -> e
+       -> Delayed (Array (dim:.Int) e)
        -> Delayed (Array dim e)
-       -> Delayed (Scalar e)
-foldOp f e (DelayedArray sh rf)
-  = unitOp $ 
-      Sugar.toElem (iter sh rf (Sugar.sinkFromElem2 f) (Sugar.fromElem e))
+foldOp f e (DelayedArray (sh, n) rf)
+  = DelayedArray sh 
+      (\ix -> iter ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElem2 f) (Sugar.fromElem e))
 
-foldSegOp :: forall e.
+fold1Op :: Sugar.Ix dim
+        => (e -> e -> e)
+        -> Delayed (Array (dim:.Int) e)
+        -> Delayed (Array dim e)
+fold1Op f (DelayedArray (sh, n) rf)
+  = DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElem2 f))
+    
+foldSegOp :: forall e dim.
              (e -> e -> e)
           -> e
-          -> Delayed (Vector e)
+          -> Delayed (Array (dim:.Int) e)
           -> Delayed Segments
-          -> Delayed (Vector e)
-foldSegOp f e (DelayedArray _sh rf) seg@(DelayedArray shSeg rfSeg)
+          -> Delayed (Array (dim:.Int) e)
+foldSegOp f e (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
   = delay arr
   where
     DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
-    arr = Sugar.newArray (Sugar.toElem shSeg) foldOne
+    arr = Sugar.newArray (Sugar.toElem (sh, Sugar.toElem shSeg)) foldOne
     --
-    foldOne :: Sugar.DIM1 -> e
-    foldOne i = let
-                  start = (Sugar.liftToElem rfStarts) i
-                  len   = (Sugar.liftToElem rfSeg) i
-              in
-              fold e start (start + len)
-    --
-    fold :: e -> Sugar.DIM1 -> Sugar.DIM1 -> e
-    fold v j end
+    foldOne :: dim:.Int -> e
+    foldOne ix = let
+                   (ix', i) = Sugar.fromElem ix
+                   start    = (Sugar.liftToElem rfStarts) i
+                   len      = (Sugar.liftToElem rfSeg) i
+                 in
+                 fold ix' e start (start + len)
+
+    fold :: Sugar.ElemRepr dim -> e -> Int -> Int -> e
+    fold ix' v j end
       | j >= end  = v
-      | otherwise = fold (f v ((Sugar.liftToElem rf) j)) (j + 1) end
+      | otherwise = fold ix' (f v (Sugar.toElem . rf $ (ix', j))) (j + 1) end
+
+fold1SegOp :: forall e dim.
+              (e -> e -> e)
+           -> Delayed (Array (dim:.Int) e)
+           -> Delayed Segments
+           -> Delayed (Array (dim:.Int) e)
+fold1SegOp f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
+  = delay arr
+  where
+    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
+    arr = Sugar.newArray (Sugar.toElem (sh, Sugar.toElem shSeg)) foldOne
+    --
+    foldOne :: dim:.Int -> e
+    foldOne ix = let
+                   (ix', i) = Sugar.fromElem ix
+                   start    = (Sugar.liftToElem rfStarts) i
+                   len      = (Sugar.liftToElem rfSeg) i
+                 in
+                 if len == 0
+                   then
+                     BOUNDS_ERROR(error) "fold1Seg" "empty iteration space"
+                   else
+                     fold ix' (Sugar.toElem . rf $ (ix', start)) (start + 1) (start + len)
+
+    fold :: Sugar.ElemRepr dim -> e -> Int -> Int -> e
+    fold ix' v j end
+      | j >= end  = v
+      | otherwise = fold ix' (f v (Sugar.toElem . rf $ (ix', j))) (j + 1) end
 
 scanlOp :: (e -> e -> e)
         -> e
@@ -513,6 +557,18 @@ evalOpenExp (Tuple tup) env aenv
 evalOpenExp (Prj idx e) env aenv 
   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
 
+evalOpenExp IndexNil _env _aenv 
+  = Z
+
+evalOpenExp (IndexCons sh i) env aenv 
+  = evalOpenExp sh env aenv :. evalOpenExp i env aenv
+
+evalOpenExp (IndexHead ix) env aenv 
+  = case evalOpenExp ix env aenv of _:.h -> h
+
+evalOpenExp (IndexTail ix) env aenv 
+  = case evalOpenExp ix env aenv of t:._ -> t
+
 evalOpenExp (Cond c t e) env aenv 
   = if evalOpenExp c env aenv
     then evalOpenExp t env aenv
@@ -535,6 +591,10 @@ evalOpenExp (IndexScalar acc ix) env aenv
 evalOpenExp (Shape acc) _ aenv 
   = case force $ evalOpenAcc acc aenv of
       Array sh _ -> Sugar.toElem sh
+
+evalOpenExp (Size acc) _ aenv 
+  = case force $ evalOpenAcc acc aenv of
+      Array sh _ -> size sh
 
 -- Evaluate a closed expression
 --

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators, FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
@@ -35,25 +35,40 @@ module Data.Array.Accelerate.Language (
   constant,                                 -- re-exporting from 'Smart'
 
   -- ** Array introduction
-  use, unit,
+  use, unit, replicate,
 
   -- ** Shape manipulation
   reshape,
 
-  -- ** Collective array operations
-  slice, replicate, map, zipWith,
-  fold, foldSeg,
+  -- ** Extraction of subarrays
+  slice, 
+  
+  -- ** Map-like functions
+  map, zipWith,
+  
+  -- ** Reductions
+  fold, fold1, foldSeg, fold1Seg,
+  
+  -- ** Scan functions
   scanl, scanl', scanl1, scanr, scanr', scanr1,
-  permute, backpermute, stencil, stencil2,
+  
+  -- ** Permutations
+  permute, backpermute, 
+  
+  -- ** Stencil operations
+  stencil, stencil2,
   
   -- ** Tuple construction and destruction
   Tuple(..), fst, snd, curry, uncurry,
+  
+  -- ** Index expressions
+  Index(..), index0, index1, unindex1, ilift1,
   
   -- ** Conditional expressions
   (?),
   
   -- ** Array operations with a scalar result
-  (!), shape,
+  (!), the, shape, size,
   
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
@@ -84,13 +99,13 @@ import Data.Bits (Bits((.&.), (.|.), xor, complement))
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
 
 
--- Collective operations
--- ---------------------
+-- Array introduction
+-- ------------------
 
 -- |Array inlet: makes an array available for processing using the Accelerate
 -- language; triggers asynchronous host->device transfer if necessary.
@@ -104,6 +119,25 @@ use = Acc . Use
 unit :: Elem e => Exp e -> Acc (Scalar e)
 unit = Acc . Unit
 
+-- |Replicate an array across one or more dimensions as specified by the
+-- *generalised* array index provided as the first argument.
+--
+-- For example, assuming 'arr' is a vector (one-dimensional array),
+--
+-- > replicate (Z :.2 :.All :.3) arr
+--
+-- yields a three dimensional array, where 'arr' is replicated twice across the
+-- first and three times across the third dimension.
+--
+replicate :: (SliceIx slix, Elem e) 
+          => Exp slix 
+          -> Acc (Array (Slice    slix) e) 
+          -> Acc (Array (SliceDim slix) e)
+replicate = Acc $$ Replicate
+
+-- Shape manipulation
+-- ------------------
+
 -- |Change the shape of an array without altering its contents, where
 --
 -- > precondition: size dim == size dim'
@@ -114,21 +148,8 @@ reshape :: (Ix dim, Ix dim', Elem e)
         -> Acc (Array dim e)
 reshape = Acc $$ Reshape
 
--- |Replicate an array across one or more dimensions as specified by the
--- *generalised* array index provided as the first argument.
---
--- For example, assuming 'arr' is a vector (one-dimensional array),
---
--- > replicate (2, All, 3) arr
---
--- yields a three dimensional array, where 'arr' is replicated twice across the
--- first and three times across the third dimension.
---
-replicate :: (SliceIx slix, Elem e) 
-          => Exp slix 
-          -> Acc (Array (Slice    slix) e) 
-          -> Acc (Array (SliceDim slix) e)
-replicate = Acc $$ Replicate
+-- Extraction of subarrays
+-- -----------------------
 
 -- |Index an array with a *generalised* array index (supplied as the second
 -- argument).  The result is a new array (possibly a singleton) containing
@@ -164,26 +185,49 @@ zipWith = Acc $$$ ZipWith
 -- Reductions
 -- ----------
 
--- |Reduction of an array.  The type 'a' together with the binary function
--- (first argument) and value (second argument) must form a monoid; i.e., the 
--- function must be /associative/ and the value must be its /neutral element/.
+-- |Reduction of the innermost dimension of an array of arbitrary rank.  The first argument needs to
+-- be an /associative/ function to enable an efficient parallel implementation.
 -- 
 fold :: (Ix dim, Elem a)
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
+     -> Acc (Array (dim:.Int) a)
      -> Acc (Array dim a)
-     -> Acc (Scalar a)
 fold = Acc $$$ Fold
 
--- |Segmented reduction.
+-- |Variant of 'fold' that requires the reduced array to be non-empty and doesn't need an default
+-- value.
+-- 
+fold1 :: (Ix dim, Elem a)
+      => (Exp a -> Exp a -> Exp a) 
+      -> Acc (Array (dim:.Int) a)
+      -> Acc (Array dim a)
+fold1 = Acc $$ Fold1
+
+-- |Segmented reduction along the innermost dimension.  Performs one individual reduction per
+-- segment of the source array.  These reductions proceed in parallel.
 --
-foldSeg :: Elem a 
+-- The source array must have at least rank 1.
+--
+foldSeg :: (Ix dim, Elem a)
         => (Exp a -> Exp a -> Exp a) 
         -> Exp a 
-        -> Acc (Vector a)
+        -> Acc (Array (dim:.Int) a)
         -> Acc Segments
-        -> Acc (Vector a)
+        -> Acc (Array (dim:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
+
+-- |Variant of 'foldSeg' that requires /all/ segments of the reduced array to be non-empty and
+-- doesn't need a default value.
+--
+-- The source array must have at least rank 1.
+--
+fold1Seg :: (Ix dim, Elem a)
+         => (Exp a -> Exp a -> Exp a) 
+         -> Acc (Array (dim:.Int) a)
+         -> Acc Segments
+         -> Acc (Array (dim:.Int) a)
+fold1Seg = Acc $$$ Fold1Seg
 
 -- Scan functions
 -- --------------
@@ -356,6 +400,7 @@ class Tuple tup where
   
   -- |Turn a scalar expression that yields a tuple into a tuple of scalar
   -- expressions.
+  --
   untuple :: TupleT tup -> tup
   
 instance (Elem a, Elem b) => Tuple (Exp a, Exp b) where
@@ -408,26 +453,74 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i
   tuple   = tup9
   untuple = untup9
 
-
 -- |Extract the first component of a pair
 --
 fst :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp a
 fst e = let (x, _:: Exp b) = untuple e in x
 
 -- |Extract the second component of a pair
+--
 snd :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp b
 snd e = let (_ :: Exp a, y) = untuple e in y
 
 -- |Converts an uncurried function to a curried function
 --
-curry :: (Elem a, Elem b) => (Exp (a,b) -> Exp c) -> Exp a -> Exp b -> Exp c
-curry f x y = f (tuple (x,y))
+curry :: (Elem a, Elem b) => (Exp (a, b) -> Exp c) -> Exp a -> Exp b -> Exp c
+curry f x y = f (tuple (x, y))
 
 -- |Converts a curried function to a function on pairs
 --
-uncurry :: (Elem a, Elem b) => (Exp a -> Exp b -> Exp c) -> Exp (a,b) -> Exp c
-uncurry f t = let (x,y) = untuple t in f x y
+uncurry :: (Elem a, Elem b) => (Exp a -> Exp b -> Exp c) -> Exp (a, b) -> Exp c
+uncurry f t = let (x, y) = untuple t in f x y
 
+
+-- Shapes
+-- ------
+
+class Index ix where
+  type IndexExp ix
+  
+  -- |Turn an index into a scalar Accelerate expression yielding that index.
+  -- 
+  index   :: IndexExp ix -> Exp ix
+  
+  -- |Turn a scalar Accelerate expression that yields an index into an index structure of scalar
+  -- expressions.
+  --
+  unindex :: Exp ix -> IndexExp ix
+  
+instance Index Z where
+  type IndexExp Z = Z
+
+  index _   = IndexNil
+  unindex _ = Z
+  
+instance (Ix ix, Index ix) => Index (ix:.Int) where
+  type IndexExp (ix:.Int) = IndexExp ix :. Exp Int
+
+  index (ix:.i) = IndexCons (index ix) i
+  unindex e     = unindex (IndexTail e) :. IndexHead e
+
+-- |The one index for a rank-0 array.
+--
+index0 :: Exp Z
+index0 = index Z
+
+-- |Turn an 'Int' expression into a rank-1 indexing expression.
+--
+index1 :: Exp Int -> Exp (Z:. Int)
+index1 = index . (Z:.)
+
+-- |Turn an 'Int' expression into a rank-1 indexing expression.
+--
+unindex1 :: Exp (Z:. Int) -> Exp Int
+unindex1 ix = let Z:.i = unindex ix in i
+
+-- |Lift an Accelerate integer computation into rank-1 index space.
+--
+ilift1 :: (Exp Int -> Exp Int) -> Exp (Z:. Int) -> Exp (Z:. Int)
+ilift1 f = index1 . f . unindex1
+  
 
 -- Conditional expressions
 -- -----------------------
@@ -448,8 +541,20 @@ infixl 9 !
 (!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
 (!) = IndexScalar
 
+-- |Extraction of the element in a singleton array.
+--
+the :: Elem e => Acc (Scalar e) -> Exp e
+the = (!index0)
+
+-- |Expression form that yields the shape of an array.
+--
 shape :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim
 shape = Shape
+
+-- |Expression form that yields the size of an array.
+--
+size :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp Int
+size = Size
 
 
 -- Instances of all relevant H98 classes

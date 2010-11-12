@@ -50,10 +50,11 @@ module Data.Array.Accelerate (
   Elem,
 
   -- * Array shapes & indices
-  Ix(dim, size), All(..), SliceIx(..), DIM0, DIM1, DIM2, DIM3, DIM4, DIM5,
+  Z(..), (:.)(..), Ix, All(..), SliceIx(..), 
+  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
   
   -- * Operations to use Accelerate arrays from plain Haskell
-  arrayShape, indexArray, fromIArray, toIArray, fromList, toList,
+  arrayDim, arrayShape, arraySize, indexArray, fromIArray, toIArray, fromList, toList,
 
   -- * The /Accelerate/ language
   module Data.Array.Accelerate.Language,
@@ -63,7 +64,7 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar hiding ((!), shape)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), shape, dim, size)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
@@ -71,6 +72,8 @@ import Data.Array.Accelerate.Prelude
 
 -- Renamings
 --
+
+-- FIXME: these all need to go into a separate module for separate importing!
 
 -- rename as '(!)' is already used by the EDSL for indexing
 
@@ -85,3 +88,10 @@ indexArray = (Sugar.!)
 --
 arrayShape :: Ix dim => Array dim e -> dim
 arrayShape = Sugar.shape
+
+-- FIXME: Rename to rank
+arrayDim :: Ix dim => dim -> Int
+arrayDim = Sugar.dim
+
+arraySize :: Ix dim => dim -> Int
+arraySize = Sugar.size
