@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables, DeriveDataTypeable, StandaloneDeriving, TupleSections #-}
-{-# LANGUAGE UndecidableInstances #-}  -- for instance SliceIxConv sl
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -773,16 +772,6 @@ class (Shape sl,
                                       (Repr.Slice (ElemRepr    sl))
                                       (Repr.CoSlice (ElemRepr  sl))
                                       (Repr.SliceDim (ElemRepr sl))
-
--- instance (Shape sl, 
---           Repr.SliceIx (ElemRepr sl), 
---           Ix (Slice sl), Ix (CoSlice sl), Ix (SliceDim sl), 
---           SliceIxConv sl)
---   => SliceIx sl where
---   type Slice    sl = FromShapeRepr (Repr.Slice    (ElemRepr sl))
---   type CoSlice  sl = FromShapeRepr (Repr.CoSlice  (ElemRepr sl))
---   type SliceDim sl = FromShapeRepr (Repr.SliceDim (ElemRepr sl))
---   sliceIndex = Repr.sliceIndex . fromElem
 
 instance SliceIx Z where
   type Slice    Z = Z

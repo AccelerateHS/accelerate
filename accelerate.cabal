@@ -202,8 +202,7 @@ Library
                         MultiParamTypeClasses, PatternGuards, RankNTypes,
                         ScopedTypeVariables, StandaloneDeriving,
                         TemplateHaskell, TupleSections, TypeFamilies,
-                        TypeOperators, TypeSynonymInstances, UnboxedTuples,
-                        UndecidableInstances
+                        TypeOperators, TypeSynonymInstances, UnboxedTuples
 
 source-repository head
   type:                 darcs
