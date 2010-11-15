@@ -488,19 +488,19 @@ data OpenExp env aenv t where
               -> OpenExp env aenv r
 
   -- Project a single scalar from an array
-  -- * the array expression cannot contain any free scalar variables
+  -- the array expression can not contain any free scalar variables
   IndexScalar :: OpenAcc aenv (Array dim t)
               -> OpenExp env aenv dim 
               -> OpenExp env aenv t
 
   -- Array shape
-  -- * the array expression cannot contain any free scalar variables
+  -- the array expression can not contain any free scalar variables
   Shape       :: Elem dim
               => OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
 
   -- Number of elements of an array
-  -- * the array expression cannot contain any free scalar variables
+  -- the array expression can not contain any free scalar variables
   Size        :: OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv Int
 
