@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections, RankNTypes #-}
+{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -33,7 +34,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 --import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
-import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector)
+import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector,Z(..),(:.)(..))
 import qualified Data.Array.Accelerate.Array.Data       as AD
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Interpreter      as I
@@ -150,13 +151,13 @@ executeOpenAcc _acc@(Fold1 _f _a0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc
 
 executeOpenAcc _acc@(Fold1Seg _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "fold1Seg NOT YET IMPLEMENTED"
 
-executeOpenAcc acc@(Scanr _ _ a0) aenv  = executeScan acc a0 aenv
+executeOpenAcc acc@(Scanr  _ _ a0) aenv = executeScan  acc a0 aenv
 executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
-executeOpenAcc acc@(Scanr1 _ a0) aenv   = executeScan1 acc a0 aenv
+executeOpenAcc acc@(Scanr1 _ a0)   aenv = executeScan1 acc a0 aenv
 
-executeOpenAcc acc@(Scanl _ _ a0) aenv  = executeScan acc a0 aenv
+executeOpenAcc acc@(Scanl  _ _ a0) aenv = executeScan  acc a0 aenv
 executeOpenAcc acc@(Scanl' _ _ a0) aenv = executeScan' acc a0 aenv
-executeOpenAcc acc@(Scanl1 _ a0) aenv   = executeScan1 acc a0 aenv
+executeOpenAcc acc@(Scanl1 _ a0)   aenv = executeScan1 acc a0 aenv
 
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
@@ -217,80 +218,79 @@ executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
 
 -- Differences in left/right scan-variants are incorporated during code generation.
 --
-executeScan :: OpenAcc aenv (Vector e) -> OpenAcc aenv (Vector e) -> Val aenv -> CIO (Vector e)
-executeScan _acc _a0 _aenv = INTERNAL_ERROR(error) "executeScan" "NOT YET IMPLEMENTED"
--- FIXME: needs to be adpted to new index type ('Z:.Int' instead of 'Int' for rank 1) -=chak
--- executeScan acc a0 aenv = do
---   (Array sh0 in0)         <- executeOpenAcc a0 aenv
---   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
---   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
---   a@(Array _ out)         <- newArray (size sh0 + 1)
---   b@(Array _ bks)         <- newArray g
---   s@(Array _ sum)         <- newArray ()
---   let n   = size sh0
---       itv = (n + g - 1) `div` g
---       _   = unify a b
---       _   = unify a s
--- 
---   bindLifted mdl fvs
---   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
---   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
---   launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
---   freeLifted fvs
---   freeArray in0
---   freeArray bks
---   freeArray sum
---   return a
+executeScan :: forall aenv e.
+     OpenAcc aenv (Vector e)
+  -> OpenAcc aenv (Vector e)
+  -> Val aenv
+  -> CIO (Vector e)
+executeScan acc a0 aenv = do
+  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
+  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  a@(Array _ out)         <- newArray (Z :. size sh0 + 1)
+  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
+  (Array _ sum)           <- newArray Z        :: CIO (Scalar e)
+  let n   = size sh0
+      itv = (n + g - 1) `div` g
 
-executeScan' :: OpenAcc aenv (Vector e, Scalar e) -> OpenAcc aenv (Vector e) -> Val aenv 
-             -> CIO (Vector e, Scalar e)
-executeScan' _acc _a0 _aenv = error "executeScan': NOT YET IMPLEMENTED"
--- executeScan' _acc _a0 _aenv = INTERNAL_ERROR(error) "executeScan'" "NOT YET IMPLEMENTED"
--- FIXME: needs to be adpted to new index type ('Z:.Int' instead of 'Int' for rank 1) -=chak
--- executeScan' acc a0 aenv = do
---   (Array sh0 in0)         <- executeOpenAcc a0 aenv
---   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
---   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
---   a@(Array _ out)         <- newArray (size sh0)
---   b@(Array _ bks)         <- newArray g
---   s@(Array _ sum)         <- newArray ()
---   let n   = size sh0
---       itv = (n + g - 1) `div` g
---       _   = unify a b
--- 
---   bindLifted mdl fvs  launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   
---                                                         -- inclusive scan of input array
---   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
---   launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
---   freeLifted fvs
---   freeArray in0
---   freeArray bks
---   return (a,s)
+  bindLifted mdl fvs
+  launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
+  launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
+  launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
+  freeLifted fvs
+  freeArray in0
+  freeArray bks
+  freeArray sum
+  return a
 
-executeScan1 :: OpenAcc aenv (Vector e) -> OpenAcc aenv (Vector e) -> Val aenv -> CIO (Vector e)
-executeScan1 _acc _a0 _aenv = INTERNAL_ERROR(error) "executeScan1" "NOT YET IMPLEMENTED"
--- FIXME: needs to be adpted to new index type ('Z:.Int' instead of 'Int' for rank 1) -=chak
--- executeScan1 acc a0 aenv = do
---   (Array sh0 in0)         <- executeOpenAcc a0 aenv
---   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
---   fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
---   a@(Array _ out)         <- newArray (size sh0)
---   b@(Array _ bks)         <- newArray g
---   s@(Array _ sum)         <- newArray ()
---   let n   = size sh0
---       itv = (n + g - 1) `div` g
---       _   = unify a b
---       _   = unify a s
--- 
---   bindLifted mdl fvs
---   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
---   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
---   launch (t,g,m) fadd  (((((),out),bks),n),itv)         -- distribute partial results
---   freeLifted fvs
---   freeArray in0
---   freeArray bks
---   freeArray sum
---   return a
+executeScan' :: forall aenv e.
+     OpenAcc aenv (Vector e, Scalar e)
+  -> OpenAcc aenv (Vector e)
+  -> Val aenv 
+  -> CIO (Vector e, Scalar e)
+executeScan' acc a0 aenv = do
+  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
+  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  s@(Array _ sum)         <- newArray Z
+  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
+  let n   = size sh0
+      itv = (n + g - 1) `div` g
+
+  bindLifted mdl fvs
+  launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array   
+  launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
+  launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
+  freeLifted fvs
+  freeArray in0
+  freeArray bks
+  return (a,s)
+
+executeScan1 :: forall aenv e.
+     OpenAcc aenv (Vector e)
+  -> OpenAcc aenv (Vector e)
+  -> Val aenv
+  -> CIO (Vector e)
+executeScan1 acc a0 aenv = do
+  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
+  fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
+  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
+  (Array _ sum)           <- newArray Z        :: CIO (Scalar e)
+  let n   = size sh0
+      itv = (n + g - 1) `div` g
+
+  bindLifted mdl fvs
+  launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
+  launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
+  launch (t,g,m) fadd  (((((),out),bks),n),itv)         -- distribute partial results
+  freeLifted fvs
+  freeArray in0
+  freeArray bks
+  freeArray sum
+  return a
 
 -- Apply a function to a set of Arrays
 --
@@ -598,14 +598,6 @@ waitFor pid = do
 
 -- Auxiliary functions
 -- -------------------
-
--- A small hack to assist the type checker. Useful when allocating intermediate
--- arrays that would otherwise never get a fixed type.
---
--- unify :: Array dim e -> Array dim' e -> ()
--- FIXME: Don't do that!  Instead use scoped type variables and type annotations to propagate the
---   type information! -=chak
--- unify _ _ = ()
 
 -- Special version of msum, which doesn't behave as we would like for CIO [a]
 --
