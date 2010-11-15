@@ -94,6 +94,7 @@ travA _ (Avar _)                 = return ()
 travA f (Let a b)                = travA f a >> travA f b
 travA f (Let2 a b)               = travA f a >> travA f b
 travA f (Unit e)                 = travE f e
+travA f acc@(Generate e g)       = travE f e >> travF f g >> f acc
 travA f (Reshape e a)            = travE f e >> travA f a
 travA f acc@(Use _)              = f acc
 travA f acc@(Replicate _ e a)    = travE f e >> travA f a >> f acc

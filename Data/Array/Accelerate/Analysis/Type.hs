@@ -55,6 +55,7 @@ accType (Avar _)              = -- elemType (undefined::e)   -- should work - GH
                                   ArraysRarray -> elemType (undefined::e)
 accType (Use arr)             = arrayType arr
 accType (Unit _)              = elemType (undefined::e)
+accType (Generate _ _)        = elemType (undefined::e)
 accType (Reshape _ acc)       = accType acc
 accType (Replicate _ _ acc)   = accType acc
 accType (Index _ acc _)       = accType acc

@@ -34,6 +34,7 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 -- skeleton instantiation.
 --
 accToKey :: OpenAcc aenv a -> String
+accToKey (Generate e f)       = chr   1 : showExp e ++ showFun f
 accToKey r@(Replicate s e a)  = chr   3 : showTy (accType a) ++ showExp e ++ showSI s e a r
 accToKey r@(Index s a e)      = chr   5 : showTy (accType a) ++ showExp e ++ showSI s e r a
 accToKey (Map f a)            = chr   7 : showTy (accType a) ++ showFun f

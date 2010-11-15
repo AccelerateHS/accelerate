@@ -84,6 +84,9 @@ evalOpenAcc (Use arr) _aenv = delay arr
 
 evalOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
 
+evalOpenAcc (Generate sh f) aenv
+  = generateOp (evalExp sh aenv) (evalFun f aenv)
+
 evalOpenAcc (Reshape e acc) aenv 
   = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
 
@@ -153,6 +156,12 @@ evalAcc acc = evalOpenAcc acc Empty
 
 unitOp :: Sugar.Elem e => e -> Delayed (Scalar e)
 unitOp e = DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElem e)}
+
+generateOp :: (Sugar.Ix dim, Sugar.Elem e)
+      => dim
+      -> (dim -> e)
+      -> Delayed (Array dim e)
+generateOp sh rf = DelayedArray (Sugar.fromElem sh) (Sugar.sinkFromElem rf)
 
 reshapeOp :: Sugar.Ix dim 
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)

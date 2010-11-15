@@ -78,6 +78,7 @@ runCodeGen = flip runState (CodeGenState [] [])
 -- lifted out in depth-first order.
 --
 codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
+codeGen a@(Generate _ f)      = mkGenerate (codeGenAccTypeDim a) <$> codeGenFun f
 codeGen (Fold f e _)          = mkFold (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (FoldSeg f e _ s)     = mkFoldSeg (codeGenExpType e) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
 codeGen (Scanl f e _)         = mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f

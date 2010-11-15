@@ -198,6 +198,12 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array dim' e)      -- array to be reshaped
               -> OpenAcc aenv (Array dim e)
 
+  -- Constuct a new array by applying a function to each index.
+  Generate    :: (Ix dim, Elem e)
+              => Exp     aenv dim                 -- output shape
+              -> Fun     aenv (dim -> e)          -- representation function
+              -> OpenAcc aenv (Array dim e)
+
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: (Ix dim, Elem slix)

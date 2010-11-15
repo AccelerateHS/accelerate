@@ -34,8 +34,8 @@ module Data.Array.Accelerate.Language (
   -- ** Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
 
-  -- ** Array introduction
-  use, unit, replicate,
+  -- ** Array construction
+  use, unit, replicate, generate,
 
   -- ** Shape manipulation
   reshape,
@@ -134,6 +134,14 @@ replicate :: (SliceIx slix, Elem e)
           -> Acc (Array (Slice    slix) e) 
           -> Acc (Array (SliceDim slix) e)
 replicate = Acc $$ Replicate
+
+-- |Construct a new array by applying a function to each index.
+--
+generate :: (Ix dim, Elem a)
+         => Exp dim
+         -> (Exp dim -> Exp a)
+         -> Acc (Array dim a)
+generate = Acc $$ Generate
 
 -- Shape manipulation
 -- ------------------

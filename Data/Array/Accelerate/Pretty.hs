@@ -62,6 +62,8 @@ prettyAcc _   (Use arr)
   = prettyArrOp "use" [prettyArray arr]
 prettyAcc alvl (Unit e)         
   = prettyArrOp "unit" [prettyExp 0 alvl parens e]
+prettyAcc alvl (Generate sh f)
+  = prettyArrOp "generate" [prettyExp 0 alvl parens sh, parens (prettyFun alvl f)]
 prettyAcc alvl (Reshape sh acc)
   = prettyArrOp "reshape" [prettyExp 0 alvl parens sh, prettyAccParens alvl acc]
 prettyAcc alvl (Replicate _ty ix acc) 

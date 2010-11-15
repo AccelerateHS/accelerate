@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkFold, mkFoldSeg, mkMap, mkZipWith,
+    mkGenerate, mkFold, mkFoldSeg, mkMap, mkZipWith,
     mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
@@ -23,6 +23,21 @@ import System.FilePath
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
+
+--------------------------------------------------------------------------------
+-- Construction
+--------------------------------------------------------------------------------
+
+mkGenerate :: ([CType],Int) -> [CExpr] -> CUTranslSkel
+mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
+  where
+    skel = "generate.inl"
+    code = CTranslUnit
+            ( mkTupleType Nothing  tyOut ++
+	         [ mkDim "TyIn0" dimOut
+            , mkApply 1 apply ])
+            (mkNodeInfo (initPos skel) (Name 0))
+
 
 --------------------------------------------------------------------------------
 -- Reduction

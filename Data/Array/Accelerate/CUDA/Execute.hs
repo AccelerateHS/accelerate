@@ -105,6 +105,13 @@ executeOpenAcc (Unit e) aenv = do
   return (Array (Sugar.fromElem ()) ad)
 
 ---- (3) Array computations ----
+executeOpenAcc acc@(Generate e _) aenv = do
+  dim              <- executeExp e aenv
+  r@(Array sh out) <- newArray dim
+  let n = size sh
+  execute "generate" acc aenv n ((((),out),convertIx sh),n)
+  return r
+
 executeOpenAcc acc@(Map _ a0) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
   r@(Array _ out) <- newArray (Sugar.toElem sh0)
@@ -384,6 +391,7 @@ data Lifted where
   Arrays ::           Array dim e -> Lifted
 
 liftAcc :: OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftAcc (Generate _ f)       aenv = liftFun f aenv
 liftAcc (Map f _)            aenv = liftFun f aenv
 liftAcc (ZipWith f _ _)      aenv = liftFun f aenv
 liftAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]

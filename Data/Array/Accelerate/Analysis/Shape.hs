@@ -28,6 +28,7 @@ accDim (Avar _)               = -- ndim (elemType (undefined::dim))   -- should 
                                   ArraysRarray -> ndim (elemType (undefined::dim))
 accDim (Use (Array _ _))      = ndim (elemType (undefined::dim))
 accDim (Unit _)               = 0
+accDim (Generate _ _)         = ndim (elemType (undefined::dim))
 accDim (Reshape _ _)          = ndim (elemType (undefined::dim))
 accDim (Replicate _ _ _)      = ndim (elemType (undefined::dim))
 accDim (Index _ _ _)          = ndim (elemType (undefined::dim))

@@ -94,6 +94,10 @@ data PreAcc acc a where
   Unit        :: Elem e
               => Exp e 
               -> PreAcc acc (Scalar e)
+  Generate    :: (Ix dim, Elem e)
+              => Exp dim
+              -> (Exp dim -> Exp e)
+              -> PreAcc acc (Array dim e)
   Reshape     :: (Ix dim, Ix dim', Elem e)
               => Exp dim
               -> acc (Array dim' e)
@@ -247,6 +251,8 @@ convertSharingAcc alyt = convert alyt []
             -> AST.Use array
           Unit e
             -> AST.Unit (convertExp alyt e)
+          Generate dim f
+            -> AST.Generate (convertExp alyt dim) (convertFun1 alyt f)
           Reshape e acc
             -> AST.Reshape (convertExp alyt e) (convert alyt env acc)
           Replicate ix acc
@@ -408,6 +414,7 @@ traverseAcc process combine acc@(Acc pacc)
         SndArray acc             -> trav sa acc
         Use _                    -> process sa
         Unit _                   -> process sa
+        Generate _ _             -> process sa
         Reshape _ acc            -> trav sa acc
         Replicate _ acc          -> trav sa acc
         Index acc _              -> trav sa acc
@@ -479,6 +486,7 @@ determineScopes occMap acc
           SndArray acc                    -> trav SndArray acc
           Use arr                         -> reconstruct (Use arr) []
           Unit e                          -> reconstruct (Unit e) []
+          Generate sh f                   -> reconstruct (Generate sh f) []
           Reshape sh acc                  -> trav (Reshape sh) acc
           Replicate n acc                 -> trav (Replicate n) acc
           Index acc i                     -> trav (\a -> Index a i) acc
@@ -613,6 +621,7 @@ determineScopes occMap acc
                 SndArray acc                    -> trav SndArray acc
                 Use arr                         -> return (AccSharing sn $ Use arr, [])
                 Unit e                          -> return (AccSharing sn $ Unit e, [])
+                Generate sh f                   -> return (AccSharing sn $ Generate sh f, [])
                 Reshape sh acc                  -> trav (Reshape sh) acc
                 Replicate n acc                 -> trav (Replicate n) acc
                 Index acc i                     -> trav (\a -> Index a i) acc
