@@ -89,8 +89,8 @@ instance Ix ix => Ix (ix, Int) where
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` 0
-                                        Mirror     -> bound sh ix bndy `addDim` (-i)
-                                        Wrap       -> bound sh ix bndy `addDim` (sz-i)
+                                        Mirror     -> bound sh ix bndy `addDim` (-(i+1))
+                                        Wrap       -> bound sh ix bndy `addDim` (sz+i)
                                         Constant e -> Left e
     | i >= sz                       = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` (sz-1)
