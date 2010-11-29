@@ -581,14 +581,6 @@ data TupleType a where
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
 
 
--- -- Tuple extension
--- -- ---------------
--- 
--- infix 8 :#
--- data ix:#i = ix:#i
---   deriving (Show, Typeable)
--- 
-
 -- Stencil support
 -- ---------------
 
