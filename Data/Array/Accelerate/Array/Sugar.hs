@@ -847,21 +847,22 @@ newArray sh f
 
 -- |Convert an 'IArray' to an accelerated array.
 --
-fromIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
-           => a dim e -> Array dim e
-fromIArray iarr = newArray sh (iarr IArray.!)
+fromIArray :: (ElemRepr ix ~ ElemRepr dim, IArray.Ix ix, Elem ix, IArray a e, Ix dim, Elem e)
+           => a ix e -> Array dim e
+fromIArray iarr = newArray (toElem sh) (\ix -> iarr IArray.! toElem (fromElem ix))
   where
-    sh = rangeToShape (IArray.bounds iarr)
+    (lo,hi) = IArray.bounds iarr
+    sh      = Repr.rangeToShape (fromElem lo, fromElem hi)
 
 -- |Convert an accelerated array to an 'IArray'
 -- 
-toIArray :: (IArray a e, IArray.Ix dim, Ix dim, Elem e) 
-         => Array dim e -> a dim e
-toIArray arr@(Array sh _) 
-  = let bnds = shapeToRange (toElem sh)
-    in
-    IArray.array bnds [(ix, arr!ix) | ix <- IArray.range bnds]
-    
+toIArray :: (ElemRepr ix ~ ElemRepr dim, IArray a e, IArray.Ix ix, Ix dim, Elem ix, Elem e) 
+         => Array dim e -> a ix e
+toIArray arr = IArray.array bnds [(ix, arr ! toElem (fromElem ix)) | ix <- IArray.range bnds]
+  where
+    (lo,hi) = Repr.shapeToRange (fromElem (shape arr))
+    bnds    = (toElem lo, toElem hi)
+
 -- |Convert a list (with elements in row-major order) to an accelerated array.
 --
 fromList :: (Ix dim, Elem e) => dim -> [e] -> Array dim e
