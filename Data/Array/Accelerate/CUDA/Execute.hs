@@ -92,17 +92,17 @@ executeOpenAcc (Reshape e a) aenv = do
   ix            <- executeExp e aenv
   (Array sh ad) <- executeOpenAcc a aenv
   BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
-    $ return (Array (Sugar.fromElem ix) ad)
+    $ return (Array (Sugar.fromElt ix) ad)
 
 executeOpenAcc (Unit e) aenv = do
   v <- executeExp e aenv
   let ad = fst . AD.runArrayData $ (,undefined) <$> do
         arr <- AD.newArrayData 1024    -- FIXME: small arrays moved by the GC
-        AD.writeArrayData arr 0 (Sugar.fromElem v)
+        AD.writeArrayData arr 0 (Sugar.fromElt v)
         return arr
   mallocArray    ad 1
   pokeArrayAsync ad 1 Nothing
-  return (Array (Sugar.fromElem ()) ad)
+  return (Array (Sugar.fromElt ()) ad)
 
 ---- (3) Array computations ----
 executeOpenAcc acc@(Generate e _) aenv = do
@@ -114,7 +114,7 @@ executeOpenAcc acc@(Generate e _) aenv = do
 
 executeOpenAcc acc@(Map _ a0) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array _ out) <- newArray (Sugar.toElem sh0)
+  r@(Array _ out) <- newArray (Sugar.toElt sh0)
   let n = size sh0
   execute "map" acc aenv n ((((),out),in0),n)
   freeArray in0
@@ -123,7 +123,7 @@ executeOpenAcc acc@(Map _ a0) aenv = do
 executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
   (Array sh1 in1) <- executeOpenAcc a1 aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElem (sh1 `intersect` sh0))
+  r@(Array s out) <- newArray (Sugar.toElt (sh1 `intersect` sh0))
   execute "zipWith" acc aenv (size s) (((((((),out),in1),in0),convertIx s),convertIx sh1),convertIx sh0)
   freeArray in1
   freeArray in0
@@ -138,13 +138,13 @@ executeOpenAcc _acc@(Fold _f _x _a0) _aenv = INTERNAL_ERROR(error) "executeOpenA
 --   dispatch c ((((),out),in0),size sh0)
 --   freeArray in0
 --   if g > 1 then executeOpenAcc (Fold f x (Use r)) aenv
---            else return (Array (Sugar.fromElem ()) out)
+--            else return (Array (Sugar.fromElt ()) out)
 
 -- FIXME: Plain foldSeg is now only supposed to fold along the innermost dimensions.
 executeOpenAcc _acc@(FoldSeg _ _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
 -- executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
 -- !!!FIXME: this is not nice btw, you should construct the code using AST, not Smart -=chak
---   let scan = Scanl (convertFun2 undefined mkAdd) (Const (Sugar.fromElem (0::Int))) . Use
+--   let scan = Scanl (convertFun2 undefined mkAdd) (Const (Sugar.fromElt (0::Int))) . Use
 --   (Array _   in0) <- executeOpenAcc a0 aenv
 --   (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
 --   r@(Array _ out) <- newArray (size shs)
@@ -169,7 +169,7 @@ executeOpenAcc acc@(Scanl1 _ a0)   aenv = executeScan1 acc a0 aenv
 executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
   (Array sh1 in1) <- executeOpenAcc a1 aenv     -- permuted array
-  r@(Array _ out) <- newArray (Sugar.toElem sh0)
+  r@(Array _ out) <- newArray (Sugar.toElt sh0)
   copyArray in0 out (size sh0)
   execute "permute" acc aenv (size sh0) (((((),out),in1),convertIx sh0),convertIx sh1)
   freeArray in0
@@ -192,7 +192,7 @@ executeOpenAcc acc@(Replicate sliceIndex e a0) aenv = do
 
   slix            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElem $ extend sliceIndex (Sugar.fromElem slix) sh0)
+  r@(Array s out) <- newArray (Sugar.toElt $ extend sliceIndex (Sugar.fromElt slix) sh0)
   execute "replicate" acc aenv (size s) (((((),out),in0),convertIx sh0),convertIx s)
   freeArray in0
   return r
@@ -211,9 +211,9 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
 
   slix            <- executeExp e aenv
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElem $ restrict sliceIndex (Sugar.fromElem slix) sh0)
+  r@(Array s out) <- newArray (Sugar.toElt $ restrict sliceIndex (Sugar.fromElt slix) sh0)
   execute "slice" acc aenv (size s)
-    ((((((),out),in0),convertIx s),convertSlix sliceIndex (Sugar.fromElem slix)),convertIx sh0)
+    ((((((),out),in0),convertIx s),convertSlix sliceIndex (Sugar.fromElt slix)),convertIx sh0)
   freeArray in0
   return r
 
@@ -259,7 +259,7 @@ executeScan' acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  a@(Array _ out)         <- newArray (Sugar.toElt sh0)
   s@(Array _ sum)         <- newArray Z
   (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
   let n   = size sh0
@@ -283,7 +283,7 @@ executeScan1 acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElem sh0)
+  a@(Array _ out)         <- newArray (Sugar.toElt sh0)
   (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
   (Array _ sum)           <- newArray Z        :: CIO (Scalar e)
   let n   = size sh0
@@ -301,7 +301,7 @@ executeScan1 acc a0 aenv = do
 
 -- Apply a function to a set of Arrays
 --
-applyArraysR :: Arrays arrs => (forall e. ArrayElem e => AD.ArrayData e -> CIO ()) -> arrs -> CIO ()
+applyArraysR :: Arrays arrs => (forall e. ArrayElt e => AD.ArrayData e -> CIO ()) -> arrs -> CIO ()
 applyArraysR f arrs = applyR arrays arrs
   where
     applyR :: ArraysR arrs -> arrs -> CIO ()
@@ -336,8 +336,8 @@ executeExp :: Exp aenv t -> Val aenv -> CIO t
 executeExp e = executeOpenExp e Empty
 
 executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
-executeOpenExp (Var idx)         env _    = return . Sugar.toElem $ prj idx env
-executeOpenExp (Const c)         _   _    = return $ Sugar.toElem c
+executeOpenExp (Var idx)         env _    = return . Sugar.toElt $ prj idx env
+executeOpenExp (Const c)         _   _    = return $ Sugar.toElt c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
 executeOpenExp (Tuple tup)       env aenv = toTuple                   <$> executeTuple tup env aenv
@@ -349,14 +349,14 @@ executeOpenExp (IndexTail ix)    env aenv = (\(t:._) -> t) <$> executeOpenExp ix
 executeOpenExp (IndexScalar a e) env aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   ix            <- executeOpenExp e env aenv
-  res           <- Sugar.toElem <$> ad `indexArray` index sh (Sugar.fromElem ix)
+  res           <- Sugar.toElt <$> ad `indexArray` index sh (Sugar.fromElt ix)
   freeArray ad
   return res
 
 executeOpenExp (Shape a) _ aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   freeArray ad
-  return (Sugar.toElem sh)
+  return (Sugar.toElt sh)
 executeOpenExp (Size a) _ aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   freeArray ad
@@ -383,8 +383,8 @@ executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
 -- code generation stage
 --
 data Lifted where
-  Shapes :: Ix dim => dim         -> Lifted
-  Arrays ::           Array dim e -> Lifted
+  Shapes :: Shape sh => sh          -> Lifted
+  Arrays ::             Array dim e -> Lifted
 
 liftAcc :: forall a aenv. OpenAcc aenv a -> Val aenv -> CIO [Lifted]
 liftAcc (Let _ _)            _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
@@ -511,7 +511,7 @@ primMarshalable((CUDA.DevicePtr a))
 instance Marshalable CUDA.FunParam where
   marshal x = return [x]
 
-instance ArrayElem e => Marshalable (AD.ArrayData e) where
+instance ArrayElt e => Marshalable (AD.ArrayData e) where
   marshal = marshalArrayData    -- Marshalable (DevicePtrs a) does not type )=
 
 instance Marshalable a => Marshalable [a] where
@@ -640,12 +640,12 @@ sequence' = foldr k (return [])
 -- Create a new host array, and associated device memory area
 -- FIXME: small arrays are relocated by the GC
 --
-newArray :: (Sugar.Ix dim, Sugar.Elem e) => dim -> CIO (Array dim e)
+newArray :: (Sugar.Shape sh, Sugar.Elt e) => sh -> CIO (Array sh e)
 newArray sh =
   let ad = fst . AD.runArrayData $ (,undefined) <$> AD.newArrayData (1024 `max` Sugar.size sh)
   in do
     ad `seq` mallocArray ad (Sugar.size sh)
-    return $ Array (Sugar.fromElem sh) ad
+    return $ Array (Sugar.fromElt sh) ad
 
 
 -- Extract shape dimensions as a list of 32-bit integers (the base integer width
@@ -656,7 +656,7 @@ newArray sh =
 -- itself is stored in reading order. Ensure we match the behaviour of regular
 -- tuples and code generation thereof.
 --
-convertIx :: Ix dim => dim -> [Int32]
+convertIx :: Shape sh => sh -> [Int32]
 convertIx = post . map fromIntegral . shapeToList
   where post [] = [1]
         post xs = reverse xs

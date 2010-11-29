@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
+  -- only for the deprecated class aliases
+
 -- |
 -- Module      : Data.Array.Accelerate
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -47,10 +50,10 @@ module Data.Array.Accelerate (
   Array, Scalar, Vector, Segments,
 
   -- * Array element types
-  Elem,
+  Elt,
 
   -- * Array shapes & indices
-  Z(..), (:.)(..), Ix, All(..), SliceIx(..), 
+  Z(..), (:.)(..), Shape, All(..), Slice(..), 
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
   
   -- * Operations to use Accelerate arrays from plain Haskell
@@ -58,7 +61,10 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ language
   module Data.Array.Accelerate.Language,
-  module Data.Array.Accelerate.Prelude
+  module Data.Array.Accelerate.Prelude,
+  
+  -- * Deprecated names for backwards compatibility
+  Elem, Ix, SliceIx
 
 ) where
 
@@ -79,19 +85,34 @@ import Data.Array.Accelerate.Prelude
 
 -- |Array indexing in plain Haskell code
 --
-indexArray :: Array dim e -> dim -> e
+indexArray :: Array sh e -> sh -> e
 indexArray = (Sugar.!)
 
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
 -- |Array shape in plain Haskell code
 --
-arrayShape :: Ix dim => Array dim e -> dim
+arrayShape :: Shape sh => Array sh e -> sh
 arrayShape = Sugar.shape
 
 -- FIXME: Rename to rank
-arrayDim :: Ix dim => dim -> Int
+arrayDim :: Shape sh => sh -> Int
 arrayDim = Sugar.dim
 
-arraySize :: Ix dim => dim -> Int
+arraySize :: Shape sh => sh -> Int
 arraySize = Sugar.size
+
+-- Deprecated aliases for backwards compatibility
+--
+
+{-# DEPRECATED Elem "Use 'Elt' instead" #-}
+class Elt e => Elem e
+instance Elt e => Elem e
+
+{-# DEPRECATED Ix "Use 'Shape' instead" #-}
+class Shape sh => Ix sh
+instance Shape sh => Ix sh
+
+{-# DEPRECATED SliceIx "Use 'Slice' instead" #-}
+class Slice sh => SliceIx sh
+instance Slice sh => SliceIx sh

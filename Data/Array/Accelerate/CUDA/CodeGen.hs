@@ -155,7 +155,7 @@ codeGenFun (Body body) = codeGenExp body
 codeGenExp :: forall env aenv t. OpenExp env aenv t -> CodeGen [CExpr]
 codeGenExp (PrimConst c)   = return . return $ codeGenPrimConst c
 codeGenExp (PrimApp f arg) = return . codeGenPrim f <$> codeGenExp arg
-codeGenExp (Const c)       = return $ codeGenConst (Sugar.elemType (undefined::t)) c
+codeGenExp (Const c)       = return $ codeGenConst (Sugar.eltType (undefined::t)) c
 codeGenExp (Tuple t)       = codeGenTup t
 codeGenExp p@(Prj idx e)
   = reverse
@@ -175,7 +175,7 @@ codeGenExp (IndexTail ix)  =          init <$> codeGenExp ix
 codeGenExp (Var i) =
   let var = cvar ('x' : show (idxToInt i))
   in
-  case codeGenTupleType (Sugar.elemType (undefined::t)) of
+  case codeGenTupleType (Sugar.eltType (undefined::t)) of
        [_] -> return [var]
        cps -> return . reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
          \c -> CMember var (internalIdent ('a':show c)) False internalNode

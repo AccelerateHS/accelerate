@@ -43,18 +43,18 @@ import Data.Array.Accelerate.Language
 -- |Combine the elements of two arrays pairwise.  The shape of the result is 
 -- the intersection of the two argument shapes.
 --
-zip :: (Ix dim, Elem a, Elem b) 
-    => Acc (Array dim a)
-    -> Acc (Array dim b)
-    -> Acc (Array dim (a, b))
+zip :: (Shape sh, Elt a, Elt b) 
+    => Acc (Array sh a)
+    -> Acc (Array sh b)
+    -> Acc (Array sh (a, b))
 zip = zipWith (\x y -> tuple (x, y))
 
 -- |The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 -- 
-unzip :: (Ix dim, Elem a, Elem b)
-      => Acc (Array dim (a, b))
-      -> (Acc (Array dim a), Acc (Array dim b))
+unzip :: (Shape sh, Elt a, Elt b)
+      => Acc (Array sh (a, b))
+      -> (Acc (Array sh a), Acc (Array sh b))
 unzip arr = (map fst arr, map snd arr)
 
 
@@ -64,19 +64,19 @@ unzip arr = (map fst arr, map snd arr)
 -- |Reduction of an array of arbitrary rank to a single scalar value.  The first argument needs to be
 -- an /associative/ function to enable an efficient parallel implementation.
 -- 
-foldAll :: (Ix dim, Elem a)
+foldAll :: (Shape sh, Elt a)
         => (Exp a -> Exp a -> Exp a) 
         -> Exp a 
-        -> Acc (Array dim a)
+        -> Acc (Array sh a)
         -> Acc (Scalar a)
 foldAll f e arr = fold f e (reshape (index1 $ size arr) arr)
 
 -- |Variant of 'foldAll' that requires the reduced array to be non-empty and doesn't need an default
 -- value.
 -- 
-fold1All :: (Ix dim, Elem a)
+fold1All :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a) 
-         -> Acc (Array dim a)
+         -> Acc (Array sh a)
          -> Acc (Scalar a)
 fold1All f arr = fold1 f (reshape (index1 $ size arr) arr)
 
@@ -89,7 +89,7 @@ fold1All f arr = fold1 f (reshape (index1 $ size arr) arr)
 --
 -- > prescanl f e = Prelude.fst . scanl' f e
 --
-prescanl :: Elem a
+prescanl :: Elt a
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -100,7 +100,7 @@ prescanl f e = Prelude.fst . scanl' f e
 --
 -- > postscanl f e = map (e `f`) . scanl1 f
 --
-postscanl :: Elem a
+postscanl :: Elt a
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -112,7 +112,7 @@ postscanl f e = map (e `f`) . scanl1 f
 --
 -- > prescanr f e = Prelude.fst . scanr' f e
 --
-prescanr :: Elem a
+prescanr :: Elt a
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -123,7 +123,7 @@ prescanr f e = Prelude.fst . scanr' f e
 --
 -- > postscanr f e = map (e `f`) . scanr1 f
 --
-postscanr :: Elem a
+postscanr :: Elt a
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -136,7 +136,7 @@ postscanr f e = map (`f` e) . scanr1 f
 
 -- |Segmented version of 'scanl'.
 --
-scanlSeg :: Elem a
+scanlSeg :: Elt a
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -182,7 +182,7 @@ scanlSeg f e arr seg = scans
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanlSeg' :: Elem a
+scanlSeg' :: Elt a
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -214,7 +214,7 @@ scanlSeg' f e arr seg = (scans, sums)
 
 -- |Segmented version of 'scanl1'.
 --
-scanl1Seg :: Elem a
+scanl1Seg :: Elt a
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc Segments
@@ -223,7 +223,7 @@ scanl1Seg f arr seg = map snd $ scanl1 (mkSegApply f) $ zip (mkHeadFlags seg) ar
 
 -- |Segmented version of 'prescanl'.
 --
-prescanlSeg :: Elem a
+prescanlSeg :: Elt a
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -233,7 +233,7 @@ prescanlSeg f e arr seg = Prelude.fst $ scanlSeg' f e arr seg
 
 -- |Segmented version of 'postscanl'.
 --
-postscanlSeg :: Elem a
+postscanlSeg :: Elt a
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -243,7 +243,7 @@ postscanlSeg f e arr seg = map (e `f`) $ scanl1Seg f arr seg
 
 -- |Segmented version of 'scanr'.
 --
-scanrSeg :: Elem a
+scanrSeg :: Elt a
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -281,7 +281,7 @@ scanrSeg f e arr seg = scans
 
 -- |Segmented version of 'scanrSeg\''.
 --
-scanrSeg' :: Elem a
+scanrSeg' :: Elt a
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -309,7 +309,7 @@ scanrSeg' f e arr seg = (scans, sums)
 
 -- |Segmented version of 'scanr1'.
 --
-scanr1Seg :: Elem a
+scanr1Seg :: Elt a
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc Segments
@@ -318,7 +318,7 @@ scanr1Seg f arr seg = map snd $ scanr1 (mkSegApply f) $ zip (mkTailFlags seg) ar
 
 -- |Segmented version of 'prescanr'.
 --
-prescanrSeg :: Elem a
+prescanrSeg :: Elt a
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -328,7 +328,7 @@ prescanrSeg f e arr seg = Prelude.fst $ scanrSeg' f e arr seg
 
 -- |Segmented version of 'postscanr'.
 --
-postscanrSeg :: Elem a
+postscanrSeg :: Elt a
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -361,7 +361,7 @@ mkTailFlags seg
 -- |Construct a segmented version of apply from a non-segmented version. The segmented apply
 -- operates on a head-flag value tuple.
 --
-mkSegApply :: (Elem e)
+mkSegApply :: (Elt e)
          => (Exp e -> Exp e -> Exp e)
          -> (Exp (Int, e) -> Exp (Int, e) -> Exp (Int, e))
 mkSegApply op = apply

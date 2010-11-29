@@ -11,8 +11,8 @@
 
 module Data.Array.Accelerate.Array.Representation (
 
-  -- * Array indexing and slicing
-  Ix(..), SliceIx(..), SliceIndex(..),
+  -- * Array shapes, indices, and slices
+  Shape(..), Slice(..), SliceIndex(..),
 
 ) where
 
@@ -27,40 +27,39 @@ import Data.Array.Accelerate.Type
 
 -- |Class of index representations (which are nested pairs)
 --
-class Eq ix => Ix ix where
+class Eq sh => Shape sh where
   -- user-facing methods
-  dim       :: ix -> Int             -- number of dimensions (>= 0)
-  size      :: ix -> Int             -- for a *shape* yield the total number of 
-                                     -- elements in that array
+  dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
+  size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
 
   -- internal methods
-  intersect :: ix -> ix -> ix  -- yield the intersection of two shapes
-  ignore    :: ix              -- identifies ignored elements in 'permute'
-  index     :: ix -> ix -> Int -- yield the index position in a linear, row-major representation of
+  intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
+  ignore    :: sh              -- identifies ignored elements in 'permute'
+  index     :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
-  bound     :: ix -> ix -> Boundary e -> Either e ix
+  bound     :: sh -> sh -> Boundary e -> Either e sh
                                -- apply a boundary condition to an index
 
-  iter      :: ix -> (ix -> a) -> (a -> a -> a) -> a -> a
+  iter      :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
                                -- iterate through the entire shape, applying the function in the
                                -- second argument; third argument combines results and fourth is an
                                -- initial value that is combined with the results; the index space
                                -- is traversed in row-major order
 
-  iter1     :: ix -> (ix -> a) -> (a -> a -> a) -> a
+  iter1     :: sh -> (sh -> a) -> (a -> a -> a) -> a
                                -- variant of 'iter' without an initial value
 
   -- operations to facilitate conversion with IArray
-  rangeToShape :: (ix, ix) -> ix   -- convert a minpoint-maxpoint index
+  rangeToShape :: (sh, sh) -> sh   -- convert a minpoint-maxpoint index
                                    -- into a shape
-  shapeToRange :: ix -> (ix, ix)   -- ...the converse
+  shapeToRange :: sh -> (sh, sh)   -- ...the converse
   
 
   -- other conversions
-  shapeToList :: ix -> [Int]    -- convert a shape into its list of dimensions
-  listToShape :: [Int] -> ix    -- convert a list of dimensions into a shape
+  shapeToList :: sh -> [Int]    -- convert a shape into its list of dimensions
+  listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
 
-instance Ix () where
+instance Shape () where
   dim ()            = 0
   size ()           = 1
   
@@ -78,7 +77,7 @@ instance Ix () where
   listToShape [] = ()
   listToShape _  = INTERNAL_ERROR(error) "listToShape" "non-empty list when converting to unit"
 
-instance Ix ix => Ix (ix, Int) where
+instance Shape sh => Shape (sh, Int) where
   dim (sh, _)                       = dim sh + 1
   size (sh, sz)                     = size sh * sz
   
@@ -130,32 +129,29 @@ instance Ix ix => Ix (ix, Int) where
 
 -- |Class of slice representations (which are nested pairs)
 --
-class SliceIx sl where
-  type Slice    sl      -- the projected slice
-  type CoSlice  sl      -- the complement of the slice
-  type SliceDim sl      -- the combined dimension
+class Slice sl where
+  type SliceShape    sl      -- the projected slice
+  type CoSliceShape  sl      -- the complement of the slice
+  type FullShape     sl      -- the combined dimension
     -- argument *value* not used; it's just a phantom value to fix the type
-  sliceIndex :: sl -> SliceIndex sl 
-                                     (Slice    sl) 
-                                     (CoSlice  sl) 
-                                     (SliceDim sl)
+  sliceIndex :: sl -> SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
 
-instance SliceIx () where
-  type Slice    () = ()
-  type CoSlice  () = ()
-  type SliceDim () = ()
+instance Slice () where
+  type SliceShape    () = ()
+  type CoSliceShape  () = ()
+  type FullShape () = ()
   sliceIndex _ = SliceNil
 
-instance SliceIx sl => SliceIx (sl, ()) where
-  type Slice    (sl, ()) = (Slice sl, Int)
-  type CoSlice  (sl, ()) = CoSlice sl
-  type SliceDim (sl, ()) = (SliceDim sl, Int)
+instance Slice sl => Slice (sl, ()) where
+  type SliceShape   (sl, ()) = (SliceShape sl, Int)
+  type CoSliceShape (sl, ()) = CoSliceShape sl
+  type FullShape    (sl, ()) = (FullShape sl, Int)
   sliceIndex _ = SliceAll (sliceIndex (undefined::sl))
 
-instance SliceIx sl => SliceIx (sl, Int) where
-  type Slice    (sl, Int) = Slice sl
-  type CoSlice  (sl, Int) = (CoSlice sl, Int)
-  type SliceDim (sl, Int) = (SliceDim sl, Int)
+instance Slice sl => Slice (sl, Int) where
+  type SliceShape   (sl, Int) = SliceShape sl
+  type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
+  type FullShape    (sl, Int) = (FullShape sl, Int)
   sliceIndex _ = SliceFixed (sliceIndex (undefined::sl))
 
 -- |Generalised array index, which may index only in a subset of the dimensions

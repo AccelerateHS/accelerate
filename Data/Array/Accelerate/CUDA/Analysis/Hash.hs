@@ -71,7 +71,7 @@ showFun f = render . hcat . map pretty . fst $ runCodeGen (codeGenFun f)
 showExp :: OpenExp env aenv a -> String
 showExp e = render . hcat . map pretty . fst $ runCodeGen (codeGenExp e)
 
-showSI :: SliceIndex (Sugar.ElemRepr slix) (Sugar.ElemRepr sl) co (Sugar.ElemRepr dim)
+showSI :: SliceIndex (Sugar.EltRepr slix) (Sugar.EltRepr sl) co (Sugar.EltRepr dim)
        -> Exp aenv slix                         {- dummy -}
        -> OpenAcc aenv (Sugar.Array sl e)       {- dummy -}
        -> OpenAcc aenv (Sugar.Array dim e)      {- dummy -}

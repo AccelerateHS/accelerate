@@ -29,7 +29,7 @@ import System.IO
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
-import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, fromElem)
+import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, fromElt)
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
@@ -56,7 +56,7 @@ compileAcc = travA k
     k acc                   = compile acc
 
     scan = Scanl (convertFun2 undefined mkAdd)
-                 (Const (fromElem (0::Int)))
+                 (Const (fromElt (0::Int)))
                  (Use (Array undefined undefined :: Segments))
 
 {-

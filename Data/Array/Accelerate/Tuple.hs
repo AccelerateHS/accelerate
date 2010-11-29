@@ -30,16 +30,16 @@ import Data.Array.Accelerate.Array.Sugar
 -- |We represent tuples as heterogenous lists, typed by a type list.
 --
 data Tuple c t where
-  NilTup  ::                               Tuple c ()
-  SnocTup :: Elem t => Tuple c s -> c t -> Tuple c (s, t)
+  NilTup  ::                              Tuple c ()
+  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
 
 -- |Type-safe projection indicies for tuples.
 --
 -- NB: We index tuples by starting to count from the *right*!
 --
 data TupleIdx t e where
-  ZeroTupIdx :: Elem s =>                 TupleIdx (t, s) s
-  SuccTupIdx ::           TupleIdx t e -> TupleIdx (t, s) e
+  ZeroTupIdx :: Elt s =>                 TupleIdx (t, s) s
+  SuccTupIdx ::          TupleIdx t e -> TupleIdx (t, s) e
 
 -- |Conversion between surface n-tuples and our tuple representation.
 --

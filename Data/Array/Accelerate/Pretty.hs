@@ -121,12 +121,12 @@ prettyAcc alvl (Stencil2 sten bndy1 acc1 bndy2 acc2)
                             prettyBoundary acc2 bndy2,
                             prettyAccParens alvl acc2]
 
-prettyBoundary :: forall aenv dim e. Elem e 
-               => {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (ElemRepr e) -> Doc
+prettyBoundary :: forall aenv dim e. Elt e 
+               => {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (EltRepr e) -> Doc
 prettyBoundary _ Clamp        = text "Clamp"
 prettyBoundary _ Mirror       = text "Mirror"
 prettyBoundary _ Wrap         = text "Wrap"
-prettyBoundary _ (Constant e) = parens $ text "Constant" <+> text (show (toElem e :: e))
+prettyBoundary _ (Constant e) = parens $ text "Constant" <+> text (show (toElt e :: e))
     
 prettyArrOp :: String -> [Doc] -> Doc
 prettyArrOp name docs = hang (text name) 2 $ sep docs
@@ -159,7 +159,7 @@ prettyExp :: forall t env aenv.
 prettyExp lvl _ _ (Var idx)  
   = text $ "x" ++ show (lvl - idxToInt idx)
 prettyExp _ _ _ (Const v)
-  = text $ show (toElem v :: t)
+  = text $ show (toElt v :: t)
 prettyExp lvl alvl _ (Tuple tup)
   = prettyTuple lvl alvl tup
 prettyExp lvl alvl wrap (Prj idx e)       
@@ -283,7 +283,7 @@ prettyArray :: forall dim a. Array dim a -> Doc
 prettyArray arr@(Array sh _) 
   = parens $
       hang (text "Array") 2 $
-        sep [showDoc $ (toElem sh :: dim), dataDoc]
+        sep [showDoc $ (toElt sh :: dim), dataDoc]
   where
     showDoc :: forall a. Show a => a -> Doc
     showDoc = text . show

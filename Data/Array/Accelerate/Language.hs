@@ -110,13 +110,13 @@ import Data.Array.Accelerate.Smart
 -- |Array inlet: makes an array available for processing using the Accelerate
 -- language; triggers asynchronous host->device transfer if necessary.
 --
-use :: (Ix dim, Elem e) => Array dim e -> Acc (Array dim e)
+use :: (Shape ix, Elt e) => Array ix e -> Acc (Array ix e)
 use = Acc . Use
 
 -- |Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
 -- array for use in the Accelerate language.
 --
-unit :: Elem e => Exp e -> Acc (Scalar e)
+unit :: Elt e => Exp e -> Acc (Scalar e)
 unit = Acc . Unit
 
 -- |Replicate an array across one or more dimensions as specified by the
@@ -129,18 +129,18 @@ unit = Acc . Unit
 -- yields a three dimensional array, where 'arr' is replicated twice across the
 -- first and three times across the third dimension.
 --
-replicate :: (SliceIx slix, Elem e) 
+replicate :: (Slice slix, Elt e) 
           => Exp slix 
-          -> Acc (Array (Slice    slix) e) 
-          -> Acc (Array (SliceDim slix) e)
+          -> Acc (Array (SliceShape slix) e) 
+          -> Acc (Array (FullShape  slix) e)
 replicate = Acc $$ Replicate
 
 -- |Construct a new array by applying a function to each index.
 --
-generate :: (Ix dim, Elem a)
-         => Exp dim
-         -> (Exp dim -> Exp a)
-         -> Acc (Array dim a)
+generate :: (Shape ix, Elt a)
+         => Exp ix
+         -> (Exp ix -> Exp a)
+         -> Acc (Array ix a)
 generate = Acc $$ Generate
 
 -- Shape manipulation
@@ -148,12 +148,12 @@ generate = Acc $$ Generate
 
 -- |Change the shape of an array without altering its contents, where
 --
--- > precondition: size dim == size dim'
+-- > precondition: size ix == size ix'
 --
-reshape :: (Ix dim, Ix dim', Elem e) 
-        => Exp dim 
-        -> Acc (Array dim' e) 
-        -> Acc (Array dim e)
+reshape :: (Shape ix, Shape ix', Elt e) 
+        => Exp ix 
+        -> Acc (Array ix' e) 
+        -> Acc (Array ix e)
 reshape = Acc $$ Reshape
 
 -- Extraction of subarrays
@@ -163,10 +163,10 @@ reshape = Acc $$ Reshape
 -- argument).  The result is a new array (possibly a singleton) containing
 -- all dimensions in their entirety.
 --
-slice :: (SliceIx slix, Elem e) 
-      => Acc (Array (SliceDim slix) e) 
+slice :: (Slice slix, Elt e) 
+      => Acc (Array (FullShape slix) e) 
       -> Exp slix 
-      -> Acc (Array (Slice slix) e)
+      -> Acc (Array (SliceShape slix) e)
 slice = Acc $$ Index
 
 -- Map-like functions
@@ -174,20 +174,20 @@ slice = Acc $$ Index
 
 -- |Apply the given function elementwise to the given array.
 -- 
-map :: (Ix dim, Elem a, Elem b) 
+map :: (Shape ix, Elt a, Elt b) 
     => (Exp a -> Exp b) 
-    -> Acc (Array dim a)
-    -> Acc (Array dim b)
+    -> Acc (Array ix a)
+    -> Acc (Array ix b)
 map = Acc $$ Map
 
 -- |Apply the given binary function elementwise to the two arrays.  The extent of the resulting
 -- array is the intersection of the extents of the two source arrays.
 --
-zipWith :: (Ix dim, Elem a, Elem b, Elem c)
+zipWith :: (Shape ix, Elt a, Elt b, Elt c)
         => (Exp a -> Exp b -> Exp c) 
-        -> Acc (Array dim a)
-        -> Acc (Array dim b)
-        -> Acc (Array dim c)
+        -> Acc (Array ix a)
+        -> Acc (Array ix b)
+        -> Acc (Array ix c)
 zipWith = Acc $$$ ZipWith
 
 -- Reductions
@@ -196,20 +196,20 @@ zipWith = Acc $$$ ZipWith
 -- |Reduction of the innermost dimension of an array of arbitrary rank.  The first argument needs to
 -- be an /associative/ function to enable an efficient parallel implementation.
 -- 
-fold :: (Ix dim, Elem a)
+fold :: (Shape ix, Elt a)
      => (Exp a -> Exp a -> Exp a) 
      -> Exp a 
-     -> Acc (Array (dim:.Int) a)
-     -> Acc (Array dim a)
+     -> Acc (Array (ix:.Int) a)
+     -> Acc (Array ix a)
 fold = Acc $$$ Fold
 
 -- |Variant of 'fold' that requires the reduced array to be non-empty and doesn't need an default
 -- value.
 -- 
-fold1 :: (Ix dim, Elem a)
+fold1 :: (Shape ix, Elt a)
       => (Exp a -> Exp a -> Exp a) 
-      -> Acc (Array (dim:.Int) a)
-      -> Acc (Array dim a)
+      -> Acc (Array (ix:.Int) a)
+      -> Acc (Array ix a)
 fold1 = Acc $$ Fold1
 
 -- |Segmented reduction along the innermost dimension.  Performs one individual reduction per
@@ -217,12 +217,12 @@ fold1 = Acc $$ Fold1
 --
 -- The source array must have at least rank 1.
 --
-foldSeg :: (Ix dim, Elem a)
+foldSeg :: (Shape ix, Elt a)
         => (Exp a -> Exp a -> Exp a) 
         -> Exp a 
-        -> Acc (Array (dim:.Int) a)
+        -> Acc (Array (ix:.Int) a)
         -> Acc Segments
-        -> Acc (Array (dim:.Int) a)
+        -> Acc (Array (ix:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
 
 -- |Variant of 'foldSeg' that requires /all/ segments of the reduced array to be non-empty and
@@ -230,11 +230,11 @@ foldSeg = Acc $$$$ FoldSeg
 --
 -- The source array must have at least rank 1.
 --
-fold1Seg :: (Ix dim, Elem a)
+fold1Seg :: (Shape ix, Elt a)
          => (Exp a -> Exp a -> Exp a) 
-         -> Acc (Array (dim:.Int) a)
+         -> Acc (Array (ix:.Int) a)
          -> Acc Segments
-         -> Acc (Array (dim:.Int) a)
+         -> Acc (Array (ix:.Int) a)
 fold1Seg = Acc $$$ Fold1Seg
 
 -- Scan functions
@@ -244,7 +244,7 @@ fold1Seg = Acc $$$ Fold1Seg
 -- needs to be an /associative/ function to enable an efficient parallel implementation.  The initial
 -- value (second argument) may be aribitrary.
 --
-scanl :: Elem a
+scanl :: Elt a
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
       -> Acc (Vector a)
@@ -259,7 +259,7 @@ scanl = Acc $$$ Scanl
 -- >     len = shape arr
 -- >     res = scanl f e arr in 
 --
-scanl' :: Elem a
+scanl' :: Elt a
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Vector a)
@@ -274,7 +274,7 @@ scanl' = unpair . Acc $$$ Scanl'
 -- >     len = shape arr
 -- >     res = scanl f e arr in 
 --
-scanl1 :: Elem a
+scanl1 :: Elt a
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Vector a)
        -> Acc (Vector a)
@@ -282,7 +282,7 @@ scanl1 = Acc $$ Scanl1
 
 -- |Right-to-left variant of 'scanl'.
 --
-scanr :: Elem a
+scanr :: Elt a
       => (Exp a -> Exp a -> Exp a)
       -> Exp a
       -> Acc (Vector a)
@@ -291,7 +291,7 @@ scanr = Acc $$$ Scanr
 
 -- |Right-to-left variant of 'scanl\''. 
 --
-scanr' :: Elem a
+scanr' :: Elt a
        => (Exp a -> Exp a -> Exp a)
        -> Exp a
        -> Acc (Vector a)
@@ -300,7 +300,7 @@ scanr' = unpair . Acc $$$ Scanr'
 
 -- |Right-to-left variant of 'scanl1'.
 --
-scanr1 :: Elem a
+scanr1 :: Elt a
        => (Exp a -> Exp a -> Exp a)
        -> Acc (Vector a)
        -> Acc (Vector a)
@@ -314,24 +314,24 @@ scanr1 = Acc $$ Scanr1
 -- into the result array are added to the current value using the given
 -- combination function.
 --
--- The combination function must be /associative/.  Elements that are mapped to
+-- The combination function must be /associative/.  Eltents that are mapped to
 -- the magic value 'ignore' by the permutation function are being dropped.
 --
-permute :: (Ix dim, Ix dim', Elem a)
+permute :: (Shape ix, Shape ix', Elt a)
         => (Exp a -> Exp a -> Exp a)    -- ^combination function
-        -> Acc (Array dim' a)           -- ^array of default values
-        -> (Exp dim -> Exp dim')        -- ^permutation
-        -> Acc (Array dim  a)           -- ^permuted array
-        -> Acc (Array dim' a)
+        -> Acc (Array ix' a)            -- ^array of default values
+        -> (Exp ix -> Exp ix')          -- ^permutation
+        -> Acc (Array ix  a)            -- ^permuted array
+        -> Acc (Array ix' a)
 permute = Acc $$$$ Permute
 
 -- |Backward permutation 
 --
-backpermute :: (Ix dim, Ix dim', Elem a)
-            => Exp dim'                 -- ^shape of the result array
-            -> (Exp dim' -> Exp dim)    -- ^permutation
-            -> Acc (Array dim  a)       -- ^permuted array
-            -> Acc (Array dim' a)
+backpermute :: (Shape ix, Shape ix', Elt a)
+            => Exp ix'                  -- ^shape of the result array
+            -> (Exp ix' -> Exp ix)      -- ^permutation
+            -> Acc (Array ix  a)        -- ^permuted array
+            -> Acc (Array ix' a)
 backpermute = Acc $$$ Backpermute
 
 -- Stencil operations
@@ -373,25 +373,25 @@ type Stencil5x5x5 a = (Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, Stencil5x5 a, S
 --  array, a boundary condition determines the contents of the out-of-bounds neighbourhood
 --  positions.
 --
-stencil :: (Ix dim, Elem a, Elem b, Stencil dim a stencil)
+stencil :: (Shape ix, Elt a, Elt b, Stencil ix a stencil)
         => (stencil -> Exp b)                 -- ^stencil function
         -> Boundary a                         -- ^boundary condition
-        -> Acc (Array dim a)                  -- ^source array
-        -> Acc (Array dim b)                  -- ^destination array
+        -> Acc (Array ix a)                   -- ^source array
+        -> Acc (Array ix b)                   -- ^destination array
 stencil = Acc $$$ Stencil
 
 -- |Map a binary stencil of an array.  The extent of the resulting array is the intersection of
 -- the extents of the two source arrays.
 --
-stencil2 :: (Ix dim, Elem a, Elem b, Elem c, 
-             Stencil dim a stencil1, 
-             Stencil dim b stencil2)
+stencil2 :: (Shape ix, Elt a, Elt b, Elt c, 
+             Stencil ix a stencil1, 
+             Stencil ix b stencil2)
         => (stencil1 -> stencil2 -> Exp c)    -- ^binary stencil function
         -> Boundary a                         -- ^boundary condition #1
-        -> Acc (Array dim a)                  -- ^source array #1
+        -> Acc (Array ix a)                   -- ^source array #1
         -> Boundary b                         -- ^boundary condition #2
-        -> Acc (Array dim b)                  -- ^source array #2
-        -> Acc (Array dim c)                  -- ^destination array
+        -> Acc (Array ix b)                   -- ^source array #2
+        -> Acc (Array ix c)                   -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
 
 
@@ -411,50 +411,50 @@ class Tuple tup where
   --
   untuple :: TupleT tup -> tup
   
-instance (Elem a, Elem b) => Tuple (Exp a, Exp b) where
+instance (Elt a, Elt b) => Tuple (Exp a, Exp b) where
   type TupleT (Exp a, Exp b) = Exp (a, b)
   tuple   = tup2
   untuple = untup2
 
-instance (Elem a, Elem b, Elem c) => Tuple (Exp a, Exp b, Exp c) where
+instance (Elt a, Elt b, Elt c) => Tuple (Exp a, Exp b, Exp c) where
   type TupleT (Exp a, Exp b, Exp c) = Exp (a, b, c)
   tuple   = tup3
   untuple = untup3
 
-instance (Elem a, Elem b, Elem c, Elem d) 
+instance (Elt a, Elt b, Elt c, Elt d) 
   => Tuple (Exp a, Exp b, Exp c, Exp d) where
   type TupleT (Exp a, Exp b, Exp c, Exp d) = Exp (a, b, c, d)
   tuple   = tup4
   untuple = untup4
 
-instance (Elem a, Elem b, Elem c, Elem d, Elem e) 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e) 
   => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e) where
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e) = Exp (a, b, c, d, e)
   tuple   = tup5
   untuple = untup5
 
-instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f)
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
   => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
     = Exp (a, b, c, d, e, f)
   tuple   = tup6
   untuple = untup6
 
-instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g)
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
     = Exp (a, b, c, d, e, f, g)
   tuple   = tup7
   untuple = untup7
 
-instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h)
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
     = Exp (a, b, c, d, e, f, g, h)
   tuple   = tup8
   untuple = untup8
 
-instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i)
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
   type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
     = Exp (a, b, c, d, e, f, g, h, i)
@@ -463,22 +463,22 @@ instance (Elem a, Elem b, Elem c, Elem d, Elem e, Elem f, Elem g, Elem h, Elem i
 
 -- |Extract the first component of a pair
 --
-fst :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp a
+fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
 fst e = let (x, _:: Exp b) = untuple e in x
 
 -- |Extract the second component of a pair
 --
-snd :: forall a b. (Elem a, Elem b) => Exp (a, b) -> Exp b
+snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
 snd e = let (_ :: Exp a, y) = untuple e in y
 
 -- |Converts an uncurried function to a curried function
 --
-curry :: (Elem a, Elem b) => (Exp (a, b) -> Exp c) -> Exp a -> Exp b -> Exp c
+curry :: (Elt a, Elt b) => (Exp (a, b) -> Exp c) -> Exp a -> Exp b -> Exp c
 curry f x y = f (tuple (x, y))
 
 -- |Converts a curried function to a function on pairs
 --
-uncurry :: (Elem a, Elem b) => (Exp a -> Exp b -> Exp c) -> Exp (a, b) -> Exp c
+uncurry :: (Elt a, Elt b) => (Exp a -> Exp b -> Exp c) -> Exp (a, b) -> Exp c
 uncurry f t = let (x, y) = untuple t in f x y
 
 
@@ -503,7 +503,7 @@ instance Index Z where
   index _   = IndexNil
   unindex _ = Z
   
-instance (Ix ix, Index ix) => Index (ix:.Int) where
+instance (Shape ix, Index ix) => Index (ix:.Int) where
   type IndexExp (ix:.Int) = IndexExp ix :. Exp Int
 
   index (ix:.i) = IndexCons (index ix) i
@@ -536,7 +536,7 @@ ilift1 f = index1 . f . unindex1
 -- |Conditional expression.
 --
 infix 0 ?
-(?) :: Elem t => Exp Bool -> (Exp t, Exp t) -> Exp t
+(?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = Cond c t e
 
 
@@ -546,75 +546,75 @@ c ? (t, e) = Cond c t e
 -- |Expression form that extracts a scalar from an array.
 --
 infixl 9 !
-(!) :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim -> Exp e
+(!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
 (!) = IndexScalar
 
 -- |Extraction of the element in a singleton array.
 --
-the :: Elem e => Acc (Scalar e) -> Exp e
+the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
 
 -- |Expression form that yields the shape of an array.
 --
-shape :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp dim
+shape :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix
 shape = Shape
 
 -- |Expression form that yields the size of an array.
 --
-size :: (Ix dim, Elem e) => Acc (Array dim e) -> Exp Int
+size :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int
 size = Size
 
 
 -- Instances of all relevant H98 classes
 -- -------------------------------------
 
-instance (Elem t, IsBounded t) => Bounded (Exp t) where
+instance (Elt t, IsBounded t) => Bounded (Exp t) where
   minBound = mkMinBound
   maxBound = mkMaxBound
 
-instance (Elem t, IsScalar t) => Enum (Exp t)
+instance (Elt t, IsScalar t) => Enum (Exp t)
 --  succ = mkSucc
 --  pred = mkPred
   -- FIXME: ops
 
-instance (Elem t, IsScalar t) => Prelude.Eq (Exp t) where
+instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   (==)        = error "Prelude.Eq.== applied to EDSL types"
 
-instance (Elem t, IsScalar t) => Prelude.Ord (Exp t) where
+instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   compare     = error "Prelude.Ord.compare applied to EDSL types"
 
-instance (Elem t, IsNum t, IsIntegral t) => Bits (Exp t) where
+instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd
   (.|.)      = mkBOr
   xor        = mkBXor
   complement = mkBNot
   -- FIXME: argh, the rest have fixed types in their signatures
 
-shift, shiftL, shiftR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shift, shiftL, shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shift  x i = i ==* 0 ? (x, i <* 0 ? (x `shiftR` (-i), x `shiftL` i))
 shiftL     = mkBShiftL
 shiftR     = mkBShiftR
 
-rotate, rotateL, rotateR :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotate, rotateL, rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotate  x i = i ==* 0 ? (x, i <* 0 ? (x `rotateR` (-i), x `rotateL` i))
 rotateL     = mkBRotateL
 rotateR     = mkBRotateR
 
-bit :: (Elem t, IsIntegral t) => Exp Int -> Exp t
+bit :: (Elt t, IsIntegral t) => Exp Int -> Exp t
 bit x = 1 `shiftL` x
 
-setBit, clearBit, complementBit :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+setBit, clearBit, complementBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 x `setBit` i        = x .|. bit i
 x `clearBit` i      = x .&. complement (bit i)
 x `complementBit` i = x `xor` bit i
 
-testBit :: (Elem t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
+testBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
 x `testBit` i       = (x .&. bit i) /=* 0
 
 
-instance (Elem t, IsNum t) => Num (Exp t) where
+instance (Elt t, IsNum t) => Num (Exp t) where
   (+)         = mkAdd
   (-)         = mkSub
   (*)         = mkMul
@@ -623,11 +623,11 @@ instance (Elem t, IsNum t) => Num (Exp t) where
   signum      = mkSig
   fromInteger = constant . fromInteger
 
-instance (Elem t, IsNum t) => Real (Exp t)
+instance (Elt t, IsNum t) => Real (Exp t)
   -- FIXME: Why did we include this class?  We won't need `toRational' until
   --   we support rational numbers in AP computations.
 
-instance (Elem t, IsIntegral t) => Integral (Exp t) where
+instance (Elt t, IsIntegral t) => Integral (Exp t) where
   quot = mkQuot
   rem  = mkRem
   div  = mkIDiv
@@ -636,7 +636,7 @@ instance (Elem t, IsIntegral t) => Integral (Exp t) where
 --  divMod  =
 --  toInteger =  -- makes no sense
 
-instance (Elem t, IsFloating t) => Floating (Exp t) where
+instance (Elt t, IsFloating t) => Floating (Exp t) where
   pi      = mkPi
   sin     = mkSin
   cos     = mkCos
@@ -654,16 +654,16 @@ instance (Elem t, IsFloating t) => Floating (Exp t) where
   logBase = mkLogBase
   -- FIXME: add other ops
 
-instance (Elem t, IsFloating t) => Fractional (Exp t) where
+instance (Elt t, IsFloating t) => Fractional (Exp t) where
   (/)          = mkFDiv
   recip        = mkRecip
   fromRational = constant . fromRational
   -- FIXME: add other ops
 
-instance (Elem t, IsFloating t) => RealFrac (Exp t)
+instance (Elt t, IsFloating t) => RealFrac (Exp t)
   -- FIXME: add ops
 
-instance (Elem t, IsFloating t) => RealFloat (Exp t) where
+instance (Elt t, IsFloating t) => RealFloat (Exp t) where
   atan2 = mkAtan2
   -- FIXME: add ops
 
@@ -675,12 +675,12 @@ infix 4 ==*, /=*, <*, <=*, >*, >=*
 
 -- |Equality lifted into Accelerate expressions.
 --
-(==*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(==*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (==*) = mkEq
 
 -- |Inequality lifted into Accelerate expressions.
 --
-(/=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(/=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (/=*) = mkNEq
 
 -- compare :: a -> a -> Ordering  -- we have no enumerations at the moment
@@ -688,32 +688,32 @@ infix 4 ==*, /=*, <*, <=*, >*, >=*
 
 -- |Smaller-than lifted into Accelerate expressions.
 --
-(<*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(<*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<*)  = mkLt
 
 -- |Greater-or-equal lifted into Accelerate expressions.
 --
-(>=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(>=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>=*) = mkGtEq
 
 -- |Greater-than lifted into Accelerate expressions.
 --
-(>*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(>*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (>*)  = mkGt
 
 -- |Smaller-or-equal lifted into Accelerate expressions.
 --
-(<=*) :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp Bool
+(<=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<=*) = mkLtEq
 
 -- |Determine the maximum of two scalars.
 --
-max :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
+max :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
 max = mkMax
 
 -- |Determine the minimum of two scalars.
 --
-min :: (Elem t, IsScalar t) => Exp t -> Exp t -> Exp t
+min :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
 
@@ -768,5 +768,5 @@ truncateFloatToInt = mkTruncFloatInt
 
 -- |Magic value identifying elements that are ignored in a forward permutation
 --
-ignore :: Ix dim => Exp dim
+ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore

@@ -36,18 +36,16 @@ instance Delayable () where
   delay ()          = DelayedUnit
   force DelayedUnit = ()
 
-instance Delayable (Array dim e) where
-  data Delayed (Array dim e) 
-    = (Ix dim, Elem e) => 
-      DelayedArray { shapeDA :: ElemRepr dim
-                   , repfDA  :: ElemRepr dim -> ElemRepr e
+instance Delayable (Array sh e) where
+  data Delayed (Array sh e) 
+    = (Shape sh, Elt e) => 
+      DelayedArray { shapeDA :: EltRepr sh
+                   , repfDA  :: EltRepr sh -> EltRepr e
                    }
-  delay arr@(Array sh _)    = DelayedArray sh (fromElem . (arr!) . toElem)
-  force (DelayedArray sh f) = newArray (toElem sh) (toElem . f . fromElem)
+  delay arr@(Array sh _)    = DelayedArray sh (fromElt . (arr!) . toElt)
+  force (DelayedArray sh f) = newArray (toElt sh) (toElt . f . fromElt)
   
 instance (Delayable a1, Delayable a2) => Delayable (a1, a2) where
   data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
   delay (a1, a2) = DelayedPair (delay a1) (delay a2)
   force (DelayedPair a1 a2) = (force a1, force a2)
-
-
