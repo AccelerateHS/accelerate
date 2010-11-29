@@ -507,7 +507,8 @@ data OpenExp env aenv t where
 
   -- Number of elements of an array
   -- the array expression can not contain any free scalar variables
-  Size        :: OpenAcc aenv (Array dim e) 
+  Size        :: Elem dim
+              => OpenAcc aenv (Array dim e)
               -> OpenExp env aenv Int
 
 -- |Expression without free scalar variables

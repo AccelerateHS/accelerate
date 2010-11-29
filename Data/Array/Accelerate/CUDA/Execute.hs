@@ -106,10 +106,10 @@ executeOpenAcc (Unit e) aenv = do
 
 ---- (3) Array computations ----
 executeOpenAcc acc@(Generate e _) aenv = do
-  dim              <- executeExp e aenv
-  r@(Array sh out) <- newArray dim
-  let n = size sh
-  execute "generate" acc aenv n ((((),out),convertIx sh),n)
+  sh              <- executeExp e aenv
+  r@(Array s out) <- newArray sh
+  let n = size s
+  execute "generate" acc aenv n ((((),out),convertIx s),n)
   return r
 
 executeOpenAcc acc@(Map _ a0) aenv = do
@@ -342,14 +342,10 @@ executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
 executeOpenExp (Tuple tup)       env aenv = toTuple                   <$> executeTuple tup env aenv
 executeOpenExp (Prj idx e)       env aenv = I.evalPrj idx . fromTuple <$> executeOpenExp e env aenv
-executeOpenExp IndexNil          _env _aenv = 
-  INTERNAL_ERROR(error) "executeOpenExp" "IndexNil NOT YET IMPLEMENTED"
-executeOpenExp (IndexCons _t _h)   _env _aenv = 
-  INTERNAL_ERROR(error) "executeOpenExp" "IndexCons NOT YET IMPLEMENTED"
-executeOpenExp (IndexHead _ix)   _env _aenv = 
-  INTERNAL_ERROR(error) "executeOpenExp" "IndexHead NOT YET IMPLEMENTED"
-executeOpenExp (IndexTail _ix)   _env _aenv = 
-  INTERNAL_ERROR(error) "executeOpenExp" "IndexTail NOT YET IMPLEMENTED"
+executeOpenExp IndexNil          _   _    = return Z
+executeOpenExp (IndexCons sh i)  env aenv = (:.) <$> executeOpenExp sh env aenv <*> executeOpenExp i env aenv
+executeOpenExp (IndexHead ix)    env aenv = (\(_:.h) -> h) <$> executeOpenExp ix env aenv
+executeOpenExp (IndexTail ix)    env aenv = (\(t:._) -> t) <$> executeOpenExp ix env aenv
 executeOpenExp (IndexScalar a e) env aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   ix            <- executeOpenExp e env aenv
@@ -390,23 +386,33 @@ data Lifted where
   Shapes :: Ix dim => dim         -> Lifted
   Arrays ::           Array dim e -> Lifted
 
-liftAcc :: OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftAcc :: forall a aenv. OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftAcc (Let _ _)            _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
+liftAcc (Let2 _ _)           _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
+liftAcc (Avar _)             _    = return []
+liftAcc (Use _)              _    = return []
+liftAcc (Unit _)             _    = return []
+liftAcc (Reshape _ _)        _    = return []
+liftAcc (Replicate _ _ _)    _    = return []
+liftAcc (Index _ _ _)        _    = return []
 liftAcc (Generate _ f)       aenv = liftFun f aenv
 liftAcc (Map f _)            aenv = liftFun f aenv
 liftAcc (ZipWith f _ _)      aenv = liftFun f aenv
+liftAcc (Fold1 f _)          aenv = liftFun f aenv
+liftAcc (Fold1Seg f _ _)     aenv = liftFun f aenv
+liftAcc (Scanl1 f _)         aenv = liftFun f aenv
+liftAcc (Scanr1 f _)         aenv = liftFun f aenv
 liftAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]
 liftAcc (FoldSeg f e _ _)    aenv = concatM [liftExp e aenv, liftFun f aenv]
 liftAcc (Scanl f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
 liftAcc (Scanr f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
 liftAcc (Scanl' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
 liftAcc (Scanr' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanl1 f _)         aenv = liftFun f aenv
-liftAcc (Scanr1 f _)         aenv = liftFun f aenv
 liftAcc (Permute f _ g _)    aenv = concatM [liftFun f aenv, liftFun g aenv]
 liftAcc (Backpermute _ f _)  aenv = liftFun f aenv
 liftAcc (Stencil f _ _)      aenv = liftFun f aenv
 liftAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
-liftAcc _ _ = return []
+
 
 liftFun :: OpenFun env aenv a -> Val aenv -> CIO [Lifted]
 liftFun (Lam  lam)  = liftFun lam
@@ -417,8 +423,15 @@ liftTup NilTup          _    = return []
 liftTup (t `SnocTup` e) aenv = (++) <$> liftTup t aenv <*> liftExp e aenv
 
 liftExp :: OpenExp env aenv a -> Val aenv -> CIO [Lifted]
+liftExp (Var _)           _    = return []
+liftExp (Const _)         _    = return []
+liftExp (PrimConst _)     _    = return []
+liftExp (IndexNil)        _    = return []
 liftExp (Tuple t)         aenv = liftTup t aenv
 liftExp (Prj _ e)         aenv = liftExp e aenv
+liftExp (IndexCons sh i)  aenv = concatM [liftExp sh aenv, liftExp i aenv]
+liftExp (IndexHead ix)    aenv = liftExp ix aenv
+liftExp (IndexTail ix)    aenv = liftExp ix aenv
 liftExp (PrimApp _ e)     aenv = liftExp e aenv
 liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
 liftExp (Shape a)         aenv = do
@@ -430,7 +443,7 @@ liftExp (IndexScalar a e) aenv = do
   arr@(Array sh _) <- executeOpenAcc a aenv
   return $ Arrays arr : Shapes sh : vs
 
-liftExp _ _ = return []
+liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
 
 -- Bind array variables to the appropriate module references, where binding

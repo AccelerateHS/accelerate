@@ -164,10 +164,13 @@ codeGenExp p@(Prj idx e)
   . reverse
   <$> codeGenExp e
 
-codeGenExp IndexNil        = INTERNAL_ERROR(error) "codeGenExp" "IndexNil NOT YET IMPLEMENTED"
-codeGenExp (IndexCons _t _h) = INTERNAL_ERROR(error) "codeGenExp" "IndexCons NOT YET IMPLEMENTED"
-codeGenExp (IndexHead _ix)  = INTERNAL_ERROR(error) "codeGenExp" "IndexHead NOT YET IMPLEMENTED"
-codeGenExp (IndexTail _ix)  = INTERNAL_ERROR(error) "codeGenExp" "IndexTail NOT YET IMPLEMENTED"
+codeGenExp IndexNil         = return []
+codeGenExp (IndexCons ix i) =
+  let snoc xs x = xs ++ x
+  in  snoc <$> codeGenExp ix <*> codeGenExp i
+
+codeGenExp (IndexHead ix)  = return . last <$> codeGenExp ix
+codeGenExp (IndexTail ix)  =          init <$> codeGenExp ix
 
 codeGenExp (Var i) =
   let var = cvar ('x' : show (idxToInt i))
@@ -185,7 +188,9 @@ codeGenExp (Shape a) = do
   modM shapes (mkShape (accDim a) sh :)
   return [cvar sh]
 
-codeGenExp (Size _a) = INTERNAL_ERROR(error) "codeGenExp" "size NOT YET IMPLEMENTED"
+codeGenExp (Size a) = do
+  sh <- codeGenExp (Shape a)
+  return [ccall "size" sh]
 
 codeGenExp (IndexScalar a e) = do
   ix <- codeGenExp e

@@ -117,13 +117,20 @@ travA f acc@(Stencil g _ a)      = travF f g >> travA f a >> f acc
 travA f acc@(Stencil2 g _ a _ b) = travF f g >> travA f a >> travA f b >> f acc
 
 travE :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> OpenExp env aenv e -> CIO ()
+travE _ (Var _)           = return ()
+travE _ (Const _)         = return ()
 travE f (Tuple t)         = travT f t
 travE f (Prj _ e)         = travE f e
+travE _ (IndexNil)        = return ()
+travE f (IndexCons ix i)  = travE f ix >> travE f i
+travE f (IndexHead ix)    = travE f ix
+travE f (IndexTail ix)    = travE f ix
+travE _ (PrimConst _)     = return ()
 travE f (PrimApp _ e)     = travE f e
 travE f (Cond p t e)      = travE f p >> travE f t >> travE f e
 travE f (IndexScalar a e) = travA f a >> travE f e
 travE f (Shape a)         = travA f a
-travE _ _                 = return ()
+travE f (Size a)          = travA f a
 
 travT :: (forall a' aenv'. OpenAcc aenv' a' -> CIO ()) -> Tuple (OpenExp env aenv) t -> CIO ()
 travT _ NilTup        = return ()

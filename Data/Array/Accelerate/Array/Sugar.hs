@@ -847,7 +847,7 @@ newArray sh f
 
 -- |Convert an 'IArray' to an accelerated array.
 --
-fromIArray :: (ElemRepr ix ~ ElemRepr dim, IArray.Ix ix, Elem ix, IArray a e, Ix dim, Elem e)
+fromIArray :: (ElemRepr ix ~ ElemRepr dim, IArray a e, IArray.Ix ix, Ix dim, Elem ix, Elem e)
            => a ix e -> Array dim e
 fromIArray iarr = newArray (toElem sh) (\ix -> iarr IArray.! toElem (fromElem ix))
   where
