@@ -20,9 +20,9 @@ filter p vec
   = let arr                 = use vec
         flags               = map (boolToInt . p) arr
         (targetIdx, length) = scanl' (+) 0 flags
-        arr'                = backpermute (length!(constant ())) id arr
+        arr'                = backpermute (index1 $ the length) id arr
     in
-    permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, targetIdx!ix)) arr
+    permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) arr
     -- FIXME: This is abusing 'permute' in that the first two arguments are
     --        only justified because we know the permutation function will
     --        write to each location in the target exactly once.

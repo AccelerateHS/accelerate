@@ -12,7 +12,7 @@ import SAXPY
 import SMVM
 import ScanSeg
 
-import Data.Array.Accelerate                       (Acc)
+import Data.Array.Accelerate                       (Acc,Z(..),(:.)(..))
 import qualified Data.Array.Accelerate             as Acc
 import qualified Data.Array.Accelerate.CUDA        as CUDA
 import qualified Data.Array.Accelerate.Interpreter as Interp
@@ -30,14 +30,15 @@ instance (Ix dim, IArray UArray e) => NFData (UArray dim e) where
 
 -- Generate a benchmark test iff the reference and accelerate tests succeed.
 --
+{-- actually this isn't so good, since toIArray exposes ElemRepr...
 benchmark
-  :: (IArray UArray e, Ix dim, Acc.Ix dim, Acc.Elem e)
+  :: (IArray UArray e, Ix ix, Acc.Elem ix, Acc.Ix dim, Acc.Elem e)
   => String
   -> (e -> e -> Bool)
-  -> (() -> UArray dim e)
+  -> (() -> UArray ix e)
   -> (() -> Acc (Acc.Array dim e))
   -> IO Benchmark
-
+--}
 benchmark name sim ref acc = do
   putStr "Interpreter : " ; v1 <- validate sim (ref ()) (Acc.toIArray $ Interp.run (acc ()))
   putStr "CUDA        : " ; v2 <- validate sim (ref ()) (Acc.toIArray $ CUDA.run   (acc ()))
@@ -54,8 +55,8 @@ benchmark name sim ref acc = do
 test_dotp :: GenIO -> Int -> IO Benchmark
 test_dotp gen n = do
   putStrLn $ "== Dot Product (n = " ++ shows n ") =="
-  xs  <- randomVector gen id n
-  ys  <- randomVector gen id n
+  xs  <- randomVectorR (-1,1) gen n
+  ys  <- randomVectorR (-1,1) gen n
   xs' <- convertVector xs
   ys' <- convertVector ys
   benchmark "dotp" similar (run_ref xs ys) (run_acc xs' ys')
@@ -64,12 +65,11 @@ test_dotp gen n = do
     run_ref x y () = dotp_ref x y
     run_acc x y () = dotp x y
 
-
 test_saxpy :: GenIO -> Int -> IO Benchmark
 test_saxpy gen n = do
   putStrLn $ "== SAXPY (n = " ++ shows n ") =="
-  xs    <- randomVector gen id n
-  ys    <- randomVector gen id n
+  xs    <- randomVectorR (-1,1) gen n
+  ys    <- randomVectorR (-1,1) gen n
   xs'   <- convertVector xs
   ys'   <- convertVector ys
   alpha <- uniform gen
@@ -83,7 +83,7 @@ test_saxpy gen n = do
 test_filter :: GenIO -> Int -> IO Benchmark
 test_filter gen n = do
   putStrLn $ "== Filter (n = " ++ shows n ") =="
-  xs  <- randomVector gen id n :: IO (UArray Int Float)
+  xs  <- randomVectorR (0,1::Float) gen n
   xs' <- convertVector xs
   benchmark "filter" similar (run_ref xs) (run_acc xs')
   where
@@ -95,16 +95,16 @@ test_filter gen n = do
 test_smvm :: GenIO -> (Int,Int) -> (Int,Int) -> IO Benchmark
 test_smvm gen (n,m) (rows,cols) = do
   putStr $ "== SMVM (" ++ shows rows " x " ++ shows cols ", "
-  vec   <- randomVector gen id cols
-  segd  <- randomVector gen (\x -> (abs x `rem` (m-n)) + n) rows
+  vec   <- randomVectorR (-1,1) gen cols
+  segd  <- randomVectorR (n,m)  gen rows
   let nnz = sum (elems segd)
   putStrLn $ shows nnz " non-zeros) =="
-  inds  <- randomVector gen (\x -> abs x `rem` cols) nnz
-  vals  <- randomVector gen id nnz
+  inds  <- randomVectorR (0,cols) gen nnz
+  vals  <- randomVectorR (-1,1)   gen nnz
   segd' <- convertVector segd
   vec'  <- convertVector vec
-  mat'  <- let v = Acc.fromList nnz (zip (elems inds) (elems vals))
-           in  evaluate (v `Acc.indexArray` 0) >> return v
+  mat'  <- let v = Acc.fromList (Z:.nnz) (zip (elems inds) (elems vals))
+           in  evaluate (v `Acc.indexArray` (Z:.0)) >> return v
   benchmark "smvm" similar (run_ref segd inds vals vec) (run_acc segd' mat' vec')
   where
     {-# NOINLINE run_ref #-}
@@ -115,11 +115,11 @@ test_smvm gen (n,m) (rows,cols) = do
 test_scanlSeg :: GenIO -> Int -> Int -> IO Benchmark
 test_scanlSeg gen n r = do
   putStr $ "== Segmented Prescan (" ++ shows n " segments, "
-  seg  <- randomVector gen (\x -> abs x `rem` r) n :: IO (UArray Int Int)
+  seg  <- randomVectorR (0,r-1) gen n :: IO (UArray Int Int)
   seg' <- convertVector seg
   let ne = sum (elems seg)
   putStrLn $ shows ne " elements)"
-  xs   <- randomVector gen id ne :: IO (UArray Int Float)
+  xs   <- randomVectorR (-1,1) gen ne :: IO (UArray Int Float)
   xs'  <- convertVector xs
   benchmark "prescanlSeg" similar (run_ref xs seg) (run_acc xs' seg')
   where

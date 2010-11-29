@@ -18,7 +18,7 @@ smvm (segd', smat') vec'
       (inds, vals) = Acc.unzip (Acc.use smat')
       vec          = Acc.use vec'
       ---
-      vecVals  = Acc.backpermute (Acc.shape inds) (\i -> inds Acc.! i) vec
+      vecVals  = Acc.backpermute (Acc.shape inds) (\i -> Acc.index1 $ inds Acc.! i) vec
       products = Acc.zipWith (*) vecVals vals
     in
     Acc.foldSeg (+) 0 products segd
