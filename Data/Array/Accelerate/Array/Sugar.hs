@@ -832,9 +832,9 @@ newArray sh f
 
 -- |Convert an 'IArray' to an accelerated array.
 --
-fromIArray :: (ElemRepr ix ~ ElemRepr dim, IArray.Ix ix, Elem ix, IArray a e, Ix dim, Elem e)
-           => a ix e -> Array dim e
-fromIArray iarr = newArray (toElem sh) (\ix -> iarr IArray.! toElem (fromElem ix))
+fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+           => a ix e -> Array sh e
+fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
   where
     (lo,hi) = IArray.bounds iarr
     sh      = Repr.rangeToShape (fromElt lo, fromElt hi)

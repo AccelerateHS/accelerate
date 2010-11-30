@@ -20,6 +20,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
@@ -39,18 +40,20 @@ accToKey r@(Replicate s e a)  = chr   3 : showTy (accType a) ++ showExp e ++ sho
 accToKey r@(Index s a e)      = chr   5 : showTy (accType a) ++ showExp e ++ showSI s e r a
 accToKey (Map f a)            = chr   7 : showTy (accType a) ++ showFun f
 accToKey (ZipWith f x y)      = chr  11 : showTy (accType x) ++ showTy (accType y) ++ showFun f
-accToKey (Fold f e a)         = chr  13 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (FoldSeg f e _ a)    = chr  17 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl f e a)        = chr  19 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl' f e a)       = chr  23 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl1 f a)         = chr  31 : showTy (accType a) ++ showFun f
-accToKey (Scanr f e a)        = chr  43 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanr' f e a)       = chr  61 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanr1 f a)         = chr  79 : showTy (accType a) ++ showFun f
-accToKey (Permute c _ p a)    = chr 101 : showTy (accType a) ++ showFun c ++ showFun p
-accToKey (Backpermute _ p a)  = chr 127 : showTy (accType a) ++ showFun p
-accToKey (Stencil _ _ _)      = {-chr 167 :-} INTERNAL_ERROR(error) "accToKey" "Stencil"
-accToKey (Stencil2 _ _ _ _ _) = {-chr 191 :-} INTERNAL_ERROR(error) "accToKey" "Stencil2"
+accToKey (Fold f e a)         = chr  13 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Fold1 f a)          = chr  17 : chr (accDim a) : showTy (accType a) ++ showFun f
+accToKey (FoldSeg f e a _)    = chr  19 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Fold1Seg f a _)     = chr  23 : chr (accDim a) : showTy (accType a) ++ showFun f
+accToKey (Scanl f e a)        = chr  31 : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Scanl' f e a)       = chr  43 : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Scanl1 f a)         = chr  61 : showTy (accType a) ++ showFun f
+accToKey (Scanr f e a)        = chr  79 : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Scanr' f e a)       = chr 101 : showTy (accType a) ++ showFun f ++ showExp e
+accToKey (Scanr1 f a)         = chr 127 : showTy (accType a) ++ showFun f
+accToKey (Permute c _ p a)    = chr 167 : showTy (accType a) ++ showFun c ++ showFun p
+accToKey (Backpermute _ p a)  = chr 191 : showTy (accType a) ++ showFun p
+accToKey (Stencil _ _ _)      = chr 199 : INTERNAL_ERROR(error) "accToKey" "Stencil"
+accToKey (Stencil2 _ _ _ _ _) = chr 313 : INTERNAL_ERROR(error) "accToKey" "Stencil2"
 accToKey x =
   INTERNAL_ERROR(error) "accToKey"
   (unlines ["incomplete patterns for key generation", render (nest 2 doc)])

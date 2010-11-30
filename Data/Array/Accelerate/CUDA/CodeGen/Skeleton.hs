@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkGenerate, mkFold, mkFoldSeg, mkMap, mkZipWith,
+    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkMap, mkZipWith,
     mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
@@ -43,14 +43,27 @@ mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
 -- Reduction
 --------------------------------------------------------------------------------
 
-mkFold :: [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkFold ty identity apply = CUTranslSkel code [] skel
+mkFold :: ([CType],Int) -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkFold (ty,dim) identity apply = CUTranslSkel code [] skel
   where
-    skel = "fold.inl"
+    skel | dim == 1  = "foldAll.inl"
+         | otherwise = "fold.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
             [ mkTuplePartition ty
             , mkIdentity identity
+            , mkApply 2 apply ])
+            (mkNodeInfo (initPos skel) (Name 0))
+
+mkFold1 :: ([CType],Int) -> [CExpr] -> CUTranslSkel
+mkFold1 (ty,dim) apply = CUTranslSkel code inc skel
+  where
+    skel | dim == 1  = "foldAll.inl"
+         | otherwise = "fold.inl"
+    inc  = [(internalIdent "INCLUSIVE", Just (fromBool True))]
+    code = CTranslUnit
+            ( mkTupleTypeAsc 2 ty ++
+            [ mkTuplePartition ty
             , mkApply 2 apply ])
             (mkNodeInfo (initPos skel) (Name 0))
 

@@ -12,7 +12,7 @@ import SAXPY
 import SMVM
 import ScanSeg
 
-import Data.Array.Accelerate                       (Acc,Z(..),(:.)(..))
+import Data.Array.Accelerate                       (Z(..),(:.)(..))
 import qualified Data.Array.Accelerate             as Acc
 import qualified Data.Array.Accelerate.CUDA        as CUDA
 import qualified Data.Array.Accelerate.Interpreter as Interp
@@ -99,8 +99,8 @@ test_smvm gen (n,m) (rows,cols) = do
   segd  <- randomVectorR (n,m)  gen rows
   let nnz = sum (elems segd)
   putStrLn $ shows nnz " non-zeros) =="
-  inds  <- randomVectorR (0,cols) gen nnz
-  vals  <- randomVectorR (-1,1)   gen nnz
+  inds  <- randomVectorR (0,cols-1) gen nnz
+  vals  <- randomVectorR (-1,1)     gen nnz
   segd' <- convertVector segd
   vec'  <- convertVector vec
   mat'  <- let v = Acc.fromList (Z:.nnz) (zip (elems inds) (elems vals))

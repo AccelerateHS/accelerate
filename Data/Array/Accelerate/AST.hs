@@ -348,7 +348,7 @@ data OpenAcc aenv a where
            -> Boundary (EltRepr e1)                 -- boundary condition #1
            -> OpenAcc  aenv (Array sh e1)           -- source array #1
            -> Boundary (EltRepr e2)                 -- boundary condition #2
-           -> OpenAcc  aenv (Array sh e2)          -- source array #2
+           -> OpenAcc  aenv (Array sh e2)           -- source array #2
            -> OpenAcc  aenv (Array sh e')
 
 -- |Closed array expression aka an array program

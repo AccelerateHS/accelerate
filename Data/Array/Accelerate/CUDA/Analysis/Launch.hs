@@ -52,6 +52,7 @@ launchConfig acc n fn = do
 --
 blockSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
 blockSize p (Fold _ _ _) r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
+blockSize p (Fold1 _ _)  r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
 blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) s
 
 
@@ -78,7 +79,8 @@ elementsPerThread _ = 1
 -- occupancy calculator to optimise kernel launch shape.
 --
 sharedMem :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int
-sharedMem _ (Fold  _ x _)     blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Fold  _ _ a)     blockDim = sizeOf (accType a) * blockDim
+sharedMem _ (Fold1 _ a)       blockDim = sizeOf (accType a) * blockDim
 sharedMem _ (Scanl _ x _)     blockDim = sizeOf (expType x) * blockDim
 sharedMem _ (Scanr _ x _)     blockDim = sizeOf (expType x) * blockDim
 sharedMem _ (Scanl' _ x _)    blockDim = sizeOf (expType x) * blockDim

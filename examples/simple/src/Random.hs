@@ -15,7 +15,7 @@ import qualified Data.Array.Accelerate  as Acc
 
 -- Convert an unboxed array to an Accelerate array
 --
-convertVector :: (IArray UArray e, Acc.Elem e) => UArray Int e -> IO (Acc.Vector e)
+convertVector :: (IArray UArray e, Acc.Elt e) => UArray Int e -> IO (Acc.Vector e)
 convertVector v =
   let arr = Acc.fromIArray v
   in  evaluate (arr `Acc.indexArray` (Z:.0)) >> return arr

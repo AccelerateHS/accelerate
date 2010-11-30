@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators  #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -32,6 +32,7 @@ import System.IO.Unsafe
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Analysis.Shape
 --import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
 import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector,Z(..),(:.)(..))
@@ -130,15 +131,13 @@ executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
   return r
 
 -- FIXME: Plain fold is now only supposed to fold along the innermost dimensions.
-executeOpenAcc _acc@(Fold _f _x _a0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "fold NOT YET IMPLEMENTED"
--- executeOpenAcc acc@(Fold f x a0) aenv = do
---   (Array sh0 in0)   <- executeOpenAcc a0 aenv
---   c@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
---   r@(Array _ out)   <- newArray g
---   dispatch c ((((),out),in0),size sh0)
---   freeArray in0
---   if g > 1 then executeOpenAcc (Fold f x (Use r)) aenv
---            else return (Array (Sugar.fromElt ()) out)
+executeOpenAcc acc@(Fold _ _x a0) aenv
+  | accDim a0 == 1 = executeFoldAll acc a0 aenv
+  | otherwise      = INTERNAL_ERROR(error) "executeOpenAcc" "fold NOT YET IMPLEMENTED"
+
+executeOpenAcc acc@(Fold1 _x a0) aenv
+  | accDim a0 == 1 = executeFoldAll acc a0 aenv
+  | otherwise      = INTERNAL_ERROR(error) "executeOpenAcc" "fold1 NOT YET IMPLEMENTED"
 
 -- FIXME: Plain foldSeg is now only supposed to fold along the innermost dimensions.
 executeOpenAcc _acc@(FoldSeg _ _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
@@ -153,8 +152,6 @@ executeOpenAcc _acc@(FoldSeg _ _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "execute
 --   freeArray in0
 --   freeArray seg
 --   return r
-
-executeOpenAcc _acc@(Fold1 _f _a0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "fold1 NOT YET IMPLEMENTED"
 
 executeOpenAcc _acc@(Fold1Seg _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "fold1Seg NOT YET IMPLEMENTED"
 
@@ -221,6 +218,22 @@ executeOpenAcc _acc@(Stencil _ _ _a0) _aenv
   = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil NOT YET IMPLEMENTED"
 executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
   = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil2 NOT YET IMPLEMENTED"
+
+
+
+executeFoldAll :: Sugar.Shape dim
+  => OpenAcc aenv (Array dim e)
+  -> OpenAcc aenv (Array (dim:.Int) e)
+  -> Val aenv
+  -> CIO (Array dim e)
+executeFoldAll acc a0 aenv = do
+  (Array sh0 in0)   <- executeOpenAcc a0 aenv
+  c@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
+  r@(Array _ out)   <- newArray (Sugar.toElt (fst sh0,g))
+  dispatch c ((((),out),in0),size sh0)
+  freeArray in0
+  if g > 1 then executeFoldAll acc (Use r) aenv
+           else return (Array (fst sh0) out)
 
 
 -- Differences in left/right scan-variants are incorporated during code generation.
