@@ -12,7 +12,7 @@ import qualified Data.Array.IArray as IArray
 import Data.Array.Accelerate
 
 
-filter :: Elem a 
+filter :: Elt a
        => (Exp a -> Exp Bool) 
        -> Vector a
        -> Acc (Vector a)
