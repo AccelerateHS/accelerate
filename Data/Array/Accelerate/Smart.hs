@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Smart (
   Acc(..), PreAcc(..), Exp(..), Boundary(..), Stencil(..),
   
   -- * HOAS -> de Bruijn conversion
-  convertAcc,
+  convertAcc, convertAccFun1,
   convertExp, convertFun1, convertFun2,
 
   -- * Smart constructors for unpairing
@@ -75,13 +75,45 @@ import Data.Array.Accelerate.Pretty ()
 #include "accelerate.h"
 
 
+-- Layouts
+-- -------
+
+-- A layout of an environment has an entry for each entry of the environment.
+-- Each entry in the layout holds the deBruijn index that refers to the
+-- corresponding entry in the environment.
+--
+data Layout env env' where
+  EmptyLayout :: Layout env ()
+  PushLayout  :: Typeable t 
+              => Layout env env' -> Idx env t -> Layout env (env', t)
+
+-- Project the nth index out of an environment layout.
+--
+prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
+prjIdx 0 (PushLayout _ ix) = case gcast ix of
+                               Just ix' -> ix'
+                               Nothing  -> INTERNAL_ERROR(error) "prjIdx" "type mismatch"
+prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
+prjIdx _ EmptyLayout       = INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
+
+-- Add an entry to a layout, incrementing all indices
+--
+incLayout :: Layout env env' -> Layout (env, t) env'
+incLayout EmptyLayout         = EmptyLayout
+incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
+
+
 -- Array computations
 -- ------------------
 
 -- |Array-valued collective computations without a recursive knot
 --
-data PreAcc acc a where
-  
+data PreAcc acc a where  
+    -- Needed for conversion to de Bruijn form
+  Atag        :: Arrays as
+              => Int            -- environment size at defining occurrence
+              -> PreAcc acc as
+
   FstArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc (Array sh1 e1, Array sh2 e2)
               -> PreAcc acc (Array sh1 e1)
@@ -217,6 +249,19 @@ convertAcc = convertOpenAcc EmptyLayout
 convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
 convertOpenAcc alyt = convertSharingAcc alyt . recoverSharing
 
+-- |Convert a unary function over array computations
+--
+convertAccFun1 :: forall a b. (Arrays a, Arrays b)
+               => (Acc a -> Acc b) 
+               -> AST.Afun (a -> b)
+convertAccFun1 f = Alam (Abody openF)
+  where
+    a     = Atag 0
+    alyt  = EmptyLayout 
+            `PushLayout` 
+            (ZeroIdx :: Idx ((), a) a)
+    openF = convertOpenAcc alyt (f (Acc a))
+
 -- |Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
 -- bindings).  The latter implements the third phase of sharing recovery.
@@ -243,6 +288,8 @@ convertSharingAcc alyt = convert alyt []
         AST.Let (convert alyt env boundAcc) (convert alyt' (sa:env) bodyAcc)
     convert alyt env (AccSharing _ preAcc)
       = case preAcc of
+          Atag i
+            -> AST.Avar (prjIdx i alyt)
           FstArray acc
             -> AST.Let2 (convert alyt env acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
           SndArray acc
@@ -410,6 +457,7 @@ traverseAcc process combine acc@(Acc pacc)
   = do
       sa <- liftM StableAccName $ makeStableAcc acc
       case pacc of
+        Atag i                   -> process sa
         FstArray acc             -> trav sa acc
         SndArray acc             -> trav sa acc
         Use _                    -> process sa
@@ -482,6 +530,7 @@ determineScopes occMap acc
     injectBindings :: forall arrs. Acc arrs -> IO (SharingAcc arrs, NodeCounts)
     injectBindings acc@(Acc pacc)
       = case pacc of
+          Atag i                          -> reconstruct (Atag i) []
           FstArray acc                    -> trav FstArray acc
           SndArray acc                    -> trav SndArray acc
           Use arr                         -> reconstruct (Use arr) []
@@ -617,6 +666,7 @@ determineScopes occMap acc
               return (VarSharing sn, [sa])
             else
               case pacc of
+                Atag i                          -> return (AccSharing sn $ Atag i, [])
                 FstArray acc                    -> trav FstArray acc
                 SndArray acc                    -> trav SndArray acc
                 Use arr                         -> return (AccSharing sn $ Use arr, [])
@@ -719,30 +769,6 @@ data Exp t where
 
 -- |Conversion from HOAS to de Bruijn expression AST
 -- -
-
--- A layout of an environment has an entry for each entry of the environment.
--- Each entry in the layout holds the deBruijn index that refers to the
--- corresponding entry in the environment.
---
-data Layout env env' where
-  EmptyLayout :: Layout env ()
-  PushLayout  :: Typeable t 
-              => Layout env env' -> Idx env t -> Layout env (env', t)
-
--- Project the nth index out of an environment layout.
---
-prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
-prjIdx 0 (PushLayout _ ix) = case gcast ix of
-                               Just ix' -> ix'
-                               Nothing  -> INTERNAL_ERROR(error) "prjIdx" "type mismatch"
-prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
-prjIdx _ EmptyLayout       = INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
-
--- Add an entry to a layout, incrementing all indices
---
-incLayout :: Layout env env' -> Layout (env, t) env'
-incLayout EmptyLayout         = EmptyLayout
-incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 
 -- |Convert an open expression with given environment layouts.
 --

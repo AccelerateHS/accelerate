@@ -72,7 +72,7 @@ module Data.Array.Accelerate.AST (
   Val(..), prj,
 
   -- * Accelerated array expressions
-  Arrays(..), ArraysR(..), OpenAcc(..), Acc, Stencil(..),
+  Arrays(..), ArraysR(..), OpenAfun(..), Afun, OpenAcc(..), Acc, Stencil(..),
 
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
@@ -143,6 +143,17 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
 instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2) where
   arrays = ArraysRpair arrays arrays
 
+
+-- |Function abstraction over array computations
+--
+data OpenAfun aenv t where
+  Abody :: OpenAcc  aenv       t -> OpenAfun aenv t
+  Alam  :: Arrays as
+        => OpenAfun (aenv, as) t -> OpenAfun aenv (as -> t)
+
+-- |Array computation function without free array variables
+--
+type Afun t = OpenAfun () t
 
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
