@@ -369,24 +369,64 @@ type Acc a = OpenAcc () a
 class IsTuple stencil => Stencil sh e stencil where
   stencilAccess :: (sh -> e) -> sh -> stencil
 
--- DIM0
-instance IsTuple res => Stencil DIM0 res res where
-  stencilAccess rf Z = rf Z
+-- NB: We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at 'DIM0' imply that
+--     the types of individual array elements are in 'IsTuple'.  (That would only possible if we
+--     could have (degenerate) 1-tuple, but we can't as we can't distinguish between a 1-tuple of a
+--     pair and a simple pair.)  Hence, we need to start from 'DIM1' and use 'sh:.Int:.Int' in the
+--     recursive case (to avoid overlapping instances).
 
--- DIM(n+1)
-instance (Stencil sh a row2, 
-          Stencil sh a row1,
-          Stencil sh a row0) => Stencil (sh:.Int) a (row2, row1, row0) where
+-- DIM1
+instance Elt e => Stencil DIM1 e (e, e, e) where
+  stencilAccess rf (Z:.y) = (rf' (y - 1), 
+                             rf' y      ,
+                             rf' (y + 1))
+    where
+      rf' y = rf (Z:.y)
+instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
+  stencilAccess rf (Z:.y) = (rf' (y - 2), 
+                             rf' (y - 1), 
+                             rf' y      ,
+                             rf' (y + 1),
+                             rf' (y + 2))
+    where
+      rf' y = rf (Z:.y)
+instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
+  stencilAccess rf (Z:.y) = (rf' (y - 3), 
+                             rf' (y - 2), 
+                             rf' (y - 1), 
+                             rf' y      ,
+                             rf' (y + 1),
+                             rf' (y + 2),
+                             rf' (y + 3))
+     where
+       rf' y = rf (Z:.y)
+instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
+  stencilAccess rf (Z:.y) = (rf' (y - 4), 
+                             rf' (y - 3), 
+                             rf' (y - 2), 
+                             rf' (y - 1), 
+                             rf' y      ,
+                             rf' (y + 1),
+                             rf' (y + 2),
+                             rf' (y + 3),
+                             rf' (y + 4))
+     where
+       rf' y = rf (Z:.y)
+
+-- DIM(n+1), where n>0
+instance (Stencil (sh:.Int) a row2, 
+          Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 1)) ix, 
                               stencilAccess (rf' y      ) ix,
                               stencilAccess (rf' (y + 1)) ix)
     where
       rf' y ix = rf (ix:.y)
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5) where
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 2)) ix, 
                               stencilAccess (rf' (y - 1)) ix, 
                               stencilAccess (rf' y      ) ix,
@@ -394,13 +434,14 @@ instance (Stencil sh a row1,
                               stencilAccess (rf' (y + 2)) ix)
     where
       rf' y ix = rf (ix:.y)
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5,
-          Stencil sh a row6,
-          Stencil sh a row7) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7)
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 3)) ix, 
                               stencilAccess (rf' (y - 2)) ix, 
                               stencilAccess (rf' (y - 1)) ix, 
@@ -410,16 +451,16 @@ instance (Stencil sh a row1,
                               stencilAccess (rf' (y + 3)) ix)
      where
        rf' y ix = rf (ix:.y)
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5,
-          Stencil sh a row6,
-          Stencil sh a row7,
-          Stencil sh a row8,
-          Stencil sh a row9) 
-  => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7,
+          Stencil (sh:.Int) a row8,
+          Stencil (sh:.Int) a row9) 
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 4)) ix, 
                               stencilAccess (rf' (y - 3)) ix, 
                               stencilAccess (rf' (y - 2)) ix, 

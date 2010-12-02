@@ -457,7 +457,7 @@ traverseAcc process combine acc@(Acc pacc)
   = do
       sa <- liftM StableAccName $ makeStableAcc acc
       case pacc of
-        Atag i                   -> process sa
+        Atag _                   -> process sa
         FstArray acc             -> trav sa acc
         SndArray acc             -> trav sa acc
         Use _                    -> process sa
@@ -941,73 +941,108 @@ class (Elt (StencilRepr sh stencil), AST.Stencil sh a (StencilRepr sh stencil))
   type StencilRepr sh stencil :: *
   stencilPrj :: sh{-dummy-} -> a{-dummy-} -> Exp (StencilRepr sh stencil) -> stencil
 
--- DIM0
-instance (Elt res, IsTuple res) => Stencil Z res (Exp res) where
-  type StencilRepr Z (Exp res) = res
-  stencilPrj _ _ res = res
+-- DIM1
+instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e) where
+  type StencilRepr DIM1 (Exp e, Exp e, Exp e) 
+    = (e, e, e)
+  stencilPrj _ _ s = (Prj tix2 s, 
+                      Prj tix1 s, 
+                      Prj tix0 s)
+instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
+  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
+    = (e, e, e, e, e)
+  stencilPrj _ _ s = (Prj tix4 s, 
+                      Prj tix3 s, 
+                      Prj tix2 s, 
+                      Prj tix1 s, 
+                      Prj tix0 s)
+instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
+  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) 
+    = (e, e, e, e, e, e, e)
+  stencilPrj _ _ s = (Prj tix6 s, 
+                      Prj tix5 s, 
+                      Prj tix4 s, 
+                      Prj tix3 s, 
+                      Prj tix2 s, 
+                      Prj tix1 s, 
+                      Prj tix0 s)
+instance Elt e => Stencil DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
+  type StencilRepr DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
+    = (e, e, e, e, e, e, e, e, e)
+  stencilPrj _ _ s = (Prj tix8 s, 
+                      Prj tix7 s, 
+                      Prj tix6 s, 
+                      Prj tix5 s, 
+                      Prj tix4 s, 
+                      Prj tix3 s, 
+                      Prj tix2 s, 
+                      Prj tix1 s, 
+                      Prj tix0 s)
 
 -- DIM(n+1)
-instance (Stencil sh a row2, 
-          Stencil sh a row1,
-          Stencil sh a row0) => Stencil (sh:.Int) a (row2, row1, row0) where
-  type StencilRepr (sh:.Int) (row2, row1, row0) 
-    = (StencilRepr sh row2, StencilRepr sh row1, StencilRepr sh row0)
-  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix2 s), 
-                      stencilPrj (undefined::sh) a (Prj tix1 s), 
-                      stencilPrj (undefined::sh) a (Prj tix0 s))
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5) where
-  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5) 
-    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
-       StencilRepr sh row5)
-  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix4 s), 
-                      stencilPrj (undefined::sh) a (Prj tix3 s), 
-                      stencilPrj (undefined::sh) a (Prj tix2 s), 
-                      stencilPrj (undefined::sh) a (Prj tix1 s), 
-                      stencilPrj (undefined::sh) a (Prj tix0 s))
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5,
-          Stencil sh a row6,
-          Stencil sh a row7) => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
-  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5, row6, row7) 
-    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
-       StencilRepr sh row5, StencilRepr sh row6, StencilRepr sh row7)
-  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix6 s), 
-                      stencilPrj (undefined::sh) a (Prj tix5 s), 
-                      stencilPrj (undefined::sh) a (Prj tix4 s), 
-                      stencilPrj (undefined::sh) a (Prj tix3 s), 
-                      stencilPrj (undefined::sh) a (Prj tix2 s), 
-                      stencilPrj (undefined::sh) a (Prj tix1 s), 
-                      stencilPrj (undefined::sh) a (Prj tix0 s))
-instance (Stencil sh a row1,
-          Stencil sh a row2,
-          Stencil sh a row3,
-          Stencil sh a row4,
-          Stencil sh a row5,
-          Stencil sh a row6,
-          Stencil sh a row7,
-          Stencil sh a row8,
-          Stencil sh a row9) 
-  => Stencil (sh:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
-  type StencilRepr (sh:.Int) (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
-    = (StencilRepr sh row1, StencilRepr sh row2, StencilRepr sh row3, StencilRepr sh row4,
-       StencilRepr sh row5, StencilRepr sh row6, StencilRepr sh row7, StencilRepr sh row8,
-       StencilRepr sh row9)
-  stencilPrj _ a s = (stencilPrj (undefined::sh) a (Prj tix8 s), 
-                      stencilPrj (undefined::sh) a (Prj tix7 s), 
-                      stencilPrj (undefined::sh) a (Prj tix6 s), 
-                      stencilPrj (undefined::sh) a (Prj tix5 s), 
-                      stencilPrj (undefined::sh) a (Prj tix4 s), 
-                      stencilPrj (undefined::sh) a (Prj tix3 s), 
-                      stencilPrj (undefined::sh) a (Prj tix2 s), 
-                      stencilPrj (undefined::sh) a (Prj tix1 s), 
-                      stencilPrj (undefined::sh) a (Prj tix0 s))
+instance (Stencil (sh:.Int) a row2, 
+          Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
+  type StencilRepr (sh:.Int:.Int) (row2, row1, row0) 
+    = (StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row0)
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Prj tix2 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix1 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix0 s))
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
+  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5) 
+    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
+       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5)
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Prj tix4 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix3 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix2 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix1 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix0 s))
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7) 
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5, row6, row7) 
+    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
+       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
+       StencilRepr (sh:.Int) row7)
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Prj tix6 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix5 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix4 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix3 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix2 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix1 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix0 s))
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3,
+          Stencil (sh:.Int) a row4,
+          Stencil (sh:.Int) a row5,
+          Stencil (sh:.Int) a row6,
+          Stencil (sh:.Int) a row7,
+          Stencil (sh:.Int) a row8,
+          Stencil (sh:.Int) a row9) 
+  => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  type StencilRepr (sh:.Int:.Int) (row1, row2, row3, row4, row5, row6, row7, row8, row9) 
+    = (StencilRepr (sh:.Int) row1, StencilRepr (sh:.Int) row2, StencilRepr (sh:.Int) row3,
+       StencilRepr (sh:.Int) row4, StencilRepr (sh:.Int) row5, StencilRepr (sh:.Int) row6,
+       StencilRepr (sh:.Int) row7, StencilRepr (sh:.Int) row8, StencilRepr (sh:.Int) row9)
+  stencilPrj _ a s = (stencilPrj (undefined::(sh:.Int)) a (Prj tix8 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix7 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix6 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix5 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix4 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix3 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix2 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix1 s), 
+                      stencilPrj (undefined::(sh:.Int)) a (Prj tix0 s))
   
 -- Auxilliary tuple index constants
 --
