@@ -11,6 +11,7 @@
  *
  * ---------------------------------------------------------------------------*/
 
+#include "reduce.inl"
 
 /*
  * Compute multiple elements per thread sequentially. This reduces the overall
@@ -58,28 +59,11 @@ fold
     set(s_data, tid, sum);
     __syncthreads();
 
-    /*
-     * Compute reduction across the block
-     */
-    i = min(shape - gridSize, blockDim.x);
-
-    if (i > 512) { if (tid < 512 && tid + 512 < i) { sum = apply(sum, get0(s_data, tid+512)); set(s_data, tid, sum); } __syncthreads(); }
-    if (i > 256) { if (tid < 256 && tid + 256 < i) { sum = apply(sum, get0(s_data, tid+256)); set(s_data, tid, sum); } __syncthreads(); }
-    if (i > 128) { if (tid < 128 && tid + 128 < i) { sum = apply(sum, get0(s_data, tid+128)); set(s_data, tid, sum); } __syncthreads(); }
-    if (i >  64) { if (tid <  64 && tid +  64 < i) { sum = apply(sum, get0(s_data, tid+ 64)); set(s_data, tid, sum); } __syncthreads(); }
-
-    if (tid < 32)
-    {
-        if (i > 32) { if (tid + 32 < i) { sum = apply(sum, get0(s_data, tid+32)); set(s_data, tid, sum); }}
-        if (i > 16) { if (tid + 16 < i) { sum = apply(sum, get0(s_data, tid+16)); set(s_data, tid, sum); }}
-        if (i >  8) { if (tid +  8 < i) { sum = apply(sum, get0(s_data, tid+ 8)); set(s_data, tid, sum); }}
-        if (i >  4) { if (tid +  4 < i) { sum = apply(sum, get0(s_data, tid+ 4)); set(s_data, tid, sum); }}
-        if (i >  2) { if (tid +  2 < i) { sum = apply(sum, get0(s_data, tid+ 2)); set(s_data, tid, sum); }}
-        if (i >  1) { if (tid +  1 < i) { sum = apply(sum, get0(s_data, tid+ 1)); }}
-    }
+    sum = reduce_block_n(s_data, sum, min(shape - gridSize, blockDim.x));
 
     /*
-     * Write the results of this block back to global memory
+     * Write the results of this block back to global memory. If we are the last
+     * phase of a recursive multi-block reduction, include the seed element.
      */
     if (tid == 0)
     {

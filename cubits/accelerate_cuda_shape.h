@@ -295,6 +295,57 @@ static __inline__ __device__ int ignore(const DIM9 ix)
 /*
  * Destructing a shape index
  */
+static __inline__ __device__ Ix indexHead(const DIM1 ix)
+{
+    return ix;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM2 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM3 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM4 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM5 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM6 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM7 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM8 ix)
+{
+    return ix.a0;
+}
+
+static __inline__ __device__ Ix indexHead(const DIM9 ix)
+{
+    return ix.a0;
+}
+
+
+static __inline__ __device__ Ix   indexTail(const DIM1 ix)
+{
+    return ix;
+}
+
 static __inline__ __device__ DIM1 indexTail(const DIM2 ix)
 {
     return ix.a1;
@@ -336,13 +387,62 @@ static __inline__ __device__ DIM8 indexTail(const DIM9 ix)
 }
 
 
+// static __inline__ __device__ DIM1 indexCons(const DIM0 sh, const Ix ix)
+// {
+//     return shape(ix);
+// }
+
+static __inline__ __device__ DIM2 indexCons(const DIM1 sh, const Ix ix)
+{
+    return shape(sh, ix);
+}
+
+static __inline__ __device__ DIM3 indexCons(const DIM2 sh, const Ix ix)
+{
+    return shape(sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM4 indexCons(const DIM3 sh, const Ix ix)
+{
+    return shape(sh.a2, sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM5 indexCons(const DIM4 sh, const Ix ix)
+{
+    return shape(sh.a3, sh.a2, sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM6 indexCons(const DIM5 sh, const Ix ix)
+{
+    return shape(sh.a4, sh.a3, sh.a2, sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM7 indexCons(const DIM6 sh, const Ix ix)
+{
+    return shape(sh.a5, sh.a4, sh.a3, sh.a2, sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM8 indexCons(const DIM7 sh, const Ix ix)
+{
+    return shape(sh.a6, sh.a5, sh.a4, sh.a3, sh.a2, sh.a1, sh.a0, ix);
+}
+
+static __inline__ __device__ DIM9 indexCons(const DIM8 sh, const Ix ix)
+{
+    return shape(sh.a7, sh.a6, sh.a5, sh.a4, sh.a3, sh.a2, sh.a1, sh.a0, ix);
+}
+
+
 #else
 
-int dim(const Ix sh);
-int size(const Ix sh);
-int shape(const Ix sh);
-int toIndex(const Ix sh, const Ix ix);
-int fromIndex(const Ix sh, const Ix ix);
+static __inline__ __device__ int dim(const Ix sh);
+static __inline__ __device__ int size(const Ix sh);
+static __inline__ __device__ int shape(const Ix sh);
+static __inline__ __device__ int toIndex(const Ix sh, const Ix ix);
+static __inline__ __device__ int fromIndex(const Ix sh, const Ix ix);
+static __inline__ __device__ int indexHead(const Ix ix);
+static __inline__ __device__ int indexTail(const Ix ix);
+static __inline__ __device__ int indexCons(const Ix sh, const Ix ix);
 
 #endif  // __cplusplus
 #endif  // __ACCELERATE_CUDA_SHAPE_H__

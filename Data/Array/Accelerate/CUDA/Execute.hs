@@ -130,14 +130,13 @@ executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
   freeArray in0
   return r
 
--- FIXME: Plain fold is now only supposed to fold along the innermost dimensions.
-executeOpenAcc acc@(Fold _ _x a0) aenv
+executeOpenAcc acc@(Fold _ _ a0) aenv
   | accDim a0 == 1 = executeFoldAll acc a0 aenv
-  | otherwise      = INTERNAL_ERROR(error) "executeOpenAcc" "fold NOT YET IMPLEMENTED"
+  | otherwise      = executeFold    acc a0 aenv
 
-executeOpenAcc acc@(Fold1 _x a0) aenv
+executeOpenAcc acc@(Fold1 _ a0) aenv
   | accDim a0 == 1 = executeFoldAll acc a0 aenv
-  | otherwise      = INTERNAL_ERROR(error) "executeOpenAcc" "fold1 NOT YET IMPLEMENTED"
+  | otherwise      = executeFold    acc a0 aenv
 
 -- FIXME: Plain foldSeg is now only supposed to fold along the innermost dimensions.
 executeOpenAcc _acc@(FoldSeg _ _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
@@ -235,6 +234,17 @@ executeFoldAll acc a0 aenv = do
   if g > 1 then executeFoldAll acc (Use r) aenv
            else return (Array (fst sh0) out)
 
+executeFold :: Sugar.Shape dim
+  => OpenAcc aenv (Array dim e)
+  -> OpenAcc aenv (Array (dim:.Int) e)
+  -> Val aenv
+  -> CIO (Array dim e)
+executeFold acc a0 aenv = do
+  (Array sh0 in0) <- executeOpenAcc a0 aenv
+  r@(Array _ out) <- newArray (Sugar.toElt $ fst sh0)
+  execute "fold" acc aenv (size (fst sh0)) ((((),out),in0),convertIx sh0)
+  freeArray in0
+  return r
 
 -- Differences in left/right scan-variants are incorporated during code generation.
 --

@@ -17,6 +17,7 @@ import Control.Monad.IO.Class
 import Data.Int
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Type
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.CUDA.State
 import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
@@ -65,7 +66,12 @@ blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) 
 --
 gridSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int -> Int
 gridSize p (FoldSeg _ _ _ _) size cta = ((size * CUDA.warpSize p) + cta - 1) `div` cta
-gridSize _ acc size cta =
+gridSize _ (Fold _ _ acc)    size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
+gridSize _ (Fold1 _ acc)     size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
+gridSize _ acc               size cta = splitByBlocks acc size cta
+
+splitByBlocks :: OpenAcc aenv a -> Int -> Int -> Int
+splitByBlocks acc size cta =
   let between arr n = (n+arr-1) `div` n
   in  1 `max` ((cta - 1 + (size `between` elementsPerThread acc)) `div` cta)
 

@@ -34,7 +34,7 @@ mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
     skel = "generate.inl"
     code = CTranslUnit
             ( mkTupleType Nothing  tyOut ++
-	         [ mkDim "TyIn0" dimOut
+            [ mkDim "TyIn0" dimOut
             , mkApply 1 apply ])
             (mkNodeInfo (initPos skel) (Name 0))
 
@@ -52,7 +52,9 @@ mkFold (ty,dim) identity apply = CUTranslSkel code [] skel
             ( mkTupleTypeAsc 2 ty ++
             [ mkTuplePartition ty
             , mkIdentity identity
-            , mkApply 2 apply ])
+            , mkApply 2 apply
+            , mkDim "DimIn0" dim
+            , mkDim "DimOut" (dim-1) ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkFold1 :: ([CType],Int) -> [CExpr] -> CUTranslSkel
@@ -64,7 +66,9 @@ mkFold1 (ty,dim) apply = CUTranslSkel code inc skel
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
             [ mkTuplePartition ty
-            , mkApply 2 apply ])
+            , mkApply 2 apply
+            , mkDim "DimIn0" dim
+            , mkDim "DimOut" (dim-1) ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkFoldSeg :: [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
@@ -201,9 +205,9 @@ mkReplicate ty dimSl dimOut slix = CUTranslSkel code [] skel
   where
     skel = "replicate.inl"
     code = CTranslUnit
-	    ( mkTupleTypeAsc 1 ty ++
-	    [ mkDim "Slice"    dimSl
-	    , mkDim "SliceDim" dimOut
-	    , mkSliceReplicate slix ])
-	    (mkNodeInfo (initPos skel) (Name 0))
+            ( mkTupleTypeAsc 1 ty ++
+            [ mkDim "Slice"    dimSl
+            , mkDim "SliceDim" dimOut
+            , mkSliceReplicate slix ])
+            (mkNodeInfo (initPos skel) (Name 0))
 
