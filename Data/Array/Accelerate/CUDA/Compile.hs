@@ -49,8 +49,7 @@ compileAcc = travA k
   where
     k :: OpenAcc aenv a -> CIO ()
     k (Use (Array sh ad))   = let n = size sh
-                              in  when (n > 0) $ do
-                                    mallocArray    ad n
+                              in do mallocArray    ad (max 1 n)
                                     pokeArrayAsync ad n Nothing
     k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
     k acc                   = compile acc

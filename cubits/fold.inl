@@ -21,16 +21,16 @@ fold
 (
     ArrOut              d_out,
     const ArrIn0        d_in0,
+    const DimOut        shOut,
     const DimIn0        shIn0
 )
 {
     extern volatile __shared__ void* s_ptr[];
     ArrOut s_data = partition(s_ptr, blockDim.x);
 
-    const Ix     tid          = threadIdx.x;
-    const DimOut shOut        = indexTail(shIn0);
-    const Ix     num_elements = indexHead(shIn0);
-    const Ix     num_segments = size(shOut);
+    const Ix tid          = threadIdx.x;
+    const Ix num_elements = indexHead(shIn0);
+    const Ix num_segments = size(shOut);
 
     /*
      * Each block of threads reduces elements along a projection through an
@@ -67,7 +67,8 @@ fold
 #ifdef INCLUSIVE
             set(d_out, ix, sum);
 #else
-            set(d_out, ix, apply(sum, identity()));
+            sum = num_elements > 0 ? apply(sum, identity()) : identity();
+            set(d_out, ix, sum);
 #endif
         }
     }

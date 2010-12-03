@@ -241,8 +241,8 @@ executeFold :: Sugar.Shape dim
   -> CIO (Array dim e)
 executeFold acc a0 aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array _ out) <- newArray (Sugar.toElt $ fst sh0)
-  execute "fold" acc aenv (size (fst sh0)) ((((),out),in0),convertIx sh0)
+  r@(Array s out) <- newArray (Sugar.toElt $ fst sh0)
+  execute "fold" acc aenv (size (fst sh0)) (((((),out),in0),convertIx s),convertIx sh0)
   freeArray in0
   return r
 
@@ -667,7 +667,7 @@ newArray :: (Sugar.Shape sh, Sugar.Elt e) => sh -> CIO (Array sh e)
 newArray sh =
   let ad = fst . AD.runArrayData $ (,undefined) <$> AD.newArrayData (1024 `max` Sugar.size sh)
   in do
-    ad `seq` mallocArray ad (Sugar.size sh)
+    ad `seq` mallocArray ad (1 `max` Sugar.size sh)
     return $ Array (Sugar.fromElt sh) ad
 
 

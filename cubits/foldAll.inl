@@ -70,7 +70,10 @@ fold
 #ifdef INCLUSIVE
         set(d_out, blockIdx.x, sum);
 #else
-        set(d_out, blockIdx.x, gridDim.x == 1 ? apply(sum, identity()) : sum);
+        if (shape > 0)
+            set(d_out, blockIdx.x, gridDim.x == 1 ? apply(sum, identity()) : sum);
+        else
+            set(d_out, blockIdx.x, identity());
 #endif
     }
 }
