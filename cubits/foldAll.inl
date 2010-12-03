@@ -59,7 +59,7 @@ fold
     set(s_data, tid, sum);
     __syncthreads();
 
-    sum = reduce_block_n(s_data, sum, min(shape - gridSize, blockDim.x));
+    sum = reduce_block_n(s_data, sum, min(shape, blockDim.x));
 
     /*
      * Write the results of this block back to global memory. If we are the last
