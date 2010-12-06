@@ -1,32 +1,37 @@
 /* -----------------------------------------------------------------------------
  *
- * Kernel      : FoldSeg
+ * Kernel      : FoldSegAll
  * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
  * License     : BSD3
  *
  * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
  * Stability   : experimental
  *
- * Reduction an array to a single value for each segment, using a binary
+ * Reduction a vector to a single value for each segment, using a binary
  * associative function
  *
  * ---------------------------------------------------------------------------*/
 
 
 /*
- * Cooperatively reduce an array to a single value. The computation requires an
- * extra half-warp worth of elements of shared memory per block, to let threads
- * index beyond the input data without using any branch instructions.
+ * Cooperatively reduce a single warp's section of an array to a single value
  */
-static __inline__ __device__
-TyOut reduce_warp(ArrOut s_data, TyOut sum)
+static __inline__ __device__ TyOut
+reduce_warp_n
+(
+    ArrOut      s_data,
+    TyOut       sum,
+    Ix          n
+)
 {
-    set(s_data, threadIdx.x, sum);
-    sum = apply(sum, get0(s_data, threadIdx.x + 16)); set(s_data, threadIdx.x, sum);
-    sum = apply(sum, get0(s_data, threadIdx.x +  8)); set(s_data, threadIdx.x, sum);
-    sum = apply(sum, get0(s_data, threadIdx.x +  4)); set(s_data, threadIdx.x, sum);
-    sum = apply(sum, get0(s_data, threadIdx.x +  2)); set(s_data, threadIdx.x, sum);
-    sum = apply(sum, get0(s_data, threadIdx.x +  1));
+    const Ix tid  = threadIdx.x;
+    const Ix lane = threadIdx.x & (warpSize - 1);
+
+    if (n > 16 && lane + 16 < n) { sum = apply(sum, get0(s_data, tid+16)); set(s_data, tid, sum); }
+    if (n >  8 && lane +  8 < n) { sum = apply(sum, get0(s_data, tid+ 8)); set(s_data, tid, sum); }
+    if (n >  4 && lane +  4 < n) { sum = apply(sum, get0(s_data, tid+ 4)); set(s_data, tid, sum); }
+    if (n >  2 && lane +  2 < n) { sum = apply(sum, get0(s_data, tid+ 2)); set(s_data, tid, sum); }
+    if (n >  1 && lane +  1 < n) { sum = apply(sum, get0(s_data, tid+ 1)); }
 
     return sum;
 }
@@ -54,7 +59,7 @@ TyOut reduce_warp(ArrOut s_data, TyOut sum)
  */
 extern "C"
 __global__ void
-fold_segmented
+foldSeg
 (
     ArrOut              d_out,
     const ArrIn0        d_in0,
@@ -85,24 +90,59 @@ fold_segmented
         if (thread_lane < 2)
             s_ptrs[vector_lane][thread_lane] = d_offset[seg + thread_lane];
 
-        const Ix start = s_ptrs[vector_lane][0];
-        const Ix end   = s_ptrs[vector_lane][1];
+        const Ix    start        = s_ptrs[vector_lane][0];
+        const Ix    end          = s_ptrs[vector_lane][1];
+        const Ix    num_elements = end - start;
+              TyOut sum;
 
         /*
-         * Have each thread read in all values for this segment, accumulating a
-         * local sum. This is then reduced cooperatively in shared memory.
+         * Each thread reads in values of this segment, accumulating a local sum
          */
-        TyOut sum = identity();
-        for (Ix i = start + thread_lane; i < end; i += warpSize)
-            sum   = apply(sum, get0(d_in0, i));
+        if (num_elements > warpSize)
+        {
+            /*
+             * Ensure aligned access to global memory
+             */
+            Ix i = start - (start & (warpSize - 1)) + thread_lane;
+            if (i >= start)
+                sum = get0(d_in0, i);
 
-        sum = reduce_warp(s_data, sum);
+            /*
+             * Subsequent reads to global memory are aligned, but make sure all
+             * threads have initialised their local sum.
+             */
+            if (i + warpSize < end)
+            {
+                TyOut tmp = get0(d_in0, i + warpSize);
+
+                if (i >= start) sum = apply(sum, tmp);
+                else            sum = tmp;
+            }
+
+            for (i += 2 * warpSize; i < end; i += warpSize)
+                sum = apply(sum, get0(d_in0, i));
+        }
+        else if (start + thread_lane < end)
+        {
+            sum = get0(d_in0, start + thread_lane);
+        }
+
+        /*
+         * Store local sums into shared memory and reduce to a single value
+         */
+        set(s_data, threadIdx.x, sum);
+        sum = reduce_warp_n(s_data, sum, min(num_elements, warpSize));
 
         /*
          * Finally, the first thread writes the result for this segment
          */
         if (thread_lane == 0)
+        {
+#ifndef INCLUSIVE
+            sum = num_elements > 0 ? apply(sum, identity()) : identity();
+#endif
             set(d_out, seg, sum);
+        }
     }
 }
 

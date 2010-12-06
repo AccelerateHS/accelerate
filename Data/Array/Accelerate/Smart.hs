@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Smart (
   
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1,
-  convertExp, convertFun1, convertFun2,
 
   -- * Smart constructors for unpairing
   unpair,
@@ -66,10 +65,10 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Tuple hiding    (Tuple)
+import Data.Array.Accelerate.Tuple hiding (Tuple)
+import Data.Array.Accelerate.AST   hiding (OpenAcc(..), Acc, Stencil, OpenExp(..), Exp)
 import qualified Data.Array.Accelerate.Tuple as Tuple
-import Data.Array.Accelerate.AST hiding (OpenAcc(..), Acc, Stencil, OpenExp(..), Exp)
-import qualified Data.Array.Accelerate.AST                  as AST
+import qualified Data.Array.Accelerate.AST   as AST
 import Data.Array.Accelerate.Pretty ()
 
 #include "accelerate.h"

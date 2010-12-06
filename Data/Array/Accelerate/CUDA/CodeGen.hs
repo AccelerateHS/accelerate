@@ -81,7 +81,8 @@ codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
 codeGen a@(Generate _ f)      = mkGenerate (codeGenAccTypeDim a) <$> codeGenFun f
 codeGen (Fold f e a)          = mkFold  (codeGenAccTypeDim a) <$> codeGenExp e <*> codeGenFun f
 codeGen (Fold1 f a)           = mkFold1 (codeGenAccTypeDim a) <$> codeGenFun f
-codeGen (FoldSeg f e _ s)     = mkFoldSeg (codeGenExpType e) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
+codeGen (FoldSeg f e a s)     = mkFoldSeg  (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
+codeGen (Fold1Seg f a s)      = mkFold1Seg (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenFun f
 codeGen (Scanl f e _)         = mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (Scanr f e _)         = mkScanr  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
 codeGen (Scanl' f e _)        = mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f

@@ -266,14 +266,16 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array sh e)
 
   -- Segmented fold along the innermost dimension of an array with a given /associative/ function
-  FoldSeg     :: Fun     aenv (e -> e -> e)           -- combination function
+  FoldSeg     :: Shape sh
+              => Fun     aenv (e -> e -> e)           -- combination function
               -> Exp     aenv e                       -- default value
               -> OpenAcc aenv (Array (sh:.Int) e)     -- folded array
               -> OpenAcc aenv Segments                -- segment descriptor
               -> OpenAcc aenv (Array (sh:.Int) e)
 
   -- 'FoldSeg' without a default value
-  Fold1Seg   :: Fun     aenv (e -> e -> e)            -- combination function
+  Fold1Seg   :: Shape sh
+             => Fun     aenv (e -> e -> e)            -- combination function
              -> OpenAcc aenv (Array (sh:.Int) e)      -- folded array
              -> OpenAcc aenv Segments                 -- segment descriptor
              -> OpenAcc aenv (Array (sh:.Int) e)

@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkMap, mkZipWith,
+    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkFold1Seg, mkMap, mkZipWith,
     mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
@@ -71,16 +71,34 @@ mkFold1 (ty,dim) apply = CUTranslSkel code inc skel
             , mkDim "DimOut" (dim-1) ])
             (mkNodeInfo (initPos skel) (Name 0))
 
-mkFoldSeg :: [CType] -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
-mkFoldSeg ty int identity apply = CUTranslSkel code [] skel
+mkFoldSeg :: ([CType],Int) -> [CType] -> [CExpr] -> [CExpr] -> CUTranslSkel
+mkFoldSeg (ty,dim) int identity apply = CUTranslSkel code [] skel
   where
-    skel = "fold_segmented.inl"
+    skel | dim == 1  = "foldSegAll.inl"
+         | otherwise = "foldSeg.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
             [ mkTuplePartition ty
-            , mkTypedef "Int" False (head int)
             , mkIdentity identity
-            , mkApply 2 apply ])
+            , mkApply 2 apply
+            , mkTypedef "Int" False (head int)
+            , mkDim "DimIn0" dim
+            , mkDim "DimSeg" (dim-1) ])
+            (mkNodeInfo (initPos skel) (Name 0))
+
+mkFold1Seg :: ([CType],Int) -> [CType] -> [CExpr] -> CUTranslSkel
+mkFold1Seg (ty,dim) int apply = CUTranslSkel code inc skel
+  where
+    skel | dim == 1  = "foldSegAll.inl"
+         | otherwise = "foldSeg.inl"
+    inc  = [(internalIdent "INCLUSIVE", Just (fromBool True))]
+    code = CTranslUnit
+            ( mkTupleTypeAsc 2 ty ++
+            [ mkTuplePartition ty
+            , mkApply 2 apply
+            , mkTypedef "Int" False (head int)
+            , mkDim "DimIn0" dim
+            , mkDim "DimSeg" (dim-1) ])
             (mkNodeInfo (initPos skel) (Name 0))
 
 

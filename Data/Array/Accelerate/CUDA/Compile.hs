@@ -27,9 +27,9 @@ import System.Posix.Process
 import System.IO
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
-import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, fromElt)
+import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments)
 import Data.Array.Accelerate.Array.Representation
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
@@ -54,9 +54,11 @@ compileAcc = travA k
     k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
     k acc                   = compile acc
 
-    scan = Scanl (convertFun2 undefined mkAdd)
-                 (Const (fromElt (0::Int)))
-                 (Use (Array undefined undefined :: Segments))
+    scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
+    add  = Lam (Lam (Body (PrimAdd numType
+                          `PrimApp`
+                          Tuple (NilTup `SnocTup` (Var (SuccIdx ZeroIdx))
+                                        `SnocTup` (Var ZeroIdx)))))
 
 {-
 -- | Initiate code generation and compilation for an embedded expression, but do

@@ -16,7 +16,7 @@
 #include <cuda_runtime.h>
 
 typedef int32_t                                   Ix;
-typedef Ix                                        DIM0;
+typedef void*                                     DIM0;
 typedef Ix                                        DIM1;
 typedef struct { Ix a1,a0; }                      DIM2;
 typedef struct { Ix a2,a1,a0; }                   DIM3;
@@ -32,6 +32,7 @@ typedef struct { Ix a8,a7,a6,a5,a4,a3,a2,a1,a0; } DIM9;
 /*
  * Number of dimensions of a shape
  */
+static __inline__ __device__ int dim(const DIM0 sh) { return 0; }
 static __inline__ __device__ int dim(const DIM1 sh) { return 1; }
 static __inline__ __device__ int dim(const DIM2 sh) { return 2; }
 static __inline__ __device__ int dim(const DIM3 sh) { return 3; }
@@ -45,6 +46,7 @@ static __inline__ __device__ int dim(const DIM9 sh) { return 9; }
 /*
  * Yield the total number of elements in a shape
  */
+static __inline__ __device__ int size(const DIM0 _)  { return 1; }
 static __inline__ __device__ int size(const DIM1 sh) { return sh; }
 static __inline__ __device__ int size(const DIM2 sh) { return sh.a0 * sh.a1; }
 static __inline__ __device__ int size(const DIM3 sh) { return sh.a0 * sh.a1 * sh.a2; }
@@ -343,7 +345,7 @@ static __inline__ __device__ Ix indexHead(const DIM9 ix)
 
 static __inline__ __device__ Ix   indexTail(const DIM1 ix)
 {
-    return ix;
+    return 0;
 }
 
 static __inline__ __device__ DIM1 indexTail(const DIM2 ix)
@@ -387,10 +389,10 @@ static __inline__ __device__ DIM8 indexTail(const DIM9 ix)
 }
 
 
-// static __inline__ __device__ DIM1 indexCons(const DIM0 sh, const Ix ix)
-// {
-//     return shape(ix);
-// }
+static __inline__ __device__ DIM1 indexCons(const DIM0 _, const Ix ix)
+{
+    return shape(ix);
+}
 
 static __inline__ __device__ DIM2 indexCons(const DIM1 sh, const Ix ix)
 {

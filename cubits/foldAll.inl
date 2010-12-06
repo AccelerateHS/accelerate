@@ -33,9 +33,9 @@ fold
     /*
      * Calculate first level of reduction reading into shared memory
      */
-    const Ix tid      = threadIdx.x;
-    const Ix gridSize = blockDim.x * gridDim.x;
-          Ix    i     = blockIdx.x * blockDim.x + tid;
+    const Ix    tid      = threadIdx.x;
+    const Ix    gridSize = blockDim.x * gridDim.x;
+          Ix    i        = blockIdx.x * blockDim.x + tid;
           TyOut sum;
 
     /*

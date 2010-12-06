@@ -31,11 +31,11 @@ import System.Posix.Types                               (ProcessID)
 import System.IO.Unsafe
 
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Analysis.Shape
---import Data.Array.Accelerate.Smart                      (convertFun2, mkAdd)
 import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
-import Data.Array.Accelerate.Array.Sugar                (Array(..),Scalar,Vector,Z(..),(:.)(..))
+import Data.Array.Accelerate.Array.Sugar                (Array(..),Segments,Scalar,Vector,Z(..),(:.)(..))
 import qualified Data.Array.Accelerate.Array.Data       as AD
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Interpreter      as I
@@ -130,29 +130,21 @@ executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
   freeArray in0
   return r
 
-executeOpenAcc acc@(Fold _ _ a0) aenv
-  | accDim a0 == 1 = executeFoldAll acc a0 aenv
-  | otherwise      = executeFold    acc a0 aenv
+executeOpenAcc acc@(Fold _ _ a0) aenv =
+  if accDim a0 == 1 then executeFoldAll acc a0 aenv
+                    else executeFold    acc a0 aenv
 
-executeOpenAcc acc@(Fold1 _ a0) aenv
-  | accDim a0 == 1 = executeFoldAll acc a0 aenv
-  | otherwise      = executeFold    acc a0 aenv
+executeOpenAcc acc@(Fold1 _ a0) aenv =
+  if accDim a0 == 1 then executeFoldAll acc a0 aenv
+                    else executeFold    acc a0 aenv
 
--- FIXME: Plain foldSeg is now only supposed to fold along the innermost dimensions.
-executeOpenAcc _acc@(FoldSeg _ _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
--- executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = do
--- !!!FIXME: this is not nice btw, you should construct the code using AST, not Smart -=chak
---   let scan = Scanl (convertFun2 undefined mkAdd) (Const (Sugar.fromElt (0::Int))) . Use
---   (Array _   in0) <- executeOpenAcc a0 aenv
---   (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
---   r@(Array _ out) <- newArray (size shs)
---   let n = size shs - 1
---   execute "fold_segmented" acc aenv n (((((),out),in0),seg),n)
---   freeArray in0
---   freeArray seg
---   return r
+executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv =
+  if accDim a0 == 1 then executeFoldSegAll acc a0 s0 aenv
+                    else INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
 
-executeOpenAcc _acc@(Fold1Seg _ _a0 _s0) _aenv = INTERNAL_ERROR(error) "executeOpenAcc" "fold1Seg NOT YET IMPLEMENTED"
+executeOpenAcc acc@(Fold1Seg _ a0 s0) aenv =
+  if accDim a0 == 1 then executeFoldSegAll acc a0 s0 aenv
+                    else INTERNAL_ERROR(error) "executeOpenAcc" "fold1Seg NOT YET IMPLEMENTED"
 
 executeOpenAcc acc@(Scanr  _ _ a0) aenv = executeScan  acc a0 aenv
 executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
@@ -219,9 +211,10 @@ executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
   = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil2 NOT YET IMPLEMENTED"
 
 
-
+-- Reduction
+--
 executeFoldAll :: Sugar.Shape dim
-  => OpenAcc aenv (Array dim e)
+  => OpenAcc aenv (Array dim e)         -- dim ~ Z
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> Val aenv
   -> CIO (Array dim e)
@@ -246,7 +239,31 @@ executeFold acc a0 aenv = do
   freeArray in0
   return r
 
--- Differences in left/right scan-variants are incorporated during code generation.
+-- Segmented Reduction
+--
+executeFoldSegAll :: Sugar.Shape dim
+  => OpenAcc aenv (Array (dim:.Int) e)  -- dim ~ Z
+  -> OpenAcc aenv (Array (dim:.Int) e)
+  -> OpenAcc aenv Segments
+  -> Val aenv
+  -> CIO (Array (dim:.Int) e)
+executeFoldSegAll acc a0 s0 aenv = do
+  (Array sh0 in0) <- executeOpenAcc a0 aenv
+  (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
+  r@(Array _ out) <- newArray (Sugar.toElt (fst sh0,size shs - 1))
+  let n = size shs - 1
+  execute "foldSeg" acc aenv n (((((),out),in0),seg),n)
+  freeArray in0
+  freeArray seg
+  return r
+  where
+    scan = Scanl add (Const ((),0)) . Use
+    add  = Lam (Lam (Body (PrimAdd numType
+                          `PrimApp`
+                          Tuple (NilTup `SnocTup` (Var (SuccIdx ZeroIdx))
+                                        `SnocTup` (Var ZeroIdx)))))
+
+-- Left and right scan variants
 --
 executeScan :: forall aenv e.
      OpenAcc aenv (Vector e)

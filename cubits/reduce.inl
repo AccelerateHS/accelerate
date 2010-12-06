@@ -7,12 +7,11 @@
  * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
  * Stability   : experimental
  *
- * Cooperatively reduce a block or warp to a single value
- *
  * ---------------------------------------------------------------------------*/
 
 #ifndef __REDUCE__
 #define __REDUCE__
+
 
 static __inline__ __device__ TyOut
 reduce_block_n

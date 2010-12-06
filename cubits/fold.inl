@@ -64,12 +64,10 @@ fold
 
         if (tid == 0)
         {
-#ifdef INCLUSIVE
-            set(d_out, ix, sum);
-#else
+#ifndef INCLUSIVE
             sum = num_elements > 0 ? apply(sum, identity()) : identity();
-            set(d_out, ix, sum);
 #endif
+            set(d_out, ix, sum);
         }
     }
 }
