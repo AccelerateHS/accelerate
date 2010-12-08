@@ -261,6 +261,11 @@ convertAccFun1 f = Alam (Abody openF)
             (ZeroIdx :: Idx ((), a) a)
     openF = convertOpenAcc alyt (f (Acc a))
 
+lenLayout :: Layout env env' -> Int
+lenLayout EmptyLayout = 0
+lenLayout (PushLayout rest _) = 1 + lenLayout rest
+
+
 -- |Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
 -- bindings).  The latter implements the third phase of sharing recovery.
@@ -288,7 +293,7 @@ convertSharingAcc alyt = convert alyt []
     convert alyt env (AccSharing _ preAcc)
       = case preAcc of
           Atag i
-            -> AST.Avar (prjIdx i alyt)
+            -> AST.Avar (prjIdx (lenLayout alyt - i -1)  alyt)
           FstArray acc
             -> AST.Let2 (convert alyt env acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
           SndArray acc
