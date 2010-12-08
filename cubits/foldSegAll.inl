@@ -12,30 +12,7 @@
  *
  * ---------------------------------------------------------------------------*/
 
-
-/*
- * Cooperatively reduce a single warp's section of an array to a single value
- */
-static __inline__ __device__ TyOut
-reduce_warp_n
-(
-    ArrOut      s_data,
-    TyOut       sum,
-    Ix          n
-)
-{
-    const Ix tid  = threadIdx.x;
-    const Ix lane = threadIdx.x & (warpSize - 1);
-
-    if (n > 16 && lane + 16 < n) { sum = apply(sum, get0(s_data, tid+16)); set(s_data, tid, sum); }
-    if (n >  8 && lane +  8 < n) { sum = apply(sum, get0(s_data, tid+ 8)); set(s_data, tid, sum); }
-    if (n >  4 && lane +  4 < n) { sum = apply(sum, get0(s_data, tid+ 4)); set(s_data, tid, sum); }
-    if (n >  2 && lane +  2 < n) { sum = apply(sum, get0(s_data, tid+ 2)); set(s_data, tid, sum); }
-    if (n >  1 && lane +  1 < n) { sum = apply(sum, get0(s_data, tid+ 1)); }
-
-    return sum;
-}
-
+#include "reduce.inl"
 
 /*
  * Each segment of the vector is assigned to a warp, which computes the
