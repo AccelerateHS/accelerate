@@ -171,8 +171,17 @@ codeGenExp (IndexCons ix i) =
   let snoc xs x = xs ++ x
   in  snoc <$> codeGenExp ix <*> codeGenExp i
 
-codeGenExp (IndexHead ix)  = return . last <$> codeGenExp ix
-codeGenExp (IndexTail ix)  =          init <$> codeGenExp ix
+codeGenExp (IndexHead sh@(Shape _)) = do
+  [var] <- codeGenExp sh
+  return [CMember var (internalIdent "a0") False internalNode]
+
+codeGenExp (IndexTail sh@(Shape a)) = do
+  [var] <- codeGenExp sh
+  return . map (\i -> CMember var (internalIdent ('a':show i)) False internalNode)
+         $ reverse [1 .. accDim a - 1]
+
+codeGenExp (IndexHead ix) = return . last <$> codeGenExp ix
+codeGenExp (IndexTail ix) =          init <$> codeGenExp ix
 
 codeGenExp (Var i) =
   let var = cvar ('x' : show (idxToInt i))
