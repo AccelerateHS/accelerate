@@ -20,11 +20,12 @@ mkTupleType :: Maybe Int -> [CType] -> [CExtDecl]
 mkTupleType subscript ty = types ++ [accessor]
   where
     n        = length ty
+    volatile = maybe True (const False) subscript
     base     = maybe "Out" (\p -> "In" ++ show p) subscript
     accessor = maybe (mkSet n) (mkGet n) subscript
     types
-      | n <= 1    = [ mkTypedef ("Ty"  ++ base) False (head ty), mkTypedef ("Arr" ++ base) True (head ty)]
-      | otherwise = [ mkStruct  ("Ty"  ++ base) False ty,        mkStruct  ("Arr" ++ base) True ty]
+      | n <= 1    = [ mkTypedef ("Ty"  ++ base) False False (head ty), mkTypedef ("Arr" ++ base) volatile True (head ty)]
+      | otherwise = [ mkStruct  ("Ty"  ++ base) False False ty,        mkStruct  ("Arr" ++ base) volatile True ty]
 
 -- A variant of tuple generation for associative array computations, generating
 -- base get and set functions, and the given number of type synonyms.
@@ -34,11 +35,11 @@ mkTupleTypeAsc syn ty = types ++ synonyms ++ [mkSet n, mkGet n 0]
   where
     n	     = length ty
     synonyms = concat . take syn . flip map ([0..] :: [Int]) $ \v ->
-      [ mkTypedef ("TyIn"  ++ show v) False [CTypeDef (internalIdent "TyOut")  internalNode]
-      , mkTypedef ("ArrIn" ++ show v) False [CTypeDef (internalIdent "ArrOut") internalNode] ]
+      [ mkTypedef ("TyIn"  ++ show v) False False [CTypeDef (internalIdent "TyOut")  internalNode]
+      , mkTypedef ("ArrIn" ++ show v) False False [CTypeDef (internalIdent "ArrOut") internalNode] ]
     types
-      | n <= 1    = [ mkTypedef "TyOut" False (head ty), mkTypedef "ArrOut" True (head ty)]
-      | otherwise = [ mkStruct  "TyOut" False ty,        mkStruct  "ArrOut" True ty]
+      | n <= 1    = [ mkTypedef "TyOut" False False (head ty), mkTypedef "ArrOut" True True (head ty)]
+      | otherwise = [ mkStruct  "TyOut" False False ty,        mkStruct  "ArrOut" True True ty]
 
 
 -- Getter and setter functions for reading and writing (respectively) to global
@@ -100,7 +101,7 @@ mkTuplePartition ty =
     var s = CVar (internalIdent s) internalNode
     names = map (('p':) . show) [n-1,n-2..0]
     initp = mkInitList (map var names)
-    stmts = zipWith  (\l r -> CBlockDecl (CDecl (map CTypeSpec l) r internalNode)) ty
+    stmts = zipWith  (\l r -> CBlockDecl (CDecl (CTypeQual (CVolatQual internalNode) : map CTypeSpec l) r internalNode)) ty
           . zipWith3 (\p t s -> [(Just (CDeclr (Just (internalIdent p)) [CPtrDeclr [] internalNode] Nothing [] internalNode),Just (CInitExpr (CCast (CDecl (map CTypeSpec t) [(Just (CDeclr Nothing [CPtrDeclr [] internalNode] Nothing [] internalNode),Nothing,Nothing)] internalNode) s internalNode) internalNode),Nothing)]) names ty
           $ var "s_data" : map (\v -> CUnary CAdrOp (CIndex (var v) (CVar (internalIdent "n") internalNode) internalNode) internalNode) names
 

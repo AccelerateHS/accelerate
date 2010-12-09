@@ -54,12 +54,12 @@ fromBool False = CConst $ CIntConst (cInteger 0) internalNode
 
 mkDim :: String -> Int -> CExtDecl
 mkDim name n =
-  mkTypedef name False [CTypeDef (internalIdent ("DIM" ++ show n)) internalNode]
+  mkTypedef name False False [CTypeDef (internalIdent ("DIM" ++ show n)) internalNode]
 
-mkTypedef :: String -> Bool -> CType -> CExtDecl
-mkTypedef var ptr ty =
+mkTypedef :: String -> Bool -> Bool -> CType -> CExtDecl
+mkTypedef var volatile ptr ty =
   CDeclExt $ CDecl
-    (CStorageSpec (CTypedef internalNode) : map CTypeSpec ty)
+    (CStorageSpec (CTypedef internalNode) : [CTypeQual (CVolatQual internalNode) | volatile] ++ map CTypeSpec ty)
     [(Just (CDeclr (Just (internalIdent var)) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode), Nothing, Nothing)]
     internalNode
 
@@ -70,21 +70,21 @@ mkInitList xs  = CInitList (map (\e -> ([],CInitExpr e internalNode)) xs) intern
 
 
 -- typedef struct {
---   ... ty1 (*?) a1; ty0 (*?) a0;
+--   ... (volatile?) ty1 (*?) a1; (volatile?) ty0 (*?) a0;
 -- } var;
 --
 -- NOTE: The Accelerate language uses snoc based tuple projection, so the last
 --       field of the structure is named 'a' instead of the first.
 --
-mkStruct :: String -> Bool -> [CType] -> CExtDecl
-mkStruct name ptr types =
+mkStruct :: String -> Bool -> Bool -> [CType] -> CExtDecl
+mkStruct name volatile ptr types =
   CDeclExt $ CDecl
     [CStorageSpec (CTypedef internalNode) , CTypeSpec (CSUType (CStruct CStructTag Nothing (Just (zipWith field names types)) [] internalNode) internalNode)]
     [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)]
     internalNode
   where
     names      = reverse . take (length types) $ (enumFrom 0 :: [Int])
-    field v ty = CDecl (map CTypeSpec ty)
+    field v ty = CDecl ([CTypeQual (CVolatQual internalNode) | volatile] ++ map CTypeSpec ty)
                        [(Just (CDeclr (Just (internalIdent ('a':show v))) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode), Nothing, Nothing)]
                        internalNode
 
