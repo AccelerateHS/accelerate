@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE CPP, GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Analysis.Launch
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -22,6 +22,8 @@ import Data.Array.Accelerate.CUDA.State
 import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.Storable                       as F
+
+#include "accelerate.h"
 
 
 -- |
@@ -86,20 +88,34 @@ elementsPerThread _ = 1
 -- occupancy calculator to optimise kernel launch shape.
 --
 sharedMem :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int
-sharedMem _ (Fold  _ _ a)     blockDim = sizeOf (accType a) * blockDim
-sharedMem _ (Fold1 _ a)       blockDim = sizeOf (accType a) * blockDim
-sharedMem _ (Scanl _ x _)     blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanr _ x _)     blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanl' _ x _)    blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanr' _ x _)    blockDim = sizeOf (expType x) * blockDim
-sharedMem _ (Scanl1 _ a)      blockDim = sizeOf (accType a) * blockDim
-sharedMem _ (Scanr1 _ a)      blockDim = sizeOf (accType a) * blockDim
-sharedMem p (FoldSeg _ _ a _) blockDim =
-  let warp = CUDA.warpSize p
-  in (blockDim `div` warp * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
-sharedMem p (Fold1Seg _ a _) blockDim =
-  let warp = CUDA.warpSize p
-  in (blockDim `div` warp * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+-- non-computation forms
+sharedMem _ (Let _ _)     _ = INTERNAL_ERROR(error) "sharedMem" ""
+sharedMem _ (Let2 _ _)    _ = INTERNAL_ERROR(error) "sharedMem" ""
+sharedMem _ (Avar _)      _ = INTERNAL_ERROR(error) "sharedMem" ""
+sharedMem _ (Use _)       _ = INTERNAL_ERROR(error) "sharedMem" ""
+sharedMem _ (Unit _)      _ = INTERNAL_ERROR(error) "sharedMem" ""
+sharedMem _ (Reshape _ _) _ = INTERNAL_ERROR(error) "sharedMem" ""
 
-sharedMem _ _ _ = 0
+-- skeleton nodes
+sharedMem _ (Generate _ _)      _        = 0
+sharedMem _ (Replicate _ _ _)   _        = 0
+sharedMem _ (Index _ _ _)       _        = 0
+sharedMem _ (Map _ _)           _        = 0
+sharedMem _ (ZipWith _ _ _)     _        = 0
+sharedMem _ (Permute _ _ _ _)   _        = 0
+sharedMem _ (Backpermute _ _ _) _        = 0
+sharedMem _ (Fold  _ _ a)       blockDim = sizeOf (accType a) * blockDim
+sharedMem _ (Fold1 _ a)         blockDim = sizeOf (accType a) * blockDim
+sharedMem _ (Scanl _ x _)       blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanr _ x _)       blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanl' _ x _)      blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanr' _ x _)      blockDim = sizeOf (expType x) * blockDim
+sharedMem _ (Scanl1 _ a)        blockDim = sizeOf (accType a) * blockDim
+sharedMem _ (Scanr1 _ a)        blockDim = sizeOf (accType a) * blockDim
+sharedMem p (FoldSeg _ _ a _)   blockDim =
+  (blockDim `div` CUDA.warpSize p * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+sharedMem p (Fold1Seg _ a _) blockDim =
+  (blockDim `div` CUDA.warpSize p * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+sharedMem _ (Stencil _ _ _)      _ = INTERNAL_ERROR(error) "sharedMem" "Stencil not implemented yet"
+sharedMem _ (Stencil2 _ _ _ _ _) _ = INTERNAL_ERROR(error) "sharedMem" "Stencil2 not implemented yet"
 
