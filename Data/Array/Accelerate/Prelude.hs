@@ -47,7 +47,7 @@ zip :: (Shape sh, Elt a, Elt b)
     => Acc (Array sh a)
     -> Acc (Array sh b)
     -> Acc (Array sh (a, b))
-zip = zipWith (\x y -> tuple (x, y))
+zip = zipWith (\x y -> lift (x, y))
 
 -- |The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
@@ -366,7 +366,7 @@ mkSegApply :: (Elt e)
          -> (Exp (Int, e) -> Exp (Int, e) -> Exp (Int, e))
 mkSegApply op = apply
   where
-    apply a b = tuple (((aF ==* 1) ||* (bF ==* 1)) ? (1, 0), (bF ==* 1) ? (bV, aV `op` bV))
+    apply a b = lift (((aF ==* 1) ||* (bF ==* 1)) ? (1, 0), (bF ==* 1) ? (bV, aV `op` bV))
       where
         aF = fst a
         aV = snd a

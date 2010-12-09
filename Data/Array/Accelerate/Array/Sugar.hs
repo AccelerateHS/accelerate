@@ -178,7 +178,8 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
--- |Class that characterises the types of values that can be array elements.
+-- |Class that characterises the types of values that can be array elements, and hence, appear in
+-- scalar Accelerate expressions.
 --
 class (Show a, Typeable a, 
 #ifdef ACCELERATE_CUDA_BACKEND
@@ -194,7 +195,7 @@ class (Show a, Typeable a,
   eltType' :: {-dummy-} a -> TupleType (EltRepr' a)
   fromElt' :: a -> EltRepr' a
   toElt'   :: EltRepr' a -> a
-
+  
 instance Elt () where
   eltType _ = UnitTuple
   fromElt = id

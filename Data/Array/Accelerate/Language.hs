@@ -58,11 +58,14 @@ module Data.Array.Accelerate.Language (
   -- ** Stencil operations
   stencil, stencil2,
   
-  -- ** Tuple construction and destruction
-  Tuple(..), fst, snd, curry, uncurry,
+  -- ** Lifting and unlifting
+  Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
   
-  -- ** Index expressions
-  Index(..), index0, index1, unindex1, ilift1,
+  -- ** Tuple construction and destruction
+  fst, snd, curry, uncurry,
+  
+  -- ** Index construction and destruction
+  index0, index1, unindex1,
   
   -- ** Conditional expressions
   (?),
@@ -92,13 +95,14 @@ module Data.Array.Accelerate.Language (
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, const, fst, snd, curry, uncurry)
+                         filter, max, min, not, fst, snd, curry, uncurry)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
@@ -395,139 +399,335 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
 stencil2 = Acc $$$$$ Stencil2
 
 
--- Tuples
--- ------
+-- Lifting
+-- -------
 
-class Tuple tup where
-  type TupleT tup
+class Lift e where
+  type Plain e
 
-  -- |Turn a tuple of scalar expressions into a scalar expressions that yields
-  -- a tuple.
+  -- |Lift the given value into 'Exp'.  The value may already contain subexpressions in 'Exp'.
   -- 
-  tuple   :: tup -> TupleT tup
+  lift :: e -> Exp (Plain e)
   
-  -- |Turn a scalar expression that yields a tuple into a tuple of scalar
-  -- expressions.
-  --
-  untuple :: TupleT tup -> tup
+class Lift e => Unlift e where
+
+  -- |Unlift the outmost constructor through 'Exp'.  This is only possible if the constructor is
+  -- fully determined by its type - i.e., it is a singleton.
+  -- 
+  unlift :: Exp (Plain e) -> e
+
+-- instances for indices
+
+instance Lift () where
+  type Plain () = ()
+  lift _ = Tuple NilTup
+
+instance Unlift () where
+  unlift _ = ()
+
+instance Lift Z where
+  type Plain Z = Z
+  lift _ = IndexNil
+
+instance Unlift Z where
+  unlift _ = Z
+
+instance (Shape (Plain ix), Lift ix, Lift i, Plain i ~ Int) => Lift (ix :. i) where
+  type Plain (ix :. i) = Plain ix :. Plain i
+  lift (ix:.i) = IndexCons (lift ix) (lift i)
+
+instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp Int) where
+  unlift e = unlift (IndexTail e) :. IndexHead e
+
+-- FIXME: IndexCons and friends insist on indices being Int; hence, these instances don't type check
+-- instance (Shape (Plain ix), Lift ix) => Lift (ix :. Exp All) where
+--   type Plain (ix :. Exp All) = Plain ix :. All
+--   lift (ix:.i) = IndexCons (lift ix) i
+-- 
+-- instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp All) where
+--   unlift e = unlift (IndexTail e) :. IndexHead e
+-- 
+-- instance (Shape (Plain ix), Lift ix) => Lift (ix :. All) where
+--   type Plain (ix :. All) = Plain ix :. All
+--   lift (ix:.i) = IndexCons (lift ix) (Const i)
+-- 
+-- instance (Shape (Plain ix), Lift ix) => Lift (ix :. Exp (Any sh)) where
+--   type Plain (ix :. Exp (Any sh)) = Plain ix :. (Any sh)
+--   lift (ix:.i) = IndexCons (lift ix) i
+-- 
+-- instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp (Any sh)) where
+--   unlift e = unlift (IndexTail e) :. IndexHead e
+-- 
+-- instance (Shape (Plain ix), Lift ix) => Lift (ix :. (Any sh)) where
+--   type Plain (ix :. (Any sh)) = Plain ix :. (Any sh)
+--   lift (ix:.i) = IndexCons (lift ix) (Const i)
+    
+-- instances for numeric types
+
+instance Lift Int where
+  type Plain Int = Int
+  lift = Const
   
-instance (Elt a, Elt b) => Tuple (Exp a, Exp b) where
-  type TupleT (Exp a, Exp b) = Exp (a, b)
-  tuple   = tup2
-  untuple = untup2
+instance Lift Int8 where
+  type Plain Int8 = Int8
+  lift = Const
+  
+instance Lift Int16 where
+  type Plain Int16 = Int16
+  lift = Const
+  
+instance Lift Int32 where
+  type Plain Int32 = Int32
+  lift = Const
+  
+instance Lift Int64 where
+  type Plain Int64 = Int64
+  lift = Const
+  
+instance Lift Word where
+  type Plain Word = Word
+  lift = Const
+  
+instance Lift Word8 where
+  type Plain Word8 = Word8
+  lift = Const
+  
+instance Lift Word16 where
+  type Plain Word16 = Word16
+  lift = Const
+  
+instance Lift Word32 where
+  type Plain Word32 = Word32
+  lift = Const
+  
+instance Lift Word64 where
+  type Plain Word64 = Word64
+  lift = Const
 
-instance (Elt a, Elt b, Elt c) => Tuple (Exp a, Exp b, Exp c) where
-  type TupleT (Exp a, Exp b, Exp c) = Exp (a, b, c)
-  tuple   = tup3
-  untuple = untup3
+{-  
+instance Lift CShort where
+  type Plain CShort = CShort
+  lift = Const
+  
+instance Lift CUShort where
+  type Plain CUShort = CUShort
+  lift = Const
+  
+instance Lift CInt where
+  type Plain CInt = CInt
+  lift = Const
+  
+instance Lift CUInt where
+  type Plain CUInt = CUInt
+  lift = Const
+  
+instance Lift CLong where
+  type Plain CLong = CLong
+  lift = Const
+  
+instance Lift CULong where
+  type Plain CULong = CULong
+  lift = Const
+  
+instance Lift CLLong where
+  type Plain CLLong = CLLong
+  lift = Const
+  
+instance Lift CULLong where
+  type Plain CULLong = CULLong
+  lift = Const
+ -}
+ 
+instance Lift Float where
+  type Plain Float = Float
+  lift = Const
 
-instance (Elt a, Elt b, Elt c, Elt d) 
-  => Tuple (Exp a, Exp b, Exp c, Exp d) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d) = Exp (a, b, c, d)
-  tuple   = tup4
-  untuple = untup4
+instance Lift Double where
+  type Plain Double = Double
+  lift = Const
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e) 
-  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e) = Exp (a, b, c, d, e)
-  tuple   = tup5
-  untuple = untup5
+{-
+instance Lift CFloat where
+  type Plain CFloat = CFloat
+  lift = Const
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
-  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f)
-    = Exp (a, b, c, d, e, f)
-  tuple   = tup6
-  untuple = untup6
+instance Lift CDouble where
+  type Plain CDouble = CDouble
+  lift = Const
+ -}
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
-  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g)
-    = Exp (a, b, c, d, e, f, g)
-  tuple   = tup7
-  untuple = untup7
+instance Lift Bool where
+  type Plain Bool = Bool
+  lift = Const
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
-  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
-    = Exp (a, b, c, d, e, f, g, h)
-  tuple   = tup8
-  untuple = untup8
+instance Lift Char where
+  type Plain Char = Char
+  lift = Const
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
-  => Tuple (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
-  type TupleT (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
-    = Exp (a, b, c, d, e, f, g, h, i)
-  tuple   = tup9
-  untuple = untup9
+{-
+instance Lift CChar where
+  type Plain CChar = CChar
+  lift = Const
 
--- |Extract the first component of a pair
+instance Lift CSChar where
+  type Plain CSChar = CSChar
+  lift = Const
+
+instance Lift CUChar where
+  type Plain CUChar = CUChar
+  lift = Const
+ -}
+
+-- Instances for tuples
+
+instance (Lift a, Lift b, Elt (Plain a), Elt (Plain b)) => Lift (a, b) where
+  type Plain (a, b) = (Plain a, Plain b)
+  lift (x, y) = tup2 (lift x, lift y)
+
+instance (Elt a, Elt b) => Unlift (Exp a, Exp b) where
+  unlift = untup2
+
+instance (Lift a, Lift b, Lift c, Elt (Plain a), Elt (Plain b), Elt (Plain c)) => Lift (a, b, c) where
+  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
+  lift (x, y, z) = tup3 (lift x, lift y, lift z)
+
+instance (Elt a, Elt b, Elt c) => Unlift (Exp a, Exp b, Exp c) where
+  unlift = untup3
+
+instance (Lift a, Lift b, Lift c, Lift d,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d)) 
+  => Lift (a, b, c, d) where
+  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
+  lift (x, y, z, u) = tup4 (lift x, lift y, lift z, lift u)
+
+instance (Elt a, Elt b, Elt c, Elt d) => Unlift (Exp a, Exp b, Exp c, Exp d) where
+  unlift = untup4
+
+instance (Lift a, Lift b, Lift c, Lift d, Lift e,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e)) 
+  => Lift (a, b, c, d, e) where
+  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
+  lift (x, y, z, u, v) = tup5 (lift x, lift y, lift z, lift u, lift v)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e) where
+  unlift = untup5
+
+instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f)) 
+  => Lift (a, b, c, d, e, f) where
+  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
+  lift (x, y, z, u, v, w) = tup6 (lift x, lift y, lift z, lift u, lift v, lift w)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) 
+  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
+  unlift = untup6
+
+instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
+          Elt (Plain g)) 
+  => Lift (a, b, c, d, e, f, g) where
+  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
+  lift (x, y, z, u, v, w, r) = tup7 (lift x, lift y, lift z, lift u, lift v, lift w, lift r)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g) 
+  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
+  unlift = untup7
+
+instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g, Lift h,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
+          Elt (Plain g), Elt (Plain h)) 
+  => Lift (a, b, c, d, e, f, g, h) where
+  type Plain (a, b, c, d, e, f, g, h) 
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
+  lift (x, y, z, u, v, w, r, s) 
+    = tup8 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h) 
+  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
+  unlift = untup8
+
+instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g, Lift h, Lift i,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
+          Elt (Plain g), Elt (Plain h), Elt (Plain i)) 
+  => Lift (a, b, c, d, e, f, g, h, i) where
+  type Plain (a, b, c, d, e, f, g, h, i) 
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
+  lift (x, y, z, u, v, w, r, s, t) 
+    = tup9 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s, lift t)
+
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i) 
+  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
+  unlift = untup9
+
+-- Instance for scalar Accelerate expressions
+
+instance Lift (Exp e) where
+  type Plain (Exp e) = e
+  lift = id
+
+-- Helpers to lift functions
+
+-- |Lift a unary function into 'Exp'.
+--
+lift1 :: (Unlift e1, Lift e2) 
+      => (e1 -> e2) -> Exp (Plain e1) -> Exp (Plain e2)
+lift1 f = lift . f . unlift
+
+-- |Lift a binary function into 'Exp'.
+--
+lift2 :: (Unlift e1, Unlift e2, Lift e3) 
+      => (e1 -> e2 -> e3) -> Exp (Plain e1) -> Exp (Plain e2) -> Exp (Plain e3)
+lift2 f x y = lift $ f (unlift x) (unlift y)
+
+-- |Lift a unary function to a computation over rank-1 indices.
+--
+ilift1 :: (Exp Int -> Exp Int) -> Exp (Z :. Int) -> Exp (Z :. Int)
+ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
+
+-- |Lift a binary function to a computation over rank-1 indices.
+--
+ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp (Z :. Int) -> Exp (Z :. Int) -> Exp (Z :. Int)
+ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
+
+
+-- Helpers to lift tuples
+
+-- |Extract the first component of a pair.
 --
 fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
-fst e = let (x, _:: Exp b) = untuple e in x
+fst e = let (x, _:: Exp b) = unlift e in x
 
--- |Extract the second component of a pair
+-- |Extract the second component of a pair.
 --
 snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
-snd e = let (_ :: Exp a, y) = untuple e in y
+snd e = let (_ :: Exp a, y) = unlift e in y
 
--- |Converts an uncurried function to a curried function
+-- |Converts an uncurried function to a curried function.
 --
 curry :: (Elt a, Elt b) => (Exp (a, b) -> Exp c) -> Exp a -> Exp b -> Exp c
-curry f x y = f (tuple (x, y))
+curry f x y = f (lift (x, y))
 
--- |Converts a curried function to a function on pairs
+-- |Converts a curried function to a function on pairs.
 --
 uncurry :: (Elt a, Elt b) => (Exp a -> Exp b -> Exp c) -> Exp (a, b) -> Exp c
-uncurry f t = let (x, y) = untuple t in f x y
+uncurry f t = let (x, y) = unlift t in f x y
 
-
--- Shapes
--- ------
-
-class Index ix where
-  type IndexExp ix
-  
-  -- |Turn an index into a scalar Accelerate expression yielding that index.
-  -- 
-  index   :: IndexExp ix -> Exp ix
-  
-  -- |Turn a scalar Accelerate expression that yields an index into an index structure of scalar
-  -- expressions.
-  --
-  unindex :: Exp ix -> IndexExp ix
-  
-instance Index Z where
-  type IndexExp Z = Z
-
-  index _   = IndexNil
-  unindex _ = Z
-  
-instance (Shape ix, Index ix) => Index (ix:.Int) where
-  type IndexExp (ix:.Int) = IndexExp ix :. Exp Int
-
-  index (ix:.i) = IndexCons (index ix) i
-  unindex e     = unindex (IndexTail e) :. IndexHead e
+-- Helpers to lift shapes and indices
 
 -- |The one index for a rank-0 array.
 --
 index0 :: Exp Z
-index0 = index Z
+index0 = lift Z
 
 -- |Turn an 'Int' expression into a rank-1 indexing expression.
 --
 index1 :: Exp Int -> Exp (Z:. Int)
-index1 = index . (Z:.)
+index1 = lift . (Z:.)
 
 -- |Turn an 'Int' expression into a rank-1 indexing expression.
 --
 unindex1 :: Exp (Z:. Int) -> Exp Int
-unindex1 ix = let Z:.i = unindex ix in i
-
--- |Lift an Accelerate integer computation into rank-1 index space.
---
-ilift1 :: (Exp Int -> Exp Int) -> Exp (Z:. Int) -> Exp (Z:. Int)
-ilift1 f = index1 . f . unindex1
+unindex1 ix = let Z:.i = unlift ix in i
   
 
 -- Conditional expressions

@@ -1,4 +1,4 @@
-{-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE ParallelListComp, FlexibleContexts #-}
 
 module Stencil (stencil_test, stencil_test_ref) where
 
@@ -30,11 +30,11 @@ stencil_test_ref arr
 
 -- some example stencils
 
-stencil1D :: (Elem a, IsFloating a) 
-          => Stencil3 a -> Exp a
+stencil1D :: Floating a 
+          => (a, a, a) -> a
 stencil1D (x, y, z) = (x + z - 2 * y) / 2
 
-stencil2D5 :: (Elem a, IsFloating a) 
+stencil2D5 :: Floating (Exp a)
            => Stencil3x3 a -> Exp a
 stencil2D5 ( (_, t, _)
            , (l, m, r)
@@ -42,7 +42,7 @@ stencil2D5 ( (_, t, _)
            ) 
            = (t + l + r + b - 4 * m) / 4
 
-stencil2D :: (Elem a, IsFloating a) 
+stencil2D :: Floating (Exp a) 
           => Stencil3x3 a -> Exp a
 stencil2D ( (t1, t2, t3)
           , (l , m,  r )
@@ -50,7 +50,7 @@ stencil2D ( (t1, t2, t3)
           ) 
           = (t1/2 + t2 + t3/2 + l + r + b1/2 + b2 + b3/2 - 4 * m) / 4
 
-stencil3D :: (Elem a, IsNum a)
+stencil3D :: Num (Exp a)
           => Stencil3x3x3 a -> Exp a
 stencil3D (front, back, _) =      -- 'b4' is the focal point
   let ((f1, f2, _),

@@ -48,6 +48,11 @@ class IsTuple tup where
   fromTuple :: tup -> TupleRepr tup
   toTuple   :: TupleRepr tup -> tup
 
+instance IsTuple () where
+  type TupleRepr () = ()
+  fromTuple         = id
+  toTuple           = id
+            
 instance IsTuple (a, b) where
   type TupleRepr (a, b) = (((), a), b)
   fromTuple (x, y)      = (((), x), y)

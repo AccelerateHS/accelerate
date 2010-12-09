@@ -64,7 +64,7 @@ module Data.Array.Accelerate (
   module Data.Array.Accelerate.Prelude,
   
   -- * Deprecated names for backwards compatibility
-  Elem, Ix, SliceIx
+  Elem, Ix, SliceIx, tuple, untuple
 
 ) where
 
@@ -116,3 +116,11 @@ instance Shape sh => Ix sh
 {-# DEPRECATED SliceIx "Use 'Slice' instead" #-}
 class Slice sh => SliceIx sh
 instance Slice sh => SliceIx sh
+
+{-#DEPRECATED tuple "Use 'lift' instead" #-}
+tuple :: Lift e => e -> Exp (Plain e)
+tuple = lift
+
+{-#DEPRECATED untuple "Use 'unlift' instead" #-}
+untuple :: Unlift e => Exp (Plain e) -> e
+untuple = unlift
