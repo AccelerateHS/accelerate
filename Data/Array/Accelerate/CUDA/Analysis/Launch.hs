@@ -66,6 +66,7 @@ blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) 
 --
 gridSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int -> Int
 gridSize p (FoldSeg _ _ _ _) size cta = ((size * CUDA.warpSize p) + cta - 1) `div` cta
+gridSize p (Fold1Seg _ _ _)  size cta = ((size * CUDA.warpSize p) + cta - 1) `div` cta
 gridSize _ (Fold _ _ acc)    size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
 gridSize _ (Fold1 _ acc)     size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
 gridSize _ acc               size cta = splitByBlocks acc size cta
@@ -94,6 +95,9 @@ sharedMem _ (Scanr' _ x _)    blockDim = sizeOf (expType x) * blockDim
 sharedMem _ (Scanl1 _ a)      blockDim = sizeOf (accType a) * blockDim
 sharedMem _ (Scanr1 _ a)      blockDim = sizeOf (accType a) * blockDim
 sharedMem p (FoldSeg _ _ a _) blockDim =
+  let warp = CUDA.warpSize p
+  in (blockDim `div` warp * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+sharedMem p (Fold1Seg _ a _) blockDim =
   let warp = CUDA.warpSize p
   in (blockDim `div` warp * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
 
