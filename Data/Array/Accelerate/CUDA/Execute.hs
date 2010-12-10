@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators  #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators, PatternGuards, DeriveDataTypeable #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -10,7 +10,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Execute (executeAcc)
+module Data.Array.Accelerate.CUDA.Execute (executeAcc, executeAccFun1, executeOpenAcc)
   where
 
 import Prelude hiding (id, (.), sum)
@@ -19,6 +19,7 @@ import Control.Category
 import Data.Int
 import Data.Word
 import Data.Maybe
+import Data.Typeable
 import Control.Monad
 import Control.Monad.Trans                              (liftIO)
 import Control.Applicative                              hiding (Const)
@@ -29,6 +30,7 @@ import System.Posix.Process
 import System.Exit                                      (ExitCode(..))
 import System.Posix.Types                               (ProcessID)
 import System.IO.Unsafe
+import System.Mem.StableName
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -51,6 +53,9 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 #include "accelerate.h"
 
 
+deriving instance Typeable1 Val
+deriving instance Typeable2 OpenAcc
+
 -- Array evaluation
 -- ----------------
 
@@ -67,10 +72,40 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 --    memory allocated for the result, and the kernel(s) that implement the
 --    skeleton are invoked
 --
+
 executeAcc :: Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
 
-executeOpenAcc :: OpenAcc aenv a -> Val aenv -> CIO a
+
+executeAccFun1 :: Arrays a => a -> Afun (a -> b) -> CIO b
+executeAccFun1 arrs (Alam (Abody f)) = do
+  -- transfer arrays to device
+  loadArrays arrays arrs
+  res <- executeOpenAcc f (Empty `Push` arrs)
+  releaseArrays arrays arrs
+  return (res)
+  where
+    loadArrays :: ArraysR as -> as -> CIO ()
+    loadArrays ArraysRunit                  ()            = return ()
+    loadArrays ArraysRarray                 (Array sh ad) = do
+      let n = size sh
+      mallocArray ad n
+      pokeArrayAsync ad n Nothing
+      bindArray ad
+    loadArrays (ArraysRpair r1 r0)          (a1,a0)       = do
+      loadArrays r0 a0
+      loadArrays r1 a1
+    releaseArrays :: ArraysR as -> as -> CIO ()
+    releaseArrays ArraysRunit                  ()           = return ()
+    releaseArrays ArraysRarray                 (Array _ ad) = do
+      unbindArray ad
+      freeArray ad
+    releaseArrays (ArraysRpair r1 r0)          (a1,a0)      = do
+      releaseArrays r0 a0
+      releaseArrays r1 a1
+
+
+executeOpenAcc :: Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO a
 ---- (1) Array introduction ----
 executeOpenAcc (Use a)    _    = return a
 
@@ -93,7 +128,7 @@ executeOpenAcc (Reshape e a) aenv = do
   ix            <- executeExp e aenv
   (Array sh ad) <- executeOpenAcc a aenv
   BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
-    $ return (Array (Sugar.fromElt ix) ad)
+   $ return (Array (Sugar.fromElt ix) ad)
 
 executeOpenAcc (Unit e) aenv = do
   v <- executeExp e aenv
@@ -208,8 +243,9 @@ executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
 
 -- Reduction
 --
-executeFoldAll :: Sugar.Shape dim
-  => OpenAcc aenv (Array dim e)         -- dim ~ Z
+executeFoldAll :: forall dim e aenv.
+  (Typeable aenv, Sugar.Shape dim)
+  => OpenAcc aenv (Array dim e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> Val aenv
   -> CIO (Array dim e)
@@ -222,7 +258,8 @@ executeFoldAll acc a0 aenv = do
   if g > 1 then executeFoldAll acc (Use r) aenv
            else return (Array (fst sh0) out)
 
-executeFold :: Sugar.Shape dim
+executeFold :: forall dim e aenv.
+  (Typeable aenv, Sugar.Shape dim)
   => OpenAcc aenv (Array dim e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> Val aenv
@@ -236,9 +273,8 @@ executeFold acc a0 aenv = do
 
 -- Segmented Reduction
 --
-executeFoldSeg
-  :: Sugar.Shape dim
-  => OpenAcc aenv (Array (dim:.Int) e)
+executeFoldSegAll :: Sugar.Shape dim
+  => OpenAcc aenv (Array (dim:.Int) e)  -- dim ~ Z
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> OpenAcc aenv Segments
   -> Val aenv
@@ -262,7 +298,8 @@ executeFoldSeg acc a0 s0 aenv = do
 -- Left and right scan variants
 --
 executeScan :: forall aenv e.
-     OpenAcc aenv (Vector e)
+     Typeable aenv
+  => OpenAcc aenv (Vector e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv
   -> CIO (Vector e)
@@ -287,13 +324,14 @@ executeScan acc a0 aenv = do
   return a
 
 executeScan' :: forall aenv e.
-     OpenAcc aenv (Vector e, Scalar e)
+     Typeable aenv
+  => OpenAcc aenv (Vector e, Scalar e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv 
   -> CIO (Vector e, Scalar e)
 executeScan' acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
-  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
+  (fvs,mdl,fscan,(t,g,m)) <- configure' "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
   a@(Array _ out)         <- newArray (Sugar.toElt sh0)
   s@(Array _ sum)         <- newArray Z
@@ -311,7 +349,8 @@ executeScan' acc a0 aenv = do
   return (a,s)
 
 executeScan1 :: forall aenv e.
-     OpenAcc aenv (Vector e)
+     Typeable aenv
+  => OpenAcc aenv (Vector e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv
   -> CIO (Vector e)
@@ -368,10 +407,10 @@ freeArraysR = applyArraysR freeArray
 -- Evaluate a closed scalar expression. Expressions are evaluated on the host,
 -- but may require some interaction with the device, such as array indexing
 --
-executeExp :: Exp aenv t -> Val aenv -> CIO t
+executeExp :: Typeable aenv => Exp aenv t -> Val aenv -> CIO t
 executeExp e = executeOpenExp e Empty
 
-executeOpenExp :: OpenExp env aenv t -> Val env -> Val aenv -> CIO t
+executeOpenExp :: Typeable aenv => OpenExp env aenv t -> Val env -> Val aenv -> CIO t
 executeOpenExp (Var idx)         env _    = return . Sugar.toElt $ prj idx env
 executeOpenExp (Const c)         _   _    = return $ Sugar.toElt c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
@@ -404,7 +443,7 @@ executeOpenExp (Cond c t e) env aenv = do
        else executeOpenExp e env aenv
 
 
-executeTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> CIO t
+executeTuple :: Typeable aenv => Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> CIO t
 executeTuple NilTup          _   _    = return ()
 executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
                                             <*> executeOpenExp e env aenv
@@ -422,7 +461,7 @@ data Lifted where
   Shapes :: Shape sh => sh          -> Lifted
   Arrays ::             Array dim e -> Lifted
 
-liftAcc :: forall a aenv. OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftAcc :: forall a aenv. Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
 liftAcc (Let _ _)            _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
 liftAcc (Let2 _ _)           _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
 liftAcc (Avar _)             _    = return []
@@ -450,15 +489,15 @@ liftAcc (Stencil f _ _)      aenv = liftFun f aenv
 liftAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
 
 
-liftFun :: OpenFun env aenv a -> Val aenv -> CIO [Lifted]
+liftFun :: Typeable aenv => OpenFun env aenv a -> Val aenv -> CIO [Lifted]
 liftFun (Lam  lam)  = liftFun lam
 liftFun (Body body) = liftExp body
 
-liftTup :: Tuple (OpenExp env aenv) t -> Val aenv -> CIO [Lifted]
+liftTup :: Typeable aenv => Tuple (OpenExp env aenv) t -> Val aenv -> CIO [Lifted]
 liftTup NilTup          _    = return []
 liftTup (t `SnocTup` e) aenv = (++) <$> liftTup t aenv <*> liftExp e aenv
 
-liftExp :: OpenExp env aenv a -> Val aenv -> CIO [Lifted]
+liftExp :: Typeable aenv => OpenExp env aenv a -> Val aenv -> CIO [Lifted]
 liftExp (Var _)           _    = return []
 liftExp (Const _)         _    = return []
 liftExp (PrimConst _)     _    = return []
@@ -561,16 +600,29 @@ instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
 -- launch parameters, and initiate the computation. This also handles lifting
 -- and binding of array references from scalar expressions.
 --
-execute :: Marshalable args => String -> OpenAcc aenv a -> Val aenv -> Int -> args -> CIO ()
+execute :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a, Marshalable args) => 
+           String -> OpenAcc aenv (Array dim a) -> Val aenv -> Int -> args -> CIO ()
 execute name acc aenv n args =
   configure name acc aenv n >>= flip dispatch args
 
 -- Pre-execution configuration and kernel linking
 --
-configure :: String -> OpenAcc aenv a -> Val aenv -> Int -> CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+configure :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) => 
+             String -> OpenAcc aenv (Array dim a) -> Val aenv -> Int -> 
+             CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
 configure name acc aenv n = do
   fvs <- liftAcc acc aenv
   mdl <- loadKernel acc
+  fun <- liftIO $ CUDA.getFun mdl name
+  cfg <- launchConfig acc n fun
+  return (fvs, mdl, fun, cfg)
+
+configure' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) => 
+             String -> OpenAcc aenv (Array dim a, Array dim' a) -> Val aenv -> Int -> 
+             CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+configure' name acc aenv n = do
+  fvs <- liftAcc acc aenv
+  mdl <- loadKernel' acc
   fun <- liftIO $ CUDA.getFun mdl name
   cfg <- launchConfig acc n fun
   return (fvs, mdl, fun, cfg)
@@ -598,20 +650,32 @@ launch (cta,grid,smem) fn a = do
 
 -- Dynamic kernel loading
 -- ----------------------
-{-
--- Hash value for an Acc node
+
+-- generate opaque stable name for an OpenAcc expression - used to key the compute table
 --
-makeStableAcc :: OpenAcc aenv a -> IO Int32
-makeStableAcc acc = combine accID . fromIntegral . hashStableName <$> makeStableName acc
-  where
-    combine a b = (a `rotate` 1) `xor` b
-    accID       = Hash.hashInt . ord . head $ accToKey acc
+makeStableAcc :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) 
+              => OpenAcc aenv (Array dim a) -> IO (StableAccName)
+makeStableAcc acc = do 
+    x <- makeStableName acc
+    return (StableAccName x)
+
+makeStableAcc' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) 
+               => OpenAcc aenv (Array dim a, Array dim' a) -> IO (StableAccName)
+makeStableAcc' acc = do 
+    x <- makeStableName acc
+    return (StableAccName x)
+
+
+-- Hash table for storing references to compiled kernels for OpenAcc nodes
+--
+--type ComputeTable = Hash.HashTable StableAccName AccEntry
 
 -- Kernel module lookup with fast association to particular AST nodes
 --
-loadKernel :: OpenAcc aenv a -> CIO CUDA.Module
+loadKernel :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) => OpenAcc aenv (Array dim a) -> CIO CUDA.Module
 loadKernel acc = do
   tab <- getM computeTable
+  --tab <- liftIO $ newComputeTable
   key <- liftIO $ makeStableAcc acc
   mdl <- liftIO $ Hash.lookup tab key
   case mdl of
@@ -624,13 +688,30 @@ loadKernel acc = do
       liftIO $ Hash.insert tab key (AccEntry undefined m)
 #endif
       return m
--}
+
+loadKernel' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) 
+                => OpenAcc aenv (Array dim a, Array dim' a) -> CIO CUDA.Module
+loadKernel' acc = do
+  tab <- getM computeTable
+  --tab <- liftIO $ newComputeTable
+  key <- liftIO $ makeStableAcc' acc
+  mdl <- liftIO $ Hash.lookup tab key
+  case mdl of
+    Just e  -> INTERNAL_ASSERT "loadKernel" (getL accKey e == accToKey acc) $ return (getL accKernel e)
+    Nothing -> do
+      m <- linkKernel acc
+#ifdef ACCELERATE_INTERNAL_CHECKS
+      liftIO $ Hash.insert tab key (AccEntry (accToKey acc) m)
+#else
+      liftIO $ Hash.insert tab key (AccEntry undefined m)
+#endif
+      return m
 
 -- Link the CUDA binary object implementing the kernel for the given array
 -- computation. This may entail waiting for the external compilation process.
 --
-loadKernel :: OpenAcc aenv a -> CIO CUDA.Module
-loadKernel acc =
+linkKernel :: OpenAcc aenv a -> CIO CUDA.Module
+linkKernel acc =
   let key           = accToKey acc
       either' e r l = either l r e
       intErr        = INTERNAL_ERROR(error) "loadKernel" "code generation failed"

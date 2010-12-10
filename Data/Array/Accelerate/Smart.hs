@@ -243,6 +243,9 @@ deriving instance Typeable1 Acc
 convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
 convertAcc = convertOpenAcc EmptyLayout
 
+--convertAcc1 :: (Arrays arrs, Typeable s) => Acc arrs -> AST.OpenAcc ((), s) arrs
+--convertAcc1 = convertOpenAcc (EmptyLayout `PushLayout` ZeroIdx)
+
 -- |Convert a closed array expression to de Bruijn form while also incorporating sharing information.
 --
 convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs

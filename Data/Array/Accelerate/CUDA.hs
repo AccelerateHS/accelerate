@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
   -- * Generate and execute CUDA code for an array expression
-  Arrays, run, stream
+  run, stream
 
 ) where
 
@@ -22,14 +22,15 @@ module Data.Array.Accelerate.CUDA (
 import Prelude hiding (catch)
 import Control.Exception
 import Control.Applicative
+import Control.Monad
 import System.IO.Unsafe
 
 -- CUDA binding
 import Foreign.CUDA.Driver.Error
 
 -- friends
-import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))
-import Data.Array.Accelerate.Smart                (Acc, convertAcc)
+import qualified Data.Array.Accelerate.AST     as AST
+import Data.Array.Accelerate.Smart                (Acc, convertAcc, convertAccFun1)
 import Data.Array.Accelerate.Array.Representation (size)
 import Data.Array.Accelerate.Array.Sugar          (Array(..))
 import Data.Array.Accelerate.CUDA.Array.Data
@@ -45,7 +46,7 @@ import Data.Array.Accelerate.CUDA.Execute
 
 -- | Compile and run a complete embedded array program using the CUDA backend
 --
-run :: Arrays a => Acc a -> a
+run :: AST.Arrays a => Acc a -> a
 {-# NOINLINE run #-}
 run = unsafePerformIO . execute
 
@@ -57,29 +58,41 @@ run = unsafePerformIO . execute
 --  * avoid re-analysing the array code in the frontend
 --  * overlap host->device & device->host transfers, as well as computation
 --
-stream :: (Arrays a, Arrays b) => (a -> Acc b) -> [a] -> [b]
+stream :: (AST.Arrays a, AST.Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
 {-# NOINLINE stream #-}
-stream acc = unsafePerformIO . sequence' . map (execute . acc)
+stream f as = unsafePerformIO $ do
+  let acc = convertAccFun1 f 
+  s <- liftM snd $ runCUDA (compileAccFun1 acc)
+  stream' s acc as
+
+--stream acc = unsafePerformIO . sequence' . map (execute . acc)
+
+stream' :: (AST.Arrays a, AST.Arrays b) => CUDAState -> AST.Afun (a -> b) -> [a] -> IO ([b])
+stream' _ _ [] = return []
+stream' state acc (aArr:as) = do
+  (bArr,s) <- runCUDAWith state (executeAccFun1 aArr acc >>= collect)
+  bs <- unsafeInterleaveIO (stream' s acc as)
+  return (bArr:bs)
 
 
-execute :: Arrays a => Acc a -> IO a
+execute :: AST.Arrays a => Acc a -> IO a
 execute a =
   let acc = convertAcc a
   in  evalCUDA (compileAcc acc >> executeAcc acc >>= collect)
       `catch`
       \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+
+-- Copy from device to host, and decrement the usage counter.
+--
+collect :: AST.Arrays arrs => arrs -> CIO arrs
+collect arrs = collectR AST.arrays arrs
   where
-    -- Copy from device to host, and decrement the usage counter.
-    --
-    collect :: Arrays arrs => arrs -> CIO arrs
-    collect arrs = collectR arrays arrs
-      where
-        collectR :: ArraysR arrs -> arrs -> CIO arrs
-        collectR ArraysRunit         ()                = return ()
-        collectR ArraysRarray        arr@(Array sh ad)
-          = peekArray ad (size sh) >> freeArray ad >> return arr
-        collectR (ArraysRpair r1 r2) (arrs1, arrs2)
-          = (,) <$> collectR r1 arrs1 <*> collectR r2 arrs2
+    collectR :: AST.ArraysR arrs -> arrs -> CIO arrs
+    collectR AST.ArraysRunit         ()                = return ()
+    collectR AST.ArraysRarray        arr@(Array sh ad)
+      = peekArray ad (size sh) >> freeArray ad >> return arr
+    collectR (AST.ArraysRpair r1 r2) (arrs1, arrs2)
+      = (,) <$> collectR r1 arrs1 <*> collectR r2 arrs2
 
 sequence' :: [IO a] -> IO [a]
 sequence' = foldr k (return [])

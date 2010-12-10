@@ -15,9 +15,9 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, CIO,
+    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState,
     unique, outputDir, deviceProps, deviceContext,
-    memoryTable, kernelTable, computeTable,
+    memoryTable, kernelTable, computeTable, StableAccName(..),
 
     MemoryEntry(MemoryEntry), refcount, memsize, arena,
     KernelEntry(KernelEntry), kernelName, kernelStatus,
@@ -34,6 +34,7 @@ import Data.Record.Label
 
 import Data.Int
 import Data.IORef
+import Data.Typeable
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict       (StateT(..))
@@ -46,6 +47,7 @@ import System.Directory
 import System.FilePath
 import System.Posix.Types               (ProcessID)
 import System.Mem.Weak
+import System.Mem.StableName
 import System.IO.Unsafe
 
 import Data.Array.Accelerate.CUDA.Analysis.Device
@@ -66,7 +68,9 @@ import System.Posix.Process             (getProcessID)
 
 type MemoryTable  = HashTable WordPtr MemoryEntry
 type KernelTable  = HashTable String  KernelEntry
-type ComputeTable = HashTable Int32   AccEntry
+--type ComputeTable = HashTable Int32   AccEntry
+type ComputeTable = Hash.HashTable StableAccName AccEntry
+
 
 -- | The state token for accelerated CUDA array operations
 --
@@ -105,6 +109,23 @@ data AccEntry = AccEntry
     _accKey    :: String,       -- for assertions
     _accKernel :: CUDA.Module
   }
+
+-- Opaque stable name for an OpenAcc expression - used to key the compute table
+--
+
+data StableAccName where
+  StableAccName :: Typeable a => StableName a -> StableAccName
+
+instance Eq StableAccName where
+  StableAccName sn1 == StableAccName sn2
+    | Just sn1' <- gcast sn1 = sn1' == sn2
+    | otherwise              = False
+
+hashStableAcc :: StableAccName -> Int32
+hashStableAcc (StableAccName sn) = fromIntegral (hashStableName sn)
+
+newComputeTable :: IO (ComputeTable)
+newComputeTable = Hash.new (==) hashStableAcc
 
 -- | Reference tracking for device memory allocations. Associates the products
 -- of an `Array dim e' with data stored on the graphics device. Facilitates
@@ -192,7 +213,7 @@ initialise = do
 
 sanitise :: CUDAState -> IO CUDAState
 sanitise st = do
-  compute <- Hash.new (==) fromIntegral
+  compute <- newComputeTable
   entries <- length <$> Hash.toList (getL memoryTable st)
   INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return (setL computeTable compute st)
 
@@ -216,8 +237,10 @@ runCUDA acc =
     return (a,s)
 
 
--- runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
--- runCUDAWith = error "not implemented yet"
+runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
+runCUDAWith state acc = do
+  (a,s) <- runStateT acc state
+  return (a,s)
 
 
 -- Utility
