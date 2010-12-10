@@ -84,7 +84,7 @@ instance Shape sh => Shape (sh, Int) where
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
   index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
-                                    $ index sh ix + size sh * i
+                                    $ index sh ix * sz + i
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` 0
