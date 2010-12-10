@@ -28,46 +28,69 @@ fold
     extern volatile __shared__ void* s_ptr[];
     ArrOut s_data = partition(s_ptr, blockDim.x);
 
-    const Ix tid          = threadIdx.x;
     const Ix num_elements = indexHead(shIn0);
     const Ix num_segments = size(shOut);
 
+    const Ix num_vectors  = blockDim.x / warpSize * gridDim.x;
+    const Ix thread_id    = blockDim.x * blockIdx.x + threadIdx.x;
+    const Ix vector_id    = thread_id / warpSize;
+    const Ix thread_lane  = threadIdx.x & (warpSize - 1);
+
     /*
-     * Each block of threads reduces elements along a projection through an
-     * innermost dimension to a single value.
+     * Each warp reduces elements along a projection through an innermost
+     * dimension to a single value
      */
-    for (Ix ix = blockIdx.x; ix < num_segments; ix += gridDim.x)
+    for (Ix seg = vector_id; seg < num_segments; seg += num_vectors)
     {
-        Ix     i     = tid;
-        DimOut ixOut = fromIndex(shOut, ix);
-        TyOut  sum;
+        const Ix    start = seg   * num_elements;
+        const Ix    end   = start + num_elements;
+              TyOut sum;
 
-        /*
-         * Reduce multiple elements per thread
-         */
-        if (i < num_elements)
+        if (num_elements > warpSize)
         {
-            sum = get0(d_in0, toIndex(shIn0, indexCons(ixOut, i)));
+            /*
+             * Ensure aligned access to global memory, and that each thread
+             * initialises its local sum.
+             */
+            Ix i = start - (start & (warpSize - 1)) + thread_lane;
+            if (i >= start)
+                sum = get0(d_in0, i);
 
-            for (i += blockDim.x; i < num_elements; i += blockDim.x)
-                sum = apply(sum, get0(d_in0, toIndex(shIn0, indexCons(ixOut, i))));
+            if (i + warpSize < end)
+            {
+                TyOut tmp = get0(d_in0, i + warpSize);
+
+                if (i >= start) sum = apply(sum, tmp);
+                else            sum = tmp;
+            }
+
+            /*
+             * Now, iterate along the inner-most dimension collecting a local sum
+             */
+            for (i += 2 * warpSize; i < end; i += warpSize)
+                sum = apply(sum, get0(d_in0, i));
+        }
+        else if (start + thread_lane < end)
+        {
+            sum = get0(d_in0, start + thread_lane);
         }
 
         /*
          * Each thread puts its local sum into shared memory, then cooperatively
          * reduce the shared array to a single value.
          */
-        set(s_data, tid, sum);
-        __syncthreads();
+        set(s_data, threadIdx.x, sum);
+        sum = reduce_warp_n(s_data, sum, min(num_elements, warpSize));
 
-        sum = reduce_block_n(s_data, sum, min(num_elements, blockDim.x));
-
-        if (tid == 0)
+        /*
+         * Finally, the first thread writes the result for this segment
+         */
+        if (thread_lane == 0)
         {
 #ifndef INCLUSIVE
             sum = num_elements > 0 ? apply(sum, identity()) : identity();
 #endif
-            set(d_out, ix, sum);
+            set(d_out, seg, sum);
         }
     }
 }

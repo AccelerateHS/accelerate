@@ -67,19 +67,17 @@ blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) 
 -- foldSeg: 'size' is the number of segments, require one warp per segment
 --
 gridSize :: CUDA.DeviceProperties -> OpenAcc aenv a -> Int -> Int -> Int
-gridSize p (FoldSeg _ _ _ _) size cta = ((size * CUDA.warpSize p) + cta - 1) `div` cta
-gridSize p (Fold1Seg _ _ _)  size cta = ((size * CUDA.warpSize p) + cta - 1) `div` cta
-gridSize _ (Fold _ _ acc)    size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
-gridSize _ (Fold1 _ acc)     size cta = if accDim acc == 1 then splitByBlocks acc size cta else size
-gridSize _ acc               size cta = splitByBlocks acc size cta
+gridSize p acc@(FoldSeg _ _ _ _) size cta = split acc (size * CUDA.warpSize p) cta
+gridSize p acc@(Fold1Seg _ _ _)  size cta = split acc (size * CUDA.warpSize p) cta
+gridSize p acc@(Fold _ _ a)      size cta = if accDim a == 1 then split acc size cta else split acc (size * CUDA.warpSize p) cta
+gridSize p acc@(Fold1 _ a)       size cta = if accDim a == 1 then split acc size cta else split acc (size * CUDA.warpSize p) cta
+gridSize _ acc                   size cta = split acc size cta
 
-splitByBlocks :: OpenAcc aenv a -> Int -> Int -> Int
-splitByBlocks acc size cta =
-  let between arr n = (n+arr-1) `div` n
-  in  1 `max` ((cta - 1 + (size `between` elementsPerThread acc)) `div` cta)
-
-elementsPerThread :: OpenAcc aenv a -> Int
-elementsPerThread _ = 1
+split :: OpenAcc aenv a -> Int -> Int -> Int
+split acc size cta = (size `between` eltsPerThread acc) `between` cta
+  where
+    between arr n   = 1 `max` ((n + arr - 1) `div` n)
+    eltsPerThread _ = 1
 
 
 -- |
