@@ -98,19 +98,19 @@ instance Shape sh => Shape (sh, Int) where
                                         Constant e -> Left e
     | otherwise                     = bound sh ix bndy `addDim` i
     where
-      Right ix `addDim` i = Right (ix, i)
+      Right ds `addDim` d = Right (ds, d)
       Left e   `addDim` _ = Left e
 
-  iter (sh, sz) f c r = iter' 0 r
+  iter (sh, sz) f c r = iter sh (\ix -> iter' (ix,0)) c r
     where
-      iter' i v | i >= sz   = v
-                | otherwise = iter' (i + 1) $ iter sh (\ix -> f (ix, i)) c v
+      iter' (ix,i) | i >= sz   = r
+                   | otherwise = f (ix,i) `c` iter' (ix,i+1)
 
-  iter1 (_sh, 0)  _f _c = BOUNDS_ERROR(error) "iter1" "empty iteration space"
-  iter1 (sh , sz) f  c  = iter1' (sz - 1)
+  iter1 (_,  0)  _ _ = BOUNDS_ERROR(error) "iter1" "empty iteration space"
+  iter1 (sh, sz) f c = iter1 sh (\ix -> iter1' (ix,0)) c
     where
-      iter1' i | i == 0    = iter1 sh (\ix -> f (ix, 0)) c
-               | otherwise = iter1' (i - 1) `c` iter1 sh (\ix -> f (ix, i)) c
+      iter1' (ix,i) | i == sz-1 = f (ix,i)
+                    | otherwise = f (ix,i) `c` iter1' (ix,i+1)
 
   rangeToShape ((sh1, sz1), (sh2, sz2)) 
     = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
