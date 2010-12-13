@@ -1,14 +1,14 @@
 /* -----------------------------------------------------------------------------
  *
- * Kernel      : FoldSegAll
+ * Kernel      : FoldSeg
  * Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
  * License     : BSD3
  *
  * Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
  * Stability   : experimental
  *
- * Reduction a vector to a single value for each segment, using a binary
- * associative function
+ * Reduce segments along the innermost dimension of a multidimensional array to
+ * a single value for each segment, using a binary associative function
  *
  * ---------------------------------------------------------------------------*/
 
@@ -41,7 +41,8 @@ foldSeg
     ArrOut              d_out,
     const ArrIn0        d_in0,
     const Int*          d_offset,
-    const Ix            num_segments
+    const DimOut        shOut,
+    const DimIn0        shIn0
 )
 {
     const Ix vectors_per_block = blockDim.x / warpSize;
@@ -51,24 +52,30 @@ foldSeg
     const Ix thread_lane       = threadIdx.x & (warpSize - 1);
     const Ix vector_lane       = threadIdx.x / warpSize;
 
+    const Ix num_segments      = indexHead(shOut);
+    const Ix total_segments    = size(shOut);
+
     /*
      * Manually partition (dynamically-allocated) shared memory
      */
     extern volatile __shared__ Ix s_ptrs[][2];
     ArrOut s_data = partition((void*) &s_ptrs[vectors_per_block][2], blockDim.x);
 
-    for (Ix seg = vector_id; seg < num_segments; seg += num_vectors)
+    for (Ix seg = vector_id; seg < total_segments; seg += num_vectors)
     {
+        const Ix s    =  seg % num_segments;
+        const Ix base = (seg / num_segments) * indexHead(shIn0);
+
         /*
          * Use two threads to fetch the indices of the start and end of this
          * segment. This results in single coalesced global read, instead of two
          * separate transactions.
          */
         if (thread_lane < 2)
-            s_ptrs[vector_lane][thread_lane] = d_offset[seg + thread_lane];
+            s_ptrs[vector_lane][thread_lane] = d_offset[s + thread_lane];
 
-        const Ix    start        = s_ptrs[vector_lane][0];
-        const Ix    end          = s_ptrs[vector_lane][1];
+        const Ix    start        = base + s_ptrs[vector_lane][0];
+        const Ix    end          = base + s_ptrs[vector_lane][1];
         const Ix    num_elements = end - start;
               TyOut sum;
 

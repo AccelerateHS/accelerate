@@ -111,9 +111,10 @@ sharedMem _ (Scanr' _ x _)      blockDim = sizeOf (expType x) * blockDim
 sharedMem _ (Scanl1 _ a)        blockDim = sizeOf (accType a) * blockDim
 sharedMem _ (Scanr1 _ a)        blockDim = sizeOf (accType a) * blockDim
 sharedMem p (FoldSeg _ _ a _)   blockDim =
-  (blockDim `div` CUDA.warpSize p * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+  (blockDim `div` CUDA.warpSize p) * 4 * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
 sharedMem p (Fold1Seg _ a _) blockDim =
-  (blockDim `div` CUDA.warpSize p * 2) * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+  (blockDim `div` CUDA.warpSize p) * 4 * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
+
 sharedMem _ (Stencil _ _ _)      _ = INTERNAL_ERROR(error) "sharedMem" "Stencil not implemented yet"
 sharedMem _ (Stencil2 _ _ _ _ _) _ = INTERNAL_ERROR(error) "sharedMem" "Stencil2 not implemented yet"
 

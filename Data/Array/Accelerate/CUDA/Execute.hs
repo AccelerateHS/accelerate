@@ -138,13 +138,8 @@ executeOpenAcc acc@(Fold1 _ a0) aenv =
   if accDim a0 == 1 then executeFoldAll acc a0 aenv
                     else executeFold    acc a0 aenv
 
-executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv =
-  if accDim a0 == 1 then executeFoldSegAll acc a0 s0 aenv
-                    else INTERNAL_ERROR(error) "executeOpenAcc" "foldSeg NOT YET IMPLEMENTED"
-
-executeOpenAcc acc@(Fold1Seg _ a0 s0) aenv =
-  if accDim a0 == 1 then executeFoldSegAll acc a0 s0 aenv
-                    else INTERNAL_ERROR(error) "executeOpenAcc" "fold1Seg NOT YET IMPLEMENTED"
+executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = executeFoldSeg acc a0 s0 aenv
+executeOpenAcc acc@(Fold1Seg  _ a0 s0) aenv = executeFoldSeg acc a0 s0 aenv
 
 executeOpenAcc acc@(Scanr  _ _ a0) aenv = executeScan  acc a0 aenv
 executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
@@ -241,18 +236,18 @@ executeFold acc a0 aenv = do
 
 -- Segmented Reduction
 --
-executeFoldSegAll :: Sugar.Shape dim
-  => OpenAcc aenv (Array (dim:.Int) e)  -- dim ~ Z
+executeFoldSeg
+  :: Sugar.Shape dim
+  => OpenAcc aenv (Array (dim:.Int) e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> OpenAcc aenv Segments
   -> Val aenv
   -> CIO (Array (dim:.Int) e)
-executeFoldSegAll acc a0 s0 aenv = do
+executeFoldSeg acc a0 s0 aenv = do
   (Array sh0 in0) <- executeOpenAcc a0 aenv
   (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
-  r@(Array _ out) <- newArray (Sugar.toElt (fst sh0,size shs - 1))
-  let n = size shs - 1
-  execute "foldSeg" acc aenv n (((((),out),in0),seg),n)
+  r@(Array s out) <- newArray (Sugar.toElt (fst sh0,size shs - 1))
+  execute "foldSeg" acc aenv (size s) ((((((),out),in0),seg),convertIx s),convertIx sh0)
   freeArray in0
   freeArray seg
   return r
@@ -262,6 +257,7 @@ executeFoldSegAll acc a0 s0 aenv = do
                           `PrimApp`
                           Tuple (NilTup `SnocTup` (Var (SuccIdx ZeroIdx))
                                         `SnocTup` (Var ZeroIdx)))))
+
 
 -- Left and right scan variants
 --

@@ -52,6 +52,7 @@ compileAcc = travA k
                               in do mallocArray    ad (max 1 n)
                                     pokeArrayAsync ad n Nothing
     k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
+    k acc@(Fold1Seg  _ _ _) = compile scan >> compile acc
     k acc                   = compile acc
 
     scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
