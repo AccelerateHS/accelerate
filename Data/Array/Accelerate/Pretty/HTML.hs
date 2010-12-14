@@ -59,7 +59,8 @@ htmlAST :: OpenAcc aenv a -> H.Html
 htmlAST acc = H.docTypeHtml $ do
     H.head $ do
         H.meta ! A.httpEquiv "Content-Type" ! A.content "text/html; charset=UTF-8"
-        H.script ! A.type_ "text/javascript" ! A.src "jquery.js" $ mempty
+        H.script ! A.type_ "text/javascript" !
+                   A.src "https://ajax.googleapis.com/ajax/libs/jquery/1.4.4/jquery.min.js" $ mempty
         H.link ! A.rel "stylesheet" ! A.href "accelerate.css" ! A.type_ "text/css"
         H.script ! A.type_ "text/javascript" $ H.text $
           T.unlines ["function collapse() {"
@@ -99,15 +100,85 @@ htmlAST acc = H.docTypeHtml $ do
           H.hr
           travAcc htmlLabels combineHtml leafHtml acc
 
+accelerateCSS :: String
+accelerateCSS =
+  unlines $
+  [ "body {"
+  , "  font-family: Helvetica;"
+  , "  font-size: 10pt;"
+  , "}"
+  , ".node {"
+  , "  padding-left: 5px;"
+  , ""
+  , "}"
+  , ""
+  , ".expanded .node {"
+  , "  padding-left: 12px;"
+  , "}"
+  , ""
+  , ".expanded .node.leaf {"
+  , " padding-left: 23px;"
+  , "}"
+  , ""
+  , ".acc-node>span      { color: red; }"
+  , ".exp-node>span      { color: blue;}"
+  , ".array-node>span    { color: purple;}"
+  , ".fun-node>span      { color: orange;}"
+  , ".prim-fun-node>span { color: magenta;}"
+  , ".tuple-node>span    { color: green;}"
+  , ".boundary-node>span { color: darkcyan;}                                            "
+  , ""
+  , ".selector, .leaf>span {"
+  , "  padding: 2px 7px 2px 5px; "
+  , "}"
+  , ""
+  , ".selector:hover, .leaf>span:hover {"
+  , "  background: #FC9;"
+  , "  -webkit-border-radius: 10px;"
+  , "  -moz-border-radius: 10px;"
+  , "}"
+  , ""
+  , ".leaf>span:hover {"
+  , "  cursor: default;"
+  , "}"
+  , ""
+  , ".selector:hover {"
+  , "  cursor: pointer;"
+  , "}"
+  , ""
+  , ".expanded .selector::before {"
+  , "  font-size: 8pt;"
+  , "  color: #999;"
+  , "  content: \"\\25bc\";"
+  , "}"
+  , ""
+  , ".collapsed .selector::before {"
+  , "  font-size: 8pt;"
+  , "  color: #999;"
+  , "  content: \"\\25ba\";"
+  , "  position: relative;"
+  , ""
+  , "}"
+  , ""
+  , ".selector:hover::before {"
+  , "  color: orange;"
+  , "}" ]
+
+
 dumpHtmlAST :: String -> OpenAcc aenv a -> IO ()
 dumpHtmlAST basename acc = do
   catch writeHtmlFile handler
   where
     writeHtmlFile = do
+      let cssPath = "accelerate.css"
+      h <- openFile cssPath WriteMode
+      hPutStr h accelerateCSS
+      hClose h
       let path = basename ++ ".html"
       h <- openFile path WriteMode
       BS.hPutStr h (renderHtml $ htmlAST acc)
-      putStrLn ("HTML file successfully written to `" ++ path ++ "'")
+      putStrLn ("HTML file successfully written to `" ++ path ++ "'\n" ++
+                "CSS file written to `" ++ cssPath ++ "'")
       hClose h
     handler :: IOError -> IO ()
     handler e = do

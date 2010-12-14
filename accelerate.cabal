@@ -174,6 +174,7 @@ Library
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Graphviz
+                        Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
