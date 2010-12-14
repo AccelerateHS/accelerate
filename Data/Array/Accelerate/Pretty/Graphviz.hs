@@ -37,44 +37,45 @@ import Data.Array.Accelerate.Type
 -- | Detects if the dot command line tool from the Graphviz package exists.
 -- If it does outputs a Postscript file, otherwise a ".dot" file.
 --
-dumpAcc :: OpenAcc aenv a -> String -> IO ()
-dumpAcc acc basename = do
+dumpAcc :: String -> OpenAcc aenv a -> IO ()
+dumpAcc basename acc = do
   exitCode <- system ("which dot > /dev/null 2>&1")
   case exitCode of
     ExitSuccess   -> withTempFile "ast.dot" writePSFile
-    ExitFailure _ -> writeDotFile basename
+    ExitFailure _ -> do
+      putStrLn "Couldn't find `dot' tool. Just writing DOT file."
+      writeDotFile basename
   where
     writePSFile file h = do
       hPutStr h (dotAcc acc)
       hFlush h
-      system ("cat " ++ file)
       let cmd = concat $ intersperse " " ["dot", file,"-Tps ","-o" ++ basename ++ ".ps" ]
       exitCode <- system cmd
       case exitCode of
         ExitSuccess -> putStrLn ("PS file successfully written to `" ++ basename ++ ".ps'")
         ExitFailure _ -> do
-          putStrLn "Couldn't find `dot' tool. Just writing DOT file."
+          putStrLn "dot failed to write Postscript file. Just writing the DOT file."
           writeDotFile basename-- fall back to writing the dot file
     writeDotFile :: String -> IO ()
-    writeDotFile file = catch (writeDotFile' file) handler
-    writeDotFile' file = do
-      tempDir <- catch (getTemporaryDirectory) (\_ -> return ".")
-      let path = joinPath [tempDir, file ++ ".dot"]
+    writeDotFile basename = catch (writeDotFile' basename) handler
+    writeDotFile' basename = do
+      let path = basename ++ ".dot"
       h <- openFile path WriteMode
       hPutStr h (dotAcc acc)
-      putStr ("DOT file successfully written to `" ++ path ++ "'")
+      putStrLn ("DOT file successfully written to `" ++ path ++ "'")
       hClose h
     handler :: IOError -> IO ()
     handler e = do
       case True of
-        _ | isAlreadyInUseError e -> putStr "isAlreadyInUseError"
-          | isDoesNotExistError e -> putStr "isDoesNotExistError"
-          | isFullError e         -> putStr "isFullError"
-          | isEOFError e          -> putStr "isEOFError"
-          | isPermissionError   e -> putStr "isPermissionError"
-          | isIllegalOperation e  -> putStr "isIllegalOperation"
-          | isUserError e         -> putStr "isUserError"
-          | otherwise             -> putStr "Unknown error"
+        _ | isAlreadyInUseError e -> putStrLn "isAlreadyInUseError"
+          | isDoesNotExistError e -> putStrLn "isDoesNotExistError"
+          | isFullError e         -> putStrLn "isFullError"
+          | isEOFError e          -> putStrLn "isEOFError"
+          | isPermissionError   e -> putStrLn "isPermissionError"
+          | isIllegalOperation e  -> putStrLn "isIllegalOperation"
+          | isUserError e         -> putStrLn "isUserError"
+          | otherwise             -> putStrLn "Unknown error"
+
 
 withTempFile :: String -> (FilePath -> Handle -> IO a) -> IO a
 withTempFile pattern f = do
@@ -99,83 +100,100 @@ mkNode lbl childNodes transitions = do
   put $  DotState { counter = c + 1 }
   return (Node { nodeId = mkNodeId c, label = lbl, childNodes = childNodes, transitions = transitions })
 
-leafNode :: String -> State DotState Node
-leafNode lbl = do
+leafNode :: String -> String -> State DotState Node
+leafNode color lbl = do
   s <- get
   let c = counter s
   put $  DotState { counter = c + 1 }
   return (Node { nodeId = mkNodeId c, label = lbl
-               , childNodes = [ printf "%s [ label=\"%s\"];" (mkNodeId c) lbl ]
+               , childNodes = [ nodeDef (mkNodeId c) lbl color ]
                , transitions = [] })
 
+
+
+accColor = "yellow"
+expColor = "orange"
+funColor = "blue"
+tupleColor = "green"
+primFunColor = "red"
+arrayColor = "purple"
+boundaryColor = "cyan"
+
+linesForDigraphAcc = linesForDigraphWithColor accColor
+linesForDigraphExp = linesForDigraphWithColor expColor
+linesForDigraphFun = linesForDigraphWithColor funColor
+linesForDigraphTuple = linesForDigraphWithColor tupleColor
+
 dotAcc' :: OpenAcc aenv a -> State DotState Node
-dotAcc' (Let acc1 acc2) = linesForDigraph "Let" [dotAcc' acc1, dotAcc' acc2]
-dotAcc' (Let2 acc1 acc2) = linesForDigraph "Let2" [ dotAcc' acc1, dotAcc' acc2 ]
-dotAcc' (Avar idx) = leafNode ("AVar " ++ show (idxToInt idx))
-dotAcc' (Use arr) = linesForDigraph "Use" [ dotArray' arr ]
-dotAcc' (Unit e) = linesForDigraph "Unit" [ dotExp' e ]
-dotAcc' (Generate sh f) = linesForDigraph "Generate" [ dotExp' sh, dotFun' f ]
-dotAcc' (Reshape sh acc) = linesForDigraph "Reshape" [ dotExp' sh, dotAcc' acc ]
-dotAcc' (Replicate _ ix acc) = linesForDigraph "Replicate" [ dotExp' ix, dotAcc' acc ]
-dotAcc' (Index _ acc ix) = linesForDigraph "Index" [ dotAcc' acc, dotExp' ix ]
-dotAcc' (Map f acc) = linesForDigraph "Map" [ dotFun' f, dotAcc' acc ]
-dotAcc' (ZipWith f acc1 acc2) = linesForDigraph "ZipWith" [ dotFun' f, dotAcc' acc1, dotAcc' acc2 ]
-dotAcc' (Fold f e acc) = linesForDigraph "Fold" [ dotFun' f, dotExp' e, dotAcc' acc]
-dotAcc' (Fold1 f acc) = linesForDigraph "Fold1" [ dotFun' f, dotAcc' acc]
-dotAcc' (FoldSeg f e acc1 acc2) = linesForDigraph "FoldSeg" [ dotFun' f, dotExp' e, dotAcc' acc1, dotAcc' acc2 ]
-dotAcc' (Fold1Seg f acc1 acc2) = linesForDigraph "FoldSeg1" [ dotFun' f, dotAcc' acc1, dotAcc' acc2 ]
-dotAcc' (Scanl f e acc) = linesForDigraph "Scanl" [ dotFun' f, dotExp' e, dotAcc' acc ]
-dotAcc' (Scanl' f e acc) = linesForDigraph "Scanl'" [ dotFun' f, dotExp' e, dotAcc' acc ]
-dotAcc' (Scanl1 f acc) = linesForDigraph "Scanl1" [ dotFun' f, dotAcc' acc ]
-dotAcc' (Scanr f e acc) = linesForDigraph "Scanr" [ dotFun' f, dotExp' e, dotAcc' acc ]
-dotAcc' (Scanr' f e acc) = linesForDigraph "Scanr'" [ dotFun' f, dotExp' e, dotAcc' acc ]
-dotAcc' (Scanr1 f acc) = linesForDigraph "Scanr1" [ dotFun' f, dotAcc' acc ]
-dotAcc' (Permute f dfts p acc) = linesForDigraph "Permute" [ dotFun' f, dotAcc' dfts, dotFun' p, dotAcc' acc]
-dotAcc' (Backpermute sh p acc) = linesForDigraph "Backpermute" [ dotExp' sh, dotFun' p, dotAcc' acc]
-dotAcc' (Stencil sten bndy acc) = linesForDigraph "Stencil" [ dotFun' sten, dotBoundary' acc bndy, dotAcc' acc]
-dotAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = linesForDigraph "Stencil2" [ dotFun' sten, dotBoundary' acc1 bndy1,
+dotAcc' (Let acc1 acc2) = linesForDigraphAcc "Let" [dotAcc' acc1, dotAcc' acc2]
+dotAcc' (Let2 acc1 acc2) = linesForDigraphAcc "Let2" [ dotAcc' acc1, dotAcc' acc2 ]
+dotAcc' (Avar idx) = leafNode accColor ("AVar " ++ show (idxToInt idx))
+dotAcc' (Use arr) = linesForDigraphAcc "Use" [ dotArray' arr ]
+dotAcc' (Unit e) = linesForDigraphAcc "Unit" [ dotExp' e ]
+dotAcc' (Generate sh f) = linesForDigraphAcc "Generate" [ dotExp' sh, dotFun' f ]
+dotAcc' (Reshape sh acc) = linesForDigraphAcc "Reshape" [ dotExp' sh, dotAcc' acc ]
+dotAcc' (Replicate _ ix acc) = linesForDigraphAcc "Replicate" [ dotExp' ix, dotAcc' acc ]
+dotAcc' (Index _ acc ix) = linesForDigraphAcc "Index" [ dotAcc' acc, dotExp' ix ]
+dotAcc' (Map f acc) = linesForDigraphAcc "Map" [ dotFun' f, dotAcc' acc ]
+dotAcc' (ZipWith f acc1 acc2) = linesForDigraphAcc "ZipWith" [ dotFun' f, dotAcc' acc1, dotAcc' acc2 ]
+dotAcc' (Fold f e acc) = linesForDigraphAcc "Fold" [ dotFun' f, dotExp' e, dotAcc' acc]
+dotAcc' (Fold1 f acc) = linesForDigraphAcc "Fold1" [ dotFun' f, dotAcc' acc]
+dotAcc' (FoldSeg f e acc1 acc2) = linesForDigraphAcc "FoldSeg" [ dotFun' f, dotExp' e, dotAcc' acc1, dotAcc' acc2 ]
+dotAcc' (Fold1Seg f acc1 acc2) = linesForDigraphAcc "FoldSeg1" [ dotFun' f, dotAcc' acc1, dotAcc' acc2 ]
+dotAcc' (Scanl f e acc) = linesForDigraphAcc "Scanl" [ dotFun' f, dotExp' e, dotAcc' acc ]
+dotAcc' (Scanl' f e acc) = linesForDigraphAcc "Scanl'" [ dotFun' f, dotExp' e, dotAcc' acc ]
+dotAcc' (Scanl1 f acc) = linesForDigraphAcc "Scanl1" [ dotFun' f, dotAcc' acc ]
+dotAcc' (Scanr f e acc) = linesForDigraphAcc "Scanr" [ dotFun' f, dotExp' e, dotAcc' acc ]
+dotAcc' (Scanr' f e acc) = linesForDigraphAcc "Scanr'" [ dotFun' f, dotExp' e, dotAcc' acc ]
+dotAcc' (Scanr1 f acc) = linesForDigraphAcc "Scanr1" [ dotFun' f, dotAcc' acc ]
+dotAcc' (Permute f dfts p acc) = linesForDigraphAcc "Permute" [ dotFun' f, dotAcc' dfts, dotFun' p, dotAcc' acc]
+dotAcc' (Backpermute sh p acc) = linesForDigraphAcc "Backpermute" [ dotExp' sh, dotFun' p, dotAcc' acc]
+dotAcc' (Stencil sten bndy acc) = linesForDigraphAcc "Stencil" [ dotFun' sten, dotBoundary' acc bndy, dotAcc' acc]
+dotAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = linesForDigraphAcc "Stencil2" [ dotFun' sten, dotBoundary' acc1 bndy1,
                                                                dotAcc' acc1, dotBoundary' acc2 bndy2, dotAcc' acc2]
+
+
 
 dotExp :: OpenExp env aenv a -> String
 dotExp = toDigraph dotExp'
 
 dotExp' :: forall env aenv a. OpenExp env aenv a -> State DotState Node
-dotExp' (Var idx)           = leafNode ("Var "   ++ show (idxToInt idx))
-dotExp' (Const v)           = leafNode ("Const " ++ show (toElt v :: a))
-dotExp' (Tuple tup)         = linesForDigraph "Tuple" [ dotTuple' tup ]
-dotExp' (Prj idx e)         = linesForDigraph ("Prj " ++ show (tupleIdxToInt idx)) [ dotExp' e ]
-dotExp' (IndexNil)          = leafNode "IndexNil"
-dotExp' (IndexCons t h)     = linesForDigraph "IndexCons" [ dotExp' t, dotExp' h]
-dotExp' (IndexHead ix)      = linesForDigraph "IndexHead" [ dotExp' ix ]
-dotExp' (IndexTail ix)      = linesForDigraph "IndexTail" [ dotExp' ix ]
-dotExp' (Cond c t e)        = linesForDigraph "Cond" [dotExp' c, dotExp' t, dotExp' e]
-dotExp' (PrimConst a)       = leafNode ("PrimConst " ++ labelForConst a)
-dotExp' (PrimApp p a)       = linesForDigraph "PrimApp" [ (leafNode (labelForPrimFun p) ), dotExp' a ]
-dotExp' (IndexScalar idx i) = linesForDigraph "IndexScalar" [ dotAcc' idx, dotExp' i]
-dotExp' (Shape idx)         = linesForDigraph "Shape" [ dotAcc' idx ]
-dotExp' (Size idx)          = linesForDigraph "Size" [ dotAcc' idx ]
+dotExp' (Var idx)           = leafNode expColor ("Var "   ++ show (idxToInt idx))
+dotExp' (Const v)           = leafNode expColor ("Const " ++ show (toElt v :: a))
+dotExp' (Tuple tup)         = linesForDigraphExp "Tuple" [ dotTuple' tup ]
+dotExp' (Prj idx e)         = linesForDigraphExp ("Prj " ++ show (tupleIdxToInt idx)) [ dotExp' e ]
+dotExp' (IndexNil)          = leafNode expColor "IndexNil"
+dotExp' (IndexCons t h)     = linesForDigraphExp "IndexCons" [ dotExp' t, dotExp' h]
+dotExp' (IndexHead ix)      = linesForDigraphExp "IndexHead" [ dotExp' ix ]
+dotExp' (IndexTail ix)      = linesForDigraphExp "IndexTail" [ dotExp' ix ]
+dotExp' (Cond c t e)        = linesForDigraphExp "Cond" [dotExp' c, dotExp' t, dotExp' e]
+dotExp' (PrimConst a)       = leafNode expColor ("PrimConst " ++ labelForConst a)
+dotExp' (PrimApp p a)       = linesForDigraphExp "PrimApp" [ (leafNode primFunColor (labelForPrimFun p) ), dotExp' a ]
+dotExp' (IndexScalar idx i) = linesForDigraphExp "IndexScalar" [ dotAcc' idx, dotExp' i]
+dotExp' (Shape idx)         = linesForDigraphExp "Shape" [ dotAcc' idx ]
+dotExp' (Size idx)          = linesForDigraphExp "Size" [ dotAcc' idx ]
 
 dotFun :: OpenFun env aenv fun -> String
 dotFun = toDigraph dotFun'
 
 dotFun' :: OpenFun env aenv fun -> State DotState Node
-dotFun' (Body body) = linesForDigraph "Body" [ dotExp' body ]
-dotFun' (Lam fun)   = linesForDigraph "Lam"  [ dotFun' fun ]
+dotFun' (Body body) = linesForDigraphFun "Body" [ dotExp' body ]
+dotFun' (Lam fun)   = linesForDigraphFun "Lam"  [ dotFun' fun ]
 
 dotArray' :: forall dim a. Array dim a -> State DotState Node
-dotArray' (Array sh _) = leafNode ("Array" ++ show (toElt sh :: dim))
+dotArray' (Array sh _) = leafNode arrayColor ("Array" ++ show (toElt sh :: dim))
 
 dotBoundary' :: forall aenv dim e. Elt e => {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (EltRepr e)
              -> State DotState Node
-dotBoundary' _ Clamp        = leafNode "Clamp"
-dotBoundary' _ Mirror       = leafNode ("Mirror")
-dotBoundary' _ Wrap         = leafNode ("Wrap")
-dotBoundary' _ (Constant e) = leafNode ("Constant " ++ show (toElt e :: e))
+dotBoundary' _ Clamp        = leafNode boundaryColor "Clamp"
+dotBoundary' _ Mirror       = leafNode boundaryColor ("Mirror")
+dotBoundary' _ Wrap         = leafNode boundaryColor ("Wrap")
+dotBoundary' _ (Constant e) = leafNode boundaryColor ("Constant " ++ show (toElt e :: e))
 
 
 dotTuple' :: Tuple (OpenExp env aenv) t -> State DotState Node
-dotTuple' NilTup          = leafNode ("NilTup")
-dotTuple' (SnocTup tup e) = linesForDigraph "SnocTup" [ dotTuple' tup, dotExp' e ]
+dotTuple' NilTup          = leafNode tupleColor ("NilTup")
+dotTuple' (SnocTup tup e) = linesForDigraphTuple "SnocTup" [ dotTuple' tup, dotExp' e ]
 
 labelForPrimFun :: PrimFun a -> String
 labelForPrimFun (PrimAdd _)         = "PrimAdd"
@@ -249,21 +267,23 @@ idxToInt :: Idx env t -> Int
 idxToInt ZeroIdx       = 0
 idxToInt (SuccIdx idx) = 1 + idxToInt idx
 
-linesForDigraph :: String -> [State DotState Node] -> State DotState Node
-linesForDigraph source targets = do
+linesForDigraphWithColor :: String -> String -> [State DotState Node] -> State DotState Node
+linesForDigraphWithColor color source targets = do
    targetNodes <- sequence targets
    s <- get
    let newNodeId  = mkNodeId (counter s)
-       childNodes1 = [(nodeDef newNodeId source) ]
+       childNodes1 = [(nodeDef newNodeId source color) ]
        childNodes2 = concatMap childNodes targetNodes
        lines1     = map (digraphLine newNodeId) targetNodes
        lines2     = concat (map transitions targetNodes)
    mkNode source (childNodes1 ++ childNodes2) (lines1 ++ lines2)
   where
-    nodeDef nodeId label = nodeId  ++ " [ label =\"" ++ label  ++ "\" ];"
     digraphLine :: String -> Node -> String
     digraphLine sourceNodeId targetNode =
       sourceNodeId ++ " -> " ++ nodeId targetNode ++ ";"
+
+nodeDef :: String -> String -> String -> String
+nodeDef nodeId label color = printf "%s [ color=\"%s\", label=\"%s\" ];" nodeId color label
 
 toDigraph :: (a -> State DotState Node) -> a -> String
 toDigraph f e =
@@ -272,7 +292,7 @@ toDigraph f e =
      node = evalState (f e) (DotState { counter = 0 })
      header = unlines $ [ "/* Automatically generated by Accelerate */"
                         , "digraph AST {"
-                        , "size = \"20.0,20.0\";"
+                        , "size=\"7.5,11\";"
                         , "ratio=\"compress\";"
                         , "node[color=lightblue2, style=filled];"]
      footer = "}"
