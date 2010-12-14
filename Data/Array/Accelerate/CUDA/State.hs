@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskell, TupleSections #-}
+{-# LANGUAGE CPP, GADTs, PatternGuards, TemplateHaskell, TupleSections #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -15,9 +15,10 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState,
+    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState, StableAccName(..),
     unique, outputDir, deviceProps, deviceContext,
-    memoryTable, kernelTable, computeTable, StableAccName(..),
+    memoryTable, kernelTable, computeTable,
+    cleanup,
 
     MemoryEntry(MemoryEntry), refcount, memsize, arena,
     KernelEntry(KernelEntry), kernelName, kernelStatus,
@@ -68,8 +69,7 @@ import System.Posix.Process             (getProcessID)
 
 type MemoryTable  = HashTable WordPtr MemoryEntry
 type KernelTable  = HashTable String  KernelEntry
---type ComputeTable = HashTable Int32   AccEntry
-type ComputeTable = Hash.HashTable StableAccName AccEntry
+type ComputeTable = HashTable StableAccName AccEntry
 
 
 -- | The state token for accelerated CUDA array operations
@@ -110,9 +110,8 @@ data AccEntry = AccEntry
     _accKernel :: CUDA.Module
   }
 
--- Opaque stable name for an OpenAcc expression - used to key the compute table
+-- Stable keys to nodes of an Acc computation
 --
-
 data StableAccName where
   StableAccName :: Typeable a => StableName a -> StableAccName
 
@@ -218,29 +217,41 @@ sanitise st = do
   INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return (setL computeTable compute st)
 
 
--- | Evaluate a CUDA array computation under a newly initialised environment,
--- discarding the final state.
+cleanup :: CUDAState -> IO ()
+cleanup st = do
+  mapM_ release =<< Hash.toList tab
+  writeIORef onta st
+  where
+    tab	          = getL memoryTable st
+    release (k,v) = do
+      CUDA.free $ CUDA.wordPtrToDevPtr (getL arena v)
+      Hash.delete tab k
+
+
+-- | Evaluate a CUDA array computation under the standard global environment
 --
 evalCUDA :: CIO a -> IO a
 evalCUDA = liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc =
-  let
-    {-# NOINLINE ref #-} -- hic sunt dracones: truly unsafe use of unsafePerformIO
-    ref = unsafePerformIO (initialise >>= newIORef)
-  in do
-    state <- sanitise =<< readIORef ref
-    (a,s) <- runStateT acc state
-    saveIndexFile s
-    writeIORef ref s
-    return (a,s)
+runCUDA acc = readIORef onta >>= sanitise >>= flip runCUDAWith acc
 
 
+-- | Execute a computation under the provided state, returning the updated
+-- environment structure and replacing the global state.
+--
 runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
 runCUDAWith state acc = do
   (a,s) <- runStateT acc state
+  saveIndexFile s
+  writeIORef onta s
   return (a,s)
+  
+
+-- hic sunt dracones: truly unsafe use of unsafePerformIO
+onta :: IORef CUDAState
+{-# NOINLINE onta #-}
+onta = unsafePerformIO (initialise >>= newIORef)
 
 
 -- Utility

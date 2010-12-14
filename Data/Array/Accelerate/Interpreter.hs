@@ -528,7 +528,7 @@ stencil2Op sten bndy1 (DelayedArray sh1 rf1) bndy2 (DelayedArray sh2 rf2)
   = DelayedArray (sh1 `intersect` sh2) rf'
   where
     rf' = Sugar.sinkFromElt (\ix -> sten (stencilAccess rf1Bounded ix)
-                                          (stencilAccess rf2Bounded ix))
+                                         (stencilAccess rf2Bounded ix))
 
     -- add a boundary to the source arrays as specified by the boundary conditions
     

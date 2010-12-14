@@ -9,7 +9,7 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Compile (compileAcc, compileAccFun1)
+module Data.Array.Accelerate.CUDA.Compile (compileAcc, compileAccFun)
   where
 
 import Data.Maybe
@@ -47,14 +47,20 @@ import Paths_accelerate                                 (getDataDir)
 compileAcc :: OpenAcc aenv a -> CIO ()
 compileAcc = compileAcc' False
 
+compileAccFun :: OpenAfun aenv f -> CIO ()
+compileAccFun (Alam  b) = compileAccFun b
+compileAccFun (Abody f) = compileAcc' True f
+
 compileAcc' :: Bool -> OpenAcc aenv a -> CIO ()
-compileAcc' isStreaming = travA (k isStreaming)
+compileAcc' iss = travA k
   where
     k :: OpenAcc aenv a -> CIO ()
-    k (Use (Array sh ad))   = let n = size sh
-                              in do mallocArray    ad (max 1 n)
-                                    pokeArrayAsync ad n Nothing
+    k (Use (Array sh ad)) = let n = size sh
+                            in do mallocArray    ad (max 1 n)
+                                  pokeArrayAsync ad n Nothing
+                                  when iss (bindArray ad)  -- keep constant arrays if streaming
     k acc@(FoldSeg _ _ _ _) = compile scan >> compile acc
+    k acc@(Fold1Seg  _ _ _) = compile scan >> compile acc
     k acc                   = compile acc
 
     scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
@@ -63,32 +69,6 @@ compileAcc' isStreaming = travA (k isStreaming)
                           Tuple (NilTup `SnocTup` (Var (SuccIdx ZeroIdx))
                                         `SnocTup` (Var ZeroIdx)))))
 
-{-
--- | Initiate code generation and compilation for an embedded expression, but do
--- not transfer any data.
---
--- TODO: we would like the following to hold, but falls over in 
--- D.A.A.Analysis.Type.arrayType
---  * We could provide a 'undefinedArray' (or 'noArray') value that has the 'Array' constructor, 
---    but no payload   -=chak
---
--- Note that it is not necessary to create an unused array argument. For
--- example:
---
--- > dotp :: Vector a -> Vector a -> Acc (Scalar a)
--- > dotp xs ys = fold (+) 0 $ zipWith (*) (use xs) (use ys)
---
--- It is sufficient to:
---
--- > precompile (dotp undefined undefined :: Acc (Scalar Float))
---
-precompileAcc :: OpenAcc aenv a -> CIO ()
-precompileAcc = travA k
-  where
-    k :: OpenAcc aenv a -> CIO ()
-    k (Use _) = return ()
-    k acc     = compile acc
--}
 
 -- Depth-first traversal of the term tree, searching for array expressions to
 -- apply the given function to.
@@ -98,9 +78,9 @@ travA _ (Avar _)                 = return ()
 travA f (Let a b)                = travA f a >> travA f b
 travA f (Let2 a b)               = travA f a >> travA f b
 travA f (Unit e)                 = travE f e
-travA f acc@(Generate e g)       = travE f e >> travF f g >> f acc
 travA f (Reshape e a)            = travE f e >> travA f a
 travA f acc@(Use _)              = f acc
+travA f acc@(Generate e g)       = travE f e >> travF f g >> f acc
 travA f acc@(Replicate _ e a)    = travE f e >> travA f a >> f acc
 travA f acc@(Index _ a e)        = travA f a >> travE f e >> f acc
 travA f acc@(Map g a)            = travF f g >> travA f a >> f acc

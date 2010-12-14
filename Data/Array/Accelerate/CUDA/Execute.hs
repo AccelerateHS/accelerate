@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators, PatternGuards, DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -10,11 +10,13 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Execute (executeAcc, executeAccFun1, executeOpenAcc)
-  where
+module Data.Array.Accelerate.CUDA.Execute (
 
-import Prelude hiding (id, (.), sum)
-import Control.Category
+  executeAcc, executeAfun1
+
+) where
+
+import Prelude hiding (sum)
 
 import Data.Int
 import Data.Word
@@ -53,9 +55,6 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 #include "accelerate.h"
 
 
-deriving instance Typeable1 Val
-deriving instance Typeable2 OpenAcc
-
 -- Array evaluation
 -- ----------------
 
@@ -76,33 +75,13 @@ deriving instance Typeable2 OpenAcc
 executeAcc :: Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
 
-
-executeAccFun1 :: Arrays a => a -> Afun (a -> b) -> CIO b
-executeAccFun1 arrs (Alam (Abody f)) = do
-  -- transfer arrays to device
-  loadArrays arrays arrs
-  res <- executeOpenAcc f (Empty `Push` arrs)
-  releaseArrays arrays arrs
-  return (res)
-  where
-    loadArrays :: ArraysR as -> as -> CIO ()
-    loadArrays ArraysRunit                  ()            = return ()
-    loadArrays ArraysRarray                 (Array sh ad) = do
-      let n = size sh
-      mallocArray ad n
-      pokeArrayAsync ad n Nothing
-      bindArray ad
-    loadArrays (ArraysRpair r1 r0)          (a1,a0)       = do
-      loadArrays r0 a0
-      loadArrays r1 a1
-    releaseArrays :: ArraysR as -> as -> CIO ()
-    releaseArrays ArraysRunit                  ()           = return ()
-    releaseArrays ArraysRarray                 (Array _ ad) = do
-      unbindArray ad
-      freeArray ad
-    releaseArrays (ArraysRpair r1 r0)          (a1,a0)      = do
-      releaseArrays r0 a0
-      releaseArrays r1 a1
+executeAfun1 :: Arrays b => Afun (a -> b) -> a -> CIO b
+executeAfun1 (Alam (Abody f)) a = do
+  copyArraysR a
+  acc <- withBoundArrays a $ executeOpenAcc f (Empty `Push` a)
+  withBoundArrays acc      $ freeArraysR a
+  return acc
+executeAfun1 _ _ = error "we can not get here"
 
 
 executeOpenAcc :: Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO a
@@ -128,7 +107,7 @@ executeOpenAcc (Reshape e a) aenv = do
   ix            <- executeExp e aenv
   (Array sh ad) <- executeOpenAcc a aenv
   BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
-   $ return (Array (Sugar.fromElt ix) ad)
+    $ return (Array (Sugar.fromElt ix) ad)
 
 executeOpenAcc (Unit e) aenv = do
   v <- executeExp e aenv
@@ -243,8 +222,8 @@ executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
 
 -- Reduction
 --
-executeFoldAll :: forall dim e aenv.
-  (Typeable aenv, Sugar.Shape dim)
+executeFoldAll
+  :: (Typeable aenv, Sugar.Shape dim)
   => OpenAcc aenv (Array dim e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> Val aenv
@@ -258,8 +237,8 @@ executeFoldAll acc a0 aenv = do
   if g > 1 then executeFoldAll acc (Use r) aenv
            else return (Array (fst sh0) out)
 
-executeFold :: forall dim e aenv.
-  (Typeable aenv, Sugar.Shape dim)
+executeFold
+  :: (Typeable aenv, Sugar.Shape dim)
   => OpenAcc aenv (Array dim e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> Val aenv
@@ -273,8 +252,9 @@ executeFold acc a0 aenv = do
 
 -- Segmented Reduction
 --
-executeFoldSegAll :: Sugar.Shape dim
-  => OpenAcc aenv (Array (dim:.Int) e)  -- dim ~ Z
+executeFoldSeg
+  :: (Typeable aenv, Sugar.Shape dim)
+  => OpenAcc aenv (Array (dim:.Int) e)
   -> OpenAcc aenv (Array (dim:.Int) e)
   -> OpenAcc aenv Segments
   -> Val aenv
@@ -297,8 +277,8 @@ executeFoldSeg acc a0 s0 aenv = do
 
 -- Left and right scan variants
 --
-executeScan :: forall aenv e.
-     Typeable aenv
+executeScan
+  :: forall aenv e. Typeable aenv
   => OpenAcc aenv (Vector e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv
@@ -323,15 +303,15 @@ executeScan acc a0 aenv = do
   freeArray sum
   return a
 
-executeScan' :: forall aenv e.
-     Typeable aenv
+executeScan'
+  :: forall aenv e. Typeable aenv
   => OpenAcc aenv (Vector e, Scalar e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv 
   -> CIO (Vector e, Scalar e)
 executeScan' acc a0 aenv = do
   (Array sh0 in0)         <- executeOpenAcc a0 aenv
-  (fvs,mdl,fscan,(t,g,m)) <- configure' "inclusive_scan" acc aenv (size sh0)
+  (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
   a@(Array _ out)         <- newArray (Sugar.toElt sh0)
   s@(Array _ sum)         <- newArray Z
@@ -348,8 +328,8 @@ executeScan' acc a0 aenv = do
   freeArray bks
   return (a,s)
 
-executeScan1 :: forall aenv e.
-     Typeable aenv
+executeScan1
+  :: forall aenv e. Typeable aenv
   => OpenAcc aenv (Vector e)
   -> OpenAcc aenv (Vector e)
   -> Val aenv
@@ -374,31 +354,42 @@ executeScan1 acc a0 aenv = do
   freeArray sum
   return a
 
+
 -- Apply a function to a set of Arrays
 --
-applyArraysR :: Arrays arrs => (forall e. ArrayElt e => AD.ArrayData e -> CIO ()) -> arrs -> CIO ()
+applyArraysR :: Arrays arrs => (forall dim e. Sugar.Elt e => Array dim e -> CIO ()) -> arrs -> CIO ()
 applyArraysR f arrs = applyR arrays arrs
   where
     applyR :: ArraysR arrs -> arrs -> CIO ()
-    applyR ArraysRunit         ()           = return ()
-    applyR ArraysRarray        (Array _ ad) = f ad
-    applyR (ArraysRpair r1 r0) (a1,a0)      = applyR r1 a1 >> applyR r0 a0
+    applyR ArraysRunit         ()      = return ()
+    applyR ArraysRarray        arr     = f arr
+    applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 >> applyR r0 a0
 
 -- Execute an action under which the given set of Arrays will not be released by
 -- a call to 'freeArray'. This is used to ensure that let-bound arrays remain
 -- active for the duration of the sub-computation.
 --
+-- TLM: would like proper reference counting, so the data can be released as
+-- soon as no longer required, which may be significantly earlier than the end
+-- of the let body.
+--
 withBoundArrays :: Arrays arrs => arrs -> CIO a -> CIO a
 withBoundArrays arrs action =
-  applyArraysR bindArray   arrs >> action >>= \r ->
-  applyArraysR unbindArray arrs >> return r
+  applyArraysR (\(Array _ ad) -> bindArray ad)   arrs >> action >>= \r ->
+  applyArraysR (\(Array _ ad) -> unbindArray ad) arrs >> return r
 
 withBoundArrays2 :: (Arrays arrs1, Arrays arrs2) => arrs1 -> arrs2 -> CIO a -> CIO a
 withBoundArrays2 arrs1 arrs2 action =
   withBoundArrays arrs1 $ withBoundArrays arrs2 action
 
 freeArraysR :: Arrays arrs => arrs -> CIO ()
-freeArraysR = applyArraysR freeArray
+freeArraysR = applyArraysR (\(Array _ ad) -> freeArray ad)
+
+copyArraysR :: Arrays arrs => arrs -> CIO ()
+copyArraysR = applyArraysR $ \(Array sh ad) ->
+  let n = size sh
+  in do mallocArray    ad (max 1 n)
+        pokeArrayAsync ad n Nothing
 
 
 -- Scalar expression evaluation
@@ -600,16 +591,17 @@ instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
 -- launch parameters, and initiate the computation. This also handles lifting
 -- and binding of array references from scalar expressions.
 --
-execute :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a, Marshalable args) => 
-           String -> OpenAcc aenv (Array dim a) -> Val aenv -> Int -> args -> CIO ()
+execute
+  :: (Typeable a, Typeable aenv, Marshalable args)
+  => String -> OpenAcc aenv a -> Val aenv -> Int -> args -> CIO ()
 execute name acc aenv n args =
   configure name acc aenv n >>= flip dispatch args
 
 -- Pre-execution configuration and kernel linking
 --
-configure :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) => 
-             String -> OpenAcc aenv (Array dim a) -> Val aenv -> Int -> 
-             CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+configure
+  :: (Typeable a, Typeable aenv)
+  => String -> OpenAcc aenv a -> Val aenv -> Int -> CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
 configure name acc aenv n = do
   fvs <- liftAcc acc aenv
   mdl <- loadKernel acc
@@ -617,15 +609,6 @@ configure name acc aenv n = do
   cfg <- launchConfig acc n fun
   return (fvs, mdl, fun, cfg)
 
-configure' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) => 
-             String -> OpenAcc aenv (Array dim a, Array dim' a) -> Val aenv -> Int -> 
-             CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
-configure' name acc aenv n = do
-  fvs <- liftAcc acc aenv
-  mdl <- loadKernel' acc
-  fun <- liftIO $ CUDA.getFun mdl name
-  cfg <- launchConfig acc n fun
-  return (fvs, mdl, fun, cfg)
 
 -- Binding of lifted array expressions and kernel invocation
 --
@@ -651,50 +634,17 @@ launch (cta,grid,smem) fn a = do
 -- Dynamic kernel loading
 -- ----------------------
 
--- generate opaque stable name for an OpenAcc expression - used to key the compute table
+-- Generate opaque stable name for an OpenAcc expression - used to key the compute table
 --
-makeStableAcc :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) 
-              => OpenAcc aenv (Array dim a) -> IO (StableAccName)
-makeStableAcc acc = do 
-    x <- makeStableName acc
-    return (StableAccName x)
-
-makeStableAcc' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) 
-               => OpenAcc aenv (Array dim a, Array dim' a) -> IO (StableAccName)
-makeStableAcc' acc = do 
-    x <- makeStableName acc
-    return (StableAccName x)
-
-
--- Hash table for storing references to compiled kernels for OpenAcc nodes
---
---type ComputeTable = Hash.HashTable StableAccName AccEntry
+makeStableAcc :: Typeable a => a -> IO StableAccName
+makeStableAcc acc = StableAccName <$> makeStableName acc
 
 -- Kernel module lookup with fast association to particular AST nodes
 --
-loadKernel :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt a) => OpenAcc aenv (Array dim a) -> CIO CUDA.Module
+loadKernel :: (Typeable a, Typeable aenv) => OpenAcc aenv a -> CIO CUDA.Module
 loadKernel acc = do
   tab <- getM computeTable
-  --tab <- liftIO $ newComputeTable
   key <- liftIO $ makeStableAcc acc
-  mdl <- liftIO $ Hash.lookup tab key
-  case mdl of
-    Just e  -> INTERNAL_ASSERT "loadKernel" (getL accKey e == accToKey acc) $ return (getL accKernel e)
-    Nothing -> do
-      m <- linkKernel acc
-#ifdef ACCELERATE_INTERNAL_CHECKS
-      liftIO $ Hash.insert tab key (AccEntry (accToKey acc) m)
-#else
-      liftIO $ Hash.insert tab key (AccEntry undefined m)
-#endif
-      return m
-
-loadKernel' :: (Typeable aenv, Sugar.Elt dim, Sugar.Elt dim', Sugar.Elt a) 
-                => OpenAcc aenv (Array dim a, Array dim' a) -> CIO CUDA.Module
-loadKernel' acc = do
-  tab <- getM computeTable
-  --tab <- liftIO $ newComputeTable
-  key <- liftIO $ makeStableAcc' acc
   mdl <- liftIO $ Hash.lookup tab key
   case mdl of
     Just e  -> INTERNAL_ASSERT "loadKernel" (getL accKey e == accToKey acc) $ return (getL accKernel e)

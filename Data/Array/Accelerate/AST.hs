@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, StandaloneDeriving #-}
 {-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 -- |
@@ -111,6 +111,9 @@ data Idx env t where
 data Val env where
   Empty :: Val ()
   Push  :: Val env -> t -> Val (env, t)
+
+deriving instance Typeable1 Val
+
 
 -- Projection of a value from a valuation using a de Bruijn index
 --
@@ -364,6 +367,9 @@ data OpenAcc aenv a where
            -> OpenAcc  aenv (Array sh e2)           -- source array #2
            -> OpenAcc  aenv (Array sh e')
 
+
+deriving instance Typeable2 OpenAcc
+
 -- |Closed array expression aka an array program
 --
 type Acc a = OpenAcc () a
@@ -482,7 +488,7 @@ instance (Stencil (sh:.Int) a row1,
 -- |Function abstraction
 --
 data OpenFun env aenv t where
-  Body :: OpenExp env               aenv t -> OpenFun env aenv t
+  Body :: OpenExp env              aenv t -> OpenFun env aenv t
   Lam  :: Elt a
        => OpenFun (env, EltRepr a) aenv t -> OpenFun env aenv (a -> t)
 
