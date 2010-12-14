@@ -27,7 +27,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run,
+  Arrays, run, stream,
 
   -- Internal
   evalPrim, evalPrimConst, evalPrj
@@ -61,6 +61,18 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 --
 run :: Arrays a => Sugar.Acc a -> a
 run = force . evalAcc . Sugar.convertAcc
+
+-- | Stream a lazily read list of input arrays through the given program,
+-- collecting results as we go
+--
+stream :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> [a] -> [b]
+stream afun = map (run1 acc)
+  where
+    acc = Sugar.convertAccFun1 afun
+
+    run1 :: Delayable b => Afun (a -> b) -> a -> b
+    run1 (Alam (Abody f)) = \a -> force (evalOpenAcc f (Empty `Push` a))
+    run1 _                = error "we can not get here"
 
 
 -- Array expression evaluation
