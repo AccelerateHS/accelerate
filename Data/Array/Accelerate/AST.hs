@@ -389,7 +389,7 @@ instance Elt e => Stencil DIM1 e (e, e, e) where
                              rf' y      ,
                              rf' (y + 1))
     where
-      rf' y = rf (Z:.y)
+      rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
   stencilAccess rf (Z:.y) = (rf' (y - 2), 
                              rf' (y - 1), 
@@ -397,7 +397,7 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
                              rf' (y + 1),
                              rf' (y + 2))
     where
-      rf' y = rf (Z:.y)
+      rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
   stencilAccess rf (Z:.y) = (rf' (y - 3), 
                              rf' (y - 2), 
@@ -406,8 +406,8 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
                              rf' (y + 1),
                              rf' (y + 2),
                              rf' (y + 3))
-     where
-       rf' y = rf (Z:.y)
+    where
+      rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
   stencilAccess rf (Z:.y) = (rf' (y - 4), 
                              rf' (y - 3), 
@@ -418,8 +418,8 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
                              rf' (y + 2),
                              rf' (y + 3),
                              rf' (y + 4))
-     where
-       rf' y = rf (Z:.y)
+    where
+      rf' d = rf (Z:.d)
 
 -- DIM(n+1), where n>0
 instance (Stencil (sh:.Int) a row2, 
@@ -429,7 +429,7 @@ instance (Stencil (sh:.Int) a row2,
                               stencilAccess (rf' y      ) ix,
                               stencilAccess (rf' (y + 1)) ix)
     where
-      rf' y ix = rf (ix:.y)
+      rf' d ds = rf (ds:.d)
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -441,7 +441,7 @@ instance (Stencil (sh:.Int) a row1,
                               stencilAccess (rf' (y + 1)) ix,
                               stencilAccess (rf' (y + 2)) ix)
     where
-      rf' y ix = rf (ix:.y)
+      rf' d ds = rf (ds:.d)
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -457,8 +457,8 @@ instance (Stencil (sh:.Int) a row1,
                               stencilAccess (rf' (y + 1)) ix,
                               stencilAccess (rf' (y + 2)) ix,
                               stencilAccess (rf' (y + 3)) ix)
-     where
-       rf' y ix = rf (ix:.y)
+    where
+      rf' d ds = rf (ds:.d)
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -478,8 +478,8 @@ instance (Stencil (sh:.Int) a row1,
                               stencilAccess (rf' (y + 2)) ix,
                               stencilAccess (rf' (y + 3)) ix,
                               stencilAccess (rf' (y + 4)) ix)
-     where
-       rf' y ix = rf (ix:.y)
+    where
+      rf' d ds = rf (ds:.d)
 
               
 -- Embedded expressions

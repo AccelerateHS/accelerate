@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Interpreter (
   -- * Interpret an array expression
   Arrays, run, stream,
 
-  -- Internal
+  -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
 
 ) where
@@ -37,12 +37,13 @@ module Data.Array.Accelerate.Interpreter (
 -- standard libraries
 import Control.Monad
 import Data.Bits
-import Data.Char                (chr, ord)
+import Data.Char                                   (chr, ord)
+import Prelude                                     hiding (sum)
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Representation  hiding (sliceIndex)
 import Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), Array(..), Scalar, Vector, Segments)
 import Data.Array.Accelerate.Array.Delayed
@@ -355,9 +356,9 @@ scanl'Op f e (DelayedArray sh rf)
     f' = Sugar.sinkFromElt2 f
     --
     (adata, final) = runArrayData $ do
-                       arr   <- newArrayData n
-                       final <- traverse arr 0 (Sugar.fromElt e)
-                       return (arr, final)
+                       arr <- newArrayData n
+                       sum <- traverse arr 0 (Sugar.fromElt e)
+                       return (arr, sum)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
@@ -423,9 +424,9 @@ scanr'Op f e (DelayedArray sh rf)
     f' = Sugar.sinkFromElt2 f
     --
     (adata, final) = runArrayData $ do
-                       arr   <- newArrayData n
-                       final <- traverse arr (n-1) (Sugar.fromElt e)
-                       return (arr, final)
+                       arr <- newArrayData n
+                       sum <- traverse arr (n-1) (Sugar.fromElt e)
+                       return (arr, sum)
     traverse arr i v
       | i < 0     = return v
       | otherwise = do

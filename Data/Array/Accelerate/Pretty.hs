@@ -140,15 +140,15 @@ prettyAccParens lvl acc          = parens (prettyAcc lvl acc)
 -- Pretty print a function over scalar expressions.
 --
 prettyFun :: Int -> OpenFun env aenv fun -> Doc
-prettyFun alvl fun = 
-  let (n, bodyDoc) = count n fun
+prettyFun alvl f =
+  let (n, bodyDoc) = count n f
   in
   char '\\' <> hsep [text $ "x" ++ show idx | idx <- [0..n]] <+> 
   text "->" <+> bodyDoc
   where
      count :: Int -> OpenFun env aenv fun -> (Int, Doc)
      count lvl (Body body) = (-1, prettyExp lvl alvl noParens body)
-     count lvl (Lam fun)   = let (n, body) = count lvl fun in (1 + n, body)
+     count lvl (Lam  fun)  = let (n, body) = count lvl fun in (1 + n, body)
 
 -- Pretty print an expression.
 --
@@ -192,9 +192,9 @@ prettyExp _lvl alvl wrap (Size idx)
 -- Pretty print nested pairs as a proper tuple.
 --
 prettyTuple :: Int -> Int -> Tuple (OpenExp env aenv) t -> Doc
-prettyTuple lvl alvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
+prettyTuple lvl alvl expr = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
-    es = collect e
+    es = collect expr
     --
     collect :: Tuple (OpenExp env aenv) t -> [Doc]
     collect NilTup          = []
@@ -285,7 +285,7 @@ prettyArray arr@(Array sh _)
       hang (text "Array") 2 $
         sep [showDoc $ (toElt sh :: dim), dataDoc]
   where
-    showDoc :: forall a. Show a => a -> Doc
+    showDoc :: forall b. Show b => b -> Doc
     showDoc = text . show
     l       = toList arr
     dataDoc | length l <= 1000 = showDoc l

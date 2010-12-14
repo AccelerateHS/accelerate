@@ -364,4 +364,5 @@ uArrayPtr (UArray _ _ _ ba) = Ptr (byteArrayContents# ba)
 sTUArrayPtr :: STUArray s Int a -> ST s (Ptr a)
 sTUArrayPtr (STUArray _ _ _ mba) = ST $ \s ->
   case unsafeFreezeByteArray# mba s of
-    (# s, ba #) -> (# s, Ptr (byteArrayContents# ba) #)
+    (# s', ba #) -> (# s', Ptr (byteArrayContents# ba) #)
+
