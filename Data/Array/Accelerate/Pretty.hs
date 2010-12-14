@@ -14,10 +14,17 @@ module Data.Array.Accelerate.Pretty (
 
   -- * Instances of Show
 
+  -- * Functions
+  module Data.Array.Accelerate.Pretty.Graphviz
+
 ) where
 
+-- standard libraries
 import Text.PrettyPrint
+
+-- friends
 import Data.Array.Accelerate.Pretty.Print
+import Data.Array.Accelerate.Pretty.Graphviz
 import Data.Array.Accelerate.AST
 
 -- |Show instances
