@@ -9,7 +9,7 @@ Description:            This library defines an embedded language for
                         regular, multi-dimensional array computations with
                         multiple backends to facilitate high-performance
                         implementations.  Currently, there are two backends:
-                        (1) an interpreter that serves as a reference 
+                        (1) an interpreter that serves as a reference
                         implementation of the intended semantics of the
                         language and (2) a CUDA backend generating code for
                         CUDA-capable NVIDIA GPUs.
@@ -23,15 +23,15 @@ Description:            This library defines an embedded language for
                         .
                         * New in 0.8.1.0: bug fixes and some performance tweaks
                         .
-                        * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the 
+                        * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the
                             CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
 License:                BSD3
 License-file:           LICENSE
-Author:                 Manuel M T Chakravarty, 
-                        Gabriele Keller, 
-                        Sean Lee, 
+Author:                 Manuel M T Chakravarty,
+                        Gabriele Keller,
+                        Sean Lee,
                         Trevor L. McDonell
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
@@ -91,6 +91,10 @@ Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
+Flag html-pp
+  Description:          Enable HTML pretty printing.
+  Default:              True
+
 Flag pcache
   Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
   Default:              False
@@ -112,9 +116,9 @@ Flag internal-checks
   Default:              False
 
 Library
-  Build-depends:        array, 
-                        base == 4.*, 
-                        ghc-prim, 
+  Build-depends:        array,
+                        base == 4.*,
+                        ghc-prim,
                         haskell98,
                         pretty
 
@@ -138,6 +142,10 @@ Library
 
   if flag(test-suite)
     Build-depends:      QuickCheck == 2.*
+
+  if flag(html-pp)
+    Build-depends:      blaze-html >= 0.3.0.2,
+                        text >= 0.10.0.0
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
@@ -169,6 +177,11 @@ Library
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
+
+  If flag(html-pp)
+    Other-modules:      Data.Array.Accelerate.Pretty.HTML
+
+
                         Paths_accelerate
 --  If flag(llvm)
 --    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
