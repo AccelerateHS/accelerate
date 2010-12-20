@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
