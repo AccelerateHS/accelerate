@@ -786,26 +786,39 @@ determineScopes occMap acc
                                     (tup', accCountT) <- travTup tup
                                     (e'  , accCountE) <- injectBindingsExp e
                                     return (SnocTup tup' e', accCountT +++ accCountE)
-        --
+
+        travE1 :: (SharingExp a -> SharingExp b) -> Exp a -> IO (SharingExp b, NodeCounts)
         travE1 c e
           = do
               (e', accCount) <- injectBindingsExp e
               return (c e', accCount)
+
+        travE2 :: (SharingExp a -> SharingExp b -> SharingExp c) -> Exp a -> Exp b 
+               -> IO (SharingExp c, NodeCounts)
         travE2 c e1 e2
           = do
               (e1', accCount1) <- injectBindingsExp e1
               (e2', accCount2) <- injectBindingsExp e2
               return (c e1' e2', accCount1 +++ accCount2)
+
+        travE3 :: (SharingExp a -> SharingExp b -> SharingExp c -> SharingExp d) 
+               -> Exp a -> Exp b -> Exp c 
+               -> IO (SharingExp d, NodeCounts)
         travE3 c e1 e2 e3
           = do
               (e1', accCount1) <- injectBindingsExp e1
               (e2', accCount2) <- injectBindingsExp e2
               (e3', accCount3) <- injectBindingsExp e3
               return (c e1' e2' e3', accCount1 +++ accCount2 +++ accCount3)
+
+        travA :: (SharingAcc a -> SharingExp b) -> Acc a -> IO (SharingExp b, NodeCounts)
         travA c acc
           = do
               (acc', accCount) <- injectBindingsAcc acc
               return (c acc', accCount)
+
+        travAE :: (SharingAcc a -> SharingExp b -> SharingExp c) -> Acc a -> Exp b 
+               -> IO (SharingExp c, NodeCounts)
         travAE c acc e
           = do
               (acc', accCountA) <- injectBindingsAcc acc
@@ -921,7 +934,8 @@ determineScopes occMap acc
     -- To drop all unused let bindings, we collect all subtrees that we do replace by a sharing
     -- variable.
     --
-    pruneSharedSubtreesAcc :: Maybe Int -> SharingAcc arrs -> IO (SharingAcc arrs, [StableAccName])
+    pruneSharedSubtreesAcc :: forall arrs. 
+                              Maybe Int -> SharingAcc arrs -> IO (SharingAcc arrs, [StableAccName])
     pruneSharedSubtreesAcc _ (VarSharing _)
       -- before pruning, a tree may not have sharing variables
       = INTERNAL_ERROR(error) "pruneSharedSubtrees" "unexpected sharing variable"
@@ -1009,18 +1023,30 @@ determineScopes occMap acc
                        return (AccSharing sn $ Stencil2 st' bnd1 acc1' bnd2 acc2',
                                used1 ++ used2 ++ used3)
       where
+        travF1A :: Elt a
+                => ((Exp a -> SharingExp b) -> SharingAcc c -> PreAcc SharingAcc arrs) 
+                -> (Exp a -> SharingExp b) -> SharingAcc c -> IO (SharingAcc arrs, [StableAccName])
         travF1A c f acc
           = do
               (f'  , used1) <- pruneSharedSubtreesFun1 sf f
               (acc', used2) <- pruneSharedSubtreesAcc  sf acc
               return (AccSharing sn $ c f' acc', used1 ++ used2)
     
+        travF2A :: (Elt a, Elt b)
+                => ((Exp a -> Exp b -> SharingExp c) -> SharingAcc d -> PreAcc SharingAcc arrs) 
+                -> (Exp a -> Exp b -> SharingExp c) -> SharingAcc d 
+                -> IO (SharingAcc arrs, [StableAccName])
         travF2A c f acc
           = do
               (f'  , used1) <- pruneSharedSubtreesFun2 sf f
               (acc', used2) <- pruneSharedSubtreesAcc  sf acc
               return (AccSharing sn $ c f' acc', used1 ++ used2)
     
+        travF2A2 :: (Elt a, Elt b)
+                 => ((Exp a -> Exp b -> SharingExp c) -> SharingAcc d -> SharingAcc e 
+                     -> PreAcc SharingAcc arrs) 
+                 -> (Exp a -> Exp b -> SharingExp c) -> SharingAcc d -> SharingAcc e 
+                 -> IO (SharingAcc arrs, [StableAccName])
         travF2A2 c f acc1 acc2
           = do
               (f'   , used1) <- pruneSharedSubtreesFun2 sf f
@@ -1028,6 +1054,11 @@ determineScopes occMap acc
               (acc2', used3) <- pruneSharedSubtreesAcc  sf acc2
               return (AccSharing sn $ c f' acc1' acc2', used1 ++ used2 ++ used3)
     
+        travF2EA :: (Elt a, Elt b)
+                 => ((Exp a -> Exp b -> SharingExp c) -> SharingExp d -> SharingAcc e 
+                     -> PreAcc SharingAcc arrs) 
+                 -> (Exp a -> Exp b -> SharingExp c) -> SharingExp d -> SharingAcc e 
+                 -> IO (SharingAcc arrs, [StableAccName])
         travF2EA c f e acc
           = do
               (f'  , used1) <- pruneSharedSubtreesFun2 sf f
@@ -1035,6 +1066,11 @@ determineScopes occMap acc
               (acc', used3) <- pruneSharedSubtreesAcc  sf acc
               return (AccSharing sn $ c f' e' acc', used1 ++ used2 ++ used3)
     
+        travF2EA2 :: (Elt a, Elt b)
+                  => ((Exp a -> Exp b -> SharingExp c) -> SharingExp d -> SharingAcc e -> SharingAcc f 
+                      -> PreAcc SharingAcc arrs) 
+                  -> (Exp a -> Exp b -> SharingExp c) -> SharingExp d -> SharingAcc e -> SharingAcc f 
+                  -> IO (SharingAcc arrs, [StableAccName])
         travF2EA2 c f e acc1 acc2
           = do
               (f'   , used1) <- pruneSharedSubtreesFun2 sf f
@@ -1043,12 +1079,18 @@ determineScopes occMap acc
               (acc2', used4) <- pruneSharedSubtreesAcc  sf acc2
               return (AccSharing sn $ c f' e' acc1' acc2', used1 ++ used2 ++ used3 ++ used4)
     
+        travEA :: (SharingExp d -> SharingAcc e -> PreAcc SharingAcc arrs) 
+               -> SharingExp d -> SharingAcc e 
+               -> IO (SharingAcc arrs, [StableAccName])
         travEA c e acc
           = do
               (e'  , used1) <- pruneSharedSubtreesExp sf e
               (acc', used2) <- pruneSharedSubtreesAcc sf acc
               return (AccSharing sn $ c e' acc', used1 ++ used2)
     
+        travA :: (SharingAcc e -> PreAcc SharingAcc arrs) 
+              -> SharingAcc e 
+              -> IO (SharingAcc arrs, [StableAccName])
         travA c acc
           = do
               (acc', used) <- pruneSharedSubtreesAcc sf acc
@@ -1079,26 +1121,39 @@ determineScopes occMap acc
                                     (tup', used1) <- travTup tup
                                     (e'  , used2) <- pruneSharedSubtreesExp sf e
                                     return (SnocTup tup' e', used1 ++ used2)
-        --
+
+        travE1 :: (SharingExp a -> SharingExp b) -> SharingExp a -> IO (SharingExp b, [StableAccName])
         travE1 c e
           = do
               (e', used) <- pruneSharedSubtreesExp sf e
               return (c e', used)
+
+        travE2 :: (SharingExp a -> SharingExp b -> SharingExp c) -> SharingExp a -> SharingExp b 
+               -> IO (SharingExp c, [StableAccName])
         travE2 c e1 e2
           = do
               (e1', used1) <- pruneSharedSubtreesExp sf e1
               (e2', used2) <- pruneSharedSubtreesExp sf e2
               return (c e1' e2', used1 ++ used2)
+
+        travE3 :: (SharingExp a -> SharingExp b -> SharingExp c -> SharingExp d) 
+               -> SharingExp a -> SharingExp b -> SharingExp c 
+               -> IO (SharingExp d, [StableAccName])
         travE3 c e1 e2 e3
           = do
               (e1', used1) <- pruneSharedSubtreesExp sf e1
               (e2', used2) <- pruneSharedSubtreesExp sf e2
               (e3', used3) <- pruneSharedSubtreesExp sf e3
               return (c e1' e2' e3', used1 ++ used2 ++ used3)
+
+        travA :: (SharingAcc a -> SharingExp b) -> SharingAcc a -> IO (SharingExp b, [StableAccName])
         travA c acc
           = do
               (acc', used) <- pruneSharedSubtreesAcc sf acc
               return (c acc', used)
+
+        travAE :: (SharingAcc a -> SharingExp b -> SharingExp c) -> SharingAcc a -> SharingExp b 
+               -> IO (SharingExp c, [StableAccName])
         travAE c acc e
           = do
               (acc', used1) <- pruneSharedSubtreesAcc sf acc
