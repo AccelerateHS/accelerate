@@ -36,6 +36,11 @@ typedef struct { Ix a8,a7,a6,a5,a4,a3,a2,a1,a0; } DIM9;
 /*
  * Convert the individual dimensions of a linear array into a shape
  */
+static __inline__ __device__ DIM0 shape()
+{
+    return NULL;
+}
+
 static __inline__ __device__ DIM1 shape(const Ix a)
 {
     return a;
