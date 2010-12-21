@@ -93,7 +93,7 @@ Flag cuda
 
 Flag html-pp
   Description:          Enable HTML pretty printing.
-  Default:              True
+  Default:              False
 
 Flag pcache
   Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
