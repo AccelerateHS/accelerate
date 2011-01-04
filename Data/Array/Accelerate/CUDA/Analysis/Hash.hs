@@ -52,7 +52,7 @@ accToKey (Scanr' f e a)       = chr 101 : showTy (accType a) ++ showFun f ++ sho
 accToKey (Scanr1 f a)         = chr 127 : showTy (accType a) ++ showFun f
 accToKey (Permute c _ p a)    = chr 167 : showTy (accType a) ++ showFun c ++ showFun p
 accToKey (Backpermute _ p a)  = chr 191 : showTy (accType a) ++ showFun p
-accToKey (Stencil _ _ _)      = chr 199 : INTERNAL_ERROR(error) "accToKey" "Stencil"
+accToKey (Stencil f _ a)      = chr 199 : showTy (accType a) ++ showFun f
 accToKey (Stencil2 _ _ _ _ _) = chr 313 : INTERNAL_ERROR(error) "accToKey" "Stencil2"
 accToKey x =
   INTERNAL_ERROR(error) "accToKey"

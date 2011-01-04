@@ -39,6 +39,7 @@ import qualified Foreign.Storable                               as F
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+import Data.Array.Accelerate.CUDA.Analysis.Stencil              as Stencil
 
 
 #include "accelerate.h"
@@ -115,8 +116,11 @@ codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo 
     restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
     restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
 
-codeGen (Stencil _ _ _)      = error "codeGenAcc: 'stencil' is not supported by the CUDA backend yet"
-codeGen (Stencil2 _ _ _ _ _) = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
+codeGen c@(Stencil f b a)     = mkStencil (codeGenAccType c) (codeGenAccType a)
+                                          (Stencil.positions f a) (codeGenBoundary a b) <$> codeGenFun f
+
+codeGen (Stencil2 _ _ _ _ _)  = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
+
 
 -- We should never get here: Use, Let, Let2, Avar, Unit, Reshape
 --
@@ -127,6 +131,20 @@ codeGen x =
     acc = show x
     doc | length acc <= 250 = text acc
         | otherwise         = text (take 250 acc) <+> text "... {truncated}"
+
+
+-- Code generation for the boundary condition. For Clamp, Mirror and Wrap we simply
+-- return a string that will get used in a #define. For Constant we generate code
+-- for the constant expression.
+--
+codeGenBoundary :: forall aenv dim e . (Sugar.Elt e)
+                => OpenAcc aenv (Sugar.Array dim e)   -- dummy: type witness only
+                -> Boundary (Sugar.EltRepr e)
+                -> Either String [CExpr]
+codeGenBoundary _ Clamp         = Left "BOUNDARY_CLAMP"
+codeGenBoundary _ Mirror        = Left "BOUNDARY_MIRROR"
+codeGenBoundary _ Wrap          = Left "BOUNDARY_WRAP"
+codeGenBoundary _ (Constant c)  = Right (codeGenConst (Sugar.eltType (undefined::e)) c)
 
 
 mkPrj :: Int -> String -> Int -> CExpr

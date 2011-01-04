@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, DeriveDataTypeable, StandaloneDeriving #-}
 {-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -72,7 +72,7 @@ module Data.Array.Accelerate.AST (
   Val(..), prj,
 
   -- * Accelerated array expressions
-  Arrays(..), ArraysR(..), OpenAfun(..), Afun, OpenAcc(..), Acc, Stencil(..),
+  Arrays(..), ArraysR(..), OpenAfun(..), Afun, OpenAcc(..), Acc, Stencil(..), StencilR(..),
 
   -- * Scalar expressions
   OpenFun(..), Fun, OpenExp(..), Exp, PrimConst(..), PrimFun(..)
@@ -374,8 +374,58 @@ deriving instance Typeable2 OpenAcc
 --
 type Acc a = OpenAcc () a
 
-class IsTuple stencil => Stencil sh e stencil where
+
+-- | Operations on stencils.
+--
+class (Shape sh, Elt e, IsTuple stencil) => Stencil sh e stencil where
+  stencil       :: StencilR sh e stencil
   stencilAccess :: (sh -> e) -> sh -> stencil
+
+
+-- |GADT reifying the 'Stencil' class.
+--
+data StencilR sh e pat where
+  StencilRunit3 :: (Elt e)
+                => StencilR DIM1 e (e,e,e)
+  StencilRunit5 :: (Elt e)
+                => StencilR DIM1 e (e,e,e,e,e)
+  StencilRunit7 :: (Elt e)
+                => StencilR DIM1 e (e,e,e,e,e,e,e)
+  StencilRunit9 :: (Elt e)
+                => StencilR DIM1 e (e,e,e,e,e,e,e,e,e)
+  StencilRtup3  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3)
+  StencilRtup5  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5)
+  StencilRtup7  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7)
+  StencilRtup9  :: (Shape sh, Elt e)
+                => StencilR sh e pat1
+                -> StencilR sh e pat2
+                -> StencilR sh e pat3
+                -> StencilR sh e pat4
+                -> StencilR sh e pat5
+                -> StencilR sh e pat6
+                -> StencilR sh e pat7
+                -> StencilR sh e pat8
+                -> StencilR sh e pat9
+                -> StencilR (sh:.Int) e (pat1,pat2,pat3,pat4,pat5,pat6,pat7,pat8,pat9)
+
 
 -- NB: We cannot start with 'DIM0'.  The 'IsTuple stencil' superclass would at 'DIM0' imply that
 --     the types of individual array elements are in 'IsTuple'.  (That would only possible if we
@@ -385,12 +435,14 @@ class IsTuple stencil => Stencil sh e stencil where
 
 -- DIM1
 instance Elt e => Stencil DIM1 e (e, e, e) where
+  stencil = StencilRunit3
   stencilAccess rf (Z:.y) = (rf' (y - 1), 
                              rf' y      ,
                              rf' (y + 1))
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
+  stencil = StencilRunit5
   stencilAccess rf (Z:.y) = (rf' (y - 2), 
                              rf' (y - 1), 
                              rf' y      ,
@@ -399,6 +451,7 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
+  stencil = StencilRunit7
   stencilAccess rf (Z:.y) = (rf' (y - 3), 
                              rf' (y - 2), 
                              rf' (y - 1), 
@@ -409,6 +462,7 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
+  stencil = StencilRunit9
   stencilAccess rf (Z:.y) = (rf' (y - 4), 
                              rf' (y - 3), 
                              rf' (y - 2), 
@@ -422,9 +476,10 @@ instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
       rf' d = rf (Z:.d)
 
 -- DIM(n+1), where n>0
-instance (Stencil (sh:.Int) a row2, 
-          Stencil (sh:.Int) a row1,
-          Stencil (sh:.Int) a row0) => Stencil (sh:.Int:.Int) a (row2, row1, row0) where
+instance (Stencil (sh:.Int) a row1,
+          Stencil (sh:.Int) a row2,
+          Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
+  stencil = StencilRtup3 stencil stencil stencil
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 1)) ix, 
                               stencilAccess (rf' y      ) ix,
                               stencilAccess (rf' (y + 1)) ix)
@@ -435,6 +490,7 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row3,
           Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
+  stencil = StencilRtup5 stencil stencil stencil stencil stencil
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 2)) ix, 
                               stencilAccess (rf' (y - 1)) ix, 
                               stencilAccess (rf' y      ) ix,
@@ -450,6 +506,7 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row6,
           Stencil (sh:.Int) a row7)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
+  stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 3)) ix, 
                               stencilAccess (rf' (y - 2)) ix, 
                               stencilAccess (rf' (y - 1)) ix, 
@@ -469,6 +526,7 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row8,
           Stencil (sh:.Int) a row9) 
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
+  stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
   stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 4)) ix, 
                               stencilAccess (rf' (y - 3)) ix, 
                               stencilAccess (rf' (y - 2)) ix, 

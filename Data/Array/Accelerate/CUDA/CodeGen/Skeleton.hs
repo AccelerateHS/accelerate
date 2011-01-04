@@ -12,7 +12,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkFold1Seg, mkMap, mkZipWith,
+    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkFold1Seg, mkMap, mkZipWith, mkStencil,
     mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
@@ -50,7 +50,7 @@ mkFold (ty,dim) identity apply = CUTranslSkel code [] skel
          | otherwise = "fold.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTuplePartition ty
+            [ mkTuplePartition "ArrOut" ty True
             , mkIdentity identity
             , mkApply 2 apply
             , mkDim "DimIn0" dim
@@ -65,7 +65,7 @@ mkFold1 (ty,dim) apply = CUTranslSkel code inc skel
     inc  = [(internalIdent "INCLUSIVE", Just (fromBool True))]
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTuplePartition ty
+            [ mkTuplePartition "ArrOut" ty True
             , mkApply 2 apply
             , mkDim "DimIn0" dim
             , mkDim "DimOut" (dim-1) ])
@@ -77,7 +77,7 @@ mkFoldSeg (ty,dim) int identity apply = CUTranslSkel code [] skel
     skel = "foldSeg.inl"
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTuplePartition ty
+            [ mkTuplePartition "ArrOut" ty True
             , mkIdentity identity
             , mkApply 2 apply
             , mkTypedef "Int" False False (head int)
@@ -92,7 +92,7 @@ mkFold1Seg (ty,dim) int apply = CUTranslSkel code inc skel
     inc  = [(internalIdent "INCLUSIVE", Just (fromBool True))]
     code = CTranslUnit
             ( mkTupleTypeAsc 2 ty ++
-            [ mkTuplePartition ty
+            [ mkTuplePartition "ArrOut" ty True
             , mkApply 2 apply
             , mkTypedef "Int" False False (head int)
             , mkDim "DimIn0" dim
@@ -128,6 +128,38 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
             , mkDim "DimIn1" dimIn1
             , mkDim "DimIn0" dimIn0 ])
             (mkNodeInfo (initPos skel) (Name 0))
+
+
+--------------------------------------------------------------------------------
+-- Stencil
+--------------------------------------------------------------------------------
+
+mkStencil :: [CType] -> [CType] -> [[Int]] -> Either String [CExpr] -> [CExpr] -> CUTranslSkel
+mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
+  where
+    skel = "stencil.inl"
+    code = CTranslUnit
+            ( mkTupleType Nothing  tyOut ++
+              mkTupleType (Just 0) tyIn0 ++
+              mkStencilType 0 tyIn0 (length ixs) ++
+            [ mkDim "ArrDimIn0"  (length $ head ixs) ] ++
+              mkGather 0 tyIn0 ixs ++
+            [ mkStencilApply 1 apply ] ++
+              (bndyConst bndy) )
+            (mkNodeInfo (initPos skel) (Name 0))
+
+--
+bndyDef :: Either String [CExpr] -> [CMacro]
+bndyDef bndy =
+  case bndy of
+    Left bndyTy -> [(internalIdent bndyTy, Nothing)]
+    Right _     -> []
+
+bndyConst :: Either String [CExpr] -> [CExtDecl]
+bndyConst bndy =
+  case bndy of
+    Left _  -> []
+    Right c -> [mkDeviceFun "boundary_const" (typename "TyIn0") [] c]
 
 
 --------------------------------------------------------------------------------

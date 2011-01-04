@@ -24,9 +24,15 @@ mkIdentity :: [CExpr] -> CExtDecl
 mkIdentity = mkDeviceFun "identity" (typename "TyOut") []
 
 mkApply :: Int -> [CExpr] -> CExtDecl
-mkApply argc
+mkApply = mkApply' "TyIn"
+
+mkStencilApply :: Int -> [CExpr] -> CExtDecl
+mkStencilApply = mkApply' "TyStencil"
+
+mkApply' :: String -> Int -> [CExpr] -> CExtDecl
+mkApply' tyName argc
   = mkDeviceFun "apply" (typename "TyOut")
-  $ map (\n -> (typename ("TyIn"++show n), 'x':show n)) [argc-1,argc-2..0]
+  $ map (\n -> (typename (tyName ++ show n), 'x':show n)) [argc-1,argc-2..0]
 
 mkProject :: Direction -> [CExpr] -> CExtDecl
 mkProject Forward  = mkDeviceFun "project" (typename "DimOut") [(typename "DimIn0","x0")]

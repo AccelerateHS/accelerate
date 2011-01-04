@@ -214,8 +214,14 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
   freeArray in0
   return r
 
-executeOpenAcc _acc@(Stencil _ _ _a0) _aenv
-  = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil NOT YET IMPLEMENTED"
+executeOpenAcc acc@(Stencil _ _ a0) aenv = do
+  (Array sh0 in0) <- executeOpenAcc a0 aenv
+  r@(Array _ out) <- newArray (Sugar.toElt sh0)
+  let n = size sh0
+  execute "stencil" acc aenv n ((((),out),in0),(convertIx sh0))
+  freeArray in0
+  return r
+
 executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
   = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil2 NOT YET IMPLEMENTED"
 
