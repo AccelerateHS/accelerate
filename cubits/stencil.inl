@@ -26,7 +26,7 @@
 /*
  * Bounds check handling for Clamp, Mirror and Wrap. Peforms an index projection.
  */
-static __inline__ __device__ DIM1 project_for_bounds(DIM1 sh, DIM1 ix)
+static __inline__ __device__ DIM1 project_for_bounds(const DIM1 sh, const DIM1 ix)
 {
     if (ix < 0)
     {
@@ -58,49 +58,49 @@ static __inline__ __device__ DIM1 project_for_bounds(DIM1 sh, DIM1 ix)
     }
 }
 
-static __inline__ __device__ DIM2 project_for_bounds(DIM2 sh, DIM2 ix)
+static __inline__ __device__ DIM2 project_for_bounds(const DIM2 sh, const DIM2 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM3 project_for_bounds(DIM3 sh, DIM3 ix)
+static __inline__ __device__ DIM3 project_for_bounds(const DIM3 sh, const DIM3 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM4 project_for_bounds(DIM4 sh, DIM4 ix)
+static __inline__ __device__ DIM4 project_for_bounds(const DIM4 sh, const DIM4 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM5 project_for_bounds(DIM5 sh, DIM5 ix)
+static __inline__ __device__ DIM5 project_for_bounds(const DIM5 sh, const DIM5 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM6 project_for_bounds(DIM6 sh, DIM6 ix)
+static __inline__ __device__ DIM6 project_for_bounds(const DIM6 sh, const DIM6 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM7 project_for_bounds(DIM7 sh, DIM7 ix)
+static __inline__ __device__ DIM7 project_for_bounds(const DIM7 sh, const DIM7 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM8 project_for_bounds(DIM8 sh, DIM8 ix)
+static __inline__ __device__ DIM8 project_for_bounds(const DIM8 sh, const DIM8 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
 }
 
-static __inline__ __device__ DIM9 project_for_bounds(DIM9 sh, DIM9 ix)
+static __inline__ __device__ DIM9 project_for_bounds(const DIM9 sh, const DIM9 ix)
 {
     return indexCons(project_for_bounds(indexTail(sh), indexTail(ix)),
                      project_for_bounds(indexHead(sh), indexHead(ix)));
@@ -111,7 +111,7 @@ static __inline__ __device__ DIM9 project_for_bounds(DIM9 sh, DIM9 ix)
 /*
  * Bounds check handling for Constant.
  */
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM1 sh, DIM1 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM1 sh, const DIM1 ix)
 {
     if (ix < 0)
         return boundary_const();
@@ -121,7 +121,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM1 s
         return tex_get0(ix);
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM2 sh, DIM2 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM2 sh, const DIM2 ix)
 {
     if (ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -131,7 +131,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM2 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM3 sh, DIM3 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM3 sh, const DIM3 ix)
 {
     if (ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -141,7 +141,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM3 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM4 sh, DIM4 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM4 sh, const DIM4 ix)
 {
     if (ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -151,7 +151,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM4 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM5 sh, DIM5 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM5 sh, const DIM5 ix)
 {
     if (ix.a4 < 0 || ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -161,7 +161,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM5 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM6 sh, DIM6 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM6 sh, const DIM6 ix)
 {
     if (ix.a5 < 0 || ix.a4 < 0 || ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -171,7 +171,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM6 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM7 sh, DIM7 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM7 sh, const DIM7 ix)
 {
     if (ix.a6 < 0 || ix.a5 < 0 || ix.a4 < 0 || ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -181,7 +181,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM7 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM8 sh, DIM8 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM8 sh, const DIM8 ix)
 {
     if (ix.a7 < 0 || ix.a6 < 0 || ix.a5 < 0 || ix.a4 < 0 || ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
@@ -191,7 +191,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM8 s
         return tex_get0(toIndex(sh, ix));
 }
 
-static __inline__ __device__ TyIn0 get0_for_constant_bounds(ArrIn0 d_in0, DIM9 sh, DIM9 ix)
+static __inline__ __device__ TyIn0 get0_for_constant_bounds(const ArrIn0 d_in0, const DIM9 sh, const DIM9 ix)
 {
     if (ix.a8 < 0 || ix.a7 < 0 || ix.a6 < 0 || ix.a5 < 0 || ix.a4 < 0 || ix.a3 < 0 || ix.a2 < 0 || ix.a1 < 0 || ix.a0 < 0)
         return boundary_const();
