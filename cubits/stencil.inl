@@ -234,7 +234,7 @@ stencil
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < size(d_in0_shape); idx += gridSize)
     {
-        set(d_out, idx, apply(gather0(d_in0, fromIndex(d_in0_shape, idx), d_in0_shape)));
+        set(d_out, idx, gather_and_apply(d_in0, fromIndex(d_in0_shape, idx), d_in0_shape));
     }
 }
 

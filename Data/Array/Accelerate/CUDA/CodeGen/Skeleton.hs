@@ -143,8 +143,7 @@ mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
               mkTexTupleType 0 tyIn0 ++
               mkStencilType 0 tyIn0 (length ixs) ++
             [ mkDim "ArrDimIn0"  (length $ head ixs) ] ++
-              mkGather 0 tyIn0 ixs ++
-            [ mkStencilApply 1 apply ] ++
+              mkGatherAndApply 0 tyIn0 ixs apply ++
               (bndyConst bndy) )
             (mkNodeInfo (initPos skel) (Name 0))
 
