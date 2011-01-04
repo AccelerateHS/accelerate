@@ -215,10 +215,14 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
   return r
 
 executeOpenAcc acc@(Stencil _ _ a0) aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
+  a@(Array sh0 in0) <- executeOpenAcc a0 aenv
+  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil" acc aenv (size sh0)
   r@(Array _ out) <- newArray (Sugar.toElt sh0)
-  let n = size sh0
-  execute "stencil" acc aenv n ((((),out),in0),(convertIx sh0))
+  let fvs' = Arrays a : Shapes (listToMaybe $ tail [sh0]): fvs  -- create texture-ref for input array
+                                                                -- don't require shape for input array
+  bindLifted mdl fvs'
+  launch (t,g,m) fstencil ((((),out),in0),(convertIx sh0))
+  freeLifted fvs
   freeArray in0
   return r
 
@@ -455,7 +459,7 @@ executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
 -- code generation stage
 --
 data Lifted where
-  Shapes :: Shape sh => sh          -> Lifted
+  Shapes :: Shape sh => Maybe sh    -> Lifted
   Arrays ::             Array dim e -> Lifted
 
 liftAcc :: forall a aenv. Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
@@ -508,12 +512,12 @@ liftExp (PrimApp _ e)     aenv = liftExp e aenv
 liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
 liftExp (Shape a)         aenv = do
   (Array sh _) <- executeOpenAcc a aenv
-  return [Shapes sh]
+  return [Shapes (Just sh)]
 
 liftExp (IndexScalar a e) aenv = do
   vs               <- liftExp e aenv
   arr@(Array sh _) <- executeOpenAcc a aenv
-  return $ Arrays arr : Shapes sh : vs
+  return $ Arrays arr : Shapes (Just sh) : vs
 
 liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
@@ -525,7 +529,7 @@ bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
 bindLifted mdl = foldM_ go (0,0)
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
-    go (n,m) (Shapes sh)            = bindDim n sh    >>  return (n+1,m)
+    go (n,m) (Shapes sh)            = maybe (return ()) (bindDim n) sh >> return (n+1,m)
     go (n,m) (Arrays (Array sh ad)) = bindTex m sh ad >>= \m' -> return (n,m+m')
 
     bindDim n sh = liftIO $

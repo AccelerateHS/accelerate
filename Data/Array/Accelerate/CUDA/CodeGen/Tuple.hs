@@ -10,7 +10,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Tuple
   (
-    mkTupleType, mkTupleTypeAsc, mkTuplePartition,
+    mkTupleType, mkTupleTypeAsc, mkTexTupleType, mkTuplePartition,
     mkStencilType, mkGather
   )
   where
@@ -45,6 +45,16 @@ mkTupleTypeAsc syn ty = types ++ synonyms ++ [mkSet n, mkGet n 0]
       | n <= 1    = [ mkTypedef "TyOut" False False (head ty), mkTypedef "ArrOut" True True (head ty)]
       | otherwise = [ mkStruct  "TyOut" False False ty,        mkStruct  "ArrOut" True True ty]
 
+mkTexTupleType :: Int -> [CType] -> [CExtDecl]
+mkTexTupleType subscript ty = types ++ [accessor]
+  where
+    n        = length ty
+    base     = "In" ++ (show subscript)
+    accessor = mkTexGet n subscript
+    types
+      | n <= 1    = [ mkTypedef ("Ty"  ++ base) False False (head ty), mkTypedef ("Arr" ++ base) False True (head ty)]
+      | otherwise = [ mkStruct  ("Ty"  ++ base) False False ty,        mkStruct  ("Arr" ++ base) False True ty]
+
 
 -- Getter and setter functions for reading and writing (respectively) to global
 -- device arrays. Since arrays of tuples are stored as tuples of arrays, we
@@ -73,6 +83,22 @@ mkGet n prj =
       | n <= 1    = CInitExpr (CIndex (CVar arrIn internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode
       | otherwise = flip CInitList internalNode . reverse . take n . flip map (enumFrom 0 :: [Int]) $ \v ->
                       ([], CInitExpr (CIndex (CMember (CVar arrIn internalNode) (internalIdent ('a':show v)) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode)
+
+
+mkTexGet :: Int -> Int -> CExtDecl
+mkTexGet n prj =
+  CFDefExt
+    (CFunDef
+      [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show prj)) internalNode)]
+      (CDeclr (Just (internalIdent ("tex_get" ++ show prj))) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "idx")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
+      []
+      (CCompound [] [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show prj)) internalNode)] [(Just (CDeclr (Just (internalIdent "x")) [] Nothing [] internalNode),Just initList,Nothing)] internalNode),CBlockStmt (CReturn (Just (CVar (internalIdent "x") internalNode)) internalNode)] internalNode)
+      internalNode)
+  where
+    initList
+      | n <= 1    = CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent "tex0") internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode
+      | otherwise = flip CInitList internalNode . take n . flip map (enumFrom 0 :: [Int]) $ \v ->
+                      ([], CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent ("tex" ++ (show v))) internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode)
 
 
 mkSet :: Int -> CExtDecl

@@ -19,6 +19,7 @@ module Data.Array.Accelerate.CUDA.CodeGen
 import Prelude hiding (id, (.))
 import Control.Category
 
+import Data.Maybe
 import Data.Record.Label
 import Data.Char
 import Language.C
@@ -52,7 +53,7 @@ type CodeGen a = State CodeGenState a
 
 data CodeGenState = CodeGenState
   { _arrays :: [CExtDecl]
-  , _shapes :: [CExtDecl]
+  , _shapes :: [Maybe CExtDecl]
   }
 
 $(mkLabels [''CodeGenState])
@@ -67,7 +68,7 @@ codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
   let (CUTranslSkel code defs skel, st) = runCodeGen (codeGen acc)
       (CTranslUnit decl node)           = code
-      fvars                             = getL arrays st ++ getL shapes st
+      fvars                             = getL arrays st ++ (catMaybes $ getL shapes st)
   in
   CUTranslSkel (CTranslUnit (fvars ++ decl) node) defs skel
 
@@ -116,8 +117,16 @@ codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo 
     restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
     restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
 
-codeGen c@(Stencil f b a)     = mkStencil (codeGenAccType c) (codeGenAccType a)
-                                          (Stencil.positions f a) (codeGenBoundary a b) <$> codeGenFun f
+codeGen c@(Stencil f b a) = do
+  n  <- length <$> getM arrays
+  let ty = codeGenTupleTex (accType a)
+      fv = map (("tex"++) . show) [n..]
+  modM arrays (zipWith array ty fv ++)
+  modM shapes (Nothing :)   -- don't require shape for stencil input array
+  mkStencil (codeGenAccType c) (codeGenAccType a) (Stencil.positions f a)
+            (codeGenBoundary a b) <$> codeGenFun f
+  where
+    array t = mkGlobal (map CTypeSpec t)
 
 codeGen (Stencil2 _ _ _ _ _)  = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
 
@@ -215,7 +224,7 @@ codeGenExp (Cond p t e) =
 
 codeGenExp (Shape a) = do
   sh <- ("sh"++) . show . length <$> getM shapes
-  modM shapes (mkShape (accDim a) sh :)
+  modM shapes ((Just $ mkShape (accDim a) sh) :)
   return [cvar sh]
 
 codeGenExp (Size a) = do
@@ -230,7 +239,7 @@ codeGenExp (IndexScalar a e) = do
       fv = map (("tex"++) . show) [n..]
 
   modM arrays (zipWith array ty fv ++)
-  modM shapes (mkShape (accDim a) sh :)
+  modM shapes ((Just $ mkShape (accDim a) sh) :)
   return (zipWith (indexArray sh ix) fv ty)
   where
     array t                 = mkGlobal (map CTypeSpec t)
