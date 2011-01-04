@@ -85,7 +85,7 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation (SliceIndex)
-import Data.Array.Accelerate.Array.Sugar 
+import Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Array.Delayed        (Delayable)
 import Data.Array.Accelerate.Tuple
 
@@ -436,42 +436,42 @@ data StencilR sh e pat where
 -- DIM1
 instance Elt e => Stencil DIM1 e (e, e, e) where
   stencil = StencilRunit3
-  stencilAccess rf (Z:.y) = (rf' (y - 1), 
+  stencilAccess rf (Z:.y) = (rf' (y - 1),
                              rf' y      ,
                              rf' (y + 1))
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
   stencil = StencilRunit5
-  stencilAccess rf (Z:.y) = (rf' (y - 2), 
-                             rf' (y - 1), 
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2))
+  stencilAccess rf (Z:.y) = (rf' (y - 2),
+                         rf' (y - 1),
+                         rf' y      ,
+                         rf' (y + 1),
+                         rf' (y + 2))
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e) where
   stencil = StencilRunit7
-  stencilAccess rf (Z:.y) = (rf' (y - 3), 
-                             rf' (y - 2), 
-                             rf' (y - 1), 
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3))
+  stencilAccess rf (Z:.y) = (rf' (y - 3),
+                         rf' (y - 2),
+                         rf' (y - 1),
+                         rf' y      ,
+                         rf' (y + 1),
+                         rf' (y + 2),
+                         rf' (y + 3))
     where
       rf' d = rf (Z:.d)
 instance Elt e => Stencil DIM1 e (e, e, e, e, e, e, e, e, e) where
   stencil = StencilRunit9
-  stencilAccess rf (Z:.y) = (rf' (y - 4), 
-                             rf' (y - 3), 
-                             rf' (y - 2), 
-                             rf' (y - 1), 
-                             rf' y      ,
-                             rf' (y + 1),
-                             rf' (y + 2),
-                             rf' (y + 3),
-                             rf' (y + 4))
+  stencilAccess rf (Z:.y) = (rf' (y - 4),
+                         rf' (y - 3),
+                         rf' (y - 2),
+                         rf' (y - 1),
+                         rf' y      ,
+                         rf' (y + 1),
+                         rf' (y + 2),
+                         rf' (y + 3),
+                         rf' (y + 4))
     where
       rf' d = rf (Z:.d)
 
@@ -480,24 +480,35 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
   stencil = StencilRtup3 stencil stencil stencil
-  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 1)) ix, 
-                              stencilAccess (rf' y      ) ix,
-                              stencilAccess (rf' (y + 1)) ix)
+  stencilAccess rf ix = (stencilAccess (rf' (y - 1)) xs',
+                     stencilAccess (rf' y      ) xs',
+                     stencilAccess (rf' (y + 1)) xs')
+
     where
-      rf' d ds = rf (ds:.d)
+      y : xs = reverse $ Sugar.shapeToList ix
+      xs' = Sugar.listToShape $ reverse xs
+
+      rf' :: Int -> (sh:.Int) -> a
+      rf' d ds = rf $ Sugar.listToShape $ reverse $ Sugar.shapeToList (ds:.d)
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
           Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
   stencil = StencilRtup5 stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 2)) ix, 
-                              stencilAccess (rf' (y - 1)) ix, 
-                              stencilAccess (rf' y      ) ix,
-                              stencilAccess (rf' (y + 1)) ix,
-                              stencilAccess (rf' (y + 2)) ix)
+  stencilAccess rf ix = (stencilAccess (rf' (y - 2)) xs',
+                         stencilAccess (rf' (y - 1)) xs',
+                         stencilAccess (rf' y      ) xs',
+                         stencilAccess (rf' (y + 1)) xs',
+                         stencilAccess (rf' (y + 2)) xs')
     where
-      rf' d ds = rf (ds:.d)
+      y : xs = reverse $ Sugar.shapeToList ix
+      xs' = Sugar.listToShape $ reverse xs
+
+      rf' :: Int -> (sh:.Int) -> a
+      rf' d ds = rf $ Sugar.listToShape $ reverse $ Sugar.shapeToList (ds:.d)
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -507,15 +518,20 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row7)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
   stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 3)) ix, 
-                              stencilAccess (rf' (y - 2)) ix, 
-                              stencilAccess (rf' (y - 1)) ix, 
-                              stencilAccess (rf' y      ) ix,
-                              stencilAccess (rf' (y + 1)) ix,
-                              stencilAccess (rf' (y + 2)) ix,
-                              stencilAccess (rf' (y + 3)) ix)
+  stencilAccess rf ix = (stencilAccess (rf' (y - 3)) xs',
+                         stencilAccess (rf' (y - 2)) xs',
+                         stencilAccess (rf' (y - 1)) xs',
+                         stencilAccess (rf' y      ) xs',
+                         stencilAccess (rf' (y + 1)) xs',
+                         stencilAccess (rf' (y + 2)) xs',
+                         stencilAccess (rf' (y + 3)) xs')
     where
-      rf' d ds = rf (ds:.d)
+      y : xs = reverse $ Sugar.shapeToList ix
+      xs' = Sugar.listToShape $ reverse xs
+
+      rf' :: Int -> (sh:.Int) -> a
+      rf' d ds = rf $ Sugar.listToShape $ reverse $ Sugar.shapeToList (ds:.d)
+
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3,
@@ -524,22 +540,26 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row6,
           Stencil (sh:.Int) a row7,
           Stencil (sh:.Int) a row8,
-          Stencil (sh:.Int) a row9) 
+          Stencil (sh:.Int) a row9)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.y) = (stencilAccess (rf' (y - 4)) ix, 
-                              stencilAccess (rf' (y - 3)) ix, 
-                              stencilAccess (rf' (y - 2)) ix, 
-                              stencilAccess (rf' (y - 1)) ix, 
-                              stencilAccess (rf' y      ) ix,
-                              stencilAccess (rf' (y + 1)) ix,
-                              stencilAccess (rf' (y + 2)) ix,
-                              stencilAccess (rf' (y + 3)) ix,
-                              stencilAccess (rf' (y + 4)) ix)
+  stencilAccess rf ix = (stencilAccess (rf' (y - 4)) xs',
+                         stencilAccess (rf' (y - 3)) xs',
+                         stencilAccess (rf' (y - 2)) xs',
+                         stencilAccess (rf' (y - 1)) xs',
+                         stencilAccess (rf' y      ) xs',
+                         stencilAccess (rf' (y + 1)) xs',
+                         stencilAccess (rf' (y + 2)) xs',
+                         stencilAccess (rf' (y + 3)) xs',
+                         stencilAccess (rf' (y + 4)) xs')
     where
-      rf' d ds = rf (ds:.d)
+      y : xs = reverse $ Sugar.shapeToList ix
+      xs' = Sugar.listToShape $ reverse xs
 
-              
+      rf' :: Int -> (sh:.Int) -> a
+      rf' d ds = rf $ Sugar.listToShape $ reverse $ Sugar.shapeToList (ds:.d)
+
+
 -- Embedded expressions
 -- --------------------
 
