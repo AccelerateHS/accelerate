@@ -24,8 +24,8 @@ extern "C"
 __global__ void
 stencil1
 (
-    ArrOut              d_out,
-    const ArrDimIn0     d_in0_shape
+    ArrOut        d_out,
+    const DimIn0  d_in0_shape
 )
 {
     Ix       idx;

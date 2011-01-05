@@ -119,7 +119,7 @@ static __inline__ __device__ TyIn1 get1_for_constant_bounds(const DIM9 sh, const
 /*
  * Getter function that handles indexing outside the array boundary (array 1).
  */
-static inline __attribute__((device)) TyIn1 get1_for_stencil(ArrDimIn1 sh, ArrDimIn1 ix)
+static inline __attribute__((device)) TyIn1 get1_for_stencil(DimIn1 sh, DimIn1 ix)
 {
     #if defined(BOUNDARY_CLAMP_1) || defined(BOUNDARY_MIRROR_1) || defined(BOUNDARY_WRAP_1)
         return tex_get1(toIndex(sh, project_for_bounds(sh, ix)));
@@ -136,10 +136,10 @@ extern "C"
 __global__ void
 stencil2
 (
-    ArrOut              d_out,
-    const ArrDimOut     d_out_shape,
-    const ArrDimIn0     d_in0_shape,
-    const ArrDimIn0     d_in1_shape
+    ArrOut        d_out,
+    const DimOut  d_out_shape,
+    const DimIn0  d_in0_shape,
+    const DimIn0  d_in1_shape
 )
 {
     Ix       idx;

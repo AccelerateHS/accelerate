@@ -173,7 +173,7 @@ mkGatherAndApply ty ixs expr =
   [CFDefExt
     (CFunDef
       [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
-      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
+      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
       []
       (CCompound
         []
@@ -193,7 +193,7 @@ mkGatherAndApply2 ty0 ixs0 ty1 ixs1 expr =
   [CFDefExt
     (CFunDef
       [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
-      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([ CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "sh1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "idx1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
+      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([ CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "sh1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "DimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "idx1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
       []
       (CCompound
         []
@@ -212,7 +212,7 @@ mkGetForStencilDecl subscript =
   [CDeclExt
     (CDecl
       [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)]
-      [(Just (CDeclr (Just (internalIdent ("get" ++ show subscript ++ "_for_stencil"))) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "sh")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "ix")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode), Nothing, Nothing)]
+      [(Just (CDeclr (Just (internalIdent ("get" ++ show subscript ++ "_for_stencil"))) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("DimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "sh")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("DimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "ix")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode), Nothing, Nothing)]
       internalNode)]
 
 

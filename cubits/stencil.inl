@@ -201,7 +201,7 @@ static __inline__ __device__ TyIn0 get0_for_constant_bounds(const DIM9 sh, const
 /*
  * Getter function that handles indexing outside the array boundary (array 0).
  */
-static inline __attribute__((device)) TyIn0 get0_for_stencil(ArrDimIn0 sh, ArrDimIn0 ix)
+static inline __attribute__((device)) TyIn0 get0_for_stencil(DimIn0 sh, DimIn0 ix)
 {
     #if defined(BOUNDARY_CLAMP_0) || defined(BOUNDARY_MIRROR_0) || defined(BOUNDARY_WRAP_0)
         return tex_get0(toIndex(sh, project_for_bounds(sh, ix)));
