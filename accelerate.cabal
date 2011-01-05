@@ -54,6 +54,8 @@ Data-files:             cubits/accelerate_cuda_extras.h
                         cubits/foldSeg.inl
                         cubits/map.inl
                         cubits/stencil.inl
+                        cubits/stencil1.inl
+                        cubits/stencil2.inl
                         cubits/permute.inl
                         cubits/reduce.inl
                         cubits/replicate.inl

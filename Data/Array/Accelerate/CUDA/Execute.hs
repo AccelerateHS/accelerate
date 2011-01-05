@@ -216,18 +216,30 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
 
 executeOpenAcc acc@(Stencil _ _ a0) aenv = do
   a@(Array sh0 in0) <- executeOpenAcc a0 aenv
-  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil" acc aenv (size sh0)
-  r@(Array _ out) <- newArray (Sugar.toElt sh0)
-  let fvs' = Arrays a : Shapes (listToMaybe $ tail [sh0]): fvs  -- create texture-ref for input array
-                                                                -- don't require shape for input array
+  r@(Array _ out)   <- newArray (Sugar.toElt sh0)
+  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil1" acc aenv (size sh0)
+  let fvs' = Arrays a : Shapes (listToMaybe $ tail [sh0]) : fvs  -- create texture-ref for input array
+                                                                 -- don't require shape for input array
   bindLifted mdl fvs'
-  launch (t,g,m) fstencil ((((),out),in0),(convertIx sh0))
+  launch (t,g,m) fstencil (((),out),(convertIx sh0))
   freeLifted fvs
   freeArray in0
   return r
 
-executeOpenAcc _acc@(Stencil2 _ _ _ _ _a0) _aenv
-  = INTERNAL_ERROR(error) "executeOpenAcc" "Stencil2 NOT YET IMPLEMENTED"
+executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
+  _a1@(Array sh1 in1) <- executeOpenAcc a1 aenv
+  _a0@(Array sh0 in0) <- executeOpenAcc a0 aenv
+  r@(Array s out)     <- newArray (Sugar.toElt (sh1 `intersect` sh0))
+  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil2" acc aenv (size s)
+  let fvs' = Arrays _a0 : Shapes (listToMaybe $ tail [sh0]) :
+             Arrays _a1 : Shapes (listToMaybe $ tail [sh1]) : fvs  -- create texture-ref for input arrays
+                                                                   -- don't require shape for input arrays
+  bindLifted mdl fvs'
+  launch (t,g,m) fstencil (((((),out),(convertIx s)),(convertIx sh0)),(convertIx sh1))
+  freeLifted fvs
+  freeArray in0
+  freeArray in1
+  return r
 
 
 -- Reduction

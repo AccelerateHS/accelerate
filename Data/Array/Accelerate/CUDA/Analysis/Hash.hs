@@ -53,7 +53,7 @@ accToKey (Scanr1 f a)         = chr 127 : showTy (accType a) ++ showFun f
 accToKey (Permute c _ p a)    = chr 167 : showTy (accType a) ++ showFun c ++ showFun p
 accToKey (Backpermute _ p a)  = chr 191 : showTy (accType a) ++ showFun p
 accToKey (Stencil f _ a)      = chr 199 : showTy (accType a) ++ showFun f
-accToKey (Stencil2 _ _ _ _ _) = chr 313 : INTERNAL_ERROR(error) "accToKey" "Stencil2"
+accToKey (Stencil2 f _ x _ y) = chr 313 : showTy (accType x) ++ showTy (accType y) ++ showFun f
 accToKey x =
   INTERNAL_ERROR(error) "accToKey"
   (unlines ["incomplete patterns for key generation", render (nest 2 doc)])

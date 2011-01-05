@@ -10,8 +10,8 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Tuple
   (
-    mkTupleType, mkTupleTypeAsc, mkTexTupleType, mkTuplePartition,
-    mkStencilType, mkGatherAndApply
+    mkTupleType, mkTupleTypeAsc, mkTexTupleTypes, mkTuplePartition,
+    mkStencilType, mkGatherAndApply, mkGatherAndApply2
   )
   where
 
@@ -45,12 +45,29 @@ mkTupleTypeAsc syn ty = types ++ synonyms ++ [mkSet n, mkGet n 0]
       | n <= 1    = [ mkTypedef "TyOut" False False (head ty), mkTypedef "ArrOut" True True (head ty)]
       | otherwise = [ mkStruct  "TyOut" False False ty,        mkStruct  "ArrOut" True True ty]
 
-mkTexTupleType :: Int -> [CType] -> [CExtDecl]
-mkTexTupleType subscript ty = types ++ [accessor]
+
+-- Declare types and getters for arrays that are accessed via textrure references. Need to
+-- do all arrays in one hit because texture reference identifiers are unique for each tuple element
+-- and for each array.
+--
+-- For example, if we have two arrays of types (Float,Float,Float) and (Int,Int)
+-- respectively, then we will have texture references tex0 - tex4. We must decalare TyIn0 for the first
+-- array and its getter will access via tex0, tex1 and tex2, whereas for the second array we must declare TyIn1
+-- and its getter will access via tex3 and tex4.
+--
+mkTexTupleTypes :: [[CType]] -> [CExtDecl]
+mkTexTupleTypes tys = concat $ flip map tys' $ \(subscript, texId, ty) -> mkTexTupleType subscript texId ty
+  where
+    tys' = zip3 ([0..]) heads tys
+    heads = scanl (+) 0 $ map length tys
+
+
+mkTexTupleType :: Int -> Int -> [CType] -> [CExtDecl]
+mkTexTupleType subscript texIdx ty = types ++ [accessor]
   where
     n        = length ty
     base     = "In" ++ (show subscript)
-    accessor = mkTexGet n subscript
+    accessor = mkTexGet n texIdx subscript
     types
       | n <= 1    = [ mkTypedef ("Ty"  ++ base) False False (head ty), mkTypedef ("Arr" ++ base) False True (head ty)]
       | otherwise = [ mkStruct  ("Ty"  ++ base) False False ty,        mkStruct  ("Arr" ++ base) False True ty]
@@ -85,8 +102,8 @@ mkGet n prj =
                       ([], CInitExpr (CIndex (CMember (CVar arrIn internalNode) (internalIdent ('a':show v)) False internalNode) (CVar (internalIdent "idx") internalNode) internalNode) internalNode)
 
 
-mkTexGet :: Int -> Int -> CExtDecl
-mkTexGet n prj =
+mkTexGet :: Int -> Int -> Int -> CExtDecl
+mkTexGet n texIdx prj =
   CFDefExt
     (CFunDef
       [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show prj)) internalNode)]
@@ -96,8 +113,8 @@ mkTexGet n prj =
       internalNode)
   where
     initList
-      | n <= 1    = CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent "tex0") internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode
-      | otherwise = flip CInitList internalNode . take n . flip map (enumFrom 0 :: [Int]) $ \v ->
+      | n <= 1    = CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent ("tex" ++ show texIdx )) internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode
+      | otherwise = flip CInitList internalNode . take n . flip map (enumFrom texIdx :: [Int]) $ \v ->
                       ([], CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent ("tex" ++ (show v))) internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode)
 
 
@@ -137,6 +154,8 @@ mkTuplePartition tyName ty isVolatile =
           $ var "s_data" : map (\v -> CUnary CAdrOp (CIndex (var v) (CVar (internalIdent "n") internalNode) internalNode) internalNode) names
 
 
+-- |Generated code for stencil kernels.
+--
 mkStencilType :: Int -> [CType] -> Int -> [CExtDecl]
 mkStencilType subscript ty size = types
   where
@@ -145,27 +164,68 @@ mkStencilType subscript ty size = types
     types = [mkStruct  ("TyStencil" ++ base) False False (take n $ cycle ty)]
 
 
-mkGatherAndApply :: Int -> [CType] -> [[Int]] -> [CExpr] -> [CExtDecl]
-mkGatherAndApply subscript ty ixs expr =
-  [CDeclExt
-    (CDecl
-      [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)]
-      [(Just (CDeclr (Just (internalIdent ("get" ++ show subscript ++ "_for_stencil"))) [CFunDeclr (Right ([CDecl[CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("d_in" ++ show subscript))) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "sh")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "ix")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode), Nothing, Nothing)]
-      internalNode)]
-  ++
+-- |Generated function that gathers stencil elements for a given focal point and then applies the
+-- stencil function.
+--
+mkGatherAndApply :: [CType] -> [[Int]] -> [CExpr] -> [CExtDecl]
+mkGatherAndApply ty ixs expr =
+  mkGetForStencilDecl 0 ++
   [CFDefExt
     (CFunDef
       [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
-      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([CDecl[CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("d_in" ++ show subscript))) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "idx")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "sh")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
+      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
       []
-      (CCompound [] (getStmts ++ stencilStmt ++ applyStmt) internalNode)
+      (CCompound
+        []
+        (mkStencilGetStmt 0 ty ixs ++
+         mkStencilApplyStmt expr)
+        internalNode)
       internalNode)]
+
+
+-- |Generated function that gathers stencil elements from two array for a given focal point
+-- and then applies the stencil function.
+--
+mkGatherAndApply2 :: [CType] -> [[Int]] -> [CType] -> [[Int]] -> [CExpr] -> [CExtDecl]
+mkGatherAndApply2 ty0 ixs0 ty1 ixs1 expr =
+  mkGetForStencilDecl 0 ++
+  mkGetForStencilDecl 1 ++
+  [CFDefExt
+    (CFunDef
+      [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)]
+      (CDeclr (Just (internalIdent "gather_and_apply")) [CFunDeclr (Right ([ CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "sh0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn0") internalNode)] [(Just (CDeclr (Just (internalIdent "idx0")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "sh1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "ArrDimIn1") internalNode)] [(Just (CDeclr (Just (internalIdent "idx1")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode)
+      []
+      (CCompound
+        []
+        (mkStencilGetStmt 0 ty0 ixs0 ++
+         mkStencilGetStmt 1 ty1 ixs1 ++
+         mkStencilApplyStmt expr)
+        internalNode)
+      internalNode)]
+
+
+
+-- |Forward declaration of get(n)_for_stencil function implemented by stencil1/stencil2 kernel.
+--
+mkGetForStencilDecl :: Int -> [CExtDecl]
+mkGetForStencilDecl subscript =
+  [CDeclExt
+    (CDecl
+      [CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (internalIdent "device") [] internalNode)), CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)]
+      [(Just (CDeclr (Just (internalIdent ("get" ++ show subscript ++ "_for_stencil"))) [CFunDeclr (Right ([CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "sh")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode, CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent ("ArrDimIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent "ix")) [] Nothing [] internalNode), Nothing, Nothing)] internalNode], False)) [] internalNode] Nothing [] internalNode), Nothing, Nothing)]
+      internalNode)]
+
+
+-- |Stencil element gathering.
+--
+mkStencilGetStmt :: Int -> [CType] -> [[Int]] -> [CBlockItem]
+mkStencilGetStmt subscript ty ixs = getStmts ++ stencilStmt
   where
     -- statements that 'get' each stencil element
     getStmts        = map getStmt $ zip ([size-1,size-2..0]) ixs
-    getStmt (e, ix) = CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("e" ++ show e))) [] Nothing [] internalNode),Just (getFn ix), Nothing)] internalNode)
+    getStmt (e, ix) = CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("e" ++ show subscript ++ "_" ++ show e))) [] Nothing [] internalNode),Just (getFn ix), Nothing)] internalNode)
     getFn ix        = CInitExpr (CCall (CVar (internalIdent ("get" ++ show subscript ++ "_for_stencil")) internalNode) (getArgs ix) internalNode) internalNode
-    getArgs ix      = [(CVar (internalIdent ("d_in" ++ show subscript)) internalNode), (CVar (internalIdent "sh") internalNode), (ixArg ix)]
+    getArgs ix      = [(CVar (internalIdent ("sh" ++ show subscript)) internalNode), (ixArg ix)]
 
     ixArg ix        = (CCall (CVar (internalIdent "shape") internalNode) (shapeArgs ix) internalNode)
     shapeArgs ix    = map ixExpr $ zip ns ix
@@ -176,8 +236,8 @@ mkGatherAndApply subscript ty ixs expr =
 
     ixExpr (n, i)   = CBinary CAddOp (CVar (internalIdent (idx n)) internalNode) (CConst (CIntConst (cInteger $ fromIntegral i) internalNode)) internalNode
       where
-        idx (Just n) = "idx.a" ++ show n
-        idx Nothing  = "idx"
+        idx (Just n) = "idx" ++ show subscript ++ ".a" ++ show n
+        idx Nothing  = "idx" ++ show subscript
 
 
     -- initialise stencil struct which flattens all elmenet tuples
@@ -186,12 +246,16 @@ mkGatherAndApply subscript ty ixs expr =
     n           = length ty
     var s       = CVar (internalIdent s) internalNode
     names
-      | n > 1     = ["e" ++ show e ++ ".a" ++ show a | e <- [size-1,size-2..0], a <- [n-1,n-2..0]]
-      | otherwise = map (('e' :) . show) [size-1,size-2..0]
-
-    -- application of stencil function on gathered elements
-    applyStmt   = [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "r")) [] Nothing [] internalNode), Just (mkInitList expr), Nothing)] internalNode), CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)]
+      | n > 1     = ["e" ++ show subscript ++ "_" ++ show e ++ ".a" ++ show a | e <- [size-1,size-2..0], a <- [n-1,n-2..0]]
+      | otherwise = map ((("e" ++ show subscript ++ "_") ++) . show) [size-1,size-2..0]
 
     --
     size = length ixs
+
+
+-- |Application of stencil function on gathered elements.
+--
+mkStencilApplyStmt :: [CExpr] -> [CBlockItem]
+mkStencilApplyStmt expr =
+  [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent "TyOut") internalNode)] [(Just (CDeclr (Just (internalIdent "r")) [] Nothing [] internalNode), Just (mkInitList expr), Nothing)] internalNode), CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)]
 

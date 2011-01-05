@@ -12,7 +12,8 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
   (
-    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkFold1Seg, mkMap, mkZipWith, mkStencil,
+    mkGenerate, mkFold, mkFold1, mkFoldSeg, mkFold1Seg, mkMap, mkZipWith,
+    mkStencil, mkStencil2,
     mkScanl, mkScanr, mkScanl', mkScanr', mkScanl1, mkScanr1,
     mkPermute, mkBackpermute, mkIndex, mkReplicate
   )
@@ -134,17 +135,42 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
 -- Stencil
 --------------------------------------------------------------------------------
 
-mkStencil :: [CType] -> [CType] -> [[Int]] -> Either String [CExpr] -> [CExpr] -> CUTranslSkel
+mkStencil :: [CType]
+          -> [CType] -> [[Int]] -> Either String [CExpr]
+          -> [CExpr]
+          -> CUTranslSkel
 mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
   where
-    skel = "stencil.inl"
+    skel = "stencil1.inl"
     code = CTranslUnit
             ( mkTupleType Nothing  tyOut ++
-              mkTexTupleType 0 tyIn0 ++
+              mkTexTupleTypes [tyIn0] ++
               mkStencilType 0 tyIn0 (length ixs) ++
-            [ mkDim "ArrDimIn0"  (length $ head ixs) ] ++
-              mkGatherAndApply 0 tyIn0 ixs apply ++
-              (bndyConst bndy) )
+            [ mkDim "ArrDimIn0" (length $ head ixs) ] ++
+              mkGatherAndApply tyIn0 ixs apply ++
+              (bndyConst 0 bndy) )
+            (mkNodeInfo (initPos skel) (Name 0))
+
+mkStencil2 :: [CType]
+           -> [CType] -> [[Int]] -> Either String [CExpr]
+           -> [CType] -> [[Int]] -> Either String [CExpr]
+           -> [CExpr]
+           -> CUTranslSkel
+mkStencil2 tyOut tyIn0 ixs0 bndy0 tyIn1 ixs1 bndy1 apply
+  = CUTranslSkel code ((bndyDef bndy0) ++ (bndyDef bndy1)) skel
+  where
+    skel = "stencil2.inl"
+    code = CTranslUnit
+            ( mkTupleType Nothing  tyOut ++
+              mkTexTupleTypes [tyIn0, tyIn1] ++
+              mkStencilType 0 tyIn0 (length ixs0) ++
+              mkStencilType 1 tyIn1 (length ixs1) ++
+            [ mkDim "ArrDimOut" (length $ head ixs0),   -- all dimensions the same
+              mkDim "ArrDimIn0" (length $ head ixs0),
+              mkDim "ArrDimIn1" (length $ head ixs1) ] ++
+              mkGatherAndApply2 tyIn0 ixs0 tyIn1 ixs1 apply ++
+              bndyConst 0 bndy0 ++
+              bndyConst 1 bndy1 )
             (mkNodeInfo (initPos skel) (Name 0))
 
 --
@@ -154,11 +180,11 @@ bndyDef bndy =
     Left bndyTy -> [(internalIdent bndyTy, Nothing)]
     Right _     -> []
 
-bndyConst :: Either String [CExpr] -> [CExtDecl]
-bndyConst bndy =
+bndyConst :: Int -> Either String [CExpr] -> [CExtDecl]
+bndyConst n bndy =
   case bndy of
     Left _  -> []
-    Right c -> [mkDeviceFun "boundary_const" (typename "TyIn0") [] c]
+    Right c -> [mkDeviceFun ("boundary_const" ++ show n) (typename ("TyIn" ++ show n)) [] c]
 
 
 --------------------------------------------------------------------------------

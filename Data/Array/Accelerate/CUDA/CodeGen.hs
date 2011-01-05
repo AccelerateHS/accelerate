@@ -123,12 +123,26 @@ codeGen c@(Stencil f b a) = do
       fv = map (("tex"++) . show) [n..]
   modM arrays (zipWith array ty fv ++)
   modM shapes (Nothing :)   -- don't require shape for stencil input array
-  mkStencil (codeGenAccType c) (codeGenAccType a) (Stencil.positions f a)
-            (codeGenBoundary a b) <$> codeGenFun f
+  mkStencil (codeGenAccType c)
+            (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a b)
+            <$> codeGenFun f
   where
     array t = mkGlobal (map CTypeSpec t)
 
-codeGen (Stencil2 _ _ _ _ _)  = error "codeGenAcc: 'stencil2' is not supported by the CUDA backend yet"
+codeGen c@(Stencil2 f b1 a1 b0 a0) = do
+  n  <- length <$> getM arrays
+  let ty0 = codeGenTupleTex (accType a0)
+      ty1 = codeGenTupleTex (accType a1)
+      fv  = map (("tex"++) . show) [n..]
+  modM arrays (zipWith array (ty0 ++ ty1) fv ++)
+  modM shapes ([Nothing, Nothing] ++)   -- don't require shape for stencil input array
+  mkStencil2 (codeGenAccType c)
+             (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 b0)
+             (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 b1)
+             <$> codeGenFun f
+  where
+    (pos1, pos0) = Stencil.positions2 f a1 a0
+    array t = mkGlobal (map CTypeSpec t)
 
 
 -- We should never get here: Use, Let, Let2, Avar, Unit, Reshape
@@ -147,13 +161,14 @@ codeGen x =
 -- for the constant expression.
 --
 codeGenBoundary :: forall aenv dim e . (Sugar.Elt e)
-                => OpenAcc aenv (Sugar.Array dim e)   -- dummy: type witness only
+                => Int
+                -> OpenAcc aenv (Sugar.Array dim e)   -- dummy: type witness only
                 -> Boundary (Sugar.EltRepr e)
                 -> Either String [CExpr]
-codeGenBoundary _ Clamp         = Left "BOUNDARY_CLAMP"
-codeGenBoundary _ Mirror        = Left "BOUNDARY_MIRROR"
-codeGenBoundary _ Wrap          = Left "BOUNDARY_WRAP"
-codeGenBoundary _ (Constant c)  = Right (codeGenConst (Sugar.eltType (undefined::e)) c)
+codeGenBoundary n _ Clamp         = Left $ "BOUNDARY_CLAMP_" ++ show n
+codeGenBoundary n _ Mirror        = Left $ "BOUNDARY_MIRROR_" ++ show n
+codeGenBoundary n _ Wrap          = Left $ "BOUNDARY_WRAP_" ++ show n
+codeGenBoundary _ _ (Constant c)  = Right (codeGenConst (Sugar.eltType (undefined::e)) c)
 
 
 mkPrj :: Int -> String -> Int -> CExpr

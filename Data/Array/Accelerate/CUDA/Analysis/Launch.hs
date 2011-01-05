@@ -103,6 +103,7 @@ sharedMem _ (ZipWith _ _ _)     _        = 0
 sharedMem _ (Permute _ _ _ _)   _        = 0
 sharedMem _ (Backpermute _ _ _) _        = 0
 sharedMem _ (Stencil _ _ _)      _       = 0
+sharedMem _ (Stencil2 _ _ _ _ _) _       = 0
 sharedMem _ (Fold  _ _ a)       blockDim = sizeOf (accType a) * blockDim
 sharedMem _ (Fold1 _ a)         blockDim = sizeOf (accType a) * blockDim
 sharedMem _ (Scanl _ x _)       blockDim = sizeOf (expType x) * blockDim
@@ -115,6 +116,4 @@ sharedMem p (FoldSeg _ _ a _)   blockDim =
   (blockDim `div` CUDA.warpSize p) * 4 * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
 sharedMem p (Fold1Seg _ a _) blockDim =
   (blockDim `div` CUDA.warpSize p) * 4 * F.sizeOf (undefined::Int32) + blockDim * sizeOf (accType a)
-
-sharedMem _ (Stencil2 _ _ _ _ _) _ = INTERNAL_ERROR(error) "sharedMem" "Stencil2 not implemented yet"
 
