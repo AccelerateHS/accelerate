@@ -19,7 +19,6 @@ module Data.Array.Accelerate.CUDA.CodeGen
 import Prelude hiding (id, (.))
 import Control.Category
 
-import Data.Maybe
 import Data.Record.Label
 import Data.Char
 import Language.C
@@ -53,7 +52,7 @@ type CodeGen a = State CodeGenState a
 
 data CodeGenState = CodeGenState
   { _arrays :: [CExtDecl]
-  , _shapes :: [Maybe CExtDecl]
+  , _shapes :: [CExtDecl]
   }
 
 $(mkLabels [''CodeGenState])
@@ -68,7 +67,7 @@ codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
 codeGenAcc acc =
   let (CUTranslSkel code defs skel, st) = runCodeGen (codeGen acc)
       (CTranslUnit decl node)           = code
-      fvars                             = getL arrays st ++ (catMaybes $ getL shapes st)
+      fvars                             = getL arrays st ++ getL shapes st
   in
   CUTranslSkel (CTranslUnit (fvars ++ decl) node) defs skel
 
@@ -122,7 +121,6 @@ codeGen c@(Stencil f b a) = do
   let ty = codeGenTupleTex (accType a)
       fv = map (("tex"++) . show) [n..]
   modM arrays (zipWith array ty fv ++)
-  modM shapes (Nothing :)   -- don't require shape for stencil input array
   mkStencil (codeGenAccType c)
             (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a b)
             <$> codeGenFun f
@@ -135,7 +133,6 @@ codeGen c@(Stencil2 f b1 a1 b0 a0) = do
       ty1 = codeGenTupleTex (accType a1)
       fv  = map (("tex"++) . show) [n..]
   modM arrays (zipWith array (ty0 ++ ty1) fv ++)
-  modM shapes ([Nothing, Nothing] ++)   -- don't require shape for stencil input array
   mkStencil2 (codeGenAccType c)
              (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 b0)
              (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 b1)
@@ -239,7 +236,7 @@ codeGenExp (Cond p t e) =
 
 codeGenExp (Shape a) = do
   sh <- ("sh"++) . show . length <$> getM shapes
-  modM shapes ((Just $ mkShape (accDim a) sh) :)
+  modM shapes (mkShape (accDim a) sh :)
   return [cvar sh]
 
 codeGenExp (Size a) = do
@@ -254,7 +251,7 @@ codeGenExp (IndexScalar a e) = do
       fv = map (("tex"++) . show) [n..]
 
   modM arrays (zipWith array ty fv ++)
-  modM shapes ((Just $ mkShape (accDim a) sh) :)
+  modM shapes (mkShape (accDim a) sh :)
   return (zipWith (indexArray sh ix) fv ty)
   where
     array t                 = mkGlobal (map CTypeSpec t)
