@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
+import Control.Monad.ST                            (ST)
 import Data.Bits
 import Data.Char                                   (chr, ord)
 import Prelude                                     hiding (sum)
@@ -322,7 +323,7 @@ fold1SegOp f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
       | j >= end  = v
       | otherwise = fold ix' (f v (Sugar.toElt . rf $ (ix', j))) (j + 1) end
 
-scanlOp :: (e -> e -> e)
+scanlOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
@@ -337,14 +338,15 @@ scanlOp f e (DelayedArray sh rf)
                    final <- traverse arr 0 (Sugar.fromElt e)
                    writeArrayData arr n final
                    return (arr, undefined)
-               
+
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
 
-scanl'Op :: (e -> e -> e)
+scanl'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
@@ -359,13 +361,15 @@ scanl'Op f e (DelayedArray sh rf)
                        arr <- newArrayData n
                        sum <- traverse arr 0 (Sugar.fromElt e)
                        return (arr, sum)
+
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
 
-scanl1Op :: (e -> e -> e)
+scanl1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
 scanl1Op f (DelayedArray sh rf)
@@ -379,6 +383,7 @@ scanl1Op f (DelayedArray sh rf)
                    traverse arr 0 undefined
                    return (arr, undefined)
 
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s ()
     traverse arr i v
       | i >= n    = return ()
       | i == 0    = do
@@ -390,7 +395,7 @@ scanl1Op f (DelayedArray sh rf)
                       writeArrayData arr i e
                       traverse arr (i + 1) e
 
-scanrOp :: (e -> e -> e)
+scanrOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
@@ -405,14 +410,15 @@ scanrOp f e (DelayedArray sh rf)
                    final <- traverse arr n (Sugar.fromElt e)
                    writeArrayData arr 0 final
                    return (arr, undefined)
-                        
+
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i == 0    = return v
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i - 1) (f' v (rf ((), i)))
 
-scanr'Op :: (e -> e -> e)
+scanr'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
@@ -427,13 +433,15 @@ scanr'Op f e (DelayedArray sh rf)
                        arr <- newArrayData n
                        sum <- traverse arr (n-1) (Sugar.fromElt e)
                        return (arr, sum)
+
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i < 0     = return v
       | otherwise = do
                       writeArrayData arr i v
                       traverse arr (i - 1) (f' v (rf ((), i)))
 
-scanr1Op :: (e -> e -> e)
+scanr1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
 scanr1Op f (DelayedArray sh rf)
@@ -447,6 +455,7 @@ scanr1Op f (DelayedArray sh rf)
                    traverse arr (n - 1) undefined
                    return (arr, undefined)
 
+    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s ()
     traverse arr i v
       | i < 0        = return ()
       | i == (n - 1) = do

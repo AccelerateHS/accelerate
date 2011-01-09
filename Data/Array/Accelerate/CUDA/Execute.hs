@@ -111,10 +111,10 @@ executeOpenAcc (Reshape e a) aenv = do
 
 executeOpenAcc (Unit e) aenv = do
   v <- executeExp e aenv
-  let ad = fst . AD.runArrayData $ (,undefined) <$> do
-        arr <- AD.newArrayData 1024    -- FIXME: small arrays moved by the GC
+  let (ad, _) = AD.runArrayData $ do
+        arr  <- AD.newArrayData 1024    -- FIXME: small arrays moved by the GC
         AD.writeArrayData arr 0 (Sugar.fromElt v)
-        return arr
+        return (arr, undefined)
   mallocArray    ad 1
   pokeArrayAsync ad 1 Nothing
   return (Array (Sugar.fromElt ()) ad)
@@ -218,25 +218,22 @@ executeOpenAcc acc@(Stencil _ _ a0) aenv = do
   a@(Array sh0 in0) <- executeOpenAcc a0 aenv
   r@(Array _ out)   <- newArray (Sugar.toElt sh0)
   (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil1" acc aenv (size sh0)
-  let fvs' = Arrays a : Shapes (listToMaybe $ tail [sh0]) : fvs  -- create texture-ref for input array
-                                                                 -- don't require shape for input array
+  let fvs' = FreeArray a : fvs                                  -- create texture-ref for input array
   bindLifted mdl fvs'
   launch (t,g,m) fstencil (((),out),(convertIx sh0))
-  freeLifted fvs
+  freeLifted fvs'
   freeArray in0
   return r
 
 executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
-  _a1@(Array sh1 in1) <- executeOpenAcc a1 aenv
-  _a0@(Array sh0 in0) <- executeOpenAcc a0 aenv
+  a1'@(Array sh1 in1) <- executeOpenAcc a1 aenv
+  a0'@(Array sh0 in0) <- executeOpenAcc a0 aenv
   r@(Array s out)     <- newArray (Sugar.toElt (sh1 `intersect` sh0))
   (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil2" acc aenv (size s)
-  let fvs' = Arrays _a0 : Shapes (listToMaybe $ tail [sh0]) :
-             Arrays _a1 : Shapes (listToMaybe $ tail [sh1]) : fvs  -- create texture-ref for input arrays
-                                                                   -- don't require shape for input arrays
+  let fvs' = FreeArray a0' : FreeArray a1' : fvs                -- create texture-ref for input arrays
   bindLifted mdl fvs'
   launch (t,g,m) fstencil (((((),out),(convertIx s)),(convertIx sh0)),(convertIx sh1))
-  freeLifted fvs
+  freeLifted fvs'
   freeArray in0
   freeArray in1
   return r
@@ -471,8 +468,8 @@ executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
 -- code generation stage
 --
 data Lifted where
-  Shapes :: Shape sh => Maybe sh    -> Lifted
-  Arrays ::             Array dim e -> Lifted
+  FreeShape :: Shape sh => sh          -> Lifted
+  FreeArray ::             Array dim e -> Lifted
 
 liftAcc :: forall a aenv. Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
 liftAcc (Let _ _)            _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
@@ -524,12 +521,12 @@ liftExp (PrimApp _ e)     aenv = liftExp e aenv
 liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
 liftExp (Shape a)         aenv = do
   (Array sh _) <- executeOpenAcc a aenv
-  return [Shapes (Just sh)]
+  return [FreeShape sh]
 
 liftExp (IndexScalar a e) aenv = do
   vs               <- liftExp e aenv
   arr@(Array sh _) <- executeOpenAcc a aenv
-  return $ Arrays arr : Shapes (Just sh) : vs
+  return $ FreeArray arr : FreeShape sh : vs
 
 liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
@@ -541,13 +538,15 @@ bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
 bindLifted mdl = foldM_ go (0,0)
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
-    go (n,m) (Shapes sh)            = maybe (return ()) (bindDim n) sh >> return (n+1,m)
-    go (n,m) (Arrays (Array sh ad)) = bindTex m sh ad >>= \m' -> return (n,m+m')
+    go (n,m) (FreeShape sh)            = bindDim n sh    >>  return (n+1,m)
+    go (n,m) (FreeArray (Array sh ad)) = bindTex m sh ad >>= \m' -> return (n,m+m')
 
+    bindDim :: Shape sh => Int -> sh -> CIO ()
     bindDim n sh = liftIO $
       CUDA.getPtr mdl ("sh"++show n) >>= \(p,_) ->
       CUDA.pokeListArray (convertIx sh) p
 
+    bindTex :: (Shape sh, ArrayElt e) => Int -> sh -> AD.ArrayData e -> CIO Int
     bindTex m sh ad
       = let textures = sequence' $ map (CUDA.getTex mdl . ("tex"++) . show) [m..]
         in  marshalTextureData ad (size sh) =<< liftIO textures
@@ -557,8 +556,8 @@ bindLifted mdl = foldM_ go (0,0)
 freeLifted :: [Lifted] -> CIO ()
 freeLifted = mapM_ go
   where go :: Lifted -> CIO ()
-        go (Shapes _)            = return ()
-        go (Arrays (Array _ ad)) = freeArray ad
+        go (FreeShape _)            = return ()
+        go (FreeArray (Array _ ad)) = freeArray ad
 
 
 -- Kernel execution
@@ -730,11 +729,14 @@ sequence' = foldr k (return [])
 -- FIXME: small arrays are relocated by the GC
 --
 newArray :: (Sugar.Shape sh, Sugar.Elt e) => sh -> CIO (Array sh e)
-newArray sh =
-  let ad = fst . AD.runArrayData $ (,undefined) <$> AD.newArrayData (1024 `max` Sugar.size sh)
-  in do
-    ad `seq` mallocArray ad (1 `max` Sugar.size sh)
-    return $ Array (Sugar.fromElt sh) ad
+newArray sh = do
+  ad `seq` mallocArray ad (1 `max` n)
+  return $ Array (Sugar.fromElt sh) ad
+  where
+    n       = Sugar.size sh
+    (ad, _) = AD.runArrayData $ do
+      arr <- AD.newArrayData (1024 `max` n)
+      return (arr, undefined)
 
 
 -- Extract shape dimensions as a list of 32-bit integers (the base integer width
