@@ -149,8 +149,6 @@ Library
                         monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
-  if flag(io)
-    Build-depends:      bytestring
 
   if flag(test-suite)
     Build-depends:      QuickCheck == 2.*

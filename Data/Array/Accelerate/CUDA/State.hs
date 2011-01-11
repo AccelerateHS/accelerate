@@ -34,19 +34,22 @@ import Control.Category
 import Data.Record.Label
 
 import Data.Int
+import Data.Char
 import Data.IORef
 import Data.Typeable
+import Data.ByteString.Lazy.Char8                       (ByteString)
 import Control.Applicative
 import Control.Monad
-import Control.Monad.State.Strict       (StateT(..))
-import Data.HashTable                   (HashTable)
+import Control.Monad.State.Strict                       (StateT(..))
+import Data.HashTable                                   (HashTable)
 import Foreign.Ptr
-import qualified Data.HashTable         as Hash
-import qualified Foreign.CUDA.Driver    as CUDA
+import qualified Foreign.CUDA.Driver                    as CUDA
+import qualified Data.HashTable                         as Hash
+import qualified Data.ByteString.Lazy.Char8             as L
 
 import System.Directory
 import System.FilePath
-import System.Posix.Types               (ProcessID)
+import System.Posix.Types                               (ProcessID)
 import System.Mem.Weak
 import System.Mem.StableName
 import System.IO.Unsafe
@@ -54,22 +57,33 @@ import System.IO.Unsafe
 import Data.Array.Accelerate.CUDA.Analysis.Device
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-import Data.Binary                      (encodeFile, decodeFile)
-import Control.Arrow                    (second)
-import Paths_accelerate                 (getDataDir)
+import Data.Binary                                      (encodeFile, decodeFile)
+import Control.Arrow                                    (second)
+import Paths_accelerate                                 (getDataDir)
 #else
-import System.Posix.Process             (getProcessID)
+import System.Posix.Process                             (getProcessID)
 #endif
 
 #include "accelerate.h"
 
 
--- Types
--- -----
+-- An exact association between an accelerate computation and its
+-- implementation, stored as a (deflated) string representation of the generated
+-- kernel code.
+--
+-- An Eq instance of Accelerate expressions does not facilitate persistent
+-- caching.
+--
+type AccKey   = ByteString
+type AccTable = HashTable AccKey KernelEntry
 
-type MemoryTable  = HashTable WordPtr MemoryEntry
-type KernelTable  = HashTable String  KernelEntry
-type ComputeTable = HashTable StableAccName AccEntry
+-- Associations between host- and device-side arrays, with reference counting.
+--
+type MemKey   = WordPtr
+type MemTable = HashTable MemKey MemoryEntry
+
+type ComputeTable = HashTable StableAccName     AccEntry
+
 
 
 -- | The state token for accelerated CUDA array operations
@@ -81,8 +95,8 @@ data CUDAState = CUDAState
     _outputDir     :: FilePath,
     _deviceProps   :: CUDA.DeviceProperties,
     _deviceContext :: CUDA.Context,
-    _memoryTable   :: MemoryTable,
-    _kernelTable   :: KernelTable,
+    _memoryTable   :: MemTable,
+    _kernelTable   :: AccTable,
     _computeTable  :: ComputeTable
   }
 
@@ -106,7 +120,7 @@ data KernelEntry = KernelEntry
 --
 data AccEntry = AccEntry
   {
-    _accKey    :: String,       -- for assertions
+    _accKey    :: AccKey,       -- for assertions
     _accKernel :: CUDA.Module
   }
 
@@ -175,18 +189,29 @@ saveIndexFile _ = return ()
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
 --
-loadIndexFile :: FilePath -> IO (KernelTable, Int)
+loadIndexFile :: FilePath -> IO (AccTable, Int)
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
 loadIndexFile f = do
   x <- doesFileExist f
   e <- if x then mapM reload =<< decodeFile f
             else return []
-  (,length e) <$> Hash.fromList Hash.hashString e
+  (,length e) <$> Hash.fromList hashByteString e
   where
     reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
 #else
-loadIndexFile _  = (,0) <$> Hash.new (==) Hash.hashString
+loadIndexFile _  = (,0) <$> Hash.new (==) hashByteString
 #endif
+
+
+-- Reimplementation of Data.HashTable.hashString to fold over a lazy bytestring
+-- rather than a list of characters.
+--
+hashByteString :: ByteString -> Int32
+hashByteString = L.foldl' f golden
+  where
+    f m c  = fromIntegral (ord c) * magic + Hash.hashInt (fromIntegral m)
+    magic  = 0xdeadbeef
+    golden = 1013904242 -- = round ((sqrt 5 - 1) * 2^32)
 
 
 -- Select and initialise the CUDA device, and create a new execution context.

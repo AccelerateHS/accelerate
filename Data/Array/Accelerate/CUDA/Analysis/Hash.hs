@@ -15,6 +15,9 @@ module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey)
 import Data.Char
 import Language.C
 import Text.PrettyPrint
+import Codec.Compression.Zlib
+import Data.ByteString.Lazy.Char8                       (ByteString)
+import qualified Data.ByteString.Lazy.Char8             as L
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -23,45 +26,50 @@ import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.Array.Representation
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 #include "accelerate.h"
 
 
 -- | Generate a unique key for each kernel computation
 --
+accToKey :: OpenAcc aenv a -> ByteString
+accToKey acc =
+  let key = compress . L.pack $ showAcc acc
+  in  L.head key `seq` key
+
+
 -- The first radical identifies the skeleton type (actually, this is arithmetic
 -- sequence A000978), followed by the salient features that parameterise
 -- skeleton instantiation.
 --
-accToKey :: OpenAcc aenv a -> String
-accToKey (Generate e f)       = chr   1 : showExp e ++ showFun f
-accToKey r@(Replicate s e a)  = chr   3 : showTy (accType a) ++ showExp e ++ showSI s e a r
-accToKey r@(Index s a e)      = chr   5 : showTy (accType a) ++ showExp e ++ showSI s e r a
-accToKey (Map f a)            = chr   7 : showTy (accType a) ++ showFun f
-accToKey (ZipWith f x y)      = chr  11 : showTy (accType x) ++ showTy (accType y) ++ showFun f
-accToKey (Fold f e a)         = chr  13 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Fold1 f a)          = chr  17 : chr (accDim a) : showTy (accType a) ++ showFun f
-accToKey (FoldSeg f e a _)    = chr  19 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Fold1Seg f a _)     = chr  23 : chr (accDim a) : showTy (accType a) ++ showFun f
-accToKey (Scanl f e a)        = chr  31 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl' f e a)       = chr  43 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanl1 f a)         = chr  61 : showTy (accType a) ++ showFun f
-accToKey (Scanr f e a)        = chr  79 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanr' f e a)       = chr 101 : showTy (accType a) ++ showFun f ++ showExp e
-accToKey (Scanr1 f a)         = chr 127 : showTy (accType a) ++ showFun f
-accToKey (Permute c _ p a)    = chr 167 : showTy (accType a) ++ showFun c ++ showFun p
-accToKey (Backpermute _ p a)  = chr 191 : showTy (accType a) ++ showFun p
-accToKey (Stencil f _ a)      = chr 199 : showTy (accType a) ++ showFun f
-accToKey (Stencil2 f _ x _ y) = chr 313 : showTy (accType x) ++ showTy (accType y) ++ showFun f
-accToKey x =
+showAcc :: OpenAcc aenv a -> String
+showAcc (Generate e f)       = chr   1 : showExp e ++ showFun f
+showAcc r@(Replicate s e a)  = chr   3 : showTy (accType a) ++ showExp e ++ showSI s e a r
+showAcc r@(Index s a e)      = chr   5 : showTy (accType a) ++ showExp e ++ showSI s e r a
+showAcc (Map f a)            = chr   7 : showTy (accType a) ++ showFun f
+showAcc (ZipWith f x y)      = chr  11 : showTy (accType x) ++ showTy (accType y) ++ showFun f
+showAcc (Fold f e a)         = chr  13 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Fold1 f a)          = chr  17 : chr (accDim a) : showTy (accType a) ++ showFun f
+showAcc (FoldSeg f e a _)    = chr  19 : chr (accDim a) : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Fold1Seg f a _)     = chr  23 : chr (accDim a) : showTy (accType a) ++ showFun f
+showAcc (Scanl f e a)        = chr  31 : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Scanl' f e a)       = chr  43 : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Scanl1 f a)         = chr  61 : showTy (accType a) ++ showFun f
+showAcc (Scanr f e a)        = chr  79 : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Scanr' f e a)       = chr 101 : showTy (accType a) ++ showFun f ++ showExp e
+showAcc (Scanr1 f a)         = chr 127 : showTy (accType a) ++ showFun f
+showAcc (Permute c _ p a)    = chr 167 : showTy (accType a) ++ showFun c ++ showFun p
+showAcc (Backpermute _ p a)  = chr 191 : showTy (accType a) ++ showFun p
+showAcc (Stencil f _ a)      = chr 199 : showTy (accType a) ++ showFun f
+showAcc (Stencil2 f _ x _ y) = chr 313 : showTy (accType x) ++ showTy (accType y) ++ showFun f
+showAcc x =
   INTERNAL_ERROR(error) "accToKey"
   (unlines ["incomplete patterns for key generation", render (nest 2 doc)])
   where
     acc = show x
     doc | length acc <= 250 = text acc
         | otherwise         = text (take 250 acc) <+> text "... {truncated}"
-
 
 showTy :: TupleType a -> String
 showTy UnitTuple = []
