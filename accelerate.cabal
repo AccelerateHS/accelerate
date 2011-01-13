@@ -69,6 +69,9 @@ Data-files:             cubits/accelerate_cuda_extras.h
 
 Extra-source-files:     INSTALL
                         include/accelerate.h
+                        utils/README
+                        utils/Paths_accelerate.hs
+                        utils/dot_ghci
                         examples/simple/src/DotP.hs
                         examples/simple/src/Filter.hs
                         examples/simple/src/Main.hs
