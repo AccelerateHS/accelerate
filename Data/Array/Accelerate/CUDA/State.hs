@@ -154,14 +154,14 @@ getOutputDir :: IO FilePath
 getOutputDir = do
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
   tmp <- getDataDir
-  dir <- canonicalizePath $ tmp </> "cache"
+  let dir = tmp </> "cache"
 #else
   tmp <- getTemporaryDirectory
   pid <- getProcessID
-  dir <- canonicalizePath $ tmp </> "ac" ++ show pid
+  let dir = tmp </> "ac" ++ show pid
 #endif
   createDirectoryIfMissing True dir
-  return dir
+  canonicalizePath dir
 
 -- Store the kernel module map to file
 --
