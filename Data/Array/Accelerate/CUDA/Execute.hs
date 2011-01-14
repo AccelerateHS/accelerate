@@ -222,7 +222,6 @@ executeOpenAcc acc@(Stencil _ _ a0) aenv = do
   bindLifted mdl fvs'
   launch (t,g,m) fstencil (((),out),(convertIx sh0))
   freeLifted fvs'
-  freeArray in0
   return r
 
 executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
@@ -234,8 +233,6 @@ executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
   bindLifted mdl fvs'
   launch (t,g,m) fstencil (((((),out),(convertIx s)),(convertIx sh0)),(convertIx sh1))
   freeLifted fvs'
-  freeArray in0
-  freeArray in1
   return r
 
 
