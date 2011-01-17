@@ -128,8 +128,10 @@ Flag io
 Library
   Build-depends:        array,
                         base == 4.*,
+                        directory,
                         ghc-prim,
                         haskell98,
+                        mtl >= 2.0,
                         pretty
 
   Include-Dirs:         include
@@ -142,11 +144,9 @@ Library
                         bytestring,
                         containers,
                         cuda >= 0.2.2,
-                        directory,
                         fclabels >= 0.9 && < 1.0,
                         filepath,
                         language-c >= 0.3 && < 0.4,
-                        monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
 
