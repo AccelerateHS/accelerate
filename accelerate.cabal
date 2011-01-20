@@ -120,6 +120,10 @@ Flag unsafe-checks
 Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
+  
+Flag io
+  Description:          Provide access to the block copy I/O functionality. Implied by 'cuda' flag.
+  Default:              False
 
 Library
   Build-depends:        array,
@@ -145,6 +149,8 @@ Library
                         monads-fd,
                         transformers >= 0.2 && < 0.3,
                         unix
+  if flag(io)
+    Build-depends:      bytestring
 
   if flag(test-suite)
     Build-depends:      QuickCheck == 2.*
@@ -155,12 +161,15 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
-                        Data.Array.Accelerate.Array.BlockCopy
+
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
 
   If flag(cuda)
     Exposed-modules:    Data.Array.Accelerate.CUDA
+
+  If flag(io) || flag(cuda)
+     Exposed-modules:   Data.Array.Accelerate.Array.BlockCopy
 
   If flag(test-suite)
     Exposed-modules:    Data.Array.Accelerate.Test
