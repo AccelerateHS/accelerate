@@ -1,9 +1,20 @@
 {-# LANGUAGE GADTs, ForeignFunctionInterface #-}
+-- | This module provides functions for efficient block copies of primitive arrays
+-- (i.e. one dimensional, in row-major order in contiguous memory) to Accelerate Arrays.
+--
+-- You should only use this module if you really know what you are doing.
+-- Potential pitfalls include:
+--
+--   * copying from memory your program doesn't have access to (e.g. it may be unallocated or not enough memory is
+--     allocated)
+--
+--   * memory alignment errors
+--
 module Data.Array.Accelerate.Array.BlockCopy (
   -- * Types
-  BlockCopyFun, BlockCopyFuns,
+  BlockCopyFun, BlockCopyFuns, BlockPtrs,
   -- * Functions
-  blockCopyToArray, blockCopyToArrayWithFunctions
+  blockCopyToArray, blockCopyFromArray, blockCopyToArrayWithFunctions, blockCopyFromArrayWithFunctions
 ) where
 
 -- standard libraries
@@ -16,12 +27,23 @@ import Data.Array.Base (bOOL_SCALE, wORD_SCALE, fLOAT_SCALE, dOUBLE_SCALE)
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar
 
+
+
 -- | Functions of this type are passed as arguments to 'blockCopyToArrayWithFunctions'.
 --   A function of this type should copy a number of bytes (equal to the value of the parameter
---   of type 'Int') to the destination memory pointed to by @Ptr ()@.
+--   of type 'Int') to the destination memory pointed to by @Ptr e@.
 type BlockCopyFun e = Ptr e -> Int -> IO ()
 
------
+-- | Represents a collection of "block copy functions" (see 'BlockCopyFun'). The
+--   structure of the collection of 'BlockCopyFun's depends on the element type @e@.
+--
+-- e.g.
+--
+-- If @e :: Float@
+-- then @BlockCopyFuns (EltRepr e) :: ((), Ptr Float -> Int -> IO ())@
+--
+-- If @e :: (Double, Float)@
+-- then @BlockCopyFuns (EltRepr e) :: (((), Ptr Double -> Int -> IO ()), Ptr Float -> Int -> IO ())@
 type family BlockCopyFuns e
 
 type instance BlockCopyFuns ()     = ()
@@ -42,6 +64,15 @@ type instance BlockCopyFuns Char   = BlockCopyFun Char
 type instance BlockCopyFuns (a,b)  = (BlockCopyFuns a, BlockCopyFuns b)
 -----
 
+-- | This family of data types represents a collection of pointers that are the source
+--   addresses for a block copy. The structure of the collection of pointers depends on
+--   the element type @e@.
+--
+--  e.g.
+--
+--  If @e :: Int@,            then @BlockPtrs (EltRepr e) :: ((), Ptr Int)@
+--
+--  If @e :: (Double, Float)@ then @BlockPtrs (EltRepr e) :: (((), Ptr Double), Ptr Float)@
 type family BlockPtrs e
 
 type instance BlockPtrs ()     = ()
@@ -62,13 +93,9 @@ type instance BlockPtrs Char   = Ptr Char
 type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
 -----
 
--- | This function is used to block copy regions of memory into freshly allocated
---   Accelerate arrays. The type of elements (@e@) in the output Accelerate array determines
---   the structure of the collection of pointers that will be required as the second argument
---   to this function.
---
---   e.g. If @e :: Int@,            then @BlockPtrs (EltRepr e) :: ((), Ptr Int)@
---        If @e :: (Double, Float)@ then @BlockPtrs (EltRepr e) :: (((), Ptr Double), Ptr Float)@
+-- | Block copy regions of memory into freshly allocated Accelerate arrays. The type of elements
+--   (@e@) in the output Accelerate array determines the structure of the collection of pointers
+--   that will be required as the second argument to this function. See 'BlockPtrs'
 --
 --   Each one of these pointers points to a block of memory that is the source of data
 --   for the Accelerate array (unlike function 'blockCopyToArrayWithFunctions' where one passes
@@ -77,37 +104,78 @@ type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
 blockCopyToArray :: (Shape sh, Elt e) => sh -> BlockPtrs (EltRepr e) -> IO (Array sh e)
 blockCopyToArray sh blkPtrs = do
   let arr = uninitNewArray sh
-      copier = fst $ blockCopyToArrayGen arr
+      copier = let (f,_,_) = blockCopyFunGenerator arr in f
   copier blkPtrs
   return arr
 
-
--- | This function is used to populate a freshly allocated Accelerate array using a collection
---   of functions that have type 'BlockCopyFun'. The structure of this collection of functions
---   depends on the elemente type @e@. Each function (of type 'BlockCopyFun') copies data to a
---   destination address (pointed to by the argument of type @Ptr ()@).
+-- | Block copy from Accelerate array to pre-allocated regions of memory. The type of element of
+--   the input Accelerate array (@e@) determines the structure of the collection of pointers
+--   that will be required as the second argument to this function. See 'BlockPtrs'
 --
---   Unless there is a particularly pressing reason to use this function the 'blockCopyToArray'
---   function is probably sufficient as it uses an efficient low-level call to libc's @memcpy@ to
---   perform the copy.
+--   The memory associated with the pointers must have already been allocated.
+
+blockCopyFromArray :: (Shape sh, Elt e) => Array sh e -> BlockPtrs (EltRepr e) -> IO ()
+blockCopyFromArray arr blockPtrs = do
+   let copier = let (_,f,_) = blockCopyFunGenerator arr in f
+   copier blockPtrs
+   return ()
+
+
+-- | Copy values to a freshly allocated Accelerate array using a collection of
+--   functions that have type 'BlockCopyFun'. The argument of type @Ptr e@ in each of
+--   these functions refers to the address of the /destination/ block of memory in the
+--   Accelerate Array. The /source/ address is implicit. e.g. the 'BlockCopyFun' could
+--   be the result of a partial application to a @Ptr e@ pointing to the source block.
+--
+--   The structure of this collection of functions depends on the elemente type @e@. Each
+--   function (of type 'BlockCopyFun') copies data to a destination address (pointed to by
+--   the argument of type @Ptr ()@).
+--
+--   Unless there is a particularly pressing reason to use this function, the 'blockCopyToArray'
+--   function is sufficient as it uses an efficient low-level call to libc's
+--   @memcpy@ to perform the copy.
 --
 blockCopyToArrayWithFunctions :: (Shape sh, Elt e) => sh -> BlockCopyFuns (EltRepr e) -> IO (Array sh e)
 blockCopyToArrayWithFunctions sh blockCopyFuns = do
   let arr = uninitNewArray sh
-      copier = snd $ blockCopyToArrayGen arr
+      copier = let (_,_,f) = blockCopyFunGenerator arr in f
   copier blockCopyFuns
   return arr
 
+-- | Copy values from an Accelerate array using a collection of functions that have type
+--   'BlockCopyFun'. The argument of type @Ptr e@ in each of these functions refers to the
+--   address of the /source/ block of memory in the Accelerate Array. The /destination/
+--   address is implicit. e.g. the 'BlockCopyFun' could be the result of partially
+--   application to a @Ptr e@ pointing to the destination block.
+--
+--   The structure of this collection of functions depends on the elemente type @e@. Each
+--   function (of type 'BlockCopyFun') copies data to a destination address (pointed to
+--   by the argument of type @Ptr ()@).
+--
+--   Unless there is a particularly pressing reason to use this function, the 'blockCopyToArray'
+--   function is sufficient as it uses an efficient low-level call to libc's @memcpy@ to
+--   perform the copy.
+--
+blockCopyFromArrayWithFunctions :: (Shape sh, Elt e) => Array sh e -> BlockCopyFuns (EltRepr e) -> IO ()
+blockCopyFromArrayWithFunctions arr blockCopyFuns = do
+   let copier = let (_,_,f) = blockCopyFunGenerator arr in f
+   copier blockCopyFuns
+   return ()
 
-blockCopyToArrayGen :: Array sh e -> ( BlockPtrs (EltRepr e) -> IO ()
-                                     , BlockCopyFuns (EltRepr e) -> IO ())
-blockCopyToArrayGen array@(Array _ arrayData) = aux arrayElt arrayData
+blockCopyFunGenerator :: Array sh e -> ( BlockPtrs (EltRepr e) -> IO ()
+                                       , BlockPtrs (EltRepr e) -> IO ()
+                                       , BlockCopyFuns (EltRepr e) -> IO ())
+blockCopyFunGenerator array@(Array _ arrayData) = aux arrayElt arrayData
   where
    sizeA = size (shape array)
-   base :: Ptr b -> Int -> (Ptr a -> IO (), (Ptr b -> Int -> IO ()) -> IO ())
-   base dst byteSize = (\src -> blockCopy src dst byteSize, \f -> f dst byteSize)
-   aux :: ArrayEltR e -> ArrayData e -> (BlockPtrs e -> IO (), BlockCopyFuns e -> IO ())
-   aux ArrayEltRunit _ = let f = \() -> return () in (f,f)
+   base :: Ptr b -> Int -> (Ptr a -> IO (), Ptr a -> IO (), (Ptr b -> Int -> IO ()) -> IO ())
+
+   base accArrayPtr byteSize =
+       (\blockPtr -> blockCopy blockPtr accArrayPtr byteSize, -- copy from BlockPtrs to Array
+        \blockPtr -> blockCopy accArrayPtr blockPtr byteSize, -- copy from Array to blockPtrs
+        \blockCopyFun -> blockCopyFun accArrayPtr byteSize)
+   aux :: ArrayEltR e -> ArrayData e -> (BlockPtrs e -> IO (), BlockPtrs e -> IO (), BlockCopyFuns e -> IO ())
+   aux ArrayEltRunit _ = let f = \() -> return () in (f,f,f)
    aux ArrayEltRint    ad = base (ptrsOfArrayData ad) (box wORD_SCALE sizeA)
    aux ArrayEltRint8   ad = base (ptrsOfArrayData ad) sizeA
    aux ArrayEltRint16  ad = base (ptrsOfArrayData ad) (sizeA * 2)
@@ -122,11 +190,12 @@ blockCopyToArrayGen array@(Array _ arrayData) = aux arrayElt arrayData
    aux ArrayEltRdouble ad = base (ptrsOfArrayData ad) (box dOUBLE_SCALE sizeA)
    aux ArrayEltRbool   ad = base (ptrsOfArrayData ad) (box bOOL_SCALE sizeA)
    aux ArrayEltRchar   _ = error "not defined yet"-- base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
-   aux (ArrayEltRpair a b) (AD_Pair ad1 ad2) = (fromC, toH)
+   aux (ArrayEltRpair a b) (AD_Pair ad1 ad2) = (fromC, toC, toH)
      where
-       (fromC1, toH1) = aux a ad1
-       (fromC2, toH2) = aux b ad2
+       (fromC1, toC1, toH1) = aux a ad1
+       (fromC2, toC2, toH2) = aux b ad2
        toH (funs1, funs2) = toH1 funs1 >> toH2 funs2
+       toC (ptrA, ptrB)   = toC1 ptrA >> toC2 ptrB
        fromC (ptrA, ptrB) = fromC1 ptrA >> fromC2 ptrB
 
 blockCopy :: Ptr a -> Ptr b -> Int -> IO ()
@@ -142,10 +211,8 @@ uninitNewArray sh = adata `seq` Array (fromElt sh) adata
                    return (arr, undefined)
 
 -- Foreign imports
-
 foreign import ccall memcpy :: Ptr a -> Ptr b -> CInt -> IO ()
 
 -- Helpers
-
 box :: (Int# -> Int#) -> (Int -> Int)
 box f (I# x) = I# (f x)
