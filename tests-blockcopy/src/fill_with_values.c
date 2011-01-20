@@ -13,7 +13,7 @@ double *ten_to_one() {
   double *p = malloc(sizeof(int) * 10);
   int i;
   for (i=0; i< 10; i++) {
-    p[i] = (double) 11 - i;
+    p[i] = (double) 10 - i;
   }
   return p;
 }
