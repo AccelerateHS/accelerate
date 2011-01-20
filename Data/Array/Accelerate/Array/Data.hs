@@ -111,7 +111,6 @@ data ArrayEltR a where
   ArrayEltRchar   :: ArrayEltR Char
   ArrayEltRpair   :: (ArrayElt a, ArrayElt b) => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
 
-
 -- Array operations
 -- ----------------
 

@@ -19,25 +19,26 @@ import Data.Array.Accelerate.Array.Sugar
 -- | Functions of this type are passed as arguments to 'blockCopyToArrayWithFunctions'.
 --   A function of this type should copy a number of bytes (equal to the value of the parameter
 --   of type 'Int') to the destination memory pointed to by @Ptr ()@.
-type BlockCopyFun = Ptr () -> Int -> IO ()
+type BlockCopyFun e = Ptr e -> Int -> IO ()
+
 -----
 type family BlockCopyFuns e
 
 type instance BlockCopyFuns ()     = ()
-type instance BlockCopyFuns Int    = BlockCopyFun
-type instance BlockCopyFuns Int8   = BlockCopyFun
-type instance BlockCopyFuns Int16  = BlockCopyFun
-type instance BlockCopyFuns Int32  = BlockCopyFun
-type instance BlockCopyFuns Int64  = BlockCopyFun
-type instance BlockCopyFuns Word   = BlockCopyFun
-type instance BlockCopyFuns Word8  = BlockCopyFun
-type instance BlockCopyFuns Word16 = BlockCopyFun
-type instance BlockCopyFuns Word32 = BlockCopyFun
-type instance BlockCopyFuns Word64 = BlockCopyFun
-type instance BlockCopyFuns Float  = BlockCopyFun
-type instance BlockCopyFuns Double = BlockCopyFun
-type instance BlockCopyFuns Bool   = BlockCopyFun
-type instance BlockCopyFuns Char   = BlockCopyFun
+type instance BlockCopyFuns Int    = BlockCopyFun Int
+type instance BlockCopyFuns Int8   = BlockCopyFun Int8
+type instance BlockCopyFuns Int16  = BlockCopyFun Int16
+type instance BlockCopyFuns Int32  = BlockCopyFun Int32
+type instance BlockCopyFuns Int64  = BlockCopyFun Int64
+type instance BlockCopyFuns Word   = BlockCopyFun Word
+type instance BlockCopyFuns Word8  = BlockCopyFun Word8
+type instance BlockCopyFuns Word16 = BlockCopyFun Word16
+type instance BlockCopyFuns Word32 = BlockCopyFun Word32
+type instance BlockCopyFuns Word64 = BlockCopyFun Word64
+type instance BlockCopyFuns Float  = BlockCopyFun Float
+type instance BlockCopyFuns Double = BlockCopyFun Double
+type instance BlockCopyFuns Bool   = BlockCopyFun Word8 -- Packed a bit vector
+type instance BlockCopyFuns Char   = BlockCopyFun Char
 type instance BlockCopyFuns (a,b)  = (BlockCopyFuns a, BlockCopyFuns b)
 -----
 
@@ -56,7 +57,7 @@ type instance BlockPtrs Word32 = Ptr Word32
 type instance BlockPtrs Word64 = Ptr Word64
 type instance BlockPtrs Float  = Ptr Float
 type instance BlockPtrs Double = Ptr Double
-type instance BlockPtrs Bool   = Ptr Bool
+type instance BlockPtrs Bool   = Ptr Word8 -- Packed as a bit vector
 type instance BlockPtrs Char   = Ptr Char
 type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
 -----
@@ -103,24 +104,23 @@ blockCopyToArrayGen :: Array sh e -> ( BlockPtrs (EltRepr e) -> IO ()
 blockCopyToArrayGen array@(Array _ arrayData) = aux arrayElt arrayData
   where
    sizeA = size (shape array)
-   base :: Ptr () -> Int -> (Ptr a -> IO (), (Ptr () -> Int -> IO ()) -> IO ())
-   base dst byteSize = (\src -> blockCopy (castPtr src) dst byteSize,
-                        \f -> f dst byteSize)
+   base :: Ptr b -> Int -> (Ptr a -> IO (), (Ptr b -> Int -> IO ()) -> IO ())
+   base dst byteSize = (\src -> blockCopy src dst byteSize, \f -> f dst byteSize)
    aux :: ArrayEltR e -> ArrayData e -> (BlockPtrs e -> IO (), BlockCopyFuns e -> IO ())
    aux ArrayEltRunit _ = let f = \() -> return () in (f,f)
-   aux ArrayEltRint    ad = base (castPtr $ ptrsOfArrayData ad) (box wORD_SCALE sizeA)
-   aux ArrayEltRint8   ad = base (castPtr $ ptrsOfArrayData ad) sizeA
-   aux ArrayEltRint16  ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 2)
-   aux ArrayEltRint32  ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
-   aux ArrayEltRint64  ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 8)
-   aux ArrayEltRword   ad = base (castPtr $ ptrsOfArrayData ad) (box wORD_SCALE sizeA)
-   aux ArrayEltRword8  ad = base (castPtr $ ptrsOfArrayData ad) sizeA
-   aux ArrayEltRword16 ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 2)
-   aux ArrayEltRword32 ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
-   aux ArrayEltRword64 ad = base (castPtr $ ptrsOfArrayData ad) (sizeA * 8)
-   aux ArrayEltRfloat  ad = base (castPtr $ ptrsOfArrayData ad) (box fLOAT_SCALE sizeA)
-   aux ArrayEltRdouble ad = base (castPtr $ ptrsOfArrayData ad) (box dOUBLE_SCALE sizeA)
-   aux ArrayEltRbool   ad = base (castPtr $ ptrsOfArrayData ad) (box bOOL_SCALE sizeA)
+   aux ArrayEltRint    ad = base (ptrsOfArrayData ad) (box wORD_SCALE sizeA)
+   aux ArrayEltRint8   ad = base (ptrsOfArrayData ad) sizeA
+   aux ArrayEltRint16  ad = base (ptrsOfArrayData ad) (sizeA * 2)
+   aux ArrayEltRint32  ad = base (ptrsOfArrayData ad) (sizeA * 4)
+   aux ArrayEltRint64  ad = base (ptrsOfArrayData ad) (sizeA * 8)
+   aux ArrayEltRword   ad = base (ptrsOfArrayData ad) (box wORD_SCALE sizeA)
+   aux ArrayEltRword8  ad = base (ptrsOfArrayData ad) sizeA
+   aux ArrayEltRword16 ad = base (ptrsOfArrayData ad) (sizeA * 2)
+   aux ArrayEltRword32 ad = base (ptrsOfArrayData ad) (sizeA * 4)
+   aux ArrayEltRword64 ad = base (ptrsOfArrayData ad) (sizeA * 8)
+   aux ArrayEltRfloat  ad = base (ptrsOfArrayData ad) (box fLOAT_SCALE sizeA)
+   aux ArrayEltRdouble ad = base (ptrsOfArrayData ad) (box dOUBLE_SCALE sizeA)
+   aux ArrayEltRbool   ad = base (ptrsOfArrayData ad) (box bOOL_SCALE sizeA)
    aux ArrayEltRchar   _ = error "not defined yet"-- base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
    aux (ArrayEltRpair a b) (AD_Pair ad1 ad2) = (fromC, toH)
      where
@@ -129,7 +129,7 @@ blockCopyToArrayGen array@(Array _ arrayData) = aux arrayElt arrayData
        toH (funs1, funs2) = toH1 funs1 >> toH2 funs2
        fromC (ptrA, ptrB) = fromC1 ptrA >> fromC2 ptrB
 
-blockCopy :: Ptr () -> Ptr () -> Int -> IO ()
+blockCopy :: Ptr a -> Ptr b -> Int -> IO ()
 blockCopy src dst byteSize = memcpy dst src (fromIntegral byteSize)
 
 -- | Creates a new, uninitialized Accelerate array.
@@ -143,7 +143,7 @@ uninitNewArray sh = adata `seq` Array (fromElt sh) adata
 
 -- Foreign imports
 
-foreign import ccall memcpy :: Ptr () -> Ptr () -> CInt -> IO ()
+foreign import ccall memcpy :: Ptr a -> Ptr b -> CInt -> IO ()
 
 -- Helpers
 
