@@ -215,7 +215,7 @@ executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
   return r
 
 executeOpenAcc acc@(Stencil _ _ a0) aenv = do
-  a@(Array sh0 in0) <- executeOpenAcc a0 aenv
+  a@(Array sh0 _in0) <- executeOpenAcc a0 aenv
   r@(Array _ out)   <- newArray (Sugar.toElt sh0)
   (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil1" acc aenv (size sh0)
   let fvs' = FreeArray a : fvs                                  -- create texture-ref for input array
@@ -225,8 +225,8 @@ executeOpenAcc acc@(Stencil _ _ a0) aenv = do
   return r
 
 executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
-  a1'@(Array sh1 in1) <- executeOpenAcc a1 aenv
-  a0'@(Array sh0 in0) <- executeOpenAcc a0 aenv
+  a1'@(Array sh1 _in1) <- executeOpenAcc a1 aenv
+  a0'@(Array sh0 _in0) <- executeOpenAcc a0 aenv
   r@(Array s out)     <- newArray (Sugar.toElt (sh1 `intersect` sh0))
   (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil2" acc aenv (size s)
   let fvs' = FreeArray a0' : FreeArray a1' : fvs                -- create texture-ref for input arrays
