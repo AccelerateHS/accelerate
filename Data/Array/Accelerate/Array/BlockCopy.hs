@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, ForeignFunctionInterface #-}
+{-# LANGUAGE GADTs, ForeignFunctionInterface, ScopedTypeVariables #-}
 -- | This module provides functions for efficient block copies of primitive arrays
 -- (i.e. one dimensional, in row-major order in contiguous memory) to Accelerate Arrays.
 --
@@ -14,7 +14,8 @@ module Data.Array.Accelerate.Array.BlockCopy (
   -- * Types
   BlockCopyFun, BlockCopyFuns, BlockPtrs,
   -- * Functions
-  blockCopyToArray, blockCopyFromArray, blockCopyToArrayWithFunctions, blockCopyFromArrayWithFunctions
+  blockCopyToArray, blockCopyFromArray, blockCopyToArrayWithFunctions, blockCopyFromArrayWithFunctions,
+  byteStringsToArray, arrayToByteStrings
 ) where
 
 -- standard libraries
@@ -22,12 +23,11 @@ import Foreign
 import Foreign.C
 import GHC.Base
 import Data.Array.Base (bOOL_SCALE, wORD_SCALE, fLOAT_SCALE, dOUBLE_SCALE)
+import Data.ByteString
 
 -- friends
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar
-
-
 
 -- | Functions of this type are passed as arguments to 'blockCopyToArrayWithFunctions'.
 --   A function of this type should copy a number of bytes (equal to the value of the parameter
@@ -62,9 +62,8 @@ type instance BlockCopyFuns Double = BlockCopyFun Double
 type instance BlockCopyFuns Bool   = BlockCopyFun Word8 -- Packed a bit vector
 type instance BlockCopyFuns Char   = BlockCopyFun Char
 type instance BlockCopyFuns (a,b)  = (BlockCopyFuns a, BlockCopyFuns b)
------
 
--- | This family of data types represents a collection of pointers that are the source
+-- | A family of types that represents a collection of pointers that are the source/destination
 --   addresses for a block copy. The structure of the collection of pointers depends on
 --   the element type @e@.
 --
@@ -91,9 +90,29 @@ type instance BlockPtrs Double = Ptr Double
 type instance BlockPtrs Bool   = Ptr Word8 -- Packed as a bit vector
 type instance BlockPtrs Char   = Ptr Char
 type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
------
 
--- | Block copy regions of memory into freshly allocated Accelerate arrays. The type of elements
+-- | A family of types that represents a collection of 'ByteString's. They are the source
+--   data for function 'byteStringsToArray' and the result data for 'arrayToByteStrings'
+type family ByteStrings e
+
+type instance ByteStrings ()     = ()
+type instance ByteStrings Int    = ByteString
+type instance ByteStrings Int8   = ByteString
+type instance ByteStrings Int16  = ByteString
+type instance ByteStrings Int32  = ByteString
+type instance ByteStrings Int64  = ByteString
+type instance ByteStrings Word   = ByteString
+type instance ByteStrings Word8  = ByteString
+type instance ByteStrings Word16 = ByteString
+type instance ByteStrings Word32 = ByteString
+type instance ByteStrings Word64 = ByteString
+type instance ByteStrings Float  = ByteString
+type instance ByteStrings Double = ByteString
+type instance ByteStrings Bool   = ByteString
+type instance ByteStrings Char   = ByteString
+type instance ByteStrings (a,b)  = (ByteStrings a, ByteStrings b)
+
+-- | Block copy regions of memory into a freshly allocated Accelerate array. The type of elements
 --   (@e@) in the output Accelerate array determines the structure of the collection of pointers
 --   that will be required as the second argument to this function. See 'BlockPtrs'
 --
@@ -104,8 +123,21 @@ type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
 blockCopyToArray :: (Shape sh, Elt e) => sh -> BlockPtrs (EltRepr e) -> IO (Array sh e)
 blockCopyToArray sh blkPtrs = do
   let arr = uninitNewArray sh
-      copier = let (f,_,_) = blockCopyFunGenerator arr in f
+      copier = let ((f,_),_,_) = blockCopyFunGenerator arr in f
   copier blkPtrs
+  return arr
+
+-- | Block copies bytes from a collection of 'ByteString's to freshly allocated Accelerate array.
+--
+--   The type of elements (@e@) in the output Accelerate array determines the structure of the
+--   collection of 'ByteString's that will be required as the second argument to this function.
+--   See 'ByteStrings'
+--
+byteStringsToArray :: (Shape sh, Elt e) => sh -> ByteStrings (EltRepr e) -> IO (Array sh e)
+byteStringsToArray sh byteStrings = do
+  let arr = uninitNewArray sh
+      copier = let ((_,f),_,_) = blockCopyFunGenerator arr in f
+  copier byteStrings
   return arr
 
 -- | Block copy from Accelerate array to pre-allocated regions of memory. The type of element of
@@ -113,13 +145,23 @@ blockCopyToArray sh blkPtrs = do
 --   that will be required as the second argument to this function. See 'BlockPtrs'
 --
 --   The memory associated with the pointers must have already been allocated.
-
+--
 blockCopyFromArray :: (Shape sh, Elt e) => Array sh e -> BlockPtrs (EltRepr e) -> IO ()
 blockCopyFromArray arr blockPtrs = do
-   let copier = let (_,f,_) = blockCopyFunGenerator arr in f
-   copier blockPtrs
-   return ()
+  let copier = let (_,(f,_),_) = blockCopyFunGenerator arr in f
+  copier blockPtrs
+  return ()
 
+-- | Block copy from an Accelerate array to a collection of freshly allocated 'ByteString's.
+--
+--   The type of elements (@e@) in the input Accelerate array determines the structure of the
+--   collection of 'ByteString's that will be output.
+--   See 'ByteStrings'
+--
+arrayToByteStrings :: (Shape sh, Elt e) => Array sh e -> IO (ByteStrings (EltRepr e))
+arrayToByteStrings arr = do
+  let copier = let (_,(_,f),_) = blockCopyFunGenerator arr in f
+  copier
 
 -- | Copy values to a freshly allocated Accelerate array using a collection of
 --   functions that have type 'BlockCopyFun'. The argument of type @Ptr e@ in each of
@@ -162,20 +204,37 @@ blockCopyFromArrayWithFunctions arr blockCopyFuns = do
    copier blockCopyFuns
    return ()
 
-blockCopyFunGenerator :: Array sh e -> ( BlockPtrs (EltRepr e) -> IO ()
-                                       , BlockPtrs (EltRepr e) -> IO ()
-                                       , BlockCopyFuns (EltRepr e) -> IO ())
+type GenFuns e = (( BlockPtrs e -> IO ()
+                  , ByteStrings e -> IO ())
+                 ,( BlockPtrs e -> IO ()
+                  , IO (ByteStrings e))
+                 , BlockCopyFuns e -> IO ())
+
+base :: forall a b. Ptr b -> Int -> (( Ptr a -> IO (), ByteString -> IO ())
+                                    ,( Ptr a -> IO (), IO ByteString)
+                                    ,(Ptr b -> Int -> IO ()) -> IO ())
+base accArrayPtr byteSize =
+   ((blockPtrToArray, byteStringToArray)
+   ,(arrayToBlockPtr, arrayToByteString)
+   , blockCopyFunToOrFromArray)
+  where
+    blockPtrToArray :: Ptr a -> IO ()
+    blockPtrToArray blockPtr = blockCopy blockPtr accArrayPtr byteSize
+    arrayToBlockPtr :: Ptr a -> IO ()
+    arrayToBlockPtr blockPtr = blockCopy accArrayPtr blockPtr byteSize
+    blockCopyFunToOrFromArray :: (Ptr b -> Int -> IO ()) -> IO ()
+    blockCopyFunToOrFromArray blockCopyFun = blockCopyFun accArrayPtr byteSize
+    byteStringToArray :: ByteString -> IO ()
+    byteStringToArray bs = useAsCString bs (\cStr -> blockPtrToArray (castPtr cStr))
+    arrayToByteString :: IO ByteString
+    arrayToByteString = packCStringLen (castPtr accArrayPtr, byteSize)
+
+blockCopyFunGenerator :: Array sh e -> GenFuns (EltRepr e)
 blockCopyFunGenerator array@(Array _ arrayData) = aux arrayElt arrayData
   where
    sizeA = size (shape array)
-   base :: Ptr b -> Int -> (Ptr a -> IO (), Ptr a -> IO (), (Ptr b -> Int -> IO ()) -> IO ())
-
-   base accArrayPtr byteSize =
-       (\blockPtr -> blockCopy blockPtr accArrayPtr byteSize, -- copy from BlockPtrs to Array
-        \blockPtr -> blockCopy accArrayPtr blockPtr byteSize, -- copy from Array to blockPtrs
-        \blockCopyFun -> blockCopyFun accArrayPtr byteSize)
-   aux :: ArrayEltR e -> ArrayData e -> (BlockPtrs e -> IO (), BlockPtrs e -> IO (), BlockCopyFuns e -> IO ())
-   aux ArrayEltRunit _ = let f = \() -> return () in (f,f,f)
+   aux :: ArrayEltR e -> ArrayData e -> GenFuns e
+   aux ArrayEltRunit _ = let f = \() -> return () in ((f,f),(f,return ()),f)
    aux ArrayEltRint    ad = base (ptrsOfArrayData ad) (box wORD_SCALE sizeA)
    aux ArrayEltRint8   ad = base (ptrsOfArrayData ad) sizeA
    aux ArrayEltRint16  ad = base (ptrsOfArrayData ad) (sizeA * 2)
@@ -189,14 +248,16 @@ blockCopyFunGenerator array@(Array _ arrayData) = aux arrayElt arrayData
    aux ArrayEltRfloat  ad = base (ptrsOfArrayData ad) (box fLOAT_SCALE sizeA)
    aux ArrayEltRdouble ad = base (ptrsOfArrayData ad) (box dOUBLE_SCALE sizeA)
    aux ArrayEltRbool   ad = base (ptrsOfArrayData ad) (box bOOL_SCALE sizeA)
-   aux ArrayEltRchar   _ = error "not defined yet"-- base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
-   aux (ArrayEltRpair a b) (AD_Pair ad1 ad2) = (fromC, toC, toH)
+   aux ArrayEltRchar   _ = error "not defined yet" -- base (castPtr $ ptrsOfArrayData ad) (sizeA * 4)
+   aux (ArrayEltRpair a b) (AD_Pair ad1 ad2) = ((bpFromC, bsFromC), (bpToC, bsToC), toH)
      where
-       (fromC1, toC1, toH1) = aux a ad1
-       (fromC2, toC2, toH2) = aux b ad2
-       toH (funs1, funs2) = toH1 funs1 >> toH2 funs2
-       toC (ptrA, ptrB)   = toC1 ptrA >> toC2 ptrB
-       fromC (ptrA, ptrB) = fromC1 ptrA >> fromC2 ptrB
+       ((bpFromC1, bsFromC1), (bpToC1, bsToC1), toH1) = aux a ad1
+       ((bpFromC2, bsFromC2), (bpToC2, bsToC2), toH2) = aux b ad2
+       toH (funs1, funs2)   = toH1 funs1    >> toH2 funs2
+       bpToC (ptrA, ptrB)   = bpToC1 ptrA   >> bpToC2 ptrB
+       bsToC                = do { bsA <- bsToC1; bsB <- bsToC2; return (bsA, bsB) }
+       bpFromC (ptrA, ptrB) = bpFromC1 ptrA >> bpFromC2 ptrB
+       bsFromC (bsA, bsB)   = bsFromC1 bsA  >> bsFromC2 bsB
 
 blockCopy :: Ptr a -> Ptr b -> Int -> IO ()
 blockCopy src dst byteSize = memcpy dst src (fromIntegral byteSize)
