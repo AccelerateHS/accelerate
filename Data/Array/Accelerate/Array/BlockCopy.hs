@@ -1,5 +1,14 @@
 {-# LANGUAGE GADTs, ForeignFunctionInterface, ScopedTypeVariables #-}
--- | This module provides functions for efficient block copies of primitive arrays
+-- |
+-- Module      : Data.Array.Accelerate.Array.BlockCopy
+-- Copyright   : [2008..2010] Sean Seefried
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- This module provides functions for efficient block copies of primitive arrays
 -- (i.e. one dimensional, in row-major order in contiguous memory) to Accelerate Arrays.
 --
 -- You should only use this module if you really know what you are doing.
