@@ -17,7 +17,7 @@ import qualified Data.Array.Accelerate as A
 main = defaultMain tests
 
 tests = [ testGroup "Block copies" [
-           testCase "test1" test1, testCase "test2" test2, testCase "test3" test3 ] ]
+           testCase "test1" test1, testCase "test2" test2] ]
 
 
 assertEqualWithin :: (Ord a, Fractional a) => String -> a -> a -> a -> Assertion
