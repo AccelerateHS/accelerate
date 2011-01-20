@@ -97,8 +97,8 @@ Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
-Flag html-pp
-  Description:          Enable HTML pretty printing.
+Flag more-pp
+  Description:          Enable HTML and Graphviz pretty printing.
   Default:              False
 
 Flag pcache
@@ -155,8 +155,11 @@ Library
   if flag(test-suite)
     Build-depends:      QuickCheck == 2.*
 
-  if flag(html-pp)
-    Build-depends:      blaze-html >= 0.3.0.2,
+  if flag(more-pp)
+    Build-depends:      monads-fd,
+                        bytestring,
+                        directory,
+                        blaze-html >= 0.3.0.2,
                         text >= 0.10.0.0
 
   Exposed-modules:      Data.Array.Accelerate
@@ -189,15 +192,15 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Pretty.Print
-                        Data.Array.Accelerate.Pretty.Graphviz
                         Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
                         Paths_accelerate
 
-  If flag(html-pp)
+  If flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
+                        Data.Array.Accelerate.Pretty.Graphviz
 
 
 --  If flag(llvm)
