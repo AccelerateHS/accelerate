@@ -155,6 +155,7 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
+                        Data.Array.Accelerate.Array.BlockCopy
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
 

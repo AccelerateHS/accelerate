@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Array.Data (
 
   -- * Array operations and representations
   ArrayElt(..), ArrayData, MutableArrayData, runArrayData,
+  ArrayEltR(..), GArrayData(..),
 
   -- * Array tuple operations
   fstArrayData, sndArrayData, pairArrayData
@@ -87,8 +88,28 @@ data instance GArrayData ba Char    = AD_Char    (ba Char)
 -- data instance GArrayData ba CChar   = AD_CChar   (ba CChar)
 -- data instance GArrayData ba CSChar  = AD_CSChar  (ba CSChar)
 -- data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
-data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a) 
+data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
+
+
+-- | GADT to reify the ArrayElt class
+data ArrayEltR a where
+  ArrayEltRunit   :: ArrayEltR ()
+  ArrayEltRint    :: ArrayEltR Int
+  ArrayEltRint8   :: ArrayEltR Int8
+  ArrayEltRint16  :: ArrayEltR Int16
+  ArrayEltRint32  :: ArrayEltR Int32
+  ArrayEltRint64  :: ArrayEltR Int64
+  ArrayEltRword   :: ArrayEltR Word
+  ArrayEltRword8  :: ArrayEltR Word8
+  ArrayEltRword16 :: ArrayEltR Word16
+  ArrayEltRword32 :: ArrayEltR Word32
+  ArrayEltRword64 :: ArrayEltR Word64
+  ArrayEltRfloat  :: ArrayEltR Float
+  ArrayEltRdouble :: ArrayEltR Double
+  ArrayEltRbool   :: ArrayEltR Bool
+  ArrayEltRchar   :: ArrayEltR Char
+  ArrayEltRpair   :: (ArrayElt a, ArrayElt b) => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
 
 
 -- Array operations
@@ -105,6 +126,8 @@ class ArrayElt e where
   writeArrayData         :: MutableArrayData s e -> Int -> e -> ST s ()
   unsafeFreezeArrayData  :: MutableArrayData s e -> ST s (ArrayData e)
   ptrsOfMutableArrayData :: MutableArrayData s e -> ST s (ArrayPtrs e)
+  --
+  arrayElt :: ArrayEltR e
 
 instance ArrayElt () where
   type ArrayPtrs () = ()
@@ -115,6 +138,7 @@ instance ArrayElt () where
   writeArrayData AD_Unit i () = i `seq` return ()
   unsafeFreezeArrayData AD_Unit = return AD_Unit
   ptrsOfMutableArrayData AD_Unit = return ()
+  arrayElt = ArrayEltRunit
 
 instance ArrayElt Int where
   type ArrayPtrs Int = Ptr Int
@@ -125,6 +149,7 @@ instance ArrayElt Int where
   writeArrayData (AD_Int ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int ba) = liftM AD_Int $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Int ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRint
 
 instance ArrayElt Int8 where
   type ArrayPtrs Int8 = Ptr Int8
@@ -135,6 +160,7 @@ instance ArrayElt Int8 where
   writeArrayData (AD_Int8 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int8 ba) = liftM AD_Int8 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Int8 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRint8
 
 instance ArrayElt Int16 where
   type ArrayPtrs Int16 = Ptr Int16
@@ -145,6 +171,7 @@ instance ArrayElt Int16 where
   writeArrayData (AD_Int16 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int16 ba) = liftM AD_Int16 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Int16 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRint16
 
 instance ArrayElt Int32 where
   type ArrayPtrs Int32 = Ptr Int32
@@ -155,6 +182,7 @@ instance ArrayElt Int32 where
   writeArrayData (AD_Int32 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int32 ba) = liftM AD_Int32 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Int32 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRint32
 
 instance ArrayElt Int64 where
   type ArrayPtrs Int64 = Ptr Int64
@@ -165,6 +193,7 @@ instance ArrayElt Int64 where
   writeArrayData (AD_Int64 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Int64 ba) = liftM AD_Int64 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Int64 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRint64
 
 instance ArrayElt Word where
   type ArrayPtrs Word = Ptr Word
@@ -175,6 +204,7 @@ instance ArrayElt Word where
   writeArrayData (AD_Word ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word ba) = liftM AD_Word $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Word ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRword
 
 instance ArrayElt Word8 where
   type ArrayPtrs Word8 = Ptr Word8
@@ -185,6 +215,7 @@ instance ArrayElt Word8 where
   writeArrayData (AD_Word8 ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Word8 ba) = liftM AD_Word8 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Word8 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRword8
 
 instance ArrayElt Word16 where
   type ArrayPtrs Word16 = Ptr Word16
@@ -193,9 +224,10 @@ instance ArrayElt Word16 where
   newArrayData size = liftM AD_Word16 $ unsafeNewArray_ size (*# 2#)
   readArrayData (AD_Word16 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word16 ba) i e = MArray.writeArray ba i e
-  unsafeFreezeArrayData (AD_Word16 ba) 
+  unsafeFreezeArrayData (AD_Word16 ba)
     = liftM AD_Word16 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Word16 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRword16
 
 instance ArrayElt Word32 where
   type ArrayPtrs Word32 = Ptr Word32
@@ -204,9 +236,10 @@ instance ArrayElt Word32 where
   newArrayData size = liftM AD_Word32 $ unsafeNewArray_ size (*# 4#)
   readArrayData (AD_Word32 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word32 ba) i e = MArray.writeArray ba i e
-  unsafeFreezeArrayData (AD_Word32 ba) 
+  unsafeFreezeArrayData (AD_Word32 ba)
     = liftM AD_Word32 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Word32 ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRword32
 
 instance ArrayElt Word64 where
   type ArrayPtrs Word64 = Ptr Word64
@@ -215,10 +248,11 @@ instance ArrayElt Word64 where
   newArrayData size = liftM AD_Word64 $ unsafeNewArray_ size (*# 8#)
   readArrayData (AD_Word64 ba) i = MArray.readArray ba i
   writeArrayData (AD_Word64 ba) i e = MArray.writeArray ba i e
-  unsafeFreezeArrayData (AD_Word64 ba) 
+  unsafeFreezeArrayData (AD_Word64 ba)
     = liftM AD_Word64 $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Word64 ba) = sTUArrayPtr ba
-  
+  arrayElt = ArrayEltRword64
+
 -- FIXME:
 -- CShort
 -- CUShort
@@ -238,6 +272,7 @@ instance ArrayElt Float where
   writeArrayData (AD_Float ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Float ba) = liftM AD_Float $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Float ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRfloat
 
 instance ArrayElt Double where
   type ArrayPtrs Double = Ptr Double
@@ -246,9 +281,10 @@ instance ArrayElt Double where
   newArrayData size = liftM AD_Double $ unsafeNewArray_ size dOUBLE_SCALE
   readArrayData (AD_Double ba) i = MArray.readArray ba i
   writeArrayData (AD_Double ba) i e = MArray.writeArray ba i e
-  unsafeFreezeArrayData (AD_Double ba) 
+  unsafeFreezeArrayData (AD_Double ba)
     = liftM AD_Double $ MArray.unsafeFreeze ba
   ptrsOfMutableArrayData (AD_Double ba) = sTUArrayPtr ba
+  arrayElt = ArrayEltRdouble
 
 -- FIXME:
 -- CFloat
@@ -269,6 +305,7 @@ instance ArrayElt Bool where
   unsafeFreezeArrayData (AD_Bool ba) = liftM AD_Bool $ MArray.unsafeFreeze ba
 --  ptrsOfMutableArrayData (AD_Bool ba) = sTUArrayPtr ba???
 --    see ptrsOfArrayData
+  arrayElt = ArrayEltRbool
 
 instance ArrayElt Char where
 --  type ArrayPtrs Char = ???unicode???
@@ -279,6 +316,7 @@ instance ArrayElt Char where
   writeArrayData (AD_Char ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Char ba) = liftM AD_Char $ MArray.unsafeFreeze ba
 --  ptrsOfMutableArrayData (AD_Char ba) = ???
+  arrayElt = ArrayEltRchar
 
 -- FIXME:
 -- CChar
@@ -289,12 +327,12 @@ instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b) = (ArrayPtrs a, ArrayPtrs b)
   indexArrayData (AD_Pair a b) i = (indexArrayData a i, indexArrayData b i)
   ptrsOfArrayData (AD_Pair a b) = (ptrsOfArrayData a, ptrsOfArrayData b)
-  newArrayData size 
-    = do 
+  newArrayData size
+    = do
         a <- newArrayData size
         b <- newArrayData size
         return $ AD_Pair a b
-  readArrayData (AD_Pair a b) i 
+  readArrayData (AD_Pair a b) i
     = do
         x <- readArrayData a i
         y <- readArrayData b i
@@ -303,16 +341,17 @@ instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
     = do
         writeArrayData a i x
         writeArrayData b i y
-  unsafeFreezeArrayData (AD_Pair a b) 
+  unsafeFreezeArrayData (AD_Pair a b)
     = do
         a' <- unsafeFreezeArrayData a
         b' <- unsafeFreezeArrayData b
         return $ AD_Pair a' b'
-  ptrsOfMutableArrayData (AD_Pair a b) 
+  ptrsOfMutableArrayData (AD_Pair a b)
     = do
         aptr <- ptrsOfMutableArrayData a
         bptr <- ptrsOfMutableArrayData b
         return (aptr, bptr)
+  arrayElt = ArrayEltRpair arrayElt arrayElt
 
 -- |Safe combination of creating and fast freezing of array data.
 --
@@ -322,7 +361,7 @@ runArrayData st = runST $ do
                     (mad, r) <- st
                     ad <- unsafeFreezeArrayData mad
                     return (ad, r)
-                    
+
 -- Array tuple operations
 -- ----------------------
 
