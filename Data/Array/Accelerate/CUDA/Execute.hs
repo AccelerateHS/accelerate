@@ -523,7 +523,7 @@ liftExp (Shape a)         aenv = do
 liftExp (IndexScalar a e) aenv = do
   vs               <- liftExp e aenv
   arr@(Array sh _) <- executeOpenAcc a aenv
-  return $ FreeArray arr : FreeShape sh : vs
+  return $ vs ++ [FreeArray arr, FreeShape sh]
 
 liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
