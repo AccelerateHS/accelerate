@@ -1,5 +1,5 @@
-{-# LANGUAGE CPP, GADTs, TypeSynonymInstances, TupleSections #-}
-{-# LANGUAGE ScopedTypeVariables, RankNTypes, TypeOperators #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, PatternGuards, ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections, TypeOperators, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -10,39 +10,35 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Execute (
+module Data.Array.Accelerate.CUDA.Execute (executeAcc, executeAfun1)
+  where
 
-  executeAcc, executeAfun1
-
-) where
-
-import Prelude hiding (sum)
-
+import Prelude                                                  hiding (sum)
 import Data.Int
 import Data.Word
 import Data.Maybe
 import Data.Typeable
 import Control.Monad
-import Control.Monad.Trans                              (liftIO)
-import Control.Applicative                              hiding (Const)
-import qualified Data.HashTable                         as Hash
+import Control.Monad.Trans
+import Control.Applicative                                      hiding (Const)
+import qualified Data.HashTable                                 as Hash
 
-import System.FilePath                                  hiding (combine)
+import System.FilePath                                          hiding (combine)
 import System.Posix.Process
-import System.Exit                                      (ExitCode(..))
-import System.Posix.Types                               (ProcessID)
-import System.IO.Unsafe
+import System.Exit                                              (ExitCode(..))
+import System.Posix.Types                                       (ProcessID)
 import System.Mem.StableName
+import System.IO.Unsafe
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Array.Representation       hiding (sliceIndex)
-import Data.Array.Accelerate.Array.Sugar                (Array(..),Segments,Scalar,Vector,Z(..),(:.)(..))
-import qualified Data.Array.Accelerate.Array.Data       as AD
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import qualified Data.Array.Accelerate.Interpreter      as I
+import Data.Array.Accelerate.Array.Representation               hiding (sliceIndex)
+import Data.Array.Accelerate.Array.Sugar (
+  Z(..), (:.)(..), Array(..), Scalar, Vector, Segments)
+import qualified Data.Array.Accelerate.Array.Data               as AD
+import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
+import qualified Data.Array.Accelerate.Interpreter              as I
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Array.Data
@@ -50,13 +46,13 @@ import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Analysis.Launch
 
 import Foreign.Ptr (Ptr)
-import qualified Foreign.CUDA.Driver                    as CUDA
+import qualified Foreign.CUDA.Driver                            as CUDA
 
 #include "accelerate.h"
 
 
--- Array evaluation
--- ----------------
+-- Array expression evaluation
+-- ---------------------------
 
 -- Computations are evaluated by traversing the AST bottom-up, and for each node
 -- distinguishing between three cases:
@@ -72,243 +68,322 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 --    skeleton are invoked
 --
 
-executeAcc :: Acc a -> CIO a
+-- Evaluate a closed array expression
+--
+executeAcc :: Arrays a => Acc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
 
+-- Evaluate an expression with free array variables
+--
+-- TLM: we do not have reference counting for the free array variables, so they
+--      remain active for the entire computation.
+--
 executeAfun1 :: Arrays b => Afun (a -> b) -> a -> CIO b
-executeAfun1 (Alam (Abody f)) a = do
-  copyArraysR a
-  acc <- withBoundArrays a $ executeOpenAcc f (Empty `Push` a)
-  withBoundArrays acc      $ freeArraysR a
-  return acc
-executeAfun1 _ _ = error "we can not get here"
+executeAfun1 (Alam (Abody f)) arrs = do
+  copyArraysR arrays arrs
+  executeOpenAcc f (Empty `Push` arrs) <* freeArraysR arrays arrs
+  where
+    copyArraysR :: ArraysR arrs -> arrs -> CIO ()
+    copyArraysR ArraysRunit         ()      = return ()
+    copyArraysR ArraysRarray        arr     = copy arr
+    copyArraysR (ArraysRpair r1 r0) (a1,a0) = copyArraysR r1 a1 >> copyArraysR r0 a0
+    --
+    copy :: (Sugar.Shape dim, Sugar.Elt e) => Array dim e -> CIO ()
+    copy (Array sh ad) =
+      let n = size sh
+          c = Nothing   -- no reference counting yet; need to keep active )=
+      in do mallocArray    ad c (max 1 n)
+            pokeArrayAsync ad n Nothing
+    --
+    freeArraysR :: ArraysR arrs -> arrs -> CIO ()
+    freeArraysR ArraysRunit         ()           = return ()
+    freeArraysR ArraysRarray        (Array _ ad) = unbindArray ad    >> freeArray ad
+    freeArraysR (ArraysRpair r1 r0) (a1,a0)      = freeArraysR r1 a1 >> freeArraysR r0 a0
+
+executeAfun1 _ _                = error "we can never get here"
 
 
-executeOpenAcc :: Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO a
+-- Evaluate an open array expression
+--
+executeOpenAcc :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> Val aenv -> CIO a
+
 ---- (1) Array introduction ----
 executeOpenAcc (Use a)    _    = return a
 
 ---- (2) Non-skeleton nodes ----
 executeOpenAcc (Avar ix)  aenv = return (prj ix aenv)
 
-executeOpenAcc (Let  x y) aenv = do
-  a0  <- executeOpenAcc x aenv
-  acc <- withBoundArrays a0 $ executeOpenAcc y (aenv `Push` a0)
-  withBoundArrays acc       $ freeArraysR a0
-  return acc
+executeOpenAcc (Let  a b) aenv = do
+  a0 <- executeOpenAcc a aenv
+  executeOpenAcc b (aenv `Push` a0)
 
-executeOpenAcc (Let2 x y) aenv = do
-  (a1,a0) <- executeOpenAcc x aenv
-  acc     <- withBoundArrays2 a1 a0 $ executeOpenAcc y (aenv `Push` a1 `Push` a0)
-  withBoundArrays acc               $ freeArraysR a1 >> freeArraysR a0
-  return acc
+executeOpenAcc (Let2 a b) aenv = do
+  (a1,a0) <- executeOpenAcc a aenv
+  executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
 executeOpenAcc (Reshape e a) aenv = do
-  ix            <- executeExp e aenv
-  (Array sh ad) <- executeOpenAcc a aenv
-  BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size ix == size sh)
-    $ return (Array (Sugar.fromElt ix) ad)
+  ix <- executeExp e aenv
+  a0 <- executeOpenAcc a aenv
+  reshapeOp ix a0
 
-executeOpenAcc (Unit e) aenv = do
-  v <- executeExp e aenv
-  let (ad, _) = AD.runArrayData $ do
-        arr  <- AD.newArrayData 1024    -- FIXME: small arrays moved by the GC
-        AD.writeArrayData arr 0 (Sugar.fromElt v)
-        return (arr, undefined)
-  mallocArray    ad 1
-  pokeArrayAsync ad 1 Nothing
-  return (Array (Sugar.fromElt ()) ad)
+executeOpenAcc acc@(Unit e) aenv =
+  unitOp acc =<< executeExp e aenv
 
 ---- (3) Array computations ----
-executeOpenAcc acc@(Generate e _) aenv = do
-  sh              <- executeExp e aenv
-  r@(Array s out) <- newArray sh
-  let n = size s
-  execute "generate" acc aenv n ((((),out),convertIx s),n)
-  return r
+executeOpenAcc acc@(Generate e _) aenv =
+  generateOp acc aenv =<< executeExp e aenv
 
-executeOpenAcc acc@(Map _ a0) aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array _ out) <- newArray (Sugar.toElt sh0)
-  let n = size sh0
-  execute "map" acc aenv n ((((),out),in0),n)
+executeOpenAcc acc@(Replicate sliceIndex e a) aenv = do
+  slix <- executeExp e aenv
+  a0   <- executeOpenAcc a aenv
+  replicateOp acc aenv sliceIndex slix a0
+
+executeOpenAcc acc@(Index sliceIndex a e) aenv = do
+  slix <- executeExp e aenv
+  a0   <- executeOpenAcc a aenv
+  indexOp acc aenv sliceIndex a0 slix
+
+executeOpenAcc acc@(Map _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  mapOp acc aenv a0
+
+executeOpenAcc acc@(ZipWith _ a b) aenv = do
+  a1 <- executeOpenAcc a aenv
+  a0 <- executeOpenAcc b aenv
+  zipWithOp acc aenv a1 a0
+
+executeOpenAcc acc@(Fold _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  foldOp acc aenv a0
+
+executeOpenAcc acc@(Fold1 _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  foldOp acc aenv a0
+
+executeOpenAcc acc@(FoldSeg _ _ a s) aenv = do
+  a0 <- executeOpenAcc a aenv
+  s0 <- executeOpenAcc s aenv
+  foldSegOp acc aenv a0 s0
+
+executeOpenAcc acc@(Fold1Seg _ a s) aenv = do
+  a0 <- executeOpenAcc a aenv
+  s0 <- executeOpenAcc s aenv
+  foldSegOp acc aenv a0 s0
+
+executeOpenAcc acc@(Scanl _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scanOp acc aenv a0
+
+executeOpenAcc acc@(Scanl' _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scan'Op acc aenv a0
+
+executeOpenAcc acc@(Scanl1 _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scan1Op acc aenv a0
+
+executeOpenAcc acc@(Scanr _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scanOp acc aenv a0
+
+executeOpenAcc acc@(Scanr' _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scan'Op acc aenv a0
+
+executeOpenAcc acc@(Scanr1 _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  scan1Op acc aenv a0
+
+executeOpenAcc acc@(Permute _ a _ b) aenv = do
+  a0 <- executeOpenAcc a aenv
+  a1 <- executeOpenAcc b aenv
+  permuteOp acc aenv a0 a1
+
+executeOpenAcc acc@(Backpermute e _ a) aenv = do
+  sh <- executeExp e aenv
+  a0 <- executeOpenAcc a aenv
+  backpermuteOp acc aenv sh a0
+
+executeOpenAcc acc@(Stencil _ _ a) aenv = do
+  a0 <- executeOpenAcc a aenv
+  stencilOp acc aenv a0
+
+executeOpenAcc acc@(Stencil2 _ _ a _ b) aenv = do
+  a1 <- executeOpenAcc a aenv
+  a0 <- executeOpenAcc b aenv
+  stencil2Op acc aenv a1 a0
+
+
+
+-- Implementation of primitive array operations
+-- --------------------------------------------
+
+reshapeOp :: Sugar.Shape dim
+          => dim
+          -> Array dim' e
+          -> CIO (Array dim e)
+reshapeOp newShape (Array oldShape adata)
+  = BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
+  $ return (Array (Sugar.fromElt newShape) adata)
+
+unitOp :: (Sugar.Elt e, Typeable aenv)
+       => OpenAcc aenv (Scalar e)
+       -> e
+       -> CIO (Scalar e)
+unitOp acc v = do
+  rc <- Just `fmap` getUseCount acc
+  let (!ad,_) = AD.runArrayData $ do
+        arr  <- AD.newArrayData 1024                    -- FIXME: small arrays moved by the GC
+        AD.writeArrayData arr 0 (Sugar.fromElt v)
+        return (arr, undefined)
+  mallocArray ad rc 1
+  pokeArrayAsync ad 1 Nothing
+  return $ Array () ad
+
+generateOp :: (Sugar.Shape dim, Sugar.Elt e, Typeable aenv)
+           => OpenAcc aenv (Array dim e)
+           -> Val aenv
+           -> dim
+           -> CIO (Array dim e)
+generateOp acc aenv sh = do
+  res@(Array s out) <- allocResult acc sh
+  execute "generate" acc aenv (Sugar.size sh) (((),out),convertIx s)
+  return res
+
+replicateOp :: (Sugar.Shape dim, Sugar.Elt slix, Typeable aenv)
+            => OpenAcc aenv (Array dim e)
+            -> Val aenv
+            -> SliceIndex (Sugar.EltRepr slix)
+                          (Sugar.EltRepr sl)
+                          co
+                          (Sugar.EltRepr dim)
+            -> slix
+            -> Array sl e
+            -> CIO (Array dim e)
+replicateOp acc aenv sliceIndex slix (Array sh0 in0) = do
+  res@(Array sh out) <- allocResult acc (Sugar.toElt $ extend sliceIndex (Sugar.fromElt slix) sh0)
+  execute "replicate" acc aenv (size sh) (((((),out),in0),convertIx sh0),convertIx sh)
   freeArray in0
-  return r
+  return res
+  where
+    extend :: SliceIndex slix sl co dim -> slix -> sl -> dim
+    extend (SliceNil)            ()       ()      = ()
+    extend (SliceAll sliceIdx)   (slx,()) (sl,sz) = (extend sliceIdx slx sl, sz)
+    extend (SliceFixed sliceIdx) (slx,sz) sl      = (extend sliceIdx slx sl, sz)
 
-executeOpenAcc acc@(ZipWith _ a1 a0) aenv = do
-  (Array sh1 in1) <- executeOpenAcc a1 aenv
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElt (sh1 `intersect` sh0))
-  execute "zipWith" acc aenv (size s) (((((((),out),in1),in0),convertIx s),convertIx sh1),convertIx sh0)
+indexOp :: (Sugar.Shape sl, Sugar.Elt slix, Typeable aenv)
+        => OpenAcc aenv (Array sl e)
+        -> Val aenv
+        -> SliceIndex (Sugar.EltRepr slix)
+                      (Sugar.EltRepr sl)
+                      co
+                      (Sugar.EltRepr dim)
+        -> Array dim e
+        -> slix
+        -> CIO (Array sl e)
+indexOp acc aenv sliceIndex (Array sh0 in0) slix = do
+  res@(Array sh out) <- allocResult acc (Sugar.toElt $ restrict sliceIndex (Sugar.fromElt slix) sh0)
+  execute "slice" acc aenv (size sh)
+    ((((((),out),in0),convertIx sh),convertSlix sliceIndex (Sugar.fromElt slix)),convertIx sh0)
+  freeArray in0
+  return res
+  where
+    restrict :: SliceIndex slix sl co dim -> slix -> dim -> sl
+    restrict (SliceNil)            ()       ()      = ()
+    restrict (SliceAll sliceIdx)   (slx,()) (sh,sz) = (restrict sliceIdx slx sh, sz)
+    restrict (SliceFixed sliceIdx) (slx,i)  (sh,sz)
+      = BOUNDS_CHECK(checkIndex) "slice" i sz $ restrict sliceIdx slx sh
+    --
+    convertSlix :: SliceIndex slix sl co dim -> slix -> [Int32]
+    convertSlix (SliceNil)            ()     = []
+    convertSlix (SliceAll   sliceIdx) (s,()) = convertSlix sliceIdx s
+    convertSlix (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSlix sliceIdx s
+
+
+mapOp :: (Sugar.Elt e, Typeable aenv)
+      => OpenAcc aenv (Array dim e)
+      -> Val aenv
+      -> Array dim e'
+      -> CIO (Array dim e)
+mapOp acc aenv (Array sh0 in0) = do
+  res@(Array _ out) <- allocResult acc (Sugar.toElt sh0)
+  execute "map" acc aenv (size sh0) ((((),out),in0),size sh0)
+  freeArray in0
+  return res
+
+zipWithOp :: (Sugar.Elt c, Typeable aenv)
+          => OpenAcc aenv (Array dim c)
+          -> Val aenv
+          -> Array dim a
+          -> Array dim b
+          -> CIO (Array dim c)
+zipWithOp acc aenv (Array sh1 in1) (Array sh0 in0) = do
+  res@(Array sh out) <- allocResult acc $ Sugar.toElt (sh1 `intersect` sh0)
+  execute "zipWith" acc aenv (size sh) (((((((),out),in1),in0),convertIx sh),convertIx sh1),convertIx sh0)
   freeArray in1
   freeArray in0
-  return r
+  return res
 
-executeOpenAcc acc@(Fold _ _ a0) aenv =
-  if accDim a0 == 1 then executeFoldAll acc a0 aenv
-                    else executeFold    acc a0 aenv
+foldOp :: (Sugar.Shape dim, Typeable aenv)
+       => OpenAcc aenv (Array dim e)
+       -> Val aenv
+       -> Array (dim:.Int) e
+       -> CIO (Array dim e)
+foldOp acc aenv (Array sh0 in0)
+  -- A recursive multi-block reduction when collapsing to a single value
+  --
+  | dim sh0 == 1 = do
+      cfg@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
+      rc                  <- getUseCount acc
+      res@(Array _ out)   <- newArray (bool rc 1 (g > 1)) (Sugar.toElt (fst sh0,g))
+      dispatch cfg ((((),out),in0),size sh0)
+      freeArray in0
+      if g > 1 then foldOp acc aenv res
+               else return (Array (fst sh0) out)
+  --
+  -- Reduction over the innermost dimension of an array (single pass operation)
+  --
+  | otherwise    = do
+      res@(Array sh out) <- allocResult acc $ Sugar.toElt (fst sh0)
+      execute "fold" acc aenv (size (fst sh0)) (((((),out),in0),convertIx sh),convertIx sh0)
+      freeArray in0
+      return res
 
-executeOpenAcc acc@(Fold1 _ a0) aenv =
-  if accDim a0 == 1 then executeFoldAll acc a0 aenv
-                    else executeFold    acc a0 aenv
-
-executeOpenAcc acc@(FoldSeg _ _ a0 s0) aenv = executeFoldSeg acc a0 s0 aenv
-executeOpenAcc acc@(Fold1Seg  _ a0 s0) aenv = executeFoldSeg acc a0 s0 aenv
-
-executeOpenAcc acc@(Scanr  _ _ a0) aenv = executeScan  acc a0 aenv
-executeOpenAcc acc@(Scanr' _ _ a0) aenv = executeScan' acc a0 aenv
-executeOpenAcc acc@(Scanr1 _ a0)   aenv = executeScan1 acc a0 aenv
-
-executeOpenAcc acc@(Scanl  _ _ a0) aenv = executeScan  acc a0 aenv
-executeOpenAcc acc@(Scanl' _ _ a0) aenv = executeScan' acc a0 aenv
-executeOpenAcc acc@(Scanl1 _ a0)   aenv = executeScan1 acc a0 aenv
-
-executeOpenAcc acc@(Permute _ a0 _ a1) aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv     -- default values
-  (Array sh1 in1) <- executeOpenAcc a1 aenv     -- permuted array
-  r@(Array _ out) <- newArray (Sugar.toElt sh0)
-  copyArray in0 out (size sh0)
-  execute "permute" acc aenv (size sh0) (((((),out),in1),convertIx sh0),convertIx sh1)
-  freeArray in0
-  freeArray in1
-  return r
-
-executeOpenAcc acc@(Backpermute e _ a0) aenv = do
-  dim'            <- executeExp e aenv
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray dim'
-  execute "backpermute" acc aenv (size s) (((((),out),in0),convertIx s),convertIx sh0)
-  freeArray in0
-  return r
-
-executeOpenAcc acc@(Replicate sliceIndex e a0) aenv = do
-  let extend :: SliceIndex slix sl co dim -> slix -> sl -> dim
-      extend (SliceNil)            ()       ()      = ()
-      extend (SliceAll sliceIdx)   (slx,()) (sl,sz) = (extend sliceIdx slx sl, sz)
-      extend (SliceFixed sliceIdx) (slx,sz) sl      = (extend sliceIdx slx sl, sz)
-
-  slix            <- executeExp e aenv
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElt $ extend sliceIndex (Sugar.fromElt slix) sh0)
-  execute "replicate" acc aenv (size s) (((((),out),in0),convertIx sh0),convertIx s)
-  freeArray in0
-  return r
-
-executeOpenAcc acc@(Index sliceIndex a0 e) aenv = do
-  let restrict :: SliceIndex slix sl co dim -> slix -> dim -> sl
-      restrict (SliceNil)            ()       ()      = ()
-      restrict (SliceAll sliceIdx)   (slx,()) (sh,sz) = (restrict sliceIdx slx sh, sz)
-      restrict (SliceFixed sliceIdx) (slx,i)  (sh,sz)
-        = BOUNDS_CHECK(checkIndex) "slice" i sz $ restrict sliceIdx slx sh
-
-      convertSlix :: SliceIndex slix sl co dim -> slix -> [Int32]
-      convertSlix (SliceNil)            ()     = []
-      convertSlix (SliceAll   sliceIdx) (s,()) = convertSlix sliceIdx s
-      convertSlix (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSlix sliceIdx s
-
-  slix            <- executeExp e aenv
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElt $ restrict sliceIndex (Sugar.fromElt slix) sh0)
-  execute "slice" acc aenv (size s)
-    ((((((),out),in0),convertIx s),convertSlix sliceIndex (Sugar.fromElt slix)),convertIx sh0)
-  freeArray in0
-  return r
-
-executeOpenAcc acc@(Stencil _ _ a0) aenv = do
-  a@(Array sh0 _in0) <- executeOpenAcc a0 aenv
-  r@(Array _ out)   <- newArray (Sugar.toElt sh0)
-  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil1" acc aenv (size sh0)
-  let fvs' = FreeArray a : fvs                                  -- create texture-ref for input array
-  bindLifted mdl fvs'
-  launch (t,g,m) fstencil (((),out),(convertIx sh0))
-  freeLifted fvs'
-  return r
-
-executeOpenAcc acc@(Stencil2 _ _ a1 _ a0) aenv = do
-  a1'@(Array sh1 _in1) <- executeOpenAcc a1 aenv
-  a0'@(Array sh0 _in0) <- executeOpenAcc a0 aenv
-  r@(Array s out)     <- newArray (Sugar.toElt (sh1 `intersect` sh0))
-  (fvs,mdl,fstencil,(t,g,m)) <- configure "stencil2" acc aenv (size s)
-  let fvs' = FreeArray a0' : FreeArray a1' : fvs                -- create texture-ref for input arrays
-  bindLifted mdl fvs'
-  launch (t,g,m) fstencil (((((),out),(convertIx s)),(convertIx sh0)),(convertIx sh1))
-  freeLifted fvs'
-  return r
-
-
--- Reduction
---
-executeFoldAll
-  :: (Typeable aenv, Sugar.Shape dim)
-  => OpenAcc aenv (Array dim e)
-  -> OpenAcc aenv (Array (dim:.Int) e)
-  -> Val aenv
-  -> CIO (Array dim e)
-executeFoldAll acc a0 aenv = do
-  (Array sh0 in0)   <- executeOpenAcc a0 aenv
-  c@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
-  r@(Array _ out)   <- newArray (Sugar.toElt (fst sh0,g))
-  dispatch c ((((),out),in0),size sh0)
-  freeArray in0
-  if g > 1 then executeFoldAll acc (Use r) aenv
-           else return (Array (fst sh0) out)
-
-executeFold
-  :: (Typeable aenv, Sugar.Shape dim)
-  => OpenAcc aenv (Array dim e)
-  -> OpenAcc aenv (Array (dim:.Int) e)
-  -> Val aenv
-  -> CIO (Array dim e)
-executeFold acc a0 aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  r@(Array s out) <- newArray (Sugar.toElt $ fst sh0)
-  execute "fold" acc aenv (size (fst sh0)) (((((),out),in0),convertIx s),convertIx sh0)
-  freeArray in0
-  return r
-
--- Segmented Reduction
---
-executeFoldSeg
-  :: (Typeable aenv, Sugar.Shape dim)
-  => OpenAcc aenv (Array (dim:.Int) e)
-  -> OpenAcc aenv (Array (dim:.Int) e)
-  -> OpenAcc aenv Segments
-  -> Val aenv
-  -> CIO (Array (dim:.Int) e)
-executeFoldSeg acc a0 s0 aenv = do
-  (Array sh0 in0) <- executeOpenAcc a0 aenv
-  (Array shs seg) <- executeOpenAcc s0 aenv >>= flip executeOpenAcc aenv . scan
-  r@(Array s out) <- newArray (Sugar.toElt (fst sh0,size shs - 1))
-  execute "foldSeg" acc aenv (size s) ((((((),out),in0),seg),convertIx s),convertIx sh0)
+foldSegOp :: (Sugar.Shape dim, Typeable aenv)
+          => OpenAcc aenv (Array (dim:.Int) e)
+          -> Val aenv
+          -> Array (dim:.Int) e
+          -> Segments
+          -> CIO (Array (dim:.Int) e)
+foldSegOp acc aenv (Array sh0 in0) seg' = do
+  (Array shs seg)    <- scanOp scan aenv seg'           -- transform segment descriptor into offset indices
+  res@(Array sh out) <- allocResult acc $ Sugar.toElt (fst sh0, size shs-1)
+  execute "foldSeg" acc aenv (size sh) ((((((),out),in0),seg),convertIx sh),convertIx sh0)
   freeArray in0
   freeArray seg
-  return r
+  return res
   where
-    scan = Scanl add (Const ((),0)) . Use
+    scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
     add  = Lam (Lam (Body (PrimAdd numType
                           `PrimApp`
-                          Tuple (NilTup `SnocTup` (Var (SuccIdx ZeroIdx))
-                                        `SnocTup` (Var ZeroIdx)))))
+                          Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
+                                        `SnocTup` Var ZeroIdx))))
 
-
--- Left and right scan variants
---
-executeScan
-  :: forall aenv e. Typeable aenv
-  => OpenAcc aenv (Vector e)
-  -> OpenAcc aenv (Vector e)
-  -> Val aenv
-  -> CIO (Vector e)
-executeScan acc a0 aenv = do
-  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+scanOp :: forall aenv e. (Sugar.Elt e, Typeable aenv)
+       => OpenAcc aenv (Vector e)
+       -> Val aenv
+       -> Vector e
+       -> CIO (Vector e)
+scanOp acc aenv (Array sh0 in0) = do
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (Z :. size sh0 + 1)
-  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
-  (Array _ sum)           <- newArray Z        :: CIO (Scalar e)
+  c                       <- getUseCount acc
+  res@(Array _ out)       <- newArray c (Z :. size sh0 + 1)
+  (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
+  (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
-
+  --
   bindLifted mdl fvs
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
@@ -317,24 +392,23 @@ executeScan acc a0 aenv = do
   freeArray in0
   freeArray bks
   freeArray sum
-  return a
+  return res
 
-executeScan'
-  :: forall aenv e. Typeable aenv
-  => OpenAcc aenv (Vector e, Scalar e)
-  -> OpenAcc aenv (Vector e)
-  -> Val aenv 
-  -> CIO (Vector e, Scalar e)
-executeScan' acc a0 aenv = do
-  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+scan'Op :: forall aenv e. (Sugar.Elt e, Typeable aenv)
+        => OpenAcc aenv (Vector e, Scalar e)
+        -> Val aenv 
+        -> Vector e
+        -> CIO (Vector e, Scalar e)
+scan'Op acc aenv (Array sh0 in0) = do
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElt sh0)
-  s@(Array _ sum)         <- newArray Z
-  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
+  (c1,c2)                 <- getUseCount2 acc
+  res1@(Array _ out)      <- newArray c1 (Sugar.toElt sh0)
+  res2@(Array _ sum)      <- newArray c2 Z
+  (Array _ bks)           <- newArray 1  (Z :. g) :: CIO (Vector e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
-
+  --
   bindLifted mdl fvs
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array   
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
@@ -342,24 +416,25 @@ executeScan' acc a0 aenv = do
   freeLifted fvs
   freeArray in0
   freeArray bks
-  return (a,s)
+  when (c1 == 0) $ freeArray out
+  when (c2 == 0) $ freeArray sum
+  return (res1,res2)
 
-executeScan1
-  :: forall aenv e. Typeable aenv
-  => OpenAcc aenv (Vector e)
-  -> OpenAcc aenv (Vector e)
-  -> Val aenv
-  -> CIO (Vector e)
-executeScan1 acc a0 aenv = do
-  (Array sh0 in0)         <- executeOpenAcc a0 aenv
+scan1Op :: forall aenv e. (Sugar.Elt e, Typeable aenv)
+        => OpenAcc aenv (Vector e)
+        -> Val aenv
+        -> Vector e
+        -> CIO (Vector e)
+scan1Op acc aenv (Array sh0 in0) = do
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
-  a@(Array _ out)         <- newArray (Sugar.toElt sh0)
-  (Array _ bks)           <- newArray (Z :. g) :: CIO (Vector e)
-  (Array _ sum)           <- newArray Z        :: CIO (Scalar e)
+  c                       <- getUseCount acc
+  res@(Array _ out)       <- newArray c (Sugar.toElt sh0)
+  (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
+  (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
-
+  --
   bindLifted mdl fvs
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
@@ -368,55 +443,70 @@ executeScan1 acc a0 aenv = do
   freeArray in0
   freeArray bks
   freeArray sum
-  return a
+  return res
+
+permuteOp :: (Sugar.Elt e, Typeable aenv)
+          => OpenAcc aenv (Array dim' e)
+          -> Val aenv
+          -> Array dim' e       -- default values
+          -> Array dim e        -- permuted array
+          -> CIO (Array dim' e)
+permuteOp acc aenv (Array sh0 in0) (Array sh1 in1) = do
+  res@(Array _ out) <- allocResult acc (Sugar.toElt sh0)
+  copyArray in0 out (size sh0)
+  execute "permute" acc aenv (size sh0) (((((),out),in1),convertIx sh0),convertIx sh1)
+  freeArray in0
+  freeArray in1
+  return res
+
+backpermuteOp :: (Sugar.Shape dim', Sugar.Elt e, Typeable aenv)
+              => OpenAcc aenv (Array dim' e)
+              -> Val aenv
+              -> dim'
+              -> Array dim e
+              -> CIO (Array dim' e)
+backpermuteOp acc aenv dim' (Array sh0 in0) = do
+  res@(Array sh out) <- allocResult acc dim'
+  execute "backpermute" acc aenv (size sh) (((((),out),in0),convertIx sh),convertIx sh0)
+  freeArray in0
+  return res
+
+stencilOp :: (Sugar.Elt e, Typeable aenv)
+          => OpenAcc aenv (Array dim e)
+          -> Val aenv
+          -> Array dim e'
+          -> CIO (Array dim e)
+stencilOp acc aenv ain0@(Array sh0 _) = do
+  res@(Array _ out)      <- allocResult acc (Sugar.toElt sh0)
+  (fvs,mdl,fstencil,cfg) <- configure "stencil1" acc aenv (size sh0)
+  let fvs' = FreeArray ain0 : fvs                       -- input arrays read via texture references
+  bindLifted mdl fvs'
+  launch cfg fstencil (((),out),convertIx sh0)
+  freeLifted fvs'
+  return res
+
+stencil2Op :: (Sugar.Elt e, Typeable aenv)
+           => OpenAcc aenv (Array dim e)
+           -> Val aenv
+           -> Array dim e1
+           -> Array dim e2
+           -> CIO (Array dim e)
+stencil2Op acc aenv ain1@(Array sh1 _) ain0@(Array sh0 _) = do
+  res@(Array sh out)     <- allocResult acc $ Sugar.toElt (sh1 `intersect` sh0)
+  (fvs,mdl,fstencil,cfg) <- configure "stencil2" acc aenv (size sh)
+  let fvs' = FreeArray ain0 : FreeArray ain1 : fvs      -- input arrays read via texture references
+  bindLifted mdl fvs'
+  launch cfg fstencil (((((),out),convertIx sh),convertIx sh0),convertIx sh1)
+  freeLifted fvs'
+  return res
 
 
--- Apply a function to a set of Arrays
+
+-- Expression evaluation
+-- ---------------------
+
+-- Evaluate an open expression
 --
-applyArraysR :: Arrays arrs => (forall dim e. Sugar.Elt e => Array dim e -> CIO ()) -> arrs -> CIO ()
-applyArraysR f arrs = applyR arrays arrs
-  where
-    applyR :: ArraysR arrs -> arrs -> CIO ()
-    applyR ArraysRunit         ()      = return ()
-    applyR ArraysRarray        arr     = f arr
-    applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 >> applyR r0 a0
-
--- Execute an action under which the given set of Arrays will not be released by
--- a call to 'freeArray'. This is used to ensure that let-bound arrays remain
--- active for the duration of the sub-computation.
---
--- TLM: would like proper reference counting, so the data can be released as
--- soon as no longer required, which may be significantly earlier than the end
--- of the let body.
---
-withBoundArrays :: Arrays arrs => arrs -> CIO a -> CIO a
-withBoundArrays arrs action =
-  applyArraysR (\(Array _ ad) -> bindArray ad)   arrs >> action >>= \r ->
-  applyArraysR (\(Array _ ad) -> unbindArray ad) arrs >> return r
-
-withBoundArrays2 :: (Arrays arrs1, Arrays arrs2) => arrs1 -> arrs2 -> CIO a -> CIO a
-withBoundArrays2 arrs1 arrs2 action =
-  withBoundArrays arrs1 $ withBoundArrays arrs2 action
-
-freeArraysR :: Arrays arrs => arrs -> CIO ()
-freeArraysR = applyArraysR (\(Array _ ad) -> freeArray ad)
-
-copyArraysR :: Arrays arrs => arrs -> CIO ()
-copyArraysR = applyArraysR $ \(Array sh ad) ->
-  let n = size sh
-  in do mallocArray    ad (max 1 n)
-        pokeArrayAsync ad n Nothing
-
-
--- Scalar expression evaluation
--- ----------------------------
-
--- Evaluate a closed scalar expression. Expressions are evaluated on the host,
--- but may require some interaction with the device, such as array indexing
---
-executeExp :: Typeable aenv => Exp aenv t -> Val aenv -> CIO t
-executeExp e = executeOpenExp e Empty
-
 executeOpenExp :: Typeable aenv => OpenExp env aenv t -> Val env -> Val aenv -> CIO t
 executeOpenExp (Var idx)         env _    = return . Sugar.toElt $ prj idx env
 executeOpenExp (Const c)         _   _    = return $ Sugar.toElt c
@@ -439,6 +529,7 @@ executeOpenExp (Shape a) _ aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   freeArray ad
   return (Sugar.toElt sh)
+
 executeOpenExp (Size a) _ aenv = do
   (Array sh ad) <- executeOpenAcc a aenv
   freeArray ad
@@ -450,11 +541,19 @@ executeOpenExp (Cond c t e) env aenv = do
        else executeOpenExp e env aenv
 
 
+-- Evaluate a closed expression
+--
+executeExp :: Typeable aenv => Exp aenv t -> Val aenv -> CIO t
+executeExp e = executeOpenExp e Empty
+
+
+-- Tuple evaluation
+--
+
 executeTuple :: Typeable aenv => Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> CIO t
 executeTuple NilTup          _   _    = return ()
 executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
                                             <*> executeOpenExp e env aenv
-
 
 -- Array references in scalar code
 -- -------------------------------
@@ -468,10 +567,23 @@ data Lifted where
   FreeShape :: Shape sh => sh          -> Lifted
   FreeArray ::             Array dim e -> Lifted
 
-liftAcc :: forall a aenv. Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
-liftAcc (Let _ _)            _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
-liftAcc (Let2 _ _)           _    = INTERNAL_ERROR(error) "liftAcc" "let-binding?"
-liftAcc (Avar _)             _    = return []
+
+liftAcc :: Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftAcc (Let  a b)           aenv = do
+  a0 <- executeOpenAcc a aenv
+  liftAcc b (aenv `Push` a0)
+
+liftAcc (Let2 a b)           aenv = do
+  (a1,a0) <- executeOpenAcc a aenv
+  liftAcc b (aenv `Push` a1 `Push` a0)
+
+liftAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        -- TLM ??
+  where
+    applyR :: ArraysR arrs -> arrs -> [Lifted]
+    applyR ArraysRunit         ()      = []
+    applyR ArraysRarray        arr     = [FreeArray arr]
+    applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
+
 liftAcc (Use _)              _    = return []
 liftAcc (Unit _)             _    = return []
 liftAcc (Reshape _ _)        _    = return []
@@ -524,6 +636,7 @@ liftExp (IndexScalar a e) aenv = do
   vs               <- liftExp e aenv
   arr@(Array sh _) <- executeOpenAcc a aenv
   return $ vs ++ [FreeArray arr, FreeShape sh]
+--  return $ FreeArray arr : FreeShape sh : vs
 
 liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
@@ -532,7 +645,7 @@ liftExp (Size a)          aenv = liftExp (Shape a) aenv
 -- names are simply derived "in order", c.f. code generation.
 --
 bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
-bindLifted mdl = foldM_ go (0,0)
+bindLifted mdl = foldM_ go (0,0) {-- . reverse --}
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
     go (n,m) (FreeShape sh)            = bindDim n sh    >>  return (n+1,m)
@@ -555,6 +668,7 @@ freeLifted = mapM_ go
   where go :: Lifted -> CIO ()
         go (FreeShape _)            = return ()
         go (FreeArray (Array _ ad)) = freeArray ad
+
 
 
 -- Kernel execution
@@ -609,17 +723,24 @@ instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
 -- launch parameters, and initiate the computation. This also handles lifting
 -- and binding of array references from scalar expressions.
 --
-execute
-  :: (Typeable a, Typeable aenv, Marshalable args)
-  => String -> OpenAcc aenv a -> Val aenv -> Int -> args -> CIO ()
+execute :: (Typeable a, Typeable aenv, Marshalable args)
+        => String
+        -> OpenAcc aenv a
+        -> Val aenv
+        -> Int
+        -> args
+        -> CIO ()
 execute name acc aenv n args =
   configure name acc aenv n >>= flip dispatch args
 
 -- Pre-execution configuration and kernel linking
 --
-configure
-  :: (Typeable a, Typeable aenv)
-  => String -> OpenAcc aenv a -> Val aenv -> Int -> CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+configure :: (Typeable a, Typeable aenv)
+          => String
+          -> OpenAcc aenv a
+          -> Val aenv
+          -> Int
+          -> CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
 configure name acc aenv n = do
   fvs <- liftAcc acc aenv
   mdl <- loadKernel acc
@@ -630,7 +751,10 @@ configure name acc aenv n = do
 
 -- Binding of lifted array expressions and kernel invocation
 --
-dispatch :: Marshalable args => ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer)) -> args -> CIO ()
+dispatch :: Marshalable args
+         => ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+         -> args
+         -> CIO ()
 dispatch (fvs, mdl, fun, cfg) args = do
   bindLifted mdl fvs
   launch cfg fun args
@@ -649,31 +773,25 @@ launch (cta,grid,smem) fn a = do
     CUDA.launch        fn (grid,1) Nothing
 
 
+
 -- Dynamic kernel loading
 -- ----------------------
 
--- Generate opaque stable name for an OpenAcc expression - used to key the compute table
---
-makeStableAcc :: Typeable a => a -> IO StableAccName
-makeStableAcc acc = StableAccName <$> makeStableName acc
-
--- Kernel module lookup with fast association to particular AST nodes
+-- Retrieve the binary object associated with an AST node
 --
 loadKernel :: (Typeable a, Typeable aenv) => OpenAcc aenv a -> CIO CUDA.Module
 loadKernel acc = do
-  tab <- getM computeTable
-  key <- liftIO $ makeStableAcc acc
-  mdl <- liftIO $ Hash.lookup tab key
-  case mdl of
-    Just e  -> INTERNAL_ASSERT "loadKernel" (getL accKey e == accToKey acc) $ return (getL accKernel e)
-    Nothing -> do
-      m <- linkKernel acc
-#ifdef ACCELERATE_INTERNAL_CHECKS
-      liftIO $ Hash.insert tab key (AccEntry (accToKey acc) m)
-#else
-      liftIO $ Hash.insert tab key (AccEntry undefined m)
-#endif
-      return m
+  n <- lookupAccTable acc
+  case n of
+    Just e | Just mdl <- getL executable e -> return mdl
+    Just e                                 -> cache e
+    Nothing                                -> cache $ AccNode (1,0) Nothing
+  where
+    cache e =
+      linkKernel acc >>= \mdl -> do
+      updateAccTable acc $ setL executable (Just mdl) e
+      return mdl
+
 
 -- Link the CUDA binary object implementing the kernel for the given array
 -- computation. This may entail waiting for the external compilation process.
@@ -702,8 +820,84 @@ waitFor pid = do
        _                         -> error  $ "nvcc (" ++ show pid ++ ") terminated abnormally"
 
 
+
+-- Memory management
+-- -----------------
+
+-- Return the number of times the result of the given computation will be used.
+-- The use map only contains entries for (let-bound) arrays that are used more
+-- than once.
+--
+getUseCount :: (Sugar.Shape sh, Sugar.Elt e, Typeable aenv)
+            => OpenAcc aenv (Array sh e)
+            -> CIO Int
+getUseCount acc = maybe 1 (fst . getL usecount) `fmap` lookupAccTable acc
+
+-- Get the use count for each of the results of an array computation yielding
+-- two arrays. The use map should definitely have an entry for computations of
+-- this type.
+--
+getUseCount2 :: (Sugar.Shape sh1, Sugar.Shape sh2, Sugar.Elt a, Sugar.Elt b, Typeable aenv)
+             => OpenAcc aenv (Array sh1 a, Array sh2 b)
+             -> CIO (Int, Int)
+getUseCount2 acc =
+  let err = INTERNAL_ERROR(error) "getUseCount2" "assumption failed"
+  in  maybe err (getL usecount) `fmap` lookupAccTable acc
+
+
+-- Convenience function for allocating the output array for a given computation,
+-- with appropriate reference counting information
+--
+allocResult :: (Sugar.Shape sh, Sugar.Elt e, Typeable aenv)
+            => OpenAcc aenv (Array sh e)
+            -> sh
+            -> CIO (Array sh e)
+allocResult acc sh = flip newArray sh =<< getUseCount acc
+
+
+-- Allocate a new device array to accompany the given host-side Accelerate
+-- array, of given shape and reference count.
+--
+newArray :: (Sugar.Shape sh, Sugar.Elt e)
+         => Int                         -- use/reference count
+         -> sh                          -- shape
+         -> CIO (Array sh e)
+newArray rc sh = do
+  ad `seq` mallocArray ad (Just rc) (1 `max` n)
+  return $ Array (Sugar.fromElt sh) ad
+  where
+    n      = Sugar.size sh
+    (ad,_) = AD.runArrayData $ (,undefined) `fmap` AD.newArrayData (1024 `max` n)
+      -- FIXME: small arrays moved by the GC
+
+
+
+-- Stable names
+-- ------------
+
+lookupAccTable :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> CIO (Maybe AccNode)
+lookupAccTable acc = do
+  table <- getM computeTable
+  liftIO $ Hash.lookup table =<< makeStableAcc acc
+
+updateAccTable :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> AccNode -> CIO ()
+updateAccTable acc val = do
+  tab <- getM computeTable
+  key <- liftIO $ makeStableAcc acc
+  liftIO $ Hash.update tab key val >> return ()
+
+makeStableAcc :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> IO StableAccName
+makeStableAcc a = StableAccName `fmap` makeStableName a
+
+
 -- Auxiliary functions
 -- -------------------
+
+-- Fold over a boolean value, analogous to 'maybe' and 'either'
+--
+bool :: a -> a -> Bool -> a
+bool x _ False = x
+bool _ y True  = y
 
 -- Special version of msum, which doesn't behave as we would like for CIO [a]
 --
@@ -720,21 +914,6 @@ concatMapM f xs = concat `liftM` mapM f xs
 sequence' :: [IO a] -> IO [a]
 sequence' = foldr k (return [])
   where k m ms = do { x <- m; xs <- unsafeInterleaveIO ms; return (x:xs) }
-
-
--- Create a new host array, and associated device memory area
--- FIXME: small arrays are relocated by the GC
---
-newArray :: (Sugar.Shape sh, Sugar.Elt e) => sh -> CIO (Array sh e)
-newArray sh = do
-  ad `seq` mallocArray ad (1 `max` n)
-  return $ Array (Sugar.fromElt sh) ad
-  where
-    n       = Sugar.size sh
-    (ad, _) = AD.runArrayData $ do
-      arr <- AD.newArrayData (1024 `max` n)
-      return (arr, undefined)
-
 
 -- Extract shape dimensions as a list of 32-bit integers (the base integer width
 -- of the device, and used for index calculations). Singleton dimensions are

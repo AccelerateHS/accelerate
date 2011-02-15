@@ -1,6 +1,6 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, StandaloneDeriving #-}
-{-# LANGUAGE GADTs, EmptyDataDecls, FlexibleContexts, TypeFamilies, TypeOperators #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, GADTs, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeFamilies, TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
 -- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -151,7 +151,7 @@ instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2) where
 --
 data OpenAfun aenv t where
   Abody :: OpenAcc  aenv       t -> OpenAfun aenv t
-  Alam  :: Arrays as
+  Alam  :: (Arrays as, Arrays t)
         => OpenAfun (aenv, as) t -> OpenAfun aenv (as -> t)
 
 -- |Array computation function without free array variables
@@ -207,7 +207,7 @@ data OpenAcc aenv a where
 
   -- Change the shape of an array without altering its contents
   -- > precondition: size dim == size dim'
-  Reshape     :: Shape sh
+  Reshape     :: (Shape sh, Shape sh', Elt e)
               => Exp     aenv sh                  -- new shape
               -> OpenAcc aenv (Array sh' e)       -- array to be reshaped
               -> OpenAcc aenv (Array sh e)
@@ -220,7 +220,7 @@ data OpenAcc aenv a where
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: (Shape sh, Elt slix)
+  Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)        -- slice type specification
                             (EltRepr sl) 
                             co'
@@ -231,7 +231,7 @@ data OpenAcc aenv a where
 
   -- Index a subarray out of an array; i.e., the dimensions not indexed are 
   -- returned whole
-  Index       :: (Shape sl, Elt slix)
+  Index       :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)       -- slice type specification
                             (EltRepr sl) 
                             co'
@@ -241,7 +241,7 @@ data OpenAcc aenv a where
               -> OpenAcc aenv (Array sl e)
 
   -- Apply the given unary function to all elements of the given array
-  Map         :: Elt e'
+  Map         :: (Shape sh, Elt e, Elt e')
               => Fun     aenv (e -> e') 
               -> OpenAcc aenv (Array sh e) 
               -> OpenAcc aenv (Array sh e')
@@ -249,21 +249,21 @@ data OpenAcc aenv a where
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
-  ZipWith     :: Elt e3
+  ZipWith     :: (Shape sh, Elt e1, Elt e2, Elt e3)
               => Fun     aenv (e1 -> e2 -> e3) 
               -> OpenAcc aenv (Array sh e1)
               -> OpenAcc aenv (Array sh e2)
               -> OpenAcc aenv (Array sh e3)
 
   -- Fold along the innermost dimension of an array with a given /associative/ function.
-  Fold        :: Shape sh
+  Fold        :: (Shape sh, Elt e)
               => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- default value
               -> OpenAcc aenv (Array (sh:.Int) e)    -- folded array
               -> OpenAcc aenv (Array sh e)
 
   -- 'Fold' without a default value
-  Fold1       :: Shape sh
+  Fold1       :: (Shape sh, Elt e)
               => Fun     aenv (e -> e -> e)          -- combination function
               -> OpenAcc aenv (Array (sh:.Int) e)    -- folded array
               -> OpenAcc aenv (Array sh e)
@@ -286,7 +286,8 @@ data OpenAcc aenv a where
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
   -- associative operations)
-  Scanl       :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanl       :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
@@ -294,30 +295,35 @@ data OpenAcc aenv a where
   
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
-  Scanl'      :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanl'      :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)
 
   -- Haskell-style scan without an initial value
-  Scanl1      :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanl1      :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
 
   -- Right-to-left version of 'Scanl'
-  Scanr       :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanr       :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
   
   -- Right-to-left version of 'Scanl\''
-  Scanr'      :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanr'      :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> Exp     aenv e                      -- initial value
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e, Scalar e)
 
   -- Right-to-left version of 'Scanl1'
-  Scanr1      :: Fun     aenv (e -> e -> e)          -- combination function
+  Scanr1      :: Elt e
+              => Fun     aenv (e -> e -> e)          -- combination function
               -> OpenAcc aenv (Vector e)             -- linear array
               -> OpenAcc aenv (Vector e)
 
@@ -333,7 +339,8 @@ data OpenAcc aenv a where
   -- permutation functions).  The combination function needs to be
   -- /associative/ and /commutative/ .  We drop every element for which the
   -- permutation function yields -1 (i.e., a tuple of -1 values).
-  Permute     :: Fun     aenv (e -> e -> e)        -- combination function
+  Permute     :: (Shape sh, Elt e)
+              => Fun     aenv (e -> e -> e)        -- combination function
               -> OpenAcc aenv (Array sh' e)        -- default values
               -> Fun     aenv (sh -> sh')          -- permutation function
               -> OpenAcc aenv (Array sh e)         -- source array
@@ -341,7 +348,7 @@ data OpenAcc aenv a where
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
-  Backpermute :: Shape sh'
+  Backpermute :: (Shape sh, Shape sh', Elt e)
               => Exp     aenv sh'                  -- dimensions of the result
               -> Fun     aenv (sh' -> sh)          -- permutation function
               -> OpenAcc aenv (Array sh e)         -- source array
@@ -633,19 +640,20 @@ data OpenExp env aenv t where
 
   -- Project a single scalar from an array
   -- the array expression can not contain any free scalar variables
-  IndexScalar :: OpenAcc aenv (Array dim t)
+  IndexScalar :: (Shape dim, Elt t)
+              => OpenAcc aenv (Array dim t)
               -> OpenExp env aenv dim 
               -> OpenExp env aenv t
 
   -- Array shape
   -- the array expression can not contain any free scalar variables
-  Shape       :: Elt dim
+  Shape       :: (Shape dim, Elt e)
               => OpenAcc aenv (Array dim e) 
               -> OpenExp env aenv dim
 
   -- Number of elements of an array
   -- the array expression can not contain any free scalar variables
-  Size        :: Elt dim
+  Size        :: (Shape dim, Elt e)
               => OpenAcc aenv (Array dim e)
               -> OpenExp env aenv Int
 

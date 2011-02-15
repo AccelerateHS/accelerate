@@ -234,9 +234,9 @@ mkStencilGetStmt subscript ty ixs = getStmts ++ stencilStmt
            | otherwise = map Just [dim-1,dim-2..0]
         dim  = length $ head ixs
 
-    ixExpr (n, i)   = CBinary CAddOp (CVar (internalIdent (idx n)) internalNode) (CConst (CIntConst (cInteger $ fromIntegral i) internalNode)) internalNode
+    ixExpr (mx,i)   = CBinary CAddOp (CVar (internalIdent (idx mx)) internalNode) (CConst (CIntConst (cInteger $ fromIntegral i) internalNode)) internalNode
       where
-        idx (Just n) = "idx" ++ show subscript ++ ".a" ++ show n
+        idx (Just x) = "idx" ++ show subscript ++ ".a" ++ show x
         idx Nothing  = "idx" ++ show subscript
 
 

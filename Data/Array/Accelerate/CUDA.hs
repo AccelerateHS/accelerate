@@ -23,9 +23,11 @@ import Prelude hiding (catch)
 import Control.Exception
 import Control.Applicative
 import System.IO.Unsafe
+import qualified Data.HashTable			  as Hash
 
 -- CUDA binding
 import Foreign.CUDA.Driver.Error
+import qualified Foreign.CUDA.Driver		  as CUDA
 
 -- friends
 import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))
@@ -63,16 +65,21 @@ stream :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
 stream f arrs = unsafePerformIO $ execute arrs . snd =<< runCUDA (compileAccFun acc)
   where
     acc                  = convertAccFun1 f
-    execute []     state = cleanup state >> return []   -- release all constant arrays
+    execute []     state = finalise state >> return []   -- release all constant arrays
     execute (a:as) state = do
       (b,s) <- runCUDAWith state (executeAfun1 acc a >>= collect)
                `catch`
                \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
       bs    <- unsafeInterleaveIO (execute as s)
       return (b:bs)
+    --
+    finalise state       = do
+      mem <- Hash.toList (getL memoryTable state)
+      mapM_ (CUDA.free . CUDA.wordPtrToDevPtr . getL arena . snd) mem
 
 
--- Copy from device to host, and decrement the usage counter.
+-- Copy from device to host, and decrement the usage counter. This last step
+-- should result in all transient arrays having been removed from the device.
 --
 collect :: Arrays arrs => arrs -> CIO arrs
 collect arrs = collectR arrays arrs

@@ -15,16 +15,15 @@
 
 module Data.Array.Accelerate.CUDA.State
   (
-    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState, StableAccName(..),
-    unique, outputDir, deviceProps, deviceContext,
-    memoryTable, kernelTable, computeTable,
-    cleanup,
+    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState,
+    unique, deviceProps, deviceContext, memoryTable, kernelTable, computeTable,
 
-    MemoryEntry(MemoryEntry), refcount, memsize, arena,
     KernelEntry(KernelEntry), kernelName, kernelStatus,
-    AccEntry(AccEntry), accKey, accKernel,
+    MemoryEntry(MemoryEntry), refcount, memsize, arena,
+    AccNode(AccNode), usecount, executable,
 
-    freshVar,
+    newAccHashTable, AccHashTable, StableAccName(..),
+
     module Data.Record.Label
   )
   where
@@ -36,6 +35,7 @@ import Data.Record.Label
 import Data.Int
 import Data.Char
 import Data.IORef
+import Data.Maybe
 import Data.Typeable
 import Data.ByteString.Lazy.Char8                       (ByteString)
 import Control.Applicative
@@ -47,8 +47,6 @@ import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable                         as Hash
 import qualified Data.ByteString.Lazy.Char8             as L
 
-import System.Directory
-import System.FilePath
 import System.Posix.Types                               (ProcessID)
 import System.Mem.Weak
 import System.Mem.StableName
@@ -60,128 +58,115 @@ import Data.Array.Accelerate.CUDA.Analysis.Device
 import Data.Binary                                      (encodeFile, decodeFile)
 import Control.Arrow                                    (second)
 import Paths_accelerate                                 (getDataDir)
-#else
-import System.Posix.Process                             (getProcessID)
 #endif
 
 #include "accelerate.h"
 
 
 -- An exact association between an accelerate computation and its
--- implementation, stored as a (deflated) string representation of the generated
--- kernel code.
+-- implementation, which is either a reference to the external compiler (nvcc)
+-- or the resulting binary module. This is keyed by a string representation of
+-- the generated kernel code.
 --
 -- An Eq instance of Accelerate expressions does not facilitate persistent
 -- caching.
 --
-type AccKey   = ByteString
-type AccTable = HashTable AccKey KernelEntry
-
--- Associations between host- and device-side arrays, with reference counting.
---
-type MemKey   = WordPtr
-type MemTable = HashTable MemKey MemoryEntry
-
-type ComputeTable = HashTable StableAccName     AccEntry
-
-
-
--- | The state token for accelerated CUDA array operations
---
-type CIO       = StateT CUDAState IO
-data CUDAState = CUDAState
-  {
-    _unique        :: Int,
-    _outputDir     :: FilePath,
-    _deviceProps   :: CUDA.DeviceProperties,
-    _deviceContext :: CUDA.Context,
-    _memoryTable   :: MemTable,
-    _kernelTable   :: AccTable,
-    _computeTable  :: ComputeTable
-  }
-
--- | Associate an array expression with an external compilation tool (nvcc) or
--- the loaded function module
---
+type KernelTable = HashTable ByteString KernelEntry
 data KernelEntry = KernelEntry
   {
     _kernelName   :: FilePath,
     _kernelStatus :: Either ProcessID CUDA.Module
   }
 
--- | In contrast to the kernel entry table, which relates Accelerate
--- computations to kernel functions invariantly, the Acc computation table
--- associates the nodes of a particular AST directly to the object code that
--- will be used to realise the result.
+-- Associations between host- and device-side arrays, with reference counting.
+-- Facilitates reuse and delayed allocation at the cost of explicit release.
 --
--- Its function is to provide a fast cache of compiled modules for streaming
--- applications, avoiding (string-based) key generation for fast,
--- not-quite-exact comparisons.
+-- This maps to a single concrete array. Arrays of tuples, which are represented
+-- internally as tuples of arrays, will generate multiple entries.
 --
-data AccEntry = AccEntry
+type MemoryTable = HashTable WordPtr MemoryEntry
+data MemoryEntry = MemoryEntry
   {
-    _accKey    :: AccKey,       -- for assertions
-    _accKernel :: CUDA.Module
+    _refcount :: Maybe Int,     -- set to 'Nothing', the array will never be released
+    _memsize  :: Int64,
+    _arena    :: WordPtr
   }
 
--- Stable keys to nodes of an Acc computation
+-- Opaque stable names for array computations
+--
+-- TLM: This should be more specific: "StableName (OpenAcc aenv a)", so that it
+--      is not possible to insert the stable names logically different things.
 --
 data StableAccName where
   StableAccName :: Typeable a => StableName a -> StableAccName
+
+instance Show StableAccName where
+  show (StableAccName sn) = show $ hashStableName sn
 
 instance Eq StableAccName where
   StableAccName sn1 == StableAccName sn2
     | Just sn1' <- gcast sn1 = sn1' == sn2
     | otherwise              = False
 
-hashStableAcc :: StableAccName -> Int32
-hashStableAcc (StableAccName sn) = fromIntegral (hashStableName sn)
-
-newComputeTable :: IO (ComputeTable)
-newComputeTable = Hash.new (==) hashStableAcc
-
--- | Reference tracking for device memory allocations. Associates the products
--- of an `Array dim e' with data stored on the graphics device. Facilitates
--- reuse and delayed allocation at the cost of explicit release.
+-- Hash table keyed on the stable name of array computations
 --
--- This maps to a single concrete array. Arrays of tuples, which are represented
--- internally as tuples of arrays, will generate multiple entries.
+type AccHashTable v = Hash.HashTable StableAccName v
+
+newAccHashTable :: IO (AccHashTable v)
+newAccHashTable = Hash.new (==) hashStableAcc
+  where
+    hashStableAcc (StableAccName sn) = fromIntegral (hashStableName sn)
+
+-- Relate a particular computation node directly to the object code that will be
+-- used to execute the computation, together with a use count information for
+-- the resultant array.
 --
-data MemoryEntry = MemoryEntry
+data AccNode = AccNode
   {
-    _refcount :: Maybe Int,     -- let bound arrays have no reference count
-    _memsize  :: Int64,
-    _arena    :: WordPtr
+    _usecount   :: (Int,Int),
+    _executable :: Maybe CUDA.Module
+  }
+  -- TLM: The scanl' and scanr' primitives return two arrays, which we need to
+  --      keep separate usage counts for. For all other node types, ignore the
+  --      second component of the tuple.
+  --
+
+
+-- The state token for accelerated CUDA array operations
+--
+type CIO       = StateT CUDAState IO
+data CUDAState = CUDAState
+  {
+    _unique        :: Int,
+    _deviceProps   :: CUDA.DeviceProperties,
+    _deviceContext :: CUDA.Context,
+    _kernelTable   :: KernelTable,
+
+    _memoryTable   :: MemoryTable,              -- TLM: these are non-persistent between computations,
+    _computeTable  :: AccHashTable AccNode      --      so maybe they should live elsewhere?
   }
 
-
-$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry, ''AccEntry])
+$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry, ''AccNode])
 
 
 -- Execution State
 -- ---------------
 
--- Return the output directory for compilation by-products, creating if it does
--- not exist.
---
-getOutputDir :: IO FilePath
-getOutputDir = do
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-  tmp <- getDataDir
-  let dir = tmp </> "cache"
-#else
-  tmp <- getTemporaryDirectory
-  pid <- getProcessID
-  let dir = tmp </> "ac" ++ show pid
+indexFileName :: IO FilePath
+indexFileName = do
+  tmp <- (</> "cache") `fmap` getDataDir
+  dir <- createDirectoryIfMissing True tmp >> canonicalizePath tmp
+  return (dir </> "_index")
 #endif
-  createDirectoryIfMissing True dir
-  canonicalizePath dir
 
 -- Store the kernel module map to file
 --
 saveIndexFile :: CUDAState -> IO ()
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-saveIndexFile s = encodeFile (_outputDir s </> "_index") . map (second _kernelName) =<< Hash.toList (_kernelTable s)
+saveIndexFile s = do
+  ind <- indexFileName
+  encodeFile ind . map (second _kernelName) =<< Hash.toList (_kernelTable s)
 #else
 saveIndexFile _ = return ()
 #endif
@@ -189,9 +174,10 @@ saveIndexFile _ = return ()
 -- Read the kernel index map file (if it exists), loading modules into the
 -- current context
 --
-loadIndexFile :: FilePath -> IO (AccTable, Int)
+loadIndexFile :: IO (KernelTable, Int)
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-loadIndexFile f = do
+loadIndexFile = do
+  f <- indexFileName
   x <- doesFileExist f
   e <- if x then mapM reload =<< decodeFile f
             else return []
@@ -199,7 +185,7 @@ loadIndexFile f = do
   where
     reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
 #else
-loadIndexFile _  = (,0) <$> Hash.new (==) hashByteString
+loadIndexFile = (,0) <$> Hash.new (==) hashByteString
 #endif
 
 
@@ -228,29 +214,9 @@ initialise = do
   CUDA.initialise []
   (d,prp) <- selectBestDevice
   ctx     <- CUDA.create d [CUDA.SchedAuto]
-  dir     <- getOutputDir
-  mem     <- Hash.new (==) fromIntegral
-  (knl,n) <- loadIndexFile (dir </> "_index")
+  (knl,n) <- loadIndexFile
   addFinalizer ctx (CUDA.destroy ctx)
-  return $ CUDAState n dir prp ctx mem knl undefined
-
-
-sanitise :: CUDAState -> IO CUDAState
-sanitise st = do
-  compute <- newComputeTable
-  entries <- length <$> Hash.toList (getL memoryTable st)
-  INTERNAL_ASSERT "debugMemTable" (entries == 0) $ return (setL computeTable compute st)
-
-
-cleanup :: CUDAState -> IO ()
-cleanup st = do
-  mapM_ release =<< Hash.toList tab
-  writeIORef onta st
-  where
-    tab	          = getL memoryTable st
-    release (k,v) = do
-      CUDA.free $ CUDA.wordPtrToDevPtr (getL arena v)
-      Hash.delete tab k
+  return $ CUDAState n prp ctx knl undefined undefined
 
 
 -- | Evaluate a CUDA array computation under the standard global environment
@@ -259,7 +225,7 @@ evalCUDA :: CIO a -> IO a
 evalCUDA = liftM fst . runCUDA
 
 runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc = readIORef onta >>= sanitise >>= flip runCUDAWith acc
+runCUDA acc = readIORef onta >>= flip runCUDAWith acc
 
 
 -- | Execute a computation under the provided state, returning the updated
@@ -269,21 +235,22 @@ runCUDAWith :: CUDAState -> CIO a -> IO (a, CUDAState)
 runCUDAWith state acc = do
   (a,s) <- runStateT acc state
   saveIndexFile s
-  writeIORef onta s
+  writeIORef onta =<< sanitise s
   return (a,s)
-  
+  where
+    -- The memory table and compute table are transient data structures: they
+    -- exist only for the life of a single computation [stream]. Don't record
+    -- them into the persistent state token.
+    --
+    sanitise :: CUDAState -> IO CUDAState
+    sanitise st = do
+      entries <- length . filter (isJust . getL refcount . snd) <$> Hash.toList (getL memoryTable st)
+      INTERNAL_ASSERT "runCUDA.sanitise" (entries == 0)
+        $ return (setL memoryTable undefined . setL computeTable undefined $ st)
+
 
 -- hic sunt dracones: truly unsafe use of unsafePerformIO
 onta :: IORef CUDAState
 {-# NOINLINE onta #-}
 onta = unsafePerformIO (initialise >>= newIORef)
-
-
--- Utility
--- -------
-
--- | A unique name supply
---
-freshVar :: CIO Int
-freshVar =  getM unique <* modM unique (+1)
 

@@ -35,7 +35,8 @@ mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
     skel = "generate.inl"
     code = CTranslUnit
             ( mkTupleType Nothing  tyOut ++
-            [ mkDim "TyIn0" dimOut
+            [ mkDim "DimOut" dimOut
+	    , mkDim "TyIn0"  dimOut
             , mkApply 1 apply ])
             (mkNodeInfo (initPos skel) (Name 0))
 

@@ -232,7 +232,10 @@ codeGenExp (Var i) =
          \c -> CMember var (internalIdent ('a':show c)) False internalNode
 
 codeGenExp (Cond p t e) =
-  zipWith . (\[a] b c -> CCond a (Just b) c internalNode) <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
+  let predicate [a] b c = CCond a (Just b) c internalNode
+      predicate _ _ _   = INTERNAL_ERROR(error) "codeGenExp.Cond" "assumption violated"
+  in
+  zipWith . predicate <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
 
 codeGenExp (Shape a) = do
   sh <- ("sh"++) . show . length <$> getM shapes
