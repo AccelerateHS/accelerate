@@ -122,7 +122,7 @@ Flag internal-checks
   Default:              False
   
 Flag io
-  Description:          Provide access to the block copy I/O functionality. Implied by 'cuda' flag.
+  Description:          Provide access to the block copy I/O functionality
   Default:              False
 
 Library
@@ -170,8 +170,11 @@ Library
   If flag(cuda)
     Exposed-modules:    Data.Array.Accelerate.CUDA
 
-  If flag(io) || flag(cuda)
-     Exposed-modules:   Data.Array.Accelerate.Array.BlockCopy
+  If flag(io)
+    Other-modules:      Data.Array.Accelerate.Array.BlockCopy
+    Exposed-modules:    Data.Array.Accelerate.IO
+                        Data.Array.Accelerate.IO.Ptr
+                        Data.Array.Accelerate.IO.ByteString
 
   If flag(test-suite)
     Exposed-modules:    Data.Array.Accelerate.Test

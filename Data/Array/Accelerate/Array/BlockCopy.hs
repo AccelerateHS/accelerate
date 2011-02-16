@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, ForeignFunctionInterface, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, MagicHash, ForeignFunctionInterface, TypeFamilies, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.BlockCopy
 -- Copyright   : [2010..2011] Sean Seefried
@@ -24,7 +24,7 @@
 module Data.Array.Accelerate.Array.BlockCopy (
 
   -- * Types
-  BlockCopyFun, BlockCopyFuns, BlockPtrs,
+  BlockCopyFun, BlockCopyFuns, BlockPtrs, ByteStrings,
 
   -- * Functions
   blockCopyToArray, blockCopyFromArray, blockCopyToArrayWithFunctions, blockCopyFromArrayWithFunctions,
