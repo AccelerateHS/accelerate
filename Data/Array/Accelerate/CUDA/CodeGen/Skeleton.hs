@@ -1,6 +1,6 @@
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.CodeGen.Skeleton
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -25,9 +25,8 @@ import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
 
---------------------------------------------------------------------------------
 -- Construction
---------------------------------------------------------------------------------
+-- ------------
 
 mkGenerate :: ([CType],Int) -> [CExpr] -> CUTranslSkel
 mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
@@ -41,9 +40,8 @@ mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
---------------------------------------------------------------------------------
 -- Reduction
---------------------------------------------------------------------------------
+-- ---------
 
 mkFold :: ([CType],Int) -> [CExpr] -> [CExpr] -> CUTranslSkel
 mkFold (ty,dim) identity apply = CUTranslSkel code [] skel
@@ -102,9 +100,8 @@ mkFold1Seg (ty,dim) int apply = CUTranslSkel code inc skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
---------------------------------------------------------------------------------
 -- Map
---------------------------------------------------------------------------------
+-- ---
 
 mkMap :: [CType] -> [CType] -> [CExpr] -> CUTranslSkel
 mkMap tyOut tyIn0 apply = CUTranslSkel code [] skel
@@ -132,9 +129,8 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
             (mkNodeInfo (initPos skel) (Name 0))
 
 
---------------------------------------------------------------------------------
 -- Stencil
---------------------------------------------------------------------------------
+-- -------
 
 mkStencil :: [CType]
           -> [CType] -> [[Int]] -> Either String [CExpr]
@@ -188,9 +184,8 @@ bndyConst n bndy =
     Right c -> [mkDeviceFun ("boundary_const" ++ show n) (typename ("TyIn" ++ show n)) [] c]
 
 
---------------------------------------------------------------------------------
 -- Scan
---------------------------------------------------------------------------------
+-- ----
 
 -- TODO: use a fast scan for primitive types
 --
@@ -229,9 +224,8 @@ mkScanl1 = mkInclusiveScan False
 mkScanr1 = mkInclusiveScan True
 
 
---------------------------------------------------------------------------------
 -- Permutation
---------------------------------------------------------------------------------
+-- -----------
 
 mkPermute :: [CType] -> Int -> Int -> [CExpr] -> [CExpr] -> CUTranslSkel
 mkPermute ty dimOut dimIn0 combinefn indexfn = CUTranslSkel code [] skel
@@ -257,9 +251,8 @@ mkBackpermute ty dimOut dimIn0 indexFn = CUTranslSkel code [] skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 
---------------------------------------------------------------------------------
 -- Multidimensional Index and Replicate
---------------------------------------------------------------------------------
+-- ------------------------------------
 
 mkIndex :: [CType] -> Int -> Int -> Int -> [CExpr] -> CUTranslSkel
 mkIndex ty dimSl dimCo dimIn0 slix = CUTranslSkel code [] skel

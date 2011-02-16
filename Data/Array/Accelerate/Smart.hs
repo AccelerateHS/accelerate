@@ -1,19 +1,19 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE CPP, GADTs, TypeOperators, TypeFamilies, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, PatternGuards #-}
 -- |
 -- Module      : Data.Array.Accelerate.Smart
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- This modules defines the AST of the user-visible embedded language using
--- more convenient higher-order abstract syntax (instead of de Bruijn
--- indices). Moreover, it defines smart constructors to construct programs.
+-- This modules defines the AST of the user-visible embedded language using more
+-- convenient higher-order abstract syntax (instead of de Bruijn indices).
+-- Moreover, it defines smart constructors to construct programs.
+--
 
 module Data.Array.Accelerate.Smart (
 
@@ -1640,7 +1640,7 @@ instance (Stencil (sh:.Int) a row1,
                       stencilPrj (undefined::(sh:.Int)) a (Prj tix1 s), 
                       stencilPrj (undefined::(sh:.Int)) a (Prj tix0 s))
   
--- Auxilliary tuple index constants
+-- Auxiliary tuple index constants
 --
 tix0 :: Elt s => TupleIdx (t, s) s
 tix0 = ZeroTupIdx
@@ -1980,7 +1980,7 @@ mkTruncFloatInt :: Exp Float -> Exp Int
 mkTruncFloatInt x = PrimTruncFloatInt `PrimApp` x
 
 
--- Auxilliary functions
+-- Auxiliary functions
 -- --------------------
 
 infixr 0 $$

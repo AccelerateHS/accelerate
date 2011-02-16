@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
--- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -13,6 +13,7 @@
 -- allocate all arrays using pinned memory to enable safe direct-access by
 -- non-Haskell code in multi-threaded code.  In particular, we can safely pass
 -- pointers to an array's payload to foreign code.
+--
 
 module Data.Array.Accelerate.Array.Data (
 

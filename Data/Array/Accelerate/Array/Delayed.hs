@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -10,6 +10,7 @@
 --
 -- Delayed arrays are represented by their representation function, which enables the simple
 -- composition of many array operations.
+--
 
 module Data.Array.Accelerate.Array.Delayed (
 
@@ -49,3 +50,4 @@ instance (Delayable a1, Delayable a2) => Delayable (a1, a2) where
   data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
   delay (a1, a2) = DelayedPair (delay a1) (delay a2)
   force (DelayedPair a1 a2) = (force a1, force a2)
+

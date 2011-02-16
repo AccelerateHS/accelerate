@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, ForeignFunctionInterface, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.BlockCopy
--- Copyright   : [2008..2010] Sean Seefried
+-- Copyright   : [2010..2011] Sean Seefried
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -9,22 +9,27 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This module provides functions for efficient block copies of primitive arrays
--- (i.e. one dimensional, in row-major order in contiguous memory) to Accelerate Arrays.
+-- (i.e. one dimensional, in row-major order in contiguous memory) to Accelerate
+-- Arrays.
 --
 -- You should only use this module if you really know what you are doing.
 -- Potential pitfalls include:
 --
---   * copying from memory your program doesn't have access to (e.g. it may be unallocated or not enough memory is
---     allocated)
+--   * copying from memory your program doesn't have access to (e.g. it may be
+--     unallocated or not enough memory is allocated)
 --
 --   * memory alignment errors
 --
+
 module Data.Array.Accelerate.Array.BlockCopy (
+
   -- * Types
   BlockCopyFun, BlockCopyFuns, BlockPtrs,
+
   -- * Functions
   blockCopyToArray, blockCopyFromArray, blockCopyToArrayWithFunctions, blockCopyFromArrayWithFunctions,
   byteStringsToArray, arrayToByteStrings
+
 ) where
 
 -- standard libraries
@@ -286,3 +291,4 @@ foreign import ccall memcpy :: Ptr a -> Ptr b -> CInt -> IO ()
 -- Helpers
 box :: (Int# -> Int#) -> Int -> Int
 box f (I# x) = I# (f x)
+

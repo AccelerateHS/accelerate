@@ -1,14 +1,15 @@
 {-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
--- |Embedded array processing language: graphviz pretty printing
+-- |
+-- Module      : Data.Array.Accelerate.Pretty.Graphviz
+-- Copyright   : [2010..2011] Sean Seefried
+-- License     : BSD3
 --
---  Copyright (c) 2010 Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Sean Seefried
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
---  License: BSD3
+-- Functions for printing out Graphviz graphs in DOT format.
 --
---- Description ---------------------------------------------------------------
---
---  Functions for printing out Graphviz graphs in DOT format.
-
 
 module Data.Array.Accelerate.Pretty.Graphviz (
 

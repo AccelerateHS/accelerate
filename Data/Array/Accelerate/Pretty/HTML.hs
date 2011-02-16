@@ -1,16 +1,21 @@
 {-# LANGUAGE GADTs, OverloadedStrings, ScopedTypeVariables, NoMonomorphismRestriction #-}
--- |Embedded array processing language: pretty printing to HTML
+-- |
+-- Module      : Data.Array.Accelerate.Pretty.HTML
+-- Copyright   : [2010..2011] Sean Seefried
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Sean Seefried
---
---  License: BSD3
---
---- Description ---------------------------------------------------------------
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
 
 module Data.Array.Accelerate.Pretty.HTML  (
+
+   -- * HTML printing function
    dumpHtmlAST
+
 ) where
+
 
 -- standard libraries
 import Data.String

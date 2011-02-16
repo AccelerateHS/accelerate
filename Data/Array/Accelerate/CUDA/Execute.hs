@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections, TypeOperators, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -10,8 +10,12 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Execute (executeAcc, executeAfun1)
-  where
+module Data.Array.Accelerate.CUDA.Execute (
+
+  -- * Execute a computation under a CUDA environment
+  executeAcc, executeAfun1
+
+) where
 
 import Prelude                                                  hiding (sum)
 import Data.Int

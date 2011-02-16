@@ -1,6 +1,6 @@
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.CodeGen.Util
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -16,9 +16,8 @@ import Data.Array.Accelerate.CUDA.CodeGen.Data
 
 data Direction = Forward | Backward
 
---------------------------------------------------------------------------------
 -- Common device functions
---------------------------------------------------------------------------------
+-- -----------------------
 
 mkIdentity :: [CExpr] -> CExtDecl
 mkIdentity = mkDeviceFun "identity" (typename "TyOut") []
@@ -41,9 +40,8 @@ mkSliceReplicate =
   mkDeviceFun "sliceIndex" (typename "Slice") [(typename "SliceDim","dim")]
 
 
---------------------------------------------------------------------------------
 -- Helper functions
---------------------------------------------------------------------------------
+-- ----------------
 
 typename :: String -> CType
 typename var = [CTypeDef (internalIdent var) internalNode]

@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -62,6 +62,7 @@
 -- available for all supported types.  In contrast, reified dictionaries are
 -- used for functionality that is only available for certain types, such as
 -- arithmetic operations.
+--
 
 module Data.Array.Accelerate.AST (
 
@@ -754,3 +755,4 @@ data PrimFun sig where
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want
   --   the range constructs for arrays (but that's not scalar primitives)
+

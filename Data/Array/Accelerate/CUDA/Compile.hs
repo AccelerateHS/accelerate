@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -9,8 +9,12 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Compile (compileAcc, compileAccFun)
-  where
+module Data.Array.Accelerate.CUDA.Compile (
+
+  -- * generate and compile kernels to realise a computation
+  compileAcc, compileAccFun
+
+) where
 
 import Prelude                                          hiding (exp)
 import Data.Maybe

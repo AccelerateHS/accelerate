@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
-
+-- |
 -- Module      : Data.Array.Accelerate.Tuple
--- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -12,6 +12,7 @@
 -- by type lists, where '()' and '(,)' are type-level nil and snoc,
 -- respectively.  The components may only be drawn from types that can be
 -- used as array elements.
+--
 
 module Data.Array.Accelerate.Tuple (
 

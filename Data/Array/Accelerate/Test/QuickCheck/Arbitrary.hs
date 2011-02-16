@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Test.QuickCheck.Arbitrary
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2010..2011] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -11,13 +11,13 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Test.QuickCheck.Arbitrary
-  (
-    -- Instances of Arbitrary
-    arbitraryIntegralExp, arbitraryIntegralVector,
-    arbitraryFloatingExp, arbitraryFloatingVector
-  )
-  where
+module Data.Array.Accelerate.Test.QuickCheck.Arbitrary (
+
+  -- * Instances of Arbitrary
+  arbitraryIntegralExp, arbitraryIntegralVector,
+  arbitraryFloatingExp, arbitraryFloatingVector
+
+) where
 
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart

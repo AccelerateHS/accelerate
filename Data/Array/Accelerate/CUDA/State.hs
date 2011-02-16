@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, GADTs, PatternGuards, TemplateHaskell, TupleSections #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -13,20 +13,20 @@
 -- processes.
 --
 
-module Data.Array.Accelerate.CUDA.State
-  (
-    evalCUDA, runCUDA, runCUDAWith, CIO, CUDAState,
-    unique, deviceProps, deviceContext, memoryTable, kernelTable, computeTable,
+module Data.Array.Accelerate.CUDA.State (
 
-    KernelEntry(KernelEntry), kernelName, kernelStatus,
-    MemoryEntry(MemoryEntry), refcount, memsize, arena,
-    AccNode(AccNode), usecount, executable,
+  evalCUDA, runCUDA, runCUDAWith, CIO,
+  CUDAState, unique, deviceProps, deviceContext, memoryTable, kernelTable, computeTable,
 
-    newAccHashTable, AccHashTable, StableAccName(..),
+  KernelEntry(KernelEntry), kernelName, kernelStatus,
+  MemoryEntry(MemoryEntry), refcount, memsize, arena,
+  AccNode(AccNode), usecount, executable,
 
-    module Data.Record.Label
-  )
-  where
+  newAccHashTable, AccHashTable, StableAccName(..),
+
+  module Data.Record.Label
+
+) where
 
 import Prelude hiding (id, (.))
 import Control.Category

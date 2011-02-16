@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleInstances #-}
-
+-- |
 -- Module      : Data.Array.Accelerate.Type
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -20,6 +20,7 @@
 --  'Int' has the same bitwidth as in plain Haskell computations, and 'Float'
 --  and 'Double' represent IEEE single and double precision floating point
 --  numbers, respectively.
+--
 
 module Data.Array.Accelerate.Type (
   module Data.Int,
@@ -133,7 +134,7 @@ data FloatingType a where
 -- |Non-numeric types supported in array computations.
 --
 data NonNumType a where
-  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshaled to CInt
+  TypeBool    :: NonNumDict Bool      -> NonNumType Bool   --  marshalled to CInt
   TypeChar    :: NonNumDict Char      -> NonNumType Char
   TypeCChar   :: NonNumDict CChar     -> NonNumType CChar
   TypeCSChar  :: NonNumDict CSChar    -> NonNumType CSChar
@@ -650,3 +651,4 @@ data CDouble3 = CDouble3 CDouble CDouble CDouble
 data CDouble4 = CDouble4 CDouble CDouble CDouble CDouble
 -- in the future, vector types for CHalf
  -}
+

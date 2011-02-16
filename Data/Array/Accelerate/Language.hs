@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
--- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -16,6 +16,7 @@
 -- operations (such as comparisons), we use the standard operator names with a
 -- '*' attached.  We keep the standard alphanumeric names as they can be
 -- easily qualified.
+--
 
 module Data.Array.Accelerate.Language (
 
@@ -970,3 +971,4 @@ truncateFloatToInt = mkTruncFloatInt
 --
 ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore
+

@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs, FlexibleInstances, TypeOperators, ScopedTypeVariables #-}
-
--- |Embedded array processing language: pretty printing
+-- |
+-- Module      : Data.Array.Accelerate.Pretty.Print
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- License     : BSD3
 --
---  Copyright (c) 2009 Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---
---  License: BSD3
---
---- Description ---------------------------------------------------------------
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 --
 
 module Data.Array.Accelerate.Pretty.Print (
@@ -279,13 +279,13 @@ prettyArray arr@(Array sh _)
                                  text "{truncated at 1000 elements}"
 
 
--- Auxilliary pretty printing combinators
+-- Auxiliary pretty printing combinators
 --
 
 noParens :: Doc -> Doc
 noParens = id
 
--- Auxilliary ops
+-- Auxiliary ops
 --
 
 -- Convert a typed de Brujin index to the corresponding integer
@@ -294,7 +294,7 @@ idxToInt :: Idx env t -> Int
 idxToInt ZeroIdx       = 0
 idxToInt (SuccIdx idx) = 1 + idxToInt idx
 
--- Auxilliary dictionary operations
+-- Auxiliary dictionary operations
 --
 
 {-

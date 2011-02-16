@@ -1,6 +1,6 @@
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
--- Copyright   : [2010] Manuel M T Chakravarty, Ben Lever
+-- Copyright   : [2010..2011] Manuel M T Chakravarty, Ben Lever
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -9,6 +9,7 @@
 --
 -- Standard functions that are not part of the core set (directly represented in the AST), but are
 -- instead implemented in terms of the core set.
+--
 
 module Data.Array.Accelerate.Prelude (
 

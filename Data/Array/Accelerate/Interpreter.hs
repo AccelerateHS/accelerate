@@ -1,10 +1,9 @@
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeOperators, GADTs, BangPatterns, PatternGuards #-}
+{-# LANGUAGE CPP, GADTs, BangPatterns, TypeOperators, PatternGuards #-}
 {-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
--- Copyright   : [2008..2009] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -23,6 +22,7 @@
 -- the code by eliminating back and forth conversions is fine, but only where it doesn't
 -- negatively affects clarity — after all, the main purpose of the interpreter is to serve as an
 -- executable specification.
+--
 
 module Data.Array.Accelerate.Interpreter (
 
@@ -947,3 +947,4 @@ evalMin (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry min
 evalMin (NonNumScalarType ty) 
   | NonNumDict   <- nonNumDict ty   = uncurry min
+

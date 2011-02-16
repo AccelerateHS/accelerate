@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, GADTs, TypeFamilies, PatternGuards #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Type
--- Copyright   : [2009..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+-- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -9,10 +9,11 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- The Accelerate AST does not explicitly store much type information.  Most of
--- it is only indirectly through type class constraints -especially, 'Elem'
+-- it is only indirectly through type class constraints -especially, 'Elt'
 -- constraints- available.  This module provides functions that reify that 
 -- type information in the form of a 'TupleType' value.  This is, for example,
 -- needed to emit type information in a backend.
+--
 
 module Data.Array.Accelerate.Analysis.Type (
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 -- |
 -- Module      : Data.Array.Accelerate.Internal.Check
--- Copyright   : [2008..2010] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2009..2011] Roman Lechinskiy, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -10,15 +10,17 @@
 --
 -- Bounds checking infrastructure
 --
--- Sstolen from the Vector package by Roman Leshchinskiy
--- <http://hackage.haskell.org/package/vector>
+-- Stolen from the Vector package by Roman Leshchinskiy. This code has a
+-- BSD-style license. <http://hackage.haskell.org/package/vector>
 --
 
-module Data.Array.Accelerate.Internal.Check
-  (
-    Checks(..), doChecks,
-    error, check, assert, checkIndex, checkLength, checkSlice
-  ) where
+module Data.Array.Accelerate.Internal.Check (
+
+  -- * Bounds checking and assertion infrastructure
+  Checks(..), doChecks,
+  error, check, assert, checkIndex, checkLength, checkSlice
+
+) where
 
 import Prelude hiding( error )
 import qualified Prelude as P

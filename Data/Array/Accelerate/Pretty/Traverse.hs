@@ -1,6 +1,15 @@
 {-# LANGUAGE GADTs, ScopedTypeVariables, NoMonomorphismRestriction #-}
+-- |
+-- Module      : Data.Array.Accelerate.Pretty.Traverse
+-- Copyright   : [2010..2011] Sean Seefried
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 module Data.Array.Accelerate.Pretty.Traverse
-where
+  where
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar hiding ((!))
@@ -183,7 +192,7 @@ tupleIdxToInt :: TupleIdx t e -> Int
 tupleIdxToInt ZeroTupIdx     = 0
 tupleIdxToInt (SuccTupIdx n) = 1 + tupleIdxToInt n
 
--- Auxilliary ops
+-- Auxiliary ops
 --
 
 -- Convert a typed de Brujin index to the corresponding integer
