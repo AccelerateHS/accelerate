@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, TypeOperators, KindSignatures, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
 -- |Embedded array processing language: graphviz pretty printing
 --
 --  Copyright (c) 2010 Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Sean Seefried
@@ -18,14 +18,14 @@ module Data.Array.Accelerate.Pretty.Graphviz (
 ) where
 
 -- standard libraries
-import Data.List
-import IO hiding (catch)
-import System
-import System.IO
-import System.Directory
--- import System.FilePath.Posix(joinPath)
 import Control.Exception (finally)
 import Control.Monad.State
+import System.Exit
+import System.FilePath
+import System.Directory
+import System.Posix.Process
+import System.IO
+import System.IO.Error hiding (catch)
 import Text.Printf
 
 -- friends
@@ -37,25 +37,27 @@ import Data.Array.Accelerate.AST
 --
 dumpAcc :: String -> OpenAcc aenv a -> IO ()
 dumpAcc basename acc = do
-  exitCode <- system ("which dot > /dev/null 2>&1")
-  case exitCode of
-    ExitSuccess   -> withTempFile "ast.dot" writePSFile
-    ExitFailure _ -> do
+  exists <- findExecutable "dot"
+  case exists of
+    Just dot -> withTempFile "ast.dot" (writePSFile dot)
+    Nothing  -> do
       putStrLn "Couldn't find `dot' tool. Just writing DOT file."
       writeDotFile
   where
-    writePSFile file h = do
+    writePSFile dot file h = do
       hPutStr h (dotAcc acc)
       hFlush h
-      let cmd = concat $ intersperse " " ["dot", file,"-Tps ","-o" ++ basename ++ ".ps" ]
-      exitCode <- system cmd
-      case exitCode of
-        ExitSuccess -> putStrLn ("PS file successfully written to `" ++ basename ++ ".ps'")
-        ExitFailure _ -> do
-          putStrLn "dot failed to write Postscript file. Just writing the DOT file."
-          writeDotFile-- fall back to writing the dot file
+      let output = basename <.> "ps"
+          flags  = [file, "-Tps", "-o" ++ output]
+      status <- getProcessStatus True True =<< forkProcess (executeFile dot False flags Nothing)
+      case status of
+           Just (Exited ExitSuccess) -> putStrLn $ "PS file successfully written to `" ++ output ++ "'"
+           _                         -> do
+             putStrLn "dot failed to write Postscript file. Just writing the DOT file."
+             writeDotFile       -- fall back to writing the dot file
+    --
     writeDotFile :: IO ()
-    writeDotFile  = catch (writeDotFile') handler
+    writeDotFile  = catch writeDotFile' handler
     writeDotFile'  = do
       let path = basename ++ ".dot"
       h <- openFile path WriteMode
@@ -63,7 +65,7 @@ dumpAcc basename acc = do
       putStrLn ("DOT file successfully written to `" ++ path ++ "'")
       hClose h
     handler :: IOError -> IO ()
-    handler e = do
+    handler e =
       case True of
         _ | isAlreadyInUseError e -> putStrLn "isAlreadyInUseError"
           | isDoesNotExistError e -> putStrLn "isDoesNotExistError"
@@ -77,7 +79,7 @@ dumpAcc basename acc = do
 
 withTempFile :: String -> (FilePath -> Handle -> IO a) -> IO a
 withTempFile pattern f = do
-  tempDir <- catch (getTemporaryDirectory) (\_ -> return ".")
+  tempDir <- catch getTemporaryDirectory (\_ -> return ".")
   (tempFile, tempH) <- openTempFile tempDir pattern
   finally (f tempFile tempH) (hClose tempH >> removeFile tempFile)
 
@@ -94,8 +96,8 @@ mkNode :: String -> [String] -> [String] -> State DotState Node
 mkNode lbl childNodes' transitions' = do
   s <- get
   let c = counter s
-  put $  DotState { counter = c + 1 }
-  return (Node { nodeId = mkNodeId c, label = lbl, childNodes = childNodes', transitions = transitions' })
+  put DotState { counter = c + 1 }
+  return Node  { nodeId = mkNodeId c, label = lbl, childNodes = childNodes', transitions = transitions' }
 
 dotLabels :: Labels
 dotLabels = Labels { accFormat = "yellow"
@@ -112,11 +114,11 @@ combineDot  :: String -> String -> [State DotState Node] -> State DotState Node
 combineDot color source targets = do
    targetNodes <- sequence targets
    s <- get
-   let newNodeId  = mkNodeId (counter s)
-       childNodes1 = [(nodeDef newNodeId source color) ]
+   let newNodeId   = mkNodeId (counter s)
+       childNodes1 = [nodeDef newNodeId source color ]
        childNodes2 = concatMap childNodes targetNodes
-       lines1     = map (digraphLine newNodeId) targetNodes
-       lines2     = concat (map transitions targetNodes)
+       lines1      = map (digraphLine newNodeId) targetNodes
+       lines2      = concatMap transitions targetNodes
    mkNode source (childNodes1 ++ childNodes2) (lines1 ++ lines2)
   where
     digraphLine :: String -> Node -> String
@@ -127,10 +129,10 @@ leafDot :: String -> String -> State DotState Node
 leafDot color lbl = do
   s <- get
   let c = counter s
-  put $  DotState { counter = c + 1 }
-  return (Node { nodeId = mkNodeId c, label = lbl
-               , childNodes = [ nodeDef (mkNodeId c) lbl color ]
-               , transitions = [] })
+  put DotState { counter = c + 1 }
+  return Node { nodeId      = mkNodeId c, label = lbl
+              , childNodes  = [ nodeDef (mkNodeId c) lbl color ]
+              , transitions = [] }
 
 nodeDef :: String -> String -> String -> String
 nodeDef nodeId' label' color = printf "%s [ color=\"%s\", label=\"%s\" ];" nodeId' color label'
@@ -139,10 +141,11 @@ toDigraph :: (a -> State DotState Node) -> a -> String
 toDigraph f e =
   header ++ unlines (childNodes node) ++ unlines (transitions node) ++ footer
    where
-     node = evalState (f e) (DotState { counter = 0 })
-     header = unlines $ [ "/* Automatically generated by Accelerate */"
-                        , "digraph AST {"
-                        , "size=\"7.5,11\";"
-                        , "ratio=\"compress\";"
-                        , "node[color=lightblue2, style=filled];"]
+     node = evalState (f e) DotState { counter = 0 }
+     header = unlines [ "/* Automatically generated by Accelerate */"
+                      , "digraph AST {"
+                      , "size=\"7.5,11\";"
+                      , "ratio=\"compress\";"
+                      , "node[color=lightblue2, style=filled];"]
      footer = "}"
+

@@ -15,6 +15,7 @@ module Data.Array.Accelerate.CUDA.CodeGen.Tuple
   )
   where
 
+import Data.Maybe
 import Language.C
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
@@ -24,7 +25,7 @@ mkTupleType :: Maybe Int -> [CType] -> [CExtDecl]
 mkTupleType subscript ty = types ++ [accessor]
   where
     n        = length ty
-    volatile = maybe True (const False) subscript
+    volatile = isNothing subscript
     base     = maybe "Out" (\p -> "In" ++ show p) subscript
     accessor = maybe (mkSet n) (mkGet n) subscript
     types
@@ -58,7 +59,7 @@ mkTupleTypeAsc syn ty = types ++ synonyms ++ [mkSet n, mkGet n 0]
 mkTexTupleTypes :: [[CType]] -> [CExtDecl]
 mkTexTupleTypes tys = concat $ flip map tys' $ \(subscript, texId, ty) -> mkTexTupleType subscript texId ty
   where
-    tys' = zip3 ([0..]) heads tys
+    tys'  = zip3 [0..] heads tys
     heads = scanl (+) 0 $ map length tys
 
 
@@ -66,7 +67,7 @@ mkTexTupleType :: Int -> Int -> [CType] -> [CExtDecl]
 mkTexTupleType subscript texIdx ty = types ++ [accessor]
   where
     n        = length ty
-    base     = "In" ++ (show subscript)
+    base     = "In" ++ show subscript
     accessor = mkTexGet n texIdx subscript
     types
       | n <= 1    = [ mkTypedef ("Ty"  ++ base) False False (head ty), mkTypedef ("Arr" ++ base) False True (head ty)]
@@ -113,9 +114,9 @@ mkTexGet n texIdx prj =
       internalNode)
   where
     initList
-      | n <= 1    = CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent ("tex" ++ show texIdx )) internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode
+      | n <= 1    = CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [CVar (internalIdent ("tex" ++ show texIdx)) internalNode, CVar (internalIdent "idx") internalNode] internalNode) internalNode
       | otherwise = flip CInitList internalNode . take n . flip map (enumFrom texIdx :: [Int]) $ \v ->
-                      ([], CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [(CVar (internalIdent ("tex" ++ (show v))) internalNode), (CVar (internalIdent "idx") internalNode)] internalNode) internalNode)
+                      ([], CInitExpr (CCall (CVar (internalIdent "indexArray") internalNode) [CVar (internalIdent ("tex" ++ show v)) internalNode, CVar (internalIdent "idx") internalNode] internalNode) internalNode)
 
 
 mkSet :: Int -> CExtDecl
@@ -148,8 +149,8 @@ mkTuplePartition tyName ty isVolatile =
     var s = CVar (internalIdent s) internalNode
     names = map (('p':) . show) [n-1,n-2..0]
     initp = mkInitList (map var names)
-    volat = if isVolatile then [CTypeQual (CVolatQual internalNode)] else []
-    stmts = zipWith  (\l r -> CBlockDecl (CDecl (volat ++ (map CTypeSpec l)) r internalNode)) ty
+    volat = [CTypeQual (CVolatQual internalNode) | isVolatile]
+    stmts = zipWith  (\l r -> CBlockDecl (CDecl (volat ++ map CTypeSpec l) r internalNode)) ty
           . zipWith3 (\p t s -> [(Just (CDeclr (Just (internalIdent p)) [CPtrDeclr [] internalNode] Nothing [] internalNode),Just (CInitExpr (CCast (CDecl (map CTypeSpec t) [(Just (CDeclr Nothing [CPtrDeclr [] internalNode] Nothing [] internalNode),Nothing,Nothing)] internalNode) s internalNode) internalNode),Nothing)]) names ty
           $ var "s_data" : map (\v -> CUnary CAdrOp (CIndex (var v) (CVar (internalIdent "n") internalNode) internalNode) internalNode) names
 
@@ -159,7 +160,7 @@ mkTuplePartition tyName ty isVolatile =
 mkStencilType :: Int -> [CType] -> Int -> [CExtDecl]
 mkStencilType subscript ty size = types
   where
-    n     = size * (length ty)
+    n     = size * length ty
     base  = show subscript
     types = [mkStruct  ("TyStencil" ++ base) False False (take n $ cycle ty)]
 
@@ -222,12 +223,12 @@ mkStencilGetStmt :: Int -> [CType] -> [[Int]] -> [CBlockItem]
 mkStencilGetStmt subscript ty ixs = getStmts ++ stencilStmt
   where
     -- statements that 'get' each stencil element
-    getStmts        = map getStmt $ zip ([size-1,size-2..0]) ixs
+    getStmts        = map getStmt $ zip [size-1,size-2..0] ixs
     getStmt (e, ix) = CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyIn" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("e" ++ show subscript ++ "_" ++ show e))) [] Nothing [] internalNode),Just (getFn ix), Nothing)] internalNode)
     getFn ix        = CInitExpr (CCall (CVar (internalIdent ("get" ++ show subscript ++ "_for_stencil")) internalNode) (getArgs ix) internalNode) internalNode
-    getArgs ix      = [(CVar (internalIdent ("sh" ++ show subscript)) internalNode), (ixArg ix)]
+    getArgs ix      = [CVar (internalIdent ("sh" ++ show subscript)) internalNode, ixArg ix]
 
-    ixArg ix        = (CCall (CVar (internalIdent "shape") internalNode) (shapeArgs ix) internalNode)
+    ixArg ix        = CCall (CVar (internalIdent "shape") internalNode) (shapeArgs ix) internalNode
     shapeArgs ix    = map ixExpr $ zip ns ix
       where
         ns | dim == 1  = [Nothing]
@@ -241,7 +242,7 @@ mkStencilGetStmt subscript ty ixs = getStmts ++ stencilStmt
 
 
     -- initialise stencil struct which flattens all elmenet tuples
-    stencilStmt = [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyStencil" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ("x" ++ show subscript))) [] Nothing [] internalNode), Just initStencil, Nothing)] internalNode)]
+    stencilStmt = [CBlockDecl (CDecl [CTypeSpec (CTypeDef (internalIdent ("TyStencil" ++ show subscript)) internalNode)] [(Just (CDeclr (Just (internalIdent ('x' : show subscript))) [] Nothing [] internalNode), Just initStencil, Nothing)] internalNode)]
     initStencil = mkInitList (map var names)
     n           = length ty
     var s       = CVar (internalIdent s) internalNode

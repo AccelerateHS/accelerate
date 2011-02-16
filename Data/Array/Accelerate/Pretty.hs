@@ -1,5 +1,4 @@
-{-# LANGUAGE GADTs, FlexibleInstances, PatternGuards, TypeOperators #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, FlexibleInstances, ScopedTypeVariables, TypeOperators #-}
 
 -- |Embedded array processing language: pretty printing
 --

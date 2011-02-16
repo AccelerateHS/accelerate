@@ -21,7 +21,8 @@ import Text.Blaze.Html4.Transitional ((!))
 import qualified Text.Blaze.Html4.Transitional as H
 import qualified Text.Blaze.Html4.Transitional.Attributes as A
 
-import IO hiding (catch)
+import System.IO
+import System.IO.Error hiding (catch)
 import qualified Data.ByteString.Lazy as BS
 
 -- friends
@@ -32,11 +33,11 @@ combineHtml :: String -> String -> [H.Html] -> H.Html
 combineHtml cssClass label nodes = do
    let inner = foldl (>>) (return ()) nodes
    H.div ! A.class_ ("node " `mappend` fromString cssClass `mappend` " expanded") $ do
-     H.span ! (A.class_ "selector") $ H.text (fromString label)
+     H.span ! A.class_ "selector" $ H.text (fromString label)
      inner
 leafHtml :: String -> String -> H.Html
-leafHtml cssClass label = do
-  H.div ! A.class_ ("node " `mappend` fromString cssClass `mappend` " leaf") $ do
+leafHtml cssClass label =
+  H.div ! A.class_ ("node " `mappend` fromString cssClass `mappend` " leaf") $
     H.span $ H.text (fromString label)
 
 htmlLabels :: Labels
@@ -56,7 +57,7 @@ htmlLabels = Labels { accFormat = "array-node"
 -- leafNode = undefined
 
 htmlAST :: OpenAcc aenv a -> H.Html
-htmlAST acc = H.docTypeHtml $ do
+htmlAST acc = H.docTypeHtml $
     H.head $ do
         H.meta ! A.httpEquiv "Content-Type" ! A.content "text/html; charset=UTF-8"
         H.script ! A.type_ "text/javascript" !
@@ -89,7 +90,7 @@ htmlAST acc = H.docTypeHtml $ do
                     , "  $('.collapsed>.selector').click(expand);"
                     , "});"]
         H.body $ do
-          H.table ! A.border "0" $ do
+          H.table ! A.border "0" $
             H.tr $ do
               H.td ! A.class_ "acc-node" $ H.span "OpenAcc"
               H.td ! A.class_ "fun-node" $ H.span "OpenFun"
@@ -102,7 +103,7 @@ htmlAST acc = H.docTypeHtml $ do
 
 accelerateCSS :: String
 accelerateCSS =
-  unlines $
+  unlines
   [ "body {"
   , "  font-family: Helvetica;"
   , "  font-size: 10pt;"
@@ -166,7 +167,7 @@ accelerateCSS =
 
 
 dumpHtmlAST :: String -> OpenAcc aenv a -> IO ()
-dumpHtmlAST basename acc = do
+dumpHtmlAST basename acc =
   catch writeHtmlFile handler
   where
     writeHtmlFile = do
@@ -181,7 +182,7 @@ dumpHtmlAST basename acc = do
                 "CSS file written to `" ++ cssPath ++ "'")
       hClose h
     handler :: IOError -> IO ()
-    handler e = do
+    handler e =
       case True of
         _ | isAlreadyInUseError e -> putStrLn "isAlreadyInUseError"
           | isDoesNotExistError e -> putStrLn "isDoesNotExistError"
@@ -191,3 +192,4 @@ dumpHtmlAST basename acc = do
           | isIllegalOperation e  -> putStrLn "isIllegalOperation"
           | isUserError e         -> putStrLn "isUserError"
           | otherwise             -> putStrLn "Unknown error"
+

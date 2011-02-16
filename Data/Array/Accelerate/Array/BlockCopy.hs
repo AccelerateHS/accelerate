@@ -234,7 +234,7 @@ base accArrayPtr byteSize =
     blockCopyFunToOrFromArray :: (Ptr b -> Int -> IO ()) -> IO ()
     blockCopyFunToOrFromArray blockCopyFun = blockCopyFun accArrayPtr byteSize
     byteStringToArray :: ByteString -> IO ()
-    byteStringToArray bs = useAsCString bs (\cStr -> blockPtrToArray (castPtr cStr))
+    byteStringToArray bs = useAsCString bs (blockPtrToArray . castPtr)
     arrayToByteString :: IO ByteString
     arrayToByteString = packCStringLen (castPtr accArrayPtr, byteSize)
 
@@ -243,7 +243,7 @@ blockCopyFunGenerator array@(Array _ arrayData) = aux arrayElt arrayData
   where
    sizeA = size (shape array)
    aux :: ArrayEltR e -> ArrayData e -> GenFuns e
-   aux ArrayEltRunit _ = let f = \() -> return () in ((f,f),(f,return ()),f)
+   aux ArrayEltRunit _ = let f () = return () in ((f,f),(f,return ()),f)
    aux ArrayEltRint    ad = base (ptrsOfArrayData ad) (box wORD_SCALE sizeA)
    aux ArrayEltRint8   ad = base (ptrsOfArrayData ad) sizeA
    aux ArrayEltRint16  ad = base (ptrsOfArrayData ad) (sizeA * 2)
@@ -284,5 +284,5 @@ uninitNewArray sh = adata `seq` Array (fromElt sh) adata
 foreign import ccall memcpy :: Ptr a -> Ptr b -> CInt -> IO ()
 
 -- Helpers
-box :: (Int# -> Int#) -> (Int -> Int)
+box :: (Int# -> Int#) -> Int -> Int
 box f (I# x) = I# (f x)

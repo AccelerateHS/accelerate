@@ -149,7 +149,7 @@ mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
               mkStencilType 0 tyIn0 (length ixs) ++
             [ mkDim "DimIn0" (length $ head ixs) ] ++
               mkGatherAndApply tyIn0 ixs apply ++
-              (bndyConst 0 bndy) )
+              bndyConst 0 bndy )
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkStencil2 :: [CType]
@@ -158,7 +158,7 @@ mkStencil2 :: [CType]
            -> [CExpr]
            -> CUTranslSkel
 mkStencil2 tyOut tyIn0 ixs0 bndy0 tyIn1 ixs1 bndy1 apply
-  = CUTranslSkel code ((bndyDef bndy0) ++ (bndyDef bndy1)) skel
+  = CUTranslSkel code (bndyDef bndy0 ++ bndyDef bndy1) skel
   where
     skel = "stencil2.inl"
     code = CTranslUnit

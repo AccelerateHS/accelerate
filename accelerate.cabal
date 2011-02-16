@@ -130,7 +130,6 @@ Library
                         base == 4.*,
                         directory,
                         ghc-prim,
-                        haskell98,
                         mtl >= 2.0,
                         pretty
 

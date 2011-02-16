@@ -1,5 +1,4 @@
-{-# LANGUAGE GADTs, FlexibleInstances, PatternGuards, TypeOperators #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, FlexibleInstances, TypeOperators, ScopedTypeVariables #-}
 
 -- |Embedded array processing language: pretty printing
 --
@@ -44,7 +43,7 @@ prettyAcc alvl (Let2 acc1 acc2)
         , text "in" <+> prettyAcc (alvl + 2) acc2
         ]
 prettyAcc alvl (Avar idx)
-  = text $ "a" ++ show (alvl - idxToInt idx - 1)
+  = text $ 'a' : show (alvl - idxToInt idx - 1)
 prettyAcc _   (Use arr)
   = prettyArrOp "use" [prettyArray arr]
 prettyAcc alvl (Unit e)
@@ -130,7 +129,7 @@ prettyFun :: Int -> OpenFun env aenv fun -> Doc
 prettyFun alvl fun =
   let (n, bodyDoc) = count n fun
   in
-  char '\\' <> hsep [text $ "x" ++ show idx | idx <- [0..n]] <+>
+  char '\\' <> hsep [text $ 'x' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
      count :: Int -> OpenFun env aenv fun -> (Int, Doc)
@@ -144,7 +143,7 @@ prettyFun alvl fun =
 prettyExp :: forall t env aenv.
              Int -> Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
 prettyExp lvl _ _ (Var idx)
-  = text $ "x" ++ show (lvl - idxToInt idx)
+  = text $ 'x' : show (lvl - idxToInt idx)
 prettyExp _ _ _ (Const v)
   = text $ show (toElt v :: t)
 prettyExp lvl alvl _ (Tuple tup)
@@ -270,7 +269,7 @@ prettyArray :: forall dim a. Array dim a -> Doc
 prettyArray arr@(Array sh _)
   = parens $
       hang (text "Array") 2 $
-        sep [showDoc $ (toElt sh :: dim), dataDoc]
+        sep [showDoc (toElt sh :: dim), dataDoc]
   where
     showDoc :: forall a. Show a => a -> Doc
     showDoc = text . show

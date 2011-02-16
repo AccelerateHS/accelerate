@@ -602,8 +602,8 @@ singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 
 liftToElt :: (Elt a, Elt b) 
-           => (EltRepr a -> EltRepr b)
-           -> (a -> b)
+          => (EltRepr a -> EltRepr b)
+          -> (a -> b)
 {-# INLINE liftToElt #-}
 liftToElt f = toElt . f . fromElt
 
@@ -614,8 +614,8 @@ liftToElt2 :: (Elt a, Elt b, Elt c)
 liftToElt2 f = \x y -> toElt $ f (fromElt x) (fromElt y)
 
 sinkFromElt :: (Elt a, Elt b) 
-             => (a -> b)
-             -> (EltRepr a -> EltRepr b)
+            => (a -> b)
+            -> (EltRepr a -> EltRepr b)
 {-# INLINE sinkFromElt #-}
 sinkFromElt f = fromElt . f . toElt
 

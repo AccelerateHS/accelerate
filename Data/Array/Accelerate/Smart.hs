@@ -1728,7 +1728,7 @@ tup9 (x1, x2, x3, x4, x5, x6, x7, x8, x9)
 	     `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8 `SnocTup` x9
 
 untup2 :: (Elt a, Elt b) => Exp (a, b) -> (Exp a, Exp b)
-untup2 e = ((SuccTupIdx ZeroTupIdx) `Prj` e, ZeroTupIdx `Prj` e)
+untup2 e = (SuccTupIdx ZeroTupIdx `Prj` e, ZeroTupIdx `Prj` e)
 
 untup3 :: (Elt a, Elt b, Elt c) => Exp (a, b, c) -> (Exp a, Exp b, Exp c)
 untup3 e = (SuccTupIdx (SuccTupIdx ZeroTupIdx) `Prj` e, 
@@ -1985,17 +1985,17 @@ mkTruncFloatInt x = PrimTruncFloatInt `PrimApp` x
 
 infixr 0 $$
 ($$) :: (b -> a) -> (c -> d -> b) -> c -> d -> a
-(f $$ g) x y = f $ (g x y)
+(f $$ g) x y = f (g x y)
 
 infixr 0 $$$
 ($$$) :: (b -> a) -> (c -> d -> e -> b) -> c -> d -> e -> a
-(f $$$ g) x y z = f $ (g x y z)
+(f $$$ g) x y z = f (g x y z)
 
 infixr 0 $$$$
 ($$$$) :: (b -> a) -> (c -> d -> e -> f -> b) -> c -> d -> e -> f -> a
-(f $$$$ g) x y z u = f $ (g x y z u)
+(f $$$$ g) x y z u = f (g x y z u)
 
 infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
-(f $$$$$ g) x y z u v = f $ (g x y z u v)
+(f $$$$$ g) x y z u v = f (g x y z u v)
 

@@ -10,7 +10,7 @@ import Data.Array.Accelerate.Type
 
 
 cat :: Show s => String -> s -> String
-cat t s = t ++ (show $ s)
+cat t s = t ++ show s
 
 data Labels = Labels { accFormat :: String
                      , expFormat :: String
@@ -30,7 +30,7 @@ travAcc f c l openAcc = travAcc' openAcc
     travAcc' :: OpenAcc aenv a -> m b
     travAcc' (Let acc1 acc2)  = combine "Let" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (Avar idx) = leaf ("AVar " `cat` (idxToInt idx))
+    travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
     travAcc' (Use arr) = combine "Use" [ travArray f l arr ]
     travAcc' (Unit e) = combine "Unit" [ travExp f c l e ]
     travAcc' (Generate sh fun) = combine "Generate" [ travExp f c l  sh, travFun f c l fun]
@@ -68,17 +68,17 @@ travExp f c l expr = travExp' expr
     combine = c (expFormat f)
     leaf    = l (expFormat f)
     travExp' :: OpenExp env aenv a -> m b
-    travExp' (Var idx)           = leaf ("Var "   `cat` (idxToInt idx))
+    travExp' (Var idx)           = leaf ("Var "   `cat` idxToInt idx)
     travExp' (Const v)           = leaf ("Const " `cat` (toElt v :: a))
     travExp' (Tuple tup)         = combine "Tuple" [ travTuple f c l tup ]
-    travExp' (Prj idx e)         = combine ("Prj " `cat` (tupleIdxToInt idx)) [ travExp f c l e ]
+    travExp' (Prj idx e)         = combine ("Prj " `cat` tupleIdxToInt idx) [ travExp f c l e ]
     travExp' (IndexNil)          = leaf "IndexNil"
     travExp' (IndexCons t h)     = combine "IndexCons" [ travExp f c l t, travExp f c l h]
     travExp' (IndexHead ix)      = combine "IndexHead" [ travExp f c l ix ]
     travExp' (IndexTail ix)      = combine "IndexTail" [ travExp f c l ix ]
-    travExp' (Cond cond thn els)        = combine "Cond" [travExp f c l cond, travExp f c l thn, travExp f c l els]
+    travExp' (Cond cond thn els) = combine "Cond" [travExp f c l cond, travExp f c l thn, travExp f c l els]
     travExp' (PrimConst a)       = leaf ("PrimConst " `cat` labelForConst a)
-    travExp' (PrimApp p a)       = combine "PrimApp" [ (l (primFunFormat f) (labelForPrimFun p) ), travExp f c l a ]
+    travExp' (PrimApp p a)       = combine "PrimApp" [ l (primFunFormat f) (labelForPrimFun p), travExp f c l a ]
     travExp' (IndexScalar idx i) = combine "IndexScalar" [ travAcc f c l idx, travExp f c l i]
     travExp' (Shape idx)         = combine "Shape" [ travAcc f c l idx ]
     travExp' (Size idx)          = combine "Size" [ travAcc f c l idx ]
