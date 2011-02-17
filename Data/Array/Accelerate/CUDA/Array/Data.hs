@@ -265,7 +265,7 @@ unbindArray ad = basicModify ad (setL refcount (Just 0))
 -- Allocate a new device array to accompany the given host-side Accelerate array
 --
 mallocArray'
-  :: forall a e. (AD.ArrayPtrs e ~ Ptr a, Storable a, AD.ArrayElt e)
+  :: (AD.ArrayPtrs e ~ Ptr a, Storable a, AD.ArrayElt e)
   => AD.ArrayData e     -- host array data (reference)
   -> Maybe Int          -- initial reference count for this array; Nothing == bound array
   -> Int                -- number of elements
@@ -275,12 +275,11 @@ mallocArray' ad rc n = do
   tab <- getM memoryTable
   val <- liftIO $ Hash.lookup tab (arrayToKey ad)
   case val of
-       Just _m -> INTERNAL_ASSERT "mallocArray" (bytes <= getL memsize _m) $ return ()
+       Just _m -> INTERNAL_ASSERT "mallocArray" (fromIntegral n <= getL memsize _m) $ return ()
        Nothing -> insert' ad =<< liftIO (CUDA.mallocArray n)
   where
     insert' :: (AD.ArrayPtrs e ~ Ptr a, AD.ArrayElt e, Storable a) => AD.ArrayData e -> CUDA.DevicePtr a -> CIO ()
-    insert' _ = updateArray ad . MemoryEntry rc bytes . CUDA.devPtrToWordPtr
-    bytes     = fromIntegral $ n * sizeOf (undefined :: a)
+    insert' _ = updateArray ad . MemoryEntry rc (fromIntegral n) . CUDA.devPtrToWordPtr
 
 
 -- Release a device array, when its reference counter drops to zero
@@ -316,18 +315,16 @@ indexArray' ad n = do
 -- Copy data between two device arrays
 --
 copyArray'
-  :: forall a e. (AD.ArrayPtrs e ~ Ptr a, Storable a, AD.ArrayElt e)
+  :: (AD.ArrayPtrs e ~ Ptr a, Storable a, AD.ArrayElt e)
   => AD.ArrayData e     -- source array
   -> AD.ArrayData e     -- destination
   -> Int                -- number of elements
   -> CIO ()
 
-copyArray' src' dst' n =
-  let bytes = n * sizeOf (undefined::a)
-  in do
-    src <- getArray src'
-    dst <- getArray dst'
-    liftIO $ CUDA.copyArrayAsync bytes src dst
+copyArray' src' dst' n = do
+  src <- getArray src'
+  dst <- getArray dst'
+  liftIO $ CUDA.copyArrayAsync n src dst
 
 
 -- Copy data from the device into the associated Accelerate array
