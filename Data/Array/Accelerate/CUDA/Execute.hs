@@ -125,10 +125,10 @@ executeOpenAcc (Let2 a b) aenv = do
   (a1,a0) <- executeOpenAcc a aenv
   executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
-executeOpenAcc (Reshape e a) aenv = do
+executeOpenAcc acc@(Reshape e a) aenv = do
   ix <- executeExp e aenv
   a0 <- executeOpenAcc a aenv
-  reshapeOp ix a0
+  reshapeOp acc ix a0
 
 executeOpenAcc acc@(Unit e) aenv =
   unitOp acc =<< executeExp e aenv
@@ -222,13 +222,16 @@ executeOpenAcc acc@(Stencil2 _ _ a _ b) aenv = do
 -- Implementation of primitive array operations
 -- --------------------------------------------
 
-reshapeOp :: Sugar.Shape dim
-          => dim
+reshapeOp :: (Sugar.Shape dim, Typeable aenv)
+          => OpenAcc aenv (Array dim e)
+          -> dim
           -> Array dim' e
           -> CIO (Array dim e)
-reshapeOp newShape (Array oldShape adata)
+reshapeOp acc newShape (Array oldShape adata)
   = BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
-  $ return (Array (Sugar.fromElt newShape) adata)
+  $ do rc           <- subtract 1 `fmap` getUseCount acc  -- equiv. `freeArray adata'
+       when (rc > 0) $ basicModify adata (modL refcount (fmap (+rc)))
+       return        $ Array (Sugar.fromElt newShape) adata
 
 unitOp :: (Sugar.Elt e, Typeable aenv)
        => OpenAcc aenv (Scalar e)
@@ -237,7 +240,7 @@ unitOp :: (Sugar.Elt e, Typeable aenv)
 unitOp acc v = do
   rc <- Just `fmap` getUseCount acc
   let (!ad,_) = AD.runArrayData $ do
-        arr  <- AD.newArrayData 1024                    -- FIXME: small arrays moved by the GC
+        arr  <- AD.newArrayData 1024  -- FIXME: small arrays moved by the GC
         AD.writeArrayData arr 0 (Sugar.fromElt v)
         return (arr, undefined)
   mallocArray ad rc 1
@@ -381,8 +384,7 @@ scanOp :: forall aenv e. (Sugar.Elt e, Typeable aenv)
 scanOp acc aenv (Array sh0 in0) = do
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  c                       <- getUseCount acc
-  res@(Array _ out)       <- newArray c (Z :. size sh0 + 1)
+  res@(Array _ out)       <- allocResult acc (Z :. size sh0 + 1)
   (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
   (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
@@ -432,8 +434,7 @@ scan1Op :: forall aenv e. (Sugar.Elt e, Typeable aenv)
 scan1Op acc aenv (Array sh0 in0) = do
   (fvs,mdl,fscan,(t,g,m)) <- configure "inclusive_scan" acc aenv (size sh0)
   fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
-  c                       <- getUseCount acc
-  res@(Array _ out)       <- newArray c (Sugar.toElt sh0)
+  res@(Array _ out)       <- allocResult acc (Sugar.toElt sh0)
   (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
   (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
@@ -633,14 +634,14 @@ liftExp (IndexTail ix)    aenv = liftExp ix aenv
 liftExp (PrimApp _ e)     aenv = liftExp e aenv
 liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
 liftExp (Shape a)         aenv = do
-  (Array sh _) <- executeOpenAcc a aenv
+  (Array sh ad) <- executeOpenAcc a aenv
+  freeArray ad
   return [FreeShape sh]
 
 liftExp (IndexScalar a e) aenv = do
   vs               <- liftExp e aenv
   arr@(Array sh _) <- executeOpenAcc a aenv
   return $ vs ++ [FreeArray arr, FreeShape sh]
---  return $ FreeArray arr : FreeShape sh : vs
 
 liftExp (Size a)          aenv = liftExp (Shape a) aenv
 
@@ -649,7 +650,7 @@ liftExp (Size a)          aenv = liftExp (Shape a) aenv
 -- names are simply derived "in order", c.f. code generation.
 --
 bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
-bindLifted mdl = foldM_ go (0,0) {-- . reverse --}
+bindLifted mdl = foldM_ go (0,0)
   where
     go :: (Int,Int) -> Lifted -> CIO (Int,Int)
     go (n,m) (FreeShape sh)            = bindDim n sh    >>  return (n+1,m)
