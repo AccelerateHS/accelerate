@@ -231,7 +231,7 @@ compileAcc acc = generateUseMap acc >> generateCode False acc
 
 generateCode :: (Typeable aenv, Typeable a) => Bool -> OpenAcc aenv a -> CIO ()
 generateCode iss acc' = do
-  memMap <- liftIO $ Hash.new (==) fromIntegral
+  memMap <- liftIO newAccMemoryTable
   setM memoryTable memMap
   travA acc'
   where

@@ -22,6 +22,7 @@ import Data.Int
 import Data.Word
 import Data.Maybe
 import Data.Typeable
+import Data.Record.Label
 import Control.Monad
 import Control.Monad.Trans
 import Control.Applicative                                      hiding (Const)

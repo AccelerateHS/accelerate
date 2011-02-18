@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, GADTs, PatternGuards, TemplateHaskell, TupleSections #-}
+{-# LANGUAGE CPP, GADTs, PatternGuards, TemplateHaskell #-}
+{-# LANGUAGE TupleSections, TypeFamilies, TypeOperators #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.State
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -19,12 +20,11 @@ module Data.Array.Accelerate.CUDA.State (
   CUDAState, unique, deviceProps, deviceContext, memoryTable, kernelTable, computeTable,
 
   KernelEntry(KernelEntry), kernelName, kernelStatus,
-  MemoryEntry(MemoryEntry), refcount, memsize, arena,
   AccNode(AccNode), usecount, executable,
+  MemoryEntry(..), refcount,
 
+  newAccMemoryTable, AccArrayData(..),
   newAccHashTable, AccHashTable, StableAccName(..),
-
-  module Data.Record.Label
 
 ) where
 
@@ -41,7 +41,6 @@ import Data.ByteString.Lazy.Char8                       (ByteString)
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict                       (StateT(..))
-import Data.HashTable                                   (HashTable)
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable                         as Hash
@@ -53,6 +52,7 @@ import System.Mem.StableName
 import System.IO.Unsafe
 
 import Data.Array.Accelerate.CUDA.Analysis.Device
+import qualified Data.Array.Accelerate.Array.Data       as AD
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
 import Data.Binary                                      (encodeFile, decodeFile)
@@ -71,7 +71,7 @@ import Paths_accelerate                                 (getDataDir)
 -- An Eq instance of Accelerate expressions does not facilitate persistent
 -- caching.
 --
-type KernelTable = HashTable ByteString KernelEntry
+type KernelTable = Hash.HashTable ByteString KernelEntry
 data KernelEntry = KernelEntry
   {
     _kernelName   :: FilePath,
@@ -84,13 +84,36 @@ data KernelEntry = KernelEntry
 -- This maps to a single concrete array. Arrays of tuples, which are represented
 -- internally as tuples of arrays, will generate multiple entries.
 --
-type MemoryTable = HashTable WordPtr MemoryEntry
-data MemoryEntry = MemoryEntry
-  {
-    _refcount :: Maybe Int,     -- set to 'Nothing', the array will never be released
-    _memsize  :: Int64,
-    _arena    :: WordPtr
-  }
+type MemoryTable = Hash.HashTable AccArrayData MemoryEntry
+
+data AccArrayData where
+  AccArrayData :: (Typeable a, AD.ArrayPtrs e ~ Ptr a, AD.ArrayElt e)
+               => AD.ArrayData e
+               -> AccArrayData
+
+instance Eq AccArrayData where
+  AccArrayData ad1 == AccArrayData ad2
+    | Just p1 <- gcast (AD.ptrsOfArrayData ad1) = p1 == AD.ptrsOfArrayData ad2
+    | otherwise                                 = False
+
+data MemoryEntry where
+  MemoryEntry :: Typeable a
+              => Maybe Int         -- if Nothing, the array is not released by 'freeArray'
+              -> CUDA.DevicePtr a
+              -> MemoryEntry
+
+newAccMemoryTable :: IO MemoryTable
+newAccMemoryTable = Hash.new (==) hashAccArray
+  where
+    hashAccArray (AccArrayData ad) = fromIntegral . ptrToIntPtr
+                                   $ AD.ptrsOfArrayData ad
+
+refcount :: MemoryEntry :-> Maybe Int
+refcount = lens get set
+  where
+    get   (MemoryEntry c _) = c
+    set c (MemoryEntry _ p) = MemoryEntry c p
+
 
 -- Opaque stable names for array computations
 --
@@ -146,7 +169,7 @@ data CUDAState = CUDAState
     _computeTable  :: AccHashTable AccNode      --      so maybe they should live elsewhere?
   }
 
-$(mkLabels [''CUDAState, ''MemoryEntry, ''KernelEntry, ''AccNode])
+$(mkLabels [''CUDAState, ''KernelEntry, ''AccNode])
 
 
 -- Execution State

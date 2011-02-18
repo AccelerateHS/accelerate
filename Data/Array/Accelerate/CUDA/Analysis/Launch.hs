@@ -12,13 +12,13 @@
 module Data.Array.Accelerate.CUDA.Analysis.Launch (launchConfig)
   where
 
-import Control.Monad.IO.Class
-
 import Data.Int
+import Data.Record.Label
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.CUDA.State
+import Control.Monad.IO.Class
 import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.Storable                       as F

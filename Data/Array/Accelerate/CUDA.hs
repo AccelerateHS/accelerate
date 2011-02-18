@@ -20,6 +20,7 @@ module Data.Array.Accelerate.CUDA (
 
 -- standard library
 import Prelude hiding (catch)
+import Data.Record.Label
 import Control.Exception
 import Control.Applicative
 import System.IO.Unsafe
@@ -75,7 +76,7 @@ stream f arrs = unsafePerformIO $ execute arrs . snd =<< runCUDA (compileAccFun 
     --
     finalise state       = do
       mem <- Hash.toList (getL memoryTable state)
-      mapM_ (CUDA.free . CUDA.wordPtrToDevPtr . getL arena . snd) mem
+      mapM_ (\(_,MemoryEntry _ p) -> CUDA.free (CUDA.castDevPtr p)) mem
 
 
 -- Copy from device to host, and decrement the usage counter. This last step
