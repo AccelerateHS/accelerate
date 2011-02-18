@@ -34,14 +34,13 @@ instance (Ix dim, IArray UArray e) => NFData (UArray dim e) where
 benchmark
   :: (IArray UArray e, Ix ix, Acc.Elem ix, Acc.Ix dim, Acc.Elem e)
   => String
-  -> (e -> e -> Bool)
   -> (() -> UArray ix e)
   -> (() -> Acc (Acc.Array dim e))
   -> IO Benchmark
 --}
-benchmark name sim ref acc = do
-  putStr "Interpreter : " ; v1 <- validate sim (ref ()) (Acc.toIArray $ Interp.run (acc ()))
-  putStr "CUDA        : " ; v2 <- validate sim (ref ()) (Acc.toIArray $ CUDA.run   (acc ()))
+benchmark name ref acc = do
+  putStr "Interpreter : " ; v1 <- validate (ref ()) (Acc.toIArray $ Interp.run (acc ()))
+  putStr "CUDA        : " ; v2 <- validate (ref ()) (Acc.toIArray $ CUDA.run   (acc ()))
   if not (v1 && v2)
      then return $ bgroup "" []
      else return $ bgroup name
@@ -59,7 +58,7 @@ test_dotp gen n = do
   ys  <- randomVectorR (-1,1) gen n
   xs' <- convertVector xs
   ys' <- convertVector ys
-  benchmark "dotp" similar (run_ref xs ys) (run_acc xs' ys')
+  benchmark "dotp" (run_ref xs ys) (run_acc xs' ys')
   where
     {-# NOINLINE run_ref #-}
     run_ref x y () = dotp_ref x y
@@ -73,7 +72,7 @@ test_saxpy gen n = do
   xs'   <- convertVector xs
   ys'   <- convertVector ys
   alpha <- uniform gen
-  benchmark "saxpy" similar (run_ref alpha xs ys) (run_acc alpha xs' ys')
+  benchmark "saxpy" (run_ref alpha xs ys) (run_acc alpha xs' ys')
   where
     {-# NOINLINE run_ref #-}
     run_ref alpha x y () = saxpy_ref alpha x y
@@ -85,7 +84,7 @@ test_filter gen n = do
   putStrLn $ "== Filter (n = " ++ shows n ") =="
   xs  <- randomVectorR (0,1::Float) gen n
   xs' <- convertVector xs
-  benchmark "filter" similar (run_ref xs) (run_acc xs')
+  benchmark "filter" (run_ref xs) (run_acc xs')
   where
     {-# NOINLINE run_ref #-}
     run_ref x () = filter_ref (< 0.5) x
@@ -105,7 +104,7 @@ test_smvm gen (n,m) (rows,cols) = do
   vec'  <- convertVector vec
   mat'  <- let v = Acc.fromList (Z:.nnz) (zip (elems inds) (elems vals))
            in  evaluate (v `Acc.indexArray` (Z:.0)) >> return v
-  benchmark "smvm" similar (run_ref segd inds vals vec) (run_acc segd' mat' vec')
+  benchmark "smvm" (run_ref segd inds vals vec) (run_acc segd' mat' vec')
   where
     {-# NOINLINE run_ref #-}
     run_ref d i x v () = smvm_ref (d, (i,x)) v
@@ -121,7 +120,7 @@ test_scanlSeg gen n r = do
   putStrLn $ shows ne " elements)"
   xs   <- randomVectorR (-1,1) gen ne :: IO (UArray Int Float)
   xs'  <- convertVector xs
-  benchmark "prescanlSeg" similar (run_ref xs seg) (run_acc xs' seg')
+  benchmark "prescanlSeg" (run_ref xs seg) (run_acc xs' seg')
   where
     {-# NOINLINE run_ref #-}
     run_ref x s () = prefixSumSeg_ref x s
