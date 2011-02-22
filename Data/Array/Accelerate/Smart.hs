@@ -108,11 +108,21 @@ incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 
 -- |Array-valued collective computations without a recursive knot
 --
+-- * The 'Pipe' constructor is special.  It is the only form that contains functions over array
+--   computations and these functions are fixed to be over vanilla 'Acc' types.  This enables us to
+--   perform sharing recovery independently from the context for them.
+--
 data PreAcc acc a where  
     -- Needed for conversion to de Bruijn form
   Atag        :: Arrays as
-              => Int            -- environment size at defining occurrence
+              => Int                        -- environment size at defining occurrence
               -> PreAcc acc as
+
+  Pipe        :: (Arrays as, Arrays bs, Arrays cs) 
+              => (Acc as -> Acc bs)         -- see comment above on why 'Acc' and not 'acc'
+              -> (Acc bs -> Acc cs) 
+              -> acc as 
+              -> PreAcc acc cs
 
   FstArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc (Array sh1 e1, Array sh2 e2)
@@ -289,6 +299,11 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
   = case preAcc of
       Atag i
         -> AST.Avar (prjIdx i alyt)
+      Pipe afun1 afun2 acc
+        -> let boundAcc = convertAccFun1 afun1 `AST.Apply` convertSharingAcc alyt env acc
+               bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.Avar AST.ZeroIdx
+           in
+           AST.Let boundAcc bodyAcc
       FstArray acc
         -> AST.Let2 (convertSharingAcc alyt env acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
       SndArray acc
@@ -489,6 +504,7 @@ makeOccMap acc
           enter sa
           case pacc of
             Atag _                   -> return ()
+            Pipe _ _ acc             -> travA acc
             FstArray acc             -> travA acc
             SndArray acc             -> travA acc
             Use _                    -> return ()
@@ -626,6 +642,7 @@ determineScopes occMap acc
     injectBindingsAcc acc@(Acc pacc)
       = case pacc of
           Atag i                          -> reconstruct (Atag i) noNodeCounts
+          Pipe afun1 afun2 acc            -> travA (Pipe afun1 afun2) acc
           FstArray acc                    -> travA FstArray acc
           SndArray acc                    -> travA SndArray acc
           Use arr                         -> reconstruct (Use arr) noNodeCounts
@@ -635,7 +652,8 @@ determineScopes occMap acc
           Generate sh f                   -> do
                                                (sh', accCount1) <- injectBindingsExp sh
                                                (f' , accCount2) <- injectBindingsFun1 f
-                                               reconstruct (Generate sh' f') (accCount1 +++ accCount2)
+                                               reconstruct (Generate sh' f')
+                                                           (accCount1 +++ accCount2)
           Reshape sh acc                  -> travEA Reshape sh acc
           Replicate n acc                 -> travEA Replicate n acc
           Index acc i                     -> travEA (flip Index) i acc
@@ -969,6 +987,7 @@ determineScopes occMap acc
             else
               case pacc of
                 Atag i                          -> return (AccSharing sn $ Atag i, [])
+                Pipe afun1 afun2 acc            -> travA (Pipe afun1 afun2) acc
                 FstArray acc                    -> travA FstArray acc
                 SndArray acc                    -> travA SndArray acc
                 Use arr                         -> return (AccSharing sn $ Use arr, [])
@@ -1469,6 +1488,7 @@ instance Show (Exp a) where
 -- for debugging
 _showPreAccOp :: PreAcc acc arrs -> String
 _showPreAccOp (Atag _)             = "Atag"                   
+_showPreAccOp (Pipe _ _ _)         = "Pipe"
 _showPreAccOp (FstArray _)         = "FstArray"
 _showPreAccOp (SndArray _)         = "SndArray"
 _showPreAccOp (Use _)              = "Use"
@@ -1998,4 +2018,3 @@ infixr 0 $$$$
 infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
-

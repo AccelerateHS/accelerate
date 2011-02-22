@@ -105,6 +105,7 @@ data MemoryEntry where
 newAccMemoryTable :: IO MemoryTable
 newAccMemoryTable = Hash.new (==) hashAccArray
   where
+    hashAccArray :: AccArrayData -> Int32
     hashAccArray (AccArrayData ad) = fromIntegral . ptrToIntPtr
                                    $ AD.ptrsOfArrayData ad
 

@@ -59,6 +59,9 @@ module Data.Array.Accelerate.Language (
   -- ** Stencil operations
   stencil, stencil2,
   
+  -- ** Pipelining
+  (>->),
+  
   -- ** Lifting and unlifting
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
   
@@ -107,6 +110,7 @@ import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.AST (Arrays)
 
 
 -- Array introduction
@@ -245,9 +249,9 @@ fold1Seg = Acc $$$ Fold1Seg
 -- Scan functions
 -- --------------
 
--- |'Data.List'-style left-to-right scan, but with the additional restriction that the first argument
--- needs to be an /associative/ function to enable an efficient parallel implementation.  The initial
--- value (second argument) may be aribitrary.
+-- |'Data.List'-style left-to-right scan, but with the additional restriction that the first
+-- argument needs to be an /associative/ function to enable an efficient parallel implementation.
+-- The initial value (second argument) may be arbitrary.
 --
 scanl :: Elt a
       => (Exp a -> Exp a -> Exp a)
@@ -398,6 +402,24 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
         -> Acc (Array ix b)                   -- ^source array #2
         -> Acc (Array ix c)                   -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
+
+
+-- Composition of array computations
+-- ---------------------------------
+
+-- |Pipelining of two array computations.
+--
+-- Denotationally, we have
+--
+-- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs in acc2 tmp
+--
+-- Operationally, the array computations 'acc1' and 'acc2' will not share any subcomputations,
+-- neither between each other nor with the environment.  This makes them truly independent stages
+-- that only communicate by way of the result of 'acc1' which is being fed as an argument to 'acc2'.
+--
+infixl 1 >->
+(>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
+(>->) = Acc $$$ Pipe
 
 
 -- Lifting

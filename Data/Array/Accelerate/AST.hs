@@ -196,6 +196,12 @@ data OpenAcc aenv a where
   Avar        :: Arrays arrs
               => Idx     aenv arrs
               -> OpenAcc aenv arrs
+
+  -- Array-function application (to keep things simple for the moment, the function must be closed)
+  Apply       :: (Arrays arrs1, Arrays arrs2)
+              => Afun          (arrs1 -> arrs2)
+              -> OpenAcc  aenv arrs1
+              -> OpenAcc  aenv arrs2
   
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Array dim e 

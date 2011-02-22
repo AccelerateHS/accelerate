@@ -40,6 +40,7 @@ travAcc f c l openAcc = travAcc' openAcc
     travAcc' (Let acc1 acc2)  = combine "Let" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
+    travAcc' (Apply afun acc) = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
     travAcc' (Use arr) = combine "Use" [ travArray f l arr ]
     travAcc' (Unit e) = combine "Unit" [ travExp f c l e ]
     travAcc' (Generate sh fun) = combine "Generate" [ travExp f c l  sh, travFun f c l fun]
@@ -93,6 +94,14 @@ travExp f c l expr = travExp' expr
     travExp' (Size idx)          = combine "Size" [ travAcc f c l idx ]
 
 
+travAfun :: forall m b aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)
+        -> (String -> String -> m b) -> OpenAfun aenv fun -> m b
+travAfun f c l openAfun = travAfun' openAfun
+  where
+    combine = c (funFormat f)
+    travAfun' :: OpenAfun aenv fun -> m b
+    travAfun' (Abody body) = combine "Abody" [ travAcc f c l body ]
+    travAfun' (Alam fun)   = combine "Alam"  [ travAfun f c l fun ]
 
 travFun :: forall m b env aenv fun.Monad m => Labels -> (String -> String -> [m b] -> m b)
         -> (String -> String -> m b) -> OpenFun env aenv fun -> m b

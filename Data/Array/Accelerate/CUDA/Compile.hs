@@ -147,6 +147,7 @@ generateUseMap acc' = do
                       else travA' b ((sn, incFst) : aenv)
 
         Avar ix            -> updateUseMap (prjEnv ix aenv)
+        Apply _f _a        -> INTERNAL_ERROR(error) "generateUseMap" "Apply: not yet implemented"
         Use _              -> return ()
         Unit e             -> travE e
         Reshape e a        -> travE e >> travA a
@@ -243,6 +244,7 @@ generateCode iss acc' = do
         Avar _             -> return ()
         Let a b            -> travA a >> travA b
         Let2 a b           -> travA a >> travA b
+        Apply _f _a        -> INTERNAL_ERROR(error) "generateCode" "Apply: not yet implemented"
         Unit e             -> travE e
         Reshape e a        -> travE e >> travA a
         Use arr            -> upload arr

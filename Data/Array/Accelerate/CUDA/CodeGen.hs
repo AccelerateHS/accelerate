@@ -144,6 +144,7 @@ codeGen c@(Stencil2 f b1 a1 b0 a0) = do
 
 
 -- We should never get here: Use, Let, Let2, Avar, Unit, Reshape
+-- FIXME: What about Apply?
 --
 codeGen x =
   INTERNAL_ERROR(error) "codeGenAcc"

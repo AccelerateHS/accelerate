@@ -54,6 +54,9 @@ accType (Let2 _ acc)          = accType acc
 accType (Avar _)              = -- eltType (undefined::e)   -- should work - GHC 6.12 bug?
                                 case arrays :: ArraysR (Array sh e) of 
                                   ArraysRarray -> eltType (undefined::e)
+accType (Apply _ _)           = -- eltType (undefined::e)   -- should work - GHC 6.12 bug?
+                                case arrays :: ArraysR (Array sh e) of 
+                                  ArraysRarray -> eltType (undefined::e)
 accType (Use arr)             = arrayType arr
 accType (Unit _)              = eltType (undefined::e)
 accType (Generate _ _)        = eltType (undefined::e)
@@ -83,6 +86,12 @@ accType2 :: forall aenv sh1 e1 sh2 e2. OpenAcc aenv (Array sh1 e1, Array sh2 e2)
 accType2 (Let _ acc)      = accType2 acc
 accType2 (Let2 _ acc)     = accType2 acc
 accType2 (Avar _)         = -- (eltType (undefined::e1), eltType (undefined::e2))
+                            -- should work - GHC 6.12 bug?
+                            case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 
+                              ArraysRpair ArraysRarray ArraysRarray 
+                                -> (eltType (undefined::e1), eltType (undefined::e2))
+                              _ -> error "GHC is too dumb to realise that this is dead code"
+accType2 (Apply _ _)     = -- (eltType (undefined::e1), eltType (undefined::e2))
                             -- should work - GHC 6.12 bug?
                             case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 
                               ArraysRpair ArraysRarray ArraysRarray 

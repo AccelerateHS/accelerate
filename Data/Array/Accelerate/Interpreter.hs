@@ -94,6 +94,12 @@ evalOpenAcc (Let2 acc1 acc2) aenv
 
 evalOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
+evalOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
+  = let !arr = force $ evalOpenAcc acc aenv
+    in evalOpenAcc funAcc (Empty `Push` arr)
+evalOpenAcc (Apply _afun _acc) _aenv
+  = error "GHC's pattern match checker is too dumb to figure that this case is impossible"
+
 evalOpenAcc (Use arr) _aenv = delay arr
 
 evalOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)

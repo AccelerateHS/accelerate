@@ -44,6 +44,8 @@ prettyAcc alvl (Let2 acc1 acc2)
         ]
 prettyAcc alvl (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)
+prettyAcc alvl (Apply afun acc)
+  = sep [parens (prettyAfun alvl afun), prettyAccParens alvl acc]
 prettyAcc _   (Use arr)
   = prettyArrOp "use" [prettyArray arr]
 prettyAcc alvl (Unit e)
@@ -122,6 +124,21 @@ prettyArrOp name docs = hang (text name) 2 $ sep docs
 prettyAccParens :: Int -> OpenAcc aenv a -> Doc
 prettyAccParens lvl acc@(Avar _) = prettyAcc lvl acc
 prettyAccParens lvl acc          = parens (prettyAcc lvl acc)
+
+-- Pretty print a function over array computations.
+--
+-- At the moment restricted to /closed/ functions.
+--
+prettyAfun :: Int -> Afun fun -> Doc
+prettyAfun _alvl fun =
+  let (n, bodyDoc) = count n fun
+  in
+  char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
+  text "->" <+> bodyDoc
+  where
+     count :: Int -> OpenAfun aenv fun -> (Int, Doc)
+     count lvl (Abody body) = (-1, prettyAcc (lvl + 1) body)   -- 'lvl+1' ok as functions is closed!
+     count lvl (Alam fun)   = let (n, body) = count lvl fun in (1 + n, body)
 
 -- Pretty print a function over scalar expressions.
 --

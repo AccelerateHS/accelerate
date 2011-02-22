@@ -26,6 +26,9 @@ accDim (Let2 _ acc)           = accDim acc
 accDim (Avar _)               = -- ndim (eltType (undefined::sh))   -- should work - GHC 6.12 bug?
                                 case arrays :: ArraysR (Array sh e) of 
                                   ArraysRarray -> ndim (eltType (undefined::sh))
+accDim (Apply _ _)            = -- ndim (eltType (undefined::sh))   -- should work - GHC 6.12 bug?
+                                case arrays :: ArraysR (Array sh e) of 
+                                  ArraysRarray -> ndim (eltType (undefined::sh))
 accDim (Use (Array _ _))      = ndim (eltType (undefined::sh))
 accDim (Unit _)               = 0
 accDim (Generate _ _)         = ndim (eltType (undefined::sh))
@@ -54,6 +57,13 @@ accDim2 :: forall aenv sh1 e1 sh2 e2. OpenAcc aenv (Array sh1 e1, Array sh2 e2) 
 accDim2 (Let _ acc)      = accDim2 acc
 accDim2 (Let2 _ acc)     = accDim2 acc
 accDim2 (Avar _)         = -- (ndim (eltType (undefined::dim1)), ndim (eltType (undefined::dim2)))
+                           -- should work - GHC 6.12 bug?
+                            case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 
+                              ArraysRpair ArraysRarray ArraysRarray 
+                                -> (ndim (eltType (undefined::sh1)), 
+                                    ndim (eltType (undefined::sh2)))
+                              _ -> error "GHC is too dumb to realise that this is dead code"
+accDim2 (Apply _ _)      = -- (ndim (eltType (undefined::dim1)), ndim (eltType (undefined::dim2)))
                            -- should work - GHC 6.12 bug?
                             case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 
                               ArraysRpair ArraysRarray ArraysRarray 

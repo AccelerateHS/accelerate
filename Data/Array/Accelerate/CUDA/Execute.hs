@@ -126,6 +126,9 @@ executeOpenAcc (Let2 a b) aenv = do
   (a1,a0) <- executeOpenAcc a aenv
   executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
+executeOpenAcc (Apply _f _a) _aenv =
+  INTERNAL_ERROR(error) "executeOpenAcc" "Apply: not yet implemented"
+  
 executeOpenAcc acc@(Reshape e a) aenv = do
   ix <- executeExp e aenv
   a0 <- executeOpenAcc a aenv
@@ -589,6 +592,8 @@ liftAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        
     applyR ArraysRunit         ()      = []
     applyR ArraysRarray        arr     = [FreeArray arr]
     applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
+
+liftAcc (Apply _f _a)        _   = INTERNAL_ERROR(error) "liftAcc" "Apply: not yet implemented"
 
 liftAcc (Use _)              _    = return []
 liftAcc (Unit _)             _    = return []
