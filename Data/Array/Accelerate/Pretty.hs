@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, FlexibleInstances, ScopedTypeVariables, TypeOperators #-}
+{-# LANGUAGE GADTs, FlexibleInstances, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -26,7 +26,7 @@ import Data.Array.Accelerate.AST
 -- ---------------
 
 instance Show (OpenAcc aenv a) where
-  show c = render $ prettyAcc 0 c
+  show c = render $ prettyAcc 0 noParens c
 
 instance Show (OpenFun env aenv f) where
   show f = render $ prettyFun 0 f

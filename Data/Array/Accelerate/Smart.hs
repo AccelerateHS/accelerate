@@ -67,7 +67,10 @@ import Data.Typeable
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple hiding (Tuple)
-import Data.Array.Accelerate.AST   hiding (OpenAcc(..), Acc, Stencil, OpenExp(..), Exp)
+import Data.Array.Accelerate.AST
+  hiding (
+    PreOpenAcc(..), OpenAcc(..), Acc, Stencil, PreOpenExp(..), OpenExp, PreExp, Exp
+  )
 import qualified Data.Array.Accelerate.Tuple as Tuple
 import qualified Data.Array.Accelerate.AST   as AST
 import Data.Array.Accelerate.Pretty ()
@@ -279,35 +282,39 @@ convertAccFun1 f = Alam (Abody openF)
 -- The sharing environment 'env' keeps track of all currently bound sharing variables, keeping them
 -- in reverse chronological order (outermost variable is at the end of the list)
 --
-convertSharingAcc :: Arrays a
+convertSharingAcc :: forall a aenv. Arrays a
                   => Layout aenv aenv
                   -> [StableSharingAcc]
                   -> SharingAcc a
                   -> AST.OpenAcc aenv a
 convertSharingAcc alyt env (VarSharing sa)
   | Just i <- findIndex (matchStableAcc sa) env 
-  = AST.Avar (prjIdx i alyt)
+  = AST.OpenAcc $ AST.Avar (prjIdx i alyt)
   | otherwise                                   
   = INTERNAL_ERROR(error) "convertSharingAcc (prjIdx)" err
   where
     err = "inconsistent valuation; sa = " ++ show (hashStableName sa) ++ "; env = " ++ show env
 convertSharingAcc alyt env (LetSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
-  = let alyt' = incLayout alyt `PushLayout` ZeroIdx
+  = AST.OpenAcc
+  $ let alyt' = incLayout alyt `PushLayout` ZeroIdx
     in
     AST.Let (convertSharingAcc alyt env boundAcc) (convertSharingAcc alyt' (sa:env) bodyAcc)
 convertSharingAcc alyt env (AccSharing _ preAcc)
-  = case preAcc of
+  = AST.OpenAcc
+  $ (case preAcc of
       Atag i
         -> AST.Avar (prjIdx i alyt)
       Pipe afun1 afun2 acc
         -> let boundAcc = convertAccFun1 afun1 `AST.Apply` convertSharingAcc alyt env acc
-               bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.Avar AST.ZeroIdx
+               bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
-           AST.Let boundAcc bodyAcc
+           AST.Let (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
       FstArray acc
-        -> AST.Let2 (convertSharingAcc alyt env acc) (AST.Avar (AST.SuccIdx AST.ZeroIdx))
+        -> AST.Let2 (convertSharingAcc alyt env acc) 
+                    (AST.OpenAcc $ AST.Avar (AST.SuccIdx AST.ZeroIdx))
       SndArray acc
-        -> AST.Let2 (convertSharingAcc alyt env acc) (AST.Avar AST.ZeroIdx)
+        -> AST.Let2 (convertSharingAcc alyt env acc) 
+                    (AST.OpenAcc $ AST.Avar AST.ZeroIdx)
       Use array
         -> AST.Use array
       Unit e
@@ -327,7 +334,8 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
                        (convertSharingAcc alyt env acc1)
                        (convertSharingAcc alyt env acc2)
       Fold f e acc
-        -> AST.Fold (convertFun2 alyt env f) (convertExp alyt env e) (convertSharingAcc alyt env acc)
+        -> AST.Fold (convertFun2 alyt env f) (convertExp alyt env e) 
+                    (convertSharingAcc alyt env acc)
       Fold1 f acc
         -> AST.Fold1 (convertFun2 alyt env f) (convertSharingAcc alyt env acc)
       FoldSeg f e acc1 acc2
@@ -372,6 +380,7 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
                         (convertSharingAcc alyt env acc1)
                         (convertBoundary bndy2) 
                         (convertSharingAcc alyt env acc2)
+    :: AST.PreOpenAcc AST.OpenAcc aenv a)
 
 -- |Convert a boundary condition
 --
@@ -1523,19 +1532,19 @@ _showSharingAccOp (AccSharing _ acc) = _showPreAccOp acc
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
-mkIndex :: forall slix e aenv. (Slice slix, Elt e) 
-        => AST.OpenAcc aenv (Array (FullShape slix) e)
-        -> AST.Exp     aenv slix
-        -> AST.OpenAcc aenv (Array (SliceShape slix) e)
+mkIndex :: forall slix e aenv acc. (Slice slix, Elt e) 
+        => AST.OpenAcc                aenv (Array (FullShape slix) e)
+        -> AST.Exp                    aenv slix
+        -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
 mkIndex arr e 
   = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
   where
     slix = undefined :: slix
 
-mkReplicate :: forall slix e aenv. (Slice slix, Elt e) 
-        => AST.Exp     aenv slix
-        -> AST.OpenAcc aenv (Array (SliceShape slix) e)
-        -> AST.OpenAcc aenv (Array (FullShape slix) e)
+mkReplicate :: forall slix e aenv acc. (Slice slix, Elt e) 
+        => AST.Exp                    aenv slix
+        -> AST.OpenAcc                aenv (Array (SliceShape slix) e)
+        -> AST.PreOpenAcc AST.OpenAcc aenv (Array (FullShape slix) e)
 mkReplicate e arr
   = AST.Replicate (convertSliceIndex slix (sliceIndex slix)) e arr
   where

@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, FlexibleInstances, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, FlexibleInstances, TypeOperators, ScopedTypeVariables, RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -12,7 +12,12 @@
 module Data.Array.Accelerate.Pretty.Print (
 
   -- * Pretty printing functions
-  prettyAcc, prettyExp, prettyFun, noParens
+  PrettyAcc,
+  prettyPreAcc, prettyAcc, 
+  prettyPreExp, prettyExp, 
+  prettyPreAfun, prettyAfun, 
+  prettyPreFun, prettyFun, 
+  noParens
 
 ) where
 
@@ -28,89 +33,112 @@ import Data.Array.Accelerate.Type
 -- Pretty printing
 -- ---------------
 
+-- The type of pretty printing functions for array computations.
+--
+type PrettyAcc acc = forall aenv t. Int -> (Doc -> Doc) -> acc aenv t -> Doc
+
 -- Pretty print an array expression
 --
-prettyAcc :: Int -> OpenAcc aenv a -> Doc
-prettyAcc alvl (Let acc1 acc2)
-  = sep [ hang (text "let a" <> int alvl <+> char '=') 2 $
-            prettyAcc alvl acc1
-        , text "in" <+> prettyAcc (alvl + 1) acc2
-        ]
-prettyAcc alvl (Let2 acc1 acc2)
-  = sep [ hang (text "let (a" <> int alvl <> text ", a" <> int (alvl + 1) <> char ')' <+> char '=') 2
-          $
-            prettyAcc alvl acc1
-        , text "in" <+> prettyAcc (alvl + 2) acc2
-        ]
-prettyAcc alvl (Avar idx)
-  = text $ 'a' : show (alvl - idxToInt idx - 1)
-prettyAcc alvl (Apply afun acc)
-  = sep [parens (prettyAfun alvl afun), prettyAccParens alvl acc]
-prettyAcc _   (Use arr)
-  = prettyArrOp "use" [prettyArray arr]
-prettyAcc alvl (Unit e)
-  = prettyArrOp "unit" [prettyExp 0 alvl parens e]
-prettyAcc alvl (Generate sh f)
-  = prettyArrOp "generate" [prettyExp 0 alvl parens sh, parens (prettyFun alvl f)]
-prettyAcc alvl (Reshape sh acc)
-  = prettyArrOp "reshape" [prettyExp 0 alvl parens sh, prettyAccParens alvl acc]
-prettyAcc alvl (Replicate _ty ix acc)
-  = prettyArrOp "replicate" [prettyExp 0 alvl id ix, prettyAccParens alvl acc]
-prettyAcc alvl (Index _ty acc ix)
-  = sep [prettyAccParens alvl acc, char '!', prettyExp 0 alvl id ix]
-prettyAcc alvl (Map f acc)
-  = prettyArrOp "map" [parens (prettyFun alvl f), prettyAccParens alvl acc]
-prettyAcc alvl (ZipWith f acc1 acc2)
-  = prettyArrOp "zipWith"
-      [parens (prettyFun alvl f), prettyAccParens alvl acc1,
-       prettyAccParens alvl acc2]
-prettyAcc alvl (Fold f e acc)
-  = prettyArrOp "fold" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                        prettyAccParens alvl acc]
-prettyAcc alvl (Fold1 f acc)
-  = prettyArrOp "fold1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
-prettyAcc alvl (FoldSeg f e acc1 acc2)
-  = prettyArrOp "foldSeg" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                           prettyAccParens alvl acc1, prettyAccParens alvl acc2]
-prettyAcc alvl (Fold1Seg f acc1 acc2)
-  = prettyArrOp "fold1Seg" [parens (prettyFun alvl f),
-                            prettyAccParens alvl acc1, prettyAccParens alvl acc2]
-prettyAcc alvl (Scanl f e acc)
-  = prettyArrOp "scanl" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                         prettyAccParens alvl acc]
-prettyAcc alvl (Scanl' f e acc)
-  = prettyArrOp "scanl'" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                          prettyAccParens alvl acc]
-prettyAcc alvl (Scanl1 f acc)
-  = prettyArrOp "scanl1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
-prettyAcc alvl (Scanr f e acc)
-  = prettyArrOp "scanr" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                         prettyAccParens alvl acc]
-prettyAcc alvl (Scanr' f e acc)
-  = prettyArrOp "scanr'" [parens (prettyFun alvl f), prettyExp 0 alvl parens e,
-                          prettyAccParens alvl acc]
-prettyAcc alvl (Scanr1 f acc)
-  = prettyArrOp "scanr1" [parens (prettyFun alvl f), prettyAccParens alvl acc]
-prettyAcc alvl (Permute f dfts p acc)
-  = prettyArrOp "permute" [parens (prettyFun alvl f), prettyAccParens alvl dfts,
-                           parens (prettyFun alvl p), prettyAccParens alvl acc]
-prettyAcc alvl (Backpermute sh p acc)
-  = prettyArrOp "backpermute" [prettyExp 0 alvl parens sh,
-                               parens (prettyFun alvl p),
-                               prettyAccParens alvl acc]
-prettyAcc alvl (Stencil sten bndy acc)
-  = prettyArrOp "stencil" [parens (prettyFun alvl sten),
-                           prettyBoundary acc bndy,
-                           prettyAccParens alvl acc]
-prettyAcc alvl (Stencil2 sten bndy1 acc1 bndy2 acc2)
-  = prettyArrOp "stencil2" [parens (prettyFun alvl sten),
-                            prettyBoundary acc1 bndy1,
-                            prettyAccParens alvl acc1,
-                            prettyBoundary acc2 bndy2,
-                            prettyAccParens alvl acc2]
+prettyAcc :: PrettyAcc OpenAcc
+prettyAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyAcc alvl wrap acc
 
-prettyBoundary :: forall aenv dim e. Elt e
-               => {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (EltRepr e) -> Doc
+prettyPreAcc :: PrettyAcc acc -> Int -> (Doc -> Doc) -> PreOpenAcc acc aenv a -> Doc
+prettyPreAcc pp alvl wrap (Let acc1 acc2)
+  = wrap 
+  $ sep [ hang (text "let a" <> int alvl <+> char '=') 2 $
+            pp alvl noParens acc1
+        , text "in" <+> pp (alvl + 1) noParens acc2
+        ]
+prettyPreAcc pp alvl wrap (Let2 acc1 acc2)
+  = wrap
+  $ sep [ hang (text "let (a" <> int alvl <> text ", a" <> int (alvl + 1) <> char ')' <+>
+                char '=') 2 $
+            pp alvl noParens acc1
+        , text "in" <+> pp (alvl + 2) noParens acc2
+        ]
+prettyPreAcc _  alvl _    (Avar idx)
+  = text $ 'a' : show (alvl - idxToInt idx - 1)
+prettyPreAcc pp alvl wrap (Apply afun acc)
+  = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
+prettyPreAcc _  _    wrap (Use arr)
+  = wrap $ prettyArrOp "use" [prettyArray arr]
+prettyPreAcc pp alvl wrap (Unit e)
+  = wrap $ prettyArrOp "unit" [prettyPreExp pp 0 alvl parens e]
+prettyPreAcc pp alvl wrap (Generate sh f)
+  = wrap 
+  $ prettyArrOp "generate" [prettyPreExp pp 0 alvl parens sh, parens (prettyPreFun pp alvl f)]
+prettyPreAcc pp alvl wrap (Reshape sh acc)
+  = wrap $ prettyArrOp "reshape" [prettyPreExp pp 0 alvl parens sh, pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Replicate _ty ix acc)
+  = wrap $ prettyArrOp "replicate" [prettyPreExp pp 0 alvl id ix, pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Index _ty acc ix)
+  = wrap $ sep [pp alvl parens acc, char '!', prettyPreExp pp 0 alvl id ix]
+prettyPreAcc pp alvl wrap (Map f acc)
+  = wrap $ prettyArrOp "map" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (ZipWith f acc1 acc2)
+  = wrap 
+  $ prettyArrOp "zipWith"
+      [parens (prettyPreFun pp alvl f), pp alvl parens acc1, pp alvl parens acc2]
+prettyPreAcc pp alvl wrap (Fold f e acc)
+  = wrap 
+  $ prettyArrOp "fold" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                        pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Fold1 f acc)
+  = wrap $ prettyArrOp "fold1" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (FoldSeg f e acc1 acc2)
+  = wrap 
+  $ prettyArrOp "foldSeg" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                           pp alvl parens acc1, pp alvl parens acc2]
+prettyPreAcc pp alvl wrap (Fold1Seg f acc1 acc2)
+  = wrap 
+  $ prettyArrOp "fold1Seg" [parens (prettyPreFun pp alvl f), pp alvl parens acc1,
+                            pp alvl parens acc2]
+prettyPreAcc pp alvl wrap (Scanl f e acc)
+  = wrap 
+  $ prettyArrOp "scanl" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                         pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Scanl' f e acc)
+  = wrap 
+  $ prettyArrOp "scanl'" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                          pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Scanl1 f acc)
+  = wrap 
+  $ prettyArrOp "scanl1" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Scanr f e acc)
+  = wrap 
+  $ prettyArrOp "scanr" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                         pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Scanr' f e acc)
+  = wrap 
+  $ prettyArrOp "scanr'" [parens (prettyPreFun pp alvl f), prettyPreExp pp 0 alvl parens e,
+                          pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Scanr1 f acc)
+  = wrap 
+  $ prettyArrOp "scanr1" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Permute f dfts p acc)
+  = wrap 
+  $ prettyArrOp "permute" [parens (prettyPreFun pp alvl f), pp alvl parens dfts,
+                           parens (prettyPreFun pp alvl p), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Backpermute sh p acc)
+  = wrap 
+  $ prettyArrOp "backpermute" [prettyPreExp pp 0 alvl parens sh,
+                               parens (prettyPreFun pp alvl p),
+                               pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Stencil sten bndy acc)
+  = wrap 
+  $ prettyArrOp "stencil" [parens (prettyPreFun pp alvl sten),
+                           prettyBoundary acc bndy,
+                           pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Stencil2 sten bndy1 acc1 bndy2 acc2)
+  = wrap 
+  $ prettyArrOp "stencil2" [parens (prettyPreFun pp alvl sten),
+                            prettyBoundary acc1 bndy1,
+                            pp alvl parens acc1,
+                            prettyBoundary acc2 bndy2,
+                            pp alvl parens acc2]
+
+prettyBoundary :: forall acc aenv dim e. Elt e
+               => {-dummy-}acc aenv (Array dim e) -> Boundary (EltRepr e) -> Doc
 prettyBoundary _ Clamp        = text "Clamp"
 prettyBoundary _ Mirror       = text "Mirror"
 prettyBoundary _ Wrap         = text "Wrap"
@@ -119,89 +147,93 @@ prettyBoundary _ (Constant e) = parens $ text "Constant" <+> text (show (toElt e
 prettyArrOp :: String -> [Doc] -> Doc
 prettyArrOp name docs = hang (text name) 2 $ sep docs
 
--- Wrap into parenthesis
---
-prettyAccParens :: Int -> OpenAcc aenv a -> Doc
-prettyAccParens lvl acc@(Avar _) = prettyAcc lvl acc
-prettyAccParens lvl acc          = parens (prettyAcc lvl acc)
-
 -- Pretty print a function over array computations.
 --
 -- At the moment restricted to /closed/ functions.
 --
 prettyAfun :: Int -> Afun fun -> Doc
-prettyAfun _alvl fun =
+prettyAfun = prettyPreAfun prettyAcc
+
+prettyPreAfun :: forall acc fun. PrettyAcc acc -> Int -> PreAfun acc fun -> Doc
+prettyPreAfun pp _alvl fun =
   let (n, bodyDoc) = count n fun
   in
   char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
-     count :: Int -> OpenAfun aenv fun -> (Int, Doc)
-     count lvl (Abody body) = (-1, prettyAcc (lvl + 1) body)   -- 'lvl+1' ok as functions is closed!
+     count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
+     count lvl (Abody body) = (-1, pp (lvl + 1) noParens body) -- 'lvl+1' ok as functions is closed!
      count lvl (Alam fun)   = let (n, body) = count lvl fun in (1 + n, body)
 
 -- Pretty print a function over scalar expressions.
 --
 prettyFun :: Int -> OpenFun env aenv fun -> Doc
-prettyFun alvl fun =
+prettyFun = prettyPreFun prettyAcc
+
+prettyPreFun :: forall acc env aenv fun. PrettyAcc acc -> Int -> PreOpenFun acc env aenv fun -> Doc
+prettyPreFun pp alvl fun =
   let (n, bodyDoc) = count n fun
   in
   char '\\' <> hsep [text $ 'x' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
-     count :: Int -> OpenFun env aenv fun -> (Int, Doc)
-     count lvl (Body body) = (-1, prettyExp lvl alvl noParens body)
+     count :: Int -> PreOpenFun acc env' aenv' fun' -> (Int, Doc)
+     count lvl (Body body) = (-1, prettyPreExp pp lvl alvl noParens body)
      count lvl (Lam fun)   = let (n, body) = count lvl fun in (1 + n, body)
 
 -- Pretty print an expression.
 --
--- * Apply the wrapping combinator (1st argument) to any compound expressions.
+-- * Apply the wrapping combinator (3rd argument) to any compound expressions.
 --
-prettyExp :: forall t env aenv.
-             Int -> Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
-prettyExp lvl _ _ (Var idx)
+prettyExp :: Int -> Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
+prettyExp = prettyPreExp prettyAcc
+
+prettyPreExp :: forall acc t env aenv.
+                PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
+prettyPreExp pp lvl _ _ (Var idx)
   = text $ 'x' : show (lvl - idxToInt idx)
-prettyExp _ _ _ (Const v)
+prettyPreExp pp _ _ _ (Const v)
   = text $ show (toElt v :: t)
-prettyExp lvl alvl _ (Tuple tup)
-  = prettyTuple lvl alvl tup
-prettyExp lvl alvl wrap (Prj idx e)
-  = wrap $ prettyTupleIdx idx <+> prettyExp lvl alvl parens e
-prettyExp _lvl _alvl wrap IndexNil
+prettyPreExp pp lvl alvl _ (Tuple tup)
+  = prettyTuple pp lvl alvl tup
+prettyPreExp pp lvl alvl wrap (Prj idx e)
+  = wrap $ prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
+prettyPreExp pp _lvl _alvl wrap IndexNil
   = wrap $ text "index Z"
-prettyExp lvl alvl wrap (IndexCons t h)
+prettyPreExp pp lvl alvl wrap (IndexCons t h)
   = wrap $
       text "index" <+>
-      parens (prettyExp lvl alvl parens t <+> text ":." <+> prettyExp lvl alvl parens h)
-prettyExp lvl alvl wrap (IndexHead ix)
-  = wrap $ text "indexHead" <+> prettyExp lvl alvl parens ix
-prettyExp lvl alvl wrap (IndexTail ix)
-  = wrap $ text "indexTail" <+> prettyExp lvl alvl parens ix
-prettyExp lvl alvl wrap (Cond c t e)
-  = wrap $ sep [prettyExp lvl alvl parens c <+> char '?',
-                parens (prettyExp lvl alvl noParens t <> comma <+>
-                        prettyExp lvl alvl noParens e)]
-prettyExp _ _ _ (PrimConst a)
+      parens (prettyPreExp pp lvl alvl parens t <+> text ":." <+> prettyPreExp pp lvl alvl parens h)
+prettyPreExp pp lvl alvl wrap (IndexHead ix)
+  = wrap $ text "indexHead" <+> prettyPreExp pp lvl alvl parens ix
+prettyPreExp pp lvl alvl wrap (IndexTail ix)
+  = wrap $ text "indexTail" <+> prettyPreExp pp lvl alvl parens ix
+prettyPreExp pp lvl alvl wrap (Cond c t e)
+  = wrap $ sep [prettyPreExp pp lvl alvl parens c <+> char '?',
+                parens (prettyPreExp pp lvl alvl noParens t <> comma <+>
+                        prettyPreExp pp lvl alvl noParens e)]
+prettyPreExp pp _ _ _ (PrimConst a)
  = prettyConst a
-prettyExp lvl alvl wrap (PrimApp p a)
-  = wrap $ prettyPrim p <+> prettyExp lvl alvl parens a
-prettyExp lvl alvl wrap (IndexScalar idx i)
-  = wrap $ cat [prettyAccParens alvl idx, char '!', prettyExp lvl alvl parens i]
-prettyExp _lvl alvl wrap (Shape idx)
-  = wrap $ text "shape" <+> prettyAccParens alvl idx
-prettyExp _lvl alvl wrap (Size idx)
-  = wrap $ text "size" <+> prettyAccParens alvl idx
+prettyPreExp pp lvl alvl wrap (PrimApp p a)
+  = wrap $ prettyPrim p <+> prettyPreExp pp lvl alvl parens a
+prettyPreExp pp lvl alvl wrap (IndexScalar idx i)
+  = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
+prettyPreExp pp _lvl alvl wrap (Shape idx)
+  = wrap $ text "shape" <+> pp alvl parens idx
+prettyPreExp pp _lvl alvl wrap (Size idx)
+  = wrap $ text "size" <+> pp alvl parens idx
 
 -- Pretty print nested pairs as a proper tuple.
 --
-prettyTuple :: Int -> Int -> Tuple (OpenExp env aenv) t -> Doc
-prettyTuple lvl alvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
+prettyTuple :: forall acc env aenv t.
+               PrettyAcc acc -> Int -> Int -> Tuple (PreOpenExp acc env aenv) t -> Doc
+prettyTuple pp lvl alvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
     es = collect e
     --
-    collect :: Tuple (OpenExp env aenv) t -> [Doc]
+    collect :: Tuple (PreOpenExp acc env aenv) t' -> [Doc]
     collect NilTup          = []
-    collect (SnocTup tup e) = collect tup ++ [prettyExp lvl alvl noParens e]
+    collect (SnocTup tup e) = collect tup ++ [prettyPreExp pp lvl alvl noParens e]
 
 -- Pretty print an index for a tuple projection
 --

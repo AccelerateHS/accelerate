@@ -74,7 +74,7 @@ stream afun = map (run1 acc)
 
     run1 :: Delayable b => Afun (a -> b) -> a -> b
     run1 (Alam (Abody f)) = \a -> force (evalOpenAcc f (Empty `Push` a))
-    run1 _                = error "we can not get here"
+    run1 _                = error "Hey type checker! We can not get here!"
 
 
 -- Array expression evaluation
@@ -83,86 +83,89 @@ stream afun = map (run1 acc)
 -- Evaluate an open array expression
 --
 evalOpenAcc :: Delayable a => OpenAcc aenv a -> Val aenv -> Delayed a
+evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc
 
-evalOpenAcc (Let acc1 acc2) aenv 
+evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
+
+evalPreOpenAcc (Let acc1 acc2) aenv 
   = let !arr1 = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1)
 
-evalOpenAcc (Let2 acc1 acc2) aenv 
+evalPreOpenAcc (Let2 acc1 acc2) aenv 
   = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
 
-evalOpenAcc (Avar idx) aenv = delay $ prj idx aenv
+evalPreOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
-evalOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
+evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv
     in evalOpenAcc funAcc (Empty `Push` arr)
-evalOpenAcc (Apply _afun _acc) _aenv
+evalPreOpenAcc (Apply _afun _acc) _aenv
   = error "GHC's pattern match checker is too dumb to figure that this case is impossible"
 
-evalOpenAcc (Use arr) _aenv = delay arr
+evalPreOpenAcc (Use arr) _aenv = delay arr
 
-evalOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
+evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
 
-evalOpenAcc (Generate sh f) aenv
+evalPreOpenAcc (Generate sh f) aenv
   = generateOp (evalExp sh aenv) (evalFun f aenv)
 
-evalOpenAcc (Reshape e acc) aenv 
+evalPreOpenAcc (Reshape e acc) aenv 
   = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Replicate sliceIndex slix acc) aenv
+evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
   = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
   
-evalOpenAcc (Index sliceIndex acc slix) aenv
+evalPreOpenAcc (Index sliceIndex acc slix) aenv
   = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
 
-evalOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (ZipWith f acc1 acc2) aenv
+evalPreOpenAcc (ZipWith f acc1 acc2) aenv
   = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
-evalOpenAcc (Fold f e acc) aenv
+evalPreOpenAcc (Fold f e acc) aenv
   = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Fold1 f acc) aenv
+evalPreOpenAcc (Fold1 f acc) aenv
   = fold1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (FoldSeg f e acc1 acc2) aenv
+evalPreOpenAcc (FoldSeg f e acc1 acc2) aenv
   = foldSegOp (evalFun f aenv) (evalExp e aenv) 
               (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
-evalOpenAcc (Fold1Seg f acc1 acc2) aenv
+evalPreOpenAcc (Fold1Seg f acc1 acc2) aenv
   = fold1SegOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
-evalOpenAcc (Scanl f e acc) aenv
+evalPreOpenAcc (Scanl f e acc) aenv
   = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Scanl' f e acc) aenv
+evalPreOpenAcc (Scanl' f e acc) aenv
   = scanl'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Scanl1 f acc) aenv
+evalPreOpenAcc (Scanl1 f acc) aenv
   = scanl1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Scanr f e acc) aenv
+evalPreOpenAcc (Scanr f e acc) aenv
   = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Scanr' f e acc) aenv
+evalPreOpenAcc (Scanr' f e acc) aenv
   = scanr'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Scanr1 f acc) aenv
+evalPreOpenAcc (Scanr1 f acc) aenv
   = scanr1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Permute f dftAcc p acc) aenv
+evalPreOpenAcc (Permute f dftAcc p acc) aenv
   = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
               (evalFun p aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Backpermute e p acc) aenv
+evalPreOpenAcc (Backpermute e p acc) aenv
   = backpermuteOp (evalExp e aenv) (evalFun p aenv) (evalOpenAcc acc aenv)
 
-evalOpenAcc (Stencil sten bndy acc) aenv
+evalPreOpenAcc (Stencil sten bndy acc) aenv
   = stencilOp (evalFun sten aenv) bndy (evalOpenAcc acc aenv)
 
-evalOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
+evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
 -- Evaluate a closed array expressions

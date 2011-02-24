@@ -32,11 +32,11 @@ data Labels = Labels { accFormat :: String
 
 travAcc :: forall m b aenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
        -> (String -> String -> m b) -> OpenAcc aenv a -> m b
-travAcc f c l openAcc = travAcc' openAcc
+travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
-    travAcc' :: OpenAcc aenv a -> m b
+    travAcc' :: PreOpenAcc OpenAcc aenv a -> m b
     travAcc' (Let acc1 acc2)  = combine "Let" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
