@@ -611,7 +611,7 @@ ccall :: String -> [CExpr] -> CExpr
 ccall fn args = CCall (cvar fn) args internalNode
 
 postfix :: NumType a -> String -> String
-postfix (FloatingNumType (TypeFloat _))  = (++ "f")
+postfix (FloatingNumType (TypeFloat  _)) = (++ "f")
 postfix (FloatingNumType (TypeCFloat _)) = (++ "f")
 postfix _                                = id
 

@@ -165,9 +165,9 @@ data CUDAState = CUDAState
     _deviceProps   :: CUDA.DeviceProperties,
     _deviceContext :: CUDA.Context,
     _kernelTable   :: KernelTable,
-
-    _memoryTable   :: MemoryTable,              -- TLM: these are non-persistent between computations,
-    _computeTable  :: AccHashTable AccNode      --      so maybe they should live elsewhere?
+    --
+    _memoryTable   :: MemoryTable,          -- TLM: these are non-persistent between computations,
+    _computeTable  :: AccHashTable AccNode  --      so maybe they should live elsewhere?
   }
 
 $(mkLabels [''CUDAState, ''KernelEntry, ''AccNode])
@@ -273,7 +273,22 @@ runCUDAWith state acc = do
         $ return (setL memoryTable undefined . setL computeTable undefined $ st)
 
 
+-- Nasty global statesses
+-- ----------------------
+
+{--
+-- Execute an IO action at most once
+--
+mkOnceIO :: IO a -> IO (IO a)
+mkOnceIO io = do
+  mvar   <- newEmptyMVar
+  demand <- newEmptyMVar
+  forkIO (takeMVar demand >> io >>= putMVar mvar)
+  return (tryPutMVar demand ()  >>  readMVar mvar)
+--}
+
 -- hic sunt dracones: truly unsafe use of unsafePerformIO
+--
 onta :: IORef CUDAState
 {-# NOINLINE onta #-}
 onta = unsafePerformIO (initialise >>= newIORef)
