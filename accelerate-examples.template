@@ -30,6 +30,8 @@ Executable acc-saxpy
   hs-source-dirs:    src/common src/simple
   ghc-options:       ACC_OPTIONS
   build-depends:     ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:     -rtsopts
 
 -- Executable acc-dotp
 --   Main-is:           DotP.hs
