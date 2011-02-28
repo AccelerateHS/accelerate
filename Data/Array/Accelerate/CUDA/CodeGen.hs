@@ -81,78 +81,91 @@ runCodeGen = flip runState (CodeGenState [] [])
 -- lifted out in depth-first order.
 --
 codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
-codeGen a@(Generate _ f)      = mkGenerate (codeGenAccTypeDim a) <$> codeGenFun f
-codeGen (Fold f e a)          = mkFold  (codeGenAccTypeDim a) <$> codeGenExp e <*> codeGenFun f
-codeGen (Fold1 f a)           = mkFold1 (codeGenAccTypeDim a) <$> codeGenFun f
-codeGen (FoldSeg f e a s)     = mkFoldSeg  (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
-codeGen (Fold1Seg f a s)      = mkFold1Seg (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenFun f
-codeGen (Scanl f e _)         = mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanr f e _)         = mkScanr  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanl' f e _)        = mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanr' f e _)        = mkScanr' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-codeGen (Scanl1 f a)          = mkScanl1 (codeGenAccType a) <$> codeGenFun f
-codeGen (Scanr1 f a)          = mkScanr1 (codeGenAccType a) <$> codeGenFun f
-codeGen b@(Map f a)           = mkMap (codeGenAccType b) (codeGenAccType a) <$> codeGenFun f
-codeGen c@(ZipWith f a b)     = mkZipWith (codeGenAccTypeDim c) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
-codeGen b@(Permute f _ g a)   = mkPermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f <*> codeGenFun g
-codeGen b@(Backpermute _ f a) = mkBackpermute (codeGenAccType a) (accDim b) (accDim a) <$> codeGenFun f
-codeGen b@(Replicate sl _ a)  = return . mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
+codeGen acc@(OpenAcc pacc) =
+  case pacc of
+    -- non-computation forms
+    --
+    Let _ _           -> internalError
+    Let2 _ _          -> internalError
+    Avar _            -> internalError
+    Apply _ _         -> internalError  -- TLM: apply??
+    Use _             -> internalError
+    Unit _            -> internalError
+    Reshape _ _       -> internalError
+
+    -- computation nodes
+    --
+    Generate _ f      -> mkGenerate (codeGenAccTypeDim acc) <$> codeGenFun f
+    Fold f e a        -> mkFold  (codeGenAccTypeDim a) <$> codeGenExp e <*> codeGenFun f
+    Fold1 f a         -> mkFold1 (codeGenAccTypeDim a) <$> codeGenFun f
+    FoldSeg f e a s   -> mkFoldSeg  (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
+    Fold1Seg f a s    -> mkFold1Seg (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenFun f
+    Scanl f e _       -> mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+    Scanr f e _       -> mkScanr  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+    Scanl' f e _      -> mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+    Scanr' f e _      -> mkScanr' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
+    Scanl1 f a        -> mkScanl1 (codeGenAccType a) <$> codeGenFun f
+    Scanr1 f a        -> mkScanr1 (codeGenAccType a) <$> codeGenFun f
+    Map f a           -> mkMap (codeGenAccType acc) (codeGenAccType a) <$> codeGenFun f
+    ZipWith f a b     -> mkZipWith (codeGenAccTypeDim acc) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
+    Permute f _ g a   -> mkPermute (codeGenAccType a) (accDim acc) (accDim a) <$> codeGenFun f <*> codeGenFun g
+    Backpermute _ f a -> mkBackpermute (codeGenAccType a) (accDim acc) (accDim a) <$> codeGenFun f
+    Replicate sl _ a  ->
+      let dimSl  = accDim a
+          dimOut = accDim acc
+          --
+          extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
+          extend (SliceNil)            _ = []
+          extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n+1)
+          extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
+      in
+      return . mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
+
+    Index sl a slix   ->
+      let dimCo  = length (codeGenExpType slix)
+          dimSl  = accDim acc
+          dimIn0 = accDim a
+          --
+          restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
+          restrict (SliceNil)            _     = []
+          restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
+          restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
+      in
+      return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
+
+    Stencil f b a     -> do
+      n  <- length <$> getM arrays
+      let ty      = codeGenTupleTex (accType a)
+          fv      = map (("tex"++) . show) [n..]
+          array t = mkGlobal (map CTypeSpec t)
+          --
+      modM arrays (zipWith array ty fv ++)
+      mkStencil (codeGenAccType acc)
+                (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a b)
+                <$> codeGenFun f
+
+    Stencil2 f b1 a1 b0 a0 -> do
+      n  <- length <$> getM arrays
+      let ty0          = codeGenTupleTex (accType a0)
+          ty1          = codeGenTupleTex (accType a1)
+          fv           = map (("tex"++) . show) [n..]
+          array t      = mkGlobal (map CTypeSpec t)
+          (pos1, pos0) = Stencil.positions2 f a1 a0
+          --
+      modM arrays (zipWith array (ty0 ++ ty1) fv ++)
+      mkStencil2 (codeGenAccType acc)
+                 (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 b0)
+                 (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 b1)
+                 <$> codeGenFun f
+
   where
-    dimSl  = accDim a
-    dimOut = accDim b
-
-    extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
-    extend (SliceNil)            _ = []
-    extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n+1)
-    extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
-
-codeGen b@(Index sl a slix)   = return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
-  where
-    dimCo  = length (codeGenExpType slix)
-    dimSl  = accDim b
-    dimIn0 = accDim a
-
-    restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
-    restrict (SliceNil)            _     = []
-    restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
-    restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
-
-codeGen c@(Stencil f b a) = do
-  n  <- length <$> getM arrays
-  let ty = codeGenTupleTex (accType a)
-      fv = map (("tex"++) . show) [n..]
-  modM arrays (zipWith array ty fv ++)
-  mkStencil (codeGenAccType c)
-            (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a b)
-            <$> codeGenFun f
-  where
-    array t = mkGlobal (map CTypeSpec t)
-
-codeGen c@(Stencil2 f b1 a1 b0 a0) = do
-  n  <- length <$> getM arrays
-  let ty0 = codeGenTupleTex (accType a0)
-      ty1 = codeGenTupleTex (accType a1)
-      fv  = map (("tex"++) . show) [n..]
-  modM arrays (zipWith array (ty0 ++ ty1) fv ++)
-  mkStencil2 (codeGenAccType c)
-             (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 b0)
-             (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 b1)
-             <$> codeGenFun f
-  where
-    (pos1, pos0) = Stencil.positions2 f a1 a0
-    array t = mkGlobal (map CTypeSpec t)
-
-
--- We should never get here: Use, Let, Let2, Avar, Unit, Reshape
--- FIXME: What about Apply?
---
-codeGen x =
-  INTERNAL_ERROR(error) "codeGenAcc"
-  (unlines ["unsupported array primitive", render (nest 2 doc)])
-  where
-    acc = show x
-    doc | length acc <= 250 = text acc
-        | otherwise         = text (take 250 acc) <+> text "... {truncated}"
+    internalError =
+      let msg = unlines ["unsupported array primitive", render (nest 2 doc)]
+          ppr = show acc
+          doc | length ppr <= 250 = text ppr
+              | otherwise         = text (take 250 ppr) <+> text "... {truncated}"
+      in
+      INTERNAL_ERROR(error) "codeGenAcc" msg
 
 
 -- Code generation for the boundary condition. For Clamp, Mirror and Wrap we simply

@@ -126,20 +126,19 @@ generateUseMap acc' = do
                 -> OpenAcc aenv a
                 -> [(StableAccName, Maybe AccNode -> AccNode)]
                 -> IO ()
-    traverseAcc useMap acc aenv =
-      case acc of
+    traverseAcc useMap (OpenAcc pacc) aenv =
+      case pacc of
         -- If the bound array is itself a bound variable, be sure to refer to
         -- the reference count of the real array.
-        Let2 (Avar ix) b   ->
-          let sn = fst $ prjEnv ix aenv
-          in  travA' b ((sn, incSnd) : (sn, incFst) : aenv)
+        Let2 a@(OpenAcc pacc') b ->
+          case pacc' of
+            Avar ix -> let sn = fst $ prjEnv ix aenv
+                       in  travA' b ((sn, incSnd) : (sn, incFst) : aenv)
+            _       -> do
+              sn <- makeStableAcc a
+              travA  a
+              travA' b ((sn, incSnd) : (sn, incFst) : aenv)
 
-        Let2 a b           -> do
-          sn <- makeStableAcc a
-          travA  a
-          travA' b ((sn, incSnd) : (sn, incFst) : aenv)
-
-        Let (Avar _) _     -> INTERNAL_ERROR(error) "generateUseMap" "assumption failed"
         Let a b            -> do
           sn <- makeStableAcc a
           travA a
@@ -184,9 +183,11 @@ generateUseMap acc' = do
           -- that is later rebound and unpacked by a let2.
 
         isAcc2 :: OpenAcc aenv a -> Bool
-        isAcc2 (Scanl' _ _ _) = True
-        isAcc2 (Scanr' _ _ _) = True
-        isAcc2 _              = False
+        isAcc2 (OpenAcc pacc') =
+          case pacc' of
+            Scanl' _ _ _ -> True
+            Scanr' _ _ _ -> True
+            _            -> False
 
         travA' :: (Typeable aenv, Typeable a)
                  => OpenAcc aenv a
@@ -239,8 +240,8 @@ generateCode iss acc' = do
     -- Traverse an open array expression in depth-first order
     --
     travA :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> CIO ()
-    travA acc =
-      case acc of
+    travA acc@(OpenAcc pacc) =
+      case pacc of
         Avar _             -> return ()
         Let a b            -> travA a >> travA b
         Let2 a b           -> travA a >> travA b
@@ -271,7 +272,8 @@ generateCode iss acc' = do
       where
         -- TLM: could rewrite the tree to include this additional step; the
         --      stable-name operations would then work appropriately.
-        scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
+        scan :: Acc Segments
+        scan = OpenAcc $ Scanl add (Const ((),0)) (OpenAcc $ Use (Array undefined undefined))
         add  = Lam (Lam (Body (PrimAdd numType
                               `PrimApp`
                               Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
@@ -342,7 +344,6 @@ compile acc = do
                 forkProcess $ executeFile nvcc False flags Nothing
 
     liftIO $ Hash.insert kernels key (KernelEntry cufile (Left pid))
-
 
 -- Write the generated code to file
 --

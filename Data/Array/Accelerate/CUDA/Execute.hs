@@ -111,115 +111,116 @@ executeAfun1 _ _                = error "we can never get here"
 -- Evaluate an open array expression
 --
 executeOpenAcc :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> Val aenv -> CIO a
+executeOpenAcc acc@(OpenAcc pacc) aenv =
+  case pacc of
+    ---- (1) Array introduction ----
+    Use a       -> return a
 
----- (1) Array introduction ----
-executeOpenAcc (Use a)    _    = return a
+    ---- (2) Non-skeleton nodes ----
+    Avar ix     -> return (prj ix aenv)
 
----- (2) Non-skeleton nodes ----
-executeOpenAcc (Avar ix)  aenv = return (prj ix aenv)
+    Let  a b    -> do
+      a0 <- executeOpenAcc a aenv
+      executeOpenAcc b (aenv `Push` a0)
 
-executeOpenAcc (Let  a b) aenv = do
-  a0 <- executeOpenAcc a aenv
-  executeOpenAcc b (aenv `Push` a0)
+    Let2 a b    -> do
+      (a1,a0) <- executeOpenAcc a aenv
+      executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
-executeOpenAcc (Let2 a b) aenv = do
-  (a1,a0) <- executeOpenAcc a aenv
-  executeOpenAcc b (aenv `Push` a1 `Push` a0)
-
-executeOpenAcc (Apply _f _a) _aenv =
-  INTERNAL_ERROR(error) "executeOpenAcc" "Apply: not yet implemented"
+    Apply _f _a ->
+      INTERNAL_ERROR(error) "executeOpenAcc" "Apply: not yet implemented"
   
-executeOpenAcc acc@(Reshape e a) aenv = do
-  ix <- executeExp e aenv
-  a0 <- executeOpenAcc a aenv
-  reshapeOp acc ix a0
+    Reshape e a -> do
+      ix <- executeExp e aenv
+      a0 <- executeOpenAcc a aenv
+      reshapeOp acc ix a0
 
-executeOpenAcc acc@(Unit e) aenv =
-  unitOp acc =<< executeExp e aenv
+    Unit e      ->
+      unitOp acc =<< executeExp e aenv
 
----- (3) Array computations ----
-executeOpenAcc acc@(Generate e _) aenv =
-  generateOp acc aenv =<< executeExp e aenv
+    ---- (3) Array computations ----
+    Generate e _        ->
+      generateOp acc aenv =<< executeExp e aenv
 
-executeOpenAcc acc@(Replicate sliceIndex e a) aenv = do
-  slix <- executeExp e aenv
-  a0   <- executeOpenAcc a aenv
-  replicateOp acc aenv sliceIndex slix a0
+    Replicate sliceIndex e a -> do
+      slix <- executeExp e aenv
+      a0   <- executeOpenAcc a aenv
+      replicateOp acc aenv sliceIndex slix a0
 
-executeOpenAcc acc@(Index sliceIndex a e) aenv = do
-  slix <- executeExp e aenv
-  a0   <- executeOpenAcc a aenv
-  indexOp acc aenv sliceIndex a0 slix
+    Index sliceIndex a e -> do
+      slix <- executeExp e aenv
+      a0   <- executeOpenAcc a aenv
+      indexOp acc aenv sliceIndex a0 slix
 
-executeOpenAcc acc@(Map _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  mapOp acc aenv a0
+    Map _ a             -> do
+      a0 <- executeOpenAcc a aenv
+      mapOp acc aenv a0
 
-executeOpenAcc acc@(ZipWith _ a b) aenv = do
-  a1 <- executeOpenAcc a aenv
-  a0 <- executeOpenAcc b aenv
-  zipWithOp acc aenv a1 a0
+    ZipWith _ a b       -> do
+      a1 <- executeOpenAcc a aenv
+      a0 <- executeOpenAcc b aenv
+      zipWithOp acc aenv a1 a0
 
-executeOpenAcc acc@(Fold _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  foldOp acc aenv a0
+    Fold _ _ a          -> do
+      a0 <- executeOpenAcc a aenv
+      foldOp acc aenv a0
 
-executeOpenAcc acc@(Fold1 _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  foldOp acc aenv a0
+    Fold1 _ a           -> do
+      a0 <- executeOpenAcc a aenv
+      foldOp acc aenv a0
 
-executeOpenAcc acc@(FoldSeg _ _ a s) aenv = do
-  a0 <- executeOpenAcc a aenv
-  s0 <- executeOpenAcc s aenv
-  foldSegOp acc aenv a0 s0
+    FoldSeg _ _ a s     -> do
+      a0 <- executeOpenAcc a aenv
+      s0 <- executeOpenAcc s aenv
+      foldSegOp acc aenv a0 s0
 
-executeOpenAcc acc@(Fold1Seg _ a s) aenv = do
-  a0 <- executeOpenAcc a aenv
-  s0 <- executeOpenAcc s aenv
-  foldSegOp acc aenv a0 s0
+    Fold1Seg _ a s      -> do
+      a0 <- executeOpenAcc a aenv
+      s0 <- executeOpenAcc s aenv
+      foldSegOp acc aenv a0 s0
 
-executeOpenAcc acc@(Scanl _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scanOp acc aenv a0
+    Scanl _ _ a         -> do
+      a0 <- executeOpenAcc a aenv
+      scanOp acc aenv a0
 
-executeOpenAcc acc@(Scanl' _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scan'Op acc aenv a0
+    Scanl' _ _ a        -> do
+      a0 <- executeOpenAcc a aenv
+      scan'Op acc aenv a0
 
-executeOpenAcc acc@(Scanl1 _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scan1Op acc aenv a0
+    Scanl1 _ a          -> do
+      a0 <- executeOpenAcc a aenv
+      scan1Op acc aenv a0
 
-executeOpenAcc acc@(Scanr _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scanOp acc aenv a0
+    Scanr _ _ a         -> do
+      a0 <- executeOpenAcc a aenv
+      scanOp acc aenv a0
 
-executeOpenAcc acc@(Scanr' _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scan'Op acc aenv a0
+    Scanr' _ _ a        -> do
+      a0 <- executeOpenAcc a aenv
+      scan'Op acc aenv a0
 
-executeOpenAcc acc@(Scanr1 _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  scan1Op acc aenv a0
+    Scanr1 _ a          -> do
+      a0 <- executeOpenAcc a aenv
+      scan1Op acc aenv a0
 
-executeOpenAcc acc@(Permute _ a _ b) aenv = do
-  a0 <- executeOpenAcc a aenv
-  a1 <- executeOpenAcc b aenv
-  permuteOp acc aenv a0 a1
+    Permute _ a _ b     -> do
+      a0 <- executeOpenAcc a aenv
+      a1 <- executeOpenAcc b aenv
+      permuteOp acc aenv a0 a1
 
-executeOpenAcc acc@(Backpermute e _ a) aenv = do
-  sh <- executeExp e aenv
-  a0 <- executeOpenAcc a aenv
-  backpermuteOp acc aenv sh a0
+    Backpermute e _ a   -> do
+      sh <- executeExp e aenv
+      a0 <- executeOpenAcc a aenv
+      backpermuteOp acc aenv sh a0
 
-executeOpenAcc acc@(Stencil _ _ a) aenv = do
-  a0 <- executeOpenAcc a aenv
-  stencilOp acc aenv a0
+    Stencil _ _ a       -> do
+      a0 <- executeOpenAcc a aenv
+      stencilOp acc aenv a0
 
-executeOpenAcc acc@(Stencil2 _ _ a _ b) aenv = do
-  a1 <- executeOpenAcc a aenv
-  a0 <- executeOpenAcc b aenv
-  stencil2Op acc aenv a1 a0
+    Stencil2 _ _ a _ b  -> do
+      a1 <- executeOpenAcc a aenv
+      a0 <- executeOpenAcc b aenv
+      stencil2Op acc aenv a1 a0
 
 
 
@@ -367,14 +368,14 @@ foldSegOp :: (Sugar.Shape dim, Typeable aenv)
           -> Segments
           -> CIO (Array (dim:.Int) e)
 foldSegOp acc aenv (Array sh0 in0) seg' = do
-  (Array shs seg)    <- scanOp scan aenv seg'           -- transform segment descriptor into offset indices
+  (Array shs seg)    <- scanOp scan aenv seg'   -- transform segment descriptor into offset indices
   res@(Array sh out) <- allocResult acc $ Sugar.toElt (fst sh0, size shs-1)
   execute "foldSeg" acc aenv (size sh) ((((((),out),in0),seg),convertIx sh),convertIx sh0)
   freeArray in0
   freeArray seg
   return res
   where
-    scan = Scanl add (Const ((),0)) (Use (Array undefined undefined :: Segments))
+    scan = OpenAcc $ Scanl add (Const ((),0)) (OpenAcc $ Use (Array undefined undefined))
     add  = Lam (Lam (Body (PrimAdd numType
                           `PrimApp`
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
@@ -578,45 +579,48 @@ data Lifted where
 
 
 liftAcc :: Typeable aenv => OpenAcc aenv a -> Val aenv -> CIO [Lifted]
-liftAcc (Let  a b)           aenv = do
+liftAcc (OpenAcc pacc) = liftPreAcc pacc
+
+liftPreAcc :: Typeable aenv => PreOpenAcc OpenAcc aenv a -> Val aenv -> CIO [Lifted]
+liftPreAcc (Let  a b)           aenv = do
   a0 <- executeOpenAcc a aenv
   liftAcc b (aenv `Push` a0)
 
-liftAcc (Let2 a b)           aenv = do
+liftPreAcc (Let2 a b)           aenv = do
   (a1,a0) <- executeOpenAcc a aenv
   liftAcc b (aenv `Push` a1 `Push` a0)
 
-liftAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        -- TLM ??
+liftPreAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        -- TLM ??
   where
     applyR :: ArraysR arrs -> arrs -> [Lifted]
     applyR ArraysRunit         ()      = []
     applyR ArraysRarray        arr     = [FreeArray arr]
     applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
 
-liftAcc (Apply _f _a)        _   = INTERNAL_ERROR(error) "liftAcc" "Apply: not yet implemented"
+liftPreAcc (Apply _f _a)        _    = INTERNAL_ERROR(error) "liftAcc" "Apply: not yet implemented"
 
-liftAcc (Use _)              _    = return []
-liftAcc (Unit _)             _    = return []
-liftAcc (Reshape _ _)        _    = return []
-liftAcc (Replicate _ _ _)    _    = return []
-liftAcc (Index _ _ _)        _    = return []
-liftAcc (Generate _ f)       aenv = liftFun f aenv
-liftAcc (Map f _)            aenv = liftFun f aenv
-liftAcc (ZipWith f _ _)      aenv = liftFun f aenv
-liftAcc (Fold1 f _)          aenv = liftFun f aenv
-liftAcc (Fold1Seg f _ _)     aenv = liftFun f aenv
-liftAcc (Scanl1 f _)         aenv = liftFun f aenv
-liftAcc (Scanr1 f _)         aenv = liftFun f aenv
-liftAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (FoldSeg f e _ _)    aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanl f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanr f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanl' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Scanr' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftAcc (Permute f _ g _)    aenv = concatM [liftFun f aenv, liftFun g aenv]
-liftAcc (Backpermute _ f _)  aenv = liftFun f aenv
-liftAcc (Stencil f _ _)      aenv = liftFun f aenv
-liftAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
+liftPreAcc (Use _)              _    = return []
+liftPreAcc (Unit _)             _    = return []
+liftPreAcc (Reshape _ _)        _    = return []
+liftPreAcc (Replicate _ _ _)    _    = return []
+liftPreAcc (Index _ _ _)        _    = return []
+liftPreAcc (Generate _ f)       aenv = liftFun f aenv
+liftPreAcc (Map f _)            aenv = liftFun f aenv
+liftPreAcc (ZipWith f _ _)      aenv = liftFun f aenv
+liftPreAcc (Fold1 f _)          aenv = liftFun f aenv
+liftPreAcc (Fold1Seg f _ _)     aenv = liftFun f aenv
+liftPreAcc (Scanl1 f _)         aenv = liftFun f aenv
+liftPreAcc (Scanr1 f _)         aenv = liftFun f aenv
+liftPreAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (FoldSeg f e _ _)    aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (Scanl f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (Scanr f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (Scanl' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (Scanr' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
+liftPreAcc (Permute f _ g _)    aenv = concatM [liftFun f aenv, liftFun g aenv]
+liftPreAcc (Backpermute _ f _)  aenv = liftFun f aenv
+liftPreAcc (Stencil f _ _)      aenv = liftFun f aenv
+liftPreAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
 
 
 liftFun :: Typeable aenv => OpenFun env aenv a -> Val aenv -> CIO [Lifted]
