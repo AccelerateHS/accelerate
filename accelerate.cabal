@@ -125,28 +125,31 @@ Flag io
   Description:          Provide access to the block copy I/O functionality
   Default:              False
 
+Flag inplace
+  Default:              False
+
 Library
   Build-depends:        array,
-                        base == 4.*,
+                        base            == 4.*,
                         directory,
                         ghc-prim,
-                        mtl >= 2.0,
+                        mtl             >= 2.0,
                         pretty
 
   Include-Dirs:         include
 
   If flag(llvm)
-    Build-depends:      llvm >= 0.6.8
+    Build-depends:      llvm            >= 0.6.8
 
   if flag(cuda)
     Build-depends:      binary,
                         bytestring,
                         containers,
-                        cuda >= 0.2.2,
-                        fclabels >= 0.9 && < 1.0,
+                        cuda            >= 0.2.2,
+                        fclabels        >= 0.9 && < 1.0,
                         filepath,
-                        language-c >= 0.3 && < 0.4,
-                        transformers >= 0.2 && < 0.3,
+                        language-c      == 0.3.*,
+                        transformers    == 0.2.*,
                         unix,
                         zlib
 
@@ -154,12 +157,15 @@ Library
     Build-depends:      bytestring
 
   if flag(test-suite)
-    Build-depends:      QuickCheck == 2.*
+    Build-depends:      QuickCheck      == 2.*
 
   if flag(more-pp)
     Build-depends:      bytestring,
-                        blaze-html >= 0.3.0.2,
-                        text >= 0.10.0.0
+                        blaze-html      >= 0.3.0.2,
+                        text            >= 0.10.0.0
+
+  if flag(inplace)
+    hs-source-dirs:     . utils
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
