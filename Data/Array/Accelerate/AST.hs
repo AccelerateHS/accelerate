@@ -241,7 +241,7 @@ data PreOpenAcc acc aenv a where
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
-              => SliceIndex (EltRepr slix)        -- slice type specification
+              => SliceIndex (EltRepr slix)               -- slice type specification
                             (EltRepr sl) 
                             co'
                             (EltRepr sh)
@@ -297,11 +297,11 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- 'FoldSeg' without a default value
-  Fold1Seg   :: Shape sh
-             => PreFun     acc aenv (e -> e -> e)            -- combination function
-             -> acc            aenv (Array (sh:.Int) e)      -- folded array
-             -> acc            aenv Segments                 -- segment descriptor
-             -> PreOpenAcc acc aenv (Array (sh:.Int) e)
+  Fold1Seg    :: Shape sh
+              => PreFun     acc aenv (e -> e -> e)           -- combination function
+              -> acc            aenv (Array (sh:.Int) e)     -- folded array
+              -> acc            aenv Segments                -- segment descriptor
+              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
@@ -323,28 +323,28 @@ data PreOpenAcc acc aenv a where
 
   -- Haskell-style scan without an initial value
   Scanl1      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)          -- combination function
-              -> acc            aenv (Vector e)             -- linear array
+              => PreFun     acc aenv (e -> e -> e)           -- combination function
+              -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e)
 
   -- Right-to-left version of 'Scanl'
   Scanr       :: Elt e
-              => PreFun     acc aenv (e -> e -> e)          -- combination function
-              -> PreExp     acc aenv e                      -- initial value
-              -> acc            aenv (Vector e)             -- linear array
+              => PreFun     acc aenv (e -> e -> e)           -- combination function
+              -> PreExp     acc aenv e                       -- initial value
+              -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e)
   
   -- Right-to-left version of 'Scanl\''
   Scanr'      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)          -- combination function
-              -> PreExp     acc aenv e                      -- initial value
-              -> acc            aenv (Vector e)             -- linear array
+              => PreFun     acc aenv (e -> e -> e)           -- combination function
+              -> PreExp     acc aenv e                       -- initial value
+              -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e, Scalar e)
 
   -- Right-to-left version of 'Scanl1'
   Scanr1      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)          -- combination function
-              -> acc            aenv (Vector e)             -- linear array
+              => PreFun     acc aenv (e -> e -> e)           -- combination function
+              -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e)
 
   -- Generalised forward permutation is characterised by a permutation
