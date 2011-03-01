@@ -11,11 +11,9 @@
 module Build where
 
 import Util
-import Darcs
 import Config
 import BuildBox
 import Benchmarks
-import qualified BuildBox.Data.Log as Log
 
 import Data.List
 import Data.Maybe
@@ -125,8 +123,8 @@ runTest cfg env = do
 postTest :: Config -> Build ()
 postTest cfg =
   maybe' (configHistory cfg) (return ()) $ \fn -> do
-    (t,_) <- patchInfo . head <$> patchesLast 1
-    io     $ writeFile fn (show t)
+    time <- darcsTimestamp . head <$> changesN Nothing 1
+    io    $ writeFile fn (show time)
 
 
 -- Handling build errors
@@ -147,13 +145,13 @@ handleBuildError cfg err = do
 
         -- Patches since the last successful buildbot
         hist <- maybe' (configHistory cfg) (return []) $ \fn ->
-          patchesAfter . read =<< io (readFile fn)
+          changesAfter Nothing . read =<< io (readFile fn)
 
         -- Send email to the default list, and all recent submitters
         let failTo = intercalate ", "
                    . nub
                    . sort
-                   $ fromMaybe to (configMailFailTo cfg) ++ map (snd . patchInfo) hist
+                   $ fromMaybe to (configMailFailTo cfg) ++ map darcsAuthor hist
 
         outBlank
         outLn $ "* Mailing report to \"" ++ failTo ++ "\""
@@ -167,7 +165,7 @@ handleBuildError cfg err = do
                   , blank
                   , text "Patches since last build:"
                   , blank
-                  , text . unlines $ map Log.toString hist
+                  , text . unlines $ map show hist
                   , blank
                   ]
         sendMailWithMailer mail (configWithMailer cfg)

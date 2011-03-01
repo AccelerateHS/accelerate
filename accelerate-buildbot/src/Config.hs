@@ -22,8 +22,6 @@ import System.Console.CmdArgs
 
 
 -- TLM: Should probably try to validate these inputs...
-type EmailAddress = String
-type DarcsPath    = String
 type SCPPath      = String
 
 data Config = Config
