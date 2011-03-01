@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..), convertSliceIndex,
   
   -- * Array shape query, indexing, and conversions
-  shape, (!), newArray, fromIArray, toIArray, fromList, toList,
+  shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
 ) where
 
@@ -822,8 +822,7 @@ infixl 9 !
 --
 newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
 {-# INLINE newArray #-}
-newArray sh f 
-  = adata `seq` Array (fromElt sh) adata
+newArray sh f = adata `seq` Array (fromElt sh) adata
   where 
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (1024 `max` size sh)
@@ -831,6 +830,15 @@ newArray sh f
                                                      (fromElt (f ix))
                    iter sh write (>>) (return ())
                    return (arr, undefined)
+
+-- | Creates a new, uninitialized Accelerate array.
+--
+allocateArray :: (Shape sh, Elt e) => sh -> Array sh e
+{-# INLINE allocateArray #-}
+allocateArray sh = adata `seq` Array (fromElt sh) adata
+  where
+    (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (1024 `max` size sh)
+
 
 -- |Convert an 'IArray' to an accelerated array.
 --

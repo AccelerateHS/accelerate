@@ -177,7 +177,7 @@ Library
     Exposed-modules:    Data.Array.Accelerate.CUDA
 
   If flag(io)
-    Other-modules:      Data.Array.Accelerate.Array.BlockCopy
+    Other-modules:      Data.Array.Accelerate.IO.BlockCopy
     Exposed-modules:    Data.Array.Accelerate.IO
                         Data.Array.Accelerate.IO.Ptr
                         Data.Array.Accelerate.IO.ByteString
