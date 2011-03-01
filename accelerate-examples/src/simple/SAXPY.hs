@@ -30,13 +30,12 @@ main :: IO ()
 main = do
   args <- getArgs'
   case args of
-       []                       -> run 100000
+       []                       -> run 1000000
        [a] | [(n,_)] <- reads a -> run n
        _                        -> usage
 
 run :: Int -> IO ()
-run nelements = do
-  gen   <- create
+run nelements = withSystemRandom $ \gen -> do
   v1    <- randomVectorR (-1,1) gen nelements
   v2    <- randomVectorR (-1,1) gen nelements
   v1'   <- convertVector v1
@@ -57,6 +56,6 @@ usage = putStrLn $ unlines
   , "acc-saxpy [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of elements (default 100000)"
+  , "  <N>  Number of elements (default 1000000)"
   ]
 

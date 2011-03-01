@@ -13,17 +13,21 @@ Cabal-version:       >=1.6
 
 -- Simple examples -------------------------------------------------------------
 --
--- Executable acc-square
---   Main-is:           Square.hs
---   hs-source-dirs:    src/common src/simple
---   ghc-options:       ACC_OPTIONS
---   build-depends:     ACC_DEPENDS
--- 
--- Executable acc-sum
---   Main-is:           Sum.hs
---   hs-source-dirs:    src/common src/simple
---   ghc-options:       ACC_OPTIONS
---   build-depends:     ACC_DEPENDS
+Executable acc-square
+  Main-is:           Square.hs
+  hs-source-dirs:    src/common src/simple
+  ghc-options:       ACC_OPTIONS
+  build-depends:     ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:     -rtsopts
+
+Executable acc-sum
+  Main-is:           Sum.hs
+  hs-source-dirs:    src/common src/simple
+  ghc-options:       ACC_OPTIONS
+  build-depends:     ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:     -rtsopts
 
 Executable acc-saxpy
   Main-is:           SAXPY.hs
@@ -33,12 +37,14 @@ Executable acc-saxpy
   if impl(ghc >= 7.0)
     ghc-options:     -rtsopts
 
--- Executable acc-dotp
---   Main-is:           DotP.hs
---   hs-source-dirs:    src/common src/simple
---   ghc-options:       ACC_OPTIONS
---   build-depends:     ACC_DEPENDS
--- 
+Executable acc-dotp
+  Main-is:           DotP.hs
+  hs-source-dirs:    src/common src/simple
+  ghc-options:       ACC_OPTIONS
+  build-depends:     ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:     -rtsopts
+
 -- Executable acc-filter
 --   Main-is:           Filter.hs
 --   hs-source-dirs:    src/common src/simple
