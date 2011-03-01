@@ -48,6 +48,7 @@ data Config = Config
   , configMailFromTo     :: Maybe (EmailAddress, [EmailAddress]) -- addresses to email the performance summary
   , configMailFailTo     :: Maybe [EmailAddress]                 -- alternate address to send failure notifications
   , configMailBanner     :: Maybe FilePath                       -- Read a banner to prefix to emails
+  , configSendTestEmail  :: Bool
   }
   deriving Show
 
@@ -91,6 +92,7 @@ processArgs st = do
         , configMailFailTo     = bool (Just mail_fail_to) Nothing            $ null mail_fail_to
         , configMailBanner     = mailBanner
         , configUploadResults  = upload_to
+        , configSendTestEmail  = send_test_email
         }
   return (config, state)
 

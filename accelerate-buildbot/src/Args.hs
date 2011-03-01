@@ -31,6 +31,7 @@ data Args = Args
   , mail_fail_to        :: [String]
   , mail_banner         :: Maybe FilePath
   , history             :: Maybe FilePath
+  , send_test_email     :: Bool
   }
   deriving (Show, Data, Typeable)
 
@@ -108,6 +109,10 @@ defaultArgs =  Args
       &= name "history"
       &= help "Where to stash the buildbot history"
       &= typFile
+
+  , send_test_email
+       = def
+      &= help "Test the mailer configuration"
 
   } &= program "accelerate-buildbot"
     &= summary "accelerate-buildbot (c) 2011 The Accelerate Team"

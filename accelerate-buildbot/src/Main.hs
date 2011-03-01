@@ -15,8 +15,11 @@ import Build
 import Config
 import BuildBox
 
+import Data.List
+import Data.Maybe
 import System.Random
 import System.Directory
+import Control.Monad
 import Control.Monad.Error.Class
 
 
@@ -28,6 +31,12 @@ main = do
   uid      <- getStdRandom $ randomR (0,1000000)
   tmp      <- getTemporaryDirectory
   (cfg,st) <- processArgs (buildStateDefault uid tmp)
+
+  -- Send a test email
+  --
+  when (configSendTestEmail cfg) $ do
+    successfully . runBuildPrintWithState st $ sendTestEmail cfg
+    exitSuccess
 
   -- Run the build-bot
   let once = runAccBuildTest cfg
@@ -73,4 +82,19 @@ runBuildTest config =
     buildTest config
     runTest   config env
     postTest  config
+
+
+-- Send a test email
+--
+sendTestEmail :: Config -> Build ()
+sendTestEmail cfg = do
+  banner <- maybe (return []) (\f -> io $ readFile f) (configMailBanner cfg)
+  mail   <- createMailWithCurrentTime from to
+              "[accelerate-buildbot] Test Email" $ unlines [ banner, "Looks like it worked...\n" ]
+  io $ writeFile "accelerate-buildbot.mail" (render $ renderMail mail)
+  sendMailWithMailer mail (configWithMailer cfg)
+  where
+    to         = intercalate ", " toL
+    (from,toL) = fromMaybe (error "Must specify --mail-from and --mail-to with --send-test-email")
+                           (configMailFromTo cfg)
 
