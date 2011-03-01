@@ -156,8 +156,8 @@ Library
   if flag(io)
     Build-depends:      bytestring
 
-  if flag(test-suite)
-    Build-depends:      QuickCheck      == 2.*
+--  if flag(test-suite)
+--    Build-depends:      QuickCheck      == 2.*
 
   if flag(more-pp)
     Build-depends:      bytestring,
@@ -182,10 +182,10 @@ Library
                         Data.Array.Accelerate.IO.Ptr
                         Data.Array.Accelerate.IO.ByteString
 
-  If flag(test-suite)
-    Exposed-modules:    Data.Array.Accelerate.Test
-    Other-modules:      Data.Array.Accelerate.Test.QuickCheck
-                        Data.Array.Accelerate.Test.QuickCheck.Arbitrary
+--  If flag(test-suite)
+--    Exposed-modules:    Data.Array.Accelerate.Test
+--    Other-modules:      Data.Array.Accelerate.Test.QuickCheck
+--                        Data.Array.Accelerate.Test.QuickCheck.Arbitrary
 
   Other-modules:        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Array.Data
