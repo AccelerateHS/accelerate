@@ -47,7 +47,7 @@ splitPatches l | Seq.null l = []
 --
 patchInfo :: Patch -> (LocalTime, EmailAddress)
 patchInfo p =
-  ( readTime defaultTimeLocale "%a %b %d %H:%M:%S %Z %Y" (unwords time)
+  ( readTime defaultTimeLocale "%a %b %e %H:%M:%S %Z %Y" (unwords time)
   , unwords author)
   where
     header        = Seq.index p 0
