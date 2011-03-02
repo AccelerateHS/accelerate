@@ -11,6 +11,7 @@
 
 module Benchmarks (runAccBenchmarks) where
 
+import Util
 import Config
 import BuildBox
 
@@ -34,14 +35,21 @@ import qualified Data.ByteString.Lex.Double as B
 --
 benchmarks :: Config -> FilePath -> [Benchmark]
 benchmarks _config summaryLog =
-  let simple name args =
+  let simple name args = unit
        Benchmark
         { benchmarkName    = name
         , benchmarkSetup   = return ()
         , benchmarkCommand = runAcc summaryLog ("accelerate-examples/dist/build" </> name </> name) args
         , benchmarkCheck   = return [] }
   in
-  [ simple "acc-saxpy" [] ]
+  concat
+    [ simple "acc-sasum"  []
+    , simple "acc-saxpy"  []
+    , simple "acc-dotp"   []
+    , simple "acc-filter" []
+    , simple "acc-smvm"   ["accelerate-examples/data/matrices/random.mtx"]
+    , simple "acc-blackscholes" []
+    ]
 
 
 -- | Execute all benchmarks and return statistics for each.
@@ -52,7 +60,6 @@ runAccBenchmarks config = withTempFile $ \f -> do
   crit <- readCriterionStats f
   return $ combineBenchStats runs crit
   where
-    unit x = [x]
     run  x = statBenchResult
            . BenchResult (benchmarkName x) . unit <$> runBenchmarkOnce 1 x
 

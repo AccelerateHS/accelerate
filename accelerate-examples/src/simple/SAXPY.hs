@@ -36,10 +36,10 @@ main = do
 
 run :: Int -> IO ()
 run nelements = withSystemRandom $ \gen -> do
-  v1    <- randomVectorR (-1,1) gen nelements
-  v2    <- randomVectorR (-1,1) gen nelements
-  v1'   <- convertVector v1
-  v2'   <- convertVector v2
+  v1    <- randomUArrayR (-1,1) gen nelements
+  v2    <- randomUArrayR (-1,1) gen nelements
+  v1'   <- convertUArray v1
+  v2'   <- convertUArray v2
   alpha <- uniform gen
   --
   benchmark "acc-saxpy" (run_ref alpha v1 v2) (run_acc alpha v1' v2')

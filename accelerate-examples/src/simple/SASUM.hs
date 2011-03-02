@@ -10,15 +10,15 @@ import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
 
 
--- Reduce
--- ------
-sumAcc :: Vector Float -> Acc (Scalar Float)
-sumAcc xs
-  = Acc.fold (+) 0 (Acc.use xs)
+-- Sum of absolute values
+-- ----------------------
+sasumAcc :: Vector Float -> Acc (Scalar Float)
+sasumAcc xs
+  = Acc.fold (+) 0 . Acc.map abs $ Acc.use xs
 
-sumRef :: UArray Int Float -> UArray () Float
-sumRef xs
-  = listArray ((), ()) [Prelude.sum $ elems xs]
+sasumRef :: UArray Int Float -> UArray () Float
+sasumRef xs
+  = listArray ((), ()) [Prelude.sum . Prelude.map abs $ elems xs]
 
 
 -- Main
@@ -33,20 +33,20 @@ main = do
 
 run :: Int -> IO ()
 run n = withSystemRandom $ \gen -> do
-  vec  <- randomVectorR (-1,1) gen n
-  vec' <- convertVector vec
+  vec  <- randomUArrayR (-1,1) gen n
+  vec' <- convertUArray vec
   --
-  benchmark "acc-sum" (run_ref vec) (run_acc vec')
+  benchmark "acc-sasum" (run_ref vec) (run_acc vec')
   where
     {-# NOINLINE run_ref #-}
-    run_ref xs () = sumRef xs
-    run_acc xs () = sumAcc xs
+    run_ref xs () = sasumRef xs
+    run_acc xs () = sasumAcc xs
 
 usage :: IO ()
 usage = putStrLn $ unlines
-  [ "acc-sum (c) [2008..2011] The Accelerate Team"
+  [ "acc-sasum (c) [2008..2011] The Accelerate Team"
   , ""
-  , "acc-sum [OPTIONS]"
+  , "acc-sasum [OPTIONS]"
   , ""
   , "Options:"
   , "  <N>  Number of elements (default 1000000)"

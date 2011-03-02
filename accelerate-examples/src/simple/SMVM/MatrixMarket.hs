@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, GADTs, StandaloneDeriving #-}
 
-module MatrixMarket (Matrix(..), readMatrix) where
+module SMVM.MatrixMarket (Matrix(..), readMatrix) where
 
 import Control.Applicative                      hiding (many)
 

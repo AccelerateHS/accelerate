@@ -10,12 +10,11 @@ ACC_DEPENDS = \
 	deepseq		== 1.1.*, 	 \
 	directory	>= 1.0 && < 1.2, \
 	mtl		>= 1.1 && < 3.0, \
-	mwc-random	== 0.8.*
+	mwc-random	== 0.8.*,	 \
+	vector		== 0.7.*
 
 ACC_OPTIONS = \
-	-Wall
-	# -rtsopts	GHC-7 only
-
+	-Wall -O2
 
 .PHONY : all clean
 all : accelerate-examples.cabal

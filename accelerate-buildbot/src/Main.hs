@@ -11,6 +11,7 @@
 
 module Main where
 
+import Util
 import Build
 import Config
 import BuildBox
@@ -19,6 +20,7 @@ import Data.List
 import Data.Maybe
 import System.Random
 import System.Directory
+import System.Posix.Env
 import Control.Monad
 import Control.Monad.Error.Class
 
@@ -55,16 +57,29 @@ runAccBuildTest config = do
   outLn . ("  - current time is " ++) . show =<< io getZonedTime
   outBlank
 
-  runBuildTest config `catchError` handleBuildError config
+  whenM (modified config) $
+    runBuildTest config `catchError` handleBuildError config
 
   outLn "* Done"
   outLINE
+
+
+-- Determine if any patches have been submitted to the repository since the last
+-- successfully recorded build time. Returns true if we have no saved history.
+--
+modified :: Config -> Build Bool
+modified cfg =
+  maybe' (configHistory cfg) (return True) $ \hist -> do
+    buildT <- io $ read `fmap` readFile hist
+    patchT <- (darcsTimestamp . head) `fmap` changesN (Just $ configDarcsRepo cfg) 1
+    return (buildT /= patchT)
 
 
 -- Run the complete fetch/build/test cycle once
 --
 runBuildTest :: Config -> Build ()
 runBuildTest config =
+  inTempDir    (configScratchDir config) $
   inScratchDir (configScratchDir config) $ do
     -- Check the current environment
     env <- getEnvironmentWith
@@ -84,11 +99,24 @@ runBuildTest config =
     postTest  config
 
 
+inTempDir :: String -> Build a -> Build a
+inTempDir new thing =
+  let before  = io $ do old <- getTemporaryDirectory
+                        setEnv "TMPDIR" new True
+                        return old
+      after d = io $ setEnv "TMPDIR" d True
+  in do
+    a <- before
+    r <- thing `catchError` \e -> after a >> throwError e
+    _ <- after a
+    return r
+
+
 -- Send a test email
 --
 sendTestEmail :: Config -> Build ()
 sendTestEmail cfg = do
-  banner <- maybe (return []) (\f -> io $ readFile f) (configMailBanner cfg)
+  banner <- maybe (return []) (io . readFile) (configMailBanner cfg)
   mail   <- createMailWithCurrentTime from to
               "[accelerate-buildbot] Test Email" $ unlines [ banner, "Looks like it worked...\n" ]
   io $ writeFile "accelerate-buildbot.mail" (render $ renderMail mail)

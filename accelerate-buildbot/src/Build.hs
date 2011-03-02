@@ -78,9 +78,9 @@ runTest cfg env = do
 
         outLn $ "* Writing results to \"" ++ filename ++ "\""
         io    $ do
-          writeFile filename . show      $ results
-          when (not . null $ comparison) $
-            writeFile cmpfile . show     $ reportBenchResults Nothing comparison
+          writeFile filename . show  $ results
+          unless (null comparison)   $
+            writeFile cmpfile . show $ reportBenchResults Nothing comparison
 
         return [filename, cmpfile]
 

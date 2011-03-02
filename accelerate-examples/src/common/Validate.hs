@@ -1,12 +1,11 @@
 {-# LANGUAGE FlexibleContexts, ParallelListComp #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
-module Validate (Similar(..), validate) where
+module Validate (Similar(..), validate, validate') where
 
 import Data.Int
 import Data.Word
 import Data.Array.IArray
-import Data.Array.Unboxed               (UArray)
 import Foreign.C.Types
 import Foreign.Storable
 import Control.Exception                (assert)
@@ -44,6 +43,9 @@ instance Similar Float   where sim = absoluteOrRelative
 instance Similar CFloat  where sim = absoluteOrRelative
 instance Similar Double  where sim = absoluteOrRelative
 instance Similar CDouble where sim = absoluteOrRelative
+
+instance (Similar a, Similar b) => Similar (a,b) where
+  (x,y) `sim` (u,v) = x `sim` u && y `sim` v
 
 --
 -- http://www.cygnus-software.com/papers/comparingfloats/comparingfloats.htm
@@ -88,11 +90,13 @@ lexicographic64 maxUlps a b
 -- similarity. The index and values are returned for pairs that fail.
 --
 validate
-  :: (IArray UArray e, Ix ix, Show e, Show ix, Similar e)
-  => UArray ix e
-  -> UArray ix e
+  :: (IArray array e, Ix ix, Show e, Show ix, Similar e)
+  => array ix e
+  -> array ix e
   -> [(ix,(e,e))]
+validate ref arr = validate' (assocs ref) (elems arr)
 
-validate ref arr =
-  filter (not . uncurry sim . snd) [ (i,(x,y)) | (i,x) <- assocs ref | y <- elems arr ]
+validate' :: (Show ix, Ix ix, Show e, Similar e) => [(ix,e)] -> [e] -> [(ix,(e,e))]
+validate' ref arr =
+  filter (not . uncurry sim . snd) [ (i,(x,y)) | (i,x) <- ref | y <- arr ]
 

@@ -1,28 +1,42 @@
 {-# LANGUAGE BangPatterns, TupleSections #-}
 
-module Matrix (readCSRMatrix) where
+module SMVM.Matrix (readCSRMatrix, randomCSRMatrix) where
 
-import Util
-import MatrixMarket
+import Random
+import SMVM.MatrixMarket
 import System.Random.MWC
+import System.IO.Unsafe
 
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed            as V
 import qualified Data.Vector.Unboxed.Mutable    as M
 import qualified Data.Vector.Algorithms.Intro   as V
 
+type CSRMatrix a = (Vector Int, Vector (Int,a))
+
 
 -- Read a sparse matrix from a MatrixMarket file. Pattern matrices are filled
 -- with random numbers in the range (-1,1).
 --
 {-# INLINE readCSRMatrix #-}
-readCSRMatrix :: FilePath -> IO (Vector Int, Vector (Int,Float))
-readCSRMatrix file = do
-  gen <- create
+readCSRMatrix :: GenIO -> FilePath -> IO (CSRMatrix Float)
+readCSRMatrix gen file = do
   mtx <- readMatrix file
   case mtx of
     (RealMatrix    dim l vals) -> csr dim l vals
     (PatternMatrix dim l ix)   -> csr dim l =<< mapM' (\(a,b) -> (a,b,) `fmap` uniformR (-1,1) gen) ix
+
+
+-- A randomly generated matrix of given size
+--
+{-# INLINE randomCSRMatrix #-}
+randomCSRMatrix :: GenIO -> Int -> Int -> IO (CSRMatrix Float)
+randomCSRMatrix gen rows cols = do
+  segd <- randomVectorR ( 0,cols`div`3) gen rows
+  let nnz = V.sum segd
+  inds <- randomVectorR ( 0,cols-1) gen nnz
+  vals <- randomVectorR (-1,1) gen nnz
+  return (segd, V.zip inds vals)
 
 
 -- Read elements into unboxed arrays, convert to zero-indexed compress sparse
@@ -46,4 +60,14 @@ csr (m,_) l elems = do
                   | otherwise = V.unsafeFreeze mseg
   seg <- gos 0 i
   return (seg , V.zip j v)
+
+
+-- Lazier versions of things in Control.Monad
+--
+sequence' :: [IO a] -> IO [a]
+sequence' ms = foldr k (return []) ms
+    where k m m' = do { x <- m; xs <- unsafeInterleaveIO m'; return (x:xs) }
+
+mapM' :: (a -> IO b) -> [a] -> IO [b]
+mapM' f as = sequence' (map f as)
 

@@ -17,10 +17,14 @@ maybe' :: Maybe a -> b -> (a -> b) -> b
 maybe' Nothing  n _ = n
 maybe' (Just x) _ f = f x
 
-
 -- Fold over a boolean value, analogous to 'maybe' and 'either'
 --
 bool :: a -> a -> Bool -> a
 bool x _ False = x
 bool _ y True  = y
+
+-- A singleton list
+--
+unit :: a -> [a]
+unit x = [x]
 
