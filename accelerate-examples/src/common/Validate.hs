@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, ParallelListComp #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
 module Validate (Similar(..), validate) where
 
@@ -39,18 +40,28 @@ instance Similar CChar   where sim = (==)
 instance Similar CSChar  where sim = (==)
 instance Similar CUChar  where sim = (==)
 
-instance Similar Float   where sim = lexicographic32 5000
-instance Similar CFloat  where sim = lexicographic32 5000
-instance Similar Double  where sim = lexicographic64 1000000
-instance Similar CDouble where sim = lexicographic64 1000000
-
+instance Similar Float   where sim = absoluteOrRelative
+instance Similar CFloat  where sim = absoluteOrRelative
+instance Similar Double  where sim = absoluteOrRelative
+instance Similar CDouble where sim = absoluteOrRelative
 
 --
 -- http://www.cygnus-software.com/papers/comparingfloats/comparingfloats.htm
 --
+
+absoluteOrRelative :: (Fractional a, Ord a) => a -> a -> Bool
+absoluteOrRelative u v
+  | abs (u-v) < epsilonAbs = True
+  | abs u > abs v          = abs ((u-v) / u) < epsilonRel
+  | otherwise              = abs ((u-v) / v) < epsilonRel
+  where
+    epsilonRel = 0.0005
+    epsilonAbs = 0.0000001
+
+
 -- Comparisons using lexicographically ordered floating-point numbers
 -- reinterpreted as twos-complement integers.
-
+--
 lexicographic32 :: (Num a, Storable a) => Int -> a -> a -> Bool
 lexicographic32 maxUlps a b
   = assert (sizeOf a == 4 && maxUlps > 0 && maxUlps < 4 * 1024 * 1024)
