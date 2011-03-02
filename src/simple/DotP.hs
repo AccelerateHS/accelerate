@@ -39,10 +39,10 @@ main = do
 
 run :: Int -> IO ()
 run n = withSystemRandom $ \gen -> do
-  v1  <- randomVectorR (-1,1) gen n
-  v2  <- randomVectorR (-1,1) gen n
-  v1' <- convertVector v1
-  v2' <- convertVector v2
+  v1  <- randomUArrayR (-1,1) gen n
+  v2  <- randomUArrayR (-1,1) gen n
+  v1' <- convertUArray v1
+  v2' <- convertUArray v2
   --
   benchmark "acc-dotp" (run_ref v1 v2) (run_acc v1' v2')
   where
