@@ -20,14 +20,14 @@ Cabal-version:       >=1.6
 --   build-depends:        ACC_DEPENDS
 --   if impl(ghc >= 7.0)
 --     ghc-options:        -rtsopts
--- 
--- Executable acc-fold
---   Main-is:              Fold.hs
---   hs-source-dirs:       src/common src/primitives
---   ghc-options:          ACC_OPTIONS
---   build-depends:        ACC_DEPENDS
---   if impl(ghc >= 7.0)
---     ghc-options:        -rtsopts
+
+Executable acc-fold
+  Main-is:              Fold.hs
+  hs-source-dirs:       src/common src/primitives
+  ghc-options:          ACC_OPTIONS
+  build-depends:        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
 
 -- Simple examples -------------------------------------------------------------
