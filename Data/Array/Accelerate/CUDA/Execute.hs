@@ -336,7 +336,7 @@ zipWithOp acc aenv (Array sh1 in1) (Array sh0 in0) = do
   freeArray in0
   return res
 
-foldOp :: (Sugar.Shape dim, Typeable aenv)
+foldOp :: forall dim e aenv. (Sugar.Shape dim, Typeable aenv)
        => OpenAcc aenv (Array dim e)
        -> Val aenv
        -> Array (dim:.Int) e
@@ -347,7 +347,7 @@ foldOp acc aenv (Array sh0 in0)
   | dim sh0 == 1 = do
       cfg@(_,_,_,(_,g,_)) <- configure "fold" acc aenv (size sh0)
       rc                  <- getUseCount acc
-      res@(Array _ out)   <- newArray (bool rc 1 (g > 1)) (Sugar.toElt (fst sh0,g))
+      res@(Array _ out)   <- newArray (bool rc 1 (g > 1)) (Sugar.toElt (fst sh0,g)) :: CIO (Array (dim:.Int) e)
       dispatch cfg ((((),out),in0),size sh0)
       freeArray in0
       if g > 1 then foldOp acc aenv res
