@@ -13,13 +13,13 @@ Cabal-version:       >=1.6
 
 -- Primitive operations --------------------------------------------------------
 --
--- Executable acc-map
---   Main-is:              Map.hs
---   hs-source-dirs:       src/common src/primitives
---   ghc-options:          ACC_OPTIONS
---   build-depends:        ACC_DEPENDS
---   if impl(ghc >= 7.0)
---     ghc-options:        -rtsopts
+Executable acc-map
+  Main-is:              Map.hs
+  hs-source-dirs:       src/common src/primitives
+  ghc-options:          ACC_OPTIONS
+  build-depends:        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
 Executable acc-fold
   Main-is:              Fold.hs
@@ -78,6 +78,14 @@ Executable acc-smvm
 
 Executable acc-blackscholes
   Main-is:              BlackScholes.hs
+  hs-source-dirs:       src/common src/simple
+  ghc-options:          ACC_OPTIONS
+  build-depends:        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+Executable acc-radixsort
+  Main-is:              Radix.hs
   hs-source-dirs:       src/common src/simple
   ghc-options:          ACC_OPTIONS
   build-depends:        ACC_DEPENDS
