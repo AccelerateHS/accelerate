@@ -59,7 +59,7 @@ deriving instance Show Matrix
 
 comment :: Parser ()
 comment = char '%' *> skipWhile (not . eol) *> endOfLine
-  where eol w = w == '\n' || w == '\r'
+  where eol w = w `elem` "\n\r"
 
 floating :: Fractional a => Parser a
 floating = do

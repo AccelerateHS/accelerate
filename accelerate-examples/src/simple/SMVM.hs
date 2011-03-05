@@ -42,7 +42,7 @@ type USparseMatrix a = (UArray Int Int, (UArray Int Int, UArray Int a))
 smvmRef :: USparseMatrix Float -> UArray Int Float -> UArray Int Float
 smvmRef (segd, (inds, values)) vec
   = listArray (0, rangeSize (bounds segd) - 1)
-  $ [sum [ values!i * vec!(inds!i) | i <- range seg] | seg <- segd' ]
+    [sum [ values!i * vec!(inds!i) | i <- range seg] | seg <- segd' ]
   where
     segbegin = scanl  (+) 0 $ elems segd
     segend   = scanl1 (+)   $ elems segd
@@ -93,6 +93,6 @@ usage = putStrLn $ unlines
   , "acc-smvm [OPTIONS]"
   , ""
   , "Options:"
-  , "  <matrix.mtx>  MatrixMarket file to process"
+  , "  matrix.mt        MatrixMarket file to process"
   ]
 

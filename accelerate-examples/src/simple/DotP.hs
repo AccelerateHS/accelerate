@@ -58,6 +58,6 @@ usage = putStrLn $ unlines
   , "acc-dotp [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of elements (default 1000000)"
+  , "  N        Number of elements (default 1000000)"
   ]
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ParallelListComp, PatternGuards, TypeOperators #-}
+{-# LANGUAGE FlexibleContexts, PatternGuards, TypeOperators #-}
 
 module Main where
 
@@ -85,9 +85,9 @@ run alg n = withSystemRandom $ \gen -> do
 
 usage :: IO ()
 usage = putStrLn $ unlines
-  [ "acc-sum (c) [2008..2011] The Accelerate Team"
+  [ "acc-fold (c) [2008..2011] The Accelerate Team"
   , ""
-  , "acc-sum ALGORITHM [N]"
+  , "acc-fold ALGORITHM [N]"
   , ""
   , "Algorithms:"
   , "  sum          vector reduction        fold (+) 0"
