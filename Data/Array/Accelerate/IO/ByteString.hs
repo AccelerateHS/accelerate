@@ -20,11 +20,12 @@ import Data.Array.Accelerate.Array.Sugar
 
 
 
--- | Block copies bytes from a collection of 'ByteString's to freshly allocated Accelerate array.
+-- | Block copies bytes from a collection of 'ByteString's to freshly allocated
+--   Accelerate array.
 --
---   The type of elements (@e@) in the output Accelerate array determines the structure of the
---   collection of 'ByteString's that will be required as the second argument to this function.
---   See 'ByteStrings'
+--   The type of elements (@e@) in the output Accelerate array determines the
+--   structure of the collection of 'ByteString's that will be required as the
+--   second argument to this function. See 'ByteStrings'
 --
 fromByteString :: (Shape sh, Elt e) => sh -> ByteStrings (EltRepr e) -> IO (Array sh e)
 fromByteString sh byteStrings = do
@@ -34,11 +35,12 @@ fromByteString sh byteStrings = do
   return arr
 
 
--- | Block copy from an Accelerate array to a collection of freshly allocated 'ByteString's.
+-- | Block copy from an Accelerate array to a collection of freshly allocated
+--   'ByteString's.
 --
---   The type of elements (@e@) in the input Accelerate array determines the structure of the
---   collection of 'ByteString's that will be output.
---   See 'ByteStrings'
+--   The type of elements (@e@) in the input Accelerate array determines the
+--   structure of the collection of 'ByteString's that will be output. See
+--   'ByteStrings'
 --
 toByteString :: (Shape sh, Elt e) => Array sh e -> IO (ByteStrings (EltRepr e))
 toByteString arr = do

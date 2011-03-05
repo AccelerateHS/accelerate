@@ -23,13 +23,14 @@ import Data.Array.Accelerate.Array.Sugar
 
 
 
--- | Block copy regions of memory into a freshly allocated Accelerate array. The type of elements
---   (@e@) in the output Accelerate array determines the structure of the collection of pointers
---   that will be required as the second argument to this function. See 'BlockPtrs'
+-- | Block copy regions of memory into a freshly allocated Accelerate array. The
+--   type of elements (@e@) in the output Accelerate array determines the
+--   structure of the collection of pointers that will be required as the second
+--   argument to this function. See 'BlockPtrs'
 --
---   Each one of these pointers points to a block of memory that is the source of data
---   for the Accelerate array (unlike function 'blockCopyToArrayWithFunctions' where one passes
---   in function which copies data to a destination address.).
+--   Each one of these pointers points to a block of memory that is the source
+--   of data for the Accelerate array (unlike function 'toArray' where one
+--   passes in function which copies data to a destination address.).
 --
 fromPtr :: (Shape sh, Elt e) => sh -> BlockPtrs (EltRepr e) -> IO (Array sh e)
 fromPtr sh blkPtrs = do
@@ -39,9 +40,10 @@ fromPtr sh blkPtrs = do
   return arr
 
 
--- | Block copy from Accelerate array to pre-allocated regions of memory. The type of element of
---   the input Accelerate array (@e@) determines the structure of the collection of pointers
---   that will be required as the second argument to this function. See 'BlockPtrs'
+-- | Block copy from Accelerate array to pre-allocated regions of memory. The
+--   type of element of the input Accelerate array (@e@) determines the
+--   structure of the collection of pointers that will be required as the second
+--   argument to this function. See 'BlockPtrs'
 --
 --   The memory associated with the pointers must have already been allocated.
 --
@@ -52,19 +54,20 @@ toPtr arr blockPtrs = do
   return ()
 
 
--- | Copy values from an Accelerate array using a collection of functions that have type
---   'BlockCopyFun'. The argument of type @Ptr e@ in each of these functions refers to the
---   address of the /source/ block of memory in the Accelerate Array. The /destination/
---   address is implicit. e.g. the 'BlockCopyFun' could be the result of partially
---   application to a @Ptr e@ pointing to the destination block.
+-- | Copy values from an Accelerate array using a collection of functions that
+--   have type 'BlockCopyFun'. The argument of type @Ptr e@ in each of these
+--   functions refers to the address of the /source/ block of memory in the
+--   Accelerate Array. The /destination/ address is implicit. e.g. the
+--   'BlockCopyFun' could be the result of partially application to a @Ptr e@
+--   pointing to the destination block.
 --
---   The structure of this collection of functions depends on the elemente type @e@. Each
---   function (of type 'BlockCopyFun') copies data to a destination address (pointed to
---   by the argument of type @Ptr ()@).
+--   The structure of this collection of functions depends on the elemente type
+--   @e@. Each function (of type 'BlockCopyFun') copies data to a destination
+--   address (pointed to by the argument of type @Ptr ()@).
 --
---   Unless there is a particularly pressing reason to use this function, the 'blockCopyToArray'
---   function is sufficient as it uses an efficient low-level call to libc's @memcpy@ to
---   perform the copy.
+--   Unless there is a particularly pressing reason to use this function, the
+--   'fromPtr' function is sufficient as it uses an efficient low-level call to
+--   libc's @memcpy@ to perform the copy.
 --
 fromArray :: (Shape sh, Elt e) => Array sh e -> BlockCopyFuns (EltRepr e) -> IO ()
 fromArray arr blockCopyFuns = do
@@ -74,18 +77,19 @@ fromArray arr blockCopyFuns = do
 
 
 -- | Copy values to a freshly allocated Accelerate array using a collection of
---   functions that have type 'BlockCopyFun'. The argument of type @Ptr e@ in each of
---   these functions refers to the address of the /destination/ block of memory in the
---   Accelerate Array. The /source/ address is implicit. e.g. the 'BlockCopyFun' could
---   be the result of a partial application to a @Ptr e@ pointing to the source block.
+--   functions that have type 'BlockCopyFun'. The argument of type @Ptr e@ in
+--   each of these functions refers to the address of the /destination/ block of
+--   memory in the Accelerate Array. The /source/ address is implicit. e.g. the
+--   'BlockCopyFun' could be the result of a partial application to a @Ptr e@
+--   pointing to the source block.
 --
---   The structure of this collection of functions depends on the elemente type @e@. Each
---   function (of type 'BlockCopyFun') copies data to a destination address (pointed to by
---   the argument of type @Ptr ()@).
+--   The structure of this collection of functions depends on the elemente type
+--   @e@. Each function (of type 'BlockCopyFun') copies data to a destination
+--   address (pointed to by the argument of type @Ptr ()@).
 --
---   Unless there is a particularly pressing reason to use this function, the 'blockCopyToArray'
---   function is sufficient as it uses an efficient low-level call to libc's
---   @memcpy@ to perform the copy.
+--   Unless there is a particularly pressing reason to use this function, the
+--   'fromPtr' function is sufficient as it uses an efficient low-level call to
+--   libc's @memcpy@ to perform the copy.
 --
 toArray :: (Shape sh, Elt e) => sh -> BlockCopyFuns (EltRepr e) -> IO (Array sh e)
 toArray sh blockCopyFuns = do

@@ -31,21 +31,24 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Sugar
 
 
--- | Functions of this type are passed as arguments to 'blockCopyToArrayWithFunctions'.
---   A function of this type should copy a number of bytes (equal to the value of the parameter
---   of type 'Int') to the destination memory pointed to by @Ptr e@.
+-- | Functions of this type are passed as arguments to 'toArray'. A function of
+--   this type should copy a number of bytes (equal to the value of the
+--   parameter of type 'Int') to the destination memory pointed to by @Ptr e@.
+--
 type BlockCopyFun e = Ptr e -> Int -> IO ()
 
 -- | Represents a collection of "block copy functions" (see 'BlockCopyFun'). The
---   structure of the collection of 'BlockCopyFun's depends on the element type @e@.
+--   structure of the collection of 'BlockCopyFun's depends on the element type
+--   @e@.
 --
--- e.g.
+--   e.g.
 --
--- If @e :: Float@
--- then @BlockCopyFuns (EltRepr e) :: ((), Ptr Float -> Int -> IO ())@
+--   If @e :: Float@
+--   then @BlockCopyFuns (EltRepr e) :: ((), Ptr Float -> Int -> IO ())@
 --
--- If @e :: (Double, Float)@
--- then @BlockCopyFuns (EltRepr e) :: (((), Ptr Double -> Int -> IO ()), Ptr Float -> Int -> IO ())@
+--   If @e :: (Double, Float)@
+--   then @BlockCopyFuns (EltRepr e) :: (((), Ptr Double -> Int -> IO ()), Ptr Float -> Int -> IO ())@
+--
 type family BlockCopyFuns e
 
 type instance BlockCopyFuns ()     = ()
@@ -65,15 +68,16 @@ type instance BlockCopyFuns Bool   = BlockCopyFun Word8 -- Packed a bit vector
 type instance BlockCopyFuns Char   = BlockCopyFun Char
 type instance BlockCopyFuns (a,b)  = (BlockCopyFuns a, BlockCopyFuns b)
 
--- | A family of types that represents a collection of pointers that are the source/destination
---   addresses for a block copy. The structure of the collection of pointers depends on
---   the element type @e@.
+-- | A family of types that represents a collection of pointers that are the
+--   source/destination addresses for a block copy. The structure of the
+--   collection of pointers depends on the element type @e@.
 --
 --  e.g.
 --
 --  If @e :: Int@,            then @BlockPtrs (EltRepr e) :: ((), Ptr Int)@
 --
 --  If @e :: (Double, Float)@ then @BlockPtrs (EltRepr e) :: (((), Ptr Double), Ptr Float)@
+--
 type family BlockPtrs e
 
 type instance BlockPtrs ()     = ()
@@ -93,8 +97,10 @@ type instance BlockPtrs Bool   = Ptr Word8 -- Packed as a bit vector
 type instance BlockPtrs Char   = Ptr Char
 type instance BlockPtrs (a,b)  = (BlockPtrs a, BlockPtrs b)
 
--- | A family of types that represents a collection of 'ByteString's. They are the source
---   data for function 'byteStringsToArray' and the result data for 'arrayToByteStrings'
+-- | A family of types that represents a collection of 'ByteString's. They are
+--   the source data for function 'fromByteString' and the result data for
+--   'toByteString'
+--
 type family ByteStrings e
 
 type instance ByteStrings ()     = ()
