@@ -68,6 +68,6 @@ usage = putStrLn $ unlines
   , "acc-filter [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of elements (default 1000000)"
+  , "  N        Number of elements (default 1000000)"
   ]
 

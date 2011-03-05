@@ -1,4 +1,4 @@
-{-# LANGUAGE ParallelListComp, PatternGuards #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Main where
 
@@ -49,6 +49,6 @@ usage = putStrLn $ unlines
   , "acc-sasum [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of elements (default 1000000)"
+  , "  N        Number of elements (default 1000000)"
   ]
 

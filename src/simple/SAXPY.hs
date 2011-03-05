@@ -56,6 +56,6 @@ usage = putStrLn $ unlines
   , "acc-saxpy [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of elements (default 1000000)"
+  , "  N        Number of elements (default 1000000)"
   ]
 

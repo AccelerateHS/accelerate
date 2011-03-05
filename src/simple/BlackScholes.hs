@@ -102,6 +102,6 @@ usage = putStrLn $ unlines
   , "acc-blackscholes [OPTIONS]"
   , ""
   , "Options:"
-  , "  <N>  Number of options (default 1000000)"
+  , "  N        Number of options (default 1000000)"
   ]
 
