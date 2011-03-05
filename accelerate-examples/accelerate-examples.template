@@ -95,6 +95,14 @@ Executable acc-radixsort
 
 -- Block copy ------------------------------------------------------------------
 --
+Executable acc-io
+  Main-is:              src/io/Main.hs
+  c-sources:            src/io/fill_with_values.c
+  ghc-options:          ACC_OPTIONS
+  build-depends:        HUnit                   == 1.2.*,
+                        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
 -- Image processing ------------------------------------------------------------
 --
