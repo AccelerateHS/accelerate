@@ -1,16 +1,19 @@
 {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
 
-import Data.Array.Accelerate                       as Acc
-import qualified Data.Array.Accelerate.CUDA        as CUDA
-import qualified Data.Array.Accelerate.Interpreter as Interp
+import PGM
+import Benchmark
+
+import System.FilePath
+import Data.Array.Accelerate                as Acc
+import qualified Data.Array.Accelerate.CUDA as Acc
 
 
 -- |The value of each element in an integral image is the sum of all input elements
 -- above and to the left, inclusive. It is calculated by performing an inclusive/post
 -- scan from left-to-right then top-to-bottom.
 --
-integralImage :: (Elt a, IsNum a) => Acc (Array DIM2 a) -> Acc (Array DIM2 a)
-integralImage arr = sumTable
+integralImage :: (Elt a, IsNum a) => Array DIM2 a -> Acc (Array DIM2 a)
+integralImage img = sumTable
   where
     -- scan rows
     rowArr  = reshape (lift $ Z:.(w * h)) arr
@@ -26,6 +29,7 @@ integralImage arr = sumTable
     sumTable = transpose2D colSum
 
     --
+    arr     = use img
     Z:.w:.h = unlift $ shape arr
 
 
@@ -37,24 +41,38 @@ transpose2D arr = backpermute (swap $ shape arr) swap arr
     swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z :. Exp Int :. Exp Int
 
 
+{--
 -- |An image is just a 2D array of 1s. The values don't really matter here but
 -- all 1s makes it easier to validate the integral image result.
 --
-image :: Array DIM2 Int
+image :: Array DIM2 Float
 image = Acc.fromList (Z:.20:.40) $ repeat 1
+--}
 
-
--- |Run integralImage through the Interpreter and CUDA backends.
+-- |Run integralImage through the CUDA backend
 --
 main :: IO ()
 main = do
-  let cuda = CUDA.run   $ integralImage (use image)
-      int  = Interp.run $ integralImage (use image)
+  args <- getArgs'
+  case args of
+       [f]   -> let (base,ext) = splitExtension f
+                in  run f (base ++ "-out" <.> ext)
+       [f,g] -> run f g
+       _     -> usage
 
-  if toList cuda == toList int
-     then putStrLn "Valid"
-     else do
-       putStrLn "INVALID!!"
-       putStrLn $ " Interpreter: " ++ show int
-       putStrLn $ " CUDA:        " ++ show cuda
+-- TLM: should compare to a pre-saved reference image, or the interpreter (if it
+--      is not too slow)
+run :: FilePath -> FilePath -> IO ()
+run inf outf = writePGM outf . Acc.run . integralImage =<< readPGM inf
+
+usage :: IO ()
+usage = putStrLn $ unlines
+  [ "acc-integralimage (c) [2008..2011] The Accelerate Team"
+  , ""
+  , "acc-integralimage IN [OUT]"
+  , ""
+  , "Options:"
+  , "  IN       PGM image file to process"
+  , "  OUT      output image filename (optional)"
+  ]
 

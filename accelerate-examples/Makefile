@@ -3,12 +3,13 @@
 #
 
 ACC_DEPENDS = \
-	accelerate	== 0.9.*, 	 \
-	array		== 0.3.*, 	 \
-	base		== 4.*,   	 \
-	criterion	== 0.5.*, 	 \
-	deepseq		== 1.1.*, 	 \
+	accelerate	== 0.9.*,	 \
+	array		== 0.3.*,	 \
+	base		== 4.*,		 \
+	criterion	== 0.5.*,	 \
+	deepseq		== 1.1.*,	 \
 	directory	>= 1.0 && < 1.2, \
+	filepath	>= 1.0 && < 1.3, \
 	mtl		>= 1.1 && < 3.0, \
 	mwc-random	== 0.8.*,	 \
 	vector		== 0.7.*
