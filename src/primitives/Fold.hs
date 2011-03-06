@@ -10,6 +10,7 @@ import Control.Exception
 import System.Random.MWC
 import Data.Array.Unboxed    hiding (Array)
 import Data.Array.Accelerate as Acc
+import Prelude		     as P
 
 
 -- one-dimension ah-ha-ha
@@ -60,7 +61,7 @@ run alg n = withSystemRandom $ \gen -> do
   vec  <- randomUArrayR (-1,1) gen n
   vec' <- convertUArray vec
   --
-  let u = floor . sqrt $ (fromIntegral n :: Double)
+  let u = P.floor . sqrt $ (P.fromIntegral n :: Double)
       v = 2*u+1 :: Int
   mat  <- listArray ((0,0), (u-1,v-1)) `fmap` replicateM (u*v) (uniformR (-1,1) gen)
   mat' <- let m = fromIArray mat :: Array DIM2 Float
