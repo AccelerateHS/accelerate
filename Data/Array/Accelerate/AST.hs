@@ -755,10 +755,16 @@ data PrimFun sig where
   PrimExpFloating :: FloatingType a -> PrimFun (a      -> a)
   PrimSqrt        :: FloatingType a -> PrimFun (a      -> a)
   PrimLog         :: FloatingType a -> PrimFun (a      -> a)
-  PrimFPow        :: FloatingType a -> PrimFun ((a,a)  -> a)
-  PrimLogBase     :: FloatingType a -> PrimFun ((a,a)  -> a)
+  PrimFPow        :: FloatingType a -> PrimFun ((a, a) -> a)
+  PrimLogBase     :: FloatingType a -> PrimFun ((a, a) -> a)
+
+  PrimTruncate    :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
+  PrimRound       :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
+  PrimFloor       :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
+  PrimCeiling     :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
+
   PrimAtan2       :: FloatingType a -> PrimFun ((a,a)  -> a)
-  -- FIXME: add operations from Floating, RealFrac & RealFloat
+  -- FIXME: add missing operations from RealFrac & RealFloat
 
   -- relational and equality operators
   PrimLt   :: ScalarType a -> PrimFun ((a, a) -> Bool)
@@ -780,18 +786,11 @@ data PrimFun sig where
   PrimChr  :: PrimFun (Int  -> Char)
   -- FIXME: use IntegralType?
 
-  -- floating point conversions
-  PrimRoundFloatInt :: PrimFun (Float -> Int)
-  PrimTruncFloatInt :: PrimFun (Float -> Int)
-  PrimIntFloat      :: PrimFun (Int -> Float)
-  -- FIXME: variants for other integer types (and also for Double)
-  --        ALSO: need to use overloading
-
   -- FIXME: conversions between various integer types
   --        should we have an overloaded functions like 'toInt'?  
   --        (or 'fromEnum' for enums?)
-  PrimBoolToInt     :: PrimFun (Bool -> Int)
-  PrimFromIntegral  :: IntegralType a -> NumType b -> PrimFun (a -> b)
+  PrimBoolToInt    :: PrimFun (Bool -> Int)
+  PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
 
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want

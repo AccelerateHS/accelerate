@@ -40,6 +40,7 @@ module Data.Array.Accelerate.Smart (
   mkAsinh, mkAcosh, mkAtanh,
   mkExpFloating, mkSqrt, mkLog,
   mkFPow, mkLogBase,
+  mkTruncate, mkRound, mkFloor, mkCeiling,
   mkAtan2,
 
   -- * Smart constructors for primitive functions
@@ -50,7 +51,6 @@ module Data.Array.Accelerate.Smart (
 
   -- * Smart constructors for type coercion functions
   mkBoolToInt, mkFromIntegral,
-  mkIntFloat, mkRoundFloatInt, mkTruncFloatInt,
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$)
@@ -1837,8 +1837,11 @@ mkMaxBound = PrimConst (PrimMaxBound boundedType)
 mkPi :: (Elt r, IsFloating r) => Exp r
 mkPi = PrimConst (PrimPi floatingType)
 
--- Operators from Floating
+
+-- Smart constructors for primitive applications
 --
+
+-- Operators from Floating
 
 mkSin :: (Elt t, IsFloating t) => Exp t -> Exp t
 mkSin x = PrimSin floatingType `PrimApp` x
@@ -1881,9 +1884,6 @@ mkFPow x y = PrimFPow floatingType `PrimApp` tup2 (x, y)
 
 mkLogBase :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
 mkLogBase x y = PrimLogBase floatingType `PrimApp` tup2 (x, y)
-
--- Smart constructors for primitive applications
--- 
 
 -- Operators from Num
 
@@ -1943,7 +1943,7 @@ mkBRotateL x i = PrimBRotateL integralType `PrimApp` tup2 (x, i)
 mkBRotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 mkBRotateR x i = PrimBRotateR integralType `PrimApp` tup2 (x, i)
 
--- Operators from Fractional, Floating, RealFrac & RealFloat
+-- Operators from Fractional
 
 mkFDiv :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
 mkFDiv x y = PrimFDiv floatingType `PrimApp` tup2 (x, y)
@@ -1951,10 +1951,26 @@ mkFDiv x y = PrimFDiv floatingType `PrimApp` tup2 (x, y)
 mkRecip :: (Elt t, IsFloating t) => Exp t -> Exp t
 mkRecip x = PrimRecip floatingType `PrimApp` x
 
+-- Operators from RealFrac
+
+mkTruncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+mkTruncate x = PrimTruncate floatingType integralType `PrimApp` x
+
+mkRound :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+mkRound x = PrimRound floatingType integralType `PrimApp` x
+
+mkFloor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+mkFloor x = PrimFloor floatingType integralType `PrimApp` x
+
+mkCeiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+mkCeiling x = PrimCeiling floatingType integralType `PrimApp` x
+
+-- Operators from RealFloat
+
 mkAtan2 :: (Elt t, IsFloating t) => Exp t -> Exp t -> Exp t
 mkAtan2 x y = PrimAtan2 floatingType `PrimApp` tup2 (x, y)
 
--- FIXME: add operations from Floating, RealFrac & RealFloat
+-- FIXME: add missing operations from Floating, RealFrac & RealFloat
 
 -- Relational and equality operators
 
@@ -2004,15 +2020,6 @@ mkFromIntegral x = PrimFromIntegral integralType numType `PrimApp` x
 
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = PrimBoolToInt `PrimApp` b
-
-mkIntFloat :: Exp Int -> Exp Float
-mkIntFloat x = PrimIntFloat `PrimApp` x
-
-mkRoundFloatInt :: Exp Float -> Exp Int
-mkRoundFloatInt x = PrimRoundFloatInt `PrimApp` x
-
-mkTruncFloatInt :: Exp Float -> Exp Int
-mkTruncFloatInt x = PrimTruncFloatInt `PrimApp` x
 
 
 -- Auxiliary functions

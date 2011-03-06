@@ -651,58 +651,59 @@ evalPrimConst (PrimMaxBound ty) = evalMaxBound ty
 evalPrimConst (PrimPi       ty) = evalPi ty
 
 evalPrim :: PrimFun p -> p
-evalPrim (PrimAdd         ty)   = evalAdd ty
-evalPrim (PrimSub         ty)   = evalSub ty
-evalPrim (PrimMul         ty)   = evalMul ty
-evalPrim (PrimNeg         ty)   = evalNeg ty
-evalPrim (PrimAbs         ty)   = evalAbs ty
-evalPrim (PrimSig         ty)   = evalSig ty
-evalPrim (PrimQuot        ty)   = evalQuot ty
-evalPrim (PrimRem         ty)   = evalRem ty
-evalPrim (PrimIDiv        ty)   = evalIDiv ty
-evalPrim (PrimMod         ty)   = evalMod ty
-evalPrim (PrimBAnd        ty)   = evalBAnd ty
-evalPrim (PrimBOr         ty)   = evalBOr ty
-evalPrim (PrimBXor        ty)   = evalBXor ty
-evalPrim (PrimBNot        ty)   = evalBNot ty
-evalPrim (PrimBShiftL     ty)   = evalBShiftL ty
-evalPrim (PrimBShiftR     ty)   = evalBShiftR ty
-evalPrim (PrimBRotateL    ty)   = evalBRotateL ty
-evalPrim (PrimBRotateR    ty)   = evalBRotateR ty
-evalPrim (PrimFDiv        ty)   = evalFDiv ty
-evalPrim (PrimRecip       ty)   = evalRecip ty
-evalPrim (PrimSin         ty)   = evalSin ty
-evalPrim (PrimCos         ty)   = evalCos ty
-evalPrim (PrimTan         ty)   = evalTan ty
-evalPrim (PrimAsin        ty)   = evalAsin ty
-evalPrim (PrimAcos        ty)   = evalAcos ty
-evalPrim (PrimAtan        ty)   = evalAtan ty
-evalPrim (PrimAsinh       ty)   = evalAsinh ty
-evalPrim (PrimAcosh       ty)   = evalAcosh ty
-evalPrim (PrimAtanh       ty)   = evalAtanh ty
-evalPrim (PrimExpFloating ty)   = evalExpFloating ty
-evalPrim (PrimSqrt        ty)   = evalSqrt ty
-evalPrim (PrimLog         ty)   = evalLog ty
-evalPrim (PrimFPow        ty)   = evalFPow ty
-evalPrim (PrimLogBase     ty)   = evalLogBase ty
-evalPrim (PrimAtan2       ty)   = evalAtan2 ty
-evalPrim (PrimLt          ty)   = evalLt ty
-evalPrim (PrimGt          ty)   = evalGt ty
-evalPrim (PrimLtEq        ty)   = evalLtEq ty
-evalPrim (PrimGtEq        ty)   = evalGtEq ty
-evalPrim (PrimEq          ty)   = evalEq ty
-evalPrim (PrimNEq         ty)   = evalNEq ty
-evalPrim (PrimMax         ty)   = evalMax ty
-evalPrim (PrimMin         ty)   = evalMin ty
-evalPrim PrimLAnd               = evalLAnd
-evalPrim PrimLOr                = evalLOr
-evalPrim PrimLNot               = evalLNot
-evalPrim PrimOrd                = evalOrd
-evalPrim PrimChr                = evalChr
-evalPrim PrimRoundFloatInt      = evalRoundFloatInt
-evalPrim PrimTruncFloatInt      = evalTruncFloatInt
-evalPrim PrimIntFloat           = evalIntFloat
-evalPrim PrimBoolToInt          = evalBoolToInt
+evalPrim (PrimAdd             ty) = evalAdd ty
+evalPrim (PrimSub             ty) = evalSub ty
+evalPrim (PrimMul             ty) = evalMul ty
+evalPrim (PrimNeg             ty) = evalNeg ty
+evalPrim (PrimAbs             ty) = evalAbs ty
+evalPrim (PrimSig             ty) = evalSig ty
+evalPrim (PrimQuot            ty) = evalQuot ty
+evalPrim (PrimRem             ty) = evalRem ty
+evalPrim (PrimIDiv            ty) = evalIDiv ty
+evalPrim (PrimMod             ty) = evalMod ty
+evalPrim (PrimBAnd            ty) = evalBAnd ty
+evalPrim (PrimBOr             ty) = evalBOr ty
+evalPrim (PrimBXor            ty) = evalBXor ty
+evalPrim (PrimBNot            ty) = evalBNot ty
+evalPrim (PrimBShiftL         ty) = evalBShiftL ty
+evalPrim (PrimBShiftR         ty) = evalBShiftR ty
+evalPrim (PrimBRotateL        ty) = evalBRotateL ty
+evalPrim (PrimBRotateR        ty) = evalBRotateR ty
+evalPrim (PrimFDiv            ty) = evalFDiv ty
+evalPrim (PrimRecip           ty) = evalRecip ty
+evalPrim (PrimSin             ty) = evalSin ty
+evalPrim (PrimCos             ty) = evalCos ty
+evalPrim (PrimTan             ty) = evalTan ty
+evalPrim (PrimAsin            ty) = evalAsin ty
+evalPrim (PrimAcos            ty) = evalAcos ty
+evalPrim (PrimAtan            ty) = evalAtan ty
+evalPrim (PrimAsinh           ty) = evalAsinh ty
+evalPrim (PrimAcosh           ty) = evalAcosh ty
+evalPrim (PrimAtanh           ty) = evalAtanh ty
+evalPrim (PrimExpFloating     ty) = evalExpFloating ty
+evalPrim (PrimSqrt            ty) = evalSqrt ty
+evalPrim (PrimLog             ty) = evalLog ty
+evalPrim (PrimFPow            ty) = evalFPow ty
+evalPrim (PrimLogBase         ty) = evalLogBase ty
+evalPrim (PrimTruncate     ta tb) = evalTruncate ta tb
+evalPrim (PrimRound        ta tb) = evalRound ta tb
+evalPrim (PrimFloor        ta tb) = evalFloor ta tb
+evalPrim (PrimCeiling      ta tb) = evalCeiling ta tb
+evalPrim (PrimAtan2           ty) = evalAtan2 ty
+evalPrim (PrimLt              ty) = evalLt ty
+evalPrim (PrimGt              ty) = evalGt ty
+evalPrim (PrimLtEq            ty) = evalLtEq ty
+evalPrim (PrimGtEq            ty) = evalGtEq ty
+evalPrim (PrimEq              ty) = evalEq ty
+evalPrim (PrimNEq             ty) = evalNEq ty
+evalPrim (PrimMax             ty) = evalMax ty
+evalPrim (PrimMin             ty) = evalMin ty
+evalPrim PrimLAnd                 = evalLAnd
+evalPrim PrimLOr                  = evalLOr
+evalPrim PrimLNot                 = evalLNot
+evalPrim PrimOrd                  = evalOrd
+evalPrim PrimChr                  = evalChr
+evalPrim PrimBoolToInt            = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
 
 
@@ -739,15 +740,6 @@ evalOrd = ord
 
 evalChr :: Int -> Char
 evalChr =  chr
-
-evalRoundFloatInt :: Float -> Int
-evalRoundFloatInt = round
-
-evalTruncFloatInt :: Float -> Int
-evalTruncFloatInt = truncate
-
-evalIntFloat :: Int -> Float
-evalIntFloat = fromIntegral
 
 evalBoolToInt :: Bool -> Int
 evalBoolToInt = fromEnum
@@ -826,6 +818,26 @@ evalFPow ty | FloatingDict <- floatingDict ty = uncurry (**)
 
 evalLogBase :: FloatingType a -> ((a, a) -> a)
 evalLogBase ty | FloatingDict <- floatingDict ty = uncurry logBase
+
+evalTruncate :: FloatingType a -> IntegralType b -> (a -> b)
+evalTruncate ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb = truncate
+
+evalRound :: FloatingType a -> IntegralType b -> (a -> b)
+evalRound ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb = round
+
+evalFloor :: FloatingType a -> IntegralType b -> (a -> b)
+evalFloor ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb = floor
+
+evalCeiling :: FloatingType a -> IntegralType b -> (a -> b)
+evalCeiling ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb = ceiling
 
 evalAtan2 :: FloatingType a -> ((a, a) -> a)
 evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2

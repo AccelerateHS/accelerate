@@ -82,13 +82,13 @@ module Data.Array.Accelerate.Language (
   bit, setBit, clearBit, complementBit, testBit,
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
+  truncate, round, floor, ceiling,
 
   -- ** Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
   
   -- ** Conversions
   boolToInt, fromIntegral,
-  intToFloat, roundFloatToInt, truncateFloatToInt,
 
   -- ** Constants
   ignore
@@ -100,7 +100,8 @@ module Data.Array.Accelerate.Language (
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry, fromIntegral)
+                         filter, max, min, not, fst, snd, curry, uncurry,
+                         truncate, round, floor, ceiling, fromIntegral)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
@@ -876,16 +877,14 @@ instance (Elt t, IsFloating t) => Floating (Exp t) where
   log     = mkLog
   (**)    = mkFPow
   logBase = mkLogBase
-  -- FIXME: add other ops
 
 instance (Elt t, IsFloating t) => Fractional (Exp t) where
   (/)          = mkFDiv
   recip        = mkRecip
   fromRational = constant . fromRational
-  -- FIXME: add other ops
 
 instance (Elt t, IsFloating t) => RealFrac (Exp t)
-  -- FIXME: add ops
+  -- FIXME: add other ops
 
 instance (Elt t, IsFloating t) => RealFloat (Exp t) where
   atan2 = mkAtan2
@@ -940,6 +939,20 @@ max = mkMax
 min :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
+-- |Conversions from the RealFrac class
+--
+truncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+truncate = mkTruncate
+
+round :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+round = mkRound
+
+floor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+floor = mkFloor
+
+ceiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
+ceiling = mkCeiling
+
 
 -- Non-overloaded standard functions, where we need other signatures
 -- -----------------------------------------------------------------
@@ -975,21 +988,6 @@ boolToInt = mkBoolToInt
 --
 fromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
 fromIntegral = mkFromIntegral
-
--- |Convert an Int to a Float
---
-intToFloat :: Exp Int -> Exp Float
-intToFloat = mkIntFloat
-
--- |Round Float to Int
---
-roundFloatToInt :: Exp Float -> Exp Int
-roundFloatToInt = mkRoundFloatInt
-
--- |Truncate Float to Int
---
-truncateFloatToInt :: Exp Float -> Exp Int
-truncateFloatToInt = mkTruncFloatInt
 
 
 -- Constants
