@@ -47,7 +47,7 @@ run alg n = withSystemRandom $ \gen -> do
   vec'  <- convertUArray vec
   alpha <- uniform gen
   --
-  let go f g = benchmark ("acc-" ++ alg) (run_ref f vec) (run_acc g vec')
+  let go f g = benchmark ("acc-map-" ++ alg) (run_ref f vec) (run_acc g vec')
 
   case alg of
        "abs"    -> go absRef absAcc

@@ -29,6 +29,22 @@ Executable acc-fold
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
+Executable acc-scanseg
+  Main-is:              ScanSeg.hs
+  hs-source-dirs:       src/common src/primitives
+  ghc-options:          ACC_OPTIONS
+  build-depends:        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+Executable acc-stencil
+  Main-is:              Stencil.hs
+  hs-source-dirs:       src/common src/primitives
+  ghc-options:          ACC_OPTIONS
+  build-depends:        ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
 
 -- Simple examples -------------------------------------------------------------
 --

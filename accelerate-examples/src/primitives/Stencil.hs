@@ -1,6 +1,12 @@
 {-# LANGUAGE ParallelListComp, FlexibleContexts #-}
 
-module Stencil (stencil_test, stencil_test_ref) where
+module Main where
+
+import Benchmark
+
+import Control.Monad
+import Control.Exception
+import System.Random.MWC
 
 import Prelude   hiding (replicate, zip, map, filter, max, min, not, zipWith)
 import qualified Prelude
@@ -10,6 +16,9 @@ import Data.Array.IArray as IArray hiding (Array)
 
 import Data.Array.Accelerate
 
+
+-- Stencil
+-- -------
 stencil_test :: Array DIM2 Float -> Acc (Array DIM2 Float)
 stencil_test = stencil stencil2D5 Clamp . use
 
@@ -75,3 +84,44 @@ use2D arr = stencil stencil2D Clamp arr
 
 use3D :: Acc (Array DIM3 Float) -> Acc (Array DIM3 Float)
 use3D arr = stencil stencil3D Clamp arr
+
+
+-- Main
+-- ----
+main :: IO ()
+main = do
+  args <- getArgs'
+  case args of
+       [alg]                        -> run alg 1000
+       [alg,a] | [(n,_)] <- reads a -> run alg n
+       _                            -> usage
+
+run :: String -> Int -> IO ()
+run alg n = withSystemRandom $ \gen -> do
+  mat  <- listArray ((0,0),(n-1,n-1)) `fmap` replicateM (n*n) (uniformR (-1,1) gen)
+  mat' <- let m = fromIArray mat :: Array DIM2 Float
+          in  evaluate (m `indexArray` (Z:.0:.0)) >> return m
+  --
+  let go f g = benchmark ("acc-stencil-" ++ alg) (run_ref f mat) (run_acc g mat')
+  case alg of
+       "3x3"    -> go stencil_test_ref stencil_test
+       _        -> usage
+  where
+    {-# NOINLINE run_ref #-}
+    run_ref f xs () = f xs
+    run_acc f xs () = f xs
+
+
+usage :: IO ()
+usage = putStrLn $ unlines
+  [ "acc-stencil (c) [2008..2011] The Accelerate Team"
+  , ""
+  , "acc-stencil ALGORITHM [N]"
+  , ""
+  , "Algorithms:"
+  , "  3x3      5-element cross pattern"
+  , ""
+  , "Options:"
+  , "  N        Number of elements (in each dimension)"
+  ]
+
