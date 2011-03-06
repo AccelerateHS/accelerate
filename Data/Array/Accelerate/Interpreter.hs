@@ -703,6 +703,7 @@ evalPrim PrimRoundFloatInt      = evalRoundFloatInt
 evalPrim PrimTruncFloatInt      = evalTruncFloatInt
 evalPrim PrimIntFloat           = evalIntFloat
 evalPrim PrimBoolToInt          = evalBoolToInt
+evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
 
 
 -- Tuple construction and projection
@@ -750,6 +751,14 @@ evalIntFloat = fromIntegral
 
 evalBoolToInt :: Bool -> Int
 evalBoolToInt = fromEnum
+
+evalFromIntegral :: IntegralType a -> NumType b -> a -> b
+evalFromIntegral ta (IntegralNumType tb)
+  | IntegralDict <- integralDict ta
+  , IntegralDict <- integralDict tb = fromIntegral
+evalFromIntegral ta (FloatingNumType tb)
+  | IntegralDict <- integralDict ta
+  , FloatingDict <- floatingDict tb = fromIntegral
 
 
 -- Extract methods from reified dictionaries

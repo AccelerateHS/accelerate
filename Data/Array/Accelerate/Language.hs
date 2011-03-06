@@ -87,19 +87,20 @@ module Data.Array.Accelerate.Language (
   (&&*), (||*), not,
   
   -- ** Conversions
-  boolToInt, intToFloat, roundFloatToInt, truncateFloatToInt,
+  boolToInt, fromIntegral,
+  intToFloat, roundFloatToInt, truncateFloatToInt,
 
   -- ** Constants
   ignore
 
-  -- ** Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
-  --    Fractional, RealFrac, RealFloat
+  -- Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
+  -- Fractional, RealFrac, RealFloat
 
 ) where
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry)
+                         filter, max, min, not, fst, snd, curry, uncurry, fromIntegral)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
@@ -888,7 +889,7 @@ instance (Elt t, IsFloating t) => RealFrac (Exp t)
 
 instance (Elt t, IsFloating t) => RealFloat (Exp t) where
   atan2 = mkAtan2
-  -- FIXME: add ops
+  -- FIXME: add other ops
 
 
 -- Methods from H98 classes, where we need other signatures
@@ -969,6 +970,11 @@ not = mkLNot
 -- 
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
+
+-- |General coercion from integral types
+--
+fromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
+fromIntegral = mkFromIntegral
 
 -- |Convert an Int to a Float
 --

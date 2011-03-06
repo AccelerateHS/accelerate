@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
   Acc(..), PreAcc(..), Exp, PreExp(..), Boundary(..), Stencil(..),
-  
+
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1,
 
@@ -28,13 +28,13 @@ module Data.Array.Accelerate.Smart (
 
   -- * Smart constructors for literals
   constant,
-  
+
   -- * Smart constructors and destructors for tuples
   tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9,
   untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9,
 
   -- * Smart constructors for constants
-  mkMinBound, mkMaxBound, mkPi, 
+  mkMinBound, mkMaxBound, mkPi,
   mkSin, mkCos, mkTan,
   mkAsin, mkAcos, mkAtan,
   mkAsinh, mkAcosh, mkAtanh,
@@ -45,15 +45,18 @@ module Data.Array.Accelerate.Smart (
   -- * Smart constructors for primitive functions
   mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
-  mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq,
-  mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot, mkBoolToInt, mkIntFloat,
-  mkRoundFloatInt, mkTruncFloatInt,
-  
+  mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
+  mkLAnd, mkLOr, mkLNot,
+
+  -- * Smart constructors for type coercion functions
+  mkBoolToInt, mkFromIntegral,
+  mkIntFloat, mkRoundFloatInt, mkTruncFloatInt,
+
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$)
 
 ) where
-  
+
 -- standard library
 import Control.Monad
 import Data.List
@@ -87,7 +90,7 @@ import Data.Array.Accelerate.Pretty ()
 --
 data Layout env env' where
   EmptyLayout :: Layout env ()
-  PushLayout  :: Typeable t 
+  PushLayout  :: Typeable t
               => Layout env env' -> Idx env t -> Layout env (env', t)
 
 -- Project the nth index out of an environment layout.
@@ -1994,6 +1997,9 @@ mkLNot x = PrimLNot `PrimApp` x
 
 -- FIXME: Numeric conversions
 
+mkFromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
+mkFromIntegral x = PrimFromIntegral integralType numType `PrimApp` x
+
 -- FIXME: Other conversions
 
 mkBoolToInt :: Exp Bool -> Exp Int
@@ -2027,3 +2033,4 @@ infixr 0 $$$$
 infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
+

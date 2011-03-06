@@ -791,6 +791,7 @@ data PrimFun sig where
   --        should we have an overloaded functions like 'toInt'?  
   --        (or 'fromEnum' for enums?)
   PrimBoolToInt     :: PrimFun (Bool -> Int)
+  PrimFromIntegral  :: IntegralType a -> NumType b -> PrimFun (a -> b)
 
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want
