@@ -64,7 +64,7 @@ gradientMagnitude :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a) -> 
 gradientMagnitude = Acc.zipWith magdir
   where
     magdir dx dy = let mag = sqrt (dx*dx + dy*dy)
-                       dir = atan2 dy dx
+                    -- dir = atan2 dy dx
                    in  mag -- lift (mag, dir)
 
 

@@ -25,6 +25,8 @@ readCSRMatrix gen file = do
   case mtx of
     (RealMatrix    dim l vals) -> csr dim l vals
     (PatternMatrix dim l ix)   -> csr dim l =<< mapM' (\(a,b) -> (a,b,) `fmap` uniformR (-1,1) gen) ix
+    (IntMatrix _ _ _)          -> error "IntMatrix type not supported"
+    (ComplexMatrix _ _ _)      -> error "ComplexMatrix type not supported"
 
 
 -- A randomly generated matrix of given size
