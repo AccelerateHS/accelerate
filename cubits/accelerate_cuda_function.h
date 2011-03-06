@@ -58,6 +58,7 @@ static __inline__ __device__ T mod(const T x, const T y)
 }
 
 
+#if 0
 /* -----------------------------------------------------------------------------
  * Additional helper functions
  * -------------------------------------------------------------------------- */
@@ -123,6 +124,7 @@ static __inline__ __host__ T ceiling(const T x, const T f)
 {
     return multiple(x, f) * f;
 }
+#endif
 
 #endif  // __cplusplus
 #endif  // __ACCELERATE_CUDA_FUNCTION_H__
