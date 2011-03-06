@@ -67,8 +67,8 @@ run alg n = withSystemRandom $ \gen -> do
   mat' <- let m = fromIArray mat :: Array DIM2 Float
           in  evaluate (m `Acc.indexArray` (Z:.0:.0)) >> return m
   --
-  let go  f g = benchmark ("acc-" ++ alg) (run_ref f vec) (run_acc g vec')
-      go2 f g = benchmark ("acc-" ++ alg) (run_ref f mat) (run_acc g mat')
+  let go  f g = benchmark ("acc-fold-" ++ alg) (run_ref f vec) (run_acc g vec')
+      go2 f g = benchmark ("acc-fold-" ++ alg) (run_ref f mat) (run_acc g mat')
 
   case alg of
     "sum"        -> go sumRef sumAcc
