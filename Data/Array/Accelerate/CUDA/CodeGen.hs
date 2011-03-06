@@ -458,58 +458,60 @@ codeGenPrimConst (PrimMaxBound ty) = codeGenMaxBound ty
 codeGenPrimConst (PrimPi       ty) = codeGenPi ty
 
 codeGenPrim :: PrimFun p -> [CExpr] -> CExpr
-codeGenPrim (PrimAdd          _) [a,b] = CBinary CAddOp a b internalNode
-codeGenPrim (PrimSub          _) [a,b] = CBinary CSubOp a b internalNode
-codeGenPrim (PrimMul          _) [a,b] = CBinary CMulOp a b internalNode
-codeGenPrim (PrimNeg          _) [a]   = CUnary  CMinOp a   internalNode
-codeGenPrim (PrimAbs         ty) [a]   = codeGenAbs ty a
-codeGenPrim (PrimSig         ty) [a]   = codeGenSig ty a
-codeGenPrim (PrimQuot         _) [a,b] = CBinary CDivOp a b internalNode
-codeGenPrim (PrimRem          _) [a,b] = CBinary CRmdOp a b internalNode
-codeGenPrim (PrimIDiv         _) [a,b] = ccall "idiv" [a,b]
-codeGenPrim (PrimMod          _) [a,b] = ccall "mod"  [a,b]
-codeGenPrim (PrimBAnd         _) [a,b] = CBinary CAndOp a b internalNode
-codeGenPrim (PrimBOr          _) [a,b] = CBinary COrOp  a b internalNode
-codeGenPrim (PrimBXor         _) [a,b] = CBinary CXorOp a b internalNode
-codeGenPrim (PrimBNot         _) [a]   = CUnary  CCompOp a  internalNode
-codeGenPrim (PrimBShiftL      _) [a,b] = CBinary CShlOp a b internalNode
-codeGenPrim (PrimBShiftR      _) [a,b] = CBinary CShrOp a b internalNode
-codeGenPrim (PrimBRotateL     _) [a,b] = ccall "rotateL" [a,b]
-codeGenPrim (PrimBRotateR     _) [a,b] = ccall "rotateR" [a,b]
-codeGenPrim (PrimFDiv         _) [a,b] = CBinary CDivOp a b internalNode
-codeGenPrim (PrimRecip       ty) [a]   = codeGenRecip ty a
-codeGenPrim (PrimSin         ty) [a]   = ccall (FloatingNumType ty `postfix` "sin")   [a]
-codeGenPrim (PrimCos         ty) [a]   = ccall (FloatingNumType ty `postfix` "cos")   [a]
-codeGenPrim (PrimTan         ty) [a]   = ccall (FloatingNumType ty `postfix` "tan")   [a]
-codeGenPrim (PrimAsin        ty) [a]   = ccall (FloatingNumType ty `postfix` "asin")  [a]
-codeGenPrim (PrimAcos        ty) [a]   = ccall (FloatingNumType ty `postfix` "acos")  [a]
-codeGenPrim (PrimAtan        ty) [a]   = ccall (FloatingNumType ty `postfix` "atan")  [a]
-codeGenPrim (PrimAsinh       ty) [a]   = ccall (FloatingNumType ty `postfix` "asinh") [a]
-codeGenPrim (PrimAcosh       ty) [a]   = ccall (FloatingNumType ty `postfix` "acosh") [a]
-codeGenPrim (PrimAtanh       ty) [a]   = ccall (FloatingNumType ty `postfix` "atanh") [a]
-codeGenPrim (PrimExpFloating ty) [a]   = ccall (FloatingNumType ty `postfix` "exp")   [a]
-codeGenPrim (PrimSqrt        ty) [a]   = ccall (FloatingNumType ty `postfix` "sqrt")  [a]
-codeGenPrim (PrimLog         ty) [a]   = ccall (FloatingNumType ty `postfix` "log")   [a]
-codeGenPrim (PrimFPow        ty) [a,b] = ccall (FloatingNumType ty `postfix` "pow")   [a,b]
-codeGenPrim (PrimLogBase     ty) [a,b] = codeGenLogBase ty a b
-codeGenPrim (PrimAtan2       ty) [a,b] = ccall (FloatingNumType ty `postfix` "atan2") [a,b]
-codeGenPrim (PrimLt           _) [a,b] = CBinary CLeOp  a b internalNode
-codeGenPrim (PrimGt           _) [a,b] = CBinary CGrOp  a b internalNode
-codeGenPrim (PrimLtEq         _) [a,b] = CBinary CLeqOp a b internalNode
-codeGenPrim (PrimGtEq         _) [a,b] = CBinary CGeqOp a b internalNode
-codeGenPrim (PrimEq           _) [a,b] = CBinary CEqOp  a b internalNode
-codeGenPrim (PrimNEq          _) [a,b] = CBinary CNeqOp a b internalNode
-codeGenPrim (PrimMax         ty) [a,b] = codeGenMax ty a b
-codeGenPrim (PrimMin         ty) [a,b] = codeGenMin ty a b
-codeGenPrim PrimLAnd             [a,b] = CBinary CLndOp a b internalNode
-codeGenPrim PrimLOr              [a,b] = CBinary CLorOp a b internalNode
-codeGenPrim PrimLNot             [a]   = CUnary  CNegOp a   internalNode
-codeGenPrim PrimOrd              [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
-codeGenPrim PrimChr              [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
-codeGenPrim PrimRoundFloatInt    [a]   = ccall "lroundf" [a] -- TLM: (int) rintf(x) ??
-codeGenPrim PrimTruncFloatInt    [a]   = ccall "ltruncf" [a]
-codeGenPrim PrimIntFloat         [a]   = CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode) a internalNode -- TLM: __int2float_[rn,rz,ru,rd](a) ??
-codeGenPrim PrimBoolToInt        [a]   = CCast (CDecl [CTypeSpec (CIntType   internalNode)] [] internalNode) a internalNode
+codeGenPrim (PrimAdd              _) [a,b] = CBinary CAddOp a b internalNode
+codeGenPrim (PrimSub              _) [a,b] = CBinary CSubOp a b internalNode
+codeGenPrim (PrimMul              _) [a,b] = CBinary CMulOp a b internalNode
+codeGenPrim (PrimNeg              _) [a]   = CUnary  CMinOp a   internalNode
+codeGenPrim (PrimAbs             ty) [a]   = codeGenAbs ty a
+codeGenPrim (PrimSig             ty) [a]   = codeGenSig ty a
+codeGenPrim (PrimQuot             _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (PrimRem              _) [a,b] = CBinary CRmdOp a b internalNode
+codeGenPrim (PrimIDiv             _) [a,b] = ccall "idiv" [a,b]
+codeGenPrim (PrimMod              _) [a,b] = ccall "mod"  [a,b]
+codeGenPrim (PrimBAnd             _) [a,b] = CBinary CAndOp a b internalNode
+codeGenPrim (PrimBOr              _) [a,b] = CBinary COrOp  a b internalNode
+codeGenPrim (PrimBXor             _) [a,b] = CBinary CXorOp a b internalNode
+codeGenPrim (PrimBNot             _) [a]   = CUnary  CCompOp a  internalNode
+codeGenPrim (PrimBShiftL          _) [a,b] = CBinary CShlOp a b internalNode
+codeGenPrim (PrimBShiftR          _) [a,b] = CBinary CShrOp a b internalNode
+codeGenPrim (PrimBRotateL         _) [a,b] = ccall "rotateL" [a,b]
+codeGenPrim (PrimBRotateR         _) [a,b] = ccall "rotateR" [a,b]
+codeGenPrim (PrimFDiv             _) [a,b] = CBinary CDivOp a b internalNode
+codeGenPrim (PrimRecip           ty) [a]   = codeGenRecip ty a
+codeGenPrim (PrimSin             ty) [a]   = ccall (FloatingNumType ty `postfix` "sin")   [a]
+codeGenPrim (PrimCos             ty) [a]   = ccall (FloatingNumType ty `postfix` "cos")   [a]
+codeGenPrim (PrimTan             ty) [a]   = ccall (FloatingNumType ty `postfix` "tan")   [a]
+codeGenPrim (PrimAsin            ty) [a]   = ccall (FloatingNumType ty `postfix` "asin")  [a]
+codeGenPrim (PrimAcos            ty) [a]   = ccall (FloatingNumType ty `postfix` "acos")  [a]
+codeGenPrim (PrimAtan            ty) [a]   = ccall (FloatingNumType ty `postfix` "atan")  [a]
+codeGenPrim (PrimAsinh           ty) [a]   = ccall (FloatingNumType ty `postfix` "asinh") [a]
+codeGenPrim (PrimAcosh           ty) [a]   = ccall (FloatingNumType ty `postfix` "acosh") [a]
+codeGenPrim (PrimAtanh           ty) [a]   = ccall (FloatingNumType ty `postfix` "atanh") [a]
+codeGenPrim (PrimExpFloating     ty) [a]   = ccall (FloatingNumType ty `postfix` "exp")   [a]
+codeGenPrim (PrimSqrt            ty) [a]   = ccall (FloatingNumType ty `postfix` "sqrt")  [a]
+codeGenPrim (PrimLog             ty) [a]   = ccall (FloatingNumType ty `postfix` "log")   [a]
+codeGenPrim (PrimFPow            ty) [a,b] = ccall (FloatingNumType ty `postfix` "pow")   [a,b]
+codeGenPrim (PrimLogBase         ty) [a,b] = codeGenLogBase ty a b
+codeGenPrim (PrimTruncate     ta tb) [a]   = codeGenTruncate ta tb a
+codeGenPrim (PrimRound        ta tb) [a]   = codeGenRound ta tb a
+codeGenPrim (PrimFloor        ta tb) [a]   = codeGenFloor ta tb a
+codeGenPrim (PrimCeiling      ta tb) [a]   = codeGenCeiling ta tb a
+codeGenPrim (PrimAtan2           ty) [a,b] = ccall (FloatingNumType ty `postfix` "atan2") [a,b]
+codeGenPrim (PrimLt               _) [a,b] = CBinary CLeOp  a b internalNode
+codeGenPrim (PrimGt               _) [a,b] = CBinary CGrOp  a b internalNode
+codeGenPrim (PrimLtEq             _) [a,b] = CBinary CLeqOp a b internalNode
+codeGenPrim (PrimGtEq             _) [a,b] = CBinary CGeqOp a b internalNode
+codeGenPrim (PrimEq               _) [a,b] = CBinary CEqOp  a b internalNode
+codeGenPrim (PrimNEq              _) [a,b] = CBinary CNeqOp a b internalNode
+codeGenPrim (PrimMax             ty) [a,b] = codeGenMax ty a b
+codeGenPrim (PrimMin             ty) [a,b] = codeGenMin ty a b
+codeGenPrim PrimLAnd                 [a,b] = CBinary CLndOp a b internalNode
+codeGenPrim PrimLOr                  [a,b] = CBinary CLorOp a b internalNode
+codeGenPrim PrimLNot                 [a]   = CUnary  CNegOp a   internalNode
+codeGenPrim PrimOrd                  [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
+codeGenPrim PrimChr                  [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
+codeGenPrim PrimBoolToInt            [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
+codeGenPrim (PrimFromIntegral ta tb) [a]   = codeGenFromIntegral ta tb a
 
 -- If the argument lists are not the correct length
 codeGenPrim _ _ =
@@ -614,6 +616,30 @@ codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall (ty `postfix` "max
 codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall (ty `postfix` "fmax") [a,b]
 codeGenMax (NonNumScalarType _)                   _ _ = undefined
 
+codeGenFromIntegral :: IntegralType a -> NumType b -> CExpr -> CExpr
+codeGenFromIntegral _ ty x = ccast (NumScalarType ty) x
+
+codeGenTruncate :: FloatingType a -> IntegralType b -> CExpr -> CExpr
+codeGenTruncate ta tb x
+  = ccast (NumScalarType (IntegralNumType tb))
+  $ ccall (FloatingNumType ta `postfix` "trunc") [x]
+
+codeGenRound :: FloatingType a -> IntegralType b -> CExpr -> CExpr
+codeGenRound ta tb x
+  = ccast (NumScalarType (IntegralNumType tb))
+  $ ccall (FloatingNumType ta `postfix` "round") [x]
+
+codeGenFloor :: FloatingType a -> IntegralType b -> CExpr -> CExpr
+codeGenFloor ta tb x
+  = ccast (NumScalarType (IntegralNumType tb))
+  $ ccall (FloatingNumType ta `postfix` "floor") [x]
+
+codeGenCeiling :: FloatingType a -> IntegralType b -> CExpr -> CExpr
+codeGenCeiling ta tb x
+  = ccast (NumScalarType (IntegralNumType tb))
+  $ ccall (FloatingNumType ta `postfix` "ceil") [x]
+
+
 -- Auxiliary Functions
 -- -------------------
 
@@ -622,6 +648,9 @@ cvar x = CVar (internalIdent x) internalNode
 
 ccall :: String -> [CExpr] -> CExpr
 ccall fn args = CCall (cvar fn) args internalNode
+
+ccast :: ScalarType a -> CExpr -> CExpr
+ccast ty x = CCast (CDecl (map CTypeSpec (codeGenScalarType ty)) [] internalNode) x internalNode
 
 postfix :: NumType a -> String -> String
 postfix (FloatingNumType (TypeFloat  _)) = (++ "f")
