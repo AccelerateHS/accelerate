@@ -3,6 +3,7 @@
 module Main where
 
 -- standard libraries
+import Prelude as P
 import Test.HUnit
 import Foreign.Ptr
 
@@ -33,7 +34,7 @@ testBlockCopyTuples = do
   intPtr    <- oneToTen
   doublePtr <- tenToOne
   (arr :: Array (Z :. Int) (Int, Double)) <- fromPtr (Z :. 10) (((), intPtr), doublePtr)
-  assertEqual "Not equal" [ (x, fromIntegral (11 - x)) | x <- [1..10]] (toList arr)
+  assertEqual "Not equal" [ (x, P.fromIntegral (11 - x)) | x <- [1..10]] (toList arr)
 
 testBlockCopyFromArray :: Assertion
 testBlockCopyFromArray = do
