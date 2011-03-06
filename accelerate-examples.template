@@ -99,8 +99,7 @@ Executable acc-io
   Main-is:              src/io/Main.hs
   c-sources:            src/io/fill_with_values.c
   ghc-options:          ACC_OPTIONS
-  build-depends:        HUnit                   == 1.2.*,
-                        ACC_DEPENDS
+  build-depends:        HUnit == 1.2.*, ACC_DEPENDS
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -110,10 +109,15 @@ Executable acc-canny
   Main-is:              Canny.hs
   hs-source-dirs:       src/common src/image-processing
   ghc-options:          ACC_OPTIONS
-  build-depends:        pgm                     == 0.1.*,
-                        filepath                >= 1.0 && < 1.3,
-                        ACC_DEPENDS
+  build-depends:        pgm == 0.1.*, ACC_DEPENDS
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
+Executable acc-integralimage
+  Main-is:              IntegralImage.hs
+  hs-source-dirs:       src/common src/image-processing
+  ghc-options:          ACC_OPTIONS
+  build-depends:        pgm == 0.1.*, ACC_DEPENDS
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
