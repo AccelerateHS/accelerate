@@ -45,6 +45,7 @@ import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
+import Foreign.Storable
 import Foreign.CUDA.Analysis.Device
 
 import Paths_accelerate                                 (getDataDir)
@@ -373,7 +374,12 @@ printDoc m hdl doc = do
 -- Determine the appropriate command line flags to pass to the compiler process
 --
 compileFlags :: FilePath -> CIO [String]
-compileFlags cufile = do
+compileFlags cufile =
+  let machine = case sizeOf (undefined :: Int) of
+                  4 -> "-m32"
+                  8 -> "-m64"
+                  _ -> error "huh? non 32-bit or 64-bit architecture"
+  in do
   arch <- computeCapability <$> getM deviceProps
   ddir <- liftIO getDataDir
   return [ "-I", ddir </> "cubits"
@@ -382,6 +388,7 @@ compileFlags cufile = do
          , "-DUNIX"
          , "-cubin"
          , "-o", cufile `replaceExtension` "cubin"
+         , machine
          , cufile ]
 
 
