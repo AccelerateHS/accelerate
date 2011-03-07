@@ -59,23 +59,22 @@ module Data.Array.Accelerate.Smart (
 
 -- standard library
 import Control.Monad
+import Data.HashTable                           as Hash
 import Data.List
 import Data.Maybe
-import Data.HashTable as Hash
-import System.Mem.StableName
-import System.IO.Unsafe         (unsafePerformIO)
 import Data.Typeable
+import System.Mem.StableName
+import System.IO.Unsafe                         (unsafePerformIO)
+import Prelude                                  hiding (exp)
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Tuple hiding (Tuple)
-import Data.Array.Accelerate.AST
-  hiding (
-    PreOpenAcc(..), OpenAcc(..), Acc, Stencil, PreOpenExp(..), OpenExp, PreExp, Exp
-  )
-import qualified Data.Array.Accelerate.Tuple as Tuple
-import qualified Data.Array.Accelerate.AST   as AST
+import Data.Array.Accelerate.Tuple              hiding (Tuple)
+import Data.Array.Accelerate.AST                hiding (
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp)
+import qualified Data.Array.Accelerate.Tuple    as Tuple
+import qualified Data.Array.Accelerate.AST      as AST
 import Data.Array.Accelerate.Pretty ()
 
 #include "accelerate.h"
@@ -322,8 +321,8 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
         -> AST.Use array
       Unit e
         -> AST.Unit (convertExp alyt env e)
-      Generate dim f
-        -> AST.Generate (convertExp alyt env dim) (convertFun1 alyt env f)
+      Generate sh f
+        -> AST.Generate (convertExp alyt env sh) (convertFun1 alyt env f)
       Reshape e acc
         -> AST.Reshape (convertExp alyt env e) (convertSharingAcc alyt env acc)
       Replicate ix acc
@@ -493,10 +492,10 @@ lookupWithSharingAcc oc (StableSharingAcc sn _) = lookupWithAccName oc (StableAc
 -- Compute the occurence map (Phase One).
 --
 makeOccMap :: Typeable arrs => Acc arrs -> IO OccMap
-makeOccMap acc
+makeOccMap rootAcc
   = do
       occMap <- newAccHashTable
-      traverseAcc (enterOcc occMap) acc
+      traverseAcc (enterOcc occMap) rootAcc
       return occMap
   where
     -- Enter one AST node occurences into an occurence map.
@@ -510,9 +509,9 @@ makeOccMap acc
             Just n  -> Hash.update occMap sa (n + 1) >> return ()
 
     traverseAcc :: Typeable a => (StableAccName -> IO ()) -> Acc a -> IO ()
-    traverseAcc enter acc@(Acc pacc)
+    traverseAcc enter acc'@(Acc pacc)
       = do
-          sa <- liftM StableAccName $ makeStableAcc acc
+          sa <- liftM StableAccName $ makeStableAcc acc'
           enter sa
           case pacc of
             Atag _                   -> return ()
@@ -632,7 +631,7 @@ nodeCount nc = NodeCounts [nc]
 --   Change if profiling suggests that this function is a bottleneck.
 --
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
-NodeCounts xs +++ NodeCounts ys = NodeCounts $ merge xs ys
+NodeCounts us +++ NodeCounts vs = NodeCounts $ merge us vs
   where
     merge []                         ys                         = ys
     merge xs                         []                         = xs
@@ -645,13 +644,13 @@ NodeCounts xs +++ NodeCounts ys = NodeCounts $ merge xs ys
 -- Determine the scopes of all variables representing shared subterms (Phase Two).
 --
 determineScopes :: Typeable a => OccMap -> Acc a -> IO (SharingAcc a)
-determineScopes occMap acc
+determineScopes occMap rootAcc
   = do
-      accWithLets <- liftM fst $ injectBindingsAcc acc
+      accWithLets <- liftM fst $ injectBindingsAcc rootAcc
       liftM fst $ pruneSharedSubtreesAcc Nothing accWithLets
   where
     injectBindingsAcc :: forall arrs. Acc arrs -> IO (SharingAcc arrs, NodeCounts)
-    injectBindingsAcc acc@(Acc pacc)
+    injectBindingsAcc bindingAcc@(Acc pacc)
       = case pacc of
           Atag i                          -> reconstruct (Atag i) noNodeCounts
           Pipe afun1 afun2 acc            -> travA (Pipe afun1 afun2) acc
@@ -779,7 +778,7 @@ determineScopes occMap acc
                     => PreAcc SharingAcc arrs -> NodeCounts -> IO (SharingAcc arrs, NodeCounts)
         reconstruct newAcc subCount
           = do
-              sn <- makeStableAcc acc
+              sn <- makeStableAcc bindingAcc
               occCount <- lookupWithAccName occMap (StableAccName sn)
               let sharingAcc = AccSharing sn newAcc
                   --
@@ -1535,16 +1534,16 @@ _showSharingAccOp (AccSharing _ acc) = _showPreAccOp acc
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------
 
-mkIndex :: forall slix e aenv acc. (Slice slix, Elt e) 
+mkIndex :: forall slix e aenv. (Slice slix, Elt e)
         => AST.OpenAcc                aenv (Array (FullShape slix) e)
         -> AST.Exp                    aenv slix
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
-mkIndex arr e 
+mkIndex arr e
   = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
   where
     slix = undefined :: slix
 
-mkReplicate :: forall slix e aenv acc. (Slice slix, Elt e) 
+mkReplicate :: forall slix e aenv. (Slice slix, Elt e)
         => AST.Exp                    aenv slix
         -> AST.OpenAcc                aenv (Array (SliceShape slix) e)
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (FullShape slix) e)

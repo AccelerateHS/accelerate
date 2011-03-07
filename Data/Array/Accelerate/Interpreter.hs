@@ -195,41 +195,41 @@ reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
     $ delay $ Array (Sugar.fromElt newShape) adata
 
 replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
-            => SliceIndex (Sugar.EltRepr slix) 
-                          (Sugar.EltRepr sl) 
+            => SliceIndex (Sugar.EltRepr slix)
+                          (Sugar.EltRepr sl)
                           co
                           (Sugar.EltRepr dim)
-            -> slix 
+            -> slix
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
 replicateOp sliceIndex slix (DelayedArray sh pf)
   = DelayedArray sh' (pf . pf')
   where
     (sh', pf') = extend sliceIndex (Sugar.fromElt slix) sh
-    
+
     extend :: SliceIndex slix sl co dim
-           -> slix 
+           -> slix
            -> sl
            -> (dim, dim -> sl)
-    extend SliceNil                ()         ()       = ((), const ())
-    extend (SliceAll sliceIndex)   (slix, ()) (sl, sz) 
-      = let (dim', pf') = extend sliceIndex slix sl
+    extend (SliceNil)            ()        ()       = ((), const ())
+    extend (SliceAll sliceIdx)   (slx, ()) (sl, sz)
+      = let (dim', f') = extend sliceIdx slx sl
         in
-        ((dim', sz), \(ix, i) -> (pf' ix, i))
-    extend (SliceFixed sliceIndex) (slix, sz) sl
-      = let (dim', pf') = extend sliceIndex slix sl
+        ((dim', sz), \(ix, i) -> (f' ix, i))
+    extend (SliceFixed sliceIdx) (slx, sz) sl
+      = let (dim', f') = extend sliceIdx slx sl
         in
-        ((dim', sz), \(ix, _) -> pf' ix)
-    
+        ((dim', sz), \(ix, _) -> f' ix)
+
 indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
-        => SliceIndex (Sugar.EltRepr slix) 
-                      (Sugar.EltRepr sl) 
+        => SliceIndex (Sugar.EltRepr slix)
+                      (Sugar.EltRepr sl)
                       co
                       (Sugar.EltRepr dim)
         -> Delayed (Array dim e)
-        -> slix 
+        -> slix
         -> Delayed (Array sl e)
-indexOp sliceIndex (DelayedArray sh pf) slix 
+indexOp sliceIndex (DelayedArray sh pf) slix
   = DelayedArray sh' (pf . pf')
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
@@ -238,15 +238,15 @@ indexOp sliceIndex (DelayedArray sh pf) slix
              -> slix
              -> dim
              -> (sl, sl -> dim)
-    restrict SliceNil () () = ((), const ())
-    restrict (SliceAll sliceIndex) (slix, ()) (sh, sz)
-      = let (sl', pf') = restrict sliceIndex slix sh
+    restrict (SliceNil)            ()        ()       = ((), const ())
+    restrict (SliceAll sliceIdx)   (slx, ()) (sl, sz)
+      = let (sl', f') = restrict sliceIdx slx sl
         in
-        ((sl', sz), \(ix, i) -> (pf' ix, i))
-    restrict (SliceFixed sliceIndex) (slix, i) (sh, sz)
-      = let (sl', pf') = restrict sliceIndex slix sh
+        ((sl', sz), \(ix, i) -> (f' ix, i))
+    restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
+      = let (sl', f') = restrict sliceIdx slx sl
         in
-        BOUNDS_CHECK(checkIndex) "index" i sz $ (sl', \ix -> (pf' ix, i))
+        BOUNDS_CHECK(checkIndex) "index" i sz $ (sl', \ix -> (f' ix, i))
 
 mapOp :: Sugar.Elt e' 
       => (e -> e') 

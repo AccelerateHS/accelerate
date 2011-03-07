@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, FlexibleInstances, TypeSynonymInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell

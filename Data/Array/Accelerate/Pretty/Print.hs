@@ -23,6 +23,7 @@ module Data.Array.Accelerate.Pretty.Print (
 
 -- standard libraries
 import Text.PrettyPrint
+import Prelude hiding (exp)
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar
@@ -163,7 +164,7 @@ prettyPreAfun pp _alvl fun =
   where
      count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
      count lvl (Abody body) = (-1, pp (lvl + 1) noParens body) -- 'lvl+1' ok as functions is closed!
-     count lvl (Alam fun)   = let (n, body) = count lvl fun in (1 + n, body)
+     count lvl (Alam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print a function over scalar expressions.
 --
@@ -179,7 +180,7 @@ prettyPreFun pp alvl fun =
   where
      count :: Int -> PreOpenFun acc env' aenv' fun' -> (Int, Doc)
      count lvl (Body body) = (-1, prettyPreExp pp lvl alvl noParens body)
-     count lvl (Lam fun)   = let (n, body) = count lvl fun in (1 + n, body)
+     count lvl (Lam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print an expression.
 --
@@ -190,15 +191,15 @@ prettyExp = prettyPreExp prettyAcc
 
 prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
-prettyPreExp pp lvl _ _ (Var idx)
+prettyPreExp _pp lvl _ _ (Var idx)
   = text $ 'x' : show (lvl - idxToInt idx)
-prettyPreExp pp _ _ _ (Const v)
+prettyPreExp _pp _ _ _ (Const v)
   = text $ show (toElt v :: t)
 prettyPreExp pp lvl alvl _ (Tuple tup)
   = prettyTuple pp lvl alvl tup
 prettyPreExp pp lvl alvl wrap (Prj idx e)
   = wrap $ prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
-prettyPreExp pp _lvl _alvl wrap IndexNil
+prettyPreExp _pp _lvl _alvl wrap IndexNil
   = wrap $ text "index Z"
 prettyPreExp pp lvl alvl wrap (IndexCons t h)
   = wrap $
@@ -212,7 +213,7 @@ prettyPreExp pp lvl alvl wrap (Cond c t e)
   = wrap $ sep [prettyPreExp pp lvl alvl parens c <+> char '?',
                 parens (prettyPreExp pp lvl alvl noParens t <> comma <+>
                         prettyPreExp pp lvl alvl noParens e)]
-prettyPreExp pp _ _ _ (PrimConst a)
+prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a
 prettyPreExp pp lvl alvl wrap (PrimApp p a)
   = wrap $ prettyPrim p <+> prettyPreExp pp lvl alvl parens a
@@ -227,9 +228,9 @@ prettyPreExp pp _lvl alvl wrap (Size idx)
 --
 prettyTuple :: forall acc env aenv t.
                PrettyAcc acc -> Int -> Int -> Tuple (PreOpenExp acc env aenv) t -> Doc
-prettyTuple pp lvl alvl e = parens $ sep (map (<> comma) (init es) ++ [last es])
+prettyTuple pp lvl alvl exp = parens $ sep (map (<> comma) (init es) ++ [last es])
   where
-    es = collect e
+    es = collect exp
     --
     collect :: Tuple (PreOpenExp acc env aenv) t' -> [Doc]
     collect NilTup          = []
@@ -316,7 +317,7 @@ prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 -}
 
-prettyArray :: forall dim a. Array dim a -> Doc
+prettyArray :: forall dim e. Array dim e -> Doc
 prettyArray arr@(Array sh _)
   = parens $
       hang (text "Array") 2 $
