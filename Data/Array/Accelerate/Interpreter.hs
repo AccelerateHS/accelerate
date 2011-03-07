@@ -739,7 +739,7 @@ evalOrd :: Char -> Int
 evalOrd = ord
 
 evalChr :: Int -> Char
-evalChr =  chr
+evalChr = chr
 
 evalBoolToInt :: Bool -> Int
 evalBoolToInt = fromEnum

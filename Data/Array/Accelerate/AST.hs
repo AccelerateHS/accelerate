@@ -757,13 +757,11 @@ data PrimFun sig where
   PrimLog         :: FloatingType a -> PrimFun (a      -> a)
   PrimFPow        :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimLogBase     :: FloatingType a -> PrimFun ((a, a) -> a)
-
+  PrimAtan2       :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimTruncate    :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimRound       :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimFloor       :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimCeiling     :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
-
-  PrimAtan2       :: FloatingType a -> PrimFun ((a,a)  -> a)
   -- FIXME: add missing operations from RealFrac & RealFloat
 
   -- relational and equality operators

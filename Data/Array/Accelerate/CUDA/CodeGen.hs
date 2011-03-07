@@ -379,8 +379,8 @@ codeGenFloatingType (TypeCFloat  _) = [CFloatType  internalNode]
 codeGenFloatingType (TypeCDouble _) = [CDoubleType internalNode]
 
 codeGenNonNumType :: NonNumType a -> CType
-codeGenNonNumType (TypeBool   _) = [CUnsigType internalNode, CCharType internalNode]
-codeGenNonNumType (TypeChar   _) = [CCharType internalNode]
+codeGenNonNumType (TypeBool   _) = error "codeGenNonNum :: Bool" -- [CUnsigType internalNode, CCharType internalNode]
+codeGenNonNumType (TypeChar   _) = error "codeGenNonNum :: Char" -- [CCharType internalNode]
 codeGenNonNumType (TypeCChar  _) = [CCharType internalNode]
 codeGenNonNumType (TypeCSChar _) = [CSignedType internalNode, CCharType internalNode]
 codeGenNonNumType (TypeCUChar _) = [CUnsigType  internalNode, CCharType internalNode]
@@ -508,9 +508,9 @@ codeGenPrim (PrimMin             ty) [a,b] = codeGenMin ty a b
 codeGenPrim PrimLAnd                 [a,b] = CBinary CLndOp a b internalNode
 codeGenPrim PrimLOr                  [a,b] = CBinary CLorOp a b internalNode
 codeGenPrim PrimLNot                 [a]   = CUnary  CNegOp a   internalNode
-codeGenPrim PrimOrd                  [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
-codeGenPrim PrimChr                  [a]   = CCast (CDecl [CTypeSpec (CCharType internalNode)] [] internalNode) a internalNode
-codeGenPrim PrimBoolToInt            [a]   = CCast (CDecl [CTypeSpec (CIntType  internalNode)] [] internalNode) a internalNode
+codeGenPrim PrimOrd                  [a]   = codeGenOrd a
+codeGenPrim PrimChr                  [a]   = codeGenChr a
+codeGenPrim PrimBoolToInt            [a]   = codeGenBoolToInt a
 codeGenPrim (PrimFromIntegral ta tb) [a]   = codeGenFromIntegral ta tb a
 
 -- If the argument lists are not the correct length
@@ -518,48 +518,47 @@ codeGenPrim _ _ =
   INTERNAL_ERROR(error) "codeGenPrim" "inconsistent valuation"
 
 
--- Implementation
+-- Implementation of scalar primitives
 --
 codeGenConst :: TupleType a -> a -> [CExpr]
 codeGenConst UnitTuple           _      = []
 codeGenConst (SingleTuple ty)    c      = [codeGenScalar ty c]
 codeGenConst (PairTuple ty1 ty0) (cs,c) = codeGenConst ty1 cs ++ codeGenConst ty0 c
 
--- FIXME:
---  Language-c isn't pretty printing float constants with a trailing 'f', so as
---  per the C spec nvcc considers them to be double constants. This causes
---  warnings on pre-1.3 series devices, and unnecessary runtime conversion and
---  register pressure on later hardware. Work around this with an explicit type
---  cast. This is quite ugly and should be fixed, but appears to work for now.
+-- Scalar constants
+--
+-- Add an explicit type annotation (cast) to all scalar constants, which avoids
+-- ambiguity as to what type we actually want. Without this:
+--
+--   1. Floating-point constants will be implicitly promoted to double
+--      precision, which will emit warnings on pre-1.3 series devices and
+--      unnecessary runtime conversion and register pressure on later hardware
+--      that actually does support double precision arithmetic.
+--
+--   2. Interaction of differing word sizes on the host and device in overloaded
+--      functions such as max() leads to ambiguity.
 --
 codeGenScalar :: ScalarType a -> a -> CExpr
-codeGenScalar (NumScalarType (IntegralNumType ty))
-  | IntegralDict <- integralDict ty
-  = CConst . flip CIntConst   internalNode . cInteger . fromIntegral
-codeGenScalar (NumScalarType (FloatingNumType (TypeFloat _)))
-  = flip (CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode)) internalNode
-  . CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
-codeGenScalar (NumScalarType (FloatingNumType (TypeDouble _)))
-  = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
-codeGenScalar (NumScalarType (FloatingNumType (TypeCFloat _)))
-  = flip (CCast (CDecl [CTypeSpec (CFloatType internalNode)] [] internalNode)) internalNode
-  . CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
-codeGenScalar (NumScalarType (FloatingNumType (TypeCDouble _)))
-  = CConst . flip CFloatConst internalNode . cFloat   . fromRational . toRational
-codeGenScalar (NonNumScalarType (TypeBool _))   = fromBool
-codeGenScalar (NonNumScalarType (TypeChar _))   =
-  CConst . flip CCharConst internalNode . cChar
-codeGenScalar (NonNumScalarType (TypeCChar _))  =
-  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
-codeGenScalar (NonNumScalarType (TypeCUChar _)) =
-  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
-codeGenScalar (NonNumScalarType (TypeCSChar _)) =
-  CConst . flip CCharConst internalNode . cChar . chr . fromIntegral
+codeGenScalar st c = ccast st $ case st of
+  NumScalarType (IntegralNumType ty)
+    | IntegralDict <- integralDict ty -> CConst $ CIntConst (cInteger (fromIntegral c)) internalNode
+  NumScalarType (FloatingNumType ty)
+    | FloatingDict <- floatingDict ty -> CConst $ CFloatConst (cFloat (realToFrac c)) internalNode
+  NonNumScalarType (TypeCChar  _)     -> CConst $ CCharConst (cChar . chr . fromIntegral $ c) internalNode
+  NonNumScalarType (TypeCUChar _)     -> CConst $ CCharConst (cChar . chr . fromIntegral $ c) internalNode
+  NonNumScalarType (TypeCSChar _)     -> CConst $ CCharConst (cChar . chr . fromIntegral $ c) internalNode
+  NonNumScalarType (TypeChar   _)     -> CConst $ CCharConst (cChar c) internalNode
+  NonNumScalarType (TypeBool   _)     -> fromBool c
 
+
+-- Constant methods of floating
 
 codeGenPi :: FloatingType a -> CExpr
-codeGenPi ty | FloatingDict <- floatingDict ty
+codeGenPi ty
+  | FloatingDict <- floatingDict ty
   = codeGenScalar (NumScalarType (FloatingNumType ty)) pi
+
+-- Constant methods of bounded
 
 codeGenMinBound :: BoundedType a -> CExpr
 codeGenMinBound (IntegralBoundedType ty)
@@ -577,6 +576,7 @@ codeGenMaxBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict   ty
   = codeGenScalar (NonNumScalarType ty) maxBound
 
+-- Methods from Num, Floating, Fractional and RealFrac
 
 codeGenAbs :: NumType a -> CExpr -> CExpr
 codeGenAbs ty@(IntegralNumType _) x = ccall (ty `postfix` "abs")  [x]
@@ -609,12 +609,28 @@ codeGenLogBase ty x y = let a = ccall (FloatingNumType ty `postfix` "log") [x]
 codeGenMin :: ScalarType a -> CExpr -> CExpr -> CExpr
 codeGenMin (NumScalarType ty@(IntegralNumType _)) a b = ccall (ty `postfix` "min")  [a,b]
 codeGenMin (NumScalarType ty@(FloatingNumType _)) a b = ccall (ty `postfix` "fmin") [a,b]
-codeGenMin (NonNumScalarType _)                   _ _ = undefined
+codeGenMin (NonNumScalarType _)                   a b =
+  let ty = NumScalarType (IntegralNumType (TypeInt32 (undefined :: IntegralDict Int32)))
+  in  codeGenMin ty (ccast ty a) (ccast ty b)
 
 codeGenMax :: ScalarType a -> CExpr -> CExpr -> CExpr
 codeGenMax (NumScalarType ty@(IntegralNumType _)) a b = ccall (ty `postfix` "max")  [a,b]
 codeGenMax (NumScalarType ty@(FloatingNumType _)) a b = ccall (ty `postfix` "fmax") [a,b]
-codeGenMax (NonNumScalarType _)                   _ _ = undefined
+codeGenMax (NonNumScalarType _)                   a b =
+  let ty = NumScalarType (IntegralNumType (TypeInt32 (undefined :: IntegralDict Int32)))
+  in  codeGenMax ty (ccast ty a) (ccast ty b)
+
+
+-- Type coercions
+
+codeGenOrd :: CExpr -> CExpr
+codeGenOrd = ccast (NumScalarType (IntegralNumType (TypeInt (undefined :: IntegralDict Int))))
+
+codeGenChr :: CExpr -> CExpr
+codeGenChr = ccast (NonNumScalarType (TypeChar (undefined :: NonNumDict Char)))
+
+codeGenBoolToInt :: CExpr -> CExpr
+codeGenBoolToInt = ccast (NumScalarType (IntegralNumType (TypeInt (undefined :: IntegralDict Int))))
 
 codeGenFromIntegral :: IntegralType a -> NumType b -> CExpr -> CExpr
 codeGenFromIntegral _ ty x = ccast (NumScalarType ty) x
