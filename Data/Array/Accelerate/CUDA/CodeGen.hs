@@ -633,7 +633,7 @@ codeGenBoolToInt :: CExpr -> CExpr
 codeGenBoolToInt = ccast (NumScalarType (IntegralNumType (TypeInt (undefined :: IntegralDict Int))))
 
 codeGenFromIntegral :: IntegralType a -> NumType b -> CExpr -> CExpr
-codeGenFromIntegral _ ty x = ccast (NumScalarType ty) x
+codeGenFromIntegral _ ty = ccast (NumScalarType ty)
 
 codeGenTruncate :: FloatingType a -> IntegralType b -> CExpr -> CExpr
 codeGenTruncate ta tb x

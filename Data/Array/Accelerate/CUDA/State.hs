@@ -269,7 +269,7 @@ runCUDAWith state acc = do
     sanitise :: CUDAState -> IO CUDAState
     sanitise st = do
       entries <- filter (isJust . getL refcount . snd) <$> Hash.toList (getL memoryTable st)
-      INTERNAL_ASSERT "runCUDA.sanitise" (length entries == 0)
+      INTERNAL_ASSERT "runCUDA.sanitise" (null entries)
         $ return (setL memoryTable undefined . setL computeTable undefined $ st)
 
 

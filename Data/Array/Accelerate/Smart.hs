@@ -571,7 +571,7 @@ makeOccMap rootAcc
 
     traverseExp :: Typeable a => (StableAccName -> IO ()) -> Exp a -> IO ()
     traverseExp enter exp  -- @(Exp pexp)
-      = do
+      =
           -- sa <- liftM StableAccName $ makeStableAcc acc
           -- enter sa
           case exp of

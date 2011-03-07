@@ -733,7 +733,7 @@ evalLOr  :: (Bool, Bool) -> Bool
 evalLOr (!x, !y) = x || y
 
 evalLNot :: Bool -> Bool
-evalLNot x = not x
+evalLNot = not
 
 evalOrd :: Char -> Int
 evalOrd = ord
