@@ -27,6 +27,7 @@ Description:            This library defines an embedded language for
                             CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
+                        .
 License:                BSD3
 License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
@@ -72,22 +73,6 @@ Extra-source-files:     INSTALL
                         utils/README
                         utils/Paths_accelerate.hs
                         utils/dot_ghci
-                        examples/simple/src/DotP.hs
-                        examples/simple/src/Filter.hs
-                        examples/simple/src/Main.hs
-                        examples/simple/Makefile
-                        examples/simple/src/Random.hs
-                        examples/simple/src/SAXPY.hs
-                        examples/simple/src/SMVM.hs
-                        examples/simple/src/Stencil.hs
-                        examples/simple/src/Square.hs
-                        examples/simple/src/Sum.hs
-                        examples/rasterize/RasterizeAcc.hs
-                        examples/rasterize/rasterize-test1.txt
-                        examples/rasterize/rasterize-test2.txt
-                        examples/rasterize/rasterize-test3.txt
-                        examples/rasterize/rasterize-test4.txt
-                        examples/rasterize/rasterize.hs
 
 Flag llvm
   Description:          Enable the LLVM backend (sequential)
@@ -120,7 +105,7 @@ Flag unsafe-checks
 Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
-  
+
 Flag io
   Description:          Provide access to the block copy I/O functionality
   Default:              False
@@ -129,40 +114,40 @@ Flag inplace
   Default:              False
 
 Library
-  Build-depends:        array,
+  Build-depends:        array           == 0.3.*,
                         base            == 4.*,
-                        directory,
-                        ghc-prim,
-                        mtl             >= 2.0,
-                        pretty
+                        directory       >= 1.0 && < 1.2,
+                        ghc-prim        == 0.2.*,
+                        mtl             == 2.0.*,
+                        pretty          == 1.0.*
 
   Include-Dirs:         include
 
-  If flag(llvm)
+  if flag(llvm)
     Build-depends:      llvm            >= 0.6.8
 
   if flag(cuda)
-    Build-depends:      binary,
-                        bytestring,
-                        containers,
+    Build-depends:      binary          == 0.5.*,
+                        bytestring      == 0.9.*,
+                        containers      >= 0.3 && < 0.5,
                         cuda            >= 0.2.2,
                         fclabels        >= 0.9 && < 1.0,
-                        filepath,
+                        filepath        >= 1.0 && < 1.3,
                         language-c      == 0.3.*,
                         transformers    == 0.2.*,
-                        unix,
-                        zlib
+                        unix            == 2.4.*,
+                        zlib            == 0.5.*
 
   if flag(io)
-    Build-depends:      bytestring
+    Build-depends:      bytestring      == 0.9.*
 
 --  if flag(test-suite)
 --    Build-depends:      QuickCheck      == 2.*
 
   if flag(more-pp)
-    Build-depends:      bytestring,
-                        blaze-html      >= 0.3.0.2,
-                        text            >= 0.10.0.0
+    Build-depends:      bytestring      == 0.9.*,
+                        blaze-html      == 0.3.*,
+                        text            == 0.10.*
 
   if flag(inplace)
     hs-source-dirs:     . utils
@@ -173,10 +158,10 @@ Library
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
 
-  If flag(cuda)
+  if flag(cuda)
     Exposed-modules:    Data.Array.Accelerate.CUDA
 
-  If flag(io)
+  if flag(io)
     Other-modules:      Data.Array.Accelerate.IO.BlockCopy
     Exposed-modules:    Data.Array.Accelerate.IO
                         Data.Array.Accelerate.IO.Ptr
@@ -206,7 +191,7 @@ Library
                         Data.Array.Accelerate.Type
                         Paths_accelerate
 
-  If flag(more-pp)
+  if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
                         Data.Array.Accelerate.Pretty.Graphviz
 
@@ -214,7 +199,7 @@ Library
 --  If flag(llvm)
 --    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
 
-  If flag(cuda)
+  if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Device
                         Data.Array.Accelerate.CUDA.Analysis.Hash
@@ -253,3 +238,4 @@ Library
 source-repository head
   type:                 darcs
   location:             http://code.haskell.org/accelerate
+
