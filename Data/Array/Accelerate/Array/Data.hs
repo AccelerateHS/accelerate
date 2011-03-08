@@ -92,8 +92,8 @@ data instance GArrayData ba Char    = AD_Char    (ba Char)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
 
-
--- | GADT to reify the ArrayElt class
+-- | GADT to reify the 'ArrayElt' class.
+--
 data ArrayEltR a where
   ArrayEltRunit   :: ArrayEltR ()
   ArrayEltRint    :: ArrayEltR Int

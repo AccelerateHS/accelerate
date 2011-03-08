@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, FlexibleContexts, PatternGuards, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE CPP, FlexibleContexts, PatternGuards, ScopedTypeVariables, GADTs, TypeFamilies #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Data
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -12,8 +12,10 @@
 module Data.Array.Accelerate.CUDA.Array.Data (
 
   -- * Array operations and representations
-  ArrayElt(..),
-
+  DevicePtrs, HostPtrs,
+  freeArray, mallocArray, indexArray, copyArray, peekArray, pokeArray, peekArrayAsync, 
+  pokeArrayAsync, marshalArrayData, marshalTextureData, basicModify,
+  
   -- * Additional operations
   touchArray, bindArray, unbindArray,
 
@@ -38,6 +40,7 @@ import qualified Data.HashTable                         as Hash
 
 import Data.Array.Accelerate.CUDA.State
 import qualified Data.Array.Accelerate.Array.Data       as AD
+import           Data.Array.Accelerate.Array.Data       (ArrayEltR(..))
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.CUDA.Driver.Stream             as CUDA
 import qualified Foreign.CUDA.Driver.Texture            as CUDA
@@ -48,80 +51,201 @@ import qualified Foreign.CUDA.Driver.Texture            as CUDA
 -- Array Operations
 -- ----------------
 
-class AD.ArrayElt e => ArrayElt e where
-  type DevicePtrs e
-  type HostPtrs   e
+type family DevicePtrs e :: * 
+type family HostPtrs   e :: *
 
-  -- | Allocate a new device array to accompany the given host-side array
-  mallocArray :: AD.ArrayData e -> Maybe Int -> Int -> CIO ()
-
-  -- | Release a device array, when its reference count drops to zero
-  freeArray :: AD.ArrayData e -> CIO ()
-
-  -- | Array indexing
-  indexArray :: AD.ArrayData e -> Int -> CIO e
-
-  -- | Copy data between two device arrays
-  copyArray :: AD.ArrayData e -> AD.ArrayData e -> Int -> CIO ()
-
-  -- | Copy data from the device into its associated host-side Accelerate array
-  peekArray :: AD.ArrayData e -> Int -> CIO ()
-
-  -- | Copy data from an Accelerate array into the associated device array,
-  -- which must have already been allocated.
-  pokeArray :: AD.ArrayData e -> Int -> CIO ()
-
-  -- | Asynchronous device -> host copy
-  peekArrayAsync :: AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-
-  -- | Asynchronous host -> device copy
-  pokeArrayAsync :: AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
-
-  -- | Wrap the device pointers corresponding to a host-side array into
-  -- arguments that can be passed to a kernel upon invocation
-  marshalArrayData :: AD.ArrayData e -> CIO [CUDA.FunParam]
-
-  -- | Bind the device memory arrays to the given texture reference(s), setting
-  -- appropriate type. The number of components bound is returned.
-  marshalTextureData :: AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
-
-  -- | Modify the basic device memory reference for a given host-side array
-  basicModify :: AD.ArrayData e -> (MemoryEntry -> MemoryEntry) -> CIO ()
+-- CPP hackery to generate the cases where we dispatch to the worker function handling
+-- elementary types.
+--
+#define mkPrimDispatch(dispatcher,worker)                                   \
+; dispatcher ArrayEltRint    = worker                                       \
+; dispatcher ArrayEltRint8   = worker                                       \
+; dispatcher ArrayEltRint16  = worker                                       \
+; dispatcher ArrayEltRint32  = worker                                       \
+; dispatcher ArrayEltRint64  = worker                                       \
+; dispatcher ArrayEltRword   = worker                                       \
+; dispatcher ArrayEltRword8  = worker                                       \
+; dispatcher ArrayEltRword16 = worker                                       \
+; dispatcher ArrayEltRword32 = worker                                       \
+; dispatcher ArrayEltRword64 = worker                                       \
+; dispatcher ArrayEltRfloat  = worker                                       \
+; dispatcher ArrayEltRdouble = worker                                       \
+; dispatcher ArrayEltRbool   = error "mkPrimDispatcher: ArrayEltRbool"      \
+; dispatcher ArrayEltRchar   = error "mkPrimDispatcher: ArrayEltRchar"      \
+; dispatcher _               = error "mkPrimDispatcher: not primitive"
 
 
-instance ArrayElt () where
-  type DevicePtrs () = ()
-  type HostPtrs   () = ()
-  freeArray          _     = return ()
-  mallocArray        _ _ _ = return ()
-  indexArray         _ _   = return ()
-  copyArray          _ _ _ = return ()
-  peekArray          _ _   = return ()
-  pokeArray          _ _   = return ()
-  peekArrayAsync     _ _ _ = return ()
-  pokeArrayAsync     _ _ _ = return ()
-  marshalArrayData   _     = return []
-  marshalTextureData _ _ _ = return 0
-  basicModify        _ _   = return ()
+-- |Allocate a new device array to accompany the given host-side array.
+--
+mallocArray :: AD.ArrayElt e => AD.ArrayData e -> Maybe Int -> Int -> CIO ()
+mallocArray ad rc n = doMalloc AD.arrayElt ad
+  where
+    doMalloc :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doMalloc ArrayEltRunit             _  = return ()
+    doMalloc (ArrayEltRpair aeR1 aeR2) ad = doMalloc aeR1 (fst' ad) *> doMalloc aeR2 (snd' ad) 
+    doMalloc aer                       ad = doMallocPrim aer ad rc n
+      where
+        { doMallocPrim :: ArrayEltR e -> AD.ArrayData e -> Maybe Int -> Int -> CIO ()
+        mkPrimDispatch(doMallocPrim,mallocArrayPrim)
+        }
+
+-- |Release a device array, when its reference count drops to zero.
+--
+freeArray :: AD.ArrayElt e => AD.ArrayData e -> CIO ()
+freeArray ad = doFree AD.arrayElt ad
+  where
+    doFree :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doFree ArrayEltRunit             _  = return ()
+    doFree (ArrayEltRpair aeR1 aeR2) ad = doFree aeR1 (fst' ad) *> doFree aeR2 (snd' ad) 
+    doFree aer                       ad = doFreePrim aer ad 
+      where
+        { doFreePrim :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+        mkPrimDispatch(doFreePrim,freeArrayPrim)
+        }
+
+-- |Array indexing
+--
+indexArray :: AD.ArrayElt e => AD.ArrayData e -> Int -> CIO e
+indexArray ad i = doIndex AD.arrayElt ad
+  where
+    doIndex :: ArrayEltR e -> AD.ArrayData e -> CIO e
+    doIndex ArrayEltRunit             _  = return ()
+    doIndex (ArrayEltRpair aeR1 aeR2) ad = (,) <$> doIndex aeR1 (fst' ad) 
+                                               <*> doIndex aeR2 (snd' ad) 
+    doIndex aer                       ad = doIndexPrim aer ad i
+      where
+        { doIndexPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CIO e
+        mkPrimDispatch(doIndexPrim,indexArrayPrim)
+        }
+
+-- |Copy data between two device arrays.
+--
+copyArray :: AD.ArrayElt e => AD.ArrayData e -> AD.ArrayData e -> Int -> CIO ()
+copyArray ad1 ad2 i = doCopy AD.arrayElt ad1 ad2
+  where
+    doCopy :: ArrayEltR e -> AD.ArrayData e -> AD.ArrayData e -> CIO ()
+    doCopy ArrayEltRunit             _   _   = return ()
+    doCopy (ArrayEltRpair aeR1 aeR2) ad1 ad2 = doCopy aeR1 (fst' ad1) (fst' ad2) *>
+                                               doCopy aeR2 (snd' ad1) (snd' ad2)
+    doCopy aer                       ad1 ad2 = doCopyPrim aer ad1 ad2 i
+      where
+        { doCopyPrim :: ArrayEltR e -> AD.ArrayData e -> AD.ArrayData e -> Int -> CIO ()
+        mkPrimDispatch(doCopyPrim,copyArrayPrim)
+        }
+
+-- |Copy data from the device into its associated host-side Accelerate array.
+--
+peekArray :: AD.ArrayElt e => AD.ArrayData e -> Int -> CIO ()
+peekArray ad i = doPeek AD.arrayElt ad
+  where
+    doPeek :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doPeek ArrayEltRunit             _  = return ()
+    doPeek (ArrayEltRpair aeR1 aeR2) ad = doPeek aeR1 (fst' ad) *> doPeek aeR2 (snd' ad) 
+    doPeek aer                       ad = doPeekPrim aer ad i
+      where
+        { doPeekPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CIO ()
+        mkPrimDispatch(doPeekPrim,peekArrayPrim)
+        }
+
+-- |Copy data from an Accelerate array into the associated device array,
+-- which must have already been allocated.
+--
+pokeArray :: AD.ArrayElt e => AD.ArrayData e -> Int -> CIO ()
+pokeArray ad i = doPoke AD.arrayElt ad
+  where
+    doPoke :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doPoke ArrayEltRunit             _  = return ()
+    doPoke (ArrayEltRpair aeR1 aeR2) ad = doPoke aeR1 (fst' ad) *> doPoke aeR2 (snd' ad) 
+    doPoke aer                       ad = doPokePrim aer ad i
+      where
+        { doPokePrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CIO ()
+        mkPrimDispatch(doPokePrim,pokeArrayPrim)
+        }
+
+-- |Asynchronous device -> host copy
+--
+peekArrayAsync :: AD.ArrayElt e => AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+peekArrayAsync ad i s = doPeek AD.arrayElt ad
+  where
+    doPeek :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doPeek ArrayEltRunit             _  = return ()
+    doPeek (ArrayEltRpair aeR1 aeR2) ad = doPeek aeR1 (fst' ad) *> doPeek aeR2 (snd' ad) 
+    doPeek aer                       ad = doPeekPrim aer ad i s
+      where
+        { doPeekPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+        mkPrimDispatch(doPeekPrim,peekArrayAsyncPrim)
+        }
+
+-- |Asynchronous host -> device copy
+--
+pokeArrayAsync :: AD.ArrayElt e => AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+pokeArrayAsync ad i s = doPoke AD.arrayElt ad
+  where
+    doPoke :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doPoke ArrayEltRunit             _  = return ()
+    doPoke (ArrayEltRpair aeR1 aeR2) ad = doPoke aeR1 (fst' ad) *> doPoke aeR2 (snd' ad) 
+    doPoke aer                       ad = doPokePrim aer ad i s
+      where
+        { doPokePrim :: ArrayEltR e -> AD.ArrayData e -> Int -> Maybe CUDA.Stream -> CIO ()
+        mkPrimDispatch(doPokePrim,pokeArrayAsyncPrim)
+        }
+
+-- |Wrap the device pointers corresponding to a host-side array into arguments that can be passed
+-- to a kernel upon invocation.
+--
+marshalArrayData :: AD.ArrayElt e => AD.ArrayData e -> CIO [CUDA.FunParam]
+marshalArrayData ad = doMarshal AD.arrayElt ad
+  where
+    doMarshal :: ArrayEltR e -> AD.ArrayData e -> CIO [CUDA.FunParam]
+    doMarshal ArrayEltRunit             _  = return []
+    doMarshal (ArrayEltRpair aeR1 aeR2) ad = (++) <$> doMarshal aeR1 (fst' ad) 
+                                                  <*> doMarshal aeR2 (snd' ad) 
+    doMarshal aer                       ad = doMarshalPrim aer ad
+      where
+        { doMarshalPrim :: ArrayEltR e -> AD.ArrayData e -> CIO [CUDA.FunParam]
+        mkPrimDispatch(doMarshalPrim,marshalArrayDataPrim)
+        }
+
+-- |Bind the device memory arrays to the given texture reference(s), setting appropriate type.
+-- The number of components bound is returned.
+--
+marshalTextureData :: AD.ArrayElt e => AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
+marshalTextureData = doMarshal AD.arrayElt
+  where
+    doMarshal :: ArrayEltR e -> AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
+    doMarshal ArrayEltRunit             _  _ _    = return 0
+    doMarshal (ArrayEltRpair aeR1 aeR2) ad n texs
+      = do
+          k <- doMarshal aeR1 (fst' ad) n texs
+          l <- doMarshal aeR2 (snd' ad) n (drop k texs)
+          return $ k + l
+    doMarshal aer                       ad n texs = doMarshalPrim aer ad n (head texs)
+      where
+        { doMarshalPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CUDA.Texture -> CIO Int
+        mkPrimDispatch(doMarshalPrim,marshalTextureDataPrim)
+        }
+
+-- |Modify the basic device memory reference for a given host-side array.
+--
+basicModify :: AD.ArrayElt e => AD.ArrayData e -> (MemoryEntry -> MemoryEntry) -> CIO ()
+basicModify ad mod = doModify AD.arrayElt ad
+  where
+    doModify :: ArrayEltR e -> AD.ArrayData e -> CIO ()
+    doModify ArrayEltRunit             _  = return ()
+    doModify (ArrayEltRpair aeR1 aeR2) ad = doModify aeR1 (fst' ad) *> doModify aeR2 (snd' ad) 
+    doModify aer                       ad = doModifyPrim aer ad mod
+      where
+        { doModifyPrim :: ArrayEltR e -> AD.ArrayData e -> (MemoryEntry -> MemoryEntry) -> CIO ()
+        mkPrimDispatch(doModifyPrim,basicModifyPrim)
+        }
 
 
-#define primArrayElt_(ty,con)                                                  \
-instance ArrayElt ty where {                                                   \
-  type DevicePtrs ty = CUDA.DevicePtr con                                      \
-; type HostPtrs   ty = CUDA.HostPtr   con                                      \
-; mallocArray             = mallocArray'                                       \
-; freeArray               = freeArray'                                         \
-; indexArray              = indexArray'                                        \
-; copyArray               = copyArray'                                         \
-; peekArray               = peekArray'                                         \
-; pokeArray               = pokeArray'                                         \
-; peekArrayAsync          = peekArrayAsync'                                    \
-; pokeArrayAsync          = pokeArrayAsync'                                    \
-; marshalArrayData        = marshalArrayData'                                  \
-; marshalTextureData ad n = marshalTextureData' ad n . head                    \
-; basicModify             = basicModify' }
+type instance DevicePtrs () = ()
+type instance HostPtrs   () = ()
 
-#define primArrayElt(ty) primArrayElt_(ty,ty)
+#define primArrayElt(ty)                                                      \
+type instance DevicePtrs ty = CUDA.DevicePtr ty ;                             \
+type instance HostPtrs   ty = CUDA.HostPtr   ty ;                             \
 
 primArrayElt(Int)
 primArrayElt(Int8)
@@ -155,59 +279,19 @@ primArrayElt(Double)
 -- FIXME:
 -- No concrete implementation in Data.Array.Accelerate.Array.Data
 --
-instance ArrayElt Bool where
-  type HostPtrs   Bool = ()
-  type DevicePtrs Bool = ()
-  mallocArray        = error "TODO: ArrayElt Bool"
-  freeArray          = undefined
-  indexArray         = undefined
-  copyArray          = undefined
-  peekArray          = undefined
-  pokeArray          = undefined
-  peekArrayAsync     = undefined
-  pokeArrayAsync     = undefined
-  marshalArrayData   = undefined
-  marshalTextureData = undefined
-  basicModify        = undefined
+type instance HostPtrs   Bool = ()
+type instance DevicePtrs Bool = ()
 
-instance ArrayElt Char where
-  type HostPtrs   Char = ()
-  type DevicePtrs Char = ()
-  mallocArray        = error "TODO: ArrayElt Char"
-  freeArray          = undefined
-  indexArray         = undefined
-  copyArray          = undefined
-  peekArray          = undefined
-  pokeArray          = undefined
-  peekArrayAsync     = undefined
-  pokeArrayAsync     = undefined
-  marshalArrayData   = undefined
-  marshalTextureData = undefined
-  basicModify        = undefined
+type instance HostPtrs   Char = ()
+type instance DevicePtrs Char = ()
 
 -- FIXME:
 -- CChar
 -- CSChar
 -- CUChar
 
-instance (ArrayElt a, ArrayElt b) => ArrayElt (a,b) where
-  type DevicePtrs (a,b) = (DevicePtrs a, DevicePtrs b)
-  type HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
-
-  freeArray ad              = freeArray   (fst' ad)   *> freeArray   (snd' ad)
-  peekArray ad n            = peekArray   (fst' ad) n *> peekArray   (snd' ad) n
-  pokeArray ad n            = pokeArray   (fst' ad) n *> pokeArray   (snd' ad) n
-  basicModify ad f          = basicModify (fst' ad) f *> basicModify (snd' ad) f
-  mallocArray ad rc n       = mallocArray (fst' ad) rc n   *> mallocArray (snd' ad) rc n
-  peekArrayAsync ad n s     = peekArrayAsync (fst' ad) n s *> peekArrayAsync (snd' ad) n s
-  pokeArrayAsync ad n s     = pokeArrayAsync (fst' ad) n s *> pokeArrayAsync (snd' ad) n s
-  copyArray src dst n       = copyArray (fst' src) (fst' dst) n *> copyArray (snd' src) (snd' dst) n
-  indexArray ad n           = (,)  <$> indexArray (fst' ad) n <*> indexArray (snd' ad) n
-  marshalArrayData ad       = (++) <$> marshalArrayData (fst' ad) <*> marshalArrayData (snd' ad)
-  marshalTextureData ad n t = do
-    k <- marshalTextureData (fst' ad) n t
-    l <- marshalTextureData (snd' ad) n (drop k t)
-    return (k+l)
+type instance DevicePtrs (a,b) = (DevicePtrs a, DevicePtrs b)
+type instance HostPtrs   (a,b) = (HostPtrs   a, HostPtrs   b)
 
 
 -- Texture References
@@ -246,19 +330,19 @@ instance TextureData Word where
 -- Auxiliary Functions
 -- -------------------
 
--- Increase the reference count of an array
+-- |Increase the reference count of an array
 --
-touchArray :: ArrayElt e => AD.ArrayData e -> CIO ()
+touchArray :: AD.ArrayElt e => AD.ArrayData e -> CIO ()
 touchArray ad = basicModify ad (modL refcount (fmap (+1)))
 
-
--- Set/unset an array to never be released by a call to 'freeArray'. When the
+-- |Set an array to never be released by a call to 'freeArray'. When the
 -- array is unbound, its reference count is set to zero.
 --
-bindArray :: ArrayElt e => AD.ArrayData e -> CIO ()
+bindArray :: AD.ArrayElt e => AD.ArrayData e -> CIO ()
 bindArray ad = basicModify ad (setL refcount Nothing)
 
-unbindArray :: ArrayElt e => AD.ArrayData e -> CIO ()
+-- |Unset an array to never be released by a call to 'freeArray'.
+unbindArray :: AD.ArrayElt e => AD.ArrayData e -> CIO ()
 unbindArray ad = basicModify ad (setL refcount (Just 0))
 
 
@@ -267,29 +351,30 @@ unbindArray ad = basicModify ad (setL refcount (Just 0))
 
 -- Allocate a new device array to accompany the given host-side Accelerate array
 --
-mallocArray' :: forall a b e.
-                (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-                ,Typeable a, Typeable b, Storable b)
-             => AD.ArrayData e     -- host array data (reference)
-             -> Maybe Int          -- initial reference count for this array; Nothing == bound array
-             -> Int                -- number of elements
-             -> CIO ()
-mallocArray' ad rc n =
-  let key = arrayToKey ad
-  in do tab <- getM memoryTable
-        mem <- liftIO $ Hash.lookup tab key
-        when (isNothing mem) $ do
-          _ <- liftIO $ Hash.update tab key . MemoryEntry rc =<< (CUDA.mallocArray n :: IO (CUDA.DevicePtr b))
-          return ()
+mallocArrayPrim :: forall a b e.
+                   ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+                   , Typeable a, Typeable b, Storable b)
+                => AD.ArrayData e -- host array data (reference)
+                -> Maybe Int      -- initial reference count for this array; Nothing == bound array
+                -> Int            -- number of elements
+                -> CIO ()
+mallocArrayPrim ad rc n =
+  do let key = arrayToKey ad
+     tab <- getM memoryTable
+     mem <- liftIO $ Hash.lookup tab key
+     when (isNothing mem) $ do
+       _ <- liftIO $ 
+             Hash.update tab key . MemoryEntry rc =<< (CUDA.mallocArray n :: IO (CUDA.DevicePtr b))
+       return ()
 
 
 -- Release a device array, when its reference counter drops to zero
 --
-freeArray' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-              ,Typeable a, Typeable b)
-           => AD.ArrayData e     -- host array
-           -> CIO ()
-freeArray' ad = free . modL refcount (fmap (subtract 1)) =<< lookupArray ad
+freeArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+                 , Typeable a, Typeable b)
+              => AD.ArrayData e     -- host array
+              -> CIO ()
+freeArrayPrim ad = free . modL refcount (fmap (subtract 1)) =<< lookupArray ad
   where
     free v = case getL refcount v of
       Nothing        -> return ()
@@ -299,27 +384,27 @@ freeArray' ad = free . modL refcount (fmap (subtract 1)) =<< lookupArray ad
 
 -- Array indexing
 --
-indexArray' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-               ,Storable b, Typeable a, Typeable b)
-            => AD.ArrayData e     -- host array data
-            -> Int                -- index in row-major representation
-            -> CIO b
-indexArray' ad n = do
+indexArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+                  , Storable b, Typeable a, Typeable b)
+               => AD.ArrayData e     -- host array data
+               -> Int                -- index in row-major representation
+               -> CIO b
+indexArrayPrim ad n = do
   dp <- getArray ad
   liftIO . F.alloca $ \p -> do
     CUDA.peekArray 1 (dp `CUDA.advanceDevPtr` n) p
     F.peek p
 
 
--- Copy data between two device arrays
+-- Copy data between two device arrays.
 --
-copyArray' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-              ,Storable b, Typeable a, Typeable b)
-           => AD.ArrayData e     -- source array
-           -> AD.ArrayData e     -- destination
-           -> Int                -- number of elements
-           -> CIO ()
-copyArray' src' dst' n = do
+copyArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+                 , Storable b, Typeable a, Typeable b)
+              => AD.ArrayData e     -- source array
+              -> AD.ArrayData e     -- destination
+              -> Int                -- number of elements
+              -> CIO ()
+copyArrayPrim src' dst' n = do
   src <- getArray src'
   dst <- getArray dst'
   liftIO $ CUDA.copyArrayAsync n src dst
@@ -327,24 +412,24 @@ copyArray' src' dst' n = do
 
 -- Copy data from the device into the associated Accelerate array
 --
-peekArray' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-              ,Storable a, Typeable a)
-           => AD.ArrayData e     -- host array data
-           -> Int                -- number of elements
-           -> CIO ()
-peekArray' ad n =
+peekArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+                 , Storable a, Typeable a)
+              => AD.ArrayData e     -- host array data
+              -> Int                -- number of elements
+              -> CIO ()
+peekArrayPrim ad n =
   let dst = AD.ptrsOfArrayData ad
       src = arena ad
   in
   lookupArray ad >>= \me -> liftIO $ CUDA.peekArray n (src me) dst
 
-peekArrayAsync' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                   ,Storable a, Typeable a)
-                => AD.ArrayData e     -- host array data
-                -> Int                -- number of elements
-                -> Maybe CUDA.Stream  -- asynchronous stream (optional)
-                -> CIO ()
-peekArrayAsync' ad n st =
+peekArrayAsyncPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+                      , Storable a, Typeable a)
+                   => AD.ArrayData e     -- host array data
+                   -> Int                -- number of elements
+                   -> Maybe CUDA.Stream  -- asynchronous stream (optional)
+                   -> CIO ()
+peekArrayAsyncPrim ad n st =
   let dst = CUDA.HostPtr . AD.ptrsOfArrayData
       src = arena ad
   in
@@ -355,24 +440,24 @@ peekArrayAsync' ad n st =
 -- will be copied from the host-side array each time this function is called; no
 -- changes to the reference counter will be made.
 --
-pokeArray' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-              ,Storable a, Typeable a)
-           => AD.ArrayData e     -- host array data
-           -> Int                -- number of elements
-           -> CIO ()
-pokeArray' ad n = upload =<< lookupArray ad
+pokeArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+                 , Storable a, Typeable a)
+              => AD.ArrayData e     -- host array data
+              -> Int                -- number of elements
+              -> CIO ()
+pokeArrayPrim ad n = upload =<< lookupArray ad
   where
     src      = AD.ptrsOfArrayData
     dst      = arena ad
     upload v = liftIO $ CUDA.pokeArray n (src ad) (dst v)
 
-pokeArrayAsync' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                   ,Storable a, Typeable a)
-                => AD.ArrayData e     -- host array reference
-                -> Int                -- number of elements
-                -> Maybe CUDA.Stream  -- asynchronous stream to associate (optional)
-                -> CIO ()
-pokeArrayAsync' ad n st = upload =<< lookupArray ad
+pokeArrayAsyncPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+                      , Storable a, Typeable a)
+                   => AD.ArrayData e     -- host array reference
+                   -> Int                -- number of elements
+                   -> Maybe CUDA.Stream  -- asynchronous stream to associate (optional)
+                   -> CIO ()
+pokeArrayAsyncPrim ad n st = upload =<< lookupArray ad
   where
     src      = CUDA.HostPtr . AD.ptrsOfArrayData
     dst      = arena ad
@@ -382,23 +467,23 @@ pokeArrayAsync' ad n st = upload =<< lookupArray ad
 -- Wrap the device pointers corresponding to a host-side array into arguments
 -- that can be passed to a kernel on invocation.
 --
-marshalArrayData' :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-                     ,Typeable a, Typeable b)
-                  => AD.ArrayData e
-                  -> CIO [CUDA.FunParam]
-marshalArrayData' ad = return . CUDA.VArg <$> getArray ad
+marshalArrayDataPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+                        , Typeable a, Typeable b)
+                     => AD.ArrayData e
+                     -> CIO [CUDA.FunParam]
+marshalArrayDataPrim ad = return . CUDA.VArg <$> getArray ad
 
 
 -- Bind device memory to the given texture reference, setting appropriate type
 --
-marshalTextureData' :: forall a e.
-                       (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                       ,Storable a, TextureData a, Typeable a)
-                    => AD.ArrayData e     -- host array data
-                    -> Int                -- number of elements
-                    -> CUDA.Texture       -- texture reference to bind to
-                    -> CIO Int
-marshalTextureData' ad n tex = do
+marshalTextureDataPrim :: forall a e.
+                          ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+                          , Storable a, TextureData a, Typeable a)
+                       => AD.ArrayData e     -- host array data
+                       -> Int                -- number of elements
+                       -> CUDA.Texture       -- texture reference to bind to
+                       -> CIO Int
+marshalTextureDataPrim ad n tex = do
   let (fmt,c) = format (undefined :: a)
   ptr <- getArray ad
   liftIO $ do
@@ -407,13 +492,13 @@ marshalTextureData' ad n tex = do
     return 1
 
 
--- Modify the internal memory reference for a host-side array
+-- Modify the internal memory reference for a host-side array.
 --
-basicModify' :: (AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, Typeable a)
-             => AD.ArrayData e
-             -> (MemoryEntry -> MemoryEntry)
-             -> CIO ()
-basicModify' ad f = updateArray ad . f =<< lookupArray ad
+basicModifyPrim :: (AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, Typeable a)
+                => AD.ArrayData e
+                -> (MemoryEntry -> MemoryEntry)
+                -> CIO ()
+basicModifyPrim ad f = updateArray ad . f =<< lookupArray ad
 
 
 -- Utility functions
@@ -421,7 +506,7 @@ basicModify' ad f = updateArray ad . f =<< lookupArray ad
 
 -- Get a device pointer out of our existential wrapper
 --
-arena :: (ArrayElt e, DevicePtrs e ~ CUDA.DevicePtr b, Typeable b)
+arena :: (DevicePtrs e ~ CUDA.DevicePtr b, Typeable b)
       => AD.ArrayData e
       -> MemoryEntry
       -> CUDA.DevicePtr b
@@ -439,7 +524,7 @@ arrayToKey = AccArrayData
 -- Retrieve the device memory entry from the state structure associated with a
 -- particular Accelerate array.
 --
-lookupArray :: (AD.ArrayPtrs e ~ Ptr a, Typeable a, AD.ArrayElt e)
+lookupArray :: (AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, Typeable a)
             => AD.ArrayData e
             -> CIO MemoryEntry
 lookupArray ad = do
@@ -463,8 +548,8 @@ updateArray ad me = do
 -- Delete an entry from the state structure and release the corresponding device
 -- memory area
 --
-deleteArray :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-               ,Typeable a, Typeable b)
+deleteArray :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+               , Typeable a, Typeable b)
             => AD.ArrayData e
             -> CIO ()
 deleteArray ad = do
@@ -477,8 +562,8 @@ deleteArray ad = do
 
 -- Return the device pointer associated with a host-side Accelerate array
 --
-getArray :: (ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-            ,Typeable a, Typeable b)
+getArray :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+            , Typeable a, Typeable b)
          => AD.ArrayData e
          -> CIO (CUDA.DevicePtr b)
 getArray ad = arena ad <$> lookupArray ad
@@ -490,4 +575,3 @@ fst' = AD.fstArrayData
 
 snd' :: AD.ArrayData (a,b) -> AD.ArrayData b
 snd' = AD.sndArrayData
-

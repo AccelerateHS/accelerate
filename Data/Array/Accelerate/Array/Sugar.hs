@@ -44,10 +44,6 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
-#ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA.Array.Data      as CUDA
-#endif
-
 
 -- |Surface types representing array indices and slices
 -- ----------------------------------------------------
@@ -183,10 +179,7 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 -- scalar Accelerate expressions.
 --
 class (Show a, Typeable a, 
-#ifdef ACCELERATE_CUDA_BACKEND
-       CUDA.ArrayElt (EltRepr a), CUDA.ArrayElt (EltRepr' a),
-#endif
-       Typeable  (EltRepr a), Typeable  (EltRepr' a),
+       Typeable (EltRepr a), Typeable (EltRepr' a),
        ArrayElt (EltRepr a), ArrayElt (EltRepr' a))
       => Elt a where
   eltType  :: {-dummy-} a -> TupleType (EltRepr a)

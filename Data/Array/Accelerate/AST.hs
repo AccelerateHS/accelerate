@@ -130,8 +130,8 @@ prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valua
 -- Array expressions
 -- -----------------
 
--- |Tuples of arrays (of type 'Array dim e').  This characterises the domain of results of Accelerate
--- array computations.
+-- |Tuples of arrays (of type 'Array dim e').  This characterises the domain of results of
+-- Accelerate array computations.
 --
 class (Delayable arrs, Typeable arrs) => Arrays arrs where
   arrays :: ArraysR arrs

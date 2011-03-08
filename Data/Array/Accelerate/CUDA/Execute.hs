@@ -671,7 +671,7 @@ bindLifted mdl = foldM_ go (0,0)
       CUDA.getPtr mdl ("sh"++show n) >>= \(p,_) ->
       CUDA.pokeListArray (convertIx sh) p
 
-    bindTex :: (Shape sh, ArrayElt e) => Int -> sh -> AD.ArrayData e -> CIO Int
+    bindTex :: (Shape sh, AD.ArrayElt e) => Int -> sh -> AD.ArrayData e -> CIO Int
     bindTex m sh ad
       = let textures = sequence' $ map (CUDA.getTex mdl . ("tex"++) . show) [m..]
         in  marshalTextureData ad (size sh) =<< liftIO textures
@@ -724,7 +724,7 @@ primMarshalable((CUDA.DevicePtr a))
 instance Marshalable CUDA.FunParam where
   marshal x = return [x]
 
-instance ArrayElt e => Marshalable (AD.ArrayData e) where
+instance AD.ArrayElt e => Marshalable (AD.ArrayData e) where
   marshal = marshalArrayData    -- Marshalable (DevicePtrs a) does not type )=
 
 instance Marshalable a => Marshalable [a] where
