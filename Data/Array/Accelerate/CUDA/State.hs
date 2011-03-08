@@ -51,6 +51,7 @@ import System.Mem.Weak
 import System.Mem.StableName
 import System.IO.Unsafe
 
+import Data.Array.Accelerate.AST                        (OpenAcc)
 import Data.Array.Accelerate.CUDA.Analysis.Device
 import qualified Data.Array.Accelerate.Array.Data       as AD
 
@@ -118,11 +119,8 @@ refcount = lens get set
 
 -- Opaque stable names for array computations
 --
--- TLM: This should be more specific: "StableName (OpenAcc aenv a)", so that it
---      is not possible to insert the stable names logically different things.
---
 data StableAccName where
-  StableAccName :: Typeable a => StableName a -> StableAccName
+  StableAccName :: (Typeable a, Typeable aenv) => StableName (OpenAcc aenv a) -> StableAccName
 
 instance Show StableAccName where
   show (StableAccName sn) = show $ hashStableName sn
