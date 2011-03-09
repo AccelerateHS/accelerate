@@ -5,6 +5,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed       (IArray, UArray, elems, listArray)
 import Data.Array.Accelerate    as Acc
@@ -62,12 +64,14 @@ run n = withSystemRandom $ \gen -> do
     run_acc xs () = filterAcc (>*0) xs
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-filter (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-filter [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-filter (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-filter [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (default 1000000)"
+      ]
 

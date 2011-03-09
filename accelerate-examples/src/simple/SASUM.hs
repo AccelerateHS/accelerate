@@ -5,6 +5,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
@@ -43,12 +45,14 @@ run n = withSystemRandom $ \gen -> do
     run_acc xs () = sasumAcc xs
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-sasum (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-sasum [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-sasum (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-sasum [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (default 1000000)"
+      ]
 

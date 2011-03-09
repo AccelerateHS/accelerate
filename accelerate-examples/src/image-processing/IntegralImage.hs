@@ -3,6 +3,8 @@
 import PGM
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.FilePath
 import Data.Array.Accelerate                as Acc
 import qualified Data.Array.Accelerate.CUDA as Acc
@@ -66,13 +68,15 @@ run :: FilePath -> FilePath -> IO ()
 run inf outf = writePGM outf . Acc.run . integralImage =<< readPGM inf
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-integralimage (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-integralimage IN [OUT]"
-  , ""
-  , "Options:"
-  , "  IN       PGM image file to process"
-  , "  OUT      output image filename (optional)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-integralimage (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-integralimage IN [OUT]"
+      , ""
+      , "Options:"
+      , "  IN       PGM image file to process"
+      , "  OUT      output image filename (optional)"
+      ]
 

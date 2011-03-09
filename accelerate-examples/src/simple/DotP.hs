@@ -5,6 +5,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
@@ -52,12 +54,14 @@ run n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-dotp (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-dotp [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-dotp (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-dotp [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (default 1000000)"
+      ]
 

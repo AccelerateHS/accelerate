@@ -5,6 +5,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import Control.Monad
 import Control.Exception
 import System.Random.MWC
@@ -85,20 +87,22 @@ run alg n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-fold (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-fold ALGORITHM [N]"
-  , ""
-  , "Algorithms:"
-  , "  sum          vector reduction        fold (+) 0"
-  , "  product      vector product          fold (*) 1"
-  , "  maximum      maximum of a vector     fold1 max"
-  , "  minimum      minimum of a vector     fold1 min"
-  , "  sum-2d       reduction along innermost matrix dimension"
-  , "  product-2d   product along innermost matrix dimension"
-  , ""
-  , "Options:"
-  , "  N            Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-fold (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-fold ALGORITHM [N]"
+      , ""
+      , "Algorithms:"
+      , "  sum          vector reduction        fold (+) 0"
+      , "  product      vector product          fold (*) 1"
+      , "  maximum      maximum of a vector     fold1 max"
+      , "  minimum      minimum of a vector     fold1 min"
+      , "  sum-2d       reduction along innermost matrix dimension"
+      , "  product-2d   product along innermost matrix dimension"
+      , ""
+      , "Options:"
+      , "  N            Number of elements (default 1000000)"
+      ]
 
