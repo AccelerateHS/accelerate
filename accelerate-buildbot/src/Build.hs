@@ -36,7 +36,8 @@ fetchAcc cfg = do
 buildAcc :: Config -> Build ()
 buildAcc cfg = do
   outLn "* Building Accelerate"
-  ssystem $ unwords [ "cabal", "configure", "-fcuda", "-finplace"
+  ssystem $ unwords [ "cabal", "configure", "-fcuda", "-fio", "-finplace"
+                    , "--disable-library-profiling"
                     , "--with-compiler=" ++ configWithGHC cfg ]
   ssystem $ unwords [ "cabal", "build" ]
   outBlank
@@ -160,6 +161,7 @@ handleBuildError cfg err = do
                   "[accelerate-buildbot] Test Failed"
                   . render $ vcat
                   [ text "Accelerate test failed )="
+                  , blank
                   , blank
                   , nest 2 $ ppr err
                   , blank

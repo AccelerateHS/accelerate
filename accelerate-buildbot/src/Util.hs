@@ -26,5 +26,5 @@ bool _ y True  = y
 -- A singleton list
 --
 unit :: a -> [a]
-unit x = [x]
+unit = return
 

@@ -34,21 +34,39 @@ import qualified Data.ByteString.Lex.Double as B
 -- Note that we require the criterion name for the benchmark to match that below
 --
 benchmarks :: Config -> FilePath -> [Benchmark]
-benchmarks _config summaryLog =
-  let simple name args = unit
+benchmarks cfg summaryLog =
+  let simple name args = variants name [([],args)]
+      variants name    = map $ \(tag,args) ->
        Benchmark
-        { benchmarkName    = name
+        { benchmarkName    = name ++ bool ('-' : tag) [] (null tag)
         , benchmarkSetup   = return ()
         , benchmarkCommand = runAcc summaryLog ("accelerate-examples/dist/build" </> name </> name) args
         , benchmarkCheck   = return [] }
+      --
+      scratch = configScratchDir cfg
+      lena_bw = "accelerate-examples/data/images/lena_bw.pgm"
   in
   concat
-    [ simple "acc-sasum"  []
-    , simple "acc-saxpy"  []
-    , simple "acc-dotp"   []
-    , simple "acc-filter" []
-    , simple "acc-smvm"   ["accelerate-examples/data/matrices/random.mtx"]
+    [ -- library primitives
+      variants "acc-map"     $ map (\x -> (x,[x])) ["abs", "plus", "square"]
+    , variants "acc-fold"    $ map (\x -> (x,[x])) ["sum", "product", "maximum", "minimum", "sum-d2", "product-2d"]
+    , variants "acc-stencil" $ map (\x -> (x,[x])) ["3x3"]
+
+      -- simple examples
+    , simple "acc-sasum"        []
+    , simple "acc-saxpy"        []
+    , simple "acc-dotp"         []
+    , simple "acc-filter"       []
+    , simple "acc-smvm"         ["accelerate-examples/data/matrices/random.mtx"]
     , simple "acc-blackscholes" []
+    , simple "acc-radixsort"    []
+
+      -- block copy / IO
+    , simple "acc-io"           []
+
+      -- image processing
+    , simple "acc-canny"         [lena_bw, scratch </> "canny_out.pgm" ]
+    , simple "acc-integralimage" [lena_bw, scratch </> "integral_out.pgm" ]
     ]
 
 
@@ -100,7 +118,7 @@ readCriterionStats f = do
 --
 runAcc :: FilePath -> FilePath -> [String] -> Build [WithUnits (Aspect Single)]
 runAcc tlog exe args = do
-  let cmd = unwords [exe, "--summary=" ++ tlog, unwords args, "+RTS -t"]
+  let cmd = unwords [exe, "--summary=" ++ tlog, unwords args, "+RTS -K16M -t"]
   (status, logOut, logErr) <- systemTeeLog False cmd Log.empty
   case status of
        ExitSuccess -> return $ parseGCLine logErr
