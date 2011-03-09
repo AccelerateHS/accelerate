@@ -6,6 +6,8 @@ import Random
 import Benchmark
 import SMVM.Matrix
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate           (Vector, Segments, Acc)
@@ -87,12 +89,14 @@ run f = withSystemRandom $ \gen ->  do
     v2a vec = listArray (0, V.length vec - 1) $ V.toList vec
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-smvm (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-smvm [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  matrix.mt        MatrixMarket file to process"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-smvm (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-smvm [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  matrix.mt        MatrixMarket file to process"
+      ]
 

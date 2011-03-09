@@ -4,6 +4,8 @@ module Main where
 
 import Benchmark
 
+import System.IO
+import System.Exit
 import Control.Monad
 import Control.Exception
 import System.Random.MWC
@@ -113,15 +115,17 @@ run alg n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-stencil (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-stencil ALGORITHM [N]"
-  , ""
-  , "Algorithms:"
-  , "  3x3      5-element cross pattern"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (in each dimension)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-stencil (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-stencil ALGORITHM [N]"
+      , ""
+      , "Algorithms:"
+      , "  3x3      5-element cross pattern"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (in each dimension)"
+      ]
 

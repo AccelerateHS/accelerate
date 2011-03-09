@@ -13,6 +13,8 @@ import Data.Array.Accelerate as Acc
 
 import Data.List             (sort)
 import Data.Array.Unboxed    (IArray, UArray, listArray, bounds, elems)
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Unsafe.Coerce
 
@@ -93,12 +95,14 @@ run n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-radixsort (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-radixsort [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-radixsort (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-radixsort [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (default 1000000)"
+      ]
 

@@ -4,6 +4,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate
@@ -64,15 +66,17 @@ run alg r n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-scanseg (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-scanseg ALGORITHM [N]"
-  , ""
-  , "Algorithms:"
-  , "  sum      segmented reduction"
-  , ""
-  , "Options:"
-  , "  N M      Maximum segment length, number of segments"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-scanseg (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-scanseg ALGORITHM [N]"
+      , ""
+      , "Algorithms:"
+      , "  sum      segmented reduction"
+      , ""
+      , "Options:"
+      , "  N M      Maximum segment length, number of segments"
+      ]
 

@@ -5,6 +5,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
@@ -62,17 +64,19 @@ run alg n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-map (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-map ALGORITHM [N]"
-  , ""
-  , "Algorithms:"
-  , "  abs      absolute value of values"
-  , "  plus     add a constant to each element"
-  , "  square   square of each element"
-  , ""
-  , "Options:"
-  , "  N        Number of elements (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-map (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-map ALGORITHM [N]"
+      , ""
+      , "Algorithms:"
+      , "  abs      absolute value of values"
+      , "  plus     add a constant to each element"
+      , "  square   square of each element"
+      , ""
+      , "Options:"
+      , "  N        Number of elements (default 1000000)"
+      ]
 

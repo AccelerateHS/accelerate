@@ -4,6 +4,8 @@ module Main where
 import Random
 import Benchmark
 
+import System.IO
+import System.Exit
 import System.Random.MWC
 import Data.Array.IArray     as IArray
 import Data.Array.Accelerate as Acc
@@ -96,12 +98,14 @@ run n = withSystemRandom $ \gen -> do
 
 
 usage :: IO ()
-usage = putStrLn $ unlines
-  [ "acc-blackscholes (c) [2008..2011] The Accelerate Team"
-  , ""
-  , "acc-blackscholes [OPTIONS]"
-  , ""
-  , "Options:"
-  , "  N        Number of options (default 1000000)"
-  ]
+usage = hPutStrLn stderr help >> exitFailure
+  where
+    help = unlines
+      [ "acc-blackscholes (c) [2008..2011] The Accelerate Team"
+      , ""
+      , "acc-blackscholes [OPTIONS]"
+      , ""
+      , "Options:"
+      , "  N        Number of options (default 1000000)"
+      ]
 
