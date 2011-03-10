@@ -146,8 +146,12 @@ generateUseMap acc' = do
           if isAcc2 b then travA' b ((sn, noInc)  : aenv) -- should never get added to the hash table
                       else travA' b ((sn, incFst) : aenv)
 
+        Apply f a          -> do
+          sn <- makeStableAcc a
+          travA a
+          travAf' f ((sn, incFst) : aenv)
+
         Avar ix            -> updateUseMap (prjEnv ix aenv)
-        Apply _f _a        -> INTERNAL_ERROR(error) "generateUseMap" "Apply: not yet implemented"
         Use _              -> return ()
         Unit e             -> travE e
         Reshape e a        -> travE e >> travA a
@@ -206,6 +210,13 @@ generateUseMap acc' = do
         travF (Lam  f) = travF f
         travF (Body b) = travE b
 
+        travAf' :: (Typeable aenv, Typeable t)
+                => OpenAfun aenv t
+                -> [(StableAccName, Maybe AccNode -> AccNode)]
+                -> IO ()
+        travAf' (Abody a) = traverseAcc useMap a
+        travAf' (Alam b)  = travAf' b
+
         updateUseMap (sn,f) = do
           e <- Hash.lookup useMap sn
           _ <- Hash.update useMap sn (f e)
@@ -246,7 +257,7 @@ generateCode iss acc' = do
         Avar _             -> return ()
         Let a b            -> travA a >> travA b
         Let2 a b           -> travA a >> travA b
-        Apply _f _a        -> INTERNAL_ERROR(error) "generateCode" "Apply: not yet implemented"
+        Apply f a          -> travAf f >> travA a
         Unit e             -> travE e
         Reshape e a        -> travE e >> travA a
         Use arr            -> upload arr
@@ -327,6 +338,10 @@ generateCode iss acc' = do
     travF :: Typeable aenv => OpenFun env aenv t -> CIO ()
     travF (Body e) = travE e
     travF (Lam b)  = travF b
+
+    travAf :: (Typeable aenv, Typeable t) => OpenAfun aenv t -> CIO ()
+    travAf (Abody a) = travA a
+    travAf (Alam b)  = travAf b
 
 
 -- | Generate and compile code for a single open array expression

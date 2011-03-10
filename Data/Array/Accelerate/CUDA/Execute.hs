@@ -127,9 +127,12 @@ executeOpenAcc acc@(OpenAcc pacc) aenv =
       (a1,a0) <- executeOpenAcc a aenv
       executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
+    Apply (Alam (Abody f)) a -> do
+      a0 <- executeOpenAcc a aenv
+      executeOpenAcc f (Empty `Push` a0)
     Apply _f _a ->
-      INTERNAL_ERROR(error) "executeOpenAcc" "Apply: not yet implemented"
-  
+      error "GHC's pattern match checker is too dumb to figure that this case is impossible"
+
     Reshape e a -> do
       ix <- executeExp e aenv
       a0 <- executeOpenAcc a aenv
@@ -597,7 +600,7 @@ liftPreAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)     
     applyR ArraysRarray        arr     = [FreeArray arr]
     applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
 
-liftPreAcc (Apply _f _a)        _    = INTERNAL_ERROR(error) "liftAcc" "Apply: not yet implemented"
+liftPreAcc (Apply _ _)            _  = return []
 
 liftPreAcc (Use _)              _    = return []
 liftPreAcc (Unit _)             _    = return []
