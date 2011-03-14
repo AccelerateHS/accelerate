@@ -120,7 +120,8 @@ refcount = lens get set
 -- Opaque stable names for array computations
 --
 data StableAccName where
-  StableAccName :: (Typeable a, Typeable aenv) => StableName (OpenAcc aenv a) -> StableAccName
+  StableAccName :: (Typeable a, Typeable aenv)
+                => StableName (OpenAcc aenv a) -> StableAccName
 
 instance Show StableAccName where
   show (StableAccName sn) = show $ hashStableName sn

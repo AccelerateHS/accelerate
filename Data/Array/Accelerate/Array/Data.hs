@@ -110,7 +110,8 @@ data ArrayEltR a where
   ArrayEltRdouble :: ArrayEltR Double
   ArrayEltRbool   :: ArrayEltR Bool
   ArrayEltRchar   :: ArrayEltR Char
-  ArrayEltRpair   :: (ArrayElt a, ArrayElt b) => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
+  ArrayEltRpair   :: (ArrayElt a, ArrayElt b)
+                  => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
 
 -- Array operations
 -- ----------------
@@ -127,7 +128,7 @@ class ArrayElt e where
   unsafeFreezeArrayData  :: MutableArrayData s e -> ST s (ArrayData e)
   ptrsOfMutableArrayData :: MutableArrayData s e -> ST s (ArrayPtrs e)
   --
-  arrayElt :: ArrayEltR e
+  arrayElt               :: ArrayEltR e
 
 instance ArrayElt () where
   type ArrayPtrs () = ()
