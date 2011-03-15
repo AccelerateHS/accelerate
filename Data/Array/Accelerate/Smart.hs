@@ -690,9 +690,13 @@ makeOccMap rootAcc
     traverseFun1 updateMap enter f
       = do
             -- see Note [Traversing functions and side effects]
-          traverseExp updateMap enter $ f (Tag (-1))                    -- may update the 'OccMap'
-          return $ 
-            \x -> unsafePerformIO $ traverseExp False enter (f x)       -- only transform the tree
+
+            -- FIXME: new trick requires that the right tag is used straight away!!!
+          body <- traverseExp updateMap enter $ f (Tag 0)                    -- may update the 'OccMap'
+          return $ const body
+          -- traverseExp updateMap enter $ f (Tag (-1))                    -- may update the 'OccMap'
+          -- return $ 
+          --   \x -> unsafePerformIO $ traverseExp False enter (f x)       -- only transform the tree
 
     traverseFun2 :: (Elt b, Elt c, Typeable d) 
                   => Bool -> (Bool -> StableAccName -> IO Bool) -> (Exp b -> Exp c -> Exp d) 
@@ -700,9 +704,9 @@ makeOccMap rootAcc
     traverseFun2 updateMap enter f
       = do
             -- see Note [Traversing functions and side effects]
-          traverseExp updateMap enter $ f (Tag (-1)) (Tag (-2))         -- may update the 'OccMap'
-          return $ 
-            \x y -> unsafePerformIO $ traverseExp False enter (f x y)   -- only transform the tree
+          body <- traverseExp updateMap enter $ f (Tag 1) (Tag 0)         -- may update the 'OccMap'
+          return $ \_ _ -> body
+            -- \x y -> unsafePerformIO $ traverseExp False enter (f x y)   -- only transform the tree
 
     traverseStencil1 :: forall sh b c stencil. (Stencil sh b stencil, Typeable c) 
                      => Acc (Array sh b){-dummy-}
@@ -711,9 +715,12 @@ makeOccMap rootAcc
     traverseStencil1 _ updateMap enter stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          traverseExp updateMap enter $ 
-            stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
-          return $ \st -> unsafePerformIO $ traverseExp False enter (stencilFun st)
+          body <- traverseExp updateMap enter $ 
+                    stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag 0))
+          return $ const body
+          -- traverseExp updateMap enter $ 
+          --   stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
+          -- return $ \st -> unsafePerformIO $ traverseExp False enter (stencilFun st)
         
     traverseStencil2 :: forall sh b c d stencil1 stencil2. 
                         (Stencil sh b stencil1, Stencil sh c stencil2, Typeable d) 
@@ -725,10 +732,14 @@ makeOccMap rootAcc
     traverseStencil2 _ _ updateMap enter stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          traverseExp updateMap enter $ 
-            stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
-                       (stencilPrj (undefined::sh) (undefined::c) (Tag (-2)))
-          return $ \st1 st2 -> unsafePerformIO $ traverseExp False enter (stencilFun st1 st2)
+          body <- traverseExp updateMap enter $ 
+                    stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag 1))
+                               (stencilPrj (undefined::sh) (undefined::c) (Tag 0))
+          return $ \_ _ -> body
+          -- traverseExp updateMap enter $ 
+          --   stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
+          --              (stencilPrj (undefined::sh) (undefined::c) (Tag (-2)))
+          -- return $ \st1 st2 -> unsafePerformIO $ traverseExp False enter (stencilFun st1 st2)
         
     traverseExp :: Typeable a 
                 => Bool -> (Bool -> StableAccName -> IO Bool) -> Exp a -> IO (SharingExp a)
@@ -1182,7 +1193,7 @@ determineScopes occMap rootAcc
     pruneSharedSubtreesAcc _sharingFactor (VarSharing sn)
       -- sharing variable introduced by Phase One
       = do
-          traceLine "Entcountering Phase One variable during pruning" (show $ hashStableName sn)
+          traceLine "Encountering Phase One variable during pruning" (show $ hashStableName sn)
           return $ (VarSharing sn, [StableAccName sn])
     pruneSharedSubtreesAcc sharingFactor (LetSharing sa@(StableSharingAcc sn boundAcc) bodyAcc)
       -- prune a let binding (both it's body and binding); might drop the binding altogether

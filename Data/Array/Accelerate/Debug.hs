@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Debug (
 -- standard libraries
 import Control.Monad
 import Data.IORef
+import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 
 -- friends
@@ -32,8 +33,8 @@ import Data.Array.Accelerate.Pretty ()
 --
 traceFlag :: IORef Bool
 {-# NOINLINE traceFlag #-}
--- traceFlag = unsafePerformIO $ newIORef False
-traceFlag = unsafePerformIO $ newIORef True
+traceFlag = unsafePerformIO $ newIORef False
+-- traceFlag = unsafePerformIO $ newIORef True
 
 -- |Initialise the /trace flag/, which determines whether tracing messages should be emitted.
 --
@@ -52,7 +53,7 @@ traceLine :: String -> String -> IO ()
 traceLine header msg
   = do { doTrace <- queryTrace
        ; when doTrace 
-         $ putStrLn (header ++ ": " ++ msg)
+         $ hPutStrLn stderr (header ++ ": " ++ msg)
        }
 
 -- |Emit a trace message if the /trace flag/ is set.  The first string indicates the location of
@@ -63,5 +64,5 @@ traceChunk :: String -> String -> IO ()
 traceChunk header msg
   = do { doTrace <- queryTrace
        ; when doTrace 
-         $ putStrLn (header ++ "\n  " ++ msg)
+         $ hPutStrLn stderr (header ++ "\n  " ++ msg)
        }
