@@ -39,6 +39,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' :: PreOpenAcc OpenAcc aenv a -> m b
     travAcc' (Let acc1 acc2)  = combine "Let" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (PairArrays acc1 acc2) = combine "PairArrays" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
     travAcc' (Apply afun acc) = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
     travAcc' (Acond e acc1 acc2) = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]

@@ -127,6 +127,11 @@ executeOpenAcc acc@(OpenAcc pacc) aenv =
       (a1,a0) <- executeOpenAcc a aenv
       executeOpenAcc b (aenv `Push` a1 `Push` a0)
 
+    PairArrays a b -> do
+      a0 <- executeOpenAcc a aenv
+      a1 <- executeOpenAcc b aenv
+      return (a0, a1)
+
     Apply (Alam (Abody f)) a -> do
       a0 <- executeOpenAcc a aenv
       executeOpenAcc f (Empty `Push` a0)
@@ -601,6 +606,8 @@ liftPreAcc (Let  a b)           aenv = do
 liftPreAcc (Let2 a b)           aenv = do
   (a1,a0) <- executeOpenAcc a aenv
   liftAcc b (aenv `Push` a1 `Push` a0)
+
+liftPreAcc (PairArrays _ _)     aenv = return []
 
 liftPreAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        -- TLM ??
   where

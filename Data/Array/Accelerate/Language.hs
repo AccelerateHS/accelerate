@@ -37,6 +37,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Array construction
   use, unit, replicate, generate,
+  fstA, sndA, pairA,
 
   -- ** Shape manipulation
   reshape,
@@ -446,8 +447,36 @@ infix 0 ?|
 c ?| (t, e) = cond c t e
 
 
--- Lifting
--- -------
+-- Construction and destruction of array pairs
+-- -------------------------------------------
+
+-- |Extract the first component of an array pair.
+--
+fstA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+     => Acc (Array sh1 e1, Array sh2 e2)
+     -> Acc (Array sh1 e1)
+fstA = Acc . FstArray
+
+
+-- |Extract the second component of an array pair.
+--
+sndA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+     => Acc (Array sh1 e1, Array sh2 e2)
+     -> Acc (Array sh2 e2)
+sndA = Acc . SndArray
+
+-- |Create an array pair from two separate arrays.
+--
+pairA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+      => Acc (Array sh1 e1)
+      -> Acc (Array sh2 e2)
+      -> Acc (Array sh1 e1, Array sh2 e2)
+pairA = Acc $$ PairArrays
+
+
+
+-- Lifting scalar expressions
+-- --------------------------
 
 class Lift e where
   type Plain e

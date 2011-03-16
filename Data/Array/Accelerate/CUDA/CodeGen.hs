@@ -90,6 +90,7 @@ codeGen acc@(OpenAcc pacc) =
     Avar _            -> internalError
     Apply _ _         -> internalError  -- TLM: apply??
     Acond _ _ _       -> internalError
+    PairArrays _ _    -> internalError
     Use _             -> internalError
     Unit _            -> internalError
     Reshape _ _       -> internalError

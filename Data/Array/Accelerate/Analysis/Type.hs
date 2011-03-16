@@ -94,6 +94,8 @@ accType2' :: forall aenv sh1 e1 sh2 e2. PreOpenAcc OpenAcc aenv (Array sh1 e1, A
           -> (TupleType (EltRepr e1), TupleType (EltRepr e2))
 accType2' (Let _ acc)      = accType2 acc
 accType2' (Let2 _ acc)     = accType2 acc
+accType2' (PairArrays acc1 acc2)
+                           = (accType acc1, accType acc2)
 accType2' (Avar _)         = -- (eltType (undefined::e1), eltType (undefined::e2))
                              -- should work - GHC 6.12 bug?
                              case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 

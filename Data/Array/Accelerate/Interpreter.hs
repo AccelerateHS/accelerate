@@ -95,6 +95,9 @@ evalPreOpenAcc (Let2 acc1 acc2) aenv
   = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
 
+evalPreOpenAcc (PairArrays acc1 acc2) aenv
+  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+
 evalPreOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
 evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv

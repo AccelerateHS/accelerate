@@ -64,6 +64,8 @@ accDim2' :: forall aenv sh1 e1 sh2 e2.
             PreOpenAcc OpenAcc aenv (Array sh1 e1, Array sh2 e2) -> (Int, Int)
 accDim2' (Let _ acc)      = accDim2 acc
 accDim2' (Let2 _ acc)     = accDim2 acc
+accDim2' (PairArrays acc1 acc2)
+                          = (accDim acc1, accDim acc2)
 accDim2' (Avar _)         = -- (ndim (eltType (undefined::dim1)), ndim (eltType (undefined::dim2)))
                             -- should work - GHC 6.12 bug?
                              case arrays :: ArraysR (Array sh1 e1, Array sh2 e2) of 

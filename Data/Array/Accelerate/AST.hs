@@ -205,6 +205,11 @@ data PreOpenAcc acc aenv a where
                                                 bodyArrs              -- the bound expr's scope           
               -> PreOpenAcc acc aenv            bodyArrs
 
+  PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+              => acc            aenv (Array sh1 e1)
+              -> acc            aenv (Array sh2 e2)
+              -> PreOpenAcc acc aenv (Array sh1 e1, Array sh2 e2)
+
   -- Variable bound by a 'Let', represented by a de Bruijn index              
   Avar        :: Arrays arrs
               => Idx            aenv arrs

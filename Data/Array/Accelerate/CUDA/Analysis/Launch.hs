@@ -89,6 +89,8 @@ sharedMem :: CUDA.DeviceProperties -> PreOpenAcc OpenAcc aenv a -> Int -> Int
 -- non-computation forms
 sharedMem _ (Let _ _)     _ = INTERNAL_ERROR(error) "sharedMem" "Let"
 sharedMem _ (Let2 _ _)    _ = INTERNAL_ERROR(error) "sharedMem" "Let2"
+sharedMem _ (PairArrays _ _) _
+                            = INTERNAL_ERROR(error) "sharedMem" "PairArrays"
 sharedMem _ (Avar _)      _ = INTERNAL_ERROR(error) "sharedMem" "Avar"
 sharedMem _ (Apply _ _)   _ = INTERNAL_ERROR(error) "sharedMem" "Apply"
 sharedMem _ (Acond _ _ _) _ = INTERNAL_ERROR(error) "sharedMem" "Acond"

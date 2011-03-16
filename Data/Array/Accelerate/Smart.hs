@@ -23,8 +23,8 @@ module Data.Array.Accelerate.Smart (
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1,
 
-  -- * Smart constructors for unpairing
-  unpair,
+  -- * Smart constructors for pairing and unpairing
+  pair, unpair,
 
   -- * Smart constructors for literals
   constant,
@@ -141,6 +141,10 @@ data PreAcc acc a where
   SndArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc (Array sh1 e1, Array sh2 e2)
               -> PreAcc acc (Array sh2 e2)
+  PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+              => acc (Array sh1 e1)
+              -> acc (Array sh2 e2)
+              -> PreAcc acc (Array sh1 e1, Array sh2 e2)
 
   Use         :: (Shape sh, Elt e)
               => Array sh e -> PreAcc acc (Array sh e)
@@ -327,6 +331,9 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
       SndArray acc
         -> AST.Let2 (convertSharingAcc alyt env acc) 
                     (AST.OpenAcc $ AST.Avar AST.ZeroIdx)
+      PairArrays acc1 acc2
+        -> AST.PairArrays (convertSharingAcc alyt env acc1)
+                          (convertSharingAcc alyt env acc2)
       Use array
         -> AST.Use array
       Unit e
@@ -585,6 +592,10 @@ makeOccMap rootAcc
                                           return (Acond e' acc1' acc2')
             FstArray acc             -> reconstruct $ travA FstArray acc
             SndArray acc             -> reconstruct $ travA SndArray acc
+            PairArrays acc1 acc2     -> reconstruct $ do
+                                          acc1' <- traverseAcc updateMap enter acc1
+                                          acc2' <- traverseAcc updateMap enter acc2
+                                          return (PairArrays acc1' acc2')
             Use arr                  -> reconstruct $ return (Use arr)
             Unit e                   -> reconstruct $ do
                                           e' <- traverseExp updateMap enter e
@@ -888,6 +899,10 @@ determineScopes occMap rootAcc
                                                reconstruct (Acond e' acc1' acc2') (accCount1 +++ accCount2 +++ accCount3)
           FstArray acc                    -> travA FstArray acc
           SndArray acc                    -> travA SndArray acc
+          PairArrays acc1 acc2            -> do
+                                               (acc1', accCount1) <- injectBindingsAcc acc1
+                                               (acc2', accCount2) <- injectBindingsAcc acc2
+                                               reconstruct (PairArrays acc1' acc2') (accCount1 +++ accCount2)
           Use arr                         -> reconstruct (Use arr) noNodeCounts
           Unit e                          -> do
                                                (e', accCount) <- injectBindingsExp e
@@ -1258,6 +1273,10 @@ determineScopes occMap rootAcc
                                                     return (AccSharing sn $ Acond e' acc1' acc2', used1 ++ used2 ++ used3)
                 FstArray acc                    -> travA FstArray acc
                 SndArray acc                    -> travA SndArray acc
+                PairArrays acc1 acc2            -> do
+                                                     (acc1', used1) <- pruneSharedSubtreesAcc sf acc1
+                                                     (acc2', used2) <- pruneSharedSubtreesAcc sf acc2
+                                                     return (AccSharing sn $ PairArrays acc1' acc2', used1 ++ used2)
                 Use arr                         -> return (AccSharing sn $ Use arr, [])
                 Unit e                          -> do
                                                      (e', used) <- pruneSharedSubtreesExp sf e
@@ -1772,6 +1791,7 @@ showPreAccOp (Pipe _ _ _)         = "Pipe"
 showPreAccOp (Acond _ _ _)        = "Acond"
 showPreAccOp (FstArray _)         = "FstArray"
 showPreAccOp (SndArray _)         = "SndArray"
+showPreAccOp (PairArrays _ _)     = "PairArrays"
 showPreAccOp (Use _)              = "Use"
 showPreAccOp (Unit _)             = "Unit"
 showPreAccOp (Generate _ _)       = "Generate"
@@ -1968,6 +1988,14 @@ unpair :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
        => Acc (Array sh1 e1, Array sh2 e2) 
        -> (Acc (Array sh1 e1), Acc (Array sh2 e2))
 unpair acc = (Acc $ FstArray acc, Acc $ SndArray acc)
+
+-- Creates an 'Acc' pair from two separate 'Acc's.
+--
+pair :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
+     => Acc (Array sh1 e1)
+     -> Acc (Array sh2 e2)
+     -> Acc (Array sh1 e1, Array sh2 e2)
+pair acc1 acc2 = Acc $ PairArrays acc1 acc2
 
 
 -- Smart constructor for literals

@@ -57,6 +57,8 @@ prettyPreAcc pp alvl wrap (Let2 acc1 acc2)
             pp alvl noParens acc1
         , text "in" <+> pp (alvl + 2) noParens acc2
         ]
+prettyPreAcc pp alvl wrap (PairArrays acc1 acc2)
+  = wrap $ sep [pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  alvl _    (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)
 prettyPreAcc pp alvl wrap (Apply afun acc)

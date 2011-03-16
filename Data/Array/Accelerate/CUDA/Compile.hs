@@ -153,6 +153,7 @@ generateUseMap acc' = do
 
         Avar ix            -> updateUseMap (prjEnv ix aenv)
         Use _              -> return ()
+        PairArrays a b     -> travA a >> travA b
         Unit e             -> travE e
         Acond e a b        -> travE e >> travA a >> travA b
         Reshape e a        -> travE e >> travA a
@@ -258,6 +259,7 @@ generateCode iss acc' = do
         Avar _             -> return ()
         Let a b            -> travA a >> travA b
         Let2 a b           -> travA a >> travA b
+        PairArrays a b     -> travA a >> travA b
         Apply f a          -> travAf f >> travA a
         Acond e a b        -> travE e >> travA a >> travA b
         Unit e             -> travE e
