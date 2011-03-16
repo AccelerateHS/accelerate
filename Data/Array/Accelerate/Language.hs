@@ -62,6 +62,9 @@ module Data.Array.Accelerate.Language (
   -- ** Pipelining
   (>->),
   
+  -- ** Array-level flow-control
+  cond, (?|),
+
   -- ** Lifting and unlifting
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
   
@@ -422,6 +425,25 @@ stencil2 = Acc $$$$$ Stencil2
 infixl 1 >->
 (>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
 (>->) = Acc $$$ Pipe
+
+
+-- Flow control constructs
+-- -----------------------
+
+-- |An array-level if-then-else construct.
+--
+cond :: (Arrays a)
+     => Exp Bool          -- ^if-condition
+     -> Acc a             -- ^then-array
+     -> Acc a             -- ^else-array
+     -> Acc a
+cond = Acc $$$ Acond
+
+-- |Infix version of 'cond'.
+--
+infix 0 ?|
+(?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
+c ?| (t, e) = cond c t e
 
 
 -- Lifting

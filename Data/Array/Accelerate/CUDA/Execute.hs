@@ -133,6 +133,15 @@ executeOpenAcc acc@(OpenAcc pacc) aenv =
     Apply _f _a ->
       error "GHC's pattern match checker is too dumb to figure that this case is impossible"
 
+    Acond e a b -> do
+      cond <- executeExp e aenv
+      if cond then do
+                a0 <- executeOpenAcc a aenv
+                return a0
+              else do
+                a0 <- executeOpenAcc b aenv
+                return a0
+
     Reshape e a -> do
       ix <- executeExp e aenv
       a0 <- executeOpenAcc a aenv
@@ -601,6 +610,8 @@ liftPreAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)     
     applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
 
 liftPreAcc (Apply _ _)            _  = return []
+
+liftPreAcc (Acond e _ _)        aenv = liftExp e aenv
 
 liftPreAcc (Use _)              _    = return []
 liftPreAcc (Unit _)             _    = return []

@@ -41,6 +41,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
     travAcc' (Apply afun acc) = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
+    travAcc' (Acond e acc1 acc2) = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Use arr) = combine "Use" [ travArray f l arr ]
     travAcc' (Unit e) = combine "Unit" [ travExp f c l e ]
     travAcc' (Generate sh fun) = combine "Generate" [ travExp f c l  sh, travFun f c l fun]

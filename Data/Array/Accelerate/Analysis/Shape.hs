@@ -32,6 +32,7 @@ accDim' (Avar _)               = -- ndim (eltType (undefined::sh))   -- should w
 accDim' (Apply _ _)            = -- ndim (eltType (undefined::sh))   -- should work - GHC 6.12 bug?
                                  case arrays :: ArraysR (Array sh e) of 
                                    ArraysRarray -> ndim (eltType (undefined::sh))
+accDim' (Acond _ acc _)        = accDim acc
 accDim' (Use (Array _ _))      = ndim (eltType (undefined::sh))
 accDim' (Unit _)               = 0
 accDim' (Generate _ _)         = ndim (eltType (undefined::sh))
@@ -77,6 +78,7 @@ accDim2' (Apply _ _)      = -- (ndim (eltType (undefined::dim1)), ndim (eltType 
                                  -> (ndim (eltType (undefined::sh1)), 
                                      ndim (eltType (undefined::sh2)))
                                _ -> error "GHC is too dumb to realise that this is dead code"
+accDim2' (Acond _ acc _)  = accDim2 acc
 accDim2' (Scanl' _ _ acc) = (accDim acc, 0)
 accDim2' (Scanr' _ _ acc) = (accDim acc, 0)
 

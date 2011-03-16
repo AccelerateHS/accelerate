@@ -89,6 +89,7 @@ codeGen acc@(OpenAcc pacc) =
     Let2 _ _          -> internalError
     Avar _            -> internalError
     Apply _ _         -> internalError  -- TLM: apply??
+    Acond _ _ _       -> internalError
     Use _             -> internalError
     Unit _            -> internalError
     Reshape _ _       -> internalError

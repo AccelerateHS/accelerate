@@ -130,7 +130,11 @@ data PreAcc acc a where
               -> (Acc bs -> Acc cs) 
               -> acc as 
               -> PreAcc acc cs
-
+  Acond       :: (Arrays as)
+              => PreExp acc Bool
+              -> acc as
+              -> acc as
+              -> PreAcc acc as
   FstArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc (Array sh1 e1, Array sh2 e2)
               -> PreAcc acc (Array sh1 e1)
@@ -315,6 +319,8 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
                bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Let (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
+      Acond b acc1 acc2
+        -> AST.Acond (convertExp alyt env b) (convertSharingAcc alyt env acc1) (convertSharingAcc alyt env acc2)
       FstArray acc
         -> AST.Let2 (convertSharingAcc alyt env acc) 
                     (AST.OpenAcc $ AST.Avar (AST.SuccIdx AST.ZeroIdx))
@@ -572,6 +578,11 @@ makeOccMap rootAcc
           case pacc of
             Atag i                   -> reconstruct $ return (Atag i)
             Pipe afun1 afun2 acc     -> reconstruct $ travA (Pipe afun1 afun2) acc
+            Acond e acc1 acc2        -> reconstruct $ do
+                                          e'    <- traverseExp updateMap enter e
+                                          acc1' <- traverseAcc updateMap enter acc1
+                                          acc2' <- traverseAcc updateMap enter acc2
+                                          return (Acond e' acc1' acc2')
             FstArray acc             -> reconstruct $ travA FstArray acc
             SndArray acc             -> reconstruct $ travA SndArray acc
             Use arr                  -> reconstruct $ return (Use arr)
@@ -870,6 +881,11 @@ determineScopes occMap rootAcc
       = case pacc of
           Atag i                          -> reconstruct (Atag i) noNodeCounts
           Pipe afun1 afun2 acc            -> travA (Pipe afun1 afun2) acc
+          Acond e acc1 acc2               -> do
+                                               (e', accCount1)    <- injectBindingsExp e
+                                               (acc1', accCount2) <- injectBindingsAcc acc1
+                                               (acc2', accCount3) <- injectBindingsAcc acc2
+                                               reconstruct (Acond e' acc1' acc2') (accCount1 +++ accCount2 +++ accCount3)
           FstArray acc                    -> travA FstArray acc
           SndArray acc                    -> travA SndArray acc
           Use arr                         -> reconstruct (Use arr) noNodeCounts
@@ -1235,6 +1251,11 @@ determineScopes occMap rootAcc
               case pacc of
                 Atag i                          -> return (AccSharing sn $ Atag i, [])
                 Pipe afun1 afun2 acc            -> travA (Pipe afun1 afun2) acc
+                Acond e acc1 acc2               -> do
+                                                    (e', used1)    <- pruneSharedSubtreesExp sf e
+                                                    (acc1', used2) <- pruneSharedSubtreesAcc sf acc1
+                                                    (acc2', used3) <- pruneSharedSubtreesAcc sf acc2
+                                                    return (AccSharing sn $ Acond e' acc1' acc2', used1 ++ used2 ++ used3)
                 FstArray acc                    -> travA FstArray acc
                 SndArray acc                    -> travA SndArray acc
                 Use arr                         -> return (AccSharing sn $ Use arr, [])
@@ -1748,6 +1769,7 @@ instance Show (Exp a) where
 showPreAccOp :: PreAcc acc arrs -> String
 showPreAccOp (Atag _)             = "Atag"                   
 showPreAccOp (Pipe _ _ _)         = "Pipe"
+showPreAccOp (Acond _ _ _)        = "Acond"
 showPreAccOp (FstArray _)         = "FstArray"
 showPreAccOp (SndArray _)         = "SndArray"
 showPreAccOp (Use _)              = "Use"

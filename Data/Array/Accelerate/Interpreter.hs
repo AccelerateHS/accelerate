@@ -103,6 +103,9 @@ evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
 evalPreOpenAcc (Apply _afun _acc) _aenv
   = error "GHC's pattern match checker is too dumb to figure that this case is impossible"
 
+evalPreOpenAcc (Acond cond acc1 acc2) aenv
+  = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
+
 evalPreOpenAcc (Use arr) _aenv = delay arr
 
 evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)

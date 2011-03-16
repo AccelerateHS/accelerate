@@ -61,6 +61,8 @@ prettyPreAcc _  alvl _    (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)
 prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
+  = wrap $ prettyArrOp "cond" [prettyPreExp pp 0 alvl parens e, pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  _    wrap (Use arr)
   = wrap $ prettyArrOp "use" [prettyArray arr]
 prettyPreAcc pp alvl wrap (Unit e)

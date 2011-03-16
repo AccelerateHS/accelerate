@@ -61,6 +61,7 @@ accType' (Avar _)              = -- eltType (undefined::e)   -- should work - GH
 accType' (Apply _ _)           = -- eltType (undefined::e)   -- should work - GHC 6.12 bug?
                                  case arrays :: ArraysR (Array sh e) of 
                                    ArraysRarray -> eltType (undefined::e)
+accType' (Acond _ acc _)       = accType acc
 accType' (Use arr)             = arrayType arr
 accType' (Unit _)              = eltType (undefined::e)
 accType' (Generate _ _)        = eltType (undefined::e)
@@ -105,6 +106,7 @@ accType2' (Apply _ _)     = -- (eltType (undefined::e1), eltType (undefined::e2)
                                ArraysRpair ArraysRarray ArraysRarray 
                                  -> (eltType (undefined::e1), eltType (undefined::e2))
                                _ -> error "GHC is too dumb to realise that this is dead code"
+accType2' (Acond _ acc _)  = accType2 acc
 accType2' (Scanl' _ e acc) = (accType acc, expType e)
 accType2' (Scanr' _ e acc) = (accType acc, expType e)
 

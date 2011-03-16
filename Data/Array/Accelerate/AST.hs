@@ -215,7 +215,14 @@ data PreOpenAcc acc aenv a where
               => PreAfun    acc      (arrs1 -> arrs2)
               -> acc            aenv arrs1
               -> PreOpenAcc acc aenv arrs2
-  
+
+  -- If-then-else for array-level computations
+  Acond       :: (Arrays arrs)
+              => PreExp     acc aenv Bool
+              -> acc            aenv arrs
+              -> acc            aenv arrs
+              -> PreOpenAcc acc aenv arrs
+
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Array dim e 
               -> PreOpenAcc acc aenv (Array dim e)
