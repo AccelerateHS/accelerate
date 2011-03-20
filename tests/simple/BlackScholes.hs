@@ -1,11 +1,8 @@
 
-module Main where
+module BlackScholes where
 
 import Random
-import Benchmark
 
-import System.IO
-import System.Exit
 import System.Random.MWC
 import Data.Array.IArray     as IArray
 import Data.Array.Accelerate as Acc
@@ -73,15 +70,7 @@ blackscholesRef xs = listArray (bounds xs) [ go x | x <- elems xs ]
 -- Main
 -- ----
 
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       []                       -> run 1000000
-       [a] | [(n,_)] <- reads a -> run n
-       _                        -> usage
-
-run :: Int -> IO ()
+run :: Int -> IO (() -> IArray.Array Int (Float,Float), () -> Acc (Vector (Float,Float)))
 run n = withSystemRandom $ \gen -> do
   v_sp <- randomUArrayR (5,30)    gen n
   v_os <- randomUArrayR (1,100)   gen n
@@ -90,22 +79,9 @@ run n = withSystemRandom $ \gen -> do
   let v_psy = listArray (0,n-1) $ zip3 (elems v_sp) (elems v_os) (elems v_oy)
       a_psy = Acc.fromIArray v_psy
   --
-  benchmark "acc-blackscholes" (run_ref v_psy) (run_acc a_psy)
+  return (run_ref v_psy, run_acc a_psy)
   where
     {-# NOINLINE run_ref #-}
     run_ref psy () = blackscholesRef psy
     run_acc psy () = blackscholesAcc psy
-
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-blackscholes (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-blackscholes [OPTIONS]"
-      , ""
-      , "Options:"
-      , "  N        Number of options (default 1000000)"
-      ]
 

@@ -1,0 +1,60 @@
+Name:                accelerate-examples
+Version:             0.1.0.0
+Synopsis:            Examples using the Accelerate library
+Description:         Examples using the Accelerate library
+License:             BSD3
+License-file:        LICENSE
+Author:              The Accelerate Team
+Maintainer:          Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+Category:            Compilers/Interpreters,
+Build-type:          Simple
+Cabal-version:       >=1.6
+
+
+Flag cuda
+  Description:          Enable the CUDA parallel backend for NVIDIA GPUs
+  Default:              True
+
+Flag io
+  Description:          Provide access to the block copy I/O functionality
+  Default:              False
+
+
+Executable accelerate-examples
+  Main-is:              Main.hs
+  hs-source-dirs:       src
+                        tests/primitives
+                        tests/simple
+                        tests/image-processing
+                        tests/io
+
+  c-sources:            tests/io/fill_with_values.c
+
+  ghc-options:          -Wall -O2
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+
+  if flag(io)
+    CPP-options:        -DACCELERATE_IO
+
+  build-depends:        accelerate              == 0.9.*,
+                        array                   == 0.3.*,
+                        attoparsec              == 0.8.*,
+                        base                    == 4.*,
+                        bytestring              == 0.9.*,
+                        bytestring-lexing       == 0.2.*,
+                        cmdargs                 == 0.6.*,
+                        criterion               == 0.5.*,
+                        deepseq                 == 1.1.*,
+                        directory               >= 1.0 && < 1.2,
+                        filepath                >= 1.0 && < 1.3,
+                        mtl                     >= 1.1 && < 3.0,
+                        mwc-random              == 0.8.*,
+                        pgm                     == 0.1.*,
+                        pretty                  == 1.0.*,
+                        vector                  == 0.7.*,
+                        vector-algorithms       == 0.4.*
+

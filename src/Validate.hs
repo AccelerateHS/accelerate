@@ -55,10 +55,10 @@ absoluteOrRelative :: (Fractional a, Ord a) => a -> a -> Bool
 absoluteOrRelative u v
   | abs (u-v) < epsilonAbs = True
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
-  | otherwise              = abs ((u-v) / v) < epsilonRel
+  | otherwise              = abs ((v-u) / v) < epsilonRel
   where
-    epsilonRel = 0.0005
-    epsilonAbs = 0.0000001
+    epsilonRel = 0.001
+    epsilonAbs = 0.00001
 
 
 -- Comparisons using lexicographically ordered floating-point numbers
@@ -90,13 +90,13 @@ lexicographic64 maxUlps a b
 -- similarity. The index and values are returned for pairs that fail.
 --
 validate
-  :: (IArray array e, Ix ix, Show e, Show ix, Similar e)
+  :: (IArray array e, Ix ix, Similar e)
   => array ix e
   -> array ix e
   -> [(ix,(e,e))]
 validate ref arr = validate' (assocs ref) (elems arr)
 
-validate' :: (Show ix, Ix ix, Show e, Similar e) => [(ix,e)] -> [e] -> [(ix,(e,e))]
+validate' :: (Ix ix, Similar e) => [(ix,e)] -> [e] -> [(ix,(e,e))]
 validate' ref arr =
   filter (not . uncurry sim . snd) [ (i,(x,y)) | (i,x) <- ref | y <- arr ]
 

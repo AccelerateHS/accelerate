@@ -1,13 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Main where
+module SMVM where
 
 import Random
-import Benchmark
 import SMVM.Matrix
 
-import System.IO
-import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate           (Vector, Segments, Acc)
@@ -54,16 +51,7 @@ smvmRef (segd, (inds, values)) vec
 -- Main
 -- ----
 
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       []    -> run Nothing
-       [mtx] -> run (Just mtx)
-       _     -> usage
-
-
-run :: Maybe FilePath -> IO ()
+run :: Maybe FilePath -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run f = withSystemRandom $ \gen ->  do
   -- sparse-matrix
   (segd', smat') <- maybe (randomCSRMatrix gen 512 512) (readCSRMatrix gen) f
@@ -79,7 +67,7 @@ run f = withSystemRandom $ \gen ->  do
   vec  <- convertVector vec'
 
   -- multiply!
-  benchmark "acc-smvm" (run_ref (v2a segd', (v2a ind',v2a val')) (v2a vec')) (run_acc smat vec)
+  return (run_ref (v2a segd', (v2a ind',v2a val')) (v2a vec'), run_acc smat vec)
   where
     {-# NOINLINE run_ref #-}
     run_ref smat vec () = smvmRef smat vec
@@ -87,16 +75,4 @@ run f = withSystemRandom $ \gen ->  do
     --
     v2a :: (V.Unbox a, IArray UArray a) => V.Vector a -> UArray Int a
     v2a vec = listArray (0, V.length vec - 1) $ V.toList vec
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-smvm (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-smvm [OPTIONS]"
-      , ""
-      , "Options:"
-      , "  matrix.mt        MatrixMarket file to process"
-      ]
 
