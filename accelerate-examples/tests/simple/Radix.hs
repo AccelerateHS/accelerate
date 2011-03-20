@@ -1,10 +1,10 @@
+--
 -- Radix sort for a subclass of element types
 --
 
-module Main where
+module Radix where
 
 import Random
-import Benchmark
 
 import qualified Prelude
 import Prelude               hiding (zip, map, scanl, scanr, zipWith, fst)
@@ -13,8 +13,6 @@ import Data.Array.Accelerate as Acc
 
 import Data.List             (sort)
 import Data.Array.Unboxed    (IArray, UArray, listArray, bounds, elems)
-import System.IO
-import System.Exit
 import System.Random.MWC
 import Unsafe.Coerce
 
@@ -74,35 +72,15 @@ sortRef xs = listArray (bounds xs) $ sort (elems xs)
 
 -- Main
 -- ----
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       []                       -> run 1000000
-       [a] | [(n,_)] <- reads a -> run n
-       _                        -> usage
 
-run :: Int -> IO ()
+run :: Int -> IO (() -> UArray Int Int, () -> Acc (Vector Int))
 run n = withSystemRandom $ \gen -> do
   vec  <- randomUArrayR (minBound,maxBound) gen n
   vec' <- convertUArray vec
   --
-  benchmark "acc-radixsort" (run_ref vec) (run_acc vec')
+  return (run_ref vec, run_acc vec')
   where
     {-# NOINLINE run_ref #-}
     run_ref xs () = sortRef xs
     run_acc xs () = sortAcc xs
-
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-radixsort (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-radixsort [OPTIONS]"
-      , ""
-      , "Options:"
-      , "  N        Number of elements (default 1000000)"
-      ]
 

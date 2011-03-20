@@ -1,16 +1,11 @@
 {-# LANGUAGE TypeOperators #-}
 
-module Main where
+module Canny where
 
 import PGM
-import Benchmark
 
-import System.IO
-import System.Exit
-import System.FilePath
 import Data.Array.Accelerate                hiding (zipWith)
 import qualified Data.Array.Accelerate      as Acc
-import qualified Data.Array.Accelerate.CUDA as Acc
 
 
 type Image a      = Array DIM2 a
@@ -113,29 +108,10 @@ canny img =
 
 -- Main
 -- ----
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       [f]   -> let (base,ext) = splitExtension f
-                in  run f (base ++ "-out" <.> ext)
-       [f,g] -> run f g
-       _     -> usage
 
 -- TLM: should compare to a pre-saved reference image
-run :: FilePath -> FilePath -> IO ()
-run inf outf = writePGM outf . Acc.run . canny =<< readPGM inf
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-canny (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-canny IN [OUT]"
-      , ""
-      , "Options:"
-      , "  IN       PGM image file to process"
-      , "  OUT      output image filename (optional)"
-      ]
+run :: FilePath -> IO (() -> Acc (Array DIM2 Float))
+run file = do
+  pgm <- readPGM file
+  return (\() -> canny pgm)
 

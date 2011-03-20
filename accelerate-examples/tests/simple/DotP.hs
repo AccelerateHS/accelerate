@@ -1,12 +1,9 @@
-{-# LANGUAGE ParallelListComp, PatternGuards #-}
+{-# LANGUAGE ParallelListComp #-}
 
-module Main where
+module DotP where
 
 import Random
-import Benchmark
 
-import System.IO
-import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
@@ -31,37 +28,17 @@ dotpRef xs ys
 
 -- Main
 -- ----
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       []                       -> run 1000000
-       [a] | [(n,_)] <- reads a -> run n
-       _                        -> usage
 
-run :: Int -> IO ()
+run :: Int -> IO (() -> UArray () Float, () -> Acc (Scalar Float))
 run n = withSystemRandom $ \gen -> do
   v1  <- randomUArrayR (-1,1) gen n
   v2  <- randomUArrayR (-1,1) gen n
   v1' <- convertUArray v1
   v2' <- convertUArray v2
   --
-  benchmark "acc-dotp" (run_ref v1 v2) (run_acc v1' v2')
+  return (run_ref v1 v2, run_acc v1' v2')
   where
     {-# NOINLINE run_ref #-}
     run_ref xs ys () = dotpRef xs ys
     run_acc xs ys () = dotpAcc xs ys
-
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-dotp (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-dotp [OPTIONS]"
-      , ""
-      , "Options:"
-      , "  N        Number of elements (default 1000000)"
-      ]
 

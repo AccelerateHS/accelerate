@@ -1,12 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Main where
+module Filter where
 
 import Random
-import Benchmark
 
-import System.IO
-import System.Exit
 import System.Random.MWC
 import Data.Array.Unboxed       (IArray, UArray, elems, listArray)
 import Data.Array.Accelerate    as Acc
@@ -44,34 +41,15 @@ filterRef p xs
 
 -- Main
 -- ----
-main :: IO ()
-main = do
-  args <- getArgs'
-  case args of
-       []                       -> run 1000000
-       [a] | [(n,_)] <- reads a -> run n
-       _                        -> usage
 
-run :: Int -> IO ()
+run :: Int -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run n = withSystemRandom $ \gen -> do
-  vec  <- randomUArrayR (-1,1::Float) gen n
+  vec  <- randomUArrayR (-1,1) gen n
   vec' <- convertUArray vec
   --
-  benchmark "acc-filter" (run_ref vec) (run_acc vec')
+  return (run_ref vec, run_acc vec')
   where
     {-# NOINLINE run_ref #-}
     run_ref xs () = filterRef (> 0) xs
     run_acc xs () = filterAcc (>*0) xs
-
-usage :: IO ()
-usage = hPutStrLn stderr help >> exitFailure
-  where
-    help = unlines
-      [ "acc-filter (c) [2008..2011] The Accelerate Team"
-      , ""
-      , "acc-filter [OPTIONS]"
-      , ""
-      , "Options:"
-      , "  N        Number of elements (default 1000000)"
-      ]
 
