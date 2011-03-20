@@ -47,7 +47,7 @@ module Data.Array.Accelerate (
   IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
 
   -- * Array data types
-  Array, Scalar, Vector, Segments,
+  Arrays, Array, Scalar, Vector, Segments,
 
   -- * Array element types
   Elt,
@@ -70,6 +70,7 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.AST (Arrays)
 import Data.Array.Accelerate.Array.Sugar hiding ((!), shape, dim, size)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
