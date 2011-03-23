@@ -31,6 +31,8 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
+  EltR(..)
+
 ) where
 
 -- standard library
@@ -174,6 +176,54 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 
 -- Array elements (tuples of scalars)
 -- ----------------------------------
+data EltR a where
+  EltRunit   :: EltR ()
+  EltRz      :: EltR Z
+  EltRsnoc   :: (Elt t, Elt h)
+             => EltR t
+             -> EltR h
+             -> EltR (t:.h) -- instance (Elt t, Elt h) => Elt (t:.h) where
+  EltRall    :: EltR All
+  EltRsh     :: Elt sh => EltR (Any sh)
+
+  EltRint    :: EltR Int
+  EltRint8   :: EltR Int8
+  EltRint16  :: EltR Int16
+  EltRint32  :: EltR Int32
+  EltRint64  :: EltR Int64
+  EltRword   :: EltR Word
+  EltRword8  :: EltR Word8
+  EltRword16 :: EltR Word16
+  EltRword32 :: EltR Word32
+  EltRword64 :: EltR Word64
+  EltRfloat  :: EltR Float
+  EltRdouble :: EltR Double
+  EltRbool   :: EltR Bool
+  EltRchar   :: EltR Char
+  EltRtuple  :: (Elt a, Elt b)
+             => EltR a -> EltR b
+             -> EltR (a,b)
+  EltR3tuple  :: (Elt a, Elt b, Elt c)
+              => EltR a -> EltR b -> EltR c
+              -> EltR (a,b,c)
+  EltR4tuple  :: (Elt a, Elt b, Elt c, Elt d)
+              => EltR a -> EltR b -> EltR c -> EltR d
+              -> EltR (a,b,c,d)
+  EltR5tuple  :: (Elt a, Elt b, Elt c, Elt d, Elt e)
+              => EltR a -> EltR b -> EltR c -> EltR d -> EltR e
+              -> EltR (a,b,c,d,e)
+  EltR6tuple  :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+              => EltR a -> EltR b -> EltR c -> EltR d -> EltR e -> EltR f
+              -> EltR (a,b,c,d,e,f)
+  EltR7tuple  :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+              => EltR a -> EltR b -> EltR c -> EltR d -> EltR e -> EltR f -> EltR g
+              -> EltR (a,b,c,d,e,f,g)
+  EltR8tuple  :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+              => EltR a -> EltR b -> EltR c -> EltR d -> EltR e -> EltR f -> EltR g -> EltR h
+              -> EltR (a,b,c,d,e,f,g,h)
+  EltR9tuple  :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+              => EltR a -> EltR b -> EltR c -> EltR d -> EltR e -> EltR f -> EltR g -> EltR h -> EltR i
+              -> EltR (a,b,c,d,e,f,g,h,i)
 
 -- |Class that characterises the types of values that can be array elements, and hence, appear in
 -- scalar Accelerate expressions.
@@ -189,6 +239,8 @@ class (Show a, Typeable a,
   eltType' :: {-dummy-} a -> TupleType (EltRepr' a)
   fromElt' :: a -> EltRepr' a
   toElt'   :: EltRepr' a -> a
+
+  eltR     :: EltR a
   
 instance Elt () where
   eltType _ = UnitTuple
@@ -199,6 +251,8 @@ instance Elt () where
   fromElt' = id
   toElt'   = id
 
+  eltR      = EltRunit
+
 instance Elt Z where
   eltType _ = UnitTuple
   fromElt Z = ()
@@ -207,6 +261,8 @@ instance Elt Z where
   eltType' _ = UnitTuple
   fromElt' Z = ()
   toElt' ()  = Z
+
+  eltR       = EltRz
 
 instance (Elt t, Elt h) => Elt (t:.h) where
   eltType (_::(t:.h)) = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
@@ -217,6 +273,8 @@ instance (Elt t, Elt h) => Elt (t:.h) where
   fromElt' (t:.h)      = (fromElt t, fromElt' h)
   toElt' (t, h)        = toElt t :. toElt' h
 
+  eltR = EltRsnoc eltR eltR
+
 instance Elt All where
   eltType _      = PairTuple UnitTuple UnitTuple
   fromElt All    = ((), ())
@@ -225,6 +283,8 @@ instance Elt All where
   eltType' _      = UnitTuple
   fromElt' All    = ()
   toElt' ()       = All
+
+  eltR            = EltRall
 
 instance Elt sh => Elt (Any sh) where
   eltType (_::Any sh) = UnitTuple
@@ -235,6 +295,8 @@ instance Elt sh => Elt (Any sh) where
   fromElt' Any = ()
   toElt' ()    = Any
 
+  eltR         = EltRsh
+
 instance Elt Int where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -243,6 +305,8 @@ instance Elt Int where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRint
 
 instance Elt Int8 where
   eltType       = singletonScalarType
@@ -253,6 +317,8 @@ instance Elt Int8 where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRint8
+
 instance Elt Int16 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -261,6 +327,8 @@ instance Elt Int16 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRint16
 
 instance Elt Int32 where
   eltType       = singletonScalarType
@@ -271,6 +339,8 @@ instance Elt Int32 where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRint32
+
 instance Elt Int64 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -279,6 +349,8 @@ instance Elt Int64 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRint64
 
 instance Elt Word where
   eltType       = singletonScalarType
@@ -289,6 +361,8 @@ instance Elt Word where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRword
+
 instance Elt Word8 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -297,6 +371,8 @@ instance Elt Word8 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRword8
 
 instance Elt Word16 where
   eltType       = singletonScalarType
@@ -307,6 +383,8 @@ instance Elt Word16 where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRword16
+
 instance Elt Word32 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -316,6 +394,8 @@ instance Elt Word32 where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRword32
+
 instance Elt Word64 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -324,6 +404,8 @@ instance Elt Word64 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRword64
 
 {-
 instance Elt CShort where
@@ -408,6 +490,8 @@ instance Elt Float where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRfloat
+
 instance Elt Double where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -416,6 +500,8 @@ instance Elt Double where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRdouble
 
 {-
 instance Elt CFloat where
@@ -446,6 +532,8 @@ instance Elt Bool where
   fromElt'      = id
   toElt'        = id
 
+  eltR          = EltRbool
+
 instance Elt Char where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -454,6 +542,8 @@ instance Elt Char where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
+  eltR          = EltRchar
 
 {-
 instance Elt CChar where
@@ -495,6 +585,8 @@ instance (Elt a, Elt b) => Elt (a, b) where
   fromElt' (a, b) = (fromElt a, fromElt' b)
   toElt' (a, b) = (toElt a, toElt' b)
 
+  eltR = EltRtuple eltR eltR
+
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   eltType (_::(a, b, c)) 
     = PairTuple (eltType (undefined :: (a, b))) (eltType' (undefined :: c))
@@ -506,6 +598,8 @@ instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   fromElt' (a, b, c) = (fromElt (a, b), fromElt' c)
   toElt' (ab, c) = let (a, b) = toElt ab in (a, b, toElt' c)
   
+  eltR = EltR3tuple eltR eltR eltR
+
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
   eltType (_::(a, b, c, d)) 
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
@@ -516,6 +610,8 @@ instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
   fromElt' (a, b, c, d) = (fromElt (a, b, c), fromElt' d)
   toElt' (abc, d) = let (a, b, c) = toElt abc in (a, b, c, toElt' d)
+
+  eltR = EltR4tuple eltR eltR eltR eltR
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   eltType (_::(a, b, c, d, e)) 
@@ -530,6 +626,8 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   fromElt' (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt' e)
   toElt' (abcd, e) = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt' e)
 
+  eltR = EltR5tuple eltR eltR eltR eltR eltR
+
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
   eltType (_::(a, b, c, d, e, f)) 
     = PairTuple (eltType (undefined :: (a, b, c, d, e))) 
@@ -542,6 +640,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) wh
                 (eltType' (undefined :: f))
   fromElt' (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt' f)
   toElt' (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt' f)
+
+  eltR = EltR6tuple eltR eltR eltR eltR eltR eltR
+
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g) 
   => Elt (a, b, c, d, e, f, g) where
@@ -556,6 +657,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
                 (eltType' (undefined :: g))
   fromElt' (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt' g)
   toElt' (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef in (a, b, c, d, e, f, toElt' g)
+
+  eltR = EltR7tuple eltR eltR eltR eltR eltR eltR eltR
+
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h) 
   => Elt (a, b, c, d, e, f, g, h) where
@@ -573,6 +677,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   toElt' (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg 
                          in (a, b, c, d, e, f, g, toElt' h)
 
+  eltR = EltR8tuple eltR eltR eltR eltR eltR eltR eltR eltR
+
+
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i) 
   => Elt (a, b, c, d, e, f, g, h, i) where
   eltType (_::(a, b, c, d, e, f, g, h, i)) 
@@ -588,6 +695,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   fromElt' (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt' i)
   toElt' (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
                          in (a, b, c, d, e, f, g, h, toElt' i)
+
+  eltR = EltR9tuple eltR eltR eltR eltR eltR eltR eltR eltR eltR
+
 
 -- |Convenience functions
 --

@@ -592,7 +592,7 @@ data Boundary a = Clamp               -- ^clamp coordinates to the extent of the
                 | Mirror              -- ^mirror coordinates beyond the array extent
                 | Wrap                -- ^wrap coordinates around on each dimension
                 | Constant a          -- ^use a constant value for outlying coordinates 
-                deriving Show
+                deriving (Show, Read)
 
 {-
 -- Vector GPU data types
