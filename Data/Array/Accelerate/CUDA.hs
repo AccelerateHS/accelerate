@@ -53,7 +53,7 @@ run :: Arrays a => Acc a -> a
 run a = unsafePerformIO execute
   where
     acc     = convertAcc a
-    execute = evalCUDA (compileAcc acc >> executeAcc acc >>= collect)
+    execute = evalCUDA (compileAcc acc >>= executeAcc >>= collect)
               `catch`
               \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
@@ -63,18 +63,18 @@ run a = unsafePerformIO execute
 --
 stream :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
 {-# NOINLINE stream #-}
-stream f arrs = unsafePerformIO $ execute arrs . snd =<< runCUDA (compileAccFun acc)
+stream f arrs = unsafePerformIO $ uncurry (execute arrs) =<< runCUDA (compileAfun1 acc)
   where
-    acc                  = convertAccFun1 f
-    execute []     state = finalise state >> return []   -- release all constant arrays
-    execute (a:as) state = do
-      (b,s) <- runCUDAWith state (executeAfun1 acc a >>= collect)
+    acc                       = convertAccFun1 f
+    execute []     _    state = finalise state >> return []   -- release all constant arrays
+    execute (a:as) afun state = do
+      (b,s) <- runCUDAWith state (executeAfun1 afun a >>= collect)
                `catch`
                \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
-      bs    <- unsafeInterleaveIO (execute as s)
+      bs    <- unsafeInterleaveIO (execute as afun s)
       return (b:bs)
     --
-    finalise state       = do
+    finalise state            = do
       mem <- Hash.toList (getL memoryTable state)
       mapM_ (\(_,MemoryEntry _ p) -> CUDA.free (CUDA.castDevPtr p)) mem
 

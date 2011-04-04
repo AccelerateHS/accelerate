@@ -9,8 +9,11 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey)
-  where
+module Data.Array.Accelerate.CUDA.Analysis.Hash (
+
+  AccKey, accToKey, hashAccKey
+
+) where
 
 import Data.Char
 import Language.C
@@ -18,6 +21,7 @@ import Text.PrettyPrint
 import Codec.Compression.Zlib
 import Data.ByteString.Lazy.Char8                       (ByteString)
 import qualified Data.ByteString.Lazy.Char8             as L
+import qualified Data.HashTable                         as Hash
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -31,9 +35,22 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 #include "accelerate.h"
 
 
+type AccKey = ByteString
+
+-- | Reimplementation of Data.HashTable.hashString to fold over a lazy
+-- bytestring rather than a list of characters.
+--
+hashAccKey :: AccKey -> Int32
+hashAccKey = L.foldl' f golden
+  where
+    f m c  = fromIntegral (ord c) * magic + Hash.hashInt (fromIntegral m)
+    magic  = 0xdeadbeef
+    golden = 1013904242 -- = round ((sqrt 5 - 1) * 2^32)
+
+
 -- | Generate a unique key for each kernel computation
 --
-accToKey :: OpenAcc aenv a -> ByteString
+accToKey :: OpenAcc aenv a -> AccKey
 accToKey acc =
   let key = compress . L.pack $ showAcc acc
   in  L.head key `seq` key

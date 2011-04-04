@@ -190,19 +190,19 @@ type Afun = OpenAfun ()
 -- calculation in the backend.
 --
 data PreOpenAcc acc aenv a where
-  
+
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
   Let         :: (Arrays bndArrs, Arrays bodyArrs)
               => acc            aenv            bndArrs               -- bound expression
-              -> acc            (aenv, bndArrs) bodyArrs              -- the bound expr's scope           
+              -> acc            (aenv, bndArrs) bodyArrs              -- the bound expr's scope
               -> PreOpenAcc acc aenv            bodyArrs
 
   -- Variant of 'Let' binding (and decomposing) a pair
   Let2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
-              => acc            aenv            (bndArrs1, bndArrs2)  -- bound expressions 
+              => acc            aenv            (bndArrs1, bndArrs2)  -- bound expressions
               -> acc            ((aenv, bndArrs1), bndArrs2)
-                                                bodyArrs              -- the bound expr's scope           
+                                                bodyArrs              -- the bound expr's scope
               -> PreOpenAcc acc aenv            bodyArrs
 
   PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
@@ -210,7 +210,7 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh2 e2)
               -> PreOpenAcc acc aenv (Array sh1 e1, Array sh2 e2)
 
-  -- Variable bound by a 'Let', represented by a de Bruijn index              
+  -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
               => Idx            aenv arrs
               -> PreOpenAcc acc aenv arrs
@@ -229,12 +229,12 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv arrs
 
   -- Array inlet (triggers async host->device transfer if necessary)
-  Use         :: Array dim e 
+  Use         :: Array dim e
               -> PreOpenAcc acc aenv (Array dim e)
 
-  -- Capture a scalar (or a tuple of scalars) in a singleton array  
+  -- Capture a scalar (or a tuple of scalars) in a singleton array
   Unit        :: Elt e
-              => PreExp     acc aenv e 
+              => PreExp     acc aenv e
               -> PreOpenAcc acc aenv (Scalar e)
 
   -- Change the shape of an array without altering its contents
@@ -254,18 +254,18 @@ data PreOpenAcc acc aenv a where
   -- argument
   Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)               -- slice type specification
-                            (EltRepr sl) 
+                            (EltRepr sl)
                             co'
                             (EltRepr sh)
               -> PreExp     acc aenv slix                -- slice value specification
               -> acc            aenv (Array sl e)        -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
 
-  -- Index a subarray out of an array; i.e., the dimensions not indexed are 
+  -- Index a subarray out of an array; i.e., the dimensions not indexed are
   -- returned whole
   Index       :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)       -- slice type specification
-                            (EltRepr sl) 
+                            (EltRepr sl)
                             co'
                             (EltRepr sh)
               -> acc            aenv (Array sh e)        -- array to be indexed
@@ -274,15 +274,15 @@ data PreOpenAcc acc aenv a where
 
   -- Apply the given unary function to all elements of the given array
   Map         :: (Shape sh, Elt e, Elt e')
-              => PreFun     acc aenv (e -> e') 
-              -> acc            aenv (Array sh e) 
+              => PreFun     acc aenv (e -> e')
+              -> acc            aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e')
 
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
   ZipWith     :: (Shape sh, Elt e1, Elt e2, Elt e3)
-              => PreFun     acc aenv (e1 -> e2 -> e3) 
+              => PreFun     acc aenv (e1 -> e2 -> e3)
               -> acc            aenv (Array sh e1)
               -> acc            aenv (Array sh e2)
               -> PreOpenAcc acc aenv (Array sh e3)
@@ -324,7 +324,7 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e)
     -- FIXME: Make the scans rank-polymorphic?
-  
+
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
   Scanl'      :: Elt e
@@ -345,7 +345,7 @@ data PreOpenAcc acc aenv a where
               -> PreExp     acc aenv e                       -- initial value
               -> acc            aenv (Vector e)              -- linear array
               -> PreOpenAcc acc aenv (Vector e)
-  
+
   -- Right-to-left version of 'Scanl\''
   Scanr'      :: Elt e
               => PreFun     acc aenv (e -> e -> e)           -- combination function
@@ -395,10 +395,10 @@ data PreOpenAcc acc aenv a where
           -> PreOpenAcc acc aenv (Array sh e')
 
   -- Map a binary stencil over an array.
-  Stencil2 :: (Elt e1, Elt e2, Elt e', 
+  Stencil2 :: (Elt e1, Elt e2, Elt e',
                Stencil sh e1 stencil1,
                Stencil sh e2 stencil2)
-           => PreFun     acc aenv (stencil1 -> 
+           => PreFun     acc aenv (stencil1 ->
                                    stencil2 -> e')        -- stencil function
            -> Boundary            (EltRepr e1)            -- boundary condition #1
            -> acc            aenv (Array sh e1)           -- source array #1

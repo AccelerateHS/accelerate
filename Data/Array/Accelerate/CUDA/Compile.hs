@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, TupleSections, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -11,386 +11,627 @@
 
 module Data.Array.Accelerate.CUDA.Compile (
 
+  -- * Types parameterising our annotated computation form
+  ExecAcc, ExecOpenAcc(..),
+  AccKernel, AccRefcount(..), AccBinding,
+
   -- * generate and compile kernels to realise a computation
-  compileAcc, compileAccFun
+  compileAcc, compileAfun1
 
 ) where
 
-import Prelude                                          hiding (exp)
-import Data.Maybe
-import Data.Typeable
-import Data.Record.Label
-import Control.Arrow                                    (first, second)
-import Control.Applicative                              hiding (Const)
-import Control.Monad
-import Control.Monad.IO.Class
-import Language.C
-import Text.PrettyPrint
-import qualified Data.HashTable                         as Hash
+#include "accelerate.h"
 
-import System.Directory
-import System.FilePath
-import System.Posix.Process
-import System.Mem.StableName
-import System.IO
-import System.IO.Unsafe
-
-import Data.Array.Accelerate.AST
+-- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar                (Array(..), Elt, Shape, Segments)
-import Data.Array.Accelerate.Array.Representation       (size)
+import Data.Array.Accelerate.AST                        hiding (Val(..))
+import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments)
+import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Pretty.Print
+
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
+-- libraries
+import Prelude                                          hiding (exp)
+import Control.Applicative                              hiding (Const)
+import Control.Monad.Trans
+import Control.Concurrent.MVar
+import Data.Maybe
+import Data.Record.Label
+import Language.C
+import System.FilePath
+import System.Directory
+import System.IO
+import System.Exit                                      (ExitCode(..))
+import System.Posix.Types                               (ProcessID)
+import System.Posix.Process
+import Text.PrettyPrint
 import Foreign.Storable
-import Foreign.CUDA.Analysis.Device
+import qualified Data.HashTable                         as Hash
+import qualified Foreign.CUDA.Driver                    as CUDA
 
 import Paths_accelerate                                 (getDataDir)
 
-#include "accelerate.h"
+
+-- A binary object that will be used to execute a kernel
+--
+type AccKernel a = (String, CIO CUDA.Module)
+
+noKernel :: AccKernel a
+noKernel = INTERNAL_ERROR(error) "ExecAcc" "no kernel module for this node"
+
+-- The number of times an array computation will be used. This is an overzealous
+-- estimate, due to the presence of array branching. Only the scanl' and scanr'
+-- primitives use two reference counts.
+--
+data AccRefcount = R1 !Int
+                 | R2 !Int !Int
+
+instance Show AccRefcount where
+  show (R1 x)   = show x
+  show (R2 x y) = show (x,y)
+
+noRefcount :: AccRefcount
+noRefcount = INTERNAL_ERROR(error) "ExecAcc" "no reference count for this node"
+
+singleRef :: AccRefcount
+singleRef = R1 1
 
 
--- TLM:
---   These two passes could be combined into one (some overlap with Use nodes),
---   but for now they are kept separate for clarity's sake.
+-- Array computations that were embedded within scalar expressions, and will be
+-- required to execute the kernel; i.e. bound to texture references or similar.
 --
---   It might be appropriate to "tag" each node of the AST, with its stable name
---   and accumulate to this tag any meta-information required for execution /
---   dependency tracking, such as array use counts and any inputs which need to
---   bound to scalar expressions (and the associated ordering!).
---
+data AccBinding where
+  ArrayVar :: Idx aenv arrs -> AccBinding
 
--- Memory management
--- -----------------
+instance Eq AccBinding where
+  ArrayVar ix1 == ArrayVar ix2 = idxToInt ix1 == idxToInt ix2
 
--- | Build a hash table of array usage counts. This only contains entries for
--- let-bound arrays that are referenced more than once.
+-- Typeless conversion from array variable to environment projection
 --
--- TLM: this does not include the free variables of function abstractions over
---      array computations.
---
-generateUseMap :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> CIO ()
-generateUseMap acc' = do
-  useMap <- liftIO newAccHashTable
-  liftIO $  traverseAcc useMap acc' []
-  setM computeTable useMap
+idxToInt :: Idx env t -> Int
+idxToInt = go 0
   where
-    -- Traverse an open expression term
+    go :: Int -> Idx env t -> Int
+    go !n ZeroIdx      = n
+    go !n (SuccIdx ix) = go (n+1) ix
+
+
+-- A pseudo array environment that holds the number of times each indexed
+-- variable has been accessed.
+--
+data Ref c where
+  Empty :: Ref ()
+  Push  :: Ref c
+        -> Either (IndirectRef c) AccRefcount
+        -> Ref (c, AccRefcount)
+
+type IndirectRef c = Ref c -> Ref c
+
+
+incIdx :: Idx env t -> Ref count -> Ref count
+incIdx = modIdx incR1
+  where
+    incR1 (R1 x) = R1 (x+1)
+    incR1 _      = INTERNAL_ERROR(error) "incR1" "inconsistent valuation"
+
+modIdx :: (AccRefcount -> AccRefcount) -> Idx env t -> Ref count -> Ref count
+modIdx f (SuccIdx ix) (Push next c) = modIdx f ix next `Push` c
+modIdx f ZeroIdx      (Push rest c) =
+  case c of
+    Left  ir -> ir rest `Push` c
+    Right n  -> rest    `Push` Right (f n)
+modIdx _ _            _             = INTERNAL_ERROR(error) "modIdx" "inconsistent valuation"
+
+
+-- Interleave execution state annotations into an open array computation AST
+--
+data ExecOpenAcc aenv a where
+  ExecAfun :: AccRefcount                       -- reference count attached to an enclosed lambda
+           -> PreOpenAfun ExecOpenAcc () t
+           -> ExecOpenAcc aenv t
+
+  ExecAcc  :: AccRefcount                       -- number of times the result is used (zealous)
+           -> AccKernel a                       -- an executable binary object
+           -> [AccBinding]                      -- auxiliary arrays from the environment the kernel needs access to
+           -> PreOpenAcc ExecOpenAcc aenv a     -- the actual computation
+           -> ExecOpenAcc aenv a
+
+-- An annotated AST suitable for execution in the CUDA environment
+--
+type ExecAcc a = ExecOpenAcc () a
+
+instance Show (ExecOpenAcc aenv a) where
+  show = render . prettyExecAcc 0 noParens
+
+
+-- |Initiate code generation, compilation, and data transfer for an array
+-- expression. If we are in `streaming' mode, then the arrays are marked so that
+-- they will be retained between iterations.
+--
+-- The returned array computation is annotated so to be suitable for execution
+-- in the CUDA environment. This includes:
+--
+--   1. The kernel module that can be used to execute the computation, and the
+--      list of array variables that were embedded within scalar expressions
+--      (TLM: todo)
+--
+--   2. Array reference counts (TLM: not accurate in the presence of branches)
+--
+--   3. Wrap the segment descriptor of FoldSeg and similar in 'Scanl (+) 0', to
+--      transform the segment lengths into global offset indices.
+--
+compileAcc :: Acc a -> CIO (ExecAcc a)
+compileAcc acc = fst `fmap` prepareAcc False acc Empty
+
+
+compileAfun1 :: Afun (a -> b) -> CIO (ExecAcc (a -> b))
+compileAfun1 (Alam (Abody b)) = do
+  (b', Empty `Push` Right c) <- prepareAcc True b (Empty `Push` Right (R1 0))
+  return $ ExecAfun c (Alam (Abody b'))
+
+compileAfun1 _ =
+  error "Hope (noun): something that happens to facts when the world refuses to agree"
+
+
+prepareAcc :: Bool -> OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
+prepareAcc iss rootAcc rootEnv = do
+  setM memoryTable =<< liftIO newAccMemoryTable
+  travA rootAcc rootEnv
+  where
+    -- Traverse an open array expression in depth-first order
     --
-    traverseExp :: Typeable aenv
-                => AccHashTable AccNode
-                -> OpenExp env aenv e
-                -> [(StableAccName, Maybe AccNode -> AccNode)]
-                -> IO ()
-    traverseExp useMap exp aenv =
-      case exp of
-        Var _           -> return ()
-        Const _         -> return ()
-        Tuple t         -> travT t
-        Prj _ e         -> travE e
-        IndexNil        -> return ()
-        IndexCons ix i  -> travE ix >> travE i
-        IndexHead ix    -> travE ix
-        IndexTail ix    -> travE ix
-        PrimConst _     -> return ()
-        PrimApp _ e     -> travE e
-        Cond p t e      -> travE p >> travE t >> travE e
-        IndexScalar a e -> travA a >> travE e
-        Shape a         -> travA a
-        Size a          -> travA a
-
-      where
-        travT :: Typeable aenv => Tuple (OpenExp env aenv) t -> IO ()
-        travT NilTup        = return ()
-        travT (SnocTup t e) = travE e >> travT t
-
-        travE :: Typeable aenv => OpenExp env aenv e -> IO ()
-        travE e = traverseExp useMap e aenv
-
-        travA :: (Typeable aenv, Shape dim, Elt e) => OpenAcc aenv (Array dim e) -> IO ()
-        travA a = traverseAcc useMap a aenv
-
-    -- Traverse an open array computation
-    --
-    -- We keep track of an environment of currently bound sharing variables,
-    -- stored in reverse chronological order (outermost variable is at the end
-    -- of the list). This is a StableName associated with the bound AST node,
-    -- together with the procedure of incrementing that node's reference count.
-    -- The latter is required because of those nodes which produce a pair of
-    -- output arrays (namely, Scanl' and Scanr').
-    --
-    traverseAcc :: (Typeable aenv, Typeable a)
-                => AccHashTable AccNode
-                -> OpenAcc aenv a
-                -> [(StableAccName, Maybe AccNode -> AccNode)]
-                -> IO ()
-    traverseAcc useMap (OpenAcc pacc) aenv =
+    travA :: OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
+    travA acc@(OpenAcc pacc) aenv =
       case pacc of
-        -- If the bound array is itself a bound variable, be sure to refer to
-        -- the reference count of the real array.
-        Let2 a@(OpenAcc pacc') b ->
-          case pacc' of
-            Avar ix -> let sn = fst $ prjEnv ix aenv
-                       in  travA' b ((sn, incSnd) : (sn, incFst) : aenv)
-            _       -> do
-              sn <- makeStableAcc a
-              travA  a
-              travA' b ((sn, incSnd) : (sn, incFst) : aenv)
 
-        Let a b            -> do
-          sn <- makeStableAcc a
-          travA a
-          if isAcc2 b then travA' b ((sn, noInc)  : aenv) -- should never get added to the hash table
-                      else travA' b ((sn, incFst) : aenv)
+        -- Environment manipulations
+        --
+        Avar ix -> return (node (Avar ix), incIdx ix aenv)
 
-        Apply f a          -> do
-          sn <- makeStableAcc a
-          travA a
-          travAf' f ((sn, incFst) : aenv)
+        -- Let bindings to computations that yield two arrays
+        --
+        Let2 a b | Avar ia <- unAcc a
+                 , Avar ib <- unAcc b ->
+          let a'   = node (Avar ia)
+              b'   = node (Avar ib)
+              env' = modIdx (eitherIx ib incSucc incZero) ia aenv
+          in
+          return (node (Let2 a' b'), env')
 
-        Avar ix            -> updateUseMap (prjEnv ix aenv)
-        Use _              -> return ()
-        PairArrays a b     -> travA a >> travA b
-        Unit e             -> travE e
-        Acond e a b        -> travE e >> travA a >> travA b
-        Reshape e a        -> travE e >> travA a
-        Generate e f       -> travE e >> travF f
-        Replicate _ e a    -> travE e >> travA a
-        Index _ a e        -> travE e >> travA a
-        Map f a            -> travF f >> travA a
-        ZipWith f a b      -> travF f >> travA a >> travA b
-        Fold f e a         -> travF f >> travE e >> travA a
-        Fold1 f a          -> travF f >> travA a
-        FoldSeg f e a s    -> travF f >> travE e >> travA a >> travA s
-        Fold1Seg f a s     -> travF f >> travA a >> travA s
-        Scanl f e a        -> travF f >> travE e >> travA a
-        Scanl' f e a       -> travF f >> travE e >> travA a
-        Scanl1 f a         -> travF f >> travA a
-        Scanr f e a        -> travF f >> travE e >> travA a
-        Scanr' f e a       -> travF f >> travE e >> travA a
-        Scanr1 f a         -> travF f >> travA a
-        Permute f a g b    -> travF f >> travA a >> travF g >> travA b
-        Backpermute e f a  -> travE e >> travF f >> travA a
-        Stencil f _ a      -> travF f >> travA a
-        Stencil2 f _ a _ b -> travF f >> travA a >> travA b
+        Let2 a b | Avar ix <- unAcc a ->
+          let a' = node (Avar ix)
+          in do
+          (b', env1 `Push` _ `Push` _) <- travA b (aenv `Push` Left (modIdx incSucc ix)
+                                                        `Push` Left (modIdx incZero ix))
+          return (node (Let2 a' b'), env1)
 
-      where
-        prjEnv :: Idx env t -> [a] -> a
-        prjEnv ZeroIdx       (x:_)  = x
-        prjEnv (SuccIdx idx) (_:xs) = prjEnv idx xs
-        prjEnv _             _      = INTERNAL_ERROR(error) "prjEnv" "inconsistent valuation"
+        Let2 a b -> do
+          (a', env1)                      <- travA a aenv
+          (b', env2 `Push` Right (R1 c1)
+                    `Push` Right (R1 c0)) <- travA b (env1 `Push` Right (R1 0) `Push` Right (R1 0))
+          return (node (Let2 (setref (R2 c1 c0) a') b'), env2)
 
-        incFst = maybe (AccNode (1,0) Nothing) (modL usecount (first  (+1)))
-        incSnd = maybe (AccNode (0,1) Nothing) (modL usecount (second (+1)))
-        noInc  = INTERNAL_ERROR(error) "generateUseMap" "assumption failed"
-          -- when let-binding the paired result of a computation (c.f. isAcc2)
-          -- that is later rebound and unpacked by a let2.
+        -- Let bindings to a single computation
+        --
+        Let a b | Let2 x y <- unAcc a
+                , Avar u   <- unAcc x
+                , Avar v   <- unAcc y ->
+          let a' = node (Let2 (node (Avar u)) (node (Avar v)))
+              rc = Left (modIdx (eitherIx v incSucc incZero) u)
+          in do
+          (b', env1 `Push` _) <- travA b (aenv `Push` rc)
+          return (node (Let a' b'), env1)
 
-        isAcc2 :: OpenAcc aenv a -> Bool
-        isAcc2 (OpenAcc pacc') =
-          case pacc' of
-            Scanl' _ _ _ -> True
-            Scanr' _ _ _ -> True
-            _            -> False
+        Let a b | Let2 _ y <- unAcc a
+                , Avar v   <- unAcc y -> do
+          (ExecAcc _ _ _ (Let2 x' y'), env1) <- travA a aenv
+          (b', env2 `Push` Right (R1 c))     <- travA b (env1 `Push` Right (R1 0))
+          --
+          let a' = node (Let2 (setref (eitherIx v (R2 c 0) (R2 0 c)) x') y')
+          return  (node (Let a' b'), env2)
 
-        travA' :: (Typeable aenv, Typeable a)
-                 => OpenAcc aenv a
-                 -> [(StableAccName, Maybe AccNode -> AccNode)]
-                 -> IO ()
-        travA' = traverseAcc useMap
+        Let a b  -> do
+          (a', env1)                <- travA a aenv
+          (b', env2 `Push` Right c) <- travA b (env1 `Push` Right rc)
+          return (node (Let (setref c a') b'), env2)
+          where
+            rc | isAcc2 a  = R2 0 0
+               | otherwise = R1 0
 
-        travA :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> IO ()
-        travA a = traverseAcc useMap a aenv
 
-        travE :: Typeable aenv => OpenExp env aenv e -> IO ()
-        travE e = traverseExp useMap e aenv
+        Apply (Alam (Abody b)) a -> do
+          (a', env1)                <- travA a aenv
+          (b', env2 `Push` Right c) <- travA b (env1 `Push` Right (R1 0))
+          return (node (Apply (Alam (Abody b')) (setref c a')), env2)
+        Apply _                _ -> error "I made you a cookie, but I eated it"
 
-        travF :: Typeable aenv => OpenFun env aenv t -> IO ()
-        travF (Lam  f) = travF f
-        travF (Body b) = travE b
+        PairArrays arr1 arr2 -> do
+          (arr1', env1) <- travA arr1 aenv
+          (arr2', env2) <- travA arr2 env1
+          return (node (PairArrays arr1' arr2'), env2)
 
-        travAf' :: (Typeable aenv, Typeable t)
-                => OpenAfun aenv t
-                -> [(StableAccName, Maybe AccNode -> AccNode)]
-                -> IO ()
-        travAf' (Abody a) = traverseAcc useMap a
-        travAf' (Alam b)  = travAf' b
+        Acond c t e -> do
+          (c', env1, var1) <- travE c aenv []
+          (t', env2)       <- travA t env1      -- TLM: separate use counts for each branch?
+          (e', env3)       <- travA e env2
+          return (ExecAcc noRefcount noKernel var1 (Acond c' t' e'), env3)
 
-        updateUseMap (sn,f) = do
-          e <- Hash.lookup useMap sn
-          _ <- Hash.update useMap sn (f e)
-          return ()
+        Reshape sh a -> do
+          (sh', env1, var1) <- travE sh aenv []
+          (a',  env2)       <- travA a  env1
+          return (ExecAcc noRefcount noKernel var1 (Reshape sh' a'), env2)
 
-makeStableAcc :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> IO StableAccName
-makeStableAcc a = StableAccName `fmap` makeStableName a
+        -- Array injection
+        --
+        -- If this array is let-bound, we will only see this case once, and need
+        -- to update the reference count when retrieved during execution
+        --
+        Use arr@(Array sh ad) ->
+          let n = size sh
+              c = if iss then Nothing else Just 1
+          in do mallocArray    ad c (max 1 n)
+                pokeArrayAsync ad n Nothing
+                return (ExecAcc singleRef noKernel [] (Use arr), aenv)
+
+        -- Computation nodes
+        --
+        Unit e  -> do
+          (e', env1, var1) <- travE e aenv []
+          return (ExecAcc singleRef noKernel var1 (Unit e'), env1)
+
+        Generate e f -> do
+          (e', env1, var1) <- travE e aenv []
+          (f', env2, var2) <- travF f env1 var1
+          kernel           <- build "generate" acc
+          return (ExecAcc singleRef kernel var2 (Generate e' f'), env2)
+
+        Replicate slix e a -> do
+          (e', env1, var1) <- travE e aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "replicate" acc
+          return (ExecAcc singleRef kernel var1 (Replicate slix e' a'), env2)
+
+        Index slix a e -> do
+          (a', env1)       <- travA a aenv
+          (e', env2, var2) <- travE e env1 []
+          kernel           <- build "slice" acc
+          return (ExecAcc singleRef kernel var2 (Index slix a' e'), env2)
+
+        Map f a -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "map" acc
+          return (ExecAcc singleRef kernel var1 (Map f' a'), env2)
+
+        ZipWith f a b -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          (b', env3)       <- travA b env2
+          kernel           <- build "zipWith" acc
+          return (ExecAcc singleRef kernel var1 (ZipWith f' a' b'), env3)
+
+        Fold f e a -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "fold" acc
+          return (ExecAcc singleRef kernel var2 (Fold f' e' a'), env3)
+
+        Fold1 f a -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "fold" acc
+          return (ExecAcc singleRef kernel var1 (Fold1 f' a'), env2)
+
+        FoldSeg f e a s -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          (s', env4)       <- travA (scan s) env3
+          kernel           <- build "foldSeg" acc
+          return (ExecAcc singleRef kernel var2 (FoldSeg f' e' a' s'), env4)
+
+        Fold1Seg f a s -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          (s', env3)       <- travA (scan s) env2
+          kernel           <- build "foldSeg" acc
+          return (ExecAcc singleRef kernel var1 (Fold1Seg f' a' s'), env3)
+
+        Scanl f e a -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc singleRef kernel var2 (Scanl f' e' a'), env3)
+
+        Scanl' f e a -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc (R2 0 0) kernel var2 (Scanl' f' e' a'), env3)
+
+        Scanl1 f a -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc singleRef kernel var1 (Scanl1 f' a'), env2)
+
+        Scanr f e a -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc singleRef kernel var2 (Scanr f' e' a'), env3)
+
+        Scanr' f e a -> do
+          (f', env1, var1) <- travF f aenv []
+          (e', env2, var2) <- travE e env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc (R2 0 0) kernel var2 (Scanr' f' e' a'), env3)
+
+        Scanr1 f a -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "inclusive_scan" acc
+          return (ExecAcc singleRef kernel var1 (Scanr1 f' a'), env2)
+
+        Permute f a g b -> do
+          (f', env1, var1) <- travF f aenv []
+          (g', env2, var2) <- travF g env1 var1
+          (a', env3)       <- travA a env2
+          (b', env4)       <- travA b env3
+          kernel           <- build "permute" acc
+          return (ExecAcc singleRef kernel var2 (Permute f' a' g' b'), env4)
+
+        Backpermute e f a -> do
+          (e', env1, var1) <- travE e aenv []
+          (f', env2, var2) <- travF f env1 var1
+          (a', env3)       <- travA a env2
+          kernel           <- build "backpermute" acc
+          return (ExecAcc singleRef kernel var2 (Backpermute e' f' a'), env3)
+
+        Stencil f b a -> do
+          (f', env1, var1) <- travF f aenv []
+          (a', env2)       <- travA a env1
+          kernel           <- build "stencil1" acc
+          return (ExecAcc singleRef kernel var1 (Stencil f' b a'), env2)
+
+        Stencil2 f b1 a1 b2 a2 -> do
+          (f', env1, var1) <- travF f aenv []
+          (a1', env2)      <- travA a1 env1
+          (a2', env3)      <- travA a2 env2
+          kernel           <- build "stencil2" acc
+          return (ExecAcc singleRef kernel var1 (Stencil2 f' b1 a1' b2 a2'), env3)
+
+
+    -- Traverse a scalar expression
+    --
+    travE :: OpenExp env aenv e
+          -> Ref count
+          -> [AccBinding]
+          -> CIO (PreOpenExp ExecOpenAcc env aenv e, Ref count, [AccBinding])
+    travE exp aenv vars =
+      case exp of
+        Var ix          -> return (Var ix, aenv, vars)
+        Const c         -> return (Const c, aenv, vars)
+        PrimConst c     -> return (PrimConst c, aenv, vars)
+        IndexNil        -> return (IndexNil, aenv, vars)
+        IndexCons ix i  -> do
+          (ix', env1, var1) <- travE ix aenv vars
+          (i',  env2, var2) <- travE i  env1 var1
+          return (IndexCons ix' i', env2, var2)
+
+        IndexHead ix    -> do
+          (ix', env1, var1) <- travE ix aenv vars
+          return (IndexHead ix', env1, var1)
+
+        IndexTail ix    -> do
+          (ix', env1, var1) <- travE ix aenv vars
+          return (IndexTail ix', env1, var1)
+
+        Tuple t         -> do
+          (t', env1, var1) <- travT t aenv vars
+          return (Tuple t', env1, var1)
+
+        Prj idx e       -> do
+          (e', env1, var1) <- travE e aenv vars
+          return (Prj idx e', env1, var1)
+
+        Cond p t e      -> do
+          (p', env1, var1) <- travE p aenv vars
+          (t', env2, var2) <- travE t env1 var1 -- TLM: reference count contingent on which
+          (e', env3, var3) <- travE e env2 var2 --      branch is taken?
+          return (Cond p' t' e', env3, var3)
+
+        PrimApp f e     -> do
+          (e', env1, var1) <- travE e aenv vars
+          return (PrimApp f e', env1, var1)
+
+        IndexScalar a e -> do
+          (a', env1)       <- travA a aenv
+          (e', env2, var2) <- travE e env1 vars
+          return (IndexScalar a' e', env2, {- lift a' `cons` -} var2)
+
+        Shape a         -> do
+          (a', env1) <- travA a aenv
+          return (Shape a', env1, {- lift a' `cons` -} vars)
+
+        Size a          -> do
+          (a', env1) <- travA a aenv
+          return (Size a', env1, {- lift a' `cons` -} vars)
+
+
+    travT :: Tuple (OpenExp env aenv) t
+          -> Ref count
+          -> [AccBinding]
+          -> CIO (Tuple (PreOpenExp ExecOpenAcc env aenv) t, Ref count, [AccBinding])
+    travT NilTup        aenv vars = return (NilTup, aenv, vars)
+    travT (SnocTup t e) aenv vars = do
+      (e', env1, var1) <- travE e aenv vars
+      (t', env2, var2) <- travT t env1 var1
+      return (SnocTup t' e', env2, var2)
+
+    travF :: OpenFun env aenv t
+          -> Ref count
+          -> [AccBinding]
+          -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding])
+    travF (Body b) aenv vars = do
+      (b', env1, var1) <- travE b aenv vars
+      return (Body b', env1, var1)
+    travF (Lam  f) aenv vars = do
+      (f', env1, var1) <- travF f aenv vars
+      return (Lam f', env1, var1)
+
+
+    -- Auxiliary
+    --
+    scan :: OpenAcc aenv Segments -> OpenAcc aenv Segments
+    scan = OpenAcc . Scanl plus (Const ((),0))
+
+    plus :: PreOpenFun OpenAcc () aenv (Int -> Int -> Int)
+    plus = Lam (Lam (Body (PrimAdd numType
+                          `PrimApp`
+                          Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
+                                        `SnocTup` Var ZeroIdx))))
+
+    unAcc :: OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
+    unAcc (OpenAcc pacc) = pacc
+
+    node :: PreOpenAcc ExecOpenAcc aenv a -> ExecOpenAcc aenv a
+    node = ExecAcc noRefcount noKernel []
+
+    isAcc2 :: OpenAcc aenv a -> Bool
+    isAcc2 (OpenAcc pacc) = case pacc of
+        Scanl' _ _ _ -> True
+        Scanr' _ _ _ -> True
+        _            -> False
+
+    incSucc :: AccRefcount -> AccRefcount
+    incSucc (R2 x y) = R2 (x+1) y
+    incSucc _        = INTERNAL_ERROR(error) "incSucc" "inconsistent valuation"
+
+    incZero :: AccRefcount -> AccRefcount
+    incZero (R2 x y) = R2 x (y+1)
+    incZero _        = INTERNAL_ERROR(error) "incZero" "inconsistent valuation"
+
+    eitherIx :: Idx env t -> f -> f -> f
+    eitherIx ZeroIdx           _ z = z
+    eitherIx (SuccIdx ZeroIdx) s _ = s
+    eitherIx _                 _ _ =
+      INTERNAL_ERROR(error) "eitherIx" "inconsistent valuation"
+
+    setref :: AccRefcount -> ExecOpenAcc aenv a -> ExecOpenAcc aenv a
+    setref count (ExecAfun _ fun)     = ExecAfun count fun
+    setref count (ExecAcc  _ k b acc) = ExecAcc  count k b acc
+
+    _cons :: AccBinding -> [AccBinding] -> [AccBinding]
+    _cons x xs | x `notElem` xs = x : xs
+               | otherwise      = xs
+
+    _lift :: ExecOpenAcc aenv a -> AccBinding
+    _lift (ExecAcc _ _ _ (Avar ix)) = ArrayVar ix
+    _lift _                         =
+      INTERNAL_ERROR(error) "lift" "expected array variable"
 
 
 -- Compilation
 -- -----------
 
--- | Initiate code generation, compilation, and data transfer for an array
--- expression. If we are in `streaming' mode, the input arrays are marked so
--- that they will be retained between each iteration.
+-- Initiate compilation and provide a closure to later link the compiled module
+-- when it is required.
 --
-compileAccFun :: Typeable t => Afun t -> CIO ()
-compileAccFun = compileOpenAfun
-
-compileOpenAfun :: (Typeable aenv, Typeable t) => OpenAfun aenv t -> CIO ()
-compileOpenAfun (Alam  b) = compileOpenAfun b
-compileOpenAfun (Abody f) = generateUseMap f >> generateCode True f
-
-compileAcc :: Arrays a => Acc a -> CIO ()
-compileAcc acc = generateUseMap acc >> generateCode False acc
-
-generateCode :: (Typeable aenv, Typeable a) => Bool -> OpenAcc aenv a -> CIO ()
-generateCode iss acc' = do
-  memMap <- liftIO newAccMemoryTable
-  setM memoryTable memMap
-  travA acc'
-  where
-    -- Traverse an open array expression in depth-first order
-    --
-    travA :: (Typeable aenv, Typeable a) => OpenAcc aenv a -> CIO ()
-    travA acc@(OpenAcc pacc) =
-      case pacc of
-        Avar _             -> return ()
-        Let a b            -> travA a >> travA b
-        Let2 a b           -> travA a >> travA b
-        PairArrays a b     -> travA a >> travA b
-        Apply f a          -> travAf f >> travA a
-        Acond e a b        -> travE e >> travA a >> travA b
-        Unit e             -> travE e
-        Reshape e a        -> travE e >> travA a
-        Use arr            -> upload arr
-        Generate e f       -> travE e >> travF f                       >> compile acc
-        Replicate _ e a    -> travE e >> travA a                       >> compile acc
-        Index _ a e        -> travE e >> travA a                       >> compile acc
-        Map f a            -> travF f >> travA a                       >> compile acc
-        ZipWith f a b      -> travF f >> travA a >> travA b            >> compile acc
-        Fold f e a         -> travF f >> travE e >> travA a            >> compile acc
-        Fold1 f a          -> travF f >> travA a                       >> compile acc
-        FoldSeg f e a s    -> travF f >> travE e >> travA a >> travA s >> compile scan >> compile acc
-        Fold1Seg f a s     -> travF f >> travA a >> travA s            >> compile scan >> compile acc
-        Scanl f e a        -> travF f >> travE e >> travA a            >> compile acc
-        Scanl' f e a       -> travF f >> travE e >> travA a            >> compile acc
-        Scanl1 f a         -> travF f >> travA a                       >> compile acc
-        Scanr f e a        -> travF f >> travE e >> travA a            >> compile acc
-        Scanr' f e a       -> travF f >> travE e >> travA a            >> compile acc
-        Scanr1 f a         -> travF f >> travA a                       >> compile acc
-        Permute f a g b    -> travF f >> travA a >> travF g >> travA b >> compile acc
-        Backpermute e f a  -> travE e >> travF f >> travA a            >> compile acc
-        Stencil f _ a      -> travF f >> travA a                       >> compile acc
-        Stencil2 f _ a _ b -> travF f >> travA a >> travA b            >> compile acc
-
-      where
-        -- TLM: could rewrite the tree to include this additional step; the
-        --      stable-name operations would then work appropriately.
-        scan :: Acc Segments
-        scan = OpenAcc $ Scanl add (Const ((),0)) (OpenAcc $ Use (Array undefined undefined))
-        add  = Lam (Lam (Body (PrimAdd numType
-                              `PrimApp`
-                              Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
-                                            `SnocTup` Var ZeroIdx))))
-
-        -- Retrieve array use information. If we are under the "streaming"
-        -- paradigm, all Use nodes must be retained over successive iterations
-        --
-        lookupUseCount :: CIO (Maybe Int)
-        lookupUseCount
-          | iss       = return Nothing
-          | otherwise = do
-              tab <- getM computeTable
-              val <- liftIO $ Hash.lookup tab =<< makeStableAcc acc
-              return . Just $ maybe 1 (fst . getL usecount) val
-
-        -- Copy an input array (Use node) to the device
-        --
-        upload :: Array dim e -> CIO ()
-        upload (Array sh ad) = do
-          let n = size sh
-          c <- lookupUseCount
-          mallocArray    ad c (max 1 n)
-          pokeArrayAsync ad n Nothing
-
-    -- Traverse scalar expressions looking for embedded array computations
-    --
-    travE :: Typeable aenv => OpenExp env aenv e -> CIO ()
-    travE exp =
-      case exp of
-        Var _           -> return ()
-        Const _         -> return ()
-        Tuple t         -> travT t
-        Prj _ e         -> travE e
-        IndexNil        -> return ()
-        IndexCons ix i  -> travE ix >> travE i
-        IndexHead ix    -> travE ix
-        IndexTail ix    -> travE ix
-        PrimConst _     -> return ()
-        PrimApp _ e     -> travE e
-        Cond p t e      -> travE p >> travE t >> travE e
-        IndexScalar a e -> travA a >> travE e
-        Shape a         -> travA a
-        Size a          -> travA a
-
-    travT :: Typeable aenv => Tuple (OpenExp env aenv) t -> CIO ()
-    travT NilTup        = return ()
-    travT (SnocTup t e) = travE e >> travT t
-
-    travF :: Typeable aenv => OpenFun env aenv t -> CIO ()
-    travF (Body e) = travE e
-    travF (Lam b)  = travF b
-
-    travAf :: (Typeable aenv, Typeable t) => OpenAfun aenv t -> CIO ()
-    travAf (Abody a) = travA a
-    travAf (Alam b)  = travAf b
-
-
--- | Generate and compile code for a single open array expression
+-- TLM: should get name(s) from code generation
 --
-compile :: OpenAcc aenv a -> CIO ()
-compile acc = do
+build :: String -> OpenAcc aenv a -> CIO (AccKernel a)
+build name acc =
   let key = accToKey acc
-  kernels  <- getM kernelTable
-  compiled <- isJust <$> liftIO (Hash.lookup kernels key)
-  unless compiled $ do
-    nvcc   <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
-    cufile <- outputName acc (outputDir </> "dragon.cu")        -- rawr!
-    flags  <- compileFlags cufile
-    pid    <- liftIO $ do
-                writeCode cufile (codeGenAcc acc)
-                forkProcess $ executeFile nvcc False flags Nothing
+  in do
+    compile key acc
+    mvar  <- liftIO newEmptyMVar
+    table <- getM kernelTable
+    return . (name,) . liftIO $ memo mvar (link table key)
 
-    liftIO $ Hash.insert kernels key (KernelEntry cufile (Left pid))
-
--- Write the generated code to file
+-- A simple memoisation routine
+-- TLM: maybe we can be a bit clever than this...
 --
-writeCode :: FilePath -> CUTranslSkel -> IO ()
-writeCode f code =
-  withFile f WriteMode $ \hdl ->
-  printDoc PageMode hdl (pretty code)
+memo :: MVar a -> IO a -> IO a
+memo mvar fun = do
+  full <- not `fmap` isEmptyMVar mvar
+  if full
+     then readMVar mvar
+     else do a <- fun
+             putMVar mvar a
+             return a
 
 
--- stolen from $fptools/ghc/compiler/utils/Pretty.lhs
+-- Link a compiled binary and update the associated kernel entry in the hash
+-- table. This may entail waiting for the external compilation process to
+-- complete. If successfully, the temporary files are removed.
 --
--- This code has a BSD-style license
+link :: KernelTable -> AccKey -> IO CUDA.Module
+link table key =
+  let intErr = INTERNAL_ERROR(error) "link" "missing kernel entry"
+  in do
+    (KernelEntry cufile stat) <- fromMaybe intErr `fmap` Hash.lookup table key
+    case stat of
+      Right mdl -> return mdl
+      Left  pid -> do
+        -- wait for compiler to finish and load binary object
+        --
+        waitFor pid
+        mdl <- CUDA.loadFile (replaceExtension cufile ".cubin")
+
+#ifndef ACCELERATE_CUDA_PERSISTENT_CACHE
+        -- remove build products
+        --
+        removeFile      cufile
+        removeFile      (replaceExtension cufile ".cubin")
+        removeDirectory (dropFileName cufile)
+          `catch` \_ -> return ()       -- directory not empty
+#endif
+
+        -- update hash table
+        --
+        Hash.insert table key (KernelEntry cufile (Right mdl))
+        return mdl
+
+
+-- Generate and compile code for a single open array expression
 --
-printDoc :: Mode -> Handle -> Doc -> IO ()
-printDoc m hdl doc = do
-  fullRender m cols 1.5 put done doc
-  hFlush hdl
-  where
-    put (Chr c)  next = hPutChar hdl c >> next
-    put (Str s)  next = hPutStr  hdl s >> next
-    put (PStr s) next = hPutStr  hdl s >> next
+compile :: AccKey -> OpenAcc aenv a -> CIO ()
+compile key acc = do
+  kernels <- getM kernelTable
+  dir     <- outputDir
+  nvcc    <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
+  cufile  <- outputName acc (dir </> "dragon.cu")        -- rawr!
+  flags   <- compileFlags cufile
+  pid     <- liftIO $ do
+               writeCode cufile (codeGenAcc acc)
+               forkProcess $ executeFile nvcc False flags Nothing
+  --
+  liftIO $ Hash.insert kernels key (KernelEntry cufile (Left pid))
 
-    done = hPutChar hdl '\n'
-    cols = 100
+
+-- Wait for the compilation process to finish
+--
+waitFor :: ProcessID -> IO ()
+waitFor pid = do
+  status <- getProcessStatus True True pid
+  case status of
+    Just (Exited ExitSuccess) -> return ()
+    _                         -> error  $ "nvcc (" ++ show pid ++ ") terminated abnormally"
 
 
--- Determine the appropriate command line flags to pass to the compiler process
+-- Determine the appropriate command line flags to pass to the compiler process.
+-- This is dependent on the host architecture and device capabilities.
 --
 compileFlags :: FilePath -> CIO [String]
 compileFlags cufile =
@@ -399,7 +640,7 @@ compileFlags cufile =
                   8 -> "-m64"
                   _ -> error "huh? non 32-bit or 64-bit architecture"
   in do
-  arch <- computeCapability <$> getM deviceProps
+  arch <- CUDA.computeCapability <$> getM deviceProps
   ddir <- liftIO getDataDir
   return [ "-I", ddir </> "cubits"
          , "-O2", "--compiler-options", "-fno-strict-aliasing"
@@ -427,20 +668,72 @@ outputName acc cufile = do
 
 
 -- Return the output directory for compilation by-products, creating if it does
--- not exist. This is safe in the sense that the result will never change for a
--- given program invocation (TLM: a little excessive, really...)
+-- not exist.
 --
-outputDir :: FilePath
-{-# NOINLINE outputDir #-}
-outputDir = unsafePerformIO $ do
+outputDir :: CIO FilePath
+outputDir = liftIO $ do
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
   tmp <- getDataDir
   let dir = tmp </> "cache"
 #else
   tmp <- getTemporaryDirectory
   pid <- getProcessID
-  let dir = tmp </> "ac" ++ show pid
+  let dir = tmp </> "accelerate-cuda-" ++ show pid
 #endif
   createDirectoryIfMissing True dir
   canonicalizePath dir
+
+
+-- Pretty printing
+-- ---------------
+
+-- Write the generated code to file
+--
+writeCode :: FilePath -> CUTranslSkel -> IO ()
+writeCode f code =
+  withFile f WriteMode $ \hdl ->
+  printDoc PageMode hdl (pretty code)
+
+
+-- stolen from $fptools/ghc/compiler/utils/Pretty.lhs
+--
+-- This code has a BSD-style license
+--
+printDoc :: Mode -> Handle -> Doc -> IO ()
+printDoc m hdl doc = do
+  fullRender m cols 1.5 put done doc
+  hFlush hdl
+  where
+    put (Chr c)  next = hPutChar hdl c >> next
+    put (Str s)  next = hPutStr  hdl s >> next
+    put (PStr s) next = hPutStr  hdl s >> next
+
+    done = hPutChar hdl '\n'
+    cols = 100
+
+
+-- Display the annotated AST
+--
+prettyExecAcc :: PrettyAcc ExecOpenAcc
+prettyExecAcc alvl wrap ecc =
+  case ecc of
+    ExecAfun rc pfun      -> braces (usecount rc)
+                              <+> prettyPreAfun prettyExecAcc alvl pfun
+    ExecAcc  rc _ fv pacc ->
+      let base = prettyPreAcc prettyExecAcc alvl wrap pacc
+          ann  = braces (usecount rc <> comma <+> freevars fv)
+      in case pacc of
+           Avar _         -> base
+           Let  _ _       -> base
+           Let2 _ _       -> base
+           Apply _ _      -> base
+           PairArrays _ _ -> base
+           Acond _ _ _    -> base
+           Reshape _ _    -> base
+           _              -> ann <+> base
+  where
+    usecount (R1 x)   = text "rc=" <> int x
+    usecount (R2 x y) = text "rc=" <> text (show (x,y))
+    freevars = (text "fv=" <>) . brackets . hcat . punctuate comma
+                               . map (\(ArrayVar ix) -> char 'a' <> int (idxToInt ix))
 

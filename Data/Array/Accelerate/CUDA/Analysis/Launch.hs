@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs #-}
+{-# LANGUAGE CPP, GADTs, RankNTypes #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Analysis.Launch
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -12,18 +12,41 @@
 module Data.Array.Accelerate.CUDA.Analysis.Launch (launchConfig)
   where
 
-import Data.Int
-import Data.Record.Label
+-- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Type
-import Data.Array.Accelerate.Analysis.Shape
+import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Sugar                (Array(..), EltRepr)
+import Data.Array.Accelerate.Analysis.Type              hiding (accType, expType)
+import Data.Array.Accelerate.Analysis.Shape             hiding (accDim)
+
 import Data.Array.Accelerate.CUDA.State
+import Data.Array.Accelerate.CUDA.Compile               (ExecOpenAcc(..))
+
+-- library
+import Data.Record.Label
 import Control.Monad.IO.Class
+
 import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Foreign.Storable                       as F
 
 #include "accelerate.h"
+
+
+-- |Reify dimensionality of array computations
+--
+accDim :: ExecOpenAcc aenv (Array sh e) -> Int
+accDim (ExecAcc _ _ _ acc) = preAccDim accDim acc
+accDim (ExecAfun _ _)      = error "when I get sad, I stop being sad and be AWESOME instead."
+
+-- |Reify type of arrays and scalar expressions
+--
+accType :: ExecOpenAcc aenv (Array sh e) -> TupleType (EltRepr e)
+accType (ExecAcc _ _ _ acc) = preAccType accType acc
+accType (ExecAfun _ _)      = error "TRUE STORY."
+
+expType :: PreOpenExp ExecOpenAcc aenv env t -> TupleType (EltRepr t)
+expType = preExpType accType
 
 
 -- |
@@ -36,8 +59,8 @@ import qualified Foreign.Storable                       as F
 -- physically resident blocks. Hence, kernels may need to process multiple
 -- elements per thread.
 --
-launchConfig :: OpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
-launchConfig (OpenAcc acc) n fn = do
+launchConfig :: PreOpenAcc ExecOpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
+launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
   prop <- getM deviceProps
@@ -53,7 +76,7 @@ launchConfig (OpenAcc acc) n fn = do
 -- Determine the optimal thread block size for a given array computation. Fold
 -- requires blocks with a power-of-two number of threads.
 --
-blockSize :: CUDA.DeviceProperties -> PreOpenAcc OpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
+blockSize :: CUDA.DeviceProperties -> PreOpenAcc ExecOpenAcc aenv a -> Int -> (Int -> Int) -> (Int, CUDA.Occupancy)
 blockSize p (Fold _ _ _) r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
 blockSize p (Fold1 _ _)  r s = CUDA.optimalBlockSizeBy p CUDA.incPow2 (const r) s
 blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) s
@@ -66,14 +89,14 @@ blockSize p _            r s = CUDA.optimalBlockSizeBy p CUDA.incWarp (const r) 
 --
 -- foldSeg: 'size' is the number of segments, require one warp per segment
 --
-gridSize :: CUDA.DeviceProperties -> PreOpenAcc OpenAcc aenv a -> Int -> Int -> Int
+gridSize :: CUDA.DeviceProperties -> PreOpenAcc ExecOpenAcc aenv a -> Int -> Int -> Int
 gridSize p acc@(FoldSeg _ _ _ _) size cta = split acc (size * CUDA.warpSize p) cta
 gridSize p acc@(Fold1Seg _ _ _)  size cta = split acc (size * CUDA.warpSize p) cta
 gridSize p acc@(Fold _ _ a)      size cta = if accDim a == 1 then split acc size cta else split acc (size * CUDA.warpSize p) cta
 gridSize p acc@(Fold1 _ a)       size cta = if accDim a == 1 then split acc size cta else split acc (size * CUDA.warpSize p) cta
 gridSize _ acc                   size cta = split acc size cta
 
-split :: PreOpenAcc OpenAcc aenv a -> Int -> Int -> Int
+split :: PreOpenAcc ExecOpenAcc aenv a -> Int -> Int -> Int
 split acc size cta = (size `between` eltsPerThread acc) `between` cta
   where
     between arr n   = 1 `max` ((n + arr - 1) `div` n)
@@ -85,7 +108,7 @@ split acc size cta = (size `between` eltsPerThread acc) `between` cta
 -- memory usage as a function of thread block size. This can be used by the
 -- occupancy calculator to optimise kernel launch shape.
 --
-sharedMem :: CUDA.DeviceProperties -> PreOpenAcc OpenAcc aenv a -> Int -> Int
+sharedMem :: CUDA.DeviceProperties -> PreOpenAcc ExecOpenAcc aenv a -> Int -> Int
 -- non-computation forms
 sharedMem _ (Let _ _)     _ = INTERNAL_ERROR(error) "sharedMem" "Let"
 sharedMem _ (Let2 _ _)    _ = INTERNAL_ERROR(error) "sharedMem" "Let2"

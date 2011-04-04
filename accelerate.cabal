@@ -227,7 +227,11 @@ Library
   if flag(internal-checks)
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
-  Ghc-options:          -O2 -Wall -fno-warn-name-shadowing
+  ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
+
+  if impl(ghc >= 7.0)
+    ghc-options:        -fspec-constr-count=25
+
   Extensions:           BangPatterns, CPP, DeriveDataTypeable, EmptyDataDecls,
                         FlexibleContexts, FlexibleInstances, GADTs, MagicHash,
                         MultiParamTypeClasses, PatternGuards, RankNTypes,

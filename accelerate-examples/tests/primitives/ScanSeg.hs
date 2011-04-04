@@ -7,7 +7,8 @@ import System.IO
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
-import Prelude		     as P
+import Prelude               as P
+
 
 -- Segmented prefix-sum
 -- --------------------

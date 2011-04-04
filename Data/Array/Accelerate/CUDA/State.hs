@@ -17,43 +17,33 @@
 module Data.Array.Accelerate.CUDA.State (
 
   evalCUDA, runCUDA, runCUDAWith, CIO,
-  CUDAState, unique, deviceProps, deviceContext, memoryTable, kernelTable, computeTable,
+  CUDAState, unique, deviceProps, deviceContext, memoryTable, kernelTable,
 
-  KernelEntry(KernelEntry), kernelName, kernelStatus,
-  AccNode(AccNode), usecount, executable,
-  MemoryEntry(..), refcount,
-
-  newAccMemoryTable, AccArrayData(..),
-  newAccHashTable, AccHashTable, StableAccName(..),
+  KernelTable, KernelEntry(KernelEntry), kernelName, kernelStatus,
+  MemoryEntry(..), AccArrayData(..), refcount, newAccMemoryTable
 
 ) where
 
-import Prelude hiding (id, (.))
-import Control.Category
-import Data.Record.Label
+-- friends
+import Data.Array.Accelerate.CUDA.Analysis.Device
+import Data.Array.Accelerate.CUDA.Analysis.Hash
+import qualified Data.Array.Accelerate.Array.Data       as AD
 
+-- library
 import Data.Int
-import Data.Char
 import Data.IORef
 import Data.Maybe
 import Data.Typeable
-import Data.ByteString.Lazy.Char8                       (ByteString)
+import Data.Record.Label
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict                       (StateT(..))
+import System.Posix.Types                               (ProcessID)
+import System.Mem.Weak
+import System.IO.Unsafe
 import Foreign.Ptr
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable                         as Hash
-import qualified Data.ByteString.Lazy.Char8             as L
-
-import System.Posix.Types                               (ProcessID)
-import System.Mem.Weak
-import System.Mem.StableName
-import System.IO.Unsafe
-
-import Data.Array.Accelerate.AST                        (OpenAcc)
-import Data.Array.Accelerate.CUDA.Analysis.Device
-import qualified Data.Array.Accelerate.Array.Data       as AD
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
 import Data.Binary                                      (encodeFile, decodeFile)
@@ -72,7 +62,7 @@ import Paths_accelerate                                 (getDataDir)
 -- An Eq instance of Accelerate expressions does not facilitate persistent
 -- caching.
 --
-type KernelTable = Hash.HashTable ByteString KernelEntry
+type KernelTable = Hash.HashTable AccKey KernelEntry
 data KernelEntry = KernelEntry
   {
     _kernelName   :: FilePath,
@@ -117,45 +107,9 @@ refcount = lens get set
     set c (MemoryEntry _ p) = MemoryEntry c p
 
 
--- Opaque stable names for array computations
---
-data StableAccName where
-  StableAccName :: (Typeable a, Typeable aenv)
-                => StableName (OpenAcc aenv a) -> StableAccName
-
-instance Show StableAccName where
-  show (StableAccName sn) = show $ hashStableName sn
-
-instance Eq StableAccName where
-  StableAccName sn1 == StableAccName sn2
-    | Just sn1' <- gcast sn1 = sn1' == sn2
-    | otherwise              = False
-
--- Hash table keyed on the stable name of array computations
---
-type AccHashTable v = Hash.HashTable StableAccName v
-
-newAccHashTable :: IO (AccHashTable v)
-newAccHashTable = Hash.new (==) hashStableAcc
-  where
-    hashStableAcc (StableAccName sn) = fromIntegral (hashStableName sn)
-
--- Relate a particular computation node directly to the object code that will be
--- used to execute the computation, together with a use count information for
--- the resultant array.
---
-data AccNode = AccNode
-  {
-    _usecount   :: (Int,Int),
-    _executable :: Maybe CUDA.Module
-  }
-  -- TLM: The scanl' and scanr' primitives return two arrays, which we need to
-  --      keep separate usage counts for. For all other node types, ignore the
-  --      second component of the tuple.
-  --
-
-
 -- The state token for accelerated CUDA array operations
+--
+-- TLM: the memory table is not persistent between computations. Move elsewhere?
 --
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
@@ -164,12 +118,10 @@ data CUDAState = CUDAState
     _deviceProps   :: CUDA.DeviceProperties,
     _deviceContext :: CUDA.Context,
     _kernelTable   :: KernelTable,
-    --
-    _memoryTable   :: MemoryTable,          -- TLM: these are non-persistent between computations,
-    _computeTable  :: AccHashTable AccNode  --      so maybe they should live elsewhere?
+    _memoryTable   :: MemoryTable
   }
 
-$(mkLabels [''CUDAState, ''KernelEntry, ''AccNode])
+$(mkLabels [''CUDAState, ''KernelEntry])
 
 
 -- Execution State
@@ -204,23 +156,13 @@ loadIndexFile = do
   x <- doesFileExist f
   e <- if x then mapM reload =<< decodeFile f
             else return []
-  (,length e) <$> Hash.fromList hashByteString e
+  (,length e) <$> Hash.fromList hashAccKey e
   where
     reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
 #else
-loadIndexFile = (,0) <$> Hash.new (==) hashByteString
+loadIndexFile = (,0) <$> Hash.new (==) hashAccKey
 #endif
 
-
--- Reimplementation of Data.HashTable.hashString to fold over a lazy bytestring
--- rather than a list of characters.
---
-hashByteString :: ByteString -> Int32
-hashByteString = L.foldl' f golden
-  where
-    f m c  = fromIntegral (ord c) * magic + Hash.hashInt (fromIntegral m)
-    magic  = 0xdeadbeef
-    golden = 1013904242 -- = round ((sqrt 5 - 1) * 2^32)
 
 
 -- Select and initialise the CUDA device, and create a new execution context.
@@ -239,7 +181,7 @@ initialise = do
   ctx     <- CUDA.create d [CUDA.SchedAuto]
   (knl,n) <- loadIndexFile
   addFinalizer ctx (CUDA.destroy ctx)
-  return $ CUDAState n prp ctx knl undefined undefined
+  return $ CUDAState n prp ctx knl undefined
 
 
 -- | Evaluate a CUDA array computation under the standard global environment
@@ -269,7 +211,7 @@ runCUDAWith state acc = do
     sanitise st = do
       entries <- filter (isJust . getL refcount . snd) <$> Hash.toList (getL memoryTable st)
       INTERNAL_ASSERT "runCUDA.sanitise" (null entries)
-        $ return (setL memoryTable undefined . setL computeTable undefined $ st)
+        $ return (setL memoryTable undefined st)
 
 
 -- Nasty global statesses
