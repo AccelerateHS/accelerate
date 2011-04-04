@@ -28,7 +28,8 @@ Executable accelerate-examples
                         tests/image-processing
                         tests/io
 
-  c-sources:            tests/io/fill_with_values.c
+  c-sources:            tests/io/fill_with_values.cpp
+  extra-libraries:      stdc++
 
   ghc-options:          -Wall -O2
   if impl(ghc >= 7.0)
