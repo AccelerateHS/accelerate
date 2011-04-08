@@ -13,12 +13,7 @@ Standard Cabal installation:
 
 Then, to use the library, pass the flag "-package accelerate" to GHC.
 
-WARNING: This is an early beta release.  Most features are implemented 
-         in both the interpreter and CUDA backend.  The code has been
-         lightly tested.  The Accelerate API will surely change a few
-	     more times before settling down.  You have been warned.
-	     
-Please report bugs at http://trac.haskell.org/accelerate
+The source repository is at https://github.com/mchakravarty/accelerate
 The project web page is at http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
 Direct questions at Manuel M T Chakravarty <chak@cse.unsw.edu.au>
