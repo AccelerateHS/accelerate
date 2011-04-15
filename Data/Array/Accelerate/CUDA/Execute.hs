@@ -549,8 +549,8 @@ stencil2Op c kernel _bindings acc aenv ain1@(Array sh1 _) ain0@(Array sh0 _) = d
 
 -- Evaluate an open expression
 --
-executeOpenExp :: PreOpenExp ExecOpenAcc env aenv t -> Val env -> Val aenv -> CIO t
-executeOpenExp (Var idx)         env _    = return . toElt $ prj idx env
+executeOpenExp :: PreOpenExp ExecOpenAcc env aenv t -> ValE env -> Val aenv -> CIO t
+executeOpenExp (Var idx)         env _    = return . toElt $ prjE idx env
 executeOpenExp (Const c)         _   _    = return $ toElt c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
@@ -586,12 +586,12 @@ executeOpenExp (Cond c t e) env aenv = do
 -- Evaluate a closed expression
 --
 executeExp :: PreExp ExecOpenAcc aenv t -> Val aenv -> CIO t
-executeExp e = executeOpenExp e Empty
+executeExp e = executeOpenExp e EmptyE
 
 
 -- Tuple evaluation
 --
-executeTuple :: Tuple (PreOpenExp ExecOpenAcc env aenv) t -> Val env -> Val aenv -> CIO t
+executeTuple :: Tuple (PreOpenExp ExecOpenAcc env aenv) t -> ValE env -> Val aenv -> CIO t
 executeTuple NilTup          _   _    = return ()
 executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
                                             <*> executeOpenExp e env aenv

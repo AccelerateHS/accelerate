@@ -24,7 +24,7 @@
 -- In fact, collective operations cannot produce any values other than
 -- multi-dimensional arrays; when they yield a scalar, this is in the form of
 -- a 0-dimensional, singleton array.  Similarly, scalar expression can -as
--- their name indicates- only produce tuples of scalar, but not arrays. 
+-- their name indicates- only produce tuples of scalar, but not arrays.
 --
 -- There are, however, two expression forms that take arrays as arguments.  As
 -- a result scalar and array expressions are recursively dependent.  As we
@@ -57,7 +57,7 @@
 -- module 'Types').  Reified dictionaries also ensure that constants
 -- (constructor 'Const') are representable on compute acceleration hardware.
 --
--- The AST contains both reified dictionaries and type class constraints.  
+-- The AST contains both reified dictionaries and type class constraints.
 -- Type classes are used for array-related functionality that is uniformly
 -- available for all supported types.  In contrast, reified dictionaries are
 -- used for functionality that is only available for certain types, such as
@@ -71,9 +71,10 @@ module Data.Array.Accelerate.AST (
 
   -- * Valuation environment
   Val(..), prj,
+  ValE(..), prjE,
 
   -- * Accelerated array expressions
-  Arrays(..), ArraysR(..), 
+  Arrays(..), ArraysR(..),
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   Stencil(..), StencilR(..),
 
@@ -100,7 +101,7 @@ import Data.Array.Accelerate.Tuple
 -- -----------------------
 
 -- De Bruijn variable index projecting a specific type from a type
--- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 
+-- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn).
 --
 data Idx env t where
   ZeroIdx ::              Idx (env, t) t
@@ -118,6 +119,15 @@ data Val env where
 
 deriving instance Typeable1 Val
 
+--
+-- An environment that contains values of type @EltRepr t@ but
+-- has source types it its encoded environment.
+--
+data ValE env where
+  EmptyE :: ValE ()
+  PushE :: ValE env -> EltRepr t -> ValE (env, t)
+
+deriving instance Typeable1 ValE
 
 -- Projection of a value from a valuation using a de Bruijn index
 --
@@ -126,6 +136,12 @@ prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
+-- Projection of a value from a valuation using a de Bruijn index for the 'ValE' type.
+--
+prjE :: Idx env t -> ValE env -> EltRepr t
+prjE ZeroIdx       (PushE _ v)   = v
+prjE (SuccIdx idx) (PushE val _) = prjE idx val
+prjE _             _             = INTERNAL_ERROR(error) "prjE" "inconsistent valuation"
 
 -- Array expressions
 -- -----------------
@@ -135,14 +151,14 @@ prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valua
 --
 class (Delayable arrs, Typeable arrs) => Arrays arrs where
   arrays :: ArraysR arrs
-  
+
 -- |GADT reifying the 'Arrays' class.
 --
 data ArraysR arrs where
   ArraysRunit  :: ArraysR ()
   ArraysRarray :: (Shape sh, Elt e) => ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
-  
+
 instance Arrays () where
   arrays = ArraysRunit
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
@@ -611,7 +627,7 @@ instance (Stencil (sh:.Int) a row1,
 data PreOpenFun (acc :: * -> * -> *) env aenv t where
   Body :: PreOpenExp acc env              aenv t -> PreOpenFun acc env aenv t
   Lam  :: Elt a
-       => PreOpenFun acc (env, EltRepr a) aenv t -> PreOpenFun acc env aenv (a -> t)
+       => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
 -- |Vanilla open function abstraction
 --
@@ -627,7 +643,7 @@ type Fun = OpenFun ()
 
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
 -- of scalars and arrays of tuples.  All code, except Cond, is evaluated
--- eagerly.  N-tuples are represented as nested pairs. 
+-- eagerly.  N-tuples are represented as nested pairs.
 --
 -- The data type is parametrised over the surface types (not the representation
 -- type).
@@ -636,14 +652,14 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Variable index, ranging only over tuples or scalars
   Var         :: Elt t
-              => Idx env (EltRepr t)
+              => Idx env t
               -> PreOpenExp acc env aenv t
 
   -- Constant values
   Const       :: Elt t
               => EltRepr t
               -> PreOpenExp acc env aenv t
-              
+
   -- Tuples
   Tuple       :: (Elt t, IsTuple t)
               => Tuple (PreOpenExp acc env aenv) (TupleRepr t)
@@ -656,7 +672,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   -- Array indices & shapes
   IndexNil    :: PreOpenExp acc env aenv Z
   IndexCons   :: Shape sh
-              => PreOpenExp acc env aenv sh 
+              => PreOpenExp acc env aenv sh
               -> PreOpenExp acc env aenv Int
               -> PreOpenExp acc env aenv (sh:.Int)
   IndexHead   :: Shape sh
@@ -665,21 +681,21 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   IndexTail   :: Shape sh
               => PreOpenExp acc env aenv (sh:.Int)
               -> PreOpenExp acc env aenv sh
-  
+
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond        :: PreOpenExp acc env aenv Bool
-              -> PreOpenExp acc env aenv t 
-              -> PreOpenExp acc env aenv t 
+              -> PreOpenExp acc env aenv t
+              -> PreOpenExp acc env aenv t
               -> PreOpenExp acc env aenv t
 
   -- Primitive constants
   PrimConst   :: Elt t
-              => PrimConst t 
+              => PrimConst t
               -> PreOpenExp acc env aenv t
 
   -- Primitive scalar operations
   PrimApp     :: (Elt a, Elt r)
-              => PrimFun (a -> r) 
+              => PrimFun (a -> r)
               -> PreOpenExp acc env aenv a
               -> PreOpenExp acc env aenv r
 
@@ -687,13 +703,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   -- the array expression can not contain any free scalar variables
   IndexScalar :: (Shape dim, Elt t)
               => acc                aenv (Array dim t)
-              -> PreOpenExp acc env aenv dim 
+              -> PreOpenExp acc env aenv dim
               -> PreOpenExp acc env aenv t
 
   -- Array shape
   -- the array expression can not contain any free scalar variables
   Shape       :: (Shape dim, Elt e)
-              => acc                aenv (Array dim e) 
+              => acc                aenv (Array dim e)
               -> PreOpenExp acc env aenv dim
 
   -- Number of elements of an array
@@ -752,7 +768,7 @@ data PrimFun sig where
   PrimBRotateR :: IntegralType a -> PrimFun ((a, Int) -> a)
 
   -- operators from Fractional, Floating, RealFrac & RealFloat
-  
+
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimRecip       :: FloatingType a -> PrimFun (a      -> a)
   PrimSin         :: FloatingType a -> PrimFun (a      -> a)
@@ -797,7 +813,7 @@ data PrimFun sig where
   -- FIXME: use IntegralType?
 
   -- FIXME: conversions between various integer types
-  --        should we have an overloaded functions like 'toInt'?  
+  --        should we have an overloaded functions like 'toInt'?
   --        (or 'fromEnum' for enums?)
   PrimBoolToInt    :: PrimFun (Bool -> Int)
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
