@@ -272,7 +272,7 @@ scanl = Acc $$$ Scanl
 -- > scanl' f e arr = (crop 0 (len - 1) res, unit (res!len))
 -- >   where
 -- >     len = shape arr
--- >     res = scanl f e arr in 
+-- >     res = scanl f e arr
 --
 scanl' :: Elt a
        => (Exp a -> Exp a -> Exp a)
@@ -287,7 +287,7 @@ scanl' = unpair . Acc $$$ Scanl'
 -- > scanl1 f e arr = crop 1 len res
 -- >   where
 -- >     len = shape arr
--- >     res = scanl f e arr in 
+-- >     res = scanl f e arr
 --
 scanl1 :: Elt a
        => (Exp a -> Exp a -> Exp a)
