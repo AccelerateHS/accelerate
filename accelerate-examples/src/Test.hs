@@ -9,9 +9,13 @@ module Test (
 
 -- individual test implementations
 import qualified Map
+import qualified Zip
+import qualified ZipWith
 import qualified Fold
 import qualified ScanSeg
 import qualified Stencil
+import qualified Permute
+import qualified Backpermute
 
 import qualified SASUM
 import qualified SAXPY
@@ -111,6 +115,8 @@ allTests cfg = sequence'
     mkTest "map-abs"         "absolute value of each element"             $ Map.run "abs" n
   , mkTest "map-plus"        "add a constant to each element"             $ Map.run "plus" n
   , mkTest "map-square"      "square of each element"                     $ Map.run "square" n
+  , mkTest "zip"             "vector zip"                                 $ Zip.run n
+  , mkTest "zipWith-plus"    "element-wise addition"                      $ ZipWith.run "plus" n
   , mkTest "fold-sum"        "vector reduction: fold (+) 0"               $ Fold.run "sum" n
   , mkTest "fold-product"    "vector product: fold (*) 1"                 $ Fold.run "product" n
   , mkTest "fold-maximum"    "maximum of a vector: fold1 max"             $ Fold.run "maximum" n
@@ -119,6 +125,9 @@ allTests cfg = sequence'
   , mkTest "fold-2d-product" "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
   , mkTest "scanseg-sum"     "segmented reduction"                        $ ScanSeg.run "sum" n
   , mkTest "stencil-3x3"     "5-element cross pattern"                    $ Stencil.run "3x3" n
+  , mkTest "permute-hist"    "histogram"                                  $ Permute.run "histogram" n
+  , mkTest "backpermute-reverse"   "reverse a vector"                     $ Backpermute.run "reverse" n
+  , mkTest "backpermute-transpose" "transpose a matrix"                   $ Backpermute.run2d "transpose" n
 
     -- simple examples
   , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n
@@ -150,7 +159,9 @@ allTests cfg = sequence'
       acc <- unsafeInterleaveIO builder
       return $ TestNoRef name desc acc
 
+#ifdef ACCELERATE_IO
     mkIO name desc act = return $ TestIO name desc act
+#endif
 
 
 -- How to evaluate Accelerate programs with the chosen backend?
