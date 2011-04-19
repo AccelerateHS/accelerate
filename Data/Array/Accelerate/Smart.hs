@@ -1686,7 +1686,7 @@ convertFun1 alyt env f = Lam (Body openF)
     a     = Tag 0
     lyt   = EmptyLayout 
             `PushLayout` 
-            (ZeroIdx :: Idx ((), EltRepr a) (EltRepr a))
+            (ZeroIdx :: Idx ((), a) a)
     openF = convertOpenExp lyt alyt env (f a)
 
 -- |Convert a binary functions
@@ -1702,9 +1702,9 @@ convertFun2 alyt env f = Lam (Lam (Body openF))
     b     = Tag 0
     lyt   = EmptyLayout 
             `PushLayout`
-            (SuccIdx ZeroIdx :: Idx (((), EltRepr a), EltRepr b) (EltRepr a))
+            (SuccIdx ZeroIdx :: Idx (((), a), b) a)
             `PushLayout`
-            (ZeroIdx         :: Idx (((), EltRepr a), EltRepr b) (EltRepr b))
+            (ZeroIdx         :: Idx (((), a), b) b)
     openF = convertOpenExp lyt alyt env (f a b)
 
 -- Convert a unary stencil function
@@ -1720,8 +1720,8 @@ convertStencilFun _ alyt env stencilFun = Lam (Body openStencilFun)
     stencil = Tag 0 :: Exp (StencilRepr sh stencil)
     lyt     = EmptyLayout 
               `PushLayout` 
-              (ZeroIdx :: Idx ((), EltRepr (StencilRepr sh stencil)) 
-                              (EltRepr (StencilRepr sh stencil)))
+              (ZeroIdx :: Idx ((), StencilRepr sh stencil)
+                              (StencilRepr sh stencil))
     openStencilFun = convertOpenExp lyt alyt env $
                        stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil)
 
@@ -1743,13 +1743,13 @@ convertStencilFun2 _ _ alyt env stencilFun = Lam (Lam (Body openStencilFun))
     stencil2 = Tag 0 :: Exp (StencilRepr sh stencil2)
     lyt     = EmptyLayout 
               `PushLayout` 
-              (SuccIdx ZeroIdx :: Idx (((), EltRepr (StencilRepr sh stencil1)),
-                                            EltRepr (StencilRepr sh stencil2)) 
-                                       (EltRepr (StencilRepr sh stencil1)))
+              (SuccIdx ZeroIdx :: Idx (((),  StencilRepr sh stencil1),
+                                            StencilRepr sh stencil2)
+                                       (StencilRepr sh stencil1))
               `PushLayout` 
-              (ZeroIdx         :: Idx (((), EltRepr (StencilRepr sh stencil1)),
-                                            EltRepr (StencilRepr sh stencil2)) 
-                                       (EltRepr (StencilRepr sh stencil2)))
+              (ZeroIdx         :: Idx (((), StencilRepr sh stencil1),
+                                            StencilRepr sh stencil2)
+                                       (StencilRepr sh stencil2))
     openStencilFun = convertOpenExp lyt alyt env $
                        stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil1)
                                   (stencilPrj (undefined::sh) (undefined::b) stencil2)

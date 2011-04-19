@@ -71,6 +71,7 @@ module Data.Array.Accelerate.AST (
 
   -- * Valuation environment
   Val(..), prj,
+  ValE(..), prjE,
 
   -- * Accelerated array expressions
   Arrays(..), ArraysR(..), 
@@ -118,6 +119,15 @@ data Val env where
 
 deriving instance Typeable1 Val
 
+--
+-- An environment that contains values of type @EltRepr t@ but
+-- has source types it its encoded environment.
+--
+data ValE env where
+  EmptyE :: ValE ()
+  PushE :: ValE env -> EltRepr t -> ValE (env, t)
+
+deriving instance Typeable1 ValE
 
 -- Projection of a value from a valuation using a de Bruijn index
 --
@@ -126,6 +136,12 @@ prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
+-- Projection of a value from a valuation using a de Bruijn index for the 'ValE' type.
+--
+prjE :: Idx env t -> ValE env -> EltRepr t
+prjE ZeroIdx       (PushE _ v)   = v
+prjE (SuccIdx idx) (PushE val _) = prjE idx val
+prjE _             _             = INTERNAL_ERROR(error) "prjE" "inconsistent valuation"
 
 -- Array expressions
 -- -----------------
@@ -611,7 +627,7 @@ instance (Stencil (sh:.Int) a row1,
 data PreOpenFun (acc :: * -> * -> *) env aenv t where
   Body :: PreOpenExp acc env              aenv t -> PreOpenFun acc env aenv t
   Lam  :: Elt a
-       => PreOpenFun acc (env, EltRepr a) aenv t -> PreOpenFun acc env aenv (a -> t)
+       => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
 -- |Vanilla open function abstraction
 --
@@ -636,7 +652,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Variable index, ranging only over tuples or scalars
   Var         :: Elt t
-              => Idx env (EltRepr t)
+              => Idx env t
               -> PreOpenExp acc env aenv t
 
   -- Constant values

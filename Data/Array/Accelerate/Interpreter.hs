@@ -573,15 +573,15 @@ stencil2Op sten bndy1 (DelayedArray sh1 rf1) bndy2 (DelayedArray sh2 rf2)
 
 -- Evaluate open function
 --
-evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
+evalOpenFun :: OpenFun env aenv t -> ValE env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
 evalOpenFun (Lam f)  env aenv 
-  = \x -> evalOpenFun f (env `Push` Sugar.fromElt x) aenv
+  = \x -> evalOpenFun f (env `PushE` Sugar.fromElt x) aenv
 
 -- Evaluate a closed function
 --
 evalFun :: Fun aenv t -> Val aenv -> t
-evalFun f aenv = evalOpenFun f Empty aenv
+evalFun f aenv = evalOpenFun f EmptyE aenv
 
 -- Evaluate an open expression
 --
@@ -591,9 +591,9 @@ evalFun f aenv = evalOpenFun f Empty aenv
 --     gets mapped over an array, the array argument would be forced many times
 --     leading to a large amount of wasteful recomputation.
 --  
-evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
+evalOpenExp :: OpenExp env aenv a -> ValE env -> Val aenv -> a
 
-evalOpenExp (Var idx) env _ = Sugar.toElt $ prj idx env
+evalOpenExp (Var idx) env _ = Sugar.toElt $ prjE idx env
   
 evalOpenExp (Const c) _ _ = Sugar.toElt c
 
@@ -645,7 +645,7 @@ evalOpenExp (Size acc) _ aenv
 -- Evaluate a closed expression
 --
 evalExp :: Exp aenv t -> Val aenv -> t
-evalExp e aenv = evalOpenExp e Empty aenv
+evalExp e aenv = evalOpenExp e EmptyE aenv
 
 
 -- Scalar primitives
@@ -716,7 +716,7 @@ evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
 -- Tuple construction and projection
 -- ---------------------------------
 
-evalTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> t
+evalTuple :: Tuple (OpenExp env aenv) t -> ValE env -> Val aenv -> t
 evalTuple NilTup            _env _aenv = ()
 evalTuple (tup `SnocTup` e) env  aenv  = (evalTuple tup env aenv, 
                                           evalOpenExp e env aenv)
