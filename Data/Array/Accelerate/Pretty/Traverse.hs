@@ -208,8 +208,3 @@ tupleIdxToInt (SuccTupIdx n) = 1 + tupleIdxToInt n
 -- Auxiliary ops
 --
 
--- Convert a typed de Brujin index to the corresponding integer
---
-idxToInt :: Idx env t -> Int
-idxToInt ZeroIdx       = 0
-idxToInt (SuccIdx idx) = 1 + idxToInt idx

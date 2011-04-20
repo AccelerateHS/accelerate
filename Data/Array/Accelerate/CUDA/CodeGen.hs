@@ -297,12 +297,6 @@ codeGenTup :: Tuple (OpenExp env aenv) t -> CodeGen [CExpr]
 codeGenTup NilTup          = return []
 codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
 
--- Convert a typed de Brujin index to the corresponding integer
---
-idxToInt :: Idx env t -> Int
-idxToInt ZeroIdx       = 0
-idxToInt (SuccIdx idx) = 1 + idxToInt idx
-
 -- Convert a tuple index into the corresponding integer. Since the internal
 -- representation is flat, be sure to walk over all sub components when indexing
 -- past nested tuples.

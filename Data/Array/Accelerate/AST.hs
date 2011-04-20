@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, DeriveDataTypeable, StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeFamilies, TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
 -- |
@@ -70,7 +70,7 @@ module Data.Array.Accelerate.AST (
   Idx(..),
 
   -- * Valuation environment
-  Val(..), prj, deBruijnToInt,
+  Val(..), prj, idxToInt,
 
   -- * Accelerated array expressions
   Arrays(..), ArraysR(..), 
@@ -126,11 +126,13 @@ prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
--- de Bruijn Index to Int conversion
+-- Convert a typed de Bruijn index to the corresponding integer
 --
-deBruijnToInt :: Idx env t -> Int
-deBruijnToInt ZeroIdx       = 0
-deBruijnToInt (SuccIdx idx) = 1 + deBruijnToInt idx
+idxToInt :: Idx env t -> Int
+idxToInt = go 0
+  where go :: Int -> Idx env t -> Int
+        go !n ZeroIdx       = n
+        go !n (SuccIdx idx) = go (n+1) idx
 
 
 -- Array expressions

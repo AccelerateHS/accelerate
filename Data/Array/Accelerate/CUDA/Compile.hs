@@ -91,16 +91,6 @@ data AccBinding where
 instance Eq AccBinding where
   ArrayVar ix1 == ArrayVar ix2 = idxToInt ix1 == idxToInt ix2
 
--- Typeless conversion from array variable to environment projection
---
-idxToInt :: Idx env t -> Int
-idxToInt = go 0
-  where
-    go :: Int -> Idx env t -> Int
-    go !n ZeroIdx      = n
-    go !n (SuccIdx ix) = go (n+1) ix
-
-
 -- A pseudo array environment that holds the number of times each indexed
 -- variable has been accessed.
 --
