@@ -551,16 +551,17 @@ lookupWithSharingAcc oc (StableSharingAcc sn _) = lookupWithAccName oc (StableAc
 --
 -- Note [Traversing functions and side effects]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- We need to descent into function bodies twice.  First to update the 'OccMap' with all the
--- occurences in the function body and second to obtain the transformed tree of the function
--- body.  We cannot combine the two as the second traversal /must/ be under a lambda (we are
--- using HOAS at this point), which would delay the effects of updating the 'OccMap' until the
--- time when the lambda abstraction is applied.  This is too late.  We need to update the 'OccMap'
--- straight away.
+-- We need to descent into function bodies to build the 'OccMap' with all occurences in the
+-- function bodies.  Due to the side effects in the construction of the occurence map and, more
+-- importantly, the dependence of the second phase on /global/ occurence information, we may not
+-- delay the body traversals by putting them under a lambda.  Hence, we apply the each function, to
+-- traverse its body and use a /dummy abstraction/ of the result.
 --
--- As we need two traversals, we need to ensure that only the first traversal mutates the 'OccMap'.
--- We control this by the first argument to the traversal functions, which determines 'updateMap'
--- in 'enterOcc'.
+-- For example, given a function 'f', we traverse 'f (Tag 0)', which yields a transformed body 'e'.
+-- As the result of the traversal of the overall function, we use 'const e'.  Hence, it is crucial
+-- that the 'Tag' supplied during the initial traversal is already the one required by the HOAS to
+-- de Bruijn conversion in 'convertSharingAcc' — any subsequent application of 'const e' will only
+-- yield 'e' with the embedded 'Tag 0' of the original application.
 --
 makeOccMap :: Typeable arrs => Acc arrs -> IO (SharingAcc arrs, OccMapHash)
 makeOccMap rootAcc
@@ -738,13 +739,8 @@ makeOccMap rootAcc
     traverseFun1 updateMap enter f
       = do
             -- see Note [Traversing functions and side effects]
-
-            -- FIXME: new trick requires that the right tag is used straight away!!!
-          body <- traverseExp updateMap enter $ f (Tag 0)                    -- may update the 'OccMap'
+          body <- traverseExp updateMap enter $ f (Tag 0)
           return $ const body
-          -- traverseExp updateMap enter $ f (Tag (-1))                    -- may update the 'OccMap'
-          -- return $ 
-          --   \x -> unsafePerformIO $ traverseExp False enter (f x)       -- only transform the tree
 
     traverseFun2 :: (Elt b, Elt c, Typeable d) 
                   => Bool -> (Bool -> StableAccName -> IO Bool) -> (Exp b -> Exp c -> Exp d) 
@@ -752,9 +748,8 @@ makeOccMap rootAcc
     traverseFun2 updateMap enter f
       = do
             -- see Note [Traversing functions and side effects]
-          body <- traverseExp updateMap enter $ f (Tag 1) (Tag 0)         -- may update the 'OccMap'
+          body <- traverseExp updateMap enter $ f (Tag 1) (Tag 0)
           return $ \_ _ -> body
-            -- \x y -> unsafePerformIO $ traverseExp False enter (f x y)   -- only transform the tree
 
     traverseStencil1 :: forall sh b c stencil. (Stencil sh b stencil, Typeable c) 
                      => Acc (Array sh b){-dummy-}
@@ -766,9 +761,6 @@ makeOccMap rootAcc
           body <- traverseExp updateMap enter $ 
                     stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag 0))
           return $ const body
-          -- traverseExp updateMap enter $ 
-          --   stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
-          -- return $ \st -> unsafePerformIO $ traverseExp False enter (stencilFun st)
         
     traverseStencil2 :: forall sh b c d stencil1 stencil2. 
                         (Stencil sh b stencil1, Stencil sh c stencil2, Typeable d) 
@@ -784,17 +776,11 @@ makeOccMap rootAcc
                     stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag 1))
                                (stencilPrj (undefined::sh) (undefined::c) (Tag 0))
           return $ \_ _ -> body
-          -- traverseExp updateMap enter $ 
-          --   stencilFun (stencilPrj (undefined::sh) (undefined::b) (Tag (-1)))
-          --              (stencilPrj (undefined::sh) (undefined::c) (Tag (-2)))
-          -- return $ \st1 st2 -> unsafePerformIO $ traverseExp False enter (stencilFun st1 st2)
         
     traverseExp :: Typeable a 
                 => Bool -> (Bool -> StableAccName -> IO Bool) -> Exp a -> IO (SharingExp a)
     traverseExp updateMap enter exp  -- @(Exp pexp)
-      = 
-          -- sa <- liftM StableAccName $ makeStableAcc acc
-          -- enter sa
+      = -- FIXME: recover sharing of scalar expressions as well
           case exp of
             Tag i           -> return $ Tag i
             Const c         -> return $ Const c
