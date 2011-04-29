@@ -135,7 +135,7 @@ class Slice sl where
   type CoSliceShape  sl      -- the complement of the slice
   type FullShape     sl      -- the combined dimension
     -- argument *value* not used; it's just a phantom value to fix the type
-  sliceIndex :: sl -> SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
+  sliceIndex :: {-dummy-} sl -> SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
 
 instance Slice () where
   type SliceShape    () = ()
@@ -164,3 +164,8 @@ data SliceIndex ix slice coSlice sliceDim where
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
   SliceFixed :: 
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
+
+instance Show (SliceIndex ix slice coSlice sliceDim) where
+  show SliceNil          = "SliceNil"
+  show (SliceAll rest)   = "SliceAll ("++ show rest ++ ")"
+  show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"

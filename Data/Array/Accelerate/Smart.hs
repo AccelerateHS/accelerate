@@ -778,6 +778,7 @@ makeOccMap rootAcc
             IndexCons ix i  -> travE2 IndexCons ix i
             IndexHead i     -> travE1 IndexHead i
             IndexTail ix    -> travE1 IndexTail ix
+            IndexAny        -> return $ IndexAny
             Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
             PrimConst c     -> return $ PrimConst c
             PrimApp p e     -> travE1 (PrimApp p) e
@@ -1057,6 +1058,7 @@ determineScopes occMap rootAcc
           IndexCons ix i  -> travE2 IndexCons ix i
           IndexHead i     -> travE1 IndexHead i
           IndexTail ix    -> travE1 IndexTail ix
+          IndexAny        -> return (IndexAny, noNodeCounts)
           Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
           PrimConst c     -> return (PrimConst c, noNodeCounts)
           PrimApp p e     -> travE1 (PrimApp p) e
@@ -1417,6 +1419,7 @@ determineScopes occMap rootAcc
           IndexCons ix i  -> travE2 IndexCons ix i
           IndexHead i     -> travE1 IndexHead i
           IndexTail ix    -> travE1 IndexTail ix
+          IndexAny        -> return (IndexAny, [])
           Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
           PrimConst c     -> return (PrimConst c, [])
           PrimApp p e     -> travE1 (PrimApp p) e
@@ -1600,12 +1603,14 @@ data PreExp acc t where
               => TupleIdx (TupleRepr t) e     
               -> PreExp acc t                                    -> PreExp acc e
   IndexNil    ::                                                    PreExp acc Z
-  IndexCons   :: Shape sh
-              => PreExp acc sh -> PreExp acc Int                 -> PreExp acc (sh:.Int)
-  IndexHead   :: Shape sh
-              => PreExp acc (sh:.Int)                            -> PreExp acc Int
-  IndexTail   :: Shape sh
-              => PreExp acc (sh:.Int)                            -> PreExp acc sh
+  IndexCons   :: (Slice sl, Elt a)
+              => PreExp acc sl -> PreExp acc a                   -> PreExp acc (sl:.a)
+  IndexHead   :: (Slice sl, Elt a)
+              => PreExp acc (sl:.a)                              -> PreExp acc a
+  IndexTail   :: (Slice sl, Elt a)
+              => PreExp acc (sl:.a)                              -> PreExp acc sl
+  IndexAny    :: Shape sh
+              =>                                                    PreExp acc (Any sh)
   Cond        :: PreExp acc Bool -> PreExp acc t -> PreExp acc t -> PreExp acc t
   PrimConst   :: Elt t                       
               => PrimConst t                                     -> PreExp acc t
@@ -1648,6 +1653,7 @@ convertOpenExp lyt alyt env = cvt
     cvt (IndexCons ix i)    = AST.IndexCons (cvt ix) (cvt i)
     cvt (IndexHead i)       = AST.IndexHead (cvt i)
     cvt (IndexTail ix)      = AST.IndexTail (cvt ix)
+    cvt (IndexAny)          = AST.IndexAny
     cvt (Cond e1 e2 e3)     = AST.Cond (cvt e1) (cvt e2) (cvt e3)
     cvt (PrimConst c)       = AST.PrimConst c
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
@@ -1773,6 +1779,7 @@ instance Show (Exp a) where
       toSharingExp (IndexCons ix i)    = IndexCons (toSharingExp ix) (toSharingExp i)
       toSharingExp (IndexHead ix)      = IndexHead (toSharingExp ix)
       toSharingExp (IndexTail ix)      = IndexTail (toSharingExp ix)
+      toSharingExp (IndexAny)          = IndexAny
       toSharingExp (Cond e1 e2 e3)     = Cond (toSharingExp e1) (toSharingExp e2) (toSharingExp e3)
       toSharingExp (PrimConst c)       = PrimConst c
       toSharingExp (PrimApp p e)       = PrimApp p (toSharingExp e)

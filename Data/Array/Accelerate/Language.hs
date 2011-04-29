@@ -508,36 +508,32 @@ instance Lift Z where
 instance Unlift Z where
   unlift _ = Z
 
-instance (Shape (Plain ix), Lift ix, Lift i, Plain i ~ Int) => Lift (ix :. i) where
-  type Plain (ix :. i) = Plain ix :. Plain i
-  lift (ix:.i) = IndexCons (lift ix) (lift i)
+instance (Slice (Plain ix), Lift ix) => Lift (ix :. Int) where
+  type Plain (ix :. Int) = Plain ix :. Int
+  lift (ix:.i) = IndexCons (lift ix) (Const i)
 
-instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp Int) where
+instance (Slice (Plain ix), Lift ix) => Lift (ix :. Exp Int) where
+  type Plain (ix :. Exp Int) = Plain ix :. Int
+  lift (ix:.i) = IndexCons (lift ix) i
+
+instance (Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp Int) where
   unlift e = unlift (IndexTail e) :. IndexHead e
 
--- FIXME: IndexCons and friends insist on indices being Int; hence, these instances don't type check
--- instance (Shape (Plain ix), Lift ix) => Lift (ix :. Exp All) where
---   type Plain (ix :. Exp All) = Plain ix :. All
---   lift (ix:.i) = IndexCons (lift ix) i
--- 
--- instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp All) where
---   unlift e = unlift (IndexTail e) :. IndexHead e
--- 
--- instance (Shape (Plain ix), Lift ix) => Lift (ix :. All) where
---   type Plain (ix :. All) = Plain ix :. All
---   lift (ix:.i) = IndexCons (lift ix) (Const i)
--- 
--- instance (Shape (Plain ix), Lift ix) => Lift (ix :. Exp (Any sh)) where
---   type Plain (ix :. Exp (Any sh)) = Plain ix :. (Any sh)
---   lift (ix:.i) = IndexCons (lift ix) i
--- 
--- instance (Shape (Plain ix), Unlift ix) => Unlift (ix :. Exp (Any sh)) where
---   unlift e = unlift (IndexTail e) :. IndexHead e
--- 
--- instance (Shape (Plain ix), Lift ix) => Lift (ix :. (Any sh)) where
---   type Plain (ix :. (Any sh)) = Plain ix :. (Any sh)
---   lift (ix:.i) = IndexCons (lift ix) (Const i)
-    
+instance (Slice (Plain ix), Lift ix) => Lift (ix :. All) where
+  type Plain (ix :. All) = Plain ix :. All
+  lift (ix:.i) = IndexCons (lift ix) (Const i)
+
+instance (Slice (Plain ix), Lift ix) => Lift (ix :. Exp All) where
+  type Plain (ix :. Exp All) = Plain ix :. All
+  lift (ix:.i) = IndexCons (lift ix) i
+
+instance (Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp All) where
+  unlift e = unlift (IndexTail e) :. IndexHead e
+
+instance Shape sh => Lift (Any sh) where
+  type Plain (Any sh) = Any sh
+  lift Any = IndexAny
+
 -- instances for numeric types
 
 instance Lift Int where
@@ -1048,4 +1044,3 @@ fromIntegral = mkFromIntegral
 --
 ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore
-

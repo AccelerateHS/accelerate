@@ -615,6 +615,9 @@ evalOpenExp (IndexHead ix) env aenv
 evalOpenExp (IndexTail ix) env aenv 
   = case evalOpenExp ix env aenv of t:._ -> t
 
+evalOpenExp (IndexAny) _ _
+  = Sugar.Any
+
 evalOpenExp (Cond c t e) env aenv 
   = if evalOpenExp c env aenv
     then evalOpenExp t env aenv
