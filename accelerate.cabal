@@ -116,6 +116,7 @@ Flag inplace
 Library
   Build-depends:        array           == 0.3.*,
                         base            == 4.*,
+                        containers      >= 0.3 && < 0.5,
                         directory       >= 1.0 && < 1.2,
                         ghc-prim        == 0.2.*,
                         mtl             == 2.0.*,
@@ -129,7 +130,6 @@ Library
   if flag(cuda)
     Build-depends:      binary          == 0.5.*,
                         bytestring      == 0.9.*,
-                        containers      >= 0.3 && < 0.5,
                         cuda            >= 0.2.2,
                         fclabels        >= 0.9 && < 1.0,
                         filepath        >= 1.0 && < 1.3,
