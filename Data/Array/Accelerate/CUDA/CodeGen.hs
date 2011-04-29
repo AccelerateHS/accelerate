@@ -228,9 +228,11 @@ codeGenExp (IndexCons ix i) =
   let snoc xs x = xs ++ x
   in  snoc <$> codeGenExp ix <*> codeGenExp i
 
-codeGenExp (IndexHead sh@(Shape _)) = do
+codeGenExp (IndexHead sh@(Shape a)) = do
   [var] <- codeGenExp sh
-  return [CMember var (internalIdent "a0") False internalNode]
+  return $ if accDim a > 1
+              then [CMember var (internalIdent "a0") False internalNode]
+              else [var]
 
 codeGenExp (IndexTail sh@(Shape a)) = do
   [var] <- codeGenExp sh
