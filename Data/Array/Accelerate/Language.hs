@@ -512,22 +512,15 @@ instance (Slice (Plain ix), Lift ix) => Lift (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
   lift (ix:.i) = IndexCons (lift ix) (Const i)
 
-instance (Slice (Plain ix), Lift ix) => Lift (ix :. Exp Int) where
-  type Plain (ix :. Exp Int) = Plain ix :. Int
-  lift (ix:.i) = IndexCons (lift ix) i
-
-instance (Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp Int) where
-  unlift e = unlift (IndexTail e) :. IndexHead e
-
 instance (Slice (Plain ix), Lift ix) => Lift (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
   lift (ix:.i) = IndexCons (lift ix) (Const i)
 
-instance (Slice (Plain ix), Lift ix) => Lift (ix :. Exp All) where
-  type Plain (ix :. Exp All) = Plain ix :. All
+instance (Elt e, Slice (Plain ix), Lift ix) => Lift (ix :. Exp e) where
+  type Plain (ix :. Exp e) = Plain ix :. e
   lift (ix:.i) = IndexCons (lift ix) i
 
-instance (Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp All) where
+instance (Elt e, Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp e) where
   unlift e = unlift (IndexTail e) :. IndexHead e
 
 instance Shape sh => Lift (Any sh) where
