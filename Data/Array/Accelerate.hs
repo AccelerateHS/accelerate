@@ -53,7 +53,7 @@ module Data.Array.Accelerate (
   Elt,
 
   -- * Array shapes & indices
-  Z(..), (:.)(..), Shape, All(..), Slice(..), 
+  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
   
   -- * Operations to use Accelerate arrays from plain Haskell

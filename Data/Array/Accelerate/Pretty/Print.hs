@@ -213,6 +213,8 @@ prettyPreExp pp lvl alvl wrap (IndexHead ix)
   = wrap $ text "indexHead" <+> prettyPreExp pp lvl alvl parens ix
 prettyPreExp pp lvl alvl wrap (IndexTail ix)
   = wrap $ text "indexTail" <+> prettyPreExp pp lvl alvl parens ix
+prettyPreExp _ _ _ wrap (IndexAny)
+  = wrap $ text "indexAny"
 prettyPreExp pp lvl alvl wrap (Cond c t e)
   = wrap $ sep [prettyPreExp pp lvl alvl parens c <+> char '?',
                 parens (prettyPreExp pp lvl alvl noParens t <> comma <+>
