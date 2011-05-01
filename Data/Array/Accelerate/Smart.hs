@@ -684,14 +684,6 @@ makeOccMap rootAcc
               acc' <- traverseAcc updateMap enter acc
               return $ c acc'
 
-        travE :: Typeable b
-              => (SharingExp b -> PreAcc SharingAcc arrs) 
-              -> Exp b -> IO (PreAcc SharingAcc arrs)
-        travE c exp
-          = do
-              exp' <- traverseExp updateMap enter exp
-              return $ c exp'
-
         travEA :: (Typeable b, Arrays arrs')
                => (SharingExp b -> SharingAcc arrs' -> PreAcc SharingAcc arrs) 
                -> Exp b -> Acc arrs' -> IO (PreAcc SharingAcc arrs)
@@ -1461,10 +1453,10 @@ showPreAccOp (Backpermute _ _ _)  = "Backpermute"
 showPreAccOp (Stencil _ _ _)      = "Stencil"
 showPreAccOp (Stencil2 _ _ _ _ _) = "Stencil2"
 
-showSharingAccOp :: SharingAcc arrs -> String
-showSharingAccOp (VarSharing sn)    = "VAR " ++ show (hashStableName sn)
-showSharingAccOp (LetSharing _ acc) = "LET " ++ showSharingAccOp acc
-showSharingAccOp (AccSharing _ acc) = showPreAccOp acc
+_showSharingAccOp :: SharingAcc arrs -> String
+_showSharingAccOp (VarSharing sn)    = "VAR " ++ show (hashStableName sn)
+_showSharingAccOp (LetSharing _ acc) = "LET " ++ _showSharingAccOp acc
+_showSharingAccOp (AccSharing _ acc) = showPreAccOp acc
 
 
 -- |Smart constructors to construct representation AST forms
