@@ -28,7 +28,7 @@ import Data.Array.Accelerate.Type
 
 -- |Class of index representations (which are nested pairs)
 --
-class Eq sh => Shape sh where
+class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
   dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
   size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
