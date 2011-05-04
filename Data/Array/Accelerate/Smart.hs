@@ -1467,7 +1467,7 @@ mkIndex :: forall slix e aenv. (Slice slix, Elt e)
         -> AST.Exp                    aenv slix
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
 mkIndex arr e
-  = AST.Index (convertSliceIndex slix (sliceIndex slix)) arr e
+  = AST.Index (sliceIndex slix) arr e
   where
     slix = undefined :: slix
 
@@ -1476,7 +1476,7 @@ mkReplicate :: forall slix e aenv. (Slice slix, Elt e)
         -> AST.OpenAcc                aenv (Array (SliceShape slix) e)
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (FullShape slix) e)
 mkReplicate e arr
-  = AST.Replicate (convertSliceIndex slix (sliceIndex slix)) e arr
+  = AST.Replicate (sliceIndex slix) e arr
   where
     slix = undefined :: slix
 

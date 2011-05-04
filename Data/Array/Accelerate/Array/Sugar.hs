@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..), convertSliceIndex,
+  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..),
   
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
@@ -37,7 +37,6 @@ module Data.Array.Accelerate.Array.Sugar (
 import Data.Array.IArray (IArray)
 import qualified Data.Array.IArray as IArray
 import Data.Typeable
-import Unsafe.Coerce
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -73,7 +72,6 @@ data All = All
 data Any sh = Any
   deriving (Typeable, Show)
 
-
 -- |Representation change for array element types
 -- ----------------------------------------------
 
@@ -87,7 +85,8 @@ type instance EltRepr () = ()
 type instance EltRepr Z = ()
 type instance EltRepr (t:.h) = (EltRepr t, EltRepr' h)
 type instance EltRepr All = ((), ())
-type instance EltRepr (Any sh) = SliceAnyRepr sh
+type instance EltRepr (Any Z) = ()
+type instance EltRepr (Any (sh:.Int)) = (EltRepr (Any sh), ())
 type instance EltRepr Int = ((), Int)
 type instance EltRepr Int8 = ((), Int8)
 type instance EltRepr Int16 = ((), Int16)
@@ -133,7 +132,8 @@ type instance EltRepr' () = ()
 type instance EltRepr' Z = ()
 type instance EltRepr' (t:.h) = (EltRepr t, EltRepr' h)
 type instance EltRepr' All = ()
-type instance EltRepr' (Any sh) = SliceAnyRepr sh
+type instance EltRepr' (Any Z) = ()
+type instance EltRepr' (Any (sh:.Int)) = (EltRepr' (Any sh), ())
 type instance EltRepr' Int = Int
 type instance EltRepr' Int8 = Int8
 type instance EltRepr' Int16 = Int16
@@ -226,14 +226,23 @@ instance Elt All where
   fromElt' All    = ()
   toElt' ()       = All
 
-instance ShapeElt sh => Elt (Any sh) where
-  eltType (_::Any sh) = sliceAnyEltType (undefined :: sh)
-  fromElt Any         = toSliceAnyRepr  (undefined :: sh)
-  toElt _             = Any
+instance Elt (Any Z) where
+  eltType _ = UnitTuple
+  fromElt _ = ()
+  toElt _ = Any
+  
+  eltType' _ = UnitTuple
+  fromElt' _ = ()
+  toElt' _ = Any
 
-  eltType' _     = sliceAnyEltType (undefined :: sh)
-  fromElt' Any   = toSliceAnyRepr  (undefined :: sh)
-  toElt' _       =  Any
+instance Shape sh => Elt (Any (sh:.Int)) where
+  eltType _ = PairTuple (eltType (undefined::Any sh)) UnitTuple
+  fromElt _ = (fromElt (undefined :: Any sh), ())
+  toElt _ = Any
+
+  eltType' _ = PairTuple (eltType' (undefined::Any sh)) UnitTuple
+  fromElt' _ = (fromElt' (undefined :: Any sh), ())
+  toElt' _ = Any
 
 instance Elt Int where
   eltType       = singletonScalarType
@@ -626,53 +635,6 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 
   #-}
 
---
--- | Mapping from Shape element types to representation types for shapes, 'sh',
---   that appear inside a slice of form 'Any sh'.
--- 
--- This is because a slice of form 'Any (Z:.Int:. ... :.Int)' is effectively
--- the same as the slice 'Z:.All:. ... :. All'
---
-type family SliceAnyRepr a :: *
-type instance SliceAnyRepr Z            = ()
-type instance SliceAnyRepr Int          = ()
-type instance SliceAnyRepr (tail:.head) = (SliceAnyRepr tail, SliceAnyRepr head)
-
---
--- | Mapping from Shape element types to representation types for Shapes
---   (in module D.A.A.Array.Represetnation)
---
-type family ShapeEltRepr a :: *
-type instance ShapeEltRepr Z            = ()
-type instance ShapeEltRepr Int          = Int
-type instance ShapeEltRepr (tail:.head) = (ShapeEltRepr tail, ShapeEltRepr head)
---
--- | Class that characterises the elements allowed in shapes (but not
---    slice specifiers)
---
---   They are a subset of those that can be array elements.
---
-class (Typeable (SliceAnyRepr a),
-       ArrayElt (SliceAnyRepr a),
-       Elt a) => ShapeElt a where
-  sliceAnyEltType :: {-dummy-} a -> TupleType (SliceAnyRepr a)
-  toSliceAnyRepr  :: {-dummy-} a -> SliceAnyRepr a
-
-instance ShapeElt Z where
-  sliceAnyEltType _ = UnitTuple
-  toSliceAnyRepr _ = ()
-
-instance ShapeElt Int where
-  sliceAnyEltType _ = UnitTuple
-  toSliceAnyRepr _ = ()
-
-instance (ShapeElt tail, ShapeElt head) => ShapeElt (tail:.head) where
-  sliceAnyEltType _ = PairTuple (sliceAnyEltType (undefined::tail))
-                                (sliceAnyEltType (undefined::head))
-  toSliceAnyRepr _ = (toSliceAnyRepr (undefined::tail), toSliceAnyRepr (undefined::head))
-
-
-
 -- Surface arrays
 -- --------------
 
@@ -720,7 +682,7 @@ type DIM9 = DIM8:.Int
 
 -- |Shapes and indices of multi-dimensional arrays
 --
-class (ShapeElt sh, Repr.Slice (SliceAnyRepr sh), Repr.Shape (EltRepr sh)) => Shape sh where
+class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   dim    :: sh -> Int
@@ -755,7 +717,9 @@ class (ShapeElt sh, Repr.Slice (SliceAnyRepr sh), Repr.Shape (EltRepr sh)) => Sh
 
   -- |Convert a list of dimensions into a shape.
   listToShape :: [Int] -> sh
-  
+
+  -- | The slice index for slice specifier 'Any sh'
+  sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
   dim              = Repr.dim . fromElt
   size             = Repr.size . fromElt
@@ -780,24 +744,24 @@ class (ShapeElt sh, Repr.Slice (SliceAnyRepr sh), Repr.Shape (EltRepr sh)) => Sh
   shapeToList = Repr.shapeToList . fromElt
   listToShape = toElt . Repr.listToShape
 
-instance Shape Z
-instance Shape sh => Shape (sh:.Int)
+instance Shape Z where
+  sliceAnyIndex _ = Repr.SliceNil
   
+instance Shape sh => Shape (sh:.Int) where
+  sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
+
 -- |Slices -aka generalised indices- as n-tuples and mappings of slice
 -- indicies to slices, co-slices, and slice dimensions
 --
-class (Elt sl,
-       Repr.Slice (EltRepr sl), 
-       Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl),
-       SliceIxConv sl)
-  => Slice sl where
+class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl)) 
+       => Slice sl where
   type SliceShape   sl :: *
   type CoSliceShape sl :: *
   type FullShape    sl :: *
   sliceIndex :: sl -> Repr.SliceIndex (EltRepr sl)
-                                      (Repr.SliceShape   (EltRepr sl))
-                                      (Repr.CoSliceShape (EltRepr sl))
-                                      (Repr.FullShape    (EltRepr sl))
+                        (EltRepr (SliceShape   sl))
+                        (EltRepr (CoSliceShape sl))
+                        (EltRepr (FullShape    sl))
 
 instance Slice Z where
   type SliceShape   Z = Z
@@ -805,13 +769,11 @@ instance Slice Z where
   type FullShape    Z = Z
   sliceIndex _ = Repr.SliceNil
 
-
 instance Slice sl => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined::sl))
-
 
 instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape sl
@@ -819,30 +781,11 @@ instance Slice sl => Slice (sl:.Int) where
   type FullShape    (sl:.Int) = FullShape sl :. Int
   sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined::sl))
 
-
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
-  sliceIndex _ = Repr.sliceIndex (toSliceAnyRepr (undefined :: sh))
-
-
-class SliceIxConv slix where
-  convertSliceIndex :: slix {- dummy to fix the type variable -}
-                    -> Repr.SliceIndex (EltRepr slix)
-                                       (Repr.SliceShape   (EltRepr slix))
-                                       (Repr.CoSliceShape (EltRepr slix))
-                                       (Repr.FullShape    (EltRepr slix))
-                    -> Repr.SliceIndex (EltRepr slix)
-                                       (EltRepr (SliceShape   slix))
-                                       (EltRepr (CoSliceShape slix))
-                                       (EltRepr (FullShape    slix))
-
-instance SliceIxConv slix where
-  convertSliceIndex _ = unsafeCoerce
-    -- FIXME: the coercion is safe given the definition of the involved
-    --   families, but we really ought to code a proof for that instead
-
+  sliceIndex _ = sliceAnyIndex (undefined :: sh)
 
 -- Array operations
 -- ----------------
