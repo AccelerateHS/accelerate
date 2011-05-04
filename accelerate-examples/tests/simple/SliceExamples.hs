@@ -1,8 +1,12 @@
 {-# LANGUAGE TypeOperators, ScopedTypeVariables #-}
 module SliceExamples where
 
+import Random
+
+import System.Random.MWC
 import Data.Array.Accelerate as Acc
-import Data.Array.Accelerate.Interpreter
+import qualified Data.Array.Accelerate.Interpreter as Interp
+import qualified Data.Array.Unboxed as UA
 
 --    y
 --    ^
@@ -24,18 +28,18 @@ slice3 = lift $ Z:.All:.All:.(2::Int)
 
 -- Replicate into z-axis
 -- should produce [1,2,3,4,1,2,3,4]
-test1 :: Array DIM3 Int
-test1 = run $ Acc.replicate slice1 arr
+test1 :: Acc (Array DIM3 Int)
+test1 = Acc.replicate slice1 arr
 
 -- Replicate into y-axis
 -- should produce [1,2,1,2,3,4,3,4]
-test2 :: Array DIM3 Int
-test2 = run $ Acc.replicate slice2 arr
+test2 :: Acc (Array DIM3 Int)
+test2 =  Acc.replicate slice2 arr
 
 -- Replicate into x-axis
 -- should produce [1,1,2,2,3,3,4,4]
-test3 :: Array DIM3 Int
-test3 = run $ Acc.replicate slice3 arr
+test3 :: Acc (Array DIM3 Int)
+test3 =  Acc.replicate slice3 arr
 
 --
 -- repN. Replicates an array into the rightmost dimension of
@@ -47,17 +51,68 @@ repN :: forall sh e. (Shape sh, Elt e)
      -> Acc (Array (sh:.Int) e)
 repN n a = Acc.replicate (lift (Any:.n :: Any sh:.Int)) a
 
-rep1 :: Acc (Array DIM0 Int) -> Acc (Array DIM1 Int)
-rep1 = repN 2
+repExample :: Acc (Array DIM2 Int) -> Acc (Array DIM3 Int)
+repExample = repN 2
 
-rep2 :: Acc (Array DIM2 Int) -> Acc (Array DIM3 Int)
-rep2 = repN 2
-
-rep2' :: Acc (Array DIM2 Int) -> Acc (Array DIM3 Int)
-rep2' = Acc.replicate (lift (Z:.All:.All:.(2::Int)))
+repExample' :: Acc (Array DIM2 Int) -> Acc (Array DIM3 Int)
+repExample' = Acc.replicate (lift (Z:.All:.All:.(2::Int)))
 
 slice1' :: Any (Z:.Int:.Int) :. Int
 slice1' = Any:.2
 
 slice2' :: Z:.All:.All:.Int
 slice2' = Z:.All:.All:.2
+
+run1 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
+run1 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
+                                                 , ((0,0,1), 2)
+                                                 , ((0,1,0), 3)
+                                                 , ((0,1,1), 4)
+                                                 , ((1,0,0), 1)
+                                                 , ((1,0,1), 2)
+                                                 , ((1,1,0), 3)
+                                                 , ((1,1,1), 4) ]
+              ,\() -> test1)
+
+run2 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
+run2 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
+                                                 , ((0,0,1), 2)
+                                                 , ((0,1,0), 1)
+                                                 , ((0,1,1), 2)
+                                                 , ((1,0,0), 3)
+                                                 , ((1,0,1), 4)
+                                                 , ((1,1,0), 3)
+                                                 , ((1,1,1), 4) ]
+              ,\() -> test2)
+
+run3 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
+run3 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
+                                                 , ((0,0,1), 1)
+                                                 , ((0,1,0), 2)
+                                                 , ((0,1,1), 2)
+                                                 , ((1,0,0), 3)
+                                                 , ((1,0,1), 3)
+                                                 , ((1,1,0), 4)
+                                                 , ((1,1,1), 4) ]
+              ,\() -> test3)
+run4 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
+run4 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
+                                                 , ((0,0,1), 1)
+                                                 , ((0,1,0), 2)
+                                                 , ((0,1,1), 2)
+                                                 , ((1,0,0), 3)
+                                                 , ((1,0,1), 3)
+                                                 , ((1,1,0), 4)
+                                                 , ((1,1,1), 4) ]
+              ,\() -> repExample arr)
+
+run5 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
+run5 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
+                                                 , ((0,0,1), 1)
+                                                 , ((0,1,0), 2)
+                                                 , ((0,1,1), 2)
+                                                 , ((1,0,0), 3)
+                                                 , ((1,0,1), 3)
+                                                 , ((1,1,0), 4)
+                                                 , ((1,1,1), 4) ]
+              ,\() -> repExample' arr)
