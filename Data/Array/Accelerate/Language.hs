@@ -524,8 +524,8 @@ instance (Elt e, Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp e) where
   unlift e = unlift (IndexTail e) :. IndexHead e
 
 instance Shape sh => Lift (Any sh) where
-  type Plain (Any sh) = Any sh
-  lift Any = IndexAny
+ type Plain (Any sh) = Any sh
+ lift Any = IndexAny
 
 -- instances for numeric types
 

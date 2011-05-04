@@ -20,6 +20,7 @@ import qualified Filter
 import qualified SMVM
 import qualified BlackScholes
 import qualified Radix
+import qualified SliceExamples
 
 #ifdef ACCELERATE_IO
 import qualified BlockCopy
@@ -119,7 +120,7 @@ allTests cfg = sequence'
   , mkTest "fold-2d-product" "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
   , mkTest "scanseg-sum"     "segmented reduction"                        $ ScanSeg.run "sum" n
   , mkTest "stencil-3x3"     "5-element cross pattern"                    $ Stencil.run "3x3" n
-
+  
     -- simple examples
   , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n
   , mkTest "saxpy"           "scalar alpha*x + y"                         $ SAXPY.run n
@@ -134,9 +135,16 @@ allTests cfg = sequence'
   , mkIO   "io"              "array IO test"                              $ BlockCopy.run
 #endif
 
-    -- image processing
+  --  image processing
   , mkNoRef "canny"          "canny edge detection"                       $ Canny.run img
   , mkNoRef "integral-image" "image integral (2D scan)"                   $ IntegralImage.run img
+  -- slices
+  , mkTest "slices"  "replicate (Z:.2:.All:.All)" $ SliceExamples.run1
+  , mkTest "slices"  "replicate (Z:.All:.2:.All)" $ SliceExamples.run2
+  , mkTest "slices"  "replicate (Z:.All:.All:.2)" $ SliceExamples.run3
+  , mkTest "slices"  "replicate (Any:.2)"         $ SliceExamples.run4  
+  , mkTest "slices"  "replicate (Z:.2:.2:.2)"     $ SliceExamples.run5
+    
   ]
   where
     n   = cfgElements cfg
@@ -160,7 +168,7 @@ backend cfg =
   case cfgBackend cfg of
     Interpreter -> Interpreter.run
 #ifdef ACCELERATE_CUDA_BACKEND
-    CUDA        -> CUDA.run
+    CUDA        -> Interpreter.run -- CUDA.run
 #endif
 
 
