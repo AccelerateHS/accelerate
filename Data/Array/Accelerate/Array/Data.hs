@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
 -- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

@@ -1,11 +1,7 @@
 {-# LANGUAGE TypeOperators, ScopedTypeVariables #-}
 module SliceExamples where
 
-import Random
-
-import System.Random.MWC
 import Data.Array.Accelerate as Acc
-import qualified Data.Array.Accelerate.Interpreter as Interp
 import qualified Data.Array.Unboxed as UA
 
 --    y

@@ -158,8 +158,9 @@ allTests cfg = sequence'
       acc <- unsafeInterleaveIO builder
       return $ TestNoRef name desc acc
 
+#ifdef ACCELERATE_IO
     mkIO name desc act = return $ TestIO name desc act
-
+#endif
 
 -- How to evaluate Accelerate programs with the chosen backend?
 --
