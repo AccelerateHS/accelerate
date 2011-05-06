@@ -168,7 +168,7 @@ backend cfg =
   case cfgBackend cfg of
     Interpreter -> Interpreter.run
 #ifdef ACCELERATE_CUDA_BACKEND
-    CUDA        -> Interpreter.run -- CUDA.run
+    CUDA        -> CUDA.run
 #endif
 
 
