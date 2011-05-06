@@ -83,6 +83,16 @@ import Data.Array.Accelerate.Pretty ()
 #include "accelerate.h"
 
 
+-- Configuration
+-- -------------
+
+-- Are array computations floated out of expressions irrespective of whether they are shared or 
+-- not?  'True' implies floating them out.
+--
+floatOutAccFromExp :: Bool
+floatOutAccFromExp = True
+
+
 -- Layouts
 -- -------
 
@@ -277,7 +287,7 @@ convertAcc = convertOpenAcc EmptyLayout
 -- information.
 --
 convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
-convertOpenAcc alyt = convertSharingAcc alyt [] . recoverSharing
+convertOpenAcc alyt = convertSharingAcc alyt [] . recoverSharing floatOutAccFromExp
 
 -- |Convert a unary function over array computations
 --
@@ -483,8 +493,7 @@ data SharingAcc arrs where
 -- Stable name for an array computation associated with its sharing-annotated version.
 --
 data StableSharingAcc where
-  StableSharingAcc :: (Typeable arrs, Arrays arrs) 
-                   => StableName (Acc arrs) -> SharingAcc arrs -> StableSharingAcc
+  StableSharingAcc :: Arrays arrs => StableName (Acc arrs) -> SharingAcc arrs -> StableSharingAcc
 
 instance Show StableSharingAcc where
   show (StableSharingAcc sn _) = show $ hashStableName sn
@@ -880,12 +889,13 @@ NodeCounts us +++ NodeCounts vs = NodeCounts $ merge us vs
     sa1                                 `pickNoneVar` _sa2                                = sa1
 
 -- Determine the scopes of all variables representing shared subterms (Phase Two) in a bottom-up
--- sweep.
+-- sweep.  The first argument determines whether array computations are floated out of expressions
+-- irrespective of whether they are shared or not — 'True' implies floating them out.
 --
 -- Precondition: there are only 'VarSharing' and 'AccSharing' nodes in the argument.
 --
-determineScopes :: Typeable a => OccMap -> SharingAcc a -> SharingAcc a
-determineScopes occMap rootAcc = fst $ scopesAcc rootAcc
+determineScopes :: Typeable a => Bool -> OccMap -> SharingAcc a -> SharingAcc a
+determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
   where
     scopesAcc :: forall arrs. SharingAcc arrs -> (SharingAcc arrs, NodeCounts)
     scopesAcc (LetSharing _ _)
@@ -1066,12 +1076,12 @@ determineScopes occMap rootAcc = fst $ scopesAcc rootAcc
           = let (counts', completed) = fc counts
             in (NodeCounts counts', completed)
           where
-            fc []                             = ([], [])
+            fc []                 = ([], [])
             fc (sub@(sa, n):subs)
                 -- current node is the binding point for the shared node 'sa'
-              | occCount > 1 && occCount == n = (subs', sa:bindHere)
+              | occCount == n     = (subs', sa:bindHere)
                 -- not a binding point
-              | otherwise                     = (sub:subs', bindHere)
+              | otherwise         = (sub:subs', bindHere)
               where
                 occCount          = lookupWithSharingAcc occMap sa
                 (subs', bindHere) = fc subs
@@ -1107,36 +1117,51 @@ determineScopes occMap rootAcc = fst $ scopesAcc rootAcc
         travE1 :: (SharingExp a -> SharingExp b) -> SharingExp a -> (SharingExp b, NodeCounts)
         travE1 c e = (c e', accCount)
           where
-              (e', accCount) = scopesExp e
+            (e', accCount) = scopesExp e
 
         travE2 :: (SharingExp a -> SharingExp b -> SharingExp c) -> SharingExp a -> SharingExp b 
                -> (SharingExp c, NodeCounts)
         travE2 c e1 e2 = (c e1' e2', accCount1 +++ accCount2)
           where
-              (e1', accCount1) = scopesExp e1
-              (e2', accCount2) = scopesExp e2
+            (e1', accCount1) = scopesExp e1
+            (e2', accCount2) = scopesExp e2
 
         travE3 :: (SharingExp a -> SharingExp b -> SharingExp c -> SharingExp d) 
                -> SharingExp a -> SharingExp b -> SharingExp c 
                -> (SharingExp d, NodeCounts)
         travE3 c e1 e2 e3 = (c e1' e2' e3', accCount1 +++ accCount2 +++ accCount3)
           where
-              (e1', accCount1) = scopesExp e1
-              (e2', accCount2) = scopesExp e2
-              (e3', accCount3) = scopesExp e3
+            (e1', accCount1) = scopesExp e1
+            (e2', accCount2) = scopesExp e2
+            (e3', accCount3) = scopesExp e3
 
         travA :: (SharingAcc a -> SharingExp b) -> SharingAcc a -> (SharingExp b, NodeCounts)
-        travA c acc = (c acc', accCount)
+        travA c acc = maybeFloatOutAcc c acc' accCount
           where
-              (acc', accCount) = scopesAcc acc
-
+            (acc', accCount)  = scopesAcc acc
+        
         travAE :: (SharingAcc a -> SharingExp b -> SharingExp c) -> SharingAcc a -> SharingExp b 
                -> (SharingExp c, NodeCounts)
-        travAE c acc e = (c acc' e', accCountA +++ accCountE)
+        travAE c acc e = maybeFloatOutAcc (flip c e') acc' (accCountA +++ accCountE)
           where
-              (acc', accCountA) = scopesAcc acc
-              (e'  , accCountE) = scopesExp e
-              
+            (acc', accCountA) = scopesAcc acc
+            (e'  , accCountE) = scopesExp e
+        
+        maybeFloatOutAcc :: (SharingAcc a -> SharingExp b) -> SharingAcc a -> NodeCounts
+                         -> (SharingExp b, NodeCounts)
+        maybeFloatOutAcc c acc@(VarSharing _) accCount = (c acc, accCount)  -- nothing to float out
+        maybeFloatOutAcc c acc                accCount
+          | floatOutAcc = (c var, nodeCount (stableAcc, 1) +++ accCount)
+          | otherwise   = (c acc, accCount)
+          where
+             (var, stableAcc) = abstract acc id
+
+        abstract :: SharingAcc a -> (SharingAcc a -> SharingAcc a) 
+                 -> (SharingAcc a, StableSharingAcc)
+        abstract (VarSharing _)        _    = INTERNAL_ERROR(error) "sharingAccToVar" "VarSharing"
+        abstract (LetSharing sa acc)   lets = abstract acc (lets . LetSharing sa)
+        abstract acc@(AccSharing sn _) lets = (VarSharing sn, StableSharingAcc sn (lets acc))
+
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
@@ -1180,7 +1205,8 @@ determineScopes occMap rootAcc = fst $ scopesAcc rootAcc
         (body, counts) = scopesExp (stencilFun undefined undefined)          
                   
 -- |Recover sharing information and annotate the HOAS AST with variable and let binding
--- annotations.
+--  annotations.  The first argument determines whether array computations are floated out of
+--  expressions irrespective of whether they are shared or not — 'True' implies floating them out.
 --
 -- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
 --     determine the sharing of subterms.  The stable pointer API does not guarantee its
@@ -1188,9 +1214,9 @@ determineScopes occMap rootAcc = fst $ scopesAcc rootAcc
 --     some sharing.  However, sharing does not affect the denotational meaning of an array
 --     computation; hence, we do not compromise denotational correctness.
 --
-recoverSharing :: Typeable a => Acc a -> SharingAcc a
+recoverSharing :: Typeable a => Bool -> Acc a -> SharingAcc a
 {-# NOINLINE recoverSharing #-}
-recoverSharing acc 
+recoverSharing floatOutAcc acc 
   = let (acc', occMap) =   -- as we need to use stable pointers; it's safe as explained above
           unsafePerformIO $ do
             (acc', occMap) <- makeOccMap acc
@@ -1201,8 +1227,8 @@ recoverSharing acc
  
             frozenOccMap <- freezeOccMap occMap
             return (acc', frozenOccMap)
-     in 
-    determineScopes occMap acc'
+    in 
+    determineScopes floatOutAcc occMap acc'
 
 
 -- Embedded expressions of the surface language
@@ -1414,9 +1440,9 @@ instance Show (Exp a) where
       toSharingExp (Cond e1 e2 e3)     = Cond (toSharingExp e1) (toSharingExp e2) (toSharingExp e3)
       toSharingExp (PrimConst c)       = PrimConst c
       toSharingExp (PrimApp p e)       = PrimApp p (toSharingExp e)
-      toSharingExp (IndexScalar a e)   = IndexScalar (recoverSharing a) (toSharingExp e)
-      toSharingExp (Shape a)           = Shape (recoverSharing a)
-      toSharingExp (Size a)            = Size (recoverSharing a)
+      toSharingExp (IndexScalar a e)   = IndexScalar (recoverSharing False a) (toSharingExp e)
+      toSharingExp (Shape a)           = Shape (recoverSharing False a)
+      toSharingExp (Size a)            = Size (recoverSharing False a)
 
       toSharingTup :: Tuple.Tuple (PreExp Acc) tup -> Tuple.Tuple (PreExp SharingAcc) tup
       toSharingTup NilTup          = NilTup
@@ -1975,4 +2001,3 @@ infixr 0 $$$$
 infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
-
