@@ -496,151 +496,151 @@ class Lift e => Unlift e where
 
 instance Lift () where
   type Plain () = ()
-  lift _ = Tuple NilTup
+  lift _ = Exp $ Tuple NilTup
 
 instance Unlift () where
   unlift _ = ()
 
 instance Lift Z where
   type Plain Z = Z
-  lift _ = IndexNil
+  lift _ = Exp $ IndexNil
 
 instance Unlift Z where
   unlift _ = Z
 
 instance (Slice (Plain ix), Lift ix) => Lift (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
-  lift (ix:.i) = IndexCons (lift ix) (Const i)
+  lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
 instance (Slice (Plain ix), Lift ix) => Lift (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
-  lift (ix:.i) = IndexCons (lift ix) (Const i)
+  lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
 instance (Elt e, Slice (Plain ix), Lift ix) => Lift (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
-  lift (ix:.i) = IndexCons (lift ix) i
+  lift (ix:.i) = Exp $ IndexCons (lift ix) i
 
 instance (Elt e, Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp e) where
-  unlift e = unlift (IndexTail e) :. IndexHead e
+  unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
 
 instance Shape sh => Lift (Any sh) where
  type Plain (Any sh) = Any sh
- lift Any = IndexAny
+ lift Any = Exp $ IndexAny
 
 -- instances for numeric types
 
 instance Lift Int where
   type Plain Int = Int
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Int8 where
   type Plain Int8 = Int8
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Int16 where
   type Plain Int16 = Int16
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Int32 where
   type Plain Int32 = Int32
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Int64 where
   type Plain Int64 = Int64
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Word where
   type Plain Word = Word
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Word8 where
   type Plain Word8 = Word8
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Word16 where
   type Plain Word16 = Word16
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Word32 where
   type Plain Word32 = Word32
-  lift = Const
+  lift = Exp . Const
   
 instance Lift Word64 where
   type Plain Word64 = Word64
-  lift = Const
+  lift = Exp . Const
 
 {-  
 instance Lift CShort where
   type Plain CShort = CShort
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CUShort where
   type Plain CUShort = CUShort
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CInt where
   type Plain CInt = CInt
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CUInt where
   type Plain CUInt = CUInt
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CLong where
   type Plain CLong = CLong
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CULong where
   type Plain CULong = CULong
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CLLong where
   type Plain CLLong = CLLong
-  lift = Const
+  lift = Exp . Const
   
 instance Lift CULLong where
   type Plain CULLong = CULLong
-  lift = Const
+  lift = Exp . Const
  -}
  
 instance Lift Float where
   type Plain Float = Float
-  lift = Const
+  lift = Exp . Const
 
 instance Lift Double where
   type Plain Double = Double
-  lift = Const
+  lift = Exp . Const
 
 {-
 instance Lift CFloat where
   type Plain CFloat = CFloat
-  lift = Const
+  lift = Exp . Const
 
 instance Lift CDouble where
   type Plain CDouble = CDouble
-  lift = Const
+  lift = Exp . Const
  -}
 
 instance Lift Bool where
   type Plain Bool = Bool
-  lift = Const
+  lift = Exp . Const
 
 instance Lift Char where
   type Plain Char = Char
-  lift = Const
+  lift = Exp . Const
 
 {-
 instance Lift CChar where
   type Plain CChar = CChar
-  lift = Const
+  lift = Exp . Const
 
 instance Lift CSChar where
   type Plain CSChar = CSChar
-  lift = Const
+  lift = Exp . Const
 
 instance Lift CUChar where
   type Plain CUChar = CUChar
-  lift = Const
+  lift = Exp . Const
  -}
 
 -- Instances for tuples
@@ -802,7 +802,7 @@ unindex1 ix = let Z:.i = unlift ix in i
 --
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
-c ? (t, e) = Cond c t e
+c ? (t, e) = Exp $ Cond c t e
 
 
 -- Array operations with a scalar result
@@ -812,7 +812,7 @@ c ? (t, e) = Cond c t e
 --
 infixl 9 !
 (!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
-(!) = IndexScalar
+arr ! ix = Exp $ IndexScalar arr ix
 
 -- |Extraction of the element in a singleton array.
 --
@@ -822,12 +822,12 @@ the = (!index0)
 -- |Expression form that yields the shape of an array.
 --
 shape :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix
-shape = Shape
+shape = Exp . Shape
 
 -- |Expression form that yields the size of an array.
 --
 size :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int
-size = Size
+size = Exp . Size
 
 
 -- Instances of all relevant H98 classes
