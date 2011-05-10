@@ -770,7 +770,7 @@ lookupWithSharingAcc oc (StableSharingAcc sn _) = lookupWithAccName oc (StableAc
 -- We need to descent into function bodies to build the 'OccMap' with all occurences in the
 -- function bodies.  Due to the side effects in the construction of the occurence map and, more
 -- importantly, the dependence of the second phase on /global/ occurence information, we may not
--- delay the body traversals by putting them under a lambda.  Hence, we apply the each function, to
+-- delay the body traversals by putting them under a lambda.  Hence, we apply each function, to
 -- traverse its body and use a /dummy abstraction/ of the result.
 --
 -- For example, given a function 'f', we traverse 'f (Tag 0)', which yields a transformed body 'e'.
@@ -783,32 +783,26 @@ makeOccMap :: Typeable arrs => Acc arrs -> IO (SharingAcc arrs, OccMapHash)
 makeOccMap rootAcc
   = do
       occMap <- newAccHashTable
-      rootAcc' <- traverseAcc True (enterOcc occMap) rootAcc
+      rootAcc' <- traverseAcc occMap rootAcc
       return (rootAcc', occMap)
   where
     -- Enter one AST node occurrence into an occurrence map.  Returns 'True' if this is a repeated
     -- occurence.
     --
-    -- The first argument determines whether the 'OccMap' will be modified - see Note [Traversing
-    -- functions and side effects].
-    --
-    enterOcc :: OccMapHash -> Bool -> StableAccName -> IO Bool
-    enterOcc occMap updateMap sa 
+    enterOcc :: OccMapHash -> StableAccName -> IO Bool
+    enterOcc occMap sa 
       = do
           entry <- Hash.lookup occMap sa
           case entry of
-            Nothing -> when updateMap (       Hash.insert occMap sa 1      ) >> return False
-            Just n  -> when updateMap (void $ Hash.update occMap sa (n + 1)) >> return True
-              where
-                void = (>> return ())
+            Nothing -> Hash.insert occMap sa 1       >> return False
+            Just n  -> Hash.update occMap sa (n + 1) >> return True
 
-    traverseAcc :: forall arrs. Typeable arrs
-                => Bool -> (Bool -> StableAccName -> IO Bool) -> Acc arrs -> IO (SharingAcc arrs)
-    traverseAcc updateMap enter acc'@(Acc pacc)
+    traverseAcc :: forall arrs. Typeable arrs => OccMapHash -> Acc arrs -> IO (SharingAcc arrs)
+    traverseAcc occMap acc'@(Acc pacc)
       = do
             -- Compute stable name and enter it into the occurence map
           sn <- makeStableAcc acc'
-          isRepeatedOccurence <- enter updateMap $ StableAccName sn
+          isRepeatedOccurence <- enterOcc occMap $ StableAccName sn
           
           traceLine (showPreAccOp pacc) $
             if isRepeatedOccurence 
@@ -829,39 +823,39 @@ makeOccMap rootAcc
             Atag i                   -> reconstruct $ return (Atag i)
             Pipe afun1 afun2 acc     -> reconstruct $ travA (Pipe afun1 afun2) acc
             Acond e acc1 acc2        -> reconstruct $ do
-                                          e'    <- traverseExp updateMap enter e
-                                          acc1' <- traverseAcc updateMap enter acc1
-                                          acc2' <- traverseAcc updateMap enter acc2
+                                          e'    <- traverseExp occMap e
+                                          acc1' <- traverseAcc occMap acc1
+                                          acc2' <- traverseAcc occMap acc2
                                           return (Acond e' acc1' acc2')
             FstArray acc             -> reconstruct $ travA FstArray acc
             SndArray acc             -> reconstruct $ travA SndArray acc
             PairArrays acc1 acc2     -> reconstruct $ do
-                                          acc1' <- traverseAcc updateMap enter acc1
-                                          acc2' <- traverseAcc updateMap enter acc2
+                                          acc1' <- traverseAcc occMap acc1
+                                          acc2' <- traverseAcc occMap acc2
                                           return (PairArrays acc1' acc2')
             Use arr                  -> reconstruct $ return (Use arr)
             Unit e                   -> reconstruct $ do
-                                          e' <- traverseExp updateMap enter e
+                                          e' <- traverseExp occMap e
                                           return (Unit e')
             Generate e f             -> reconstruct $ do
-                                          e' <- traverseExp  updateMap enter e
-                                          f' <- traverseFun1 updateMap enter f
+                                          e' <- traverseExp  occMap e
+                                          f' <- traverseFun1 occMap f
                                           return (Generate e' f')
             Reshape e acc            -> reconstruct $ travEA Reshape e acc
             Replicate e acc          -> reconstruct $ travEA Replicate e acc
             Index acc e              -> reconstruct $ travEA (flip Index) e acc
             Map f acc                -> reconstruct $ do
-                                          f'   <- traverseFun1 updateMap enter f
-                                          acc' <- traverseAcc  updateMap enter acc
+                                          f'   <- traverseFun1 occMap f
+                                          acc' <- traverseAcc  occMap acc
                                           return (Map f' acc')
             ZipWith f acc1 acc2      -> reconstruct $ travF2A2 ZipWith f acc1 acc2
             Fold f e acc             -> reconstruct $ travF2EA Fold f e acc
             Fold1 f acc              -> reconstruct $ travF2A Fold1 f acc
             FoldSeg f e acc1 acc2    -> reconstruct $ do
-                                          f'    <- traverseFun2 updateMap enter f
-                                          e'    <- traverseExp  updateMap enter e
-                                          acc1' <- traverseAcc  updateMap enter acc1
-                                          acc2' <- traverseAcc  updateMap enter acc2
+                                          f'    <- traverseFun2 occMap f
+                                          e'    <- traverseExp  occMap e
+                                          acc1' <- traverseAcc  occMap acc1
+                                          acc2' <- traverseAcc  occMap acc2
                                           return (FoldSeg f' e' acc1' acc2')
             Fold1Seg f acc1 acc2     -> reconstruct $ travF2A2 Fold1Seg f acc1 acc2
             Scanl f e acc            -> reconstruct $ travF2EA Scanl f e acc
@@ -871,25 +865,25 @@ makeOccMap rootAcc
             Scanr' f e acc           -> reconstruct $ travF2EA Scanr' f e acc
             Scanr1 f acc             -> reconstruct $ travF2A Scanr1 f acc
             Permute c acc1 p acc2    -> reconstruct $ do
-                                          c'    <- traverseFun2 updateMap enter c
-                                          p'    <- traverseFun1 updateMap enter p
-                                          acc1' <- traverseAcc  updateMap enter acc1
-                                          acc2' <- traverseAcc  updateMap enter acc2
+                                          c'    <- traverseFun2 occMap c
+                                          p'    <- traverseFun1 occMap p
+                                          acc1' <- traverseAcc  occMap acc1
+                                          acc2' <- traverseAcc  occMap acc2
                                           return (Permute c' acc1' p' acc2')
             Backpermute e p acc      -> reconstruct $ do
-                                          e'   <- traverseExp  updateMap enter e
-                                          p'   <- traverseFun1 updateMap enter p
-                                          acc' <- traverseAcc  updateMap enter acc
+                                          e'   <- traverseExp  occMap e
+                                          p'   <- traverseFun1 occMap p
+                                          acc' <- traverseAcc  occMap acc
                                           return (Backpermute e' p' acc')
             Stencil s bnd acc        -> reconstruct $ do
-                                          s'   <- traverseStencil1 acc updateMap enter s
-                                          acc' <- traverseAcc  updateMap enter acc
+                                          s'   <- traverseStencil1 acc occMap s
+                                          acc' <- traverseAcc  occMap acc
                                           return (Stencil s' bnd acc')
             Stencil2 s bnd1 acc1 
                        bnd2 acc2     -> reconstruct $ do
-                                          s'    <- traverseStencil2 acc1 acc2 updateMap enter s
-                                          acc1' <- traverseAcc  updateMap enter acc1
-                                          acc2' <- traverseAcc  updateMap enter acc2
+                                          s'    <- traverseStencil2 acc1 acc2 occMap s
+                                          acc1' <- traverseAcc  occMap acc1
+                                          acc2' <- traverseAcc  occMap acc2
                                           return (Stencil2 s' bnd1 acc1' bnd2 acc2')
       where
         travA :: Arrays arrs'
@@ -897,7 +891,7 @@ makeOccMap rootAcc
               -> Acc arrs' -> IO (PreAcc SharingAcc SharingExp arrs)
         travA c acc
           = do
-              acc' <- traverseAcc updateMap enter acc
+              acc' <- traverseAcc occMap acc
               return $ c acc'
 
         travEA :: (Typeable b, Arrays arrs')
@@ -905,8 +899,8 @@ makeOccMap rootAcc
                -> Exp b -> Acc arrs' -> IO (PreAcc SharingAcc SharingExp arrs)
         travEA c exp acc
           = do
-              exp' <- traverseExp updateMap enter exp
-              acc' <- traverseAcc updateMap enter acc
+              exp' <- traverseExp occMap exp
+              acc' <- traverseAcc occMap acc
               return $ c exp' acc'
 
         travF2A :: (Elt b, Elt c, Typeable d, Arrays arrs')
@@ -915,8 +909,8 @@ makeOccMap rootAcc
                 -> (Exp b -> Exp c -> Exp d) -> Acc arrs' -> IO (PreAcc SharingAcc SharingExp arrs)
         travF2A c fun acc
           = do
-              fun' <- traverseFun2 updateMap enter fun
-              acc' <- traverseAcc updateMap enter acc
+              fun' <- traverseFun2 occMap fun
+              acc' <- traverseAcc occMap acc
               return $ c fun' acc'
 
         travF2EA :: (Elt b, Elt c, Typeable d, Typeable e, Arrays arrs')
@@ -926,9 +920,9 @@ makeOccMap rootAcc
                  -> IO (PreAcc SharingAcc SharingExp arrs)
         travF2EA c fun exp acc
           = do
-              fun' <- traverseFun2 updateMap enter fun
-              exp' <- traverseExp updateMap enter exp
-              acc' <- traverseAcc updateMap enter acc
+              fun' <- traverseFun2 occMap fun
+              exp' <- traverseExp occMap exp
+              acc' <- traverseAcc occMap acc
               return $ c fun' exp' acc'
 
         travF2A2 :: (Elt b, Elt c, Typeable d, Arrays arrs1, Arrays arrs2)
@@ -938,37 +932,34 @@ makeOccMap rootAcc
                  -> IO (PreAcc SharingAcc SharingExp arrs)
         travF2A2 c fun acc1 acc2
           = do
-              fun' <- traverseFun2 updateMap enter fun
-              acc1' <- traverseAcc updateMap enter acc1
-              acc2' <- traverseAcc updateMap enter acc2
+              fun' <- traverseFun2 occMap fun
+              acc1' <- traverseAcc occMap acc1
+              acc2' <- traverseAcc occMap acc2
               return $ c fun' acc1' acc2'
 
     traverseFun1 :: (Elt b, Typeable c) 
-                  => Bool -> (Bool -> StableAccName -> IO Bool) -> (Exp b -> Exp c) 
-                  -> IO (Exp b -> SharingExp c)
-    traverseFun1 updateMap enter f
+                  => OccMapHash -> (Exp b -> Exp c) -> IO (Exp b -> SharingExp c)
+    traverseFun1 occMap f
       = do
             -- see Note [Traversing functions and side effects]
-          body <- traverseExp updateMap enter $ f (Exp $ Tag 0)
+          body <- traverseExp occMap $ f (Exp $ Tag 0)
           return $ const body
 
     traverseFun2 :: (Elt b, Elt c, Typeable d) 
-                  => Bool -> (Bool -> StableAccName -> IO Bool) -> (Exp b -> Exp c -> Exp d) 
-                  -> IO (Exp b -> Exp c -> SharingExp d)
-    traverseFun2 updateMap enter f
+                  => OccMapHash -> (Exp b -> Exp c -> Exp d) -> IO (Exp b -> Exp c -> SharingExp d)
+    traverseFun2 occMap f
       = do
             -- see Note [Traversing functions and side effects]
-          body <- traverseExp updateMap enter $ f (Exp $ Tag 1) (Exp $ Tag 0)
+          body <- traverseExp occMap $ f (Exp $ Tag 1) (Exp $ Tag 0)
           return $ \_ _ -> body
 
     traverseStencil1 :: forall sh b c stencil. (Stencil sh b stencil, Typeable c) 
                      => Acc (Array sh b){-dummy-}
-                     -> Bool -> (Bool -> StableAccName -> IO Bool) -> (stencil -> Exp c) 
-                     -> IO (stencil -> SharingExp c)
-    traverseStencil1 _ updateMap enter stencilFun 
+                     -> OccMapHash -> (stencil -> Exp c) -> IO (stencil -> SharingExp c)
+    traverseStencil1 _ occMap stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          body <- traverseExp updateMap enter $ 
+          body <- traverseExp occMap $ 
                     stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag 0))
           return $ const body
         
@@ -976,20 +967,19 @@ makeOccMap rootAcc
                         (Stencil sh b stencil1, Stencil sh c stencil2, Typeable d) 
                      => Acc (Array sh b){-dummy-}
                      -> Acc (Array sh c){-dummy-}
-                     -> Bool -> (Bool -> StableAccName -> IO Bool) 
+                     -> OccMapHash 
                      -> (stencil1 -> stencil2 -> Exp d) 
                      -> IO (stencil1 -> stencil2 -> SharingExp d)
-    traverseStencil2 _ _ updateMap enter stencilFun 
+    traverseStencil2 _ _ occMap stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          body <- traverseExp updateMap enter $ 
+          body <- traverseExp occMap $ 
                     stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag 1))
                                (stencilPrj (undefined::sh) (undefined::c) (Exp $ Tag 0))
           return $ \_ _ -> body
         
-    traverseExp :: forall a. Typeable a 
-                => Bool -> (Bool -> StableAccName -> IO Bool) -> Exp a -> IO (SharingExp a)
-    traverseExp updateMap enter (Exp pexp)
+    traverseExp :: forall a. Typeable a => OccMapHash -> Exp a -> IO (SharingExp a)
+    traverseExp occMap (Exp pexp)
       = -- FIXME: recover sharing of scalar expressions as well
           case pexp of
             Tag i           -> returnSharingExp $ Tag i
@@ -1014,7 +1004,7 @@ makeOccMap rootAcc
                -> IO (SharingExp a)
         travE1 c e
           = do
-              e' <- traverseExp updateMap enter e
+              e' <- traverseExp occMap e
               returnSharingExp $ c e'
       
         travE2 :: (Typeable b, Typeable c) 
@@ -1023,8 +1013,8 @@ makeOccMap rootAcc
                -> IO (SharingExp a)
         travE2 c e1 e2
           = do
-              e1' <- traverseExp updateMap enter e1
-              e2' <- traverseExp updateMap enter e2
+              e1' <- traverseExp occMap e1
+              e2' <- traverseExp occMap e2
               returnSharingExp $ c e1' e2'
       
         travE3 :: (Typeable b, Typeable c, Typeable d) 
@@ -1033,16 +1023,16 @@ makeOccMap rootAcc
                -> IO (SharingExp a)
         travE3 c e1 e2 e3
           = do
-              e1' <- traverseExp updateMap enter e1
-              e2' <- traverseExp updateMap enter e2
-              e3' <- traverseExp updateMap enter e3
+              e1' <- traverseExp occMap e1
+              e2' <- traverseExp occMap e2
+              e3' <- traverseExp occMap e3
               returnSharingExp $ c e1' e2' e3'
       
         travA :: Typeable b => (SharingAcc b -> PreExp SharingAcc SharingExp a) -> Acc b 
               -> IO (SharingExp a)
         travA c acc
           = do
-              acc' <- traverseAcc updateMap enter acc
+              acc' <- traverseAcc occMap acc
               returnSharingExp $ c acc'
 
         travAE :: (Typeable b, Typeable c) 
@@ -1051,13 +1041,13 @@ makeOccMap rootAcc
                -> IO (SharingExp a)
         travAE c acc e
           = do
-              acc' <- traverseAcc updateMap enter acc
-              e' <- traverseExp updateMap enter e
+              acc' <- traverseAcc occMap acc
+              e' <- traverseExp occMap e
               returnSharingExp $ c acc' e'
 
         travTup :: Tuple.Tuple Exp tup -> IO (Tuple.Tuple SharingExp tup)
         travTup NilTup          = return NilTup
-        travTup (SnocTup tup e) = pure SnocTup <*> travTup tup <*> traverseExp updateMap enter e
+        travTup (SnocTup tup e) = pure SnocTup <*> travTup tup <*> traverseExp occMap e
 
 -- Type used to maintain how often each shared subterm occured.
 --

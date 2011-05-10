@@ -812,7 +812,7 @@ c ? (t, e) = Exp $ Cond c t e
 --
 infixl 9 !
 (!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
-arr ! ix = Exp $ IndexScalar arr ix
+(!) arr ix = Exp $ IndexScalar arr ix
 
 -- |Extraction of the element in a singleton array.
 --
