@@ -12,6 +12,7 @@ import qualified Map
 import qualified Fold
 import qualified ScanSeg
 import qualified Stencil
+import qualified Vector
 
 import qualified SASUM
 import qualified SAXPY
@@ -120,6 +121,11 @@ allTests cfg = sequence'
   , mkTest "fold-2d-product" "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
   , mkTest "scanseg-sum"     "segmented reduction"                        $ ScanSeg.run "sum" n
   , mkTest "stencil-3x3"     "5-element cross pattern"                    $ Stencil.run "3x3" n
+  , mkTest "init"            "vector init"                                $ Vector.run "init" n
+  , mkTest "tail"            "vector tail"                                $ Vector.run "tail" n
+  , mkTest "take"            "vector take"                                $ Vector.run "take" n
+  , mkTest "drop"            "vector drop"                                $ Vector.run "drop" n
+  , mkTest "slit"            "vector slit"                                $ Vector.run "slit" n
   
     -- simple examples
   , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n
