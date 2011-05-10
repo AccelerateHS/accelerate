@@ -26,6 +26,9 @@ module Data.Array.Accelerate.Prelude (
   scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg, 
   scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
+  -- ** Gather
+  gather, gatherIf,
+
   -- ** Subvector extraction
   init, tail, take, drop, slit
 
@@ -376,6 +379,56 @@ mkSegApply op = apply
         aV = snd a
         bF = fst b
         bV = snd b
+
+
+-- Gather operations
+-- -----------------
+
+-- | Copy elements from source array to destination array according to a map. This
+--   is a backpermute operation where a 'map' vector encodes the ouput to input
+--   index mapping. For example:
+--
+--    input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--    map    = [1, 3, 7, 2, 5, 3]
+--
+--    output = [9, 4, 1, 6, 2, 4]
+--
+gather :: (Elt e)
+       => Acc (Vector Int)      -- ^map
+       -> Acc (Vector e)        -- ^input
+       -> Acc (Vector e)        -- ^output
+gather mapV inputV = backpermute (shape mapV) bpF inputV
+  where
+    bpF ix = lift (Z :. (mapV ! ix))
+
+
+-- | Conditionally copy elements from source array to destination array according
+--   to a map. This is a backpermute opereation where a 'map' vector encdes the
+--   output to input index mapping. In addition, there is a 'mask' vector, and an
+--   associated predication function, that specifies whether an element will be
+--   copied. If not copied, the output array assumes the default vector's value.
+--   For example:
+--
+--    default = [6, 6, 6, 6, 6, 6]
+--    map     = [1, 3, 7, 2, 5, 3]
+--    mask    = [3, 4, 9, 2, 7, 5]
+--    pred    = (> 4)
+--    input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--
+--    output  = [6, 6, 1, 6, 2, 4]
+--
+gatherIf :: (Elt e, Elt e')
+         => Acc (Vector Int)    -- ^map
+         -> Acc (Vector e)      -- ^mask
+         -> (Exp e -> Exp Bool) -- ^predicate
+         -> Acc (Vector e')     -- ^default
+         -> Acc (Vector e')     -- ^input
+         -> Acc (Vector e')     -- ^output
+gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
+  where
+    zwF p g   = p ? (unlift g)
+    gatheredV = zip (gather mapV inputV) defaultV
+    predV     = map pred maskV
 
 
 -- Extracting subvectors
