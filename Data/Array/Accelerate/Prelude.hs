@@ -24,13 +24,16 @@ module Data.Array.Accelerate.Prelude (
 
   -- ** Segmented scans
   scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg, 
-  scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg
+  scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
+  -- ** Subvector extraction
+  init, tail, take, drop, slit
+
 ) where
 
 -- avoid clashes with Prelude functions
 import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry)
+                         init, tail, take, drop, filter, max, min, not, fst, snd, curry, uncurry)
 import qualified Prelude
 
 -- friends  
@@ -373,4 +376,45 @@ mkSegApply op = apply
         aV = snd a
         bF = fst b
         bV = snd b
+
+
+-- Extracting subvectors
+-- ---------------------
+
+
+-- | Yield the first 'n' elements of the input vector. The vector must contain
+--   no more than 'n' elements.
+--
+take :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
+take n = backpermute (index1 n) id
+
+-- | Yield all but the first 'n' elements of the input vector. The vector must
+--   contain no more than 'n' elements.
+--
+drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
+drop n arr = backpermute (ilift1 (\x -> x - n) $ shape arr) (ilift1 (+ n)) arr
+
+
+-- | Yield all but the last element of the input vector. The vector may not
+--   be empty.
+--
+init :: Elt e => Acc (Vector e) -> Acc (Vector e)
+init arr = take ((unindex1 $ shape arr) - 1) arr
+
+
+-- | Yield all but the first element of the input vector. The vector may not
+--   be empty.
+tail :: Elt e => Acc (Vector e) -> Acc (Vector e)
+tail = drop 1
+
+
+-- | Yield a slit (slice) from the vector. The vector must contain at least
+--   i + n elements.
+--
+slit :: Elt e
+      => Exp Int
+      -> Exp Int
+      -> Acc (Vector e)
+      -> Acc (Vector e)
+slit i n = backpermute (index1 n) (ilift1 (+ i))
 
