@@ -13,6 +13,7 @@ import qualified Fold
 import qualified ScanSeg
 import qualified Stencil
 import qualified Vector
+import qualified Gather
 
 import qualified SASUM
 import qualified SAXPY
@@ -126,6 +127,8 @@ allTests cfg = sequence'
   , mkTest "take"            "vector take"                                $ Vector.run "take" n
   , mkTest "drop"            "vector drop"                                $ Vector.run "drop" n
   , mkTest "slit"            "vector slit"                                $ Vector.run "slit" n
+  , mkTest "gather"          "backpermute via index mapping vector"       $ Gather.run "gather" n
+  , mkTest "gather-if"       "cond. backpermute via index mapping vector" $ Gather.run "gather-if" n
   
     -- simple examples
   , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n
