@@ -6,6 +6,7 @@ import Random
 import System.Random.MWC
 import Data.Array.IArray     as IArray
 import Data.Array.Accelerate as Acc
+import Prelude               as P
 
 
 riskfree, volatility :: Float
@@ -76,7 +77,7 @@ run n = withSystemRandom $ \gen -> do
   v_os <- randomUArrayR (1,100)   gen n
   v_oy <- randomUArrayR (0.25,10) gen n
 
-  let v_psy = listArray (0,n-1) $ zip3 (elems v_sp) (elems v_os) (elems v_oy)
+  let v_psy = listArray (0,n-1) $ P.zip3 (elems v_sp) (elems v_os) (elems v_oy)
       a_psy = Acc.fromIArray v_psy
   --
   return (run_ref v_psy, run_acc a_psy)
