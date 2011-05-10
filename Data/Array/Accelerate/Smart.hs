@@ -314,14 +314,14 @@ convertSharingAcc :: forall a aenv. Arrays a
                   -> [StableSharingAcc]
                   -> SharingAcc a
                   -> AST.OpenAcc aenv a
-convertSharingAcc alyt env (VarSharing sa)
+convertSharingAcc alyt env (AvarSharing sa)
   | Just i <- findIndex (matchStableAcc sa) env 
   = AST.OpenAcc $ AST.Avar (prjIdx i alyt)
   | otherwise                                   
   = INTERNAL_ERROR(error) "convertSharingAcc (prjIdx)" err
   where
     err = "inconsistent valuation; sa = " ++ show (hashStableName sa) ++ "; env = " ++ show env
-convertSharingAcc alyt env (LetSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
+convertSharingAcc alyt env (AletSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
   = AST.OpenAcc
   $ let alyt' = incLayout alyt `PushLayout` ZeroIdx
     in
@@ -451,7 +451,7 @@ data PreExp acc exp t where
                                                 
   Tuple       :: (Elt t, IsTuple t)             
               => Tuple.Tuple exp (TupleRepr t)  -> PreExp acc exp t
-  Prj         :: (Elt t, IsTuple t)             
+  Prj         :: (Elt t, IsTuple t, Elt e)             
               => TupleIdx (TupleRepr t) e       
               -> exp t                          -> PreExp acc exp e
   IndexNil    ::                                   PreExp acc exp Z
@@ -463,7 +463,8 @@ data PreExp acc exp t where
               => exp (sl:.a)                    -> PreExp acc exp sl
   IndexAny    :: Shape sh                       
               =>                                   PreExp acc exp (Any sh)
-  Cond        :: exp Bool -> exp t -> exp t     -> PreExp acc exp t
+  Cond        :: Elt t
+              => exp Bool -> exp t -> exp t     -> PreExp acc exp t
   PrimConst   :: Elt t                          
               => PrimConst t                    -> PreExp acc exp t
   PrimApp     :: (Elt a, Elt r)                 
@@ -479,10 +480,6 @@ data PreExp acc exp t where
 --
 newtype Exp t = Exp (PreExp Acc Exp t)
 
--- |Scalar expressions for array computations with sharing annotations.
---
-newtype SharingExp t = SharingExp (PreExp SharingAcc SharingExp t)
-
 -- |Conversion from HOAS to de Bruijn expression AST
 -- -
 
@@ -497,7 +494,9 @@ convertOpenExp :: forall t env aenv.
 convertOpenExp lyt alyt env = cvt
   where
     cvt :: SharingExp t' -> AST.OpenExp env aenv t'
-    cvt (SharingExp pexp)
+    cvt (VarSharing _)   = INTERNAL_ERROR(error) "convertOpenExp" "sharing not yet implemented"
+    cvt (LetSharing _ _) = INTERNAL_ERROR(error) "convertOpenExp" "sharing not yet implemented"
+    cvt (ExpSharing _ pexp)
       = case pexp of
           Tag i           -> AST.Var (prjIdx i lyt)
           Const v         -> AST.Const (fromElt v)
@@ -633,7 +632,7 @@ convertStencilFun2 _ _ alyt env stencilFun = Lam (Lam (Body openStencilFun))
 --
 -- During computation of the occurences, the tree is annotated with stable names on every node
 -- using 'AccSharing' constructors and all but the first occurence of shared subtrees are pruned
--- using 'VarSharing' constructors (see 'SharingAcc' below).  This phase is impure as it is based
+-- using 'AvarSharing' constructors (see 'SharingAcc' below).  This phase is impure as it is based
 -- on stable names.
 --
 -- We use a hash table (instead of 'Data.Map') as computing stable names forces us to live in IO
@@ -646,13 +645,23 @@ convertStencilFun2 _ _ alyt env stencilFun = Lam (Lam (Body openStencilFun))
 --
 -- This is a bottom-up traversal that determines the scope for every binding to be introduced
 -- to share a subterm.  It uses the occurence map to determine, for every shared subtree, the
--- lowest AST node at which the binding for that shared subtree can be placed (using a 'LetSharing'
--- constructor)— it's the meet of all the shared subtree occurences.
+-- lowest AST node at which the binding for that shared subtree can be placed (using a
+-- 'AletSharing' constructor)— it's the meet of all the shared subtree occurences.
 --
 -- The second phase is also replacing the first occurence of each shared subtree with a
--- 'VarSharing' node and floats the shared subtree up to its binding point.
+-- 'AvarSharing' node and floats the shared subtree up to its binding point.
 --
 --  (Implemented by 'determineScopes'.)
+--
+-- /Sharing recovery for expressions/
+--
+-- We recover sharing for each expression (including function bodies) independently of any other
+-- expression — i.e., we cannot share scalar expressions across array computations.  Hence, during
+-- Phase One of sharing recovery for array computations, we mark all scalar expression nodes with
+-- a stable name, but we do /not/ yet enter them into an occurence map.  The later needs to be done
+-- separately into a separate map for each expression, so that the counts of independent
+-- expressions do not interfere.  Otherwise, sharing recovery for scalar expressions proceeds in
+-- the same manner as for array computations.
 
 -- Opaque stable name for an array computation — used to key the occurence map.
 --
@@ -687,15 +696,26 @@ makeStableAST :: c t -> IO (StableName (c t))
 makeStableAST e = e `seq` makeStableName e
 
 -- Interleave sharing annotations into an array computation AST.  Subtrees can be marked as being
--- represented by variable (binding a shared subtree) using 'VarSharing' and as being prefixed by
--- a let binding (for a shared subtree) using 'LetSharing'.
+-- represented by variable (binding a shared subtree) using 'AvarSharing' and as being prefixed by
+-- a let binding (for a shared subtree) using 'AletSharing'.
 --
 data SharingAcc arrs where
-  VarSharing :: Arrays arrs 
-             => StableName (Acc arrs)                                      -> SharingAcc arrs
-  LetSharing :: StableSharingAcc -> SharingAcc arrs                        -> SharingAcc arrs
-  AccSharing :: Arrays arrs 
-             => StableName (Acc arrs) -> PreAcc SharingAcc SharingExp arrs -> SharingAcc arrs
+  AvarSharing :: Arrays arrs 
+              => StableName (Acc arrs)                                      -> SharingAcc arrs
+  AletSharing :: StableSharingAcc -> SharingAcc arrs                        -> SharingAcc arrs
+  AccSharing  :: Arrays arrs 
+              => StableName (Acc arrs) -> PreAcc SharingAcc SharingExp arrs -> SharingAcc arrs
+
+-- Interleave sharing annotations into a scalar expressions AST in the same manner as 'SharingAcc'
+-- do for array computations.
+--
+data SharingExp t where
+  VarSharing :: Elt t
+             => StableName (Exp t)                                   -> SharingExp t
+  -- LetSharing :: StableSharingExp -> SharingExp t                     -> SharingExp t
+  LetSharing :: () -> SharingExp t                     -> SharingExp t
+  ExpSharing :: Elt t
+             => StableName (Exp t) -> PreExp SharingAcc SharingExp t -> SharingExp t
 
 -- Stable name for an array computation associated with its sharing-annotated version.
 --
@@ -798,10 +818,10 @@ makeOccMap rootAcc
             Just n  -> Hash.update occMap sa (n + 1) >> return True
 
     traverseAcc :: forall arrs. Typeable arrs => OccMapHash -> Acc arrs -> IO (SharingAcc arrs)
-    traverseAcc occMap acc'@(Acc pacc)
+    traverseAcc occMap acc@(Acc pacc)
       = do
             -- Compute stable name and enter it into the occurence map
-          sn <- makeStableAcc acc'
+          sn <- makeStableAcc acc
           isRepeatedOccurence <- enterOcc occMap $ StableAccName sn
           
           traceLine (showPreAccOp pacc) $
@@ -816,7 +836,7 @@ makeOccMap rootAcc
           let reconstruct :: Arrays arrs 
                           => IO (PreAcc SharingAcc SharingExp arrs)
                           -> IO (SharingAcc arrs)
-              reconstruct newAcc | isRepeatedOccurence = pure $ VarSharing sn
+              reconstruct newAcc | isRepeatedOccurence = pure $ AvarSharing sn
                                  | otherwise           = AccSharing sn <$> newAcc
 
           case pacc of
@@ -979,71 +999,75 @@ makeOccMap rootAcc
           return $ \_ _ -> body
         
     traverseExp :: forall a. Typeable a => OccMapHash -> Exp a -> IO (SharingExp a)
-    traverseExp occMap (Exp pexp)
-      = -- FIXME: recover sharing of scalar expressions as well
-          case pexp of
-            Tag i           -> returnSharingExp $ Tag i
-            Const c         -> returnSharingExp $ Const c
-            Tuple tup       -> (SharingExp . Tuple) <$> travTup tup
-            Prj i e         -> travE1 (Prj i) e
-            IndexNil        -> returnSharingExp IndexNil
-            IndexCons ix i  -> travE2 IndexCons ix i
-            IndexHead i     -> travE1 IndexHead i
-            IndexTail ix    -> travE1 IndexTail ix
-            IndexAny        -> returnSharingExp $ IndexAny
-            Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
-            PrimConst c     -> returnSharingExp $ PrimConst c
-            PrimApp p e     -> travE1 (PrimApp p) e
-            IndexScalar a e -> travAE IndexScalar a e
-            Shape a         -> travA Shape a
-            Size a          -> travA Size a
-      where
-        returnSharingExp = return . SharingExp
+    traverseExp occMap exp@(Exp pexp)
+      = do
+            -- Compute stable name (scalar expressions don't go into the occurence map yet)
+          sn <- makeStableAST exp
+
+          let reconstruct :: Elt a => IO (PreExp SharingAcc SharingExp a) -> IO (SharingExp a)
+              reconstruct newExp = ExpSharing sn <$> newExp
         
+          case pexp of
+            Tag i           -> reconstruct $ return $ Tag i
+            Const c         -> reconstruct $ return $ Const c
+            Tuple tup       -> reconstruct $ Tuple <$> travTup tup
+            Prj i e         -> reconstruct $ travE1 (Prj i) e
+            IndexNil        -> reconstruct $ return $ IndexNil
+            IndexCons ix i  -> reconstruct $ travE2 IndexCons ix i
+            IndexHead i     -> reconstruct $ travE1 IndexHead i
+            IndexTail ix    -> reconstruct $ travE1 IndexTail ix
+            IndexAny        -> reconstruct $ return $ IndexAny
+            Cond e1 e2 e3   -> reconstruct $ travE3 Cond e1 e2 e3
+            PrimConst c     -> reconstruct $ return $ PrimConst c
+            PrimApp p e     -> reconstruct $ travE1 (PrimApp p) e
+            IndexScalar a e -> reconstruct $ travAE IndexScalar a e
+            Shape a         -> reconstruct $ travA Shape a
+            Size a          -> reconstruct $ travA Size a
+      where
         travE1 :: Typeable b => (SharingExp b -> PreExp SharingAcc SharingExp a) -> Exp b 
-               -> IO (SharingExp a)
+               -> IO (PreExp SharingAcc SharingExp a)
         travE1 c e
           = do
               e' <- traverseExp occMap e
-              returnSharingExp $ c e'
-      
+              return $ c e'
+
         travE2 :: (Typeable b, Typeable c) 
                => (SharingExp b -> SharingExp c -> PreExp SharingAcc SharingExp a) 
                -> Exp b -> Exp c 
-               -> IO (SharingExp a)
+               -> IO (PreExp SharingAcc SharingExp a)
         travE2 c e1 e2
           = do
               e1' <- traverseExp occMap e1
               e2' <- traverseExp occMap e2
-              returnSharingExp $ c e1' e2'
+              return $ c e1' e2'
       
         travE3 :: (Typeable b, Typeable c, Typeable d) 
                => (SharingExp b -> SharingExp c -> SharingExp d -> PreExp SharingAcc SharingExp a) 
                -> Exp b -> Exp c -> Exp d
-               -> IO (SharingExp a)
+               -> IO (PreExp SharingAcc SharingExp a)
         travE3 c e1 e2 e3
           = do
               e1' <- traverseExp occMap e1
               e2' <- traverseExp occMap e2
               e3' <- traverseExp occMap e3
-              returnSharingExp $ c e1' e2' e3'
+              return $ c e1' e2' e3'
       
         travA :: Typeable b => (SharingAcc b -> PreExp SharingAcc SharingExp a) -> Acc b 
-              -> IO (SharingExp a)
+              -> IO (PreExp SharingAcc SharingExp a)
         travA c acc
           = do
               acc' <- traverseAcc occMap acc
-              returnSharingExp $ c acc'
+              return $ c acc'
 
         travAE :: (Typeable b, Typeable c) 
                => (SharingAcc b -> SharingExp c -> PreExp SharingAcc SharingExp a) 
                -> Acc b -> Exp c 
-               -> IO (SharingExp a)
+               -> IO (PreExp SharingAcc SharingExp a)
         travAE c acc e
           = do
               acc' <- traverseAcc occMap acc
               e' <- traverseExp occMap e
-              returnSharingExp $ c acc' e'
+              return $ c acc' e'
 
         travTup :: Tuple.Tuple Exp tup -> IO (Tuple.Tuple SharingExp tup)
         travTup NilTup          = return NilTup
@@ -1090,23 +1114,23 @@ NodeCounts us +++ NodeCounts vs = NodeCounts $ merge us vs
       | sa2 `notElem` map fst xs' = y : merge xs  ys'
       | otherwise                 = INTERNAL_ERROR(error) "(+++)" "Precondition violated"
 
-    (StableSharingAcc _ (VarSharing _)) `pickNoneVar` sa2                                 = sa2
-    sa1                                 `pickNoneVar` _sa2                                = sa1
+    (StableSharingAcc _ (AvarSharing _)) `pickNoneVar` sa2                                 = sa2
+    sa1                                  `pickNoneVar` _sa2                                = sa1
 
 -- Determine the scopes of all variables representing shared subterms (Phase Two) in a bottom-up
 -- sweep.  The first argument determines whether array computations are floated out of expressions
 -- irrespective of whether they are shared or not — 'True' implies floating them out.
 --
--- Precondition: there are only 'VarSharing' and 'AccSharing' nodes in the argument.
+-- Precondition: there are only 'AvarSharing' and 'AccSharing' nodes in the argument.
 --
 determineScopes :: Typeable a => Bool -> OccMap -> SharingAcc a -> SharingAcc a
 determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
   where
     scopesAcc :: forall arrs. SharingAcc arrs -> (SharingAcc arrs, NodeCounts)
-    scopesAcc (LetSharing _ _)
-      = INTERNAL_ERROR(error) "determineScopes: scopes" "unexpected 'LetSharing'"
-    scopesAcc sharingAcc@(VarSharing sn)
-      = (VarSharing sn, nodeCount (StableSharingAcc sn sharingAcc, 1))
+    scopesAcc (AletSharing _ _)
+      = INTERNAL_ERROR(error) "determineScopes: scopesAcc" "unexpected 'AletSharing'"
+    scopesAcc sharingAcc@(AvarSharing sn)
+      = (AvarSharing sn, nodeCount (StableSharingAcc sn sharingAcc, 1))
     scopesAcc (AccSharing sn pacc)
       = case pacc of
           Atag i                  -> reconstruct (Atag i) noNodeCounts
@@ -1252,26 +1276,26 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
 
         -- Reconstruct the current tree node.
         --
-        -- * If the current node is being shared ('occCount > 1'), replace it by a 'VarSharing'
+        -- * If the current node is being shared ('occCount > 1'), replace it by a 'AvarSharing'
         --   node and float the shared subtree out wrapped in a 'NodeCounts' value.
         -- * If the current node is not shared, reconstruct it in place.
         --
-        -- In either case, any completed 'NodeCounts' are injected as bindings using 'LetSharing'
+        -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
         -- node.
         -- 
         reconstruct :: Arrays arrs 
                     => PreAcc SharingAcc SharingExp arrs -> NodeCounts 
                     -> (SharingAcc arrs, NodeCounts)
         reconstruct newAcc subCount
-          | occCount > 1 = ( VarSharing sn
+          | occCount > 1 = ( AvarSharing sn
                            , nodeCount (StableSharingAcc sn sharingAcc, 1) +++ newCount)
           | otherwise    = (sharingAcc, newCount)
           where
               -- Determine the bindings that need to be attached to the current node...
             (newCount, bindHere) = filterCompleted subCount
 
-              -- ...and wrap them in 'LetSharing' constructors
-            lets       = foldl (flip (.)) id . map LetSharing $ bindHere
+              -- ...and wrap them in 'AletSharing' constructors
+            lets       = foldl (flip (.)) id . map AletSharing $ bindHere
             sharingAcc = lets $ AccSharing sn newAcc
 
         -- Extract nodes that have a complete node count (i.e., their node count is equal to the
@@ -1294,7 +1318,12 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
                 (subs', bindHere) = fc subs
 
     scopesExp :: forall t. SharingExp t -> (SharingExp t, NodeCounts)
-    scopesExp (SharingExp pexp)
+    scopesExp (LetSharing _ _)
+      = INTERNAL_ERROR(error) "determineScopes: scopesExp" "unexpected 'LetSharing'"
+    scopesExp sharingExp@(VarSharing sn)
+      -- = (VarSharing sn, nodeCount (StableSharingAST sn sharingExp, 1))
+      = undefined
+    scopesExp (ExpSharing sn pexp)
       = case pexp of
           Tag i           -> reconstruct (Tag i) noNodeCounts
           Const c         -> reconstruct (Const c) noNodeCounts
@@ -1367,9 +1396,9 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
                          -> SharingAcc a 
                          -> NodeCounts
                          -> (SharingExp t, NodeCounts)
-        maybeFloatOutAcc c acc@(VarSharing _) accCount        -- nothing to float out
+        maybeFloatOutAcc c acc@(AvarSharing _) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
-        maybeFloatOutAcc c acc                accCount
+        maybeFloatOutAcc c acc                 accCount
           | floatOutAcc = reconstruct (c var) (nodeCount (stableAcc, 1) +++ accCount)
           | otherwise   = reconstruct (c acc) accCount
           where
@@ -1377,13 +1406,13 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
 
         abstract :: SharingAcc a -> (SharingAcc a -> SharingAcc a) 
                  -> (SharingAcc a, StableSharingAcc)
-        abstract (VarSharing _)        _    = INTERNAL_ERROR(error) "sharingAccToVar" "VarSharing"
-        abstract (LetSharing sa acc)   lets = abstract acc (lets . LetSharing sa)
-        abstract acc@(AccSharing sn _) lets = (VarSharing sn, StableSharingAcc sn (lets acc))
+        abstract (AvarSharing _)       _    = INTERNAL_ERROR(error) "sharingAccToVar" "AvarSharing"
+        abstract (AletSharing sa acc)  lets = abstract acc (lets . AletSharing sa)
+        abstract acc@(AccSharing sn _) lets = (AvarSharing sn, StableSharingAcc sn (lets acc))
 
         reconstruct :: PreExp SharingAcc SharingExp t -> NodeCounts 
                     -> (SharingExp t, NodeCounts)
-        reconstruct newExp subCount = (SharingExp newExp, subCount)
+        reconstruct newExp subCount = (ExpSharing sn newExp, subCount)
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
@@ -1466,22 +1495,22 @@ instance Show (Exp a) where
       toSharingExp :: Exp b -> SharingExp b
       toSharingExp (Exp pexp)
         = case pexp of
-            Tag i           -> SharingExp $ Tag i
-            Const v         -> SharingExp $ Const v
-            Tuple tup       -> SharingExp $ Tuple (toSharingTup tup)
-            Prj idx e       -> SharingExp $ Prj idx (toSharingExp e)
-            IndexNil        -> SharingExp $ IndexNil
-            IndexCons ix i  -> SharingExp $ IndexCons (toSharingExp ix) (toSharingExp i)
-            IndexHead ix    -> SharingExp $ IndexHead (toSharingExp ix)
-            IndexTail ix    -> SharingExp $ IndexTail (toSharingExp ix)
-            IndexAny        -> SharingExp $ IndexAny
-            Cond e1 e2 e3   -> SharingExp $ Cond (toSharingExp e1) (toSharingExp e2)
-                                                 (toSharingExp e3)
-            PrimConst c     -> SharingExp $ PrimConst c
-            PrimApp p e     -> SharingExp $ PrimApp p (toSharingExp e)
-            IndexScalar a e -> SharingExp $ IndexScalar (recoverSharing False a) (toSharingExp e)
-            Shape a         -> SharingExp $ Shape (recoverSharing False a)
-            Size a          -> SharingExp $ Size (recoverSharing False a)
+            Tag i           -> ExpSharing undefined $ Tag i
+            Const v         -> ExpSharing undefined $ Const v
+            Tuple tup       -> ExpSharing undefined $ Tuple (toSharingTup tup)
+            Prj idx e       -> ExpSharing undefined $ Prj idx (toSharingExp e)
+            IndexNil        -> ExpSharing undefined $ IndexNil
+            IndexCons ix i  -> ExpSharing undefined $ IndexCons (toSharingExp ix) (toSharingExp i)
+            IndexHead ix    -> ExpSharing undefined $ IndexHead (toSharingExp ix)
+            IndexTail ix    -> ExpSharing undefined $ IndexTail (toSharingExp ix)
+            IndexAny        -> ExpSharing undefined $ IndexAny
+            Cond e1 e2 e3   -> ExpSharing undefined $ Cond (toSharingExp e1) (toSharingExp e2)
+                                                           (toSharingExp e3)
+            PrimConst c     -> ExpSharing undefined $ PrimConst c
+            PrimApp p e     -> ExpSharing undefined $ PrimApp p (toSharingExp e)
+            IndexScalar a e -> ExpSharing undefined $ IndexScalar (recoverSharing False a) (toSharingExp e)
+            Shape a         -> ExpSharing undefined $ Shape (recoverSharing False a)
+            Size a          -> ExpSharing undefined $ Size (recoverSharing False a)
 
       toSharingTup :: Tuple.Tuple Exp tup -> Tuple.Tuple SharingExp tup
       toSharingTup NilTup          = NilTup
@@ -1519,9 +1548,9 @@ showPreAccOp (Stencil _ _ _)      = "Stencil"
 showPreAccOp (Stencil2 _ _ _ _ _) = "Stencil2"
 
 _showSharingAccOp :: SharingAcc arrs -> String
-_showSharingAccOp (VarSharing sn)    = "VAR " ++ show (hashStableName sn)
-_showSharingAccOp (LetSharing _ acc) = "LET " ++ _showSharingAccOp acc
-_showSharingAccOp (AccSharing _ acc) = showPreAccOp acc
+_showSharingAccOp (AvarSharing sn)    = "AVAR " ++ show (hashStableName sn)
+_showSharingAccOp (AletSharing _ acc) = "ALET " ++ _showSharingAccOp acc
+_showSharingAccOp (AccSharing _ acc)  = showPreAccOp acc
 
 
 -- |Smart constructors to construct representation AST forms
