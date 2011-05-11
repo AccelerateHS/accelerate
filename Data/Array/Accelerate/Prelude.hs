@@ -27,6 +27,9 @@ module Data.Array.Accelerate.Prelude (
   scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg, 
   scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
+  -- ** Enumeration and filling
+  fill, enumFromN, enumFromStepN,
+
   -- ** Gather
   gather, gatherIf,
 
@@ -428,6 +431,27 @@ mkSegApply op = apply
         aV = snd a
         bF = fst b
         bV = snd b
+
+
+-- Enumeration and filling
+-- -----------------------
+
+-- | Create an array where all elements are the same value.
+--
+fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
+fill sh c = generate sh (const c)
+
+-- | Create an array of the given shape containing the values x, x+1, etc (in
+--   row-major order).
+--
+enumFromN :: Exp DIM1 -> Exp Int -> Acc (Array DIM1 Int)
+enumFromN sh x = enumFromStepN sh x 1
+
+-- | Create an array of the given shape containing the values x, x+y, x+y+y, etc
+--   (in row-major order).
+--
+enumFromStepN :: Exp DIM1 -> Exp Int -> Exp Int -> Acc (Array DIM1 Int)
+enumFromStepN sh x y = generate sh ((\i -> (i * y) + x) . unindex1)
 
 
 -- Gather operations
