@@ -261,8 +261,8 @@ codeGenExp (Shape a) = do
   modM shapes (mkShape (accDim a) sh :)
   return [cvar sh]
 
-codeGenExp (Size a) = do
-  sh <- codeGenExp (Shape a)
+codeGenExp (ShapeSize e) = do
+  sh <- codeGenExp e
   return [ccall "size" sh]
 
 codeGenExp (IndexScalar a e) = do

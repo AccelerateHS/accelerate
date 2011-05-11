@@ -641,9 +641,7 @@ evalOpenExp (Shape acc) _ aenv
   = case force $ evalOpenAcc acc aenv of
       Array sh _ -> Sugar.toElt sh
 
-evalOpenExp (Size acc) _ aenv 
-  = case force $ evalOpenAcc acc aenv of
-      Array sh _ -> size sh
+evalOpenExp (ShapeSize sh) env aenv = size $ Sugar.fromElt $ evalOpenExp sh env aenv
 
 -- Evaluate a closed expression
 --

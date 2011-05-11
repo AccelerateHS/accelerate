@@ -79,7 +79,7 @@ module Data.Array.Accelerate.Language (
   (?),
   
   -- ** Array operations with a scalar result
-  (!), the, shape, size,
+  (!), the, shape, size, shapeSize,
   
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
@@ -827,7 +827,14 @@ shape = Shape
 -- |Expression form that yields the size of an array.
 --
 size :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int
-size = Size
+size = shapeSize . shape
+--size = Size
+
+-- |The same as `size` but not operates directly on a shape without the
+--  array.
+--
+shapeSize :: (Shape ix) => Exp ix -> Exp Int
+shapeSize = ShapeSize
 
 
 -- Instances of all relevant H98 classes

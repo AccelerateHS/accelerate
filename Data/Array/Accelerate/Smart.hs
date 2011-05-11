@@ -797,7 +797,7 @@ makeOccMap rootAcc
             PrimApp p e     -> travE1 (PrimApp p) e
             IndexScalar a e -> travAE IndexScalar a e
             Shape a         -> travA Shape a
-            Size a          -> travA Size a
+            ShapeSize e     -> travE1 ShapeSize e
       where
         travE1 :: Typeable b => (SharingExp b -> SharingExp c) -> Exp b -> IO (SharingExp c)
         travE1 c e
@@ -1103,7 +1103,7 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
           PrimApp p e     -> travE1 (PrimApp p) e
           IndexScalar a e -> travAE IndexScalar a e
           Shape a         -> travA Shape a
-          Size a          -> travA Size a
+          ShapeSize e     -> travE1 ShapeSize e
      where
         travTup :: Tuple.Tuple (PreExp SharingAcc) tup 
                 -> (Tuple.Tuple (PreExp SharingAcc) tup, NodeCounts)
@@ -1277,8 +1277,8 @@ data PreExp acc t where
               => acc (Array sh t) -> PreExp acc sh               -> PreExp acc t
   Shape       :: (Shape sh, Elt e)
               => acc (Array sh e)                                -> PreExp acc sh
-  Size        :: (Shape sh, Elt e)
-              => acc (Array sh e)                                -> PreExp acc Int
+  ShapeSize   :: Shape sh
+              => PreExp acc sh                                   -> PreExp acc Int
 
 -- |Scalar expressions for plain array computations.
 --
@@ -1316,7 +1316,7 @@ convertOpenExp lyt alyt env = cvt
     cvt (PrimApp p e)       = AST.PrimApp p (cvt e)
     cvt (IndexScalar a e)   = AST.IndexScalar (convertSharingAcc alyt env a) (cvt e)
     cvt (Shape a)           = AST.Shape (convertSharingAcc alyt env a)
-    cvt (Size a)            = AST.Size (convertSharingAcc alyt env a)
+    cvt (ShapeSize e)       = AST.ShapeSize (cvt e)
 
 -- |Convert a tuple expression
 --
@@ -1442,7 +1442,7 @@ instance Show (Exp a) where
       toSharingExp (PrimApp p e)       = PrimApp p (toSharingExp e)
       toSharingExp (IndexScalar a e)   = IndexScalar (recoverSharing False a) (toSharingExp e)
       toSharingExp (Shape a)           = Shape (recoverSharing False a)
-      toSharingExp (Size a)            = Size (recoverSharing False a)
+      toSharingExp (ShapeSize e)       = ShapeSize (toSharingExp e)
 
       toSharingTup :: Tuple.Tuple (PreExp Acc) tup -> Tuple.Tuple (PreExp SharingAcc) tup
       toSharingTup NilTup          = NilTup

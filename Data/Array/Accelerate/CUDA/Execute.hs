@@ -572,10 +572,9 @@ executeOpenExp (Shape a) _ aenv = do
   freeArray ad
   return (toElt sh)
 
-executeOpenExp (Size a) _ aenv = do
-  (Array sh ad) <- executeOpenAcc a aenv
-  freeArray ad
-  return (size sh)
+executeOpenExp (ShapeSize e) env aenv = do
+  sh <- executeOpenExp e env aenv
+  return (size $ fromElt sh)
 
 executeOpenExp (Cond c t e) env aenv = do
   p <- executeOpenExp c env aenv
@@ -698,7 +697,7 @@ liftExp (IndexScalar a e) aenv = do
   arr@(Array sh _) <- executeOpenAcc a aenv
   return $ vs ++ [FreeArray arr, FreeShape sh]
 
-liftExp (Size a)          aenv = liftExp (Shape a) aenv
+liftExp (ShapeSize e)     aenv = liftExp e aenv
 
 
 -- Bind array variables to the appropriate module references, where binding
