@@ -88,6 +88,7 @@ travExp f c l expr = travExp' expr
     travExp' (IndexCons t h)     = combine "IndexCons" [ travExp f c l t, travExp f c l h]
     travExp' (IndexHead ix)      = combine "IndexHead" [ travExp f c l ix ]
     travExp' (IndexTail ix)      = combine "IndexTail" [ travExp f c l ix ]
+    travExp' (IndexAny)          = leaf "IndexAny"
     travExp' (Cond cond thn els) = combine "Cond" [travExp f c l cond, travExp f c l thn, travExp f c l els]
     travExp' (PrimConst a)       = leaf ("PrimConst " `cat` labelForConst a)
     travExp' (PrimApp p a)       = combine "PrimApp" [ l (primFunFormat f) (labelForPrimFun p), travExp f c l a ]

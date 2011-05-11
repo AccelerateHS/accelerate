@@ -50,13 +50,17 @@ arrayType (Array _ _) = eltType (undefined::e)
 
 type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRepr e)
 type AccType2 acc = forall aenv sh1 e1 sh2 e2.
-                      acc aenv (Array sh1 e1, Array sh2 e2) -> (TupleType (EltRepr e1), TupleType (EltRepr e2))
+                      acc aenv (Array sh1 e1, Array sh2 e2) -> (TupleType (EltRepr e1), 
+                                                                TupleType (EltRepr e2))
 
 -- |Reify the element type of the result of an array computation.
 --
 accType :: AccType OpenAcc
 accType (OpenAcc acc) = preAccType accType acc
 
+-- |Reify the element type of the result of an array computation using the array computation AST
+-- before tying the knot.
+--
 preAccType :: forall acc aenv sh e.
               AccType acc
            -> PreOpenAcc acc aenv (Array sh e)
@@ -93,13 +97,15 @@ preAccType k pacc =
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
 
-
 -- |Reify the element types of the results of an array computation that yields
 -- two arrays.
 --
 accType2 :: AccType2 OpenAcc
 accType2 (OpenAcc acc) = preAccType2 accType accType2 acc
 
+-- |Reify the element types of the results of an array computation that yields
+-- two arrays using the array computation AST before tying the knot.
+--
 preAccType2 :: forall acc aenv sh1 e1 sh2 e2.
                AccType  acc
             -> AccType2 acc
@@ -128,13 +134,14 @@ preAccType2 k1 k2 pacc =
     Scanl' _ e acc -> (k1 acc, preExpType k1 e)
     Scanr' _ e acc -> (k1 acc, preExpType k1 e)
 
-
 -- |Reify the result type of a scalar expression.
 --
 expType :: OpenExp aenv env t -> TupleType (EltRepr t)
 expType = preExpType accType
 
-
+-- |Reify the result types of of a scalar expression using the expression AST before tying the
+-- knot.
+--
 preExpType :: forall acc aenv env t.
               AccType acc
            -> PreOpenExp acc aenv env t
@@ -149,6 +156,7 @@ preExpType k e =
     IndexCons _ _     -> eltType (undefined::t)
     IndexHead _       -> eltType (undefined::t)
     IndexTail _       -> eltType (undefined::t)
+    IndexAny          -> eltType (undefined::t)
     Cond _ t _        -> preExpType k t
     PrimConst _       -> eltType (undefined::t)
     PrimApp _ _       -> eltType (undefined::t)

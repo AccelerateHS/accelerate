@@ -24,6 +24,7 @@ import qualified Filter
 import qualified SMVM
 import qualified BlackScholes
 import qualified Radix
+import qualified SliceExamples
 
 #ifdef ACCELERATE_IO
 import qualified BlockCopy
@@ -146,6 +147,13 @@ allTests cfg = sequence'
     -- image processing
   , mkNoRef "canny"          "canny edge detection"                       $ Canny.run img
   , mkNoRef "integral-image" "image integral (2D scan)"                   $ IntegralImage.run img
+    -- slices
+  , mkTest "slices"          "replicate (Z:.2:.All:.All)"                 $ SliceExamples.run1
+  , mkTest "slices"          "replicate (Z:.All:.2:.All)"                 $ SliceExamples.run2
+  , mkTest "slices"          "replicate (Z:.All:.All:.2)"                 $ SliceExamples.run3
+  , mkTest "slices"          "replicate (Any:.2)"                         $ SliceExamples.run4
+  , mkTest "slices"          "replicate (Z:.2:.2:.2)"                     $ SliceExamples.run5
+
   ]
   where
     n   = cfgElements cfg

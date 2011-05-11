@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE BangPatterns, CPP, GADTs, TupleSections, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
@@ -39,6 +40,7 @@ import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Prelude                                          hiding (exp)
 import Control.Applicative                              hiding (Const)
 import Control.Monad.Trans
+import Control.Monad
 import Control.Concurrent.MVar
 import Data.Maybe
 import Data.Record.Label
@@ -100,7 +102,8 @@ data Ref c where
         -> Either (IndirectRef c) AccRefcount
         -> Ref (c, AccRefcount)
 
-type IndirectRef c = Ref c -> Ref c
+data IndirectRef c = forall env t.
+                     IRef (Idx env t) (AccRefcount -> AccRefcount)
 
 
 incIdx :: Idx env t -> Ref count -> Ref count
@@ -113,8 +116,8 @@ modIdx :: (AccRefcount -> AccRefcount) -> Idx env t -> Ref count -> Ref count
 modIdx f (SuccIdx ix) (Push next c) = modIdx f ix next `Push` c
 modIdx f ZeroIdx      (Push rest c) =
   case c of
-    Left  ir -> ir rest `Push` c
-    Right n  -> rest    `Push` Right (f n)
+    Left (IRef ix' f') -> modIdx f' ix' rest `Push` c
+    Right n            -> rest               `Push` Right (f n)
 modIdx _ _            _             = INTERNAL_ERROR(error) "modIdx" "inconsistent valuation"
 
 
@@ -196,8 +199,8 @@ prepareAcc iss rootAcc rootEnv = do
         Let2 a b | Avar ix <- unAcc a ->
           let a' = node (Avar ix)
           in do
-          (b', env1 `Push` _ `Push` _) <- travA b (aenv `Push` Left (modIdx incSucc ix)
-                                                        `Push` Left (modIdx incZero ix))
+          (b', env1 `Push` _ `Push` _) <- travA b (aenv `Push` Left (IRef ix incSucc)
+                                                        `Push` Left (IRef ix incZero))
           return (node (Let2 a' b'), env1)
 
         Let2 a b -> do
@@ -212,7 +215,7 @@ prepareAcc iss rootAcc rootEnv = do
                 , Avar u   <- unAcc x
                 , Avar v   <- unAcc y ->
           let a' = node (Let2 (node (Avar u)) (node (Avar v)))
-              rc = Left (modIdx (eitherIx v incSucc incZero) u)
+              rc = Left (IRef u (eitherIx v incSucc incZero))
           in do
           (b', env1 `Push` _) <- travA b (aenv `Push` rc)
           return (node (Let a' b'), env1)
@@ -224,6 +227,11 @@ prepareAcc iss rootAcc rootEnv = do
           --
           let a' = node (Let2 (setref (eitherIx v (R2 c 0) (R2 0 c)) x') y')
           return  (node (Let a' b'), env2)
+
+        Let a b | Let _ _ <- unAcc a -> do
+          (ExecAcc _ _ _ (Let x' y'), env1) <- travA a aenv
+          (b', env2 `Push` Right c)         <- travA b (env1 `Push` Right (R1 0))
+          return (node (Let (node (Let x' (setref c y'))) b'), env2)
 
         Let a b  -> do
           (a', env1)                <- travA a aenv
@@ -251,11 +259,6 @@ prepareAcc iss rootAcc rootEnv = do
           (e', env3)       <- travA e env2
           return (ExecAcc noRefcount noKernel var1 (Acond c' t' e'), env3)
 
-        Reshape sh a -> do
-          (sh', env1, var1) <- travE sh aenv []
-          (a',  env2)       <- travA a  env1
-          return (ExecAcc noRefcount noKernel var1 (Reshape sh' a'), env2)
-
         -- Array injection
         --
         -- If this array is let-bound, we will only see this case once, and need
@@ -270,6 +273,11 @@ prepareAcc iss rootAcc rootEnv = do
 
         -- Computation nodes
         --
+        Reshape sh a -> do
+          (sh', env1, var1) <- travE sh aenv []
+          (a',  env2)       <- travA a  env1
+          return (ExecAcc singleRef noKernel var1 (Reshape sh' a'), env2)
+
         Unit e  -> do
           (e', env1, var1) <- travE e aenv []
           return (ExecAcc singleRef noKernel var1 (Unit e'), env1)
@@ -544,9 +552,10 @@ build :: String -> OpenAcc aenv a -> CIO (AccKernel a)
 build name acc =
   let key = accToKey acc
   in do
-    compile key acc
-    mvar  <- liftIO newEmptyMVar
-    table <- getM kernelTable
+    mvar   <- liftIO newEmptyMVar
+    table  <- getM kernelTable
+    cached <- isJust `fmap` liftIO (Hash.lookup table key)
+    unless cached $ compile table key acc
     return . (name,) . liftIO $ memo mvar (link table key)
 
 -- A simple memoisation routine
@@ -596,9 +605,8 @@ link table key =
 
 -- Generate and compile code for a single open array expression
 --
-compile :: AccKey -> OpenAcc aenv a -> CIO ()
-compile key acc = do
-  kernels <- getM kernelTable
+compile :: KernelTable -> AccKey -> OpenAcc aenv a -> CIO ()
+compile table key acc = do
   dir     <- outputDir
   nvcc    <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
   cufile  <- outputName acc (dir </> "dragon.cu")        -- rawr!
@@ -607,7 +615,7 @@ compile key acc = do
                writeCode cufile (codeGenAcc acc)
                forkProcess $ executeFile nvcc False flags Nothing
   --
-  liftIO $ Hash.insert kernels key (KernelEntry cufile (Left pid))
+  liftIO $ Hash.insert table key (KernelEntry cufile (Left pid))
 
 
 -- Wait for the compilation process to finish
@@ -719,7 +727,6 @@ prettyExecAcc alvl wrap ecc =
            Apply _ _      -> base
            PairArrays _ _ -> base
            Acond _ _ _    -> base
-           Reshape _ _    -> base
            _              -> ann <+> base
   where
     usecount (R1 x)   = text "rc=" <> int x

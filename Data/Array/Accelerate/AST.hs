@@ -663,17 +663,18 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Array indices & shapes
   IndexNil    :: PreOpenExp acc env aenv Z
-  IndexCons   :: Shape sh
-              => PreOpenExp acc env aenv sh 
-              -> PreOpenExp acc env aenv Int
-              -> PreOpenExp acc env aenv (sh:.Int)
-  IndexHead   :: Shape sh
-              => PreOpenExp acc env aenv (sh:.Int)
-              -> PreOpenExp acc env aenv Int
-  IndexTail   :: Shape sh
-              => PreOpenExp acc env aenv (sh:.Int)
-              -> PreOpenExp acc env aenv sh
-  
+  IndexCons   :: (Slice sl, Elt a)
+              => PreOpenExp acc env aenv sl
+              -> PreOpenExp acc env aenv a
+              -> PreOpenExp acc env aenv (sl:.a)
+  IndexHead   :: (Slice sl, Elt a)
+              => PreOpenExp acc env aenv (sl:.a)
+              -> PreOpenExp acc env aenv a
+  IndexTail   :: (Slice sl, Elt a)
+              => PreOpenExp acc env aenv (sl:.a)
+              -> PreOpenExp acc env aenv sl
+  IndexAny    :: Shape sh => PreOpenExp acc env aenv (Any sh)
+
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond        :: PreOpenExp acc env aenv Bool
               -> PreOpenExp acc env aenv t 
