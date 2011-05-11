@@ -27,6 +27,9 @@ module Data.Array.Accelerate.Prelude (
   scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg, 
   scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
+  -- ** Enumeration and filling
+  fill, enumFromN, enumFromStepN,
+
   -- ** Gather
   gather, gatherIf,
 
@@ -36,13 +39,17 @@ module Data.Array.Accelerate.Prelude (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, zip3, unzip, unzip3, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         init, tail, take, drop, filter, max, min, not, fst, snd, curry, uncurry)
+import Prelude   hiding (replicate, zip, zip3, unzip, unzip3, map, zipWith,
+                         scanl, scanl1, scanr, scanr1,
+                         init, tail, take, drop, filter, max, min, not,
+                         fst, snd, curry, uncurry,
+                         fromIntegral)
 import qualified Prelude
 
 -- friends  
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Type
 
 
 -- Map-like composites
@@ -428,6 +435,33 @@ mkSegApply op = apply
         aV = snd a
         bF = fst b
         bV = snd b
+
+
+-- Enumeration and filling
+-- -----------------------
+
+-- | Create an array where all elements are the same value.
+--
+fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
+fill sh c = generate sh (const c)
+
+-- | Create an array of the given shape containing the values x, x+1, etc (in
+--   row-major order).
+--
+enumFromN :: (Shape sh, Elt e, IsNum e) => Exp sh -> Exp e -> Acc (Array sh e)
+enumFromN sh x = enumFromStepN sh x 1
+
+-- | Create an array of the given shape containing the values x, x+y, x+y+y, etc
+--   (in row-major order).
+--
+enumFromStepN :: (Shape sh, Elt e, IsNum e)
+              => Exp sh
+              -> Exp e    -- ^x
+              -> Exp e    -- ^y
+              -> Acc (Array sh e)
+enumFromStepN sh x y = reshape sh
+                     $ generate (index1 $ shapeSize sh)
+                                ((\i -> ((fromIntegral i) * y) + x) . unindex1)
 
 
 -- Gather operations
