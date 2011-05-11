@@ -14,6 +14,7 @@ import qualified ScanSeg
 import qualified Stencil
 import qualified Vector
 import qualified Gather
+import qualified Scatter
 
 import qualified SASUM
 import qualified SAXPY
@@ -129,6 +130,8 @@ allTests cfg = sequence'
   , mkTest "slit"            "vector slit"                                $ Vector.run "slit" n
   , mkTest "gather"          "backpermute via index mapping vector"       $ Gather.run "gather" n
   , mkTest "gather-if"       "cond. backpermute via index mapping vector" $ Gather.run "gather-if" n
+  , mkTest "scatter"         "permute via index mapping vector"           $ Scatter.run "scatter" n
+  , mkTest "scatter-if"      "cond. permute via index mapping vector"     $ Scatter.run "scatter-if" n
   
     -- simple examples
   , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n

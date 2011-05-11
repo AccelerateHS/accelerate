@@ -30,8 +30,8 @@ module Data.Array.Accelerate.Prelude (
   -- ** Enumeration and filling
   fill, enumFromN, enumFromStepN,
 
-  -- ** Gather
-  gather, gatherIf,
+  -- ** Gather and scatter
+  gather, gatherIf, scatter, scatterIf,
 
   -- ** Subvector extraction
   init, tail, take, drop, slit
@@ -502,6 +502,64 @@ gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
     zwF p g   = p ? (unlift g)
     gatheredV = zip (gather mapV inputV) defaultV
     predV     = map pred maskV
+
+
+-- Scatter operations
+-- ------------------
+
+-- | Copy elements from source array to destination array according to a map. This
+--   is a forward-permute operation where a 'map' vector encodes an input to output
+--   index mapping. Output elements for indicies that are not mapped asume the default
+--   vector's value.  For example:
+--
+--    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--    map     = [1, 3, 7, 2, 5, 8]
+--    input   = [1, 9, 6, 4, 4, 2, 5]
+--
+--    output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
+--
+--   Note if the same index appears in the map more than once, the result is
+--   undefined. The map vector cannot be larger than the input vector.
+--
+scatter :: (Elt e)
+        => Acc (Vector Int)      -- ^map
+        -> Acc (Vector e)        -- ^default
+        -> Acc (Vector e)        -- ^input
+        -> Acc (Vector e)        -- ^output
+scatter mapV defaultV inputV = permute (const) defaultV pF inputV
+  where
+    pF ix = lift (Z :. (mapV ! ix))
+
+
+-- | Conditionally copy elements from source array to destination array according
+--   to a map. This is a forward-permute operation where a 'map' vector encodes an
+--   input to output index mapping. In addition, there is a 'mask' vector, and an
+--   associated predicate function, that specifies whether an elements will be
+--   copied. If not copied, the ouput array assumes the default vector's value. For
+--   example:
+--
+--    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--    map     = [1, 3, 7, 2, 5, 8]
+--    mask    = [3, 4, 9, 2, 7, 5]
+--    pred    = (> 4)
+--    input   = [1, 9, 6, 4, 4, 2]
+--
+--    output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
+--
+--   Note if the same index appears in the map more than once, the result is
+--   undefined. The map and input vector must be of the same length.
+--
+scatterIf :: (Elt e, Elt e')
+          => Acc (Vector Int)      -- ^map
+          -> Acc (Vector e)        -- ^mask
+          -> (Exp e -> Exp Bool)   -- ^predicate
+          -> Acc (Vector e')       -- ^default
+          -> Acc (Vector e')       -- ^input
+          -> Acc (Vector e')       -- ^output
+scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
+  where
+    pF ix = (pred (maskV ! ix)) ? (lift (Z :. (mapV ! ix)), ignore)
+
 
 
 -- Extracting subvectors
