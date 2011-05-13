@@ -15,7 +15,7 @@
 module Data.Array.Accelerate.Debug (
 
   -- * Conditional tracing
-  initTrace, queryTrace, traceLine, traceChunk
+  initTrace, queryTrace, traceLine, traceChunk, trace
 
 ) where
 
@@ -24,6 +24,7 @@ import Control.Monad
 import Data.IORef
 import System.IO
 import System.IO.Unsafe (unsafePerformIO)
+import qualified Debug.Trace as Trace
 
 -- friends
 import Data.Array.Accelerate.Pretty ()
@@ -66,3 +67,11 @@ traceChunk header msg
        ; when doTrace 
          $ hPutStrLn stderr (header ++ "\n  " ++ msg)
        }
+
+-- | Like Debug.Trace but only when the /trace flag/ is set.
+trace :: String -> a -> a
+trace msg v = unsafePerformIO $ do
+  doTrace <- queryTrace
+  if doTrace
+    then return $ Trace.trace msg v
+    else return v
