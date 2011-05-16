@@ -133,14 +133,15 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
 -- -------
 
 mkStencil :: [CType]
-          -> [CType] -> [[Int]] -> Either String [CExpr]
+          -> [CExtDecl] -> [CType] -> [[Int]] -> Either String [CExpr]
           -> [CExpr]
           -> CUTranslSkel
-mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
+mkStencil tyOut sten0 tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
   where
     skel = "stencil1.inl"
     code = CTranslUnit
-            ( mkTupleType Nothing  tyOut ++
+            ( sten0 ++
+              mkTupleType Nothing  tyOut ++
               mkTexTupleTypes [tyIn0] ++
               mkStencilType 0 tyIn0 (length ixs) ++
             [ mkDim "DimIn0" (length $ head ixs) ] ++
@@ -149,16 +150,17 @@ mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
             (mkNodeInfo (initPos skel) (Name 0))
 
 mkStencil2 :: [CType]
-           -> [CType] -> [[Int]] -> Either String [CExpr]
-           -> [CType] -> [[Int]] -> Either String [CExpr]
+           -> [CExtDecl] -> [CType] -> [[Int]] -> Either String [CExpr]
+           -> [CExtDecl] -> [CType] -> [[Int]] -> Either String [CExpr]
            -> [CExpr]
            -> CUTranslSkel
-mkStencil2 tyOut tyIn0 ixs0 bndy0 tyIn1 ixs1 bndy1 apply
+mkStencil2 tyOut sten0 tyIn0 ixs0 bndy0 sten1 tyIn1 ixs1 bndy1 apply
   = CUTranslSkel code (bndyDef bndy0 ++ bndyDef bndy1) skel
   where
     skel = "stencil2.inl"
     code = CTranslUnit
-            ( mkTupleType Nothing  tyOut ++
+            ( sten0 ++ sten1 ++
+              mkTupleType Nothing  tyOut ++
               mkTexTupleTypes [tyIn0, tyIn1] ++
               mkStencilType 0 tyIn0 (length ixs0) ++
               mkStencilType 1 tyIn1 (length ixs1) ++

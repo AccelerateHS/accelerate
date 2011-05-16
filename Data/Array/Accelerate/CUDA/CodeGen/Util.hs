@@ -61,6 +61,17 @@ mkTypedef var volatile ptr ty =
     [(Just (CDeclr (Just (internalIdent var)) [CPtrDeclr [] internalNode | ptr] Nothing [] internalNode), Nothing, Nothing)]
     internalNode
 
+mkShape :: Int -> String -> CExtDecl
+mkShape d n = mkGlobal [constant,dimension] n
+  where
+    constant  = CTypeQual (CAttrQual (CAttr (internalIdent "constant") [] internalNode))
+    dimension = CTypeSpec (CTypeDef (internalIdent ("DIM" ++ show d)) internalNode)
+
+mkGlobal :: [CDeclSpec] -> String -> CExtDecl
+mkGlobal spec name =
+  CDeclExt (CDecl (CStorageSpec (CStatic internalNode) : spec)
+           [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
+
 mkInitList :: [CExpr] -> CInit
 mkInitList []  = CInitExpr (CConst (CIntConst (cInteger 0) internalNode)) internalNode
 mkInitList [x] = CInitExpr x internalNode

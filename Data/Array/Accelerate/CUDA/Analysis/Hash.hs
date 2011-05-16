@@ -97,10 +97,10 @@ showAcc acc@(OpenAcc pacc) =
     showTy (PairTuple a b)  = showTy a ++ showTy b
 
     showFun :: OpenFun env aenv a -> String
-    showFun f = render . hcat . map pretty . fst $ runCodeGen (codeGenFun f)
+    showFun = render . hcat . map pretty . codeGenFun
 
     showExp :: OpenExp env aenv a -> String
-    showExp e = render . hcat . map pretty . fst $ runCodeGen (codeGenExp e)
+    showExp = render . hcat . map pretty . codeGenExp
 
     showSI :: SliceIndex (Sugar.EltRepr slix) (Sugar.EltRepr sl) co (Sugar.EltRepr dim)
            -> Exp aenv slix                         {- dummy -}

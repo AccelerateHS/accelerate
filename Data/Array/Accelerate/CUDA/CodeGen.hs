@@ -11,29 +11,28 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen (
 
-  -- * CUDA code generation
-  CUTranslSkel,
-  runCodeGen, codeGenAcc, codeGenFun, codeGenExp
+  -- * types
+  CUTranslSkel, AccBinding(..),
+
+  -- * code generation
+  codeGenAcc, codeGenFun, codeGenExp
 
 ) where
 
 import Prelude hiding (id, (.))
 import Control.Category
 
-import Data.Record.Label
 import Data.Char
 import Language.C
-import Control.Applicative                                      hiding (Const)
-import Control.Monad.State.Strict
 import Text.PrettyPrint
 
+import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Representation
-import Data.Array.Accelerate.AST hiding (arrays)
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
 
@@ -46,121 +45,132 @@ import Data.Array.Accelerate.CUDA.Analysis.Stencil              as Stencil
 #include "accelerate.h"
 
 
+-- Array computations that were embedded within scalar expressions, and will be
+-- required to execute the kernel; i.e. bound to texture references or similar.
+--
+data AccBinding aenv where
+  ArrayVar :: (Sugar.Shape sh, Sugar.Elt e)
+           => Idx aenv (Sugar.Array sh e) -> AccBinding aenv
+
+instance Eq (AccBinding aenv) where
+  ArrayVar ix1 == ArrayVar ix2 = idxToInt ix1 == idxToInt ix2
+
+
+
 -- Array expressions
 -- -----------------
-
-type CodeGen a = State CodeGenState a
-
-data CodeGenState = CodeGenState
-  { _arrays :: [CExtDecl]
-  , _shapes :: [CExtDecl]
-  }
-
-$(mkLabels [''CodeGenState])
-
 
 -- | Instantiate an array computation with a set of concrete function and type
 -- definitions to fix the parameters of an algorithmic skeleton. The generated
 -- code can then be pretty-printed to file, and compiled to object code
 -- executable on the device.
 --
-codeGenAcc :: OpenAcc aenv a -> CUTranslSkel
-codeGenAcc acc =
-  let (CUTranslSkel code defs skel, st) = runCodeGen (codeGen acc)
-      (CTranslUnit decl node)           = code
-      fvars                             = getL arrays st ++ getL shapes st
-  in
-  CUTranslSkel (CTranslUnit (fvars ++ decl) node) defs skel
-
-runCodeGen :: CodeGen a -> (a,CodeGenState)
-runCodeGen = flip runState (CodeGenState [] [])
-
-
--- The code generator, which needs to track any array references from scalar
--- code, to produce the appropriate binding hooks. Such references must be
--- lifted out in depth-first order.
+-- The code generator needs to include binding points for array references from
+-- scalar code. We require that the only array form allowed within expressions
+-- are array variables.
 --
-codeGen :: OpenAcc aenv a -> CodeGen CUTranslSkel
-codeGen acc@(OpenAcc pacc) =
-  case pacc of
-    -- non-computation forms
-    --
-    Let _ _           -> internalError
-    Let2 _ _          -> internalError
-    Avar _            -> internalError
-    Apply _ _         -> internalError  -- TLM: apply??
-    Acond _ _ _       -> internalError
-    PairArrays _ _    -> internalError
-    Use _             -> internalError
-    Unit _            -> internalError
-    Reshape _ _       -> internalError
-
-    -- computation nodes
-    --
-    Generate _ f      -> mkGenerate (codeGenAccTypeDim acc) <$> codeGenFun f
-    Fold f e a        -> mkFold  (codeGenAccTypeDim a) <$> codeGenExp e <*> codeGenFun f
-    Fold1 f a         -> mkFold1 (codeGenAccTypeDim a) <$> codeGenFun f
-    FoldSeg f e a s   -> mkFoldSeg  (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenExp e <*> codeGenFun f
-    Fold1Seg f a s    -> mkFold1Seg (codeGenAccTypeDim a) (codeGenAccType s) <$> codeGenFun f
-    Scanl f e _       -> mkScanl  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-    Scanr f e _       -> mkScanr  (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-    Scanl' f e _      -> mkScanl' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-    Scanr' f e _      -> mkScanr' (codeGenExpType e) <$> codeGenExp e <*> codeGenFun f
-    Scanl1 f a        -> mkScanl1 (codeGenAccType a) <$> codeGenFun f
-    Scanr1 f a        -> mkScanr1 (codeGenAccType a) <$> codeGenFun f
-    Map f a           -> mkMap (codeGenAccType acc) (codeGenAccType a) <$> codeGenFun f
-    ZipWith f a b     -> mkZipWith (codeGenAccTypeDim acc) (codeGenAccTypeDim a) (codeGenAccTypeDim b) <$> codeGenFun f
-    Permute f _ g a   -> mkPermute (codeGenAccType a) (accDim acc) (accDim a) <$> codeGenFun f <*> codeGenFun g
-    Backpermute _ f a -> mkBackpermute (codeGenAccType a) (accDim acc) (accDim a) <$> codeGenFun f
-    Replicate sl _ a  ->
-      let dimSl  = accDim a
-          dimOut = accDim acc
-          --
-          extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
-          extend (SliceNil)            _ = []
-          extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n+1)
-          extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
-      in
-      return . mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
-
-    Index sl a slix   ->
-      let dimCo  = length (codeGenExpType slix)
-          dimSl  = accDim acc
-          dimIn0 = accDim a
-          --
-          restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
-          restrict (SliceNil)            _     = []
-          restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
-          restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
-      in
-      return . mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
-
-    Stencil f b a     -> do
-      n  <- length <$> getM arrays
-      let ty      = codeGenTupleTex (accType a)
-          fv      = map (("tex"++) . show) [n..]
-          array t = mkGlobal (map CTypeSpec t)
-          --
-      modM arrays (zipWith array ty fv ++)
-      mkStencil (codeGenAccType acc)
-                (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a b)
-                <$> codeGenFun f
-
-    Stencil2 f b1 a1 b0 a0 -> do
-      n  <- length <$> getM arrays
-      let ty0          = codeGenTupleTex (accType a0)
-          ty1          = codeGenTupleTex (accType a1)
-          fv           = map (("tex"++) . show) [n..]
-          array t      = mkGlobal (map CTypeSpec t)
-          (pos1, pos0) = Stencil.positions2 f a1 a0
-          --
-      modM arrays (zipWith array (ty0 ++ ty1) fv ++)
-      mkStencil2 (codeGenAccType acc)
-                 (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 b0)
-                 (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 b1)
-                 <$> codeGenFun f
-
+codeGenAcc :: forall aenv a. OpenAcc aenv a -> [AccBinding aenv] -> CUTranslSkel
+codeGenAcc acc vars =
+  let fvars                      = concatMap (liftAcc acc) vars
+      CUTranslSkel code def skel = codeGen acc
+      CTranslUnit decl node      = code
+  in
+  CUTranslSkel (CTranslUnit (fvars ++ decl) node) def skel
   where
+    codeGen :: OpenAcc aenv a -> CUTranslSkel
+    codeGen (OpenAcc pacc) =
+      case pacc of
+        -- non-computation forms
+        --
+        Let _ _           -> internalError
+        Let2 _ _          -> internalError
+        Avar _            -> internalError
+        Apply _ _         -> internalError
+        Acond _ _ _       -> internalError
+        PairArrays _ _    -> internalError
+        Use _             -> internalError
+        Unit _            -> internalError
+        Reshape _ _       -> internalError
+
+        -- computation nodes
+        --
+        Generate _ f      -> mkGenerate (codeGenAccTypeDim acc) (codeGenFun f)
+        Fold f e a        -> mkFold  (codeGenAccTypeDim a) (codeGenExp e) (codeGenFun f)
+        Fold1 f a         -> mkFold1 (codeGenAccTypeDim a) (codeGenFun f)
+        FoldSeg f e a s   -> mkFoldSeg  (codeGenAccTypeDim a) (codeGenAccType s) (codeGenExp e) (codeGenFun f)
+        Fold1Seg f a s    -> mkFold1Seg (codeGenAccTypeDim a) (codeGenAccType s) (codeGenFun f)
+        Scanl f e _       -> mkScanl  (codeGenExpType e) (codeGenExp e) (codeGenFun f)
+        Scanr f e _       -> mkScanr  (codeGenExpType e) (codeGenExp e) (codeGenFun f)
+        Scanl' f e _      -> mkScanl' (codeGenExpType e) (codeGenExp e) (codeGenFun f)
+        Scanr' f e _      -> mkScanr' (codeGenExpType e) (codeGenExp e) (codeGenFun f)
+        Scanl1 f a        -> mkScanl1 (codeGenAccType a) (codeGenFun f)
+        Scanr1 f a        -> mkScanr1 (codeGenAccType a) (codeGenFun f)
+        Map f a           -> mkMap (codeGenAccType acc) (codeGenAccType a) (codeGenFun f)
+        ZipWith f a b     -> mkZipWith (codeGenAccTypeDim acc) (codeGenAccTypeDim a) (codeGenAccTypeDim b) (codeGenFun f)
+        Permute f _ g a   -> mkPermute (codeGenAccType a) (accDim acc) (accDim a) (codeGenFun f) (codeGenFun g)
+        Backpermute _ f a -> mkBackpermute (codeGenAccType a) (accDim acc) (accDim a) (codeGenFun f)
+        Replicate sl _ a  ->
+          let dimSl  = accDim a
+              dimOut = accDim acc
+              --
+              extend :: SliceIndex slix sl co dim -> Int -> [CExpr]
+              extend (SliceNil)            _ = []
+              extend (SliceAll   sliceIdx) n = mkPrj dimOut "dim" n : extend sliceIdx (n+1)
+              extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
+          in
+          mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
+
+        Index sl a slix   ->
+          let dimCo  = length (codeGenExpType slix)
+              dimSl  = accDim acc
+              dimIn0 = accDim a
+              --
+              restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
+              restrict (SliceNil)            _     = []
+              restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
+              restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
+          in
+          mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
+
+        Stencil f bndy a     ->
+          let ty0   = codeGenTupleTex (accType a)
+              decl0 = map (map CTypeSpec) (reverse ty0)
+              sten0 = zipWith mkGlobal decl0 (map (\n -> "stencil0_a" ++ show n) [0::Int ..])
+          in
+          mkStencil (codeGenAccType acc)
+                    sten0 (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a bndy)
+                    (codeGenFun f)
+
+        Stencil2 f bndy1 a1 bndy0 a0 ->
+          let ty1          = codeGenTupleTex (accType a1)
+              ty0          = codeGenTupleTex (accType a0)
+              decl         = map (map CTypeSpec) . reverse
+              sten n       = zipWith (flip mkGlobal) (map (\k -> "stencil" ++ shows (n::Int) "_a" ++ show k) [0::Int ..]) . decl
+              (pos1, pos0) = Stencil.positions2 f a1 a0
+          in
+          mkStencil2 (codeGenAccType acc)
+                     (sten 0 ty0) (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 bndy0)
+                     (sten 1 ty1) (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 bndy1)
+                     (codeGenFun f)
+
+    --
+    -- Generate binding points (texture references and shapes) for arrays lifted
+    -- from scalar expressions
+    --
+    liftAcc :: OpenAcc aenv a -> AccBinding aenv -> [CExtDecl]
+    liftAcc _ (ArrayVar idx) =
+      let avar    = OpenAcc (Avar idx)
+          idx'    = show $ idxToInt idx
+          sh      = mkShape (accDim avar) ("sh" ++ idx')
+          ty      = codeGenTupleTex (accType avar)
+          arr n   = "arr" ++ idx' ++ "_a" ++ show n
+          var t n = mkGlobal (map CTypeSpec t) (arr n)
+      in
+      sh : zipWith var (reverse ty) (enumFrom 0 :: [Int])
+
+    --
+    -- caffeine and misery
+    --
     internalError =
       let msg = unlines ["unsupported array primitive", render (nest 2 doc)]
           ppr = show acc
@@ -201,7 +211,7 @@ mkPrj ndim var c
 -- are only introduced as arguments to collective operations, so lambdas are
 -- always outermost, and can always be translated into plain C functions.
 --
-codeGenFun :: OpenFun env aenv t -> CodeGen [CExpr]
+codeGenFun :: OpenFun env aenv t -> [CExpr]
 codeGenFun (Lam  lam)  = codeGenFun lam
 codeGenFun (Body body) = codeGenExp body
 
@@ -211,93 +221,79 @@ codeGenFun (Body body) = codeGenExp body
 -- The state is used here to track array expressions that have been hoisted out
 -- of the scalar computation; namely, the arguments to 'IndexScalar' and 'Shape'
 --
-codeGenExp :: forall env aenv t. OpenExp env aenv t -> CodeGen [CExpr]
-codeGenExp (PrimConst c)   = return . return $ codeGenPrimConst c
-codeGenExp (PrimApp f arg) = return . codeGenPrim f <$> codeGenExp arg
-codeGenExp (Const c)       = return $ codeGenConst (Sugar.eltType (undefined::t)) c
+codeGenExp :: forall env aenv t. OpenExp env aenv t -> [CExpr]
+codeGenExp (PrimConst c)   = [codeGenPrimConst c]
+codeGenExp (PrimApp f arg) = [codeGenPrim f (codeGenExp arg)]
+codeGenExp (Const c)       = codeGenConst (Sugar.eltType (undefined::t)) c
 codeGenExp (Tuple t)       = codeGenTup t
 codeGenExp p@(Prj idx e)
   = reverse
   . take (length $ codeGenTupleType (expType p))
   . drop (prjToInt idx (expType e))
   . reverse
-  <$> codeGenExp e
+  $ codeGenExp e
 
-codeGenExp IndexNil         = return []
-codeGenExp (IndexCons ix i) =
-  let snoc xs x = xs ++ x
-  in  snoc <$> codeGenExp ix <*> codeGenExp i
+codeGenExp IndexNil         = []
+codeGenExp IndexAny         = INTERNAL_ERROR(error) "codeGenExp" "IndexAny: not implemented yet"
+codeGenExp (IndexCons ix i) = codeGenExp ix ++ codeGenExp i
 
-codeGenExp (IndexHead sh@(Shape a)) = do
-  [var] <- codeGenExp sh
-  return $ if accDim a > 1
-              then [CMember var (internalIdent "a0") False internalNode]
-              else [var]
+codeGenExp (IndexHead sh@(Shape a)) =
+  let [var] = codeGenExp sh
+  in if accDim a > 1
+        then [CMember var (internalIdent "a0") False internalNode]
+        else [var]
 
-codeGenExp (IndexTail sh@(Shape a)) = do
-  [var] <- codeGenExp sh
-  return . map (\i -> CMember var (internalIdent ('a':show i)) False internalNode)
-         $ reverse [1 .. accDim a - 1]
+codeGenExp (IndexTail sh@(Shape a)) =
+  let [var] = codeGenExp sh
+      idx   = reverse [1 .. accDim a - 1]
+  in
+  map (\i -> CMember var (internalIdent ('a':show i)) False internalNode) idx
 
-codeGenExp (IndexHead ix) = return . last <$> codeGenExp ix
-codeGenExp (IndexTail ix) =          init <$> codeGenExp ix
+codeGenExp (IndexHead ix) = return . last $ codeGenExp ix
+codeGenExp (IndexTail ix) =          init $ codeGenExp ix
 
 codeGenExp (Var i) =
   let var = cvar ('x' : show (idxToInt i))
   in
   case codeGenTupleType (Sugar.eltType (undefined::t)) of
-       [_] -> return [var]
-       cps -> return . reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
+       [_] -> [var]
+       cps -> reverse . take (length cps) . flip map (enumFrom 0 :: [Int]) $
          \c -> CMember var (internalIdent ('a':show c)) False internalNode
 
 codeGenExp (Cond p t e) =
-  let predicate [a] b c = CCond a (Just b) c internalNode
-      predicate _ _ _   = INTERNAL_ERROR(error) "codeGenExp.Cond" "assumption violated"
+  let [predicate] = codeGenExp p
+      branch a b  = CCond predicate (Just a) b internalNode
   in
-  zipWith . predicate <$> codeGenExp p <*> codeGenExp t <*> codeGenExp e
+  zipWith branch (codeGenExp t) (codeGenExp e)
 
-codeGenExp (Shape a) = do
-  sh <- ("sh"++) . show . length <$> getM shapes
-  modM shapes (mkShape (accDim a) sh :)
-  return [cvar sh]
+codeGenExp (Size a)         = return $ ccall "size" (codeGenExp (Shape a))
+codeGenExp (Shape a)
+  | OpenAcc (Avar var) <- a = return $ cvar ("sh" ++ show (idxToInt var))
+  | otherwise               = INTERNAL_ERROR(error) "codeGenExp" "expected array variable"
 
-codeGenExp (Size a) = do
-  sh <- codeGenExp (Shape a)
-  return [ccall "size" sh]
+codeGenExp (IndexScalar a e)
+  | OpenAcc (Avar var) <- a =
+      let var'  = show $ idxToInt var
+          arr n = cvar ("arr" ++ var' ++ "_a" ++ show n)
+          sh    = cvar ("sh"  ++ var')
+          ix    = ccall "toIndex" [sh, ccall "shape" (codeGenExp e)]
+          --
+          ty         = codeGenTupleTex (accType a)
+          indexA t n = ccall indexer [arr n, ix]
+            where
+              indexer = case t of
+                          [CDoubleType _] -> "indexDArray"
+                          _               -> "indexArray"
+      in
+      reverse $ zipWith indexA (reverse ty) (enumFrom 0 :: [Int])
+  | otherwise               = INTERNAL_ERROR(error) "codeGenExp" "expected array variable"
 
-codeGenExp (IndexScalar a e) = do
-  ix <- codeGenExp e
-  n  <- length <$> getM arrays
-  sh <- ("sh"++) . show . length <$> getM shapes
-  let ty = codeGenTupleTex (accType a)
-      fv = map (("tex"++) . show) [n..]
-
-  modM arrays (zipWith array ty fv ++)
-  modM shapes (mkShape (accDim a) sh :)
-  return (zipWith (indexArray sh ix) fv ty)
-  where
-    array t                 = mkGlobal (map CTypeSpec t)
-    indexArray sh ix n t    = ccall (indexer t) [cvar n, ccall "toIndex" [cvar sh, ccall "shape" ix]]
-    indexer [CDoubleType _] = "indexDArray"
-    indexer _               = "indexArray"
-
-
-mkShape :: Int -> String -> CExtDecl
-mkShape d n = mkGlobal [constant,dimension] n
-  where
-    constant  = CTypeQual (CAttrQual (CAttr (internalIdent "constant") [] internalNode))
-    dimension = CTypeSpec (CTypeDef (internalIdent ("DIM" ++ show d)) internalNode)
-
-mkGlobal :: [CDeclSpec] -> String -> CExtDecl
-mkGlobal spec name =
-  CDeclExt (CDecl (CStorageSpec (CStatic internalNode) : spec)
-           [(Just (CDeclr (Just (internalIdent name)) [] Nothing [] internalNode),Nothing,Nothing)] internalNode)
 
 -- Tuples are defined as snoc-lists, so generate code right-to-left
 --
-codeGenTup :: Tuple (OpenExp env aenv) t -> CodeGen [CExpr]
-codeGenTup NilTup          = return []
-codeGenTup (t `SnocTup` e) = (++) <$> codeGenTup t <*> codeGenExp e
+codeGenTup :: Tuple (OpenExp env aenv) t -> [CExpr]
+codeGenTup NilTup          = []
+codeGenTup (t `SnocTup` e) = codeGenTup t ++ codeGenExp e
 
 -- Convert a tuple index into the corresponding integer. Since the internal
 -- representation is flat, be sure to walk over all sub components when indexing

@@ -88,10 +88,10 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Representation (SliceIndex)
-import Data.Array.Accelerate.Array.Sugar as Sugar
-import Data.Array.Accelerate.Array.Delayed        (Delayable)
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Array.Representation (SliceIndex)
+import Data.Array.Accelerate.Array.Delayed        (Delayable)
+import Data.Array.Accelerate.Array.Sugar          as Sugar
 
 #include "accelerate.h"
 
@@ -100,7 +100,7 @@ import Data.Array.Accelerate.Tuple
 -- -----------------------
 
 -- De Bruijn variable index projecting a specific type from a type
--- environment.  Type envionments are nested pairs (..((), t1), t2, ..., tn). 
+-- environment.  Type environments are nested pairs (..((), t1), t2, ..., tn).
 --
 data Idx env t where
   ZeroIdx ::              Idx (env, t) t
