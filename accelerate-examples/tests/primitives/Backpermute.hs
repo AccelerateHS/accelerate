@@ -35,7 +35,7 @@ transposeAcc mat =
 
 transposeRef :: UArray (Int,Int) Float -> UArray (Int,Int) Float
 transposeRef mat =
-  let swap (x,y) = (x,y)
+  let swap (x,y) = (y,x)
       (u,v)      = bounds mat
   in
   array (swap u, swap v) [(swap ix, e) | (ix, e) <- assocs mat]
