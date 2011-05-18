@@ -545,7 +545,7 @@ stencil2Op c kernel bindings acc aenv sten1@(Array sh1 in1) sten0@(Array sh0 in0
   bindLifted mdl aenv bindings
   bindStencil 0 mdl sten0
   bindStencil 1 mdl sten1
-  launch cfg fstencil (((((),out),convertIx sh),convertIx sh0),convertIx sh1)
+  launch cfg fstencil (((((),out),convertIx sh),convertIx sh1),convertIx sh0)
   freeLifted aenv bindings
   freeArray in0
   freeArray in1

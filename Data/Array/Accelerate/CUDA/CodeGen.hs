@@ -19,9 +19,6 @@ module Data.Array.Accelerate.CUDA.CodeGen (
 
 ) where
 
-import Prelude hiding (id, (.))
-import Control.Category
-
 import Data.Char
 import Language.C
 import Text.PrettyPrint
@@ -32,6 +29,7 @@ import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
+import Data.Array.Accelerate.Analysis.Stencil
 import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
@@ -39,7 +37,6 @@ import qualified Foreign.Storable                               as F
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
-import Data.Array.Accelerate.CUDA.Analysis.Stencil              as Stencil
 
 
 #include "accelerate.h"
@@ -137,8 +134,8 @@ codeGenAcc acc vars =
               decl0 = map (map CTypeSpec) (reverse ty0)
               sten0 = zipWith mkGlobal decl0 (map (\n -> "stencil0_a" ++ show n) [0::Int ..])
           in
-          mkStencil (codeGenAccType acc)
-                    sten0 (codeGenAccType a) (Stencil.positions f a) (codeGenBoundary 0 a bndy)
+          mkStencil (codeGenAccTypeDim acc)
+                    sten0 (codeGenAccType a) (map Sugar.shapeToList $ offsets f a) (codeGenBoundary a bndy)
                     (codeGenFun f)
 
         Stencil2 f bndy1 a1 bndy0 a0 ->
@@ -146,11 +143,11 @@ codeGenAcc acc vars =
               ty0          = codeGenTupleTex (accType a0)
               decl         = map (map CTypeSpec) . reverse
               sten n       = zipWith (flip mkGlobal) (map (\k -> "stencil" ++ shows (n::Int) "_a" ++ show k) [0::Int ..]) . decl
-              (pos1, pos0) = Stencil.positions2 f a1 a0
+              (pos1, pos0) = offsets2 f a1 a0
           in
-          mkStencil2 (codeGenAccType acc)
-                     (sten 0 ty0) (codeGenAccType a0) pos0 (codeGenBoundary 0 a0 bndy0)
-                     (sten 1 ty1) (codeGenAccType a1) pos1 (codeGenBoundary 1 a1 bndy1)
+          mkStencil2 (codeGenAccTypeDim acc)
+                     (sten 0 ty0) (codeGenAccType a0) (map Sugar.shapeToList pos0) (codeGenBoundary a0 bndy0)
+                     (sten 1 ty1) (codeGenAccType a1) (map Sugar.shapeToList pos1) (codeGenBoundary a1 bndy1)
                      (codeGenFun f)
 
     --
@@ -180,19 +177,16 @@ codeGenAcc acc vars =
       INTERNAL_ERROR(error) "codeGenAcc" msg
 
 
--- Code generation for the boundary condition. For Clamp, Mirror and Wrap we simply
--- return a string that will get used in a #define. For Constant we generate code
--- for the constant expression.
+-- code generation for stencil boundary conditions
 --
-codeGenBoundary :: forall aenv dim e . (Sugar.Elt e)
-                => Int
-                -> OpenAcc aenv (Sugar.Array dim e)   -- dummy: type witness only
+codeGenBoundary :: forall aenv dim e. Sugar.Elt e
+                => OpenAcc aenv (Sugar.Array dim e) {- dummy -}
                 -> Boundary (Sugar.EltRepr e)
-                -> Either String [CExpr]
-codeGenBoundary n _ Clamp         = Left $ "BOUNDARY_CLAMP_" ++ show n
-codeGenBoundary n _ Mirror        = Left $ "BOUNDARY_MIRROR_" ++ show n
-codeGenBoundary n _ Wrap          = Left $ "BOUNDARY_WRAP_" ++ show n
-codeGenBoundary _ _ (Constant c)  = Right (codeGenConst (Sugar.eltType (undefined::e)) c)
+                -> Boundary [CExpr]
+codeGenBoundary _ (Constant c) = Constant $ codeGenConst (Sugar.eltType (undefined::e)) c
+codeGenBoundary _ Clamp        = Clamp
+codeGenBoundary _ Mirror       = Mirror
+codeGenBoundary _ Wrap         = Wrap
 
 
 mkPrj :: Int -> String -> Int -> CExpr
@@ -652,12 +646,6 @@ codeGenCeiling ta tb x
 
 -- Auxiliary Functions
 -- -------------------
-
-cvar :: String -> CExpr
-cvar x = CVar (internalIdent x) internalNode
-
-ccall :: String -> [CExpr] -> CExpr
-ccall fn args = CCall (cvar fn) args internalNode
 
 ccast :: ScalarType a -> CExpr -> CExpr
 ccast ty x = CCast (CDecl (map CTypeSpec (codeGenScalarType ty)) [] internalNode) x internalNode

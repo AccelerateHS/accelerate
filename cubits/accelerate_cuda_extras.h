@@ -14,6 +14,7 @@
 
 #include "accelerate_cuda_function.h"
 #include "accelerate_cuda_shape.h"
+#include "accelerate_cuda_stencil.h"
 #include "accelerate_cuda_texture.h"
 #include "accelerate_cuda_util.h"
 

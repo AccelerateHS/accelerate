@@ -390,7 +390,7 @@ prepareAcc iss rootAcc rootEnv = do
         Stencil f b a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "stencil1" acc var1
+          kernel           <- build "stencil" acc var1
           return (ExecAcc singleRef kernel var1 (Stencil f' b a'), env2)
 
         Stencil2 f b1 a1 b2 a2 -> do

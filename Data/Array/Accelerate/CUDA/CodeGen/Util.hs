@@ -43,6 +43,12 @@ mkSliceReplicate =
 -- Helper functions
 -- ----------------
 
+cvar :: String -> CExpr
+cvar x = CVar (internalIdent x) internalNode
+
+ccall :: String -> [CExpr] -> CExpr
+ccall fn args = CCall (cvar fn) args internalNode
+
 typename :: String -> CType
 typename var = [CTypeDef (internalIdent var) internalNode]
 
@@ -121,11 +127,24 @@ mkTyVector var n ty =
 --
 mkDeviceFun :: String -> CType -> [(CType,String)] -> [CExpr] -> CExtDecl
 mkDeviceFun name tyout args expr =
+  let body = [ CBlockDecl (CDecl (map CTypeSpec tyout) [(Just (CDeclr (Just (internalIdent "r")) [] Nothing [] internalNode), Just (mkInitList expr), Nothing)] internalNode)
+             , CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)]
+  in
+  mkDeviceFun' name tyout args body
+
+
+-- static inline __attribute__((device)) tyout name(args)
+-- {
+--   body
+-- }
+--
+mkDeviceFun' :: String -> CType -> [(CType, String)] -> [CBlockItem] -> CExtDecl
+mkDeviceFun' name tyout args body =
   CFDefExt $ CFunDef
     ([CStorageSpec (CStatic internalNode), CTypeQual (CInlineQual internalNode), CTypeQual (CAttrQual (CAttr (builtinIdent "device") [] internalNode))] ++ map CTypeSpec tyout)
     (CDeclr (Just (internalIdent name)) [CFunDeclr (Right (argv,False)) [] internalNode] Nothing [] internalNode)
     []
-    (CCompound [] [CBlockDecl (CDecl (map CTypeSpec tyout) [(Just (CDeclr (Just (internalIdent "r")) [] Nothing [] internalNode), Just (mkInitList expr), Nothing)] internalNode), CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)] internalNode)
+    (CCompound [] body internalNode)
     internalNode
     where
       argv = flip map args $ \(ty,var) ->
