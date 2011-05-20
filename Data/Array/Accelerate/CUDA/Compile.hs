@@ -583,7 +583,7 @@ link table key =
 #ifndef ACCELERATE_CUDA_PERSISTENT_CACHE
         -- remove build products
         --
---        removeFile      cufile
+        removeFile      cufile
         removeFile      (replaceExtension cufile ".cubin")
         removeDirectory (dropFileName cufile)
           `catch` \_ -> return ()       -- directory not empty
