@@ -160,8 +160,8 @@ mkStencil2 :: ([CType], Int)
            -> [CExtDecl] -> [CType] -> [[Int]] -> Boundary [CExpr]
            -> [CExpr]
            -> CUTranslSkel
-mkStencil2 (tyOut, dim) stencil0 tyIn0 ixs0 boundary0
-                        stencil1 tyIn1 ixs1 boundary1 apply =
+mkStencil2 (tyOut, dim) stencil1 tyIn1 ixs1 boundary1
+                        stencil0 tyIn0 ixs0 boundary0 apply =
   CUTranslSkel code [] skel
   where
     skel = "stencil2.inl"
@@ -170,16 +170,16 @@ mkStencil2 (tyOut, dim) stencil0 tyIn0 ixs0 boundary0
               stencil1                   ++
               mkTupleType Nothing  tyOut ++
             [ mkDim "DimOut" dim
-            , mkDim "DimIn0" dim
             , mkDim "DimIn1" dim
+            , mkDim "DimIn0" dim
             , head $ mkTupleType (Just 0) tyIn0 -- just the scalar type
             , head $ mkTupleType (Just 1) tyIn1
-            , mkStencilType 0 (length ixs0) tyIn0
-            , mkStencilType 1 (length ixs1) tyIn1 ] ++
-              mkStencilGet 0 boundary0 tyIn0 ++
+            , mkStencilType 1 (length ixs1) tyIn1
+            , mkStencilType 0 (length ixs0) tyIn0 ] ++
               mkStencilGet 1 boundary1 tyIn1 ++
-            [ mkStencilGather 0 dim tyIn0 ixs0
-            , mkStencilGather 1 dim tyIn1 ixs1
+              mkStencilGet 0 boundary0 tyIn0 ++
+            [ mkStencilGather 1 dim tyIn1 ixs1
+            , mkStencilGather 0 dim tyIn0 ixs0
             , mkStencilApply 2 apply ] )
             (mkNodeInfo (initPos skel) (Name 0))
 

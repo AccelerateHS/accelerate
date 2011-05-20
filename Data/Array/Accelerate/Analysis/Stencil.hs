@@ -37,7 +37,7 @@ offsets2 _ _ _ =
 
 -- |Position calculation on reified stencil values.
 --
-positionsR :: StencilR sh' e pat -> [sh']
+positionsR :: StencilR sh e pat -> [sh]
 positionsR StencilRunit3 = map (Z:.) [         -1, 0, 1         ]
 positionsR StencilRunit5 = map (Z:.) [      -2,-1, 0, 1, 2      ]
 positionsR StencilRunit7 = map (Z:.) [   -3,-2,-1, 0, 1, 2, 3   ]

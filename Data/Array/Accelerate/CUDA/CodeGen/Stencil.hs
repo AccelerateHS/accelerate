@@ -33,12 +33,12 @@ mkStencilGet base bndy ty =
     Wrap       -> [mkFun (boundary "wrap")]
   where
     dim   = typename (subscript "DimIn")
-    mkFun = mkDeviceFun' (subscript "get") (typename (subscript "TyIn")) [(typename "DimOut", "sz"), (dim, "sh"), (dim, "ix")]
+    mkFun = mkDeviceFun' (subscript "get") (typename (subscript "TyIn")) [(dim, "sh"), (dim, "ix")]
 
     mkConstant = mkDeviceFun (subscript "constant") (typename (subscript "TyIn")) []
 
     constant   = CBlockStmt $
-      CIf (ccall "inRange" [cvar "sz", cvar "ix"])
+      CIf (ccall "inRange" [cvar "sh", cvar "ix"])
       (CCompound [] [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", cvar "ix"]) internalNode),Nothing)] internalNode)
                     , initA
                     , CBlockStmt (CReturn (Just (cvar "r")) internalNode) ]
@@ -47,7 +47,7 @@ mkStencilGet base bndy ty =
       internalNode
 
     boundary f =
-      [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", ccall f [cvar "sz", cvar "ix"]]) internalNode),Nothing)] internalNode)
+      [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", ccall f [cvar "sh", cvar "ix"]]) internalNode),Nothing)] internalNode)
       , initA
       , CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)
       ]
@@ -80,7 +80,7 @@ mkStencilType subscript size
 --
 mkStencilGather :: Int -> Int -> [CType] -> [[Int]] -> CExtDecl
 mkStencilGather base dim ty ixs =
-  mkDeviceFun' (subscript "gather") (typename (subscript "Stencil")) [(typename "DimOut", "sz"), (dimIn, "sh"), (dimIn, "ix")] body
+  mkDeviceFun' (subscript "gather") (typename (subscript "Stencil")) [(dimIn, "sh"), (dimIn, "ix")] body
   where
     dimIn     = typename (subscript "DimIn")
     subscript = (++ show base)
@@ -94,7 +94,7 @@ mkStencilGather base dim ty ixs =
     initX x is = CBlockDecl
       (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent (subscript "TyIn")) internalNode)]
              [( Just (CDeclr (Just (internalIdent ('x':show x))) [] Nothing [] internalNode)
-              , Just (CInitExpr (ccall (subscript "get") [cvar "sz", cvar "sh", ccall "shape" (offset is)]) internalNode)
+              , Just (CInitExpr (ccall (subscript "get") [cvar "sh", ccall "shape" (offset is)]) internalNode)
               , Nothing)]
              internalNode)
 

@@ -27,7 +27,7 @@ stencil
 
     for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
-        set(d_out, ix, apply(gather0(shOut, shOut, fromIndex(shOut, ix))));
+        set(d_out, ix, apply(gather0(shOut, fromIndex(shOut, ix))));
     }
 }
 
