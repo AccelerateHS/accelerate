@@ -14,6 +14,7 @@ import qualified ZipWith
 import qualified Fold
 import qualified ScanSeg
 import qualified Stencil
+import qualified Stencil2
 import qualified Permute
 import qualified Backpermute
 
@@ -113,46 +114,51 @@ allTests :: Config -> IO [Test]
 allTests cfg = sequence'
   [
     -- primitive functions
-    mkTest "map-abs"         "absolute value of each element"             $ Map.run "abs" n
-  , mkTest "map-plus"        "add a constant to each element"             $ Map.run "plus" n
-  , mkTest "map-square"      "square of each element"                     $ Map.run "square" n
-  , mkTest "zip"             "vector zip"                                 $ Zip.run n
-  , mkTest "zipWith-plus"    "element-wise addition"                      $ ZipWith.run "plus" n
-  , mkTest "fold-sum"        "vector reduction: fold (+) 0"               $ Fold.run "sum" n
-  , mkTest "fold-product"    "vector product: fold (*) 1"                 $ Fold.run "product" n
-  , mkTest "fold-maximum"    "maximum of a vector: fold1 max"             $ Fold.run "maximum" n
-  , mkTest "fold-minimum"    "minimum of a vector: fold1 min"             $ Fold.run "minimum" n
-  , mkTest "fold-2d-sum"     "reduction along innermost matrix dimension" $ Fold.run2d "sum-2d" n
-  , mkTest "fold-2d-product" "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
-  , mkTest "scanseg-sum"     "segmented reduction"                        $ ScanSeg.run "sum" n
-  , mkTest "stencil-3x3"     "5-element cross pattern"                    $ Stencil.run "3x3" n
-  , mkTest "permute-hist"    "histogram"                                  $ Permute.run "histogram" n
-  , mkTest "backpermute-reverse"   "reverse a vector"                     $ Backpermute.run "reverse" n
-  , mkTest "backpermute-transpose" "transpose a matrix"                   $ Backpermute.run2d "transpose" n
+    mkTest "map-abs"               "absolute value of each element"             $ Map.run "abs" n
+  , mkTest "map-plus"              "add a constant to each element"             $ Map.run "plus" n
+  , mkTest "map-square"            "square of each element"                     $ Map.run "square" n
+  , mkTest "zip"                   "vector zip"                                 $ Zip.run n
+  , mkTest "zipWith-plus"          "element-wise addition"                      $ ZipWith.run "plus" n
+  , mkTest "fold-sum"              "vector reduction: fold (+) 0"               $ Fold.run "sum" n
+  , mkTest "fold-product"          "vector product: fold (*) 1"                 $ Fold.run "product" n
+  , mkTest "fold-maximum"          "maximum of a vector: fold1 max"             $ Fold.run "maximum" n
+  , mkTest "fold-minimum"          "minimum of a vector: fold1 min"             $ Fold.run "minimum" n
+  , mkTest "fold-2d-sum"           "reduction along innermost matrix dimension" $ Fold.run2d "sum-2d" n
+  , mkTest "fold-2d-product"       "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
+  , mkTest "scanseg-sum"           "segmented reduction"                        $ ScanSeg.run "sum" n
+  , mkTest "stencil-1D"            "3-element vector"                           $ Stencil.run "1D" n
+  , mkTest "stencil-2D"            "3x3 pattern"                                $ Stencil.run2D "2D" n
+  , mkTest "stencil-3D"            "3x3x3 pattern"                              $ Stencil.run3D "3D" n
+  , mkTest "stencil-3x3-cross"     "3x3 cross pattern"                          $ Stencil.run2D "3x3-cross" n
+  , mkTest "stencil-3x3-pair"      "3x3 non-symmetric pattern with pairs"       $ Stencil.run2D "3x3-pair" n
+  , mkTest "stencil2-2D"           "3x3 pattern"				$ Stencil2.run2D "2D" n
+  , mkTest "permute-hist"          "histogram"                                  $ Permute.run "histogram" n
+  , mkTest "backpermute-reverse"   "reverse a vector"                           $ Backpermute.run "reverse" n
+  , mkTest "backpermute-transpose" "transpose a matrix"                         $ Backpermute.run2d "transpose" n
 
     -- simple examples
-  , mkTest "sasum"           "sum of absolute values"                     $ SASUM.run n
-  , mkTest "saxpy"           "scalar alpha*x + y"                         $ SAXPY.run n
-  , mkTest "dotp"            "vector dot-product"                         $ DotP.run n
-  , mkTest "filter"          "return elements that satisfy a predicate"   $ Filter.run n
-  , mkTest "smvm"            "sparse-matrix vector multiplication"        $ SMVM.run (cfgMatrix cfg)
-  , mkTest "black-scholes"   "Black-Scholes option pricing"               $ BlackScholes.run n
-  , mkTest "radixsort"       "radix sort"                                 $ Radix.run n
+  , mkTest "sasum"                 "sum of absolute values"                     $ SASUM.run n
+  , mkTest "saxpy"                 "scalar alpha*x + y"                         $ SAXPY.run n
+  , mkTest "dotp"                  "vector dot-product"                         $ DotP.run n
+  , mkTest "filter"                "return elements that satisfy a predicate"   $ Filter.run n
+  , mkTest "smvm"                  "sparse-matrix vector multiplication"        $ SMVM.run (cfgMatrix cfg)
+  , mkTest "black-scholes"         "Black-Scholes option pricing"               $ BlackScholes.run n
+  , mkTest "radixsort"             "radix sort"                                 $ Radix.run n
 
 #ifdef ACCELERATE_IO
     -- Array IO
-  , mkIO   "io"              "array IO test"                              $ BlockCopy.run
+  , mkIO   "io"                    "array IO test"                              $ BlockCopy.run
 #endif
 
     -- image processing
-  , mkNoRef "canny"          "canny edge detection"                       $ Canny.run img
-  , mkNoRef "integral-image" "image integral (2D scan)"                   $ IntegralImage.run img
+  , mkNoRef "canny"                "canny edge detection"                       $ Canny.run img
+  , mkNoRef "integral-image"       "image integral (2D scan)"                   $ IntegralImage.run img
     -- slices
-  , mkTest "slices"          "replicate (Z:.2:.All:.All)"                 $ SliceExamples.run1
-  , mkTest "slices"          "replicate (Z:.All:.2:.All)"                 $ SliceExamples.run2
-  , mkTest "slices"          "replicate (Z:.All:.All:.2)"                 $ SliceExamples.run3
-  , mkTest "slices"          "replicate (Any:.2)"                         $ SliceExamples.run4
-  , mkTest "slices"          "replicate (Z:.2:.2:.2)"                     $ SliceExamples.run5
+  , mkTest "slices"                "replicate (Z:.2:.All:.All)"                 $ SliceExamples.run1
+  , mkTest "slices"                "replicate (Z:.All:.2:.All)"                 $ SliceExamples.run2
+  , mkTest "slices"                "replicate (Z:.All:.All:.2)"                 $ SliceExamples.run3
+  , mkTest "slices"                "replicate (Any:.2)"                         $ SliceExamples.run4
+  , mkTest "slices"                "replicate (Z:.2:.2:.2)"                     $ SliceExamples.run5
 
   ]
   where
