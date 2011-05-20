@@ -135,7 +135,7 @@ codeGenAcc acc vars =
               sten0 = zipWith mkGlobal decl0 (map (\n -> "stencil0_a" ++ show n) [0::Int ..])
           in
           mkStencil (codeGenAccTypeDim acc)
-                    sten0 (codeGenAccType a) (map Sugar.shapeToList $ offsets f a) (codeGenBoundary a bndy)
+                    sten0 (codeGenAccType a) (map (reverse . Sugar.shapeToList) $ offsets f a) (codeGenBoundary a bndy)
                     (codeGenFun f)
 
         Stencil2 f bndy1 a1 bndy0 a0 ->
@@ -146,8 +146,8 @@ codeGenAcc acc vars =
               (pos1, pos0) = offsets2 f a1 a0
           in
           mkStencil2 (codeGenAccTypeDim acc)
-                     (sten 0 ty0) (codeGenAccType a0) (map Sugar.shapeToList pos0) (codeGenBoundary a0 bndy0)
-                     (sten 1 ty1) (codeGenAccType a1) (map Sugar.shapeToList pos1) (codeGenBoundary a1 bndy1)
+                     (sten 1 ty1) (codeGenAccType a1) (map (reverse . Sugar.shapeToList) pos1) (codeGenBoundary a1 bndy1)
+                     (sten 0 ty0) (codeGenAccType a0) (map (reverse . Sugar.shapeToList) pos0) (codeGenBoundary a0 bndy0)
                      (codeGenFun f)
 
     --
