@@ -65,8 +65,8 @@ static __inline__ __device__ Shape mirror(const Shape sh, const Shape ix)
 template <>
 static __inline__ __device__ DIM1 mirror(const DIM1 sz, const DIM1 i)
 {
-    if      (i <  0)  return -(i+1);
-    else if (i >= sz) return sz - (i-sz+1);
+    if      (i <  0)  return -i;
+    else if (i >= sz) return sz - (i-sz+2);
     else              return i;
 }
 
