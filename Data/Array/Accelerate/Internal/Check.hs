@@ -61,7 +61,7 @@ error file line kind loc msg
       (if kind == Internal
          then ([""
                ,"*** Internal error in package accelerate ***"
-               ,"*** Please submit a bug report at http://trac.haskell.org/accelerate"]++)
+               ,"*** Please submit a bug report at https://github.com/mchakravarty/accelerate/issues"]++)
          else id)
       [ file ++ ":" ++ show line ++ " (" ++ loc ++ "): " ++ msg ]
 
