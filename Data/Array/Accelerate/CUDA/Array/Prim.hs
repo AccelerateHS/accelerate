@@ -18,7 +18,7 @@ module Data.Array.Accelerate.CUDA.Array.Prim (
   newMT, MemoryTable,
 
   -- Array operations
-  mallocArray, indexArray, copyArray, peekArray, peekArrayAsync,
+  mallocArray, useArray, indexArray, copyArray, peekArray, peekArrayAsync,
   pokeArray, pokeArrayAsync, marshalArrayData, marshalTextureData
 
 ) where
@@ -197,6 +197,15 @@ lookup (MemoryTable tbl _) ad =
       Just w  -> maybe  notFound (devicePtr ad) `fmap` deRefWeak w
 
 
+-- Check whether a device array exists
+--
+exists :: (ArrayElt e, ArrayPtrs e ~ Ptr a, Typeable a)
+       => MemoryTable
+       -> ArrayData e
+       -> IO Bool
+exists (MemoryTable tbl _) ad = isJust `fmap` Hash.lookup tbl (ArrayPtr ad)
+
+
 -- Record an association between the given host and device side arrays. The
 -- device array will be released at some point after the host array becomes
 -- unreachable.
@@ -250,17 +259,32 @@ mallocArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
             -> Int                      -- number of array elements
             -> IO ()
 mallocArray mmap@(MemoryTable tbl _) arr ad n =
-  let whenM p a = p >>= \f -> when f a
-      key       = ArrayPtr ad
-      reclaim   = Hash.toList tbl >>= \l     -> forM l $
-                                      \(_,w) -> whenM (isNothing `fmap` deRefWeak w) $ finalize w
+  let reclaim = Hash.toList tbl >>= \l     -> forM l $
+                                    \(_,w) -> whenM (isNothing `fmap` deRefWeak w) $ finalize w
   in
-  whenM (isNothing `fmap` Hash.lookup tbl key) $ do
+  unlessM (exists mmap ad) $ do
     dptr <- CUDA.mallocArray n `catch` \(e :: CUDAException) ->
       case e of
         ExitCode OutOfMemory -> performGC >> reclaim >> CUDA.mallocArray n
         _                    -> throwIO e
     insert mmap arr ad dptr
+
+
+-- A combination of 'mallocArray' and 'pokeArray' to allocate space on the
+-- device and upload an existing array. This is specialised because if the host
+-- array is shared on the heap, we do not need to do anything.
+--
+useArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
+            ,Typeable a, Storable a)
+         => MemoryTable
+         -> array                       -- principal array object to associate finaliser with
+         -> ArrayData e                 -- host array data
+         -> Int                         -- number of array elements
+         -> IO ()
+useArray mmap arr ad n =
+  unlessM (exists mmap ad) $ do
+    mallocArray mmap arr ad n
+    pokeArrayAsync mmap ad n Nothing
 
 
 -- Read a single element from an array at the given row-major index. This is a
@@ -369,4 +393,18 @@ marshalTextureData mmap ad n tex =
   in  lookup mmap ad >>= \ptr -> do
         CUDA.setFormat tex fmt c
         CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
+
+
+-- Auxiliary
+-- ---------
+
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM predicate action = do
+  p <- predicate
+  when p action
+
+unlessM :: Monad m => m Bool -> m () -> m ()
+unlessM predicate action = do
+  p <- predicate
+  unless p action
 

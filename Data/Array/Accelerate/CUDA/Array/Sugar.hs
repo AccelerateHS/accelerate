@@ -21,14 +21,6 @@ import Data.Array.Accelerate.Array.Sugar		hiding (newArray, allocateArray)
 import qualified Data.Array.Accelerate.Array.Sugar	as Sugar
 
 
--- Allocate space on the device and upload an existing array
---
-useArray :: (Shape dim, Elt e) => Array dim e -> CIO ()
-useArray arr = do
-  mallocArray arr
-  pokeArrayAsync arr Nothing
-
-
 -- Create an array from its representation function, uploading the result to the
 -- device
 --
