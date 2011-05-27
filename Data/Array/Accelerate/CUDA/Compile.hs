@@ -27,13 +27,11 @@ module Data.Array.Accelerate.CUDA.Compile (
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST                        hiding (Val(..))
-import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, Shape, Elt)
-import Data.Array.Accelerate.Array.Representation       hiding (Shape)
 import Data.Array.Accelerate.Pretty.Print
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
-import Data.Array.Accelerate.CUDA.Array.Data
+import Data.Array.Accelerate.CUDA.Array.Sugar
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
 -- libraries
@@ -163,8 +161,7 @@ compileAfun1 _ =
 
 
 prepareAcc :: Bool -> OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
-prepareAcc iss rootAcc rootEnv = do
-  puts memoryTable =<< liftIO newAccMemoryTable
+prepareAcc _ rootAcc rootEnv = do
   travA rootAcc rootEnv
   where
     -- Traverse an open array expression in depth-first order
@@ -255,12 +252,9 @@ prepareAcc iss rootAcc rootEnv = do
         -- If this array is let-bound, we will only see this case once, and need
         -- to update the reference count when retrieved during execution
         --
-        Use arr@(Array sh ad) ->
-          let n = size sh
-              c = if iss then Nothing else Just 1
-          in do mallocArray    ad c (max 1 n)
-                pokeArrayAsync ad n Nothing
-                return (ExecAcc singleRef noKernel [] (Use arr), aenv)
+        Use arr@(Array _ _) -> do
+	  useArray arr
+	  return (ExecAcc singleRef noKernel [] (Use arr), aenv)
 
         -- Computation nodes
         --

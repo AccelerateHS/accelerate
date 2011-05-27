@@ -20,21 +20,14 @@ module Data.Array.Accelerate.CUDA (
 
 -- standard library
 import Prelude hiding (catch)
-import Data.Label
 import Control.Exception
 import Control.Applicative
 import System.IO.Unsafe
-import qualified Data.HashTable                   as Hash
-
--- CUDA binding
 import Foreign.CUDA.Driver.Error
-import qualified Foreign.CUDA.Driver              as CUDA
 
 -- friends
 import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))
 import Data.Array.Accelerate.Smart                (Acc, convertAcc, convertAccFun1)
-import Data.Array.Accelerate.Array.Representation (size)
-import Data.Array.Accelerate.Array.Sugar          (Array(..))
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
@@ -63,20 +56,16 @@ run a = unsafePerformIO execute
 --
 stream :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
 {-# NOINLINE stream #-}
-stream f arrs = unsafePerformIO $ uncurry (execute arrs) =<< runCUDA (compileAfun1 acc)
+stream f arrs = unsafePerformIO $ execute arrs =<< evalCUDA (compileAfun1 acc)
   where
-    acc                       = convertAccFun1 f
-    execute []     _    state = finalise state >> return []   -- release all constant arrays
-    execute (a:as) afun state = do
-      (b,s) <- runCUDAWith state (executeAfun1 afun a >>= collect)
-               `catch`
-               \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
-      bs    <- unsafeInterleaveIO (execute as afun s)
+    acc                 = convertAccFun1 f
+    execute []     _    = return []
+    execute (a:as) afun = do
+      b  <- evalCUDA (executeAfun1 afun a >>= collect)
+            `catch`
+            \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+      bs <- unsafeInterleaveIO (execute as afun)
       return (b:bs)
-    --
-    finalise state            = do
-      mem <- Hash.toList (get memoryTable state)
-      mapM_ (\(_,MemoryEntry _ p) -> CUDA.free (CUDA.castDevPtr p)) mem
 
 
 -- Copy from device to host, and decrement the usage counter. This last step
@@ -86,7 +75,8 @@ collect :: Arrays arrs => arrs -> CIO arrs
 collect arrs = collectR arrays arrs
   where
     collectR :: ArraysR arrs -> arrs -> CIO arrs
-    collectR ArraysRunit         ()                = return ()
-    collectR ArraysRarray        arr@(Array sh ad) = peekArray ad (size sh) >> freeArray ad >> return arr
-    collectR (ArraysRpair r1 r2) (arrs1, arrs2)    = (,) <$> collectR r1 arrs1 <*> collectR r2 arrs2
+    collectR ArraysRunit         ()             = return ()
+    collectR ArraysRarray        arr            = peekArray arr >> return arr
+    collectR (ArraysRpair r1 r2) (arrs1, arrs2) = (,) <$> collectR r1 arrs1
+                                                      <*> collectR r2 arrs2
 
