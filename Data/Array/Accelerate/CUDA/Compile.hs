@@ -13,8 +13,7 @@
 module Data.Array.Accelerate.CUDA.Compile (
 
   -- * Types parameterising our annotated computation form
-  ExecAcc, ExecOpenAcc(..),
-  AccKernel, AccRefcount(..),
+  AccKernel, ExecAcc, ExecOpenAcc(..),
 
   -- * generate and compile kernels to realise a computation
   compileAcc, compileAfun1
@@ -64,61 +63,14 @@ type AccKernel a = (String, CIO CUDA.Module)
 noKernel :: AccKernel a
 noKernel = INTERNAL_ERROR(error) "ExecAcc" "no kernel module for this node"
 
--- The number of times an array computation will be used. This is an overzealous
--- estimate, due to the presence of array branching. Only the scanl' and scanr'
--- primitives use two reference counts.
---
-data AccRefcount = R1 !Int
-                 | R2 !Int !Int
-
-instance Show AccRefcount where
-  show (R1 x)   = show x
-  show (R2 x y) = show (x,y)
-
-noRefcount :: AccRefcount
-noRefcount = INTERNAL_ERROR(error) "ExecAcc" "no reference count for this node"
-
-singleRef :: AccRefcount
-singleRef = R1 1
-
-
--- A pseudo array environment that holds the number of times each indexed
--- variable has been accessed.
---
-data Ref c where
-  Empty :: Ref ()
-  Push  :: Ref c
-        -> Either (IndirectRef c) AccRefcount
-        -> Ref (c, AccRefcount)
-
-data IndirectRef c = forall env t.
-                     IRef (Idx env t) (AccRefcount -> AccRefcount)
-
-
-incIdx :: Idx env t -> Ref count -> Ref count
-incIdx = modIdx incR1
-  where
-    incR1 (R1 x) = R1 (x+1)
-    incR1 _      = INTERNAL_ERROR(error) "incR1" "inconsistent valuation"
-
-modIdx :: (AccRefcount -> AccRefcount) -> Idx env t -> Ref count -> Ref count
-modIdx f (SuccIdx ix) (Push next c) = modIdx f ix next `Push` c
-modIdx f ZeroIdx      (Push rest c) =
-  case c of
-    Left (IRef ix' f') -> modIdx f' ix' rest `Push` c
-    Right n            -> rest               `Push` Right (f n)
-modIdx _ _            _             = INTERNAL_ERROR(error) "modIdx" "inconsistent valuation"
-
 
 -- Interleave execution state annotations into an open array computation AST
 --
 data ExecOpenAcc aenv a where
-  ExecAfun :: AccRefcount                       -- reference count attached to an enclosed lambda
-           -> PreOpenAfun ExecOpenAcc () t
+  ExecAfun :: PreOpenAfun ExecOpenAcc () t
            -> ExecOpenAcc aenv t
 
-  ExecAcc  :: AccRefcount                       -- number of times the result is used (zealous)
-           -> AccKernel a                       -- an executable binary object
+  ExecAcc  :: AccKernel a                       -- an executable binary object
            -> [AccBinding aenv]                 -- auxiliary arrays from the environment the kernel needs access to
            -> PreOpenAcc ExecOpenAcc aenv a     -- the actual computation
            -> ExecOpenAcc aenv a
@@ -148,332 +100,282 @@ instance Show (ExecOpenAcc aenv a) where
 --      transform the segment lengths into global offset indices.
 --
 compileAcc :: Acc a -> CIO (ExecAcc a)
-compileAcc acc = fst `fmap` prepareAcc False acc Empty
+compileAcc acc = prepareAcc acc
 
 
 compileAfun1 :: Afun (a -> b) -> CIO (ExecAcc (a -> b))
 compileAfun1 (Alam (Abody b)) = do
-  (b', Empty `Push` Right c) <- prepareAcc True b (Empty `Push` Right (R1 0))
-  return $ ExecAfun c (Alam (Abody b'))
+  b' <- prepareAcc b
+  return $ ExecAfun (Alam (Abody b'))
 
 compileAfun1 _ =
   error "Hope (noun): something that happens to facts when the world refuses to agree"
 
 
-prepareAcc :: Bool -> OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
-prepareAcc _ rootAcc rootEnv = do
-  travA rootAcc rootEnv
+prepareAcc :: OpenAcc aenv a -> CIO (ExecOpenAcc aenv a)
+prepareAcc rootAcc = do
+  travA rootAcc
   where
     -- Traverse an open array expression in depth-first order
     --
-    travA :: OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
-    travA acc@(OpenAcc pacc) aenv =
+    travA :: OpenAcc aenv a -> CIO (ExecOpenAcc aenv a)
+    travA acc@(OpenAcc pacc) =
       case pacc of
 
         -- Environment manipulations
         --
-        Avar ix -> return (node (Avar ix), incIdx ix aenv)
+        Avar ix -> return $ node (Avar ix)
 
-        -- Let bindings to computations that yield two arrays
+        -- Let bindings
         --
-        Alet2 a b | Avar ia <- unAcc a
-                  , Avar ib <- unAcc b ->
-          let a'   = node (Avar ia)
-              b'   = node (Avar ib)
-              env' = modIdx (eitherIx ib incSucc incZero) ia aenv
-          in
-          return (node (Alet2 a' b'), env')
-
-        Alet2 a b | Avar ix <- unAcc a ->
-          let a' = node (Avar ix)
-          in do
-          (b', env1 `Push` _ `Push` _) <- travA b (aenv `Push` Left (IRef ix incSucc)
-                                                        `Push` Left (IRef ix incZero))
-          return (node (Alet2 a' b'), env1)
-
         Alet2 a b -> do
-          (a', env1)                      <- travA a aenv
-          (b', env2 `Push` Right (R1 c1)
-                    `Push` Right (R1 c0)) <- travA b (env1 `Push` Right (R1 0) `Push` Right (R1 0))
-          return (node (Alet2 (setref (R2 c1 c0) a') b'), env2)
-
-        -- Let bindings to a single computation
-        --
-        Alet a b | Alet2 x y <- unAcc a
-                 , Avar u    <- unAcc x
-                 , Avar v    <- unAcc y ->
-          let a' = node (Alet2 (node (Avar u)) (node (Avar v)))
-              rc = Left (IRef u (eitherIx v incSucc incZero))
-          in do
-          (b', env1 `Push` _) <- travA b (aenv `Push` rc)
-          return (node (Alet a' b'), env1)
-
-        Alet a b | Alet2 _ y <- unAcc a
-                 , Avar v    <- unAcc y -> do
-          (ExecAcc _ _ _ (Alet2 x' y'), env1) <- travA a aenv
-          (b', env2 `Push` Right (R1 c))      <- travA b (env1 `Push` Right (R1 0))
-          --
-          let a' = node (Alet2 (setref (eitherIx v (R2 c 0) (R2 0 c)) x') y')
-          return  (node (Alet a' b'), env2)
-
-        Alet a b | Alet _ _ <- unAcc a -> do
-          (ExecAcc _ _ _ (Alet x' y'), env1) <- travA a aenv
-          (b', env2 `Push` Right c)          <- travA b (env1 `Push` Right (R1 0))
-          return (node (Alet (node (Alet x' (setref c y'))) b'), env2)
+          a' <- travA a
+          b' <- travA b
+          return $ node (Alet2 a' b')
 
         Alet a b  -> do
-          (a', env1)                <- travA a aenv
-          (b', env2 `Push` Right c) <- travA b (env1 `Push` Right rc)
-          return (node (Alet (setref c a') b'), env2)
-          where
-            rc | isAcc2 a  = R2 0 0
-               | otherwise = R1 0
-
+          a' <- travA a
+          b' <- travA b
+          return $ node (Alet a' b')
 
         Apply (Alam (Abody b)) a -> do
-          (a', env1)                <- travA a aenv
-          (b', env2 `Push` Right c) <- travA b (env1 `Push` Right (R1 0))
-          return (node (Apply (Alam (Abody b')) (setref c a')), env2)
+          a' <- travA a
+          b' <- travA b
+          return $ node (Apply (Alam (Abody b')) a')
         Apply _                _ -> error "I made you a cookie, but I eated it"
 
         PairArrays arr1 arr2 -> do
-          (arr1', env1) <- travA arr1 aenv
-          (arr2', env2) <- travA arr2 env1
-          return (node (PairArrays arr1' arr2'), env2)
+          arr1' <- travA arr1
+          arr2' <- travA arr2
+          return $ node (PairArrays arr1' arr2')
 
         Acond c t e -> do
-          (c', env1, _) <- travE c aenv []
-          (t', env2)    <- travA t env1      -- TLM: separate use counts for each branch?
-          (e', env3)    <- travA e env2
-          return (ExecAcc noRefcount noKernel [] (Acond c' t' e'), env3)
+          (c', _) <- travE c []
+          t'      <- travA t
+          e'      <- travA e
+          return $ node (Acond c' t' e')
 
         -- Array injection
         --
-        -- If this array is let-bound, we will only see this case once, and need
-        -- to update the reference count when retrieved during execution
-        --
         Use arr@(Array _ _) -> do
 	  useArray arr
-	  return (ExecAcc singleRef noKernel [] (Use arr), aenv)
+	  return $ node (Use arr)
 
         -- Computation nodes
         --
         Reshape sh a -> do
-          (sh', env1, _) <- travE sh aenv []
-          (a',  env2)    <- travA a  env1
-          return (ExecAcc singleRef noKernel [] (Reshape sh' a'), env2)
+          (sh', _) <- travE sh []
+          a'       <- travA a
+          return $ node (Reshape sh' a')
 
         Unit e  -> do
-          (e', env1, _) <- travE e aenv []
-          return (ExecAcc singleRef noKernel [] (Unit e'), env1)
+          (e', _) <- travE e []
+          return $ node (Unit e')
 
         Generate e f -> do
-          (e', env1, _)    <- travE e aenv []
-          (f', env2, var1) <- travF f env1 []
-          kernel           <- build "generate" acc var1
-          return (ExecAcc singleRef kernel var1 (Generate e' f'), env2)
+          (e', _)    <- travE e []
+          (f', var1) <- travF f []
+          kernel     <- build "generate" acc var1
+          return $ ExecAcc kernel var1 (Generate e' f')
 
         Replicate slix e a -> do
-          (e', env1, _) <- travE e aenv []
-          (a', env2)    <- travA a env1
-          kernel        <- build "replicate" acc []
-          return (ExecAcc singleRef kernel [] (Replicate slix e' a'), env2)
+          (e', _) <- travE e []
+          a'      <- travA a
+          kernel  <- build "replicate" acc []
+          return $ ExecAcc kernel [] (Replicate slix e' a')
 
         Index slix a e -> do
-          (a', env1)    <- travA a aenv
-          (e', env2, _) <- travE e env1 []
-          kernel        <- build "slice" acc []
-          return (ExecAcc singleRef kernel [] (Index slix a' e'), env2)
+          a'      <- travA a
+          (e', _) <- travE e []
+          kernel  <- build "slice" acc []
+          return $ ExecAcc kernel [] (Index slix a' e')
 
         Map f a -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "map" acc var1
-          return (ExecAcc singleRef kernel var1 (Map f' a'), env2)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          kernel     <- build "map" acc var1
+          return $ ExecAcc kernel var1 (Map f' a')
 
         ZipWith f a b -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          (b', env3)       <- travA b env2
-          kernel           <- build "zipWith" acc var1
-          return (ExecAcc singleRef kernel var1 (ZipWith f' a' b'), env3)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          b'         <- travA b
+          kernel     <- build "zipWith" acc var1
+          return $ ExecAcc kernel var1 (ZipWith f' a' b')
 
         Fold f e a -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          kernel           <- build "fold" acc var2
-          return (ExecAcc singleRef kernel var2 (Fold f' e' a'), env3)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          kernel     <- build "fold" acc var2
+          return $ ExecAcc kernel var2 (Fold f' e' a')
 
         Fold1 f a -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "fold" acc var1
-          return (ExecAcc singleRef kernel var1 (Fold1 f' a'), env2)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          kernel     <- build "fold" acc var1
+          return $ ExecAcc kernel var1 (Fold1 f' a')
 
         FoldSeg f e a s -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          (s', env4)       <- travA (scan s) env3
-          kernel           <- build "foldSeg" acc var2
-          return (ExecAcc singleRef kernel var2 (FoldSeg f' e' a' s'), env4)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          s'         <- travA (scan s)
+          kernel     <- build "foldSeg" acc var2
+          return $ ExecAcc kernel var2 (FoldSeg f' e' a' s')
 
         Fold1Seg f a s -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          (s', env3)       <- travA (scan s) env2
-          kernel           <- build "foldSeg" acc var1
-          return (ExecAcc singleRef kernel var1 (Fold1Seg f' a' s'), env3)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          s'         <- travA (scan s)
+          kernel     <- build "foldSeg" acc var1
+          return $ ExecAcc kernel var1 (Fold1Seg f' a' s')
 
         Scanl f e a -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc var2
-          return (ExecAcc singleRef kernel var2 (Scanl f' e' a'), env3)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var2
+          return $ ExecAcc kernel var2 (Scanl f' e' a')
 
         Scanl' f e a -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc var2
-          return (ExecAcc (R2 0 0) kernel var2 (Scanl' f' e' a'), env3)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var2
+          return $ ExecAcc kernel var2 (Scanl' f' e' a')
 
         Scanl1 f a -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "inclusive_scan" acc var1
-          return (ExecAcc singleRef kernel var1 (Scanl1 f' a'), env2)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var1
+          return $ ExecAcc kernel var1 (Scanl1 f' a')
 
         Scanr f e a -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc var2
-          return (ExecAcc singleRef kernel var2 (Scanr f' e' a'), env3)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var2
+          return $ ExecAcc kernel var2 (Scanr f' e' a')
 
         Scanr' f e a -> do
-          (f', env1, var1) <- travF f aenv []
-          (e', env2, var2) <- travE e env1 var1
-          (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc var2
-          return (ExecAcc (R2 0 0) kernel var2 (Scanr' f' e' a'), env3)
+          (f', var1) <- travF f []
+          (e', var2) <- travE e var1
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var2
+          return $ ExecAcc kernel var2 (Scanr' f' e' a')
 
         Scanr1 f a -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "inclusive_scan" acc var1
-          return (ExecAcc singleRef kernel var1 (Scanr1 f' a'), env2)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          kernel     <- build "inclusive_scan" acc var1
+          return $ ExecAcc kernel var1 (Scanr1 f' a')
 
         Permute f a g b -> do
-          (f', env1, var1) <- travF f aenv []
-          (g', env2, var2) <- travF g env1 var1
-          (a', env3)       <- travA a env2
-          (b', env4)       <- travA b env3
-          kernel           <- build "permute" acc var2
-          return (ExecAcc singleRef kernel var2 (Permute f' a' g' b'), env4)
+          (f', var1) <- travF f []
+          (g', var2) <- travF g var1
+          a'         <- travA a
+          b'         <- travA b
+          kernel     <- build "permute" acc var2
+          return $ ExecAcc kernel var2 (Permute f' a' g' b')
 
         Backpermute e f a -> do
-          (e', env1, _)    <- travE e aenv []
-          (f', env2, var2) <- travF f env1 []
-          (a', env3)       <- travA a env2
-          kernel           <- build "backpermute" acc var2
-          return (ExecAcc singleRef kernel var2 (Backpermute e' f' a'), env3)
+          (e', _)    <- travE e []
+          (f', var2) <- travF f []
+          a'         <- travA a
+          kernel     <- build "backpermute" acc var2
+          return $ ExecAcc kernel var2 (Backpermute e' f' a')
 
         Stencil f b a -> do
-          (f', env1, var1) <- travF f aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "stencil" acc var1
-          return (ExecAcc singleRef kernel var1 (Stencil f' b a'), env2)
+          (f', var1) <- travF f []
+          a'         <- travA a
+          kernel     <- build "stencil" acc var1
+          return $ ExecAcc kernel var1 (Stencil f' b a')
 
         Stencil2 f b1 a1 b2 a2 -> do
-          (f', env1, var1) <- travF f aenv []
-          (a1', env2)      <- travA a1 env1
-          (a2', env3)      <- travA a2 env2
-          kernel           <- build "stencil2" acc var1
-          return (ExecAcc singleRef kernel var1 (Stencil2 f' b1 a1' b2 a2'), env3)
+          (f', var1) <- travF f []
+          a1'        <- travA a1
+          a2'        <- travA a2
+          kernel     <- build "stencil2" acc var1
+          return $ ExecAcc kernel var1 (Stencil2 f' b1 a1' b2 a2')
 
 
     -- Traverse a scalar expression
     --
     travE :: OpenExp env aenv e
-          -> Ref count
           -> [AccBinding aenv]
-          -> CIO (PreOpenExp ExecOpenAcc env aenv e, Ref count, [AccBinding aenv])
-    travE exp aenv vars =
+          -> CIO (PreOpenExp ExecOpenAcc env aenv e, [AccBinding aenv])
+    travE exp vars =
       case exp of
         Let _ _         -> INTERNAL_ERROR(error) "prepareAcc" "Let: not implemented yet"
-        Var ix          -> return (Var ix, aenv, vars)
-        Const c         -> return (Const c, aenv, vars)
-        PrimConst c     -> return (PrimConst c, aenv, vars)
+        Var ix          -> return (Var ix, vars)
+        Const c         -> return (Const c, vars)
+        PrimConst c     -> return (PrimConst c, vars)
         IndexAny        -> INTERNAL_ERROR(error) "prepareAcc" "IndexAny: not implemented yet"
-        IndexNil        -> return (IndexNil, aenv, vars)
+        IndexNil        -> return (IndexNil, vars)
         IndexCons ix i  -> do
-          (ix', env1, var1) <- travE ix aenv vars
-          (i',  env2, var2) <- travE i  env1 var1
-          return (IndexCons ix' i', env2, var2)
+          (ix', var1) <- travE ix vars
+          (i',  var2) <- travE i  var1
+          return (IndexCons ix' i', var2)
 
         IndexHead ix    -> do
-          (ix', env1, var1) <- travE ix aenv vars
-          return (IndexHead ix', env1, var1)
+          (ix', var1) <- travE ix vars
+          return (IndexHead ix', var1)
 
         IndexTail ix    -> do
-          (ix', env1, var1) <- travE ix aenv vars
-          return (IndexTail ix', env1, var1)
+          (ix', var1) <- travE ix vars
+          return (IndexTail ix', var1)
 
         Tuple t         -> do
-          (t', env1, var1) <- travT t aenv vars
-          return (Tuple t', env1, var1)
+          (t', var1) <- travT t vars
+          return (Tuple t', var1)
 
         Prj idx e       -> do
-          (e', env1, var1) <- travE e aenv vars
-          return (Prj idx e', env1, var1)
+          (e', var1) <- travE e vars
+          return (Prj idx e', var1)
 
         Cond p t e      -> do
-          (p', env1, var1) <- travE p aenv vars
-          (t', env2, var2) <- travE t env1 var1 -- TLM: reference count contingent on which
-          (e', env3, var3) <- travE e env2 var2 --      branch is taken?
-          return (Cond p' t' e', env3, var3)
+          (p', var1) <- travE p vars
+          (t', var2) <- travE t var1
+          (e', var3) <- travE e var2
+          return (Cond p' t' e', var3)
 
         PrimApp f e     -> do
-          (e', env1, var1) <- travE e aenv vars
-          return (PrimApp f e', env1, var1)
+          (e', var1) <- travE e vars
+          return (PrimApp f e', var1)
 
         IndexScalar a e -> do
-          (a', env1)       <- travA a aenv
-          (e', env2, var2) <- travE e env1 vars
-          return (IndexScalar a' e', env2, bind a' `cons` var2)
+          a'         <- travA a
+          (e', var2) <- travE e vars
+          return (IndexScalar a' e', bind a' `cons` var2)
 
         Shape a         -> do
-          (a', env1) <- travA a aenv
-          return (Shape a', env1, bind a' `cons` vars)
+          a' <- travA a
+          return (Shape a', bind a' `cons` vars)
 
         ShapeSize e     -> do
-          (e', env1, var1) <- travE e aenv vars
-          return (ShapeSize e', env1, var1)
+          (e', var1) <- travE e vars
+          return (ShapeSize e', var1)
 
 
     travT :: Tuple (OpenExp env aenv) t
-          -> Ref count
           -> [AccBinding aenv]
-          -> CIO (Tuple (PreOpenExp ExecOpenAcc env aenv) t, Ref count, [AccBinding aenv])
-    travT NilTup        aenv vars = return (NilTup, aenv, vars)
-    travT (SnocTup t e) aenv vars = do
-      (e', env1, var1) <- travE e aenv vars
-      (t', env2, var2) <- travT t env1 var1
-      return (SnocTup t' e', env2, var2)
+          -> CIO (Tuple (PreOpenExp ExecOpenAcc env aenv) t, [AccBinding aenv])
+    travT NilTup        vars = return (NilTup, vars)
+    travT (SnocTup t e) vars = do
+      (e', var1) <- travE e vars
+      (t', var2) <- travT t var1
+      return (SnocTup t' e', var2)
 
     travF :: OpenFun env aenv t
-          -> Ref count
           -> [AccBinding aenv]
-          -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding aenv])
-    travF (Body b) aenv vars = do
-      (b', env1, var1) <- travE b aenv vars
-      return (Body b', env1, var1)
-    travF (Lam  f) aenv vars = do
-      (f', env1, var1) <- travF f aenv vars
-      return (Lam f', env1, var1)
+          -> CIO (PreOpenFun ExecOpenAcc env aenv t, [AccBinding aenv])
+    travF (Body b) vars = do
+      (b', var1) <- travE b vars
+      return (Body b', var1)
+    travF (Lam  f) vars = do
+      (f', var1) <- travF f vars
+      return (Lam f', var1)
 
 
     -- Auxiliary
@@ -487,43 +389,16 @@ prepareAcc _ rootAcc rootEnv = do
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
 
-    unAcc :: OpenAcc aenv a -> PreOpenAcc OpenAcc aenv a
-    unAcc (OpenAcc pacc) = pacc
-
     node :: PreOpenAcc ExecOpenAcc aenv a -> ExecOpenAcc aenv a
-    node = ExecAcc noRefcount noKernel []
-
-    isAcc2 :: OpenAcc aenv a -> Bool
-    isAcc2 (OpenAcc pacc) = case pacc of
-        Scanl' _ _ _ -> True
-        Scanr' _ _ _ -> True
-        _            -> False
-
-    incSucc :: AccRefcount -> AccRefcount
-    incSucc (R2 x y) = R2 (x+1) y
-    incSucc _        = INTERNAL_ERROR(error) "incSucc" "inconsistent valuation"
-
-    incZero :: AccRefcount -> AccRefcount
-    incZero (R2 x y) = R2 x (y+1)
-    incZero _        = INTERNAL_ERROR(error) "incZero" "inconsistent valuation"
-
-    eitherIx :: Idx env t -> f -> f -> f
-    eitherIx ZeroIdx           _ z = z
-    eitherIx (SuccIdx ZeroIdx) s _ = s
-    eitherIx _                 _ _ =
-      INTERNAL_ERROR(error) "eitherIx" "inconsistent valuation"
-
-    setref :: AccRefcount -> ExecOpenAcc aenv a -> ExecOpenAcc aenv a
-    setref count (ExecAfun _ fun)     = ExecAfun count fun
-    setref count (ExecAcc  _ k b acc) = ExecAcc  count k b acc
+    node = ExecAcc noKernel []
 
     cons :: AccBinding aenv -> [AccBinding aenv] -> [AccBinding aenv]
     cons x xs | x `notElem` xs = x : xs
               | otherwise      = xs
 
     bind :: (Shape sh, Elt e) => ExecOpenAcc aenv (Array sh e) -> AccBinding aenv
-    bind (ExecAcc _ _ _ (Avar ix)) = ArrayVar ix
-    bind _                         =
+    bind (ExecAcc _ _ (Avar ix)) = ArrayVar ix
+    bind _                       =
      INTERNAL_ERROR(error) "bind" "expected array variable"
 
 
@@ -702,11 +577,10 @@ printDoc m hdl doc = do
 prettyExecAcc :: PrettyAcc ExecOpenAcc
 prettyExecAcc alvl wrap ecc =
   case ecc of
-    ExecAfun rc pfun      -> braces (usecount rc)
-                              <+> prettyPreAfun prettyExecAcc alvl pfun
-    ExecAcc  rc _ fv pacc ->
+    ExecAfun pfun      -> prettyPreAfun prettyExecAcc alvl pfun
+    ExecAcc  _ fv pacc ->
       let base = prettyPreAcc prettyExecAcc alvl wrap pacc
-          ann  = braces (usecount rc <> comma <+> freevars fv)
+          ann  = braces (freevars fv)
       in case pacc of
            Avar _         -> base
            Alet  _ _      -> base
@@ -716,8 +590,6 @@ prettyExecAcc alvl wrap ecc =
            Acond _ _ _    -> base
            _              -> ann <+> base
   where
-    usecount (R1 x)   = text "rc=" <> int x
-    usecount (R2 x y) = text "rc=" <> text (show (x,y))
     freevars = (text "fv=" <>) . brackets . hcat . punctuate comma
                                . map (\(ArrayVar ix) -> char 'a' <> int (deBruijnToInt ix))
 
