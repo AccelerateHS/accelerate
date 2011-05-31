@@ -89,12 +89,12 @@ instance Shape sh => Shape (sh, Int) where
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` 0
-                                        Mirror     -> bound sh ix bndy `addDim` (-(i+1))
+                                        Mirror     -> bound sh ix bndy `addDim` (-i)
                                         Wrap       -> bound sh ix bndy `addDim` (sz+i)
                                         Constant e -> Left e
     | i >= sz                       = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` (sz-1)
-                                        Mirror     -> bound sh ix bndy `addDim` (sz-(i-sz+1))
+                                        Mirror     -> bound sh ix bndy `addDim` (sz-(i-sz+2))
                                         Wrap       -> bound sh ix bndy `addDim` (i-sz)
                                         Constant e -> Left e
     | otherwise                     = bound sh ix bndy `addDim` i
@@ -169,3 +169,4 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"
   show (SliceAll rest)   = "SliceAll ("++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
+

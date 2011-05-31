@@ -46,6 +46,7 @@ Stability:              Experimental
 Data-files:             cubits/accelerate_cuda_extras.h
                         cubits/accelerate_cuda_function.h
                         cubits/accelerate_cuda_shape.h
+                        cubits/accelerate_cuda_stencil.h
                         cubits/accelerate_cuda_texture.h
                         cubits/accelerate_cuda_util.h
                         cubits/generate.inl
@@ -55,7 +56,6 @@ Data-files:             cubits/accelerate_cuda_extras.h
                         cubits/foldSeg.inl
                         cubits/map.inl
                         cubits/stencil.inl
-                        cubits/stencil1.inl
                         cubits/stencil2.inl
                         cubits/permute.inl
                         cubits/reduce.inl
@@ -183,6 +183,7 @@ Library
                         Data.Array.Accelerate.Array.Delayed
                         Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Analysis.Shape
+                        Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
@@ -204,10 +205,10 @@ Library
     Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Device
                         Data.Array.Accelerate.CUDA.Analysis.Hash
                         Data.Array.Accelerate.CUDA.Analysis.Launch
-                        Data.Array.Accelerate.CUDA.Analysis.Stencil
                         Data.Array.Accelerate.CUDA.Array.Data
                         Data.Array.Accelerate.CUDA.CodeGen.Data
                         Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+                        Data.Array.Accelerate.CUDA.CodeGen.Stencil
                         Data.Array.Accelerate.CUDA.CodeGen.Tuple
                         Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.CodeGen

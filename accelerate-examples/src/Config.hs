@@ -126,10 +126,10 @@ defaultConfig testPrograms = Config
   &= verbosityArgs [help "Print more output"] [help "Print less output"]
   &= details (
       [ "Available tests, by prefix match:"
-      , "  <default>           run all tests"
+      , "  <default>             run all tests"
       ]
       ++
-      map (\(n,d) -> render . nest 2 $ text n $$ nest 20 (text d)) testPrograms)
+      map (\(n,d) -> render . nest 2 $ text n $$ nest 22 (text d)) testPrograms)
       --
       -- magic number to make the second columns of the help text align
 

@@ -207,22 +207,23 @@ marshalArrayData adata = doMarshal AD.arrayElt adata
         mkPrimDispatch(doMarshalPrim,marshalArrayDataPrim)
         }
 
--- |Bind the device memory arrays to the given texture reference(s), setting appropriate type.
--- The number of components bound is returned.
+-- |Bind the device memory arrays to the given texture reference(s), setting
+-- appropriate type. The arrays are bound, and the list of textures thereby
+-- consumed, in projection index order --- i.e. right-to-left
 --
-marshalTextureData :: AD.ArrayElt e => AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
-marshalTextureData = doMarshal AD.arrayElt
+marshalTextureData :: AD.ArrayElt e => AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO ()
+marshalTextureData adata n texs = doMarshal AD.arrayElt adata texs >> return ()
   where
-    doMarshal :: ArrayEltR e -> AD.ArrayData e -> Int -> [CUDA.Texture] -> CIO Int
-    doMarshal ArrayEltRunit             _  _ _    = return 0
-    doMarshal (ArrayEltRpair aeR1 aeR2) ad n texs
+    doMarshal :: ArrayEltR e -> AD.ArrayData e -> [CUDA.Texture] -> CIO Int
+    doMarshal ArrayEltRunit             _  _ = return 0
+    doMarshal (ArrayEltRpair aeR1 aeR2) ad t
       = do
-          k <- doMarshal aeR1 (fst' ad) n texs
-          l <- doMarshal aeR2 (snd' ad) n (drop k texs)
-          return $ k + l
-    doMarshal aer                       ad n texs = doMarshalPrim aer ad n (head texs)
+          r <- doMarshal aeR2 (snd' ad) t
+          l <- doMarshal aeR1 (fst' ad) (drop r t)
+          return $ l + r
+    doMarshal aer                       ad t = doMarshalPrim aer ad n (head t) >> return 1
       where
-        { doMarshalPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CUDA.Texture -> CIO Int
+        { doMarshalPrim :: ArrayEltR e -> AD.ArrayData e -> Int -> CUDA.Texture -> CIO ()
         mkPrimDispatch(doMarshalPrim,marshalTextureDataPrim)
         }
 
@@ -503,14 +504,13 @@ marshalTextureDataPrim :: forall a e.
                        => AD.ArrayData e     -- host array data
                        -> Int                -- number of elements
                        -> CUDA.Texture       -- texture reference to bind to
-                       -> CIO Int
+                       -> CIO ()
 marshalTextureDataPrim ad n tex = do
   let (fmt,c) = format (undefined :: a)
   ptr <- getArray ad
   liftIO $ do
     CUDA.setFormat tex fmt c
     CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
-    return 1
 
 
 -- Modify the internal memory reference for a host-side array.
