@@ -21,9 +21,12 @@ module Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
 import Language.C
 import System.FilePath
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Tuple
+import Data.Array.Accelerate.CUDA.CodeGen.Stencil
+
 
 -- Construction
 -- ------------
@@ -35,7 +38,7 @@ mkGenerate (tyOut, dimOut) apply = CUTranslSkel code [] skel
     code = CTranslUnit
             ( mkTupleType Nothing  tyOut ++
             [ mkDim "DimOut" dimOut
-	    , mkDim "TyIn0"  dimOut
+            , mkDim "TyIn0"  dimOut
             , mkApply 1 apply ])
             (mkNodeInfo (initPos skel) (Name 0))
 
@@ -132,56 +135,53 @@ mkZipWith (tyOut,dimOut) (tyIn1,dimIn1) (tyIn0,dimIn0) apply = CUTranslSkel code
 -- Stencil
 -- -------
 
-mkStencil :: [CType]
-          -> [CType] -> [[Int]] -> Either String [CExpr]
+mkStencil :: ([CType], Int)
+          -> [CExtDecl] -> [CType] -> [[Int]] -> Boundary [CExpr]
           -> [CExpr]
           -> CUTranslSkel
-mkStencil tyOut tyIn0 ixs bndy apply = CUTranslSkel code (bndyDef bndy) skel
+mkStencil (tyOut, dim) stencil0 tyIn0 ixs0 boundary0 apply = CUTranslSkel code [] skel
   where
-    skel = "stencil1.inl"
+    skel = "stencil.inl"
     code = CTranslUnit
-            ( mkTupleType Nothing  tyOut ++
-              mkTexTupleTypes [tyIn0] ++
-              mkStencilType 0 tyIn0 (length ixs) ++
-            [ mkDim "DimIn0" (length $ head ixs) ] ++
-              mkGatherAndApply tyIn0 ixs apply ++
-              bndyConst 0 bndy )
+            ( stencil0                   ++
+              mkTupleType Nothing  tyOut ++
+            [ mkDim "DimOut" dim
+            , mkDim "DimIn0" dim
+            , head $ mkTupleType (Just 0) tyIn0 -- just the scalar type
+            , mkStencilType 0 (length ixs0) tyIn0 ] ++
+              mkStencilGet 0 boundary0 tyIn0 ++
+            [ mkStencilGather 0 dim tyIn0 ixs0
+            , mkStencilApply 1 apply ] )
             (mkNodeInfo (initPos skel) (Name 0))
 
-mkStencil2 :: [CType]
-           -> [CType] -> [[Int]] -> Either String [CExpr]
-           -> [CType] -> [[Int]] -> Either String [CExpr]
+
+mkStencil2 :: ([CType], Int)
+           -> [CExtDecl] -> [CType] -> [[Int]] -> Boundary [CExpr]
+           -> [CExtDecl] -> [CType] -> [[Int]] -> Boundary [CExpr]
            -> [CExpr]
            -> CUTranslSkel
-mkStencil2 tyOut tyIn0 ixs0 bndy0 tyIn1 ixs1 bndy1 apply
-  = CUTranslSkel code (bndyDef bndy0 ++ bndyDef bndy1) skel
+mkStencil2 (tyOut, dim) stencil1 tyIn1 ixs1 boundary1
+                        stencil0 tyIn0 ixs0 boundary0 apply =
+  CUTranslSkel code [] skel
   where
     skel = "stencil2.inl"
     code = CTranslUnit
-            ( mkTupleType Nothing  tyOut ++
-              mkTexTupleTypes [tyIn0, tyIn1] ++
-              mkStencilType 0 tyIn0 (length ixs0) ++
-              mkStencilType 1 tyIn1 (length ixs1) ++
-            [ mkDim "DimOut" (length $ head ixs0),   -- all dimensions the same
-              mkDim "DimIn0" (length $ head ixs0),
-              mkDim "DimIn1" (length $ head ixs1) ] ++
-              mkGatherAndApply2 tyIn0 ixs0 tyIn1 ixs1 apply ++
-              bndyConst 0 bndy0 ++
-              bndyConst 1 bndy1 )
+            ( stencil0                   ++
+              stencil1                   ++
+              mkTupleType Nothing  tyOut ++
+            [ mkDim "DimOut" dim
+            , mkDim "DimIn1" dim
+            , mkDim "DimIn0" dim
+            , head $ mkTupleType (Just 0) tyIn0 -- just the scalar type
+            , head $ mkTupleType (Just 1) tyIn1
+            , mkStencilType 1 (length ixs1) tyIn1
+            , mkStencilType 0 (length ixs0) tyIn0 ] ++
+              mkStencilGet 1 boundary1 tyIn1 ++
+              mkStencilGet 0 boundary0 tyIn0 ++
+            [ mkStencilGather 1 dim tyIn1 ixs1
+            , mkStencilGather 0 dim tyIn0 ixs0
+            , mkStencilApply 2 apply ] )
             (mkNodeInfo (initPos skel) (Name 0))
-
---
-bndyDef :: Either String [CExpr] -> [CMacro]
-bndyDef bndy =
-  case bndy of
-    Left bndyTy -> [(internalIdent bndyTy, Nothing)]
-    Right _     -> []
-
-bndyConst :: Int -> Either String [CExpr] -> [CExtDecl]
-bndyConst n bndy =
-  case bndy of
-    Left _  -> []
-    Right c -> [mkDeviceFun ("boundary_const" ++ show n) (typename ("TyIn" ++ show n)) [] c]
 
 
 -- Scan

@@ -14,7 +14,7 @@ module Data.Array.Accelerate.CUDA.Compile (
 
   -- * Types parameterising our annotated computation form
   ExecAcc, ExecOpenAcc(..),
-  AccKernel, AccRefcount(..), AccBinding,
+  AccKernel, AccRefcount(..),
 
   -- * generate and compile kernels to realise a computation
   compileAcc, compileAfun1
@@ -27,8 +27,8 @@ module Data.Array.Accelerate.CUDA.Compile (
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST                        hiding (Val(..))
-import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments)
-import Data.Array.Accelerate.Array.Representation
+import Data.Array.Accelerate.Array.Sugar                (Array(..), Segments, Shape, Elt)
+import Data.Array.Accelerate.Array.Representation       hiding (Shape)
 import Data.Array.Accelerate.Pretty.Print
 
 import Data.Array.Accelerate.CUDA.State
@@ -84,25 +84,6 @@ singleRef :: AccRefcount
 singleRef = R1 1
 
 
--- Array computations that were embedded within scalar expressions, and will be
--- required to execute the kernel; i.e. bound to texture references or similar.
---
-data AccBinding where
-  ArrayVar :: Idx aenv arrs -> AccBinding
-
-instance Eq AccBinding where
-  ArrayVar ix1 == ArrayVar ix2 = idxToInt ix1 == idxToInt ix2
-
--- Typeless conversion from array variable to environment projection
---
-idxToInt :: Idx env t -> Int
-idxToInt = go 0
-  where
-    go :: Int -> Idx env t -> Int
-    go !n ZeroIdx      = n
-    go !n (SuccIdx ix) = go (n+1) ix
-
-
 -- A pseudo array environment that holds the number of times each indexed
 -- variable has been accessed.
 --
@@ -140,7 +121,7 @@ data ExecOpenAcc aenv a where
 
   ExecAcc  :: AccRefcount                       -- number of times the result is used (zealous)
            -> AccKernel a                       -- an executable binary object
-           -> [AccBinding]                      -- auxiliary arrays from the environment the kernel needs access to
+           -> [AccBinding aenv]                 -- auxiliary arrays from the environment the kernel needs access to
            -> PreOpenAcc ExecOpenAcc aenv a     -- the actual computation
            -> ExecOpenAcc aenv a
 
@@ -264,10 +245,10 @@ prepareAcc iss rootAcc rootEnv = do
           return (node (PairArrays arr1' arr2'), env2)
 
         Acond c t e -> do
-          (c', env1, var1) <- travE c aenv []
-          (t', env2)       <- travA t env1      -- TLM: separate use counts for each branch?
-          (e', env3)       <- travA e env2
-          return (ExecAcc noRefcount noKernel var1 (Acond c' t' e'), env3)
+          (c', env1, _) <- travE c aenv []
+          (t', env2)    <- travA t env1      -- TLM: separate use counts for each branch?
+          (e', env3)    <- travA e env2
+          return (ExecAcc noRefcount noKernel [] (Acond c' t' e'), env3)
 
         -- Array injection
         --
@@ -284,56 +265,56 @@ prepareAcc iss rootAcc rootEnv = do
         -- Computation nodes
         --
         Reshape sh a -> do
-          (sh', env1, var1) <- travE sh aenv []
-          (a',  env2)       <- travA a  env1
-          return (ExecAcc singleRef noKernel var1 (Reshape sh' a'), env2)
+          (sh', env1, _) <- travE sh aenv []
+          (a',  env2)    <- travA a  env1
+          return (ExecAcc singleRef noKernel [] (Reshape sh' a'), env2)
 
         Unit e  -> do
-          (e', env1, var1) <- travE e aenv []
-          return (ExecAcc singleRef noKernel var1 (Unit e'), env1)
+          (e', env1, _) <- travE e aenv []
+          return (ExecAcc singleRef noKernel [] (Unit e'), env1)
 
         Generate e f -> do
-          (e', env1, var1) <- travE e aenv []
-          (f', env2, var2) <- travF f env1 var1
-          kernel           <- build "generate" acc
-          return (ExecAcc singleRef kernel var2 (Generate e' f'), env2)
+          (e', env1, _)    <- travE e aenv []
+          (f', env2, var1) <- travF f env1 []
+          kernel           <- build "generate" acc var1
+          return (ExecAcc singleRef kernel var1 (Generate e' f'), env2)
 
         Replicate slix e a -> do
-          (e', env1, var1) <- travE e aenv []
-          (a', env2)       <- travA a env1
-          kernel           <- build "replicate" acc
-          return (ExecAcc singleRef kernel var1 (Replicate slix e' a'), env2)
+          (e', env1, _) <- travE e aenv []
+          (a', env2)    <- travA a env1
+          kernel        <- build "replicate" acc []
+          return (ExecAcc singleRef kernel [] (Replicate slix e' a'), env2)
 
         Index slix a e -> do
-          (a', env1)       <- travA a aenv
-          (e', env2, var2) <- travE e env1 []
-          kernel           <- build "slice" acc
-          return (ExecAcc singleRef kernel var2 (Index slix a' e'), env2)
+          (a', env1)    <- travA a aenv
+          (e', env2, _) <- travE e env1 []
+          kernel        <- build "slice" acc []
+          return (ExecAcc singleRef kernel [] (Index slix a' e'), env2)
 
         Map f a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "map" acc
+          kernel           <- build "map" acc var1
           return (ExecAcc singleRef kernel var1 (Map f' a'), env2)
 
         ZipWith f a b -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
           (b', env3)       <- travA b env2
-          kernel           <- build "zipWith" acc
+          kernel           <- build "zipWith" acc var1
           return (ExecAcc singleRef kernel var1 (ZipWith f' a' b'), env3)
 
         Fold f e a -> do
           (f', env1, var1) <- travF f aenv []
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
-          kernel           <- build "fold" acc
+          kernel           <- build "fold" acc var2
           return (ExecAcc singleRef kernel var2 (Fold f' e' a'), env3)
 
         Fold1 f a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "fold" acc
+          kernel           <- build "fold" acc var1
           return (ExecAcc singleRef kernel var1 (Fold1 f' a'), env2)
 
         FoldSeg f e a s -> do
@@ -341,54 +322,54 @@ prepareAcc iss rootAcc rootEnv = do
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
           (s', env4)       <- travA (scan s) env3
-          kernel           <- build "foldSeg" acc
+          kernel           <- build "foldSeg" acc var2
           return (ExecAcc singleRef kernel var2 (FoldSeg f' e' a' s'), env4)
 
         Fold1Seg f a s -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
           (s', env3)       <- travA (scan s) env2
-          kernel           <- build "foldSeg" acc
+          kernel           <- build "foldSeg" acc var1
           return (ExecAcc singleRef kernel var1 (Fold1Seg f' a' s'), env3)
 
         Scanl f e a -> do
           (f', env1, var1) <- travF f aenv []
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var2
           return (ExecAcc singleRef kernel var2 (Scanl f' e' a'), env3)
 
         Scanl' f e a -> do
           (f', env1, var1) <- travF f aenv []
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var2
           return (ExecAcc (R2 0 0) kernel var2 (Scanl' f' e' a'), env3)
 
         Scanl1 f a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var1
           return (ExecAcc singleRef kernel var1 (Scanl1 f' a'), env2)
 
         Scanr f e a -> do
           (f', env1, var1) <- travF f aenv []
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var2
           return (ExecAcc singleRef kernel var2 (Scanr f' e' a'), env3)
 
         Scanr' f e a -> do
           (f', env1, var1) <- travF f aenv []
           (e', env2, var2) <- travE e env1 var1
           (a', env3)       <- travA a env2
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var2
           return (ExecAcc (R2 0 0) kernel var2 (Scanr' f' e' a'), env3)
 
         Scanr1 f a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "inclusive_scan" acc
+          kernel           <- build "inclusive_scan" acc var1
           return (ExecAcc singleRef kernel var1 (Scanr1 f' a'), env2)
 
         Permute f a g b -> do
@@ -396,27 +377,27 @@ prepareAcc iss rootAcc rootEnv = do
           (g', env2, var2) <- travF g env1 var1
           (a', env3)       <- travA a env2
           (b', env4)       <- travA b env3
-          kernel           <- build "permute" acc
+          kernel           <- build "permute" acc var2
           return (ExecAcc singleRef kernel var2 (Permute f' a' g' b'), env4)
 
         Backpermute e f a -> do
-          (e', env1, var1) <- travE e aenv []
-          (f', env2, var2) <- travF f env1 var1
+          (e', env1, _)    <- travE e aenv []
+          (f', env2, var2) <- travF f env1 []
           (a', env3)       <- travA a env2
-          kernel           <- build "backpermute" acc
+          kernel           <- build "backpermute" acc var2
           return (ExecAcc singleRef kernel var2 (Backpermute e' f' a'), env3)
 
         Stencil f b a -> do
           (f', env1, var1) <- travF f aenv []
           (a', env2)       <- travA a env1
-          kernel           <- build "stencil1" acc
+          kernel           <- build "stencil" acc var1
           return (ExecAcc singleRef kernel var1 (Stencil f' b a'), env2)
 
         Stencil2 f b1 a1 b2 a2 -> do
           (f', env1, var1) <- travF f aenv []
           (a1', env2)      <- travA a1 env1
           (a2', env3)      <- travA a2 env2
-          kernel           <- build "stencil2" acc
+          kernel           <- build "stencil2" acc var1
           return (ExecAcc singleRef kernel var1 (Stencil2 f' b1 a1' b2 a2'), env3)
 
 
@@ -424,13 +405,14 @@ prepareAcc iss rootAcc rootEnv = do
     --
     travE :: OpenExp env aenv e
           -> Ref count
-          -> [AccBinding]
-          -> CIO (PreOpenExp ExecOpenAcc env aenv e, Ref count, [AccBinding])
+          -> [AccBinding aenv]
+          -> CIO (PreOpenExp ExecOpenAcc env aenv e, Ref count, [AccBinding aenv])
     travE exp aenv vars =
       case exp of
         Var ix          -> return (Var ix, aenv, vars)
         Const c         -> return (Const c, aenv, vars)
         PrimConst c     -> return (PrimConst c, aenv, vars)
+        IndexAny        -> INTERNAL_ERROR(error) "prepareAcc" "IndexAny: not implemented yet"
         IndexNil        -> return (IndexNil, aenv, vars)
         IndexCons ix i  -> do
           (ix', env1, var1) <- travE ix aenv vars
@@ -466,21 +448,21 @@ prepareAcc iss rootAcc rootEnv = do
         IndexScalar a e -> do
           (a', env1)       <- travA a aenv
           (e', env2, var2) <- travE e env1 vars
-          return (IndexScalar a' e', env2, {- lift a' `cons` -} var2)
+          return (IndexScalar a' e', env2, bind a' `cons` var2)
 
         Shape a         -> do
           (a', env1) <- travA a aenv
-          return (Shape a', env1, {- lift a' `cons` -} vars)
+          return (Shape a', env1, bind a' `cons` vars)
 
         Size a          -> do
           (a', env1) <- travA a aenv
-          return (Size a', env1, {- lift a' `cons` -} vars)
+          return (Size a', env1, bind a' `cons` vars)
 
 
     travT :: Tuple (OpenExp env aenv) t
           -> Ref count
-          -> [AccBinding]
-          -> CIO (Tuple (PreOpenExp ExecOpenAcc env aenv) t, Ref count, [AccBinding])
+          -> [AccBinding aenv]
+          -> CIO (Tuple (PreOpenExp ExecOpenAcc env aenv) t, Ref count, [AccBinding aenv])
     travT NilTup        aenv vars = return (NilTup, aenv, vars)
     travT (SnocTup t e) aenv vars = do
       (e', env1, var1) <- travE e aenv vars
@@ -489,8 +471,8 @@ prepareAcc iss rootAcc rootEnv = do
 
     travF :: OpenFun env aenv t
           -> Ref count
-          -> [AccBinding]
-          -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding])
+          -> [AccBinding aenv]
+          -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding aenv])
     travF (Body b) aenv vars = do
       (b', env1, var1) <- travE b aenv vars
       return (Body b', env1, var1)
@@ -540,14 +522,14 @@ prepareAcc iss rootAcc rootEnv = do
     setref count (ExecAfun _ fun)     = ExecAfun count fun
     setref count (ExecAcc  _ k b acc) = ExecAcc  count k b acc
 
-    _cons :: AccBinding -> [AccBinding] -> [AccBinding]
-    _cons x xs | x `notElem` xs = x : xs
-               | otherwise      = xs
+    cons :: AccBinding aenv -> [AccBinding aenv] -> [AccBinding aenv]
+    cons x xs | x `notElem` xs = x : xs
+              | otherwise      = xs
 
-    _lift :: ExecOpenAcc aenv a -> AccBinding
-    _lift (ExecAcc _ _ _ (Avar ix)) = ArrayVar ix
-    _lift _                         =
-      INTERNAL_ERROR(error) "lift" "expected array variable"
+    bind :: (Shape sh, Elt e) => ExecOpenAcc aenv (Array sh e) -> AccBinding aenv
+    bind (ExecAcc _ _ _ (Avar ix)) = ArrayVar ix
+    bind _                         =
+     INTERNAL_ERROR(error) "bind" "expected array variable"
 
 
 -- Compilation
@@ -558,14 +540,14 @@ prepareAcc iss rootAcc rootEnv = do
 --
 -- TLM: should get name(s) from code generation
 --
-build :: String -> OpenAcc aenv a -> CIO (AccKernel a)
-build name acc =
+build :: String -> OpenAcc aenv a -> [AccBinding aenv] -> CIO (AccKernel a)
+build name acc fvar =
   let key = accToKey acc
   in do
     mvar   <- liftIO newEmptyMVar
     table  <- getM kernelTable
     cached <- isJust `fmap` liftIO (Hash.lookup table key)
-    unless cached $ compile table key acc
+    unless cached $ compile table key acc fvar
     return . (name,) . liftIO $ memo mvar (link table key)
 
 -- A simple memoisation routine
@@ -615,14 +597,14 @@ link table key =
 
 -- Generate and compile code for a single open array expression
 --
-compile :: KernelTable -> AccKey -> OpenAcc aenv a -> CIO ()
-compile table key acc = do
+compile :: KernelTable -> AccKey -> OpenAcc aenv a -> [AccBinding aenv] -> CIO ()
+compile table key acc fvar = do
   dir     <- outputDir
   nvcc    <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
   cufile  <- outputName acc (dir </> "dragon.cu")        -- rawr!
   flags   <- compileFlags cufile
   pid     <- liftIO $ do
-               writeCode cufile (codeGenAcc acc)
+               writeCode cufile (codeGenAcc acc fvar)
                forkProcess $ executeFile nvcc False flags Nothing
   --
   liftIO $ Hash.insert table key (KernelEntry cufile (Left pid))

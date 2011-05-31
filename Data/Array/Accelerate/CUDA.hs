@@ -24,11 +24,11 @@ import Data.Record.Label
 import Control.Exception
 import Control.Applicative
 import System.IO.Unsafe
-import qualified Data.HashTable			  as Hash
+import qualified Data.HashTable                   as Hash
 
 -- CUDA binding
 import Foreign.CUDA.Driver.Error
-import qualified Foreign.CUDA.Driver		  as CUDA
+import qualified Foreign.CUDA.Driver              as CUDA
 
 -- friends
 import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))

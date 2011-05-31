@@ -32,6 +32,7 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
+import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.Analysis.Launch
 
@@ -258,7 +259,7 @@ unitOp rc v = do
 generateOp :: (Shape dim, Elt e)
            => Int
            -> AccKernel a
-           -> [AccBinding]
+           -> [AccBinding aenv]
            -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
            -> Val aenv
            -> dim
@@ -272,7 +273,7 @@ generateOp c kernel bindings acc aenv sh = do
 replicateOp :: (Shape dim, Elt slix)
             => Int
             -> AccKernel (Array dim e)
-            -> [AccBinding]
+            -> [AccBinding aenv]
             -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
             -> Val aenv
             -> SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr dim)
@@ -294,7 +295,7 @@ replicateOp c kernel bindings acc aenv sliceIndex slix (Array sh0 in0) = do
 indexOp :: (Shape sl, Elt slix)
         => Int
         -> AccKernel (Array dim e)
-        -> [AccBinding]
+        -> [AccBinding aenv]
         -> PreOpenAcc ExecOpenAcc aenv (Array sl e)
         -> Val aenv
         -> SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr dim)
@@ -323,7 +324,7 @@ indexOp c kernel bindings acc aenv sliceIndex (Array sh0 in0) slix = do
 mapOp :: Elt e
       => Int
       -> AccKernel (Array dim e)
-      -> [AccBinding]
+      -> [AccBinding aenv]
       -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
       -> Val aenv
       -> Array dim e'
@@ -337,7 +338,7 @@ mapOp c kernel bindings acc aenv (Array sh0 in0) = do
 zipWithOp :: Elt c
           => Int
           -> AccKernel (Array dim c)
-          -> [AccBinding]
+          -> [AccBinding aenv]
           -> PreOpenAcc ExecOpenAcc aenv (Array dim c)
           -> Val aenv
           -> Array dim a
@@ -353,7 +354,7 @@ zipWithOp c kernel bindings acc aenv (Array sh1 in1) (Array sh0 in0) = do
 foldOp :: forall dim e aenv. Shape dim
        => Int
        -> AccKernel (Array dim e)
-       -> [AccBinding]
+       -> [AccBinding aenv]
        -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
        -> Val aenv
        -> Array (dim:.Int) e
@@ -361,10 +362,13 @@ foldOp :: forall dim e aenv. Shape dim
 foldOp c kernel bindings acc aenv (Array sh0 in0)
   -- A recursive multi-block reduction when collapsing to a single value
   --
+  -- TLM: multiple bind/free of arrays in scalar expressions in the recursive
+  --      case, which probably breaks reference counting.
+  --
   | dim sh0 == 1 = do
-      cfg@(_,_,_,(_,g,_)) <- configure kernel acc aenv (size sh0)
-      res@(Array _ out)   <- newArray (bool c 1 (g > 1)) (toElt (fst sh0,g)) :: CIO (Array (dim:.Int) e)
-      dispatch cfg ((((),out),in0),size sh0)
+      cfg@(_,_,(_,g,_)) <- configure kernel acc (size sh0)
+      res@(Array _ out) <- newArray (bool c 1 (g > 1)) (toElt (fst sh0,g)) :: CIO (Array (dim:.Int) e)
+      dispatch cfg bindings aenv ((((),out),in0),size sh0)
       freeArray in0
       if g > 1 then foldOp c kernel bindings acc aenv res
                else return (Array (fst sh0) out)
@@ -380,7 +384,7 @@ foldOp c kernel bindings acc aenv (Array sh0 in0)
 foldSegOp :: Shape dim
           => Int
           -> AccKernel (Array dim e)
-          -> [AccBinding]
+          -> [AccBinding aenv]
           -> PreOpenAcc ExecOpenAcc aenv (Array (dim:.Int) e)
           -> Val aenv
           -> Array (dim:.Int) e
@@ -397,25 +401,25 @@ foldSegOp c kernel bindings acc aenv (Array sh0 in0) (Array shs seg) = do
 scanOp :: forall aenv e. Elt e
        => Int
        -> AccKernel (Vector e)
-       -> [AccBinding]
+       -> [AccBinding aenv]
        -> PreOpenAcc ExecOpenAcc aenv (Vector e)
        -> Val aenv
        -> Vector e
        -> CIO (Vector e)
-scanOp c kernel _bindings acc aenv (Array sh0 in0) = do
-  (fvs,mdl,fscan,(t,g,m)) <- configure kernel acc aenv (size sh0)
-  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  res@(Array _ out)       <- newArray c (Z :. size sh0 + 1)
-  (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
-  (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
+scanOp c kernel bindings acc aenv (Array sh0 in0) = do
+  (mdl,fscan,(t,g,m)) <- configure kernel acc (size sh0)
+  fadd                <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  res@(Array _ out)   <- newArray c (Z :. size sh0 + 1)
+  (Array _ bks)       <- newArray 1 (Z :. g) :: CIO (Vector e)
+  (Array _ sum)       <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
   --
-  bindLifted mdl fvs
+  bindLifted mdl aenv bindings
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
   launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
-  freeLifted fvs
+  freeLifted aenv bindings
   freeArray in0
   freeArray bks
   freeArray sum
@@ -424,25 +428,25 @@ scanOp c kernel _bindings acc aenv (Array sh0 in0) = do
 scan'Op :: forall aenv e. Elt e
         => (Int,Int)
         -> AccKernel (Vector e)
-        -> [AccBinding]
+        -> [AccBinding aenv]
         -> PreOpenAcc ExecOpenAcc aenv (Vector e, Scalar e)
         -> Val aenv
         -> Vector e
         -> CIO (Vector e, Scalar e)
-scan'Op (c1,c0) kernel _bindings acc aenv (Array sh0 in0) = do
-  (fvs,mdl,fscan,(t,g,m)) <- configure kernel acc aenv (size sh0)
-  fadd                    <- liftIO $ CUDA.getFun mdl "exclusive_update"
-  res1@(Array _ out)      <- newArray c1 (toElt sh0)
-  res2@(Array _ sum)      <- newArray c0 Z
-  (Array _ bks)           <- newArray 1  (Z :. g) :: CIO (Vector e)
+scan'Op (c1,c0) kernel bindings acc aenv (Array sh0 in0) = do
+  (mdl,fscan,(t,g,m)) <- configure kernel acc (size sh0)
+  fadd                <- liftIO $ CUDA.getFun mdl "exclusive_update"
+  res1@(Array _ out)  <- newArray c1 (toElt sh0)
+  res2@(Array _ sum)  <- newArray c0 Z
+  (Array _ bks)       <- newArray 1  (Z :. g) :: CIO (Vector e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
   --
-  bindLifted mdl fvs
+  bindLifted mdl aenv bindings
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
   launch (t,g,m) fadd  ((((((),out),bks),sum),n),itv)   -- distribute partial results
-  freeLifted fvs
+  freeLifted aenv bindings
   freeArray in0
   freeArray bks
   when (c1 == 0) $ freeArray out
@@ -452,25 +456,25 @@ scan'Op (c1,c0) kernel _bindings acc aenv (Array sh0 in0) = do
 scan1Op :: forall aenv e. Elt e
         => Int
         -> AccKernel (Vector e)
-        -> [AccBinding]
+        -> [AccBinding aenv]
         -> PreOpenAcc ExecOpenAcc aenv (Vector e)
         -> Val aenv
         -> Vector e
         -> CIO (Vector e)
-scan1Op c kernel _bindings acc aenv (Array sh0 in0) = do
-  (fvs,mdl,fscan,(t,g,m)) <- configure kernel acc aenv (size sh0)
-  fadd                    <- liftIO $ CUDA.getFun mdl "inclusive_update"
-  res@(Array _ out)       <- newArray c (toElt sh0)
-  (Array _ bks)           <- newArray 1 (Z :. g) :: CIO (Vector e)
-  (Array _ sum)           <- newArray 1 Z        :: CIO (Scalar e)
+scan1Op c kernel bindings acc aenv (Array sh0 in0) = do
+  (mdl,fscan,(t,g,m)) <- configure kernel acc (size sh0)
+  fadd                <- liftIO $ CUDA.getFun mdl "inclusive_update"
+  res@(Array _ out)   <- newArray c (toElt sh0)
+  (Array _ bks)       <- newArray 1 (Z :. g) :: CIO (Vector e)
+  (Array _ sum)       <- newArray 1 Z        :: CIO (Scalar e)
   let n   = size sh0
       itv = (n + g - 1) `div` g
   --
-  bindLifted mdl fvs
+  bindLifted mdl aenv bindings
   launch (t,g,m) fscan ((((((),out),in0),bks),n),itv)   -- inclusive scan of input array
   launch (t,1,m) fscan ((((((),bks),bks),sum),g),itv)   -- inclusive scan block-level sums
   launch (t,g,m) fadd  (((((),out),bks),n),itv)         -- distribute partial results
-  freeLifted fvs
+  freeLifted aenv bindings
   freeArray in0
   freeArray bks
   freeArray sum
@@ -479,7 +483,7 @@ scan1Op c kernel _bindings acc aenv (Array sh0 in0) = do
 permuteOp :: Elt e
           => Int
           -> AccKernel (Array dim e)
-          -> [AccBinding]
+          -> [AccBinding aenv]
           -> PreOpenAcc ExecOpenAcc aenv (Array dim' e)
           -> Val aenv
           -> Array dim' e       -- default values
@@ -496,7 +500,7 @@ permuteOp c kernel bindings acc aenv (Array sh0 in0) (Array sh1 in1) = do
 backpermuteOp :: (Shape dim', Elt e)
               => Int
               -> AccKernel (Array dim e)
-              -> [AccBinding]
+              -> [AccBinding aenv]
               -> PreOpenAcc ExecOpenAcc aenv (Array dim' e)
               -> Val aenv
               -> dim'
@@ -511,36 +515,40 @@ backpermuteOp c kernel bindings acc aenv dim' (Array sh0 in0) = do
 stencilOp :: Elt e
           => Int
           -> AccKernel (Array dim e)
-          -> [AccBinding]
+          -> [AccBinding aenv]
           -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
           -> Val aenv
           -> Array dim e'
           -> CIO (Array dim e)
-stencilOp c kernel _bindings acc aenv ain0@(Array sh0 _) = do
-  res@(Array _ out)      <- newArray c (toElt sh0)
-  (fvs,mdl,fstencil,cfg) <- configure kernel acc aenv (size sh0)
-  let fvs' = FreeArray ain0 : fvs                       -- input arrays read via texture references
-  bindLifted mdl fvs'
+stencilOp c kernel bindings acc aenv sten0@(Array sh0 in0) = do
+  res@(Array _ out)  <- newArray c (toElt sh0)
+  (mdl,fstencil,cfg) <- configure kernel acc (size sh0)
+  bindLifted mdl aenv bindings
+  bindStencil 0 mdl sten0
   launch cfg fstencil (((),out),convertIx sh0)
-  freeLifted fvs'
+  freeLifted aenv bindings
+  freeArray in0
   return res
 
 stencil2Op :: Elt e
            => Int
            -> AccKernel (Array dim e)
-           -> [AccBinding]
+           -> [AccBinding aenv]
            -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
            -> Val aenv
            -> Array dim e1
            -> Array dim e2
            -> CIO (Array dim e)
-stencil2Op c kernel _bindings acc aenv ain1@(Array sh1 _) ain0@(Array sh0 _) = do
-  res@(Array sh out)     <- newArray c $ toElt (sh1 `intersect` sh0)
-  (fvs,mdl,fstencil,cfg) <- configure kernel acc aenv (size sh)
-  let fvs' = FreeArray ain0 : FreeArray ain1 : fvs      -- input arrays read via texture references
-  bindLifted mdl fvs'
-  launch cfg fstencil (((((),out),convertIx sh),convertIx sh0),convertIx sh1)
-  freeLifted fvs'
+stencil2Op c kernel bindings acc aenv sten1@(Array sh1 in1) sten0@(Array sh0 in0) = do
+  res@(Array sh out) <- newArray c $ toElt (sh1 `intersect` sh0)
+  (mdl,fstencil,cfg) <- configure kernel acc (size sh)
+  bindLifted mdl aenv bindings
+  bindStencil 0 mdl sten0
+  bindStencil 1 mdl sten1
+  launch cfg fstencil (((((),out),convertIx sh),convertIx sh1),convertIx sh0)
+  freeLifted aenv bindings
+  freeArray in0
+  freeArray in1
   return res
 
 
@@ -556,6 +564,7 @@ executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
 executeOpenExp (Tuple tup)       env aenv = toTuple                   <$> executeTuple tup env aenv
 executeOpenExp (Prj idx e)       env aenv = I.evalPrj idx . fromTuple <$> executeOpenExp e env aenv
+executeOpenExp IndexAny          _   _    = INTERNAL_ERROR(error) "executeOpenExp" "IndexAny: not implemented yet"
 executeOpenExp IndexNil          _   _    = return Z
 executeOpenExp (IndexCons sh i)  env aenv = (:.) <$> executeOpenExp sh env aenv <*> executeOpenExp i env aenv
 executeOpenExp (IndexHead ix)    env aenv = (\(_:.h) -> h) <$> executeOpenExp ix env aenv
@@ -600,134 +609,46 @@ executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
 -- Array references in scalar code
 -- -------------------------------
 
--- TLM: remove me!
---
---   -> front end needs to embed only array variables inside scalar expressions
---
---   -> compilation annotates the tree with the environment indices, then we
---      don't have to search a second time, and wave our hands hoping that the
---      two passes align
---
+bindLifted :: CUDA.Module -> Val aenv -> [AccBinding aenv] -> CIO ()
+bindLifted mdl aenv = mapM_ (bindAcc mdl aenv)
 
--- Lift array valued variables out of scalar computations. Returns a list of the
--- arrays in the order that they were encountered, corresponding to the order in
--- which the should be bound to the appropriate device module references; c.f.
--- code generation stage
---
-data Lifted where
-  FreeShape :: R.Shape sh => sh          -> Lifted
-  FreeArray ::               Array dim e -> Lifted
-
-
-liftAcc :: ExecOpenAcc aenv a -> Val aenv -> CIO [Lifted]
-liftAcc (ExecAcc _ _ _ pacc) = liftPreAcc pacc
-liftAcc (ExecAfun _ _)       = error "First things first, but not necessarily in that order"
-
-liftPreAcc :: PreOpenAcc ExecOpenAcc aenv a -> Val aenv -> CIO [Lifted]
-liftPreAcc (Let  a b)           aenv = do
-  a0 <- executeOpenAcc a aenv
-  liftAcc b (aenv `Push` a0)
-
-liftPreAcc (Let2 a b)           aenv = do
-  (a1,a0) <- executeOpenAcc a aenv
-  liftAcc b (aenv `Push` a1 `Push` a0)
-
-liftPreAcc (Avar ix)            aenv = return $ applyR arrays (prj ix aenv)        -- TLM ??
+freeLifted :: Val aenv -> [AccBinding aenv] -> CIO ()
+freeLifted aenv = mapM_ free
   where
-    applyR :: ArraysR arrs -> arrs -> [Lifted]
-    applyR ArraysRunit         ()      = []
-    applyR ArraysRarray        arr     = [FreeArray arr]
-    applyR (ArraysRpair r1 r0) (a1,a0) = applyR r1 a1 ++ applyR r0 a0
-
-liftPreAcc (PairArrays _ _)     _    = return []
-liftPreAcc (Apply _ _)          _    = return []
-
-liftPreAcc (Acond e _ _)        aenv = liftExp e aenv
-
-liftPreAcc (Use _)              _    = return []
-liftPreAcc (Unit _)             _    = return []
-liftPreAcc (Reshape _ _)        _    = return []
-liftPreAcc (Replicate _ _ _)    _    = return []
-liftPreAcc (Index _ _ _)        _    = return []
-liftPreAcc (Generate _ f)       aenv = liftFun f aenv
-liftPreAcc (Map f _)            aenv = liftFun f aenv
-liftPreAcc (ZipWith f _ _)      aenv = liftFun f aenv
-liftPreAcc (Fold1 f _)          aenv = liftFun f aenv
-liftPreAcc (Fold1Seg f _ _)     aenv = liftFun f aenv
-liftPreAcc (Scanl1 f _)         aenv = liftFun f aenv
-liftPreAcc (Scanr1 f _)         aenv = liftFun f aenv
-liftPreAcc (Fold f e _)         aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (FoldSeg f e _ _)    aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (Scanl f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (Scanr f e _)        aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (Scanl' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (Scanr' f e _)       aenv = concatM [liftExp e aenv, liftFun f aenv]
-liftPreAcc (Permute f _ g _)    aenv = concatM [liftFun f aenv, liftFun g aenv]
-liftPreAcc (Backpermute _ f _)  aenv = liftFun f aenv
-liftPreAcc (Stencil f _ _)      aenv = liftFun f aenv
-liftPreAcc (Stencil2 f _ _ _ _) aenv = liftFun f aenv
+    free (ArrayVar idx) =
+      let Array _ ad = prj idx aenv
+      in  freeArray ad
 
 
-liftFun :: PreOpenFun ExecOpenAcc env aenv a -> Val aenv -> CIO [Lifted]
-liftFun (Lam  lam)  = liftFun lam
-liftFun (Body body) = liftExp body
-
-liftTup :: Tuple (PreOpenExp ExecOpenAcc env aenv) t -> Val aenv -> CIO [Lifted]
-liftTup NilTup          _    = return []
-liftTup (t `SnocTup` e) aenv = (++) <$> liftTup t aenv <*> liftExp e aenv
-
-liftExp :: PreOpenExp ExecOpenAcc env aenv a -> Val aenv -> CIO [Lifted]
-liftExp (Var _)           _    = return []
-liftExp (Const _)         _    = return []
-liftExp (PrimConst _)     _    = return []
-liftExp (IndexNil)        _    = return []
-liftExp (Tuple t)         aenv = liftTup t aenv
-liftExp (Prj _ e)         aenv = liftExp e aenv
-liftExp (IndexCons sh i)  aenv = concatM [liftExp sh aenv, liftExp i aenv]
-liftExp (IndexHead ix)    aenv = liftExp ix aenv
-liftExp (IndexTail ix)    aenv = liftExp ix aenv
-liftExp (PrimApp _ e)     aenv = liftExp e aenv
-liftExp (Cond p t e)      aenv = concatM [liftExp p aenv, liftExp t aenv, liftExp e aenv]
-liftExp (Shape a)         aenv = do
-  (Array sh ad) <- executeOpenAcc a aenv
-  freeArray ad
-  return [FreeShape sh]
-
-liftExp (IndexScalar a e) aenv = do
-  vs               <- liftExp e aenv
-  arr@(Array sh _) <- executeOpenAcc a aenv
-  return $ vs ++ [FreeArray arr, FreeShape sh]
-
-liftExp (Size a)          aenv = liftExp (Shape a) aenv
+bindAcc :: CUDA.Module
+        -> Val aenv
+        -> AccBinding aenv
+        -> CIO ()
+bindAcc mdl aenv (ArrayVar idx) =
+  let idx'        = show $ idxToInt idx
+      Array sh ad = prj idx aenv
+      --
+      bindDim = liftIO $
+        CUDA.getPtr mdl ("sh" ++ idx') >>=
+        CUDA.pokeListArray (convertIx sh) . fst
+      --
+      arr n   = "arr" ++ idx' ++ "_a" ++ show (n::Int)
+      tex     = CUDA.getTex mdl . arr
+      bindTex =
+        marshalTextureData ad (size sh) =<< liftIO (sequence' $ map tex [0..])
+  in
+  bindDim >> bindTex
 
 
--- Bind array variables to the appropriate module references, where binding
--- names are simply derived "in order", c.f. code generation.
---
-bindLifted :: CUDA.Module -> [Lifted] -> CIO ()
-bindLifted mdl = foldM_ go (0,0)
-  where
-    go :: (Int,Int) -> Lifted -> CIO (Int,Int)
-    go (n,m) (FreeShape sh)            = bindDim n sh    >>  return (n+1,m)
-    go (n,m) (FreeArray (Array sh ad)) = bindTex m sh ad >>= \m' -> return (n,m+m')
-
-    bindDim :: R.Shape sh => Int -> sh -> CIO ()
-    bindDim n sh = liftIO $
-      CUDA.getPtr mdl ("sh"++show n) >>= \(p,_) ->
-      CUDA.pokeListArray (convertIx sh) p
-
-    bindTex :: (R.Shape sh, AD.ArrayElt e) => Int -> sh -> AD.ArrayData e -> CIO Int
-    bindTex m sh ad
-      = let textures = sequence' $ map (CUDA.getTex mdl . ("tex"++) . show) [m..]
-        in  marshalTextureData ad (size sh) =<< liftIO textures
-
--- Release arrays lifted from scalar expressions
---
-freeLifted :: [Lifted] -> CIO ()
-freeLifted = mapM_ go
-  where go :: Lifted -> CIO ()
-        go (FreeShape _)            = return ()
-        go (FreeArray (Array _ ad)) = freeArray ad
+bindStencil :: Int
+            -> CUDA.Module
+            -> Array dim e
+            -> CIO ()
+bindStencil s mdl (Array sh ad) =
+  let sten n = "stencil" ++ show s ++ "_a" ++ show (n::Int)
+      tex    = CUDA.getTex mdl . sten
+  in
+  marshalTextureData ad (size sh) =<< liftIO (sequence' $ map tex [0..])
 
 
 -- Kernel execution
@@ -784,40 +705,41 @@ instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
 --
 execute :: Marshalable args
         => AccKernel a          -- The binary module implementing this kernel
-        -> [AccBinding]         -- Array variables embedded in scalar expressions
+        -> [AccBinding aenv]    -- Array variables embedded in scalar expressions
         -> PreOpenAcc ExecOpenAcc aenv a
         -> Val aenv
         -> Int
         -> args
         -> CIO ()
-execute kernel _bindings acc aenv n args =
-  configure kernel acc aenv n >>= flip dispatch args
+execute kernel bindings acc aenv n args =
+  configure kernel acc n >>= \cfg ->
+  dispatch cfg bindings aenv args
 
 -- Pre-execution configuration and kernel linking
 --
 configure :: AccKernel a
           -> PreOpenAcc ExecOpenAcc aenv a
-          -> Val aenv
           -> Int
-          -> CIO ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
-configure (name, kernel) acc aenv n = do
-  fvs <- liftPreAcc acc aenv       -- TLM: remove me I eat puppies!
+          -> CIO (CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+configure (name, kernel) acc n = do
   mdl <- kernel
   fun <- liftIO $ CUDA.getFun mdl name
   cfg <- launchConfig acc n fun
-  return (fvs, mdl, fun, cfg)
+  return (mdl, fun, cfg)
 
 
 -- Binding of lifted array expressions and kernel invocation
 --
 dispatch :: Marshalable args
-         => ([Lifted], CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+         => (CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+         -> [AccBinding aenv]
+         -> Val aenv
          -> args
          -> CIO ()
-dispatch (fvs, mdl, fun, cfg) args = do
-  bindLifted mdl fvs
+dispatch (mdl, fun, cfg) fvs aenv args = do
+  bindLifted mdl aenv fvs
   launch cfg fun args
-  freeLifted fvs
+  freeLifted aenv fvs
 
 -- Execute a device function, with the given thread configuration and function
 -- parameters. The tuple contains (threads per block, grid size, shared memory)
@@ -867,11 +789,6 @@ whenM :: Monad m => m Bool -> m () -> m ()
 whenM predicate action = do
   doit <- predicate
   when doit action
-
--- Special version of msum, which doesn't behave as we would like for CIO [a]
---
-concatM :: Monad m => [m [a]] -> m [a]
-concatM ms = concat `liftM` sequence ms
 
 -- Generalise concatMap to arbitrary monads
 --
