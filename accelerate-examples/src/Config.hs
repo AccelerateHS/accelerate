@@ -44,7 +44,9 @@ data Config = Config
 -- With list of (name,description) pairs for the available tests
 --
 defaultConfig :: [(String,String)] -> Config
-defaultConfig testPrograms = Config
+defaultConfig testPrograms =
+  let numElements = 100000
+  in  Config
   {
     cfgBackend = enum
     [ Interpreter
@@ -63,11 +65,11 @@ defaultConfig testPrograms = Config
       &= name "verify"
       &= help "Only verify examples, do not run timing tests"
 
-  , cfgElements = 1000000
+  , cfgElements = numElements
       &= explicit
       &= name "n"
       &= name "size"
-      &= help "Canonical test data size (1000000)"
+      &= help ("Canonical test data size (" ++ shows numElements ")")
 
   , cfgImage = def
       &= explicit
