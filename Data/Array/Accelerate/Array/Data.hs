@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples #-}
+{-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
@@ -34,6 +34,7 @@ import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
                            unsafeFreezeByteArray#, Int#, (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
+import Data.Typeable
 import Control.Monad
 import Control.Monad.ST
 import qualified Data.Array.IArray  as IArray
@@ -97,6 +98,11 @@ data instance GArrayData ba Char    = AD_Char    (ba Char)
 -- data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
+
+instance (Typeable1 ba, Typeable e) => Typeable (GArrayData ba e) where
+  typeOf _ = mkTyCon "Data.Array.Accelerate.Array.Data.GArrayData"
+            `mkTyConApp` [typeOf (undefined::ba e), typeOf (undefined::e)]
+
 
 -- | GADT to reify the 'ArrayElt' class.
 --
