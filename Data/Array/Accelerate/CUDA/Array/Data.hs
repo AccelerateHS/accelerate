@@ -80,9 +80,9 @@ mallocArray (Array sh adata) = doMalloc =<< getM memoryTable
         mallocR :: ArrayEltR e -> ArrayData e -> IO ()
         mallocR ArrayEltRunit             _  = return ()
         mallocR (ArrayEltRpair aeR1 aeR2) ad = mallocR aeR1 (fst ad) >> mallocR aeR2 (snd ad)
-        mallocR aer                       ad = mallocPrim aer mmap adata ad (size sh)
+        mallocR aer                       ad = mallocPrim aer mmap ad (size sh)
 
-        mallocPrim :: ArrayEltR e -> MemoryTable -> key -> ArrayData e -> Int -> IO ()
+        mallocPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(mallocPrim,Prim.mallocArray)
 
 
@@ -96,9 +96,9 @@ useArray (Array sh adata) = doUse =<< getM memoryTable
         useR :: ArrayEltR e -> ArrayData e -> IO ()
         useR ArrayEltRunit             _  = return ()
         useR (ArrayEltRpair aeR1 aeR2) ad = useR aeR1 (fst ad) >> useR aeR2 (snd ad)
-        useR aer                       ad = usePrim aer mmap adata ad (size sh)
+        useR aer                       ad = usePrim aer mmap ad (size sh)
 
-        usePrim :: ArrayEltR e -> MemoryTable -> key -> ArrayData e -> Int -> IO ()
+        usePrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(usePrim,Prim.useArray)
 
 

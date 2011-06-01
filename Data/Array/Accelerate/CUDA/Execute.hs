@@ -674,7 +674,6 @@ launch (cta,grid,smem) fn a = do
     CUDA.launch        fn (grid,1) Nothing
 
 
-
 -- Auxiliary functions
 -- -------------------
 

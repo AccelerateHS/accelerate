@@ -814,7 +814,7 @@ newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
 newArray sh f = adata `seq` Array (fromElt sh) adata
   where 
     (adata, _) = runArrayData $ do
-                   arr <- newArrayData (1024 `max` size sh)
+                   arr <- newArrayData (size sh)
                    let write ix = writeArrayData arr (index sh ix) 
                                                      (fromElt (f ix))
                    iter sh write (>>) (return ())
@@ -826,7 +826,7 @@ allocateArray :: (Shape sh, Elt e) => sh -> Array sh e
 {-# INLINE allocateArray #-}
 allocateArray sh = adata `seq` Array (fromElt sh) adata
   where
-    (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (1024 `max` size sh)
+    (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
 -- |Convert an 'IArray' to an accelerated array.

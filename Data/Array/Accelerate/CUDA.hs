@@ -22,6 +22,7 @@ module Data.Array.Accelerate.CUDA (
 import Prelude hiding (catch)
 import Control.Exception
 import Control.Applicative
+import System.Mem
 import System.IO.Unsafe
 import Foreign.CUDA.Driver.Error
 
@@ -43,7 +44,7 @@ import Data.Array.Accelerate.CUDA.Execute
 --
 run :: Arrays a => Acc a -> a
 {-# NOINLINE run #-}
-run a = unsafePerformIO execute
+run a = unsafePerformIO $ execute <* performGC
   where
     acc     = convertAcc a
     execute = evalCUDA (compileAcc acc >>= executeAcc >>= collect)
@@ -59,7 +60,7 @@ stream :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
 stream f arrs = unsafePerformIO $ execute arrs =<< evalCUDA (compileAfun1 acc)
   where
     acc                 = convertAccFun1 f
-    execute []     _    = return []
+    execute []     _    = return [] <* performGC
     execute (a:as) afun = do
       b  <- evalCUDA (executeAfun1 afun a >>= collect)
             `catch`

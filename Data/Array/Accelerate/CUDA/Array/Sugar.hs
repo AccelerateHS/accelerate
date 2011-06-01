@@ -24,14 +24,11 @@ import qualified Data.Array.Accelerate.Array.Sugar	as Sugar
 -- Create an array from its representation function, uploading the result to the
 -- device
 --
--- FIXME: small arrays are moved by the GC?
---
 newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> CIO (Array sh e)
 newArray sh f =
   let arr = Sugar.newArray sh f
   in do
-      mallocArray arr
-      pokeArrayAsync arr Nothing
+      useArray arr
       return arr
 
 

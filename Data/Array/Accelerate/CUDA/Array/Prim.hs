@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, TypeFamilies, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Prim
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -33,6 +33,7 @@ import Control.Monad
 import Control.Exception
 import System.Mem
 import System.Mem.Weak
+import System.Mem.StableName
 import Foreign.Ptr
 import Foreign.Marshal                                  (alloca)
 import Foreign.Storable
@@ -146,8 +147,8 @@ instance TextureData Word where
 -- --------------
 
 data ArrayPtr where
-  ArrayPtr :: (Typeable a, ArrayPtrs e ~ Ptr a, ArrayElt e)
-           => ArrayData e
+  ArrayPtr :: (ArrayPtrs e ~ Ptr a, Typeable a, Typeable e)
+           => StableName (ArrayData e)
            -> ArrayPtr
 
 data DevicePtr where
@@ -157,7 +158,7 @@ data DevicePtr where
 
 instance Eq ArrayPtr where
   ArrayPtr p1 == ArrayPtr p2
-    = maybe False (== ptrsOfArrayData p2) (gcast $ ptrsOfArrayData p1)
+    = maybe False (== p2) (gcast p1)
 
 type MMap        = Hash.HashTable ArrayPtr (Weak DevicePtr)
 data MemoryTable = MemoryTable MMap (Weak MMap)
@@ -173,7 +174,7 @@ data MemoryTable = MemoryTable MMap (Weak MMap)
 --
 newMT :: IO MemoryTable
 newMT =
-  let hashPtr (ArrayPtr p) = fromIntegral . ptrToIntPtr . ptrsOfArrayData $ p
+  let hashPtr (ArrayPtr p) = fromIntegral . hashStableName $ p
   in do
     t <- Hash.new (==) hashPtr
     w <- mkWeak t t (Just $ mapM_ (finalize . snd) =<< Hash.toList t)
@@ -183,15 +184,24 @@ newMT =
 -- Retrieve the device memory pointer associated with a given Accelerate array.
 -- This will throw an exception if the array can not be found.
 --
-lookup :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b, Typeable a, Typeable b)
+-- Note that there is an awkward race condition going on here. After we use the
+-- array data to key the hash table, there might, conceivably, be no further
+-- references to it. If that is so, and a garbage collection intervenes, the
+-- weak pointer might be tombstoned before deRefWeak gets to it. In this unusual
+-- case we call notFound again. Critically, because the array data is used as
+-- part of the error message, this means it is available in the continuation and
+-- deRefWeak always succeeds.
+--
+lookup :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+          ,Typeable a, Typeable b, Typeable e)
        => MemoryTable
        -> ArrayData e
        -> IO (DevicePtrs e)
 lookup (MemoryTable tbl _) ad =
-  let key      = ArrayPtr ad
-      notFound = INTERNAL_ERROR(error) "lookup" "lost device memory"
+  let ptrs     = ptrsOfArrayData ad
+      notFound = INTERNAL_ERROR(error) "lookup" ("lost device memory " ++ show ptrs)
   in do
-    mw <- Hash.lookup tbl key
+    mw <- Hash.lookup tbl =<< arrayPtr ad
     case mw of
       Nothing -> return notFound
       Just w  -> maybe  notFound (devicePtr ad) `fmap` deRefWeak w
@@ -199,11 +209,12 @@ lookup (MemoryTable tbl _) ad =
 
 -- Check whether a device array exists
 --
-exists :: (ArrayElt e, ArrayPtrs e ~ Ptr a, Typeable a)
+exists :: (ArrayElt e, ArrayPtrs e ~ Ptr a, Typeable a, Typeable e)
        => MemoryTable
        -> ArrayData e
        -> IO Bool
-exists (MemoryTable tbl _) ad = isJust `fmap` Hash.lookup tbl (ArrayPtr ad)
+exists (MemoryTable tbl _) ad =
+  liftM isJust $ Hash.lookup tbl =<< arrayPtr ad
 
 
 -- Record an association between the given host and device side arrays. The
@@ -214,19 +225,29 @@ exists (MemoryTable tbl _) ad = isJust `fmap` Hash.lookup tbl (ArrayPtr ad)
 -- the weak pointer to the table will be tombstoned and there is nothing further
 -- to do, otherwise we also remove the entry from the hash table.
 --
-insert :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b, Typeable a, Typeable b)
+insert :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
+          ,Typeable a, Typeable b, Typeable e)
        => MemoryTable
-       -> array
        -> ArrayData e
        -> DevicePtrs e
        -> IO ()
-insert (MemoryTable tbl weakTbl) arr ad ptr =
-  let key = ArrayPtr ad
-      val = DevicePtr ptr
+insert (MemoryTable tbl weakTbl) ad ptr =
+  let val = DevicePtr ptr
   in do
-    weak <- mkWeak arr val (Just $ do CUDA.free ptr
-                                      maybe (return ()) (flip Hash.delete key) =<< deRefWeak weakTbl)
+    key  <- arrayPtr ad
+    weak <- mkWeak ad val (Just $ do CUDA.free ptr
+                                     maybe (return ()) (`Hash.delete` key) =<< deRefWeak weakTbl)
     Hash.insert tbl key weak
+
+
+-- Create the stable key used to associate host and device arrays. Add
+-- strictness to the key, since its stable name may change after it is
+-- evaluated to normal form.
+--
+arrayPtr :: (ArrayPtrs e ~ Ptr a, ArrayElt e, Typeable e, Typeable a)
+         => ArrayData e
+         -> IO ArrayPtr
+arrayPtr !ad = ArrayPtr `fmap` makeStableName ad
 
 
 -- Get a typed device pointer out of our untyped wrapper
@@ -240,7 +261,6 @@ devicePtr _ (DevicePtr p)
   | otherwise           = INTERNAL_ERROR(error) "devicePtr" "type mismatch"
 
 
-
 -- Primitive array operations
 -- --------------------------
 
@@ -252,13 +272,12 @@ devicePtr _ (DevicePtr p)
 -- shared on the heap.
 --
 mallocArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-               ,Typeable a, Typeable b, Storable b)
+               ,Typeable a, Typeable b, Typeable e, Storable b)
             => MemoryTable
-            -> array                    -- principal array object to associate finaliser with
             -> ArrayData e              -- host array data
             -> Int                      -- number of array elements
             -> IO ()
-mallocArray mmap@(MemoryTable tbl _) arr ad n =
+mallocArray mmap@(MemoryTable tbl _) ad n =
   let reclaim = Hash.toList tbl >>= \l     -> forM l $
                                     \(_,w) -> whenM (isNothing `fmap` deRefWeak w) $ finalize w
   in
@@ -267,7 +286,7 @@ mallocArray mmap@(MemoryTable tbl _) arr ad n =
       case e of
         ExitCode OutOfMemory -> performGC >> reclaim >> CUDA.mallocArray n
         _                    -> throwIO e
-    insert mmap arr ad dptr
+    insert mmap ad dptr
 
 
 -- A combination of 'mallocArray' and 'pokeArray' to allocate space on the
@@ -275,15 +294,14 @@ mallocArray mmap@(MemoryTable tbl _) arr ad n =
 -- array is shared on the heap, we do not need to do anything.
 --
 useArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-            ,Typeable a, Storable a)
+            ,Typeable a, Typeable e, Storable a)
          => MemoryTable
-         -> array                       -- principal array object to associate finaliser with
          -> ArrayData e                 -- host array data
          -> Int                         -- number of array elements
          -> IO ()
-useArray mmap arr ad n =
+useArray mmap ad n =
   unlessM (exists mmap ad) $ do
-    mallocArray mmap arr ad n
+    mallocArray    mmap ad n
     pokeArrayAsync mmap ad n Nothing
 
 
@@ -291,7 +309,7 @@ useArray mmap arr ad n =
 -- synchronous operation.
 --
 indexArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-              ,Typeable a, Typeable b, Storable b)
+              ,Typeable a, Typeable b, Typeable e, Storable b)
            => MemoryTable
            -> ArrayData e               -- host array
            -> Int                       -- index in row-major representation
@@ -307,7 +325,7 @@ indexArray mmap ad i =
 -- respect to the host, but will never overlap kernel execution.
 --
 copyArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-             ,Typeable a, Typeable b, Storable b)
+             ,Typeable a, Typeable b, Typeable e, Storable b)
           => MemoryTable
           -> ArrayData e                -- source array
           -> ArrayData e                -- destination array
@@ -322,7 +340,7 @@ copyArray mmap from to n = do
 -- Copy data from the device into the associated Accelerate host-side array
 --
 peekArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-             ,Typeable a, Storable a)
+             ,Typeable a, Typeable e, Storable a)
           => MemoryTable
           -> ArrayData e                -- host array
           -> Int                        -- number of elements
@@ -332,7 +350,7 @@ peekArray mmap ad n =
   in  lookup mmap ad >>= \src -> CUDA.peekArray n src dst
 
 peekArrayAsync :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                 ,Typeable a, Storable a)
+                 ,Typeable a, Typeable e, Storable a)
               => MemoryTable
               -> ArrayData e            -- host array
               -> Int                    -- number of elements
@@ -346,7 +364,7 @@ peekArrayAsync mmap ad n st =
 -- Copy data from an Accelerate array into the associated device array
 --
 pokeArray :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-             ,Typeable a, Storable a)
+             ,Typeable a, Typeable e, Storable a)
           => MemoryTable
           -> ArrayData e                -- host array
           -> Int                        -- number of elements
@@ -356,7 +374,7 @@ pokeArray mmap ad n =
   in  lookup mmap ad >>= \dst -> CUDA.pokeArray n src dst
 
 pokeArrayAsync :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                 ,Typeable a, Storable a)
+                 ,Typeable a, Typeable e, Storable a)
               => MemoryTable
               -> ArrayData e            -- host array
               -> Int                    -- number of elements
@@ -371,7 +389,7 @@ pokeArrayAsync mmap ad n st =
 -- arguments that can be passed to a kernel upon invocation
 --
 marshalArrayData :: (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr b
-                    ,Typeable a, Typeable b)
+                    ,Typeable a, Typeable b, Typeable e)
                  => MemoryTable
                  -> ArrayData e         -- host array
                  -> IO CUDA.FunParam
@@ -382,7 +400,7 @@ marshalArrayData mmap ad = CUDA.VArg `fmap` lookup mmap ad
 --
 marshalTextureData :: forall a e.
                       (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a
-                      ,Typeable a, Storable a, TextureData a)
+                      ,Typeable a, Typeable e, Storable a, TextureData a)
                    => MemoryTable
                    -> ArrayData e       -- host array
                    -> Int               -- number of elements
