@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs, FlexibleInstances, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -11,6 +12,9 @@
 --
 
 module Data.Array.Accelerate.Pretty (
+
+  -- * Pretty printing functions
+  module Data.Array.Accelerate.Pretty.Print
 
   -- * Instances of Show
 

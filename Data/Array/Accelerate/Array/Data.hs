@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
 -- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

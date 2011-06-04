@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, TypeFamilies, FlexibleInstances #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Tuple
 -- Copyright   : [2009..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP, GADTs, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeOperators, TypeFamilies #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Representation
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell

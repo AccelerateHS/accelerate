@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs, ScopedTypeVariables #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Analysis.Stencil
 -- Copyright   : [2010..2011] Ben Lever, Trevor L. McDonell

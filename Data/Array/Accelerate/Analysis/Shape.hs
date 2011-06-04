@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, GADTs, RankNTypes #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Shape
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
