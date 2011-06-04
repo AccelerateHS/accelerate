@@ -2,3 +2,7 @@
 /dist/
 /accelerate-examples/dist
 /accelerate-buildbot/dist
+/accelerate-cuda/dist/
+/accelerate-cuda/config.log
+/accelerate-cuda/config.status
+/accelerate-cuda/cubits/accelerate_cuda_shape.h

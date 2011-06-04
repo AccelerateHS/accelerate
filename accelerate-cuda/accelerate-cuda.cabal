@@ -2,7 +2,7 @@ Name:                   accelerate-cuda
 Version:                0.9.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 6.12.3
-Build-type:             Simple
+Build-type:             Configure
 
 Synopsis:               An embedded language for accelerated array processing
 Description:            This library implements a backend for the Accelerate

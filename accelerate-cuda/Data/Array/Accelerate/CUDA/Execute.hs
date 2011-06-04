@@ -288,10 +288,10 @@ indexOp kernel bindings acc aenv sliceIndex (Array sh0 in0) slix = do
     restrict (SliceFixed sliceIdx) (slx,i)  (sh,sz)
       = BOUNDS_CHECK(checkIndex) "slice" i sz $ restrict sliceIdx slx sh
     --
-    convertSlix :: SliceIndex slix sl co dim -> slix -> [Int32]
+    convertSlix :: SliceIndex slix sl co dim -> slix -> [Int]
     convertSlix (SliceNil)            ()     = []
     convertSlix (SliceAll   sliceIdx) (s,()) = convertSlix sliceIdx s
-    convertSlix (SliceFixed sliceIdx) (s,i)  = fromIntegral i : convertSlix sliceIdx s
+    convertSlix (SliceFixed sliceIdx) (s,i)  = i : convertSlix sliceIdx s
 
 
 mapOp :: Elt e
@@ -584,20 +584,16 @@ class Marshalable a where
 instance Marshalable () where
   marshal _ = return []
 
-instance Marshalable Int where
-  marshal x = marshal (fromIntegral x :: Int32)         -- TLM: this isn't so good...
-
-instance Marshalable Word where
-  marshal x = marshal (fromIntegral x :: Word32)
-
 #define primMarshalable(ty)                                                    \
 instance Marshalable ty where {                                                \
   marshal x = return [CUDA.VArg x] }
 
+primMarshalable(Int)
 primMarshalable(Int8)
 primMarshalable(Int16)
 primMarshalable(Int32)
 primMarshalable(Int64)
+primMarshalable(Word)
 primMarshalable(Word8)
 primMarshalable(Word16)
 primMarshalable(Word32)
@@ -688,18 +684,15 @@ sequence' :: [IO a] -> IO [a]
 sequence' = foldr k (return [])
   where k m ms = do { x <- m; xs <- unsafeInterleaveIO ms; return (x:xs) }
 
--- Extract shape dimensions as a list of 32-bit integers (the base integer width
--- of the device, and used for index calculations). Singleton dimensions are
+-- Extract shape dimensions as a list of integers. Singleton dimensions are
 -- considered to be of unit size.
 --
 -- Internally, Accelerate uses snoc-based tuple projection, while the data
 -- itself is stored in reading order. Ensure we match the behaviour of regular
 -- tuples and code generation thereof.
 --
--- TLM: keep native integer sizes, now that we have conversion functions
---
-convertIx :: R.Shape sh => sh -> [Int32]
-convertIx = post . map fromIntegral . shapeToList
+convertIx :: R.Shape sh => sh -> [Int]
+convertIx = post . shapeToList
   where post [] = [1]
         post xs = reverse xs
 

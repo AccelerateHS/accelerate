@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <cuda_runtime.h>
 
-typedef int32_t                                   Ix;
+typedef @hs_int_type@                             Ix;
 typedef void*                                     DIM0;
 typedef Ix                                        DIM1;
 typedef struct { Ix a1,a0; }                      DIM2;
