@@ -26,7 +26,7 @@ module Data.Array.Accelerate.CUDA.Compile (
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST                        hiding (Val(..))
-import Data.Array.Accelerate.Pretty.Print
+import Data.Array.Accelerate.Pretty
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.CodeGen
@@ -53,7 +53,7 @@ import Foreign.Storable
 import qualified Data.HashTable                         as Hash
 import qualified Foreign.CUDA.Driver                    as CUDA
 
-import Paths_accelerate                                 (getDataDir)
+import Paths_accelerate_cuda                            (getDataDir)
 
 
 -- A binary object that will be used to execute a kernel

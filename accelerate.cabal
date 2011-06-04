@@ -61,33 +61,6 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
--- Should be in the Library stanza, and only enabled for the CUDA backend,
--- but Cabal does not support that.
-Data-files:             cubits/accelerate_cuda_extras.h
-                        cubits/accelerate_cuda_function.h
-                        cubits/accelerate_cuda_shape.h
-                        cubits/accelerate_cuda_stencil.h
-                        cubits/accelerate_cuda_texture.h
-                        cubits/accelerate_cuda_util.h
-                        cubits/generate.inl
-                        cubits/backpermute.inl
-                        cubits/fold.inl
-                        cubits/foldAll.inl
-                        cubits/foldSeg.inl
-                        cubits/map.inl
-                        cubits/stencil.inl
-                        cubits/stencil2.inl
-                        cubits/permute.inl
-                        cubits/reduce.inl
-                        cubits/replicate.inl
-                        cubits/scan.inl
-                        cubits/scan1.inl
-                        cubits/slice.inl
-                        cubits/zipWith.inl
-                        cubits/thrust/safe_scan_intervals.inl
-                        cubits/thrust/inclusive_scan.inl
-                        cubits/thrust/exclusive_scan.inl
-
 Extra-source-files:     INSTALL
                         include/accelerate.h
                         utils/README
@@ -98,16 +71,8 @@ Flag llvm
   Description:          Enable the LLVM backend (sequential)
   Default:              False
 
-Flag cuda
-  Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              True
-
 Flag more-pp
   Description:          Enable HTML and Graphviz pretty printing.
-  Default:              False
-
-Flag pcache
-  Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
   Default:              False
 
 Flag test-suite
@@ -130,9 +95,6 @@ Flag io
   Description:          Provide access to the block copy I/O functionality
   Default:              False
 
-Flag inplace
-  Default:              False
-
 Library
   Build-depends:        array           >= 0.3 && < 0.5,
                         base            == 4.*,
@@ -146,18 +108,6 @@ Library
   if flag(llvm)
     Build-depends:      llvm            >= 0.6.8
 
-  if flag(cuda)
-    Build-depends:      binary          == 0.5.*,
-                        bytestring      == 0.9.*,
-                        cuda            >= 0.2.2,
-                        fclabels        >= 1.0 && < 1.2,
-                        filepath        >= 1.0 && < 1.4,
-                        language-c      >= 0.3 && < 0.5,
-                        mtl             >= 2.0,
-                        transformers    >= 0.2,
-                        unix            >= 2.4 && < 2.6,
-                        zlib            == 0.5.* && < 0.5.3.2
-
   if flag(io)
     Build-depends:      bytestring      == 0.9.*,
                         vector          == 0.9.*
@@ -170,27 +120,23 @@ Library
                         blaze-html      == 0.3.*,
                         text            == 0.10.*
 
-  if flag(inplace)
-    hs-source-dirs:     . utils
-
   Exposed-modules:      Data.Array.Accelerate
-                        Data.Array.Accelerate.Interpreter
-                        Data.Array.Accelerate.Analysis.Shape
-                        Data.Array.Accelerate.Analysis.Type
-                        Data.Array.Accelerate.Array.Sugar
-                        Data.Array.Accelerate.Array.Representation
-                        Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.AST
+                        Data.Array.Accelerate.Analysis.Shape
+                        Data.Array.Accelerate.Analysis.Stencil
+                        Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Array.Data
+                        Data.Array.Accelerate.Array.Representation
+                        Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Interpreter
+                        Data.Array.Accelerate.Pretty
+                        Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
                         Data.Array.Accelerate.Pretty
 
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
-
-  if flag(cuda)
-    Exposed-modules:    Data.Array.Accelerate.CUDA
 
   if flag(io)
     Other-modules:      Data.Array.Accelerate.IO.BlockCopy
@@ -212,7 +158,6 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
-                        Paths_accelerate
 
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
@@ -221,27 +166,6 @@ Library
 
 --  If flag(llvm)
 --    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
-
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    Other-modules:      Data.Array.Accelerate.CUDA.Analysis.Device
-                        Data.Array.Accelerate.CUDA.Analysis.Hash
-                        Data.Array.Accelerate.CUDA.Analysis.Launch
-                        Data.Array.Accelerate.CUDA.Array.Data
-                        Data.Array.Accelerate.CUDA.Array.Prim
-                        Data.Array.Accelerate.CUDA.Array.Sugar
-                        Data.Array.Accelerate.CUDA.CodeGen.Data
-                        Data.Array.Accelerate.CUDA.CodeGen.Skeleton
-                        Data.Array.Accelerate.CUDA.CodeGen.Stencil
-                        Data.Array.Accelerate.CUDA.CodeGen.Tuple
-                        Data.Array.Accelerate.CUDA.CodeGen.Util
-                        Data.Array.Accelerate.CUDA.CodeGen
-                        Data.Array.Accelerate.CUDA.Compile
-                        Data.Array.Accelerate.CUDA.Execute
-                        Data.Array.Accelerate.CUDA.State
-
-  if flag(pcache)
-    CPP-options:        -DACCELERATE_CUDA_PERSISTENT_CACHE
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS

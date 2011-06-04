@@ -25,7 +25,6 @@ import qualified Data.HashTable                         as Hash
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Pretty ()
 import Data.Array.Accelerate.Analysis.Type
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.CUDA.CodeGen

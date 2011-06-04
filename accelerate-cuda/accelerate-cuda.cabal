@@ -1,0 +1,146 @@
+Name:                   accelerate-cuda
+Version:                0.9.0.0
+Cabal-version:          >= 1.6
+Tested-with:            GHC >= 6.12.3
+Build-type:             Simple
+
+Synopsis:               An embedded language for accelerated array processing
+Description:            This library implements a backend for the Accelerate
+                        language instrumented for parallel execution on
+                        CUDA-capable NVIDIA GPUs.
+                        .
+                        To use this backend you need CUDA version 3.x installed.
+                        Note that currently there is no support for 'Char' and
+                        'Bool' arrays.
+                        .
+                        * New in 0.9.0.0: split off from main Accelerate package
+                        .
+
+License:                BSD3
+License-file:           LICENSE
+Author:                 Manuel M T Chakravarty,
+                        Gabriele Keller,
+                        Sean Lee,
+                        Trevor L. McDonell
+Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Bug-reports:            https://github.com/mchakravarty/accelerate/issues
+
+Category:               Compilers/Interpreters, Concurrency, Data
+Stability:              Experimental
+
+Data-files:             cubits/accelerate_cuda_extras.h
+                        cubits/accelerate_cuda_function.h
+                        cubits/accelerate_cuda_shape.h
+                        cubits/accelerate_cuda_stencil.h
+                        cubits/accelerate_cuda_texture.h
+                        cubits/accelerate_cuda_util.h
+                        cubits/generate.inl
+                        cubits/backpermute.inl
+                        cubits/fold.inl
+                        cubits/foldAll.inl
+                        cubits/foldSeg.inl
+                        cubits/map.inl
+                        cubits/stencil.inl
+                        cubits/stencil2.inl
+                        cubits/permute.inl
+                        cubits/reduce.inl
+                        cubits/replicate.inl
+                        cubits/scan.inl
+                        cubits/scan1.inl
+                        cubits/slice.inl
+                        cubits/zipWith.inl
+                        cubits/thrust/safe_scan_intervals.inl
+                        cubits/thrust/inclusive_scan.inl
+                        cubits/thrust/exclusive_scan.inl
+
+Extra-tmp-files:        config.status
+                        config.log
+                        cubits/accelerate_cuda_shape.h
+
+Extra-source-files:     cubits/accelerate_cuda_shape.h.in
+                        include/accelerate.h
+                        utils/README
+                        utils/Paths_accelerate_cuda.hs
+                        utils/dot_ghci
+
+-- Flag pcache
+--   Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
+--   Default:              False
+
+Flag bounds-checks
+  Description:          Enable bounds checking
+  Default:              True
+
+Flag unsafe-checks
+  Description:          Enable bounds checking in unsafe operations
+  Default:              False
+
+Flag internal-checks
+  Description:          Enable internal consistency checks
+  Default:              False
+
+Library
+  Include-Dirs:         include
+
+  Build-depends:        accelerate      == 0.9.*,
+                        base            == 4.*,
+                        binary          == 0.5.*,
+                        bytestring      == 0.9.*,
+                        cuda            >= 0.2.2,
+                        directory       >= 1.0 && < 1.2,
+                        fclabels        >= 0.9 && < 1.0,
+                        filepath        >= 1.0 && < 1.3,
+                        language-c      == 0.3.*,
+                        mtl             == 2.0.*,
+                        pretty          == 1.0.*,
+                        transformers    == 0.2.*,
+                        unix            == 2.4.*,
+                        zlib            == 0.5.*
+
+  Exposed-modules:      Data.Array.Accelerate.CUDA
+
+  Other-modules:        Data.Array.Accelerate.CUDA.Analysis.Device
+                        Data.Array.Accelerate.CUDA.Analysis.Hash
+                        Data.Array.Accelerate.CUDA.Analysis.Launch
+                        Data.Array.Accelerate.CUDA.Array.Data
+                        Data.Array.Accelerate.CUDA.Array.Prim
+                        Data.Array.Accelerate.CUDA.Array.Sugar
+                        Data.Array.Accelerate.CUDA.CodeGen
+                        Data.Array.Accelerate.CUDA.CodeGen.Data
+                        Data.Array.Accelerate.CUDA.CodeGen.Skeleton
+                        Data.Array.Accelerate.CUDA.CodeGen.Stencil
+                        Data.Array.Accelerate.CUDA.CodeGen.Tuple
+                        Data.Array.Accelerate.CUDA.CodeGen.Util
+                        Data.Array.Accelerate.CUDA.Compile
+                        Data.Array.Accelerate.CUDA.Execute
+                        Data.Array.Accelerate.CUDA.State
+                        Data.Array.Accelerate.Internal.Check
+                        Paths_accelerate_cuda
+
+--  if flag(pcache)
+--    CPP-options:        -DACCELERATE_CUDA_PERSISTENT_CACHE
+
+  if flag(bounds-checks)
+    cpp-options:        -DACCELERATE_BOUNDS_CHECKS
+
+  if flag(unsafe-checks)
+    cpp-options:        -DACCELERATE_UNSAFE_CHECKS
+
+  if flag(internal-checks)
+    cpp-options:        -DACCELERATE_INTERNAL_CHECKS
+
+  ghc-options:          -O2 -Wall -funbox-strict-fields
+
+  if impl(ghc >= 7.0)
+    ghc-options:        -fspec-constr-count=25
+
+  Extensions:           BangPatterns, CPP, ExistentialQuantification,
+                        FlexibleContexts, GADTs, PatternGuards, RankNTypes,
+                        ScopedTypeVariables, TemplateHaskell, TupleSections,
+                        TypeFamilies, TypeOperators, TypeSynonymInstances
+
+source-repository head
+  type:                 git
+  location:             https://github.com/mchakravarty/accelerate
+

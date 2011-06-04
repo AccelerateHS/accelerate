@@ -1,4 +1,5 @@
-{-# LANGUAGE BangPatterns, CPP, GADTs, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, TypeFamilies #-}
+{-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Prim
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
