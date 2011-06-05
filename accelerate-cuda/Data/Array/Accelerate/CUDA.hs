@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.CUDA (
 
   -- * Generate and execute CUDA code for an array expression
-  Arrays, run, stream
+  Arrays, run, run1, stream
 
 ) where
 
@@ -22,6 +22,7 @@ module Data.Array.Accelerate.CUDA (
 import Prelude hiding (catch)
 import Control.Exception
 import Control.Applicative
+import Control.Monad.Trans
 import System.Mem
 import System.IO.Unsafe
 import Foreign.CUDA.Driver.Error
@@ -40,11 +41,11 @@ import Data.Array.Accelerate.CUDA.Execute
 -- Accelerate: CUDA
 -- ----------------
 
--- | Compile and run a complete embedded array program using the CUDA backend
+-- |Compile and run a complete embedded array program using the CUDA backend
 --
 run :: Arrays a => Acc a -> a
 {-# NOINLINE run #-}
-run a = unsafePerformIO $ execute <* performGC
+run a = unsafePerformIO $ execute
   where
     acc     = convertAcc a
     execute = evalCUDA (compileAcc acc >>= executeAcc >>= collect)
@@ -52,28 +53,33 @@ run a = unsafePerformIO $ execute <* performGC
               \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
 
 
--- | Stream a lazily read list of input arrays through the given program,
+-- |Prepare and execute an embedded array program of one argument
+--
+-- TLM: ensure this can be partially applied, such that compilation only occurs
+--      once. Structure so that we would have had type IO (a -> b) ?
+--
+run1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> a -> b
+{-# NOINLINE run1 #-}
+run1 f a = unsafePerformIO $ execute =<< evalCUDA (compileAfun1 acc)
+  where
+    acc          = convertAccFun1 f
+    execute afun = evalCUDA (executeAfun1 afun a >>= collect)
+                   `catch`
+                   \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
+
+
+-- |Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
 --
 stream :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> [a] -> [b]
-{-# NOINLINE stream #-}
-stream f arrs = unsafePerformIO $ execute arrs =<< evalCUDA (compileAfun1 acc)
-  where
-    acc                 = convertAccFun1 f
-    execute []     _    = return [] <* performGC
-    execute (a:as) afun = do
-      b  <- evalCUDA (executeAfun1 afun a >>= collect)
-            `catch`
-            \e -> INTERNAL_ERROR(error) "unhandled" (show (e :: CUDAException))
-      bs <- unsafeInterleaveIO (execute as afun)
-      return (b:bs)
+stream f arrs = map (run1 f) arrs
 
 
 -- Copy from device to host, and decrement the usage counter. This last step
 -- should result in all transient arrays having been removed from the device.
 --
 collect :: Arrays arrs => arrs -> CIO arrs
-collect arrs = collectR arrays arrs
+collect arrs = collectR arrays arrs <* liftIO performGC
   where
     collectR :: ArraysR arrs -> arrs -> CIO arrs
     collectR ArraysRunit         ()             = return ()
