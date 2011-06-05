@@ -1,0 +1,59 @@
+Name:                   accelerate-io
+Version:                0.9.0.0
+Cabal-version:          >= 1.6
+Tested-with:            GHC >= 6.12.3
+Build-type:             Simple
+
+Synopsis:               Low-level conversions between Accelerate arrays
+Description:            Low-level conversions between Accelerate arrays
+
+License:                BSD3
+License-file:           LICENSE
+Author:                 Manuel M T Chakravarty,
+                        Gabriele Keller,
+                        Sean Lee,
+                        Trevor L. McDonell
+Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Bug-reports:            https://github.com/mchakravarty/accelerate/issues
+
+Category:               Compilers/Interpreters, Concurrency, Data
+Stability:              Experimental
+
+Extra-source-files:     include/accelerate.h
+
+Flag bounds-checks
+  Description:          Enable bounds checking
+  Default:              True
+
+Flag unsafe-checks
+  Description:          Enable bounds checking in unsafe operations
+  Default:              False
+
+Flag internal-checks
+  Description:          Enable internal consistency checks
+  Default:              False
+
+Library
+  Include-Dirs:         include
+  Build-depends:        accelerate      == 0.9.*,
+                        bytestring      == 0.9.*,
+                        array           == 0.3.*,
+                        base            == 4.*
+
+  Other-modules:        Data.Array.Accelerate.IO.BlockCopy
+  Exposed-modules:      Data.Array.Accelerate.IO
+                        Data.Array.Accelerate.IO.Ptr
+                        Data.Array.Accelerate.IO.ByteString
+
+  if flag(bounds-checks)
+    cpp-options:        -DACCELERATE_BOUNDS_CHECKS
+
+  if flag(unsafe-checks)
+    cpp-options:        -DACCELERATE_UNSAFE_CHECKS
+
+  if flag(internal-checks)
+    cpp-options:        -DACCELERATE_INTERNAL_CHECKS
+
+  ghc-options:          -O2 -Wall -funbox-strict-fields
+

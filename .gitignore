@@ -6,3 +6,4 @@
 /accelerate-cuda/config.log
 /accelerate-cuda/config.status
 /accelerate-cuda/cubits/accelerate_cuda_shape.h
+/accelerate-io/dist/

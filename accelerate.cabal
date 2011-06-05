@@ -88,11 +88,8 @@ Flag internal-checks
   Description:          Enable internal consistency checks
   Default:              False
 
-Flag io
-  Description:          Provide access to the block copy I/O functionality
-  Default:              False
-
 Library
+  Include-Dirs:         include
   Build-depends:        array           >= 0.3 && < 0.5,
                         base            == 4.*,
                         containers      >= 0.3 && < 0.5,
@@ -100,14 +97,8 @@ Library
                         ghc-prim        == 0.2.*,
                         pretty          >= 1.0 && < 1.2
 
-  Include-Dirs:         include
-
   if flag(llvm)
     Build-depends:      llvm            >= 0.6.8
-
-  if flag(io)
-    Build-depends:      bytestring      == 0.9.*,
-                        vector          == 0.9.*
 
 --  if flag(test-suite)
 --    Build-depends:      QuickCheck      == 2.*
@@ -134,13 +125,6 @@ Library
 
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
-
-  if flag(io)
-    Other-modules:      Data.Array.Accelerate.IO.BlockCopy
-    Exposed-modules:    Data.Array.Accelerate.IO
-                        Data.Array.Accelerate.IO.Ptr
-                        Data.Array.Accelerate.IO.ByteString
-                        Data.Array.Accelerate.IO.Vector
 
 --  If flag(test-suite)
 --    Exposed-modules:    Data.Array.Accelerate.Test
