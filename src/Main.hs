@@ -12,7 +12,7 @@ import Data.Maybe
 import Control.Arrow
 import Control.Monad
 import System.Environment
-import System.Console.CmdArgs   (cmdArgs, getVerbosity, Verbosity(..))
+import System.Console.CmdArgs   (cmdArgs, whenNormal, getVerbosity, Verbosity(..))
 
 
 -- Process command line options, prepare selected test programs for benchmarking
@@ -69,6 +69,7 @@ runTiming cfg tests = do
 main :: IO ()
 main = do
   (config, tests) <- processArgs
+  whenNormal       $ putStrLn ("running with " ++ shows (cfgBackend config) " backend")
   valid           <- runVerify config tests
   --
   unless (null valid || cfgVerify config) $ runTiming config valid
