@@ -21,8 +21,8 @@ map
     const Ix            shape
 )
 {
-    Ix       idx;
-    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
+    int       idx;
+    const int gridSize = __umul24(blockDim.x, gridDim.x);
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < shape; idx += gridSize)
     {

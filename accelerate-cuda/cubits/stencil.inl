@@ -22,10 +22,10 @@ stencil
     const DimOut  shOut
 )
 {
-    const Ix shapeSize = size(shOut);
-    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
+    const int shapeSize = size(shOut);
+    const int gridSize  = __umul24(blockDim.x, gridDim.x);
 
-    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
+    for (int ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
         set(d_out, ix, apply(gather0(shOut, fromIndex(shOut, ix))));
     }

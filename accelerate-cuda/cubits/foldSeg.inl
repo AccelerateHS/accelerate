@@ -40,20 +40,20 @@ foldSeg
 (
     ArrOut              d_out,
     const ArrIn0        d_in0,
-    const Int*          d_offset,
+    const ArrSeg        d_offset,
     const DimOut        shOut,
     const DimIn0        shIn0
 )
 {
-    const Ix vectors_per_block = blockDim.x / warpSize;
-    const Ix num_vectors       = vectors_per_block * gridDim.x;
-    const Ix thread_id         = blockDim.x * blockIdx.x + threadIdx.x;
-    const Ix vector_id         = thread_id / warpSize;
-    const Ix thread_lane       = threadIdx.x & (warpSize - 1);
-    const Ix vector_lane       = threadIdx.x / warpSize;
+    const int vectors_per_block = blockDim.x / warpSize;
+    const int num_vectors       = vectors_per_block * gridDim.x;
+    const int thread_id         = blockDim.x * blockIdx.x + threadIdx.x;
+    const int vector_id         = thread_id / warpSize;
+    const int thread_lane       = threadIdx.x & (warpSize - 1);
+    const int vector_lane       = threadIdx.x / warpSize;
 
-    const Ix num_segments      = indexHead(shOut);
-    const Ix total_segments    = size(shOut);
+    const int num_segments      = indexHead(shOut);
+    const int total_segments    = size(shOut);
 
     /*
      * Manually partition (dynamically-allocated) shared memory
@@ -61,10 +61,10 @@ foldSeg
     extern volatile __shared__ Ix s_ptrs[][2];
     ArrOut s_data = partition((void*) &s_ptrs[vectors_per_block][2], blockDim.x);
 
-    for (Ix seg = vector_id; seg < total_segments; seg += num_vectors)
+    for (int seg = vector_id; seg < total_segments; seg += num_vectors)
     {
-        const Ix s    =  seg % num_segments;
-        const Ix base = (seg / num_segments) * indexHead(shIn0);
+        const int s    =  seg % num_segments;
+        const int base = (seg / num_segments) * indexHead(shIn0);
 
         /*
          * Use two threads to fetch the indices of the start and end of this
@@ -74,9 +74,9 @@ foldSeg
         if (thread_lane < 2)
             s_ptrs[vector_lane][thread_lane] = d_offset[s + thread_lane];
 
-        const Ix    start        = base + s_ptrs[vector_lane][0];
-        const Ix    end          = base + s_ptrs[vector_lane][1];
-        const Ix    num_elements = end - start;
+        const int   start        = base + s_ptrs[vector_lane][0];
+        const int   end          = base + s_ptrs[vector_lane][1];
+        const int   num_elements = end - start;
               TyOut sum;
 
         /*
@@ -87,7 +87,7 @@ foldSeg
             /*
              * Ensure aligned access to global memory
              */
-            Ix i = start - (start & (warpSize - 1)) + thread_lane;
+            int i = start - (start & (warpSize - 1)) + thread_lane;
             if (i >= start)
                 sum = get0(d_in0, i);
 
@@ -115,7 +115,7 @@ foldSeg
          * Store local sums into shared memory and reduce to a single value
          */
         set(s_data, threadIdx.x, sum);
-        sum = reduce_warp_n(s_data, sum, min(num_elements, warpSize));
+        sum = reduce_warp_n(s_data, sum, min((int) num_elements, warpSize));
 
         /*
          * Finally, the first thread writes the result for this segment

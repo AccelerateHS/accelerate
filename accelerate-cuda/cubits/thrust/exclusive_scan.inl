@@ -49,8 +49,8 @@ exclusive_update
 {
     extern __shared__ TyOut sdata[];
 
-    const Ix interval_begin = interval_size * blockIdx.x;
-    const Ix interval_end   = min(interval_begin + interval_size, N);
+    const int interval_begin = interval_size * blockIdx.x;
+    const int interval_end   = min(interval_begin + interval_size, N);
 
     // value to add to this segment
     TyOut carry = identity();
@@ -70,12 +70,12 @@ exclusive_update
 #endif
 
     // advance result iterator
-    Ix output = REVERSE ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
+    int output = REVERSE ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
     TyOut val = carry;
 
-    for (Ix base = interval_begin; base < interval_end; base += blockDim.x)
+    for (int base = interval_begin; base < interval_end; base += blockDim.x)
     {
-        const Ix i = base + threadIdx.x;
+        const int i = base + threadIdx.x;
 
         if (i < interval_end)
         {

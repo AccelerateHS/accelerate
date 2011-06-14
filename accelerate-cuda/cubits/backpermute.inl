@@ -25,10 +25,10 @@ backpermute
     const DimIn0        shIn0
 )
 {
-    const Ix shapeSize = size(shOut);
-    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
+    const int shapeSize = size(shOut);
+    const int gridSize  = __umul24(blockDim.x, gridDim.x);
 
-    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
+    for (int ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
         DimOut dst = fromIndex(shOut, ix);
         DimIn0 src = project(dst);

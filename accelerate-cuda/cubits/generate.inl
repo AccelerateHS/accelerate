@@ -20,9 +20,9 @@ generate
     const DimOut        shOut
 )
 {
-    Ix       idx;
-    const Ix n        = size(shOut);
-    const Ix gridSize = __umul24(blockDim.x, gridDim.x);
+    int       idx;
+    const int n        = size(shOut);
+    const int gridSize = __umul24(blockDim.x, gridDim.x);
 
     for (idx = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; idx < n; idx += gridSize)
     {

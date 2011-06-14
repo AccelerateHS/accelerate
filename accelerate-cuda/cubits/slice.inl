@@ -20,10 +20,10 @@ slice
     const SliceDim      sliceDim
 )
 {
-    const Ix shapeSize = size(slice);
-    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
+    const int shapeSize = size(slice);
+    const int gridSize  = __umul24(blockDim.x, gridDim.x);
 
-    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
+    for (int ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
         Slice    dst = fromIndex(slice, ix);
         SliceDim src = sliceIndex(dst, slix);

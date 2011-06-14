@@ -83,7 +83,7 @@ mkFoldSeg (ty,dim) int identity apply = CUTranslSkel code [] skel
             [ mkTuplePartition "ArrOut" ty True
             , mkIdentity identity
             , mkApply 2 apply
-            , mkTypedef "Int" False False (head int)
+            , mkTypedef "ArrSeg" False True (head int)
             , mkDim "DimIn0" dim
             , mkDim "DimOut" dim ])
             (mkNodeInfo (initPos skel) (Name 0))
@@ -97,7 +97,7 @@ mkFold1Seg (ty,dim) int apply = CUTranslSkel code inc skel
             ( mkTupleTypeAsc 2 ty ++
             [ mkTuplePartition "ArrOut" ty True
             , mkApply 2 apply
-            , mkTypedef "Int" False False (head int)
+            , mkTypedef "ArrSeg" False True (head int)
             , mkDim "DimIn0" dim
             , mkDim "DimOut" dim ])
             (mkNodeInfo (initPos skel) (Name 0))

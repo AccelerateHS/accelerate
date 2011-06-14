@@ -21,11 +21,11 @@ reduce_warp_n
 (
     ArrOut      s_data,
     TyOut       sum,
-    Ix          n
+    int         n
 )
 {
-    const Ix tid  = threadIdx.x;
-    const Ix lane = threadIdx.x & (warpSize - 1);
+    const int tid  = threadIdx.x;
+    const int lane = threadIdx.x & (warpSize - 1);
 
     if (n > 16 && lane + 16 < n) { sum = apply(sum, get0(s_data, tid+16)); set(s_data, tid, sum); }
     if (n >  8 && lane +  8 < n) { sum = apply(sum, get0(s_data, tid+ 8)); set(s_data, tid, sum); }
@@ -45,10 +45,10 @@ reduce_block_n
 (
     ArrOut      s_data,
     TyOut       sum,
-    Ix          n
+    int         n
 )
 {
-    const Ix tid = threadIdx.x;
+    const int tid = threadIdx.x;
 
     if (n > 512) { if (tid < 512 && tid + 512 < n) { sum = apply(sum, get0(s_data, tid+512)); set(s_data, tid, sum); } __syncthreads(); }
     if (n > 256) { if (tid < 256 && tid + 256 < n) { sum = apply(sum, get0(s_data, tid+256)); set(s_data, tid, sum); } __syncthreads(); }

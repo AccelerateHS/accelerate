@@ -78,14 +78,14 @@ scan_intervals
     const Ix            interval_size
 )
 {
-    const Ix interval_begin = interval_size * blockIdx.x;
-    const Ix interval_end   = min(interval_begin + interval_size, N);
+    const int interval_begin = interval_size * blockIdx.x;
+    const int interval_end   = min(interval_begin + interval_size, N);
 
     TyOut val;
-    Ix output = REVERSE ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
+    int output = REVERSE ? interval_end - threadIdx.x - 1 : interval_begin + threadIdx.x;
 
     // process intervals
-    for(Ix base = interval_begin + threadIdx.x; base < interval_end; base += blockDim.x)
+    for(int base = interval_begin + threadIdx.x; base < interval_end; base += blockDim.x)
     {
         // read data
         val = get0(d_in0, output);

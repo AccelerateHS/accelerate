@@ -41,8 +41,8 @@ inclusive_update
     const Ix            interval_size
 )
 {
-    const Ix interval_begin = interval_size * blockIdx.x;
-    const Ix interval_end   = min(interval_begin + interval_size, N);
+    const int interval_begin = interval_size * blockIdx.x;
+    const int interval_end   = min(interval_begin + interval_size, N);
     TyOut sum;
 
     // ignore first block and get value to add to this segment
@@ -59,9 +59,9 @@ inclusive_update
 #endif
 
     // advance result iterator
-    for(Ix base = interval_begin; base < interval_end; base += blockDim.x)
+    for(int base = interval_begin; base < interval_end; base += blockDim.x)
     {
-        const Ix i = base + threadIdx.x;
+        const int i = base + threadIdx.x;
 
         if (i < interval_end)
         {

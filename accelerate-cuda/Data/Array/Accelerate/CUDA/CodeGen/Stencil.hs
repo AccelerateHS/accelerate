@@ -39,7 +39,7 @@ mkStencilGet base bndy ty =
 
     constant   = CBlockStmt $
       CIf (ccall "inRange" [cvar "sh", cvar "ix"])
-      (CCompound [] [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", cvar "ix"]) internalNode),Nothing)] internalNode)
+      (CCompound [] [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "int") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", cvar "ix"]) internalNode),Nothing)] internalNode)
                     , initA
                     , CBlockStmt (CReturn (Just (cvar "r")) internalNode) ]
                     internalNode)
@@ -47,7 +47,7 @@ mkStencilGet base bndy ty =
       internalNode
 
     boundary f =
-      [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "Ix") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", ccall f [cvar "sh", cvar "ix"]]) internalNode),Nothing)] internalNode)
+      [ CBlockDecl (CDecl [CTypeQual (CConstQual internalNode), CTypeSpec (CTypeDef (internalIdent "int") internalNode)] [(Just (CDeclr (Just (internalIdent "i")) [] Nothing [] internalNode),Just (CInitExpr (ccall "toIndex" [cvar "sh", ccall f [cvar "sh", cvar "ix"]]) internalNode),Nothing)] internalNode)
       , initA
       , CBlockStmt (CReturn (Just (CVar (internalIdent "r") internalNode)) internalNode)
       ]

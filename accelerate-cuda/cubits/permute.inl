@@ -27,17 +27,17 @@ permute
     const DimIn0        shIn0
 )
 {
-    const Ix shapeSize = size(shIn0);
-    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
+    const int shapeSize = size(shIn0);
+    const int gridSize  = __umul24(blockDim.x, gridDim.x);
 
-    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
+    for (int ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
         DimIn0 src = fromIndex(shIn0, ix);
         DimOut dst = project(src);
 
         if (!ignore(dst))
         {
-            Ix j = toIndex(shOut, dst);
+            int j = toIndex(shOut, dst);
             set(d_out, j, apply(get0(d_in0, ix), get0(d_out, j)));
         }
     }

@@ -33,9 +33,9 @@ fold
     /*
      * Calculate first level of reduction reading into shared memory
      */
-    const Ix    tid      = threadIdx.x;
-    const Ix    gridSize = blockDim.x * gridDim.x;
-          Ix    i        = blockIdx.x * blockDim.x + tid;
+    const int   tid      = threadIdx.x;
+    const int   gridSize = blockDim.x * gridDim.x;
+          int   i        = blockIdx.x * blockDim.x + tid;
           TyOut sum;
 
     /*
@@ -59,7 +59,7 @@ fold
     set(s_data, tid, sum);
     __syncthreads();
 
-    sum = reduce_block_n(s_data, sum, min(shape, blockDim.x));
+    sum = reduce_block_n(s_data, sum, min((int) shape, blockDim.x));
 
     /*
      * Write the results of this block back to global memory. If we are the last

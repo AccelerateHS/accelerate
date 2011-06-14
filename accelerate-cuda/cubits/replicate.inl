@@ -19,10 +19,10 @@ replicate
     const SliceDim      sliceDim
 )
 {
-    const Ix shapeSize = size(sliceDim);
-    const Ix gridSize  = __umul24(blockDim.x, gridDim.x);
+    const int shapeSize = size(sliceDim);
+    const int gridSize  = __umul24(blockDim.x, gridDim.x);
 
-    for (Ix ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
+    for (int ix = __umul24(blockDim.x, blockIdx.x) + threadIdx.x; ix < shapeSize; ix += gridSize)
     {
         SliceDim dst = fromIndex(sliceDim, ix);
         Slice    src = sliceIndex(dst);

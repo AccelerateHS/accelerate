@@ -28,22 +28,22 @@ fold
     extern volatile __shared__ void* s_ptr[];
     ArrOut s_data = partition(s_ptr, blockDim.x);
 
-    const Ix num_elements = indexHead(shIn0);
-    const Ix num_segments = size(shOut);
+    const int num_elements = indexHead(shIn0);
+    const int num_segments = size(shOut);
 
-    const Ix num_vectors  = blockDim.x / warpSize * gridDim.x;
-    const Ix thread_id    = blockDim.x * blockIdx.x + threadIdx.x;
-    const Ix vector_id    = thread_id / warpSize;
-    const Ix thread_lane  = threadIdx.x & (warpSize - 1);
+    const int num_vectors  = blockDim.x / warpSize * gridDim.x;
+    const int thread_id    = blockDim.x * blockIdx.x + threadIdx.x;
+    const int vector_id    = thread_id / warpSize;
+    const int thread_lane  = threadIdx.x & (warpSize - 1);
 
     /*
      * Each warp reduces elements along a projection through an innermost
      * dimension to a single value
      */
-    for (Ix seg = vector_id; seg < num_segments; seg += num_vectors)
+    for (int seg = vector_id; seg < num_segments; seg += num_vectors)
     {
-        const Ix    start = seg   * num_elements;
-        const Ix    end   = start + num_elements;
+        const int   start = seg   * num_elements;
+        const int   end   = start + num_elements;
               TyOut sum;
 
         if (num_elements > warpSize)
@@ -52,7 +52,7 @@ fold
              * Ensure aligned access to global memory, and that each thread
              * initialises its local sum.
              */
-            Ix i = start - (start & (warpSize - 1)) + thread_lane;
+            int i = start - (start & (warpSize - 1)) + thread_lane;
             if (i >= start)
                 sum = get0(d_in0, i);
 
@@ -80,7 +80,7 @@ fold
          * reduce the shared array to a single value.
          */
         set(s_data, threadIdx.x, sum);
-        sum = reduce_warp_n(s_data, sum, min(num_elements, warpSize));
+        sum = reduce_warp_n(s_data, sum, min((int) num_elements, warpSize));
 
         /*
          * Finally, the first thread writes the result for this segment
