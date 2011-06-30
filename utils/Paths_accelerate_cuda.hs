@@ -5,7 +5,8 @@
 module Paths_accelerate_cuda where
 
 import System.Directory
+import System.FilePath
 
 getDataDir :: IO FilePath
-getDataDir = getCurrentDirectory
+getDataDir = (</> "accelerate-cuda") `fmap` getCurrentDirectory
 
