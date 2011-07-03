@@ -1,8 +1,20 @@
 
-#ifndef NOT_ACCELERATE_MODULE
+#ifndef ACCELERATE_H
+#define ACCELERATE_H
 import qualified Data.Array.Accelerate.Internal.Check as Ck
-#endif
+import qualified Data.Array.Accelerate.Internal.Trace as T
 
+/*
+ * Tracing
+ */
+#define INFO  (T.message T.Loud   __FILE__ __LINE__)
+#define DEBUG (T.message T.Normal __FILE__ __LINE__)
+#define TRACE (T.trace   T.Normal __FILE__ __LINE__)
+
+
+/*
+ * Internal checks
+ */
 #define ERROR(f)  (Ck.f __FILE__ __LINE__)
 #define ASSERT (Ck.assert __FILE__ __LINE__)
 #define ENSURE (Ck.f __FILE__ __LINE__)
@@ -22,4 +34,6 @@ import qualified Data.Array.Accelerate.Internal.Check as Ck
 #define INTERNAL_ASSERT (ASSERT Ck.Internal)
 #define INTERNAL_ENSURE (ENSURE Ck.Internal)
 #define INTERNAL_CHECK(f) (CHECK(f) Ck.Internal)
+
+#endif
 

@@ -70,6 +70,10 @@ Extra-source-files:     configure
 --   Description:          Enable the persistent caching of the compiled CUDA modules (experimental)
 --   Default:              False
 
+Flag debug
+  Description:          Spew debugging output to stderr
+  Default:              False
+
 Flag bounds-checks
   Description:          Enable bounds checking
   Default:              True
@@ -118,10 +122,14 @@ Library
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
                         Data.Array.Accelerate.Internal.Check
+                        Data.Array.Accelerate.Internal.Trace
                         Paths_accelerate_cuda
 
 --  if flag(pcache)
 --    CPP-options:        -DACCELERATE_CUDA_PERSISTENT_CACHE
+
+  if flag(debug)
+    cpp-options:        -DACCELERATE_DEBUG
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS
@@ -133,6 +141,7 @@ Library
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
   ghc-options:          -O2 -Wall -funbox-strict-fields
+                        -fno-warn-unused-imports
 
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
