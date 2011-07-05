@@ -1,0 +1,2 @@
+To use the CUDA backend from within GHCi, copy the file 'dot_ghci' to '.ghci' 
+in the root directory of the accelerate-cuda source tree.

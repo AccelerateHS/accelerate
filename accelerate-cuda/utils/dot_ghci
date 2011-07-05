@@ -1,0 +1,4 @@
+:set -DACCELERATE_BOUNDS_CHECKS
+:set -DACCELERATE_INTERNAL_CHECKS
+:set -Iinclude
+:set -iutils
