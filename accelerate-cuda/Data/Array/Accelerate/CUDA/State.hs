@@ -35,7 +35,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict                       (StateT(..))
 import System.Posix.Types                               (ProcessID)
-import System.Mem.Weak
 import System.IO.Unsafe
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable                         as Hash
@@ -124,11 +123,6 @@ loadIndexFile = (,0) <$> Hash.new (==) hashAccKey
 -- This will be done only once per program execution, as initialising the CUDA
 -- context is relatively expensive.
 --
--- Would like to put the finaliser on the state token, since finalising the
--- context affects the various hash tables. However, this places the finaliser
--- on the CUDAState "box", and the box is removed by optimisations causing the
--- finaliser to fire prematurely.
---
 initialise :: IO CUDAState
 initialise = do
   CUDA.initialise []
@@ -136,7 +130,6 @@ initialise = do
   ctx     <- CUDA.create d [CUDA.SchedAuto]
   mem     <- newMT
   (knl,n) <- loadIndexFile
-  addFinalizer ctx (CUDA.destroy ctx)
   return $ CUDAState n prp ctx knl mem
 
 
@@ -149,7 +142,11 @@ runCUDA :: CIO a -> IO (a, CUDAState)
 runCUDA acc =
   let -- hic sunt dracones: truly unsafe use of unsafePerformIO
       {-# NOINLINE onta #-}
-      onta = unsafePerformIO (initialise >>= newIORef)
+      onta = unsafePerformIO
+           $ do s <- initialise
+                r <- newIORef s
+                _ <- mkWeakIORef r $ CUDA.destroy (getL deviceContext s)
+                return r
   in do
     (a,s) <- runStateT acc =<< readIORef onta
     saveIndexFile s
