@@ -704,7 +704,7 @@ applyArraysR
     -> ArraysR arrs
     -> arrs
     -> CIO ()
-applyArraysR _  ArraysRunit         ()       = return ()
-applyArraysR go (ArraysRpair r1 r0) (a1, a0) = applyArraysR go r1 a1 >> applyArraysR go r0 a0
-applyArraysR go ArraysRarray        arr      = go arr
+applyArraysR _ ArraysRunit         ()       = return ()
+applyArraysR f (ArraysRpair r1 r0) (a1, a0) = applyArraysR f r1 a1 >> applyArraysR f r0 a0
+applyArraysR f ArraysRarray        arr      = f arr
 

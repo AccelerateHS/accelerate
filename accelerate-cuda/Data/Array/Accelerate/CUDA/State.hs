@@ -26,7 +26,7 @@ module Data.Array.Accelerate.CUDA.State (
 -- friends
 import Data.Array.Accelerate.CUDA.Analysis.Device
 import Data.Array.Accelerate.CUDA.Analysis.Hash
-import Data.Array.Accelerate.CUDA.Array.Prim
+import Data.Array.Accelerate.CUDA.Array.Table
 
 -- library
 import Data.IORef
@@ -128,7 +128,7 @@ initialise = do
   CUDA.initialise []
   (d,prp) <- selectBestDevice
   ctx     <- CUDA.create d [CUDA.SchedAuto]
-  mem     <- newMT
+  mem     <- new
   (knl,n) <- loadIndexFile
   return $ CUDAState n prp ctx knl mem
 

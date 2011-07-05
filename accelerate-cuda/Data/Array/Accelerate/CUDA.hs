@@ -79,7 +79,7 @@ stream f arrs = map (run1 f) arrs
 -- should result in all transient arrays having been removed from the device.
 --
 collect :: Arrays arrs => arrs -> CIO arrs
-collect arrs = collectR arrays arrs <* liftIO performGC
+collect arrs = collectR arrays arrs <* cleanupArrayData
   where
     collectR :: ArraysR arrs -> arrs -> CIO arrs
     collectR ArraysRunit         ()             = return ()
