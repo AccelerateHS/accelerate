@@ -50,7 +50,7 @@ import System.Posix.Types                               (ProcessID)
 import System.Posix.Process
 import Text.PrettyPrint
 import Foreign.Storable
-import qualified Data.HashTable                         as Hash
+import qualified Data.HashTable.IO                      as Hash
 import qualified Foreign.CUDA.Driver                    as CUDA
 
 import Paths_accelerate_cuda                            (getDataDir)

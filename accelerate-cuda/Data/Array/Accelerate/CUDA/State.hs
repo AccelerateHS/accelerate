@@ -16,10 +16,12 @@
 
 module Data.Array.Accelerate.CUDA.State (
 
-  evalCUDA, runCUDA, CIO,
-  CUDAState, unique, deviceProps, deviceContext, memoryTable, kernelTable,
+  -- Types
+  CIO, KernelTable, KernelEntry(KernelEntry),
 
-  KernelTable, KernelEntry(KernelEntry), kernelName, kernelStatus
+  -- Evaluating computations
+  evalCUDA, unique, deviceProps, memoryTable, kernelTable, kernelName,
+  kernelStatus
 
 ) where
 
@@ -29,15 +31,15 @@ import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Array.Table
 
 -- library
-import Data.IORef
+import Data.Tuple
 import Data.Record.Label
-import Control.Applicative
+import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.State.Strict                       (StateT(..))
 import System.Posix.Types                               (ProcessID)
 import System.IO.Unsafe
 import qualified Foreign.CUDA.Driver                    as CUDA
-import qualified Data.HashTable                         as Hash
+import qualified Data.HashTable.IO                      as Hash
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
 import Data.Binary                                      (encodeFile, decodeFile)
@@ -48,13 +50,15 @@ import Paths_accelerate                                 (getDataDir)
 
 -- An exact association between an accelerate computation and its
 -- implementation, which is either a reference to the external compiler (nvcc)
--- or the resulting binary module. This is keyed by a string representation of
+-- or the resulting binary module.
+--
+-- We aren't concerned with true (typed) equality of an OpenAcc expression,
+-- since we largely want to disregard the array environment; we really only want
+-- to assert the type and index of those variables that are accessed by the
+-- computation and no more, but we can not do that. Instead, this is keyed to
 -- the generated kernel code.
 --
--- An Eq instance of Accelerate expressions does not facilitate persistent
--- caching.
---
-type KernelTable = Hash.HashTable AccKey KernelEntry
+type KernelTable = Hash.BasicHashTable AccKey KernelEntry
 data KernelEntry = KernelEntry
   {
     _kernelName   :: FilePath,
@@ -63,8 +67,6 @@ data KernelEntry = KernelEntry
 
 
 -- The state token for accelerated CUDA array operations
---
--- TLM: the memory table is not persistent between computations. Move elsewhere?
 --
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
@@ -82,41 +84,18 @@ $(mkLabels [''CUDAState, ''KernelEntry])
 -- Execution State
 -- ---------------
 
-#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-indexFileName :: IO FilePath
-indexFileName = do
-  tmp <- (</> "cache") `fmap` getDataDir
-  dir <- createDirectoryIfMissing True tmp >> canonicalizePath tmp
-  return (dir </> "_index")
-#endif
-
--- Store the kernel module map to file
+-- |Evaluate a CUDA array computation
 --
-saveIndexFile :: CUDAState -> IO ()
-#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-saveIndexFile s = do
-  ind <- indexFileName
-  encodeFile ind . map (second _kernelName) =<< Hash.toList (_kernelTable s)
-#else
-saveIndexFile _ = return ()
-#endif
-
--- Read the kernel index map file (if it exists), loading modules into the
--- current context
---
-loadIndexFile :: IO (KernelTable, Int)
-#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-loadIndexFile = do
-  f <- indexFileName
-  x <- doesFileExist f
-  e <- if x then mapM reload =<< decodeFile f
-            else return []
-  (,length e) <$> Hash.fromList hashAccKey e
+evalCUDA :: CIO a -> IO a
+evalCUDA acc = modifyMVar onta (liftM swap . runStateT acc)
   where
-    reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
-#else
-loadIndexFile = (,0) <$> Hash.new (==) hashAccKey
-#endif
+    -- hic sunt dracones: truly unsafe use of unsafePerformIO
+    {-# NOINLINE onta #-}
+    onta = unsafePerformIO
+         $ do s <- initialise
+              r <- newMVar s
+              addMVarFinalizer r $ CUDA.destroy (getL deviceContext s)
+              return r
 
 
 -- Select and initialise the CUDA device, and create a new execution context.
@@ -128,28 +107,39 @@ initialise = do
   CUDA.initialise []
   (d,prp) <- selectBestDevice
   ctx     <- CUDA.create d [CUDA.SchedAuto]
+  knl     <- Hash.new
   mem     <- new
-  (knl,n) <- loadIndexFile
-  return $ CUDAState n prp ctx knl mem
+  return $ CUDAState 0 prp ctx knl mem
 
 
--- | Evaluate a CUDA array computation under the standard global environment
+-- Persistent caching (deprecated)
+-- -------------------------------
+
+#ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
+-- Load and save the persistent kernel index file
 --
-evalCUDA :: CIO a -> IO a
-evalCUDA = liftM fst . runCUDA
+indexFileName :: IO FilePath
+indexFileName = do
+  tmp <- (</> "cache") `fmap` getDataDir
+  dir <- createDirectoryIfMissing True tmp >> canonicalizePath tmp
+  return (dir </> "_index")
 
-runCUDA :: CIO a -> IO (a, CUDAState)
-runCUDA acc =
-  let -- hic sunt dracones: truly unsafe use of unsafePerformIO
-      {-# NOINLINE onta #-}
-      onta = unsafePerformIO
-           $ do s <- initialise
-                r <- newIORef s
-                _ <- mkWeakIORef r $ CUDA.destroy (getL deviceContext s)
-                return r
-  in do
-    (a,s) <- runStateT acc =<< readIORef onta
-    saveIndexFile s
-    writeIORef onta s
-    return (a,s)
+saveIndexFile :: CUDAState -> IO ()
+saveIndexFile s = do
+  ind <- indexFileName
+  encodeFile ind . map (second _kernelName) =<< Hash.toList (_kernelTable s)
+
+-- Read the kernel index map file (if it exists), loading modules into the
+-- current context
+--
+loadIndexFile :: IO (KernelTable, Int)
+loadIndexFile = do
+  f <- indexFileName
+  x <- doesFileExist f
+  e <- if x then mapM reload =<< decodeFile f
+            else return []
+  (,length e) <$> Hash.fromList hashAccKey e
+  where
+    reload (k,n) = (k,) . KernelEntry n . Right <$> CUDA.loadFile (n `replaceExtension` ".cubin")
+#endif
 
