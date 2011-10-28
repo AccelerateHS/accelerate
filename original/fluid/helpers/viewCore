@@ -1,0 +1,5 @@
+touch src/Density.hs ; ghc -O2 -isrc --make src/Main.hs -ddump-simpl -dsuppress-module-prefixes -dsuppress-coercions | less
+
+
+
+touch src/Stages.hs ; ghc -isrc -O1 --make src/Main.hs -ddump-simpl -dsuppress-all -dsuppress-uniques -dsuppress-type-applications -dppr-cols200 -dppr-case-as-let -dsuppress-coercions -dsuppress-module-prefixes -dsuppress-type-signatures > dump

@@ -1,0 +1,24 @@
+Name:                accelerate-fluid
+Version:             0.1.0.0
+Synopsis:            A fluid simulation written in Accelerate
+Description:         A fluid simulation written in Accelerate
+License:             BSD3
+License-file:        LICENSE
+Author:              Ben Lambert-Smith and Trevor L. McDonell
+Maintainer:          Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+
+Category:            Game
+Build-type:          Simple
+Cabal-version:       >=1.6
+
+
+Executable accelerate-fluid
+  Main-is:              Main.hs
+  hs-source-dirs:       src
+  ghc-options:          -O2 -Wall
+
+  Build-depends:        accelerate      == 0.9.*,
+                        base            == 4.*,
+                        cmdargs         == 0.8.*,
+                        gloss           == 1.5.*
+
