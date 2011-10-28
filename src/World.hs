@@ -2,11 +2,10 @@
 -- Displaying the world state
 --
 
-module World where
+module World (World(..), initialWorld, renderWorld) where
 
+import Type
 import Config
-import Field
-
 import Data.Array.Accelerate
 import Graphics.Gloss.Interface.Game    hiding ( Point )
 

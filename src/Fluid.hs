@@ -2,12 +2,21 @@
 -- Fluid simulation
 --
 
-module Fluid where
+module Fluid (simulate) where
 
-import           Field
+import           Type
 import           World
 import           Data.Array.Accelerate          ( Z(..), (:.)(..), Acc, Exp )
 import qualified Data.Array.Accelerate          as A
+
+
+-- A simulation step
+--
+simulate :: Viscosity -> Diffusion -> Timestep -> World -> World
+simulate dp dn dt world = world { densityField = df', velocityField = vf' }
+  where
+    vf' = velocity dt dp $ world
+    df' = density  dt dn $ world { velocityField = vf' }
 
 
 -- The velocity over a timestep evolves due to three causes:
@@ -15,13 +24,36 @@ import qualified Data.Array.Accelerate          as A
 --   2. viscous diffusion
 --   3. self-advection
 --
-velocity :: World -> VelocityField
-velocity = error "TODO: velocity"
+velocity :: Timestep -> Viscosity -> World -> Acc VelocityField
+velocity dt dp world
+  = project
+  . advect dt ix vf0
+  . project
+  $ diffuse dt dp vf0 vf
+  where
+    ix  = indexField world
+    vf  = velocityField world
+    vf0 = inject (velocitySource world) vf
 
 
--- Ensure the velocity field conserves mass.
+-- Ensure the velocity field conserves mass
 --
---project = error "TODO: project"
+project :: Acc VelocityField -> Acc VelocityField
+project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
+  where
+    steps   = 20
+    grad    = A.stencil divF A.Mirror vf
+    p1      = A.stencil2 pF (A.Constant 0) grad A.Mirror
+    p       = foldl1 (.) (replicate steps p1) grad
+
+    poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
+    poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, t-b)
+
+    divF :: A.Stencil3x3 Velocity -> Exp Float
+    divF ((_,t,_), (l,_,r), (_,b,_)) = -0.5 * (A.fst r - A.fst l + A.snd t - A.snd b)
+
+    pF :: A.Stencil3x3 Float -> A.Stencil3x3 Float -> Exp Float
+    pF (_,(_,x,_),_) ((_,t,_), (l,_,r), (_,b,_)) = 0.25 * (x + l + t + r + b)
 
 
 
@@ -31,17 +63,18 @@ velocity = error "TODO: velocity"
 --   3. motion through the velocity field
 --
 density :: Timestep -> Diffusion -> World -> Acc DensityField
-density dt dn world = advect  dt ix vf
-                    $ diffuse dt dn (inject (densitySource world) df) df
+density dt dn world
+  = advect  dt ix vf
+  $ diffuse dt dn (inject (densitySource world) df) df
   where
     ix  = indexField world
     vf  = velocityField world
     df  = densityField world
 
 
--- Inject sources into the density field
+-- Inject sources into the field
 --
-inject :: [(Point, Density)] -> Acc DensityField -> Acc DensityField
+inject :: FieldElt e => [(Point, e)] -> Acc (Field e) -> Acc (Field e)
 inject []  df = df
 inject src df =
   let n     = length src
@@ -49,31 +82,31 @@ inject src df =
       is    = A.use $ A.fromList (Z:.n) i
       ps    = A.use $ A.fromList (Z:.n) d
   in
-  A.permute (+) df (is A.!) ps
+  A.permute (.+.) df (is A.!) ps
 
 
-diffuse :: Timestep -> Diffusion -> Acc DensityField -> Acc DensityField -> Acc DensityField
+diffuse :: FieldElt e
+        => Timestep -> Diffusion -> Acc (Field e) -> Acc (Field e) -> Acc (Field e)
 diffuse dt dn df0 = foldl1 (.) (replicate steps diffuse1)
   where
     steps = 20
     a     = A.constant (dt * dn) * (A.fromIntegral (A.size df0))
     c     = 1 + 4*a
 
-    diffuse1 :: Acc DensityField -> Acc DensityField
-    diffuse1 df = A.stencil2 relax (A.Constant 0) df0 A.Mirror df
+    diffuse1 df = A.stencil2 relax (A.Constant zero) df0 A.Mirror df
 
-    relax :: A.Stencil3x3 Density -> A.Stencil3x3 Density -> Exp Density
-    relax (_,(_,x0,_),_) ((_,t,_), (l,_,r), (_,b,_)) = (x0 + a * (l+t+r+b)) / c
+    relax :: FieldElt e => A.Stencil3x3 e -> A.Stencil3x3 e -> Exp e
+    relax (_,(_,x0,_),_) ((_,t,_), (l,_,r), (_,b,_)) = (x0 .+. a .*. (l.+.t.+.r.+.b)) ./. c
 
 
-advect :: Timestep -> Acc IndexField -> Acc VelocityField -> Acc DensityField -> Acc DensityField
+advect :: FieldElt e
+       => Timestep -> Acc IndexField -> Acc VelocityField -> Acc (Field e) -> Acc (Field e)
 advect dt ixf vf df = imap backtrace vf
   where
     Z:.h:.w = A.unlift $ A.shape vf
     imap f  = A.zipWith f ixf
 
-    backtrace :: Exp Point -> Exp Velocity -> Exp Density
-    backtrace ix vu = s0*(t0*d00 + t1*d10) + s1*(t0*d01 + t1*d11)
+    backtrace ix vu = s0.*.(t0.*.d00 .+. t1.*.d10) .+. s1.*.(t0.*.d01 .+. t1.*.d11)
       where
         Z:.j:.i = A.unlift ix
         (v,u)   = A.unlift vu
