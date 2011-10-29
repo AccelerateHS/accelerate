@@ -13,7 +13,8 @@ import qualified Data.Array.Accelerate          as A
 -- A simulation step
 --
 simulate :: Viscosity -> Diffusion -> Timestep -> World -> World
-simulate dp dn dt world = world { densityField = df', velocityField = vf' }
+simulate dp dn dt world = world { densityField  = df', densitySource  = []
+                                , velocityField = vf', velocitySource = [] }
   where
     vf' = velocity dt dp $ world
     df' = density  dt dn $ world { velocityField = vf' }
