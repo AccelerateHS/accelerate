@@ -1,13 +1,27 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE CPP, DeriveDataTypeable #-}
 --
 -- Configuration parameters
 --
 
-module Config (Config(..), processArgs) where
+module Config (Config(..), run, processArgs) where
 
-import Data.Version
-import System.Console.CmdArgs
-import Paths_accelerate_fluid
+import           Data.Version
+import           System.Console.CmdArgs
+import           Paths_accelerate_fluid
+import           Data.Array.Accelerate                  (Acc, Arrays)
+
+import qualified Data.Array.Accelerate.Interpreter      as I
+#ifdef ACCELERATE_CUDA_BACKEND
+import qualified Data.Array.Accelerate.CUDA             as CUDA
+#endif
+
+data Backend
+  = Interpreter
+#ifdef ACCELERATE_CUDA_BACKEND
+  | CUDA
+#endif
+  deriving (Show, Data, Typeable)
+
 
 data Config = Config
   {
@@ -21,17 +35,42 @@ data Config = Config
     -- visualisation
     , displayScale     :: Int
     , displayFramerate :: Int
+
+    -- execution
+    , backend          :: Backend
   }
   deriving (Show, Data, Typeable)
 
+
+-- Execute an Accelerate expression using the selected backend
+--
+run :: Arrays a => Config -> Acc a -> a
+run cfg = case backend cfg of
+  Interpreter   -> I.run
+#ifdef ACCELERATE_CUDA_BACKEND
+  CUDA          -> CUDA.run
+#endif
+
+-- Process command line arguments
+--
 processArgs :: IO Config
-processArgs =
-  cmdArgs defaultConfig
+processArgs =  cmdArgs defaultConfig
 
 defaultConfig :: Config
 defaultConfig =  Config
   {
-    timestep = 0.5
+    backend = enum
+    [ Interpreter
+        &= help "Reference implementation (sequential)"
+#ifdef ACCELERATE_CUDA_BACKEND
+    , CUDA
+        &= explicit
+        &= name "cuda"
+        &= help "Implementation for NVIDIA GPUs (parallel)"
+#endif
+    ]
+
+  , timestep = 0.5
       &= explicit
       &= name "t"
       &= name "timestep"
@@ -79,10 +118,9 @@ defaultConfig =  Config
       &= name "framerate"
       &= help "frame rate for visualisation"
       &= typ "INT"
-
   }
   &= program "accelerate-fluid"
-  &= summary "accelerate-fluid (c) 2011 Ben Lambert-Smith & Trevor L. McDonell"
+  &= summary "accelerate-fluid (c) 2011 Trevor L. McDonell"
   &= versionArg [summary $ "accelerate-fluid-" ++ showVersion version]
   &= verbosityArgs
        [explicit, name "verbose", help "Print more output"]
