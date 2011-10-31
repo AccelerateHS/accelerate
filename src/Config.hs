@@ -110,7 +110,7 @@ defaultConfig =  Config
       &= name "s"
       &= name "scale"
       &= help "feature size of visualisation"
-      &= typ "FLOAT"
+      &= typ "INT"
 
   , displayFramerate = 10
       &= explicit

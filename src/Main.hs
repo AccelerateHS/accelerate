@@ -18,6 +18,8 @@ main = do
   let width  = simulationWidth  cfg * displayScale cfg
       height = simulationHeight cfg * displayScale cfg
       fps    = displayFramerate cfg
+      dp     = viscosity cfg
+      dn     = diffusion cfg
   gameInWindow
     "accelerate-fluid"
     (width, height)
@@ -27,5 +29,5 @@ main = do
     (initialWorld cfg)          -- initial state of the simulation
     (renderWorld cfg)           -- render world state into a picture
     (\_ w -> w)                 -- handle user events
-    (\_ w -> w)                 -- one step of the simulation
+    (simulate cfg dp dn)        -- one step of the simulation
 

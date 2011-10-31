@@ -4,23 +4,26 @@
 --
 
 module Type (
-  Timestep, Viscosity, Diffusion, Point, Density, Velocity,
-  Field, FieldElt(..), DensityField, VelocityField, IndexField
+  Timestep, Viscosity, Diffusion, Index, Density, Velocity,
+  Field, FieldElt(..), DensityField, VelocityField, IndexField,
+  ImageRGBA
 ) where
 
+import Data.Word
 import Data.Array.Accelerate
 
 type Timestep      = Float
 type Viscosity     = Float
 type Diffusion     = Float
-type Point         = DIM2
+type Index         = DIM2
 type Density       = Float
 type Velocity      = (Float, Float)
 
 type Field a       = Array DIM2 a
 type DensityField  = Field Density
 type VelocityField = Field Velocity
-type IndexField    = Field Point
+type IndexField    = Field Index
+type ImageRGBA     = Field Word32
 
 
 infixl 6 .+.

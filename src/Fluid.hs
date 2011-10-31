@@ -6,18 +6,22 @@ module Fluid (simulate) where
 
 import           Type
 import           World
+import           Config
 import           Data.Array.Accelerate          ( Z(..), (:.)(..), Acc, Exp )
 import qualified Data.Array.Accelerate          as A
 
 
 -- A simulation step
 --
-simulate :: Viscosity -> Diffusion -> Timestep -> World -> World
-simulate dp dn dt world = world { densityField  = df', densitySource  = []
-                                , velocityField = vf', velocitySource = [] }
+simulate :: Config -> Viscosity -> Diffusion -> Timestep -> World -> World
+simulate cfg dp dn dt world =
+  world { densityField  = df', densitySource  = []
+        , velocityField = vf', velocitySource = []
+        }
   where
-    vf' = velocity dt dp $ world
-    df' = density  dt dn $ world { velocityField = vf' }
+    vf          = velocity world dt dp    $ A.use (velocityField world)
+    df          = density  world dt dn vf $ A.use (densityField world)
+    (vf', df')  = run cfg (A.pairA vf df)
 
 
 -- The velocity over a timestep evolves due to three causes:
@@ -25,15 +29,14 @@ simulate dp dn dt world = world { densityField  = df', densitySource  = []
 --   2. viscous diffusion
 --   3. self-advection
 --
-velocity :: Timestep -> Viscosity -> World -> Acc VelocityField
-velocity dt dp world
+velocity :: World -> Timestep -> Viscosity -> Acc VelocityField -> Acc VelocityField
+velocity world dt dp vf
   = project
   . advect dt ix vf0
   . project
   $ diffuse dt dp vf0 vf
   where
     ix  = indexField world
-    vf  = velocityField world
     vf0 = inject (velocitySource world) vf
 
 
@@ -63,19 +66,22 @@ project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
 --   2. self-diffusion
 --   3. motion through the velocity field
 --
-density :: Timestep -> Diffusion -> World -> Acc DensityField
-density dt dn world
+density :: World
+        -> Timestep
+        -> Diffusion
+        -> Acc VelocityField
+        -> Acc DensityField
+        -> Acc DensityField
+density world dt dn vf df
   = advect  dt ix vf
   $ diffuse dt dn (inject (densitySource world) df) df
   where
     ix  = indexField world
-    vf  = velocityField world
-    df  = densityField world
 
 
 -- Inject sources into the field
 --
-inject :: FieldElt e => [(Point, e)] -> Acc (Field e) -> Acc (Field e)
+inject :: FieldElt e => [(Index, e)] -> Acc (Field e) -> Acc (Field e)
 inject []  df = df
 inject src df =
   let n     = length src
