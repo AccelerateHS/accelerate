@@ -9,6 +9,7 @@ module Main where
 import Config
 import World
 import Fluid
+import Event
 import Graphics.Gloss.Interface.Game
 
 
@@ -28,6 +29,6 @@ main = do
     fps                         -- display framerate
     (initialWorld cfg)          -- initial state of the simulation
     (renderWorld cfg)           -- render world state into a picture
-    (\_ w -> w)                 -- handle user events
+    (react cfg)                 -- handle user events
     (simulate cfg dp dn)        -- one step of the simulation
 
