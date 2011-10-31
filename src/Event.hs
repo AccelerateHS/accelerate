@@ -14,7 +14,7 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- Event locations are returned as window coordinates, where the origin is in
 -- the centre of the window and increases to the right and up. If the simulation
 -- size is (100,100) with scale factor of 4, then the event coordinates are
--- returned in the range [-200,199].
+-- returned in the range [-200,200].
 --
 react :: Config -> Event -> World -> World
 react cfg event world =
@@ -53,8 +53,11 @@ react cfg event world =
                                       v = fromIntegral (y1-y0)
                                   in  (Z:.y0:.x0, (u,v)) : velocitySource world
     --
-    zoom        = displayScale cfg
-    hw          = simulationWidth  cfg `div` 2
-    hh          = simulationHeight cfg `div` 2
-    coord (u,v) = ((truncate u + hw) `div` zoom, (truncate v + hh) `div` zoom)
+    zoom        = fromIntegral $ displayScale cfg
+    width       = fromIntegral $ simulationWidth  cfg
+    height      = fromIntegral $ simulationHeight cfg
+    scaleX      = width  / (width  * zoom + 1)
+    scaleY      = height / (height * zoom + 1)
+    coord (u,v) = (truncate $ u * scaleX + width /2
+                  ,truncate $ v * scaleY + height/2)
 
