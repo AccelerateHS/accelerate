@@ -12,10 +12,18 @@ Build-type:          Simple
 Cabal-version:       >=1.6
 
 
+Flag cuda
+  Description:          Enable CUDA backend
+  Default:              False
+
 Executable accelerate-fluid
   Main-is:              Main.hs
   hs-source-dirs:       src
-  ghc-options:          -O2 -Wall
+  ghc-options:          -O2 -Wall -rtsopts
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda == 0.9.*
 
   Build-depends:        accelerate      == 0.9.*,
                         base            == 4.*,
