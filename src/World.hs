@@ -3,10 +3,7 @@
 -- Displaying the world state
 --
 
-module World (
-  World(..),
-  initialWorld, renderWorld, renderDensity
-) where
+module World (World(..), initialise, render) where
 
 import           Type
 import           Config
@@ -37,8 +34,8 @@ data World = World
   , currentButton  :: Maybe (MouseButton, (Int,Int))
   }
 
-initialWorld :: Config -> World
-initialWorld cfg =
+initialise :: Config -> World
+initialise cfg =
   let w = simulationWidth  cfg
       h = simulationHeight cfg
   in
@@ -51,8 +48,8 @@ initialWorld cfg =
     , currentButton  = Nothing
     }
 
-renderWorld :: Config -> World -> Picture
-renderWorld cfg world = Scale zoom zoom pic
+render :: Config -> World -> Picture
+render cfg world = Scale zoom zoom pic
   where
     zoom = fromIntegral  $ displayScale cfg
     pic  = Pictures [ renderDensity  $ densityField  world

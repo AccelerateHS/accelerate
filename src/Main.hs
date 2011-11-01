@@ -27,8 +27,8 @@ main = do
     (10, 20)                    -- initial position
     black                       -- background colour
     fps                         -- display framerate
-    (initialWorld cfg)          -- initial state of the simulation
-    (renderWorld cfg)           -- render world state into a picture
+    (initialise cfg)            -- initial state of the simulation
+    (render cfg)                -- render world state into a picture
     (react cfg)                 -- handle user events
     (simulate cfg dp dn)        -- one step of the simulation
 
