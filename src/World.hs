@@ -55,7 +55,8 @@ renderWorld :: Config -> World -> Picture
 renderWorld cfg world = Scale zoom zoom pic
   where
     zoom = fromIntegral  $ displayScale cfg
-    pic  = renderDensity $ densityField world
+    pic  = Pictures [ renderDensity  $ densityField  world
+                    , renderVelocity $ velocityField world ]
 
 
 {-# NOINLINE renderDensity #-}
@@ -79,6 +80,19 @@ renderDensity df@(Array _ ad) = unsafePerformIO $ do
                                    pokeByteOff d 2 c            -- G
                                    pokeByteOff d 3 c            -- R
                                    fill (i+1) (plusPtr s 4) (plusPtr d 4)
+
+
+renderVelocity :: VelocityField -> Picture
+renderVelocity vf
+  = Translate (fromIntegral $ -w `div` 2) (fromIntegral $ -h `div` 2)
+  $ Pictures [ field (x,y) | y <- [2,7..h], x <- [2,7..w] ]
+  where
+    Z:.h:.w       = A.arrayShape vf
+    field (x0,y0) =
+      let x     = fromIntegral x0
+          y     = fromIntegral y0
+          (u,v) = A.indexArray vf (Z:.y0:.x0)
+      in  Color red $ Line [ (x,y), (x+u, y+v) ]
 
 
 -- Float to Word8 conversion because the one in the GHC libraries doesn't have
