@@ -74,11 +74,11 @@ renderDensity df@(Array _ ad) = unsafePerformIO $ do
 
     fill !i !s !d | i >= n    = return ()
                   | otherwise = do c <- colour `fmap` peek s
-                                   poke        d   c                -- R
-                                   pokeByteOff d 1 c                -- G
-                                   pokeByteOff d 2 c                -- B
-                                   pokeByteOff d 3 (0xFF :: Word8)  -- A
-                                   fill (i+1) (plusPtr s 1) (plusPtr d 4)
+                                   poke        d   0xFF         -- A
+                                   pokeByteOff d 1 c            -- B
+                                   pokeByteOff d 2 c            -- G
+                                   pokeByteOff d 3 c            -- R
+                                   fill (i+1) (plusPtr s 4) (plusPtr d 4)
 
 
 -- Float to Word8 conversion because the one in the GHC libraries doesn't have
