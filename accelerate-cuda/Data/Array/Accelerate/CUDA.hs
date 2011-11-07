@@ -22,8 +22,7 @@ module Data.Array.Accelerate.CUDA (
 import Prelude hiding (catch)
 import Control.Exception
 import Control.Applicative
-import Control.Monad.Trans
-import System.Mem
+import Control.Concurrent
 import System.IO.Unsafe
 import Foreign.CUDA.Driver.Error
 
@@ -45,7 +44,7 @@ import Data.Array.Accelerate.CUDA.Execute
 --
 run :: Arrays a => Acc a -> a
 {-# NOINLINE run #-}
-run a = unsafePerformIO $ execute
+run a = unsafePerformIO $ async execute >>= wait
   where
     acc     = convertAcc a
     execute = evalCUDA (compileAcc acc >>= executeAcc >>= collect)
@@ -60,7 +59,7 @@ run a = unsafePerformIO $ execute
 --
 run1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> a -> b
 {-# NOINLINE run1 #-}
-run1 f a = unsafePerformIO $ execute =<< evalCUDA (compileAfun1 acc)
+run1 f a = unsafePerformIO $ wait =<< async . execute =<< evalCUDA (compileAfun1 acc)
   where
     acc          = convertAccFun1 f
     execute afun = evalCUDA (executeAfun1 afun a >>= collect)
@@ -79,11 +78,36 @@ stream f arrs = map (run1 f) arrs
 -- should result in all transient arrays having been removed from the device.
 --
 collect :: Arrays arrs => arrs -> CIO arrs
-collect arrs = collectR arrays arrs <* cleanupArrayData
+collect arrs = collectR arrays arrs
   where
     collectR :: ArraysR arrs -> arrs -> CIO arrs
     collectR ArraysRunit         ()             = return ()
     collectR ArraysRarray        arr            = peekArray arr >> return arr
     collectR (ArraysRpair r1 r2) (arrs1, arrs2) = (,) <$> collectR r1 arrs1
                                                       <*> collectR r2 arrs2
+
+
+-- Running asynchronously
+-- ----------------------
+--
+-- We need to execute the main thread asynchronously to give finalisers a chance
+-- to run. Make sure to catch exceptions to avoid "blocked indefinitely on MVar"
+-- errors.
+--
+
+data Async a = Async ThreadId (MVar (Either SomeException a))
+
+async :: IO a -> IO (Async a)
+async action = do
+   var <- newEmptyMVar
+   tid <- forkIO $ (putMVar var . Right =<< action)
+                   `catch`
+                   \e -> putMVar var (Left e)
+   return (Async tid var)
+
+wait :: Async a -> IO a
+wait (Async _ var) = either throwIO return =<< readMVar var
+
+-- cancel :: Async a -> IO ()
+-- cancel (Async tid _) = throwTo tid ThreadKilled
 
