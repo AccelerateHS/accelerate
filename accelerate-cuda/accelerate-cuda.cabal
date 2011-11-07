@@ -141,7 +141,8 @@ Library
   if flag(internal-checks)
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
-  ghc-options:          -O2 -Wall -funbox-strict-fields
+  ghc-options:          -O2 -Wall -fwarn-tabs
+                        -funbox-strict-fields
                         -fno-warn-unused-imports
 
   if impl(ghc >= 7.0)

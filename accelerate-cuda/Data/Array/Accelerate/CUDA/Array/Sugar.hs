@@ -17,8 +17,8 @@ module Data.Array.Accelerate.CUDA.Array.Sugar (
 
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Array.Data
-import Data.Array.Accelerate.Array.Sugar		hiding (newArray, allocateArray)
-import qualified Data.Array.Accelerate.Array.Sugar	as Sugar
+import Data.Array.Accelerate.Array.Sugar                hiding (newArray, allocateArray)
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 -- Create an array from its representation function, uploading the result to the
