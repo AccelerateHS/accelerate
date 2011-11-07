@@ -243,7 +243,7 @@ scanlSeg f e arr seg = scans
     zerosArr  = generate (shape arr) (const 0)
     zerosArr' = generate nSh (const 0)
 
--- |Segmented version of 'scanl\''.
+-- |Segmented version of 'scanl''.
 --
 -- The first element of the resulting tuple is a vector of scanned values. The
 -- second element is a vector of segment scan totals and has the same size as
@@ -346,7 +346,7 @@ scanrSeg f e arr seg = scans
     zerosArr  = generate (shape arr) (const 0)
     zerosArr' = generate nSh (const 0)
 
--- |Segmented version of 'scanrSeg\''.
+-- |Segmented version of 'scanrSeg''.
 --
 scanrSeg' :: Elt a
             => (Exp a -> Exp a -> Exp a)

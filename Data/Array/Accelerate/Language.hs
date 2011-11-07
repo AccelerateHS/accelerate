@@ -14,7 +14,7 @@
 -- bit manipulation) to reify such expressions.  With non-overloaded
 -- operations (such as, the logical connectives) and partially overloaded
 -- operations (such as comparisons), we use the standard operator names with a
--- '*' attached.  We keep the standard alphanumeric names as they can be
+-- \'*\' attached.  We keep the standard alphanumeric names as they can be
 -- easily qualified.
 --
 
@@ -297,7 +297,7 @@ scanl' :: Elt a
        -> (Acc (Vector a), Acc (Scalar a))
 scanl' = unpair . Acc $$$ Scanl'
 
--- |'Data.List' style left-to-right scan without an intial value (aka inclusive scan).  Again, the
+-- |'Data.List' style left-to-right scan without an initial value (aka inclusive scan).  Again, the
 -- first argument needs to be an /associative/ function.  Denotationally, we have
 --
 -- > scanl1 f e arr = crop 1 len res
@@ -320,7 +320,7 @@ scanr :: Elt a
       -> Acc (Vector a)
 scanr = Acc $$$ Scanr
 
--- |Right-to-left variant of 'scanl\''. 
+-- |Right-to-left variant of 'scanl''.
 --
 scanr' :: Elt a
        => (Exp a -> Exp a -> Exp a)
@@ -435,7 +435,7 @@ stencil2 = Acc $$$$$ Stencil2
 --
 -- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs in acc2 tmp
 --
--- Operationally, the array computations 'acc1' and 'acc2' will not share any subcomputations,
+-- Operationally, the array computations 'acc1' and 'acc2' will not share any sub-computations,
 -- neither between each other nor with the environment.  This makes them truly independent stages
 -- that only communicate by way of the result of 'acc1' which is being fed as an argument to 'acc2'.
 --
@@ -498,14 +498,14 @@ class Lift e where
   type Plain e
 
   -- |Lift the given value into 'Exp'.  The value may already contain subexpressions in 'Exp'.
-  -- 
+  --
   lift :: e -> Exp (Plain e)
-  
+
 class Lift e => Unlift e where
 
-  -- |Unlift the outmost constructor through 'Exp'.  This is only possible if the constructor is
+  -- |Unlift the outermost constructor through 'Exp'.  This is only possible if the constructor is
   -- fully determined by its type - i.e., it is a singleton.
-  -- 
+  --
   unlift :: Exp (Plain e) -> e
 
 -- instances for indices
@@ -806,7 +806,7 @@ index0 = lift Z
 index1 :: Exp Int -> Exp (Z:. Int)
 index1 = lift . (Z:.)
 
--- |Turn an 'Int' expression into a rank-1 indexing expression.
+-- |Turn a rank-1 indexing expression into an 'Int' expression.
 --
 unindex1 :: Exp (Z:. Int) -> Exp Int
 unindex1 ix = let Z:.i = unlift ix in i
@@ -1053,7 +1053,7 @@ not = mkLNot
 
 -- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
 -- into '1'.
--- 
+--
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
 
@@ -1070,3 +1070,4 @@ fromIntegral = mkFromIntegral
 --
 ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore
+

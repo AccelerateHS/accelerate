@@ -1972,8 +1972,8 @@ showPreExpOp (IndexScalar _ _) = "IndexScalar"
 showPreExpOp (Shape _)         = "Shape"
 showPreExpOp (ShapeSize _)     = "ShapeSize"
 
--- |Smart constructors to construct representation AST forms
--- ---------------------------------------------------------
+-- Smart constructors to construct representation AST forms
+-- --------------------------------------------------------
 
 mkIndex :: forall slix e aenv. (Slice slix, Elt e)
         => AST.OpenAcc                aenv (Array (FullShape slix) e)
@@ -1994,8 +1994,8 @@ mkReplicate e arr
     slix = undefined :: slix
 
 
--- |Smart constructors for stencil reification
--- -------------------------------------------
+-- Smart constructors for stencil reification
+-- ------------------------------------------
 
 -- Stencil reification
 --

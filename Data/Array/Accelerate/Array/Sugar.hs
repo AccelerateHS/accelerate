@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr, EltRepr',
-  
+
   -- * Derived functions
   liftToElt, liftToElt2, sinkFromElt, sinkFromElt2,
 
@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array indexing and slicing
   Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..),
-  
+
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
@@ -45,12 +45,11 @@ import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
 
--- |Surface types representing array indices and slices
--- ----------------------------------------------------
+-- Surface types representing array indices and slices
+-- ---------------------------------------------------
 
--- |Array indices are snoc type lists
---
--- For example, the type of a rank-2 array index is 'Z :.Int :. Int'.
+-- |Array indices are snoc type lists.
+-- For example, the type of a rank-2 array index is @Z :.Int :. Int@.
 
 -- |Rank-0 index
 --
@@ -65,7 +64,7 @@ data tail :. head = tail :. head
 
 -- |Marker for entire dimensions in slice descriptors
 --
-data All = All 
+data All = All
   deriving (Typeable, Show)
 
 -- |Marker for arbitrary shapes in slice descriptors
@@ -73,13 +72,13 @@ data All = All
 data Any sh = Any
   deriving (Typeable, Show)
 
--- |Representation change for array element types
--- ----------------------------------------------
+-- Representation change for array element types
+-- ---------------------------------------------
 
 -- |Type representation mapping
 --
--- We represent tuples by using '()' and '(,)' as type-level nil and snoc to construct 
--- snoc-lists of types.
+-- We represent tuples by using '()' and '(,)' as type-level nil and snoc to construct snoc-lists of
+-- types.
 --
 type family EltRepr a :: *
 type instance EltRepr () = ()
@@ -754,8 +753,8 @@ instance Shape Z where
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
 
--- |Slices -aka generalised indices- as n-tuples and mappings of slice
--- indicies to slices, co-slices, and slice dimensions
+-- |Slices, aka generalised indices, as /n/-tuples and mappings of slice indices to slices,
+-- co-slices, and slice dimensions
 --
 class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl)) 
        => Slice sl where

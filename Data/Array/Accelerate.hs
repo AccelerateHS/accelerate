@@ -38,7 +38,7 @@
 module Data.Array.Accelerate (
 
   -- * Scalar element types
-  Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32, Word64, 
+  Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32, Word64,
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   Float, Double, CFloat, CDouble,
   Bool, Char, CChar, CSChar, CUChar,
@@ -55,14 +55,14 @@ module Data.Array.Accelerate (
   -- * Array shapes & indices
   Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
-  
+
   -- * Operations to use Accelerate arrays from plain Haskell
   arrayDim, arrayShape, arraySize, indexArray, fromIArray, toIArray, fromList, toList,
 
   -- * The /Accelerate/ language
   module Data.Array.Accelerate.Language,
   module Data.Array.Accelerate.Prelude,
-  
+
   -- * Deprecated names for backwards compatibility
   Elem, Ix, SliceIx, tuple, untuple,
   
