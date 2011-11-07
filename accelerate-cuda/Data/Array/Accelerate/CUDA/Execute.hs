@@ -73,12 +73,13 @@ executeAcc acc = executeOpenAcc acc Empty
 
 -- Evaluate an expression with free array variables
 --
-executeAfun1 :: (Arrays a, Arrays b) => ExecAcc (a -> b) -> a -> CIO b
-executeAfun1 (ExecAfun (Alam (Abody f))) arrs = do
+executeAfun1 :: (Arrays a, Arrays b) => ExecAfun (a -> b) -> a -> CIO b
+executeAfun1 (Alam (Abody f)) arrs = do
   applyArraysR useArray arrays arrs
   executeOpenAcc f (Empty `Push` arrs)
 
-executeAfun1 _ _ = error "the sword comes out after you swallow it, right?"
+executeAfun1 _ _                   =
+  error "the sword comes out after you swallow it, right?"
 
 
 -- Evaluate an open array expression
@@ -211,9 +212,6 @@ executeOpenAcc (ExecAcc kernel bindings acc) aenv =
       a1 <- executeOpenAcc a aenv
       a0 <- executeOpenAcc b aenv
       stencil2Op kernel bindings acc aenv a1 a0
-
-executeOpenAcc (ExecAfun _) _ =
-  INTERNAL_ERROR(error) "executeOpenAcc" "impossible evaluation"
 
 
 -- Implementation of primitive array operations

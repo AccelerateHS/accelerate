@@ -37,13 +37,11 @@ import qualified Foreign.Storable                       as F
 --
 accDim :: ExecOpenAcc aenv (Array sh e) -> Int
 accDim (ExecAcc _ _ acc) = preAccDim accDim acc
-accDim (ExecAfun _)      = error "when I get sad, I stop being sad and be AWESOME instead."
 
 -- |Reify type of arrays and scalar expressions
 --
 accType :: ExecOpenAcc aenv (Array sh e) -> TupleType (EltRepr e)
 accType (ExecAcc _ _ acc) = preAccType accType acc
-accType (ExecAfun _)      = error "TRUE STORY."
 
 expType :: PreOpenExp ExecOpenAcc aenv env t -> TupleType (EltRepr t)
 expType = preExpType accType

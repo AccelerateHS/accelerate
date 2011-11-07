@@ -19,7 +19,7 @@ module Data.Array.Accelerate.CUDA (
 ) where
 
 -- standard library
-import Prelude hiding (catch)
+import Prelude                                          hiding (catch)
 import Control.Exception
 import Control.Applicative
 import Control.Concurrent
@@ -27,8 +27,8 @@ import System.IO.Unsafe
 import Foreign.CUDA.Driver.Error
 
 -- friends
-import Data.Array.Accelerate.AST                  (Arrays(..), ArraysR(..))
-import Data.Array.Accelerate.Smart                (Acc, convertAcc, convertAccFun1)
+import Data.Array.Accelerate.AST                        (Arrays(..), ArraysR(..))
+import Data.Array.Accelerate.Smart                      (Acc, convertAcc, convertAccFun1)
 import Data.Array.Accelerate.CUDA.Array.Data
 import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile

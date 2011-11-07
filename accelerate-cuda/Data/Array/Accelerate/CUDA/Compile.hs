@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, FlexibleInstances #-}
 {-# LANGUAGE BangPatterns, CPP, GADTs, TupleSections, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
@@ -13,7 +13,7 @@
 module Data.Array.Accelerate.CUDA.Compile (
 
   -- * Types parameterising our annotated computation form
-  AccKernel, ExecAcc, ExecOpenAcc(..),
+  AccKernel, ExecAcc, ExecAfun, ExecOpenAcc(..),
 
   -- * generate and compile kernels to realise a computation
   compileAcc, compileAfun1
@@ -68,20 +68,21 @@ noKernel = INTERNAL_ERROR(error) "ExecAcc" "no kernel module for this node"
 -- Interleave execution state annotations into an open array computation AST
 --
 data ExecOpenAcc aenv a where
-  ExecAfun :: PreOpenAfun ExecOpenAcc () t
-           -> ExecOpenAcc aenv t
-
-  ExecAcc  :: AccKernel a                       -- an executable binary object
-           -> [AccBinding aenv]                 -- auxiliary arrays from the environment the kernel needs access to
-           -> PreOpenAcc ExecOpenAcc aenv a     -- the actual computation
-           -> ExecOpenAcc aenv a
+  ExecAcc :: AccKernel a                        -- an executable binary object
+          -> [AccBinding aenv]                  -- auxiliary arrays from the environment the kernel needs access to
+          -> PreOpenAcc ExecOpenAcc aenv a      -- the actual computation
+          -> ExecOpenAcc aenv a
 
 -- An annotated AST suitable for execution in the CUDA environment
 --
-type ExecAcc a = ExecOpenAcc () a
+type ExecAcc  a = ExecOpenAcc () a
+type ExecAfun a = PreAfun ExecOpenAcc a
 
 instance Show (ExecOpenAcc aenv a) where
   show = render . prettyExecAcc 0 noParens
+
+instance Show (ExecAfun a) where
+  show = render . prettyExecAfun 0
 
 
 -- |Initiate code generation, compilation, and data transfer for an array
@@ -104,12 +105,9 @@ compileAcc :: Acc a -> CIO (ExecAcc a)
 compileAcc acc = prepareAcc acc
 
 
-compileAfun1 :: Afun (a -> b) -> CIO (ExecAcc (a -> b))
-compileAfun1 (Alam (Abody b)) = do
-  b' <- prepareAcc b
-  return $ ExecAfun (Alam (Abody b'))
-
-compileAfun1 _ =
+compileAfun1 :: Afun (a -> b) -> CIO (ExecAfun (a -> b))
+compileAfun1 (Alam (Abody b)) = Alam . Abody <$> prepareAcc b
+compileAfun1 _                =
   error "Hope (noun): something that happens to facts when the world refuses to agree"
 
 
@@ -575,10 +573,12 @@ printDoc m hdl doc = do
 
 -- Display the annotated AST
 --
+prettyExecAfun :: Int -> ExecAfun a -> Doc
+prettyExecAfun alvl pfun = prettyPreAfun prettyExecAcc alvl pfun
+
 prettyExecAcc :: PrettyAcc ExecOpenAcc
 prettyExecAcc alvl wrap ecc =
   case ecc of
-    ExecAfun pfun      -> prettyPreAfun prettyExecAcc alvl pfun
     ExecAcc  _ fv pacc ->
       let base = prettyPreAcc prettyExecAcc alvl wrap pacc
           ann  = braces (freevars fv)
