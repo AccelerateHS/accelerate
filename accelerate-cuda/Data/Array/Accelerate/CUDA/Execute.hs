@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, CPP, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, ScopedTypeVariables, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, TupleSections, TypeOperators, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Execute
