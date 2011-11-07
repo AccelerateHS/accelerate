@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns, CPP, GADTs, TupleSections, TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
@@ -34,10 +34,11 @@ import Data.Array.Accelerate.CUDA.Array.Sugar
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
 -- libraries
-import Prelude                                          hiding (exp)
+import Prelude                                          hiding (exp, catch)
 import Control.Applicative                              hiding (Const)
 import Control.Monad.Trans
 import Control.Monad
+import Control.Exception
 import Control.Concurrent.MVar
 import Data.Maybe
 import Data.Label.PureM
@@ -456,7 +457,7 @@ link table key =
         removeFile      cufile
         removeFile      (replaceExtension cufile ".cubin")
         removeDirectory (dropFileName cufile)
-          `catch` \_ -> return ()       -- directory not empty
+          `catch` \(_ :: IOError) -> return ()          -- directory not empty
 #endif
 
         -- update hash table
