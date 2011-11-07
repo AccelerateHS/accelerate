@@ -31,10 +31,10 @@ import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile
 import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Data
-import Data.Array.Accelerate.CUDA.Array.Sugar			hiding
+import Data.Array.Accelerate.CUDA.Array.Sugar                   hiding
    (dim, size, index, shapeToList, sliceIndex)
 import Data.Array.Accelerate.CUDA.Analysis.Launch
-import qualified Data.Array.Accelerate.CUDA.Array.Sugar		as Sugar
+import qualified Data.Array.Accelerate.CUDA.Array.Sugar         as Sugar
 
 -- libraries
 import Prelude                                                  hiding (sum)
@@ -68,12 +68,12 @@ import qualified Foreign.CUDA.Driver                            as CUDA
 
 -- Evaluate a closed array expression
 --
-executeAcc :: Arrays a => ExecAcc a -> CIO a
+executeAcc :: Arrays a => CompileAcc a -> CIO a
 executeAcc acc = executeOpenAcc acc Empty
 
 -- Evaluate an expression with free array variables
 --
-executeAfun1 :: (Arrays a, Arrays b) => ExecAfun (a -> b) -> a -> CIO b
+executeAfun1 :: (Arrays a, Arrays b) => CompileAfun (a -> b) -> a -> CIO b
 executeAfun1 (Alam (Abody f)) arrs = do
   applyArraysR useArray arrays arrs
   executeOpenAcc f (Empty `Push` arrs)
@@ -84,8 +84,8 @@ executeAfun1 _ _                   =
 
 -- Evaluate an open array expression
 --
-executeOpenAcc :: ExecOpenAcc aenv a -> Val aenv -> CIO a
-executeOpenAcc (ExecAcc kernel bindings acc) aenv =
+executeOpenAcc :: CompileOpenAcc aenv a -> Val aenv -> CIO a
+executeOpenAcc (C kernel bindings acc) aenv =
   case acc of
     --
     -- (1) Array introduction
@@ -235,7 +235,7 @@ unitOp v = newArray Z (const v)
 generateOp :: (Shape dim, Elt e)
            => AccKernel a
            -> [AccBinding aenv]
-           -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+           -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
            -> Val aenv
            -> dim
            -> CIO (Array dim e)
@@ -248,7 +248,7 @@ generateOp kernel bindings acc aenv sh = do
 replicateOp :: (Shape dim, Elt slix)
             => AccKernel (Array dim e)
             -> [AccBinding aenv]
-            -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+            -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
             -> Val aenv
             -> SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr dim)
             -> slix
@@ -268,7 +268,7 @@ replicateOp kernel bindings acc aenv sliceIndex slix (Array sh0 in0) = do
 indexOp :: (Shape sl, Elt slix)
         => AccKernel (Array dim e)
         -> [AccBinding aenv]
-        -> PreOpenAcc ExecOpenAcc aenv (Array sl e)
+        -> PreOpenAcc CompileOpenAcc aenv (Array sl e)
         -> Val aenv
         -> SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr dim)
         -> Array dim e
@@ -295,7 +295,7 @@ indexOp kernel bindings acc aenv sliceIndex (Array sh0 in0) slix = do
 mapOp :: Elt e
       => AccKernel (Array dim e)
       -> [AccBinding aenv]
-      -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+      -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
       -> Val aenv
       -> Array dim e'
       -> CIO (Array dim e)
@@ -307,7 +307,7 @@ mapOp kernel bindings acc aenv (Array sh0 in0) = do
 zipWithOp :: Elt c
           => AccKernel (Array dim c)
           -> [AccBinding aenv]
-          -> PreOpenAcc ExecOpenAcc aenv (Array dim c)
+          -> PreOpenAcc CompileOpenAcc aenv (Array dim c)
           -> Val aenv
           -> Array dim a
           -> Array dim b
@@ -320,7 +320,7 @@ zipWithOp kernel bindings acc aenv (Array sh1 in1) (Array sh0 in0) = do
 foldOp :: forall dim e aenv. Shape dim
        => AccKernel (Array dim e)
        -> [AccBinding aenv]
-       -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+       -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
        -> Val aenv
        -> Array (dim:.Int) e
        -> CIO (Array dim e)
@@ -344,7 +344,7 @@ foldOp kernel bindings acc aenv (Array sh0 in0)
 foldSegOp :: Shape dim
           => AccKernel (Array dim e)
           -> [AccBinding aenv]
-          -> PreOpenAcc ExecOpenAcc aenv (Array (dim:.Int) e)
+          -> PreOpenAcc CompileOpenAcc aenv (Array (dim:.Int) e)
           -> Val aenv
           -> Array (dim:.Int) e
           -> Segments
@@ -358,7 +358,7 @@ foldSegOp kernel bindings acc aenv (Array sh0 in0) (Array shs seg) = do
 scanOp :: forall aenv e. Elt e
        => AccKernel (Vector e)
        -> [AccBinding aenv]
-       -> PreOpenAcc ExecOpenAcc aenv (Vector e)
+       -> PreOpenAcc CompileOpenAcc aenv (Vector e)
        -> Val aenv
        -> Vector e
        -> CIO (Vector e)
@@ -380,7 +380,7 @@ scanOp kernel bindings acc aenv (Array sh0 in0) = do
 scan'Op :: forall aenv e. Elt e
         => AccKernel (Vector e)
         -> [AccBinding aenv]
-        -> PreOpenAcc ExecOpenAcc aenv (Vector e, Scalar e)
+        -> PreOpenAcc CompileOpenAcc aenv (Vector e, Scalar e)
         -> Val aenv
         -> Vector e
         -> CIO (Vector e, Scalar e)
@@ -402,7 +402,7 @@ scan'Op kernel bindings acc aenv (Array sh0 in0) = do
 scan1Op :: forall aenv e. Elt e
         => AccKernel (Vector e)
         -> [AccBinding aenv]
-        -> PreOpenAcc ExecOpenAcc aenv (Vector e)
+        -> PreOpenAcc CompileOpenAcc aenv (Vector e)
         -> Val aenv
         -> Vector e
         -> CIO (Vector e)
@@ -424,7 +424,7 @@ scan1Op kernel bindings acc aenv (Array sh0 in0) = do
 permuteOp :: Elt e
           => AccKernel (Array dim e)
           -> [AccBinding aenv]
-          -> PreOpenAcc ExecOpenAcc aenv (Array dim' e)
+          -> PreOpenAcc CompileOpenAcc aenv (Array dim' e)
           -> Val aenv
           -> Array dim' e       -- default values
           -> Array dim e        -- permuted array
@@ -438,7 +438,7 @@ permuteOp kernel bindings acc aenv in0@(Array sh0 _) (Array sh1 in1) = do
 backpermuteOp :: (Shape dim', Elt e)
               => AccKernel (Array dim e)
               -> [AccBinding aenv]
-              -> PreOpenAcc ExecOpenAcc aenv (Array dim' e)
+              -> PreOpenAcc CompileOpenAcc aenv (Array dim' e)
               -> Val aenv
               -> dim'
               -> Array dim e
@@ -451,7 +451,7 @@ backpermuteOp kernel bindings acc aenv dim' (Array sh0 in0) = do
 stencilOp :: Elt e
           => AccKernel (Array dim e)
           -> [AccBinding aenv]
-          -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+          -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
           -> Val aenv
           -> Array dim e'
           -> CIO (Array dim e)
@@ -466,7 +466,7 @@ stencilOp kernel bindings acc aenv in0@(Array sh0 _) = do
 stencil2Op :: Elt e
            => AccKernel (Array dim e)
            -> [AccBinding aenv]
-           -> PreOpenAcc ExecOpenAcc aenv (Array dim e)
+           -> PreOpenAcc CompileOpenAcc aenv (Array dim e)
            -> Val aenv
            -> Array dim e1
            -> Array dim e2
@@ -486,7 +486,7 @@ stencil2Op kernel bindings acc aenv in1@(Array sh1 _) in0@(Array sh0 _) = do
 
 -- Evaluate an open expression
 --
-executeOpenExp :: PreOpenExp ExecOpenAcc env aenv t -> Val env -> Val aenv -> CIO t
+executeOpenExp :: PreOpenExp CompileOpenAcc env aenv t -> Val env -> Val aenv -> CIO t
 executeOpenExp (Let _ _)         _   _    = INTERNAL_ERROR(error) "executeOpenExp" "Let: not implemented yet"
 executeOpenExp (Var idx)         env _    = return $ prj idx env
 executeOpenExp (Const c)         _   _    = return $ toElt c
@@ -520,13 +520,13 @@ executeOpenExp (Cond c t e) env aenv = do
 
 -- Evaluate a closed expression
 --
-executeExp :: PreExp ExecOpenAcc aenv t -> Val aenv -> CIO t
+executeExp :: PreExp CompileOpenAcc aenv t -> Val aenv -> CIO t
 executeExp e = executeOpenExp e Empty
 
 
 -- Tuple evaluation
 --
-executeTuple :: Tuple (PreOpenExp ExecOpenAcc env aenv) t -> Val env -> Val aenv -> CIO t
+executeTuple :: Tuple (PreOpenExp CompileOpenAcc env aenv) t -> Val env -> Val aenv -> CIO t
 executeTuple NilTup          _   _    = return ()
 executeTuple (t `SnocTup` e) env aenv = (,) <$> executeTuple   t env aenv
                                             <*> executeOpenExp e env aenv
@@ -621,7 +621,7 @@ instance (Marshalable a, Marshalable b) => Marshalable (a,b) where
 execute :: Marshalable args
         => AccKernel a          -- The binary module implementing this kernel
         -> [AccBinding aenv]    -- Array variables embedded in scalar expressions
-        -> PreOpenAcc ExecOpenAcc aenv a
+        -> PreOpenAcc CompileOpenAcc aenv a
         -> Val aenv
         -> Int
         -> args
@@ -633,7 +633,7 @@ execute kernel bindings acc aenv n args =
 -- Pre-execution configuration and kernel linking
 --
 configure :: AccKernel a
-          -> PreOpenAcc ExecOpenAcc aenv a
+          -> PreOpenAcc CompileOpenAcc aenv a
           -> Int
           -> CIO (CUDA.Module, CUDA.Fun, (Int,Int,Integer))
 configure (name, kernel) acc n = do
