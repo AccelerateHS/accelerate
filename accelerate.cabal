@@ -97,9 +97,6 @@ Library
                         ghc-prim        == 0.2.*,
                         pretty          >= 1.0 && < 1.2
 
-  if flag(llvm)
-    Build-depends:      llvm            >= 0.6.8
-
 --  if flag(test-suite)
 --    Build-depends:      QuickCheck      == 2.*
 
@@ -123,9 +120,6 @@ Library
                         Data.Array.Accelerate.Type
                         Data.Array.Accelerate.Pretty
 
---  If flag(llvm)
---    Exposed-modules:    Data.Array.Accelerate.LLVM
-
 --  If flag(test-suite)
 --    Exposed-modules:    Data.Array.Accelerate.Test
 --    Other-modules:      Data.Array.Accelerate.Test.QuickCheck
@@ -143,10 +137,6 @@ Library
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
                         Data.Array.Accelerate.Pretty.Graphviz
-
-
---  If flag(llvm)
---    Other-modules:      Data.Array.Accelerate.LLVM.CodeGen
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS
