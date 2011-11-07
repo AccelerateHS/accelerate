@@ -866,5 +866,10 @@ toList (Array sh adata) = iter sh' idx (.) id []
 --
 instance Show (Array sh e) where
   show arr@(Array sh _adata) 
-    = "Array " ++ show (toElt sh :: sh) ++ " " ++ show (toList arr)
+    = "Array (" ++ showShape (toElt sh :: sh) ++ ") " ++ show (toList arr)
+
+-- | Nicely format a shape as a string
+--
+showShape :: Shape sh => sh -> String
+showShape = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList
 
