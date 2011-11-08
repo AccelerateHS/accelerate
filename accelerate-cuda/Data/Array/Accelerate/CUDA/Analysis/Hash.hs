@@ -9,17 +9,13 @@
 -- Portability : non-partable (GHC extensions)
 --
 
-module Data.Array.Accelerate.CUDA.Analysis.Hash (
-
-  AccKey, accToKey
-
-) where
+module Data.Array.Accelerate.CUDA.Analysis.Hash (accToKey)
+  where
 
 import Data.Char
 import Language.C
 import Text.PrettyPrint
-import Codec.Compression.Zlib
-import Data.ByteString.Lazy.Char8                       (ByteString)
+import Data.ByteString.Lazy.Char8                       ( ByteString )
 import qualified Data.ByteString.Lazy.Char8             as L
 
 import Data.Array.Accelerate.AST
@@ -33,14 +29,10 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 #include "accelerate.h"
 
 
-type AccKey = ByteString
-
 -- | Generate a unique key for each kernel computation
 --
-accToKey :: OpenAcc aenv a -> AccKey
-accToKey acc =
-  let key = compress . L.pack $ showAcc acc
-  in  L.head key `seq` key
+accToKey :: OpenAcc aenv a -> ByteString
+accToKey acc = L.pack (showAcc acc)
 
 
 -- The first radical identifies the skeleton type (actually, this is arithmetic

@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.CUDA.State (
 
   -- Types
-  CIO, KernelTable, KernelEntry(KernelEntry),
+  CIO, KernelTable, KernelKey, KernelEntry(KernelEntry),
 
   -- Evaluating computations
   evalCUDA, unique, deviceProps, memoryTable, kernelTable, kernelName,
@@ -27,7 +27,6 @@ module Data.Array.Accelerate.CUDA.State (
 
 -- friends
 import Data.Array.Accelerate.CUDA.Analysis.Device
-import Data.Array.Accelerate.CUDA.Analysis.Hash
 import Data.Array.Accelerate.CUDA.Array.Table
 
 -- library
@@ -35,16 +34,17 @@ import Data.Tuple
 import Data.Record.Label
 import Control.Concurrent.MVar
 import Control.Monad
-import Control.Monad.State.Strict                       (StateT(..))
-import System.Posix.Types                               (ProcessID)
+import Data.ByteString.Lazy.Char8                       ( ByteString )
+import Control.Monad.State.Strict                       ( StateT(..) )
+import System.Posix.Types                               ( ProcessID )
 import System.IO.Unsafe
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable.IO                      as Hash
 
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-import Data.Binary                                      (encodeFile, decodeFile)
-import Control.Arrow                                    (second)
-import Paths_accelerate                                 (getDataDir)
+import Data.Binary                                      ( encodeFile, decodeFile )
+import Control.Arrow                                    ( second )
+import Paths_accelerate                                 ( getDataDir )
 #endif
 
 
@@ -58,7 +58,9 @@ import Paths_accelerate                                 (getDataDir)
 -- computation and no more, but we can not do that. Instead, this is keyed to
 -- the generated kernel code.
 --
-type KernelTable = Hash.BasicHashTable AccKey KernelEntry
+type KernelTable = Hash.BasicHashTable KernelKey KernelEntry
+
+type KernelKey   = ByteString
 data KernelEntry = KernelEntry
   {
     _kernelName   :: FilePath,
