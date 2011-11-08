@@ -11,10 +11,7 @@
 
 module Data.Array.Accelerate.CUDA.CodeGen (
 
-  -- * types
-  CUTranslSkel, AccBinding(..),
-
-  -- * code generation
+  CUTranslSkel,
   codeGenAcc, codeGenFun, codeGenExp
 
 ) where
@@ -23,7 +20,6 @@ import Data.Char
 import Language.C
 import Text.PrettyPrint
 
-import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty                             ()
@@ -34,24 +30,12 @@ import Data.Array.Accelerate.Array.Representation
 import qualified Data.Array.Accelerate.Array.Sugar              as Sugar
 import qualified Foreign.Storable                               as F
 
+import Data.Array.Accelerate.CUDA.AST
 import Data.Array.Accelerate.CUDA.CodeGen.Data
 import Data.Array.Accelerate.CUDA.CodeGen.Util
 import Data.Array.Accelerate.CUDA.CodeGen.Skeleton
 
-
 #include "accelerate.h"
-
-
--- Array computations that were embedded within scalar expressions, and will be
--- required to execute the kernel; i.e. bound to texture references or similar.
---
-data AccBinding aenv where
-  ArrayVar :: (Sugar.Shape sh, Sugar.Elt e)
-           => Idx aenv (Sugar.Array sh e) -> AccBinding aenv
-
-instance Eq (AccBinding aenv) where
-  ArrayVar ix1 == ArrayVar ix2 = deBruijnToInt ix1 == deBruijnToInt ix2
-
 
 
 -- Array expressions

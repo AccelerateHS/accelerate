@@ -118,6 +118,7 @@ Library
                         Data.Array.Accelerate.CUDA.CodeGen.Stencil
                         Data.Array.Accelerate.CUDA.CodeGen.Tuple
                         Data.Array.Accelerate.CUDA.CodeGen.Util
+                        Data.Array.Accelerate.CUDA.AST
                         Data.Array.Accelerate.CUDA.Compile
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
