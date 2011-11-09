@@ -7,6 +7,29 @@ import Text.PrettyPrint
 import System.Console.CmdArgs
 import Paths_accelerate_examples
 
+import Data.Array.Accelerate                            ( Arrays, Acc )
+import qualified Data.Array.Accelerate.Interpreter      as Interpreter
+
+-- -----------------------------------------------------------------------------
+-- [NOTE: Adding backend support]
+--
+-- To add support for additional Accelerate backends:
+--
+--   1. Edit the cabal file so that the backend can be optionally included via
+--      CPP macros, as has been done for the CUDA backend. Add the appropriate
+--      import statement below.
+--
+--   2. Add a new constructor to the 'Backend' data type, and add this case to
+--      the 'backend' dispatch function. This function is called to evaluate an
+--      Accelerate expression.
+--
+--   3. Add the new constructor to the 'cfgBackend' list in 'defaultConfig'.
+--      This will make the backend appear in the command-line options.
+--
+#ifdef ACCELERATE_CUDA_BACKEND
+import qualified Data.Array.Accelerate.CUDA             as CUDA
+#endif
+
 -- The Accelerate backends available to test, which should be no larger than the
 -- build configuration for the Accelerate library itself.
 --
@@ -16,6 +39,20 @@ data Backend
   | CUDA
 #endif
   deriving (Show, Data, Typeable)
+
+
+-- How to evaluate Accelerate programs with the chosen backend?
+--
+backend :: Arrays a => Config -> Acc a -> a
+backend cfg =
+  case cfgBackend cfg of
+    Interpreter -> Interpreter.run
+#ifdef ACCELERATE_CUDA_BACKEND
+    CUDA        -> CUDA.run
+#endif
+
+--
+-- -----------------------------------------------------------------------------
 
 
 -- Program configuration options
