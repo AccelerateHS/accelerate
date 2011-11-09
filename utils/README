@@ -1,0 +1,2 @@
+To load the example programs from within GHCi, copy the file 'dot_ghci' to
+'.ghci' in root of the accelerate-examples source tree.

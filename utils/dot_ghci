@@ -1,0 +1,6 @@
+:set -isrc
+:set -itests/image-processing
+:set -itests/io
+:set -itests/primitives
+:set -itests/simple
+:set -idist/build/autogen
