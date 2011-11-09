@@ -15,3 +15,6 @@ mapM' f xs = sequence' $ map f xs
 forM' :: [a] -> (a -> IO b) -> IO [b]
 forM' = flip mapM'
 
+replicateM' :: Int -> IO a -> IO [a]
+replicateM' n x = sequence' (replicate n x)
+

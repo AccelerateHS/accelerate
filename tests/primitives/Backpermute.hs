@@ -2,6 +2,7 @@
 
 module Backpermute where
 
+import Util
 import Random
 
 import Control.Monad
@@ -58,7 +59,7 @@ run2d :: String -> Int -> IO (() -> UArray (Int,Int) Float, () -> Acc (Acc.Array
 run2d alg n = withSystemRandom $ \gen -> do
   let n'    = P.round $ sqrt (P.fromIntegral n :: Double)
       (u,v) = (n'*2, n'`div`2)
-  mat  <- listArray ((0,0), (u-1,v-1)) `fmap` replicateM (u*v) (uniformR (-1,1) gen)
+  mat  <- listArray ((0,0), (u-1,v-1)) `fmap` replicateM' (u*v) (uniformR (-1,1) gen)
   mat' <- let m = fromIArray mat :: Acc.Array DIM2 Float
           in  evaluate (m `Acc.indexArray` (Z:.0:.0)) >> return m
   --

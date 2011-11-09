@@ -2,11 +2,13 @@
 
 module Fold where
 
+import Util
 import Random
 
 import Control.Monad
 import Control.Exception
 import System.Random.MWC
+import Data.List
 import Data.Array.Unboxed    hiding (Array)
 import Data.Array.Accelerate as Acc
 import Prelude		     as P
@@ -26,10 +28,10 @@ maxAcc  = Acc.fold1 Acc.max . Acc.use
 minAcc  = Acc.fold1 Acc.min . Acc.use
 
 sumRef, prodRef, maxRef, minRef :: UArray Int Float -> UArray () Float
-sumRef  = toUA sum
-prodRef = toUA product
-maxRef  = toUA maximum
-minRef  = toUA minimum
+sumRef  = toUA (foldl' (+) 0)
+prodRef = toUA (foldl' (*) 1)
+maxRef  = toUA (foldl1' P.max)
+minRef  = toUA (foldl1' P.min)
 
 
 -- two-dimensions ah-ha-ha
@@ -68,7 +70,7 @@ run2d :: String -> Int -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run2d alg n = withSystemRandom $ \gen -> do
   let u = P.floor . sqrt $ (P.fromIntegral n :: Double)
       v = 2*u+1 :: Int
-  mat  <- listArray ((0,0), (u-1,v-1)) `fmap` replicateM (u*v) (uniformR (-1,1) gen)
+  mat  <- listArray ((0,0), (u-1,v-1)) `fmap` replicateM' (u*v) (uniformR (-1,1) gen)
   mat' <- let m = fromIArray mat :: Array DIM2 Float
           in  evaluate (m `Acc.indexArray` (Z:.0:.0)) >> return m
   --

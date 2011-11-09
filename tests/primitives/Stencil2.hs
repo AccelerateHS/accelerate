@@ -2,6 +2,8 @@
 
 module Stencil2 where
 
+import Util
+
 import Control.Monad
 import Control.Exception
 import System.Random.MWC
@@ -22,8 +24,8 @@ test_stencil2_2D n2 = withSystemRandom $ \gen -> do
       m = n * 2
       u = m `div` 3
       v = n + m
-  m1  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM (n*m) (uniformR (-1,1) gen) :: IO (UArray (Int,Int) Float)
-  m2  <- listArray ((0,0),(u-1,v-1)) `fmap` replicateM (u*v) (uniformR (-1,1) gen) :: IO (UArray (Int,Int) Float)
+  m1  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM' (n*m) (uniformR (-1,1) gen) :: IO (UArray (Int,Int) Float)
+  m2  <- listArray ((0,0),(u-1,v-1)) `fmap` replicateM' (u*v) (uniformR (-1,1) gen) :: IO (UArray (Int,Int) Float)
   m1' <- let m1' = fromIArray m1 in evaluate (m1' `indexArray` (Z:.0:.0)) >> return m1'
   m2' <- let m2' = fromIArray m2 in evaluate (m2' `indexArray` (Z:.0:.0)) >> return m2'
   --

@@ -2,6 +2,7 @@
 
 module Stencil where
 
+import Util
 import Random
 
 import Control.Monad
@@ -59,7 +60,7 @@ test_stencil2D :: Int -> IO (() -> IArray.Array (Int,Int) Float, () -> Acc (Arra
 test_stencil2D n2 = withSystemRandom $ \gen -> do
   let n = round . (/3) . sqrt $ (fromIntegral n2 :: Double)
       m = n * 4
-  mat  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM (n*m) (uniformR (-1,1) gen) :: IO (IArray.Array (Int,Int) Float)
+  mat  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM' (n*m) (uniformR (-1,1) gen) :: IO (IArray.Array (Int,Int) Float)
   mat' <- let v = fromIArray mat                                                    :: Array DIM2 Float
           in  evaluate (v `indexArray` (Z:.0:.0)) >> return v
   --
@@ -98,7 +99,7 @@ stencil2D5 ( (_, t, _)
 test_stencil2D5 :: Int -> IO (() -> IArray.Array (Int,Int) Float, () -> Acc (Array DIM2 Float))
 test_stencil2D5 n2 = withSystemRandom $ \gen -> do
   let n = round . sqrt $ (fromIntegral n2 :: Double)
-  mat  <- listArray ((0,0),(n-1,n-1)) `fmap` replicateM (n*n) (uniformR (-1,1) gen) :: IO (IArray.Array (Int,Int) Float)
+  mat  <- listArray ((0,0),(n-1,n-1)) `fmap` replicateM' (n*n) (uniformR (-1,1) gen) :: IO (IArray.Array (Int,Int) Float)
   mat' <- let m = fromIArray mat                                                    :: Array DIM2 Float
           in  evaluate (m `indexArray` (Z:.0:.0)) >> return m
   --
@@ -136,7 +137,7 @@ test_stencil2Dpair :: Int -> IO (() -> IArray.Array (Int,Int) Float, () -> Acc (
 test_stencil2Dpair n2 = withSystemRandom $ \gen -> do
   let n = round (fromIntegral n2 ** 0.5 :: Double)
       m = 2 * n
-  mat  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM (n*m) (uniformR ((-100,0), (100,0)) gen) :: IO (IArray.Array (Int,Int) (Int,Float))
+  mat  <- listArray ((0,0),(n-1,m-1)) `fmap` replicateM' (n*m) (uniformR ((-100,0), (100,0)) gen) :: IO (IArray.Array (Int,Int) (Int,Float))
   mat' <- let a = fromIArray mat
           in  evaluate (a `indexArray` (Z:.0:.0)) >> return a
   --
@@ -179,7 +180,7 @@ test_stencil3D n3 = withSystemRandom $ \gen -> do
   let u = round (fromIntegral n3 ** (1/3) :: Double)
       v = u `div` 2
       w = u * 3
-  arr  <- listArray ((0,0,0), (u-1, v-1, w-1)) `fmap` replicateM (u*v*w) (uniformR (-1,1) gen) :: IO (UArray (Int,Int,Int) Float)
+  arr  <- listArray ((0,0,0), (u-1, v-1, w-1)) `fmap` replicateM' (u*v*w) (uniformR (-1,1) gen) :: IO (UArray (Int,Int,Int) Float)
   arr' <- let a = fromIArray arr
           in  evaluate (a `indexArray` (Z:.0:.0:.0)) >> return a
   --
