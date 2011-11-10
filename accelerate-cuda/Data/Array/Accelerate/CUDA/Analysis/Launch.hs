@@ -57,7 +57,7 @@ expType = preExpType accType
 -- physically resident blocks. Hence, kernels may need to process multiple
 -- elements per thread.
 --
-launchConfig :: PreOpenAcc ExecOpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Integer)
+launchConfig :: PreOpenAcc ExecOpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, Int, Int)
 launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
@@ -67,7 +67,7 @@ launchConfig acc n fn = do
       (cta, occ) = blockSize prop acc regs ((stat+) . dyn)
       mbk        = CUDA.multiProcessorCount prop * CUDA.activeThreadBlocks occ
 
-  return (cta, mbk `min` gridSize prop acc n cta, toInteger (dyn cta))
+  return (cta, mbk `min` gridSize prop acc n cta, dyn cta)
 
 
 -- |

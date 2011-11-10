@@ -633,7 +633,7 @@ execute kernel bindings acc aenv n args =
 configure :: AccKernel a
           -> PreOpenAcc ExecOpenAcc aenv a
           -> Int
-          -> CIO (CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+          -> CIO (CUDA.Module, CUDA.Fun, (Int,Int,Int))
 configure (name, kernel) acc n = do
   mdl <- kernel
   fun <- liftIO $ CUDA.getFun mdl name
@@ -644,7 +644,7 @@ configure (name, kernel) acc n = do
 -- Binding of lifted array expressions and kernel invocation
 --
 dispatch :: Marshalable args
-         => (CUDA.Module, CUDA.Fun, (Int,Int,Integer))
+         => (CUDA.Module, CUDA.Fun, (Int,Int,Int))
          -> [AccBinding aenv]
          -> Val aenv
          -> args
@@ -656,14 +656,10 @@ dispatch (mdl, fun, cfg) fvs aenv args = do
 -- Execute a device function, with the given thread configuration and function
 -- parameters. The tuple contains (threads per block, grid size, shared memory)
 --
-launch :: Marshalable args => (Int,Int,Integer) -> CUDA.Fun -> args -> CIO ()
+launch :: Marshalable args => (Int,Int,Int) -> CUDA.Fun -> args -> CIO ()
 launch (cta,grid,smem) fn a = do
-  args <- marshal a
-  liftIO $ do
-    CUDA.setParams     fn args
-    CUDA.setSharedSize fn smem
-    CUDA.setBlockShape fn (cta,1,1)
-    CUDA.launch        fn (grid,1) Nothing
+  args  <- marshal a
+  liftIO $ CUDA.launchKernel fn (grid,1,1) (cta,1,1) smem Nothing args
 
 
 -- Auxiliary functions
