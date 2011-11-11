@@ -1,5 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, FlexibleInstances #-}
-{-# LANGUAGE BangPatterns, CPP, GADTs, TupleSections, TypeSynonymInstances #-}
+{-# LANGUAGE CPP, GADTs, TupleSections, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Compile
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
