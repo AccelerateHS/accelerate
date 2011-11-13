@@ -3,4 +3,5 @@
 :set -itests/io
 :set -itests/primitives
 :set -itests/simple
-:set -idist/build/autogen
+:set -iutils
+:set -DACCELERATE_CUDA_BACKEND
