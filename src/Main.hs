@@ -69,7 +69,10 @@ runTiming cfg tests = do
 main :: IO ()
 main = do
   (config, tests) <- processArgs
-  whenNormal       $ putStrLn ("running with " ++ shows (cfgBackend config) " backend")
+  whenNormal . putStrLn $
+    unlines ["running with " ++ shows (cfgBackend config) " backend"
+            ,"to display available options, rerun with '--help'"
+            ]
   valid           <- runVerify config tests
   --
   unless (null valid || cfgVerify config) $ runTiming config valid
