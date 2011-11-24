@@ -26,12 +26,13 @@ module Data.Array.Accelerate.CUDA.State (
 ) where
 
 -- friends
-import Data.Array.Accelerate.CUDA.Analysis.Device
 import Data.Array.Accelerate.CUDA.Array.Table
+import Data.Array.Accelerate.CUDA.Analysis.Device
+import qualified Data.Array.Accelerate.CUDA.Debug       as Debug ( initialise )
 
 -- library
+import Data.Label
 import Data.Tuple
-import Data.Record.Label
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.ByteString.Lazy.Char8                       ( ByteString )
@@ -106,6 +107,7 @@ evalCUDA acc = modifyMVar onta (liftM swap . runStateT acc)
 --
 initialise :: IO CUDAState
 initialise = do
+  Debug.initialise
   CUDA.initialise []
   (d,prp) <- selectBestDevice
   ctx     <- CUDA.create d [CUDA.SchedAuto]

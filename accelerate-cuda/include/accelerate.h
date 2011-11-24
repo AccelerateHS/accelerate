@@ -2,14 +2,6 @@
 #ifndef ACCELERATE_H
 #define ACCELERATE_H
 import qualified Data.Array.Accelerate.Internal.Check as Ck
-import qualified Data.Array.Accelerate.Internal.Trace as T
-
-/*
- * Tracing
- */
-#define INFO  (T.message T.Loud   __FILE__ __LINE__)
-#define DEBUG (T.message T.Normal __FILE__ __LINE__)
-#define TRACE (T.trace   T.Normal __FILE__ __LINE__)
 
 
 /*

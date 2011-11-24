@@ -29,6 +29,8 @@ import Foreign.CUDA.Ptr                 ( DevicePtr )
 import qualified Foreign.CUDA.Driver    as CUDA
 import qualified Data.HashTable.IO      as Hash
 
+import Data.Array.Accelerate.CUDA.Debug ( debug, dump_gc_trace )
+
 #include "accelerate.h"
 
 
@@ -132,16 +134,24 @@ reclaim (MemoryTable _ weak_ref) = do
 
 finalizer :: Typeable a => Weak MT -> StableName (UArray Int a) -> DevicePtr b -> IO ()
 finalizer weak_ref sn ptr
-  = TRACE ("finalise: " ++ show (HostArray sn))
+  = trace ("finalise: " ++ show (HostArray sn))
   $ do
     CUDA.free ptr
     mr <- deRefWeak weak_ref
     case mr of
-      Nothing  -> TRACE "dead memory table" $ return ()
+      Nothing  -> trace "dead memory table" $ return ()
       Just ref -> withMVar ref (`Hash.delete` HostArray sn)
 
 table_finalizer :: HashTable HostArray DeviceArray -> IO ()
 table_finalizer tbl
-  = TRACE "table finaliser"
+  = trace "table finaliser"
   $ Hash.mapM_ (\(_,DeviceArray w) -> finalize w) tbl
+
+
+-- Debug
+-- -----
+
+{-# INLINE trace #-}
+trace :: String -> IO a -> IO a
+trace msg next = debug dump_gc_trace msg >> next
 

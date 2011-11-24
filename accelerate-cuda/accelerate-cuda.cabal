@@ -120,6 +120,7 @@ Library
                         Data.Array.Accelerate.CUDA.CodeGen.Util
                         Data.Array.Accelerate.CUDA.AST
                         Data.Array.Accelerate.CUDA.Compile
+                        Data.Array.Accelerate.CUDA.Debug
                         Data.Array.Accelerate.CUDA.Execute
                         Data.Array.Accelerate.CUDA.State
                         Data.Array.Accelerate.Internal.Check
@@ -143,7 +144,6 @@ Library
 
   ghc-options:          -O2 -Wall -fwarn-tabs
                         -funbox-strict-fields
-                        -fno-warn-unused-imports
 
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
