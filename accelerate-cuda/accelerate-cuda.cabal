@@ -96,7 +96,7 @@ Library
                         fclabels        >= 0.9 && < 1.0,
                         filepath        >= 1.0 && < 1.3,
                         hashable        == 1.1.*,
-                        hashtables      == 1.0.*,
+                        hashtables      >  1.0 && < 2.0,
                         language-c      >= 0.3 && < 0.5,
                         mtl             == 2.0.*,
                         pretty          >= 1.0 && < 1.2,

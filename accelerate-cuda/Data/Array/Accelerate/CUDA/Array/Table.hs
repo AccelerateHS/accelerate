@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs #-}
+{-# LANGUAGE CPP, GADTs, MagicHash, UnboxedTuples #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Table
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -16,20 +16,26 @@ module Data.Array.Accelerate.CUDA.Array.Table (
 
 ) where
 
-import Prelude                          hiding ( lookup )
-import Data.Hashable                    ( Hashable, hash )
-import Data.Typeable                    ( Typeable, gcast )
-import Data.Array.Unboxed               ( UArray )
-import System.Mem                       ( performGC )
-import System.Mem.Weak                  ( Weak, mkWeak, mkWeakPtr, deRefWeak, finalize )
-import System.Mem.StableName            ( StableName, makeStableName, hashStableName )
-import Control.Concurrent.MVar          ( MVar, newMVar, withMVar, addMVarFinalizer )
-import Foreign.CUDA.Ptr                 ( DevicePtr )
+import Prelude                                          hiding ( lookup )
+import Data.Maybe                                       ( isJust )
+import Data.Hashable                                    ( Hashable, hash )
+import Data.Typeable                                    ( Typeable, gcast )
+import Data.Array.Unboxed                               ( UArray )
+import Control.Monad                                    ( unless )
+import System.Mem                                       ( performGC )
+import System.Mem.Weak                                  ( Weak, mkWeak, deRefWeak, finalize )
+import System.Mem.StableName                            ( StableName, makeStableName, hashStableName )
+import Control.Concurrent.MVar                          ( MVar, newMVar, withMVar )
+import Foreign.CUDA.Ptr                                 ( DevicePtr )
 
-import qualified Foreign.CUDA.Driver    as CUDA
-import qualified Data.HashTable.IO      as Hash
+import GHC.Base                                         ( IO(IO), mkWeak# )
+import GHC.MVar                                         ( MVar(MVar) )
+import GHC.Weak                                         ( Weak(Weak) )
 
-import Data.Array.Accelerate.CUDA.Debug ( debug, dump_gc_trace )
+import qualified Foreign.CUDA.Driver                    as CUDA
+import qualified Data.HashTable.IO                      as Hash
+
+import qualified Data.Array.Accelerate.CUDA.Debug       as D ( debug, dump_gc )
 
 #include "accelerate.h"
 
@@ -70,7 +76,7 @@ instance Hashable HostArray where
   hash (HostArray sn) = hash sn
 
 instance Show HostArray where
-  show (HostArray sn) = "HostArray #" ++ show (hashStableName sn)
+  show (HostArray sn) = "Array #" ++ show (hashStableName sn)
 
 
 -- Referencing arrays
@@ -81,40 +87,44 @@ instance Show HostArray where
 --
 new :: IO MemoryTable
 new = do
-  tbl  <- Hash.newSized 1001
-  mvar <- newMVar tbl
-  weak <- mkWeakPtr mvar Nothing
-  addMVarFinalizer mvar (table_finalizer tbl)
+  tbl           <- Hash.new
+  mvar@(MVar m) <- newMVar tbl
+  weak          <- IO $ \s -> case mkWeak# m mvar (table_finalizer tbl) s of
+                                (# s', w #) -> (# s', Weak w #)
   return $! MemoryTable mvar weak
 
 
--- NOTE: we require the INLINE pragma on both 'lookup' and 'insert'
+-- NOTE: we require the INLINE pragma on both 'lookup' and 'insert', else we get
+-- inconsistent StableName generation.
 --
 {-# INLINE lookup #-}
 lookup :: (Typeable a, Typeable b) => MemoryTable -> UArray Int a -> IO (Maybe (DevicePtr b))
-lookup (MemoryTable ref _) key
-  = key `seq` withMVar ref
-  $ \tbl -> do
-      sn <- makeStableName key
-      mw <- Hash.lookup tbl (HostArray sn)
-      case mw of
-        Nothing              -> return Nothing
-        Just (DeviceArray w) -> do
-          mv <- deRefWeak w
-          case mv of
-            Just v | Just p <- gcast v -> return (Just p)
-                   | otherwise         -> INTERNAL_ERROR(error) "lookup" $ "type mismatch"
-            Nothing                    -> INTERNAL_ERROR(error) "lookup" $ "dead weak pair: " ++ show (HostArray sn)
+lookup (MemoryTable ref _) arr = seq arr $ do
+  sa <- makeStableArray arr
+  mw <- withMVar ref (`Hash.lookup` sa)
+  case mw of
+    Nothing              -> trace ("lookup/not found: " ++ show sa) $ return Nothing
+    Just (DeviceArray w) -> do
+      mv <- deRefWeak w
+      case mv of
+        Just v | Just p <- gcast v   -> trace ("lookup/found: " ++ show sa) $ return (Just p)
+               | otherwise           -> INTERNAL_ERROR(error) "lookup" $ "type mismatch"
+        Nothing                      ->
+          makeStableArray arr >>= \x -> INTERNAL_ERROR(error) "lookup" $ "dead weak pair: " ++ show x
 
 
 {-# INLINE insert #-}
 insert :: (Typeable a, Typeable b) => MemoryTable -> UArray Int a -> DevicePtr b -> IO ()
-insert (MemoryTable ref weak_ref) arr ptr
-  = arr `seq` withMVar ref
-  $ \tbl -> do
-      sn   <- makeStableName arr
-      weak <- mkWeak arr ptr (Just $ finalizer weak_ref sn ptr)
-      Hash.insert tbl (HostArray sn) (DeviceArray weak)
+insert (MemoryTable ref weak_ref) arr ptr = seq arr $ do
+  sn   <- makeStableName arr
+  weak <- mkWeak arr ptr (Just $ finalizer weak_ref sn ptr)
+  debug $ "insert: " ++ show (HostArray sn)
+  withMVar ref $ \tbl -> Hash.insert tbl (HostArray sn) (DeviceArray weak)
+
+
+{-# INLINE makeStableArray #-}
+makeStableArray :: Typeable a => UArray Int a -> IO HostArray
+makeStableArray arr = HostArray `fmap` makeStableName arr
 
 
 -- Removing entries
@@ -125,22 +135,25 @@ insert (MemoryTable ref weak_ref) arr ptr
 --
 reclaim :: MemoryTable -> IO ()
 reclaim (MemoryTable _ weak_ref) = do
-  performGC
+  trace "reclaim" performGC
   mr <- deRefWeak weak_ref
   case mr of
     Nothing  -> return ()
-    Just ref -> withMVar ref $ Hash.mapM_ (\(_,DeviceArray w) -> finalize w)
+    Just ref -> withMVar ref $ \tbl ->
+      flip Hash.mapM_ tbl    $ \(_,DeviceArray w) -> do
+        alive <- isJust `fmap` deRefWeak w
+        unless alive $ finalize w
 
 
 finalizer :: Typeable a => Weak MT -> StableName (UArray Int a) -> DevicePtr b -> IO ()
-finalizer weak_ref sn ptr
-  = trace ("finalise: " ++ show (HostArray sn))
-  $ do
-    CUDA.free ptr
-    mr <- deRefWeak weak_ref
-    case mr of
-      Nothing  -> trace "dead memory table" $ return ()
-      Just ref -> withMVar ref (`Hash.delete` HostArray sn)
+finalizer weak_ref sn ptr = do
+  let s = "finalise: " ++ show (HostArray sn)
+      d = s ++ " // dead memory table"
+  CUDA.free ptr
+  mr <- deRefWeak weak_ref
+  case mr of
+    Nothing  -> trace d $ return ()
+    Just ref -> trace s $ withMVar ref (`Hash.delete` HostArray sn)
 
 table_finalizer :: HashTable HostArray DeviceArray -> IO ()
 table_finalizer tbl
@@ -153,5 +166,9 @@ table_finalizer tbl
 
 {-# INLINE trace #-}
 trace :: String -> IO a -> IO a
-trace msg next = debug dump_gc_trace msg >> next
+trace msg next = D.debug D.dump_gc ("gc: " ++ msg) >> next
+
+{-# INLINE debug #-}
+debug :: String -> IO ()
+debug s = s `trace` return ()
 
