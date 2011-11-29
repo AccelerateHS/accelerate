@@ -28,6 +28,8 @@ import Data.Array.Accelerate.CUDA.CodeGen
 import Data.Array.Accelerate.CUDA.Array.Sugar
 import Data.Array.Accelerate.CUDA.Analysis.Hash
 
+import qualified Data.Array.Accelerate.CUDA.Debug       as D
+
 -- libraries
 import Prelude                                          hiding (exp, catch)
 import Control.Applicative                              hiding (Const)
@@ -442,13 +444,12 @@ link table key =
 --
 compile :: KernelTable -> KernelKey -> OpenAcc aenv a -> [AccBinding aenv] -> CIO ()
 compile table key acc fvar = do
-  dir     <- outputDir
-  nvcc    <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
-  cufile  <- outputName acc (dir </> "dragon.cu")        -- rawr!
-  flags   <- compileFlags cufile
-  pid     <- liftIO $ do
-               writeCode cufile (codeGenAcc acc fvar)
-               forkProcess $ executeFile nvcc False flags Nothing
+  nvcc         <- fromMaybe (error "nvcc: command not found") <$> liftIO (findExecutable "nvcc")
+  (cufile,hdl) <- openOutputFile "dragon.cu"    -- rawr!
+  flags        <- compileFlags cufile
+  pid          <- liftIO $ do
+    writeCode hdl (codeGenAcc acc fvar)                `finally`     hClose hdl
+    forkProcess $ executeFile nvcc False flags Nothing `onException` removeFile cufile
   --
   liftIO $ Hash.insert table key (KernelEntry cufile (Left pid))
 
@@ -485,36 +486,18 @@ compileFlags cufile =
          , cufile ]
 
 
--- Return a unique output filename for the generated CUDA code
+-- Open a unique file in the temporary directory used for compilation
+-- by-products. The directory will be created if it does not exist.
 --
-outputName :: OpenAcc aenv a -> FilePath -> CIO FilePath
-outputName acc cufile = do
-  n <- freshVar
-  x <- liftIO $ doesFileExist (filename n)
-  if x then outputName acc cufile
-       else return (filename n)
-  where
-    (base,suffix) = splitExtension cufile
-    filename n    = base ++ pad (show n) <.> suffix
-    pad s         = replicate (4-length s) '0' ++ s
-    freshVar      = gets unique <* modify unique (+1)
-
-
--- Return the output directory for compilation by-products, creating if it does
--- not exist.
---
-outputDir :: CIO FilePath
-outputDir = liftIO $ do
+openOutputFile :: String -> CIO (FilePath, Handle)
+openOutputFile template = liftIO $ do
 #ifdef ACCELERATE_CUDA_PERSISTENT_CACHE
-  tmp <- getDataDir
-  let dir = tmp </> "cache"
+  dir <- (</>) <$> getDataDir            <*> pure "cache"
 #else
-  tmp <- getTemporaryDirectory
-  pid <- getProcessID
-  let dir = tmp </> "accelerate-cuda-" ++ show pid
+  dir <- (</>) <$> getTemporaryDirectory <*> pure "accelerate-cuda"
 #endif
   createDirectoryIfMissing True dir
-  canonicalizePath dir
+  openTempFile dir template
 
 
 -- Pretty printing
@@ -522,10 +505,10 @@ outputDir = liftIO $ do
 
 -- Write the generated code to file
 --
-writeCode :: FilePath -> CUTranslSkel -> IO ()
-writeCode f code =
-  withFile f WriteMode $ \hdl ->
-  printDoc PageMode hdl (pretty code)
+writeCode :: Handle -> CUTranslSkel -> IO ()
+writeCode hdl skel =
+  let code = pretty skel
+  in  trace (show code) $ printDoc PageMode hdl code
 
 
 -- stolen from $fptools/ghc/compiler/utils/Pretty.lhs
@@ -543,4 +526,12 @@ printDoc m hdl doc = do
 
     done = hPutChar hdl '\n'
     cols = 100
+
+
+-- Debug
+-- -----
+
+{-# INLINE trace #-}
+trace :: String -> IO a -> IO a
+trace msg next = D.debug D.dump_cuda msg >> next
 

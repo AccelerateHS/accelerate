@@ -20,7 +20,7 @@ module Data.Array.Accelerate.CUDA.State (
   CIO, KernelTable, KernelKey, KernelEntry(KernelEntry),
 
   -- Evaluating computations
-  evalCUDA, unique, deviceProps, memoryTable, kernelTable, kernelName,
+  evalCUDA, deviceProps, memoryTable, kernelTable, kernelName,
   kernelStatus
 
 ) where
@@ -74,7 +74,6 @@ data KernelEntry = KernelEntry
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
   {
-    _unique        :: Int,
     _deviceProps   :: CUDA.DeviceProperties,
     _deviceContext :: CUDA.Context,
     _kernelTable   :: KernelTable,
@@ -113,7 +112,7 @@ initialise = do
   ctx     <- CUDA.create d [CUDA.SchedAuto]
   knl     <- Hash.new
   mem     <- new
-  return $ CUDAState 0 prp ctx knl mem
+  return $ CUDAState prp ctx knl mem
 
 
 -- Persistent caching (deprecated)

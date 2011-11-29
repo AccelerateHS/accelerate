@@ -15,7 +15,7 @@
 module Data.Array.Accelerate.CUDA.Debug (
 
   initialise, debug,
-  dump_cuda, dump_gc, dump_timing
+  dump_cuda, dump_gc, dump_exec
 
 ) where
 
@@ -35,18 +35,18 @@ import System.Console.GetOpt
 
 data Flags = Flags
   {
-    _dump_cuda   :: Bool,
-    _dump_gc     :: Bool,
-    _dump_timing :: Bool
+    _dump_cuda  :: Bool,
+    _dump_gc    :: Bool,
+    _dump_exec  :: Bool
   }
 
 $(mkLabels [''Flags])
 
 flags :: [OptDescr (Flags -> Flags)]
 flags =
-  [ Option [] ["ddump-cuda"]     (NoArg (set dump_cuda True))   "print generated CUDA code"
-  , Option [] ["ddump-gc"]       (NoArg (set dump_gc True))     "print device memory management trace"
-  , Option [] ["ddump-timing"]   (NoArg (set dump_timing True)) "print kernel execution timing"
+  [ Option [] ["ddump-cuda"]    (NoArg (set dump_cuda True))    "print generated CUDA code"
+  , Option [] ["ddump-gc"]      (NoArg (set dump_gc True))      "print device memory management trace"
+  , Option [] ["ddump-exec"]    (NoArg (set dump_exec True))    "print kernel execution trace"
   ]
 
 initialise :: IO ()
