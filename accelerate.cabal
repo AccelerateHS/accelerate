@@ -154,6 +154,8 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
+                        Data.Array.Accelerate.Analysis.Shape
+                        Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Smart
@@ -161,6 +163,7 @@ Library
                         Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
+                        Data.Array.Accelerate.Pretty
 
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM
@@ -181,13 +184,10 @@ Library
 
   Other-modules:        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Array.Delayed
-                        Data.Array.Accelerate.Analysis.Type
-                        Data.Array.Accelerate.Analysis.Shape
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
-                        Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
                         Paths_accelerate
