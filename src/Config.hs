@@ -30,6 +30,10 @@ import qualified Data.Array.Accelerate.Interpreter      as Interpreter
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
 
+#ifdef ACCELERATE_OPENCL_BACKEND
+import qualified Data.Array.Accelerate.OpenCL           as OpenCL
+#endif
+
 -- The Accelerate backends available to test, which should be no larger than the
 -- build configuration for the Accelerate library itself.
 --
@@ -37,6 +41,9 @@ data Backend
   = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
   | CUDA
+#endif
+#ifdef ACCELERATE_OPENCL_BACKEND
+  | OpenCL
 #endif
   deriving (Show, Data, Typeable)
 
@@ -50,7 +57,9 @@ backend cfg =
 #ifdef ACCELERATE_CUDA_BACKEND
     CUDA        -> CUDA.run
 #endif
-
+#ifdef ACCELERATE_OPENCL_BACKEND
+    OpenCL      -> OpenCL.run
+#endif
 --
 -- -----------------------------------------------------------------------------
 
@@ -94,6 +103,13 @@ defaultConfig testPrograms =
         &= name "cuda"
         &= help "Implementation for NVIDIA GPUs (parallel)"
 #endif
+#ifdef ACCELERATE_OPENCL_BACKEND
+    , OpenCL
+        &= explicit
+        &= name "opencl"
+        &= help "Implementation for OpenCL (parallel)"
+#endif
+
     ]
 
   , cfgVerify = def

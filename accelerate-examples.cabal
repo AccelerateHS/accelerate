@@ -17,6 +17,10 @@ Stability:           Experimental
 
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
+  Default:              False
+
+Flag opencl
+  Description:          Enable the OpenCL parallel backend
   Default:              True
 
 Flag io
@@ -73,6 +77,10 @@ Executable accelerate-examples
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.9.*
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl       == 0.1.*
 
   if flag(io)
     CPP-options:        -DACCELERATE_IO
