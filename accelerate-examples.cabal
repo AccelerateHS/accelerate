@@ -1,23 +1,37 @@
-Name:                accelerate-examples
-Version:             0.3.0.0
-Synopsis:            Examples using the Accelerate library
-Description:         Examples using the Accelerate library
-License:             BSD3
-License-file:        LICENSE
-Author:              The Accelerate Team
-Maintainer:          Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
-Category:            Compilers/Interpreters,
-Build-type:          Simple
-Cabal-version:       >=1.6
-Homepage:            http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Name:                   accelerate-examples
+Version:                0.3.0.0
+License:                BSD3
+License-file:           LICENSE
+Author:                 The Accelerate Team
+Maintainer:             Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
+Stability:              Experimental
+Build-type:             Simple
+Cabal-version:          >=1.6
+Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 
-Category:            Compilers/Interpreters, Concurrency, Data, Parallelism
-Stability:           Experimental
-
+Synopsis:               Examples using the Accelerate library
+Description:            This package defines a number of example programs for verification and
+                        performance testing of the Accelerate language and associated backend
+                        implementations. By default the package attempts to build with all available
+                        backends, but this might not be desirable or even possible depending on your
+                        available hardware. To disable a specific component, install with the extra
+                        cabal flag(s):
+                        .
+                        . > cabal install accelerate-examples -f-opt
+                        .
+                        Where the available options are:
+                        .
+                        * cuda: A parallel CUDA backend for NVIDIA GPUs
+                        .
+                        * opencl: A parallel OpenCL backend
+                        .
+                        * io: Extra tests for reading and writing arrays in various formats
+                        .
 
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              False
+  Default:              True
 
 Flag opencl
   Description:          Enable the OpenCL parallel backend
@@ -25,7 +39,7 @@ Flag opencl
 
 Flag io
   Description:          Provide access to the block copy I/O functionality
-  Default:              False
+  Default:              True
 
 
 Executable accelerate-examples
@@ -102,4 +116,9 @@ Executable accelerate-examples
                         pretty                  >= 1.0 && < 1.2,
                         vector                  >= 0.7 && < 0.10,
                         vector-algorithms       >= 0.4 && < 0.6
+
+
+source-repository head
+  type:                 git
+  location:             https://github.com/AccelerateHS/accelerate-examples
 

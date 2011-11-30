@@ -60,9 +60,10 @@ backend cfg =
 #ifdef ACCELERATE_OPENCL_BACKEND
     OpenCL      -> OpenCL.run
 #endif
+
 --
 -- -----------------------------------------------------------------------------
-
+--
 
 -- Program configuration options
 --
