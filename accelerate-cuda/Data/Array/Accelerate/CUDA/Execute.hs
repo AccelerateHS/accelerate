@@ -581,7 +581,7 @@ instance Marshalable () where
   marshal _ = return []
 
 #define primMarshalable(ty)                                                    \
-instance Marshalable ty where {                                                \
+instance Marshalable (ty) where {                                              \
   marshal x = return [CUDA.VArg x] }
 
 primMarshalable(Int)
@@ -596,8 +596,8 @@ primMarshalable(Word32)
 primMarshalable(Word64)
 primMarshalable(Float)
 primMarshalable(Double)
-primMarshalable((Ptr a))
-primMarshalable((CUDA.DevicePtr a))
+primMarshalable(Ptr a)
+primMarshalable(CUDA.DevicePtr a)
 
 instance Marshalable CUDA.FunParam where
   marshal x = return [x]
@@ -659,7 +659,7 @@ dispatch (mdl, fun, cfg) fvs aenv args = do
 launch :: Marshalable args => (Int,Int,Int) -> CUDA.Fun -> args -> CIO ()
 launch (cta,grid,smem) fn a = do
   args  <- marshal a
-  liftIO $ CUDA.launchKernel fn (grid,1,1) (cta,1,1) smem Nothing args
+  liftIO $ CUDA.launchKernel' fn (grid,1,1) (cta,1,1) smem Nothing args
 
 
 -- Auxiliary functions

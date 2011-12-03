@@ -91,7 +91,7 @@ Library
                         base            == 4.*,
                         binary          == 0.5.*,
                         bytestring      == 0.9.*,
-                        cuda            >= 0.4,
+                        cuda            >= 0.4.0.2,
                         directory       >= 1.0 && < 1.2,
                         fclabels        >= 0.9 && < 1.0,
                         filepath        >= 1.0 && < 1.3,
