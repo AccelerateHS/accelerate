@@ -14,7 +14,7 @@
 
 module Data.Array.Accelerate.CUDA.Debug (
 
-  initialise, debug,
+  debug, when,
   dump_cuda, dump_gc, dump_exec
 
 ) where
@@ -23,7 +23,6 @@ import Data.List
 import Data.Label
 import Data.IORef
 import Debug.Trace                              ( putTraceMsg )
-import Control.Monad
 import Control.Monad.IO.Class
 import System.IO.Unsafe
 import System.Environment
@@ -49,8 +48,8 @@ flags =
   , Option [] ["ddump-exec"]    (NoArg (set dump_exec True))    "print kernel execution trace"
   ]
 
-initialise :: IO ()
-initialise = writeIORef options . parse =<< getArgs
+initialise :: IO Flags
+initialise = parse `fmap` getArgs
   where
     defaults      = Flags False False False
     parse         = foldl parse1 defaults
@@ -60,11 +59,19 @@ initialise = writeIORef options . parse =<< getArgs
 
 {-# NOINLINE options #-}
 options :: IORef Flags
-options = unsafePerformIO $ newIORef undefined
+options = unsafePerformIO $ newIORef =<< initialise
 
 {-# INLINE debug #-}
 debug :: MonadIO m => (Flags :-> Bool) -> String -> m ()
-debug f = liftIO
-        . when (unsafePerformIO $ get f `fmap` readIORef options)
-        . putTraceMsg
+debug f str =
+  if unsafePerformIO $ get f `fmap` readIORef options
+     then liftIO (putTraceMsg str)
+     else return ()
+
+{-# INLINE when #-}
+when :: MonadIO m => (Flags :-> Bool) -> m () -> m ()
+when f action =
+  if unsafePerformIO $ get f `fmap` readIORef options
+     then action
+     else return ()
 
