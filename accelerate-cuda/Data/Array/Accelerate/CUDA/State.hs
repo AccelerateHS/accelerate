@@ -73,10 +73,10 @@ data KernelEntry = KernelEntry
 type CIO       = StateT CUDAState IO
 data CUDAState = CUDAState
   {
-    _deviceProps   :: CUDA.DeviceProperties,
-    _deviceContext :: CUDA.Context,
-    _kernelTable   :: KernelTable,
-    _memoryTable   :: MemoryTable
+    _deviceProps   :: !CUDA.DeviceProperties,
+    _deviceContext :: !CUDA.Context,
+    _kernelTable   :: !KernelTable,
+    _memoryTable   :: !MemoryTable
   }
 
 $(mkLabels [''CUDAState, ''KernelEntry])

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs, MagicHash, UnboxedTuples #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Table
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -17,24 +17,20 @@ module Data.Array.Accelerate.CUDA.Array.Table (
 ) where
 
 import Prelude                                          hiding ( lookup )
+import Data.IORef                                       ( IORef, newIORef, readIORef, mkWeakIORef )
 import Data.Maybe                                       ( isJust )
 import Data.Hashable                                    ( Hashable, hash )
 import Data.Typeable                                    ( Typeable, gcast )
-import Data.Array.Unboxed                               ( UArray )
 import Control.Monad                                    ( unless )
 import System.Mem                                       ( performGC )
 import System.Mem.Weak                                  ( Weak, mkWeak, deRefWeak, finalize )
 import System.Mem.StableName                            ( StableName, makeStableName, hashStableName )
-import Control.Concurrent.MVar                          ( MVar, newMVar, withMVar )
 import Foreign.CUDA.Ptr                                 ( DevicePtr )
-
-import GHC.Base                                         ( IO(IO), mkWeak# )
-import GHC.MVar                                         ( MVar(MVar) )
-import GHC.Weak                                         ( Weak(Weak) )
 
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.HashTable.IO                      as Hash
 
+import Data.Array.Accelerate.Array.Data                 ( ArrayData )
 import qualified Data.Array.Accelerate.CUDA.Debug       as D ( debug, dump_gc )
 
 #include "accelerate.h"
@@ -54,13 +50,13 @@ import qualified Data.Array.Accelerate.CUDA.Debug       as D ( debug, dump_gc )
 -- semantics of weak pointers in the documentation).
 --
 type HashTable key val = Hash.BasicHashTable key val
-type MT                = MVar ( HashTable HostArray DeviceArray )
+type MT                = IORef ( HashTable HostArray DeviceArray )
 data MemoryTable       = MemoryTable !MT !(Weak MT)
 
 
 data HostArray where
   HostArray :: Typeable e
-            => StableName (UArray Int e)
+            => StableName (ArrayData e)
             -> HostArray
 
 data DeviceArray where
@@ -87,21 +83,18 @@ instance Show HostArray where
 --
 new :: IO MemoryTable
 new = do
-  tbl           <- Hash.new
-  mvar@(MVar m) <- newMVar tbl
-  weak          <- IO $ \s -> case mkWeak# m mvar (table_finalizer tbl) s of
-                                (# s', w #) -> (# s', Weak w #)
-  return $! MemoryTable mvar weak
+  tbl  <- Hash.new
+  ref  <- newIORef tbl
+  weak <- mkWeakIORef ref (table_finalizer tbl)
+  return $! MemoryTable ref weak
 
 
--- NOTE: we require the INLINE pragma on both 'lookup' and 'insert', else we get
--- inconsistent StableName generation.
+-- Look for the device memory corresponding to a given host-side array.
 --
-{-# INLINE lookup #-}
-lookup :: (Typeable a, Typeable b) => MemoryTable -> UArray Int a -> IO (Maybe (DevicePtr b))
-lookup (MemoryTable ref _) arr = seq arr $ do
+lookup :: (Typeable a, Typeable b) => MemoryTable -> ArrayData a -> IO (Maybe (DevicePtr b))
+lookup (MemoryTable ref _) !arr = do
   sa <- makeStableArray arr
-  mw <- withMVar ref (`Hash.lookup` sa)
+  mw <- withIORef ref (`Hash.lookup` sa)
   case mw of
     Nothing              -> trace ("lookup/not found: " ++ show sa) $ return Nothing
     Just (DeviceArray w) -> do
@@ -113,18 +106,16 @@ lookup (MemoryTable ref _) arr = seq arr $ do
           makeStableArray arr >>= \x -> INTERNAL_ERROR(error) "lookup" $ "dead weak pair: " ++ show x
 
 
-{-# INLINE insert #-}
-insert :: (Typeable a, Typeable b) => MemoryTable -> UArray Int a -> DevicePtr b -> IO ()
-insert (MemoryTable ref weak_ref) arr ptr = seq arr $ do
-  sn   <- makeStableName arr
-  weak <- mkWeak arr ptr (Just $ finalizer weak_ref sn ptr)
-  debug $ "insert: " ++ show (HostArray sn)
-  withMVar ref $ \tbl -> Hash.insert tbl (HostArray sn) (DeviceArray weak)
-
-
-{-# INLINE makeStableArray #-}
-makeStableArray :: Typeable a => UArray Int a -> IO HostArray
-makeStableArray arr = HostArray `fmap` makeStableName arr
+-- Record an association between a host-side array and a new device memory area.
+-- The device memory will be freed when the host array is garbage collected.
+--
+insert :: (Typeable a, Typeable b) => MemoryTable -> ArrayData a -> DevicePtr b -> IO ()
+insert (MemoryTable ref weak_ref) !arr !ptr = do
+  key  <- makeStableArray arr
+  dev  <- DeviceArray `fmap` mkWeak arr ptr (Just $ finalizer weak_ref key ptr)
+  tbl  <- readIORef ref
+  debug $ "insert: " ++ show key
+  Hash.insert tbl key dev
 
 
 -- Removing entries
@@ -139,26 +130,40 @@ reclaim (MemoryTable _ weak_ref) = do
   mr <- deRefWeak weak_ref
   case mr of
     Nothing  -> return ()
-    Just ref -> withMVar ref $ \tbl ->
-      flip Hash.mapM_ tbl    $ \(_,DeviceArray w) -> do
+    Just ref -> withIORef ref $ \tbl ->
+      flip Hash.mapM_ tbl $ \(_,DeviceArray w) -> do
         alive <- isJust `fmap` deRefWeak w
         unless alive $ finalize w
 
 
-finalizer :: Typeable a => Weak MT -> StableName (UArray Int a) -> DevicePtr b -> IO ()
-finalizer weak_ref sn ptr = do
-  let s = "finalise: " ++ show (HostArray sn)
-      d = s ++ " // dead memory table"
+finalizer :: Weak MT -> HostArray -> DevicePtr b -> IO ()
+finalizer !weak_ref !key !ptr = do
   CUDA.free ptr
   mr <- deRefWeak weak_ref
   case mr of
-    Nothing  -> trace d $ return ()
-    Just ref -> trace s $ withMVar ref (`Hash.delete` HostArray sn)
+    Nothing  -> trace nom $ return ()
+    Just ref -> trace del $ withIORef ref (`Hash.delete` key)
+  --
+  where del = "finalise: " ++ show key
+        nom = "finalise/dead table: " ++ show key
+
 
 table_finalizer :: HashTable HostArray DeviceArray -> IO ()
-table_finalizer tbl
+table_finalizer !tbl
   = trace "table finaliser"
   $ Hash.mapM_ (\(_,DeviceArray w) -> finalize w) tbl
+
+
+-- Miscellaneous
+-- -------------
+
+{-# INLINE makeStableArray #-}
+makeStableArray :: Typeable a => ArrayData a -> IO HostArray
+makeStableArray !arr = HostArray `fmap` makeStableName arr
+
+{-# INLINE withIORef #-}
+withIORef :: IORef a -> (a -> IO b) -> IO b
+withIORef ref f = readIORef ref >>= f
 
 
 -- Debug

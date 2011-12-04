@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, CPP, GADTs, TypeFamilies, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Array.Prim
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -11,8 +11,10 @@
 
 module Data.Array.Accelerate.CUDA.Array.Prim (
 
-  mallocArray, useArray, indexArray, copyArray, peekArray, peekArrayAsync,
-  pokeArray, pokeArrayAsync, marshalArrayData, marshalTextureData
+  DevicePtrs, HostPtrs,
+
+  mallocArray, useArray, useArrayAsync, indexArray, copyArray, peekArray, peekArrayAsync,
+  pokeArray, pokeArrayAsync, marshalArrayData, marshalTextureData, devicePtrsOfArrayData
 
 ) where
 
@@ -23,9 +25,9 @@ import Data.Word
 import Data.Maybe
 import Data.Functor
 import Data.Typeable
-import Data.Array.Unboxed                               (UArray)
 import Control.Monad
 import Control.Exception
+import System.Mem.StableName
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.Marshal.Alloc
@@ -149,16 +151,14 @@ mallocArray
     -> ArrayData e
     -> Int
     -> IO ()
-mallocArray mt ad n =
-  let arr = primArrayData ad
-  in do
-    exists <- isJust <$> (lookup mt arr :: IO (Maybe (CUDA.DevicePtr b)))
-    unless exists $ do
-      ptr <- CUDA.mallocArray n `catch` \(e :: CUDAException) ->
-        case e of
-          ExitCode OutOfMemory -> reclaim mt >> CUDA.mallocArray n
-          _                    -> throwIO e
-      insert mt arr (ptr :: CUDA.DevicePtr b)
+mallocArray !mt !ad !n = do
+  exists <- isJust <$> (lookup mt ad :: IO (Maybe (CUDA.DevicePtr b)))
+  unless exists $ do
+    ptr <- CUDA.mallocArray n `catch` \(e :: CUDAException) ->
+      case e of
+        ExitCode OutOfMemory -> reclaim mt >> CUDA.mallocArray n
+        _                    -> throwIO e
+    insert mt ad (ptr :: CUDA.DevicePtr b)
 
 
 -- A combination of 'mallocArray' and 'pokeArray' to allocate space on the
@@ -171,18 +171,37 @@ useArray
     -> ArrayData e
     -> Int
     -> IO ()
-useArray mt ad n =
-  let arr = primArrayData ad
-      src = CUDA.HostPtr (ptrsOfArrayData ad)
+useArray !mt !ad !n =
+  let src = ptrsOfArrayData ad
   in do
-    exists <- isJust <$> (lookup mt arr :: IO (Maybe (CUDA.DevicePtr a)))
+    exists <- isJust <$> (lookup mt ad :: IO (Maybe (CUDA.DevicePtr a)))
     unless exists $ do
       dst <- CUDA.mallocArray n `catch` \(e :: CUDAException) ->
         case e of
           ExitCode OutOfMemory -> reclaim mt >> CUDA.mallocArray n
           _                    -> throwIO e
-      CUDA.pokeArrayAsync n src dst Nothing
-      insert mt arr dst
+      CUDA.pokeArray n src dst
+      insert mt ad dst
+
+
+useArrayAsync
+    :: forall e a. (ArrayElt e, ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.DevicePtr a, Typeable e, Typeable a, Storable a)
+    => MemoryTable
+    -> ArrayData e
+    -> Int
+    -> Maybe CUDA.Stream
+    -> IO ()
+useArrayAsync !mt !ad !n !ms =
+  let src = CUDA.HostPtr (ptrsOfArrayData ad)
+  in do
+    exists <- isJust <$> (lookup mt ad :: IO (Maybe (CUDA.DevicePtr a)))
+    unless exists $ do
+      dst <- CUDA.mallocArray n `catch` \(e :: CUDAException) ->
+        case e of
+          ExitCode OutOfMemory -> reclaim mt >> CUDA.mallocArray n
+          _                    -> throwIO e
+      CUDA.pokeArrayAsync n src dst ms
+      insert mt ad dst
 
 
 -- Read a single element from an array at the given row-major index
@@ -193,9 +212,9 @@ indexArray
     -> ArrayData e
     -> Int
     -> IO b
-indexArray mt ad i =
-  unsafeLookup mt ad >>= \src ->
-  alloca               $ \dst -> do
+indexArray !mt !ad !i =
+  alloca                        $ \dst ->
+  devicePtrsOfArrayData mt ad >>= \src -> do
     CUDA.peekArray 1 (src `CUDA.advanceDevPtr` i) dst
     peek dst
 
@@ -210,9 +229,9 @@ copyArray
     -> ArrayData e              -- destination array
     -> Int                      -- number of array elements
     -> IO ()
-copyArray mt from to n = do
-  src <- unsafeLookup mt from
-  dst <- unsafeLookup mt to
+copyArray !mt !from !to !n = do
+  src <- devicePtrsOfArrayData mt from
+  dst <- devicePtrsOfArrayData mt to
   CUDA.copyArrayAsync n src dst
 
 
@@ -224,8 +243,8 @@ peekArray
     -> ArrayData e
     -> Int
     -> IO ()
-peekArray mt ad n =
-  unsafeLookup mt ad >>= \src ->
+peekArray !mt !ad !n =
+  devicePtrsOfArrayData mt ad >>= \src ->
     CUDA.peekArray n src (ptrsOfArrayData ad)
 
 peekArrayAsync
@@ -235,8 +254,8 @@ peekArrayAsync
     -> Int
     -> Maybe CUDA.Stream
     -> IO ()
-peekArrayAsync mt ad n st =
-  unsafeLookup mt ad >>= \src ->
+peekArrayAsync !mt !ad !n !st =
+  devicePtrsOfArrayData mt ad >>= \src ->
     CUDA.peekArrayAsync n src (CUDA.HostPtr $ ptrsOfArrayData ad) st
 
 
@@ -248,8 +267,8 @@ pokeArray
     -> ArrayData e
     -> Int
     -> IO ()
-pokeArray mt ad n =
-  unsafeLookup mt ad >>= \dst ->
+pokeArray !mt !ad !n =
+  devicePtrsOfArrayData mt ad >>= \dst ->
     CUDA.pokeArray n (ptrsOfArrayData ad) dst
 
 pokeArrayAsync
@@ -259,8 +278,8 @@ pokeArrayAsync
     -> Int
     -> Maybe CUDA.Stream
     -> IO ()
-pokeArrayAsync mt ad n st =
-  unsafeLookup mt ad >>= \dst ->
+pokeArrayAsync !mt !ad !n !st =
+  devicePtrsOfArrayData mt ad >>= \dst ->
     CUDA.pokeArrayAsync n (CUDA.HostPtr $ ptrsOfArrayData ad) dst st
 
 
@@ -272,58 +291,37 @@ marshalArrayData
     => MemoryTable
     -> ArrayData e
     -> IO CUDA.FunParam
-marshalArrayData mt ad = CUDA.VArg <$> unsafeLookup mt ad
+marshalArrayData !mt !ad = CUDA.VArg <$> devicePtrsOfArrayData mt ad
 
 
 -- Bind device memory to the given texture reference, setting appropriate type
 --
-marshalTextureData :: forall a e.
-                      (ArrayElt e, DevicePtrs e ~ CUDA.DevicePtr a
-                      ,Typeable a, Typeable e, Storable a, TextureData a)
-                   => MemoryTable
-                   -> ArrayData e       -- host array
-                   -> Int               -- number of elements
-                   -> CUDA.Texture      -- texture reference to bind array to
-                   -> IO ()
-marshalTextureData mt ad n tex =
+marshalTextureData
+    :: forall a e. (ArrayElt e, DevicePtrs e ~ CUDA.DevicePtr a, Typeable a, Typeable e, Storable a, TextureData a)
+    => MemoryTable
+    -> ArrayData e              -- host array
+    -> Int                      -- number of elements
+    -> CUDA.Texture             -- texture reference to bind array to
+    -> IO ()
+marshalTextureData !mt !ad !n !tex =
   let (fmt, c) = format (undefined :: a)
-  in  unsafeLookup mt ad >>= \ptr -> do
+  in  devicePtrsOfArrayData mt ad >>= \ptr -> do
         CUDA.setFormat tex fmt c
         CUDA.bind tex ptr (fromIntegral $ n * sizeOf (undefined :: a))
 
 
--- Auxiliary functions
--- -------------------
-
-unsafeLookup
-    :: (ArrayElt e, DevicePtrs e ~ CUDA.DevicePtr b, Typeable e, Typeable b)
-    => MemoryTable -> ArrayData e -> IO (DevicePtrs e)
-unsafeLookup mt ad = do
-  mv <- lookup mt (primArrayData ad)
-  case mv of
-    Nothing -> INTERNAL_ERROR(error) "unsafeLookup" "lost device memory"
-    Just v  -> return v
-
-
--- Obtain the underlying unboxed array
+-- Lookup the device memory associated with our host array
 --
-primArrayData :: ArrayElt e => ArrayData e -> UArray Int e
-primArrayData = arrayDataR arrayElt
-  where
-    arrayDataR :: ArrayEltR e -> ArrayData e -> UArray Int e
-    arrayDataR ArrayEltRint    (AD_Int    ba) = ba
-    arrayDataR ArrayEltRint8   (AD_Int8   ba) = ba
-    arrayDataR ArrayEltRint16  (AD_Int16  ba) = ba
-    arrayDataR ArrayEltRint32  (AD_Int32  ba) = ba
-    arrayDataR ArrayEltRint64  (AD_Int64  ba) = ba
-    arrayDataR ArrayEltRword   (AD_Word   ba) = ba
-    arrayDataR ArrayEltRword8  (AD_Word8  ba) = ba
-    arrayDataR ArrayEltRword16 (AD_Word16 ba) = ba
-    arrayDataR ArrayEltRword32 (AD_Word32 ba) = ba
-    arrayDataR ArrayEltRword64 (AD_Word64 ba) = ba
-    arrayDataR ArrayEltRfloat  (AD_Float  ba) = ba
-    arrayDataR ArrayEltRdouble (AD_Double ba) = ba
-    arrayDataR ArrayEltRbool   (AD_Bool _)    = error "arrayDataR: ArrayEltRbool"
-    arrayDataR ArrayEltRchar   (AD_Char _)    = error "arrayDataR: ArrayEltRchar"
-    arrayDataR _               _              = error "arrayDataR: not primitive"
+devicePtrsOfArrayData
+    :: (ArrayElt e, DevicePtrs e ~ CUDA.DevicePtr b, Typeable e, Typeable b)
+    => MemoryTable
+    -> ArrayData e
+    -> IO (DevicePtrs e)
+devicePtrsOfArrayData !mt !ad = do
+  mv <- lookup mt ad
+  case mv of
+    Just v  -> return v
+    Nothing -> do
+      sn <- makeStableName ad
+      INTERNAL_ERROR(error) "devicePtrsOfArrayData" $ "lost device memory #" ++ show (hashStableName sn)
 

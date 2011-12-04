@@ -12,8 +12,12 @@
 module Data.Array.Accelerate.CUDA.Array.Data (
 
   -- * Array operations and representations
-  mallocArray, useArray, indexArray, copyArray, peekArray, peekArrayAsync,
-  pokeArray, pokeArrayAsync, marshalArrayData, marshalTextureData,
+  mallocArray, indexArray, copyArray,
+  useArray,  useArrayAsync,
+  peekArray, peekArrayAsync,
+  pokeArray, pokeArrayAsync,
+  marshalArrayData, marshalTextureData,
+  devicePtrsOfArrayData,
 
   -- * Garbage collection
   cleanupArrayData
@@ -88,7 +92,7 @@ mallocArray (Array sh adata) = doMalloc =<< getM memoryTable
         mallocR ArrayEltRunit             _  = return ()
         mallocR (ArrayEltRpair aeR1 aeR2) ad = mallocR aeR1 (fst ad) >> mallocR aeR2 (snd ad)
         mallocR aer                       ad = mallocPrim aer mt ad (size sh)
-
+        --
         mallocPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(mallocPrim,Prim.mallocArray)
 
@@ -104,9 +108,22 @@ useArray (Array sh adata) = doUse =<< getM memoryTable
         useR ArrayEltRunit             _  = return ()
         useR (ArrayEltRpair aeR1 aeR2) ad = useR aeR1 (fst ad) >> useR aeR2 (snd ad)
         useR aer                       ad = usePrim aer mt ad (size sh)
-
+        --
         usePrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(usePrim,Prim.useArray)
+
+useArrayAsync :: (Shape dim, Elt e) => Array dim e -> Maybe CUDA.Stream -> CIO ()
+useArrayAsync (Array sh adata) ms = doUse =<< gets memoryTable
+  where
+    doUse mt = liftIO $ useR arrayElt adata
+      where
+        useR :: ArrayEltR e -> ArrayData e -> IO ()
+        useR ArrayEltRunit             _  = return ()
+        useR (ArrayEltRpair aeR1 aeR2) ad = useR aeR1 (fst ad) >> useR aeR2 (snd ad)
+        useR aer                       ad = usePrim aer mt ad (size sh) ms
+        --
+        usePrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> Maybe CUDA.Stream -> IO ()
+        mkPrimDispatch(usePrim,Prim.useArrayAsync)
 
 
 -- |Read a single element from an array at the given row-major index. This is a
@@ -123,7 +140,7 @@ indexArray (Array sh adata) ix = doIndex =<< getM memoryTable
         indexR (ArrayEltRpair aeR1 aeR2) ad = (,) <$> indexR aeR1 (fst ad)
                                                   <*> indexR aeR2 (snd ad)
         indexR aer                       ad = indexPrim aer mt ad i
-
+        --
         indexPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO e
         mkPrimDispatch(indexPrim,Prim.indexArray)
 
@@ -143,7 +160,7 @@ copyArray (Array sh1 adata1) (Array sh2 adata2)
         copyR (ArrayEltRpair aeR1 aeR2) ad1 ad2 = copyR aeR1 (fst ad1) (fst ad2) >>
                                                   copyR aeR2 (snd ad1) (snd ad2)
         copyR aer                       ad1 ad2 = copyPrim aer mt ad1 ad2 (size sh1)
-
+        --
         copyPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(copyPrim,Prim.copyArray)
 
@@ -159,10 +176,9 @@ peekArray (Array sh adata) = doPeek =<< getM memoryTable
         peekR ArrayEltRunit             _  = return ()
         peekR (ArrayEltRpair aeR1 aeR2) ad = peekR aeR1 (fst ad) >> peekR aeR2 (snd ad)
         peekR aer                       ad = peekPrim aer mt ad (size sh)
-
+        --
         peekPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(peekPrim,Prim.peekArray)
-
 
 peekArrayAsync :: (Shape dim, Elt e) => Array dim e -> Maybe CUDA.Stream -> CIO ()
 peekArrayAsync (Array sh adata) ms = doPeek =<< getM memoryTable
@@ -173,7 +189,7 @@ peekArrayAsync (Array sh adata) ms = doPeek =<< getM memoryTable
         peekR ArrayEltRunit             _  = return ()
         peekR (ArrayEltRpair aeR1 aeR2) ad = peekR aeR1 (fst ad) >> peekR aeR2 (snd ad)
         peekR aer                       ad = peekPrim aer mt ad (size sh) ms
-
+        --
         peekPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> Maybe CUDA.Stream -> IO ()
         mkPrimDispatch(peekPrim,Prim.peekArrayAsync)
 
@@ -189,7 +205,7 @@ pokeArray (Array sh adata) = doPoke =<< getM memoryTable
         pokeR ArrayEltRunit             _  = return ()
         pokeR (ArrayEltRpair aeR1 aeR2) ad = pokeR aeR1 (fst ad) >> pokeR aeR2 (snd ad)
         pokeR aer                       ad = pokePrim aer mt ad (size sh)
-
+        --
         pokePrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> IO ()
         mkPrimDispatch(pokePrim,Prim.pokeArray)
 
@@ -202,7 +218,7 @@ pokeArrayAsync (Array sh adata) ms = doPoke =<< getM memoryTable
         pokeR ArrayEltRunit             _  = return ()
         pokeR (ArrayEltRpair aeR1 aeR2) ad = pokeR aeR1 (fst ad) >> pokeR aeR2 (snd ad)
         pokeR aer                       ad = pokePrim aer mt ad (size sh) ms
-
+        --
         pokePrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> Maybe CUDA.Stream -> IO ()
         mkPrimDispatch(pokePrim,Prim.pokeArrayAsync)
 
@@ -220,7 +236,7 @@ marshalArrayData adata = doMarshal =<< getM memoryTable
         marshalR (ArrayEltRpair aeR1 aeR2) ad = (++) <$> marshalR aeR1 (fst ad)
                                                      <*> marshalR aeR2 (snd ad)
         marshalR aer                       ad = return <$> marshalPrim aer mt ad
-
+        --
         marshalPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> IO CUDA.FunParam
         mkPrimDispatch(marshalPrim,Prim.marshalArrayData)
 
@@ -243,7 +259,24 @@ marshalTextureData adata n texs = doMarshal =<< getM memoryTable
         marshalR aer                       ad t
           = do marshalPrim aer mt ad n (head t)
                return 1
-
+        --
         marshalPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> Int -> CUDA.Texture -> IO ()
         mkPrimDispatch(marshalPrim,Prim.marshalTextureData)
+
+
+-- |Raw device pointers associated with a host-side array
+--
+devicePtrsOfArrayData :: ArrayElt e => ArrayData e -> CIO (Prim.DevicePtrs e)
+devicePtrsOfArrayData adata = ptrs =<< gets memoryTable
+  where
+    ptrs mt = liftIO $ ptrsR arrayElt adata
+      where
+        ptrsR :: ArrayEltR e -> ArrayData e -> IO (Prim.DevicePtrs e)
+        ptrsR ArrayEltRunit             _  = return ()
+        ptrsR (ArrayEltRpair aeR1 aeR2) ad = (,) <$> ptrsR aeR1 (fst ad)
+                                                 <*> ptrsR aeR2 (snd ad)
+        ptrsR aer                       ad = ptrsPrim aer mt ad
+        --
+        ptrsPrim :: ArrayEltR e -> MemoryTable -> ArrayData e -> IO (Prim.DevicePtrs e)
+        mkPrimDispatch(ptrsPrim,Prim.devicePtrsOfArrayData)
 
