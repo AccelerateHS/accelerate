@@ -100,22 +100,22 @@ Executable accelerate-examples
     CPP-options:        -DACCELERATE_IO
 
   build-depends:        accelerate              == 0.12.*,
-                        array                   >= 0.3 && < 0.5,
-                        attoparsec              >= 0.8 && < 0.10,
+                        array                   >= 0.3,
+                        attoparsec              >= 0.8,
                         base                    == 4.*,
-                        bytestring              == 0.9.*,
-                        bytestring-lexing       == 0.2.*,
-                        cmdargs                 >= 0.6 && < 0.10,
-                        criterion               == 0.5.*,
-                        deepseq                 >= 1.1 && < 1.4,
-                        directory               >= 1.0 && < 1.2,
-                        filepath                >= 1.0 && < 1.4,
-                        mtl                     >= 1.1 && < 3.0,
-                        mwc-random              >= 0.8 && < 0.11,
-                        pgm                     == 0.1.*,
-                        pretty                  >= 1.0 && < 1.2,
-                        vector                  >= 0.7 && < 0.10,
-                        vector-algorithms       >= 0.4 && < 0.6
+                        bytestring              >= 0.9,
+                        bytestring-lexing       >= 0.2,
+                        cmdargs                 >= 0.6,
+                        criterion               >= 0.5,
+                        deepseq                 >= 1.1,
+                        directory               >= 1.0,
+                        filepath                >= 1.0,
+                        mtl                     >= 1.1,
+                        mwc-random              >= 0.8,
+                        pgm                     >= 0.1,
+                        pretty                  >= 1.0,
+                        vector                  >= 0.7,
+                        vector-algorithms       >= 0.4
 
 
 source-repository head

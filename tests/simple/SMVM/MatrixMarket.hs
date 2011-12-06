@@ -5,7 +5,7 @@ module SMVM.MatrixMarket (Matrix(..), readMatrix) where
 import Control.Applicative                      hiding (many)
 
 import Data.Complex
-import Data.Attoparsec.Char8                    hiding (parse, Result(..))
+import Data.Attoparsec.Char8                    hiding (parse, Result)
 import Data.Attoparsec.Lazy                     (parse, Result(..))
 import Data.ByteString.Lex.Double
 import qualified Data.ByteString.Lazy           as L
@@ -118,10 +118,10 @@ matrix = do
   (_,t,_) <- header
   (m,n,l) <- skipMany comment *> extent
   case t of
-    Real    -> RealMatrix    (m,n) l `fmap` many (line floating)
-    Complex -> ComplexMatrix (m,n) l `fmap` many (line ((:+) <$> floating <*> floating))
-    Integer -> IntMatrix     (m,n) l `fmap` many (line integral)
-    Pattern -> PatternMatrix (m,n) l `fmap` many ((,) <$> integral <*> integral)
+    Real    -> RealMatrix    (m,n) l `fmap` many1 (line floating)
+    Complex -> ComplexMatrix (m,n) l `fmap` many1 (line ((:+) <$> floating <*> floating))
+    Integer -> IntMatrix     (m,n) l `fmap` many1 (line integral)
+    Pattern -> PatternMatrix (m,n) l `fmap` many1 ((,) <$> integral <*> integral)
 
 
 readMatrix :: FilePath -> IO Matrix
