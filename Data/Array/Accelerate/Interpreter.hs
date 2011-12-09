@@ -87,11 +87,11 @@ evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc
 
 evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
 
-evalPreOpenAcc (Let acc1 acc2) aenv 
+evalPreOpenAcc (Alet acc1 acc2) aenv 
   = let !arr1 = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1)
 
-evalPreOpenAcc (Let2 acc1 acc2) aenv 
+evalPreOpenAcc (Alet2 acc1 acc2) aenv 
   = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
 
@@ -593,9 +593,15 @@ evalFun f aenv = evalOpenFun f Empty aenv
 --  
 evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
 
-evalOpenExp (Var idx) env _ = Sugar.toElt $ prj idx env
-  
-evalOpenExp (Const c) _ _ = Sugar.toElt c
+evalOpenExp (Let exp1 exp2) env aenv = 
+  = let !v1 = force $ evalOpenExp exp1 env aenv
+    in evalOpenExp exp2 (env `Push` exp1) aenv
+
+evalOpenExp (Var idx) env _
+  = Sugar.toElt $ prj idx env
+
+evalOpenExp (Const c) _ _
+  = Sugar.toElt c
 
 evalOpenExp (Tuple tup) env aenv 
   = toTuple $ evalTuple tup env aenv

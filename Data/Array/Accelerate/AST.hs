@@ -199,17 +199,17 @@ data PreOpenAcc acc aenv a where
 
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: (Arrays bndArrs, Arrays bodyArrs)
-              => acc            aenv            bndArrs               -- bound expression
-              -> acc            (aenv, bndArrs) bodyArrs              -- the bound expr's scope
-              -> PreOpenAcc acc aenv            bodyArrs
+  Alet         :: (Arrays bndArrs, Arrays bodyArrs)
+               => acc            aenv            bndArrs                -- bound expression
+               -> acc            (aenv, bndArrs) bodyArrs               -- the bound expr's scope
+               -> PreOpenAcc acc aenv            bodyArrs
 
-  -- Variant of 'Let' binding (and decomposing) a pair
-  Let2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
-              => acc            aenv            (bndArrs1, bndArrs2)  -- bound expressions
-              -> acc            ((aenv, bndArrs1), bndArrs2)
-                                                bodyArrs              -- the bound expr's scope
-              -> PreOpenAcc acc aenv            bodyArrs
+  -- Variant of 'Let' binding a pair by decomposing it
+  Alet2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
+               => acc            aenv            (bndArrs1, bndArrs2)   -- bound expressions
+               -> acc            ((aenv, bndArrs1), bndArrs2)
+                                                 bodyArrs               -- the bound expr's scope
+               -> PreOpenAcc acc aenv            bodyArrs
 
   PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc            aenv (Array sh1 e1)
@@ -423,13 +423,11 @@ deriving instance Typeable2 OpenAcc
 --
 type Acc = OpenAcc ()
 
-
--- | Operations on stencils.
+-- |Operations on stencils.
 --
 class (Shape sh, Elt e, IsTuple stencil) => Stencil sh e stencil where
   stencil       :: StencilR sh e stencil
   stencilAccess :: (sh -> e) -> sh -> stencil
-
 
 -- |GADT reifying the 'Stencil' class.
 --
@@ -632,13 +630,19 @@ type PreFun acc = PreOpenFun acc ()
 type Fun = OpenFun ()
 
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
--- of scalars and arrays of tuples.  All code, except Cond, is evaluated
--- eagerly.  N-tuples are represented as nested pairs. 
+-- of scalars and arrays of tuples.  All code, except Cond, is evaluated eagerly.  N-tuples are
+-- represented as nested pairs. 
 --
 -- The data type is parametrised over the surface types (not the representation
 -- type).
 --
 data PreOpenExp (acc :: * -> * -> *) env aenv t where
+
+  -- Local binding of a scalar expression
+  Let         :: (Elt bnd_t, Elt body_t)
+              => PreOpenExp acc env          aenv bnd_t
+              -> PreOpenExp acc (env, bnd_t) aenv body_t
+              -> PreOpenExp acc env          aenv body_t
 
   -- Variable index, ranging only over tuples or scalars
   Var         :: Elt t

@@ -67,8 +67,8 @@ preAccType :: forall acc aenv sh e.
            -> TupleType (EltRepr e)
 preAccType k pacc =
   case pacc of
-    Let  _ acc          -> k acc
-    Let2 _ acc          -> k acc
+    Alet  _ acc         -> k acc
+    Alet2 _ acc         -> k acc
     Avar _              -> -- eltType (undefined::e)   -- should work - GHC 6.12 bug?
                            case arrays :: ArraysR (Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
@@ -113,8 +113,8 @@ preAccType2 :: forall acc aenv sh1 e1 sh2 e2.
             -> (TupleType (EltRepr e1), TupleType (EltRepr e2))
 preAccType2 k1 k2 pacc =
   case pacc of
-    Let  _ acc           -> k2 acc
-    Let2 _ acc           -> k2 acc
+    ALet  _ acc          -> k2 acc
+    ALet2 _ acc          -> k2 acc
     PairArrays acc1 acc2 -> (k1 acc1, k1 acc2)
     Avar _    ->
       -- (eltType (undefined::e1), eltType (undefined::e2))
@@ -148,6 +148,7 @@ preExpType :: forall acc aenv env t.
            -> TupleType (EltRepr t)
 preExpType k e =
   case e of
+    Let _ _           -> eltType (undefined::t)
     Var _             -> eltType (undefined::t)
     Const _           -> eltType (undefined::t)
     Tuple _           -> eltType (undefined::t)
