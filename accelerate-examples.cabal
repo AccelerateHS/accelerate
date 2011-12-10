@@ -42,6 +42,9 @@ Flag io
   Default:              True
 
 
+-- The main examples program including verification and timing tests for several
+-- simple accelerate programs
+--
 Executable accelerate-examples
   Main-is:              Main.hs
   Other-modules:        Backpermute
@@ -116,6 +119,29 @@ Executable accelerate-examples
                         pretty                  >= 1.0,
                         vector                  >= 0.7,
                         vector-algorithms       >= 0.4
+
+
+-- A quasicrystal demo as the sum of waves in a plane
+--
+Executable accelerate-crystal
+  hs-source-dirs:       examples/crystal
+  Main-is:              Main.hs
+  other-modules:        Config
+  ghc-options:          -O2 -Wall
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         == 0.9.*
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl       == 0.1.*
+
+  build-depends:        accelerate              == 0.9.*,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        gloss                   >= 1.5
 
 
 source-repository head
