@@ -5,7 +5,7 @@ module SMVM.MatrixMarket (Matrix(..), readMatrix) where
 import Control.Applicative                      hiding (many)
 
 import Data.Complex
-import Data.Attoparsec.Char8                    hiding (parse, Result)
+import Data.Attoparsec.Char8                    hiding (parse, Result(..))
 import Data.Attoparsec.Lazy                     (parse, Result(..))
 import Data.ByteString.Lex.Double
 import qualified Data.ByteString.Lazy           as L
