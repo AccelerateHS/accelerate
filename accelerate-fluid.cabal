@@ -14,7 +14,7 @@ Cabal-version:       >=1.6
 
 Flag cuda
   Description:          Enable CUDA backend
-  Default:              False
+  Default:              True
 
 Executable accelerate-fluid
   Main-is:              Main.hs
@@ -27,6 +27,7 @@ Executable accelerate-fluid
 
   Build-depends:        accelerate      == 0.9.*,
                         base            == 4.*,
-                        cmdargs         == 0.8.*,
-                        gloss           == 1.5.*
+                        criterion	>= 0.5,
+                        fclabels        >= 1.0,
+                        gloss           >= 1.5
 

@@ -7,6 +7,7 @@ module Event where
 
 import Config
 import World
+import Data.Label
 import Graphics.Gloss.Interface.Game
 import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 
@@ -16,8 +17,8 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Config -> Event -> World -> World
-react cfg event world =
+react :: Options -> Event -> World -> World
+react opt event world =
   case event of
     EventKey (MouseButton b) s _ uv -> mouse b s (coord uv)
     EventMotion uv                  -> motion (coord uv)
@@ -30,12 +31,10 @@ react cfg event world =
     mouse LeftButton  Down xy = world { currentButton = Just (LeftButton, xy)
                                       , densitySource = addDensity xy }
     mouse RightButton Down xy = world { currentButton = Just (RightButton, xy) }
-    mouse RightButton Up   xy =
-      case currentButton world of
-           Just (RightButton,xy0) -> world { currentButton  = Nothing
-                                           , velocitySource = addVelocity xy0 xy }
-           _                      -> world { currentButton  = Nothing }
-    mouse _ _ _               = world
+    mouse RightButton Up   xy | Just (RightButton,xy0) <- currentButton world
+                              = world { currentButton  = Nothing
+                                      , velocitySource = addVelocity xy0 xy }
+    mouse _ _ _               = world { currentButton = Nothing }
 
     -- As the mouse moves, keep inserting density sources, or adding source
     -- velocities
@@ -53,9 +52,9 @@ react cfg event world =
                                       v = fromIntegral (y1-y0)
                                   in  (Z:.y0:.x0, (u,v)) : velocitySource world
     --
-    zoom        = fromIntegral $ displayScale cfg
-    width       = fromIntegral $ simulationWidth  cfg
-    height      = fromIntegral $ simulationHeight cfg
+    zoom        = fromIntegral $ get displayScale opt
+    width       = fromIntegral $ get simulationWidth  opt
+    height      = fromIntegral $ get simulationHeight opt
     scaleX      = width  / (width  * zoom + 1)
     scaleY      = height / (height * zoom + 1)
     coord (u,v) = (truncate $ u * scaleX + width /2

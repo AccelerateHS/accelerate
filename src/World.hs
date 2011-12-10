@@ -8,6 +8,7 @@ module World (World(..), initialise, render) where
 import           Type
 import           Config
 import           Data.Word
+import           Data.Label
 import           Graphics.Gloss.Interface.Game
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
@@ -23,8 +24,8 @@ import qualified Data.Array.Accelerate                  as A
 data World = World
   {
     -- current state of the simulation
-    densityField   :: DensityField
-  , velocityField  :: VelocityField
+    densityField   :: !DensityField
+  , velocityField  :: !VelocityField
   , indexField     :: Acc IndexField
       -- ^^ because we lack functions to map with indices
 
@@ -34,10 +35,10 @@ data World = World
   , currentButton  :: Maybe (MouseButton, (Int,Int))
   }
 
-initialise :: Config -> World
-initialise cfg =
-  let w = simulationWidth  cfg
-      h = simulationHeight cfg
+initialise :: Options -> World
+initialise opt =
+  let w = get simulationWidth  opt
+      h = get simulationHeight opt
   in
   World
     { densityField   = A.fromList (Z:.h:.w) (repeat 0)
@@ -48,10 +49,10 @@ initialise cfg =
     , currentButton  = Nothing
     }
 
-render :: Config -> World -> Picture
-render cfg world = Scale zoom zoom pic
+render :: Options -> World -> Picture
+render opt world = Scale zoom zoom pic
   where
-    zoom = fromIntegral  $ displayScale cfg
+    zoom = fromIntegral $ get displayScale opt
     pic  = Pictures [ renderDensity  $ densityField  world
                     , renderVelocity $ velocityField world ]
 
@@ -97,21 +98,4 @@ renderVelocity vf
 {-# INLINE floatToWord8 #-}
 floatToWord8 :: Float -> Word8
 floatToWord8 f = fromIntegral (truncate f :: Int)
-
-
-{--
- -- We would like to be able to render the density field into an image as part
- -- of the accelerate expression, but can not at the moment because we are
- -- limited to two output arrays (a soft bug).
- --
-renderDensity :: Acc DensityField -> Acc ImageRGBA
-renderDensity = A.map rgba
-  where
-    rgba f = let r = A.truncate . (255 *) . A.max 0 . A.min 1 $ f
-                 g = r * 0x100
-                 b = g * 0x100
-                 a = 0xFF000000
-             in
-             r + g + b + a
---}
 

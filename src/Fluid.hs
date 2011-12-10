@@ -13,15 +13,15 @@ import qualified Data.Array.Accelerate          as A
 
 -- A simulation step
 --
-simulate :: Config -> Viscosity -> Diffusion -> Timestep -> World -> World
-simulate cfg dp dn dt world =
+simulate :: Options -> Viscosity -> Diffusion -> Timestep -> World -> World
+simulate opt dp dn dt world =
   world { densityField  = df', densitySource  = []
         , velocityField = vf', velocitySource = []
         }
   where
     vf          = velocity world dt dp    $ A.use (velocityField world)
     df          = density  world dt dn vf $ A.use (densityField world)
-    (vf', df')  = run cfg (A.pairA vf df)
+    (vf', df')  = run opt (A.pairA vf df)
 
 
 -- The velocity over a timestep evolves due to three causes:

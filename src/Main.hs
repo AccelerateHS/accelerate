@@ -10,25 +10,39 @@ import Config
 import World
 import Fluid
 import Event
+import Data.Label
+import Criterion.Main
+import Control.Exception
+import System.Environment
 import Graphics.Gloss.Interface.Game
 
 
 main :: IO ()
 main = do
-  cfg <- processArgs
-  let width  = simulationWidth  cfg * displayScale cfg
-      height = simulationHeight cfg * displayScale cfg
-      fps    = displayFramerate cfg
-      dp     = viscosity cfg
-      dn     = diffusion cfg
-  gameInWindow
-    "accelerate-fluid"
-    (width, height)
-    (10, 20)                    -- initial position
-    black                       -- background colour
-    fps                         -- display framerate
-    (initialise cfg)            -- initial state of the simulation
-    (render cfg)                -- render world state into a picture
-    (react cfg)                 -- handle user events
-    (simulate cfg dp dn)        -- one step of the simulation
+  (opt,noms)    <- processArgs =<< getArgs
+  let width     = get simulationWidth  opt * get displayScale opt
+      height    = get simulationHeight opt * get displayScale opt
+      fps       = get displayFramerate opt
+      dp        = get viscosity opt
+      dn        = get diffusion opt
+
+  -- warming up...
+  initialWorld <- evaluate (simulate opt dp dn 0.1 $ initialise opt)
+
+  if get optBench opt
+     -- benchmark
+     then withArgs noms $ defaultMain
+              [ bench "fluid" $ whnf (simulate opt dp dn 1.0) initialWorld ]
+
+     -- simulate
+     else gameInWindow
+              "accelerate-fluid"
+              (width, height)
+              (10, 20)                  -- initial position
+              black                     -- background colour
+              fps                       -- display framerate
+              initialWorld              -- initial state of the simulation
+              (render opt)              -- render world state into a picture
+              (react opt)               -- handle user events
+              (simulate opt dp dn)      -- one step of the simulation
 

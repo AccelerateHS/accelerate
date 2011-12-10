@@ -1,15 +1,22 @@
-{-# LANGUAGE CPP, DeriveDataTypeable #-}
+{-# LANGUAGE CPP, TemplateHaskell, PatternGuards #-}
 --
 -- Configuration parameters
 --
 
-module Config (Config(..), run, processArgs) where
+module Config (
 
-import           Data.Version
-import           System.Console.CmdArgs
-import           Paths_accelerate_fluid
-import           Data.Array.Accelerate                  (Acc, Arrays)
+  Options,
+  timestep, viscosity, diffusion, simulationWidth, simulationHeight,
+  displayScale, displayFramerate, optBench,
 
+  processArgs, run
+
+) where
+
+import           Data.Label
+import           System.Exit
+import           System.Console.GetOpt
+import           Data.Array.Accelerate                  ( Acc, Arrays )
 import qualified Data.Array.Accelerate.Interpreter      as I
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
@@ -20,109 +27,89 @@ data Backend
 #ifdef ACCELERATE_CUDA_BACKEND
   | CUDA
 #endif
-  deriving (Show, Data, Typeable)
+  deriving (Show, Bounded)
 
 
-data Config = Config
+data Options = Options
   {
     -- simulation
-      timestep         :: Float
-    , viscosity        :: Float
-    , diffusion        :: Float
-    , simulationWidth  :: Int
-    , simulationHeight :: Int
+    _timestep           :: Float
+  , _viscosity          :: Float
+  , _diffusion          :: Float
+  , _simulationWidth    :: Int
+  , _simulationHeight   :: Int
 
-    -- visualisation
-    , displayScale     :: Int
-    , displayFramerate :: Int
+  -- visualisation
+  , _displayScale       :: Int
+  , _displayFramerate   :: Int
 
-    -- execution
-    , backend          :: Backend
+  -- misc
+  , _optBackend         :: Backend
+  , _optBench           :: Bool
+  , _optHelp            :: Bool
   }
-  deriving (Show, Data, Typeable)
+  deriving Show
 
+$(mkLabels [''Options])
+
+defaultOptions :: Options
+defaultOptions = Options
+  { _timestep           = 0.5
+  , _viscosity          = 0
+  , _diffusion          = 0
+  , _simulationWidth    = 100
+  , _simulationHeight   = 100
+  , _displayScale       = 4
+  , _displayFramerate   = 10
+  , _optBackend         = maxBound
+  , _optBench           = False
+  , _optHelp            = False
+  }
 
 -- Execute an Accelerate expression using the selected backend
 --
-run :: Arrays a => Config -> Acc a -> a
-run cfg = case backend cfg of
+run :: Arrays a => Options -> Acc a -> a
+run opts = case _optBackend opts of
   Interpreter   -> I.run
 #ifdef ACCELERATE_CUDA_BACKEND
   CUDA          -> CUDA.run
 #endif
 
+
 -- Process command line arguments
 --
-processArgs :: IO Config
-processArgs =  cmdArgs defaultConfig
-
-defaultConfig :: Config
-defaultConfig =  Config
-  {
-    backend = enum
-    [ Interpreter
-        &= help "Reference implementation (sequential)"
+options :: [OptDescr (Options -> Options)]
+options =
+  [ Option []   ["interpreter"] (NoArg  (set optBackend Interpreter))           "reference implementation (sequential)"
 #ifdef ACCELERATE_CUDA_BACKEND
-    , CUDA
-        &= explicit
-        &= name "cuda"
-        &= help "Implementation for NVIDIA GPUs (parallel)"
+  , Option []   ["cuda"]        (NoArg  (set optBackend CUDA))                  "implementation for NVIDIA GPUs (parallel)"
 #endif
-    ]
+  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")          "size of a simulation time step"
+  , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")         "viscosity for velocity dampening"
+  , Option []   ["diffusion"]   (ReqArg (set diffusion . read) "FLOAT")         "diffusion rate for mass dispersion"
+  , Option []   ["width"]       (ReqArg (set simulationWidth . read) "INT")     "grid width for simulation"
+  , Option []   ["height"]      (ReqArg (set simulationHeight . read) "INT")    "grid height for simulation"
+  , Option []   ["scale"]       (ReqArg (set displayScale . read) "INT")        "feature size of visualisation"
+  , Option []   ["framerate"]   (ReqArg (set displayFramerate . read) "INT")    "frame rate for visualisation"
+  --
+  , Option []   ["benchmark"]   (NoArg  (set optBench True))                    "benchmark instead of displaying animation (False)"
+  , Option "h?" ["help"]        (NoArg  (set optHelp True))                     "show help message"
+  ]
 
-  , timestep = 0.5
-      &= explicit
-      &= name "t"
-      &= name "timestep"
-      &= help "size of a simulation time step"
-      &= typ "FLOAT"
 
-  , viscosity = 0
-      &= explicit
-      &= name "u"
-      &= name "viscosity"
-      &= help "viscosity for velocity dampening"
-      &= typ "FLOAT"
-
-  , diffusion = 0
-      &= explicit
-      &= name "d"
-      &= name "diffusion"
-      &= help "diffusion rate for mass dispersion"
-      &= typ "FLOAT"
-
-  , simulationWidth = 100
-      &= explicit
-      &= name "w"
-      &= name "width"
-      &= help "grid width for simulation"
-      &= typ "INT"
-
-  , simulationHeight = 100
-      &= explicit
-      &= name "h"
-      &= name "height"
-      &= help "grid height for simulation"
-      &= typ "INT"
-
-  , displayScale = 4
-      &= explicit
-      &= name "s"
-      &= name "scale"
-      &= help "feature size of visualisation"
-      &= typ "INT"
-
-  , displayFramerate = 10
-      &= explicit
-      &= name "r"
-      &= name "framerate"
-      &= help "frame rate for visualisation"
-      &= typ "INT"
-  }
-  &= program "accelerate-fluid"
-  &= summary "accelerate-fluid (c) 2011 Trevor L. McDonell"
-  &= versionArg [summary $ "accelerate-fluid-" ++ showVersion version]
-  &= verbosityArgs
-       [explicit, name "verbose", help "Print more output"]
-       [explicit, name "quiet",   help "Print less output"]
+processArgs :: [String] -> IO (Options, [String])
+processArgs argv =
+  case getOpt' Permute options argv of
+    (o,_,n,[])  -> case foldl (flip id) defaultOptions o of
+                     opts | False <- get optHelp  opts  -> return (opts, n)
+--                     opts | True  <- get optBench opts  -> return (opts, "--help":n)
+                     _                                  -> putStrLn (helpMsg []) >> exitSuccess
+    (_,_,_,err) -> error (helpMsg err)
+  where
+    helpMsg err = concat err ++ usageInfo header options
+    header      = unlines
+      [ "accelerate-fluid (c) 2011 Trevor L. McDonell"
+      , ""
+      , "Usage: accelerate-fluid [OPTIONS]"
+      ]
 
