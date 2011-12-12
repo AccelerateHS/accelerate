@@ -101,6 +101,7 @@ Executable accelerate-examples
 
   if flag(io)
     CPP-options:        -DACCELERATE_IO
+    build-depends:      accelerate-io           == 0.9.*
 
   build-depends:        accelerate              == 0.12.*,
                         array                   >= 0.3,
