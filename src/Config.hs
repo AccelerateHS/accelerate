@@ -102,7 +102,7 @@ processArgs argv =
   case getOpt' Permute options argv of
     (o,_,n,[])  -> case foldl (flip id) defaultOptions o of
                      opts | False <- get optHelp  opts  -> return (opts, n)
---                     opts | True  <- get optBench opts  -> return (opts, "--help":n)
+                     opts | True  <- get optBench opts  -> return (opts, "--help":n)
                      _                                  -> putStrLn (helpMsg []) >> exitSuccess
     (_,_,_,err) -> error (helpMsg err)
   where
