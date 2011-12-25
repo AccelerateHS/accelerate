@@ -48,7 +48,7 @@ Flag io
 Executable accelerate-examples
   Main-is:              Main.hs
   Other-modules:        Backpermute, Benchmark, BlackScholes, BlockCopy, Canny,
-                        Config, DotP, Filter, Fold, IntegralImage, Map, PGM,
+                        Config, DotP, Filter, Fold, FoldSeg, IntegralImage, Map, PGM,
                         Permute, Radix, Random, SASUM, SAXPY, ScanSeg,
                         SharingRecovery, SliceExamples, SMVM, SMVM.Matrix,
                         SMVM.MatrixMarket, Stencil, Stencil2, Test, Util,

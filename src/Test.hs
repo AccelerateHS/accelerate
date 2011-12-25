@@ -12,6 +12,7 @@ import qualified Map
 import qualified Zip
 import qualified ZipWith
 import qualified Fold
+import qualified FoldSeg
 import qualified ScanSeg
 import qualified Stencil
 import qualified Stencil2
@@ -125,7 +126,10 @@ allTests cfg = sequence'
   , mkTest "fold-minimum"          "minimum of a vector: fold1 min"             $ Fold.run "minimum" n
   , mkTest "fold-2d-sum"           "reduction along innermost matrix dimension" $ Fold.run2d "sum-2d" n
   , mkTest "fold-2d-product"       "product along innermost matrix dimension"   $ Fold.run2d "product-2d" n
-  , mkTest "scanseg-sum"           "segmented reduction"                        $ ScanSeg.run "sum" n
+  , mkTest "fold-2d-maximum"       "maximum along innermost matrix dimension"   $ Fold.run2d "maximum-2d" n
+  , mkTest "fold-2d-minimum"       "minimum along innermost matrix dimension"   $ Fold.run2d "minimum-2d" n
+  , mkTest "foldseg-sum"           "segmented vector reduction"                 $ FoldSeg.run "sum" n
+  , mkTest "scanseg-sum"           "segmented vector prescanl (+) 0"            $ ScanSeg.run "sum" n
   , mkTest "stencil-1D"            "3-element vector"                           $ Stencil.run "1D" n
   , mkTest "stencil-2D"            "3x3 pattern"                                $ Stencil.run2D "2D" n
   , mkTest "stencil-3D"            "3x3x3 pattern"                              $ Stencil.run3D "3D" n

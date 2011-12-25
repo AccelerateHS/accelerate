@@ -42,9 +42,11 @@ foldU2D f z arr =
   let (_,(m,_)) = bounds arr
   in  accumArray f z (0,m) [ (i,e) | ((i,_),e) <- assocs arr ]
 
-sum2DRef, prod2DRef :: UArray (Int,Int) Float -> UArray Int Float
+sum2DRef, prod2DRef, min2DRef, max2DRef :: UArray (Int,Int) Float -> UArray Int Float
 sum2DRef  = foldU2D (+) 0
 prod2DRef = foldU2D (*) 1
+min2DRef  = foldU2D P.min ( 1/0)
+max2DRef  = foldU2D P.max (-1/0)
 
 
 -- Main
@@ -78,6 +80,8 @@ run2d alg n = withSystemRandom $ \gen -> do
   case alg of
     "sum-2d"     -> go sum2DRef sumAcc
     "product-2d" -> go prod2DRef prodAcc
+    "maximum-2d" -> go max2DRef maxAcc
+    "minimum-2d" -> go min2DRef minAcc
     x            -> error $ "unknown variant: " ++ x
   where
     {-# NOINLINE run_ref #-}
