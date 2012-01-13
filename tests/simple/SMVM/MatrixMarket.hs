@@ -6,7 +6,7 @@ import Control.Applicative                      hiding (many)
 
 import Data.Complex
 import Data.Attoparsec.Char8                    hiding (parse, Result(..))
-import Data.Attoparsec.Lazy                     (parse, Result(..))
+import Data.Attoparsec.Lazy                     as AL (parse, Result(..))
 import Data.ByteString.Lex.Double
 import qualified Data.ByteString.Lazy           as L
 
@@ -128,6 +128,6 @@ readMatrix :: FilePath -> IO Matrix
 readMatrix file = do
   chunks <- L.readFile file
   case parse matrix chunks of
-       Fail _ _ msg -> error $ file ++ ": " ++ msg
-       Done _ mtx   -> return mtx
+       AL.Fail _ _ msg -> error $ file ++ ": " ++ msg
+       AL.Done _ mtx   -> return mtx
 
