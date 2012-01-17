@@ -1,7 +1,4 @@
-:set -DACCELERATE_CUDA_BACKEND
 :set -DACCELERATE_BOUNDS_CHECKS
 :set -DACCELERATE_INTERNAL_CHECKS
 :set -Iinclude
 :set -iutils
-:set -iaccelerate-io
-:set -iaccelerate-cuda
