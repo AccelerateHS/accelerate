@@ -433,7 +433,7 @@ mkSegApply :: (Elt e)
            -> (Exp (Int, e) -> Exp (Int, e) -> Exp (Int, e))
 mkSegApply op = apply
   where
-    apply a b = lift (((aF ==* 1) ||* (bF ==* 1)) ? (1, 0), (bF ==* 1) ? (bV, aV `op` bV))
+    apply a b = lift (boolToInt (aF ==* 1 ||* bF ==* 1), bF ==* 1 ? (bV, aV `op` bV))
       where
         aF = fst a
         aV = snd a
