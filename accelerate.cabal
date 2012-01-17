@@ -72,10 +72,6 @@ Flag more-pp
   Description:          Enable HTML and Graphviz pretty printing.
   Default:              False
 
-Flag test-suite
-  Description:          Export extra test modules
-  Default:              False
-
 Flag bounds-checks
   Description:          Enable bounds checking
   Default:              True
@@ -97,9 +93,6 @@ Library
                         ghc-prim        == 0.2.*,
                         pretty          >= 1.0 && < 1.2
 
---  if flag(test-suite)
---    Build-depends:      QuickCheck      == 2.*
-
   if flag(more-pp)
     Build-depends:      bytestring      == 0.9.*,
                         blaze-html      == 0.3.*,
@@ -119,11 +112,6 @@ Library
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
                         Data.Array.Accelerate.Pretty
-
---  If flag(test-suite)
---    Exposed-modules:    Data.Array.Accelerate.Test
---    Other-modules:      Data.Array.Accelerate.Test.QuickCheck
---                        Data.Array.Accelerate.Test.QuickCheck.Arbitrary
 
   Other-modules:        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Array.Delayed
