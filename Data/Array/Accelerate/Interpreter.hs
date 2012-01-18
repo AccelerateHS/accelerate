@@ -137,11 +137,13 @@ evalPreOpenAcc (Fold1 f acc) aenv
   = fold1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (FoldSeg f e acc1 acc2) aenv
-  = foldSegOp (evalFun f aenv) (evalExp e aenv) 
+  = foldSegOp integralType
+              (evalFun f aenv) (evalExp e aenv)
               (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
 evalPreOpenAcc (Fold1Seg f acc1 acc2) aenv
-  = fold1SegOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+  = fold1SegOp integralType
+               (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
 evalPreOpenAcc (Scanl f e acc) aenv
   = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
@@ -284,14 +286,23 @@ fold1Op :: Sugar.Shape dim
         -> Delayed (Array dim e)
 fold1Op f (DelayedArray (sh, n) rf)
   = DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
-    
-foldSegOp :: forall e dim.
-             (e -> e -> e)
+
+foldSegOp :: IntegralType i
+          -> (e -> e -> e)
           -> e
           -> Delayed (Array (dim:.Int) e)
-          -> Delayed Segments
+          -> Delayed (Segments i)
           -> Delayed (Array (dim:.Int) e)
-foldSegOp f e (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
+foldSegOp ty f e arr seg
+  | IntegralDict <- integralDict ty = foldSegOp' f e arr seg
+
+foldSegOp' :: forall i e dim. Integral i
+           => (e -> e -> e)
+           -> e
+           -> Delayed (Array (dim:.Int) e)
+           -> Delayed (Segments i)
+           -> Delayed (Array (dim:.Int) e)
+foldSegOp' f e (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
   = delay arr
   where
     DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
@@ -300,22 +311,32 @@ foldSegOp f e (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
     foldOne :: dim:.Int -> e
     foldOne ix = let
                    (ix', i) = Sugar.fromElt ix
-                   start    = (Sugar.liftToElt rfStarts) i
-                   len      = (Sugar.liftToElt rfSeg) i
+                   start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
+                   len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
                  in
                  fold ix' e start (start + len)
 
     fold :: Sugar.EltRepr dim -> e -> Int -> Int -> e
-    fold ix' v j end
+    fold ix' !v j end
       | j >= end  = v
       | otherwise = fold ix' (f v (Sugar.toElt . rf $ (ix', j))) (j + 1) end
 
-fold1SegOp :: forall e dim.
-              (e -> e -> e)
+
+fold1SegOp :: IntegralType i
+           -> (e -> e -> e)
            -> Delayed (Array (dim:.Int) e)
-           -> Delayed Segments
+           -> Delayed (Segments i)
            -> Delayed (Array (dim:.Int) e)
-fold1SegOp f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
+fold1SegOp ty f arr seg
+  | IntegralDict <- integralDict ty = fold1SegOp' f arr seg
+
+
+fold1SegOp' :: forall i e dim. Integral i
+            => (e -> e -> e)
+            -> Delayed (Array (dim:.Int) e)
+            -> Delayed (Segments i)
+            -> Delayed (Array (dim:.Int) e)
+fold1SegOp' f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
   = delay arr
   where
     DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
@@ -324,8 +345,8 @@ fold1SegOp f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
     foldOne :: dim:.Int -> e
     foldOne ix = let
                    (ix', i) = Sugar.fromElt ix
-                   start    = (Sugar.liftToElt rfStarts) i
-                   len      = (Sugar.liftToElt rfSeg) i
+                   start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
+                   len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
                  in
                  if len == 0
                    then
@@ -334,9 +355,10 @@ fold1SegOp f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
                      fold ix' (Sugar.toElt . rf $ (ix', start)) (start + 1) (start + len)
 
     fold :: Sugar.EltRepr dim -> e -> Int -> Int -> e
-    fold ix' v j end
+    fold ix' !v j end
       | j >= end  = v
       | otherwise = fold ix' (f v (Sugar.toElt . rf $ (ix', j))) (j + 1) end
+
 
 scanlOp :: forall e. (e -> e -> e)
         -> e

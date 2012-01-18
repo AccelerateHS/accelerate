@@ -321,18 +321,18 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e)
 
   -- Segmented fold along the innermost dimension of an array with a given /associative/ function
-  FoldSeg     :: (Shape sh, Elt e)
+  FoldSeg     :: (Shape sh, Elt e, Elt i, IsIntegral i)
               => PreFun     acc aenv (e -> e -> e)           -- combination function
               -> PreExp     acc aenv e                       -- default value
               -> acc            aenv (Array (sh:.Int) e)     -- folded array
-              -> acc            aenv Segments                -- segment descriptor
+              -> acc            aenv (Segments i)            -- segment descriptor
               -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- 'FoldSeg' without a default value
-  Fold1Seg    :: (Shape sh, Elt e)
+  Fold1Seg    :: (Shape sh, Elt e, Elt i, IsIntegral i)
               => PreFun     acc aenv (e -> e -> e)           -- combination function
               -> acc            aenv (Array (sh:.Int) e)     -- folded array
-              -> acc            aenv Segments                -- segment descriptor
+              -> acc            aenv (Segments i)            -- segment descriptor
               -> PreOpenAcc acc aenv (Array (sh:.Int) e)
 
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*

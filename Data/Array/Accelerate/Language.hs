@@ -247,11 +247,11 @@ fold1 = Acc $$ Fold1
 -- The source array must have at least rank 1.  The 'Segments' array determines the lengths of the
 -- logical subarrays, each of which is folded seperately.
 --
-foldSeg :: (Shape ix, Elt a)
-        => (Exp a -> Exp a -> Exp a) 
-        -> Exp a 
+foldSeg :: (Shape ix, Elt a, Elt i, IsIntegral i)
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
         -> Acc (Array (ix:.Int) a)
-        -> Acc Segments
+        -> Acc (Segments i)
         -> Acc (Array (ix:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
 
@@ -261,10 +261,10 @@ foldSeg = Acc $$$$ FoldSeg
 -- The source array must have at least rank 1. The 'Segments' array determines the lengths of the
 -- logical subarrays, each of which is folded seperately.
 --
-fold1Seg :: (Shape ix, Elt a)
-         => (Exp a -> Exp a -> Exp a) 
+fold1Seg :: (Shape ix, Elt a, Elt i, IsIntegral i)
+         => (Exp a -> Exp a -> Exp a)
          -> Acc (Array (ix:.Int) a)
-         -> Acc Segments
+         -> Acc (Segments i)
          -> Acc (Array (ix:.Int) a)
 fold1Seg = Acc $$$ Fold1Seg
 

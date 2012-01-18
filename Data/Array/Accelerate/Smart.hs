@@ -230,16 +230,16 @@ data PreAcc acc exp as where
               => (Exp e -> Exp e -> exp e)
               -> acc (Array (sh:.Int) e)
               -> PreAcc acc exp (Array sh e)
-  FoldSeg     :: (Shape sh, Elt e)
+  FoldSeg     :: (Shape sh, Elt e, Elt i, IsIntegral i)
               => (Exp e -> Exp e -> exp e)
               -> exp e
               -> acc (Array (sh:.Int) e)
-              -> acc Segments
+              -> acc (Segments i)
               -> PreAcc acc exp (Array (sh:.Int) e)
-  Fold1Seg    :: (Shape sh, Elt e)
+  Fold1Seg    :: (Shape sh, Elt e, Elt i, IsIntegral i)
               => (Exp e -> Exp e -> exp e)
               -> acc (Array (sh:.Int) e)
-              -> acc Segments
+              -> acc (Segments i)
               -> PreAcc acc exp (Array (sh:.Int) e)
   Scanl       :: Elt e
               => (Exp e -> Exp e -> exp e)

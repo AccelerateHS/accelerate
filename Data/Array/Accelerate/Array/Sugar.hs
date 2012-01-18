@@ -665,7 +665,7 @@ type Vector e = Array DIM1 e
 -- To represent nested one-dimensional arrays, we use a flat array of data values in conjunction
 -- with a /segment descriptor/, which stores the lengths of the subarrays.
 --
-type Segments = Vector Int
+type Segments i = Vector i
 
 -- Shorthand for common shape types
 --
