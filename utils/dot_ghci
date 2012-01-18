@@ -1,7 +1,7 @@
-:set -isrc
-:set -itests/image-processing
-:set -itests/io
-:set -itests/primitives
-:set -itests/simple
+:set -iexamples/examples/src-main
+:set -iexamples/examples/src-tests/io
+:set -iexamples/examples/src-tests/image-processing
+:set -iexamples/examples/src-tests/primitives
+:set -iexamples/examples/src-tests/simple
 :set -iutils
 :set -DACCELERATE_CUDA_BACKEND

@@ -47,19 +47,31 @@ Flag io
 --
 Executable accelerate-examples
   Main-is:              Main.hs
-  Other-modules:        Backpermute, Benchmark, BlackScholes, BlockCopy, Canny,
-                        Config, DotP, Filter, Fold, FoldSeg, IntegralImage, Map, PGM,
-                        Permute, Radix, Random, SASUM, SAXPY, ScanSeg,
-                        SharingRecovery, SliceExamples, SMVM, SMVM.Matrix,
-                        SMVM.MatrixMarket, Stencil, Stencil2, Test, Util,
-                        Validate, Vector, Zip, ZipWith
-  hs-source-dirs:       src
-                        tests/primitives
-                        tests/simple
-                        tests/image-processing
-                        tests/io
+  hs-source-dirs:       examples/examples/src-main
+                        examples/examples/src-tests/io
+                        examples/examples/src-tests/image-processing
+                        examples/examples/src-tests/primitives
+                        examples/examples/src-tests/simple
 
-  c-sources:            tests/io/fill_with_values.cpp
+  other-modules:        Benchmark, Config, Random, Test, Util, Validate,
+
+                        -- tests:
+                        --  image-processing
+                        Canny, IntegralImage, PGM,
+
+                        --  io
+                        BlockCopy, Vector,
+
+                        --  primitives
+                        Backpermute, Fold, FoldSeg, Map, Permute, ScanSeg,
+                        Stencil, Stencil2, Zip, ZipWith,
+
+                        --  simple
+                        BlackScholes, DotP, Filter, Radix, SASUM, SAXPY,
+                        SharingRecovery, SliceExamples, SMVM, SMVM.Matrix, SMVM.MatrixMarket
+
+
+  c-sources:            examples/examples/src-tests/io/fill_with_values.cpp
   extra-libraries:      stdc++
 
   ghc-options:          -Wall -O2
