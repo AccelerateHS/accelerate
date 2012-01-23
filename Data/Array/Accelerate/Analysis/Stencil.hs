@@ -7,7 +7,7 @@
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 -- Stability   : experimental
--- Portability : non-partable (GHC extensions)
+-- Portability : non-portable (GHC extensions)
 --
 
 module Data.Array.Accelerate.Analysis.Stencil (offsets, offsets2) where
@@ -18,7 +18,8 @@ import Data.Array.Accelerate.Array.Sugar
 
 -- |Calculate the offset coordinates for each stencil element relative to the
 -- focal point. The coordinates are returned as a flattened list from the
--- top-left element to the bottom-right.
+-- bottom-left element to the top-right. This ordering matches the Var indexing
+-- order.
 --
 offsets :: forall a b sh aenv stencil. Stencil sh a stencil
         => {- dummy -} Fun aenv (stencil -> b)
@@ -39,40 +40,40 @@ offsets2 _ _ _ =
 -- |Position calculation on reified stencil values.
 --
 positionsR :: StencilR sh e pat -> [sh]
-positionsR StencilRunit3 = map (Z:.) [         -1, 0, 1         ]
-positionsR StencilRunit5 = map (Z:.) [      -2,-1, 0, 1, 2      ]
-positionsR StencilRunit7 = map (Z:.) [   -3,-2,-1, 0, 1, 2, 3   ]
-positionsR StencilRunit9 = map (Z:.) [-4,-3,-2,-1, 0, 1, 2, 3, 4]
+positionsR StencilRunit3 = map (Z:.) [          1, 0,-1          ]
+positionsR StencilRunit5 = map (Z:.) [       2, 1, 0,-1,-2       ]
+positionsR StencilRunit7 = map (Z:.) [    3, 2, 1, 0,-1,-2,-3    ]
+positionsR StencilRunit9 = map (Z:.) [ 4, 3, 2, 1, 0,-1,-2,-3,-4 ]
 
-positionsR (StencilRtup3 a b c) = concat
-  [ map (:.(-1)) $ positionsR a
+positionsR (StencilRtup3 c b a) = concat
+  [ map (:.  1 ) $ positionsR c
   , map (:.  0 ) $ positionsR b
-  , map (:.  1 ) $ positionsR c ]
+  , map (:.(-1)) $ positionsR a ]
 
-positionsR (StencilRtup5 a b c d e) = concat
-  [ map (:.(-2)) $ positionsR a
-  , map (:.(-1)) $ positionsR b
-  , map (:.  0 ) $ positionsR c
+positionsR (StencilRtup5 e d c b a) = concat
+  [ map (:.  2 ) $ positionsR e
   , map (:.  1 ) $ positionsR d
-  , map (:.  2 ) $ positionsR e ]
+  , map (:.  0 ) $ positionsR c
+  , map (:.(-1)) $ positionsR b
+  , map (:.(-2)) $ positionsR a ]
 
-positionsR (StencilRtup7 a b c d e f g) = concat
-  [ map (:.(-3)) $ positionsR a
-  , map (:.(-2)) $ positionsR b
-  , map (:.(-1)) $ positionsR c
-  , map (:.  0 ) $ positionsR d
-  , map (:.  1 ) $ positionsR e
+positionsR (StencilRtup7 g f e d c b a) = concat
+  [ map (:.  3 ) $ positionsR g
   , map (:.  2 ) $ positionsR f
-  , map (:.  3 ) $ positionsR g ]
+  , map (:.  1 ) $ positionsR e
+  , map (:.  0 ) $ positionsR d
+  , map (:.(-1)) $ positionsR c
+  , map (:.(-2)) $ positionsR b
+  , map (:.(-3)) $ positionsR a ]
 
-positionsR (StencilRtup9 a b c d e f g h i) = concat
-  [ map (:.(-4)) $ positionsR a
-  , map (:.(-3)) $ positionsR b
-  , map (:.(-2)) $ positionsR c
-  , map (:.(-1)) $ positionsR d
-  , map (:.  0 ) $ positionsR e
-  , map (:.  1 ) $ positionsR f
-  , map (:.  2 ) $ positionsR g
+positionsR (StencilRtup9 i h g f e d c b a) = concat
+  [ map (:.  4 ) $ positionsR i
   , map (:.  3 ) $ positionsR h
-  , map (:.  4 ) $ positionsR i ]
+  , map (:.  2 ) $ positionsR g
+  , map (:.  1 ) $ positionsR f
+  , map (:.  0 ) $ positionsR e
+  , map (:.(-1)) $ positionsR d
+  , map (:.(-2)) $ positionsR c
+  , map (:.(-3)) $ positionsR b
+  , map (:.(-4)) $ positionsR a ]
 
