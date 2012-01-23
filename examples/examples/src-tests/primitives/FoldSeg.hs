@@ -14,25 +14,25 @@ import Prelude                  as P
 -- segmented reduction
 -- -------------------
 
-sumSegAcc :: Vector Float -> Segments -> Acc (Vector Float)
+sumSegAcc :: Vector Float -> Segments Int32 -> Acc (Vector Float)
 sumSegAcc xs seg
   = let xs'     = use xs
         seg'    = use seg
     in
     A.foldSeg (+) 0 xs' seg'
 
-sumSegRef :: UArray Int Float -> UArray Int Int -> UArray Int Float
+sumSegRef :: UArray Int Float -> UArray Int Int32 -> UArray Int Float
 sumSegRef xs seg
   = listArray (bounds seg)
   $ list_foldSeg (+) 0 (elems xs) (elems seg)
 
-list_foldSeg :: (a -> a -> a) -> a -> [a] -> [Int] -> [a]
+list_foldSeg :: (a -> a -> a) -> a -> [a] -> [Int32] -> [a]
 list_foldSeg f s xs seg = P.map (foldl' f s) (split seg xs)
   where
     split []     _      = []
     split _      []     = []
     split (i:is) vs     =
-      let (h,t) = splitAt i vs
+      let (h,t) = splitAt (P.fromIntegral i) vs
       in  h : split is t
 
 
@@ -44,12 +44,12 @@ run alg m = withSystemRandom $ \gen -> do
   -- generate segments
   --
   let n  = P.round $ sqrt (P.fromIntegral m :: Double)
-  seg   <- randomUArrayR (0,2*n) gen n
+  seg   <- randomUArrayR (0, 2*n) gen (P.fromIntegral n)
   seg'  <- convertUArray seg
 
   -- generate elements
   --
-  let x  = sum (elems seg)
+  let x  = P.fromIntegral $ sum (elems seg)
   vec   <- randomUArrayR (-1,1) gen x
   vec'  <- convertUArray vec
 

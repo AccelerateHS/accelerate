@@ -16,7 +16,7 @@ import qualified Data.Vector.Unboxed   as V
 -- -----------------------------------
 
 type SparseVector a = (Vector Int, Vector a)
-type SparseMatrix a = (Segments, SparseVector a)
+type SparseMatrix a = (Segments Int, SparseVector a)
 
 smvmAcc :: SparseMatrix Float -> Vector Float -> Acc (Vector Float)
 smvmAcc (segd', (inds', vals')) vec'

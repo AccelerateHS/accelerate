@@ -12,7 +12,7 @@ import Prelude               as P
 
 -- Segmented prefix-sum
 -- --------------------
-prefixSumSegAcc :: Vector Float -> Segments -> Acc (Vector Float)
+prefixSumSegAcc :: Vector Float -> Segments Int32 -> Acc (Vector Float)
 prefixSumSegAcc xs seg
   = let
       xs'  = use xs
@@ -21,18 +21,18 @@ prefixSumSegAcc xs seg
     prescanlSeg (+) 0 xs' seg'
 
 
-prefixSumSegRef :: UArray Int Float -> UArray Int Int -> UArray Int Float
+prefixSumSegRef :: UArray Int Float -> UArray Int Int32 -> UArray Int Float
 prefixSumSegRef xs seg
   = listArray (bounds xs)
   $ list_prescanlSeg (+) 0 (elems xs) (elems seg)
 
-list_prescanlSeg :: (a -> a -> a) -> a -> [a] -> [Int] -> [a]
+list_prescanlSeg :: (a -> a -> a) -> a -> [a] -> [Int32] -> [a]
 list_prescanlSeg f x xs seg = concatMap (P.init . P.scanl f x) (split seg xs)
   where
     split [] _      = []
     split _  []     = []
     split (i:is) vs =
-      let (h,t) = splitAt i vs
+      let (h,t) = splitAt (P.fromIntegral i) vs
       in  h : split is t
 
 
@@ -40,10 +40,15 @@ list_prescanlSeg f x xs seg = concatMap (P.init . P.scanl f x) (split seg xs)
 -- ----
 run :: String -> Int -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run alg m = withSystemRandom $ \gen -> do
+  -- generate segments
+  --
   let n = P.round . sqrt $ (P.fromIntegral m :: Double)
-  seg  <- randomUArrayR (0,n) gen n
+  seg  <- randomUArrayR (0,n) gen (P.fromIntegral n)
   seg' <- convertUArray seg
-  let ne = sum (elems seg)
+
+  -- generate elements
+  --
+  let ne = P.fromIntegral $ sum (elems seg)
   vec  <- randomUArrayR (-1,1) gen ne
   vec' <- convertUArray vec
   --
