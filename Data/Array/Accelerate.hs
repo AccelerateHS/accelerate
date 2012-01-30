@@ -118,10 +118,10 @@ instance Shape sh => Ix sh
 class Slice sh => SliceIx sh
 instance Slice sh => SliceIx sh
 
-{-#DEPRECATED tuple "Use 'lift' instead" #-}
+{-# DEPRECATED tuple "Use 'lift' instead" #-}
 tuple :: Lift e => e -> Exp (Plain e)
 tuple = lift
 
-{-#DEPRECATED untuple "Use 'unlift' instead" #-}
+{-# DEPRECATED untuple "Use 'unlift' instead" #-}
 untuple :: Unlift e => Exp (Plain e) -> e
 untuple = unlift
