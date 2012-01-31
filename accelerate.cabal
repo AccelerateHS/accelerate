@@ -44,7 +44,7 @@ Bug-reports:            https://github.com/mchakravarty/accelerate/issues
 
 Source-repository head
   Type:                 git
-  Location:             https://mchakravarty@github.com/mchakravarty/accelerate.git
+  Location:             git://github.com/mchakravarty/accelerate.git
 
 
 Category:               Compilers/Interpreters, Concurrency, Data
