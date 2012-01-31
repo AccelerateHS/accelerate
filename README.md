@@ -26,7 +26,7 @@ Package accelerate is available from
 Requirements
 ------------
 
-  * Glasgow Haskell Compiler (GHC), 6.12.1 or later
+  * Glasgow Haskell Compiler (GHC), 7.0.3 or later
   * Haskell libraries as specified in `accelerate.cabal`
   * For the CUDA backend, CUDA version 3.0 or later
 
@@ -44,8 +44,7 @@ Here is a list of features that are currently missing:
 
  * Reification of sharing in scalar expressions (sharing is being recovered for array computations)
  * The CUDA backend does not support arrays of type Char and Bool at the moment.
- * The CUDA backend does not implement stencil computations yet.
- * Preliminary API (the current functionality is limited)
+ * Preliminary API (parts of the API may still change in subsequent releases)
 
 Documentation
 -------------

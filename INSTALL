@@ -1,5 +1,5 @@
 Requirements: 
-- Glasgow Haskell Compiler (GHC), 6.12.1 or later
+- Glasgow Haskell Compiler (GHC), 7.0.3 or later
 - Haskell libraries as specified in 'accelerate.cabal'
 - For the CUDA backend, CUDA version 3.0 or later
 
