@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, GADTs, TypeFamilies, FlexibleInstances #-}
+{-# LANGUAGE CPP, TypeOperators, GADTs, TypeFamilies, FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Type
@@ -45,11 +45,18 @@ import Foreign.C.Types (
 -- Extend Typeable support for 8- and 9-tuple
 -- ------------------------------------------
 
+myMkTyCon :: String -> TyCon
+#if __GLASGOW_HASKELL__ == 700
+myMkTyCon = mkTyCon
+#else
+myMkTyCon = mkTyCon3 "accelerate" "Data.Array.Accelerate.Type"
+#endif
+
 class Typeable8 t where
   typeOf8 :: t a b c d e f g h -> TypeRep
 
 instance Typeable8 (,,,,,,,) where
-  typeOf8 _ = mkTyCon "(,,,,,,,)" `mkTyConApp` []
+  typeOf8 _ = myMkTyCon "(,,,,,,,)" `mkTyConApp` []
 
 typeOf7Default :: (Typeable8 t, Typeable a) => t a b c d e f g h -> TypeRep
 typeOf7Default x = typeOf7 x `mkAppTy` typeOf (argType x)
@@ -65,7 +72,7 @@ class Typeable9 t where
   typeOf9 :: t a b c d e f g h i -> TypeRep
 
 instance Typeable9 (,,,,,,,,) where
-  typeOf9 _ = mkTyCon "(,,,,,,,,)" `mkTyConApp` []
+  typeOf9 _ = myMkTyCon "(,,,,,,,,)" `mkTyConApp` []
 
 typeOf8Default :: (Typeable9 t, Typeable a) => t a b c d e f g h i -> TypeRep
 typeOf8Default x = typeOf8 x `mkAppTy` typeOf (argType x)
@@ -76,6 +83,7 @@ typeOf8Default x = typeOf8 x `mkAppTy` typeOf (argType x)
 instance (Typeable9 s, Typeable a)
        => Typeable8 (s a) where
   typeOf8 = typeOf8Default
+
 
 
 -- Scalar types
