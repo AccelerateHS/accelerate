@@ -1,7 +1,7 @@
 Name:                   accelerate
 Version:                0.9.0.0
 Cabal-version:          >= 1.6
-Tested-with:            GHC >= 6.12.3
+Tested-with:            GHC >= 7.0.3
 Build-type:             Simple
 
 Synopsis:               An embedded language for accelerated array processing
@@ -18,8 +18,10 @@ Description:            This library defines an embedded language for
                         installed.  The CUDA backend currently doesn't support 'Char'
                         and 'Bool' arrays.
                         .
-                        Known bugs in this version:
-                        <http://trac.haskell.org/accelerate/query?status=new&status=assigned&status=reopened&status=closed&version=0.8.1.0&order=priority>
+                        Known bugs: <https://github.com/mchakravarty/accelerate/issues>
+                        .
+                        * New in 0.9.0.0: Streaming, precompilation, Repa-style indices, stencils, 
+                            more scans, rank-polymorphic fold, generate, block I/O & many bug fixes
                         .
                         * New in 0.8.1.0: bug fixes and some performance tweaks
                         .
@@ -33,10 +35,17 @@ License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
                         Gabriele Keller,
                         Sean Lee,
+                        Ben Lever
                         Trevor L. McDonell
+                        Sean Seefried
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
-Bug-reports:            http://trac.haskell.org/accelerate
+Bug-reports:            https://github.com/mchakravarty/accelerate/issues
+
+Source-repository head
+  Type:                 git
+  Location:             https://mchakravarty@github.com/mchakravarty/accelerate.git
+
 
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
