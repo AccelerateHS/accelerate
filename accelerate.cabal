@@ -42,11 +42,6 @@ Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 Bug-reports:            https://github.com/mchakravarty/accelerate/issues
 
-Source-repository head
-  Type:                 git
-  Location:             git://github.com/mchakravarty/accelerate.git
-
-
 Category:               Compilers/Interpreters, Concurrency, Data
 Stability:              Experimental
 
@@ -249,7 +244,6 @@ Library
                         TemplateHaskell, TupleSections, TypeFamilies,
                         TypeOperators, TypeSynonymInstances, UnboxedTuples
 
-source-repository head
-  type:                 darcs
-  location:             http://code.haskell.org/accelerate
-
+Source-repository head
+  Type:                 git
+  Location:             git://github.com/mchakravarty/accelerate.git
