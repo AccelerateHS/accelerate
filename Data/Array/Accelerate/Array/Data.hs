@@ -38,7 +38,7 @@ import Control.Monad
 import Control.Monad.ST
 import qualified Data.Array.IArray  as IArray
 import qualified Data.Array.MArray  as MArray hiding (newArray)
-#if __GLASGOW_HASKELL__ == 700
+#if __GLASGOW_HASKELL__ >= 700 && __GLASGOW_HASKELL__ < 703
 import qualified Data.Array.MArray  as Unsafe
 #else
 import qualified Data.Array.Unsafe  as Unsafe
