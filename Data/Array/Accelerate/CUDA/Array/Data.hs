@@ -399,7 +399,7 @@ freeArrayPrim :: ( AD.ArrayElt e, AD.ArrayPtrs e ~ Ptr a, DevicePtrs e ~ CUDA.De
               -> CIO ()
 freeArrayPrim ad = free . modify refcount (fmap (subtract 1)) =<< lookupArray ad
   where
-    free v = case gets refcount v of
+    free v = case get refcount v of
       Nothing        -> return ()
       Just x | x > 0 -> updateArray ad v
       _              -> deleteArray ad
