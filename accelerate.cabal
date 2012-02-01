@@ -30,6 +30,7 @@ Description:            This library defines an embedded language for
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
                         .
+                        For documentation, see the homepage and <https://github.com/mchakravarty/accelerate/wiki>.
 License:                BSD3
 License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
