@@ -20,7 +20,7 @@ module Data.Array.Accelerate.CUDA (
 
 -- standard library
 import Prelude hiding (catch)
-import Data.Record.Label
+import Data.Label
 import Control.Exception
 import Control.Applicative
 import System.IO.Unsafe
@@ -75,7 +75,7 @@ stream f arrs = unsafePerformIO $ uncurry (execute arrs) =<< runCUDA (compileAfu
       return (b:bs)
     --
     finalise state            = do
-      mem <- Hash.toList (getL memoryTable state)
+      mem <- Hash.toList (get memoryTable state)
       mapM_ (\(_,MemoryEntry _ p) -> CUDA.free (CUDA.castDevPtr p)) mem
 
 

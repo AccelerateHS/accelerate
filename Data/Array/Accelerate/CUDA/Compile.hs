@@ -43,7 +43,7 @@ import Control.Monad.Trans
 import Control.Monad
 import Control.Concurrent.MVar
 import Data.Maybe
-import Data.Record.Label
+import Data.Label.PureM
 import Language.C
 import System.FilePath
 import System.Directory
@@ -164,7 +164,7 @@ compileAfun1 _ =
 
 prepareAcc :: Bool -> OpenAcc aenv a -> Ref count -> CIO (ExecOpenAcc aenv a, Ref count)
 prepareAcc iss rootAcc rootEnv = do
-  setM memoryTable =<< liftIO newAccMemoryTable
+  puts memoryTable =<< liftIO newAccMemoryTable
   travA rootAcc rootEnv
   where
     -- Traverse an open array expression in depth-first order
@@ -545,7 +545,7 @@ build name acc fvar =
   let key = accToKey acc
   in do
     mvar   <- liftIO newEmptyMVar
-    table  <- getM kernelTable
+    table  <- gets kernelTable
     cached <- isJust `fmap` liftIO (Hash.lookup table key)
     unless cached $ compile table key acc fvar
     return . (name,) . liftIO $ memo mvar (link table key)
@@ -630,7 +630,7 @@ compileFlags cufile =
                   8 -> "-m64"
                   _ -> error "huh? non 32-bit or 64-bit architecture"
   in do
-  arch <- CUDA.computeCapability <$> getM deviceProps
+  arch <- CUDA.computeCapability <$> gets deviceProps
   ddir <- liftIO getDataDir
   return [ "-I", ddir </> "cubits"
          , "-O2", "--compiler-options", "-fno-strict-aliasing"
@@ -654,7 +654,7 @@ outputName acc cufile = do
     (base,suffix) = splitExtension cufile
     filename n    = base ++ pad (show n) <.> suffix
     pad s         = replicate (4-length s) '0' ++ s
-    freshVar      = getM unique <* modM unique (+1)
+    freshVar      = gets unique <* modify unique (+1)
 
 
 -- Return the output directory for compilation by-products, creating if it does

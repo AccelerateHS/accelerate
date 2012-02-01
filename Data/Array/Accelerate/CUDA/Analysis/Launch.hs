@@ -23,7 +23,7 @@ import Data.Array.Accelerate.CUDA.State
 import Data.Array.Accelerate.CUDA.Compile               (ExecOpenAcc(..))
 
 -- library
-import Data.Record.Label
+import Data.Label.PureM
 import Control.Monad.IO.Class
 
 import qualified Foreign.CUDA.Analysis                  as CUDA
@@ -63,7 +63,7 @@ launchConfig :: PreOpenAcc ExecOpenAcc aenv a -> Int -> CUDA.Fun -> CIO (Int, In
 launchConfig acc n fn = do
   regs <- liftIO $ CUDA.requires fn CUDA.NumRegs
   stat <- liftIO $ CUDA.requires fn CUDA.SharedSizeBytes        -- static memory only
-  prop <- getM deviceProps
+  prop <- gets deviceProps
 
   let dyn        = sharedMem prop acc
       (cta, occ) = blockSize prop acc regs ((stat+) . dyn)

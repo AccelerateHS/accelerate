@@ -34,7 +34,7 @@ import Data.Int
 import Data.IORef
 import Data.Maybe
 import Data.Typeable
-import Data.Record.Label
+import Data.Label
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict                       (StateT(..))
@@ -209,9 +209,9 @@ runCUDAWith state acc = do
     --
     sanitise :: CUDAState -> IO CUDAState
     sanitise st = do
-      entries <- filter (isJust . getL refcount . snd) <$> Hash.toList (getL memoryTable st)
+      entries <- filter (isJust . get refcount . snd) <$> Hash.toList (get memoryTable st)
       INTERNAL_ASSERT "runCUDA.sanitise" (null entries)
-        $ return (setL memoryTable undefined st)
+        $ return (set memoryTable undefined st)
 
 
 -- Nasty global statesses
