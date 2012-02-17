@@ -92,7 +92,7 @@ Executable accelerate-examples
 
   build-depends:        accelerate              == 0.12.*,
                         array                   >= 0.3,
-                        attoparsec              >= 0.8,
+                        attoparsec              >= 0.10,
                         base                    == 4.*,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -129,7 +129,7 @@ Executable accelerate-crystal
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   == 1.5.*
+                        gloss                   >= 1.6
 
 
 source-repository head

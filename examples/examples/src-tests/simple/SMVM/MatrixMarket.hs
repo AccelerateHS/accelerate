@@ -2,12 +2,12 @@
 
 module SMVM.MatrixMarket (Matrix(..), readMatrix) where
 
-import Control.Applicative                      hiding (many)
+import Control.Applicative                      hiding ( many )
 
 import Data.Complex
-import Data.Attoparsec.Char8                    hiding (parse, Result(..))
-import Data.Attoparsec.Lazy                     as AL (parse, Result(..))
+import Data.Attoparsec.Char8
 import Data.ByteString.Lex.Double
+import qualified Data.Attoparsec.Lazy           as L
 import qualified Data.ByteString.Lazy           as L
 
 
@@ -26,14 +26,14 @@ data Field  = Real | Complex | Integer | Pattern
 --
 -- In both cases, each element is given on a separate line.
 --
-data Format = Coordinate | Array 
+data Format = Coordinate | Array
     deriving (Eq, Show)
 
 -- | Specifies any special structure in the matrix.  For symmetric and hermition
 -- matrices, only the lower-triangular part of the matrix is given. For skew
 -- matrices, only the entries below the diagonal are stored.
 --
-data Structure = General | Symmetric | Hermitian | Skew 
+data Structure = General | Symmetric | Hermitian | Skew
     deriving (Eq, Show)
 
 
@@ -127,7 +127,7 @@ matrix = do
 readMatrix :: FilePath -> IO Matrix
 readMatrix file = do
   chunks <- L.readFile file
-  case parse matrix chunks of
-       AL.Fail _ _ msg -> error $ file ++ ": " ++ msg
-       AL.Done _ mtx   -> return mtx
+  case L.parse matrix chunks of
+    L.Fail _ _ msg      -> error $ file ++ ": " ++ msg
+    L.Done _ mtx        -> return mtx
 

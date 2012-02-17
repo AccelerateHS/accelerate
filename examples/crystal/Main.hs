@@ -176,10 +176,8 @@ main
            then withArgs nops $ defaultMain
                     [ bench "crystal" $ whnf render (A.fromList Z [1.0]) ]
 
-           else G.animateInWindow
-                    "Quasicrystals"
-                    (size  * zoom, size * zoom)
-                    (10, 10)
-                    G.black
+           else G.animate
+                    (G.InWindow "Quasicrystals" (size  * zoom, size * zoom) (10, 10))
+                    (G.black)
                     (frame render size zoom)
 
