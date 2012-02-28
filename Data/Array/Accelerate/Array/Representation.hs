@@ -55,7 +55,7 @@ class (Eq sh, Slice sh) => Shape sh where
   rangeToShape :: (sh, sh) -> sh   -- convert a minpoint-maxpoint index
                                    -- into a shape
   shapeToRange :: sh -> (sh, sh)   -- ...the converse
-  
+
 
   -- other conversions
   shapeToList :: sh -> [Int]    -- convert a shape into its list of dimensions
@@ -64,14 +64,14 @@ class (Eq sh, Slice sh) => Shape sh where
 instance Shape () where
   dim ()            = 0
   size ()           = 1
-  
+
   () `intersect` () = ()
   ignore            = ()
   index () ()       = 0
   bound () () _     = Right ()
-  iter  () f c e    = e `c` f ()
+  iter  () f _ _    = f ()
   iter1 () f _      = f ()
-  
+
   rangeToShape ((), ()) = ()
   shapeToRange ()       = ((), ())
 
@@ -82,11 +82,12 @@ instance Shape () where
 instance Shape sh => Shape (sh, Int) where
   dim (sh, _)                       = dim sh + 1
   size (sh, sz)                     = size sh * sz
-  
+
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
   index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
                                     $ index sh ix * sz + i
+
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
                                         Clamp      -> bound sh ix bndy `addDim` 0
