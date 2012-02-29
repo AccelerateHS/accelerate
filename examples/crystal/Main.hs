@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- Quasicrystals demo.
 --
 -- Based on code from:
@@ -176,8 +177,17 @@ main
            then withArgs nops $ defaultMain
                     [ bench "crystal" $ whnf render (A.fromList Z [1.0]) ]
 
+#if MIN_VERSION_gloss(1,6,0)
            else G.animate
                     (G.InWindow "Quasicrystals" (size  * zoom, size * zoom) (10, 10))
                     (G.black)
                     (frame render size zoom)
+#else
+           else G.animateInWindow
+                    "Quasicrystals"
+                    (size  * zoom, size * zoom)
+                    (10, 10)
+                    (G.black)
+                    (frame render size zoom)
+#endif
 

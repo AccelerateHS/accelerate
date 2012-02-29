@@ -80,7 +80,7 @@ Executable accelerate-examples
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         == 0.9.*
+    build-depends:      accelerate-cuda         >= 0.12
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -88,9 +88,9 @@ Executable accelerate-examples
 
   if flag(io)
     CPP-options:        -DACCELERATE_IO
-    build-depends:      accelerate-io           == 0.9.*
+    build-depends:      accelerate-io           >= 0.12
 
-  build-depends:        accelerate              == 0.12.*,
+  build-depends:        accelerate              >= 0.12,
                         array                   >= 0.3,
                         attoparsec              >= 0.10,
                         base                    == 4.*,
@@ -116,20 +116,22 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config
   ghc-options:          -O2 -Wall
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         == 0.9.*
+    build-depends:      accelerate-cuda         >= 0.12
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
 
-  build-depends:        accelerate              == 0.9.*,
+  build-depends:        accelerate              >= 0.12,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   >= 1.6
+                        gloss                   >= 1.5
 
 
 source-repository head
