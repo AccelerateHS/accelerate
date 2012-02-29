@@ -271,13 +271,18 @@ zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2)
   = DelayedArray (sh1 `intersect` sh2) 
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
-foldOp :: Sugar.Shape dim 
+foldOp :: Sugar.Shape dim
        => (e -> e -> e)
        -> e
        -> Delayed (Array (dim:.Int) e)
        -> Delayed (Array dim e)
 foldOp f e (DelayedArray (sh, n) rf)
-  = DelayedArray sh 
+  | size sh == 0
+  = DelayedArray (listToShape . map (max 1) . shapeToList $ sh)
+      (\_ -> Sugar.fromElt e)
+  --
+  | otherwise
+  = DelayedArray sh
       (\ix -> iter ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f) (Sugar.fromElt e))
 
 fold1Op :: Sugar.Shape dim
