@@ -23,10 +23,11 @@
 module Data.Array.Accelerate.IO (
 
   module Data.Array.Accelerate.IO.Ptr,
-  module Data.Array.Accelerate.IO.ByteString
+  module Data.Array.Accelerate.IO.ByteString,
+  module Data.Array.Accelerate.IO.Vector
 
 ) where
 
 import Data.Array.Accelerate.IO.Ptr
 import Data.Array.Accelerate.IO.ByteString
-
+import Data.Array.Accelerate.IO.Vector

@@ -144,7 +144,8 @@ Library
                         zlib            == 0.5.* && < 0.5.3.2
 
   if flag(io)
-    Build-depends:      bytestring      == 0.9.*
+    Build-depends:      bytestring      == 0.9.*,
+                        vector          == 0.9.*
 
 --  if flag(test-suite)
 --    Build-depends:      QuickCheck      == 2.*
@@ -181,6 +182,7 @@ Library
     Exposed-modules:    Data.Array.Accelerate.IO
                         Data.Array.Accelerate.IO.Ptr
                         Data.Array.Accelerate.IO.ByteString
+                        Data.Array.Accelerate.IO.Vector
 
 --  If flag(test-suite)
 --    Exposed-modules:    Data.Array.Accelerate.Test
