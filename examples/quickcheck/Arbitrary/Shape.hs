@@ -33,7 +33,13 @@ instance (Shape sh, Arbitrary sh) => Arbitrary (sh :. Int) where
 -- generate too many of them.
 --
 arbitrarySmallShape :: forall sh. (Shape sh, Arbitrary sh) => Int -> Gen sh
-arbitrarySmallShape maxDim = do
+arbitrarySmallShape maxDim = resize maxDim arbitrary
+
+-- Generate a shape as above, but also restrict the dimensions to be either all
+-- zero, or all non-zero.
+--
+arbitrarySmallNonEmptyShape :: forall sh. (Shape sh, Arbitrary sh) => Int -> Gen sh
+arbitrarySmallNonEmptyShape maxDim = do
   sh            <- resize maxDim arbitrary      :: Gen sh
   let ix         = map (`mod` max 1 maxDim) (shapeToList sh)
       sh'

@@ -42,6 +42,37 @@ Flag io
   Default:              True
 
 
+-- Run some basic randomised tests of the primitive library operations, and unit
+-- tests of known (hopefully prior) failures.
+--
+Executable accelerate-quickcheck
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/quickcheck/
+
+  other-modules:        Config
+                        Arbitrary.Array
+                        Arbitrary.Shape
+                        Test.Base
+                        Test.Reduction
+
+  ghc-options:          -Wall -O2 -fno-warn-orphans
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda                 >= 0.9
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl               == 0.1.*
+
+  build-depends:        accelerate                      >= 0.9,
+                        QuickCheck                      >= 2.0,
+                        test-framework                  >= 0.5,
+                        test-framework-quickcheck2      >= 0.2
+
+
 -- The main examples program including verification and timing tests for several
 -- simple accelerate programs
 --
