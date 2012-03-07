@@ -12,14 +12,15 @@ instance Arbitrary Z where
   arbitrary     = return Z
   shrink        = return
 
+-- Keep shapes relatively small, because we are generating arrays via lists, but
+-- scale the 'sized' parameter so we still get non-trivial test vectors.
+--
 instance (Shape sh, Arbitrary sh) => Arbitrary (sh :. Int) where
   arbitrary     = do
-    -- make sure we don't create an index so large we get integer overflow when
-    -- converting to linear form
     sh          <- arbitrary
     sz          <- sized $ \n ->
-      let nMax   = maxBound `div` max 1 (size sh)
-          nMaxed = n        `mod` nMax
+      let nMax   = 2048  `div` max 1 (size sh)
+          nMaxed = (n*2) `mod` nMax
       in
       choose (0, nMaxed)
     --
