@@ -22,9 +22,12 @@ class Similar a where
 infix 4 ~=
 
 instance Similar a => Similar [a] where
-  []     ~= []         = True
-  (x:xs) ~= (y:ys)     = x ~= y && xs ~= ys
-  _      ~= _          = False
+  []     ~= []          = True
+  (x:xs) ~= (y:ys)      = x ~= y && xs ~= ys
+  _      ~= _           = False
+
+instance (Similar a, Similar b) => Similar (a, b) where
+  (x1, y1) ~= (x2, y2)  = x1 ~= x2 && y1 ~= y2
 
 
 instance Similar Int
@@ -54,6 +57,13 @@ instance Eq Z where
 instance (Eq sh, Shape sh) => Eq (sh :. Int) where
   (sh1 :. n1) == (sh2 :. n2)    = n1 == n2 && sh1 == sh2
   (sh1 :. n1) /= (sh2 :. n2)    = n1 /= n2 || sh1 /= sh2
+
+instance (Eq e, Eq sh, Shape sh) => Eq (Array sh e) where
+  a1 == a2      =  arrayShape a1 == arrayShape a2
+                && toList a1     == toList a2
+
+  a1 /= a2      =  arrayShape a1 /= arrayShape a2
+                || toList a1     /= toList a2
 
 instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
   a1 ~= a2      =  arrayShape a1 == arrayShape a2

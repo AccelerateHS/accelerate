@@ -32,10 +32,10 @@ test_reduction opt =
 
 test_foldAll :: Options -> Test
 test_foldAll opt = testGroup "foldAll"
-  [ testElt (undefined :: Int)
+  [ testElt (undefined :: Float)
+  , testElt (undefined :: Int)
   , testElt (undefined :: Int32)
   , testElt (undefined :: Int64)
-  , testElt (undefined :: Float)
   ]
   where
     testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => e -> Test
@@ -67,22 +67,22 @@ test_foldAll opt = testGroup "foldAll"
           -- reduction with a non-neutral seed element
           -- lift the seed to an indexed scalar array to avoid recompilation
           --
---          , testProperty "non-neutral sum"
---          $ \(xs :: Array sh e) z
---          -> let z' = unit (constant z)
---             in  run opt (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
+          , testProperty "non-neutral sum"
+          $ \(xs :: Array sh e) z
+          -> let z' = unit (constant z)
+             in  run opt (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
           ]
 
 
--- fold
--- ----
+-- multidimensional fold
+-- ---------------------
 
 test_fold :: Options -> Test
 test_fold opt = testGroup "fold"
-  [ testElt (undefined :: Int)
+  [ testElt (undefined :: Float)
+  , testElt (undefined :: Int)
   , testElt (undefined :: Int32)
   , testElt (undefined :: Int64)
-  , testElt (undefined :: Float)
   ]
   where
     testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => e -> Test
@@ -109,10 +109,10 @@ test_fold opt = testGroup "fold"
           -> indexHead (arrayShape xs) > 0
             ==> run opt (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
 
---          , testProperty "non-neutral sum"
---          $ \(xs :: Array (sh:.Int) e) z
---          -> let z' = unit (constant z)
---             in  run opt (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
+          , testProperty "non-neutral sum"
+          $ \(xs :: Array (sh:.Int) e) z
+          -> let z' = unit (constant z)
+             in  run opt (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
 
           ]
 

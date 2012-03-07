@@ -54,8 +54,9 @@ Executable accelerate-quickcheck
                         Arbitrary.Shape
                         Test.Base
                         Test.Reduction
+                        Test.PrefixSum
 
-  ghc-options:          -Wall -O2 -fno-warn-orphans
+  ghc-options:          -Wall -O2 -fno-warn-orphans -fno-full-laziness
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
