@@ -56,7 +56,7 @@ Executable accelerate-quickcheck
                         Test.Reduction
                         Test.PrefixSum
 
-  ghc-options:          -Wall -O2 -fno-warn-orphans -fno-full-laziness
+  ghc-options:          -Wall -O -fno-warn-orphans -fno-full-laziness
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -71,7 +71,8 @@ Executable accelerate-quickcheck
   build-depends:        accelerate                      >= 0.9,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,
-                        test-framework-quickcheck2      >= 0.2
+                        test-framework-quickcheck2      >= 0.2,
+                        random
 
 
 -- The main examples program including verification and timing tests for several
