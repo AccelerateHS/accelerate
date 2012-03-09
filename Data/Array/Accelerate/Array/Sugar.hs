@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, DeriveDataTypeable, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE GADTs, ScopedTypeVariables, StandaloneDeriving, TupleSections #-}
-{-# LANGUAGE TypeOperators, TypeFamilies #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, BangPatterns #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -850,9 +850,18 @@ toIArray arr = IArray.array bnds [(ix, arr ! toElt (fromElt ix)) | ix <- IArray.
 -- |Convert a list (with elements in row-major order) to an accelerated array.
 --
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
-fromList sh l = newArray sh indexIntoList 
+{-# INLINE fromList #-}
+fromList sh xs = adata `seq` Array (fromElt sh) adata
   where
-    indexIntoList ix = l!!index sh ix
+    !n          = size sh
+    (adata, _)  = runArrayData $ do
+                    arr <- newArrayData (size sh)
+                    let go !i _ | i >= n = return ()
+                        go !i (v:vs)     = writeArrayData arr i (fromElt v) >> go (i+1) vs
+                        go _  []         = error "fromList: insufficient input data"
+                    --
+                    go 0 xs
+                    return (arr, undefined)
 
 -- |Convert an accelerated array to a list in row-major order.
 --
