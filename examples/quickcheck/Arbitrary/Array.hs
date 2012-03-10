@@ -43,9 +43,9 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
   shrink arr =
     let (Z :. width :. height)   = shape arr
     in
-    [ fromList (Z :. length slx :. length sly) [ arr ! (Z:.x:.y) | x <- nub slx, y <- nub sly ]
-        | slx <- shrink [0 .. width  - 1]
-        , sly <- shrink [0 .. height - 1]
+    [ fromList (Z :. length slx :. length sly) [ arr ! (Z:.x:.y) | x <- slx, y <- sly ]
+        | slx <- map nub $ shrink [0 .. width  - 1]
+        , sly <- map nub $ shrink [0 .. height - 1]
     ]
 
 
