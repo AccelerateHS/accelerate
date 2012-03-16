@@ -431,7 +431,7 @@ scanrOp f e (DelayedArray sh rf)
       | i == 0    = return v
       | otherwise = do
                       writeArrayData arr i v
-                      traverse arr (i - 1) (f' v (rf ((), i)))
+                      traverse arr (i - 1) (f' v (rf ((), i-1)))
 
 scanr'Op :: forall e. (e -> e -> e)
          -> e
