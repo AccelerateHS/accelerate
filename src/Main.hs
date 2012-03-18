@@ -72,4 +72,3 @@ main = do
   valid           <- runVerify config tests
   --
   unless (null valid || cfgVerify config) $ runTiming config valid
-
