@@ -318,6 +318,8 @@ convertSharingAcc :: forall a aenv. Arrays a
 convertSharingAcc alyt env (AvarSharing sa)
   | Just i <- findIndex (matchStableAcc sa) env 
   = AST.OpenAcc $ AST.Avar (prjIdx i alyt)
+  | null env                                   
+  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableAccName sa) ++ ")"
   | otherwise                                   
   = INTERNAL_ERROR(error) "convertSharingAcc (prjIdx)" err
   where
@@ -517,6 +519,8 @@ convertSharingExp lyt alyt env aenv = cvt
     cvt (VarSharing se)
       | Just i <- findIndex (matchStableExp se) env
       = AST.Var (prjIdx i lyt)
+      | null env                                   
+      = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableName se) ++ ")"
       | otherwise                                   
       = INTERNAL_ERROR(error) "convertSharingExp (prjIdx)" err
       where
