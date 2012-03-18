@@ -593,9 +593,9 @@ evalFun f aenv = evalOpenFun f Empty aenv
 --  
 evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
 
-evalOpenExp (Let exp1 exp2) env aenv = 
-  = let !v1 = force $ evalOpenExp exp1 env aenv
-    in evalOpenExp exp2 (env `Push` exp1) aenv
+evalOpenExp (Let exp1 exp2) env aenv
+  = let !v1 = evalOpenExp exp1 env aenv
+    in evalOpenExp exp2 (env `Push` v1) aenv
 
 evalOpenExp (Var idx) env _
   = Sugar.toElt $ prj idx env

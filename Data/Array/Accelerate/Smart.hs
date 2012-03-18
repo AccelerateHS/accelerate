@@ -1411,7 +1411,7 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
     scopesExp :: forall t. SharingExp t -> (SharingExp t, NodeCounts)
     scopesExp (LetSharing _ _)
       = INTERNAL_ERROR(error) "determineScopes: scopesExp" "unexpected 'LetSharing'"
-    scopesExp sharingExp@(VarSharing sn)
+    scopesExp _sharingExp@(VarSharing _sn)
       -- = (VarSharing sn, nodeCount (StableSharingAST sn sharingExp, 1))
       = undefined
     scopesExp (ExpSharing sn pexp)

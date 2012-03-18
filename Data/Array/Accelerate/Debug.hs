@@ -30,6 +30,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.Array.Accelerate.Pretty ()
 
 #if __GLASGOW_HASKELL__ < 704
+traceIO :: String -> IO ()
 traceIO = putTraceMsg
 #endif
 

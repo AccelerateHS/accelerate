@@ -113,8 +113,8 @@ preAccType2 :: forall acc aenv sh1 e1 sh2 e2.
             -> (TupleType (EltRepr e1), TupleType (EltRepr e2))
 preAccType2 k1 k2 pacc =
   case pacc of
-    ALet  _ acc          -> k2 acc
-    ALet2 _ acc          -> k2 acc
+    Alet  _ acc          -> k2 acc
+    Alet2 _ acc          -> k2 acc
     PairArrays acc1 acc2 -> (k1 acc1, k1 acc2)
     Avar _    ->
       -- (eltType (undefined::e1), eltType (undefined::e2))
