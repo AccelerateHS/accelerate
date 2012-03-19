@@ -6,6 +6,8 @@ module Test.Reduction where
 
 import Prelude                                          as P
 import Data.List
+import Data.Label
+import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
 import Test.Framework
@@ -18,34 +20,27 @@ import Data.Array.Accelerate                            as Acc
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 
-test_reduction :: Options -> Test
-test_reduction opt =
-  testGroup "reduction"
-    [
-      test_foldAll opt
-    , test_fold opt
-    , test_foldSeg opt
-    ]
-
-
-
 -- foldAll
 -- -------
 
 test_foldAll :: Options -> Test
-test_foldAll opt = testGroup "foldAll"
-  [ testElt (undefined :: Float)
-  , testElt (undefined :: Int)
-  , testElt (undefined :: Int32)
-  , testElt (undefined :: Int64)
+test_foldAll opt = testGroup "foldAll" $ catMaybes
+  [ testElt int32  (undefined :: Int32)
+  , testElt int32  (undefined :: Word32)
+  , testElt int64  (undefined :: Int64)
+  , testElt int64  (undefined :: Word64)
+  , testElt float  (undefined :: Float)
+  , testElt double (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => e -> Test
-    testElt _ = testGroup (show (typeOf (undefined :: e)))
-      [ testDim dim0
-      , testDim dim1
-      , testDim dim2
-      ]
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt ok _
+      | P.not (get ok opt)      = Nothing
+      | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
+          [ testDim dim0
+          , testDim dim1
+          , testDim dim2
+          ]
       where
         testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testGroup ("DIM" ++ show (dim sh))
@@ -80,18 +75,22 @@ test_foldAll opt = testGroup "foldAll"
 -- ---------------------
 
 test_fold :: Options -> Test
-test_fold opt = testGroup "fold"
-  [ testElt (undefined :: Float)
-  , testElt (undefined :: Int)
-  , testElt (undefined :: Int32)
-  , testElt (undefined :: Int64)
+test_fold opt = testGroup "fold" $ catMaybes
+  [ testElt int32  (undefined :: Int32)
+  , testElt int32  (undefined :: Word32)
+  , testElt int64  (undefined :: Int64)
+  , testElt int64  (undefined :: Word64)
+  , testElt float  (undefined :: Float)
+  , testElt double (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => e -> Test
-    testElt _ = testGroup (show (typeOf (undefined :: e)))
-      [ testDim dim1
-      , testDim dim2
-      ]
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt ok _
+      | P.not (get ok opt)      = Nothing
+      | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
+          [ testDim dim1
+          , testDim dim2
+          ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" ++ show (dim sh))
@@ -123,15 +122,22 @@ test_fold opt = testGroup "fold"
 -- --------------
 
 test_foldSeg :: Options -> Test
-test_foldSeg opt = testGroup "foldSeg"
-  [ testElt (undefined :: Float)
+test_foldSeg opt = testGroup "foldSeg" $ catMaybes
+  [ testElt int32  (undefined :: Int32)
+  , testElt int32  (undefined :: Word32)
+  , testElt int64  (undefined :: Int64)
+  , testElt int64  (undefined :: Word64)
+  , testElt float  (undefined :: Float)
+  , testElt double (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => e -> Test
-    testElt _ = testGroup (show (typeOf (undefined :: e)))
-      [ testDim dim1
-      , testDim dim2
-      ]
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt ok _
+      | P.not (get ok opt)      = Nothing
+      | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
+          [ testDim dim1
+          , testDim dim2
+          ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" ++ show (dim sh))
