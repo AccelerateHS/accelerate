@@ -82,7 +82,7 @@ processArgs argv =
   where
     helpMsg err = concat err ++ usageInfo header options
     header      = unlines
-      [ "accelerate-crystal (c) 2011 The Accelerate Team"
+      [ "accelerate-crystal (c) [2011..2012] The Accelerate Team"
       , ""
       , "Usage: accelerate-crystal [OPTIONS]"
       ]
