@@ -41,12 +41,22 @@ instance Similar Word16
 instance Similar Word32
 instance Similar Word64
 
-instance Similar Float  where (~=) = relTol 0.0001
-instance Similar Double where (~=) = relTol 0.000001
+instance Similar Float  where (~=) = absRelTol
+instance Similar Double where (~=) = absRelTol
 
 {-# INLINE relTol #-}
 relTol :: (Fractional a, Ord a) => a -> a -> a -> Bool
 relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
+
+{-# INLINE absRelTol #-}
+absRelTol :: (Fractional a, Ord a) => a -> a -> Bool
+absRelTol u v
+  | abs (u-v) < epsilonAbs = True
+  | abs u > abs v          = abs ((u-v) / u) < epsilonRel
+  | otherwise              = abs ((v-u) / v) < epsilonRel
+  where
+    epsilonRel = 0.001
+    epsilonAbs = 0.00001
 
 
 -- some "missing" instances
