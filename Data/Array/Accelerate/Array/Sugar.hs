@@ -32,6 +32,9 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
+  -- * Miscellaneous
+  showShape,
+
 ) where
 
 -- standard library
