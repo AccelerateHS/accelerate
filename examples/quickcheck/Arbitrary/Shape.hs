@@ -20,7 +20,7 @@ instance (Shape sh, Arbitrary sh) => Arbitrary (sh :. Int) where
     sh          <- arbitrary
     sz          <- sized $ \n ->
       let nMax   = 2048  `div` max 1 (size sh)
-          nMaxed = (n*2) `mod` nMax
+          nMaxed = (n*4) `mod` nMax
       in
       choose (0, nMaxed)
     --
