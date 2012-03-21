@@ -7,6 +7,7 @@ import System.Environment
 import Config
 import Test.Reduction
 import Test.PrefixSum
+import Test.IndexSpace
 
 
 main :: IO ()
@@ -23,6 +24,8 @@ main = do
     , test_fold options
     , test_scan options                  -- requires fold
     , test_foldSeg options               -- requires scan
+    , test_permute options
+    , test_backpermute options
     ]
     runner
 

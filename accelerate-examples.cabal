@@ -53,8 +53,9 @@ Executable accelerate-quickcheck
                         Arbitrary.Array
                         Arbitrary.Shape
                         Test.Base
-                        Test.Reduction
+                        Test.IndexSpace
                         Test.PrefixSum
+                        Test.Reduction
 
   ghc-options:          -Wall -O2
                         -threaded
