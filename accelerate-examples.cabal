@@ -57,6 +57,7 @@ Executable accelerate-quickcheck
                         Test.PrefixSum
 
   ghc-options:          -Wall -O2
+                        -threaded
                         -fpedantic-bottoms
                         -fno-warn-orphans
                         -fno-full-laziness
@@ -176,3 +177,6 @@ source-repository head
   type:                 git
   location:             https://github.com/AccelerateHS/accelerate-examples
 
+
+-- vim: nospell
+--

@@ -1,7 +1,6 @@
 
 module Main where
 
-import Data.Label
 import Test.Framework
 import System.Environment
 
@@ -12,12 +11,18 @@ import Test.PrefixSum
 
 main :: IO ()
 main = do
-  (config, options)     <- processArgs =<< getArgs
-  putStrLn              $  "running with " ++ shows (get optBackend config) " backend"
+  -- process command line args, and print a brief usage message
+  --
+  (options, runner)     <- processArgs =<< getArgs
+
+  -- the default execution order uses some knowledge of what functionality is
+  -- required for each operation in the CUDA backend.
   --
   defaultMainWithOpts
-    [ test_reduction config
-    , test_prefixsum config
+    [ test_foldAll options
+    , test_fold options
+    , test_scan options                  -- requires fold
+    , test_foldSeg options               -- requires scan
     ]
-    options
+    runner
 
