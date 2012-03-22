@@ -49,22 +49,30 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
     ]
 
 
+arbitraryArrayOfShape
+    :: (Shape sh, Elt e, Arbitrary e)
+    => sh
+    -> Gen (Array sh e)
+arbitraryArrayOfShape sh = do
+  adata         <- vectorOf (size sh) arbitrary
+  return        $! fromList sh adata
+
 arbitrarySegmentedArray
     :: (Integral i, Shape sh, Elt e, Arbitrary sh, Arbitrary e)
     => Segments i -> Gen (Array (sh :. Int) e)
 arbitrarySegmentedArray segs = do
   let sz        =  fromIntegral . sum $ toList segs
-  sh            <- sized arbitrarySmallShape
+  sh            <- sized $ \n -> arbitrarySmallShape (n `div` 2)
   adata         <- vectorOf (size sh * sz) arbitrary
   return        $! fromList (sh :. sz) adata
 
 arbitrarySegments :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
 arbitrarySegments = do
   seg    <- listOf (sized $ \n -> choose (0, fromIntegral n))
-  return $! fromList (Z :. length seg) (map abs seg)
+  return $! fromList (Z :. length seg) seg
 
 arbitrarySegments1 :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
 arbitrarySegments1 = do
   seg    <- listOf (sized $ \n -> choose (1, fromIntegral n))
-  return $! fromList (Z :. length seg) (map abs seg)
+  return $! fromList (Z :. length seg) seg
 

@@ -20,14 +20,19 @@ import Data.Array.Accelerate                            as Acc
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 
+
+--
+-- Reduction -------------------------------------------------------------------
+--
+
 -- foldAll
 -- -------
 
 test_foldAll :: Options -> Test
 test_foldAll opt = testGroup "foldAll" $ catMaybes
   [ testElt int32  (undefined :: Int32)
-  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Int64)
+  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
   , testElt double (undefined :: Double)
@@ -77,8 +82,8 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
 test_fold :: Options -> Test
 test_fold opt = testGroup "fold" $ catMaybes
   [ testElt int32  (undefined :: Int32)
-  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Int64)
+  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
   , testElt double (undefined :: Double)
@@ -124,8 +129,8 @@ test_fold opt = testGroup "fold" $ catMaybes
 test_foldSeg :: Options -> Test
 test_foldSeg opt = testGroup "foldSeg" $ catMaybes
   [ testElt int32  (undefined :: Int32)
-  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Int64)
+  , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
   , testElt double (undefined :: Double)
@@ -170,7 +175,6 @@ foldAllRef f z
   . return
   . foldl f z
   . Acc.toList
-
 
 fold1AllRef :: Elt e => (e -> e -> e) -> Array sh e -> Array Z e
 fold1AllRef f

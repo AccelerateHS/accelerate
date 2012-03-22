@@ -34,8 +34,8 @@ test_permute opt = testGroup "permute"
     --
     test_histogram = testGroup "histogram" $ catMaybes
       [ testIntegralElt int32  (undefined :: Int32)
-      , testIntegralElt int32  (undefined :: Word32)
       , testIntegralElt int64  (undefined :: Int64)
+      , testIntegralElt int32  (undefined :: Word32)
       , testIntegralElt int64  (undefined :: Word64)
       , testFloatingElt float  (undefined :: Float)
       , testFloatingElt double (undefined :: Double)
@@ -61,7 +61,7 @@ test_permute opt = testGroup "permute"
       let n'        = unit (constant n)
           xs'       = use xs
           zeros     = generate (constant (Z :. n)) (const 0)
-          ones      = generate (shape xs')        (const 1)
+          ones      = generate (shape xs')         (const 1)
       in
       permute (+) zeros (\ix -> index1 $ f (xs' Acc.! ix) `mod` the n') ones
 

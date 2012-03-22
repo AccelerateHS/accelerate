@@ -22,8 +22,8 @@ main = do
   defaultMainWithOpts
     [ test_foldAll options
     , test_fold options
-    , test_scan options                  -- requires fold
-    , test_foldSeg options               -- requires scan
+    , test_prefixsum options            -- requires fold
+    , test_foldSeg options              -- requires scan
     , test_permute options
     , test_backpermute options
     ]

@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -17,54 +18,54 @@ import Arbitrary.Array                                  ()
 import Data.Array.Accelerate                            as Acc
 
 
--- scan
--- ----
+--
+-- prefix sum ------------------------------------------------------------------
+--
 
-test_scan :: Options -> Test
-test_scan opt = testGroup "scan" $ catMaybes
-  [ testElt int32  (undefined :: Int32)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+test_prefixsum :: Options -> Test
+test_prefixsum opt = testGroup "prefix sum"
+  [ forallElt test_scanl  "scanl"
+  , forallElt test_scanl' "scanl'"
+  , forallElt test_scanl1 "scanl1"
+  , forallElt test_scanr  "scanr"
+  , forallElt test_scanr' "scanr'"
+  , forallElt test_scanr1 "scanr1"
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
-    testElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
-          [
-          -- simple tests
-          --
-            testProperty "scanl"
-          $ \(xs :: Vector e)
-          -> run opt (Acc.scanl (+) 0 (use xs)) .==. scanlRef (+) 0 xs
+    forallElt :: (forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => Vector e -> Property)
+              -> String
+              -> Test
+    forallElt fn title = testGroup title $ catMaybes
+      [ testElt int32  (undefined :: Int32)
+      , testElt int64  (undefined :: Int64)
+      , testElt int32  (undefined :: Word32)
+      , testElt int64  (undefined :: Word64)
+      , testElt float  (undefined :: Float)
+      , testElt double (undefined :: Double)
+      ]
+      where
+        testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+        testElt ok _
+          | P.not (get ok opt)  = Nothing
+          | otherwise           = Just . testProperty (show (typeOf (undefined :: e)))
+            $ \(xs :: Vector e) -> fn xs
 
-          , testProperty "scanl'"
-          $ \(xs :: Vector e)
-          -> let (vec,sum) = Acc.scanl' (+) 0 (use xs)
-             in  (run opt vec, run opt sum) .==. scanl'Ref (+) 0 xs
+    -- left scan
+    --
+    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs)) .==. scanlRef (+) 0 xs
+    test_scanl1 xs = run opt (Acc.scanl1 Acc.min (use xs)) .==. scanl1Ref P.min xs
+    test_scanl' xs =
+      let (vec, sum) = Acc.scanl' (+) 0 (use xs)
+      in  (run opt vec, run opt sum) .==. scanl'Ref (+) 0 xs
 
-          , testProperty "scanl1"
-          $ \(xs :: Vector e)
-          -> arraySize (arrayShape xs) > 0
-            ==> run opt (Acc.scanl1 Acc.min (use xs)) .==. scanl1Ref P.min xs
+    -- right scan
+    --
+    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs)) .==. scanrRef (+) 0 xs
+    test_scanr1 xs = run opt (Acc.scanr1 Acc.max (use xs)) .==. scanr1Ref P.max xs
+    test_scanr' xs =
+      let (vec, sum) = Acc.scanr' (+) 0 (use xs)
+      in  (run opt vec, run opt sum) .==. scanr'Ref (+) 0 xs
 
-          , testProperty "scanr"
-          $ \(xs :: Vector e)
-          -> run opt (Acc.scanr (+) 0 (use xs)) .==. scanrRef (+) 0 xs
-
-          , testProperty "scanr'"
-          $ \(xs :: Vector e)
-          -> let (vec,sum) = Acc.scanr' (+) 0 (use xs)
-             in  (run opt vec, run opt sum) .==. scanr'Ref (+) 0 xs
-
-          , testProperty "scanr1"
-          $ \(xs :: Vector e)
-          -> arraySize (arrayShape xs) > 0
-            ==> run opt (Acc.scanr1 Acc.max (use xs)) .==. scanr1Ref P.max xs
-          ]
 
 
 -- Reference implementation
