@@ -50,30 +50,27 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
         testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testGroup ("DIM" ++ show (dim sh))
           [
-          -- simple tests: sum, minimum, maximum
-          --
-            testProperty "sum"
-          $ \(xs :: Array sh e)
-          -> run opt (Acc.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
-
-          -- reduction with a non-neutral seed element
-          -- lift the seed to an indexed scalar array to avoid recompilation
-          --
-          , testProperty "non-neutral sum"
-          $ \(xs :: Array sh e) z
-          -> let z' = unit (constant z)
-             in  run opt (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
-
-          , testProperty "minimum"
-          $ \(xs :: Array sh e)
-          -> arraySize (arrayShape xs) > 0
-            ==> run opt (Acc.fold1All Acc.min (use xs)) .==. fold1AllRef P.min xs
-
-          , testProperty "maximum"
-          $ \(xs :: Array sh e)
-          -> arraySize (arrayShape xs) > 0
-            ==> run opt (Acc.fold1All Acc.max (use xs)) .==. fold1AllRef P.max xs
+            testProperty "sum"             (test_sum  :: Array sh e -> Property)
+          , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
+          , testProperty "minimum"         (test_min  :: Array sh e -> Property)
+          , testProperty "maximum"         (test_max  :: Array sh e -> Property)
           ]
+    --
+    -- The tests
+    --
+    test_min xs
+      =   arraySize (arrayShape xs) > 0
+      ==> run opt (Acc.fold1All Acc.min (use xs)) .==. fold1AllRef P.min xs
+
+    test_max xs
+      =   arraySize (arrayShape xs) > 0
+      ==> run opt (Acc.fold1All Acc.max (use xs)) .==. fold1AllRef P.max xs
+
+    test_sum xs         = run opt (Acc.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
+    test_sum' xs z      =
+      let z' = unit (constant z)
+      in  run opt (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
+
 
 
 -- multidimensional fold
@@ -100,27 +97,26 @@ test_fold opt = testGroup "fold" $ catMaybes
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
         testDim sh = testGroup ("DIM" ++ show (dim sh))
           [
-          -- simple tests: sum, minimum, maximum
-            testProperty "sum"
-          $ \(xs :: Array (sh:.Int) e)
-          -> run opt (Acc.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
-
-          , testProperty "non-neutral sum"
-          $ \(xs :: Array (sh:.Int) e) z
-          -> let z' = unit (constant z)
-             in  run opt (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
-
-          , testProperty "minimum"
-          $ \(xs :: Array (sh:.Int) e)
-          -> indexHead (arrayShape xs) > 0
-            ==> run opt (Acc.fold1 Acc.min (use xs)) .==. fold1Ref P.min xs
-
-          , testProperty "maximum"
-          $ \(xs :: Array (sh:.Int) e)
-          -> indexHead (arrayShape xs) > 0
-            ==> run opt (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
-
+            testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
+          , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
+          , testProperty "minimum"         (test_min  :: Array (sh :. Int) e -> Property)
+          , testProperty "maximum"         (test_max  :: Array (sh :. Int) e -> Property)
           ]
+    --
+    -- The tests
+    --
+    test_min xs
+      =   indexHead (arrayShape xs) > 0
+      ==> run opt (Acc.fold1 Acc.min (use xs)) .==. fold1Ref P.min xs
+
+    test_max xs
+      =   indexHead (arrayShape xs) > 0
+      ==> run opt (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
+
+    test_sum xs         = run opt (Acc.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
+    test_sum' xs z      =
+      let z' = unit (constant z)
+      in  run opt (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
 
 
 -- segmented fold
@@ -148,20 +144,20 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
         testDim sh = testGroup ("DIM" ++ show (dim sh))
           [
             testProperty "sum"
-          $ forAll (arbitrarySegments           :: Gen (Segments Int32))    $ \seg ->
-            forAll (arbitrarySegmentedArray seg :: Gen (Array (sh:.Int) e)) $ \xs  ->
+          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
+            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
               run opt (Acc.foldSeg (+) 0 (use xs) (use seg)) .==. foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
-          $ forAll (arbitrarySegments           :: Gen (Segments Int32))    $ \seg ->
-            forAll (arbitrarySegmentedArray seg :: Gen (Array (sh:.Int) e)) $ \xs  ->
-            forAll arbitrary                                                $ \z   ->
+          $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
+            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
+            forAll arbitrary                     $ \z                          ->
               let z' = unit (constant z)
               in  run opt (Acc.foldSeg (+) (the z') (use xs) (use seg)) .==. foldSegRef (+) z xs seg
 
           , testProperty "minimum"
-          $ forAll (arbitrarySegments1          :: Gen (Segments Int32))    $ \seg ->
-            forAll (arbitrarySegmentedArray seg :: Gen (Array (sh:.Int) e)) $ \xs  ->
+          $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
+            forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
               run opt (Acc.fold1Seg Acc.min (use xs) (use seg)) .==. fold1SegRef P.min xs seg
           ]
 
