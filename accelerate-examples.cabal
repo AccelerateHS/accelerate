@@ -54,6 +54,7 @@ Executable accelerate-quickcheck
                         Arbitrary.Shape
                         Test.Base
                         Test.IndexSpace
+                        Test.Mapping
                         Test.PrefixSum
                         Test.Reduction
 

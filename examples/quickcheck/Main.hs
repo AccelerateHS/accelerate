@@ -5,6 +5,7 @@ import Test.Framework
 import System.Environment
 
 import Config
+import Test.Mapping
 import Test.Reduction
 import Test.PrefixSum
 import Test.IndexSpace
@@ -20,7 +21,9 @@ main = do
   -- required for each operation in the CUDA backend.
   --
   defaultMainWithOpts
-    [ test_foldAll options
+    [ test_map options
+    , test_zipWith options
+    , test_foldAll options
     , test_fold options
     , test_prefixsum options            -- requires fold
     , test_foldSeg options              -- requires scan
