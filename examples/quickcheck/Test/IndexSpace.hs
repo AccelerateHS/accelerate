@@ -33,8 +33,12 @@ test_permute opt = testGroup "permute"
     -- into a smaller range [0,n)
     --
     test_histogram = testGroup "histogram" $ catMaybes
-      [ testIntegralElt int32  (undefined :: Int32)
+      [ testIntegralElt int8   (undefined :: Int8)
+      , testIntegralElt int16  (undefined :: Int16)
+      , testIntegralElt int32  (undefined :: Int32)
       , testIntegralElt int64  (undefined :: Int64)
+      , testIntegralElt int8   (undefined :: Word8)
+      , testIntegralElt int16  (undefined :: Word16)
       , testIntegralElt int32  (undefined :: Word32)
       , testIntegralElt int64  (undefined :: Word64)
       , testFloatingElt float  (undefined :: Float)
@@ -86,8 +90,12 @@ test_backpermute opt = testGroup "backpermute"
     -- Reverse a 1D vector
     --
     test_reverse = testGroup "reverse" $ catMaybes
-      [ testElt int32  (undefined :: Int32)
+      [ testElt int8   (undefined :: Int8)
+      , testElt int16  (undefined :: Int16)
+      , testElt int32  (undefined :: Int32)
       , testElt int64  (undefined :: Int64)
+      , testElt int8   (undefined :: Word8)
+      , testElt int16  (undefined :: Word16)
       , testElt int32  (undefined :: Word32)
       , testElt int64  (undefined :: Word64)
       , testElt float  (undefined :: Float)
@@ -111,8 +119,12 @@ test_backpermute opt = testGroup "backpermute"
     -- Transpose a 2D matrix
     --
     test_transpose = testGroup "transpose" $ catMaybes
-      [ testElt int32  (undefined :: Int32)
+      [ testElt int8   (undefined :: Int8)
+      , testElt int16  (undefined :: Int16)
+      , testElt int32  (undefined :: Int32)
       , testElt int64  (undefined :: Int64)
+      , testElt int8   (undefined :: Word8)
+      , testElt int16  (undefined :: Word16)
       , testElt int32  (undefined :: Word32)
       , testElt int64  (undefined :: Word64)
       , testElt float  (undefined :: Float)

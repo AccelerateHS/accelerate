@@ -36,8 +36,12 @@ test_prefixsum opt = testGroup "prefix sum"
               -> String
               -> Test
     forallElt fn title = testGroup title $ catMaybes
-      [ testElt int32  (undefined :: Int32)
+      [ testElt int8   (undefined :: Int8)
+      , testElt int16  (undefined :: Int16)
+      , testElt int32  (undefined :: Int32)
       , testElt int64  (undefined :: Int64)
+      , testElt int8   (undefined :: Word8)
+      , testElt int16  (undefined :: Word16)
       , testElt int32  (undefined :: Word32)
       , testElt int64  (undefined :: Word64)
       , testElt float  (undefined :: Float)

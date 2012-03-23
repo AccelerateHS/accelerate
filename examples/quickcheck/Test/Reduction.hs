@@ -30,8 +30,12 @@ import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 test_foldAll :: Options -> Test
 test_foldAll opt = testGroup "foldAll" $ catMaybes
-  [ testElt int32  (undefined :: Int32)
+  [ testElt int8   (undefined :: Int8)
+  , testElt int16  (undefined :: Int16)
+  , testElt int32  (undefined :: Int32)
   , testElt int64  (undefined :: Int64)
+  , testElt int8   (undefined :: Word8)
+  , testElt int16  (undefined :: Word16)
   , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
@@ -78,8 +82,12 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
 
 test_fold :: Options -> Test
 test_fold opt = testGroup "fold" $ catMaybes
-  [ testElt int32  (undefined :: Int32)
+  [ testElt int8   (undefined :: Int8)
+  , testElt int16  (undefined :: Int16)
+  , testElt int32  (undefined :: Int32)
   , testElt int64  (undefined :: Int64)
+  , testElt int8   (undefined :: Word8)
+  , testElt int16  (undefined :: Word16)
   , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
@@ -124,8 +132,12 @@ test_fold opt = testGroup "fold" $ catMaybes
 
 test_foldSeg :: Options -> Test
 test_foldSeg opt = testGroup "foldSeg" $ catMaybes
-  [ testElt int32  (undefined :: Int32)
+  [ testElt int8   (undefined :: Int8)
+  , testElt int16  (undefined :: Int16)
+  , testElt int32  (undefined :: Int32)
   , testElt int64  (undefined :: Int64)
+  , testElt int8   (undefined :: Word8)
+  , testElt int16  (undefined :: Word16)
   , testElt int32  (undefined :: Word32)
   , testElt int64  (undefined :: Word64)
   , testElt float  (undefined :: Float)
