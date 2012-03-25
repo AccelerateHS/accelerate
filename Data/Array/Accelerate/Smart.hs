@@ -1662,7 +1662,7 @@ showPreAccOp (Stencil2 _ _ _ _ _) = "Stencil2"
 
 showShortendArr :: Elt e => Array sh e -> String
 showShortendArr arr 
-  = "[" ++ show (take cutoff l) ++ if length l > cutoff then ", ..]" else "]"
+  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
   where
     l      = Sugar.toList arr
     cutoff = 5
