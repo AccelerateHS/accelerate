@@ -74,6 +74,7 @@ import Prelude                                  hiding (exp)
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
+import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Tuple              hiding (Tuple)
 import Data.Array.Accelerate.AST                hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp)
@@ -108,12 +109,16 @@ data Layout env env' where
 
 -- Project the nth index out of an environment layout.
 --
-prjIdx :: Typeable t => Int -> Layout env env' -> Idx env t
-prjIdx 0 (PushLayout _ ix) = case gcast ix of
-                               Just ix' -> ix'
-                               Nothing  -> INTERNAL_ERROR(error) "prjIdx" "type mismatch"
-prjIdx n (PushLayout l _)  = prjIdx (n - 1) l
-prjIdx _ EmptyLayout       = INTERNAL_ERROR(error) "prjIdx" "inconsistent valuation"
+-- The first argument provides context information for error messages in the case of failure.
+--
+prjIdx :: Typeable t => String -> Int -> Layout env env' -> Idx env t
+prjIdx ctxt 0 (PushLayout _ ix) = case gcast ix of
+                                    Just ix' -> ix'
+                                    Nothing  -> INTERNAL_ERROR(error) 
+                                                  "prjIdx" ("type mismatch at " ++ ctxt)
+prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
+prjIdx ctxt _ EmptyLayout       = INTERNAL_ERROR(error) 
+                                    "prjIdx" ("inconsistent valuation at " ++ ctxt)
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -317,13 +322,15 @@ convertSharingAcc :: forall a aenv. Arrays a
                   -> AST.OpenAcc aenv a
 convertSharingAcc alyt env (AvarSharing sa)
   | Just i <- findIndex (matchStableAcc sa) env 
-  = AST.OpenAcc $ AST.Avar (prjIdx i alyt)
+  = AST.OpenAcc $ AST.Avar (prjIdx (ctxt ++ "; i = " ++ show i) i alyt)
   | null env                                   
-  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableAccName sa) ++ ")"
+  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ 
+            show (hashStableAccName sa) ++ ")"
   | otherwise                                   
-  = INTERNAL_ERROR(error) "convertSharingAcc (prjIdx)" err
+  = INTERNAL_ERROR(error) "convertSharingAcc" err
   where
-    err = "inconsistent valuation; sa = " ++ show (hashStableAccName sa) ++ "; env = " ++ show env
+    ctxt = "shared 'Acc' tree with stable name " ++ show (hashStableAccName sa)
+    err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env
 convertSharingAcc alyt env (AletSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
   = AST.OpenAcc
   $ let alyt' = incLayout alyt `PushLayout` ZeroIdx
@@ -333,7 +340,7 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
   = AST.OpenAcc
   $ (case preAcc of
       Atag i
-        -> AST.Avar (prjIdx i alyt)
+        -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
       Pipe afun1 afun2 acc
         -> let boundAcc = convertAccFun1 afun1 `AST.Apply` convertSharingAcc alyt env acc
                bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
@@ -518,20 +525,21 @@ convertSharingExp lyt alyt env aenv = cvt
     cvt :: Elt t' => SharingExp t' -> AST.OpenExp env aenv t'
     cvt (VarSharing se)
       | Just i <- findIndex (matchStableExp se) env
-      = AST.Var (prjIdx i lyt)
+      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i) i lyt)
       | null env                                   
       = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableName se) ++ ")"
       | otherwise                                   
       = INTERNAL_ERROR(error) "convertSharingExp (prjIdx)" err
       where
-        err = "inconsistent valuation; sa = " ++ show (hashStableName se) ++ "; env = " ++ show env
+        ctxt = "shared 'Exp' tree with stable name " ++ show (hashStableName se)
+        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env
     cvt (LetSharing se@(StableSharingExp _ boundExp) bodyExp)
       = let lyt' = incLayout lyt `PushLayout` ZeroIdx
         in
         AST.Let (cvt boundExp) (convertSharingExp lyt' alyt (se:env) aenv bodyExp)
     cvt (ExpSharing _ pexp)
       = case pexp of
-          Tag i           -> AST.Var (prjIdx i lyt)
+          Tag i           -> AST.Var (prjIdx ("de Bruijn conversion tag " ++ show i) i lyt)
           Const v         -> AST.Const (fromElt v)
           Tuple tup       -> AST.Tuple (convertTuple lyt alyt env aenv tup)
           Prj idx e       -> AST.Prj idx (cvt e)
@@ -1166,8 +1174,8 @@ makeOccMap rootAcc
 --   Invariant: If one shared term 's' is itself a subterm of another shared term 't', then 's' 
 --              must occur *after* 't' in the 'NodeCounts'.  Moreover, no shared term occur twice.
 --
--- We determine the subterm property by using the tree height in 'StableAccName'.  Trees get smaller
--- towards the end of a 'NodeCounts' list.
+-- We determine the subterm property by using the tree height in 'StableAccName'.  Trees get
+-- smaller towards the end of a 'NodeCounts' list.
 --
 -- To ensure the invariant is preserved over merging node counts from sibling subterms, the
 -- function '(+++)' must be used.
@@ -1191,14 +1199,13 @@ nodeCount nc = NodeCounts [nc]
 --   arguments and guarantee that it still holds for the result.
 --
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
-NodeCounts us +++ NodeCounts vs = NodeCounts $ merge us vs
+NodeCounts us +++ NodeCounts vs = NodeCounts $ foldr insert us vs
   where
-    merge []                         ys                         = ys
-    merge xs                         []                         = xs
-    merge xs@(x@(sa1, count1) : xs') ys@(y@(sa2, count2) : ys') 
-      | sa1 == sa2          = (sa1 `pickNoneVar` sa2, count1 + count2) : merge xs' ys'
-      | sa1 `higherSSA` sa2 = x : merge xs' ys
-      | otherwise           = y : merge xs  ys'
+    insert x               []                         = [x]
+    insert x@(sa1, count1) ys@(y@(sa2, count2) : ys') 
+      | sa1 == sa2          = (sa1 `pickNoneVar` sa2, count1 + count2) : ys'
+      | sa1 `higherSSA` sa2 = x : ys
+      | otherwise           = y : insert x ys'
 
     (StableSharingAcc _ (AvarSharing _)) `pickNoneVar` sa2                                 = sa2
     sa1                                  `pickNoneVar` _sa2                                = sa1
@@ -1615,13 +1622,13 @@ instance Elt a => Show (Exp a) where
 
 -- for debugging
 showPreAccOp :: PreAcc acc exp arrs -> String
-showPreAccOp (Atag _)             = "Atag"                   
+showPreAccOp (Atag i)             = "Atag " ++ show i
 showPreAccOp (Pipe _ _ _)         = "Pipe"
 showPreAccOp (Acond _ _ _)        = "Acond"
 showPreAccOp (FstArray _)         = "FstArray"
 showPreAccOp (SndArray _)         = "SndArray"
 showPreAccOp (PairArrays _ _)     = "PairArrays"
-showPreAccOp (Use _)              = "Use"
+showPreAccOp (Use arr)            = "Use " ++ showShortendArr arr
 showPreAccOp (Unit _)             = "Unit"
 showPreAccOp (Generate _ _)       = "Generate"
 showPreAccOp (Reshape _ _)        = "Reshape"
@@ -1643,6 +1650,13 @@ showPreAccOp (Permute _ _ _ _)    = "Permute"
 showPreAccOp (Backpermute _ _ _)  = "Backpermute"
 showPreAccOp (Stencil _ _ _)      = "Stencil"
 showPreAccOp (Stencil2 _ _ _ _ _) = "Stencil2"
+
+showShortendArr :: Elt e => Array sh e -> String
+showShortendArr arr 
+  = "[" ++ show (take cutoff l) ++ if length l > cutoff then ", ..]" else "]"
+  where
+    l      = Sugar.toList arr
+    cutoff = 5
 
 _showSharingAccOp :: SharingAcc arrs -> String
 _showSharingAccOp (AvarSharing sn)    = "AVAR " ++ show (hashStableAccName sn)
