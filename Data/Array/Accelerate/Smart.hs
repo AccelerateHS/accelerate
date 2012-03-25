@@ -117,8 +117,11 @@ prjIdx ctxt 0 (PushLayout _ ix) = case gcast ix of
                                     Nothing  -> INTERNAL_ERROR(error) 
                                                   "prjIdx" ("type mismatch at " ++ ctxt)
 prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
-prjIdx ctxt _ EmptyLayout       = INTERNAL_ERROR(error) 
-                                    "prjIdx" ("inconsistent valuation at " ++ ctxt)
+prjIdx ctxt _ EmptyLayout
+  = error $ "Fatal error in Smart.prjIdx:"
+      ++ "\n  Environment doesn't contain index at " ++ ctxt
+      ++ "\n  Possible reason: nested data parallelism — array computations that depend on a"
+      ++ "\n    scalar variable of type 'Exp a'"
 
 -- Add an entry to a layout, incrementing all indices
 --
