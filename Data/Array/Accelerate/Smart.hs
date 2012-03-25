@@ -111,10 +111,14 @@ data Layout env env' where
 --
 -- The first argument provides context information for error messages in the case of failure.
 --
-prjIdx :: Typeable t => String -> Int -> Layout env env' -> Idx env t
-prjIdx ctxt 0 (PushLayout _ ix) = case gcast ix of
-                                    Just ix' -> ix'
-                                    Nothing  -> possiblyNestedErr ctxt "Type mismatch"
+prjIdx :: forall t env env'. Typeable t => String -> Int -> Layout env env' -> Idx env t
+prjIdx ctxt 0 (PushLayout _ (ix :: Idx env0 t0)) 
+  = case gcast ix of
+      Just ix' -> ix'
+      Nothing  -> possiblyNestedErr ctxt $
+                    "Couldn't match expected type `" ++ show (typeOf (undefined::t)) ++ 
+                    "' with actual type `" ++ show (typeOf (undefined::t0)) ++ "'" ++
+                    "\n  Type mismatch"
 prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
 prjIdx ctxt _ EmptyLayout       = possiblyNestedErr ctxt "Environment doesn't contain index"
 
@@ -122,7 +126,7 @@ possiblyNestedErr :: String -> String -> a
 possiblyNestedErr ctxt failreason
   = error $ "Fatal error in Smart.prjIdx:"
       ++ "\n  " ++ failreason ++ " at " ++ ctxt
-      ++ "\n  Possible reason: nested data parallelism — array computations that depend on a"
+      ++ "\n  Possible reason: nested data parallelism — array computation that depends on a"
       ++ "\n    scalar variable of type 'Exp a'"
 
 -- Add an entry to a layout, incrementing all indices
