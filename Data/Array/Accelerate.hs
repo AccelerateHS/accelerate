@@ -64,7 +64,10 @@ module Data.Array.Accelerate (
   module Data.Array.Accelerate.Prelude,
   
   -- * Deprecated names for backwards compatibility
-  Elem, Ix, SliceIx, tuple, untuple
+  Elem, Ix, SliceIx, tuple, untuple,
+  
+  -- * Diagnostics
+  initTrace
 
 ) where
 
@@ -75,6 +78,7 @@ import Data.Array.Accelerate.Array.Sugar hiding ((!), shape, dim, size)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Debug
 
 
 -- Renamings
