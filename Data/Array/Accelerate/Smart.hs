@@ -114,12 +114,14 @@ data Layout env env' where
 prjIdx :: Typeable t => String -> Int -> Layout env env' -> Idx env t
 prjIdx ctxt 0 (PushLayout _ ix) = case gcast ix of
                                     Just ix' -> ix'
-                                    Nothing  -> INTERNAL_ERROR(error) 
-                                                  "prjIdx" ("type mismatch at " ++ ctxt)
+                                    Nothing  -> possiblyNestedErr ctxt "Type mismatch"
 prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
-prjIdx ctxt _ EmptyLayout
+prjIdx ctxt _ EmptyLayout       = possiblyNestedErr ctxt "Environment doesn't contain index"
+
+possiblyNestedErr :: String -> String -> a
+possiblyNestedErr ctxt failreason
   = error $ "Fatal error in Smart.prjIdx:"
-      ++ "\n  Environment doesn't contain index at " ++ ctxt
+      ++ "\n  " ++ failreason ++ " at " ++ ctxt
       ++ "\n  Possible reason: nested data parallelism — array computations that depend on a"
       ++ "\n    scalar variable of type 'Exp a'"
 
