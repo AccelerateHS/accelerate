@@ -73,7 +73,7 @@ module Data.Array.Accelerate.Language (
   fst, snd, curry, uncurry,
   
   -- ** Index construction and destruction
-  index0, index1, unindex1,
+  index0, index1, unindex1, index2, unindex2,
   
   -- ** Conditional expressions
   (?),
@@ -794,6 +794,16 @@ index1 = lift . (Z:.)
 unindex1 :: Exp (Z:. Int) -> Exp Int
 unindex1 ix = let Z:.i = unlift ix in i
   
+-- | Creates a rank-2 index from two exp ints.
+-- 
+index2 :: Exp Int -> Exp Int -> Exp DIM2
+index2 i j      = lift (Z :. i :. j)
+
+-- | Destructs a rank-2 index to an exp tuple of two ints.
+-- 
+unindex2 :: Exp DIM2 -> Exp (Int, Int)
+unindex2 ix     = let Z :. i :. j = unlift (ix :: Exp DIM2) in lift ((i,j) :: (Exp Int, Exp Int))
+
 
 -- Conditional expressions
 -- -----------------------

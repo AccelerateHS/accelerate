@@ -14,7 +14,7 @@
 module Data.Array.Accelerate.Prelude (
 
   -- ** Map-like
-  zip, unzip,
+  zip, unzip, zip3,
   
   -- ** Reductions
   foldAll, fold1All,
@@ -24,12 +24,15 @@ module Data.Array.Accelerate.Prelude (
 
   -- ** Segmented scans
   scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg, 
-  scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg
+  scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
+  -- ** Reshaping of arrays
+  flatten
+
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
+import Prelude   hiding (replicate, zip, unzip, zip3, map, scanl, scanl1, scanr, scanr1, zipWith,
                          filter, max, min, not, fst, snd, curry, uncurry)
 import qualified Prelude
 
@@ -58,6 +61,15 @@ unzip :: (Shape sh, Elt a, Elt b)
       -> (Acc (Array sh a), Acc (Array sh b))
 unzip arr = (map fst arr, map snd arr)
 
+-- | Takes three arrays and produces an array of a three-tuple.
+--   TODO Maybe there is a better way to implement this but with 2 zips?!
+--
+zip3 :: forall a b c sh. (Shape sh, Elt c, Elt b, Elt a) =>
+     Acc (Array sh a) -> Acc (Array sh b) -> Acc (Array sh c) -> Acc (Array sh (a, b, c))
+zip3 a b c = zipWith f a $ zip b c
+  where
+    f a bc = let (b,c) = unlift bc :: (Exp b, Exp c) in
+             lift (a, b, c) :: Exp (a,b,c)
 
 -- Reductions
 -- ----------
@@ -374,3 +386,10 @@ mkSegApply op = apply
         bF = fst b
         bV = snd b
 
+-- Reshaping of arrays
+-- -------------------
+
+-- | Flattens a given array of arbitrary dimension.
+--
+flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Array DIM1 a)
+flatten a = reshape (index1 $ size a) a
