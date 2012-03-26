@@ -156,6 +156,7 @@ allTests cfg = sequence'
   , mkIO "sharing-recovery" "twoLetsSameLevel2" $ return (show SharingRecovery.twoLetsSameLevel2)
   , mkIO "sharing-recovery" "noLetAtTop"   $ return (show SharingRecovery.noLetAtTop)
   , mkIO "sharing-recovery" "noLetAtTop2"   $ return (show SharingRecovery.noLetAtTop2)
+  , mkIO "sharing-recovery" "pipe" $ return (show SharingRecovery.pipe)
   ]
   where
     n   = cfgElements cfg
