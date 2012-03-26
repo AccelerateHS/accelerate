@@ -302,7 +302,12 @@ convertAcc = convertOpenAcc EmptyLayout
 -- information.
 --
 convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
-convertOpenAcc alyt = convertSharingAcc alyt [] . recoverSharingAcc floatOutAccFromExp
+convertOpenAcc alyt acc
+  = let 
+      (sharingAcc, initialEnv) = recoverSharingAcc floatOutAccFromExp acc
+    in
+    convertSharingAcc alyt initialEnv sharingAcc
+    -- FIXME: somewhat dodgy as the 'alyt' and 'initialEnv' always have to be in sync
 
 -- |Convert a unary function over array computations
 --
@@ -931,7 +936,7 @@ makeOccMap rootAcc
                                      return (AccSharing (StableAccName sn height) acc, height) 
 
           case pacc of
-            Atag i                   -> reconstruct $ return (Atag i, 1)
+            Atag i                   -> reconstruct $ return (Atag i, 0)           -- height is 0!
             Pipe afun1 afun2 acc     -> reconstruct $ travA (Pipe afun1 afun2) acc
             Acond e acc1 acc2        -> reconstruct $ do
                                           (e'   , h1) <- traverseExp occMap e
@@ -1178,13 +1183,19 @@ makeOccMap rootAcc
                                     (e'  , h2) <- traverseExp occMap e
                                     return (SnocTup tup' e', h1 `max` h2 + 1)
 
--- Type used to maintain how often each shared subterm occured.
+-- Type used to maintain how often each shared subterm, so far, occured during a bottom-up sweep.
 --
---   Invariant: If one shared term 's' is itself a subterm of another shared term 't', then 's' 
---              must occur *after* 't' in the 'NodeCounts'.  Moreover, no shared term occur twice.
+--   Invariants: 
+--   - If one shared term 's' is itself a subterm of another shared term 't', then 's' must occur
+--     *after* 't' in the 'NodeCounts'.
+--   - No shared term occurs twice.
+--   - A term may have a final occurence count of only 1 iff it is either a free variable ('Atag')
+--     or an array computation listed out of an expression.
 --
 -- We determine the subterm property by using the tree height in 'StableAccName'.  Trees get
--- smaller towards the end of a 'NodeCounts' list.
+-- smaller towards the end of a 'NodeCounts' list.  The height of free variables ('Atag') is 0,
+-- whereas other leaves have height 1.  This guarantees that all free variables are at the end of
+-- the 'NodeCounts' list.
 --
 -- To ensure the invariant is preserved over merging node counts from sibling subterms, the
 -- function '(+++)' must be used.
@@ -1219,14 +1230,46 @@ NodeCounts us +++ NodeCounts vs = NodeCounts $ foldr insert us vs
     (StableSharingAcc _ (AvarSharing _)) `pickNoneVar` sa2                                 = sa2
     sa1                                  `pickNoneVar` _sa2                                = sa1
 
+-- Sort 'StableSharingAcc's consisting of 'Atag' nodes only in order of ascending tags and drop the
+-- counts.
+--
+sortInEnvOrder :: [StableSharingAcc] -> [StableSharingAcc]
+sortInEnvOrder = sortBy envOrder
+  where
+    envOrder (StableSharingAcc _ (AccSharing _ (Atag t1)))
+             (StableSharingAcc _ (AccSharing _ (Atag t2))) = compare t1 t2
+    envOrder _ _ 
+      = INTERNAL_ERROR(error) "sortInEnvOrder" "Encountered a node that is not a plain 'Atag'"
+
+-- Determine whether a 'StableSharingAcc' is an 'Atag', which represents free variables.
+--
+isFreeVar :: StableSharingAcc -> Bool
+isFreeVar (StableSharingAcc _ (AccSharing _ (Atag _))) = True
+isFreeVar _                                            = False
+
 -- Determine the scopes of all variables representing shared subterms (Phase Two) in a bottom-up
 -- sweep.  The first argument determines whether array computations are floated out of expressions
 -- irrespective of whether they are shared or not — 'True' implies floating them out.
 --
+-- In addition to the AST with sharing information, yield the 'StableSharingAcc's for all free
+-- variables of 'rootAcc', which are represented by 'Atag' leaves in the tree. They are in order of
+-- the tag values — i.e., in the same order that they need to appear in an environment to use the
+-- tag for indexing into that environment.
+--
 -- Precondition: there are only 'AvarSharing' and 'AccSharing' nodes in the argument.
 --
-determineScopes :: Typeable a => Bool -> OccMap Acc -> SharingAcc a -> SharingAcc a
-determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
+determineScopes :: Typeable a 
+                => Bool -> OccMap Acc -> SharingAcc a -> (SharingAcc a, [StableSharingAcc])
+determineScopes floatOutAcc occMap rootAcc 
+  = let
+      (sharingAcc, NodeCounts counts) = scopesAcc rootAcc
+      unboundTrees                    = filter (not . isFreeVar . fst) counts
+    in
+    if all (isFreeVar . fst) counts
+      then
+        (sharingAcc, sortInEnvOrder . map fst $ counts)
+      else
+        INTERNAL_ERROR(error) "determineScopes" ("unbound shared subtrees" ++ show unboundTrees)
   where
     scopesAcc :: forall arrs. SharingAcc arrs -> (SharingAcc arrs, NodeCounts)
     scopesAcc (AletSharing _ _)
@@ -1383,6 +1426,9 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
         -- * If the current node is being shared ('occCount > 1'), replace it by a 'AvarSharing'
         --   node and float the shared subtree out wrapped in a 'NodeCounts' value.
         -- * If the current node is not shared, reconstruct it in place.
+        -- * Special case for free variables ('Atag'): Replace it by a sharing variable and float
+        --   the 'Atag' out in a 'NodeCounts' value.  This is idependent of the number of
+        --   occurences.
         --
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
         -- node.
@@ -1390,12 +1436,19 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
         reconstruct :: Arrays arrs 
                     => PreAcc SharingAcc SharingExp arrs -> NodeCounts 
                     -> (SharingAcc arrs, NodeCounts)
+        reconstruct newAcc@(Atag _) _subCount
+              -- free variable => replace by a sharing variable regardless of the number of occ.s
+          = let thisCount = nodeCount (StableSharingAcc sn (AccSharing sn newAcc), 1)
+            in
+            tracePure "FREE" (show thisCount) $
+            (AvarSharing sn, thisCount)
         reconstruct newAcc subCount
-          | occCount > 1 = tracePure ("SHARED" ++ completed)
-                                     (show (nodeCount (StableSharingAcc sn sharingAcc, 1) +++ 
-                                            newCount)) $
-                           ( AvarSharing sn
-                           , nodeCount (StableSharingAcc sn sharingAcc, 1) +++ newCount)
+              -- shared subtree => replace by a sharing variable
+          | occCount > 1 = let allCount = nodeCount (StableSharingAcc sn sharingAcc, 1) +++ newCount
+                           in
+                           tracePure ("SHARED" ++ completed) (show allCount) $
+                           (AvarSharing sn, allCount)
+              -- neither shared nor free variable => leave it as it is
           | otherwise    = tracePure ("Normal" ++ completed) (show newCount) $
                            (sharingAcc, newCount)
           where
@@ -1406,7 +1459,7 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
             lets       = foldl (flip (.)) id . map AletSharing $ bindHere
             sharingAcc = lets $ AccSharing sn newAcc
 
-            -- trace support
+              -- trace support
             completed | null bindHere = ""
                       | otherwise     = "(" ++ show (length bindHere) ++ " lets)"
 
@@ -1425,8 +1478,10 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
             in (NodeCounts counts', map fst completed)
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
-            -- of occurences for that node in the whole program
-            notComplete (sa, n) = lookupWithSharingAcc occMap sa > n
+            -- of occurences for that node in the whole program, with the exception that free
+            -- variables are never complete
+            notComplete (sa, n) | not . isFreeVar $ sa = lookupWithSharingAcc occMap sa > n
+                                | otherwise            = True
 
     scopesExp :: forall t. SharingExp t -> (SharingExp t, NodeCounts)
     scopesExp (LetSharing _ _)
@@ -1568,8 +1623,11 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
         (body, counts) = scopesExp (stencilFun undefined undefined)          
                   
 -- |Recover sharing information and annotate the HOAS AST with variable and let binding
---  annotations.  The first argument determines whether array computations are floated out of
---  expressions irrespective of whether they are shared or not — 'True' implies floating them out.
+-- annotations.  The first argument determines whether array computations are floated out of
+-- expressions irrespective of whether they are shared or not — 'True' implies floating them out.
+--
+-- Also returns the 'StableSharingAcc's of all 'Atag' leaves in environment order — they represent
+-- the free variables of the AST.
 --
 -- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
 --     determine the sharing of subterms.  The stable pointer API does not guarantee its
@@ -1577,11 +1635,11 @@ determineScopes floatOutAcc occMap rootAcc = fst $ scopesAcc rootAcc
 --     some sharing.  However, sharing does not affect the denotational meaning of an array
 --     computation; hence, we do not compromise denotational correctness.
 --
-recoverSharingAcc :: Typeable a => Bool -> Acc a -> SharingAcc a
+recoverSharingAcc :: Typeable a => Bool -> Acc a -> (SharingAcc a, [StableSharingAcc])
 {-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc floatOutAcc acc 
-  = let (acc', occMap) =   -- as we need to use stable pointers; it's safe as explained above
-          unsafePerformIO $ do
+  = let (acc', occMap) =
+          unsafePerformIO $ do        -- to enable stable pointers; it's safe as explained above
             { (acc', occMap) <- makeOccMap acc
  
             ; occMapList <- Hash.toList occMap
@@ -1620,10 +1678,10 @@ instance Elt a => Show (Exp a) where
                                                            (toSharingExp e3)
             PrimConst c     -> ExpSharing undefined $ PrimConst c
             PrimApp p e     -> ExpSharing undefined $ PrimApp p (toSharingExp e)
-            IndexScalar a e -> ExpSharing undefined $ IndexScalar (recoverSharingAcc False a)
+            IndexScalar a e -> ExpSharing undefined $ IndexScalar (fst $ recoverSharingAcc False a)
                                                                   (toSharingExp e)
-            Shape a         -> ExpSharing undefined $ Shape (recoverSharingAcc False a)
-            Size a          -> ExpSharing undefined $ Size (recoverSharingAcc False a)
+            Shape a         -> ExpSharing undefined $ Shape (fst $ recoverSharingAcc False a)
+            Size a          -> ExpSharing undefined $ Size (fst $ recoverSharingAcc False a)
 
       toSharingTup :: Tuple.Tuple Exp tup -> Tuple.Tuple SharingExp tup
       toSharingTup NilTup          = NilTup
