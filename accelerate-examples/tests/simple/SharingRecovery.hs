@@ -164,3 +164,22 @@ orderFail = Acc.map (\_ -> map1 ! (idx 1) + map2 ! (idx 1)) arr
     map2 = Acc.map (\_ -> map3 ! (idx 3)) arr
     map3 = Acc.map (+1) arr
     arr = mkArray 42
+
+----------------------------------------------------------------------
+
+-- Tests array-valued lambdas in conjunction with sharing recovery.
+--
+pipe :: Acc (Vector Int)
+pipe = (acc1 >-> acc2) xs
+  where
+    z :: Acc (Scalar Int)
+    z = unit 0
+
+    xs :: Acc (Vector Int)
+    xs = use $ fromList (Z:.10) [0..]
+
+    acc1 :: Acc (Vector Int) -> Acc (Vector Int)
+    acc1 = Acc.map (\_ -> the z)
+
+    acc2 :: Acc (Vector Int) -> Acc (Vector Int)
+    acc2 arr = let arr2 = use $ fromList (Z:.10) [10..] in Acc.map (\_ -> arr2!constant (Z:.(0::Int))) (Acc.zip arr arr2)
