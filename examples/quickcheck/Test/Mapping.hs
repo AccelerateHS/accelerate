@@ -78,7 +78,7 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
   , testElt double (undefined :: Double)
   ]
   where
-    test_zip  xs ys = run opt (Acc.zip             (use xs) (use xs)) .==. zipWithRef (,) xs ys
+    test_zip  xs ys = run opt (Acc.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
     test_plus xs ys = run opt (Acc.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
     test_min  xs ys = run opt (Acc.zipWith Acc.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
 
