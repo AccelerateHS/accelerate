@@ -23,40 +23,34 @@ import Data.Array.Accelerate                            as Acc
 --
 
 test_prefixsum :: Options -> Test
-test_prefixsum opt = testGroup "prefix sum"
-  [ forallElt test_scanl  "scanl"
-  , forallElt test_scanl' "scanl'"
-  , forallElt test_scanl1 "scanl1"
-  , forallElt test_scanr  "scanr"
-  , forallElt test_scanr' "scanr'"
-  , forallElt test_scanr1 "scanr1"
+test_prefixsum opt = testGroup "prefix sum" $ catMaybes
+  [ testElt int8   (undefined :: Int8)
+  , testElt int16  (undefined :: Int16)
+  , testElt int32  (undefined :: Int32)
+  , testElt int64  (undefined :: Int64)
+  , testElt int8   (undefined :: Word8)
+  , testElt int16  (undefined :: Word16)
+  , testElt int32  (undefined :: Word32)
+  , testElt int64  (undefined :: Word64)
+  , testElt float  (undefined :: Float)
+  , testElt double (undefined :: Double)
   ]
   where
-    forallElt :: (forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => Vector e -> Property)
-              -> String
-              -> Test
-    forallElt fn title = testGroup title $ catMaybes
-      [ testElt int8   (undefined :: Int8)
-      , testElt int16  (undefined :: Int16)
-      , testElt int32  (undefined :: Int32)
-      , testElt int64  (undefined :: Int64)
-      , testElt int8   (undefined :: Word8)
-      , testElt int16  (undefined :: Word16)
-      , testElt int32  (undefined :: Word32)
-      , testElt int64  (undefined :: Word64)
-      , testElt float  (undefined :: Float)
-      , testElt double (undefined :: Double)
-      ]
-      where
-        testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
-        testElt ok _
-          | P.not (get ok opt)  = Nothing
-          | otherwise           = Just . testProperty (show (typeOf (undefined :: e)))
-            $ \(xs :: Vector e) -> fn xs
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt ok _
+      | P.not (get ok opt)  = Nothing
+      | otherwise           = Just $ testGroup (show (typeOf (undefined :: e)))
+          [ testProperty "scanl"  (test_scanl  :: Vector e -> Property)
+          , testProperty "scanl'" (test_scanl' :: Vector e -> Property)
+          , testProperty "scanl1" (test_scanl1 :: Vector e -> Property)
+          , testProperty "scanr"  (test_scanr  :: Vector e -> Property)
+          , testProperty "scanr'" (test_scanr' :: Vector e -> Property)
+          , testProperty "scanr1" (test_scanr1 :: Vector e -> Property)
+          ]
 
     -- left scan
     --
-    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs)) .==. scanlRef (+) 0 xs
+    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs))    .==. scanlRef (+) 0 xs
     test_scanl1 xs = run opt (Acc.scanl1 Acc.min (use xs)) .==. scanl1Ref P.min xs
     test_scanl' xs =
       let (vec, sum) = Acc.scanl' (+) 0 (use xs)
@@ -64,7 +58,7 @@ test_prefixsum opt = testGroup "prefix sum"
 
     -- right scan
     --
-    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs)) .==. scanrRef (+) 0 xs
+    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs))    .==. scanrRef (+) 0 xs
     test_scanr1 xs = run opt (Acc.scanr1 Acc.max (use xs)) .==. scanr1Ref P.max xs
     test_scanr' xs =
       let (vec, sum) = Acc.scanr' (+) 0 (use xs)
