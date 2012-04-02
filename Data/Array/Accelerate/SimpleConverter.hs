@@ -91,22 +91,24 @@ type Counter = Int
 runEnvM m = evalState m ([],0)
 
 -- Evaluate a sub-branch in an extended environment.
--- The name of the fresh variable is not exposed until someone asks for the environment:
-withExtendedEnv :: (EnvM b) -> EnvM b 
-withExtendedEnv branch = do 
+-- Returns the name of the fresh variable as well as the result:
+withExtendedEnv :: String -> (EnvM b) -> EnvM (S.Var, b )
+withExtendedEnv basename branch = do 
   (env,cnt) <- get 
-  let newsym = S.var $ "v"++show cnt
+  let newsym = S.var $ basename ++ show cnt
   put (newsym:env, cnt+1) 
   b <- branch
   -- We keep counter-increments from the sub-branch, but NOT the extended env:
   (_,cnt2) <- get 
   put (env,cnt2)
-  return b
+  return (newsym, b)
 
 -- Look up a de bruijn index in the environment:
 envLookup :: Int -> EnvM S.Var
 envLookup i = do (env,_) <- get
-                 return (env !! i)
+                 if length env > i
+                  then return (env !! i)
+                  else error$ "Environment did not contain an element "++show i++" : "++show env
 
 blah a b c = a <$> b <*> c
 
@@ -125,19 +127,16 @@ evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
 -- The environment argument is used to convert de Bruijn indices to vars:
 evalPreOpenAcc e = 
   case e of 
-    Let acc1 acc2 -> S.Let <$> undefined
-                           <*> evalOpenAcc acc1
-                           <*> evalOpenAcc acc2
---       do
---       a1 <- evalOpenAcc acc1
---       a2 <- evalOpenAcc acc2
---       return (S.Let undefined a1 a2)
---    let !arr1 = force $ evalOpenAcc acc1 aenv
---    in evalOpenAcc acc2 (aenv `Push` arr1)
+    Let acc1 acc2 -> 
+       do (v,a2) <- withExtendedEnv "a"$ 
+                    evalOpenAcc acc2 
+	  a1     <- evalOpenAcc acc1
+          return$ S.Let v a1 a2
 
-    Avar idx -> return$ S.Vr (S.var$ show$ idxToInt idx)
+--    Avar idx -> return$ S.Vr (S.var$ show$ idxToInt idx)
+    Avar idx -> S.Vr <$> envLookup (idxToInt idx)
 
-    ZipWith f acc1 acc2 -> S.ZipWith <$> travF f
+    ZipWith f acc1 acc2 -> S.ZipWith <$> convertFun f
                                      <*> evalOpenAcc acc1
                                      <*> evalOpenAcc acc2
 
@@ -189,7 +188,8 @@ evalExp e = evalOpenExp e
 evalOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 evalOpenExp e = 
   case e of 
-    Var idx -> return$ S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
+--    Var idx -> return$ S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
+    Var idx -> S.Vr <$> envLookup (idxToInt idx)
     PrimApp p arg -> convertPrimApp p arg
 
     Tuple tup -> convertTuple tup
@@ -304,18 +304,9 @@ numty nt =
 --------------------------------------------------------------------------------
 
 -- Evaluate open function
---
--- evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
--- evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
--- evalOpenFun (Lam f)  env aenv 
---   = \x -> evalOpenFun f (env `Push` Sugar.fromElt x) aenv
-
--- -- Evaluate a closed function
--- --
--- evalFun :: Fun aenv t -> Val aenv -> t
--- evalFun f aenv = evalOpenFun f Empty aenv
-
-
-travF :: OpenFun env aenv t -> EnvM S.Exp
-travF (Body b) = evalOpenExp b
-travF (Lam f)  = S.Lam (S.var "TODO_LAMVAR") <$> travF f
+convertFun :: OpenFun env aenv t -> EnvM S.Exp
+convertFun (Body b) = evalOpenExp b
+convertFun (Lam f)  = fmap snd $ 
+                 withExtendedEnv "v" $ do
+                   v <- envLookup 0
+		   S.Lam v <$> convertFun f
