@@ -4,7 +4,9 @@ module Data.Array.Accelerate.SimpleAST
  where
 
 -- Interned symbols:
-import StringTable.Atom
+-- import StringTable.Atom
+-- import Data.Atom.Simple
+import Data.Symbol
 import Data.Map
 
 --------------------------------------------------------------------------------
@@ -12,8 +14,30 @@ import Data.Map
 -- A simple representation of variables
 -- Honestly though, since we're trying to convert from de Brujin
 -- indicies to this... it might just as well use the indicies. 
-data Var = Var String
- deriving (Read,Show,Eq)          
+--data Var = Var String
+-- deriving (Read,Show,Eq)          
+var :: String -> Var
+----------------------------------------
+-- stringtable-atom:
+-- var = toAtom
+-- type Var = Atom
+
+----------------------------------------
+-- simple-atom:
+-- var = intern
+-- type Var = Symbol
+
+----------------------------------------
+-- 'symbol' package:
+var = intern
+type Var = Symbol 
+instance Show Symbol where 
+ show = unintern
+instance Read Symbol where 
+-- read = intern
+-- NOTE - this package would seem to be unsafe because the Symbol type
+-- constructor is exported.
+----------------------------------------
 
 -- A simple environment
 -- {Var -> Expression}
@@ -153,3 +177,4 @@ data PrimFun sig where
   PrimBoolToInt    :: PrimFun (Bool -> Int)
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
 -}
+

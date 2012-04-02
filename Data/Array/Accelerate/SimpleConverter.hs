@@ -100,7 +100,7 @@ evalPreOpenAcc e =
     Let2 acc1 acc2 -> undefined
     PairArrays acc1 acc2 -> undefined
  --  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)    
-    Avar idx -> S.Avar (S.Var "v")
+    Avar idx -> S.Avar (S.var "v")
     
     Apply (Alam (Abody funAcc)) acc -> undefined
 --   = let !arr = force $ evalOpenAcc acc aenv
@@ -167,7 +167,7 @@ evalOpenExp :: OpenExp env aenv a -> S.Exp
                -- Val env -> Val aenv -> a
 evalOpenExp e = 
   case e of 
-    Var idx -> S.Avar (S.Var "yay")    
+    Var idx -> S.Avar (S.var "yay")    
     PrimApp p arg -> convertPrimApp p arg
   
 -- evalOpenExp (Const c) _ _ = Sugar.toElt c
@@ -270,4 +270,5 @@ travF :: OpenFun env aenv t
 --travF (Body b) aenv vars = undefined
 -- travF (Body b) = evalPreOpenAcc b
 travF (Body b) = evalOpenExp b
-travF (Lam f) = S.Lam (S.Var "hi") (travF f)
+travF (Lam f) = S.Lam (S.var "hi") (travF f)
+
