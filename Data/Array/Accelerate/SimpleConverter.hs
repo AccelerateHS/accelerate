@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GADTs #-}
+{-# LANGUAGE BangPatterns, GADTs, ScopedTypeVariables, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Data.Array.Accelerate.SimpleConverter 
@@ -28,6 +28,8 @@ import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import qualified Data.Array.Accelerate.SimpleAST as S
+
+import qualified Data.Array.Accelerate.Tuple as T
 
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
@@ -192,6 +194,62 @@ convertPreOpenAcc e =
 convertExp :: Exp aenv t -> EnvM S.Exp
 convertExp e = convertOpenExp e 
 
+-- This should probably be a member of the class IsTuple in Tuple.hs:
+class TupleLen tup where 
+  tuplen :: tup -> Int
+
+instance TupleLen ()                  where tuplen _ = 0
+instance TupleLen (a,b)               where tuplen _ = 2
+instance TupleLen (a,b,c)             where tuplen _ = 3
+instance TupleLen (a,b,c,d)           where tuplen _ = 4
+instance TupleLen (a,b,c,d,e)         where tuplen _ = 5
+instance TupleLen (a,b,c,d,e,f)       where tuplen _ = 6
+instance TupleLen (a,b,c,d,e,f,g)     where tuplen _ = 7
+instance TupleLen (a,b,c,d,e,f,g,h)   where tuplen _ = 8
+instance TupleLen (a,b,c,d,e,f,g,h,i) where tuplen _ = 9
+
+-- Converts the normal accelerate tuple index (FROM RIGHT) into a
+-- (n,m) pair meaning "position n in tuple of length m", where 'n' is
+-- zero-based and counting FROM THE LEFT.
+convertTupleIdx0 :: TupleLen t => TupleIdx t e -> (Int,Int)
+convertTupleIdx0 tix = (loop tix, len)
+ where 
+  len = silly tix undefined
+  silly :: TupleLen t2 => TupleIdx t2 e2 -> t2 -> Int
+  silly _ magic = tuplen magic
+  loop :: TupleIdx t e -> Int
+  loop ZeroTupIdx       = 0
+  loop (SuccTupIdx idx) = 1 + loop idx
+
+
+convertTupleIdx1 :: IsTuple t => TupleIdx t e -> (Int,Int)
+convertTupleIdx1 tix = (loop tix, len)
+ where 
+  len = silly tix undefined
+  silly :: IsTuple t2 => TupleIdx t2 e2 -> t2 -> Int
+  silly _ magic = tupleLen magic
+  loop :: TupleIdx t e -> Int
+  loop ZeroTupIdx       = 0
+  loop (SuccTupIdx idx) = 1 + loop idx
+
+
+-- convertTupleIdx :: TupleIdx (TupleRepr t) e -> (Int,Int)
+-- convertTupleIdx :: TupleIdx (t) e -> (Int,Int)
+
+-- For now I'm leaving it as an index from the right with no length:
+convertTupleIdx :: TupleIdx t e -> Int
+convertTupleIdx tix = loop tix
+ where 
+  loop :: TupleIdx t e -> Int
+  loop ZeroTupIdx       = 0
+  loop (SuccTupIdx idx) = 1 + loop idx
+
+
+-- instance IsTuple t => TupleLen (T.TupleRepr t) where 
+--   tuplen = 0 
+-- test :: IsTuple t => TupleIdx t e -> t -> Int
+-- test _ _ = 0
+
 convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 convertOpenExp e = 
   case e of 
@@ -202,8 +260,13 @@ convertOpenExp e =
 
     Const c   -> error "Const" -- Sugar.toElt c
 
-    Prj idx e -> S.EPrj (error "What's this index") (error "FINISHME") 
-                 <$> convertOpenExp e
+    -- Need to unpack the constructor here so as to access the IsTuple dictionary:
+
+    -- NOTE: The incoming AST indexes tuples FROM THE RIGHT:
+    Prj (idx) e -> 
+                 let n = convertTupleIdx idx in 
+--                 S.EPrj n m <$> convertOpenExp e
+                 S.ETupProjectFromRight n <$> convertOpenExp e
 
     -- This would seem to force indices to be LISTS at runtime??
     IndexNil       -> return$ S.EIndex []

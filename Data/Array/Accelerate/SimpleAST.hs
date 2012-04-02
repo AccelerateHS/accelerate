@@ -135,8 +135,11 @@ data Exp =
 
   | EConst Const
   -- TODO -- support other types in Elt.
-              
-  | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
+
+-- [2012.04.02] I can't presently compute the length from the TupleIdx.
+--  | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
+
+  | ETupProjectFromRight Int Exp  -- Project the nth field FROM THE RIGHT end of the tuple.
 
   -- Index into a multi-dimensional array:
   | EIndex [Exp]
