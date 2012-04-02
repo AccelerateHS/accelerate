@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, GADTs #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Data.Array.Accelerate.SimpleConverter 
 --       ()
@@ -6,7 +7,7 @@ module Data.Array.Accelerate.SimpleConverter
 
 -- standard libraries
 import Control.Monad
-import Control.Applicative
+import Control.Applicative ((<$>),(<*>))
 -- import Control.Monad.ST                            (ST)
 import Data.Bits
 import Data.Char                                   (chr, ord)
@@ -26,24 +27,15 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
-
 import qualified Data.Array.Accelerate.SimpleAST as S
 
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
--- import qualified Data.Array.Accelerate as Acc
 
 -- #include "accelerate.h"
 
-
--- | Convert the sophisticate Accelerate-internal AST representation
---   into something very simple for external consumption.
-convert :: Arrays a => Sugar.Acc a -> S.Exp
-convert = runEnvM . convertAcc . Sugar.convertAcc
-
--- convertAccFun1 = 
-
 --------------------------------------------------------------------------------
+-- TEMPORARY -- Testing:
 
 -- dotpAcc :: Vector Float -> Vector Float -> Sugar.Acc (Sugar.Scalar Float)
 dotpAcc :: Sugar.Acc (Sugar.Scalar Float)
@@ -60,6 +52,22 @@ t1 = convert dotpAcc
 
 
 --------------------------------------------------------------------------------
+-- Exposed entrypoints for this module:
+--------------------------------------------------------------------------------
+
+-- | Convert the sophisticate Accelerate-internal AST representation
+--   into something very simple for external consumption.
+convert :: Arrays a => Sugar.Acc a -> S.Exp
+convert = runEnvM . convertAcc . Sugar.convertAcc
+
+-- convertAccFun1 = 
+
+
+
+--------------------------------------------------------------------------------
+-- Environments
+--------------------------------------------------------------------------------
+
 
 -- We use a simple state monad for keeping track of the environment
 type EnvM = State (SimpleEnv,Counter) 
@@ -88,11 +96,10 @@ envLookup i = do (env,_) <- get
                   then return (env !! i)
                   else error$ "Environment did not contain an element "++show i++" : "++show env
 
-blah a b c = a <$> b <*> c
-
 
 --------------------------------------------------------------------------------
--- Accelerate Array-level Expressions
+-- Convert Accelerate Array-level Expressions
+--------------------------------------------------------------------------------
 
 convertAcc :: Delayable a => Acc a -> EnvM S.Exp
 convertAcc acc = convertOpenAcc acc 
@@ -118,19 +125,16 @@ convertPreOpenAcc e =
                                      <*> convertOpenAcc acc1
                                      <*> convertOpenAcc acc2
 
-    Let2 acc1 acc2 -> undefined
-    PairArrays acc1 acc2 -> undefined
-
-    
-    Apply (Alam (Abody funAcc)) acc -> undefined
---   = let !arr = force $ convertOpenAcc acc aenv
---     in convertOpenAcc funAcc (Empty `Push` arr)
+    Let2       acc1 acc2 -> error$ "Let2"
+    PairArrays acc1 acc2 -> error$ "PairArrays"
+    Apply (Alam (Abody funAcc)) acc -> error$ "Apply"
     Apply _afun _acc -> error "This case is impossible"
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
                                    <*> convertOpenAcc acc1 
                                    <*> convertOpenAcc acc2
-    -- This is a real live array:
+
+    -- This is real live runtime array data:
     Use arr -> return$ S.Use
 
     Unit e -> error "unit"
@@ -154,10 +158,10 @@ convertPreOpenAcc e =
     Stencil  sten bndy acc -> error "stencil"
     Stencil2 sten bndy1 acc1 bndy2 acc2 -> error "stencil2"
 
---    a -> error $ "Unmatch PreOpenAcc: "++ show a
 
 --------------------------------------------------------------------------------
--- Accelerate Scalar Expressions
+-- Convert Accelerate Scalar Expressions
+--------------------------------------------------------------------------------
     
 -- Evaluate a closed expression
 convertExp :: Exp aenv t -> EnvM S.Exp
@@ -166,79 +170,23 @@ convertExp e = convertOpenExp e
 convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 convertOpenExp e = 
   case e of 
---    Var idx -> return$ S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
     Var idx -> S.Vr <$> envLookup (idxToInt idx)
     PrimApp p arg -> convertPrimApp p arg
 
     Tuple tup -> convertTuple tup
---    Tuple NilTup -> S.Tuple []
-    -- Tuple (SnocTup tup e) -> 
-    --   case convertOpenExp tup of 
-    --     S.Tuple ls -> S.Tuple (convertOpenExp e : ls)
-  
--- convertOpenExp (Const c) _ _ = Sugar.toElt c
+    Const c   -> error "Const" -- Sugar.toElt c
+    Prj idx e -> error "Prj"
+    IndexNil       -> error "IndexNil"
+    IndexCons sh i -> error "IndexCons"
+    IndexHead ix   -> error "IndexHead"
+    IndexTail ix   -> error "IndexTail"
+    IndexAny       -> error "IndexAny"
 
--- convertOpenExp (Tuple tup) env aenv 
---   = toTuple $ convertTuple tup env aenv
-
--- convertOpenExp (Prj idx e) env aenv 
---   = evalPrj idx (fromTuple $ convertOpenExp e env aenv)
-
--- convertOpenExp IndexNil _env _aenv 
---   = Z
-
--- convertOpenExp (IndexCons sh i) env aenv 
---   = convertOpenExp sh env aenv :. convertOpenExp i env aenv
-
--- convertOpenExp (IndexHead ix) env aenv 
---   = case convertOpenExp ix env aenv of _:.h -> h
-
--- convertOpenExp (IndexTail ix) env aenv 
---   = case convertOpenExp ix env aenv of t:._ -> t
-
--- convertOpenExp (IndexAny) _ _
---   = Sugar.Any
-
--- convertOpenExp (Cond c t e) env aenv 
---   = if convertOpenExp c env aenv
---     then convertOpenExp t env aenv
---     else convertOpenExp e env aenv
-
--- convertOpenExp (PrimConst c) _ _ = evalPrimConst c
-
-
--- convertOpenExp (IndexScalar acc ix) env aenv 
---   = case convertOpenAcc acc aenv of
---       DelayedArray sh pf -> 
---         let ix' = Sugar.fromElt $ convertOpenExp ix env aenv
---         in
---         index sh ix' `seq` (Sugar.toElt $ pf ix')
---                               -- FIXME: This is ugly, but (possibly) needed to
---                               --       ensure bounds checking
-
--- convertOpenExp (Shape acc) _ aenv 
---   = case force $ convertOpenAcc acc aenv of
---       Array sh _ -> Sugar.toElt sh
-
--- convertOpenExp (Size acc) _ aenv 
---   = case force $ convertOpenAcc acc aenv of
---       Array sh _ -> size sh
-
-    _ -> error$ "unhandled exp "++ show e
-
-
--- convertTuple :: Tuple (OpenExp env aenv) t -> [S.Exp]
--- convertTuple NilTup = []
--- convertTuple (tup `SnocTup` e) = 
---     case convertOpenExp e of 
---       S.Lam _ _ -> error "hmm"
---       se -> error$ "FINISHME: This is what we got back for a tuple: "++show se
---   where 
---    sexp = convertOpenExp e
-
--- convertTuple e = go (convertOpenExp e)
---  where 
---   go (Lam _ _) = undefined
+    Cond c t e  -> error "Cond"
+    PrimConst c -> error "PrimConst"
+    IndexScalar acc ix -> error "IndexScalar"
+    Shape acc -> error "Shape"
+    Size acc  -> error "Size"
 
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
@@ -250,6 +198,7 @@ convertTuple (SnocTup tup e) =
        tup' <- convertTuple tup
        case tup' of 
          S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
+         se -> error$ "convertTuple: expected a tuple expression, received:\n  "++ show se
 
 convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
 convertTupleExp e = do
@@ -259,7 +208,8 @@ convertTupleExp e = do
     se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
 
 --------------------------------------------------------------------------------
--- Accelerate Primitives:    
+-- Convert Accelerate Primitive Applications: 
+--------------------------------------------------------------------------------
 
 convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
                => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a
@@ -279,6 +229,8 @@ numty nt =
     IntegralNumType ty -> undefined
     FloatingNumType ty -> undefined
 
+--------------------------------------------------------------------------------
+-- Convert Accelerate Functions
 --------------------------------------------------------------------------------
 
 -- Evaluate open function
