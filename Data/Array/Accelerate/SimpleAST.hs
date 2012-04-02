@@ -139,8 +139,14 @@ data Exp =
   | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
 
   -- Index into a multi-dimensional array:
-  | EIndex [Int]
+  | EIndex [Exp]
   | EIndexAny 
+
+  -- This is strange but Accelerate would seem to allow run-time CONSING of indices:
+  | EIndexConsDynamic Exp Exp
+  | EIndexHeadDynamic Exp 
+  | EIndexTailDynamic Exp 
+
   -- -- Array indices & shapes
   -- IndexNil    :: PreOpenExp acc env aenv Z
   -- IndexCons   :: (Slice sl, Elt a)

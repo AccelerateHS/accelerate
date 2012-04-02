@@ -179,7 +179,7 @@ convertPreOpenAcc e =
                                <*> convertOpenAcc acc
 
     Permute f dftAcc p acc -> error "permute"
-    Backpermute e p acc -> error "backperm"
+    Backpermute e    p acc -> error "backperm"
     Stencil  sten bndy acc -> error "stencil"
     Stencil2 sten bndy1 acc1 bndy2 acc2 -> error "stencil2"
 
@@ -199,19 +199,48 @@ convertOpenExp e =
     PrimApp p arg -> convertPrimApp p arg
 
     Tuple tup -> convertTuple tup
-    Const c   -> error "Const" -- Sugar.toElt c
-    Prj idx e -> error "Prj"
-    IndexNil       -> error "IndexNil"
-    IndexCons sh i -> error "IndexCons"
-    IndexHead ix   -> error "IndexHead"
-    IndexTail ix   -> error "IndexTail"
-    IndexAny       -> error "IndexAny"
 
-    Cond c t e  -> error "Cond"
-    PrimConst c -> error "PrimConst"
-    IndexScalar acc ix -> error "IndexScalar"
-    Shape acc -> error "Shape"
-    Size acc  -> error "Size"
+    Const c   -> error "Const" -- Sugar.toElt c
+
+    Prj idx e -> S.EPrj (error "What's this index") (error "FINISHME") 
+                 <$> convertOpenExp e
+
+    -- This would seem to force indices to be LISTS at runtime??
+    IndexNil       -> return$ S.EIndex []
+    IndexCons esh ei -> do esh' <- convertOpenExp esh
+			   ei'  <- convertOpenExp ei
+                           return $ case esh' of
+                             S.EIndex ls -> S.EIndex (ei' : ls)
+			     _           -> S.EIndexConsDynamic ei' esh'
+    IndexHead eix   -> do eix' <- convertOpenExp eix
+                          return $ case eix' of
+                             -- WARNING: This is a potentially unsafe optimization:
+                             -- Throwing away expressions:
+                             S.EIndex (h:_) -> h 
+                             S.EIndex []    -> error "IndexHead of empty index."
+			     _              -> S.EIndexHeadDynamic eix'
+    IndexTail eix   -> do eix' <- convertOpenExp eix
+                          return $ case eix' of
+                             -- WARNING: This is a potentially unsafe optimization:
+                             -- Throwing away expressions:
+                             S.EIndex (_:tl) -> S.EIndex tl
+                             S.EIndex []     -> error "IndexTail of empty index."
+			     _               -> S.EIndexTailDynamic eix'
+    IndexAny       -> return S.EIndexAny
+
+    Cond c t e  -> S.ECond <$> convertOpenExp c 
+                           <*> convertOpenExp t
+                           <*> convertOpenExp e
+    PrimConst c -> return$ S.EConst $ 
+                   case c of 
+                    PrimMinBound _ -> S.MinBound
+		    PrimMaxBound _ -> S.MaxBound
+		    PrimPi       _ -> S.Pi
+
+    IndexScalar acc eix -> S.EIndexScalar <$> convertOpenAcc acc
+                                          <*> convertOpenExp eix
+    Shape acc -> S.EShape <$> convertOpenAcc acc
+    Size  acc -> S.ESize  <$> convertOpenAcc acc
 
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
