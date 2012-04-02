@@ -53,6 +53,10 @@ data Type = TInt
  deriving (Read,Show,Eq)
 
 
+--------------------------------------------------------------------------------
+-- Accelerate Array-level Expressions
+--------------------------------------------------------------------------------
+
 data Exp = 
     Int
     -- The element types. Only Int for now, but the others would be
@@ -61,11 +65,14 @@ data Exp =
     -- Array Dimension Element
   | Unit Exp
     -- Unit Element -- Turn an element into a singleton array
-  | Let Var Exp Exp 
+  | Let  Var     Exp Exp 
     -- Let Binder Bindee Body -- Bind the array in the var. Use forz
     -- common subexpression elimination
+
   | LetPair (Var, Var) Exp Exp 
+    -- This binds an array expression returning a PAIR.
     -- Let (Var1, Var2) (PairArrays Array1 Array2) Body
+
   | PairArrays Exp Exp
     -- PairArrays Array1 Array2
   
@@ -93,9 +100,12 @@ data Exp =
     -- Fold Function Default Array
   | Fold1 Exp Exp
     -- Fold1 Function Array
+
+  | FoldSeg Exp Exp Exp Exp
+
 --  | FoldSeg Exp Exp Exp ???
     -- FoldSeg Function Default Array 'Segment Descriptor'
---  | Fold1Seg Exp Exp ???
+  | Fold1Seg Exp Exp Exp 
     -- FoldSeg Function Array 'Segment Descriptor'
   | Scanl Exp Exp Exp
     -- Scanl Function InitialValue LinearArray
@@ -128,6 +138,15 @@ data Exp =
 
  deriving (Read,Show,Eq)
 
+
+--------------------------------------------------------------------------------
+-- Accelerate Scalar Expressions
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+-- Accelerate Primitive Operations
+--------------------------------------------------------------------------------
 
 data Prim = NP NumPrim
           | IP IntPrim

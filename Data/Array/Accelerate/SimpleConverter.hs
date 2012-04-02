@@ -113,46 +113,71 @@ convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
 convertPreOpenAcc e = 
   case e of 
     Let acc1 acc2 -> 
-       do (v,a2) <- withExtendedEnv "a"$ 
+       do a1     <- convertOpenAcc acc1
+          (v,a2) <- withExtendedEnv "a"$ 
                     convertOpenAcc acc2 
-	  a1     <- convertOpenAcc acc1
           return$ S.Let v a1 a2
 
---    Avar idx -> return$ S.Vr (S.var$ show$ idxToInt idx)
     Avar idx -> S.Vr <$> envLookup (idxToInt idx)
-
-    ZipWith f acc1 acc2 -> S.ZipWith <$> convertFun f
-                                     <*> convertOpenAcc acc1
-                                     <*> convertOpenAcc acc2
-
-    Let2       acc1 acc2 -> error$ "Let2"
-    PairArrays acc1 acc2 -> error$ "PairArrays"
-    Apply (Alam (Abody funAcc)) acc -> error$ "Apply"
-    Apply _afun _acc -> error "This case is impossible"
+    -- This is real live runtime array data:
+    Use arr -> return$ S.Use
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
                                    <*> convertOpenAcc acc1 
                                    <*> convertOpenAcc acc2
 
-    -- This is real live runtime array data:
-    Use arr -> return$ S.Use
+    Apply (Alam (Abody funAcc)) acc -> error$ "Apply"
+    Apply _afun _acc -> error "This case is impossible"
 
+    Let2 acc1 acc2 -> 
+       do a1     <- convertOpenAcc acc1
+          (v2,(v1,a2)) <- withExtendedEnv "a"$ 
+		          withExtendedEnv "a"$ 		   
+			  convertOpenAcc acc2 
+          return$ S.LetPair (v1,v2) a1 a2
+
+    PairArrays acc1 acc2 -> S.PairArrays <$> convertOpenAcc acc1 
+			                 <*> convertOpenAcc acc2
     Unit e -> error "unit"
     Generate sh f -> error "generate"
     Reshape e acc -> error "reshape"
     Replicate sliceIndex slix acc -> error "replicate"
     Index sliceIndex acc slix  -> error "Index"
-    Map f acc -> error "map"
-    Fold     f e acc -> error "fold"
-    Fold1    f   acc -> error "fold1"
-    FoldSeg  f e acc1 acc2 -> error "foldseg"
-    Fold1Seg f   acc1 acc2 -> error "fold1seg"
-    Scanl  f e acc -> error "scanl"
-    Scanl' f e acc -> error "scanl'"
-    Scanl1 f   acc -> error "scanl1"
-    Scanr  f e acc -> error "scanr"
-    Scanr' f e acc -> error "scanr'"
-    Scanr1 f   acc -> error "scanr1"
+
+    Map     f acc       -> S.Map     <$> convertFun f 
+                                     <*> convertOpenAcc acc
+    ZipWith f acc1 acc2 -> S.ZipWith <$> convertFun f
+                                     <*> convertOpenAcc acc1
+                                     <*> convertOpenAcc acc2
+    Fold     f e acc -> S.Fold  <$> convertFun f
+                                <*> convertExp e 
+                                <*> convertOpenAcc acc
+    Fold1    f   acc -> S.Fold1 <$> convertFun f
+                                <*> convertOpenAcc acc
+    FoldSeg  f e acc1 acc2 -> S.FoldSeg  <$> convertFun f
+                                         <*> convertExp e
+                                         <*> convertOpenAcc acc1
+                                         <*> convertOpenAcc acc2
+    Fold1Seg f   acc1 acc2 -> S.Fold1Seg <$> convertFun f
+                                         <*> convertOpenAcc acc1
+                                         <*> convertOpenAcc acc2
+    Scanl  f e acc -> S.Scanl  <$> convertFun f
+                               <*> convertExp e 
+                               <*> convertOpenAcc acc
+    Scanl' f e acc -> S.Scanl' <$> convertFun f
+                               <*> convertExp e 
+                               <*> convertOpenAcc acc
+    Scanl1 f   acc -> S.Scanl1 <$> convertFun f
+                               <*> convertOpenAcc acc
+    Scanr  f e acc -> S.Scanr  <$> convertFun f
+                               <*> convertExp e 
+                               <*> convertOpenAcc acc
+    Scanr' f e acc -> S.Scanr' <$> convertFun f
+                               <*> convertExp e 
+                               <*> convertOpenAcc acc
+    Scanr1 f   acc -> S.Scanr1 <$> convertFun f
+                               <*> convertOpenAcc acc
+
     Permute f dftAcc p acc -> error "permute"
     Backpermute e p acc -> error "backperm"
     Stencil  sten bndy acc -> error "stencil"
