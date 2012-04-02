@@ -47,7 +47,7 @@ dotpAcc
      (Lang.zipWith (*) xs' ys')
 --    Lang.fold (+) 0 (Lang.zipWith (*) xs' ys')
 
-t1 :: S.Exp
+t1 :: S.AExp
 t1 = convert dotpAcc
 
 
@@ -57,7 +57,7 @@ t1 = convert dotpAcc
 
 -- | Convert the sophisticate Accelerate-internal AST representation
 --   into something very simple for external consumption.
-convert :: Arrays a => Sugar.Acc a -> S.Exp
+convert :: Arrays a => Sugar.Acc a -> S.AExp
 convert = runEnvM . convertAcc . Sugar.convertAcc
 
 -- convertAccFun1 = 
@@ -101,13 +101,13 @@ envLookup i = do (env,_) <- get
 -- Convert Accelerate Array-level Expressions
 --------------------------------------------------------------------------------
 
-convertAcc :: Delayable a => Acc a -> EnvM S.Exp
+convertAcc :: Delayable a => Acc a -> EnvM S.AExp
 convertAcc acc = convertOpenAcc acc 
 
-convertOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.Exp
+convertOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
 convertOpenAcc (OpenAcc acc) = convertPreOpenAcc acc 
 
-convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
+convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
 
 -- The environment argument is used to convert de Bruijn indices to vars:
 convertPreOpenAcc e = 
@@ -189,10 +189,10 @@ convertPreOpenAcc e =
 --------------------------------------------------------------------------------
     
 -- Evaluate a closed expression
-convertExp :: Exp aenv t -> EnvM S.Exp
+convertExp :: Exp aenv t -> EnvM S.AExp
 convertExp e = convertOpenExp e 
 
-convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
+convertOpenExp :: OpenExp env aenv a -> EnvM S.AExp
 convertOpenExp e = 
   case e of 
     Var idx -> S.Vr <$> envLookup (idxToInt idx)
@@ -215,8 +215,8 @@ convertOpenExp e =
 
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
--- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.Exp
-convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
+-- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.AExp
+convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.AExp
 convertTuple NilTup = return$ S.Tuple []
 convertTuple (SnocTup tup e) = 
     do e' <- convertOpenExp e
@@ -225,7 +225,7 @@ convertTuple (SnocTup tup e) =
          S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
          se -> error$ "convertTuple: expected a tuple expression, received:\n  "++ show se
 
-convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
+convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.AExp]
 convertTupleExp e = do
   e' <- convertOpenExp e
   case e' of 
@@ -238,7 +238,7 @@ convertTupleExp e = do
 
 convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
                => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a
-               -> EnvM S.Exp
+               -> EnvM S.AExp
 convertPrimApp p arg = 
   do args' <- convertTupleExp arg
      return$ S.PrimApp (op p) args'
@@ -259,7 +259,7 @@ numty nt =
 --------------------------------------------------------------------------------
 
 -- Evaluate open function
-convertFun :: OpenFun env aenv t -> EnvM S.Exp
+convertFun :: OpenFun env aenv t -> EnvM S.AExp
 convertFun (Body b) = convertOpenExp b
 convertFun (Lam f)  = fmap snd $ 
                  withExtendedEnv "v" $ do

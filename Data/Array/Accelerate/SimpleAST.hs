@@ -41,7 +41,7 @@ instance Read Symbol where
 
 -- A simple environment
 -- {Var -> Expression}
-type Env = Map Var Exp  
+type Env = Map Var AExp  
 
 
 type Dimension = [Int]
@@ -57,84 +57,84 @@ data Type = TInt
 -- Accelerate Array-level Expressions
 --------------------------------------------------------------------------------
 
-data Exp = 
+data AExp = 
     Int
     -- The element types. Only Int for now, but the others would be
     -- easy enough to add, I think.
---  | Array ??? Exp
+--  | Array ??? AExp
     -- Array Dimension Element
-  | Unit Exp
+  | Unit AExp
     -- Unit Element -- Turn an element into a singleton array
-  | Let  Var     Exp Exp 
+  | Let  Var     AExp AExp 
     -- Let Binder Bindee Body -- Bind the array in the var. Use forz
     -- common subexpression elimination
 
-  | LetPair (Var, Var) Exp Exp 
+  | LetPair (Var, Var) AExp AExp 
     -- This binds an array expression returning a PAIR.
     -- Let (Var1, Var2) (PairArrays Array1 Array2) Body
 
-  | PairArrays Exp Exp
+  | PairArrays AExp AExp
     -- PairArrays Array1 Array2
   
   | Vr Var -- Variable bound by a Let.
     
 -- Var "x"
-  | Apply Exp Exp
+  | Apply AExp AExp
     -- Function $ Argument
-  | Cond Exp Exp Exp -- If statements
+  | Cond AExp AExp AExp -- If statements
   | Use -- REAL ARRAY GOES HERE
     -- Use Array
---  | Reshape ??? Exp 
+--  | Reshape ??? AExp 
     -- Reshape Shape Array
-  | Generate Exp Exp
+  | Generate AExp AExp
     -- Generate Function Array, very similar to map
---  | Replicate ??? ??? Exp
+--  | Replicate ??? ??? AExp
     -- Replicate IndexOfSomeKind? SomeValue Array
---  | Index ??? Exp ???
+--  | Index ??? AExp ???
     -- Index SomeMultiDimensionalIndex Array 'SliceValue'?
-  | Map Exp Exp
+  | Map AExp AExp
     -- Map Function Array
-  | ZipWith Exp Exp Exp
+  | ZipWith AExp AExp AExp
     -- ZipWith Function Array1 Array2
-  | Fold Exp Exp Exp
+  | Fold AExp AExp AExp
     -- Fold Function Default Array
-  | Fold1 Exp Exp
+  | Fold1 AExp AExp
     -- Fold1 Function Array
 
-  | FoldSeg Exp Exp Exp Exp
+  | FoldSeg AExp AExp AExp AExp
 
---  | FoldSeg Exp Exp Exp ???
+--  | FoldSeg AExp AExp AExp ???
     -- FoldSeg Function Default Array 'Segment Descriptor'
-  | Fold1Seg Exp Exp Exp 
+  | Fold1Seg AExp AExp AExp 
     -- FoldSeg Function Array 'Segment Descriptor'
-  | Scanl Exp Exp Exp
+  | Scanl AExp AExp AExp
     -- Scanl Function InitialValue LinearArray
-  | Scanl' Exp Exp Exp
+  | Scanl' AExp AExp AExp
     -- Scanl' Function InitialValue LinearArray
-  | Scanl1 Exp Exp
+  | Scanl1 AExp AExp
     -- Scanl Function LinearArray
-  | Scanr Exp Exp Exp
+  | Scanr AExp AExp AExp
     -- Scanr Function InitialValue LinearArray
-  | Scanr' Exp Exp Exp
+  | Scanr' AExp AExp AExp
     -- Scanr' Function InitialValue LinearArray
-  | Scanr1 Exp Exp
+  | Scanr1 AExp AExp
     -- Scanr Function LinearArray
-  | Permute Exp Exp Exp Exp
+  | Permute AExp AExp AExp AExp
     -- Permute Function DefaultArray PermuteFunction
     -- SourceArray
---  | Backpermute ??? Exp Exp
+--  | Backpermute ??? AExp AExp
     -- Backpermute DimensionsOfReulst PermuteFunction
     -- SourceArray
---  | Stencil Exp ??? Exp
+--  | Stencil AExp ??? AExp
     -- Stencil Function BoundaryCondition SourceArray
---  | Stencil2 Exp ??? Exp ??? Exp
+--  | Stencil2 AExp ??? AExp ??? AExp
     -- Stencial2 Function Boundary1 Array1 Boundary2 Array2
-  | Lam Var Exp
+  | Lam Var AExp
     -- \Var -> Body
-  | PrimApp Prim [Exp]
+  | PrimApp Prim [AExp]
     -- Any of the primitive functions
 
-  | Tuple [Exp]
+  | Tuple [AExp]
 
  deriving (Read,Show,Eq)
 
