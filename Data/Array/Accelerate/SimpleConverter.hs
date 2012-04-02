@@ -125,53 +125,43 @@ evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
 -- The environment argument is used to convert de Bruijn indices to vars:
 evalPreOpenAcc e = 
   case e of 
-    Let acc1 acc2 -> do
-      a1 <- evalOpenAcc acc1
-      a2 <- evalOpenAcc acc2
-      return (S.Let undefined a1 a2)
+    Let acc1 acc2 -> S.Let <$> undefined
+                           <*> evalOpenAcc acc1
+                           <*> evalOpenAcc acc2
+--       do
+--       a1 <- evalOpenAcc acc1
+--       a2 <- evalOpenAcc acc2
+--       return (S.Let undefined a1 a2)
 --    let !arr1 = force $ evalOpenAcc acc1 aenv
 --    in evalOpenAcc acc2 (aenv `Push` arr1)
 
--- TODO: Let2 
-      
+    Avar idx -> return$ S.Vr (S.var$ show$ idxToInt idx)
+
     ZipWith f acc1 acc2 -> S.ZipWith <$> travF f
                                      <*> evalOpenAcc acc1
                                      <*> evalOpenAcc acc2
-{-
+
     Let2 acc1 acc2 -> undefined
     PairArrays acc1 acc2 -> undefined
- --  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)    
-    Avar idx -> S.Vr (S.var$ show$ idxToInt idx)
+
     
     Apply (Alam (Abody funAcc)) acc -> undefined
 --   = let !arr = force $ evalOpenAcc acc aenv
 --     in evalOpenAcc funAcc (Empty `Push` arr)
     Apply _afun _acc -> error "This case is impossible"
 
-    Acond cond acc1 acc2 -> S.Cond (evalExp cond) 
-                                   (evalOpenAcc acc1) 
-                                   (evalOpenAcc acc2)
-    -- This is a real array:
-    Use arr -> S.Use
+    Acond cond acc1 acc2 -> S.Cond <$> evalExp cond 
+                                   <*> evalOpenAcc acc1 
+                                   <*> evalOpenAcc acc2
+    -- This is a real live array:
+    Use arr -> return$ S.Use
 
--- evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
-
--- evalPreOpenAcc (Generate sh f) aenv
---   = generateOp (evalExp sh aenv) (evalFun f aenv)
-
--- evalPreOpenAcc (Reshape e acc) aenv 
---   = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
-
--- evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
---   = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
-  
--- evalPreOpenAcc (Index sliceIndex acc slix) aenv
---   = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
-
--- evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
-
--}
-
+    Unit e -> error "unit"
+    Generate sh f -> error "generate"
+    Reshape e acc -> error "reshape"
+    Replicate sliceIndex slix acc -> error "replicate"
+    Index sliceIndex acc slix  -> error "Index"
+    Map f acc -> error "map"
     Fold     f e acc -> error "fold"
     Fold1    f   acc -> error "fold1"
     FoldSeg  f e acc1 acc2 -> error "foldseg"
@@ -187,26 +177,19 @@ evalPreOpenAcc e =
     Stencil  sten bndy acc -> error "stencil"
     Stencil2 sten bndy1 acc1 bndy2 acc2 -> error "stencil2"
 
+--    a -> error $ "Unmatch PreOpenAcc: "++ show a
 
 --------------------------------------------------------------------------------
 -- Accelerate Scalar Expressions
     
-
--- evalExp e = evalOpenExp e
-
 -- Evaluate a closed expression
---
--- evalExp :: Exp aenv t -> Val aenv -> t
--- evalExp e aenv = evalOpenExp e Empty aenv
-
-
-evalExp :: Exp aenv t -> S.Exp
+evalExp :: Exp aenv t -> EnvM S.Exp
 evalExp e = evalOpenExp e 
 
-evalOpenExp :: OpenExp env aenv a -> S.Exp               
+evalOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 evalOpenExp e = 
   case e of 
-    Var idx -> S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
+    Var idx -> return$ S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
     PrimApp p arg -> convertPrimApp p arg
 
     Tuple tup -> convertTuple tup
@@ -282,29 +265,31 @@ evalOpenExp e =
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
 -- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.Exp
-convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> S.Exp
-convertTuple NilTup = S.Tuple []
+convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
+convertTuple NilTup = return$ S.Tuple []
 convertTuple (SnocTup tup e) = 
-    case convertTuple tup of 
-       S.Tuple ls -> S.Tuple$ ls ++ [evalOpenExp e]
+    do e' <- evalOpenExp e
+       tup' <- convertTuple tup
+       case tup' of 
+         S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
 
-
-convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> [S.Exp]
-convertTupleExp e =
-  case evalOpenExp e of 
-   S.Tuple ls -> ls
-   se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
+convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
+convertTupleExp e = do
+  e' <- evalOpenExp e
+  case e' of 
+    S.Tuple ls -> return ls
+    se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
 
 --------------------------------------------------------------------------------
 -- Accelerate Primitives:    
 
 convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
-               => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a -> S.Exp
-convertPrimApp p arg =  
---   trace ("\n\nPrim arg: "++ show arg ++"\n")$
-   S.PrimApp (op p) args'
+               => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a
+               -> EnvM S.Exp
+convertPrimApp p arg = 
+  do args' <- convertTupleExp arg
+     return$ S.PrimApp (op p) args'
  where 
-   args' = convertTupleExp arg
    op p = 
     case p of 
       PrimAdd ty -> error "add"
@@ -332,5 +317,5 @@ numty nt =
 
 
 travF :: OpenFun env aenv t -> EnvM S.Exp
-travF (Body b) = return$ evalOpenExp b
+travF (Body b) = evalOpenExp b
 travF (Lam f)  = S.Lam (S.var "TODO_LAMVAR") <$> travF f
