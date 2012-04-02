@@ -118,7 +118,7 @@ convertPreOpenAcc e =
                     convertOpenAcc acc2 
           return$ S.Let v a1 a2
 
-    Avar idx -> S.Vr <$> envLookup (idxToInt idx)
+    Avar idx -> S.AVr <$> envLookup (idxToInt idx)
     -- This is real live runtime array data:
     Use arr -> return$ S.Use
 
@@ -189,10 +189,10 @@ convertPreOpenAcc e =
 --------------------------------------------------------------------------------
     
 -- Evaluate a closed expression
-convertExp :: Exp aenv t -> EnvM S.AExp
+convertExp :: Exp aenv t -> EnvM S.Exp
 convertExp e = convertOpenExp e 
 
-convertOpenExp :: OpenExp env aenv a -> EnvM S.AExp
+convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 convertOpenExp e = 
   case e of 
     Var idx -> S.Vr <$> envLookup (idxToInt idx)
@@ -216,7 +216,7 @@ convertOpenExp e =
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
 -- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.AExp
-convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.AExp
+convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
 convertTuple NilTup = return$ S.Tuple []
 convertTuple (SnocTup tup e) = 
     do e' <- convertOpenExp e
@@ -225,7 +225,7 @@ convertTuple (SnocTup tup e) =
          S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
          se -> error$ "convertTuple: expected a tuple expression, received:\n  "++ show se
 
-convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.AExp]
+convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
 convertTupleExp e = do
   e' <- convertOpenExp e
   case e' of 
@@ -238,7 +238,7 @@ convertTupleExp e = do
 
 convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
                => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a
-               -> EnvM S.AExp
+               -> EnvM S.Exp
 convertPrimApp p arg = 
   do args' <- convertTupleExp arg
      return$ S.PrimApp (op p) args'
@@ -259,9 +259,22 @@ numty nt =
 --------------------------------------------------------------------------------
 
 -- Evaluate open function
-convertFun :: OpenFun env aenv t -> EnvM S.AExp
-convertFun (Body b) = convertOpenExp b
-convertFun (Lam f)  = fmap snd $ 
-                 withExtendedEnv "v" $ do
-                   v <- envLookup 0
-		   S.Lam v <$> convertFun f
+convertFun :: OpenFun env aenv t -> EnvM S.Fun
+convertFun fn = loop [] fn
+ where 
+--   (args,bod) = loop [] fn
+   loop :: [S.Var] -> OpenFun env aenv t -> EnvM S.Fun
+   loop acc (Body b) = do b' <- convertOpenExp b 
+			  return (S.Lam (reverse acc) b')
+   loop acc (Lam f2) = fmap snd $ 
+   		       withExtendedEnv "v" $ do
+   			 v <- envLookup 0
+                         loop (v:acc) f2
+
+-- convertFun (Body b) = convertOpenExp b
+-- convertFun (Lam f)  = fmap snd $ 
+--                  withExtendedEnv "v" $ do
+--                    v <- envLookup 0
+--                    S.Lam args bod <- convertFun f 
+--                    return$ (S.Lam (v:args) bod)
+-- --		   S.Lam v <$> convertFun f

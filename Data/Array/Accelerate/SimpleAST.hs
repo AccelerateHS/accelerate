@@ -61,13 +61,13 @@ data AExp =
     Int
     -- The element types. Only Int for now, but the others would be
     -- easy enough to add, I think.
---  | Array ??? AExp
+    --  | Array ??? AExp
     -- Array Dimension Element
-  | Unit AExp
-    -- Unit Element -- Turn an element into a singleton array
+  | Unit Exp -- Turn an element into a singleton array
+
   | Let  Var     AExp AExp 
-    -- Let Binder Bindee Body -- Bind the array in the var. Use forz
-    -- common subexpression elimination
+   -- | Let Binder Bindee Body - Bind the array in the var. 
+   -- Used for common subexpression elimination
 
   | LetPair (Var, Var) AExp AExp 
     -- This binds an array expression returning a PAIR.
@@ -76,52 +76,37 @@ data AExp =
   | PairArrays AExp AExp
     -- PairArrays Array1 Array2
   
-  | Vr Var -- Variable bound by a Let.
+  | AVr Var -- Array variable bound by a Let.
     
--- Var "x"
-  | Apply AExp AExp
-    -- Function $ Argument
-  | Cond AExp AExp AExp -- If statements
-  | Use -- REAL ARRAY GOES HERE
+  | Apply AExp AExp    -- Function $ Argument
+
+  | Cond Exp AExp AExp -- Array level if statements
+
+  | Use -- A REAL ARRAY GOES HERE!
     -- Use Array
 --  | Reshape ??? AExp 
     -- Reshape Shape Array
-  | Generate AExp AExp
+  | Generate Exp AExp
     -- Generate Function Array, very similar to map
 --  | Replicate ??? ??? AExp
     -- Replicate IndexOfSomeKind? SomeValue Array
 --  | Index ??? AExp ???
     -- Index SomeMultiDimensionalIndex Array 'SliceValue'?
-  | Map AExp AExp
-    -- Map Function Array
-  | ZipWith AExp AExp AExp
-    -- ZipWith Function Array1 Array2
-  | Fold AExp AExp AExp
-    -- Fold Function Default Array
-  | Fold1 AExp AExp
-    -- Fold1 Function Array
 
-  | FoldSeg AExp AExp AExp AExp
+  | Map      Fun AExp          -- Map Function Array
+  | ZipWith  Fun AExp AExp     -- ZipWith Function Array1 Array2
+  | Fold     Fun Exp AExp      -- Fold Function Default Array
+  | Fold1    Fun AExp          -- Fold1 Function Array
+  | FoldSeg  Fun Exp AExp AExp -- FoldSeg Function Default Array 'Segment Descriptor'
+  | Fold1Seg Fun     AExp AExp -- FoldSeg Function         Array 'Segment Descriptor'
+  | Scanl    Fun Exp AExp      -- Scanl  Function InitialValue LinearArray
+  | Scanl'   Fun Exp AExp      -- Scanl' Function InitialValue LinearArray
+  | Scanl1   Fun     AExp      -- Scanl  Function              LinearArray
+  | Scanr    Fun Exp AExp      -- Scanr  Function InitialValue LinearArray
+  | Scanr'   Fun Exp AExp      -- Scanr' Function InitialValue LinearArray
+  | Scanr1   Fun     AExp      -- Scanr  Function              LinearArray
+  | Permute  Fun AExp AExp AExp -- Permute Function DefaultArray PermuteFunction SourceArray
 
---  | FoldSeg AExp AExp AExp ???
-    -- FoldSeg Function Default Array 'Segment Descriptor'
-  | Fold1Seg AExp AExp AExp 
-    -- FoldSeg Function Array 'Segment Descriptor'
-  | Scanl AExp AExp AExp
-    -- Scanl Function InitialValue LinearArray
-  | Scanl' AExp AExp AExp
-    -- Scanl' Function InitialValue LinearArray
-  | Scanl1 AExp AExp
-    -- Scanl Function LinearArray
-  | Scanr AExp AExp AExp
-    -- Scanr Function InitialValue LinearArray
-  | Scanr' AExp AExp AExp
-    -- Scanr' Function InitialValue LinearArray
-  | Scanr1 AExp AExp
-    -- Scanr Function LinearArray
-  | Permute AExp AExp AExp AExp
-    -- Permute Function DefaultArray PermuteFunction
-    -- SourceArray
 --  | Backpermute ??? AExp AExp
     -- Backpermute DimensionsOfReulst PermuteFunction
     -- SourceArray
@@ -129,12 +114,6 @@ data AExp =
     -- Stencil Function BoundaryCondition SourceArray
 --  | Stencil2 AExp ??? AExp ??? AExp
     -- Stencial2 Function Boundary1 Array1 Boundary2 Array2
-  | Lam Var AExp
-    -- \Var -> Body
-  | PrimApp Prim [AExp]
-    -- Any of the primitive functions
-
-  | Tuple [AExp]
 
  deriving (Read,Show,Eq)
 
@@ -143,6 +122,23 @@ data AExp =
 -- Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
 
+data Fun = Lam [Var] Exp
+ deriving (Read,Show,Eq)
+
+
+data Exp = 
+
+    Vr Var -- Variable bound by a Let.
+
+--  | Lam Var Exp
+
+    -- \Var -> Body
+  | PrimApp Prim [Exp]
+    -- Any of the primitive functions
+
+  | Tuple [Exp]
+
+ deriving (Read,Show,Eq)
 
 --------------------------------------------------------------------------------
 -- Accelerate Primitive Operations
