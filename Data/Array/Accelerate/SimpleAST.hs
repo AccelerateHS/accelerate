@@ -69,7 +69,7 @@ data Exp =
   | PairArrays Exp Exp
     -- PairArrays Array1 Array2
   
-  | Avar Var -- Variable bound by a Let.
+  | Vr Var -- Variable bound by a Let.
     
 -- Var "x"
   | Apply Exp Exp
@@ -123,6 +123,8 @@ data Exp =
     -- \Var -> Body
   | PrimApp Prim [Exp]
     -- Any of the primitive functions
+
+  | Tuple [Exp]
 
  deriving (Read,Show,Eq)
 

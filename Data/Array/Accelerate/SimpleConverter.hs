@@ -10,6 +10,7 @@ import Control.Monad.ST                            (ST)
 import Data.Bits
 import Data.Char                                   (chr, ord)
 import Prelude                                     hiding (sum)
+import Debug.Trace
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -100,7 +101,7 @@ evalPreOpenAcc e =
     Let2 acc1 acc2 -> undefined
     PairArrays acc1 acc2 -> undefined
  --  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)    
-    Avar idx -> S.Avar (S.var "v")
+    Avar idx -> S.Vr (S.var$ show$ idxToInt idx)
     
     Apply (Alam (Abody funAcc)) acc -> undefined
 --   = let !arr = force $ evalOpenAcc acc aenv
@@ -159,7 +160,8 @@ evalPreOpenAcc e =
 --
 -- evalExp :: Exp aenv t -> Val aenv -> t
 -- evalExp e aenv = evalOpenExp e Empty aenv
-    
+
+
 evalExp :: Exp aenv t -> S.Exp
 evalExp e = evalOpenExp e 
 
@@ -167,13 +169,19 @@ evalOpenExp :: OpenExp env aenv a -> S.Exp
                -- Val env -> Val aenv -> a
 evalOpenExp e = 
   case e of 
-    Var idx -> S.Avar (S.var "yay")    
+    Var idx -> S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
     PrimApp p arg -> convertPrimApp p arg
+
+    Tuple tup -> convertTuple tup
+--    Tuple NilTup -> S.Tuple []
+    -- Tuple (SnocTup tup e) -> 
+    --   case evalOpenExp tup of 
+    --     S.Tuple ls -> S.Tuple (evalOpenExp e : ls)
   
 -- evalOpenExp (Const c) _ _ = Sugar.toElt c
 
 -- evalOpenExp (Tuple tup) env aenv 
---   = toTuple $ evalTuple tup env aenv
+--   = toTuple $ convertTuple tup env aenv
 
 -- evalOpenExp (Prj idx e) env aenv 
 --   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
@@ -220,11 +228,46 @@ evalOpenExp e =
 
     _ -> error$ "unhandled exp "++ show e
 
+
+-- convertTuple :: Tuple (OpenExp env aenv) t -> [S.Exp]
+-- convertTuple NilTup = []
+-- convertTuple (tup `SnocTup` e) = 
+--     case evalOpenExp e of 
+--       S.Lam _ _ -> error "hmm"
+--       se -> error$ "FINISHME: This is what we got back for a tuple: "++show se
+--   where 
+--    sexp = evalOpenExp e
+
+-- convertTuple e = go (evalOpenExp e)
+--  where 
+--   go (Lam _ _) = undefined
+
+
+-- Convert a tuple expression to our simpler Tuple representation (containing a list):
+-- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.Exp
+convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> S.Exp
+convertTuple NilTup = S.Tuple []
+convertTuple (SnocTup tup e) = 
+    case convertTuple tup of 
+       S.Tuple ls -> S.Tuple$ ls ++ [evalOpenExp e]
+
+
+convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> [S.Exp]
+convertTupleExp e =
+  case evalOpenExp e of 
+   S.Tuple ls -> ls
+   se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
+
 --------------------------------------------------------------------------------
 -- Accelerate Primitives:    
 
-convertPrimApp p arg =  S.PrimApp (op p) []
+convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
+               => PrimFun (a -> b) -> PreOpenExp OpenAcc env aenv a -> S.Exp
+convertPrimApp p arg =  
+--   trace ("\n\nPrim arg: "++ show arg ++"\n")$
+   S.PrimApp (op p) args'
  where 
+   args' = convertTupleExp arg
    op p = 
     case p of 
       PrimAdd ty -> error "add"
@@ -270,5 +313,4 @@ travF :: OpenFun env aenv t
 --travF (Body b) aenv vars = undefined
 -- travF (Body b) = evalPreOpenAcc b
 travF (Body b) = evalOpenExp b
-travF (Lam f) = S.Lam (S.var "hi") (travF f)
-
+travF (Lam f) = S.Lam (S.var "TODO_LAMVAR") (travF f)
