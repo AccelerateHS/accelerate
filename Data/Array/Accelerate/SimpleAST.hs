@@ -8,6 +8,8 @@ module Data.Array.Accelerate.SimpleAST
 -- import Data.Atom.Simple
 import Data.Symbol
 import Data.Map
+import Data.Int
+import Data.Word
 
 --------------------------------------------------------------------------------
 
@@ -58,11 +60,9 @@ data Type = TInt
 --------------------------------------------------------------------------------
 
 data AExp = 
-    Int
-    -- The element types. Only Int for now, but the others would be
-    -- easy enough to add, I think.
-    --  | Array ??? AExp
-    -- Array Dimension Element
+
+    Vr Var -- Array variable bound by a Let.
+
   | Unit Exp -- Turn an element into a singleton array
 
   | Let  Var     AExp AExp 
@@ -75,9 +75,7 @@ data AExp =
 
   | PairArrays AExp AExp
     -- PairArrays Array1 Array2
-  
-  | AVr Var -- Array variable bound by a Let.
-    
+     
   | Apply AExp AExp    -- Function $ Argument
 
   | Cond Exp AExp AExp -- Array level if statements
@@ -128,15 +126,58 @@ data Fun = Lam [Var] Exp
 
 data Exp = 
 
-    Vr Var -- Variable bound by a Let.
+    EVr Var -- Variable bound by a Let.
 
 --  | Lam Var Exp
 
-    -- \Var -> Body
-  | PrimApp Prim [Exp]
-    -- Any of the primitive functions
+  | EPrimApp Prim [Exp]  -- *Any* primitive scalar function
+  | ETuple [Exp]
 
-  | Tuple [Exp]
+  | EConst Const
+  -- TODO -- support other types in Elt.
+              
+  | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
+
+  -- Index into a multi-dimensional array:
+  | EIndex [Int]
+  | EIndexAny 
+  -- -- Array indices & shapes
+  -- IndexNil    :: PreOpenExp acc env aenv Z
+  -- IndexCons   :: (Slice sl, Elt a)
+  --             => PreOpenExp acc env aenv sl
+  --             -> PreOpenExp acc env aenv a
+  --             -> PreOpenExp acc env aenv (sl:.a)
+  -- IndexHead   :: (Slice sl, Elt a)
+  --             => PreOpenExp acc env aenv (sl:.a)
+  --             -> PreOpenExp acc env aenv a
+  -- IndexTail   :: (Slice sl, Elt a)
+  --             => PreOpenExp acc env aenv (sl:.a)
+  --             -> PreOpenExp acc env aenv sl
+
+  -- Conditional expression (non-strict in 2nd and 3rd argument):
+  | ECond Exp Exp Exp
+
+  -- Project a single scalar from an array
+  -- the array expression can not contain any free scalar variables
+  | EIndexScalar AExp Exp 
+
+  -- Array shape
+  -- the array expression can not contain any free scalar variables
+  | EShape AExp
+
+  -- Number of elements of an array
+  -- the array expression can not contain any free scalar variables
+  | ESize AExp 
+
+
+ deriving (Read,Show,Eq)
+
+data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
+           | W Word | W8 Word8 | W16 Word16 | W32 Word32 | W64 Word64
+           | F Float | D Double | C Char | B Bool
+           | ConstTup [Const]
+           -- Special constants:
+           | MinBound | MaxBound | Pi 
 
  deriving (Read,Show,Eq)
 

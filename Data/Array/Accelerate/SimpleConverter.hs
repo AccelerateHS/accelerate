@@ -118,7 +118,7 @@ convertPreOpenAcc e =
                     convertOpenAcc acc2 
           return$ S.Let v a1 a2
 
-    Avar idx -> S.AVr <$> envLookup (idxToInt idx)
+    Avar idx -> S.Vr <$> envLookup (idxToInt idx)
     -- This is real live runtime array data:
     Use arr -> return$ S.Use
 
@@ -195,7 +195,7 @@ convertExp e = convertOpenExp e
 convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
 convertOpenExp e = 
   case e of 
-    Var idx -> S.Vr <$> envLookup (idxToInt idx)
+    Var idx -> S.EVr <$> envLookup (idxToInt idx)
     PrimApp p arg -> convertPrimApp p arg
 
     Tuple tup -> convertTuple tup
@@ -217,19 +217,19 @@ convertOpenExp e =
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
 -- convertTuple :: Tuple (PreOpenExp acc env aenv) t' -> S.AExp
 convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
-convertTuple NilTup = return$ S.Tuple []
+convertTuple NilTup = return$ S.ETuple []
 convertTuple (SnocTup tup e) = 
     do e' <- convertOpenExp e
        tup' <- convertTuple tup
        case tup' of 
-         S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
+         S.ETuple ls -> return$ S.ETuple$ ls ++ [e']
          se -> error$ "convertTuple: expected a tuple expression, received:\n  "++ show se
 
 convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
 convertTupleExp e = do
   e' <- convertOpenExp e
   case e' of 
-    S.Tuple ls -> return ls
+    S.ETuple ls -> return ls
     se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
 
 --------------------------------------------------------------------------------
@@ -241,7 +241,7 @@ convertPrimApp :: (Sugar.Elt a, Sugar.Elt b)
                -> EnvM S.Exp
 convertPrimApp p arg = 
   do args' <- convertTupleExp arg
-     return$ S.PrimApp (op p) args'
+     return$ S.EPrimApp (op p) args'
  where 
    op p = 
     case p of 
