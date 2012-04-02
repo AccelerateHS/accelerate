@@ -39,8 +39,7 @@ import qualified Data.Array.Accelerate.Language as Lang
 -- | Convert the sophisticate Accelerate-internal AST representation
 --   into something very simple for external consumption.
 convert :: Arrays a => Sugar.Acc a -> S.Exp
-convert = runEnvM . evalAcc . Sugar.convertAcc
-  -- force . 
+convert = runEnvM . convertAcc . Sugar.convertAcc
 
 -- convertAccFun1 = 
 
@@ -52,30 +51,9 @@ dotpAcc
   = let
         xs' = Lang.use $ error "xs: let's not REALLY use this array"
         ys' = Lang.use $ error "ys: let's not REALLY use this array"
---         xs' = error "let's not REALLY use this array"
---         ys' = error "let's not REALLY use this array"
---      xs' = Sugar.use xs
---      ys' = Sugar.use ys
     in
      (Lang.zipWith (*) xs' ys')
 --    Lang.fold (+) 0 (Lang.zipWith (*) xs' ys')
-
-
-{-
-run :: Int -> IO (() -> UArray () Float, () -> Acc (Scalar Float))
-run n = withSystemRandom $ \gen -> do
-  v1  <- randomUArrayR (-1,1) gen n
-  v2  <- randomUArrayR (-1,1) gen n
-  v1' <- convertUArray v1
-  v2' <- convertUArray v2
-  --
---  return (run_ref v1 v2, run_acc v1' v2')
-    return (dotpAcc v1' v2')
-  where
---    {-# NOINLINE run_ref #-}
---    run_ref xs ys () = dotpRef xs ys
---    run_acc xs ys () = dotpAcc xs ys
--}
 
 t1 :: S.Exp
 t1 = convert dotpAcc
@@ -116,42 +94,42 @@ blah a b c = a <$> b <*> c
 --------------------------------------------------------------------------------
 -- Accelerate Array-level Expressions
 
-evalAcc :: Delayable a => Acc a -> EnvM S.Exp
-evalAcc acc = evalOpenAcc acc 
+convertAcc :: Delayable a => Acc a -> EnvM S.Exp
+convertAcc acc = convertOpenAcc acc 
 
-evalOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.Exp
-evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc 
+convertOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.Exp
+convertOpenAcc (OpenAcc acc) = convertPreOpenAcc acc 
 
-evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
+convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
 
 -- The environment argument is used to convert de Bruijn indices to vars:
-evalPreOpenAcc e = 
+convertPreOpenAcc e = 
   case e of 
     Let acc1 acc2 -> 
        do (v,a2) <- withExtendedEnv "a"$ 
-                    evalOpenAcc acc2 
-	  a1     <- evalOpenAcc acc1
+                    convertOpenAcc acc2 
+	  a1     <- convertOpenAcc acc1
           return$ S.Let v a1 a2
 
 --    Avar idx -> return$ S.Vr (S.var$ show$ idxToInt idx)
     Avar idx -> S.Vr <$> envLookup (idxToInt idx)
 
     ZipWith f acc1 acc2 -> S.ZipWith <$> convertFun f
-                                     <*> evalOpenAcc acc1
-                                     <*> evalOpenAcc acc2
+                                     <*> convertOpenAcc acc1
+                                     <*> convertOpenAcc acc2
 
     Let2 acc1 acc2 -> undefined
     PairArrays acc1 acc2 -> undefined
 
     
     Apply (Alam (Abody funAcc)) acc -> undefined
---   = let !arr = force $ evalOpenAcc acc aenv
---     in evalOpenAcc funAcc (Empty `Push` arr)
+--   = let !arr = force $ convertOpenAcc acc aenv
+--     in convertOpenAcc funAcc (Empty `Push` arr)
     Apply _afun _acc -> error "This case is impossible"
 
-    Acond cond acc1 acc2 -> S.Cond <$> evalExp cond 
-                                   <*> evalOpenAcc acc1 
-                                   <*> evalOpenAcc acc2
+    Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
+                                   <*> convertOpenAcc acc1 
+                                   <*> convertOpenAcc acc2
     -- This is a real live array:
     Use arr -> return$ S.Use
 
@@ -182,11 +160,11 @@ evalPreOpenAcc e =
 -- Accelerate Scalar Expressions
     
 -- Evaluate a closed expression
-evalExp :: Exp aenv t -> EnvM S.Exp
-evalExp e = evalOpenExp e 
+convertExp :: Exp aenv t -> EnvM S.Exp
+convertExp e = convertOpenExp e 
 
-evalOpenExp :: OpenExp env aenv a -> EnvM S.Exp
-evalOpenExp e = 
+convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
+convertOpenExp e = 
   case e of 
 --    Var idx -> return$ S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
     Var idx -> S.Vr <$> envLookup (idxToInt idx)
@@ -195,55 +173,55 @@ evalOpenExp e =
     Tuple tup -> convertTuple tup
 --    Tuple NilTup -> S.Tuple []
     -- Tuple (SnocTup tup e) -> 
-    --   case evalOpenExp tup of 
-    --     S.Tuple ls -> S.Tuple (evalOpenExp e : ls)
+    --   case convertOpenExp tup of 
+    --     S.Tuple ls -> S.Tuple (convertOpenExp e : ls)
   
--- evalOpenExp (Const c) _ _ = Sugar.toElt c
+-- convertOpenExp (Const c) _ _ = Sugar.toElt c
 
--- evalOpenExp (Tuple tup) env aenv 
+-- convertOpenExp (Tuple tup) env aenv 
 --   = toTuple $ convertTuple tup env aenv
 
--- evalOpenExp (Prj idx e) env aenv 
---   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
+-- convertOpenExp (Prj idx e) env aenv 
+--   = evalPrj idx (fromTuple $ convertOpenExp e env aenv)
 
--- evalOpenExp IndexNil _env _aenv 
+-- convertOpenExp IndexNil _env _aenv 
 --   = Z
 
--- evalOpenExp (IndexCons sh i) env aenv 
---   = evalOpenExp sh env aenv :. evalOpenExp i env aenv
+-- convertOpenExp (IndexCons sh i) env aenv 
+--   = convertOpenExp sh env aenv :. convertOpenExp i env aenv
 
--- evalOpenExp (IndexHead ix) env aenv 
---   = case evalOpenExp ix env aenv of _:.h -> h
+-- convertOpenExp (IndexHead ix) env aenv 
+--   = case convertOpenExp ix env aenv of _:.h -> h
 
--- evalOpenExp (IndexTail ix) env aenv 
---   = case evalOpenExp ix env aenv of t:._ -> t
+-- convertOpenExp (IndexTail ix) env aenv 
+--   = case convertOpenExp ix env aenv of t:._ -> t
 
--- evalOpenExp (IndexAny) _ _
+-- convertOpenExp (IndexAny) _ _
 --   = Sugar.Any
 
--- evalOpenExp (Cond c t e) env aenv 
---   = if evalOpenExp c env aenv
---     then evalOpenExp t env aenv
---     else evalOpenExp e env aenv
+-- convertOpenExp (Cond c t e) env aenv 
+--   = if convertOpenExp c env aenv
+--     then convertOpenExp t env aenv
+--     else convertOpenExp e env aenv
 
--- evalOpenExp (PrimConst c) _ _ = evalPrimConst c
+-- convertOpenExp (PrimConst c) _ _ = evalPrimConst c
 
 
--- evalOpenExp (IndexScalar acc ix) env aenv 
---   = case evalOpenAcc acc aenv of
+-- convertOpenExp (IndexScalar acc ix) env aenv 
+--   = case convertOpenAcc acc aenv of
 --       DelayedArray sh pf -> 
---         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
+--         let ix' = Sugar.fromElt $ convertOpenExp ix env aenv
 --         in
 --         index sh ix' `seq` (Sugar.toElt $ pf ix')
 --                               -- FIXME: This is ugly, but (possibly) needed to
 --                               --       ensure bounds checking
 
--- evalOpenExp (Shape acc) _ aenv 
---   = case force $ evalOpenAcc acc aenv of
+-- convertOpenExp (Shape acc) _ aenv 
+--   = case force $ convertOpenAcc acc aenv of
 --       Array sh _ -> Sugar.toElt sh
 
--- evalOpenExp (Size acc) _ aenv 
---   = case force $ evalOpenAcc acc aenv of
+-- convertOpenExp (Size acc) _ aenv 
+--   = case force $ convertOpenAcc acc aenv of
 --       Array sh _ -> size sh
 
     _ -> error$ "unhandled exp "++ show e
@@ -252,13 +230,13 @@ evalOpenExp e =
 -- convertTuple :: Tuple (OpenExp env aenv) t -> [S.Exp]
 -- convertTuple NilTup = []
 -- convertTuple (tup `SnocTup` e) = 
---     case evalOpenExp e of 
+--     case convertOpenExp e of 
 --       S.Lam _ _ -> error "hmm"
 --       se -> error$ "FINISHME: This is what we got back for a tuple: "++show se
 --   where 
---    sexp = evalOpenExp e
+--    sexp = convertOpenExp e
 
--- convertTuple e = go (evalOpenExp e)
+-- convertTuple e = go (convertOpenExp e)
 --  where 
 --   go (Lam _ _) = undefined
 
@@ -268,14 +246,14 @@ evalOpenExp e =
 convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
 convertTuple NilTup = return$ S.Tuple []
 convertTuple (SnocTup tup e) = 
-    do e' <- evalOpenExp e
+    do e' <- convertOpenExp e
        tup' <- convertTuple tup
        case tup' of 
          S.Tuple ls -> return$ S.Tuple$ ls ++ [e']
 
 convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
 convertTupleExp e = do
-  e' <- evalOpenExp e
+  e' <- convertOpenExp e
   case e' of 
     S.Tuple ls -> return ls
     se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
@@ -305,7 +283,7 @@ numty nt =
 
 -- Evaluate open function
 convertFun :: OpenFun env aenv t -> EnvM S.Exp
-convertFun (Body b) = evalOpenExp b
+convertFun (Body b) = convertOpenExp b
 convertFun (Lam f)  = fmap snd $ 
                  withExtendedEnv "v" $ do
                    v <- envLookup 0
