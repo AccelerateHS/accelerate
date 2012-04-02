@@ -6,11 +6,14 @@ module Data.Array.Accelerate.SimpleConverter
 
 -- standard libraries
 import Control.Monad
-import Control.Monad.ST                            (ST)
+import Control.Applicative
+-- import Control.Monad.ST                            (ST)
 import Data.Bits
 import Data.Char                                   (chr, ord)
 import Prelude                                     hiding (sum)
 import Debug.Trace
+
+import Control.Monad.State.Strict
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -36,7 +39,7 @@ import qualified Data.Array.Accelerate.Language as Lang
 -- | Convert the sophisticate Accelerate-internal AST representation
 --   into something very simple for external consumption.
 convert :: Arrays a => Sugar.Acc a -> S.Exp
-convert = evalAcc . Sugar.convertAcc
+convert = runEnvM . evalAcc . Sugar.convertAcc
   -- force . 
 
 -- convertAccFun1 = 
@@ -77,27 +80,64 @@ run n = withSystemRandom $ \gen -> do
 t1 :: S.Exp
 t1 = convert dotpAcc
 
+
+--------------------------------------------------------------------------------
+
+-- We use a simple state monad for keeping track of the environment
+type EnvM = State (SimpleEnv,Counter) 
+type SimpleEnv = [S.Var]
+type Counter = Int
+
+runEnvM m = evalState m ([],0)
+
+-- Evaluate a sub-branch in an extended environment.
+-- The name of the fresh variable is not exposed until someone asks for the environment:
+withExtendedEnv :: (EnvM b) -> EnvM b 
+withExtendedEnv branch = do 
+  (env,cnt) <- get 
+  let newsym = S.var $ "v"++show cnt
+  put (newsym:env, cnt+1) 
+  b <- branch
+  -- We keep counter-increments from the sub-branch, but NOT the extended env:
+  (_,cnt2) <- get 
+  put (env,cnt2)
+  return b
+
+-- Look up a de bruijn index in the environment:
+envLookup :: Int -> EnvM S.Var
+envLookup i = do (env,_) <- get
+                 return (env !! i)
+
+blah a b c = a <$> b <*> c
+
+
 --------------------------------------------------------------------------------
 -- Accelerate Array-level Expressions
 
-evalAcc :: Delayable a => Acc a -> S.Exp
-evalAcc acc = evalOpenAcc acc -- Empty
+evalAcc :: Delayable a => Acc a -> EnvM S.Exp
+evalAcc acc = evalOpenAcc acc 
 
-evalOpenAcc :: Delayable a => OpenAcc aenv a -> S.Exp
+evalOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.Exp
 evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc 
 
-evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> S.Exp
+evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.Exp
 
 -- The environment argument is used to convert de Bruijn indices to vars:
 evalPreOpenAcc e = 
   case e of 
-    Let acc1 acc2 -> S.Let undefined (evalOpenAcc acc1)  
-                                     (evalOpenAcc acc2)
+    Let acc1 acc2 -> do
+      a1 <- evalOpenAcc acc1
+      a2 <- evalOpenAcc acc2
+      return (S.Let undefined a1 a2)
 --    let !arr1 = force $ evalOpenAcc acc1 aenv
 --    in evalOpenAcc acc2 (aenv `Push` arr1)
 
 -- TODO: Let2 
-    
+      
+    ZipWith f acc1 acc2 -> S.ZipWith <$> travF f
+                                     <*> evalOpenAcc acc1
+                                     <*> evalOpenAcc acc2
+{-
     Let2 acc1 acc2 -> undefined
     PairArrays acc1 acc2 -> undefined
  --  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)    
@@ -130,9 +170,7 @@ evalPreOpenAcc e =
 
 -- evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
-    ZipWith f acc1 acc2 -> S.ZipWith (travF f)
-                                     (evalOpenAcc acc1) 
-                                     (evalOpenAcc acc2)
+-}
 
     Fold     f e acc -> error "fold"
     Fold1    f   acc -> error "fold1"
@@ -166,7 +204,6 @@ evalExp :: Exp aenv t -> S.Exp
 evalExp e = evalOpenExp e 
 
 evalOpenExp :: OpenExp env aenv a -> S.Exp               
-               -- Val env -> Val aenv -> a
 evalOpenExp e = 
   case e of 
     Var idx -> S.Vr (S.var$ "TODO__"++ show (idxToInt idx))
@@ -293,24 +330,7 @@ numty nt =
 -- evalFun :: Fun aenv t -> Val aenv -> t
 -- evalFun f aenv = evalOpenFun f Empty aenv
 
---     travF :: OpenFun env aenv t
---           -> Ref count
---           -> [AccBinding aenv]
---           -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding aenv])
---     travF (Body b) aenv vars = do
---       (b', env1, var1) <- travE b aenv vars
---       return (Body b', env1, var1)
---     travF (Lam  f) aenv vars = do
---       (f', env1, var1) <- travF f aenv vars
---       return (Lam f', env1, var1)
 
-
-travF :: OpenFun env aenv t
---          -> Ref count
---          -> [AccBinding aenv]
---          -> CIO (PreOpenFun ExecOpenAcc env aenv t, Ref count, [AccBinding aenv])
-          -> S.Exp
---travF (Body b) aenv vars = undefined
--- travF (Body b) = evalPreOpenAcc b
-travF (Body b) = evalOpenExp b
-travF (Lam f) = S.Lam (S.var "TODO_LAMVAR") (travF f)
+travF :: OpenFun env aenv t -> EnvM S.Exp
+travF (Body b) = return$ evalOpenExp b
+travF (Lam f)  = S.Lam (S.var "TODO_LAMVAR") <$> travF f
