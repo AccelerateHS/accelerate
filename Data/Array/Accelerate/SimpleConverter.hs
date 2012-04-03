@@ -100,7 +100,7 @@ runEnvM m = evalState m ([], M.empty, 0)
 
 -- Evaluate a sub-branch in an extended environment.
 -- Returns the name of the fresh variable as well as the result:
-withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, S.Type, b)
+withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, Maybe S.Type, b)
 withExtendedEnv basename branch = do 
   (env,tyM,cnt) <- get 
   let newsym = S.var $ basename ++ show cnt
@@ -111,11 +111,10 @@ withExtendedEnv basename branch = do
   put (env,tyM2,cnt2)
   case M.lookup newsym tyM2 of
     -- Should this ever happen?:
-    Nothing -> trace ("WARNING: Unused variable in Accelerate program!!: "++show newsym)$ 
---               return (newsym, S.TTuple [S.TTuple []], b) -- TEMP - FIXME
-               return (newsym, S.TUnknown, b) -- TEMP - FIXME
+    Nothing -> -- trace ("WARNING: Unused variable in Accelerate program!!: "++show newsym)$ 
+               return (newsym, Nothing, b) -- TEMP - FIXME
                -- error$ "Unused variable in Accelerate program!!: "++show newsym
-    Just ty -> return (newsym, ty, b)
+    Just ty -> return (newsym, Just ty, b)
 
 -- Look up a de bruijn index in the environment:
 envLookup :: Int -> EnvM S.Var
@@ -161,7 +160,9 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
        do a1        <- convertAcc acc1
           (v,ty,a2) <- withExtendedEnv "a"$ 
                        convertAcc acc2 
-          return$ S.Let v ty a1 a2
+          case ty of 
+            Just ty -> return$ S.Let v ty a1 a2
+            Nothing -> error "Invariant broken!  Let-bound variable not referenced."
 
     Avar idx -> 
       -- Reify array type information present in dictionary (i.e. type
@@ -181,7 +182,9 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
 
     Apply (Alam (Abody funAcc)) acc -> 
       do (v,ty,bod) <- withExtendedEnv "a" $ convertAcc funAcc
-         S.Apply (S.ALam [(v, ty)] bod) <$> convertAcc acc
+         case ty of 
+           Just ty -> S.Apply (S.ALam [(v, ty)] bod) <$> convertAcc acc
+	   Nothing ->  error "Invariant broken!  Array-level lambda-bound variable not referenced."
     Apply _afun _acc -> error "This case is impossible"
 
     Let2 acc1 acc2 -> 
@@ -189,7 +192,9 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
           (v2,ty2,(v1,ty1,a2)) <- withExtendedEnv "a"$ 
 				  withExtendedEnv "a"$ 		   
 				  convertAcc acc2
-          return$ S.LetPair (v1,v2) (ty1,ty2) a1 a2
+          case (ty1,ty2) of
+            (Just ty1,Just ty2) -> return$ S.LetPair (v1,v2) (ty1,ty2) a1 a2
+            _  ->  error "Invariant broken!  Let2-bound variable not referenced."
 
     PairArrays acc1 acc2 -> S.PairArrays <$> convertAcc acc1 
 			                 <*> convertAcc acc2
