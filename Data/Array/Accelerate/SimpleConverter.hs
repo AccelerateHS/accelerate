@@ -50,12 +50,9 @@ t1 :: S.AExp
 t1 = convert p1
 
 p2 :: Sugar.Acc (Sugar.Vector Float)
-p2 
-  = let
-        xs' = Lang.use $ error "xs: let's not REALLY use this array"
-        ys' = Lang.use $ error "ys: let's not REALLY use this array"
-    in
-     (Lang.zipWith (*) xs' ys')
+p2 = let xs = Lang.replicate (Lang.constant (Z :. (4::Int))) (Lang.unit 4.4)
+     in xs
+ --    (Lang.zipWith (*) xs' ys')
 
 
 
@@ -197,48 +194,6 @@ convertPreOpenAcc e =
 -- Convert Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
 
--- This should probably be a member of the class IsTuple in Tuple.hs:
-class TupleLen tup where 
-  tuplen :: tup -> Int
-
-instance TupleLen ()                  where tuplen _ = 0
-instance TupleLen (a,b)               where tuplen _ = 2
-instance TupleLen (a,b,c)             where tuplen _ = 3
-instance TupleLen (a,b,c,d)           where tuplen _ = 4
-instance TupleLen (a,b,c,d,e)         where tuplen _ = 5
-instance TupleLen (a,b,c,d,e,f)       where tuplen _ = 6
-instance TupleLen (a,b,c,d,e,f,g)     where tuplen _ = 7
-instance TupleLen (a,b,c,d,e,f,g,h)   where tuplen _ = 8
-instance TupleLen (a,b,c,d,e,f,g,h,i) where tuplen _ = 9
-
--- Converts the normal accelerate tuple index (FROM RIGHT) into a
--- (n,m) pair meaning "position n in tuple of length m", where 'n' is
--- zero-based and counting FROM THE LEFT.
-convertTupleIdx0 :: TupleLen t => TupleIdx t e -> (Int,Int)
-convertTupleIdx0 tix = (loop tix, len)
- where 
-  len = silly tix undefined
-  silly :: TupleLen t2 => TupleIdx t2 e2 -> t2 -> Int
-  silly _ magic = tuplen magic
-  loop :: TupleIdx t e -> Int
-  loop ZeroTupIdx       = 0
-  loop (SuccTupIdx idx) = 1 + loop idx
-
-
-convertTupleIdx1 :: IsTuple t => TupleIdx t e -> (Int,Int)
-convertTupleIdx1 tix = (loop tix, len)
- where 
-  len = silly tix undefined
-  silly :: IsTuple t2 => TupleIdx t2 e2 -> t2 -> Int
-  silly _ magic = tupleLen magic
-  loop :: TupleIdx t e -> Int
-  loop ZeroTupIdx       = 0
-  loop (SuccTupIdx idx) = 1 + loop idx
-
-
--- convertTupleIdx :: TupleIdx (TupleRepr t) e -> (Int,Int)
--- convertTupleIdx :: TupleIdx (t) e -> (Int,Int)
-
 -- For now I'm leaving it as an index from the right with no length:
 convertTupleIdx :: TupleIdx t e -> Int
 convertTupleIdx tix = loop tix
@@ -246,13 +201,6 @@ convertTupleIdx tix = loop tix
   loop :: TupleIdx t e -> Int
   loop ZeroTupIdx       = 0
   loop (SuccTupIdx idx) = 1 + loop idx
-
-
--- instance IsTuple t => TupleLen (T.TupleRepr t) where 
---   tuplen = 0 
--- test :: IsTuple t => TupleIdx t e -> t -> Int
--- test _ _ = 0
-
 
 -- Evaluate a closed expression
 convertExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp

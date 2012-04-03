@@ -47,7 +47,7 @@ data TupleIdx t e where
 class IsTuple tup where
   type TupleRepr tup
   fromTuple :: tup -> TupleRepr tup
-  toTuple   :: TupleRepr tup -> tup
+  toTuple   :: TupleRepr tup -> tup    
 
 instance IsTuple () where
   type TupleRepr () = ()
