@@ -46,11 +46,22 @@ dotpAcc
         xs' = Lang.use $ error "xs: let's not REALLY use this array"
         ys' = Lang.use $ error "ys: let's not REALLY use this array"
     in
-     (Lang.zipWith (*) xs' ys')
---    Lang.fold (+) 0 (Lang.zipWith (*) xs' ys')
+--     (Lang.zipWith (*) xs' ys')
+    Lang.fold (+) 0 (Lang.zipWith (*) xs' ys')
 
 t1 :: S.AExp
 t1 = convert dotpAcc
+
+
+p2 :: Sugar.Acc (Sugar.Vector Float)
+p2 
+  = let
+        xs' = Lang.use $ error "xs: let's not REALLY use this array"
+        ys' = Lang.use $ error "ys: let's not REALLY use this array"
+    in
+     (Lang.zipWith (*) xs' ys')
+
+
 
 
 --------------------------------------------------------------------------------
@@ -250,7 +261,7 @@ convertTupleIdx tix = loop tix
 -- test :: IsTuple t => TupleIdx t e -> t -> Int
 -- test _ _ = 0
 
-convertOpenExp :: OpenExp env aenv a -> EnvM S.Exp
+convertOpenExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp
 convertOpenExp e = 
   case e of 
     Var idx -> S.EVr <$> envLookup (idxToInt idx)
@@ -258,9 +269,8 @@ convertOpenExp e =
 
     Tuple tup -> convertTuple tup
 
-    Const c   -> error "Const" -- Sugar.toElt c
-
-    -- Need to unpack the constructor here so as to access the IsTuple dictionary:
+    Const c   -> return$ S.EConst$ 
+                 convertConst (Sugar.eltType (undefined::ans)) c
 
     -- NOTE: The incoming AST indexes tuples FROM THE RIGHT:
     Prj (idx) e -> 
@@ -324,6 +334,58 @@ convertTupleExp e = do
     S.ETuple ls -> return ls
     se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
 
+
+--------------------------------------------------------------------------------
+-- Convert constants    
+-------------------------------------------------------------------------------
+    
+-- convertConst :: Sugar.Elt t => Sugar.EltRepr t -> S.Const
+convertConst :: TupleType a -> a -> S.Const
+convertConst ty c = 
+  case ty of 
+    UnitTuple -> S.ConstTup []
+    PairTuple ty1 ty0 -> let (c1,c0) = c 
+                             c0' = convertConst ty0 c0
+                         in 
+                         case convertConst ty1 c1 of
+                           S.ConstTup ls -> S.ConstTup (c0' : ls)
+                           _ -> error "mal constructed tuple"
+    SingleTuple scalar -> 
+      case scalar of 
+        NumScalarType (IntegralNumType ty) -> 
+          case ty of 
+            TypeInt   _ -> S.I  c
+            TypeInt8  _ -> S.I8  c
+            TypeInt16 _ -> S.I16 c
+            TypeInt32 _ -> S.I32 c
+            TypeInt64 _ -> S.I64 c
+            TypeWord   _ -> S.W  c
+            TypeWord8  _ -> S.W8  c
+            TypeWord16 _ -> S.W16 c
+            TypeWord32 _ -> S.W32 c
+            TypeWord64 _ -> S.W64 c
+            TypeCShort _ -> S.CS  c
+            TypeCInt   _ -> S.CI  c
+            TypeCLong  _ -> S.CL  c
+            TypeCLLong _ -> S.CLL c
+            TypeCUShort _ -> S.CUS  c
+            TypeCUInt   _ -> S.CUI  c
+            TypeCULong  _ -> S.CUL  c
+            TypeCULLong _ -> S.CULL c
+        NumScalarType (FloatingNumType ty) -> 
+          case ty of 
+            TypeFloat _  -> S.F c    
+            TypeDouble _ -> S.D c 
+            TypeCFloat _  -> S.CF c    
+            TypeCDouble _ -> S.CD c 
+        NonNumScalarType ty -> 
+          case ty of 
+            TypeBool _ -> S.B c
+            TypeChar _ -> S.C c
+            TypeCChar _ -> S.CC c
+            TypeCSChar _ -> S.CSC c 
+            TypeCUChar _ -> S.CUC c
+
 --------------------------------------------------------------------------------
 -- Convert Accelerate Primitive Applications: 
 --------------------------------------------------------------------------------
@@ -337,7 +399,7 @@ convertPrimApp p arg =
  where 
    op p = 
     case p of 
-      PrimAdd ty -> error "add"
+      PrimAdd ty -> S.NP S.Add
       PrimMul ty -> S.NP S.Mul
       _ -> error$ "primapp not handled yet: "++show (PrimApp p arg)
 

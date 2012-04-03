@@ -10,6 +10,7 @@ import Data.Symbol
 import Data.Map
 import Data.Int
 import Data.Word
+import Foreign.C.Types
 
 --------------------------------------------------------------------------------
 
@@ -186,8 +187,12 @@ data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | F Float | D Double | C Char | B Bool
            | ConstTup [Const]
            -- Special constants:
-           | MinBound | MaxBound | Pi 
-
+           | MinBound | MaxBound | Pi
+           -- C types, rather annoying:
+           | CF CFloat   | CD CDouble 
+           | CS  CShort  | CI  CInt  | CL  CLong  | CLL  CLLong
+           | CUS CUShort | CUI CUInt | CUL CULong | CULL CULLong
+           | CC  CChar   | CSC CSChar | CUC CUChar 
  deriving (Read,Show,Eq)
 
 --------------------------------------------------------------------------------
