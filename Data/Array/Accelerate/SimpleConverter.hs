@@ -114,43 +114,38 @@ envLookup i = do (env,_) <- get
 -- Convert Accelerate Array-level Expressions
 --------------------------------------------------------------------------------
 
-convertAcc :: Delayable a => Acc a -> EnvM S.AExp
-convertAcc acc = convertOpenAcc acc 
-
-convertOpenAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
-convertOpenAcc (OpenAcc acc) = convertPreOpenAcc acc 
+convertAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
+convertAcc (OpenAcc acc) = convertPreOpenAcc acc 
 
 convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
-
--- The environment argument is used to convert de Bruijn indices to vars:
 convertPreOpenAcc e = 
   case e of 
     Let acc1 acc2 -> 
-       do a1     <- convertOpenAcc acc1
+       do a1     <- convertAcc acc1
           (v,a2) <- withExtendedEnv "a"$ 
-                    convertOpenAcc acc2 
+                    convertAcc acc2 
           return$ S.Let v a1 a2
 
     Avar idx -> S.Vr <$> envLookup (idxToInt idx)
     -- This is real live runtime array data:
-    Use arr -> return$ S.Use
+    Use arr -> return S.Use
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
-                                   <*> convertOpenAcc acc1 
-                                   <*> convertOpenAcc acc2
+                                   <*> convertAcc acc1 
+                                   <*> convertAcc acc2
 
-    Apply (Alam (Abody funAcc)) acc -> error$ "Apply"
+    Apply (Alam (Abody funAcc)) acc -> error "Apply"
     Apply _afun _acc -> error "This case is impossible"
 
     Let2 acc1 acc2 -> 
-       do a1     <- convertOpenAcc acc1
+       do a1     <- convertAcc acc1
           (v2,(v1,a2)) <- withExtendedEnv "a"$ 
 		          withExtendedEnv "a"$ 		   
-			  convertOpenAcc acc2 
+			  convertAcc acc2 
           return$ S.LetPair (v1,v2) a1 a2
 
-    PairArrays acc1 acc2 -> S.PairArrays <$> convertOpenAcc acc1 
-			                 <*> convertOpenAcc acc2
+    PairArrays acc1 acc2 -> S.PairArrays <$> convertAcc acc1 
+			                 <*> convertAcc acc2
     Unit e -> error "unit"
     Generate sh f -> error "generate"
     Reshape e acc -> error "reshape"
@@ -158,38 +153,38 @@ convertPreOpenAcc e =
     Index sliceIndex acc slix  -> error "Index"
 
     Map     f acc       -> S.Map     <$> convertFun f 
-                                     <*> convertOpenAcc acc
+                                     <*> convertAcc acc
     ZipWith f acc1 acc2 -> S.ZipWith <$> convertFun f
-                                     <*> convertOpenAcc acc1
-                                     <*> convertOpenAcc acc2
+                                     <*> convertAcc acc1
+                                     <*> convertAcc acc2
     Fold     f e acc -> S.Fold  <$> convertFun f
                                 <*> convertExp e 
-                                <*> convertOpenAcc acc
+                                <*> convertAcc acc
     Fold1    f   acc -> S.Fold1 <$> convertFun f
-                                <*> convertOpenAcc acc
+                                <*> convertAcc acc
     FoldSeg  f e acc1 acc2 -> S.FoldSeg  <$> convertFun f
                                          <*> convertExp e
-                                         <*> convertOpenAcc acc1
-                                         <*> convertOpenAcc acc2
+                                         <*> convertAcc acc1
+                                         <*> convertAcc acc2
     Fold1Seg f   acc1 acc2 -> S.Fold1Seg <$> convertFun f
-                                         <*> convertOpenAcc acc1
-                                         <*> convertOpenAcc acc2
+                                         <*> convertAcc acc1
+                                         <*> convertAcc acc2
     Scanl  f e acc -> S.Scanl  <$> convertFun f
                                <*> convertExp e 
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
     Scanl' f e acc -> S.Scanl' <$> convertFun f
                                <*> convertExp e 
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
     Scanl1 f   acc -> S.Scanl1 <$> convertFun f
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
     Scanr  f e acc -> S.Scanr  <$> convertFun f
                                <*> convertExp e 
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
     Scanr' f e acc -> S.Scanr' <$> convertFun f
                                <*> convertExp e 
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
     Scanr1 f   acc -> S.Scanr1 <$> convertFun f
-                               <*> convertOpenAcc acc
+                               <*> convertAcc acc
 
     Permute f dftAcc p acc -> error "permute"
     Backpermute e    p acc -> error "backperm"
@@ -200,10 +195,6 @@ convertPreOpenAcc e =
 --------------------------------------------------------------------------------
 -- Convert Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
-    
--- Evaluate a closed expression
-convertExp :: Exp aenv t -> EnvM S.Exp
-convertExp e = convertOpenExp e 
 
 -- This should probably be a member of the class IsTuple in Tuple.hs:
 class TupleLen tup where 
@@ -261,8 +252,10 @@ convertTupleIdx tix = loop tix
 -- test :: IsTuple t => TupleIdx t e -> t -> Int
 -- test _ _ = 0
 
-convertOpenExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp
-convertOpenExp e = 
+
+-- Evaluate a closed expression
+convertExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp
+convertExp e = 
   case e of 
     Var idx -> S.EVr <$> envLookup (idxToInt idx)
     PrimApp p arg -> convertPrimApp p arg
@@ -274,25 +267,27 @@ convertOpenExp e =
 
     -- NOTE: The incoming AST indexes tuples FROM THE RIGHT:
     Prj (idx) e -> 
+                 -- If I could get access to the IsTuple dict I could do something here:
+                 -- The problem is the type function EltRepr....
                  let n = convertTupleIdx idx in 
---                 S.EPrj n m <$> convertOpenExp e
-                 S.ETupProjectFromRight n <$> convertOpenExp e
+--                 S.EPrj n m <$> convertExp e
+                 S.ETupProjectFromRight n <$> convertExp e
 
     -- This would seem to force indices to be LISTS at runtime??
     IndexNil       -> return$ S.EIndex []
-    IndexCons esh ei -> do esh' <- convertOpenExp esh
-			   ei'  <- convertOpenExp ei
+    IndexCons esh ei -> do esh' <- convertExp esh
+			   ei'  <- convertExp ei
                            return $ case esh' of
                              S.EIndex ls -> S.EIndex (ei' : ls)
 			     _           -> S.EIndexConsDynamic ei' esh'
-    IndexHead eix   -> do eix' <- convertOpenExp eix
+    IndexHead eix   -> do eix' <- convertExp eix
                           return $ case eix' of
                              -- WARNING: This is a potentially unsafe optimization:
                              -- Throwing away expressions:
                              S.EIndex (h:_) -> h 
                              S.EIndex []    -> error "IndexHead of empty index."
 			     _              -> S.EIndexHeadDynamic eix'
-    IndexTail eix   -> do eix' <- convertOpenExp eix
+    IndexTail eix   -> do eix' <- convertExp eix
                           return $ case eix' of
                              -- WARNING: This is a potentially unsafe optimization:
                              -- Throwing away expressions:
@@ -301,19 +296,19 @@ convertOpenExp e =
 			     _               -> S.EIndexTailDynamic eix'
     IndexAny       -> return S.EIndexAny
 
-    Cond c t e  -> S.ECond <$> convertOpenExp c 
-                           <*> convertOpenExp t
-                           <*> convertOpenExp e
+    Cond c t e  -> S.ECond <$> convertExp c 
+                           <*> convertExp t
+                           <*> convertExp e
     PrimConst c -> return$ S.EConst $ 
                    case c of 
                     PrimMinBound _ -> S.MinBound
 		    PrimMaxBound _ -> S.MaxBound
 		    PrimPi       _ -> S.Pi
 
-    IndexScalar acc eix -> S.EIndexScalar <$> convertOpenAcc acc
-                                          <*> convertOpenExp eix
-    Shape acc -> S.EShape <$> convertOpenAcc acc
-    Size  acc -> S.ESize  <$> convertOpenAcc acc
+    IndexScalar acc eix -> S.EIndexScalar <$> convertAcc acc
+                                          <*> convertExp eix
+    Shape acc -> S.EShape <$> convertAcc acc
+    Size  acc -> S.ESize  <$> convertAcc acc
 
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
@@ -321,7 +316,7 @@ convertOpenExp e =
 convertTuple :: Tuple (PreOpenExp OpenAcc env aenv) t' -> EnvM S.Exp
 convertTuple NilTup = return$ S.ETuple []
 convertTuple (SnocTup tup e) = 
-    do e' <- convertOpenExp e
+    do e' <- convertExp e
        tup' <- convertTuple tup
        case tup' of 
          S.ETuple ls -> return$ S.ETuple$ ls ++ [e']
@@ -329,7 +324,7 @@ convertTuple (SnocTup tup e) =
 
 convertTupleExp :: PreOpenExp OpenAcc t t1 t2 -> EnvM [S.Exp]
 convertTupleExp e = do
-  e' <- convertOpenExp e
+  e' <- convertExp e
   case e' of 
     S.ETuple ls -> return ls
     se -> error$ "convertTupleExp: expected a tuple expression, received:\n  "++ show se
@@ -418,14 +413,14 @@ convertFun fn = loop [] fn
  where 
 --   (args,bod) = loop [] fn
    loop :: [S.Var] -> OpenFun env aenv t -> EnvM S.Fun
-   loop acc (Body b) = do b' <- convertOpenExp b 
+   loop acc (Body b) = do b' <- convertExp b 
 			  return (S.Lam (reverse acc) b')
    loop acc (Lam f2) = fmap snd $ 
    		       withExtendedEnv "v" $ do
    			 v <- envLookup 0
                          loop (v:acc) f2
 
--- convertFun (Body b) = convertOpenExp b
+-- convertFun (Body b) = convertExp b
 -- convertFun (Lam f)  = fmap snd $ 
 --                  withExtendedEnv "v" $ do
 --                    v <- envLookup 0
