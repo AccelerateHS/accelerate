@@ -139,8 +139,12 @@ observeType var ty =
   do (env,tyM,cnt) <- get 
      put (env, M.insert var ty tyM, cnt)
 
-retrieveType :: S.Var -> EnvM S.Type
-retrieveType = undefined
+
+getAccType :: PreOpenAcc OpenAcc aenv a -> S.Type
+getAccType = undefined
+
+getExpType :: OpenExp env aenv ans -> S.Type
+getExpType = undefined
 
 --------------------------------------------------------------------------------
 -- Convert Accelerate Array-level Expressions
@@ -490,20 +494,25 @@ numty nt =
 -- Convert Accelerate Functions
 --------------------------------------------------------------------------------
 
--- Evaluate open function
-convertFun :: OpenFun env aenv t -> EnvM S.Fun
-convertFun = loop [] 
+-- Convert an open, scalar function:
+convertFun :: OpenFun e ae t0 -> EnvM S.Fun
+convertFun =  loop [] 
  where 
---   (args,bod) = loop [] fn
-   loop :: [S.Var] -> OpenFun env aenv t -> EnvM S.Fun
-   loop acc (Body b) = do let vars = reverse acc
---			  types <- foldM retrieveType vars
-                          b' <- convertExp b 
-			  return (S.Lam (zip vars (repeat (S.TUnknown))) b')
-   loop acc (Lam f2) = do (_,_,x) <- withExtendedEnv "v" $ do
-				       v <- envLookup 0
-				       loop (v:acc) f2
-			  return x 
+   loop :: forall env aenv t . 
+	   [(S.Var,S.Type)] -> OpenFun env aenv t -> EnvM S.Fun
+   loop acc (Body b) = do b' <- convertExp b 
+			  return (S.Lam (reverse acc) b')
+   -- Here we again dig around in the Haskell types to find the type information we need.
+   -- In this case we use quite a few scoped type variables:
+   loop acc orig@(Lam f2) | (_:: OpenFun env aenv (arg -> res)) <- orig 
+                          = do 
+			       let (_:: OpenFun (env, Sugar.EltRepr arg) aenv res) = f2 
+				   ety = Sugar.eltType ((error"This shouldn't happen (4)") :: arg)
+				   sty = convertType ety
+			       (_,_,x) <- withExtendedEnv "v" $ do
+					    v <- envLookup 0
+					    loop ((v,sty) : acc) f2
+			       return x 
 
 -- convertFun (Body b) = convertExp b
 -- convertFun (Lam f)  = fmap snd $ 
