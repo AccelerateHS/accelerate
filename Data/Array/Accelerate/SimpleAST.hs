@@ -77,7 +77,7 @@ data AExp =
   | PairArrays AExp AExp
     -- PairArrays Array1 Array2
      
-  | Apply AExp AExp    -- Function $ Argument
+  | Apply AFun AExp    -- Function $ Argument
 
   | Cond Exp AExp AExp -- Array level if statements
 
@@ -85,7 +85,7 @@ data AExp =
     -- Use Array
 --  | Reshape ??? AExp 
     -- Reshape Shape Array
-  | Generate Exp AExp
+  | Generate Exp Fun
     -- Generate Function Array, very similar to map
 --  | Replicate ??? ??? AExp
     -- Replicate IndexOfSomeKind? SomeValue Array
@@ -116,6 +116,8 @@ data AExp =
 
  deriving (Read,Show,Eq)
 
+data AFun = ALam [Var] AExp
+ deriving (Read,Show,Eq)
 
 --------------------------------------------------------------------------------
 -- Accelerate Scalar Expressions
@@ -123,8 +125,7 @@ data AExp =
 
 data Fun = Lam [Var] Exp
  deriving (Read,Show,Eq)
-
-
+          
 data Exp = 
 
     EVr Var -- Variable bound by a Let.

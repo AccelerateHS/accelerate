@@ -1,5 +1,6 @@
-{-# LANGUAGE BangPatterns, GADTs, ScopedTypeVariables, TypeSynonymInstances #-}
+{-# LANGUAGE BangPatterns, GADTs, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+-- {-# ANN module "HLint: ignore Eta reduce" #-}
 
 module Data.Array.Accelerate.SimpleConverter 
 --       ()
@@ -30,28 +31,23 @@ import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import qualified Data.Array.Accelerate.SimpleAST as S
 
 import qualified Data.Array.Accelerate.Tuple as T
+import qualified Data.Vector as V
 
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
-
--- #include "accelerate.h"
+-- TEMP:
+-- import qualified Data.Array.Accelerate.Interpreter as Interp
 
 --------------------------------------------------------------------------------
 -- TEMPORARY -- Testing:
 
--- dotpAcc :: Vector Float -> Vector Float -> Sugar.Acc (Sugar.Scalar Float)
-dotpAcc :: Sugar.Acc (Sugar.Scalar Float)
-dotpAcc 
-  = let
-        xs' = Lang.use $ error "xs: let's not REALLY use this array"
-        ys' = Lang.use $ error "ys: let's not REALLY use this array"
-    in
---     (Lang.zipWith (*) xs' ys')
-    Lang.fold (+) 0 (Lang.zipWith (*) xs' ys')
+p1 :: Sugar.Acc (Sugar.Scalar Float)
+p1 = let xs = Lang.generate (Lang.constant (Z :. (10::Int))) (\ (i) -> 3.3 )
+         ys = xs
+     in  Lang.fold (+) 0 (Lang.zipWith (*) xs ys)
 
 t1 :: S.AExp
-t1 = convert dotpAcc
-
+t1 = convert p1
 
 p2 :: Sugar.Acc (Sugar.Vector Float)
 p2 
@@ -91,7 +87,7 @@ runEnvM m = evalState m ([],0)
 
 -- Evaluate a sub-branch in an extended environment.
 -- Returns the name of the fresh variable as well as the result:
-withExtendedEnv :: String -> (EnvM b) -> EnvM (S.Var, b )
+withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, b )
 withExtendedEnv basename branch = do 
   (env,cnt) <- get 
   let newsym = S.var $ basename ++ show cnt
@@ -134,7 +130,9 @@ convertPreOpenAcc e =
                                    <*> convertAcc acc1 
                                    <*> convertAcc acc2
 
-    Apply (Alam (Abody funAcc)) acc -> error "Apply"
+    Apply (Alam (Abody funAcc)) acc -> 
+      do (v,bod) <- withExtendedEnv "a" $ convertAcc funAcc
+         S.Apply (S.ALam [v] bod) <$> convertAcc acc
     Apply _afun _acc -> error "This case is impossible"
 
     Let2 acc1 acc2 -> 
@@ -146,11 +144,7 @@ convertPreOpenAcc e =
 
     PairArrays acc1 acc2 -> S.PairArrays <$> convertAcc acc1 
 			                 <*> convertAcc acc2
-    Unit e -> error "unit"
-    Generate sh f -> error "generate"
-    Reshape e acc -> error "reshape"
-    Replicate sliceIndex slix acc -> error "replicate"
-    Index sliceIndex acc slix  -> error "Index"
+    Unit e        -> S.Unit <$> convertExp e 
 
     Map     f acc       -> S.Map     <$> convertFun f 
                                      <*> convertAcc acc
@@ -186,6 +180,13 @@ convertPreOpenAcc e =
     Scanr1 f   acc -> S.Scanr1 <$> convertFun f
                                <*> convertAcc acc
 
+    Generate sh f -> S.Generate <$> convertExp sh
+                                <*> convertFun f
+
+    Index sliceIndex acc slix  -> error "Index"
+    Replicate sliceIndex slix acc -> error "replicate"
+
+    Reshape e acc -> error "reshape"
     Permute f dftAcc p acc -> error "permute"
     Backpermute e    p acc -> error "backperm"
     Stencil  sten bndy acc -> error "stencil"
@@ -266,7 +267,7 @@ convertExp e =
                  convertConst (Sugar.eltType (undefined::ans)) c
 
     -- NOTE: The incoming AST indexes tuples FROM THE RIGHT:
-    Prj (idx) e -> 
+    Prj idx e -> 
                  -- If I could get access to the IsTuple dict I could do something here:
                  -- The problem is the type function EltRepr....
                  let n = convertTupleIdx idx in 
@@ -409,7 +410,7 @@ numty nt =
 
 -- Evaluate open function
 convertFun :: OpenFun env aenv t -> EnvM S.Fun
-convertFun fn = loop [] fn
+convertFun = loop [] 
  where 
 --   (args,bod) = loop [] fn
    loop :: [S.Var] -> OpenFun env aenv t -> EnvM S.Fun
