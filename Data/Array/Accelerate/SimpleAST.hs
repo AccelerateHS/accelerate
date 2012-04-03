@@ -87,9 +87,8 @@ data AExp =
     -- Reshape Shape Array
   | Generate Exp Fun
     -- Generate Function Array, very similar to map
---  | Replicate ??? ??? AExp
-    -- Replicate IndexOfSomeKind? SomeValue Array
---  | Index ??? AExp ???
+  | Replicate String Exp AExp  -- TEMP - fix first field
+  | Index     String AExp Exp  -- TEMP - fix first field 
     -- Index SomeMultiDimensionalIndex Array 'SliceValue'?
 
   | Map      Fun AExp          -- Map Function Array

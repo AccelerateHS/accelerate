@@ -3,7 +3,11 @@
 -- {-# ANN module "HLint: ignore Eta reduce" #-}
 
 module Data.Array.Accelerate.SimpleConverter 
---       ()
+       (
+         convert
+         -- TEMP:
+         , p1,t1,p2,t2,p3,t3
+       )
        where
 
 -- standard libraries
@@ -26,6 +30,9 @@ import Data.Array.Accelerate.Array.Sugar (
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+
+import Data.Array.Accelerate.Analysis.Shape (accDim)
+
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import qualified Data.Array.Accelerate.SimpleAST as S
@@ -36,7 +43,7 @@ import qualified Data.Vector as V
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
 -- TEMP:
--- import qualified Data.Array.Accelerate.Interpreter as Interp
+import qualified Data.Array.Accelerate.Interpreter as Interp
 
 --------------------------------------------------------------------------------
 -- TEMPORARY -- Testing:
@@ -49,12 +56,17 @@ p1 = let xs = Lang.generate (Lang.constant (Z :. (10::Int))) (\ (i) -> 3.3 )
 t1 :: S.AExp
 t1 = convert p1
 
-p2 :: Sugar.Acc (Sugar.Vector Float)
-p2 = let xs = Lang.replicate (Lang.constant (Z :. (4::Int))) (Lang.unit 4.4)
-     in xs
- --    (Lang.zipWith (*) xs' ys')
+p2 :: Sugar.Acc (Sugar.Vector Int32)
+p2 = let xs = Lang.replicate (Lang.constant (Z :. (4::Int))) (Lang.unit 4)
+     in Lang.map (+ 10) xs
+t2 = convert p2
 
-
+-- p3 :: Sugar.Acc (Sugar.Array Sugar.DIM2 Int32)
+p3 :: Sugar.Acc (Sugar.Array Sugar.DIM3 Int32)
+p3 = let arr = Lang.generate  (Lang.constant (Z :. (5::Int))) (\_ -> 33)
+         xs  = Lang.replicate (Lang.constant$ Z :. (2::Int) :. Sugar.All :. (3::Int)) arr
+     in xs 
+t3 = convert p3
 
 
 --------------------------------------------------------------------------------
@@ -65,10 +77,6 @@ p2 = let xs = Lang.replicate (Lang.constant (Z :. (4::Int))) (Lang.unit 4.4)
 --   into something very simple for external consumption.
 convert :: Arrays a => Sugar.Acc a -> S.AExp
 convert = runEnvM . convertAcc . Sugar.convertAcc
-
--- convertAccFun1 = 
-
-
 
 --------------------------------------------------------------------------------
 -- Environments
@@ -108,11 +116,11 @@ envLookup i = do (env,_) <- get
 --------------------------------------------------------------------------------
 
 convertAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
-convertAcc (OpenAcc acc) = convertPreOpenAcc acc 
-
-convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
-convertPreOpenAcc e = 
-  case e of 
+convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc 
+ where 
+ convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
+ convertPreOpenAcc eacc = 
+  case eacc of 
     Let acc1 acc2 -> 
        do a1     <- convertAcc acc1
           (v,a2) <- withExtendedEnv "a"$ 
@@ -180,8 +188,37 @@ convertPreOpenAcc e =
     Generate sh f -> S.Generate <$> convertExp sh
                                 <*> convertFun f
 
-    Index sliceIndex acc slix  -> error "Index"
-    Replicate sliceIndex slix acc -> error "replicate"
+    Replicate sliceIndex slix a -> 
+      
+      let 
+          dimSl  = accDim a
+--          dimOut = accDim eacc
+          extend :: SliceIndex slix sl co dim -> Int -> [Int]
+          extend (SliceNil)            n = []
+          extend (SliceAll   sliceIdx) n = dimSl : extend sliceIdx (n+1)
+          extend (SliceFixed sliceIdx) n = extend sliceIdx (n+1)
+      in S.Replicate (show sliceIndex)
+                 --  (show $ extend sliceIndex 0) 
+                 <$> convertExp slix 
+                 <*> convertAcc a
+
+--           mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
+
+    Index sliceIndex acc slix -> 
+      S.Index (show sliceIndex) <$> convertAcc acc
+                                <*> convertExp slix
+    
+--           let dimCo  = length (codeGenExpType slix)
+--               dimSl  = accDim acc
+--               dimIn0 = accDim a
+--               --
+--               restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
+--               restrict (SliceNil)            _     = []
+--               restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
+--               restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
+--           in
+--           mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
+
 
     Reshape e acc -> error "reshape"
     Permute f dftAcc p acc -> error "permute"
