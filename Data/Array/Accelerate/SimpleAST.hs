@@ -1,4 +1,4 @@
-{-# LANGUAGE StandaloneDeriving #-}
+
 module Data.Array.Accelerate.SimpleAST  
 --       (AccExp(..))
  where
@@ -49,12 +49,22 @@ type Env = Map Var AExp
 
 type Dimension = [Int]
 
-data Type = TInt 
-          | TDouble
-          | TTuple [Type] 
+-- FIXME: TENTATIVE:
+data Type = TScalar ScalarType
+          | TTuple [Type]
           | TArray Type
  deriving (Read,Show,Eq)
 
+data ScalarType = 
+    TInt  | TInt8  | TInt16  | TInt32  | TInt64
+  | TWord | TWord8 | TWord16 | TWord32 | TWord64
+  | TFloat | TDouble | TChar | TBool
+  -- C types, rather annoying:
+  | TCFloat  | TCDouble 
+  | TCShort  | TCInt   | TCLong  | TCLLong
+  | TCUShort | TCUInt  | TCULong | TCULLong
+  | TCChar   | TCSChar | TCUChar 
+ deriving (Read,Show,Eq)
 
 --------------------------------------------------------------------------------
 -- Accelerate Array-level Expressions
@@ -66,13 +76,13 @@ data AExp =
 
   | Unit Exp -- Turn an element into a singleton array
 
-  | Let  Var     AExp AExp 
-   -- | Let Binder Bindee Body - Bind the array in the var. 
+  | Let  Var Type AExp AExp 
+   -- | Let Var Type RHS Body - Bind the array in the var. 
    -- Used for common subexpression elimination
 
-  | LetPair (Var, Var) AExp AExp 
+  | LetPair (Var, Var) (Type,Type) AExp AExp 
     -- This binds an array expression returning a PAIR.
-    -- Let (Var1, Var2) (PairArrays Array1 Array2) Body
+    -- Let (Var1, Var2) (Type1, Type2) (PairArrays Array1 Array2) Body
 
   | PairArrays AExp AExp
     -- PairArrays Array1 Array2
@@ -113,21 +123,19 @@ data AExp =
 
  deriving (Read,Show,Eq)
 
-data AFun = ALam [Var] AExp
+data AFun = ALam [(Var,Type)] AExp
  deriving (Read,Show,Eq)
 
 --------------------------------------------------------------------------------
 -- Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
 
-data Fun = Lam [Var] Exp
+data Fun = Lam [(Var,Type)] Exp
  deriving (Read,Show,Eq)
           
 data Exp = 
 
     EVr Var -- Variable bound by a Let.
-
---  | Lam Var Exp
 
   | EPrimApp Prim [Exp]  -- *Any* primitive scalar function
   | ETuple [Exp]
