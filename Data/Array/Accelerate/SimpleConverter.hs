@@ -33,6 +33,7 @@ import Data.Array.Accelerate.Tuple
 
 import Data.Array.Accelerate.Analysis.Shape (accDim)
 
+import qualified Data.Array as Arr
 import qualified Data.Array.Accelerate.Smart       as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import qualified Data.Array.Accelerate.SimpleAST as S
@@ -47,6 +48,10 @@ import qualified Data.Array.Accelerate.Interpreter as Interp
 
 --------------------------------------------------------------------------------
 -- TEMPORARY -- Testing:
+
+p0 = Lang.use $ Sugar.fromList (Z :. (10::Int)) [1..10::Int64]
+t0 :: S.AExp
+t0 = convert p0
 
 p1 :: Sugar.Acc (Sugar.Scalar Float)
 p1 = let xs = Lang.generate (Lang.constant (Z :. (10::Int))) (\ (i) -> 3.3 )
@@ -129,7 +134,7 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
 
     Avar idx -> S.Vr <$> envLookup (idxToInt idx)
     -- This is real live runtime array data:
-    Use arr -> return S.Use
+    Use arr -> return$ S.Use (show arr)
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
                                    <*> convertAcc acc1 
@@ -202,24 +207,10 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
                  <$> convertExp slix 
                  <*> convertAcc a
 
---           mkReplicate (codeGenAccType a) dimSl dimOut . reverse $ extend sl 0
-
     Index sliceIndex acc slix -> 
       S.Index (show sliceIndex) <$> convertAcc acc
                                 <*> convertExp slix
     
---           let dimCo  = length (codeGenExpType slix)
---               dimSl  = accDim acc
---               dimIn0 = accDim a
---               --
---               restrict :: SliceIndex slix sl co dim -> (Int,Int) -> [CExpr]
---               restrict (SliceNil)            _     = []
---               restrict (SliceAll   sliceIdx) (m,n) = mkPrj dimSl "sl" n : restrict sliceIdx (m,n+1)
---               restrict (SliceFixed sliceIdx) (m,n) = mkPrj dimCo "co" m : restrict sliceIdx (m+1,n)
---           in
---           mkIndex (codeGenAccType a) dimSl dimCo dimIn0 . reverse $ restrict sl (0,0)
-
-
     Reshape e acc -> error "reshape"
     Permute f dftAcc p acc -> error "permute"
     Backpermute e    p acc -> error "backperm"

@@ -78,19 +78,15 @@ data AExp =
     -- PairArrays Array1 Array2
      
   | Apply AFun AExp    -- Function $ Argument
-
   | Cond Exp AExp AExp -- Array level if statements
-
-  | Use -- A REAL ARRAY GOES HERE!
-    -- Use Array
---  | Reshape ??? AExp 
-    -- Reshape Shape Array
+  
+  | Use String -- A REAL ARRAY GOES HERE! -- TEMP - FIXME
   | Generate Exp Fun
     -- Generate Function Array, very similar to map
   | Replicate String Exp AExp  -- TEMP - fix first field
   | Index     String AExp Exp  -- TEMP - fix first field 
-    -- Index SomeMultiDimensionalIndex Array 'SliceValue'?
-
+                               -- Index sliceIndex Array SliceDims
+    
   | Map      Fun AExp          -- Map Function Array
   | ZipWith  Fun AExp AExp     -- ZipWith Function Array1 Array2
   | Fold     Fun Exp AExp      -- Fold Function Default Array
@@ -105,6 +101,8 @@ data AExp =
   | Scanr1   Fun     AExp      -- Scanr  Function              LinearArray
   | Permute  Fun AExp AExp AExp -- Permute Function DefaultArray PermuteFunction SourceArray
 
+--  | Reshape ??? AExp 
+    -- Reshape Shape Array
 --  | Backpermute ??? AExp AExp
     -- Backpermute DimensionsOfReulst PermuteFunction
     -- SourceArray
