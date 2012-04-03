@@ -53,6 +53,7 @@ type Dimension = [Int]
 data Type = TScalar ScalarType
           | TTuple [Type]
           | TArray Type
+          | TUnknown -- TEMP, we will get rid of this.
  deriving (Read,Show,Eq)
 
 data ScalarType = 

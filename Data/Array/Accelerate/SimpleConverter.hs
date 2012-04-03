@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, GADTs, ScopedTypeVariables, CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 -- {-# ANN module "HLint: ignore Eta reduce" #-}
 
@@ -41,6 +41,7 @@ import qualified Data.Array.Accelerate.SimpleAST as S
 
 import qualified Data.Array.Accelerate.Tuple as T
 import qualified Data.Vector as V
+import qualified Data.Map as M
 
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
@@ -90,28 +91,35 @@ convert = runEnvM . convertAcc . Sugar.convertAcc
 
 
 -- We use a simple state monad for keeping track of the environment
-type EnvM = State (SimpleEnv,Counter) 
+type EnvM = State (SimpleEnv, TypeObsvs, Counter) 
 type SimpleEnv = [S.Var]
+type TypeObsvs = M.Map S.Var S.Type
 type Counter = Int
 
-runEnvM m = evalState m ([],0)
+runEnvM m = evalState m ([], M.empty, 0)
 
 -- Evaluate a sub-branch in an extended environment.
 -- Returns the name of the fresh variable as well as the result:
-withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, b )
+withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, S.Type, b)
 withExtendedEnv basename branch = do 
-  (env,cnt) <- get 
+  (env,tyM,cnt) <- get 
   let newsym = S.var $ basename ++ show cnt
-  put (newsym:env, cnt+1) 
+  put (newsym:env, tyM, cnt+1) 
   b <- branch
   -- We keep counter-increments from the sub-branch, but NOT the extended env:
-  (_,cnt2) <- get 
-  put (env,cnt2)
-  return (newsym, b)
+  (_,tyM2,cnt2) <- get 
+  put (env,tyM2,cnt2)
+  case M.lookup newsym tyM2 of
+    -- Should this ever happen?:
+    Nothing -> trace ("WARNING: Unused variable in Accelerate program!!: "++show newsym)$ 
+--               return (newsym, S.TTuple [S.TTuple []], b) -- TEMP - FIXME
+               return (newsym, S.TUnknown, b) -- TEMP - FIXME
+               -- error$ "Unused variable in Accelerate program!!: "++show newsym
+    Just ty -> return (newsym, ty, b)
 
 -- Look up a de bruijn index in the environment:
 envLookup :: Int -> EnvM S.Var
-envLookup i = do (env,_) <- get
+envLookup i = do (env,_,_) <- get
                  if length env > i
                   then return (env !! i)
                   else error$ "Environment did not contain an element "++show i++" : "++show env
@@ -127,7 +135,9 @@ envLookup i = do (env,_) <- get
 -- Observations must be consistent, and they should always be.  But we
 -- perform unification just to make sure.
 observeType :: S.Var -> S.Type -> EnvM ()
-observeType var ty = return ()
+observeType var ty = 
+  do (env,tyM,cnt) <- get 
+     put (env, M.insert var ty tyM, cnt)
 
 retrieveType :: S.Var -> EnvM S.Type
 retrieveType = undefined
@@ -139,16 +149,25 @@ retrieveType = undefined
 convertAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
 convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc 
  where 
- convertPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
+ convertPreOpenAcc :: forall aenv a . Delayable a => 
+		      PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
  convertPreOpenAcc eacc = 
   case eacc of 
     Let acc1 acc2 -> 
-       do a1     <- convertAcc acc1
-          (v,a2) <- withExtendedEnv "a"$ 
-                    convertAcc acc2 
-          return$ S.Let v (S.TTuple []) a1 a2
+       do a1        <- convertAcc acc1
+          (v,ty,a2) <- withExtendedEnv "a"$ 
+                       convertAcc acc2 
+          return$ S.Let v ty a1 a2
 
-    Avar idx -> S.Vr <$> envLookup (idxToInt idx)
+    Avar idx -> 
+      -- Reify array type information present in dictionary (i.e. type
+      -- class overloading):
+      do let (ty :: ArraysR a) = arrays
+             sty = convertArrayType ty 
+         var <- envLookup (idxToInt idx)
+         observeType var sty
+         return$ S.Vr var
+
     -- This is real live runtime array data:
     Use arr -> return$ S.Use (show arr)
 
@@ -157,16 +176,16 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
                                    <*> convertAcc acc2
 
     Apply (Alam (Abody funAcc)) acc -> 
-      do (v,bod) <- withExtendedEnv "a" $ convertAcc funAcc
-         S.Apply (S.ALam [(v, S.TTuple [])] bod) <$> convertAcc acc
+      do (v,ty,bod) <- withExtendedEnv "a" $ convertAcc funAcc
+         S.Apply (S.ALam [(v, ty)] bod) <$> convertAcc acc
     Apply _afun _acc -> error "This case is impossible"
 
     Let2 acc1 acc2 -> 
        do a1     <- convertAcc acc1
-          (v2,(v1,a2)) <- withExtendedEnv "a"$ 
-		          withExtendedEnv "a"$ 		   
-			  convertAcc acc2 
-          return$ S.LetPair (v1,v2) ((S.TTuple []),(S.TTuple [])) a1 a2
+          (v2,ty2,(v1,ty1,a2)) <- withExtendedEnv "a"$ 
+				  withExtendedEnv "a"$ 		   
+				  convertAcc acc2
+          return$ S.LetPair (v1,v2) (ty1,ty2) a1 a2
 
     PairArrays acc1 acc2 -> S.PairArrays <$> convertAcc acc1 
 			                 <*> convertAcc acc2
@@ -252,7 +271,7 @@ convertExp e =
   case e of 
     -- Here is where we get to peek at the type of a variable:
     Var idx -> 
-      do let ty  = Sugar.eltType ((error"This shouldn't happen")::ans) 
+      do let ty  = Sugar.eltType ((error"This shouldn't happen (2)")::ans) 
              sty = convertType ty 
          var <- envLookup (idxToInt idx)
          observeType var sty
@@ -333,13 +352,6 @@ convertTupleExp e = do
 -- Convert types
 -------------------------------------------------------------------------------
 
-printType ::  TupleType a -> String
-printType ty = 
-  case ty of 
-    UnitTuple -> "unit"
-    PairTuple ty1 ty0 -> printType ty0 ++", "++ printType ty1
-    SingleTuple scalar -> "scalar"
-
 convertType :: TupleType a -> S.Type
 convertType ty = 
   case ty of 
@@ -355,11 +367,11 @@ convertType ty =
      case scalar of 
        NumScalarType (IntegralNumType ty) -> 
 	 case ty of 
-	   TypeInt   _ -> S.TInt
-	   TypeInt8  _ -> S.TInt8 
-	   TypeInt16 _ -> S.TInt16  
-	   TypeInt32 _ -> S.TInt32 
-	   TypeInt64 _ -> S.TInt64 
+	   TypeInt   _  -> S.TInt
+	   TypeInt8  _  -> S.TInt8 
+	   TypeInt16 _  -> S.TInt16  
+	   TypeInt32 _  -> S.TInt32 
+	   TypeInt64 _  -> S.TInt64 
 	   TypeWord   _ -> S.TWord
 	   TypeWord8  _ -> S.TWord8 
 	   TypeWord16 _ -> S.TWord16 
@@ -375,19 +387,31 @@ convertType ty =
 	   TypeCULLong _ -> S.TCULLong
        NumScalarType (FloatingNumType ty) -> 
 	 case ty of 
-	   TypeFloat _  -> S.TFloat 
-	   TypeDouble _ -> S.TDouble 
+	   TypeFloat _   -> S.TFloat 
+	   TypeDouble _  -> S.TDouble 
 	   TypeCFloat _  -> S.TCFloat 
 	   TypeCDouble _ -> S.TCDouble 
        NonNumScalarType ty -> 
 	 case ty of 
-	   TypeBool _ -> S.TBool 
-	   TypeChar _ -> S.TChar 
-	   TypeCChar _ -> S.TCChar 
+	   TypeBool _   -> S.TBool 
+	   TypeChar _   -> S.TChar 
+	   TypeCChar _  -> S.TCChar 
 	   TypeCSChar _ -> S.TCSChar 
 	   TypeCUChar _ -> S.TCUChar 
 
 
+convertArrayType :: forall arrs . ArraysR arrs -> S.Type
+convertArrayType ty = 
+  case ty of 
+   ArraysRunit  -> S.TTuple []
+   -- Again, here we reify information from types (phantom type
+   -- parameters) into a concrete data-representation:
+   ArraysRarray | (_::ArraysR (Array sh e)) <- ty -> 
+     let ety = Sugar.eltType ((error"This shouldn't happen (3)")::e) 
+     in S.TArray (convertType ety)
+   -- Left to right!
+   ArraysRpair t0 t1 -> S.TTuple [convertArrayType t0,
+				  convertArrayType t1]
 
 --------------------------------------------------------------------------------
 -- Convert constants    
@@ -408,11 +432,11 @@ convertConst ty c =
       case scalar of 
         NumScalarType (IntegralNumType ty) -> 
           case ty of 
-            TypeInt   _ -> S.I  c
-            TypeInt8  _ -> S.I8  c
-            TypeInt16 _ -> S.I16 c
-            TypeInt32 _ -> S.I32 c
-            TypeInt64 _ -> S.I64 c
+            TypeInt   _  -> S.I  c
+            TypeInt8  _  -> S.I8  c
+            TypeInt16 _  -> S.I16 c
+            TypeInt32 _  -> S.I32 c
+            TypeInt64 _  -> S.I64 c
             TypeWord   _ -> S.W  c
             TypeWord8  _ -> S.W8  c
             TypeWord16 _ -> S.W16 c
@@ -428,15 +452,15 @@ convertConst ty c =
             TypeCULLong _ -> S.CULL c
         NumScalarType (FloatingNumType ty) -> 
           case ty of 
-            TypeFloat _  -> S.F c    
-            TypeDouble _ -> S.D c 
+            TypeFloat _   -> S.F c    
+            TypeDouble _  -> S.D c 
             TypeCFloat _  -> S.CF c    
             TypeCDouble _ -> S.CD c 
         NonNumScalarType ty -> 
           case ty of 
-            TypeBool _ -> S.B c
-            TypeChar _ -> S.C c
-            TypeCChar _ -> S.CC c
+            TypeBool _   -> S.B c
+            TypeChar _   -> S.C c
+            TypeCChar _  -> S.CC c
             TypeCSChar _ -> S.CSC c 
             TypeCUChar _ -> S.CUC c
 
@@ -472,12 +496,14 @@ convertFun = loop []
  where 
 --   (args,bod) = loop [] fn
    loop :: [S.Var] -> OpenFun env aenv t -> EnvM S.Fun
-   loop acc (Body b) = do b' <- convertExp b 
-			  return (S.Lam (zip (reverse acc) (repeat (S.TTuple []))) b')
-   loop acc (Lam f2) = fmap snd $ 
-   		       withExtendedEnv "v" $ do
-   			 v <- envLookup 0
-                         loop (v:acc) f2
+   loop acc (Body b) = do let vars = reverse acc
+--			  types <- foldM retrieveType vars
+                          b' <- convertExp b 
+			  return (S.Lam (zip vars (repeat (S.TUnknown))) b')
+   loop acc (Lam f2) = do (_,_,x) <- withExtendedEnv "v" $ do
+				       v <- envLookup 0
+				       loop (v:acc) f2
+			  return x 
 
 -- convertFun (Body b) = convertExp b
 -- convertFun (Lam f)  = fmap snd $ 
