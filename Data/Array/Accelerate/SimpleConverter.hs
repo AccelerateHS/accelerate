@@ -518,11 +518,3 @@ convertFun =  loop []
 					    v <- envLookup 0
 					    loop ((v,sty) : acc) f2
 			       return x 
-
--- convertFun (Body b) = convertExp b
--- convertFun (Lam f)  = fmap snd $ 
---                  withExtendedEnv "v" $ do
---                    v <- envLookup 0
---                    S.Lam args bod <- convertFun f 
---                    return$ (S.Lam (v:args) bod)
--- --		   S.Lam v <$> convertFun f

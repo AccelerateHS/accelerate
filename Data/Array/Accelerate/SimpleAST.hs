@@ -1,4 +1,4 @@
-
+{-# LANGUAGE DeriveGeneric #-}
 module Data.Array.Accelerate.SimpleAST  
 --       (AccExp(..))
  where
@@ -11,25 +11,23 @@ import Data.Map
 import Data.Int
 import Data.Word
 import Foreign.C.Types
+import Text.PrettyPrint.GenericPretty
+import Pretty (text) -- ghc api
 
 --------------------------------------------------------------------------------
 
 -- A simple representation of variables
 -- Honestly though, since we're trying to convert from de Brujin
 -- indicies to this... it might just as well use the indicies. 
---data Var = Var String
--- deriving (Read,Show,Eq)          
 var :: String -> Var
 ----------------------------------------
--- stringtable-atom:
+-- stringtable-atom package:
 -- var = toAtom
 -- type Var = Atom
-
 ----------------------------------------
--- simple-atom:
+-- simple-atom package:
 -- var = intern
 -- type Var = Symbol
-
 ----------------------------------------
 -- 'symbol' package:
 var = intern
@@ -54,7 +52,7 @@ data Type = TScalar ScalarType
           | TTuple [Type]
           | TArray Type
           | TUnknown -- TEMP, we will get rid of this.
- deriving (Read,Show,Eq)
+ deriving (Read,Show,Eq,Generic)
 
 data ScalarType = 
     TInt  | TInt8  | TInt16  | TInt32  | TInt64
@@ -65,7 +63,8 @@ data ScalarType =
   | TCShort  | TCInt   | TCLong  | TCLLong
   | TCUShort | TCUInt  | TCULong | TCULLong
   | TCChar   | TCSChar | TCUChar 
- deriving (Read,Show,Eq)
+ deriving (Read,Show,Eq,Generic)
+
 
 --------------------------------------------------------------------------------
 -- Accelerate Array-level Expressions
@@ -122,18 +121,19 @@ data AExp =
 --  | Stencil2 AExp ??? AExp ??? AExp
     -- Stencial2 Function Boundary1 Array1 Boundary2 Array2
 
- deriving (Read,Show,Eq)
+ deriving (Read,Show,Eq,Generic)
+
 
 data AFun = ALam [(Var,Type)] AExp
- deriving (Read,Show,Eq)
+ deriving (Read,Show,Eq,Generic)
 
 --------------------------------------------------------------------------------
 -- Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
 
 data Fun = Lam [(Var,Type)] Exp
- deriving (Read,Show,Eq)
-          
+ deriving (Read,Show,Eq,Generic)
+
 data Exp = 
 
     EVr Var -- Variable bound by a Let.
@@ -185,9 +185,8 @@ data Exp =
   -- Number of elements of an array
   -- the array expression can not contain any free scalar variables
   | ESize AExp 
+ deriving (Read,Show,Eq,Generic)
 
-
- deriving (Read,Show,Eq)
 
 data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | W Word | W8 Word8 | W16 Word16 | W32 Word32 | W64 Word64
@@ -200,7 +199,7 @@ data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | CS  CShort  | CI  CInt  | CL  CLong  | CLL  CLLong
            | CUS CUShort | CUI CUInt | CUL CULong | CULL CULLong
            | CC  CChar   | CSC CSChar | CUC CUChar 
- deriving (Read,Show,Eq)
+ deriving (Read,Show,Eq,Generic)
 
 --------------------------------------------------------------------------------
 -- Accelerate Primitive Operations
@@ -209,33 +208,34 @@ data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
 data Prim = NP NumPrim
           | IP IntPrim
           | FP FloatPrim
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
+
           
 -- Neg/Abs/Sig are unary:
 data NumPrim = Add | Mul | Neg | Abs | Sig
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
 
 -- All binops except BNot, shifts and rotates take an Int constant as second arg:
 data IntPrim = Quot | Rem | IDiv | Mod | 
                BAnd | BOr | BXor | BNot | BShiftL | BShiftR | BRotateL | BRotateR
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
            
 data FloatPrim = 
       -- Unary:
       Recip | Sin | Cos | Tan | Asin | Acos | Atan | Asinh | Acosh | Atanh | ExpFloating | Sqrt | Log |
       -- Binary:                  
       FDiv | FPow | LogBase | Atan2 | Truncate | Round | Floor | Ceiling
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
            
 -- relational and equality operators
 data ScalarPrim = Lt | Gt | LtEq | GtEq | Eq | NEq | Max | Min
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
 
 data BoolPrim = And | Or | Not
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
 
 data OtherPrim = Ord | Chr | BoolToInt | FromIntegral
-  deriving (Read,Show,Eq)
+  deriving (Read,Show,Eq,Generic)
 
 {-
 data PrimFun sig where
@@ -257,3 +257,41 @@ data PrimFun sig where
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
 -}
 
+--------------------------------------------------------------------------------
+-- Boilerplate for generic pretty printing:
+
+instance Out Type
+instance Out ScalarType
+instance Out Fun
+instance Out Exp
+instance Out AExp
+instance Out AFun
+instance Out Const
+instance Out Prim
+instance Out NumPrim
+instance Out IntPrim
+instance Out FloatPrim
+
+instance Out Symbol where docPrec _ = text . show; doc = docPrec 0 
+instance Out Int8   where docPrec _ = text . show; doc = docPrec 0 
+instance Out Int16  where docPrec _ = text . show; doc = docPrec 0
+instance Out Int32  where docPrec _ = text . show; doc = docPrec 0 
+instance Out Int64  where docPrec _ = text . show; doc = docPrec 0
+instance Out Word   where docPrec _ = text . show; doc = docPrec 0 
+instance Out Word8  where docPrec _ = text . show; doc = docPrec 0 
+instance Out Word16 where docPrec _ = text . show; doc = docPrec 0
+instance Out Word32 where docPrec _ = text . show; doc = docPrec 0 
+instance Out Word64 where docPrec _ = text . show; doc = docPrec 0
+instance Out CFloat  where docPrec _ = text . show; doc = docPrec 0 
+instance Out CDouble where docPrec _ = text . show; doc = docPrec 0 
+instance Out CShort  where docPrec _ = text . show; doc = docPrec 0
+instance Out CInt    where docPrec _ = text . show; doc = docPrec 0 
+instance Out CLong   where docPrec _ = text . show; doc = docPrec 0                          
+instance Out CLLong  where docPrec _ = text . show; doc = docPrec 0 
+instance Out CUShort where docPrec _ = text . show; doc = docPrec 0
+instance Out CUInt   where docPrec _ = text . show; doc = docPrec 0 
+instance Out CULong  where docPrec _ = text . show; doc = docPrec 0
+instance Out CULLong where docPrec _ = text . show; doc = docPrec 0 
+instance Out CChar   where docPrec _ = text . show; doc = docPrec 0 
+instance Out CSChar  where docPrec _ = text . show; doc = docPrec 0
+instance Out CUChar  where docPrec _ = text . show; doc = docPrec 0 
