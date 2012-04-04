@@ -372,7 +372,7 @@ convertType ty =
         S.TTuple [] -> ty0'
         S.TTuple ls -> S.TTuple (ty0' : ls)
 	oth         -> S.TTuple [ty0', oth]
-    SingleTuple scalar -> S.TScalar$ 
+    SingleTuple scalar -> 
      case scalar of 
        NumScalarType (IntegralNumType ty) -> 
 	 case ty of 
@@ -430,12 +430,12 @@ convertArrayType ty =
 convertConst :: TupleType a -> a -> S.Const
 convertConst ty c = 
   case ty of 
-    UnitTuple -> S.ConstTup []
+    UnitTuple -> S.Tup []
     PairTuple ty1 ty0 -> let (c1,c0) = c 
                              c0' = convertConst ty0 c0
                          in 
                          case convertConst ty1 c1 of
-                           S.ConstTup ls -> S.ConstTup (c0' : ls)
+                           S.Tup ls -> S.Tup (c0' : ls)
                            _ -> error "mal constructed tuple"
     SingleTuple scalar -> 
       case scalar of 

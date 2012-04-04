@@ -48,21 +48,16 @@ type Env = Map Var AExp
 type Dimension = [Int]
 
 -- FIXME: TENTATIVE:
-data Type = TScalar ScalarType
-          | TTuple [Type]
+data Type = TTuple [Type]
           | TArray Type
-          | TUnknown -- TEMP, we will get rid of this.
- deriving (Read,Show,Eq,Generic)
-
-data ScalarType = 
-    TInt  | TInt8  | TInt16  | TInt32  | TInt64
-  | TWord | TWord8 | TWord16 | TWord32 | TWord64
-  | TFloat | TDouble | TChar | TBool
-  -- C types, rather annoying:
-  | TCFloat  | TCDouble 
-  | TCShort  | TCInt   | TCLong  | TCLLong
-  | TCUShort | TCUInt  | TCULong | TCULLong
-  | TCChar   | TCSChar | TCUChar 
+          | TInt  | TInt8  | TInt16  | TInt32  | TInt64
+          | TWord | TWord8 | TWord16 | TWord32 | TWord64
+          | TFloat | TDouble | TChar | TBool
+          -- C types, rather annoying:
+          | TCFloat  | TCDouble 
+          | TCShort  | TCInt   | TCLong  | TCLLong
+          | TCUShort | TCUInt  | TCULong | TCULLong
+          | TCChar   | TCSChar | TCUChar 
  deriving (Read,Show,Eq,Generic)
 
 
@@ -191,7 +186,7 @@ data Exp =
 data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | W Word | W8 Word8 | W16 Word16 | W32 Word32 | W64 Word64
            | F Float | D Double | C Char | B Bool
-           | ConstTup [Const]
+           | Tup [Const]
            -- Special constants:
            | MinBound | MaxBound | Pi
            -- C types, rather annoying:
@@ -261,7 +256,6 @@ data PrimFun sig where
 -- Boilerplate for generic pretty printing:
 
 instance Out Type
-instance Out ScalarType
 instance Out Fun
 instance Out Exp
 instance Out AExp
