@@ -44,10 +44,8 @@ instance Read Symbol where
 -- {Var -> Expression}
 type Env = Map Var AExp  
 
-
 type Dimension = [Int]
 
--- FIXME: TENTATIVE:
 data Type = TTuple [Type]
           | TArray Type
           | TInt  | TInt8  | TInt16  | TInt32  | TInt64
@@ -120,55 +118,29 @@ data Fun = Lam [(Var,Type)] Exp
  deriving (Read,Show,Eq,Generic)
 
 data Exp = 
-
     EVr Var -- Variable bound by a Let.
-
   | EPrimApp Prim [Exp]  -- *Any* primitive scalar function
   | ETuple [Exp]
-
   | EConst Const
-  -- TODO -- support other types in Elt.
-
--- [2012.04.02] I can't presently compute the length from the TupleIdx.
---  | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
-
-  | ETupProjectFromRight Int Exp  -- Project the nth field FROM THE RIGHT end of the tuple.
-
-  -- Index into a multi-dimensional array:
-  | EIndex [Exp]
+   -- [2012.04.02] I can't presently compute the length from the TupleIdx.
+   --  | EPrj Int Int Exp  -- n m e : Project the nth field of an m-length tuple.
+  | ETupProjectFromRight Int Exp  -- Project the nth field FROM THE RIGHT end of the tuple.  
+  | EIndex [Exp] -- Index into a multi-dimensional array:
   | EIndexAny 
-
-  -- This is strange but Accelerate would seem to allow run-time CONSING of indices:
+   -- I'm not sure I'm follwing this -- Accelerate would seem to allow run-time CONSING of indices:
   | EIndexConsDynamic Exp Exp
   | EIndexHeadDynamic Exp 
   | EIndexTailDynamic Exp 
-
-  -- -- Array indices & shapes
-  -- IndexNil    :: PreOpenExp acc env aenv Z
-  -- IndexCons   :: (Slice sl, Elt a)
-  --             => PreOpenExp acc env aenv sl
-  --             -> PreOpenExp acc env aenv a
-  --             -> PreOpenExp acc env aenv (sl:.a)
-  -- IndexHead   :: (Slice sl, Elt a)
-  --             => PreOpenExp acc env aenv (sl:.a)
-  --             -> PreOpenExp acc env aenv a
-  -- IndexTail   :: (Slice sl, Elt a)
-  --             => PreOpenExp acc env aenv (sl:.a)
-  --             -> PreOpenExp acc env aenv sl
-
-  -- Conditional expression (non-strict in 2nd and 3rd argument):
+   -- Conditional expression (non-strict in 2nd and 3rd argument):
   | ECond Exp Exp Exp
-
-  -- Project a single scalar from an array
-  -- the array expression can not contain any free scalar variables
+   -- Project a single scalar from an array
+   -- the array expression can not contain any free scalar variables
   | EIndexScalar AExp Exp 
-
-  -- Array shape
-  -- the array expression can not contain any free scalar variables
+   -- Array shape
+   -- the array expression can not contain any free scalar variables
   | EShape AExp
-
-  -- Number of elements of an array
-  -- the array expression can not contain any free scalar variables
+   -- Number of elements of an array
+   -- the array expression can not contain any free scalar variables
   | ESize AExp 
  deriving (Read,Show,Eq,Generic)
 
@@ -177,9 +149,9 @@ data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | W Word | W8 Word8 | W16 Word16 | W32 Word32 | W64 Word64
            | F Float | D Double | C Char | B Bool
            | Tup [Const]
-           -- Special constants:
+            -- Special constants:
            | MinBound | MaxBound | Pi
-           -- C types, rather annoying:
+            -- C types, rather annoying:
            | CF CFloat   | CD CDouble 
            | CS  CShort  | CI  CInt  | CL  CLong  | CLL  CLLong
            | CUS CUShort | CUI CUInt | CUL CULong | CULL CULLong
