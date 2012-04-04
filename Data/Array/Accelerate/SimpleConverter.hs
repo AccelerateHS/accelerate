@@ -435,6 +435,7 @@ convertConst ty c =
                              c0' = convertConst ty0 c0
                          in 
                          case convertConst ty1 c1 of
+                           S.Tup [] -> c0' 
                            S.Tup ls -> S.Tup (c0' : ls)
                            _ -> error "mal constructed tuple"
     SingleTuple scalar -> 
