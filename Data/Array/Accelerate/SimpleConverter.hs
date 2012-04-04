@@ -41,7 +41,6 @@ import qualified Data.Array.Accelerate.SimpleAST as S
 
 import qualified Data.Array.Accelerate.Tuple as T
 import qualified Data.Vector as V
-import qualified Data.Map as M
 
 -- TEMP:
 import qualified Data.Array.Accelerate.Language as Lang
@@ -92,52 +91,31 @@ convert = runEnvM . convertAcc . Sugar.convertAcc
 
 
 -- We use a simple state monad for keeping track of the environment
-type EnvM = State (SimpleEnv, TypeObsvs, Counter) 
+type EnvM = State (SimpleEnv, Counter) 
 type SimpleEnv = [S.Var]
-type TypeObsvs = M.Map S.Var S.Type
 type Counter = Int
 
-runEnvM m = evalState m ([], M.empty, 0)
+runEnvM m = evalState m ([], 0)
 
 -- Evaluate a sub-branch in an extended environment.
 -- Returns the name of the fresh variable as well as the result:
 withExtendedEnv :: String -> EnvM b -> EnvM (S.Var, b)
 withExtendedEnv basename branch = do 
-  (env,tyM,cnt) <- get 
+  (env,cnt) <- get 
   let newsym = S.var $ basename ++ show cnt
-  put (newsym:env, tyM, cnt+1) 
+  put (newsym:env, cnt+1) 
   b <- branch
   -- We keep counter-increments from the sub-branch, but NOT the extended env:
-  (_,tyM2,cnt2) <- get 
-  put (env,tyM2,cnt2)
-  case M.lookup newsym tyM2 of
-    -- Should this ever happen?:
-    Nothing -> -- trace ("WARNING: Unused variable in Accelerate program!!: "++show newsym)$ 
-               return (newsym, b) -- TEMP - FIXME
-    Just ty -> return (newsym, b)
+  (_,cnt2) <- get 
+  put (env,cnt2)
+  return (newsym, b)
 
 -- Look up a de bruijn index in the environment:
 envLookup :: Int -> EnvM S.Var
-envLookup i = do (env,_,_) <- get
+envLookup i = do (env,_) <- get
                  if length env > i
                   then return (env !! i)
                   else error$ "Environment did not contain an element "++show i++" : "++show env
-
--- Type /Retrieval/.
---
--- Starting from the internal Accelerate AST representation we don't
--- directly have type information on binders, but we do have type
--- information on variable references.  Thus we collect type
--- observations at variable references and retrieve the types at the
--- binders. 
--- 
--- Observations must be consistent, and they should always be.  But we
--- perform unification just to make sure.
-observeType :: S.Var -> S.Type -> EnvM ()
-observeType var ty = 
-  do (env,tyM,cnt) <- get 
-     put (env, M.insert var ty tyM, cnt)
-
 
 getAccType :: forall aenv ans . Arrays ans => OpenAcc aenv ans -> S.Type
 getAccType acc = convertArrayType ty 
@@ -167,12 +145,7 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
           return$ S.Let v sty a1 a2
 
     Avar idx -> 
-      -- Reify array type information present in dictionary (i.e. type
-      -- class overloading):
-      do let (ty :: ArraysR a) = arrays
-             sty = convertArrayType ty 
-         var <- envLookup (idxToInt idx)
---         observeType var sty
+      do var <- envLookup (idxToInt idx)
          return$ S.Vr var
 
     -- This is real live runtime array data:
@@ -294,9 +267,7 @@ convertExp e =
   case e of 
     -- Here is where we get to peek at the type of a variable:
     Var idx -> 
-      do let sty = getExpType e
-         var <- envLookup (idxToInt idx)
---         observeType var sty
+      do var <- envLookup (idxToInt idx)
          return$ S.EVr var
     PrimApp p arg -> convertPrimApp p arg
 

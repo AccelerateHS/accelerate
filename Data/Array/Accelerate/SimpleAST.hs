@@ -4,10 +4,11 @@ module Data.Array.Accelerate.SimpleAST
  where
 
 -- Interned symbols:
+----------------------------------------
 -- import StringTable.Atom
 -- import Data.Atom.Simple
 import Data.Symbol
-import Data.Map
+----------------------------------------
 import Data.Int
 import Data.Word
 import Foreign.C.Types
@@ -40,18 +41,17 @@ instance Read Symbol where
 -- constructor is exported.
 ----------------------------------------
 
--- A simple environment
--- {Var -> Expression}
-type Env = Map Var AExp  
+--------------------------------------------------------------------------------
+-- Accelerate Types
+--------------------------------------------------------------------------------
 
-type Dimension = [Int]
-
+-- | Accelerate types.
 data Type = TTuple [Type]
           | TArray Type
           | TInt  | TInt8  | TInt16  | TInt32  | TInt64
           | TWord | TWord8 | TWord16 | TWord32 | TWord64
           | TFloat | TDouble | TChar | TBool
-          -- C types, rather annoying:
+          -- C types (rather annoying):
           | TCFloat  | TCDouble 
           | TCShort  | TCInt   | TCLong  | TCLLong
           | TCUShort | TCUInt  | TCULong | TCULLong
@@ -63,6 +63,7 @@ data Type = TTuple [Type]
 -- Accelerate Array-level Expressions
 --------------------------------------------------------------------------------
 
+-- | Array-level expressions
 data AExp = 
     Vr Var -- Array variable bound by a Let.
   | Unit Exp -- Turn an element into a singleton array
@@ -103,7 +104,6 @@ data AFun = ALam [(Var,Type)] AExp
  deriving (Read,Show,Eq,Generic)
 
 -- | Boundary condition specification for stencil operations.
---
 data Boundary = Clamp               -- ^clamp coordinates to the extent of the array
               | Mirror              -- ^mirror coordinates beyond the array extent
               | Wrap                -- ^wrap coordinates around on each dimension
@@ -111,12 +111,14 @@ data Boundary = Clamp               -- ^clamp coordinates to the extent of the a
  deriving (Read,Show,Eq,Generic)
           
 --------------------------------------------------------------------------------
--- Accelerate Scalar Expressions
+-- Accelerate Scalar Expressions and Functions
 --------------------------------------------------------------------------------
 
+-- | Scalar functions
 data Fun = Lam [(Var,Type)] Exp
  deriving (Read,Show,Eq,Generic)
 
+-- | Scalar expressions
 data Exp = 
     EVr Var -- Variable bound by a Let.
   | EPrimApp Prim [Exp]  -- *Any* primitive scalar function
@@ -145,6 +147,7 @@ data Exp =
  deriving (Read,Show,Eq,Generic)
 
 
+-- | Constants embedded within Accelerate programs.
 data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
            | W Word | W8 Word8 | W16 Word16 | W32 Word32 | W64 Word64
            | F Float | D Double | C Char | B Bool
@@ -162,21 +165,27 @@ data Const = I Int  | I8 Int8  | I16 Int16  | I32 Int32  | I64 Int64
 -- Accelerate Primitive Operations
 --------------------------------------------------------------------------------
 
+-- | A type that includes all primitives supported by Accelerate.
 data Prim = NP NumPrim
           | IP IntPrim
           | FP FloatPrim
+          | SP ScalarPrim
+          | BP BoolPrim
+          | OP OtherPrim
   deriving (Read,Show,Eq,Generic)
-
           
--- Neg/Abs/Sig are unary:
+-- | Primitives that operate on /all/ numeric types.
+--   Neg/Abs/Sig are unary:
 data NumPrim = Add | Mul | Neg | Abs | Sig
   deriving (Read,Show,Eq,Generic)
 
+-- | Primitive integral-only operations.
 -- All binops except BNot, shifts and rotates take an Int constant as second arg:
 data IntPrim = Quot | Rem | IDiv | Mod | 
                BAnd | BOr | BXor | BNot | BShiftL | BShiftR | BRotateL | BRotateR
   deriving (Read,Show,Eq,Generic)
-           
+
+-- | Primitive floating point-only operations.
 data FloatPrim = 
       -- Unary:
       Recip | Sin | Cos | Tan | Asin | Acos | Atan | Asinh | Acosh | Atanh | ExpFloating | Sqrt | Log |
@@ -184,7 +193,7 @@ data FloatPrim =
       FDiv | FPow | LogBase | Atan2 | Truncate | Round | Floor | Ceiling
   deriving (Read,Show,Eq,Generic)
            
--- relational and equality operators
+-- | Relational and equality operators
 data ScalarPrim = Lt | Gt | LtEq | GtEq | Eq | NEq | Max | Min
   deriving (Read,Show,Eq,Generic)
 
@@ -194,25 +203,6 @@ data BoolPrim = And | Or | Not
 data OtherPrim = Ord | Chr | BoolToInt | FromIntegral
   deriving (Read,Show,Eq,Generic)
 
-{-
-data PrimFun sig where
-...
-  -- logical operators
-  PrimLAnd :: PrimFun ((Bool, Bool) -> Bool)
-  PrimLOr  :: PrimFun ((Bool, Bool) -> Bool)
-  PrimLNot :: PrimFun (Bool         -> Bool)
-
-  -- character conversions
-  PrimOrd  :: PrimFun (Char -> Int)
-  PrimChr  :: PrimFun (Int  -> Char)
-  -- FIXME: use IntegralType?
-
-  -- FIXME: conversions between various integer types
-  --        should we have an overloaded functions like 'toInt'?  
-  --        (or 'fromEnum' for enums?)
-  PrimBoolToInt    :: PrimFun (Bool -> Int)
-  PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
--}
 
 --------------------------------------------------------------------------------
 -- Boilerplate for generic pretty printing:
@@ -227,6 +217,9 @@ instance Out Prim
 instance Out NumPrim
 instance Out IntPrim
 instance Out FloatPrim
+instance Out ScalarPrim
+instance Out BoolPrim
+instance Out OtherPrim
 instance Out Boundary
 
 instance Out Symbol where docPrec _ = text . show; doc = docPrec 0 
