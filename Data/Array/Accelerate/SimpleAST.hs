@@ -66,32 +66,22 @@ data Type = TTuple [Type]
 --------------------------------------------------------------------------------
 
 data AExp = 
-
     Vr Var -- Array variable bound by a Let.
-
   | Unit Exp -- Turn an element into a singleton array
-
-  | Let  Var Type AExp AExp 
-   -- | Let Var Type RHS Body - Bind the array in the var. 
-   -- Used for common subexpression elimination
-
+  | Let  Var Type AExp AExp    -- Let Var Type RHS Body
+    -- Let is used for common subexpression elimination
   | LetPair (Var, Var) (Type,Type) AExp AExp 
     -- This binds an array expression returning a PAIR.
     -- Let (Var1, Var2) (Type1, Type2) (PairArrays Array1 Array2) Body
-
-  | PairArrays AExp AExp
-    -- PairArrays Array1 Array2
-     
-  | Apply AFun AExp    -- Function $ Argument
-  | Cond Exp AExp AExp -- Array level if statements
-  
+  | PairArrays AExp AExp       -- PairArrays Array1 Array2
+  | Apply AFun AExp            -- Function $ Argument
+  | Cond Exp AExp AExp         -- Array level if statements
   | Use String -- A REAL ARRAY GOES HERE! -- TEMP - FIXME
   | Generate Exp Fun
     -- Generate Function Array, very similar to map
   | Replicate String Exp AExp  -- TEMP - fix first field
   | Index     String AExp Exp  -- TEMP - fix first field 
                                -- Index sliceIndex Array SliceDims
-    
   | Map      Fun AExp          -- Map Function Array
   | ZipWith  Fun AExp AExp     -- ZipWith Function Array1 Array2
   | Fold     Fun Exp AExp      -- Fold Function Default Array
@@ -104,24 +94,24 @@ data AExp =
   | Scanr    Fun Exp AExp      -- Scanr  Function InitialValue LinearArray
   | Scanr'   Fun Exp AExp      -- Scanr' Function InitialValue LinearArray
   | Scanr1   Fun     AExp      -- Scanr  Function              LinearArray
-  | Permute  Fun AExp AExp AExp -- Permute Function DefaultArray PermuteFunction SourceArray
-
---  | Reshape ??? AExp 
-    -- Reshape Shape Array
---  | Backpermute ??? AExp AExp
-    -- Backpermute DimensionsOfReulst PermuteFunction
-    -- SourceArray
---  | Stencil AExp ??? AExp
-    -- Stencil Function BoundaryCondition SourceArray
---  | Stencil2 AExp ??? AExp ??? AExp
-    -- Stencial2 Function Boundary1 Array1 Boundary2 Array2
-
+  | Permute  Fun AExp Fun AExp -- Permute CombineFun DefaultArr PermFun SourceArray
+  | Backpermute Exp Fun AExp   -- Backpermute ResultDimension   PermFun SourceArray
+  | Reshape     Exp     AExp   -- Reshape Shape Array
+  | Stencil  Fun Boundary AExp
+  | Stencil2 Fun Boundary AExp Boundary AExp -- Two source arrays/boundaries
  deriving (Read,Show,Eq,Generic)
-
 
 data AFun = ALam [(Var,Type)] AExp
  deriving (Read,Show,Eq,Generic)
 
+-- | Boundary condition specification for stencil operations.
+--
+data Boundary = Clamp               -- ^clamp coordinates to the extent of the array
+              | Mirror              -- ^mirror coordinates beyond the array extent
+              | Wrap                -- ^wrap coordinates around on each dimension
+              | Constant Const      -- ^use a constant value for outlying coordinates 
+ deriving (Read,Show,Eq,Generic)
+          
 --------------------------------------------------------------------------------
 -- Accelerate Scalar Expressions
 --------------------------------------------------------------------------------
@@ -265,6 +255,7 @@ instance Out Prim
 instance Out NumPrim
 instance Out IntPrim
 instance Out FloatPrim
+instance Out Boundary
 
 instance Out Symbol where docPrec _ = text . show; doc = docPrec 0 
 instance Out Int8   where docPrec _ = text . show; doc = docPrec 0 

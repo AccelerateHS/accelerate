@@ -250,16 +250,24 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
                  --  (show $ extend sliceIndex 0) 
                  <$> convertExp slix 
                  <*> convertAcc a
-
     Index sliceIndex acc slix -> 
       S.Index (show sliceIndex) <$> convertAcc acc
                                 <*> convertExp slix
-    
-    Reshape e acc -> error "reshape"
-    Permute f dftAcc p acc -> error "permute"
-    Backpermute e    p acc -> error "backperm"
-    Stencil  sten bndy acc -> error "stencil"
-    Stencil2 sten bndy1 acc1 bndy2 acc2 -> error "stencil2"
+    Reshape e acc -> S.Reshape <$> convertExp e <*> convertAcc acc
+    Permute fn dft pfn acc -> S.Permute <$> convertFun fn 
+                                        <*> convertAcc dft
+                                        <*> convertFun pfn
+                                        <*> convertAcc acc
+    Backpermute e pfn acc -> S.Backpermute <$> convertExp e 
+                                           <*> convertFun pfn
+                                           <*> convertAcc acc 
+    Stencil  sten bndy acc -> S.Stencil <$> convertFun sten
+                                        <*> return (convertBoundary bndy)
+                                        <*> convertAcc acc
+    Stencil2 sten bndy1 acc1 bndy2 acc2 -> 
+      S.Stencil2 <$> convertFun sten 
+                 <*> return (convertBoundary bndy1) <*> convertAcc acc1
+                 <*> return (convertBoundary bndy2) <*> convertAcc acc2
 
 
 --------------------------------------------------------------------------------
@@ -273,6 +281,9 @@ convertTupleIdx tix = loop tix
   loop :: TupleIdx t e -> Int
   loop ZeroTupIdx       = 0
   loop (SuccTupIdx idx) = 1 + loop idx
+
+convertBoundary :: Boundary a -> S.Boundary
+convertBoundary = undefined
 
 -- Evaluate a closed expression
 convertExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp
