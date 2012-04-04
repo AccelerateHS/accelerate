@@ -139,11 +139,14 @@ observeType var ty =
      put (env, M.insert var ty tyM, cnt)
 
 
-getAccType :: PreOpenAcc OpenAcc aenv a -> S.Type
-getAccType = undefined
+getAccType :: forall aenv ans . Arrays ans => OpenAcc aenv ans -> S.Type
+getAccType acc = convertArrayType ty 
+  where (ty :: ArraysR ans) = arrays
 
-getExpType :: OpenExp env aenv ans -> S.Type
-getExpType = undefined
+getExpType :: forall env aenv ans . Sugar.Elt ans => OpenExp env aenv ans -> S.Type
+getExpType e = convertType ty 
+  where  ty  = Sugar.eltType ((error"This shouldn't happen (0)")::ans) 
+
 
 --------------------------------------------------------------------------------
 -- Convert Accelerate Array-level Expressions
@@ -158,11 +161,10 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
   case eacc of 
     Let acc1 acc2 -> 
        do a1        <- convertAcc acc1
-          (v,ty,a2) <- withExtendedEnv "a"$ 
+          (v, _,a2) <- withExtendedEnv "a"$ 
                        convertAcc acc2 
-          case ty of 
-            Just ty -> return$ S.Let v ty a1 a2
-            Nothing -> error "Invariant broken!  Let-bound variable not referenced."
+          let sty = getAccType acc1
+          return$ S.Let v sty a1 a2
 
     Avar idx -> 
       -- Reify array type information present in dictionary (i.e. type
@@ -291,8 +293,7 @@ convertExp e =
   case e of 
     -- Here is where we get to peek at the type of a variable:
     Var idx -> 
-      do let ty  = Sugar.eltType ((error"This shouldn't happen (2)")::ans) 
-             sty = convertType ty 
+      do let sty = getExpType e
          var <- envLookup (idxToInt idx)
          observeType var sty
          return$ S.EVr var
