@@ -126,11 +126,6 @@ Library
                         ghc-prim        == 0.2.*,
                         mtl             == 2.0.*,
                         pretty          >= 1.0 && < 1.2,
-                        -- For SimpleAST / SimpleConverter
-                        GenericPretty   >= 1.0,
-                        symbol          >= 0.1,
-                        vector          >= 0.9,
-                        ghc             >= 7.2
 
   Include-Dirs:         include
 
@@ -175,8 +170,6 @@ Library
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
                         Data.Array.Accelerate.Pretty
-                        Data.Array.Accelerate.SimpleAST
-                        Data.Array.Accelerate.SimpleConverter
 
 --  If flag(llvm)
 --    Exposed-modules:    Data.Array.Accelerate.LLVM

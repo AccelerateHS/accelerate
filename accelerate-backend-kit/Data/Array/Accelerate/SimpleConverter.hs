@@ -13,7 +13,9 @@ module Data.Array.Accelerate.SimpleConverter
        (
          convert
          -- TEMP:
+#if 0
          , p1,t1,p2,t2,p3,t3
+#endif
        )
        where
 
@@ -35,7 +37,7 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation  hiding (sliceIndex)
 import Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), Array(..), Scalar, Vector, Segments)
-import Data.Array.Accelerate.Array.Delayed
+-- import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 
@@ -50,15 +52,16 @@ import qualified Data.Array.Accelerate.Tuple as T
 import qualified Data.Vector as V
 
 -- TEMP:
-import qualified Data.Array.Accelerate.Language as Lang
+-- import qualified Data.Array.Accelerate.Language as Lang
 -- TEMP:
-import qualified Data.Array.Accelerate.Interpreter as Interp
-import Text.PrettyPrint.GenericPretty (doc)
+-- import qualified Data.Array.Accelerate.Interpreter as Interp
+-- import Text.PrettyPrint.GenericPretty (doc)
 
 
 --------------------------------------------------------------------------------
 -- TEMPORARY -- Testing:
 
+#if 0
 p0 = Lang.use $ Sugar.fromList (Z :. (10::Int)) [1..10::Int64]
 t0 :: S.AExp
 t0 = convert p0
@@ -132,6 +135,7 @@ t7 = convert p7
 --                                EIndexHeadDynamic (EVr v1)]))
 --                  (Vr a0))
 
+#endif
 
 --------------------------------------------------------------------------------
 -- Exposed entrypoints for this module:
@@ -188,10 +192,12 @@ getExpType e = convertType ty
 -- Convert Accelerate Array-level Expressions
 --------------------------------------------------------------------------------
 
-convertAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
+-- convertAcc :: Delayable a => OpenAcc aenv a -> EnvM S.AExp
+convertAcc :: OpenAcc aenv a -> EnvM S.AExp
 convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc 
  where 
- convertPreOpenAcc :: forall aenv a . Delayable a => 
+-- convertPreOpenAcc :: forall aenv a . Delayable a => 
+ convertPreOpenAcc :: forall aenv a . 
 		      PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
  convertPreOpenAcc eacc = 
   case eacc of 
