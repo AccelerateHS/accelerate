@@ -183,7 +183,7 @@ prettyPreFun pp alvl fun =
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenFun acc env' aenv' fun' -> (Int, Doc)
-     count lvl (Body body) = (-1, prettyPreExp pp lvl alvl noParens body)
+     count lvl (Body body) = (-1, prettyPreExp pp (lvl + 1) alvl noParens body)
      count lvl (Lam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print an expression.
@@ -202,7 +202,7 @@ prettyPreExp pp lvl alvl wrap (Let e1 e2)
         , text "in" <+> prettyPreExp pp (lvl + 1) alvl noParens e2
         ]
 prettyPreExp _pp lvl _ _ (Var idx)
-  = text $ 'x' : show (lvl - idxToInt idx)
+  = text $ 'x' : show (lvl - idxToInt idx - 1)
 prettyPreExp _pp _ _ _ (Const v)
   = text $ show (toElt v :: t)
 prettyPreExp pp lvl alvl _ (Tuple tup)
