@@ -33,6 +33,7 @@ import qualified BlockCopy
 
 import qualified Canny
 import qualified IntegralImage
+import qualified SharingRecovery
 
 -- friends
 import Util
@@ -113,6 +114,7 @@ data Test
 allTests :: Config -> IO [Test]
 allTests cfg = sequence'
   [
+
     -- primitive functions
     mkTest "map-abs"               "absolute value of each element"             $ Map.run "abs" n
   , mkTest "map-plus"              "add a constant to each element"             $ Map.run "plus" n
@@ -150,16 +152,26 @@ allTests cfg = sequence'
   , mkIO   "io"                    "array IO test"                              $ BlockCopy.run
 #endif
 
-    -- image processing
-  , mkNoRef "canny"                "canny edge detection"                       $ Canny.run img
-  , mkNoRef "integral-image"       "image integral (2D scan)"                   $ IntegralImage.run img
-    -- slices
-  , mkTest "slices"                "replicate (Z:.2:.All:.All)"                 $ SliceExamples.run1
-  , mkTest "slices"                "replicate (Z:.All:.2:.All)"                 $ SliceExamples.run2
-  , mkTest "slices"                "replicate (Z:.All:.All:.2)"                 $ SliceExamples.run3
-  , mkTest "slices"                "replicate (Any:.2)"                         $ SliceExamples.run4
-  , mkTest "slices"                "replicate (Z:.2:.2:.2)"                     $ SliceExamples.run5
-
+  --  image processing
+  , mkNoRef "canny"          "canny edge detection"                       $ Canny.run img
+  , mkNoRef "integral-image" "image integral (2D scan)"                   $ IntegralImage.run img
+  -- slices
+  , mkTest "slices"  "replicate (Z:.2:.All:.All)" $ SliceExamples.run1
+  , mkTest "slices"  "replicate (Z:.All:.2:.All)" $ SliceExamples.run2
+  , mkTest "slices"  "replicate (Z:.All:.All:.2)" $ SliceExamples.run3
+  , mkTest "slices"  "replicate (Any:.2)"         $ SliceExamples.run4  
+  , mkTest "slices"  "replicate (Z:.2:.2:.2)"     $ SliceExamples.run5
+  --
+  , mkIO "sharing-recovery" "simple"    $ return (show SharingRecovery.simple)
+  , mkIO "sharing-recovery" "orderFail" $ return (show SharingRecovery.orderFail)
+  , mkIO "sharing-recovery" "testSort"  $ return (show SharingRecovery.testSort)
+  , mkIO "sharing-recovery" "muchSharing" $ return (show $ SharingRecovery.muchSharing 20)
+  , mkIO "sharing-recovery" "bfsFail"   $ return (show SharingRecovery.bfsFail)
+  , mkIO "sharing-recovery" "twoLetsSameLevel"  $ return (show SharingRecovery.twoLetsSameLevel)
+  , mkIO "sharing-recovery" "twoLetsSameLevel2" $ return (show SharingRecovery.twoLetsSameLevel2)
+  , mkIO "sharing-recovery" "noLetAtTop"   $ return (show SharingRecovery.noLetAtTop)
+  , mkIO "sharing-recovery" "noLetAtTop2"   $ return (show SharingRecovery.noLetAtTop2)
+  , mkIO "sharing-recovery" "pipe" $ return (show SharingRecovery.pipe)
   ]
   where
     n   = cfgElements cfg
@@ -173,9 +185,7 @@ allTests cfg = sequence'
       acc <- unsafeInterleaveIO builder
       return $ TestNoRef name desc acc
 
-#ifdef ACCELERATE_IO
     mkIO name desc act = return $ TestIO name desc act
-#endif
 
 
 -- How to evaluate Accelerate programs with the chosen backend?
@@ -209,7 +219,7 @@ verifyTest cfg test = do
                                     $ map (\(i,v) -> ">>> " ++ shows i " : " ++ show v) errs
 
         TestNoRef _ _ acc -> return $ run acc `seq` Ok
-        TestIO _ _ act    -> act >> return Ok
+        TestIO _ _ act    -> act >>= \v -> v `seq` return Ok
       --
       unless quiet $ putStrLn (show result)
       return result
