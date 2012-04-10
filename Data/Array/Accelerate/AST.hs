@@ -67,10 +67,10 @@
 module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
-  Idx(..),
+  Idx(..), deBruijnToInt,
 
   -- * Valuation environment
-  Val(..), prj, idxToInt,
+  Val(..), ValElt(..), prj, prjElt,
 
   -- * Accelerated array expressions
   Arrays(..), ArraysR(..), 
@@ -106,6 +106,12 @@ data Idx env t where
   ZeroIdx ::              Idx (env, t) t
   SuccIdx :: Idx env t -> Idx (env, s) t
 
+-- de Bruijn Index to Int conversion
+--
+deBruijnToInt :: Idx env t -> Int
+deBruijnToInt ZeroIdx       = 0
+deBruijnToInt (SuccIdx idx) = 1 + deBruijnToInt idx
+
 
 -- Environments
 -- ------------
@@ -118,6 +124,12 @@ data Val env where
 
 deriving instance Typeable1 Val
 
+-- Valuation for an environment of array elements
+--
+data ValElt env where
+  EmptyElt :: ValElt ()
+  PushElt  :: Elt t 
+           => ValElt env -> EltRepr t -> ValElt (env, t)
 
 -- Projection of a value from a valuation using a de Bruijn index
 --
@@ -126,13 +138,12 @@ prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
 prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
 
--- Convert a typed de Bruijn index to the corresponding integer
+-- Projection of a value from a valuation of array elements using a de Bruijn index
 --
-idxToInt :: Idx env t -> Int
-idxToInt = go 0
-  where go :: Int -> Idx env t -> Int
-        go !n ZeroIdx       = n
-        go !n (SuccIdx idx) = go (n+1) idx
+prjElt :: Idx env t -> ValElt env -> t
+prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
+prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
+prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsistent valuation"
 
 
 -- Array expressions
@@ -201,17 +212,17 @@ data PreOpenAcc acc aenv a where
 
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Let         :: (Arrays bndArrs, Arrays bodyArrs)
-              => acc            aenv            bndArrs               -- bound expression
-              -> acc            (aenv, bndArrs) bodyArrs              -- the bound expr's scope
-              -> PreOpenAcc acc aenv            bodyArrs
+  Alet         :: (Arrays bndArrs, Arrays bodyArrs)
+               => acc            aenv            bndArrs                -- bound expression
+               -> acc            (aenv, bndArrs) bodyArrs               -- the bound expr's scope
+               -> PreOpenAcc acc aenv            bodyArrs
 
-  -- Variant of 'Let' binding (and decomposing) a pair
-  Let2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
-              => acc            aenv            (bndArrs1, bndArrs2)  -- bound expressions
-              -> acc            ((aenv, bndArrs1), bndArrs2)
-                                                bodyArrs              -- the bound expr's scope
-              -> PreOpenAcc acc aenv            bodyArrs
+  -- Variant of 'Let' binding a pair by decomposing it
+  Alet2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
+               => acc            aenv            (bndArrs1, bndArrs2)   -- bound expressions
+               -> acc            ((aenv, bndArrs1), bndArrs2)
+                                                 bodyArrs               -- the bound expr's scope
+               -> PreOpenAcc acc aenv            bodyArrs
 
   PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
               => acc            aenv (Array sh1 e1)
@@ -425,13 +436,11 @@ deriving instance Typeable2 OpenAcc
 --
 type Acc = OpenAcc ()
 
-
--- | Operations on stencils.
+-- |Operations on stencils.
 --
 class (Shape sh, Elt e, IsTuple stencil) => Stencil sh e stencil where
   stencil       :: StencilR sh e stencil
   stencilAccess :: (sh -> e) -> sh -> stencil
-
 
 -- |GADT reifying the 'Stencil' class.
 --
@@ -601,9 +610,9 @@ instance (Stencil (sh:.Int) a row1,
 -- |Parametrised open function abstraction
 --
 data PreOpenFun (acc :: * -> * -> *) env aenv t where
-  Body :: PreOpenExp acc env              aenv t -> PreOpenFun acc env aenv t
+  Body :: PreOpenExp acc env      aenv t -> PreOpenFun acc env aenv t
   Lam  :: Elt a
-       => PreOpenFun acc (env, EltRepr a) aenv t -> PreOpenFun acc env aenv (a -> t)
+       => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
 -- |Vanilla open function abstraction
 --
@@ -618,17 +627,22 @@ type PreFun acc = PreOpenFun acc ()
 type Fun = OpenFun ()
 
 -- |Parametrised open expressions using de Bruijn indices for variables ranging over tuples
--- of scalars and arrays of tuples.  All code, except Cond, is evaluated
--- eagerly.  N-tuples are represented as nested pairs. 
+-- of scalars and arrays of tuples.  All code, except Cond, is evaluated eagerly.  N-tuples are
+-- represented as nested pairs. 
 --
--- The data type is parametrised over the surface types (not the representation
--- type).
+-- The data type is parametrised over the surface types (not the representation type).
 --
 data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
+  -- Local binding of a scalar expression
+  Let         :: (Elt bnd_t, Elt body_t)
+              => PreOpenExp acc env          aenv bnd_t
+              -> PreOpenExp acc (env, bnd_t) aenv body_t
+              -> PreOpenExp acc env          aenv body_t
+
   -- Variable index, ranging only over tuples or scalars
   Var         :: Elt t
-              => Idx env (EltRepr t)
+              => Idx env t
               -> PreOpenExp acc env aenv t
 
   -- Constant values

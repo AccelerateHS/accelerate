@@ -87,11 +87,11 @@ evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc
 
 evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
 
-evalPreOpenAcc (Let acc1 acc2) aenv 
+evalPreOpenAcc (Alet acc1 acc2) aenv 
   = let !arr1 = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1)
 
-evalPreOpenAcc (Let2 acc1 acc2) aenv 
+evalPreOpenAcc (Alet2 acc1 acc2) aenv 
   = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
 
@@ -573,15 +573,15 @@ stencil2Op sten bndy1 (DelayedArray sh1 rf1) bndy2 (DelayedArray sh2 rf2)
 
 -- Evaluate open function
 --
-evalOpenFun :: OpenFun env aenv t -> Val env -> Val aenv -> t
+evalOpenFun :: OpenFun env aenv t -> ValElt env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
 evalOpenFun (Lam f)  env aenv 
-  = \x -> evalOpenFun f (env `Push` Sugar.fromElt x) aenv
+  = \x -> evalOpenFun f (env `PushElt` Sugar.fromElt x) aenv
 
 -- Evaluate a closed function
 --
 evalFun :: Fun aenv t -> Val aenv -> t
-evalFun f aenv = evalOpenFun f Empty aenv
+evalFun f aenv = evalOpenFun f EmptyElt aenv
 
 -- Evaluate an open expression
 --
@@ -591,11 +591,17 @@ evalFun f aenv = evalOpenFun f Empty aenv
 --     gets mapped over an array, the array argument would be forced many times
 --     leading to a large amount of wasteful recomputation.
 --  
-evalOpenExp :: OpenExp env aenv a -> Val env -> Val aenv -> a
+evalOpenExp :: OpenExp env aenv a -> ValElt env -> Val aenv -> a
 
-evalOpenExp (Var idx) env _ = Sugar.toElt $ prj idx env
-  
-evalOpenExp (Const c) _ _ = Sugar.toElt c
+evalOpenExp (Let exp1 exp2) env aenv
+  = let !v1 = evalOpenExp exp1 env aenv
+    in evalOpenExp exp2 (env `PushElt` Sugar.fromElt v1) aenv
+
+evalOpenExp (Var idx) env _
+  = prjElt idx env
+
+evalOpenExp (Const c) _ _
+  = Sugar.toElt c
 
 evalOpenExp (Tuple tup) env aenv 
   = toTuple $ evalTuple tup env aenv
@@ -648,7 +654,7 @@ evalOpenExp (Size acc) _ aenv
 -- Evaluate a closed expression
 --
 evalExp :: Exp aenv t -> Val aenv -> t
-evalExp e aenv = evalOpenExp e Empty aenv
+evalExp e aenv = evalOpenExp e EmptyElt aenv
 
 
 -- Scalar primitives
@@ -719,10 +725,9 @@ evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
 -- Tuple construction and projection
 -- ---------------------------------
 
-evalTuple :: Tuple (OpenExp env aenv) t -> Val env -> Val aenv -> t
+evalTuple :: Tuple (OpenExp env aenv) t -> ValElt env -> Val aenv -> t
 evalTuple NilTup            _env _aenv = ()
-evalTuple (tup `SnocTup` e) env  aenv  = (evalTuple tup env aenv, 
-                                          evalOpenExp e env aenv)
+evalTuple (tup `SnocTup` e) env  aenv  = (evalTuple tup env aenv, evalOpenExp e env aenv)
 
 evalPrj :: TupleIdx t e -> t -> e
 evalPrj ZeroTupIdx       (!_, v)   = v
