@@ -10,12 +10,7 @@
 
 
 module Data.Array.Accelerate.SimpleConverter 
-       (
-         convert
-         -- TEMP:
-#if 0
-         , p1,t1,p2,t2,p3,t3
-#endif
+       ( convert
        )
        where
 
@@ -50,92 +45,6 @@ import qualified Data.Array.Accelerate.SimpleAST as S
 
 import qualified Data.Array.Accelerate.Tuple as T
 import qualified Data.Vector as V
-
--- TEMP:
--- import qualified Data.Array.Accelerate.Language as Lang
--- TEMP:
--- import qualified Data.Array.Accelerate.Interpreter as Interp
--- import Text.PrettyPrint.GenericPretty (doc)
-
-
---------------------------------------------------------------------------------
--- TEMPORARY -- Testing:
-
-#if 0
-p0 = Lang.use $ Sugar.fromList (Z :. (10::Int)) [1..10::Int64]
-t0 :: S.AExp
-t0 = convert p0
-
-p1 :: Sugar.Acc (Sugar.Scalar Float)
-p1 = let xs = Lang.generate (Lang.constant (Z :. (10::Int))) (\ (i) -> 3.3 )
-         ys = xs
-     in  Lang.fold (+) 0 (Lang.zipWith (*) xs ys)
-
-t1 :: S.AExp
-t1 = convert p1
-
-p2 :: Sugar.Acc (Sugar.Vector Int32)
-p2 = let xs = Lang.replicate (Lang.constant (Z :. (4::Int))) (Lang.unit 4)
-     in Lang.map (+ 10) xs
-t2 = convert p2
-
--- p3 :: Sugar.Acc (Sugar.Array Sugar.DIM2 Int32)
-p3 :: Sugar.Acc (Sugar.Array Sugar.DIM3 Int32)
-p3 = let arr = Lang.generate  (Lang.constant (Z :. (5::Int))) (\_ -> 33)
-         xs  = Lang.replicate (Lang.constant$ Z :. (2::Int) :. Sugar.All :. (3::Int)) arr
-     in xs 
-t3 = convert p3
-
--- Test 4, a program that creates an IndexCons node:
-p4 :: Sugar.Acc (Sugar.Scalar Int64)
--- p4 :: Sugar.Acc (Sugar.Exp Int64)
--- p4 :: Sugar.Exp Int64
-p4 = let arr = Lang.generate (Lang.constant (Z :. (5::Int))) (\_ -> 33) in
-     Lang.unit $ arr Lang.! (Lang.index1 2)
-        -- (Lang.constant (Z :. (3::Int)))  
-t4 = convert p4         
-
-
--- This one generates EIndex:
-p5 :: Lang.Acc (Scalar (((Z :. Sugar.All) :. Int) :. Sugar.All))
-p5 = Lang.unit$ Lang.lift $ Z :. Sugar.All :. (2::Int) :. Sugar.All
-t5 = convert p5
-
--- This one generates ETupProjectFromRight:
-p6 :: Sugar.Acc (Sugar.Vector Float)
-p6 = Lang.map go (Lang.use xs)
-  where
-    xs :: Sugar.Vector (Float, Float)
-    xs = Sugar.fromList sh [(1,1),(2,2)]
-    sh = Z :. (2::Int)
-    go x = let (a,b) = Lang.unlift x
-           in a*b
-t6 = convert p6
-
-
-transposeAcc :: Sugar.Array Sugar.DIM2 Float -> Lang.Acc (Sugar.Array Sugar.DIM2 Float)
-transposeAcc mat =
-  let mat' = Lang.use mat
-      swap = Lang.lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z :. Sugar.Exp Int :. Sugar.Exp Int
-  in
-  Lang.backpermute (swap $ Lang.shape mat') swap mat'
-
--- This one uses dynamic index head/tail (but not cons):
-p7 :: Lang.Acc (Array Sugar.DIM2 Float)
-p7 = transposeAcc (Sugar.fromList (Z :. (2::Int) :. (2::Int)) [1..4])
-t7 = convert p7
--- Evaluating "doc t7" prints:
--- Let a0
---     (TArray TFloat)
---     (Use "Array (Z :. 2) :. 2 [1.0,2.0,3.0,4.0]")
---     (Backpermute (EIndex [EIndexHeadDynamic (EIndexTailDynamic (EShape (Vr a0))),
---                           EIndexHeadDynamic (EShape (Vr a0))])
---                  (Lam [(v1, TTuple [TInt,TInt])]
---                       (EIndex [EIndexHeadDynamic (EIndexTailDynamic (EVr v1)),
---                                EIndexHeadDynamic (EVr v1)]))
---                  (Vr a0))
-
-#endif
 
 --------------------------------------------------------------------------------
 -- Exposed entrypoints for this module:
