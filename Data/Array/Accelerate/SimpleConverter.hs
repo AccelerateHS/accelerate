@@ -2,6 +2,13 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 -- {-# ANN module "HLint: ignore Eta reduce" #-}
 
+-- TODO LIST:
+--   * Implement Use
+--   * Audit treatment of shapes and indices
+--   * Audit tuple flattening guarantees
+--   * Add type info to some language forms... 
+
+
 module Data.Array.Accelerate.SimpleConverter 
        (
          convert
@@ -48,6 +55,7 @@ import qualified Data.Array.Accelerate.Language as Lang
 import qualified Data.Array.Accelerate.Interpreter as Interp
 import Text.PrettyPrint.GenericPretty (doc)
 
+
 --------------------------------------------------------------------------------
 -- TEMPORARY -- Testing:
 
@@ -74,6 +82,55 @@ p3 = let arr = Lang.generate  (Lang.constant (Z :. (5::Int))) (\_ -> 33)
          xs  = Lang.replicate (Lang.constant$ Z :. (2::Int) :. Sugar.All :. (3::Int)) arr
      in xs 
 t3 = convert p3
+
+-- Test 4, a program that creates an IndexCons node:
+p4 :: Sugar.Acc (Sugar.Scalar Int64)
+-- p4 :: Sugar.Acc (Sugar.Exp Int64)
+-- p4 :: Sugar.Exp Int64
+p4 = let arr = Lang.generate (Lang.constant (Z :. (5::Int))) (\_ -> 33) in
+     Lang.unit $ arr Lang.! (Lang.index1 2)
+        -- (Lang.constant (Z :. (3::Int)))  
+t4 = convert p4         
+
+
+-- This one generates EIndex:
+p5 :: Lang.Acc (Scalar (((Z :. Sugar.All) :. Int) :. Sugar.All))
+p5 = Lang.unit$ Lang.lift $ Z :. Sugar.All :. (2::Int) :. Sugar.All
+t5 = convert p5
+
+-- This one generates ETupProjectFromRight:
+p6 :: Sugar.Acc (Sugar.Vector Float)
+p6 = Lang.map go (Lang.use xs)
+  where
+    xs :: Sugar.Vector (Float, Float)
+    xs = Sugar.fromList sh [(1,1),(2,2)]
+    sh = Z :. (2::Int)
+    go x = let (a,b) = Lang.unlift x
+           in a*b
+t6 = convert p6
+
+
+transposeAcc :: Sugar.Array Sugar.DIM2 Float -> Lang.Acc (Sugar.Array Sugar.DIM2 Float)
+transposeAcc mat =
+  let mat' = Lang.use mat
+      swap = Lang.lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z :. Sugar.Exp Int :. Sugar.Exp Int
+  in
+  Lang.backpermute (swap $ Lang.shape mat') swap mat'
+
+-- This one uses dynamic index head/tail (but not cons):
+p7 :: Lang.Acc (Array Sugar.DIM2 Float)
+p7 = transposeAcc (Sugar.fromList (Z :. (2::Int) :. (2::Int)) [1..4])
+t7 = convert p7
+-- Evaluating "doc t7" prints:
+-- Let a0
+--     (TArray TFloat)
+--     (Use "Array (Z :. 2) :. 2 [1.0,2.0,3.0,4.0]")
+--     (Backpermute (EIndex [EIndexHeadDynamic (EIndexTailDynamic (EShape (Vr a0))),
+--                           EIndexHeadDynamic (EShape (Vr a0))])
+--                  (Lam [(v1, TTuple [TInt,TInt])]
+--                       (EIndex [EIndexHeadDynamic (EIndexTailDynamic (EVr v1)),
+--                                EIndexHeadDynamic (EVr v1)]))
+--                  (Vr a0))
 
 
 --------------------------------------------------------------------------------
@@ -115,6 +172,7 @@ envLookup :: Int -> EnvM S.Var
 envLookup i = do (env,_) <- get
                  if length env > i
                   then return (env !! i)
+--                  then return (S.var "DUMMY")
                   else error$ "Environment did not contain an element "++show i++" : "++show env
 
 getAccType :: forall aenv ans . Arrays ans => OpenAcc aenv ans -> S.Type
@@ -149,7 +207,8 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
          return$ S.Vr var
 
     -- This is real live runtime array data:
-    Use arr -> return$ S.Use (show arr)
+    Use arr -> return$ S.Use (show arr)  -- This show can throw a Prelude.(!!) exception.  Egad!!
+--    Use arr -> return$ S.Use ("FINISH USE CASE")
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
                                    <*> convertAcc acc1 
@@ -421,7 +480,8 @@ convertConst ty c =
                          case convertConst ty1 c1 of
                            S.Tup [] -> c0' 
                            S.Tup ls -> S.Tup (c0' : ls)
-                           _ -> error "mal constructed tuple"
+                           singl -> S.Tup [c0', singl]
+--                           oth -> error$ "mal constructed tuple on RHS of PairTuple: "++ show oth
     SingleTuple scalar -> 
       case scalar of 
         NumScalarType (IntegralNumType ty) -> 

@@ -70,6 +70,7 @@ run1 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
                                                  , ((1,1,1), 4) ]
               ,\() -> test1)
 
+
 run2 :: IO (() -> UA.UArray (Int,Int,Int) Int, () -> Acc (Array DIM3 Int))
 run2 = return (\() -> UA.array ((0,0,0),(1,1,1)) [ ((0,0,0), 1)
                                                  , ((0,0,1), 2)
