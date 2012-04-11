@@ -50,7 +50,7 @@ data AccBinding aenv where
            => Idx aenv (Sugar.Array sh e) -> AccBinding aenv
 
 instance Eq (AccBinding aenv) where
-  ArrayVar ix1 == ArrayVar ix2 = idxToInt ix1 == idxToInt ix2
+  ArrayVar ix1 == ArrayVar ix2 = deBruijnToInt ix1 == deBruijnToInt ix2
 
 
 
@@ -79,8 +79,8 @@ codeGenAcc acc vars =
       case pacc of
         -- non-computation forms
         --
-        Let _ _           -> internalError
-        Let2 _ _          -> internalError
+        Alet _ _          -> internalError
+        Alet2 _ _         -> internalError
         Avar _            -> internalError
         Apply _ _         -> internalError
         Acond _ _ _       -> internalError
@@ -157,7 +157,7 @@ codeGenAcc acc vars =
     liftAcc :: OpenAcc aenv a -> AccBinding aenv -> [CExtDecl]
     liftAcc _ (ArrayVar idx) =
       let avar    = OpenAcc (Avar idx)
-          idx'    = show $ idxToInt idx
+          idx'    = show $ deBruijnToInt idx
           sh      = mkShape (accDim avar) ("sh" ++ idx')
           ty      = codeGenTupleTex (accType avar)
           arr n   = "arr" ++ idx' ++ "_a" ++ show n
@@ -246,8 +246,9 @@ codeGenExp (IndexTail sh@(Shape a)) =
 codeGenExp (IndexHead ix) = return . last $ codeGenExp ix
 codeGenExp (IndexTail ix) =          init $ codeGenExp ix
 
-codeGenExp (Var i) =
-  let var = cvar ('x' : show (idxToInt i))
+codeGenExp (Let _ _) = INTERNAL_ERROR(error) "codeGenExp" "Let: not implemented yet"
+codeGenExp (Var i)   =
+  let var = cvar ('x' : show (deBruijnToInt i))
   in
   case codeGenTupleType (Sugar.eltType (undefined::t)) of
        [_] -> [var]
@@ -262,12 +263,12 @@ codeGenExp (Cond p t e) =
 
 codeGenExp (Size a)         = return $ ccall "size" (codeGenExp (Shape a))
 codeGenExp (Shape a)
-  | OpenAcc (Avar var) <- a = return $ cvar ("sh" ++ show (idxToInt var))
+  | OpenAcc (Avar var) <- a = return $ cvar ("sh" ++ show (deBruijnToInt var))
   | otherwise               = INTERNAL_ERROR(error) "codeGenExp" "expected array variable"
 
 codeGenExp (IndexScalar a e)
   | OpenAcc (Avar var) <- a =
-      let var'  = show $ idxToInt var
+      let var'  = show $ deBruijnToInt var
           arr n = cvar ("arr" ++ var' ++ "_a" ++ show n)
           sh    = cvar ("sh"  ++ var')
           ix    = ccall "toIndex" [sh, ccall "shape" (codeGenExp e)]
