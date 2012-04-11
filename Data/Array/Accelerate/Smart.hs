@@ -944,6 +944,7 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 -- float /all/ free variables ('Atag' and 'Tag') out to construct the initial environment for
 -- producing de Bruijn indices, which replaces them by 'AvarSharing' or 'VarSharing' nodes.  Hence,
 -- the tag values only serve the purpose of determining the ordering in that initial environment.
+-- They are /not/ directly used to compute the de Brujin indices.
 --
 makeOccMap :: Typeable arrs => Acc arrs -> IO (SharingAcc arrs, OccMapHash Acc)
 makeOccMap rootAcc
@@ -1193,7 +1194,7 @@ makeOccMap rootAcc
                                      return (ExpSharing (StableNameHeight sn height) exp, height) 
 
         ; case pexp of
-            Tag i           -> reconstruct $ return (Tag i, 1)
+            Tag i           -> reconstruct $ return (Tag i, 0)              -- height is 0!
             Const c         -> reconstruct $ return (Const c, 1)
             Tuple tup       -> reconstruct $ do
                                  (tup', h) <- travTup tup
@@ -1342,8 +1343,13 @@ sortInEnvOrderAcc = sortBy envOrder
   where
     envOrder (StableSharingAcc _ (AccSharing _ (Atag t1)))
              (StableSharingAcc _ (AccSharing _ (Atag t2))) = compare t1 t2
-    envOrder _ _ 
-      = INTERNAL_ERROR(error) "sortInEnvOrderAcc" "Encountered a node that is not a plain 'Atag'"
+    envOrder sa1 sa2 
+      = INTERNAL_ERROR(error) "sortInEnvOrderAcc" 
+          ("Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa1 ++ "\n  " ++ showSA sa2)
+    
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++ showPreAccOp acc
+    showSA (StableSharingAcc _ (AvarSharing sn))     = "AvarSharing " ++ show (hashStableNameHeight sn)
+    showSA (StableSharingAcc _ (AletSharing sa _ ))  = "AletSharing " ++ show sa ++ "..."
 
 -- Sort 'StableSharingExo's consisting of 'Tag' nodes only in order of ascending tags and drop the
 -- counts.
@@ -1353,8 +1359,13 @@ sortInEnvOrderExp = sortBy envOrder
   where
     envOrder (StableSharingExp _ (ExpSharing _ (Tag t1)))
              (StableSharingExp _ (ExpSharing _ (Tag t2))) = compare t1 t2
-    envOrder _ _ 
-      = INTERNAL_ERROR(error) "sortInEnvOrderExp" "Encountered a node that is not a plain 'Tag'"
+    envOrder se1 se2 
+      = INTERNAL_ERROR(error) "sortInEnvOrderExp" 
+          ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se1 ++ "\n  " ++ showSE se2)
+
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++ showPreExpOp exp
+    showSE (StableSharingExp _ (VarSharing sn))     = "VarSharing " ++ show (hashStableNameHeight sn)
+    showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " ++ show se ++ "..."
 
 -- Determine whether a 'NodeCount' is for an 'Atag' or 'Tag', which represent free variables.
 --
@@ -1931,7 +1942,7 @@ _showSharingAccOp (AccSharing _ acc)  = showPreAccOp acc
 -- for debugging
 showPreExpOp :: PreExp acc exp t -> String
 showPreExpOp (Tag _)           = "Tag"
-showPreExpOp (Const _)         = "Const"
+showPreExpOp (Const c)         = "Const " ++ show c
 showPreExpOp (Tuple _)         = "Tuple"
 showPreExpOp (Prj _ _)         = "Prj"
 showPreExpOp IndexNil          = "IndexNil"
