@@ -4,7 +4,7 @@ module Canny where
 
 import PGM
 
-import Data.Array.Accelerate                hiding (zipWith)
+import Data.Array.Accelerate                hiding (zipWith, unindex2)
 import qualified Data.Array.Accelerate      as Acc
 
 

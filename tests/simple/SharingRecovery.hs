@@ -127,14 +127,6 @@ scatter mapV defaultV inputV = Acc.permute (const) defaultV pF inputV
 enumeratedArray :: Exp DIM1 -> Acc (Array DIM1 Int)
 enumeratedArray sh = Acc.generate sh unindex1
 
-zip3 :: forall sh e1 e2 e3. (Shape sh, Elt e1, Elt e2, Elt e3)
-     => Acc (Array sh e1)
-     -> Acc (Array sh e2)
-     -> Acc (Array sh e3)
-     -> Acc (Array sh (e1, e2, e3))
-zip3 as bs cs = Acc.zipWith (\a bc -> let (b, c) = unlift bc :: (Exp e2, Exp e3)
-                                      in lift (a, b, c)) as $ Acc.zip bs cs
-
 unzip3 :: forall sh. forall e1. forall e2. forall e3. (Shape sh, Elt e1, Elt e2, Elt e3)
        => Acc (Array sh (e1, e2, e3))
        -> (Acc (Array sh e1), Acc (Array sh e2), Acc (Array sh e3))
