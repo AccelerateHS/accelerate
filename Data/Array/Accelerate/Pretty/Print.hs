@@ -60,7 +60,7 @@ prettyPreAcc pp alvl wrap (Alet2 acc1 acc2)
 prettyPreAcc pp alvl wrap (PairArrays acc1 acc2)
   = wrap $ sep [pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  alvl _    (Avar idx)
-  = text $ 'a' : show (alvl - idxToInt idx - 1)
+  = text $ 'a' : show (alvl - deBruijnToInt idx - 1)
 prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
@@ -202,13 +202,13 @@ prettyPreExp pp lvl alvl wrap (Let e1 e2)
         , text "in" <+> prettyPreExp pp (lvl + 1) alvl noParens e2
         ]
 prettyPreExp _pp lvl _ _ (Var idx)
-  = text $ 'x' : show (lvl - idxToInt idx - 1)
+  = text $ 'x' : show (lvl - deBruijnToInt idx - 1)
 prettyPreExp _pp _ _ _ (Const v)
   = text $ show (toElt v :: t)
 prettyPreExp pp lvl alvl _ (Tuple tup)
   = prettyTuple pp lvl alvl tup
 prettyPreExp pp lvl alvl wrap (Prj idx e)
-  = wrap $ prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
+  = wrap $ char '#' <> prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
 prettyPreExp _pp _lvl _alvl wrap IndexNil
   = wrap $ text "index Z"
 prettyPreExp pp lvl alvl wrap (IndexCons t h)
