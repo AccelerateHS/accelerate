@@ -559,7 +559,7 @@ stencil2Op c kernel bindings acc aenv sten1@(Array sh1 in1) sten0@(Array sh0 in0
 --
 executeOpenExp :: PreOpenExp ExecOpenAcc env aenv t -> Val env -> Val aenv -> CIO t
 executeOpenExp (Let _ _)         _   _    = INTERNAL_ERROR(error) "executeOpenExp" "Let: not implemented yet"
-executeOpenExp (Var idx)         env _    = return . toElt $ prj idx env
+executeOpenExp (Var idx)         env _    = return $ prj idx env
 executeOpenExp (Const c)         _   _    = return $ toElt c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
 executeOpenExp (PrimApp fun arg) env aenv = I.evalPrim fun <$> executeOpenExp arg env aenv
