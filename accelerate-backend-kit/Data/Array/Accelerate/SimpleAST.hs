@@ -1,6 +1,16 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Data.Array.Accelerate.SimpleAST  
---       (AccExp(..))
+   (     
+     -- * The types making up Accelerate ASTs:
+     AExp(..), AFun(..), 
+     Exp(..), Fun(..), Var,
+     Type(..), Const(..),
+     Prim(..), NumPrim(..), FloatPrim(..), ScalarPrim(..), BoolPrim(..), OtherPrim(..),
+     Boundary(..),
+     
+     -- * Helper routines and predicates:
+     var, isIntType, isFloatType
+    )   
  where
 
 -- Interned symbols:
@@ -58,6 +68,22 @@ data Type = TTuple [Type]
           | TCChar   | TCSChar | TCUChar 
  deriving (Read,Show,Eq,Generic)
 
+isIntType ty =
+  case ty of {
+    TInt  ->t;     TInt8 ->t;    TInt16  ->t;  TInt32  ->t;  TInt64 ->t; 
+    TCShort  ->t;  TCInt   ->t;  TCLong  ->t;  TCLLong ->t; 
+    TCUShort ->t;  TCUInt  ->t;  TCULong ->t;  TCULLong ->t;
+     _ -> False
+  }
+ where t = True
+
+isFloatType ty = 
+  case ty of {
+    TFloat  ->t; TDouble ->t; 
+    TCFloat ->t; TCDouble ->t;
+    _ -> False  
+  }
+ where t = True
 
 --------------------------------------------------------------------------------
 -- Accelerate Array-level Expressions
