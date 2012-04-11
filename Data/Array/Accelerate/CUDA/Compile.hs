@@ -209,7 +209,7 @@ prepareAcc iss rootAcc rootEnv = do
               rc = Left (IRef u (eitherIx v incSucc incZero))
           in do
           (b', env1 `Push` _) <- travA b (aenv `Push` rc)
-          return (node (Let a' b'), env1)
+          return (node (Alet a' b'), env1)
 
         Alet a b | Alet2 _ y <- unAcc a
                  , Avar v    <- unAcc y -> do
