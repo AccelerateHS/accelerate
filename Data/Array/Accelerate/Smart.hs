@@ -85,14 +85,24 @@ import Data.Array.Accelerate.Pretty ()
 #include "accelerate.h"
 
 
--- Configuration
+-- Configuration (mostly for debugging)
 -- -------------
 
+-- Recover the sharing of array computations?
+--
+recoverAccSharing :: Bool
+recoverAccSharing = True
+
 -- Are array computations floated out of expressions irrespective of whether they are shared or 
--- not?  'True' implies floating them out.
+-- not?  'True' implies floating them out.  (Requires 'recoverAccSharing' to be 'True' as well.)
 --
 floatOutAccFromExp :: Bool
-floatOutAccFromExp = True
+floatOutAccFromExp = recoverAccSharing && True
+
+-- Recover the sharing of scalar expressions?
+--
+recoverExpSharing :: Bool
+recoverExpSharing = False
 
 
 -- Layouts
@@ -981,10 +991,12 @@ makeOccMap rootAcc
                           -> IO (SharingAcc arrs, Int)
               reconstruct newAcc 
                 = case heightIfRepeatedOccurence of 
-                    Just height -> return (AvarSharing (StableNameHeight sn height), height)
-                    Nothing     -> do
-                                     (acc, height) <- newAcc
-                                     return (AccSharing (StableNameHeight sn height) acc, height) 
+                    Just height | recoverAccSharing 
+                      -> return (AvarSharing (StableNameHeight sn height), height)
+                    _ -> do
+                         { (acc, height) <- newAcc
+                         ; return (AccSharing (StableNameHeight sn height) acc, height)
+                         }
 
         ; case pacc of
             Atag i                   -> reconstruct $ return (Atag i, 0)           -- height is 0!
@@ -1188,10 +1200,12 @@ makeOccMap rootAcc
                           -> IO (SharingExp a, Int)
               reconstruct newExp
                 = case heightIfRepeatedOccurence of 
-                    Just height -> return (VarSharing (StableNameHeight sn height), height)
-                    Nothing     -> do
-                                     (exp, height) <- newExp
-                                     return (ExpSharing (StableNameHeight sn height) exp, height) 
+                    Just height | recoverExpSharing
+                      -> return (VarSharing (StableNameHeight sn height), height)
+                    _ -> do
+                         { (exp, height) <- newExp
+                         ; return (ExpSharing (StableNameHeight sn height) exp, height) 
+                         }
 
         ; case pexp of
             Tag i           -> reconstruct $ return (Tag i, 0)              -- height is 0!
@@ -1570,8 +1584,8 @@ determineScopes floatOutAcc accOccMap rootAcc
             tracePure "FREE" (show thisCount) $
             (AvarSharing sn, thisCount)
         reconstruct newAcc subCount
-              -- shared subtree => replace by a sharing variable
-          | accOccCount > 1
+              -- shared subtree => replace by a sharing variable (if 'recoverAccSharing' enabled)
+          | accOccCount > 1 && recoverAccSharing
           = let allCount = (StableSharingAcc sn sharingAcc `accNodeCount` 1) +++ newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount) $
@@ -1742,8 +1756,8 @@ determineScopes floatOutAcc accOccMap rootAcc
             tracePure "FREE" (show thisCount) $
             (VarSharing sn, thisCount)
         reconstruct newExp subCount
-              -- shared subtree => replace by a sharing variable
-          | expOccCount > 1
+              -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
+          | expOccCount > 1 && recoverExpSharing
           = let allCount = (StableSharingExp sn sharingExp `expNodeCount` 1) +++ newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount) $
