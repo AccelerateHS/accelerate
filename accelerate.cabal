@@ -18,7 +18,15 @@ Description:            This library defines an embedded language for
                         installed.  The CUDA backend currently doesn't support 'Char'
                         and 'Bool' arrays.
                         .
+                        An experimental OpenCL backend is available at <https://github.com/HIPERFIT/accelerate-opencl>
+                        and an experimental multicore CPU backend building on the Repa array library
+                        is available at <https://github.com/blambo/accelerate-repa>.
+                        .
                         Known bugs: <https://github.com/mchakravarty/accelerate/issues>
+                        .
+                        * New in 0.10.0.0: Complete sharing recovery for scalar expressions (but
+                            currently disabled by default). Also bug fixes in array sharing recovery
+                            and a few new convenience functions.
                         .
                         * New in 0.9.0.0: Streaming, precompilation, Repa-style indices, stencils, 
                             more scans, rank-polymorphic fold, generate, block I/O & many bug fixes
