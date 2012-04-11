@@ -797,12 +797,12 @@ unindex1 ix = let Z:.i = unlift ix in i
 -- | Creates a rank-2 index from two exp ints.
 -- 
 index2 :: Exp Int -> Exp Int -> Exp DIM2
-index2 i j      = lift (Z :. i :. j)
+index2 i j = lift (Z :. i :. j)
 
 -- | Destructs a rank-2 index to an exp tuple of two ints.
 -- 
 unindex2 :: Exp DIM2 -> Exp (Int, Int)
-unindex2 ix     = let Z :. i :. j = unlift (ix :: Exp DIM2) in lift ((i,j) :: (Exp Int, Exp Int))
+unindex2 ix = let Z :. i :. j = unlift ix in lift ((i, j) :: (Exp Int, Exp Int))
 
 
 -- Conditional expressions
