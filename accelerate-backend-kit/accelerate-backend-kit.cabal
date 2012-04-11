@@ -44,3 +44,15 @@ Library
                         symbol          >= 0.1,
                         vector          >= 0.9,
                         ghc             >= 7.2
+
+
+Test-Suite test-accelerate-backend-kit
+    type:       exitcode-stdio-1.0
+    main-is:    Test.hs
+--    ghc-options: -rtsopts -threaded
+    build-depends: base >= 4 
+--                 , array >= 0.3
+--                 , deepseq >= 1.2
+--                 , binary
+--                 , QuickCheck, HUnit, time
+                 , test-framework, test-framework-hunit, HUnit

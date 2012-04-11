@@ -125,7 +125,7 @@ Library
                         directory       >= 1.0 && < 1.2,
                         ghc-prim        == 0.2.*,
                         mtl             == 2.0.*,
-                        pretty          >= 1.0 && < 1.2,
+                        pretty          >= 1.0 && < 1.2
 
   Include-Dirs:         include
 
