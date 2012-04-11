@@ -107,11 +107,11 @@ executeOpenAcc (ExecAcc count kernel bindings acc) aenv =
     --
     Avar ix  -> return (prj ix aenv)
 
-    Let  a b -> do
+    Alet  a b -> do
       a0 <- executeOpenAcc a aenv
       executeOpenAcc b (aenv `Push` a0) <* applyArraysR deleteArray arrays a0
 
-    Let2 a b -> do
+    Alet2 a b -> do
       (a1, a0) <- executeOpenAcc a aenv
       executeOpenAcc b (aenv `Push` a1 `Push` a0) -- <* applyArraysR deleteArray arrays a0
                                                   -- <* applyArraysR deleteArray arrays a1
@@ -558,6 +558,7 @@ stencil2Op c kernel bindings acc aenv sten1@(Array sh1 in1) sten0@(Array sh0 in0
 -- Evaluate an open expression
 --
 executeOpenExp :: PreOpenExp ExecOpenAcc env aenv t -> Val env -> Val aenv -> CIO t
+executeOpenExp (Let _ _)         _   _    = INTERNAL_ERROR(error) "executeOpenExp" "Let: not implemented yet"
 executeOpenExp (Var idx)         env _    = return . toElt $ prj idx env
 executeOpenExp (Const c)         _   _    = return $ toElt c
 executeOpenExp (PrimConst c)     _   _    = return $ I.evalPrimConst c
@@ -625,7 +626,7 @@ bindAcc :: CUDA.Module
         -> AccBinding aenv
         -> CIO ()
 bindAcc mdl aenv (ArrayVar idx) =
-  let idx'        = show $ idxToInt idx
+  let idx'        = show $ deBruijnToInt idx
       Array sh ad = prj idx aenv
       --
       bindDim = liftIO $
