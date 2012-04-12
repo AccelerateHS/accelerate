@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -15,26 +16,29 @@
 module Data.Array.Accelerate.Debug (
 
   -- * Conditional tracing
-  initTrace, queryTrace, traceLine, traceChunk
+  initTrace, queryTrace, traceLine, traceChunk, tracePure
 
 ) where
 
 -- standard libraries
 import Control.Monad
 import Data.IORef
-import System.IO
+import Debug.Trace
 import System.IO.Unsafe (unsafePerformIO)
 
 -- friends
 import Data.Array.Accelerate.Pretty ()
 
+#if __GLASGOW_HASKELL__ < 704
+traceIO :: String -> IO ()
+traceIO = putTraceMsg
+#endif
 
 -- This flag indicates whether tracing messages should be emitted.
 --
 traceFlag :: IORef Bool
 {-# NOINLINE traceFlag #-}
 traceFlag = unsafePerformIO $ newIORef False
--- traceFlag = unsafePerformIO $ newIORef True
 
 -- |Initialise the /trace flag/, which determines whether tracing messages should be emitted.
 --
@@ -53,7 +57,7 @@ traceLine :: String -> String -> IO ()
 traceLine header msg
   = do { doTrace <- queryTrace
        ; when doTrace 
-         $ hPutStrLn stderr (header ++ ": " ++ msg)
+         $ traceIO (header ++ ": " ++ msg)
        }
 
 -- |Emit a trace message if the /trace flag/ is set.  The first string indicates the location of
@@ -64,5 +68,10 @@ traceChunk :: String -> String -> IO ()
 traceChunk header msg
   = do { doTrace <- queryTrace
        ; when doTrace 
-         $ hPutStrLn stderr (header ++ "\n  " ++ msg)
+         $ traceIO (header ++ "\n  " ++ msg)
        }
+
+-- |Perform 'traceLine' in a pure computation.
+--
+tracePure :: String -> String -> a -> a
+tracePure header msg val = unsafePerformIO (traceLine header msg) `seq` val

@@ -36,8 +36,8 @@ accDim (OpenAcc acc) = preAccDim accDim acc
 preAccDim :: forall acc aenv sh e. AccDim acc -> PreOpenAcc acc aenv (Array sh e) -> Int
 preAccDim k pacc =
   case pacc of
-    Let  _ acc           -> k acc
-    Let2 _ acc           -> k acc
+    Alet  _ acc          -> k acc
+    Alet2 _ acc          -> k acc
     Avar _               -> -- ndim (eltType (undefined::sh))   -- should work - GHC 6.12 bug?
                             case arrays :: ArraysR (Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
@@ -80,8 +80,8 @@ preAccDim2 :: forall acc aenv sh1 e1 sh2 e2.
            -> (Int, Int)
 preAccDim2 k1 k2 pacc =
   case pacc of
-    Let  _ acc           -> k2 acc
-    Let2 _ acc           -> k2 acc
+    Alet  _ acc          -> k2 acc
+    Alet2 _ acc          -> k2 acc
     PairArrays acc1 acc2 -> (k1 acc1, k1 acc2)
     Avar _ ->
       -- (ndim (eltType (undefined::dim1)), ndim (eltType (undefined::dim2)))

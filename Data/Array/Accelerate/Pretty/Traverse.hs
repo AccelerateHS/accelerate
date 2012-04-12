@@ -37,10 +37,10 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     combine = c (accFormat f)
     leaf    = l (accFormat f)
     travAcc' :: PreOpenAcc OpenAcc aenv a -> m b
-    travAcc' (Let acc1 acc2)  = combine "Let" [travAcc f c l acc1, travAcc f c l acc2]
-    travAcc' (Let2 acc1 acc2) = combine "Let2" [ travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (Alet acc1 acc2)  = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
+    travAcc' (Alet2 acc1 acc2) = combine "Alet2" [ travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (PairArrays acc1 acc2) = combine "PairArrays" [travAcc f c l acc1, travAcc f c l acc2]
-    travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
+    travAcc' (Avar idx) = leaf ("AVar " `cat` deBruijnToInt idx)
     travAcc' (Apply afun acc) = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
     travAcc' (Acond e acc1 acc2) = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Use arr) = combine "Use" [ travArray f l arr ]
@@ -80,7 +80,8 @@ travExp f c l expr = travExp' expr
     combine = c (expFormat f)
     leaf    = l (expFormat f)
     travExp' :: OpenExp env aenv a -> m b
-    travExp' (Var idx)           = leaf ("Var "   `cat` idxToInt idx)
+    travExp' (Let e1 e2)         = combine "Let" [travExp f c l e1, travExp f c l e2]
+    travExp' (Var idx)           = leaf ("Var "   `cat` deBruijnToInt idx)
     travExp' (Const v)           = leaf ("Const " `cat` (toElt v :: a))
     travExp' (Tuple tup)         = combine "Tuple" [ travTuple f c l tup ]
     travExp' (Prj idx e)         = combine ("Prj " `cat` tupleIdxToInt idx) [ travExp f c l e ]

@@ -44,13 +44,13 @@ prettyAcc :: PrettyAcc OpenAcc
 prettyAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyAcc alvl wrap acc
 
 prettyPreAcc :: PrettyAcc acc -> Int -> (Doc -> Doc) -> PreOpenAcc acc aenv a -> Doc
-prettyPreAcc pp alvl wrap (Let acc1 acc2)
+prettyPreAcc pp alvl wrap (Alet acc1 acc2)
   = wrap 
   $ sep [ hang (text "let a" <> int alvl <+> char '=') 2 $
             pp alvl noParens acc1
         , text "in" <+> pp (alvl + 1) noParens acc2
         ]
-prettyPreAcc pp alvl wrap (Let2 acc1 acc2)
+prettyPreAcc pp alvl wrap (Alet2 acc1 acc2)
   = wrap
   $ sep [ hang (text "let (a" <> int alvl <> text ", a" <> int (alvl + 1) <> char ')' <+>
                 char '=') 2 $
@@ -60,7 +60,7 @@ prettyPreAcc pp alvl wrap (Let2 acc1 acc2)
 prettyPreAcc pp alvl wrap (PairArrays acc1 acc2)
   = wrap $ sep [pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  alvl _    (Avar idx)
-  = text $ 'a' : show (alvl - idxToInt idx - 1)
+  = text $ 'a' : show (alvl - deBruijnToInt idx - 1)
 prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
@@ -183,7 +183,7 @@ prettyPreFun pp alvl fun =
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenFun acc env' aenv' fun' -> (Int, Doc)
-     count lvl (Body body) = (-1, prettyPreExp pp lvl alvl noParens body)
+     count lvl (Body body) = (-1, prettyPreExp pp (lvl + 1) alvl noParens body)
      count lvl (Lam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print an expression.
@@ -195,14 +195,20 @@ prettyExp = prettyPreExp prettyAcc
 
 prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
+prettyPreExp pp lvl alvl wrap (Let e1 e2)
+  = wrap 
+  $ sep [ hang (text "let x" <> int lvl <+> char '=') 2 $
+            prettyPreExp pp lvl alvl noParens e1
+        , text "in" <+> prettyPreExp pp (lvl + 1) alvl noParens e2
+        ]
 prettyPreExp _pp lvl _ _ (Var idx)
-  = text $ 'x' : show (lvl - idxToInt idx)
+  = text $ 'x' : show (lvl - deBruijnToInt idx - 1)
 prettyPreExp _pp _ _ _ (Const v)
   = text $ show (toElt v :: t)
 prettyPreExp pp lvl alvl _ (Tuple tup)
   = prettyTuple pp lvl alvl tup
 prettyPreExp pp lvl alvl wrap (Prj idx e)
-  = wrap $ prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
+  = wrap $ char '#' <> prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
 prettyPreExp _pp _lvl _alvl wrap IndexNil
   = wrap $ text "index Z"
 prettyPreExp pp lvl alvl wrap (IndexCons t h)

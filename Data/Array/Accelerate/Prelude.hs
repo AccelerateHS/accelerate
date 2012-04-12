@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
 -- Copyright   : [2010..2011] Manuel M T Chakravarty, Ben Lever
@@ -64,12 +65,13 @@ unzip arr = (map fst arr, map snd arr)
 -- | Takes three arrays and produces an array of a three-tuple.
 --   TODO Maybe there is a better way to implement this but with 2 zips?!
 --
-zip3 :: forall a b c sh. (Shape sh, Elt c, Elt b, Elt a) =>
-     Acc (Array sh a) -> Acc (Array sh b) -> Acc (Array sh c) -> Acc (Array sh (a, b, c))
+zip3 :: forall a b c sh. (Shape sh, Elt a, Elt b, Elt c) 
+     => Acc (Array sh a) -> Acc (Array sh b) -> Acc (Array sh c) -> Acc (Array sh (a, b, c))
 zip3 a b c = zipWith f a $ zip b c
   where
-    f a bc = let (b,c) = unlift bc :: (Exp b, Exp c) in
-             lift (a, b, c) :: Exp (a,b,c)
+    f a bc = let (b, c) = unlift bc :: (Exp b, Exp c)
+             in 
+             lift (a, b, c) :: Exp (a, b, c)
 
 -- Reductions
 -- ----------
