@@ -30,19 +30,25 @@ Requirements
   * Haskell libraries as specified in `accelerate.cabal`
   * For the CUDA backend, CUDA version 3.0 or later
 
+Examples and documentation
+--------------------------
+
+The GitHub repository contains a subdirectory `accelerate-examples`, which provides a range of computational kernels and a few complete applications. These examples are also available from Hackage in a separate package called [accelerate-examples][Hackage-examples]. Install it with `cabal install accelerate-examples`.
+
+Online documentation is on the [GitHub wiki][Wiki].
+
 Contacts
 --------
 
 The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> (aka TacticalGrace on #haskell and related channels).
 
-Both user and developer questions and discussions are welcome at `accelerate@projects.haskell.org`.  **Sorry, this mailing list is temporarily unavailable.**
+Both user and developer questions and discussions are welcome at `accelerate@projects.haskell.org`.  **Sorry, this mailing list is currently unavailable.**
 
 What's missing?
 ---------------
 
 Here is a list of features that are currently missing:
 
- * Reification of sharing in scalar expressions (sharing is being recovered for array computations)
  * The CUDA backend does not support arrays of type Char and Bool at the moment.
  * Preliminary API (parts of the API may still change in subsequent releases)
 
@@ -54,10 +60,12 @@ Haddock documentation is included in the package and linked from the Hackage pag
 The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
 
 
-  [CKLM+11]:   http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
-  [HIW'09]:    http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:     http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
-  [Hackage]:   http://hackage.haskell.org/package/accelerate
-  [GitHub]:    https://github.com/mchakravarty/accelerate
-  [HOAS-conv]: http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [CKLM+11]:          http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [HIW'09]:           http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
+  [Cha09]:            http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Hackage]:          http://hackage.haskell.org/package/accelerate
+  [Hackage-examples]: http://hackage.haskell.org/package/accelerate-examples
+  [GitHub]:           https://github.com/mchakravarty/accelerate
+  [Wiki]:             https://github.com/mchakravarty/accelerate/wiki
+  [HOAS-conv]:        http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   
