@@ -1,5 +1,5 @@
 Name:                accelerate-examples
-Version:             0.1.0.0
+Version:             0.2.0.1
 Synopsis:            Examples using the Accelerate library
 Description:         Examples using the Accelerate library
 License:             BSD3
@@ -9,6 +9,10 @@ Maintainer:          Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 Category:            Compilers/Interpreters,
 Build-type:          Simple
 Cabal-version:       >=1.6
+Homepage:            http://www.cse.unsw.edu.au/~chak/project/accelerate/
+
+Category:            Compilers/Interpreters, Concurrency, Data, Parallelism
+Stability:           Experimental
 
 
 Flag cuda
@@ -22,6 +26,37 @@ Flag io
 
 Executable accelerate-examples
   Main-is:              Main.hs
+  Other-modules:        Benchmark
+                        Test
+                        Validate
+                        Config
+                        Random
+                        Util
+                        Canny
+                        IntegralImage
+                        PGM
+                        BlockCopy
+                        Vector
+                        Backpermute
+                        Map
+                        ScanSeg
+                        Stencil2
+                        ZipWith
+                        Fold
+                        Permute
+                        Stencil
+                        Zip
+                        BlackScholes
+                        SASUM
+                        SharingRecovery
+                        DotP
+                        SAXPY
+                        SliceExamples
+                        Filter
+                        Radix
+                        SMVM
+                        SMVM.Matrix
+                        SMVM.MatrixMarket
   hs-source-dirs:       src
                         tests/primitives
                         tests/simple
@@ -41,7 +76,7 @@ Executable accelerate-examples
   if flag(io)
     CPP-options:        -DACCELERATE_IO
 
-  build-depends:        accelerate              == 0.9.*,
+  build-depends:        accelerate              == 0.10.*,
                         array                   >= 0.3 && < 0.5,
                         attoparsec              == 0.8.*,
                         base                    == 4.*,
