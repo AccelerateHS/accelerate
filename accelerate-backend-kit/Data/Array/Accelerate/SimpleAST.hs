@@ -101,8 +101,8 @@ data AExp =
   | PairArrays AExp AExp       -- PairArrays Array1 Array2
   | Apply AFun AExp            -- Function $ Argument
   | Cond Exp AExp AExp         -- Array level if statements
-  | Use String -- A REAL ARRAY GOES HERE! -- TEMP - FIXME
-  | Generate Exp Fun
+  | Use      String -- A REAL ARRAY GOES HERE! -- TEMP - FIXME
+  | Generate Type Exp Fun
     -- Generate Function Array, very similar to map
   | Replicate String Exp AExp  -- TEMP - fix first field
   | Index     String AExp Exp  -- TEMP - fix first field 

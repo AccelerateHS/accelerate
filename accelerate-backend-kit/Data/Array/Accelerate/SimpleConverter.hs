@@ -92,6 +92,8 @@ getAccType :: forall aenv ans . Arrays ans => OpenAcc aenv ans -> S.Type
 getAccType acc = convertArrayType ty 
   where (ty :: ArraysR ans) = arrays
 
+getAccTypePre acc = getAccType (OpenAcc acc)
+
 getExpType :: forall env aenv ans . Sugar.Elt ans => OpenExp env aenv ans -> S.Type
 getExpType e = convertType ty 
   where  ty  = Sugar.eltType ((error"This shouldn't happen (0)")::ans) 
@@ -121,9 +123,20 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
       do var <- envLookup (idxToInt idx)
          return$ S.Vr var
 
+    ------------------------------------------------------------
+    -- Array creation:
+
+    -- These should include types.
+
     -- This is real live runtime array data:
-    Use arr -> return$ S.Use (show arr)  -- This show can throw a Prelude.(!!) exception.  Egad!!
---    Use arr -> return$ S.Use ("FINISH USE CASE")
+    -- TEMP FIXME -- need to finish the Use case:
+    Use arr -> return$ S.Use (show arr)
+
+    Generate sh f -> S.Generate (getAccTypePre eacc)
+                                <$> convertExp sh
+                                <*> convertFun f
+
+    ------------------------------------------------------------
 
     Acond cond acc1 acc2 -> S.Cond <$> convertExp cond 
                                    <*> convertAcc acc1 
@@ -184,14 +197,8 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
     Scanr1 f   acc -> S.Scanr1 <$> convertFun f
                                <*> convertAcc acc
 
-    Generate sh f -> S.Generate <$> convertExp sh
-                                <*> convertFun f
-
-    Replicate sliceIndex slix a -> 
-      
-      let 
-          dimSl  = accDim a
---          dimOut = accDim eacc
+    Replicate sliceIndex slix a ->       
+      let dimSl  = accDim a
           extend :: SliceIndex slix sl co dim -> Int -> [Int]
           extend (SliceNil)            n = []
           extend (SliceAll   sliceIdx) n = dimSl : extend sliceIdx (n+1)
@@ -465,7 +472,9 @@ convertFun =  loop []
  where 
    loop :: forall env aenv t . 
 	   [(S.Var,S.Type)] -> OpenFun env aenv t -> EnvM S.Fun
-   loop acc (Body b) = do b' <- convertExp b 
+   loop acc (Body b) = do b'  <- convertExp b 
+                          -- It would perhaps be nice to record the output type of function 
+			  -- here as well.  But b's type isn't in class Elt.
 			  return (S.Lam (reverse acc) b')
    -- Here we again dig around in the Haskell types to find the type information we need.
    -- In this case we use quite a few scoped type variables:
