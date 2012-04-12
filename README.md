@@ -35,7 +35,9 @@ Examples and documentation
 
 The GitHub repository contains a subdirectory `accelerate-examples`, which provides a range of computational kernels and a few complete applications. These examples are also available from Hackage in a separate package called [accelerate-examples][Hackage-examples]. Install it with `cabal install accelerate-examples`.
 
-Online documentation is on the [GitHub wiki][Wiki].
+  * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
+  * Online documentation is on the [GitHub wiki][Wiki].
+  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
 
 Contacts
 --------
@@ -52,12 +54,6 @@ Here is a list of features that are currently missing:
  * The CUDA backend does not support arrays of type Char and Bool at the moment.
  * Preliminary API (parts of the API may still change in subsequent releases)
 
-Documentation
--------------
-
-Haddock documentation is included in the package and linked from the Hackage page. Furthermore, the source package contains a few simple examples in the `accelerate-examples/` directory.
-
-The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
 
 
   [CKLM+11]:          http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
