@@ -1,5 +1,5 @@
 Name:                accelerate-examples
-Version:             0.2.0.0
+Version:             0.2.0.1
 Synopsis:            Examples using the Accelerate library
 Description:         Examples using the Accelerate library
 License:             BSD3
@@ -9,6 +9,10 @@ Maintainer:          Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 Category:            Compilers/Interpreters,
 Build-type:          Simple
 Cabal-version:       >=1.6
+Homepage:            http://www.cse.unsw.edu.au/~chak/project/accelerate/
+
+Category:            Compilers/Interpreters, Concurrency, Data, Parallelism
+Stability:           Experimental
 
 
 Flag cuda

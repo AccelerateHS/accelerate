@@ -51,7 +51,7 @@ Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
 Bug-reports:            https://github.com/mchakravarty/accelerate/issues
 
-Category:               Compilers/Interpreters, Concurrency, Data
+Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 -- Should be in the Library stanza, and only enabled for the CUDA backend,
