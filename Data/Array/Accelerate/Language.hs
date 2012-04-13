@@ -152,6 +152,20 @@ replicate = Acc $$ Replicate
 
 -- |Construct a new array by applying a function to each index.
 --
+-- For example, the following will generate a one-dimensional array
+-- (`Vector`) of three floating point numbers:
+-- 
+-- > generate (index1 3) (\_ -> 1.2)
+-- 
+-- Or, equivalently:
+--
+-- > generate (constant (Z :. (3::Int))) (\_ -> 1.2)
+-- 
+-- Finally, the following will create an array equivalent to '[1..10]':
+--
+-- > generate (index1 10) $ \ ix -> 
+-- >          let (Z :. i) = unlift ix 
+-- >          in fromIntegral i
 generate :: (Shape ix, Elt a)
          => Exp ix
          -> (Exp ix -> Exp a)
@@ -639,7 +653,8 @@ instance Lift CSChar where
   lift = Exp . Const
 
 instance Lift CUChar where
-  type Plain CUChar = CUChar
+  
+type Plain CUChar = CUChar
   lift = Exp . Const
  -}
 
