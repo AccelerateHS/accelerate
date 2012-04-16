@@ -15,7 +15,8 @@
 module Data.Array.Accelerate.Prelude (
 
   -- ** Map-like
-  zip, unzip, zip3,
+  zip, zip3, zip4,
+  unzip, unzip3, unzip4,
   
   -- ** Reductions
   foldAll, fold1All,
@@ -30,16 +31,29 @@ module Data.Array.Accelerate.Prelude (
   -- ** Reshaping of arrays
   flatten
 
+  -- ** Enumeration and filling
+  fill, enumFromN, enumFromStepN,
+
+  -- ** Gather and scatter
+  gather, gatherIf, scatter, scatterIf,
+
+  -- ** Subvector extraction
+  init, tail, take, drop, slit
+
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, zip3, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry)
+import Prelude   hiding (replicate, zip, zip3, unzip, unzip3, map, zipWith,
+                         scanl, scanl1, scanr, scanr1,
+                         init, tail, take, drop, filter, max, min, not,
+                         fst, snd, curry, uncurry,
+                         fromIntegral)
 import qualified Prelude
 
 -- friends  
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Type
 
 
 -- Map-like composites
@@ -54,6 +68,29 @@ zip :: (Shape sh, Elt a, Elt b)
     -> Acc (Array sh (a, b))
 zip = zipWith (curry lift)
 
+-- |Take three arrays and and return an array of triples, analogous to zip.
+--
+zip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh (a, b, c))
+zip3 as bs cs
+  = zipWith (\a bc -> let (b, c) = unlift bc :: (Exp b, Exp c) in lift (a, b, c)) as
+  $ zip bs cs
+
+-- |Take three arrays and and return an array of quadruples, analogous to zip.
+--
+zip4 :: forall sh. forall a. forall b. forall c. forall d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh (a, b, c, d))
+zip4 as bs cs ds
+  = zipWith (\a bcd -> let (b, c, d) = unlift bcd :: (Exp b, Exp c, Exp d) in lift (a, b, c, d)) as
+  $ zip3 bs cs ds
+
 -- |The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 -- 
@@ -62,16 +99,31 @@ unzip :: (Shape sh, Elt a, Elt b)
       -> (Acc (Array sh a), Acc (Array sh b))
 unzip arr = (map fst arr, map snd arr)
 
--- | Takes three arrays and produces an array of a three-tuple.
---   TODO Maybe there is a better way to implement this but with 2 zips?!
+-- |Take an array of triples and return three arrays, analogous to unzip.
 --
-zip3 :: forall a b c sh. (Shape sh, Elt a, Elt b, Elt c) 
-     => Acc (Array sh a) -> Acc (Array sh b) -> Acc (Array sh c) -> Acc (Array sh (a, b, c))
-zip3 a b c = zipWith f a $ zip b c
+unzip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
+       => Acc (Array sh (a, b, c))
+       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
+unzip3 abcs = (as, bs, cs)
   where
-    f a bc = let (b, c) = unlift bc :: (Exp b, Exp c)
-             in 
-             lift (a, b, c) :: Exp (a, b, c)
+    (bs, cs)  = unzip bcs
+    (as, bcs) = unzip
+              $ map (\abc -> let (a, b, c) = unlift abc :: (Exp a, Exp b, Exp c) in lift (a, lift (b, c))) abcs
+
+-- |Take an array of quadruples and return four arrays, analogous to unzip.
+--
+unzip4 :: forall sh. forall a. forall b. forall c. forall d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
+       => Acc (Array sh (a, b, c, d))
+       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
+unzip4 abcds = (as, bs, cs, ds)
+  where
+    (as, bs)   = unzip abs
+    (cs, ds)   = unzip cds
+    (abs, cds) = unzip
+               $ map (\abcd -> let (a, b, c, d) = unlift abcd :: (Exp a, Exp b, Exp c, Exp d)
+                               in lift (lift (a, b), lift (c, d)))
+                     abcds
+
 
 -- Reductions
 -- ----------
@@ -395,3 +447,179 @@ mkSegApply op = apply
 --
 flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Array DIM1 a)
 flatten a = reshape (index1 $ size a) a
+
+-- Enumeration and filling
+-- -----------------------
+
+-- | Create an array where all elements are the same value.
+--
+fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
+fill sh c = generate sh (const c)
+
+-- | Create an array of the given shape containing the values x, x+1, etc (in
+--   row-major order).
+--
+enumFromN :: (Shape sh, Elt e, IsNum e) => Exp sh -> Exp e -> Acc (Array sh e)
+enumFromN sh x = enumFromStepN sh x 1
+
+-- | Create an array of the given shape containing the values x, x+y, x+y+y, etc
+--   (in row-major order).
+--
+enumFromStepN :: (Shape sh, Elt e, IsNum e)
+              => Exp sh
+              -> Exp e    -- ^x
+              -> Exp e    -- ^y
+              -> Acc (Array sh e)
+enumFromStepN sh x y = reshape sh
+                     $ generate (index1 $ shapeSize sh)
+                                ((\i -> ((fromIntegral i) * y) + x) . unindex1)
+
+
+-- Gather operations
+-- -----------------
+
+-- | Copy elements from source array to destination array according to a map. This
+--   is a backpermute operation where a 'map' vector encodes the ouput to input
+--   index mapping. For example:
+--
+--    input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--    map    = [1, 3, 7, 2, 5, 3]
+--
+--    output = [9, 4, 1, 6, 2, 4]
+--
+gather :: (Elt e)
+       => Acc (Vector Int)      -- ^map
+       -> Acc (Vector e)        -- ^input
+       -> Acc (Vector e)        -- ^output
+gather mapV inputV = backpermute (shape mapV) bpF inputV
+  where
+    bpF ix = lift (Z :. (mapV ! ix))
+
+
+-- | Conditionally copy elements from source array to destination array according
+--   to a map. This is a backpermute opereation where a 'map' vector encdes the
+--   output to input index mapping. In addition, there is a 'mask' vector, and an
+--   associated predication function, that specifies whether an element will be
+--   copied. If not copied, the output array assumes the default vector's value.
+--   For example:
+--
+--    default = [6, 6, 6, 6, 6, 6]
+--    map     = [1, 3, 7, 2, 5, 3]
+--    mask    = [3, 4, 9, 2, 7, 5]
+--    pred    = (> 4)
+--    input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--
+--    output  = [6, 6, 1, 6, 2, 4]
+--
+gatherIf :: (Elt e, Elt e')
+         => Acc (Vector Int)    -- ^map
+         -> Acc (Vector e)      -- ^mask
+         -> (Exp e -> Exp Bool) -- ^predicate
+         -> Acc (Vector e')     -- ^default
+         -> Acc (Vector e')     -- ^input
+         -> Acc (Vector e')     -- ^output
+gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
+  where
+    zwF p g   = p ? (unlift g)
+    gatheredV = zip (gather mapV inputV) defaultV
+    predV     = map pred maskV
+
+
+-- Scatter operations
+-- ------------------
+
+-- | Copy elements from source array to destination array according to a map. This
+--   is a forward-permute operation where a 'map' vector encodes an input to output
+--   index mapping. Output elements for indicies that are not mapped asume the default
+--   vector's value.  For example:
+--
+--    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--    map     = [1, 3, 7, 2, 5, 8]
+--    input   = [1, 9, 6, 4, 4, 2, 5]
+--
+--    output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
+--
+--   Note if the same index appears in the map more than once, the result is
+--   undefined. The map vector cannot be larger than the input vector.
+--
+scatter :: (Elt e)
+        => Acc (Vector Int)      -- ^map
+        -> Acc (Vector e)        -- ^default
+        -> Acc (Vector e)        -- ^input
+        -> Acc (Vector e)        -- ^output
+scatter mapV defaultV inputV = permute (const) defaultV pF inputV
+  where
+    pF ix = lift (Z :. (mapV ! ix))
+
+
+-- | Conditionally copy elements from source array to destination array according
+--   to a map. This is a forward-permute operation where a 'map' vector encodes an
+--   input to output index mapping. In addition, there is a 'mask' vector, and an
+--   associated predicate function, that specifies whether an elements will be
+--   copied. If not copied, the ouput array assumes the default vector's value. For
+--   example:
+--
+--    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--    map     = [1, 3, 7, 2, 5, 8]
+--    mask    = [3, 4, 9, 2, 7, 5]
+--    pred    = (> 4)
+--    input   = [1, 9, 6, 4, 4, 2]
+--
+--    output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
+--
+--   Note if the same index appears in the map more than once, the result is
+--   undefined. The map and input vector must be of the same length.
+--
+scatterIf :: (Elt e, Elt e')
+          => Acc (Vector Int)      -- ^map
+          -> Acc (Vector e)        -- ^mask
+          -> (Exp e -> Exp Bool)   -- ^predicate
+          -> Acc (Vector e')       -- ^default
+          -> Acc (Vector e')       -- ^input
+          -> Acc (Vector e')       -- ^output
+scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
+  where
+    pF ix = (pred (maskV ! ix)) ? (lift (Z :. (mapV ! ix)), ignore)
+
+
+
+-- Extracting subvectors
+-- ---------------------
+
+
+-- | Yield the first 'n' elements of the input vector. The vector must contain
+--   no more than 'n' elements.
+--
+take :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
+take n = backpermute (index1 n) id
+
+-- | Yield all but the first 'n' elements of the input vector. The vector must
+--   contain no more than 'n' elements.
+--
+drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
+drop n arr = backpermute (ilift1 (\x -> x - n) $ shape arr) (ilift1 (+ n)) arr
+
+
+-- | Yield all but the last element of the input vector. The vector may not
+--   be empty.
+--
+init :: Elt e => Acc (Vector e) -> Acc (Vector e)
+init arr = take ((unindex1 $ shape arr) - 1) arr
+
+
+-- | Yield all but the first element of the input vector. The vector may not
+--   be empty.
+tail :: Elt e => Acc (Vector e) -> Acc (Vector e)
+tail = drop 1
+
+
+-- | Yield a slit (slice) from the vector. The vector must contain at least
+--   i + n elements.
+--
+slit :: Elt e
+      => Exp Int
+      -> Exp Int
+      -> Acc (Vector e)
+      -> Acc (Vector e)
+slit i n = backpermute (index1 n) (ilift1 (+ i))
+

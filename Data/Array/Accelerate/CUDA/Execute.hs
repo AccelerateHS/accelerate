@@ -582,10 +582,9 @@ executeOpenExp (Shape a) _ aenv = do
   freeArray ad
   return (toElt sh)
 
-executeOpenExp (Size a) _ aenv = do
-  (Array sh ad) <- executeOpenAcc a aenv
-  freeArray ad
-  return (size sh)
+executeOpenExp (ShapeSize e) env aenv = do
+  sh <- executeOpenExp e env aenv
+  return (size $ fromElt sh)
 
 executeOpenExp (Cond c t e) env aenv = do
   p <- executeOpenExp c env aenv

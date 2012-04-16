@@ -233,8 +233,8 @@ prettyPreExp pp lvl alvl wrap (IndexScalar idx i)
   = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> pp alvl parens idx
-prettyPreExp pp _lvl alvl wrap (Size idx)
-  = wrap $ text "size" <+> pp alvl parens idx
+prettyPreExp pp lvl alvl wrap (ShapeSize idx)
+  = wrap $ text "shapeSize" <+> parens (prettyPreExp pp lvl alvl parens idx)
 
 -- Pretty print nested pairs as a proper tuple.
 --

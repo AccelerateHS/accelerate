@@ -261,7 +261,7 @@ codeGenExp (Cond p t e) =
   in
   zipWith branch (codeGenExp t) (codeGenExp e)
 
-codeGenExp (Size a)         = return $ ccall "size" (codeGenExp (Shape a))
+codeGenExp (ShapeSize e)    = return $ ccall "size" (codeGenExp e)
 codeGenExp (Shape a)
   | OpenAcc (Avar var) <- a = return $ cvar ("sh" ++ show (deBruijnToInt var))
   | otherwise               = INTERNAL_ERROR(error) "codeGenExp" "expected array variable"

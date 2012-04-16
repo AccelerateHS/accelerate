@@ -455,9 +455,9 @@ prepareAcc iss rootAcc rootEnv = do
           (a', env1) <- travA a aenv
           return (Shape a', env1, bind a' `cons` vars)
 
-        Size a          -> do
-          (a', env1) <- travA a aenv
-          return (Size a', env1, bind a' `cons` vars)
+        ShapeSize e     -> do
+          (e', env1, var1) <- travE e aenv vars
+          return (ShapeSize e', env1, var1)
 
 
     travT :: Tuple (OpenExp env aenv) t

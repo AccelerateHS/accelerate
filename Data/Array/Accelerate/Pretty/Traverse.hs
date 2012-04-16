@@ -95,7 +95,7 @@ travExp f c l expr = travExp' expr
     travExp' (PrimApp p a)       = combine "PrimApp" [ l (primFunFormat f) (labelForPrimFun p), travExp f c l a ]
     travExp' (IndexScalar idx i) = combine "IndexScalar" [ travAcc f c l idx, travExp f c l i]
     travExp' (Shape idx)         = combine "Shape" [ travAcc f c l idx ]
-    travExp' (Size idx)          = combine "Size" [ travAcc f c l idx ]
+    travExp' (ShapeSize e)       = combine "ShapeSize" [ travExp f c l e ]
 
 
 travAfun :: forall m b aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)

@@ -703,10 +703,9 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
               => acc                aenv (Array dim e) 
               -> PreOpenExp acc env aenv dim
 
-  -- Number of elements of an array
-  -- the array expression can not contain any free scalar variables
-  Size        :: (Shape dim, Elt e)
-              => acc                aenv (Array dim e)
+  -- Number of elements of an array given its shape
+  ShapeSize   :: Shape dim
+              => PreOpenExp acc env aenv dim
               -> PreOpenExp acc env aenv Int
 
 -- |Vanilla open expression

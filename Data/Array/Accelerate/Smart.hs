@@ -512,7 +512,7 @@ data PreExp acc exp t where
               => acc (Array sh t) -> exp sh     -> PreExp acc exp t
   Shape       :: (Shape sh, Elt e)              
               => acc (Array sh e)               -> PreExp acc exp sh
-  Size        :: (Shape sh, Elt e)              
+  ShapeSize   :: (Shape sh, Elt e)              
               => acc (Array sh e)               -> PreExp acc exp Int
 
 -- |Scalar expressions for plain array computations.
@@ -572,7 +572,7 @@ convertSharingExp lyt alyt env aenv = cvt
           PrimApp p e     -> AST.PrimApp p (cvt e)
           IndexScalar a e -> AST.IndexScalar (convertSharingAcc alyt aenv a) (cvt e)
           Shape a         -> AST.Shape (convertSharingAcc alyt aenv a)
-          Size a          -> AST.Size (convertSharingAcc alyt aenv a)
+          ShapeSize a     -> AST.ShapeSize (convertSharingAcc alyt aenv a)
  
 -- |Convert a tuple expression
 --
@@ -1224,7 +1224,7 @@ makeOccMap rootAcc
             PrimApp p e     -> reconstruct $ travE1 (PrimApp p) e
             IndexScalar a e -> reconstruct $ travAE IndexScalar a e
             Shape a         -> reconstruct $ travA Shape a
-            Size a          -> reconstruct $ travA Size a
+            ShapeSize a     -> reconstruct $ travA ShapeSize a
           }
       where
         travE1 :: Typeable b => (SharingExp b -> PreExp SharingAcc SharingExp a) -> Exp b 
@@ -1661,7 +1661,7 @@ determineScopes floatOutAcc accOccMap rootAcc
           PrimApp p e     -> travE1 (PrimApp p) e
           IndexScalar a e -> travAE IndexScalar a e
           Shape a         -> travA Shape a
-          Size a          -> travA Size a
+          ShapeSize a     -> travA ShapeSize a
       where
         travTup :: Tuple.Tuple SharingExp tup -> (Tuple.Tuple SharingExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)
@@ -1904,7 +1904,7 @@ instance Elt a => Show (Exp a) where
             IndexScalar a e -> ExpSharing undefined $ IndexScalar (fst $ recoverSharingAcc False a)
                                                                   (toSharingExp e)
             Shape a         -> ExpSharing undefined $ Shape (fst $ recoverSharingAcc False a)
-            Size a          -> ExpSharing undefined $ Size (fst $ recoverSharingAcc False a)
+            ShapeSize a     -> ExpSharing undefined $ ShapeSize (fst $ recoverSharingAcc False a)
 
       toSharingTup :: Tuple.Tuple Exp tup -> Tuple.Tuple SharingExp tup
       toSharingTup NilTup          = NilTup
@@ -1969,7 +1969,7 @@ showPreExpOp (PrimConst _)     = "PrimConst"
 showPreExpOp (PrimApp _ _)     = "PrimApp"
 showPreExpOp (IndexScalar _ _) = "IndexScalar"
 showPreExpOp (Shape _)         = "Shape"
-showPreExpOp (Size _)          = "Size"
+showPreExpOp (ShapeSize _)     = "ShapeSize"
 
 -- |Smart constructors to construct representation AST forms
 -- ---------------------------------------------------------

@@ -163,7 +163,7 @@ preExpType k e =
     PrimApp _ _       -> eltType (undefined::t)
     IndexScalar acc _ -> k acc
     Shape _           -> eltType (undefined::t)
-    Size _            -> eltType (undefined::t)
+    ShapeSize _       -> eltType (undefined::t)
 
 -- |Reify the result type of a tuple projection.
 --

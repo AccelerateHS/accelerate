@@ -27,7 +27,7 @@ prefixSumSegRef xs seg
   $ list_prescanlSeg (+) 0 (elems xs) (elems seg)
 
 list_prescanlSeg :: (a -> a -> a) -> a -> [a] -> [Int] -> [a]
-list_prescanlSeg f x xs seg = concatMap (init . P.scanl f x) (split seg xs)
+list_prescanlSeg f x xs seg = concatMap (P.init . P.scanl f x) (split seg xs)
   where
     split [] _      = []
     split _  []     = []
