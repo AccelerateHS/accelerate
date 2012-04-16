@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.10.0.0
+Version:                0.11.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 7.0.3
 Build-type:             Simple
@@ -24,6 +24,12 @@ Description:            This library defines an embedded language for
                         .
                         Known bugs: <https://github.com/mchakravarty/accelerate/issues>
                         .
+                        * New in 0.11.0.0: New functions zip3, zip4, unzip3, unzip4, fill,
+                            enumFromN, enumFromStepN, tail, init, drop, take, slit, gather,
+                            gatherIf, scatter, scatterIf, and shapeSize.  New simplified AST
+                            (in package accelerate-backend-kit) for backend writers who want to
+                            avoid the complexities of the type-safe AST.
+
                         * New in 0.10.0.0: Complete sharing recovery for scalar expressions (but
                             currently disabled by default). Also bug fixes in array sharing recovery
                             and a few new convenience functions.
@@ -31,7 +37,7 @@ Description:            This library defines an embedded language for
                         * New in 0.9.0.0: Streaming, precompilation, Repa-style indices, stencils, 
                             more scans, rank-polymorphic fold, generate, block I/O & many bug fixes
                         .
-                        * New in 0.8.1.0: bug fixes and some performance tweaks
+                        * New in 0.8.1.0: Bug fixes and some performance tweaks
                         .
                         * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the
                             CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
@@ -46,6 +52,7 @@ Author:                 Manuel M T Chakravarty,
                         Sean Lee,
                         Ben Lever,
                         Trevor L. McDonell,
+                        Ryan Newtown,
                         Sean Seefried
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
