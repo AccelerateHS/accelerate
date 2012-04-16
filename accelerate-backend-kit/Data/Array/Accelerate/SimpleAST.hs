@@ -147,6 +147,8 @@ data Fun = Lam [(Var,Type)] Exp
 -- | Scalar expressions
 data Exp = 
     EVr Var -- Variable bound by a Let.
+  | ELet Var Type Exp Exp    -- ELet Var Type RHS Body
+  -- ELet is used for common subexpression elimination
   | EPrimApp Prim [Exp]  -- *Any* primitive scalar function
   | ETuple [Exp]
   | EConst Const
@@ -167,9 +169,8 @@ data Exp =
    -- Array shape
    -- the array expression can not contain any free scalar variables
   | EShape AExp
-   -- Number of elements of an array
-   -- the array expression can not contain any free scalar variables
-  | ESize AExp 
+   -- Number of elements of a shape
+  | EShapeSize Exp 
  deriving (Read,Show,Eq,Generic)
 
 

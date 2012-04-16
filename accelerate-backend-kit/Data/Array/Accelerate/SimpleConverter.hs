@@ -109,10 +109,10 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
  where 
 -- convertPreOpenAcc :: forall aenv a . Delayable a => 
  convertPreOpenAcc :: forall aenv a . 
-		      PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
+                      PreOpenAcc OpenAcc aenv a -> EnvM S.AExp
  convertPreOpenAcc eacc = 
   case eacc of 
-    Let acc1 acc2 -> 
+    Alet acc1 acc2 -> 
        do a1     <- convertAcc acc1
           (v,a2) <- withExtendedEnv "a"$ 
                     convertAcc acc2 
@@ -120,7 +120,7 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
           return$ S.Let v sty a1 a2
 
     Avar idx -> 
-      do var <- envLookup (idxToInt idx)
+      do var <- envLookup (deBruijnToInt idx)
          return$ S.Vr var
 
     ------------------------------------------------------------
@@ -145,22 +145,22 @@ convertAcc (OpenAcc cacc) = convertPreOpenAcc cacc
     Apply (Alam (Abody funAcc)) acc -> 
       do (v,bod) <- withExtendedEnv "a" $ convertAcc funAcc
          let sty = getAccType acc
-	 S.Apply (S.ALam [(v, sty)] bod) <$> convertAcc acc
+         S.Apply (S.ALam [(v, sty)] bod) <$> convertAcc acc
 
     Apply _afun _acc -> error "This case is impossible"
 
-    Let2 acc1 acc2 -> 
+    Alet2 acc1 acc2 -> 
        do a1     <- convertAcc acc1
           (v2,(v1,a2)) <- withExtendedEnv "a"$ 
-		       	  withExtendedEnv "a"$ 		   
-			  convertAcc acc2
+                                 withExtendedEnv "a"$                    
+                          convertAcc acc2
           case getAccType acc2 of 
             S.TTuple [ty1,ty2] -> return$ S.LetPair (v1,v2) (ty1,ty2) a1 a2
             t -> error$ "Type error, expected pair on RHS of Let2, found: "++ show t
 
 
     PairArrays acc1 acc2 -> S.PairArrays <$> convertAcc acc1 
-			                 <*> convertAcc acc2
+                                         <*> convertAcc acc2
     Unit e        -> S.Unit <$> convertExp e 
 
     Map     f acc       -> S.Map     <$> convertFun f 
@@ -246,9 +246,16 @@ convertBoundary = undefined
 convertExp :: forall env aenv ans . OpenExp env aenv ans -> EnvM S.Exp
 convertExp e = 
   case e of 
+    Let exp1 exp2 -> 
+      do e1     <- convertExp exp1
+         (v,e2) <- withExtendedEnv "e"$ 
+                   convertExp exp2 
+         let sty = getExpType exp1
+         return$ S.ELet v sty e1 e2
+    
     -- Here is where we get to peek at the type of a variable:
     Var idx -> 
-      do var <- envLookup (idxToInt idx)
+      do var <- envLookup (deBruijnToInt idx)
          return$ S.EVr var
     PrimApp p arg -> convertPrimApp p arg
 
@@ -268,24 +275,24 @@ convertExp e =
     -- This would seem to force indices to be LISTS at runtime??
     IndexNil       -> return$ S.EIndex []
     IndexCons esh ei -> do esh' <- convertExp esh
-			   ei'  <- convertExp ei
+                           ei'  <- convertExp ei
                            return $ case esh' of
                              S.EIndex ls -> S.EIndex (ei' : ls)
-			     _           -> S.EIndexConsDynamic ei' esh'
+                             _           -> S.EIndexConsDynamic ei' esh'
     IndexHead eix   -> do eix' <- convertExp eix
                           return $ case eix' of
                              -- WARNING: This is a potentially unsafe optimization:
                              -- Throwing away expressions:
                              S.EIndex (h:_) -> h 
                              S.EIndex []    -> error "IndexHead of empty index."
-			     _              -> S.EIndexHeadDynamic eix'
+                             _              -> S.EIndexHeadDynamic eix'
     IndexTail eix   -> do eix' <- convertExp eix
                           return $ case eix' of
                              -- WARNING: This is a potentially unsafe optimization:
                              -- Throwing away expressions:
                              S.EIndex (_:tl) -> S.EIndex tl
                              S.EIndex []     -> error "IndexTail of empty index."
-			     _               -> S.EIndexTailDynamic eix'
+                             _               -> S.EIndexTailDynamic eix'
     IndexAny       -> return S.EIndexAny
 
     Cond c t e  -> S.ECond <$> convertExp c 
@@ -294,13 +301,13 @@ convertExp e =
     PrimConst c -> return$ S.EConst $ 
                    case c of 
                     PrimMinBound _ -> S.MinBound
-		    PrimMaxBound _ -> S.MaxBound
-		    PrimPi       _ -> S.Pi
+                    PrimMaxBound _ -> S.MaxBound
+                    PrimPi       _ -> S.Pi
 
     IndexScalar acc eix -> S.EIndexScalar <$> convertAcc acc
                                           <*> convertExp eix
     Shape acc -> S.EShape <$> convertAcc acc
-    Size  acc -> S.ESize  <$> convertAcc acc
+    ShapeSize  acc -> S.EShapeSize  <$> convertExp acc
 
 
 -- Convert a tuple expression to our simpler Tuple representation (containing a list):
@@ -336,42 +343,42 @@ convertType ty =
       case convertType ty1 of 
         S.TTuple [] -> ty0'
         S.TTuple ls -> S.TTuple (ty0' : ls)
-	oth         -> S.TTuple [ty0', oth]
+        oth         -> S.TTuple [ty0', oth]
     SingleTuple scalar -> 
      case scalar of 
        NumScalarType (IntegralNumType ty) -> 
-	 case ty of 
-	   TypeInt   _  -> S.TInt
-	   TypeInt8  _  -> S.TInt8 
-	   TypeInt16 _  -> S.TInt16  
-	   TypeInt32 _  -> S.TInt32 
-	   TypeInt64 _  -> S.TInt64 
-	   TypeWord   _ -> S.TWord
-	   TypeWord8  _ -> S.TWord8 
-	   TypeWord16 _ -> S.TWord16 
-	   TypeWord32 _ -> S.TWord32 
-	   TypeWord64 _ -> S.TWord64 
-	   TypeCShort _ -> S.TCShort 
-	   TypeCInt   _ -> S.TCInt 
-	   TypeCLong  _ -> S.TCLong 
-	   TypeCLLong _ -> S.TCLLong 
-	   TypeCUShort _ -> S.TCUShort
-	   TypeCUInt   _ -> S.TCUInt
-	   TypeCULong  _ -> S.TCULong
-	   TypeCULLong _ -> S.TCULLong
+         case ty of 
+           TypeInt   _  -> S.TInt
+           TypeInt8  _  -> S.TInt8 
+           TypeInt16 _  -> S.TInt16  
+           TypeInt32 _  -> S.TInt32 
+           TypeInt64 _  -> S.TInt64 
+           TypeWord   _ -> S.TWord
+           TypeWord8  _ -> S.TWord8 
+           TypeWord16 _ -> S.TWord16 
+           TypeWord32 _ -> S.TWord32 
+           TypeWord64 _ -> S.TWord64 
+           TypeCShort _ -> S.TCShort 
+           TypeCInt   _ -> S.TCInt 
+           TypeCLong  _ -> S.TCLong 
+           TypeCLLong _ -> S.TCLLong 
+           TypeCUShort _ -> S.TCUShort
+           TypeCUInt   _ -> S.TCUInt
+           TypeCULong  _ -> S.TCULong
+           TypeCULLong _ -> S.TCULLong
        NumScalarType (FloatingNumType ty) -> 
-	 case ty of 
-	   TypeFloat _   -> S.TFloat 
-	   TypeDouble _  -> S.TDouble 
-	   TypeCFloat _  -> S.TCFloat 
-	   TypeCDouble _ -> S.TCDouble 
+         case ty of 
+           TypeFloat _   -> S.TFloat 
+           TypeDouble _  -> S.TDouble 
+           TypeCFloat _  -> S.TCFloat 
+           TypeCDouble _ -> S.TCDouble 
        NonNumScalarType ty -> 
-	 case ty of 
-	   TypeBool _   -> S.TBool 
-	   TypeChar _   -> S.TChar 
-	   TypeCChar _  -> S.TCChar 
-	   TypeCSChar _ -> S.TCSChar 
-	   TypeCUChar _ -> S.TCUChar 
+         case ty of 
+           TypeBool _   -> S.TBool 
+           TypeChar _   -> S.TChar 
+           TypeCChar _  -> S.TCChar 
+           TypeCSChar _ -> S.TCSChar 
+           TypeCUChar _ -> S.TCUChar 
 
 
 convertArrayType :: forall arrs . ArraysR arrs -> S.Type
@@ -385,7 +392,7 @@ convertArrayType ty =
      in S.TArray (convertType ety)
    -- Left to right!
    ArraysRpair t0 t1 -> S.TTuple [convertArrayType t0,
-				  convertArrayType t1]
+                                  convertArrayType t1]
 
 --------------------------------------------------------------------------------
 -- Convert constants    
@@ -471,19 +478,19 @@ convertFun :: OpenFun e ae t0 -> EnvM S.Fun
 convertFun =  loop [] 
  where 
    loop :: forall env aenv t . 
-	   [(S.Var,S.Type)] -> OpenFun env aenv t -> EnvM S.Fun
+           [(S.Var,S.Type)] -> OpenFun env aenv t -> EnvM S.Fun
    loop acc (Body b) = do b'  <- convertExp b 
                           -- It would perhaps be nice to record the output type of function 
-			  -- here as well.  But b's type isn't in class Elt.
-			  return (S.Lam (reverse acc) b')
+                          -- here as well.  But b's type isn't in class Elt.
+                          return (S.Lam (reverse acc) b')
    -- Here we again dig around in the Haskell types to find the type information we need.
    -- In this case we use quite a few scoped type variables:
    loop acc orig@(Lam f2) | (_:: OpenFun env aenv (arg -> res)) <- orig 
                           = do 
-			       let (_:: OpenFun (env, Sugar.EltRepr arg) aenv res) = f2 
-				   ety = Sugar.eltType ((error"This shouldn't happen (4)") :: arg)
-				   sty = convertType ety
-			       (_,x) <- withExtendedEnv "v" $ do
-					  v <- envLookup 0
-					  loop ((v,sty) : acc) f2
-			       return x 
+                               let (_:: OpenFun (env, arg) aenv res) = f2 
+                                   ety = Sugar.eltType ((error"This shouldn't happen (4)") :: arg)
+                                   sty = convertType ety
+                               (_,x) <- withExtendedEnv "v" $ do
+                                          v <- envLookup 0
+                                          loop ((v,sty) : acc) f2
+                               return x 
