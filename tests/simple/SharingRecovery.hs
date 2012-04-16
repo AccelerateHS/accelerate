@@ -95,28 +95,6 @@ sortKey keyFun arr =  foldl sortOneBit arr (Prelude.map lift ([0..31] :: [Int]))
     --
     ixs   = enumeratedArray (shape arr)
 
--- | Copy elements from source array to destination array according to a map. For
---   example:
---
---    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---    map     = [1, 3, 7, 2, 5, 8]
---    input   = [1, 9, 6, 4, 4, 2, 5]
---
---    output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
---
---   Note if the same index appears in the map more than once, the result is
---   undefined. The map vector cannot be larger than the input vector.
---
-scatter :: (Elt e)
-        => Acc (Vector Int)      -- ^map
-        -> Acc (Vector e)        -- ^default
-        -> Acc (Vector e)        -- ^input
-        -> Acc (Vector e)        -- ^output
-scatter mapV defaultV inputV = Acc.permute (const) defaultV pF inputV
-  where
-    pF ix = lift (Z :. (mapV ! ix))
-
-
 -- | Create an array where each element is the value of its corresponding row-major
 --   index.
 --
@@ -126,16 +104,6 @@ scatter mapV defaultV inputV = Acc.permute (const) defaultV pF inputV
 
 enumeratedArray :: Exp DIM1 -> Acc (Array DIM1 Int)
 enumeratedArray sh = Acc.generate sh unindex1
-
-unzip3 :: forall sh. forall e1. forall e2. forall e3. (Shape sh, Elt e1, Elt e2, Elt e3)
-       => Acc (Array sh (e1, e2, e3))
-       -> (Acc (Array sh e1), Acc (Array sh e2), Acc (Array sh e3))
-unzip3 abcs = (as, bs, cs)
-  where
-    (bs, cs)  = Acc.unzip bcs
-    (as, bcs) = Acc.unzip
-              $ Acc.map (\abc -> let (a, b, c) = unlift abc :: (Exp e1, Exp e2, Exp e3)
-                                 in lift (a, lift (b, c))) abcs
 
 testSort :: Acc (Vector Int)
 testSort = sortKey id $ use $ fromList (Z:.10) [9,8,7,6,5,4,3,2,1,0]
