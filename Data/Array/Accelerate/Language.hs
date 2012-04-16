@@ -244,7 +244,8 @@ fold1 = Acc $$ Fold1
 -- |Segmented reduction along the innermost dimension.  Performs one individual reduction per
 -- segment of the source array.  These reductions proceed in parallel.
 --
--- The source array must have at least rank 1.
+-- The source array must have at least rank 1.  The 'Segments' array determines the lengths of the
+-- logical subarrays, each of which is folded seperately.
 --
 foldSeg :: (Shape ix, Elt a)
         => (Exp a -> Exp a -> Exp a) 
@@ -257,7 +258,8 @@ foldSeg = Acc $$$$ FoldSeg
 -- |Variant of 'foldSeg' that requires /all/ segments of the reduced array to be non-empty and
 -- doesn't need a default value.
 --
--- The source array must have at least rank 1.
+-- The source array must have at least rank 1. The 'Segments' array determines the lengths of the
+-- logical subarrays, each of which is folded seperately.
 --
 fold1Seg :: (Shape ix, Elt a)
          => (Exp a -> Exp a -> Exp a) 
@@ -343,14 +345,14 @@ scanr1 = Acc $$ Scanr1
 -- into the result array are added to the current value using the given
 -- combination function.
 --
--- The combination function must be /associative/.  Eltents that are mapped to
+-- The combination function must be /associative/.  Elements that are mapped to
 -- the magic value 'ignore' by the permutation function are being dropped.
 --
 permute :: (Shape ix, Shape ix', Elt a)
         => (Exp a -> Exp a -> Exp a)    -- ^combination function
         -> Acc (Array ix' a)            -- ^array of default values
         -> (Exp ix -> Exp ix')          -- ^permutation
-        -> Acc (Array ix  a)            -- ^permuted array
+        -> Acc (Array ix  a)            -- ^array to be permuted
         -> Acc (Array ix' a)
 permute = Acc $$$$ Permute
 
@@ -359,7 +361,7 @@ permute = Acc $$$$ Permute
 backpermute :: (Shape ix, Shape ix', Elt a)
             => Exp ix'                  -- ^shape of the result array
             -> (Exp ix' -> Exp ix)      -- ^permutation
-            -> Acc (Array ix  a)        -- ^permuted array
+            -> Acc (Array ix  a)        -- ^source array
             -> Acc (Array ix' a)
 backpermute = Acc $$$ Backpermute
 

@@ -660,7 +660,10 @@ type Scalar e = Array DIM0 e
 --
 type Vector e = Array DIM1 e
 
--- |Segment descriptor
+-- |Segment descriptor (vector of segment lengths)
+--
+-- To represent nested one-dimensional arrays, we use a flat array of data values in conjunction
+-- with a /segment descriptor/, which stores the lengths of the subarrays.
 --
 type Segments = Vector Int
 
