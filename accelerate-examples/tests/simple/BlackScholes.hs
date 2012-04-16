@@ -3,7 +3,6 @@ module BlackScholes where
 
 import Random
 
-import Prelude               as P
 import System.Random.MWC
 import Data.Array.IArray     as IArray
 import Data.Array.Accelerate as Acc
