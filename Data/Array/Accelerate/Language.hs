@@ -857,7 +857,7 @@ size = shapeSize . shape
 -- |The same as `size` but not operates directly on a shape without the
 --  array.
 --
-shapeSize :: (Shape ix) => Exp ix -> Exp Int
+shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
 
 

@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Prelude (
   scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
   
   -- ** Reshaping of arrays
-  flatten
+  flatten,
 
   -- ** Enumeration and filling
   fill, enumFromN, enumFromStepN,
