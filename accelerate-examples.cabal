@@ -1,5 +1,5 @@
 Name:                accelerate-examples
-Version:             0.2.0.1
+Version:             0.3.0.0
 Synopsis:            Examples using the Accelerate library
 Description:         Examples using the Accelerate library
 License:             BSD3
@@ -76,7 +76,7 @@ Executable accelerate-examples
   if flag(io)
     CPP-options:        -DACCELERATE_IO
 
-  build-depends:        accelerate              == 0.10.*,
+  build-depends:        accelerate              == 0.11.*,
                         array                   >= 0.3 && < 0.5,
                         attoparsec              == 0.8.*,
                         base                    == 4.*,
