@@ -13,10 +13,10 @@ module Data.Array.Accelerate.Pretty.Print (
 
   -- * Pretty printing functions
   PrettyAcc,
-  prettyPreAcc, prettyAcc, 
-  prettyPreExp, prettyExp, 
-  prettyPreAfun, prettyAfun, 
-  prettyPreFun, prettyFun, 
+  prettyPreAcc,  prettyAcc,
+  prettyPreExp,  prettyExp,
+  prettyPreAfun, prettyAfun,
+  prettyPreFun,  prettyFun,
   noParens
 
 ) where
@@ -228,7 +228,19 @@ prettyPreExp pp lvl alvl wrap (Cond c t e)
 prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a
 prettyPreExp pp lvl alvl wrap (PrimApp p a)
-  = wrap $ prettyPrim p <+> prettyPreExp pp lvl alvl parens a
+  | infixOp, Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
+  = wrap $ prettyPreExp pp lvl alvl parens x <+> f <+> prettyPreExp pp lvl alvl parens y
+
+  | otherwise
+  = wrap $ f' <+> prettyPreExp pp lvl alvl parens a
+
+  where
+    -- sometimes the infix function arguments are obstructed by, for example, a
+    -- scalar let binding. If so, add parentheses and print prefix.
+    --
+    (infixOp, f) = prettyPrim p
+    f'           = if infixOp then parens f else f
+
 prettyPreExp pp lvl alvl wrap (IndexScalar idx i)
   = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp _lvl alvl wrap (Shape idx)
@@ -264,63 +276,64 @@ prettyConst (PrimMinBound _) = text "minBound"
 prettyConst (PrimMaxBound _) = text "maxBound"
 prettyConst (PrimPi       _) = text "pi"
 
--- Pretty print a primitive operation
+-- Pretty print a primitive operation. The first parameter indicates whether the
+-- operator should be printed infix.
 --
-prettyPrim :: PrimFun a -> Doc
-prettyPrim (PrimAdd _)            = text "(+)"
-prettyPrim (PrimSub _)            = text "(-)"
-prettyPrim (PrimMul _)            = text "(*)"
-prettyPrim (PrimNeg _)            = text "negate"
-prettyPrim (PrimAbs _)            = text "abs"
-prettyPrim (PrimSig _)            = text "signum"
-prettyPrim (PrimQuot _)           = text "quot"
-prettyPrim (PrimRem _)            = text "rem"
-prettyPrim (PrimIDiv _)           = text "div"
-prettyPrim (PrimMod _)            = text "mod"
-prettyPrim (PrimBAnd _)           = text "(.&.)"
-prettyPrim (PrimBOr _)            = text "(.|.)"
-prettyPrim (PrimBXor _)           = text "xor"
-prettyPrim (PrimBNot _)           = text "complement"
-prettyPrim (PrimBShiftL _)        = text "shiftL"
-prettyPrim (PrimBShiftR _)        = text "shiftR"
-prettyPrim (PrimBRotateL _)       = text "rotateL"
-prettyPrim (PrimBRotateR _)       = text "rotateR"
-prettyPrim (PrimFDiv _)           = text "(/)"
-prettyPrim (PrimRecip _)          = text "recip"
-prettyPrim (PrimSin _)            = text "sin"
-prettyPrim (PrimCos _)            = text "cos"
-prettyPrim (PrimTan _)            = text "tan"
-prettyPrim (PrimAsin _)           = text "asin"
-prettyPrim (PrimAcos _)           = text "acos"
-prettyPrim (PrimAtan _)           = text "atan"
-prettyPrim (PrimAsinh _)          = text "asinh"
-prettyPrim (PrimAcosh _)          = text "acosh"
-prettyPrim (PrimAtanh _)          = text "atanh"
-prettyPrim (PrimExpFloating _)    = text "exp"
-prettyPrim (PrimSqrt _)           = text "sqrt"
-prettyPrim (PrimLog _)            = text "log"
-prettyPrim (PrimFPow _)           = text "(**)"
-prettyPrim (PrimLogBase _)        = text "logBase"
-prettyPrim (PrimTruncate _ _)     = text "truncate"
-prettyPrim (PrimRound _ _)        = text "round"
-prettyPrim (PrimFloor _ _)        = text "floor"
-prettyPrim (PrimCeiling _ _)      = text "ceiling"
-prettyPrim (PrimAtan2 _)          = text "atan2"
-prettyPrim (PrimLt _)             = text "(<*)"
-prettyPrim (PrimGt _)             = text "(>*)"
-prettyPrim (PrimLtEq _)           = text "(<=*)"
-prettyPrim (PrimGtEq _)           = text "(>=*)"
-prettyPrim (PrimEq _)             = text "(==*)"
-prettyPrim (PrimNEq _)            = text "(/=*)"
-prettyPrim (PrimMax _)            = text "max"
-prettyPrim (PrimMin _)            = text "min"
-prettyPrim PrimLAnd               = text "&&*"
-prettyPrim PrimLOr                = text "||*"
-prettyPrim PrimLNot               = text "not"
-prettyPrim PrimOrd                = text "ord"
-prettyPrim PrimChr                = text "chr"
-prettyPrim PrimBoolToInt          = text "boolToInt"
-prettyPrim (PrimFromIntegral _ _) = text "fromIntegral"
+prettyPrim :: PrimFun a -> (Bool, Doc)
+prettyPrim (PrimAdd _)            = (True,  char '+')
+prettyPrim (PrimSub _)            = (True,  char '-')
+prettyPrim (PrimMul _)            = (True,  char '*')
+prettyPrim (PrimNeg _)            = (False, text "negate")
+prettyPrim (PrimAbs _)            = (False, text "abs")
+prettyPrim (PrimSig _)            = (False, text "signum")
+prettyPrim (PrimQuot _)           = (False, text "quot")
+prettyPrim (PrimRem _)            = (False, text "rem")
+prettyPrim (PrimIDiv _)           = (False, text "div")
+prettyPrim (PrimMod _)            = (False, text "mod")
+prettyPrim (PrimBAnd _)           = (True,  text ".&.")
+prettyPrim (PrimBOr _)            = (True,  text ".|.")
+prettyPrim (PrimBXor _)           = (False, text "xor")
+prettyPrim (PrimBNot _)           = (False, text "complement")
+prettyPrim (PrimBShiftL _)        = (False, text "shiftL")
+prettyPrim (PrimBShiftR _)        = (False, text "shiftR")
+prettyPrim (PrimBRotateL _)       = (False, text "rotateL")
+prettyPrim (PrimBRotateR _)       = (False, text "rotateR")
+prettyPrim (PrimFDiv _)           = (True,  char '/')
+prettyPrim (PrimRecip _)          = (False, text "recip")
+prettyPrim (PrimSin _)            = (False, text "sin")
+prettyPrim (PrimCos _)            = (False, text "cos")
+prettyPrim (PrimTan _)            = (False, text "tan")
+prettyPrim (PrimAsin _)           = (False, text "asin")
+prettyPrim (PrimAcos _)           = (False, text "acos")
+prettyPrim (PrimAtan _)           = (False, text "atan")
+prettyPrim (PrimAsinh _)          = (False, text "asinh")
+prettyPrim (PrimAcosh _)          = (False, text "acosh")
+prettyPrim (PrimAtanh _)          = (False, text "atanh")
+prettyPrim (PrimExpFloating _)    = (False, text "exp")
+prettyPrim (PrimSqrt _)           = (False, text "sqrt")
+prettyPrim (PrimLog _)            = (False, text "log")
+prettyPrim (PrimFPow _)           = (True,  text "**")
+prettyPrim (PrimLogBase _)        = (False, text "logBase")
+prettyPrim (PrimTruncate _ _)     = (False, text "truncate")
+prettyPrim (PrimRound _ _)        = (False, text "round")
+prettyPrim (PrimFloor _ _)        = (False, text "floor")
+prettyPrim (PrimCeiling _ _)      = (False, text "ceiling")
+prettyPrim (PrimAtan2 _)          = (False, text "atan2")
+prettyPrim (PrimLt _)             = (True,  text "<*")
+prettyPrim (PrimGt _)             = (True,  text ">*")
+prettyPrim (PrimLtEq _)           = (True,  text "<=*")
+prettyPrim (PrimGtEq _)           = (True,  text ">=*")
+prettyPrim (PrimEq _)             = (True,  text "==*")
+prettyPrim (PrimNEq _)            = (True,  text "/=*")
+prettyPrim (PrimMax _)            = (False, text "max")
+prettyPrim (PrimMin _)            = (False, text "min")
+prettyPrim PrimLAnd               = (True,  text "&&*")
+prettyPrim PrimLOr                = (True,  text "||*")
+prettyPrim PrimLNot               = (False, text "not")
+prettyPrim PrimOrd                = (False, text "ord")
+prettyPrim PrimChr                = (False, text "chr")
+prettyPrim PrimBoolToInt          = (False, text "boolToInt")
+prettyPrim (PrimFromIntegral _ _) = (False, text "fromIntegral")
 
 {-
 -- Pretty print type
