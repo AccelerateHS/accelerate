@@ -25,8 +25,8 @@ module Data.Array.Accelerate.Prelude (
   prescanl, postscanl, prescanr, postscanr,
 
   -- ** Segmented scans
-  scanlSeg, scanlSeg', scanl1Seg, prescanlSeg, postscanlSeg,
-  scanrSeg, scanrSeg', scanr1Seg, prescanrSeg, postscanrSeg,
+  scanlSeg, scanl'Seg, scanl1Seg, prescanlSeg, postscanlSeg,
+  scanrSeg, scanr'Seg, scanr1Seg, prescanrSeg, postscanrSeg,
   
   -- ** Reshaping of arrays
   flatten,
@@ -249,13 +249,13 @@ scanlSeg f e arr seg = scans
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanlSeg' :: forall a i. (Elt a, Elt i, IsIntegral i)
+scanl'Seg :: forall a i. (Elt a, Elt i, IsIntegral i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> (Acc (Vector a), Acc (Vector a))
-scanlSeg' f e arr seg = (scans, sums)
+scanl'Seg f e arr seg = (scans, sums)
   where
     -- Segmented scan' implemented by performing segmented exclusive-scan on vector
     -- fromed by inserting identity element in at the start of each segment, shifting
@@ -296,7 +296,7 @@ prescanlSeg :: (Elt a, Elt i, IsIntegral i)
             -> Acc (Vector a)
             -> Acc (Segments i)
             -> Acc (Vector a)
-prescanlSeg f e arr seg = Prelude.fst $ scanlSeg' f e arr seg
+prescanlSeg f e arr seg = Prelude.fst $ scanl'Seg f e arr seg
 
 -- |Segmented version of 'postscanl'.
 --
@@ -346,17 +346,17 @@ scanrSeg f e arr seg = scans
     zerosArr  = generate (shape arr) (const 0)
     zerosArr' = generate nSh (const 0)
 
--- |Segmented version of 'scanrSeg''.
+-- | Segmented version of 'scanr''.
 --
-scanrSeg' :: forall a i. (Elt a, Elt i, IsIntegral i)
+scanr'Seg :: forall a i. (Elt a, Elt i, IsIntegral i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
           -> Acc (Segments i)
           -> (Acc (Vector a), Acc (Vector a))
-scanrSeg' f e arr seg = (scans, sums)
+scanr'Seg f e arr seg = (scans, sums)
   where
-    -- Using technique described for scanlSeg'.
+    -- Using technique described for scanl'Seg
     scans      = scanr1Seg f idInjArr seg
     idInjArr   = zipWith (\t x -> t ==* 1 ? (fst x, snd x)) tailFlags $ zip idsArr arrShifted
 
@@ -391,7 +391,7 @@ prescanrSeg :: (Elt a, Elt i, IsIntegral i)
             -> Acc (Vector a)
             -> Acc (Segments i)
             -> Acc (Vector a)
-prescanrSeg f e arr seg = Prelude.fst $ scanrSeg' f e arr seg
+prescanrSeg f e arr seg = Prelude.fst $ scanr'Seg f e arr seg
 
 -- |Segmented version of 'postscanr'.
 --
