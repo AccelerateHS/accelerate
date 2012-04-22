@@ -63,9 +63,6 @@ Stability:              Experimental
 
 Extra-source-files:     INSTALL
                         include/accelerate.h
-                        utils/README
-                        utils/Paths_accelerate.hs
-                        utils/dot_ghci
 
 Flag llvm
   Description:          Enable the LLVM backend (sequential)
