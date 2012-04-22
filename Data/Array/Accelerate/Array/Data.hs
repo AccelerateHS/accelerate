@@ -101,7 +101,7 @@ data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
 
 instance (Typeable1 ba, Typeable e) => Typeable (GArrayData ba e) where
-  typeOf _ = mkTyCon "Data.Array.Accelerate.Array.Data.GArrayData"
+  typeOf _ = myMkTyCon "Data.Array.Accelerate.Array.Data.GArrayData"
             `mkTyConApp` [typeOf (undefined::ba e), typeOf (undefined::e)]
 
 
