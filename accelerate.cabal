@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.11.0.0
+Version:                0.12.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 7.0.3
 Build-type:             Simple
@@ -22,7 +22,7 @@ Description:            This library defines an embedded language for
                         and an experimental multicore CPU backend building on the Repa array library
                         is available at <https://github.com/blambo/accelerate-repa>.
                         .
-                        Known bugs: <https://github.com/mchakravarty/accelerate/issues>
+                        Known bugs: <https://github.com/AccelerateHS/accelerate/issues>
                         .
                         * New in 0.11.0.0: New functions zip3, zip4, unzip3, unzip4, fill,
                             enumFromN, enumFromStepN, tail, init, drop, take, slit, gather,
@@ -44,7 +44,7 @@ Description:            This library defines an embedded language for
                         .
                         * New in 0.7.1.0: the CUDA backend and a number of scalar functions
                         .
-                        For documentation, see the homepage and <https://github.com/mchakravarty/accelerate/wiki>.
+                        For documentation, see the homepage and <https://github.com/AccelerateHS/accelerate/wiki>.
 License:                BSD3
 License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
@@ -56,7 +56,7 @@ Author:                 Manuel M T Chakravarty,
                         Sean Seefried
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
-Bug-reports:            https://github.com/mchakravarty/accelerate/issues
+Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
@@ -139,7 +139,6 @@ Library
                         containers      >= 0.3 && < 0.5,
                         directory       >= 1.0 && < 1.2,
                         ghc-prim        == 0.2.*,
-                        mtl             == 2.0.*,
                         pretty          >= 1.0 && < 1.2
 
   Include-Dirs:         include
@@ -154,7 +153,8 @@ Library
                         fclabels        >= 1.0 && < 1.2,
                         filepath        >= 1.0 && < 1.4,
                         language-c      >= 0.3 && < 0.5,
-                        transformers    == 0.2.*,
+                        mtl             >= 2.0,
+                        transformers    >= 0.2,
                         unix            >= 2.4 && < 2.6,
                         zlib            == 0.5.* && < 0.5.3.2
 
@@ -264,4 +264,4 @@ Library
 
 Source-repository head
   Type:                 git
-  Location:             git://github.com/mchakravarty/accelerate.git
+  Location:             git://github.com/AccelerateHS/accelerate.git
