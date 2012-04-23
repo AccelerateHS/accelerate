@@ -4,7 +4,6 @@ module Stencil2 where
 
 import Util
 
-import Control.Monad
 import Control.Exception
 import System.Random.MWC
 import Data.Array.Unboxed           hiding (Array)

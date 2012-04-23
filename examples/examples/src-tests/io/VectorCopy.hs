@@ -2,8 +2,6 @@
 
 module VectorCopy where
 
-import Control.Applicative
-
 import Data.Array.Accelerate hiding (fromList)
 import Data.Array.Accelerate.Array.Sugar (EltRepr)
 import Data.Array.Accelerate.IO
@@ -72,4 +70,5 @@ prop_Double_roundtrip = roundtrip
 prop_Double_unsaferoundtrip :: [Double] -> Bool
 prop_Double_unsaferoundtrip = unsaferoundtrip
 
+test :: IO Bool
 test = $quickCheckAll

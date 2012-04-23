@@ -33,7 +33,7 @@ import qualified SliceExamples
 
 #ifdef ACCELERATE_IO
 import qualified BlockCopy
-import qualified VectorCopy
+import qualified VectorCopy ()     -- FIXME: Need to add tests from here
 #endif
 
 import qualified Canny

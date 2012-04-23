@@ -5,6 +5,7 @@ module BlockCopy where
 -- standard libraries
 import Prelude as P
 import Foreign.Ptr
+import Foreign.C
 import Control.Monad
 import Control.Exception
 

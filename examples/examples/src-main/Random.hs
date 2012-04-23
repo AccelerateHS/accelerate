@@ -4,14 +4,15 @@ module Random where
 
 import System.Random.MWC
 import Data.Array.IArray
-import Data.Array.Unboxed			(UArray)
-import Data.Array.IO                    	(MArray, IOUArray)
-import Control.Exception                	(evaluate)
-import Data.Array.Accelerate            	(Z(..),(:.)(..))
-import qualified Data.Vector.Generic		as G
-import qualified Data.Vector.Generic.Mutable	as GM
-import qualified Data.Array.MArray		as M
-import qualified Data.Array.Accelerate  	as Acc
+import Data.Array.Unboxed                     (UArray)
+import Data.Array.IO                          (MArray, IOUArray)
+import Control.Exception                      (evaluate)
+import Data.Array.Accelerate                  (Z(..),(:.)(..))
+import qualified Data.Vector.Generic          as G
+import qualified Data.Vector.Generic.Mutable  as GM
+import qualified Data.Array.MArray            as M
+import qualified Data.Array.Unsafe            as U
+import qualified Data.Array.Accelerate        as Acc
 
 
 -- Convert an Unboxed Data.Array to an Accelerate Array
@@ -38,7 +39,7 @@ convertVector vec = do
       let n = G.length v
       mu <- M.newArray_ (0,n-1) :: MArray IOUArray a IO => IO (IOUArray Int a)
       let go !i | i < n     = M.writeArray mu i (G.unsafeIndex v i) >> go (i+1)
-                | otherwise = M.unsafeFreeze mu
+                | otherwise = U.unsafeFreeze mu
       go 0
 
 
@@ -56,7 +57,7 @@ randomUArrayR
 randomUArrayR lim gen n = do
   mu  <- M.newArray_ (0,n-1) :: MArray IOUArray e IO => IO (IOUArray Int e)
   let go !i | i < n     = uniformR lim gen >>= M.writeArray mu i >> go (i+1)
-            | otherwise = M.unsafeFreeze mu
+            | otherwise = U.unsafeFreeze mu
   go 0
 
 

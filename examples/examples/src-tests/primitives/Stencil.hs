@@ -5,7 +5,6 @@ module Stencil where
 import Util
 import Random
 
-import Control.Monad
 import Control.Exception
 import System.Random.MWC
 
