@@ -4,3 +4,6 @@
 [submodule "accelerate-buildbot"]
 	path = accelerate-buildbot
 	url = git@github.com:AccelerateHS/accelerate-buildbot.git
+[submodule "accelerate-examples"]
+	path = accelerate-examples
+	url = git@github.com:AccelerateHS/accelerate-examples.git
