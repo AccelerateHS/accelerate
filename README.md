@@ -6,7 +6,7 @@ For a list of available options and test programs, run:
 > accelerate-examples --help
 
 If you have found a bug, please report it to:
-https://github.com/mchakravarty/accelerate/issues
+https://github.com/AccelerateHS/accelerate/issues
 
 
 Adding new backends:

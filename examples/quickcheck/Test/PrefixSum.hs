@@ -79,7 +79,7 @@ scanl'Ref :: Elt e => (e -> e -> e) -> e -> Vector e -> (Vector e, Scalar e)
 scanl'Ref f z vec =
   let (Z :. n)  = arrayShape vec
       result    = P.scanl f z (Acc.toList vec)
-  in  (Acc.fromList (Z :. n) result, Acc.fromList Z (drop n result))
+  in  (Acc.fromList (Z :. n) result, Acc.fromList Z (P.drop n result))
 
 scanl1Ref :: Elt e => (e -> e -> e) -> Vector e -> Vector e
 scanl1Ref f vec
@@ -96,7 +96,7 @@ scanr'Ref :: Elt e => (e -> e -> e) -> e -> Vector e -> (Vector e, Scalar e)
 scanr'Ref f z vec =
   let (Z :. n)  = arrayShape vec
       result    = P.scanr f z (Acc.toList vec)
-  in  (Acc.fromList (Z :. n) (tail result), Acc.fromList Z result)
+  in  (Acc.fromList (Z :. n) (P.tail result), Acc.fromList Z result)
 
 scanr1Ref :: Elt e => (e -> e -> e) -> Vector e -> Vector e
 scanr1Ref f vec

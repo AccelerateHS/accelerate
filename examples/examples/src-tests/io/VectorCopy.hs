@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies #-}
 
-module Vector where
+module VectorCopy where
 
 import Control.Applicative
 

@@ -33,6 +33,7 @@ import qualified SliceExamples
 
 #ifdef ACCELERATE_IO
 import qualified BlockCopy
+import qualified VectorCopy
 #endif
 
 import qualified Canny
