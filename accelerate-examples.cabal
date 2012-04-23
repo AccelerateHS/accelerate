@@ -47,37 +47,12 @@ Flag io
 --
 Executable accelerate-examples
   Main-is:              Main.hs
-  Other-modules:        Backpermute
-                        Benchmark
-                        BlackScholes
-                        BlockCopy
-                        Canny
-                        Config
-                        DotP
-                        Filter
-                        Fold
-                        IntegralImage
-                        Map
-                        Permute
-                        PGM
-                        Radix
-                        Random
-                        SASUM
-                        SAXPY
-                        ScanSeg
-                        SharingRecovery
-                        SliceExamples
-                        SMVM
-                        SMVM.Matrix
-                        SMVM.MatrixMarket
-                        Stencil
-                        Stencil2
-                        Test
-                        Util
-                        Validate
-                        Vector
-                        Zip
-                        ZipWith
+  Other-modules:        Backpermute, Benchmark, BlackScholes, BlockCopy, Canny,
+                        Config, DotP, Filter, Fold, IntegralImage, Map, PGM,
+                        Permute, Radix, Random, SASUM, SAXPY, ScanSeg,
+                        SharingRecovery, SliceExamples, SMVM, SMVM.Matrix,
+                        SMVM.MatrixMarket, Stencil, Stencil2, Test, Util,
+                        Validate, Vector, Zip, ZipWith
   hs-source-dirs:       src
                         tests/primitives
                         tests/simple
