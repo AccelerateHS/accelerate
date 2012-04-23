@@ -46,6 +46,8 @@ The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> 
 
 Both user and developer questions and discussions are welcome at `accelerate@projects.haskell.org`.  **Sorry, this mailing list is currently unavailable.**
 
+Bug reports and issues tracking are on the [GitHub project page][Issues].
+
 What's missing?
 ---------------
 
@@ -61,7 +63,8 @@ Here is a list of features that are currently missing:
   [Cha09]:            http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
   [Hackage]:          http://hackage.haskell.org/package/accelerate
   [Hackage-examples]: http://hackage.haskell.org/package/accelerate-examples
-  [GitHub]:           https://github.com/mchakravarty/accelerate
-  [Wiki]:             https://github.com/mchakravarty/accelerate/wiki
+  [GitHub]:           https://github.com/AccelerateHS/accelerate
+  [Wiki]:             https://github.com/AccelerateHS/accelerate/wiki
+  [Issues]:           https://github.com/AccelerateHS/accelerate/issues
   [HOAS-conv]:        http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   
