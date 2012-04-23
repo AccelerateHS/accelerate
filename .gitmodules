@@ -12,4 +12,4 @@
 	url = git@github.com:AccelerateHS/accelerate-cuda.git
 [submodule "accelerate-backend-kit"]
 	path = accelerate-backend-kit
-	url = git@github.com:mchakravarty/accelerate-backend-kit.git
+	url = git@github.com:AccelerateHS/accelerate-backend-kit.git
