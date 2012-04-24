@@ -68,7 +68,7 @@
 module Data.Array.Accelerate.AST (
 
   -- * Typed de Bruijn indices
-  Idx(..), deBruijnToInt,
+  Idx(..), idxToInt,
 
   -- * Valuation environment
   Val(..), ValElt(..), prj, prjElt,
@@ -109,9 +109,9 @@ data Idx env t where
 
 -- de Bruijn Index to Int conversion
 --
-deBruijnToInt :: Idx env t -> Int
-deBruijnToInt ZeroIdx       = 0
-deBruijnToInt (SuccIdx idx) = 1 + deBruijnToInt idx
+idxToInt :: Idx env t -> Int
+idxToInt ZeroIdx       = 0
+idxToInt (SuccIdx idx) = 1 + idxToInt idx
 
 
 -- Environments
