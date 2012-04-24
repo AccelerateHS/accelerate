@@ -74,7 +74,10 @@ waves degree phi x = wrap $ waver degree 0
     waver :: Int -> Exp Float -> Exp Float
     waver n acc
       | n == 0    = acc
-      | otherwise = waver (n - 1) (acc + wave (A.constant (fromIntegral n) * A.the phi) x)
+      | otherwise = waver (n - 1) (acc + wave (A.constant (fromIntegral n) * phi') x)
+
+    phi'
+      = A.the phi
 
     wrap n
       = let n_  = A.truncate n :: Exp Int
@@ -105,7 +108,7 @@ point size scale ix = A.lift (adj x, adj y)
 makeImage :: Size -> Scale -> Degree -> Acc (Scalar Phi) -> Acc Bitmap
 makeImage size scale degree phi = arrPixels
   where
-    -- Compute [0..1] values for the wave density at each point.
+    -- Compute values for the wave density at each point in the range [0..1]
     arrVals     :: Acc (Array DIM2 Float)
     arrVals     = A.generate
                       (A.constant $ Z :. size :. size)
