@@ -1,0 +1,87 @@
+Name:                   beholder
+Version:                0.1.0.0
+License:                BSD3
+License-file:           LICENSE
+Author:                 Trevor L. McDonell, Ben Lippmeier
+Maintainer:             Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+Build-type:             Simple
+Cabal-version:          >=1.6
+
+Synopsis:               Realtime canny edge detection using Accelerate and CUDA
+Description:
+    This is a MacOS application that will fetch video frames from the camera and
+    process them using Accelerate.
+    .
+    This is just a meta package that will install the specific versions of
+    package dependencies that have been listed in the Xcode project.
+    .
+    To install:
+    .
+    * Use this cabal file to install the depended upon Haskell libraries (I
+      recommend doing this locally using something like 'cabal-dev')
+    .
+    * Edit the 'configure.sh' script to point to your GHC and package
+      installations, then run that script to compile the Haskell module and
+      create local library links
+    .
+    * Open the Xcode project and compile. You may need to change the target
+      architecture to match that of your GHC installation (either 32- or 64-bit)
+    .
+    * Ensure your PATH and LD_LIBRARY_PATH is set appropriately before running
+    .
+
+Library
+    build-depends:
+        accelerate             == 0.11.0.0,
+        accelerate-cuda        == 0.11.0.0,
+        accelerate-io          == 0.11.0.0,
+        array                  == 0.4.0.0,
+        base                   == 4.5.0.0,
+        binary                 == 0.5.1.0,
+        blaze-builder          == 0.3.1.0,
+        bytestring             == 0.9.2.1,
+        cereal                 == 0.3.5.1,
+        containers             == 0.4.2.1,
+        cpphs                  == 1.13.3,
+        crypto-api             == 0.10.1,
+        cryptohash             == 0.7.4,
+        cuda                   == 0.4.1.1,
+        deepseq                == 1.3.0.0,
+        directory              == 1.1.0.2,
+        entropy                == 0.2.1,
+        exception-mtl          == 0.3.0.1,
+        exception-transformers == 0.3.0.1,
+        extensible-exceptions  == 0.1.1.4,
+        fclabels               == 1.1.1.1,
+        filepath               == 1.3.0.0,
+        ghc-prim               == 0.2.0.0,
+        hashable               == 1.1.2.3,
+        hashtables             == 1.0.1.3,
+        haskell-src-exts       == 1.13.2,
+        haskell-src-meta       == 0.5.1.2,
+        integer-gmp            == 0.4.0.0,
+        language-c-quote       == 0.3.1.0,
+        largeword              == 1.0.1,
+        mainland-pretty        == 0.1.1.1,
+        mtl                    == 2.0.1.0,
+        old-locale             == 1.0.0.4,
+        old-time               == 1.1.0.0,
+        pretty                 == 1.1.1.0,
+        primitive              == 0.4.1,
+        process                == 1.1.0.1,
+        QuickCheck             == 2.4.2,
+        random                 == 1.0.1.1,
+        repa                   == 3.1.1.1,
+        srcloc                 == 0.1.1.1,
+        stm                    == 2.2.0.1,
+        syb                    == 0.3.6,
+        symbol                 == 0.1.1.1,
+        tagged                 == 0.4.2,
+        text                   == 0.11.2.0,
+        th-lift                == 0.5.5,
+        time                   == 1.4,
+        transformers           == 0.2.2.0,
+        unix                   == 2.5.1.0,
+        unordered-containers   == 0.2.1.0,
+        vector                 == 0.9.1
+

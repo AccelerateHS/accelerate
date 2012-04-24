@@ -1,0 +1,673 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1DDD58160DA1D0A300B32029 /* Main.xib in Resources */ = {isa = PBXBuildFile; fileRef = 1DDD58140DA1D0A300B32029 /* Main.xib */; };
+		256AC3DA0F4B6AC300CF3369 /* beholderAppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 256AC3D90F4B6AC300CF3369 /* beholderAppDelegate.m */; };
+		30FD80B912F2599C0021A4A5 /* QTKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30FD80B812F2599C0021A4A5 /* QTKit.framework */; };
+		30FD80BD12F259B10021A4A5 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30FD80BC12F259B10021A4A5 /* QuartzCore.framework */; };
+		30FD80C712F25B500021A4A5 /* MainView.m in Sources */ = {isa = PBXBuildFile; fileRef = 30FD80C612F25B500021A4A5 /* MainView.m */; };
+		30FD80E312F25EBA0021A4A5 /* Camera.m in Sources */ = {isa = PBXBuildFile; fileRef = 30FD80E212F25EBA0021A4A5 /* Camera.m */; };
+		30FD81B012F272520021A4A5 /* Framer.m in Sources */ = {isa = PBXBuildFile; fileRef = 30FD81AF12F272520021A4A5 /* Framer.m */; };
+		694DA9231541972600702461 /* CUDA.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 694DA9221541972600702461 /* CUDA.framework */; };
+		8D11072B0486CEB800E47090 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 089C165CFE840E0CC02AAC07 /* InfoPlist.strings */; };
+		8D11072D0486CEB800E47090 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 29B97316FDCFA39411CA2CEA /* main.m */; settings = {ATTRIBUTES = (); }; };
+		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		089C165DFE840E0CC02AAC07 /* English */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = English; path = English.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
+		13E42FB307B3F0F600E4EEF1 /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = /System/Library/Frameworks/CoreData.framework; sourceTree = "<absolute>"; };
+		1DDD58150DA1D0A300B32029 /* English */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = English; path = English.lproj/Main.xib; sourceTree = "<group>"; };
+		256AC3D80F4B6AC300CF3369 /* beholderAppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = beholderAppDelegate.h; sourceTree = "<group>"; };
+		256AC3D90F4B6AC300CF3369 /* beholderAppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = beholderAppDelegate.m; sourceTree = "<group>"; };
+		256AC3F00F4B6AF500CF3369 /* beholder_Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = beholder_Prefix.pch; sourceTree = "<group>"; };
+		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
+		29B97325FDCFA39411CA2CEA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = /System/Library/Frameworks/Foundation.framework; sourceTree = "<absolute>"; };
+		30A875B512F28C860003EA1C /* Process.hs */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Process.hs; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = "<none>"; };
+		30A875B812F28D1D0003EA1C /* Process_stub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Process_stub.h; sourceTree = "<group>"; };
+		30FD80B812F2599C0021A4A5 /* QTKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QTKit.framework; path = System/Library/Frameworks/QTKit.framework; sourceTree = SDKROOT; };
+		30FD80BC12F259B10021A4A5 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		30FD80C512F25B500021A4A5 /* MainView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MainView.h; sourceTree = "<group>"; };
+		30FD80C612F25B500021A4A5 /* MainView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MainView.m; sourceTree = "<group>"; };
+		30FD80E112F25EBA0021A4A5 /* Camera.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Camera.h; sourceTree = "<group>"; };
+		30FD80E212F25EBA0021A4A5 /* Camera.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Camera.m; sourceTree = "<group>"; };
+		30FD81AE12F272520021A4A5 /* Framer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Framer.h; sourceTree = "<group>"; };
+		30FD81AF12F272520021A4A5 /* Framer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Framer.m; sourceTree = "<group>"; };
+		694DA9221541972600702461 /* CUDA.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CUDA.framework; path = Library/Frameworks/CUDA.framework; sourceTree = SDKROOT; };
+		8D1107310486CEB800E47090 /* beholder-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "beholder-Info.plist"; sourceTree = "<group>"; };
+		8D1107320486CEB800E47090 /* beholder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = beholder.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8D11072E0486CEB800E47090 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				694DA9231541972600702461 /* CUDA.framework in Frameworks */,
+				8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */,
+				30FD80B912F2599C0021A4A5 /* QTKit.framework in Frameworks */,
+				30FD80BD12F259B10021A4A5 /* QuartzCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		080E96DDFE201D6D7F000001 /* Classes */ = {
+			isa = PBXGroup;
+			children = (
+				256AC3D80F4B6AC300CF3369 /* beholderAppDelegate.h */,
+				256AC3D90F4B6AC300CF3369 /* beholderAppDelegate.m */,
+				30FD80C512F25B500021A4A5 /* MainView.h */,
+				30FD80C612F25B500021A4A5 /* MainView.m */,
+				30FD80E112F25EBA0021A4A5 /* Camera.h */,
+				30FD80E212F25EBA0021A4A5 /* Camera.m */,
+				30FD81AE12F272520021A4A5 /* Framer.h */,
+				30FD81AF12F272520021A4A5 /* Framer.m */,
+			);
+			name = Classes;
+			sourceTree = "<group>";
+		};
+		1058C7A0FEA54F0111CA2CBB /* Linked Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				694DA9221541972600702461 /* CUDA.framework */,
+				1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */,
+				30FD80B812F2599C0021A4A5 /* QTKit.framework */,
+				30FD80BC12F259B10021A4A5 /* QuartzCore.framework */,
+			);
+			name = "Linked Frameworks";
+			sourceTree = "<group>";
+		};
+		1058C7A2FEA54F0111CA2CBB /* Other Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				29B97324FDCFA39411CA2CEA /* AppKit.framework */,
+				13E42FB307B3F0F600E4EEF1 /* CoreData.framework */,
+				29B97325FDCFA39411CA2CEA /* Foundation.framework */,
+			);
+			name = "Other Frameworks";
+			sourceTree = "<group>";
+		};
+		19C28FACFE9D520D11CA2CBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8D1107320486CEB800E47090 /* beholder.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		29B97314FDCFA39411CA2CEA /* beholder */ = {
+			isa = PBXGroup;
+			children = (
+				080E96DDFE201D6D7F000001 /* Classes */,
+				29B97315FDCFA39411CA2CEA /* Other Sources */,
+				29B97317FDCFA39411CA2CEA /* Resources */,
+				29B97323FDCFA39411CA2CEA /* Frameworks */,
+				19C28FACFE9D520D11CA2CBB /* Products */,
+			);
+			name = beholder;
+			sourceTree = "<group>";
+		};
+		29B97315FDCFA39411CA2CEA /* Other Sources */ = {
+			isa = PBXGroup;
+			children = (
+				30A875B812F28D1D0003EA1C /* Process_stub.h */,
+				256AC3F00F4B6AF500CF3369 /* beholder_Prefix.pch */,
+				29B97316FDCFA39411CA2CEA /* main.m */,
+				30A875B512F28C860003EA1C /* Process.hs */,
+			);
+			name = "Other Sources";
+			sourceTree = "<group>";
+		};
+		29B97317FDCFA39411CA2CEA /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				8D1107310486CEB800E47090 /* beholder-Info.plist */,
+				089C165CFE840E0CC02AAC07 /* InfoPlist.strings */,
+				1DDD58140DA1D0A300B32029 /* Main.xib */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		29B97323FDCFA39411CA2CEA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1058C7A0FEA54F0111CA2CBB /* Linked Frameworks */,
+				1058C7A2FEA54F0111CA2CBB /* Other Frameworks */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8D1107260486CEB800E47090 /* beholder */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C01FCF4A08A954540054247B /* Build configuration list for PBXNativeTarget "beholder" */;
+			buildPhases = (
+				8D1107290486CEB800E47090 /* Resources */,
+				8D11072C0486CEB800E47090 /* Sources */,
+				8D11072E0486CEB800E47090 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = beholder;
+			productInstallPath = "$(HOME)/Applications";
+			productName = beholder;
+			productReference = 8D1107320486CEB800E47090 /* beholder.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		29B97313FDCFA39411CA2CEA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0420;
+			};
+			buildConfigurationList = C01FCF4E08A954540054247B /* Build configuration list for PBXProject "beholder" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 1;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 29B97314FDCFA39411CA2CEA /* beholder */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8D1107260486CEB800E47090 /* beholder */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8D1107290486CEB800E47090 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8D11072B0486CEB800E47090 /* InfoPlist.strings in Resources */,
+				1DDD58160DA1D0A300B32029 /* Main.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8D11072C0486CEB800E47090 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8D11072D0486CEB800E47090 /* main.m in Sources */,
+				256AC3DA0F4B6AC300CF3369 /* beholderAppDelegate.m in Sources */,
+				30FD80C712F25B500021A4A5 /* MainView.m in Sources */,
+				30FD80E312F25EBA0021A4A5 /* Camera.m in Sources */,
+				30FD81B012F272520021A4A5 /* Framer.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		089C165CFE840E0CC02AAC07 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				089C165DFE840E0CC02AAC07 /* English */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		1DDD58140DA1D0A300B32029 /* Main.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1DDD58150DA1D0A300B32029 /* English */,
+			);
+			name = Main.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		C01FCF4B08A954540054247B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COPY_PHASE_STRIP = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_MODEL_TUNING = G5;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = beholder_Prefix.pch;
+				INFOPLIST_FILE = "beholder-Info.plist";
+				INSTALL_PATH = "$(HOME)/Applications";
+				OTHER_LDFLAGS = (
+					"-rpath",
+					/usr/local/cuda/lib,
+					"-L/usr/local/cuda/lib",
+					"-lcuda",
+					"-lcudart",
+					"-liconv",
+					hslibs/Process.o,
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSaccelerate-0.11.0.0.a",
+					"hslibs/libHSaccelerate-io-0.11.0.0.a",
+					"hslibs/libHSaccelerate-cuda-0.11.0.0.a",
+					"hslibs/libHSarray-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+				);
+				PRODUCT_NAME = beholder;
+			};
+			name = Debug;
+		};
+		C01FCF4C08A954540054247B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_MODEL_TUNING = G5;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = beholder_Prefix.pch;
+				INFOPLIST_FILE = "beholder-Info.plist";
+				INSTALL_PATH = "$(HOME)/Applications";
+				OTHER_LDFLAGS = (
+					"-rpath",
+					/usr/local/cuda/lib,
+					"-L/usr/local/cuda/lib",
+					"-lcuda",
+					"-lcudart",
+					"-liconv",
+					hslibs/Process.o,
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSaccelerate-0.11.0.0.a",
+					"hslibs/libHSaccelerate-io-0.11.0.0.a",
+					"hslibs/libHSaccelerate-cuda-0.11.0.0.a",
+					"hslibs/libHSarray-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+				);
+				PRODUCT_NAME = beholder;
+			};
+			name = Release;
+		};
+		C01FCF4F08A954540054247B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IBC_PLUGINS = "";
+				MACOSX_DEPLOYMENT_TARGET = "";
+				ONLY_ACTIVE_ARCH = NO;
+				OTHER_CFLAGS = "-I/Library/Frameworks/GHC.framework/Versions/7.4.1-i386/usr/lib/ghc-7.4.1/include";
+				OTHER_LDFLAGS = (
+					"-L/usr/local/cuda/lib",
+					"-lcuda",
+					"-lcudart",
+					"-liconv",
+					Process.o,
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSaccelerate-0.11.0.0.a",
+					"hslibs/libHSaccelerate-io-0.11.0.0.a",
+					"hslibs/libHSaccelerate-cuda-0.11.0.0.a",
+					"hslibs/libHSarray-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+				);
+				SDKROOT = macosx;
+				WARNING_LDFLAGS = "";
+			};
+			name = Debug;
+		};
+		C01FCF5008A954540054247B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IBC_PLUGINS = "";
+				MACOSX_DEPLOYMENT_TARGET = "";
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = "-I/Library/Frameworks/GHC.framework/Versions/7.4.1-i386/usr/lib/ghc-7.4.1/include";
+				OTHER_LDFLAGS = (
+					"-L/usr/local/cuda/lib",
+					"-lcuda",
+					"-lcudart",
+					"-liconv",
+					Process.o,
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSaccelerate-0.11.0.0.a",
+					"hslibs/libHSaccelerate-io-0.11.0.0.a",
+					"hslibs/libHSaccelerate-cuda-0.11.0.0.a",
+					"hslibs/libHSarray-0.4.0.0.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+					"hslibs/libHSbase-4.5.0.0.a",
+					"hslibs/libHSbinary-0.5.1.0.a",
+					"hslibs/libHSblaze-builder-0.3.1.0.a",
+					"hslibs/libHSbytestring-0.9.2.1.a",
+					"hslibs/libHScereal-0.3.5.1.a",
+					"hslibs/libHScontainers-0.4.2.1.a",
+					"hslibs/libHScpphs-1.13.3.a",
+					"hslibs/libHScrypto-api-0.10.1.a",
+					"hslibs/libHScryptohash-0.7.4.a",
+					"hslibs/libHScuda-0.4.1.1.a",
+					"hslibs/libHSdeepseq-1.3.0.0.a",
+					"hslibs/libHSdirectory-1.1.0.2.a",
+					"hslibs/libHSentropy-0.2.1.a",
+					"hslibs/libHSexception-mtl-0.3.0.1.a",
+					"hslibs/libHSexception-transformers-0.3.0.1.a",
+					"hslibs/libHSextensible-exceptions-0.1.1.4.a",
+					"hslibs/libHSfclabels-1.1.1.1.a",
+					"hslibs/libHSfilepath-1.3.0.0.a",
+					"hslibs/libHSghc-prim-0.2.0.0.a",
+					"hslibs/libHShashable-1.1.2.3.a",
+					"hslibs/libHShashtables-1.0.1.3.a",
+					"hslibs/libHShaskell-src-exts-1.13.2.a",
+					"hslibs/libHShaskell-src-meta-0.5.1.2.a",
+					"hslibs/libHSinteger-gmp-0.4.0.0.a",
+					"hslibs/libHSlanguage-c-quote-0.3.1.0.a",
+					"hslibs/libHSlargeword-1.0.1.a",
+					"hslibs/libHSmainland-pretty-0.1.1.1.a",
+					"hslibs/libHSmtl-2.0.1.0.a",
+					"hslibs/libHSold-locale-1.0.0.4.a",
+					"hslibs/libHSold-time-1.1.0.0.a",
+					"hslibs/libHSpretty-1.1.1.0.a",
+					"hslibs/libHSprimitive-0.4.1.a",
+					"hslibs/libHSprocess-1.1.0.1.a",
+					"hslibs/libHSrandom-1.0.1.1.a",
+					"hslibs/libHSrepa-3.1.1.1.a",
+					hslibs/libHSrts_thr.a,
+					"hslibs/libHSsrcloc-0.1.1.1.a",
+					"hslibs/libHSstm-2.2.0.1.a",
+					"hslibs/libHSsyb-0.3.6.a",
+					"hslibs/libHSsymbol-0.1.1.1.a",
+					"hslibs/libHStagged-0.4.2.a",
+					"hslibs/libHStext-0.11.2.0.a",
+					"hslibs/libHSth-lift-0.5.5.a",
+					"hslibs/libHStime-1.4.a",
+					"hslibs/libHStransformers-0.2.2.0.a",
+					"hslibs/libHSunix-2.5.1.0.a",
+					"hslibs/libHSunordered-containers-0.2.1.0.a",
+					"hslibs/libHSvector-0.9.1.a",
+				);
+				SDKROOT = macosx;
+				WARNING_LDFLAGS = "";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C01FCF4A08A954540054247B /* Build configuration list for PBXNativeTarget "beholder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C01FCF4B08A954540054247B /* Debug */,
+				C01FCF4C08A954540054247B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C01FCF4E08A954540054247B /* Build configuration list for PBXProject "beholder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C01FCF4F08A954540054247B /* Debug */,
+				C01FCF5008A954540054247B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 29B97313FDCFA39411CA2CEA /* Project object */;
+}
