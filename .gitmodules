@@ -1,15 +1,15 @@
 [submodule "accelerate-io"]
 	path = accelerate-io
-	url = git@github.com:AccelerateHS/accelerate-io.git
+	url = https://github.com/AccelerateHS/accelerate-io.git
 [submodule "accelerate-buildbot"]
 	path = accelerate-buildbot
-	url = git@github.com:AccelerateHS/accelerate-buildbot.git
+	url = https://github.com/AccelerateHS/accelerate-buildbot.git
 [submodule "accelerate-examples"]
 	path = accelerate-examples
-	url = git@github.com:AccelerateHS/accelerate-examples.git
+	url = https://github.com/AccelerateHS/accelerate-examples.git
 [submodule "accelerate-cuda"]
 	path = accelerate-cuda
-	url = git@github.com:AccelerateHS/accelerate-cuda.git
+	url = https://github.com/AccelerateHS/accelerate-cuda.git
 [submodule "accelerate-backend-kit"]
 	path = accelerate-backend-kit
 	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
