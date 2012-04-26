@@ -27,13 +27,13 @@ Requirements
 ------------
 
   * Glasgow Haskell Compiler (GHC), 7.0.3 or later
-  * Haskell libraries as specified in `accelerate.cabal`
+  * Haskell libraries as specified in [`accelerate.cabal`][Cabal-file]
   * For the CUDA backend, CUDA version 3.0 or later
 
 Examples and documentation
 --------------------------
 
-The GitHub repository contains a subdirectory `accelerate-examples`, which provides a range of computational kernels and a few complete applications. These examples are also available from Hackage in a separate package called [accelerate-examples][Hackage-examples]. Install it with `cabal install accelerate-examples`.
+The GitHub repository contains a subdirectory `accelerate-examples`, which provides a range of computational kernels and a few complete applications. These examples are also available in a separate package called [accelerate-examples][accelerate-examples]. Install it with `cabal install accelerate-examples`.
 
   * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
   * Online documentation is on the [GitHub wiki][Wiki].
@@ -58,13 +58,14 @@ Here is a list of features that are currently missing:
 
 
 
-  [CKLM+11]:          http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
-  [HIW'09]:           http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:            http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
-  [Hackage]:          http://hackage.haskell.org/package/accelerate
-  [Hackage-examples]: http://hackage.haskell.org/package/accelerate-examples
-  [GitHub]:           https://github.com/AccelerateHS/accelerate
-  [Wiki]:             https://github.com/AccelerateHS/accelerate/wiki
-  [Issues]:           https://github.com/AccelerateHS/accelerate/issues
-  [HOAS-conv]:        http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [CKLM+11]:             http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [HIW'09]:              http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
+  [Cha09]:               http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Hackage]:             http://hackage.haskell.org/package/accelerate
+  [accelerate-examples]: https://github.com/AccelerateHS/accelerate-examples
+  [GitHub]:              https://github.com/AccelerateHS/accelerate
+  [Wiki]:                https://github.com/AccelerateHS/accelerate/wiki
+  [Issues]:              https://github.com/AccelerateHS/accelerate/issues
+  [HOAS-conv]:           http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [Cabal-file]:          https://github.com/AccelerateHS/accelerate/accelerate.cabal
   
