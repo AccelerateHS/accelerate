@@ -21,7 +21,23 @@ Availability
 Package accelerate is available from
 
  * Hackage: [accelerate][Hackage] — install with `cabal install accelerate`
- * GitHub: [mchakravarty/accelerate][GitHub] - get the source with `git clone https://github.com/mchakravarty/accelerate.git`
+ * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git`
+
+Additional components
+---------------------
+
+The following supported addons are available as separate packages on Hackage and included as submodules in the GitHub repository:
+
+  * [`accelerate-cuda`][accelerate-cuda] Backend targeting CUDA-enabled NVIDA GPUs
+  * [`accelerate-examples`][accelerate-examples] Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
+  * [`accelerate-io`][accelerate-io] Fast conversion between Accelerate arrays and other array formats (including Repa arrays)
+  * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
+  * [`accelerate-buildbot`][accelerate-buildbot] Build bot for automatic performance & regression testing
+
+The following additional components are experimental and incomplete:
+
+  * [`accelerate-opencl`][accelerate-opencl] Backend targeting GPUs via the OpenCL standard
+  * [`accelerate-repa`][accelerate-repa] Backend targeting multicore CPUs via the [Repa][repa] parallel array library
 
 Requirements
 ------------
@@ -33,7 +49,7 @@ Requirements
 Examples and documentation
 --------------------------
 
-The GitHub repository contains a subdirectory `accelerate-examples`, which provides a range of computational kernels and a few complete applications. These examples are also available in a separate package called [accelerate-examples][accelerate-examples]. Install it with `cabal install accelerate-examples`.
+The GitHub repository contains a submodule [accelerate-examples][accelerate-examples], which provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`.
 
   * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
   * Online documentation is on the [GitHub wiki][Wiki].
@@ -58,14 +74,20 @@ Here is a list of features that are currently missing:
 
 
 
-  [CKLM+11]:             http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
-  [HIW'09]:              http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:               http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
-  [Hackage]:             http://hackage.haskell.org/package/accelerate
-  [accelerate-examples]: https://github.com/AccelerateHS/accelerate-examples
-  [GitHub]:              https://github.com/AccelerateHS/accelerate
-  [Wiki]:                https://github.com/AccelerateHS/accelerate/wiki
-  [Issues]:              https://github.com/AccelerateHS/accelerate/issues
-  [HOAS-conv]:           http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
-  [Cabal-file]:          https://github.com/AccelerateHS/accelerate/accelerate.cabal
-  
+  [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
+  [Cha09]:                  http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Hackage]:                http://hackage.haskell.org/package/accelerate
+  [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
+  [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
+  [accelerate-io]:          https://github.com/AccelerateHS/accelerate-io
+  [accelerate-backend-kit]: https://github.com/AccelerateHS/accelerate-backend-kit
+  [accelerate-buildbot]:    https://github.com/AccelerateHS/accelerate-buildbot
+  [accelerate-repa]:        https://github.com/blambo/accelerate-repa
+  [accelerate-opencl]:      https://github.com/hiPERFIT/accelerate-opencl
+  [GitHub]:                 https://github.com/AccelerateHS/accelerate
+  [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
+  [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
+  [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
+  [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
+  [repa]:                   http://hackage.haskell.org/package/repa
