@@ -84,17 +84,20 @@ options =
 #ifdef ACCELERATE_CUDA_BACKEND
   , Option []   ["cuda"]        (NoArg  (set optBackend CUDA))                  "implementation for NVIDIA GPUs (parallel)"
 #endif
-  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")          "size of a simulation time step"
-  , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")         "viscosity for velocity dampening"
-  , Option []   ["diffusion"]   (ReqArg (set diffusion . read) "FLOAT")         "diffusion rate for mass dispersion"
-  , Option []   ["width"]       (ReqArg (set simulationWidth . read) "INT")     "grid width for simulation"
-  , Option []   ["height"]      (ReqArg (set simulationHeight . read) "INT")    "grid height for simulation"
-  , Option []   ["scale"]       (ReqArg (set displayScale . read) "INT")        "feature size of visualisation"
-  , Option []   ["framerate"]   (ReqArg (set displayFramerate . read) "INT")    "frame rate for visualisation"
+  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")        $ "size of a simulation time step " ++ def timestep
+  , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")       $ "viscosity for velocity dampening " ++ def viscosity
+  , Option []   ["diffusion"]   (ReqArg (set diffusion . read) "FLOAT")       $ "diffusion rate for mass dispersion " ++ def diffusion
+  , Option []   ["width"]       (ReqArg (set simulationWidth . read) "INT")   $ "grid width for simulation " ++ def simulationWidth
+  , Option []   ["height"]      (ReqArg (set simulationHeight . read) "INT")  $ "grid height for simulation " ++ def simulationHeight
+  , Option []   ["scale"]       (ReqArg (set displayScale . read) "INT")      $ "feature size of visualisation " ++ def displayScale
+  , Option []   ["framerate"]   (ReqArg (set displayFramerate . read) "INT")  $ "frame rate for visualisation " ++ def displayFramerate
   --
   , Option []   ["benchmark"]   (NoArg  (set optBench True))                    "benchmark instead of displaying animation (False)"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))                     "show help message"
   ]
+  where
+    parens s    = "(" ++ s ++ ")"
+    def f       = parens (show (get f defaultOptions))
 
 
 processArgs :: [String] -> IO (Options, [String])
