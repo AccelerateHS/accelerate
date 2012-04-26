@@ -23,11 +23,11 @@ Executable accelerate-fluid
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda == 0.9.*
+    build-depends:      accelerate-cuda >= 0.9
 
-  Build-depends:        accelerate      == 0.9.*,
+  Build-depends:        accelerate      >= 0.9,
                         base            == 4.*,
-                        criterion	>= 0.5,
+                        criterion       >= 0.5,
                         fclabels        >= 1.0,
-                        gloss           >= 1.5
+                        gloss           >= 1.7
 

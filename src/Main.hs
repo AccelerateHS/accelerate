@@ -14,7 +14,7 @@ import Data.Label
 import Criterion.Main
 import Control.Exception
 import System.Environment
-import Graphics.Gloss.Interface.Game
+import Graphics.Gloss.Interface.Pure.Game
 
 
 main :: IO ()
@@ -35,10 +35,8 @@ main = do
               [ bench "fluid" $ whnf (simulate opt dp dn 1.0) initialWorld ]
 
      -- simulate
-     else gameInWindow
-              "accelerate-fluid"
-              (width, height)
-              (10, 20)                  -- initial position
+     else play
+              (InWindow "accelerate-fluid" (width, height) (10, 20))
               black                     -- background colour
               fps                       -- display framerate
               initialWorld              -- initial state of the simulation

@@ -9,7 +9,7 @@ import           Type
 import           Config
 import           Data.Word
 import           Data.Label
-import           Graphics.Gloss.Interface.Game
+import           Graphics.Gloss.Interface.Pure.Game
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
 import           Foreign.Storable

@@ -8,7 +8,7 @@ module Event where
 import Config
 import World
 import Data.Label
-import Graphics.Gloss.Interface.Game
+import Graphics.Gloss.Interface.Pure.Game
 import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 
 
