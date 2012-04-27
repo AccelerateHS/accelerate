@@ -3,7 +3,7 @@
 -- Displaying the world state
 --
 
-module World (World(..), initialise, render) where
+module World (World(..), Source(..), initialise, render) where
 
 import           Type
 import           Config
@@ -32,8 +32,15 @@ data World = World
     -- user input
   , densitySource  :: [(Index, Density)]
   , velocitySource :: [(Index, Velocity)]
-  , currentButton  :: Maybe (MouseButton, (Int,Int))
+  , currentSource  :: Source
   }
+  deriving Show
+
+data Source = Density  (Int, Int)
+            | Velocity (Int, Int)
+            | None
+  deriving (Eq, Show)
+
 
 initialise :: Options -> World
 initialise opt =
@@ -46,7 +53,7 @@ initialise opt =
     , indexField     = A.use $ A.fromList (Z:.h:.w) [Z:.y:.x | y <- [0..h-1], x <- [0..w-1]]
     , densitySource  = []
     , velocitySource = []
-    , currentButton  = Nothing
+    , currentSource  = None
     }
 
 render :: Options -> World -> Picture
