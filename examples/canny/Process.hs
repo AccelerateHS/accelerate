@@ -19,7 +19,7 @@ import qualified Data.Vector.Unboxed.Mutable            as UM
 import qualified Data.Vector.Storable.Mutable           as VM
 
 import Data.Array.Accelerate                            as A
-import Data.Array.Accelerate.IO                         as A hiding ( Array )
+import Data.Array.Accelerate.IO                         as A
 import Data.Array.Accelerate.CUDA                       as CUDA
 import Data.Array.Accelerate.Array.Data                 ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar                ( Array(..) )
