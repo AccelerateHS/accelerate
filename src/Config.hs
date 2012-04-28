@@ -7,7 +7,7 @@ module Config (
 
   Options,
   timestep, viscosity, diffusion, simulationWidth, simulationHeight,
-  displayScale, displayFramerate, optBench,
+  densityBMP, velocityBMP, displayScale, displayFramerate, optBench,
 
   processArgs, run
 
@@ -38,6 +38,8 @@ data Options = Options
   , _diffusion          :: Float
   , _simulationWidth    :: Int
   , _simulationHeight   :: Int
+  , _densityBMP         :: Maybe FilePath
+  , _velocityBMP        :: Maybe FilePath
 
   -- visualisation
   , _displayScale       :: Int
@@ -59,6 +61,8 @@ defaultOptions = Options
   , _diffusion          = 0
   , _simulationWidth    = 100
   , _simulationHeight   = 100
+  , _densityBMP         = Nothing
+  , _velocityBMP        = Nothing
   , _displayScale       = 4
   , _displayFramerate   = 10
   , _optBackend         = maxBound
@@ -80,20 +84,47 @@ run opts = case _optBackend opts of
 --
 options :: [OptDescr (Options -> Options)]
 options =
-  [ Option []   ["interpreter"] (NoArg  (set optBackend Interpreter))           "reference implementation (sequential)"
+  [ Option []   ["interpreter"] (NoArg  (set optBackend Interpreter))
+      "reference implementation (sequential)"
+
 #ifdef ACCELERATE_CUDA_BACKEND
-  , Option []   ["cuda"]        (NoArg  (set optBackend CUDA))                  "implementation for NVIDIA GPUs (parallel)"
+  , Option []   ["cuda"]        (NoArg  (set optBackend CUDA))
+      "implementation for NVIDIA GPUs (parallel)"
+
 #endif
-  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")        $ "size of a simulation time step " ++ def timestep
-  , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")       $ "viscosity for velocity dampening " ++ def viscosity
-  , Option []   ["diffusion"]   (ReqArg (set diffusion . read) "FLOAT")       $ "diffusion rate for mass dispersion " ++ def diffusion
-  , Option []   ["width"]       (ReqArg (set simulationWidth . read) "INT")   $ "grid width for simulation " ++ def simulationWidth
-  , Option []   ["height"]      (ReqArg (set simulationHeight . read) "INT")  $ "grid height for simulation " ++ def simulationHeight
-  , Option []   ["scale"]       (ReqArg (set displayScale . read) "INT")      $ "feature size of visualisation " ++ def displayScale
-  , Option []   ["framerate"]   (ReqArg (set displayFramerate . read) "INT")  $ "frame rate for visualisation " ++ def displayFramerate
+  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")
+    $ "size of a simulation time step " ++ def timestep
+
+  , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")
+    $ "viscosity for velocity dampening " ++ def viscosity
+
+  , Option []   ["diffusion"]   (ReqArg (set diffusion . read) "FLOAT")
+    $ "diffusion rate for mass dispersion " ++ def diffusion
+
+  , Option []   ["width"]       (ReqArg (set simulationWidth . read) "INT")
+    $ "grid width for simulation " ++ def simulationWidth
+
+  , Option []   ["height"]      (ReqArg (set simulationHeight . read) "INT")
+    $ "grid height for simulation " ++ def simulationHeight
+
+  , Option []   ["scale"]       (ReqArg (set displayScale . read) "INT")
+    $ "feature size of visualisation " ++ def displayScale
+
+  , Option []   ["framerate"]   (ReqArg (set displayFramerate . read) "INT")
+    $ "frame rate for visualisation " ++ def displayFramerate
+
+  , Option []   ["bmp-density"] (ReqArg (set densityBMP . Just) "FILE.bmp")
+      "file for initial fluid density"
+
+  , Option []   ["bmp-velocity"] (ReqArg (set velocityBMP . Just) "FILE.bmp")
+      "file for initial fluid velocity"
+
   --
-  , Option []   ["benchmark"]   (NoArg  (set optBench True))                    "benchmark instead of displaying animation (False)"
-  , Option "h?" ["help"]        (NoArg  (set optHelp True))                     "show help message"
+  , Option []   ["benchmark"]   (NoArg  (set optBench True))
+      "benchmark instead of displaying animation (False)"
+
+  , Option "h?" ["help"]        (NoArg  (set optHelp True))
+      "show help message"
   ]
   where
     parens s    = "(" ++ s ++ ")"

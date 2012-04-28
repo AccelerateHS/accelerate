@@ -14,7 +14,7 @@ import Data.Label
 import Criterion.Main
 import Control.Exception
 import System.Environment
-import Graphics.Gloss.Interface.Pure.Game
+import Graphics.Gloss.Interface.IO.Game
 
 
 main :: IO ()
@@ -27,7 +27,8 @@ main = do
       dn        = get diffusion opt
 
   -- warming up...
-  initialWorld <- evaluate (simulate opt dp dn 0.1 $ initialise opt)
+  initialWorld  <- initialise opt
+  _             <- evaluate (simulate opt dp dn 0.1 initialWorld)
 
   if get optBench opt
      -- benchmark
@@ -35,12 +36,12 @@ main = do
               [ bench "fluid" $ whnf (simulate opt dp dn 1.0) initialWorld ]
 
      -- simulate
-     else play
+     else playIO
               (InWindow "accelerate-fluid" (width, height) (10, 20))
-              black                     -- background colour
-              fps                       -- display framerate
-              initialWorld              -- initial state of the simulation
-              (render opt)              -- render world state into a picture
-              (react opt)               -- handle user events
-              (simulate opt dp dn)      -- one step of the simulation
+              black                                                     -- background colour
+              fps                                                       -- display framerate
+              initialWorld                                              -- initial state of the simulation
+              (render opt)                                              -- render world state into a picture
+              (\event world -> return $ react opt event world)          -- handle user events
+              (\event world -> return $ simulate opt dp dn event world) -- one step of the simulation
 

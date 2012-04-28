@@ -1,23 +1,30 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE PatternGuards #-}
 --
 -- Displaying the world state
 --
 
 module World (World(..), Source(..), initialise, render) where
 
-import           Type
-import           Config
-import           Data.Word
-import           Data.Label
-import           Graphics.Gloss.Interface.Pure.Game
-import           Foreign.Ptr
-import           Foreign.ForeignPtr
-import           Foreign.Storable
-import           Foreign.Marshal.Alloc
-import           System.IO.Unsafe
-import           Data.Array.Accelerate                  ( Z(..), (:.)(..), Acc )
-import           Data.Array.Accelerate.Array.Sugar      ( Array(..) )
+import Type
+import Config
+
+import Codec.BMP
+import Data.Bits
+import Data.Int
+import Data.Word
+import Data.Label
+import Control.Monad
+import Graphics.Gloss.Interface.IO.Game
+import Foreign.Ptr
+import Foreign.ForeignPtr
+import Foreign.Storable
+import Foreign.Marshal.Alloc
+import Data.Array.Accelerate                            ( Z(..), (:.)(..), Exp )
+import Data.Array.Accelerate.Array.Sugar                ( Array(..) )
+
 import qualified Data.Array.Accelerate.Array.Data       as A
+import qualified Data.Array.Accelerate.IO               as A
 import qualified Data.Array.Accelerate                  as A
 
 
@@ -42,31 +49,110 @@ data Source = Density  (Int, Int)
   deriving (Eq, Show)
 
 
-initialise :: Options -> World
+-- Initialisation --------------------------------------------------------------
+-- --------------                                                             --
+
+initialise :: Options -> IO World
 initialise opt =
-  let w = get simulationWidth  opt
-      h = get simulationHeight opt
-  in
-  World
-    { densityField   = A.fromList (Z:.h:.w) (repeat 0)
-    , velocityField  = A.fromList (Z:.h:.w) (repeat (0,0))
-    , indexField     = A.use $ A.fromList (Z:.h:.w) [Z:.y:.x | y <- [0..h-1], x <- [0..w-1]]
-    , densitySource  = []
-    , velocitySource = []
-    , currentSource  = None
+  let width     = get simulationWidth  opt
+      height    = get simulationHeight opt
+      indices   = A.use $ A.fromList
+                            (Z:.height:.width)
+                            [Z:.y:.x | y <- [0..height-1], x <- [0..width-1]]
+  in do
+  density       <- initialDensity  opt width height
+  velocity      <- initialVelocity opt width height
+
+  return $ World
+    { densityField      = density
+    , velocityField     = velocity
+    , indexField        = indices
+    , densitySource     = []
+    , velocitySource    = []
+    , currentSource     = None
     }
 
-render :: Options -> World -> Picture
-render opt world = Scale zoom zoom pic
+
+initialDensity :: Options -> Int -> Int -> IO DensityField
+initialDensity opt width height
+  -- Load the file, and use the luminance value as scalar density
+  --
+  | Just file   <- get densityBMP opt
+  = do
+      arr               <- readImageFromBMP file
+      let (Z:.h:.w)     =  A.arrayShape arr
+
+      when (w /= width || h /= height)
+        $ error "fluid: density-bmp does not match width x height"
+
+      return . run opt $ A.map densityOfRGBA (A.use arr)
+
+  -- No density file given, just set the field to zero
+  --
+  | otherwise
+  = return $ A.fromList (Z :. height :. width) (repeat 0)
+
+
+initialVelocity :: Options -> Int -> Int -> IO VelocityField
+initialVelocity opt width height
+  -- Load the file, and use the red and green channels for x- and y- velocity
+  -- values respectively
+  --
+  | Just file   <- get velocityBMP opt
+  = do
+      arr               <- readImageFromBMP file
+      let (Z:.h:.w)     =  A.arrayShape arr
+
+      when (w /= width || h /= height)
+        $ error "fluid: velocity-bmp does not match width x height"
+
+      return . run opt $ A.map velocityOfRGBA (A.use arr)
+
+  -- No density file given, just set to zero
+  --
+  | otherwise
+  = return $ A.fromList (Z :. height :. width) (repeat (0,0))
+
+
+readImageFromBMP :: FilePath -> IO (Image RGBA)
+readImageFromBMP file = do
+  bmp           <- either (error . show) id `fmap` readBMP file
+  let (w,h)     =  bmpDimensions bmp
+  --
+  A.fromByteString (Z :. h :. w) ((), unpackBMPToRGBA32 bmp)
+
+
+densityOfRGBA :: Exp RGBA -> Exp Density
+densityOfRGBA rgba =
+  let b = (0.11 / 255) * A.fromIntegral ((rgba `div` 0x100)     .&. 0xFF)
+      g = (0.59 / 255) * A.fromIntegral ((rgba `div` 0x10000)   .&. 0xFF)
+      r = (0.3  / 255) * A.fromIntegral ((rgba `div` 0x1000000) .&. 0xFF)
+  in
+  r + g + b
+
+velocityOfRGBA :: Exp RGBA -> Exp Velocity
+velocityOfRGBA rgba =
+  let g = A.fromIntegral (-128 + A.fromIntegral ((rgba `div` 0x10000)   .&. 0xFF) :: Exp Int32)
+      r = A.fromIntegral (-128 + A.fromIntegral ((rgba `div` 0x1000000) .&. 0xFF) :: Exp Int32)
+  in
+  A.lift (r * 0.001, g * 0.001)
+
+
+-- Rendering -------------------------------------------------------------------
+-- ---------                                                                  --
+
+render :: Options -> World -> IO Picture
+render opt world = do
+  den   <- renderDensity   $ densityField  world
+  vel   <- renderVelocity  $ velocityField world
+  --
+  return $ Scale zoom zoom $ Pictures [ den, vel ]
   where
-    zoom = fromIntegral $ get displayScale opt
-    pic  = Pictures [ renderDensity  $ densityField  world
-                    , renderVelocity $ velocityField world ]
+    zoom        = fromIntegral $ get displayScale opt
 
 
-{-# NOINLINE renderDensity #-}
-renderDensity :: DensityField -> Picture
-renderDensity df@(Array _ ad) = unsafePerformIO $ do
+renderDensity :: DensityField -> IO Picture
+renderDensity df@(Array _ ad) = do
   dst   <- mallocBytes (n*4)
   fill 0 src dst
   fptr  <- newForeignPtr finalizerFree dst
@@ -87,9 +173,10 @@ renderDensity df@(Array _ ad) = unsafePerformIO $ do
                                    fill (i+1) (plusPtr s 4) (plusPtr d 4)
 
 
-renderVelocity :: VelocityField -> Picture
+renderVelocity :: VelocityField -> IO Picture
 renderVelocity vf
-  = Translate (fromIntegral $ -w `div` 2) (fromIntegral $ -h `div` 2)
+  = return
+  $ Translate (fromIntegral $ -w `div` 2) (fromIntegral $ -h `div` 2)
   $ Pictures [ field (x,y) | y <- [2,7..h], x <- [2,7..w] ]
   where
     Z:.h:.w       = A.arrayShape vf

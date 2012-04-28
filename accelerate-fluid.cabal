@@ -26,7 +26,9 @@ Executable accelerate-fluid
     build-depends:      accelerate-cuda >= 0.9
 
   Build-depends:        accelerate      >= 0.9,
+                        accelerate-io   >= 0.9,
                         base            == 4.*,
+                        bmp             >= 1.2,
                         criterion       >= 0.5,
                         fclabels        >= 1.0,
                         gloss           >= 1.7
