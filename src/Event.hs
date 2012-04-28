@@ -58,9 +58,10 @@ react opt event world =
         _               -> world
     --
     addDensity (x,y)            = (Z:.y:.x, 1) : densitySource world
+
     addVelocity (x0,y0) (x1,y1) = let u = fromIntegral (x1-x0)
                                       v = fromIntegral (y1-y0)
-                                  in  (Z:.y0:.x0, (u,v)) : velocitySource world
+                                  in  (Z:.y0:.x0, (u * width, v * height)) : velocitySource world
     --
     zoom        = fromIntegral $ get displayScale opt
     width       = fromIntegral $ get simulationWidth  opt

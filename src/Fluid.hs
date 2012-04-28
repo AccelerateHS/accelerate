@@ -4,11 +4,12 @@
 
 module Fluid (simulate) where
 
-import           Type
-import           World
-import           Config
-import           Data.Array.Accelerate          ( Z(..), (:.)(..), Acc, Exp )
-import qualified Data.Array.Accelerate          as A
+import Type
+import World
+import Config
+
+import Data.Array.Accelerate            ( Z(..), (:.)(..), Exp, Acc, Vector, (?|), (==*) )
+import qualified Data.Array.Accelerate  as A
 
 
 -- A simulation step
@@ -20,7 +21,7 @@ simulate opt dp dn dt world =
         }
   where
     vf          = velocity world dt dp    $ A.use (velocityField world)
-    df          = density  world dt dn vf $ A.use (densityField world)
+    df          = density  world dt dn vf $ A.use (densityField  world)
     (vf', df')  = run opt (A.pairA vf df)
 
 
@@ -29,15 +30,22 @@ simulate opt dp dn dt world =
 --   2. viscous diffusion
 --   3. self-advection
 --
-velocity :: World -> Timestep -> Viscosity -> Acc VelocityField -> Acc VelocityField
-velocity world dt dp vf
+velocity
+    :: World
+    -> Timestep
+    -> Viscosity
+    -> Acc VelocityField
+    -> Acc VelocityField
+velocity world dt dp vf0
   = project
-  . advect dt ix vf0
+  . advect dt vf0
   . project
-  $ diffuse dt dp vf0 vf
+  . diffuse dt dp
+  $ inject ix' vs' vf0
   where
-    ix  = indexField world
-    vf0 = inject (velocitySource world) vf
+    (ix, vs)    = unzip $ velocitySource world
+    ix'         = A.use $ A.fromList (Z :. length ix) ix
+    vs'         = A.use $ A.fromList (Z :. length vs) vs
 
 
 -- Ensure the velocity field conserves mass
@@ -45,10 +53,10 @@ velocity world dt dp vf
 project :: Acc VelocityField -> Acc VelocityField
 project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
   where
-    steps   = 20
-    grad    = A.stencil divF A.Mirror vf
-    p1      = A.stencil2 pF (A.Constant 0) grad A.Mirror
-    p       = foldl1 (.) (replicate steps p1) grad
+    steps       = 10 --20
+    grad        = A.stencil divF A.Mirror vf
+    p1          = A.stencil2 pF (A.Constant 0) grad A.Mirror
+    p           = foldl1 (.) (replicate steps p1) grad
 
     poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
     poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, t-b)
@@ -66,39 +74,51 @@ project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
 --   2. self-diffusion
 --   3. motion through the velocity field
 --
-density :: World
-        -> Timestep
-        -> Diffusion
-        -> Acc VelocityField
-        -> Acc DensityField
-        -> Acc DensityField
-density world dt dn vf df
-  = advect  dt ix vf
-  $ diffuse dt dn (inject (densitySource world) df) df
+density
+    :: World
+    -> Timestep
+    -> Diffusion
+    -> Acc VelocityField
+    -> Acc DensityField
+    -> Acc DensityField
+density world dt dn vf
+  = advect dt vf
+  . diffuse dt dn
+  . inject ix' ds'
   where
-    ix  = indexField world
+    (ix, ds)    = unzip $ densitySource world
+    ix'         = A.use $ A.fromList (Z :. length ix) ix
+    ds'         = A.use $ A.fromList (Z :. length ds) ds
 
 
 -- Inject sources into the field
 --
-inject :: FieldElt e => [(Index, e)] -> Acc (Field e) -> Acc (Field e)
-inject []  df = df
-inject src df =
-  let n     = length src
-      (i,d) = unzip src
-      is    = A.use $ A.fromList (Z:.n) i
-      ps    = A.use $ A.fromList (Z:.n) d
-  in
-  A.permute (.+.) df (is A.!) ps
+-- TLM: sources should be a vector of (index, value) pairs, but no fusion means
+--   that extracting the components for permute (via unzip) is extra work.
+--
+inject
+    :: FieldElt e
+    => Acc (Vector Index) -> Acc (Vector e)
+    -> Acc (Field e)
+    -> Acc (Field e)
+inject is ps df =
+  A.size ps ==* 0
+    ?| ( df, A.permute (.+.) df (is A.!) ps )
 
 
-diffuse :: FieldElt e
-        => Timestep -> Diffusion -> Acc (Field e) -> Acc (Field e) -> Acc (Field e)
-diffuse dt dn df0 = foldl1 (.) (replicate steps diffuse1)
+diffuse
+    :: FieldElt e
+    => Timestep
+    -> Diffusion
+    -> Acc (Field e)
+    -> Acc (Field e)
+diffuse dt dn df0 =
+  a ==* 0
+    ?| ( df0 , foldl1 (.) (replicate steps diffuse1) df0 )
   where
-    steps = 20
-    a     = A.constant (dt * dn) * (A.fromIntegral (A.size df0))
-    c     = 1 + 4*a
+    steps       = 10 --20
+    a           = A.constant (dt * dn) * (A.fromIntegral (A.size df0))
+    c           = 1 + 4*a
 
     diffuse1 df = A.stencil2 relax (A.Constant zero) df0 A.Mirror df
 
@@ -106,17 +126,21 @@ diffuse dt dn df0 = foldl1 (.) (replicate steps diffuse1)
     relax (_,(_,x0,_),_) ((_,t,_), (l,_,r), (_,b,_)) = (x0 .+. a .*. (l.+.t.+.r.+.b)) ./. c
 
 
-advect :: FieldElt e
-       => Timestep -> Acc IndexField -> Acc VelocityField -> Acc (Field e) -> Acc (Field e)
-advect dt ixf vf df = imap backtrace vf
+advect
+    :: FieldElt e
+    => Timestep
+    -> Acc VelocityField
+    -> Acc (Field e)
+    -> Acc (Field e)
+advect dt vf df = A.generate sh backtrace
   where
-    Z:.h:.w = A.unlift $ A.shape vf
-    imap f  = A.zipWith f ixf
+    sh          = A.shape vf
+    Z :. h :. w = A.unlift sh
 
-    backtrace ix vu = s0.*.(t0.*.d00 .+. t1.*.d10) .+. s1.*.(t0.*.d01 .+. t1.*.d11)
+    backtrace ix = s0.*.(t0.*.d00 .+. t1.*.d10) .+. s1.*.(t0.*.d01 .+. t1.*.d11)
       where
         Z:.j:.i = A.unlift ix
-        (v,u)   = A.unlift vu
+        (u, v)  = A.unlift (vf A.! ix)
 
         -- backtrack densities based on velocity field
         clamp z = A.max 0.5 . A.min (A.fromIntegral z - 1.5)

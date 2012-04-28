@@ -33,8 +33,6 @@ data World = World
     -- current state of the simulation
     densityField   :: !DensityField
   , velocityField  :: !VelocityField
-  , indexField     :: Acc IndexField
-      -- ^^ because we lack functions to map with indices
 
     -- user input
   , densitySource  :: [(Index, Density)]
@@ -56,9 +54,6 @@ initialise :: Options -> IO World
 initialise opt =
   let width     = get simulationWidth  opt
       height    = get simulationHeight opt
-      indices   = A.use $ A.fromList
-                            (Z:.height:.width)
-                            [Z:.y:.x | y <- [0..height-1], x <- [0..width-1]]
   in do
   density       <- initialDensity  opt width height
   velocity      <- initialVelocity opt width height
@@ -66,7 +61,6 @@ initialise opt =
   return $ World
     { densityField      = density
     , velocityField     = velocity
-    , indexField        = indices
     , densitySource     = []
     , velocitySource    = []
     , currentSource     = None
