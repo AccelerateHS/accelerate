@@ -57,8 +57,8 @@ defaultOptions :: Options
 defaultOptions = Options
   { _viscosity          = 0
   , _diffusion          = 0
-  , _simulationWidth    = 100
-  , _simulationHeight   = 100
+  , _simulationWidth    = 250
+  , _simulationHeight   = 250
   , _densityBMP         = Nothing
   , _velocityBMP        = Nothing
   , _displayScale       = 2
