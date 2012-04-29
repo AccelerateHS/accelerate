@@ -142,9 +142,9 @@ unit = Acc . Unit
 -- yields a three dimensional array, where 'arr' is replicated twice across the
 -- first and three times across the third dimension.
 --
-replicate :: (Slice slix, Elt e) 
-          => Exp slix 
-          -> Acc (Array (SliceShape slix) e) 
+replicate :: (Slice slix, Elt e)
+          => Exp slix
+          -> Acc (Array (SliceShape slix) e)
           -> Acc (Array (FullShape  slix) e)
 replicate = Acc $$ Replicate
 
@@ -152,18 +152,19 @@ replicate = Acc $$ Replicate
 --
 -- For example, the following will generate a one-dimensional array
 -- (`Vector`) of three floating point numbers:
--- 
+--
 -- > generate (index1 3) (\_ -> 1.2)
--- 
+--
 -- Or, equivalently:
 --
 -- > generate (constant (Z :. (3::Int))) (\_ -> 1.2)
--- 
+--
 -- Finally, the following will create an array equivalent to '[1..10]':
 --
--- > generate (index1 10) $ \ ix -> 
--- >          let (Z :. i) = unlift ix 
+-- > generate (index1 10) $ \ ix ->
+-- >          let (Z :. i) = unlift ix
 -- >          in fromIntegral i
+--
 generate :: (Shape ix, Elt a)
          => Exp ix
          -> (Exp ix -> Exp a)
@@ -177,41 +178,41 @@ generate = Acc $$ Generate
 --
 -- > precondition: size ix == size ix'
 --
-reshape :: (Shape ix, Shape ix', Elt e) 
-        => Exp ix 
-        -> Acc (Array ix' e) 
+reshape :: (Shape ix, Shape ix', Elt e)
+        => Exp ix
+        -> Acc (Array ix' e)
         -> Acc (Array ix e)
 reshape = Acc $$ Reshape
 
--- Extraction of subarrays
--- -----------------------
+-- Extraction of sub-arrays
+-- ------------------------
 
 -- |Index an array with a *generalised* array index (supplied as the second
 -- argument).  The result is a new array (possibly a singleton) containing
 -- all dimensions in their entirety.
 --
-slice :: (Slice slix, Elt e) 
-      => Acc (Array (FullShape slix) e) 
-      -> Exp slix 
+slice :: (Slice slix, Elt e)
+      => Acc (Array (FullShape slix) e)
+      -> Exp slix
       -> Acc (Array (SliceShape slix) e)
 slice = Acc $$ Index
 
 -- Map-like functions
 -- ------------------
 
--- |Apply the given function elementwise to the given array.
--- 
-map :: (Shape ix, Elt a, Elt b) 
-    => (Exp a -> Exp b) 
+-- |Apply the given function element-wise to the given array.
+--
+map :: (Shape ix, Elt a, Elt b)
+    => (Exp a -> Exp b)
     -> Acc (Array ix a)
     -> Acc (Array ix b)
 map = Acc $$ Map
 
--- |Apply the given binary function elementwise to the two arrays.  The extent of the resulting
+-- |Apply the given binary function element-wise to the two arrays.  The extent of the resulting
 -- array is the intersection of the extents of the two source arrays.
 --
 zipWith :: (Shape ix, Elt a, Elt b, Elt c)
-        => (Exp a -> Exp b -> Exp c) 
+        => (Exp a -> Exp b -> Exp c)
         -> Acc (Array ix a)
         -> Acc (Array ix b)
         -> Acc (Array ix c)
@@ -222,19 +223,19 @@ zipWith = Acc $$$ ZipWith
 
 -- |Reduction of the innermost dimension of an array of arbitrary rank.  The first argument needs to
 -- be an /associative/ function to enable an efficient parallel implementation.
--- 
+--
 fold :: (Shape ix, Elt a)
-     => (Exp a -> Exp a -> Exp a) 
-     -> Exp a 
+     => (Exp a -> Exp a -> Exp a)
+     -> Exp a
      -> Acc (Array (ix:.Int) a)
      -> Acc (Array ix a)
 fold = Acc $$$ Fold
 
 -- |Variant of 'fold' that requires the reduced array to be non-empty and doesn't need an default
 -- value.
--- 
+--
 fold1 :: (Shape ix, Elt a)
-      => (Exp a -> Exp a -> Exp a) 
+      => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (ix:.Int) a)
       -> Acc (Array ix a)
 fold1 = Acc $$ Fold1
@@ -243,7 +244,7 @@ fold1 = Acc $$ Fold1
 -- segment of the source array.  These reductions proceed in parallel.
 --
 -- The source array must have at least rank 1.  The 'Segments' array determines the lengths of the
--- logical subarrays, each of which is folded seperately.
+-- logical sub-arrays, each of which is folded separately.
 --
 foldSeg :: (Shape ix, Elt a, Elt i, IsIntegral i)
         => (Exp a -> Exp a -> Exp a)
@@ -257,7 +258,7 @@ foldSeg = Acc $$$$ FoldSeg
 -- doesn't need a default value.
 --
 -- The source array must have at least rank 1. The 'Segments' array determines the lengths of the
--- logical subarrays, each of which is folded seperately.
+-- logical sub-arrays, each of which is folded separately.
 --
 fold1Seg :: (Shape ix, Elt a, Elt i, IsIntegral i)
          => (Exp a -> Exp a -> Exp a)
@@ -280,7 +281,7 @@ scanl :: Elt a
       -> Acc (Vector a)
 scanl = Acc $$$ Scanl
 
--- |Variant of 'scanl', where the final result of the reduction is returned separately. 
+-- |Variant of 'scanl', where the final result of the reduction is returned separately.
 -- Denotationally, we have
 --
 -- > scanl' f e arr = (crop 0 (len - 1) res, unit (res!len))
@@ -354,7 +355,7 @@ permute :: (Shape ix, Shape ix', Elt a)
         -> Acc (Array ix' a)
 permute = Acc $$$$ Permute
 
--- |Backward permutation 
+-- |Backward permutation
 --
 backpermute :: (Shape ix, Shape ix', Elt a)
             => Exp ix'                  -- ^shape of the result array
@@ -412,8 +413,8 @@ stencil = Acc $$$ Stencil
 -- |Map a binary stencil of an array.  The extent of the resulting array is the intersection of
 -- the extents of the two source arrays.
 --
-stencil2 :: (Shape ix, Elt a, Elt b, Elt c, 
-             Stencil ix a stencil1, 
+stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
+             Stencil ix a stencil1,
              Stencil ix b stencil2)
         => (stencil1 -> stencil2 -> Exp c)    -- ^binary stencil function
         -> Boundary a                         -- ^boundary condition #1
@@ -823,9 +824,6 @@ instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
 instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
   => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
   unlift = unatup9
-
-
-
 
 
 -- Helpers to lift functions
