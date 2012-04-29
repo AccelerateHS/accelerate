@@ -17,12 +17,13 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Options -> Event -> World -> World
+react :: Options -> Event -> World -> IO World
 react opt event world =
   case event of
-    EventKey (MouseButton LeftButton) s m uv    -> mouse m s (coord uv)
-    EventMotion uv                              -> motion (coord uv)
-    _                                           -> world
+    EventKey (Char c) s m _                     -> keyboard c s m
+    EventKey (MouseButton LeftButton) s m uv    -> return $ mouse m s (coord uv)
+    EventMotion uv                              -> return $ motion (coord uv)
+    _                                           -> return $ world
   where
     -- Inject a new density source when the left button is clicked.
     --
@@ -45,6 +46,11 @@ react opt event world =
 
       | otherwise
       = world { currentSource = None }
+
+    -- Handle key presses
+    --
+    keyboard 'r' Down _      = initialise opt
+    keyboard _   _    _      = return world
 
     -- As the mouse moves, keep inserting density sources, or adding source
     -- velocities

@@ -6,7 +6,7 @@
 module Type (
 
   Timestep, Viscosity, Diffusion, Index, Density, Velocity,
-  Field, FieldElt(..), DensityField, VelocityField, IndexField,
+  Field, FieldElt(..), DensityField, VelocityField, DensitySource, VelocitySource,
 
   RGBA, Image
 
@@ -25,7 +25,10 @@ type Velocity           = (Float, Float)
 type Field a            = Array DIM2 a
 type DensityField       = Field Density
 type VelocityField      = Field Velocity
-type IndexField         = Field Index
+
+type Source a           = (Vector Index, Vector a)
+type DensitySource      = Source Density
+type VelocitySource     = Source Velocity
 
 type RGBA               = Word32
 type Image a            = Array DIM2 a

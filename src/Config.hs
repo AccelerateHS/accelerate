@@ -6,10 +6,10 @@
 module Config (
 
   Options,
-  timestep, viscosity, diffusion, simulationWidth, simulationHeight,
+  viscosity, diffusion, simulationWidth, simulationHeight,
   densityBMP, velocityBMP, displayScale, displayFramerate, optBench,
 
-  processArgs, run
+  processArgs, run, run1
 
 ) where
 
@@ -33,8 +33,7 @@ data Backend
 data Options = Options
   {
     -- simulation
-    _timestep           :: Float
-  , _viscosity          :: Float
+    _viscosity          :: Float
   , _diffusion          :: Float
   , _simulationWidth    :: Int
   , _simulationHeight   :: Int
@@ -56,15 +55,14 @@ $(mkLabels [''Options])
 
 defaultOptions :: Options
 defaultOptions = Options
-  { _timestep           = 0.5
-  , _viscosity          = 0
+  { _viscosity          = 0
   , _diffusion          = 0
   , _simulationWidth    = 100
   , _simulationHeight   = 100
   , _densityBMP         = Nothing
   , _velocityBMP        = Nothing
-  , _displayScale       = 4
-  , _displayFramerate   = 10
+  , _displayScale       = 2
+  , _displayFramerate   = 20
   , _optBackend         = maxBound
   , _optBench           = False
   , _optHelp            = False
@@ -77,6 +75,13 @@ run opts = case _optBackend opts of
   Interpreter   -> I.run
 #ifdef ACCELERATE_CUDA_BACKEND
   CUDA          -> CUDA.run
+#endif
+
+run1 :: (Arrays a, Arrays b) => Options -> (Acc a -> Acc b) -> a -> b
+run1 opts f = case _optBackend opts of
+  Interpreter   -> head . I.stream f . return
+#ifdef ACCELERATE_CUDA_BACKEND
+  CUDA          -> CUDA.run1 f
 #endif
 
 
@@ -92,9 +97,6 @@ options =
       "implementation for NVIDIA GPUs (parallel)"
 
 #endif
-  , Option []   ["timestep"]    (ReqArg (set timestep . read) "FLOAT")
-    $ "size of a simulation time step " ++ def timestep
-
   , Option []   ["viscosity"]   (ReqArg (set viscosity . read) "FLOAT")
     $ "viscosity for velocity dampening " ++ def viscosity
 

@@ -2,28 +2,36 @@
 -- Fluid simulation
 --
 
-module Fluid (simulate) where
+module Fluid (
+
+  Simulation, fluid
+
+) where
 
 import Type
-import World
-import Config
 
-import Data.Array.Accelerate            ( Z(..), (:.)(..), Exp, Acc, Vector, (?|), (==*) )
+import Data.Array.Accelerate ( Z(..), (:.)(..), Exp, Acc, Scalar, Vector, (?|), (==*) )
 import qualified Data.Array.Accelerate  as A
 
 
--- A simulation step
---
-simulate :: Options -> Viscosity -> Diffusion -> Timestep -> World -> World
-simulate opt dp dn dt world =
-  world { densityField  = df', densitySource  = []
-        , velocityField = vf', velocitySource = []
-        }
-  where
-    vf          = velocity world dt dp    $ A.use (velocityField world)
-    df          = density  world dt dn vf $ A.use (densityField  world)
-    (vf', df')  = run opt (A.pairA vf df)
+type Simulation
+  =  Acc ( Scalar Timestep              -- time to evolve the simulation
+         , DensitySource                -- locations to add density sources
+         , VelocitySource               -- locations to add velocity sources
+         , DensityField                 -- the current density field
+         , VelocityField )              -- the current velocity field
+  -> Acc ( DensityField, VelocityField )
 
+
+-- A fluid simulation
+--
+fluid :: Viscosity -> Diffusion -> Simulation
+fluid dp dn inputs =
+  let (dt, ds, vs, df, vf)      = A.unlift inputs
+      df'                       = density  dn dt ds vf df
+      vf'                       = velocity dp dt vs vf
+  in
+  A.lift (df', vf')
 
 -- The velocity over a timestep evolves due to three causes:
 --   1. the addition of forces
@@ -31,21 +39,17 @@ simulate opt dp dn dt world =
 --   3. self-advection
 --
 velocity
-    :: World
-    -> Timestep
-    -> Viscosity
+    :: Viscosity
+    -> Acc (Scalar Timestep)
+    -> Acc VelocitySource
     -> Acc VelocityField
     -> Acc VelocityField
-velocity world dt dp vf0
+velocity dp dt vs vf0
   = project
   . advect dt vf0
   . project
-  . diffuse dt dp
-  $ inject ix' vs' vf0
-  where
-    (ix, vs)    = unzip $ velocitySource world
-    ix'         = A.use $ A.fromList (Z :. length ix) ix
-    vs'         = A.use $ A.fromList (Z :. length vs) vs
+  . diffuse dp dt
+  $ inject vs vf0
 
 
 -- Ensure the velocity field conserves mass
@@ -53,7 +57,7 @@ velocity world dt dp vf0
 project :: Acc VelocityField -> Acc VelocityField
 project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
   where
-    steps       = 10 --20
+    steps       = 20
     grad        = A.stencil divF A.Mirror vf
     p1          = A.stencil2 pF (A.Constant 0) grad A.Mirror
     p           = foldl1 (.) (replicate steps p1) grad
@@ -75,20 +79,16 @@ project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
 --   3. motion through the velocity field
 --
 density
-    :: World
-    -> Timestep
-    -> Diffusion
+    :: Diffusion
+    -> Acc (Scalar Timestep)
+    -> Acc DensitySource
     -> Acc VelocityField
     -> Acc DensityField
     -> Acc DensityField
-density world dt dn vf
+density dn dt ds vf
   = advect dt vf
-  . diffuse dt dn
-  . inject ix' ds'
-  where
-    (ix, ds)    = unzip $ densitySource world
-    ix'         = A.use $ A.fromList (Z :. length ix) ix
-    ds'         = A.use $ A.fromList (Z :. length ds) ds
+  . diffuse dn dt
+  . inject ds
 
 
 -- Inject sources into the field
@@ -98,26 +98,27 @@ density world dt dn vf
 --
 inject
     :: FieldElt e
-    => Acc (Vector Index) -> Acc (Vector e)
+    => Acc (Vector Index, Vector e)
     -> Acc (Field e)
     -> Acc (Field e)
-inject is ps df =
-  A.size ps ==* 0
-    ?| ( df, A.permute (.+.) df (is A.!) ps )
+inject source field =
+  let (is, ps) = A.unlift source
+  in A.size ps ==* 0
+       ?| ( field, A.permute (.+.) field (is A.!) ps )
 
 
 diffuse
     :: FieldElt e
-    => Timestep
-    -> Diffusion
+    => Diffusion
+    -> Acc (Scalar Timestep)
     -> Acc (Field e)
     -> Acc (Field e)
-diffuse dt dn df0 =
+diffuse dn dt df0 =
   a ==* 0
     ?| ( df0 , foldl1 (.) (replicate steps diffuse1) df0 )
   where
-    steps       = 10 --20
-    a           = A.constant (dt * dn) * (A.fromIntegral (A.size df0))
+    steps       = 20
+    a           = A.the dt * A.constant dn * (A.fromIntegral (A.size df0))
     c           = 1 + 4*a
 
     diffuse1 df = A.stencil2 relax (A.Constant zero) df0 A.Mirror df
@@ -128,12 +129,13 @@ diffuse dt dn df0 =
 
 advect
     :: FieldElt e
-    => Timestep
+    => Acc (Scalar Timestep)
     -> Acc VelocityField
     -> Acc (Field e)
     -> Acc (Field e)
-advect dt vf df = A.generate sh backtrace
+advect dt' vf df = A.generate sh backtrace
   where
+    dt          = A.the dt'
     sh          = A.shape vf
     Z :. h :. w = A.unlift sh
 
@@ -144,8 +146,8 @@ advect dt vf df = A.generate sh backtrace
 
         -- backtrack densities based on velocity field
         clamp z = A.max 0.5 . A.min (A.fromIntegral z - 1.5)
-        x       = w `clamp` (A.fromIntegral i - A.constant dt * u)
-        y       = h `clamp` (A.fromIntegral j - A.constant dt * v)
+        x       = w `clamp` (A.fromIntegral i - dt * u)
+        y       = h `clamp` (A.fromIntegral j - dt * v)
 
         -- discrete locations surrounding point
         i0      = A.truncate x
