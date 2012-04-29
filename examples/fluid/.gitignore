@@ -1,0 +1,4 @@
+cabal-dev/
+dist/
+*.swp
+original/GDC03/fluid/build/

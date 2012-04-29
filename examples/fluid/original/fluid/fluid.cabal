@@ -1,0 +1,21 @@
+name:          fluid
+version:       1.0
+cabal-version: >= 1.6
+build-type:    Simple
+author:        Ben Lambert-Smith
+bug-reports:   mailto:blambo@cse.unsw.edu.au
+
+executable         fluid
+   main-is:        Main.hs
+   hs-source-dirs: src
+   extensions: PatternGuards
+   ghc-options:    -Odph -rtsopts -threaded -fexcess-precision -optc-ffast-math -funfolding-keeness-factor=100 -funfolding-use-threshold=100
+-- -fllvm
+   build-depends:
+      base < 5,
+--      repa  == 1.2.*,
+      repa,
+      gloss == 1.3.*,
+      repa-bytestring,
+      bmp,
+      bytestring
