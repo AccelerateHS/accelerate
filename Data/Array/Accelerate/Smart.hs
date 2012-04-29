@@ -24,15 +24,15 @@ module Data.Array.Accelerate.Smart (
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1,
 
-  -- * Smart constructors for pairing and unpairing
-  pair, unpair,
-
   -- * Smart constructors for literals
   constant,
 
   -- * Smart constructors and destructors for tuples
   tup2, tup3, tup4, tup5, tup6, tup7, tup8, tup9,
   untup2, untup3, untup4, untup5, untup6, untup7, untup8, untup9,
+
+  atup2, atup3, atup4, atup5, atup6, atup7, atup8, atup9,
+  unatup2, unatup3, unatup4, unatup5, unatup6, unatup7, unatup8, unatup9,
 
   -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -57,7 +57,7 @@ module Data.Array.Accelerate.Smart (
   ($$), ($$$), ($$$$), ($$$$$)
 
 ) where
-  
+
 -- standard library
 import Control.Applicative                      hiding (Const)
 import Control.Monad.Fix
@@ -103,7 +103,7 @@ floatOutAccFromExp = recoverAccSharing && True
 -- Recover the sharing of scalar expressions?
 --
 recoverExpSharing :: Bool
-recoverExpSharing = False
+recoverExpSharing = True
 
 
 -- Layouts
@@ -174,19 +174,20 @@ data PreAcc acc exp as where
               -> acc as
               -> acc as
               -> PreAcc acc exp as
-  FstArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-              => acc (Array sh1 e1, Array sh2 e2)
-              -> PreAcc acc exp (Array sh1 e1)
-  SndArray    :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-              => acc (Array sh1 e1, Array sh2 e2)
-              -> PreAcc acc exp (Array sh2 e2)
-  PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-              => acc (Array sh1 e1)
-              -> acc (Array sh2 e2)
-              -> PreAcc acc exp (Array sh1 e1, Array sh2 e2)
 
-  Use         :: (Shape sh, Elt e)
-              => Array sh e -> PreAcc acc exp (Array sh e)
+  Atuple      :: (Arrays arrs, IsTuple arrs)
+              => Tuple.Atuple acc (TupleRepr arrs)
+              -> PreAcc acc exp arrs
+
+  Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
+              => TupleIdx (TupleRepr arrs) a
+              ->        acc     arrs
+              -> PreAcc acc exp a
+
+  Use         :: Arrays arrs
+              => arrs
+              -> PreAcc acc exp arrs
+
   Unit        :: Elt e
               => exp e 
               -> PreAcc acc exp (Scalar e)
@@ -379,17 +380,12 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
       Acond b acc1 acc2
         -> AST.Acond (convertExp alyt env b) (convertSharingAcc alyt env acc1)
                      (convertSharingAcc alyt env acc2)
-      FstArray acc
-        -> AST.Alet2 (convertSharingAcc alyt env acc) 
-                    (AST.OpenAcc $ AST.Avar (AST.SuccIdx AST.ZeroIdx))
-      SndArray acc
-        -> AST.Alet2 (convertSharingAcc alyt env acc) 
-                    (AST.OpenAcc $ AST.Avar AST.ZeroIdx)
-      PairArrays acc1 acc2
-        -> AST.PairArrays (convertSharingAcc alyt env acc1)
-                          (convertSharingAcc alyt env acc2)
+      Atuple arrs
+        -> AST.Atuple (convertSharingAtuple alyt env arrs)
+      Aprj ix a
+        -> AST.Aprj ix (convertSharingAcc alyt env a)
       Use array
-        -> AST.Use array
+        -> AST.Use (fromArr array)
       Unit e
         -> AST.Unit (convertExp alyt env e)
       Generate sh f
@@ -456,6 +452,19 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
                         (convertBoundary bndy2) 
                         (convertSharingAcc alyt env acc2)
     :: AST.PreOpenAcc AST.OpenAcc aenv a)
+
+convertSharingAtuple
+    :: forall aenv a. 
+       Layout aenv aenv
+    -> [StableSharingAcc]
+    -> Tuple.Atuple SharingAcc a
+    -> Tuple.Atuple (AST.OpenAcc aenv) a
+convertSharingAtuple alyt aenv = cvt
+  where
+    cvt :: Tuple.Atuple SharingAcc a' -> Tuple.Atuple (AST.OpenAcc aenv) a'
+    cvt NilAtup         = NilAtup
+    cvt (SnocAtup t a)  = cvt t `SnocAtup` convertSharingAcc alyt aenv a
+
 
 -- |Convert a boundary condition
 --
@@ -1007,12 +1016,12 @@ makeOccMap rootAcc
                                           (acc1', h2) <- traverseAcc occMap acc1
                                           (acc2', h3) <- traverseAcc occMap acc2
                                           return (Acond e' acc1' acc2', h1 `max` h2 `max` h3 + 1)
-            FstArray acc             -> reconstruct $ travA FstArray acc
-            SndArray acc             -> reconstruct $ travA SndArray acc
-            PairArrays acc1 acc2     -> reconstruct $ do
-                                          (acc1', h1) <- traverseAcc occMap acc1
-                                          (acc2', h2) <- traverseAcc occMap acc2
-                                          return (PairArrays acc1' acc2', h1 `max` h2 + 1)
+
+            Atuple tup               -> reconstruct $ do
+                                          (tup', h) <- travAtup tup
+                                          return (Atuple tup', h)
+            Aprj ix a                -> reconstruct $ travA (Aprj ix) a
+
             Use arr                  -> reconstruct $ return (Use arr, 1)
             Unit e                   -> reconstruct $ do
                                           (e', h) <- enterExp occMap e
@@ -1121,6 +1130,14 @@ makeOccMap rootAcc
               (acc1', h2) <- traverseAcc occMap acc1
               (acc2', h3) <- traverseAcc occMap acc2
               return (c fun' acc1' acc2', h1 `max` h2 `max` h3 + 1)
+
+        travAtup :: Tuple.Atuple Acc a
+                 -> IO (Tuple.Atuple SharingAcc a, Int)
+        travAtup NilAtup          = return (NilAtup, 1)
+        travAtup (SnocAtup tup a) = do
+          (tup', h1) <- travAtup tup
+          (a',   h2) <- traverseAcc occMap a
+          return (SnocAtup tup' a', h1 `max` h2 + 1)
 
     traverseFun1 :: (Elt b, Typeable c) 
                   => OccMapHash Acc -> (Exp b -> Exp c) -> IO (Exp b -> RootExp c, Int)
@@ -1430,13 +1447,11 @@ determineScopes floatOutAcc accOccMap rootAcc
                                      in
                                      reconstruct (Acond e' acc1' acc2')
                                                  (accCount1 +++ accCount2 +++ accCount3)
-          FstArray acc            -> travA FstArray acc
-          SndArray acc            -> travA SndArray acc
-          PairArrays acc1 acc2    -> let
-                                       (acc1', accCount1) = scopesAcc acc1
-                                       (acc2', accCount2) = scopesAcc acc2
-                                     in
-                                     reconstruct (PairArrays acc1' acc2') (accCount1 +++ accCount2)
+
+          Atuple tup              -> let (tup', accCount) = travAtup tup
+                                     in  reconstruct (Atuple tup') accCount
+          Aprj ix a               -> travA (Aprj ix) a
+
           Use arr                 -> reconstruct (Use arr) noNodeCounts
           Unit e                  -> let
                                        (e', accCount) = scopesExpInit e
@@ -1549,6 +1564,14 @@ determineScopes floatOutAcc accOccMap rootAcc
             (f'   , accCount1) = scopesFun2 f
             (acc1', accCount2) = scopesAcc  acc1
             (acc2', accCount3) = scopesAcc  acc2
+
+        travAtup ::  Tuple.Atuple SharingAcc a
+                 -> (Tuple.Atuple SharingAcc a, NodeCounts)
+        travAtup NilAtup          = (NilAtup, noNodeCounts)
+        travAtup (SnocAtup tup a) = let (tup', accCountT) = travAtup tup
+                                        (a',   accCountA) = scopesAcc a
+                                    in
+                                    (SnocAtup tup' a', accCountT +++ accCountA)
 
         travA :: Arrays arrs 
               => (SharingAcc arrs' -> PreAcc SharingAcc RootExp arrs) 
@@ -1912,14 +1935,13 @@ instance Elt a => Show (Exp a) where
       toSharingTup (SnocTup tup e) = SnocTup (toSharingTup tup) (toSharingExp e)
 
 -- for debugging
-showPreAccOp :: PreAcc acc exp arrs -> String
+showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
 showPreAccOp (Atag i)             = "Atag " ++ show i
 showPreAccOp (Pipe _ _ _)         = "Pipe"
 showPreAccOp (Acond _ _ _)        = "Acond"
-showPreAccOp (FstArray _)         = "FstArray"
-showPreAccOp (SndArray _)         = "SndArray"
-showPreAccOp (PairArrays _ _)     = "PairArrays"
-showPreAccOp (Use arr)            = "Use " ++ showShortendArr arr
+showPreAccOp (Atuple _)           = "Atuple"
+showPreAccOp (Aprj _ _)           = "Aprj"
+showPreAccOp (Use a)              = "Use " ++ showArrays a
 showPreAccOp (Unit _)             = "Unit"
 showPreAccOp (Generate _ _)       = "Generate"
 showPreAccOp (Reshape _ _)        = "Reshape"
@@ -1941,6 +1963,19 @@ showPreAccOp (Permute _ _ _ _)    = "Permute"
 showPreAccOp (Backpermute _ _ _)  = "Backpermute"
 showPreAccOp (Stencil _ _ _)      = "Stencil"
 showPreAccOp (Stencil2 _ _ _ _ _) = "Stencil2"
+
+showArrays :: forall arrs. Arrays arrs => arrs -> String
+showArrays = display . collect (arrays (undefined::arrs)) . fromArr
+  where
+    collect :: ArraysR a -> a -> [String]
+    collect ArraysRunit         _        = []
+    collect ArraysRarray        arr      = [showShortendArr arr]
+    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    --
+    display []  = []
+    display [x] = x
+    display xs  = "(" ++ concat (intersperse ", " xs) ++ ")"
+
 
 showShortendArr :: Elt e => Array sh e -> String
 showShortendArr arr 
@@ -1992,6 +2027,135 @@ mkReplicate e arr
   = AST.Replicate (sliceIndex slix) e arr
   where
     slix = undefined :: slix
+
+-- Smart constructors and destructors for array tuples
+--
+
+atup2 :: (Arrays a, Arrays b) => (Acc a, Acc b) -> Acc (a, b)
+atup2 (x1, x2) = Acc $ Atuple (NilAtup `SnocAtup` x1 `SnocAtup` x2)
+
+atup3 :: (Arrays a, Arrays b, Arrays c) => (Acc a, Acc b, Acc c) -> Acc (a, b, c)
+atup3 (x1, x2, x3) = Acc $ Atuple (NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3)
+
+atup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
+     => (Acc a, Acc b, Acc c, Acc d) -> Acc (a, b, c, d)
+atup4 (x1, x2, x3, x4)
+  = Acc $ Atuple (NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4)
+
+atup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
+     => (Acc a, Acc b, Acc c, Acc d, Acc e) -> Acc (a, b, c, d, e)
+atup5 (x1, x2, x3, x4, x5)
+  = Acc $ Atuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4 `SnocAtup` x5
+
+atup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+     => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f) -> Acc (a, b, c, d, e, f)
+atup6 (x1, x2, x3, x4, x5, x6)
+  = Acc $ Atuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3
+              `SnocAtup` x4 `SnocAtup` x5 `SnocAtup` x6
+
+atup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
+     => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
+     -> Acc (a, b, c, d, e, f, g)
+atup7 (x1, x2, x3, x4, x5, x6, x7)
+  = Acc $ Atuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3
+              `SnocAtup` x4 `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7
+
+atup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
+     => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
+     -> Acc (a, b, c, d, e, f, g, h)
+atup8 (x1, x2, x3, x4, x5, x6, x7, x8)
+  = Acc $ Atuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4
+              `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7 `SnocAtup` x8
+
+atup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
+     => (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
+     -> Acc (a, b, c, d, e, f, g, h, i)
+atup9 (x1, x2, x3, x4, x5, x6, x7, x8, x9)
+  = Acc $ Atuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4
+              `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7 `SnocAtup` x8 `SnocAtup` x9
+
+unatup2 :: (Arrays a, Arrays b) => Acc (a, b) -> (Acc a, Acc b)
+unatup2 e = (Acc $ SuccTupIdx ZeroTupIdx `Aprj` e, Acc $ ZeroTupIdx `Aprj` e)
+
+unatup3 :: (Arrays a, Arrays b, Arrays c) => Acc (a, b, c) -> (Acc a, Acc b, Acc c)
+unatup3 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup4
+    :: (Arrays a, Arrays b, Arrays c, Arrays d)
+    => Acc (a, b, c, d) -> (Acc a, Acc b, Acc c, Acc d)
+unatup4 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup5
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
+    => Acc (a, b, c, d, e) -> (Acc a, Acc b, Acc c, Acc d, Acc e)
+unatup5 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup6
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+    => Acc (a, b, c, d, e, f) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f)
+unatup6 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup7
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
+    => Acc (a, b, c, d, e, f, g) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g)
+unatup7 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup8
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
+    => Acc (a, b, c, d, e, f, g, h) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h)
+unatup8 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
+
+unatup9
+    :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
+    => Acc (a, b, c, d, e, f, g, h, i) -> (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i)
+unatup9 e =
+  ( Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx)) `Aprj` e
+  , Acc $ SuccTupIdx (SuccTupIdx ZeroTupIdx) `Aprj` e
+  , Acc $ SuccTupIdx ZeroTupIdx `Aprj` e
+  , Acc $ ZeroTupIdx `Aprj` e )
 
 
 -- Smart constructors for stencil reification
@@ -2134,33 +2298,17 @@ tix7 = SuccTupIdx tix6
 tix8 :: Elt s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
 
--- Pushes the 'Acc' constructor through a pair
---
-unpair :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-       => Acc (Array sh1 e1, Array sh2 e2) 
-       -> (Acc (Array sh1 e1), Acc (Array sh2 e2))
-unpair acc = (Acc $ FstArray acc, Acc $ SndArray acc)
-
--- Creates an 'Acc' pair from two separate 'Acc's.
---
-pair :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-     => Acc (Array sh1 e1)
-     -> Acc (Array sh2 e2)
-     -> Acc (Array sh1 e1, Array sh2 e2)
-pair acc1 acc2 = Acc $ PairArrays acc1 acc2
-
 
 -- Smart constructor for literals
--- 
+--
 
 -- |Constant scalar expression
 --
 constant :: Elt t => t -> Exp t
 constant = Exp . Const
 
--- Smart constructor and destructors for tuples
+-- Smart constructor and destructors for scalar tuples
 --
-
 tup2 :: (Elt a, Elt b) => (Exp a, Exp b) -> Exp (a, b)
 tup2 (x1, x2) = Exp $ Tuple (NilTup `SnocTup` x1 `SnocTup` x2)
 
@@ -2190,7 +2338,7 @@ tup7 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
 tup7 (x1, x2, x3, x4, x5, x6, x7)
   = Exp $ Tuple $
       NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3
-	     `SnocTup` x4 `SnocTup` x5 `SnocTup` x6 `SnocTup` x7
+             `SnocTup` x4 `SnocTup` x5 `SnocTup` x6 `SnocTup` x7
 
 tup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h)
@@ -2198,7 +2346,7 @@ tup8 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
 tup8 (x1, x2, x3, x4, x5, x6, x7, x8)
   = Exp $ Tuple $
       NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4
-	     `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8
+             `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8
 
 tup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
      => (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i)
@@ -2206,7 +2354,7 @@ tup9 :: (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
 tup9 (x1, x2, x3, x4, x5, x6, x7, x8, x9)
   = Exp $ Tuple $
       NilTup `SnocTup` x1 `SnocTup` x2 `SnocTup` x3 `SnocTup` x4
-	     `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8 `SnocTup` x9
+             `SnocTup` x5 `SnocTup` x6 `SnocTup` x7 `SnocTup` x8 `SnocTup` x9
 
 untup2 :: (Elt a, Elt b) => Exp (a, b) -> (Exp a, Exp b)
 untup2 e = (Exp $ SuccTupIdx ZeroTupIdx `Prj` e, Exp $ ZeroTupIdx `Prj` e)

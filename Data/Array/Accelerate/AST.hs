@@ -74,7 +74,6 @@ module Data.Array.Accelerate.AST (
   Val(..), ValElt(..), prj, prjElt,
 
   -- * Accelerated array expressions
-  Arrays(..), ArraysR(..), 
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   Stencil(..), StencilR(..),
 
@@ -91,7 +90,6 @@ import Data.Typeable
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Representation (SliceIndex)
-import Data.Array.Accelerate.Array.Delayed        (Delayable)
 import Data.Array.Accelerate.Array.Sugar          as Sugar
 
 #include "accelerate.h"
@@ -150,27 +148,6 @@ prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsist
 -- Array expressions
 -- -----------------
 
--- |Tuples of arrays (of type 'Array dim e').  This characterises the domain of results of
--- Accelerate array computations.
---
-class (Delayable arrs, Typeable arrs) => Arrays arrs where
-  arrays :: ArraysR arrs
-  
--- |GADT reifying the 'Arrays' class.
---
-data ArraysR arrs where
-  ArraysRunit  :: ArraysR ()
-  ArraysRarray :: (Shape sh, Elt e) => ArraysR (Array sh e)
-  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
-  
-instance Arrays () where
-  arrays = ArraysRunit
-instance (Shape sh, Elt e) => Arrays (Array sh e) where
-  arrays = ArraysRarray
-instance (Arrays arrs1, Arrays arrs2) => Arrays (arrs1, arrs2) where
-  arrays = ArraysRpair arrays arrays
-
-
 -- |Function abstraction over parametrised array computations
 --
 data PreOpenAfun acc aenv t where
@@ -214,26 +191,24 @@ data PreOpenAcc acc aenv a where
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
   Alet         :: (Arrays bndArrs, Arrays bodyArrs)
-               => acc            aenv            bndArrs                -- bound expression
-               -> acc            (aenv, bndArrs) bodyArrs               -- the bound expr's scope
+               => acc            aenv            bndArrs        -- bound expression
+               -> acc            (aenv, bndArrs) bodyArrs       -- the bound expression scope
                -> PreOpenAcc acc aenv            bodyArrs
-
-  -- Variant of 'Let' binding a pair by decomposing it
-  Alet2        :: (Arrays bndArrs1, Arrays bndArrs2, Arrays bodyArrs)
-               => acc            aenv            (bndArrs1, bndArrs2)   -- bound expressions
-               -> acc            ((aenv, bndArrs1), bndArrs2)
-                                                 bodyArrs               -- the bound expr's scope
-               -> PreOpenAcc acc aenv            bodyArrs
-
-  PairArrays  :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-              => acc            aenv (Array sh1 e1)
-              -> acc            aenv (Array sh2 e2)
-              -> PreOpenAcc acc aenv (Array sh1 e1, Array sh2 e2)
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
               => Idx            aenv arrs
               -> PreOpenAcc acc aenv arrs
+
+  -- Tuples of arrays
+  Atuple      :: (Arrays arrs, IsTuple arrs)
+              => Atuple    (acc aenv) (TupleRepr arrs)
+              -> PreOpenAcc acc aenv  arrs
+
+  Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
+              => TupleIdx (TupleRepr arrs) a
+              ->            acc aenv arrs
+              -> PreOpenAcc acc aenv a
 
   -- Array-function application (to keep things simple for the moment, the function must be closed)
   Apply       :: (Arrays arrs1, Arrays arrs2)
@@ -249,8 +224,9 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv arrs
 
   -- Array inlet (triggers async host->device transfer if necessary)
-  Use         :: Array dim e
-              -> PreOpenAcc acc aenv (Array dim e)
+  Use         :: Arrays arrs
+              => ArrRepr arrs
+              -> PreOpenAcc acc aenv arrs
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   Unit        :: Elt e
@@ -264,7 +240,7 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh' e)       -- array to be reshaped
               -> PreOpenAcc acc aenv (Array sh e)
 
-  -- Constuct a new array by applying a function to each index.
+  -- Construct a new array by applying a function to each index.
   Generate    :: (Shape sh, Elt e)
               => PreExp     acc aenv sh                  -- output shape
               -> PreFun     acc aenv (sh -> e)           -- representation function
@@ -650,12 +626,12 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   Const       :: Elt t
               => EltRepr t
               -> PreOpenExp acc env aenv t
-              
+
   -- Tuples
   Tuple       :: (Elt t, IsTuple t)
               => Tuple (PreOpenExp acc env aenv) (TupleRepr t)
               -> PreOpenExp acc env aenv t
-  Prj         :: (Elt t, IsTuple t)
+  Prj         :: (Elt t, IsTuple t, Elt e)
               => TupleIdx (TupleRepr t) e
               -> PreOpenExp acc env aenv t
               -> PreOpenExp acc env aenv e

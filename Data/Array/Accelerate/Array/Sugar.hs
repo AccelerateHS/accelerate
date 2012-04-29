@@ -16,6 +16,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Segments,
+  Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr, EltRepr',
@@ -640,6 +641,146 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 
 -- Surface arrays
 -- --------------
+
+-- We represent tuples of arrays in the same way as tuples of scalars; using
+-- '()' and '(,)' as type-level nil and snoc. This characterises the domain of
+-- results of Accelerate array computations.
+--
+type family ArrRepr a :: *
+type instance ArrRepr () = ()
+type instance ArrRepr (Array sh e) = ((), Array sh e)
+type instance ArrRepr (b, a) = (ArrRepr b, ArrRepr' a)
+type instance ArrRepr (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
+type instance ArrRepr (d, c, b, a) = (ArrRepr (d, c, b), ArrRepr' a)
+type instance ArrRepr (e, d, c, b, a) = (ArrRepr (e, d, c, b), ArrRepr' a)
+type instance ArrRepr (f, e, d, c, b, a) = (ArrRepr (f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
+
+type family ArrRepr' a :: *
+type instance ArrRepr' () = ()
+type instance ArrRepr' (Array sh e) = Array sh e
+type instance ArrRepr' (b, a) = (ArrRepr b, ArrRepr' a)
+type instance ArrRepr' (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
+type instance ArrRepr' (d, c, b, a) = (ArrRepr (d, c, b), ArrRepr' a)
+type instance ArrRepr' (e, d, c, b, a) = (ArrRepr (e, d, c, b), ArrRepr' a)
+type instance ArrRepr' (f, e, d, c, b, a) = (ArrRepr (f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr' (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr' (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr' (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
+
+-- Array type reification
+--
+data ArraysR arrs where
+  ArraysRunit  ::                                   ArraysR ()
+  ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
+  ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
+
+class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
+  arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
+  arrays'  :: a {- dummy -} -> ArraysR (ArrRepr' a)
+  --
+  toArr    :: ArrRepr  a -> a
+  toArr'   :: ArrRepr' a -> a
+  fromArr  :: a -> ArrRepr  a
+  fromArr' :: a -> ArrRepr' a
+
+
+instance Arrays () where
+  arrays  _ = ArraysRunit
+  arrays' _ = ArraysRunit
+  --
+  toArr     = id
+  toArr'    = id
+  fromArr   = id
+  fromArr'  = id
+
+instance (Shape sh, Elt e) => Arrays (Array sh e) where
+  arrays  _       = ArraysRpair ArraysRunit ArraysRarray
+  arrays' _       = ArraysRarray
+  --
+  toArr ((), arr) = arr
+  toArr'          = id
+  fromArr arr     = ((), arr)
+  fromArr'        = id
+
+instance (Arrays b, Arrays a) => Arrays (b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
+  --
+  toArr    (b, a) = (toArr b, toArr' a)
+  toArr'   (b, a) = (toArr b, toArr' a)
+  fromArr  (b, a) = (fromArr b, fromArr' a)
+  fromArr' (b, a) = (fromArr b, fromArr' a)
+
+instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
+  --
+  toArr    (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
+  toArr'   (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
+  fromArr  (c, b, a) = (fromArr (c, b), fromArr' a)
+  fromArr' (c, b, a) = (fromArr (c, b), fromArr' a)
+
+instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
+  toArr'   (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
+  fromArr  (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
+  fromArr' (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
+
+instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
+  toArr'   (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
+  fromArr  (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
+  fromArr' (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
+
+instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
+  => Arrays (f, e, d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
+  toArr'   (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
+  fromArr  (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
+  fromArr' (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
+
+instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
+  => Arrays (g, f, e, d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
+  toArr'   (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
+  fromArr  (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
+  fromArr' (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
+
+instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
+  => Arrays (h, g, f, e, d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
+  toArr'   (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
+  fromArr  (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
+  fromArr' (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
+
+instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
+  => Arrays (i, h, g, f, e, d, c, b, a) where
+  arrays  _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  arrays' _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  --
+  toArr    (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
+  toArr'   (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
+  fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
+  fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
+
 
 -- |Multi-dimensional arrays for array processing
 --

@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Prelude (
   -- ** Map-like
   zip, zip3, zip4,
   unzip, unzip3, unzip4,
-  
+
   -- ** Reductions
   foldAll, fold1All,
 
@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Prelude (
   -- ** Segmented scans
   scanlSeg, scanl'Seg, scanl1Seg, prescanlSeg, postscanlSeg,
   scanrSeg, scanr'Seg, scanr1Seg, prescanrSeg, postscanrSeg,
-  
+
   -- ** Reshaping of arrays
   flatten,
 
@@ -43,11 +43,10 @@ module Data.Array.Accelerate.Prelude (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, zip3, unzip, unzip3, map, zipWith,
-                         scanl, scanl1, scanr, scanr1,
-                         init, tail, take, drop, filter, max, min, not,
-                         fst, snd, curry, uncurry,
-                         fromIntegral)
+import Prelude hiding (
+  replicate, zip, zip3, unzip, unzip3, map, zipWith, scanl, scanl1, scanr,
+  scanr1, init, tail, take, drop, filter, max, min, not, fst, snd, curry,
+  uncurry, fromIntegral, abs, pred )
 import qualified Prelude
 
 -- friends
@@ -101,28 +100,37 @@ unzip arr = (map fst arr, map snd arr)
 
 -- |Take an array of triples and return three arrays, analogous to unzip.
 --
-unzip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
-       => Acc (Array sh (a, b, c))
-       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
+unzip3
+    :: forall sh a b c. (Shape sh, Elt a, Elt b, Elt c)
+    => Acc (Array sh (a, b, c))
+    -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
 unzip3 abcs = (as, bs, cs)
   where
     (bs, cs)  = unzip bcs
-    (as, bcs) = unzip
-              $ map (\abc -> let (a, b, c) = unlift abc :: (Exp a, Exp b, Exp c) in lift (a, lift (b, c))) abcs
+    (as, bcs) = unzip $ map swizzle abcs
+
+    swizzle :: Exp (a, b, c) -> Exp (a, (b, c))
+    swizzle abc = let (a, b, c) = unlift abc  :: (Exp a, Exp b, Exp c)
+                      bc        = lift (b, c) :: Exp (b, c)
+                  in lift (a, bc)
 
 -- |Take an array of quadruples and return four arrays, analogous to unzip.
 --
-unzip4 :: forall sh. forall a. forall b. forall c. forall d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
-       => Acc (Array sh (a, b, c, d))
-       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
+unzip4
+    :: forall sh a b c d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
+    => Acc (Array sh (a, b, c, d))
+    -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
 unzip4 abcds = (as, bs, cs, ds)
   where
-    (as, bs)   = unzip abs
-    (cs, ds)   = unzip cds
-    (abs, cds) = unzip
-               $ map (\abcd -> let (a, b, c, d) = unlift abcd :: (Exp a, Exp b, Exp c, Exp d)
-                               in lift (lift (a, b), lift (c, d)))
-                     abcds
+    (abs, cds)  = unzip $ map swizzle abcds
+    (as,  bs)   = unzip abs
+    (cs,  ds)   = unzip cds
+
+    swizzle :: Exp (a, b, c, d) -> Exp ((a, b), (c, d))
+    swizzle abcd = let (a, b, c, d) = unlift abcd :: (Exp a, Exp b, Exp c, Exp d)
+                       ab           = lift (a, b) :: Exp (a, b)
+                       cd           = lift (c, d) :: Exp (c, d)
+                   in  lift (ab, cd)
 
 
 -- Reductions

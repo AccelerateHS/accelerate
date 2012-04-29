@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, ScopedTypeVariables, NoMonomorphismRestriction #-}
+{-# LANGUAGE GADTs, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Traverse
 -- Copyright   : [2010..2011] Sean Seefried
@@ -36,40 +36,41 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
+
     travAcc' :: PreOpenAcc OpenAcc aenv a -> m b
-    travAcc' (Alet acc1 acc2)  = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
-    travAcc' (Alet2 acc1 acc2) = combine "Alet2" [ travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (PairArrays acc1 acc2) = combine "PairArrays" [travAcc f c l acc1, travAcc f c l acc2]
-    travAcc' (Avar idx) = leaf ("AVar " `cat` idxToInt idx)
-    travAcc' (Apply afun acc) = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
-    travAcc' (Acond e acc1 acc2) = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]
-    travAcc' (Use arr) = combine "Use" [ travArray f l arr ]
-    travAcc' (Unit e) = combine "Unit" [ travExp f c l e ]
-    travAcc' (Generate sh fun) = combine "Generate" [ travExp f c l  sh, travFun f c l fun]
-    travAcc' (Reshape sh acc) = combine "Reshape" [ travExp f c l  sh, travAcc f c l acc ]
-    travAcc' (Replicate _ ix acc) = combine "Replicate" [ travExp f c l  ix, travAcc f c l acc ]
-    travAcc' (Index _ acc ix) = combine "Index" [ travAcc f c l acc, travExp f c l  ix ]
-    travAcc' (Map fun acc) = combine "Map" [ travFun f c l fun, travAcc f c l acc ]
-    travAcc' (ZipWith fun acc1 acc2) = combine "ZipWith" [ travFun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (Fold fun e acc) = combine "Fold" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc]
-    travAcc' (Fold1 fun acc) = combine "Fold1" [ travFun f c l fun, travAcc f c l acc]
-    travAcc' (FoldSeg fun e acc1 acc2) = combine "FoldSeg" [ travFun f c l fun, travExp f c l  e,
-                                                            travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (Fold1Seg fun acc1 acc2) = combine "FoldSeg1" [ travFun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (Scanl fun e acc) = combine "Scanl" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
-    travAcc' (Scanl' fun e acc) = combine "Scanl'" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
-    travAcc' (Scanl1 fun acc) = combine "Scanl1" [ travFun f c l fun, travAcc f c l acc ]
-    travAcc' (Scanr fun e acc) = combine "Scanr" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
-    travAcc' (Scanr' fun e acc) = combine "Scanr'" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
-    travAcc' (Scanr1 fun acc) = combine "Scanr1" [ travFun f c l fun, travAcc f c l acc ]
-    travAcc' (Permute fun dfts p acc) = combine "Permute" [ travFun f c l fun, travAcc f c l dfts,
-                                                           travFun f c l p, travAcc f c l acc]
-    travAcc' (Backpermute sh p acc) = combine "Backpermute" [ travExp f c l  sh, travFun f c l p, travAcc f c l acc]
-    travAcc' (Stencil sten bndy acc) = combine "Stencil" [ travFun f c l sten, travBoundary f l acc bndy
-                                                        , travAcc f c l acc]
-    travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1,
-                                                                   travAcc f c l acc1, travBoundary f l acc2 bndy2,
-                                                                   travAcc f c l acc2]
+    travAcc' (Alet acc1 acc2)                      = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
+    travAcc' (Avar idx)                            = leaf   ("AVar " `cat` idxToInt idx)
+    travAcc' (Apply afun acc)                      = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
+    travAcc' (Acond e acc1 acc2)                   = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]
+    travAcc' (Atuple tup)                          = combine "Atuple" [ travAtuple f c l tup ]
+    travAcc' (Aprj idx a)                          = combine ("Aprj " `cat` tupleIdxToInt idx) [ travAcc f c l a ]
+    travAcc' (Use arr)                             = combine "Use" [ travArrays f c l (arrays (undefined::a)) arr ]
+    travAcc' (Unit e)                              = combine "Unit" [ travExp f c l e ]
+    travAcc' (Generate sh fun)                     = combine "Generate" [ travExp f c l  sh, travFun f c l fun]
+    travAcc' (Reshape sh acc)                      = combine "Reshape" [ travExp f c l  sh, travAcc f c l acc ]
+    travAcc' (Replicate _ ix acc)                  = combine "Replicate" [ travExp f c l  ix, travAcc f c l acc ]
+    travAcc' (Index _ acc ix)                      = combine "Index" [ travAcc f c l acc, travExp f c l  ix ]
+    travAcc' (Map fun acc)                         = combine "Map" [ travFun f c l fun, travAcc f c l acc ]
+    travAcc' (ZipWith fun acc1 acc2)               = combine "ZipWith" [ travFun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (Fold fun e acc)                      = combine "Fold" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc]
+    travAcc' (Fold1 fun acc)                       = combine "Fold1" [ travFun f c l fun, travAcc f c l acc]
+    travAcc' (FoldSeg fun e acc1 acc2)             = combine "FoldSeg" [ travFun f c l fun, travExp f c l  e
+                                                                       , travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (Fold1Seg fun acc1 acc2)              = combine "FoldSeg1" [ travFun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (Scanl fun e acc)                     = combine "Scanl" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
+    travAcc' (Scanl' fun e acc)                    = combine "Scanl'" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
+    travAcc' (Scanl1 fun acc)                      = combine "Scanl1" [ travFun f c l fun, travAcc f c l acc ]
+    travAcc' (Scanr fun e acc)                     = combine "Scanr" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
+    travAcc' (Scanr' fun e acc)                    = combine "Scanr'" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc ]
+    travAcc' (Scanr1 fun acc)                      = combine "Scanr1" [ travFun f c l fun, travAcc f c l acc ]
+    travAcc' (Permute fun dfts p acc)              = combine "Permute" [ travFun f c l fun, travAcc f c l dfts
+                                                                       , travFun f c l p, travAcc f c l acc]
+    travAcc' (Backpermute sh p acc)                = combine "Backpermute" [ travExp f c l  sh, travFun f c l p, travAcc f c l acc]
+    travAcc' (Stencil sten bndy acc)               = combine "Stencil" [ travFun f c l sten, travBoundary f l acc bndy
+                                                                       , travAcc f c l acc]
+    travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
+                                                                        , travAcc f c l acc1, travBoundary f l acc2 bndy2
+                                                                        , travAcc f c l acc2]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
@@ -79,6 +80,7 @@ travExp f c l expr = travExp' expr
   where
     combine = c (expFormat f)
     leaf    = l (expFormat f)
+
     travExp' :: OpenExp env aenv a -> m b
     travExp' (Let e1 e2)         = combine "Let" [travExp f c l e1, travExp f c l e2]
     travExp' (Var idx)           = leaf ("Var "   `cat` idxToInt idx)
@@ -107,14 +109,23 @@ travAfun f c l openAfun = travAfun' openAfun
     travAfun' (Abody body) = combine "Abody" [ travAcc f c l body ]
     travAfun' (Alam fun)   = combine "Alam"  [ travAfun f c l fun ]
 
-travFun :: forall m b env aenv fun.Monad m => Labels -> (String -> String -> [m b] -> m b)
-        -> (String -> String -> m b) -> OpenFun env aenv fun -> m b
-travFun f c l openFun = travFun' openFun
+travArrays
+    :: forall m a b. Monad m
+    => Labels
+    -> (String -> String -> [m b] -> m b)
+    -> (String -> String -> m b)
+    -> ArraysR a
+    -> a
+    -> m b
+travArrays f c l = trav
   where
-    combine = c (funFormat f)
-    travFun' :: OpenFun env aenv fun -> m b
-    travFun' (Body body) = combine "Body" [ travExp f c l body ]
-    travFun' (Lam fun)   = combine "Lam"  [ travFun f c l fun ]
+    combine = c (accFormat f)
+    leaf    = l (accFormat f)
+    --
+    trav :: ArraysR a' -> a' -> m b
+    trav ArraysRunit         ()       = leaf    "ArraysRunit"
+    trav ArraysRarray        a        = combine "ArraysRarray" [ travArray f l a ]
+    trav (ArraysRpair r1 r2) (a1, a2) = combine "ArraysRpair"  [trav r1 a1, trav r2 a2]
 
 travArray :: forall dim a m b. Monad m => Labels -> (String -> String -> m b) -> Array dim a -> m b
 travArray f l (Array sh _) = l (arrayFormat f) ("Array" `cat` (toElt sh :: dim))
@@ -130,6 +141,33 @@ travBoundary f l boundary = travBoundary' boundary
     travBoundary' _ Mirror       = leaf "Mirror"
     travBoundary' _ Wrap         = leaf "Wrap"
     travBoundary' _ (Constant e) = leaf ("Constant " `cat` (toElt e :: e))
+
+
+travAtuple
+    :: forall m b aenv t. Monad m
+    => Labels
+    -> (String -> String -> [m b] -> m b)
+    -> (String -> String -> m b)
+    -> Atuple (OpenAcc aenv) t
+    -> m b
+travAtuple f c l = trav
+  where
+    leaf    = l (tupleFormat f)
+    combine = c (tupleFormat f)
+    --
+    trav :: Atuple (OpenAcc aenv) t' -> m b
+    trav NilAtup          = leaf    "NilAtup"
+    trav (SnocAtup tup a) = combine "SnocAtup" [ trav tup, travAcc f c l a ]
+
+
+travFun :: forall m b env aenv fun.Monad m => Labels -> (String -> String -> [m b] -> m b)
+        -> (String -> String -> m b) -> OpenFun env aenv fun -> m b
+travFun f c l openFun = travFun' openFun
+  where
+    combine = c (funFormat f)
+    travFun' :: OpenFun env aenv fun -> m b
+    travFun' (Body body) = combine "Body" [ travExp f c l body ]
+    travFun' (Lam fun)   = combine "Lam"  [ travFun f c l fun ]
 
 
 travTuple :: forall m b env aenv t. Monad m => Labels -> (String -> String -> [m b] -> m b)

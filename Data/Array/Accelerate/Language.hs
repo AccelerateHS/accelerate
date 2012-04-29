@@ -22,7 +22,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Array and scalar expressions
   Acc, Exp,                                 -- re-exporting from 'Smart'
-  
+
   -- ** Stencil specification
   Boundary(..), Stencil,                    -- re-exporting from 'Smart'
 
@@ -37,50 +37,49 @@ module Data.Array.Accelerate.Language (
 
   -- ** Array construction
   use, unit, replicate, generate,
-  fstA, sndA, pairA,
 
   -- ** Shape manipulation
   reshape,
 
   -- ** Extraction of subarrays
-  slice, 
-  
+  slice,
+
   -- ** Map-like functions
   map, zipWith,
-  
+
   -- ** Reductions
   fold, fold1, foldSeg, fold1Seg,
-  
+
   -- ** Scan functions
   scanl, scanl', scanl1, scanr, scanr', scanr1,
-  
+
   -- ** Permutations
-  permute, backpermute, 
-  
+  permute, backpermute,
+
   -- ** Stencil operations
   stencil, stencil2,
-  
+
   -- ** Pipelining
   (>->),
-  
+
   -- ** Array-level flow-control
   cond, (?|),
 
   -- ** Lifting and unlifting
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
-  
+
   -- ** Tuple construction and destruction
   fst, snd, curry, uncurry,
-  
+
   -- ** Index construction and destruction
   index0, index1, unindex1, index2, unindex2,
-  
+
   -- ** Conditional expressions
   (?),
-  
+
   -- ** Array operations with a scalar result
   (!), the, shape, size, shapeSize,
-  
+
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
   bit, setBit, clearBit, complementBit, testBit,
@@ -90,7 +89,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
-  
+
   -- ** Conversions
   boolToInt, fromIntegral,
 
@@ -116,7 +115,6 @@ import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.AST (Arrays)
 
 
 -- Array introduction
@@ -125,7 +123,7 @@ import Data.Array.Accelerate.AST (Arrays)
 -- |Array inlet: makes an array available for processing using the Accelerate
 -- language; triggers asynchronous host->device transfer if necessary.
 --
-use :: (Shape ix, Elt e) => Array ix e -> Acc (Array ix e)
+use :: Arrays arrays => arrays -> Acc arrays
 use = Acc . Use
 
 -- |Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
@@ -295,7 +293,7 @@ scanl' :: Elt a
        -> Exp a
        -> Acc (Vector a)
        -> (Acc (Vector a), Acc (Scalar a))
-scanl' = unpair . Acc $$$ Scanl'
+scanl' = unlift . Acc $$$ Scanl'
 
 -- |'Data.List' style left-to-right scan without an initial value (aka inclusive scan).  Again, the
 -- first argument needs to be an /associative/ function.  Denotationally, we have
@@ -327,7 +325,7 @@ scanr' :: Elt a
        -> Exp a
        -> Acc (Vector a)
        -> (Acc (Vector a), Acc (Scalar a))
-scanr' = unpair . Acc $$$ Scanr'
+scanr' = unlift . Acc $$$ Scanr'
 
 -- |Right-to-left variant of 'scanl1'.
 --
@@ -463,301 +461,384 @@ infix 0 ?|
 c ?| (t, e) = cond c t e
 
 
--- Construction and destruction of array pairs
--- -------------------------------------------
+-- Lifting surface expressions
+-- ---------------------------
 
--- |Extract the first component of an array pair.
---
-fstA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-     => Acc (Array sh1 e1, Array sh2 e2)
-     -> Acc (Array sh1 e1)
-fstA = Acc . FstArray
-
-
--- |Extract the second component of an array pair.
---
-sndA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-     => Acc (Array sh1 e1, Array sh2 e2)
-     -> Acc (Array sh2 e2)
-sndA = Acc . SndArray
-
--- |Create an array pair from two separate arrays.
---
-pairA :: (Shape sh1, Shape sh2, Elt e1, Elt e2)
-      => Acc (Array sh1 e1)
-      -> Acc (Array sh2 e2)
-      -> Acc (Array sh1 e1, Array sh2 e2)
-pairA = Acc $$ PairArrays
-
-
-
--- Lifting scalar expressions
--- --------------------------
-
-class Lift e where
+class Lift c e where
   type Plain e
 
-  -- |Lift the given value into 'Exp'.  The value may already contain subexpressions in 'Exp'.
+  -- | Lift the given value into a surface type 'c' --- either 'Exp' for scalar
+  -- expressions or 'Acc' for array computations. The value may already contain
+  -- subexpressions in 'c'.
   --
-  lift :: e -> Exp (Plain e)
+  lift :: e -> c (Plain e)
 
-class Lift e => Unlift e where
+class Lift c e => Unlift c e where
 
-  -- |Unlift the outermost constructor through 'Exp'.  This is only possible if the constructor is
-  -- fully determined by its type - i.e., it is a singleton.
+  -- | Unlift the outermost constructor through the surface type. This is only
+  -- possible if the constructor is fully determined by its type - i.e., it is a
+  -- singleton.
   --
-  unlift :: Exp (Plain e) -> e
+  unlift :: c (Plain e) -> e
 
 -- instances for indices
 
-instance Lift () where
+instance Lift Exp () where
   type Plain () = ()
   lift _ = Exp $ Tuple NilTup
 
-instance Unlift () where
+instance Unlift Exp () where
   unlift _ = ()
 
-instance Lift Z where
+instance Lift Exp Z where
   type Plain Z = Z
   lift _ = Exp $ IndexNil
 
-instance Unlift Z where
+instance Unlift Exp Z where
   unlift _ = Z
 
-instance (Slice (Plain ix), Lift ix) => Lift (ix :. Int) where
+instance (Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Int) where
   type Plain (ix :. Int) = Plain ix :. Int
   lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
-instance (Slice (Plain ix), Lift ix) => Lift (ix :. All) where
+instance (Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. All) where
   type Plain (ix :. All) = Plain ix :. All
   lift (ix:.i) = Exp $ IndexCons (lift ix) (Exp $ Const i)
 
-instance (Elt e, Slice (Plain ix), Lift ix) => Lift (ix :. Exp e) where
+instance (Elt e, Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
   lift (ix:.i) = Exp $ IndexCons (lift ix) i
 
-instance (Elt e, Slice (Plain ix), Unlift ix) => Unlift (ix :. Exp e) where
+instance (Elt e, Slice (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
   unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
 
-instance Shape sh => Lift (Any sh) where
+instance Shape sh => Lift Exp (Any sh) where
  type Plain (Any sh) = Any sh
  lift Any = Exp $ IndexAny
 
 -- instances for numeric types
 
-instance Lift Int where
+instance Lift Exp Int where
   type Plain Int = Int
   lift = Exp . Const
-  
-instance Lift Int8 where
+
+instance Lift Exp Int8 where
   type Plain Int8 = Int8
   lift = Exp . Const
-  
-instance Lift Int16 where
+
+instance Lift Exp Int16 where
   type Plain Int16 = Int16
   lift = Exp . Const
-  
-instance Lift Int32 where
+
+instance Lift Exp Int32 where
   type Plain Int32 = Int32
   lift = Exp . Const
-  
-instance Lift Int64 where
+
+instance Lift Exp Int64 where
   type Plain Int64 = Int64
   lift = Exp . Const
-  
-instance Lift Word where
+
+instance Lift Exp Word where
   type Plain Word = Word
   lift = Exp . Const
-  
-instance Lift Word8 where
+
+instance Lift Exp Word8 where
   type Plain Word8 = Word8
   lift = Exp . Const
-  
-instance Lift Word16 where
+
+instance Lift Exp Word16 where
   type Plain Word16 = Word16
   lift = Exp . Const
-  
-instance Lift Word32 where
+
+instance Lift Exp Word32 where
   type Plain Word32 = Word32
   lift = Exp . Const
-  
-instance Lift Word64 where
+
+instance Lift Exp Word64 where
   type Plain Word64 = Word64
   lift = Exp . Const
 
-{-  
-instance Lift CShort where
+{-
+instance Lift Exp CShort where
   type Plain CShort = CShort
   lift = Exp . Const
-  
-instance Lift CUShort where
+
+instance Lift Exp CUShort where
   type Plain CUShort = CUShort
   lift = Exp . Const
-  
-instance Lift CInt where
+
+instance Lift Exp CInt where
   type Plain CInt = CInt
   lift = Exp . Const
-  
-instance Lift CUInt where
+
+instance Lift Exp CUInt where
   type Plain CUInt = CUInt
   lift = Exp . Const
-  
-instance Lift CLong where
+
+instance Lift Exp CLong where
   type Plain CLong = CLong
   lift = Exp . Const
-  
-instance Lift CULong where
+
+instance Lift Exp CULong where
   type Plain CULong = CULong
   lift = Exp . Const
-  
-instance Lift CLLong where
+
+instance Lift Exp CLLong where
   type Plain CLLong = CLLong
   lift = Exp . Const
-  
-instance Lift CULLong where
+
+instance Lift Exp CULLong where
   type Plain CULLong = CULLong
   lift = Exp . Const
  -}
- 
-instance Lift Float where
+
+instance Lift Exp Float where
   type Plain Float = Float
   lift = Exp . Const
 
-instance Lift Double where
+instance Lift Exp Double where
   type Plain Double = Double
   lift = Exp . Const
 
 {-
-instance Lift CFloat where
+instance Lift Exp CFloat where
   type Plain CFloat = CFloat
   lift = Exp . Const
 
-instance Lift CDouble where
+instance Lift Exp CDouble where
   type Plain CDouble = CDouble
   lift = Exp . Const
  -}
 
-instance Lift Bool where
+instance Lift Exp Bool where
   type Plain Bool = Bool
   lift = Exp . Const
 
-instance Lift Char where
+instance Lift Exp Char where
   type Plain Char = Char
   lift = Exp . Const
 
 {-
-instance Lift CChar where
+instance Lift Exp CChar where
   type Plain CChar = CChar
   lift = Exp . Const
 
-instance Lift CSChar where
+instance Lift Exp CSChar where
   type Plain CSChar = CSChar
   lift = Exp . Const
 
-instance Lift CUChar where
-  
+instance Lift Exp CUChar where
+
 type Plain CUChar = CUChar
   lift = Exp . Const
  -}
 
 -- Instances for tuples
 
-instance (Lift a, Lift b, Elt (Plain a), Elt (Plain b)) => Lift (a, b) where
+instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (a, b) where
   type Plain (a, b) = (Plain a, Plain b)
   lift (x, y) = tup2 (lift x, lift y)
 
-instance (Elt a, Elt b) => Unlift (Exp a, Exp b) where
+instance (Elt a, Elt b) => Unlift Exp (Exp a, Exp b) where
   unlift = untup2
 
-instance (Lift a, Lift b, Lift c, Elt (Plain a), Elt (Plain b), Elt (Plain c)) => Lift (a, b, c) where
+instance (Lift Exp a, Lift Exp b, Lift Exp c,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c))
+  => Lift Exp (a, b, c) where
   type Plain (a, b, c) = (Plain a, Plain b, Plain c)
   lift (x, y, z) = tup3 (lift x, lift y, lift z)
 
-instance (Elt a, Elt b, Elt c) => Unlift (Exp a, Exp b, Exp c) where
+instance (Elt a, Elt b, Elt c) => Unlift Exp (Exp a, Exp b, Exp c) where
   unlift = untup3
 
-instance (Lift a, Lift b, Lift c, Lift d,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d)) 
-  => Lift (a, b, c, d) where
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d))
+  => Lift Exp (a, b, c, d) where
   type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
   lift (x, y, z, u) = tup4 (lift x, lift y, lift z, lift u)
 
-instance (Elt a, Elt b, Elt c, Elt d) => Unlift (Exp a, Exp b, Exp c, Exp d) where
+instance (Elt a, Elt b, Elt c, Elt d) => Unlift Exp (Exp a, Exp b, Exp c, Exp d) where
   unlift = untup4
 
-instance (Lift a, Lift b, Lift c, Lift d, Lift e,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e)) 
-  => Lift (a, b, c, d, e) where
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e))
+  => Lift Exp (a, b, c, d, e) where
   type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
   lift (x, y, z, u, v) = tup5 (lift x, lift y, lift z, lift u, lift v)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e) where
+instance (Elt a, Elt b, Elt c, Elt d, Elt e)
+  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e) where
   unlift = untup5
 
-instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f)) 
-  => Lift (a, b, c, d, e, f) where
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f))
+  => Lift Exp (a, b, c, d, e, f) where
   type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
   lift (x, y, z, u, v, w) = tup6 (lift x, lift y, lift z, lift u, lift v, lift w)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) 
-  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f) where
   unlift = untup6
 
-instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g,
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g,
           Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g)) 
-  => Lift (a, b, c, d, e, f, g) where
+          Elt (Plain g))
+  => Lift Exp (a, b, c, d, e, f, g) where
   type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
   lift (x, y, z, u, v, w, r) = tup7 (lift x, lift y, lift z, lift u, lift v, lift w, lift r)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g) 
-  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g) where
   unlift = untup7
 
-instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g, Lift h,
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e, Lift Exp f, Lift Exp g, Lift Exp h,
           Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g), Elt (Plain h)) 
-  => Lift (a, b, c, d, e, f, g, h) where
-  type Plain (a, b, c, d, e, f, g, h) 
+          Elt (Plain g), Elt (Plain h))
+  => Lift Exp (a, b, c, d, e, f, g, h) where
+  type Plain (a, b, c, d, e, f, g, h)
     = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
-  lift (x, y, z, u, v, w, r, s) 
+  lift (x, y, z, u, v, w, r, s)
     = tup8 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h) 
-  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h) where
   unlift = untup8
 
-instance (Lift a, Lift b, Lift c, Lift d, Lift e, Lift f, Lift g, Lift h, Lift i,
-          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e), Elt (Plain f),
-          Elt (Plain g), Elt (Plain h), Elt (Plain i)) 
-  => Lift (a, b, c, d, e, f, g, h, i) where
-  type Plain (a, b, c, d, e, f, g, h, i) 
+instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
+          Lift Exp f, Lift Exp g, Lift Exp h, Lift Exp i,
+          Elt (Plain a), Elt (Plain b), Elt (Plain c), Elt (Plain d), Elt (Plain e),
+          Elt (Plain f), Elt (Plain g), Elt (Plain h), Elt (Plain i))
+  => Lift Exp (a, b, c, d, e, f, g, h, i) where
+  type Plain (a, b, c, d, e, f, g, h, i)
     = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
-  lift (x, y, z, u, v, w, r, s, t) 
+  lift (x, y, z, u, v, w, r, s, t)
     = tup9 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s, lift t)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i) 
-  => Unlift (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+  => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
   unlift = untup9
 
 -- Instance for scalar Accelerate expressions
 
-instance Lift (Exp e) where
+instance Lift Exp (Exp e) where
   type Plain (Exp e) = e
   lift = id
+
+
+-- Instance for Accelerate array computations
+
+instance Lift Acc (Acc a) where
+  type Plain (Acc a) = a
+  lift = id
+
+-- Instances for Arrays class
+
+--instance Lift Acc () where
+--  type Plain () = ()
+--  lift _ = Acc (Atuple NilAtup)
+
+instance (Shape sh, Elt e) => Lift Acc (Array sh e) where
+  type Plain (Array sh e) = Array sh e
+  lift = Acc . Use
+
+instance (Lift Acc a, Lift Acc b, Arrays (Plain a), Arrays (Plain b)) => Lift Acc (a, b) where
+  type Plain (a, b) = (Plain a, Plain b)
+  lift (x, y) = atup2 (lift x, lift y)
+
+instance (Arrays a, Arrays b) => Unlift Acc (Acc a, Acc b) where
+  unlift = unatup2
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c))
+  => Lift Acc (a, b, c) where
+  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
+  lift (x, y, z) = atup3 (lift x, lift y, lift z)
+
+instance (Arrays a, Arrays b, Arrays c) => Unlift Acc (Acc a, Acc b, Acc c) where
+  unlift = unatup3
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d))
+  => Lift Acc (a, b, c, d) where
+  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
+  lift (x, y, z, u) = atup4 (lift x, lift y, lift z, lift u)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d) => Unlift Acc (Acc a, Acc b, Acc c, Acc d) where
+  unlift = unatup4
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e))
+  => Lift Acc (a, b, c, d, e) where
+  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
+  lift (x, y, z, u, v) = atup5 (lift x, lift y, lift z, lift u, lift v)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
+  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e) where
+  unlift = unatup5
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f))
+  => Lift Acc (a, b, c, d, e, f) where
+  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
+  lift (x, y, z, u, v, w) = atup6 (lift x, lift y, lift z, lift u, lift v, lift w)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f) where
+  unlift = unatup6
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g))
+  => Lift Acc (a, b, c, d, e, f, g) where
+  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
+  lift (x, y, z, u, v, w, r) = atup7 (lift x, lift y, lift z, lift u, lift v, lift w, lift r)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
+  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g) where
+  unlift = unatup7
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e, Lift Acc f, Lift Acc g, Lift Acc h,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g), Arrays (Plain h))
+  => Lift Acc (a, b, c, d, e, f, g, h) where
+  type Plain (a, b, c, d, e, f, g, h)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
+  lift (x, y, z, u, v, w, r, s)
+    = atup8 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
+  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h) where
+  unlift = unatup8
+
+instance (Lift Acc a, Lift Acc b, Lift Acc c, Lift Acc d, Lift Acc e,
+          Lift Acc f, Lift Acc g, Lift Acc h, Lift Acc i,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
+          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i))
+  => Lift Acc (a, b, c, d, e, f, g, h, i) where
+  type Plain (a, b, c, d, e, f, g, h, i)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
+  lift (x, y, z, u, v, w, r, s, t)
+    = atup9 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s, lift t)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
+  => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
+  unlift = unatup9
+
+
+
+
 
 -- Helpers to lift functions
 
 -- |Lift a unary function into 'Exp'.
 --
-lift1 :: (Unlift e1, Lift e2) 
+lift1 :: (Unlift Exp e1, Lift Exp e2)
       => (e1 -> e2) -> Exp (Plain e1) -> Exp (Plain e2)
 lift1 f = lift . f . unlift
 
 -- |Lift a binary function into 'Exp'.
 --
-lift2 :: (Unlift e1, Unlift e2, Lift e3) 
+lift2 :: (Unlift Exp e1, Unlift Exp e2, Lift Exp e3)
       => (e1 -> e2 -> e3) -> Exp (Plain e1) -> Exp (Plain e2) -> Exp (Plain e3)
 lift2 f x y = lift $ f (unlift x) (unlift y)
 
@@ -810,14 +891,14 @@ index1 = lift . (Z:.)
 --
 unindex1 :: Exp (Z:. Int) -> Exp Int
 unindex1 ix = let Z:.i = unlift ix in i
-  
--- | Creates a rank-2 index from two exp ints.
--- 
+
+-- | Creates a rank-2 index from two Exp Int`s
+--
 index2 :: Exp Int -> Exp Int -> Exp DIM2
 index2 i j = lift (Z :. i :. j)
 
--- | Destructs a rank-2 index to an exp tuple of two ints.
--- 
+-- | Destructs a rank-2 index to an Exp tuple of two Int`s.
+--
 unindex2 :: Exp DIM2 -> Exp (Int, Int)
 unindex2 ix = let Z :. i :. j = unlift ix in lift ((i, j) :: (Exp Int, Exp Int))
 

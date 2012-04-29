@@ -43,30 +43,31 @@ type PrettyAcc acc = forall aenv t. Int -> (Doc -> Doc) -> acc aenv t -> Doc
 prettyAcc :: PrettyAcc OpenAcc
 prettyAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyAcc alvl wrap acc
 
-prettyPreAcc :: PrettyAcc acc -> Int -> (Doc -> Doc) -> PreOpenAcc acc aenv a -> Doc
+prettyPreAcc
+    :: forall acc aenv a.
+       PrettyAcc acc
+    -> Int
+    -> (Doc -> Doc)
+    -> PreOpenAcc acc aenv a
+    -> Doc
 prettyPreAcc pp alvl wrap (Alet acc1 acc2)
   = wrap 
   $ sep [ hang (text "let a" <> int alvl <+> char '=') 2 $
             pp alvl noParens acc1
         , text "in" <+> pp (alvl + 1) noParens acc2
         ]
-prettyPreAcc pp alvl wrap (Alet2 acc1 acc2)
-  = wrap
-  $ sep [ hang (text "let (a" <> int alvl <> text ", a" <> int (alvl + 1) <> char ')' <+>
-                char '=') 2 $
-            pp alvl noParens acc1
-        , text "in" <+> pp (alvl + 2) noParens acc2
-        ]
-prettyPreAcc pp alvl wrap (PairArrays acc1 acc2)
-  = wrap $ sep [pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  alvl _    (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)
+prettyPreAcc pp alvl wrap (Aprj ix arrs)
+  = wrap $ char '#' <> prettyTupleIdx ix <+> pp alvl parens arrs
+prettyPreAcc pp alvl _    (Atuple tup)
+  = prettyAtuple pp alvl tup
 prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
   = wrap $ prettyArrOp "cond" [prettyPreExp pp 0 alvl parens e, pp alvl parens acc1, pp alvl parens acc2]
 prettyPreAcc _  _    wrap (Use arr)
-  = wrap $ prettyArrOp "use" [prettyArray arr]
+  = wrap $ prettyArrOp "use" [prettyArrays (arrays (undefined::a)) arr]
 prettyPreAcc pp alvl wrap (Unit e)
   = wrap $ prettyArrOp "unit" [prettyPreExp pp 0 alvl parens e]
 prettyPreAcc pp alvl wrap (Generate sh f)
@@ -250,15 +251,25 @@ prettyPreExp pp lvl alvl wrap (ShapeSize idx)
 
 -- Pretty print nested pairs as a proper tuple.
 --
+prettyAtuple :: forall acc aenv t.
+                PrettyAcc acc
+             -> Int
+             -> Atuple (acc aenv) t
+             -> Doc
+prettyAtuple pp alvl = encloseSep lparen rparen comma . collect
+  where
+    collect :: Atuple (acc aenv) t' -> [Doc]
+    collect NilAtup          = []
+    collect (SnocAtup tup a) = collect tup ++ [pp alvl id a]
+
 prettyTuple :: forall acc env aenv t.
                PrettyAcc acc -> Int -> Int -> Tuple (PreOpenExp acc env aenv) t -> Doc
-prettyTuple pp lvl alvl exp = parens $ sep (map (<> comma) (init es) ++ [last es])
+prettyTuple pp lvl alvl = encloseSep lparen rparen comma . collect
   where
-    es = collect exp
-    --
     collect :: Tuple (PreOpenExp acc env aenv) t' -> [Doc]
     collect NilTup          = []
     collect (SnocTup tup e) = collect tup ++ [prettyPreExp pp lvl alvl noParens e]
+
 
 -- Pretty print an index for a tuple projection
 --
@@ -342,11 +353,22 @@ prettyAnyType :: ScalarType a -> Doc
 prettyAnyType ty = text $ show ty
 -}
 
+-- TLM: seems to flatten the nesting structure
+--
+prettyArrays :: ArraysR arrs -> arrs -> Doc
+prettyArrays arrs = encloseSep lparen rparen comma . collect arrs
+  where
+    collect :: ArraysR arrs -> arrs -> [Doc]
+    collect ArraysRunit         _        = []
+    collect ArraysRarray        arr      = [prettyArray arr]
+    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+
 prettyArray :: forall dim e. Array dim e -> Doc
 prettyArray arr@(Array sh _)
   = parens $
       hang (text "Array") 2 $
-        sep [showDoc (toElt sh :: dim), dataDoc]
+        sep [ parens . text $ showShape (toElt sh :: dim)
+            , dataDoc]
   where
     showDoc :: forall a. Show a => a -> Doc
     showDoc = text . show
@@ -361,6 +383,13 @@ prettyArray arr@(Array sh _)
 
 noParens :: Doc -> Doc
 noParens = id
+
+encloseSep :: Doc -> Doc -> Doc -> [Doc] -> Doc
+encloseSep left right p ds =
+  case ds of
+    []  -> left <> right
+    [d] -> left <> d <> right
+    _   -> left <> sep (punctuate p ds) <> right
 
 -- Auxiliary ops
 --

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
   -- only for the deprecated class aliases
 
 -- |
@@ -73,7 +73,6 @@ module Data.Array.Accelerate (
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.AST (Arrays)
 import Data.Array.Accelerate.Array.Sugar hiding ((!), shape, dim, size)
 import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Language
@@ -123,9 +122,9 @@ class Slice sh => SliceIx sh
 instance Slice sh => SliceIx sh
 
 {-# DEPRECATED tuple "Use 'lift' instead" #-}
-tuple :: Lift e => e -> Exp (Plain e)
+tuple :: Lift Exp e => e -> Exp (Plain e)
 tuple = lift
 
 {-# DEPRECATED untuple "Use 'unlift' instead" #-}
-untuple :: Unlift e => Exp (Plain e) -> e
+untuple :: Unlift Exp e => Exp (Plain e) -> e
 untuple = unlift
