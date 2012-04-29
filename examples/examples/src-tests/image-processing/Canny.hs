@@ -85,8 +85,8 @@ nonMaximumSuppression threshold gradX gradY gradM =
         --
         (m,n)       = unindex2 (shape gradX)
         (x,y)       = unindex2 ix
-        fwd         = gradM ! lift (clamp (x+offsetx, y+offsety))
-        rev         = gradM ! lift (clamp (x-offsetx, y-offsety))
+        fwd         = gradM ! clamp (x+offsetx, y+offsety)
+        rev         = gradM ! clamp (x-offsetx, y-offsety)
         --
         unindex2 uv = let Z:.u:.v = unlift uv in (u,v)
         clamp (u,v) = lift (Z:. 0 `Acc.max` u `Acc.min` (m-1) :. 0 `Acc.max` v `Acc.min` (n-1))
