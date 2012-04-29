@@ -36,22 +36,23 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
-import Control.Monad.ST                            (ST)
+import Control.Monad.ST                                 ( ST )
 import Data.Bits
-import Data.Char                                   (chr, ord)
-import Prelude                                     hiding (sum)
+import Data.Char                                        ( chr, ord )
+import Prelude                                          hiding ( sum )
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Representation  hiding (sliceIndex)
+import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), Scalar, Vector, Segments)
-import Data.Array.Accelerate.Array.Delayed
+  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments)
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
-import qualified Data.Array.Accelerate.Smart       as Sugar
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
+import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
+import qualified Data.Array.Accelerate.Smart            as Sugar
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
 #include "accelerate.h"
 
@@ -72,9 +73,30 @@ stream afun = map (run1 acc)
   where
     acc = Sugar.convertAccFun1 afun
 
-    run1 :: Delayable b => Afun (a -> b) -> a -> b
+    run1 :: Afun (a -> b) -> a -> b
     run1 (Alam (Abody f)) = \a -> force (evalOpenAcc f (Empty `Push` a))
     run1 _                = error "Hey type checker! We can not get here!"
+
+
+-- Delayed arrays
+--
+type Delayed a = Sugar.Delayed (Sugar.ArrRepr a)
+
+delay :: Arrays a => a -> Delayed a
+delay arr = go (Sugar.arrays arr) (Sugar.fromArr arr)
+  where
+    go :: ArraysR a -> a -> Sugar.Delayed a
+    go ArraysRunit         ()       = DelayedUnit
+    go ArraysRarray        a        = Sugar.delay a
+    go (ArraysRpair r1 r2) (a1, a2) = DelayedPair (go r1 a1) (go r2 a2)
+
+force :: forall a. Arrays a => Delayed a -> a
+force arr = Sugar.toArr $ go (Sugar.arrays (undefined::a)) arr
+  where
+    go :: ArraysR a' -> Sugar.Delayed a' -> a'
+    go ArraysRunit         DelayedUnit         = ()
+    go ArraysRarray        a                   = Sugar.force a
+    go (ArraysRpair r1 r2) (DelayedPair d1 d2) = (go r1 d1, go r2 d2)
 
 
 -- Array expression evaluation
@@ -82,23 +104,22 @@ stream afun = map (run1 acc)
 
 -- Evaluate an open array expression
 --
-evalOpenAcc :: Delayable a => OpenAcc aenv a -> Val aenv -> Delayed a
+evalOpenAcc :: OpenAcc aenv a -> Val aenv -> Delayed a
 evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc
 
-evalPreOpenAcc :: Delayable a => PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
+evalPreOpenAcc :: forall aenv a. PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
 
-evalPreOpenAcc (Alet acc1 acc2) aenv 
+evalPreOpenAcc (Alet acc1 acc2) aenv
   = let !arr1 = force $ evalOpenAcc acc1 aenv
     in evalOpenAcc acc2 (aenv `Push` arr1)
 
-evalPreOpenAcc (Alet2 acc1 acc2) aenv 
-  = let (!arr1, !arr2) = force $ evalOpenAcc acc1 aenv
-    in evalOpenAcc acc2 (aenv `Push` arr1 `Push` arr2)
-
-evalPreOpenAcc (PairArrays acc1 acc2) aenv
-  = DelayedPair (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
-
 evalPreOpenAcc (Avar idx) aenv = delay $ prj idx aenv
+
+evalPreOpenAcc (Atuple tup) aenv = delay (toTuple $ evalAtuple tup aenv :: a)
+
+evalPreOpenAcc (Aprj ix (tup :: OpenAcc aenv arrs)) aenv =
+  let tup'  = force $ evalOpenAcc tup aenv :: arrs
+  in  delay $ evalPrj ix (fromTuple tup')
 
 evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv
@@ -109,7 +130,7 @@ evalPreOpenAcc (Apply _afun _acc) _aenv
 evalPreOpenAcc (Acond cond acc1 acc2) aenv
   = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
 
-evalPreOpenAcc (Use arr) _aenv = delay arr
+evalPreOpenAcc (Use arr) _aenv = delay (Sugar.toArr arr :: a)
 
 evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
 
@@ -164,7 +185,7 @@ evalPreOpenAcc (Scanr1 f acc) aenv
   = scanr1Op (evalFun f aenv) (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (Permute f dftAcc p acc) aenv
-  = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv) 
+  = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv)
               (evalFun p aenv) (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (Backpermute e p acc) aenv
@@ -178,27 +199,38 @@ evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
 
 -- Evaluate a closed array expressions
 --
-evalAcc :: Delayable a => Acc a -> Delayed a
+evalAcc :: Acc a -> Delayed a
 evalAcc acc = evalOpenAcc acc Empty
+
+
+-- Array tuple construction and projection
+--
+evalAtuple :: Atuple (OpenAcc aenv) t -> Val aenv -> t
+evalAtuple NilAtup        _    = ()
+evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, force $ evalOpenAcc a aenv)
 
 
 -- Array primitives
 -- ----------------
 
 unitOp :: Sugar.Elt e => e -> Delayed (Scalar e)
-unitOp e = DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
+unitOp e
+  = DelayedPair DelayedUnit
+  $ DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
 
 generateOp :: (Sugar.Shape dim, Sugar.Elt e)
       => dim
       -> (dim -> e)
       -> Delayed (Array dim e)
-generateOp sh rf = DelayedArray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
+generateOp sh rf
+  = DelayedPair DelayedUnit
+  $ DelayedArray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
 
-reshapeOp :: Sugar.Shape dim 
+reshapeOp :: Sugar.Shape dim
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
-reshapeOp newShape darr@(DelayedArray {shapeDA = oldShape})
+reshapeOp newShape darr@(DelayedPair DelayedUnit (DelayedArray {shapeDA = oldShape}))
   = let Array _ adata = force darr
-    in 
+    in
     BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
     $ delay $ Array (Sugar.fromElt newShape) adata
 
@@ -210,8 +242,8 @@ replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
             -> slix
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
-replicateOp sliceIndex slix (DelayedArray sh pf)
-  = DelayedArray sh' (pf . pf')
+replicateOp sliceIndex slix (DelayedPair DelayedUnit (DelayedArray sh pf))
+  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
   where
     (sh', pf') = extend sliceIndex (Sugar.fromElt slix) sh
 
@@ -237,8 +269,8 @@ indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
         -> Delayed (Array dim e)
         -> slix
         -> Delayed (Array sl e)
-indexOp sliceIndex (DelayedArray sh pf) slix
-  = DelayedArray sh' (pf . pf')
+indexOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
+  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
 
@@ -260,15 +292,18 @@ mapOp :: Sugar.Elt e'
       => (e -> e') 
       -> Delayed (Array dim e) 
       -> Delayed (Array dim e')
-mapOp f (DelayedArray sh rf) = DelayedArray sh (Sugar.sinkFromElt f . rf)
+mapOp f (DelayedPair DelayedUnit (DelayedArray sh rf))
+  = DelayedPair DelayedUnit
+  $ DelayedArray sh (Sugar.sinkFromElt f . rf)
 
 zipWithOp :: Sugar.Elt e3
           => (e1 -> e2 -> e3) 
           -> Delayed (Array dim e1) 
           -> Delayed (Array dim e2) 
           -> Delayed (Array dim e3)
-zipWithOp f (DelayedArray sh1 rf1) (DelayedArray sh2 rf2) 
-  = DelayedArray (sh1 `intersect` sh2) 
+zipWithOp f (DelayedPair DelayedUnit (DelayedArray sh1 rf1)) (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
+  = DelayedPair DelayedUnit
+  $ DelayedArray (sh1 `intersect` sh2) 
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: Sugar.Shape dim
@@ -276,21 +311,24 @@ foldOp :: Sugar.Shape dim
        -> e
        -> Delayed (Array (dim:.Int) e)
        -> Delayed (Array dim e)
-foldOp f e (DelayedArray (sh, n) rf)
+foldOp f e (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
   | size sh == 0
-  = DelayedArray (listToShape . map (max 1) . shapeToList $ sh)
+  = DelayedPair DelayedUnit
+  $ DelayedArray (listToShape . map (max 1) . shapeToList $ sh)
       (\_ -> Sugar.fromElt e)
   --
   | otherwise
-  = DelayedArray sh
+  = DelayedPair DelayedUnit
+  $ DelayedArray sh
       (\ix -> iter ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f) (Sugar.fromElt e))
 
 fold1Op :: Sugar.Shape dim
         => (e -> e -> e)
         -> Delayed (Array (dim:.Int) e)
         -> Delayed (Array dim e)
-fold1Op f (DelayedArray (sh, n) rf)
-  = DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
+fold1Op f (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
+  = DelayedPair DelayedUnit
+  $ DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
 
 foldSegOp :: IntegralType i
           -> (e -> e -> e)
@@ -307,10 +345,10 @@ foldSegOp' :: forall i e dim. Integral i
            -> Delayed (Array (dim:.Int) e)
            -> Delayed (Segments i)
            -> Delayed (Array (dim:.Int) e)
-foldSegOp' f e (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
+foldSegOp' f e (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
+    DelayedPair (DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts)) _ = scanl'Op (+) 0 seg
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
@@ -341,10 +379,11 @@ fold1SegOp' :: forall i e dim. Integral i
             -> Delayed (Array (dim:.Int) e)
             -> Delayed (Segments i)
             -> Delayed (Array (dim:.Int) e)
-fold1SegOp' f (DelayedArray (sh, _n) rf) seg@(DelayedArray shSeg rfSeg)
+fold1SegOp' f (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair (DelayedArray _shSeg rfStarts) _ = scanl'Op (+) 0 seg
+    DelayedPair prefix _sum                                = scanl'Op (+) 0 seg
+    DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts) = prefix
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
@@ -369,7 +408,7 @@ scanlOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanlOp f e (DelayedArray sh rf)
+scanlOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -392,17 +431,18 @@ scanl'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanl'Op f e (DelayedArray sh rf)
-  = DelayedPair (delay $ adata `seq` Array sh adata) 
-                (unitOp (Sugar.toElt final))
+scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+  = DelayedPair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    (adata, final) = runArrayData $ do
-                       arr <- newArrayData n
-                       sum <- traverse arr 0 (Sugar.fromElt e)
-                       return (arr, sum)
+    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+
+    (adata, asum) = runArrayData $ do
+                      arr <- newArrayData n
+                      sum <- traverse arr 0 (Sugar.fromElt e)
+                      return (arr, sum)
 
     traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
@@ -414,7 +454,7 @@ scanl'Op f e (DelayedArray sh rf)
 scanl1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanl1Op f (DelayedArray sh rf)
+scanl1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -441,7 +481,7 @@ scanrOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanrOp f e (DelayedArray sh rf)
+scanrOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -464,17 +504,18 @@ scanr'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanr'Op f e (DelayedArray sh rf)
-  = DelayedPair (delay $ adata `seq` Array sh adata)
-                (unitOp (Sugar.toElt final))
+scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+  = DelayedPair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    (adata, final) = runArrayData $ do
-                       arr <- newArrayData n
-                       sum <- traverse arr (n-1) (Sugar.fromElt e)
-                       return (arr, sum)
+    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+
+    (adata, asum) = runArrayData $ do
+                      arr <- newArrayData n
+                      sum <- traverse arr (n-1) (Sugar.fromElt e)
+                      return (arr, sum)
 
     traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
@@ -486,7 +527,7 @@ scanr'Op f e (DelayedArray sh rf)
 scanr1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanr1Op f (DelayedArray sh rf)
+scanr1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -514,7 +555,8 @@ permuteOp :: (e -> e -> e)
           -> (dim -> dim')
           -> Delayed (Array dim e)
           -> Delayed (Array dim' e)
-permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
+permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
+          p (DelayedPair DelayedUnit (DelayedArray sh pf))
   = delay $ adata `seq` Array dftsSh adata
   where 
     f' = Sugar.sinkFromElt2 f
@@ -539,7 +581,7 @@ permuteOp f (DelayedArray dftsSh dftsPf) p (DelayedArray sh pf)
                               e <- readArrayData arr i
                               writeArrayData arr i (pf ix `f'` e) 
           iter sh update (>>) (return ())
-          
+
             -- return the updated array
           return (arr, undefined)
 
@@ -548,16 +590,18 @@ backpermuteOp :: Sugar.Shape dim'
               -> (dim' -> dim)
               -> Delayed (Array dim e)
               -> Delayed (Array dim' e)
-backpermuteOp sh' p (DelayedArray _sh rf)
-  = DelayedArray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
+backpermuteOp sh' p (DelayedPair DelayedUnit (DelayedArray _sh rf))
+  = DelayedPair DelayedUnit
+  $ DelayedArray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
 
 stencilOp :: forall dim e e' stencil. (Sugar.Elt e, Sugar.Elt e', Stencil dim e stencil)
           => (stencil -> e')
           -> Boundary (Sugar.EltRepr e)
           -> Delayed (Array dim e)
           -> Delayed (Array dim e')
-stencilOp sten bndy (DelayedArray sh rf)
-  = DelayedArray sh rf'
+stencilOp sten bndy (DelayedPair DelayedUnit (DelayedArray sh rf))
+  = DelayedPair DelayedUnit
+  $ DelayedArray sh rf'
   where
     rf' = Sugar.sinkFromElt (sten . stencilAccess rfBounded)
 
@@ -576,14 +620,14 @@ stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
            -> Boundary (Sugar.EltRepr e2)
            -> Delayed (Array dim e2)
            -> Delayed (Array dim e')
-stencil2Op sten bndy1 (DelayedArray sh1 rf1) bndy2 (DelayedArray sh2 rf2)
-  = DelayedArray (sh1 `intersect` sh2) rf'
+stencil2Op sten bndy1 (DelayedPair DelayedUnit (DelayedArray sh1 rf1))
+                bndy2 (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
+  = DelayedPair DelayedUnit (DelayedArray (sh1 `intersect` sh2) rf')
   where
     rf' = Sugar.sinkFromElt (\ix -> sten (stencilAccess rf1Bounded ix)
                                          (stencilAccess rf2Bounded ix))
 
     -- add a boundary to the source arrays as specified by the boundary conditions
-    
     rf1Bounded :: dim -> e1
     rf1Bounded ix = Sugar.toElt $ case Sugar.bound (Sugar.toElt sh1) ix bndy1 of
                                      Left v    -> v
@@ -663,7 +707,7 @@ evalOpenExp (PrimApp p arg) env aenv
 
 evalOpenExp (IndexScalar acc ix) env aenv 
   = case evalOpenAcc acc aenv of
-      DelayedArray sh pf -> 
+      DelayedPair DelayedUnit (DelayedArray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
         in
         index sh ix' `seq` (Sugar.toElt $ pf ix')
