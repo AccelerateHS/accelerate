@@ -54,6 +54,7 @@ old_locale=old-locale-1.0.0.4
 old_time=old-time-1.1.0.0
 pretty=pretty-1.1.1.0
 process=process-1.1.0.1
+template_haskell=template-haskell-2.7.0.0
 time=time-1.4
 unix=unix-2.5.1.0
 
@@ -61,8 +62,8 @@ ln -sf $LIB_GHC/libHSrts_thr.a
 
 for lib in $ghc_prim $integer_gmp $base $array $binary  $bytestring \
   $containers $deepseq $directory $extensible_exceptions $filepath $old_locale \
-  $old_time $pretty $time $unix $process ; do
-    ln -sf $LIB_GHC/$lib/libHS$lib.a
+  $old_time $pretty $template_haskell $time $unix $process ; do
+    LIBRARIES="$LIBRARIES $LIB_GHC/$lib/HS$lib.o"
 done
 
 # These libs are installed by Cabal
@@ -109,8 +110,10 @@ for lib in $accelerate $accelerate_cuda $accelerate_io $blaze_builder $cereal \
   $haskell_src_meta $language_c_quote $largeword $mainland_pretty $mtl \
   $primitive $QuickCheck $random $repa $srcloc $stm $syb $symbol $tagged $text \
   $th_lift $transformers $unordered_containers $vector ; do
-    ln -sf $LIB_CABAL/$lib/ghc-$GHC_VERSION/libHS$lib.a
+    LIBRARIES="$LIBRARIES $LIB_CABAL/$lib/ghc-$GHC_VERSION/HS$lib.o"
 done
+
+ar -rv libHS.a $LIBRARIES
 
 cd ..
 
