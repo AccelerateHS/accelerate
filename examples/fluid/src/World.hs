@@ -31,13 +31,15 @@ import qualified Data.Array.Accelerate                  as A
 data World = World
   {
     -- current state of the simulation
-    densityField   :: !DensityField
-  , velocityField  :: !VelocityField
+    densityField        :: !DensityField
+  , velocityField       :: !VelocityField
 
     -- user input
-  , densitySource  :: [(Index, Density)]
-  , velocitySource :: [(Index, Velocity)]
-  , currentSource  :: Source
+  , densitySource       :: [(Index, Density)]
+  , velocitySource      :: [(Index, Velocity)]
+  , currentSource       :: Source
+  , displayDensity      :: Bool
+  , displayVelocity     :: Bool
   }
   deriving Show
 
@@ -64,6 +66,8 @@ initialise opt =
     , densitySource     = []
     , velocitySource    = []
     , currentSource     = None
+    , displayDensity    = True
+    , displayVelocity   = False
     }
 
 
@@ -137,8 +141,13 @@ velocityOfRGBA rgba =
 
 render :: Options -> World -> IO Picture
 render opt world = do
-  den   <- renderDensity   $ densityField  world
-  vel   <- renderVelocity  $ velocityField world
+  den   <- if displayDensity world
+              then renderDensity   $ densityField  world
+              else return blank
+
+  vel   <- if displayVelocity world
+              then renderVelocity  $ velocityField world
+              else return blank
   --
   return $ Scale zoom zoom $ Pictures [ den, vel ]
   where

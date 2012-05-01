@@ -6,8 +6,8 @@
 module Config (
 
   Options,
-  viscosity, diffusion, simulationWidth, simulationHeight,
-  densityBMP, velocityBMP, displayScale, displayFramerate, optBench,
+  viscosity, diffusion, densityBMP, velocityBMP, simulationWidth,
+  simulationHeight, displayScale, displayFramerate, optBench,
 
   processArgs, run, run1
 
@@ -35,12 +35,12 @@ data Options = Options
     -- simulation
     _viscosity          :: Float
   , _diffusion          :: Float
-  , _simulationWidth    :: Int
-  , _simulationHeight   :: Int
-  , _densityBMP         :: Maybe FilePath
-  , _velocityBMP        :: Maybe FilePath
 
   -- visualisation
+  , _densityBMP         :: Maybe FilePath
+  , _velocityBMP        :: Maybe FilePath
+  , _simulationWidth    :: Int
+  , _simulationHeight   :: Int
   , _displayScale       :: Int
   , _displayFramerate   :: Int
 
@@ -57,12 +57,14 @@ defaultOptions :: Options
 defaultOptions = Options
   { _viscosity          = 0
   , _diffusion          = 0
-  , _simulationWidth    = 250
-  , _simulationHeight   = 250
+
   , _densityBMP         = Nothing
   , _velocityBMP        = Nothing
+  , _simulationWidth    = 250
+  , _simulationHeight   = 250
   , _displayScale       = 2
   , _displayFramerate   = 20
+
   , _optBackend         = maxBound
   , _optBench           = False
   , _optHelp            = False
@@ -142,10 +144,21 @@ processArgs argv =
                      _                                  -> putStrLn (helpMsg []) >> exitSuccess
     (_,_,_,err) -> error (helpMsg err)
   where
-    helpMsg err = concat err ++ usageInfo header options
+    helpMsg err = concat err ++ usageInfo header options ++ footer
     header      = unlines
       [ "accelerate-fluid (c) 2011 Trevor L. McDonell"
       , ""
       , "Usage: accelerate-fluid [OPTIONS]"
+      ]
+
+    footer      = unlines
+      [ ""
+      , "Runtime usage:"
+      , ""
+      , "          click                    add density sources to the image"
+      , "          shift-click              add velocity sources"
+      , "          r                        reset the image"
+      , "          d                        toggle display of density field"
+      , "          v                        toggle display of velocity field lines"
       ]
 

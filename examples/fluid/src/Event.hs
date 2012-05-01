@@ -49,8 +49,10 @@ react opt event world =
 
     -- Handle key presses
     --
-    keyboard 'r' Down _      = initialise opt
-    keyboard _   _    _      = return world
+    keyboard 'r' Down _         = initialise opt
+    keyboard 'd' Down _         = return $ world { displayDensity  = not (displayDensity  world) }
+    keyboard 'v' Down _         = return $ world { displayVelocity = not (displayVelocity world) }
+    keyboard _   _    _         = return world
 
     -- As the mouse moves, keep inserting density sources, or adding source
     -- velocities
