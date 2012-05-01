@@ -48,7 +48,8 @@ main = do
             vs          = sources (velocitySource world)
             (df', vf')  = step ( dt, ds, vs, densityField world, velocityField world )
         in
-        return $ world { densityField  = df', velocityField = vf' }
+        return $ world { densityField  = df', velocityField  = vf'
+                       , densitySource = [],  velocitySource = [] }
 
   -- warming up...
   initialWorld  <- initialise opt
