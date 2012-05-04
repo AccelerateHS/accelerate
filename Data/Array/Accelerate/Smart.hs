@@ -150,6 +150,11 @@ incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 -- Array computations
 -- ------------------
 
+-- The level of lambda-bound variables. The root has level 0; then it increases with each bound
+-- variable — i.e., it is the same as the size of the environment at the defining occurence.
+--
+type Level = Int
+
 -- |Array-valued collective computations without a recursive knot
 --
 -- Note [Pipe and sharing recovery]
@@ -161,7 +166,7 @@ incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 data PreAcc acc exp as where  
     -- Needed for conversion to de Bruijn form
   Atag        :: Arrays as
-              => Int                        -- environment size at defining occurrence
+              => Level                      -- environment size at defining occurrence
               -> PreAcc acc exp as
 
   Pipe        :: (Arrays as, Arrays bs, Arrays cs) 
@@ -308,23 +313,17 @@ deriving instance Typeable1 Acc
 -- information.
 --
 convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
-convertAcc = convertOpenAcc EmptyLayout
+convertAcc = convertOpenAcc 0 [] EmptyLayout
 
 -- |Convert an open array expression to de Bruijn form while also incorporating sharing
 -- information.
 --
-convertOpenAcc :: Arrays arrs => Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
-convertOpenAcc alyt acc
+convertOpenAcc :: Arrays arrs => Level -> [Level] -> Layout aenv aenv -> Acc arrs -> AST.OpenAcc aenv arrs
+convertOpenAcc lvl fvs alyt acc
   = let 
-      (sharingAcc, initialEnv) = recoverSharingAcc floatOutAccFromExp acc
+      (sharingAcc, initialEnv) = recoverSharingAcc floatOutAccFromExp lvl fvs acc
     in
     convertSharingAcc alyt initialEnv sharingAcc
-    -- FIXME: Somewhat dodgy as the 'alyt' and 'initialEnv' always have to be in sync
-    --        Would be better to look at the 'Atag's in 'initialEnv' and compute a
-    --        matching 'alyt' (that may have duplicated entries — if not all sharing was
-    --        preserved).
-    --        !!!Same problem in the convertExp, convertFun1/2 and convertStencil1/2 functions.
-
 
 -- |Convert a unary function over array computations
 --
@@ -333,11 +332,12 @@ convertAccFun1 :: forall a b. (Arrays a, Arrays b)
                -> AST.Afun (a -> b)
 convertAccFun1 f = Alam (Abody openF)
   where
-    a     = Atag 0
+    lvl   = 0
+    a     = Atag lvl
     alyt  = EmptyLayout 
             `PushLayout` 
             (ZeroIdx :: Idx ((), a) a)
-    openF = convertOpenAcc alyt (f (Acc a))
+    openF = convertOpenAcc (lvl + 1) [lvl] alyt (f (Acc a))
 
 -- |Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
@@ -491,7 +491,7 @@ convertBoundary (Constant e) = Constant (fromElt e)
 data PreExp acc exp t where
     -- Needed for conversion to de Bruijn form
   Tag         :: Elt t
-              => Int                            -> PreExp acc exp t
+              => Level                          -> PreExp acc exp t
                  -- environment size at defining occurrence
 
     -- All the same constructors as 'AST.Exp'
@@ -615,7 +615,7 @@ convertFun1 :: forall a b aenv. (Elt a, Elt b)
             -> AST.Fun aenv (a -> b)
 convertFun1 alyt aenv f = Lam (Body openF)
   where
-    a               = Exp $ Tag 0
+    a               = Exp $ undefined           -- the 'tag' was already embedded in Phase 1
     lyt             = EmptyLayout 
                       `PushLayout` 
                       (ZeroIdx :: Idx ((), a) a)
@@ -631,8 +631,8 @@ convertFun2 :: forall a b c aenv. (Elt a, Elt b, Elt c)
             -> AST.Fun aenv (a -> b -> c)
 convertFun2 alyt aenv f = Lam (Lam (Body openF))
   where
-    a               = Exp $ Tag 1
-    b               = Exp $ Tag 0
+    a               = Exp $ undefined
+    b               = Exp $ undefined
     lyt             = EmptyLayout 
                       `PushLayout`
                       (SuccIdx ZeroIdx :: Idx (((), a), b) a)
@@ -651,7 +651,7 @@ convertStencilFun :: forall sh a stencil b aenv. (Elt a, Stencil sh a stencil, E
                   -> AST.Fun aenv (StencilRepr sh stencil -> b)
 convertStencilFun _ alyt aenv stencilFun = Lam (Body openStencilFun)
   where
-    stencil = Exp $ Tag 0 :: Exp (StencilRepr sh stencil)
+    stencil = Exp $ undefined :: Exp (StencilRepr sh stencil)
     lyt     = EmptyLayout 
               `PushLayout` 
               (ZeroIdx :: Idx ((), StencilRepr sh stencil)
@@ -675,8 +675,8 @@ convertStencilFun2 :: forall sh a b stencil1 stencil2 c aenv.
                                     StencilRepr sh stencil2 -> c)
 convertStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
   where
-    stencil1 = Exp $ Tag 1 :: Exp (StencilRepr sh stencil1)
-    stencil2 = Exp $ Tag 0 :: Exp (StencilRepr sh stencil2)
+    stencil1 = Exp $ undefined :: Exp (StencilRepr sh stencil1)
+    stencil2 = Exp $ undefined :: Exp (StencilRepr sh stencil2)
     lyt     = EmptyLayout 
               `PushLayout` 
               (SuccIdx ZeroIdx :: Idx (((), StencilRepr sh stencil1),
@@ -735,15 +735,20 @@ convertStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
 --
 -- We recover sharing for each expression (including function bodies) independently of any other
 -- expression — i.e., we cannot share scalar expressions across array computations.  Hence, during
--- Phase One of sharing recovery for array computations, we mark all scalar expression nodes with
--- a stable name, but we do /not/ yet enter them into an occurence map.  The later needs to be done
--- separately into a separate map for each expression, so that the counts of independent
--- expressions do not interfere.  Otherwise, sharing recovery for scalar expressions proceeds in
--- the same manner as for array computations.
+-- Phase One, we mark all scalar expression nodes with a stable name and compute one occurence map
+-- for every scalar expression (including functions) that occurs in an array computation.  These
+-- occurence maps are added to the root of scalar expressions using 'RootExp'.
 --
 -- NB: We do not need to worry sharing recovery will try to float a shared subexpression past a
 --     binder that occurs in that subexpression.  Why?  Otherwise, the binder would already occur
 --     out of scope in the orignal source program.
+--
+-- /Lambda bound variables/
+--
+-- During sharing recovery, lambda bound variables appear in the form of 'Atag' and 'Tag' data
+-- constructors.  The tag values are determined during Phase One of sharing recovery by computing
+-- the /level/ of each variable at its binding occurence.  The level at the root of the AST is 0
+-- and increases by one with each lambda on each path through the AST.
 
 -- Stable names
 
@@ -890,6 +895,11 @@ matchStableAcc sn1 (StableSharingAcc sn2 _)
   | Just sn1' <- gcast sn1 = sn1' == sn2
   | otherwise              = False
 
+-- Dummy entry for environments to be used for unused variables.
+--
+noStableAccName :: StableAccName arrs
+noStableAccName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
+
 -- Stable 'Exp' nodes
 
 -- Stable name for 'Exp' nodes including the height of the AST.
@@ -909,13 +919,13 @@ data SharingExp t where
 -- Expressions rooted in 'Acc' computations.
 --
 -- * Between counting occurences and determining scopes, the root of every expression embedded in an
---   'Acc' is annotated by an occurence map for that one expression (excluding any subterms that
---   are rooted in embedded 'Acc's.)
+--   'Acc' is annotated by (1) the tags of free scalar variables and (2) an occurence map for that
+--   one expression (excluding any subterms that are rooted in embedded 'Acc's.)
 -- * After determining scopes, the root of every expression is annotated with a sorted environment of
 --   the 'StableSharingExp's corresponding to its free expression-valued variables.
 --
 data RootExp t where
-  OccMapExp :: OccMap Exp         -> SharingExp t -> RootExp t
+  OccMapExp :: [Int] -> OccMap Exp  -> SharingExp t -> RootExp t
   EnvExp    :: [StableSharingExp] -> SharingExp t -> RootExp t
 
 -- Stable name for an expression associated with its sharing-annotated version.
@@ -940,6 +950,11 @@ matchStableExp :: Typeable t => StableExpName t -> StableSharingExp -> Bool
 matchStableExp sn1 (StableSharingExp sn2 _)
   | Just sn1' <- gcast sn1 = sn1' == sn2
   | otherwise              = False
+
+-- Dummy entry for environments to be used for unused variables.
+--
+noStableExpName :: StableExpName t
+noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
 
 -- Compute the 'Acc' occurence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
 -- and drop repeated occurences of shared 'Acc' and 'Exp' subtrees (Phase One).
@@ -966,18 +981,18 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 -- the tag values only serve the purpose of determining the ordering in that initial environment.
 -- They are /not/ directly used to compute the de Brujin indices.
 --
-makeOccMap :: Typeable arrs => Acc arrs -> IO (SharingAcc arrs, OccMapHash Acc)
-makeOccMap rootAcc
+makeOccMap :: Typeable arrs => Level -> Acc arrs -> IO (SharingAcc arrs, OccMapHash Acc)
+makeOccMap lvl rootAcc
   = do
       traceLine "makeOccMap" "Enter"
       occMap <- newASTHashTable
-      (rootAcc', _) <- traverseAcc occMap rootAcc
+      (rootAcc', _) <- traverseAcc lvl occMap rootAcc
       traceLine "makeOccMap" "Exit"
       return (rootAcc', occMap)
   where
     traverseAcc :: forall arrs. Typeable arrs 
-                => OccMapHash Acc -> Acc arrs -> IO (SharingAcc arrs, Int)
-    traverseAcc occMap acc@(Acc pacc)
+                => Level -> OccMapHash Acc -> Acc arrs -> IO (SharingAcc arrs, Int)
+    traverseAcc lvl occMap acc@(Acc pacc)
       = mfix $ \ ~(_, height) -> do 
         {   -- Compute stable name and enter it into the occurence map
         ; sn                        <- makeStableAST acc
@@ -1012,9 +1027,9 @@ makeOccMap rootAcc
             Atag i                   -> reconstruct $ return (Atag i, 0)           -- height is 0!
             Pipe afun1 afun2 acc     -> reconstruct $ travA (Pipe afun1 afun2) acc
             Acond e acc1 acc2        -> reconstruct $ do
-                                          (e'   , h1) <- enterExp occMap e
-                                          (acc1', h2) <- traverseAcc occMap acc1
-                                          (acc2', h3) <- traverseAcc occMap acc2
+                                          (e'   , h1) <- enterExp lvl occMap e
+                                          (acc1', h2) <- traverseAcc lvl occMap acc1
+                                          (acc2', h3) <- traverseAcc lvl occMap acc2
                                           return (Acond e' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
             Atuple tup               -> reconstruct $ do
@@ -1024,27 +1039,27 @@ makeOccMap rootAcc
 
             Use arr                  -> reconstruct $ return (Use arr, 1)
             Unit e                   -> reconstruct $ do
-                                          (e', h) <- enterExp occMap e
+                                          (e', h) <- enterExp lvl occMap e
                                           return (Unit e', h + 1)
             Generate e f             -> reconstruct $ do
-                                          (e', h1) <- enterExp  occMap e
-                                          (f', h2) <- traverseFun1 occMap f
+                                          (e', h1) <- enterExp lvl  occMap e
+                                          (f', h2) <- traverseFun1 lvl occMap f
                                           return (Generate e' f', h1 `max` h2 + 1)
             Reshape e acc            -> reconstruct $ travEA Reshape e acc
             Replicate e acc          -> reconstruct $ travEA Replicate e acc
             Index acc e              -> reconstruct $ travEA (flip Index) e acc
             Map f acc                -> reconstruct $ do
-                                          (f'  , h1) <- traverseFun1 occMap f
-                                          (acc', h2) <- traverseAcc  occMap acc
+                                          (f'  , h1) <- traverseFun1 lvl occMap f
+                                          (acc', h2) <- traverseAcc lvl  occMap acc
                                           return (Map f' acc', h1 `max` h2 + 1)
             ZipWith f acc1 acc2      -> reconstruct $ travF2A2 ZipWith f acc1 acc2
             Fold f e acc             -> reconstruct $ travF2EA Fold f e acc
             Fold1 f acc              -> reconstruct $ travF2A Fold1 f acc
             FoldSeg f e acc1 acc2    -> reconstruct $ do
-                                          (f'   , h1) <- traverseFun2 occMap f
-                                          (e'   , h2) <- enterExp  occMap e
-                                          (acc1', h3) <- traverseAcc  occMap acc1
-                                          (acc2', h4) <- traverseAcc  occMap acc2
+                                          (f'   , h1) <- traverseFun2 lvl occMap f
+                                          (e'   , h2) <- enterExp lvl  occMap e
+                                          (acc1', h3) <- traverseAcc lvl occMap acc1
+                                          (acc2', h4) <- traverseAcc lvl occMap acc2
                                           return (FoldSeg f' e' acc1' acc2',
                                                   h1 `max` h2 `max` h3 `max` h4 + 1)
             Fold1Seg f acc1 acc2     -> reconstruct $ travF2A2 Fold1Seg f acc1 acc2
@@ -1055,26 +1070,26 @@ makeOccMap rootAcc
             Scanr' f e acc           -> reconstruct $ travF2EA Scanr' f e acc
             Scanr1 f acc             -> reconstruct $ travF2A Scanr1 f acc
             Permute c acc1 p acc2    -> reconstruct $ do
-                                          (c'   , h1) <- traverseFun2 occMap c
-                                          (p'   , h2) <- traverseFun1 occMap p
-                                          (acc1', h3) <- traverseAcc  occMap acc1
-                                          (acc2', h4) <- traverseAcc  occMap acc2
+                                          (c'   , h1) <- traverseFun2 lvl occMap c
+                                          (p'   , h2) <- traverseFun1 lvl occMap p
+                                          (acc1', h3) <- traverseAcc lvl  occMap acc1
+                                          (acc2', h4) <- traverseAcc lvl  occMap acc2
                                           return (Permute c' acc1' p' acc2',
                                                   h1 `max` h2 `max` h3 `max` h4 + 1)
             Backpermute e p acc      -> reconstruct $ do
-                                          (e'  , h1) <- enterExp  occMap e
-                                          (p'  , h2) <- traverseFun1 occMap p
-                                          (acc', h3) <- traverseAcc occMap acc
+                                          (e'  , h1) <- enterExp lvl  occMap e
+                                          (p'  , h2) <- traverseFun1 lvl occMap p
+                                          (acc', h3) <- traverseAcc lvl occMap acc
                                           return (Backpermute e' p' acc', h1 `max` h2 `max` h3 + 1)
             Stencil s bnd acc        -> reconstruct $ do
-                                          (s'  , h1) <- traverseStencil1 acc occMap s
-                                          (acc', h2) <- traverseAcc occMap acc
+                                          (s'  , h1) <- traverseStencil1 acc lvl occMap s
+                                          (acc', h2) <- traverseAcc lvl occMap acc
                                           return (Stencil s' bnd acc', h1 `max` h2 + 1)
             Stencil2 s bnd1 acc1 
                        bnd2 acc2     -> reconstruct $ do
-                                          (s'   , h1) <- traverseStencil2 acc1 acc2 occMap s
-                                          (acc1', h2) <- traverseAcc occMap acc1
-                                          (acc2', h3) <- traverseAcc occMap acc2
+                                          (s'   , h1) <- traverseStencil2 acc1 acc2 lvl occMap s
+                                          (acc1', h2) <- traverseAcc lvl occMap acc1
+                                          (acc2', h3) <- traverseAcc lvl occMap acc2
                                           return (Stencil2 s' bnd1 acc1' bnd2 acc2',
                                                   h1 `max` h2 `max` h3 + 1)
         }
@@ -1084,7 +1099,7 @@ makeOccMap rootAcc
               -> Acc arrs' -> IO (PreAcc SharingAcc RootExp arrs, Int)
         travA c acc
           = do
-              (acc', h) <- traverseAcc occMap acc
+              (acc', h) <- traverseAcc lvl occMap acc
               return (c acc', h + 1)
 
         travEA :: (Typeable b, Arrays arrs')
@@ -1092,8 +1107,8 @@ makeOccMap rootAcc
                -> Exp b -> Acc arrs' -> IO (PreAcc SharingAcc RootExp arrs, Int)
         travEA c exp acc
           = do
-              (exp', h1) <- enterExp occMap exp
-              (acc', h2) <- traverseAcc occMap acc
+              (exp', h1) <- enterExp lvl occMap exp
+              (acc', h2) <- traverseAcc lvl occMap acc
               return (c exp' acc', h1 `max` h2 + 1)
 
         travF2A :: (Elt b, Elt c, Typeable d, Arrays arrs')
@@ -1103,8 +1118,8 @@ makeOccMap rootAcc
                 -> IO (PreAcc SharingAcc RootExp arrs, Int)
         travF2A c fun acc
           = do
-              (fun', h1) <- traverseFun2 occMap fun
-              (acc', h2) <- traverseAcc occMap acc
+              (fun', h1) <- traverseFun2 lvl occMap fun
+              (acc', h2) <- traverseAcc lvl occMap acc
               return (c fun' acc', h1 `max` h2 + 1)
 
         travF2EA :: (Elt b, Elt c, Typeable d, Typeable e, Arrays arrs')
@@ -1114,9 +1129,9 @@ makeOccMap rootAcc
                  -> IO (PreAcc SharingAcc RootExp arrs, Int)
         travF2EA c fun exp acc
           = do
-              (fun', h1) <- traverseFun2 occMap fun
-              (exp', h2) <- enterExp occMap exp
-              (acc', h3) <- traverseAcc occMap acc
+              (fun', h1) <- traverseFun2 lvl occMap fun
+              (exp', h2) <- enterExp lvl occMap exp
+              (acc', h3) <- traverseAcc lvl occMap acc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
         travF2A2 :: (Elt b, Elt c, Typeable d, Arrays arrs1, Arrays arrs2)
@@ -1126,9 +1141,9 @@ makeOccMap rootAcc
                  -> IO (PreAcc SharingAcc RootExp arrs, Int)
         travF2A2 c fun acc1 acc2
           = do
-              (fun' , h1) <- traverseFun2 occMap fun
-              (acc1', h2) <- traverseAcc occMap acc1
-              (acc2', h3) <- traverseAcc occMap acc2
+              (fun' , h1) <- traverseFun2 lvl occMap fun
+              (acc1', h2) <- traverseAcc lvl occMap acc1
+              (acc2', h3) <- traverseAcc lvl occMap acc2
               return (c fun' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
         travAtup :: Tuple.Atuple Acc a
@@ -1136,64 +1151,74 @@ makeOccMap rootAcc
         travAtup NilAtup          = return (NilAtup, 1)
         travAtup (SnocAtup tup a) = do
           (tup', h1) <- travAtup tup
-          (a',   h2) <- traverseAcc occMap a
+          (a',   h2) <- traverseAcc lvl occMap a
           return (SnocAtup tup' a', h1 `max` h2 + 1)
 
     traverseFun1 :: (Elt b, Typeable c) 
-                  => OccMapHash Acc -> (Exp b -> Exp c) -> IO (Exp b -> RootExp c, Int)
-    traverseFun1 occMap f
+                  => Level -> OccMapHash Acc -> (Exp b -> Exp c) -> IO (Exp b -> RootExp c, Int)
+    traverseFun1 lvl occMap f
       = do
             -- see Note [Traversing functions and side effects]
-          (body, h) <- enterExp occMap $ f (Exp $ Tag 0)
+          (body, h) <- enterFun (lvl + 1) [lvl] occMap $ f (Exp $ Tag lvl)
           return (const body, h + 1)
 
     traverseFun2 :: (Elt b, Elt c, Typeable d) 
-                  => OccMapHash Acc -> (Exp b -> Exp c -> Exp d) 
+                  => Level -> OccMapHash Acc -> (Exp b -> Exp c -> Exp d) 
                   -> IO (Exp b -> Exp c -> RootExp d, Int)
-    traverseFun2 occMap f
+    traverseFun2 lvl occMap f
       = do
             -- see Note [Traversing functions and side effects]
-          (body, h) <- enterExp occMap $ f (Exp $ Tag 1) (Exp $ Tag 0)
+          (body, h) <- enterFun (lvl + 2) [lvl, lvl + 1] occMap $ f (Exp $ Tag (lvl + 1)) (Exp $ Tag lvl)
           return (\_ _ -> body, h + 2)
 
     traverseStencil1 :: forall sh b c stencil. (Stencil sh b stencil, Typeable c) 
                      => Acc (Array sh b){-dummy-}
-                     -> OccMapHash Acc -> (stencil -> Exp c) -> IO (stencil -> RootExp c, Int)
-    traverseStencil1 _ occMap stencilFun 
+                     -> Level -> OccMapHash Acc -> (stencil -> Exp c) 
+                     -> IO (stencil -> RootExp c, Int)
+    traverseStencil1 _ lvl occMap stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          (body, h) <- enterExp occMap $ 
-                         stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag 0))
+          (body, h) <- enterFun (lvl + 1) [lvl] occMap $ 
+                         stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag lvl))
           return (const body, h + 1)
         
     traverseStencil2 :: forall sh b c d stencil1 stencil2. 
                         (Stencil sh b stencil1, Stencil sh c stencil2, Typeable d) 
                      => Acc (Array sh b){-dummy-}
                      -> Acc (Array sh c){-dummy-}
+                     -> Level
                      -> OccMapHash Acc 
                      -> (stencil1 -> stencil2 -> Exp d) 
                      -> IO (stencil1 -> stencil2 -> RootExp d, Int)
-    traverseStencil2 _ _ occMap stencilFun 
+    traverseStencil2 _ _ lvl occMap stencilFun 
       = do
             -- see Note [Traversing functions and side effects]
-          (body, h) <- enterExp occMap $ 
-                         stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag 1))
-                                    (stencilPrj (undefined::sh) (undefined::c) (Exp $ Tag 0))
+          (body, h) <- enterFun (lvl + 2) [lvl, lvl + 1] occMap $ 
+                         stencilFun (stencilPrj (undefined::sh) (undefined::b) (Exp $ Tag (lvl + 1)))
+                                    (stencilPrj (undefined::sh) (undefined::c) (Exp $ Tag lvl))
           return (\_ _ -> body, h + 2)
 
     -- Enter an 'Exp' subtree from an 'Acc' tree => need a local 'Exp' occurence map
     --
-    enterExp :: forall a. Typeable a => OccMapHash Acc -> Exp a -> IO (RootExp a, Int)
-    enterExp accOccMap exp
+    -- First argument is the level (of bound variables) and the second are the tags of newly
+    -- introduced free scalar variables in this expression.
+    --
+    enterFun :: forall a. Typeable a => Level -> [Int] -> OccMapHash Acc -> Exp a -> IO (RootExp a, Int)
+    enterFun lvl fvs accOccMap exp
       = do
         { expOccMap       <- newASTHashTable
-        ; (exp', h)       <- traverseExp accOccMap expOccMap exp
+        ; (exp', h)       <- traverseExp lvl accOccMap expOccMap exp
         ; frozenExpOccMap <- freezeOccMap expOccMap
-        ; return (OccMapExp frozenExpOccMap exp', h)
+        ; return (OccMapExp fvs frozenExpOccMap exp', h)
         }
 
-    traverseExp :: forall a. Typeable a => OccMapHash Acc -> OccMapHash Exp -> Exp a -> IO (SharingExp a, Int)
-    traverseExp accOccMap expOccMap exp@(Exp pexp)
+    -- 'enterFun' without any new free variables.
+    --
+    enterExp :: forall a. Typeable a => Level -> OccMapHash Acc -> Exp a -> IO (RootExp a, Int)
+    enterExp lvl = enterFun lvl []
+
+    traverseExp :: forall a. Typeable a => Level -> OccMapHash Acc -> OccMapHash Exp -> Exp a -> IO (SharingExp a, Int)
+    traverseExp lvl accOccMap expOccMap exp@(Exp pexp)
       = mfix $ \ ~(_, height) -> do
         {   -- Compute stable name and enter it into the occurence map
         ; sn                        <- makeStableAST exp
@@ -1249,7 +1274,7 @@ makeOccMap rootAcc
                -> IO (PreExp SharingAcc SharingExp a, Int)
         travE1 c e
           = do
-              (e', h) <- traverseExp accOccMap expOccMap e
+              (e', h) <- traverseExp lvl accOccMap expOccMap e
               return (c e', h + 1)
 
         travE2 :: (Typeable b, Typeable c) 
@@ -1258,8 +1283,8 @@ makeOccMap rootAcc
                -> IO (PreExp SharingAcc SharingExp a, Int)
         travE2 c e1 e2
           = do
-              (e1', h1) <- traverseExp accOccMap expOccMap e1
-              (e2', h2) <- traverseExp accOccMap expOccMap e2
+              (e1', h1) <- traverseExp lvl accOccMap expOccMap e1
+              (e2', h2) <- traverseExp lvl accOccMap expOccMap e2
               return (c e1' e2', h1 `max` h2 + 1)
       
         travE3 :: (Typeable b, Typeable c, Typeable d) 
@@ -1268,16 +1293,16 @@ makeOccMap rootAcc
                -> IO (PreExp SharingAcc SharingExp a, Int)
         travE3 c e1 e2 e3
           = do
-              (e1', h1) <- traverseExp accOccMap expOccMap e1
-              (e2', h2) <- traverseExp accOccMap expOccMap e2
-              (e3', h3) <- traverseExp accOccMap expOccMap e3
+              (e1', h1) <- traverseExp lvl accOccMap expOccMap e1
+              (e2', h2) <- traverseExp lvl accOccMap expOccMap e2
+              (e3', h3) <- traverseExp lvl accOccMap expOccMap e3
               return (c e1' e2' e3', h1 `max` h2 `max` h3 + 1)
 
         travA :: Typeable b => (SharingAcc b -> PreExp SharingAcc SharingExp a) -> Acc b
               -> IO (PreExp SharingAcc SharingExp a, Int)
         travA c acc
           = do
-              (acc', h) <- traverseAcc accOccMap acc
+              (acc', h) <- traverseAcc lvl accOccMap acc
               return (c acc', h + 1)
 
         travAE :: (Typeable b, Typeable c) 
@@ -1286,15 +1311,15 @@ makeOccMap rootAcc
                -> IO (PreExp SharingAcc SharingExp a, Int)
         travAE c acc e
           = do
-              (acc', h1) <- traverseAcc accOccMap acc
-              (e'  , h2) <- traverseExp accOccMap expOccMap e
+              (acc', h1) <- traverseAcc lvl accOccMap acc
+              (e'  , h2) <- traverseExp lvl accOccMap expOccMap e
               return (c acc' e', h1 `max` h2 + 1)
 
         travTup :: Tuple.Tuple Exp tup -> IO (Tuple.Tuple SharingExp tup, Int)
         travTup NilTup          = return (NilTup, 1)
         travTup (SnocTup tup e) = do 
                                     (tup', h1) <- travTup tup
-                                    (e'  , h2) <- traverseExp accOccMap expOccMap e
+                                    (e'  , h2) <- traverseExp lvl accOccMap expOccMap e
                                     return (SnocTup tup' e', h1 `max` h2 + 1)
 
 -- Type used to maintain how often each shared subterm, so far, occured during a bottom-up sweep.
@@ -1367,38 +1392,68 @@ us +++ vs = foldr insert us vs
     (StableSharingExp _ (VarSharing _))  `pickNoneVar`  sa2  = sa2
     sa1                                  `pickNoneVar`  _sa2 = sa1
     
--- Sort 'StableSharingAcc's consisting of 'Atag' nodes only in order of ascending tags and drop the
--- counts.
+-- Build an initial environment for the tag values given in the first argument for traversing an
+-- array expression.  The 'StableSharingAcc's for all tags /actually used/ in the expressions are
+-- in the second argument. (Tags are not used if a bound variable has no usage occurence.)
 --
-sortInEnvOrderAcc :: [StableSharingAcc] -> [StableSharingAcc]
-sortInEnvOrderAcc = sortBy envOrder
+-- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
+-- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
+-- at 'determineScopes'.
+-- 
+buildInitialEnvAcc :: [Level] -> [StableSharingAcc] -> [StableSharingAcc]
+buildInitialEnvAcc tags sas = map (lookupSA sas) tags
   where
-    envOrder (StableSharingAcc _ (AccSharing _ (Atag t1)))
-             (StableSharingAcc _ (AccSharing _ (Atag t2))) = compare t1 t2
-    envOrder sa1 sa2 
-      = INTERNAL_ERROR(error) "sortInEnvOrderAcc" 
-          ("Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa1 ++ "\n  " ++ showSA sa2)
-    
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++ showPreAccOp acc
+    lookupSA sas tag1
+      = case filter hasTag sas of
+          []   -> noStableSharing    -- tag is not used in the analysed expression
+          [sa] -> sa                 -- tag has a unique occurence
+          sas2 -> INTERNAL_ERROR(error) "buildInitialEnvAcc" 
+                    ("Encountered duplicate 'ATag's\n  " ++ concat (intersperse ", " (map showSA sas2)))
+      where
+        hasTag (StableSharingAcc _ (AccSharing _ (Atag tag2))) = tag1 == tag2
+        hasTag sa
+          = INTERNAL_ERROR(error) "buildInitialEnvAcc" 
+            ("Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa)
+            
+        noStableSharing :: StableSharingAcc
+        noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc ())
+
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++ 
+                                                       showPreAccOp acc
     showSA (StableSharingAcc _ (AvarSharing sn))     = "AvarSharing " ++ show (hashStableNameHeight sn)
     showSA (StableSharingAcc _ (AletSharing sa _ ))  = "AletSharing " ++ show sa ++ "..."
 
--- Sort 'StableSharingExo's consisting of 'Tag' nodes only in order of ascending tags and drop the
--- counts.
+-- Build an initial environment for the tag values given in the first argument for traversing a
+-- scalar expression.  The 'StableSharingExp's for all tags /actually used/ in the expressions are
+-- in the second argument. (Tags are not used if a bound variable has no usage occurence.)
 --
-sortInEnvOrderExp :: [StableSharingExp] -> [StableSharingExp]
-sortInEnvOrderExp = sortBy envOrder
+-- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
+-- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
+-- at 'determineScopes'.
+-- 
+buildInitialEnvExp :: [Level] -> [StableSharingExp] -> [StableSharingExp]
+buildInitialEnvExp tags ses = map (lookupSE ses) tags
   where
-    envOrder (StableSharingExp _ (ExpSharing _ (Tag t1)))
-             (StableSharingExp _ (ExpSharing _ (Tag t2))) = compare t1 t2
-    envOrder se1 se2 
-      = INTERNAL_ERROR(error) "sortInEnvOrderExp" 
-          ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se1 ++ "\n  " ++ showSE se2)
+    lookupSE ses tag1
+      = case filter hasTag ses of
+          []   -> noStableSharing    -- tag is not used in the analysed expression
+          [se] -> se                 -- tag has a unique occurence
+          ses2 -> INTERNAL_ERROR(error) "buildInitialEnvExp" 
+                    ("Encountered a duplicate 'Tag'\n  " ++ concat (intersperse ", " (map showSE ses2)))
+      where
+        hasTag (StableSharingExp _ (ExpSharing _ (Tag tag2))) = tag1 == tag2
+        hasTag se 
+          = INTERNAL_ERROR(error) "buildInitialEnvExp" 
+              ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++ showPreExpOp exp
+        noStableSharing :: StableSharingExp
+        noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp ())
+        
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++
+                                                      showPreExpOp exp
     showSE (StableSharingExp _ (VarSharing sn))     = "VarSharing " ++ show (hashStableNameHeight sn)
     showSE (StableSharingExp _ (LetSharing se _ ))  = "LetSharing " ++ show se ++ "..."
-
+ 
 -- Determine whether a 'NodeCount' is for an 'Atag' or 'Tag', which represent free variables.
 --
 isFreeVar :: NodeCount -> Bool
@@ -1418,15 +1473,15 @@ isFreeVar _                                                             = False
 -- Precondition: there are only 'AvarSharing' and 'AccSharing' nodes in the argument.
 --
 determineScopes :: Typeable a 
-                => Bool -> OccMap Acc -> SharingAcc a -> (SharingAcc a, [StableSharingAcc])
-determineScopes floatOutAcc accOccMap rootAcc 
+                => Bool -> [Level] -> OccMap Acc -> SharingAcc a -> (SharingAcc a, [StableSharingAcc])
+determineScopes floatOutAcc fvs accOccMap rootAcc 
   = let
       (sharingAcc, counts) = scopesAcc rootAcc
       unboundTrees         = filter (not . isFreeVar) counts
     in
     if all isFreeVar counts
       then
-        (sharingAcc, sortInEnvOrderAcc [sa | AccNodeCount sa _ <- counts])
+        (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
       else
         INTERNAL_ERROR(error) "determineScopes" ("unbound shared subtrees" ++ show unboundTrees)
   where
@@ -1651,12 +1706,12 @@ determineScopes floatOutAcc accOccMap rootAcc
             notComplete _                                             = True
 
     scopesExpInit :: RootExp t -> (RootExp t, NodeCounts)
-    scopesExpInit (OccMapExp expOccMap exp)
+    scopesExpInit (OccMapExp fvs expOccMap exp)
       = let
           (expWithScopes, nodeCounts) = scopesExp expOccMap exp
           (expCounts, accCounts)      = break isAccNodeCount nodeCounts
         in
-        (EnvExp (sortInEnvOrderExp [se | ExpNodeCount se _ <- expCounts]) expWithScopes, accCounts)
+        (EnvExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, accCounts)
       where
         isAccNodeCount (AccNodeCount {}) = True
         isAccNodeCount _                 = False
@@ -1880,14 +1935,14 @@ determineScopes floatOutAcc accOccMap rootAcc
 --     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
 --       variables to be shared if any of them is used more than once.  If one is duplicated, the
 --       environment for de Bruijn conversion will have a duplicate entry, and hence, be of the
---       wrong size, which is fatal.
+--       wrong size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
 --
-recoverSharingAcc :: Typeable a => Bool -> Acc a -> (SharingAcc a, [StableSharingAcc])
+recoverSharingAcc :: Typeable a => Bool -> Level -> [Level] -> Acc a -> (SharingAcc a, [StableSharingAcc])
 {-# NOINLINE recoverSharingAcc #-}
-recoverSharingAcc floatOutAcc acc 
+recoverSharingAcc floatOutAcc lvl fvs acc 
   = let (acc', occMap) =
           unsafePerformIO $ do        -- to enable stable pointers; it's safe as explained above
-            { (acc', occMap) <- makeOccMap acc
+            { (acc', occMap) <- makeOccMap lvl acc
  
             ; occMapList <- Hash.toList occMap
             ; traceChunk "OccMap" $
@@ -1897,7 +1952,7 @@ recoverSharingAcc floatOutAcc acc
             ; return (acc', frozenOccMap)
             }
     in 
-    determineScopes floatOutAcc occMap acc'
+    determineScopes floatOutAcc fvs occMap acc'
 
 
 -- Pretty printing
@@ -1925,9 +1980,9 @@ instance Elt a => Show (Exp a) where
                                                            (toSharingExp e3)
             PrimConst c     -> ExpSharing undefined $ PrimConst c
             PrimApp p e     -> ExpSharing undefined $ PrimApp p (toSharingExp e)
-            IndexScalar a e -> ExpSharing undefined $ IndexScalar (fst $ recoverSharingAcc False a)
+            IndexScalar a e -> ExpSharing undefined $ IndexScalar (fst $ recoverSharingAcc False 0 [] a)
                                                                   (toSharingExp e)
-            Shape a         -> ExpSharing undefined $ Shape (fst $ recoverSharingAcc False a)
+            Shape a         -> ExpSharing undefined $ Shape (fst $ recoverSharingAcc False 0 [] a)
             ShapeSize e     -> ExpSharing undefined $ ShapeSize (toSharingExp e)
 
       toSharingTup :: Tuple.Tuple Exp tup -> Tuple.Tuple SharingExp tup
