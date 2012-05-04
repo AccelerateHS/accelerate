@@ -1002,7 +1002,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
                     arr <- newArrayData (size sh)
                     let go !i _ | i >= n = return ()
                         go !i (v:vs)     = writeArrayData arr i (fromElt v) >> go (i+1) vs
-                        go _  []         = error "fromList: insufficient input data"
+                        go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
                     --
                     go 0 xs
                     return (arr, undefined)
