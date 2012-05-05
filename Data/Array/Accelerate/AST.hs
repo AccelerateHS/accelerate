@@ -478,6 +478,7 @@ instance Elt e => Stencil DIM1 e (e, e, e) where
                              rf' (y + 1))
     where
       rf' d = rf (Z:.d)
+
 instance Elt e => Stencil DIM1 e (e, e, e, e, e) where
   stencil = StencilRunit5
   stencilAccess rf (Z:.y) = (rf' (y - 2),
@@ -517,12 +518,21 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
   stencil = StencilRtup3 stencil stencil stencil
-  stencilAccess rf (ix:.i) = (stencilAccess (rf' (i - 1)) ix,
-                              stencilAccess (rf'  i     ) ix,
-                              stencilAccess (rf' (i + 1)) ix)
+  stencilAccess rf xi = ((stencilAccess (rf' (i - 1)) ix),
+                         (stencilAccess (rf'  i     ) ix),
+                         (stencilAccess (rf' (i + 1)) ix))
 
     where
-      rf' d ds = rf (ds :. d)
+      -- Invert then re-invert to ensure each recursive step gets a shape in the
+      -- standard scoc (right-recursive) ordering
+      --
+      ix' :. i  = invertShape xi
+      ix        = invertShape ix'
+
+      -- Inject this dimension innermost
+      --
+      rf' d ds  = rf $ invertShape (invertShape ds :. d)
+
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -530,13 +540,15 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row5) => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5) where
   stencil = StencilRtup5 stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.i) = (stencilAccess (rf' (i - 2)) ix,
-                              stencilAccess (rf' (i - 1)) ix,
-                              stencilAccess (rf'  i     ) ix,
-                              stencilAccess (rf' (i + 1)) ix,
-                              stencilAccess (rf' (i + 2)) ix)
+  stencilAccess rf xi = (stencilAccess (rf' (i - 2)) ix,
+                         stencilAccess (rf' (i - 1)) ix,
+                         stencilAccess (rf'  i     ) ix,
+                         stencilAccess (rf' (i + 1)) ix,
+                         stencilAccess (rf' (i + 2)) ix)
     where
-      rf' d ds = rf (ds :. d)
+      ix' :. i  = invertShape xi
+      ix        = invertShape ix'
+      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -547,15 +559,17 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row7)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7) where
   stencil = StencilRtup7 stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.i) = (stencilAccess (rf' (i - 3)) ix,
-                              stencilAccess (rf' (i - 2)) ix,
-                              stencilAccess (rf' (i - 1)) ix,
-                              stencilAccess (rf'  i     ) ix,
-                              stencilAccess (rf' (i + 1)) ix,
-                              stencilAccess (rf' (i + 2)) ix,
-                              stencilAccess (rf' (i + 3)) ix)
+  stencilAccess rf xi = (stencilAccess (rf' (i - 3)) ix,
+                         stencilAccess (rf' (i - 2)) ix,
+                         stencilAccess (rf' (i - 1)) ix,
+                         stencilAccess (rf'  i     ) ix,
+                         stencilAccess (rf' (i + 1)) ix,
+                         stencilAccess (rf' (i + 2)) ix,
+                         stencilAccess (rf' (i + 3)) ix)
     where
-      rf' d ds = rf (ds :. d)
+      ix' :. i  = invertShape xi
+      ix        = invertShape ix'
+      rf' d ds  = rf $ invertShape (invertShape ds :. d)
 
 instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
@@ -568,17 +582,37 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row9)
   => Stencil (sh:.Int:.Int) a (row1, row2, row3, row4, row5, row6, row7, row8, row9) where
   stencil = StencilRtup9 stencil stencil stencil stencil stencil stencil stencil stencil stencil
-  stencilAccess rf (ix:.i) = (stencilAccess (rf' (i - 4)) ix,
-                              stencilAccess (rf' (i - 3)) ix,
-                              stencilAccess (rf' (i - 2)) ix,
-                              stencilAccess (rf' (i - 1)) ix,
-                              stencilAccess (rf'  i     ) ix,
-                              stencilAccess (rf' (i + 1)) ix,
-                              stencilAccess (rf' (i + 2)) ix,
-                              stencilAccess (rf' (i + 3)) ix,
-                              stencilAccess (rf' (i + 4)) ix)
+  stencilAccess rf xi = (stencilAccess (rf' (i - 4)) ix,
+                         stencilAccess (rf' (i - 3)) ix,
+                         stencilAccess (rf' (i - 2)) ix,
+                         stencilAccess (rf' (i - 1)) ix,
+                         stencilAccess (rf'  i     ) ix,
+                         stencilAccess (rf' (i + 1)) ix,
+                         stencilAccess (rf' (i + 2)) ix,
+                         stencilAccess (rf' (i + 3)) ix,
+                         stencilAccess (rf' (i + 4)) ix)
     where
-      rf' d ds = rf (ds :. d)
+      ix' :. i  = invertShape xi
+      ix        = invertShape ix'
+      rf' d ds  = rf $ invertShape (invertShape ds :. d)
+
+
+-- For stencilAccess to match how the user draws the stencil in code as a series
+-- of nested tuples, we need to recurse from the left. That is, we desire the
+-- following 2D stencil to represent elements to the top, bottom, left, and
+-- right of the focus as follows:
+--
+-- stencil2D ( (_, t, _)
+--           , (l, _, r)
+--           , (_, b, _) ) = ...
+--
+-- This function is used to reverse all components of a shape so that the
+-- innermost component, now the head, can be picked off.
+--
+-- ...but needing to go via lists is unfortunate.
+--
+invertShape :: Shape sh => sh -> sh
+invertShape =  listToShape . reverse . shapeToList
 
 
 -- Embedded expressions
