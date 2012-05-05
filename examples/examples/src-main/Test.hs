@@ -175,16 +175,18 @@ allTests cfg = sequence'
   , mkTest "slices"  "replicate (Any:.2)"         $ SliceExamples.run4  
   , mkTest "slices"  "replicate (Z:.2:.2:.2)"     $ SliceExamples.run5
   --
-  , mkIO "sharing-recovery" "simple"    $ return (show SharingRecovery.simple)
-  , mkIO "sharing-recovery" "orderFail" $ return (show SharingRecovery.orderFail)
-  , mkIO "sharing-recovery" "testSort"  $ return (show SharingRecovery.testSort)
-  , mkIO "sharing-recovery" "muchSharing" $ return (show $ SharingRecovery.muchSharing 20)
-  , mkIO "sharing-recovery" "bfsFail"   $ return (show SharingRecovery.bfsFail)
+  , mkIO "sharing-recovery" "simple"            $ return (show SharingRecovery.simple)
+  , mkIO "sharing-recovery" "orderFail"         $ return (show SharingRecovery.orderFail)
+  , mkIO "sharing-recovery" "testSort"          $ return (show SharingRecovery.testSort)
+  , mkIO "sharing-recovery" "muchSharing"       $ return (show $ SharingRecovery.muchSharing 20)
+  , mkIO "sharing-recovery" "bfsFail"           $ return (show SharingRecovery.bfsFail)
   , mkIO "sharing-recovery" "twoLetsSameLevel"  $ return (show SharingRecovery.twoLetsSameLevel)
   , mkIO "sharing-recovery" "twoLetsSameLevel2" $ return (show SharingRecovery.twoLetsSameLevel2)
-  , mkIO "sharing-recovery" "noLetAtTop"   $ return (show SharingRecovery.noLetAtTop)
-  , mkIO "sharing-recovery" "noLetAtTop2"   $ return (show SharingRecovery.noLetAtTop2)
-  , mkIO "sharing-recovery" "pipe" $ return (show SharingRecovery.pipe)
+  , mkIO "sharing-recovery" "noLetAtTop"        $ return (show SharingRecovery.noLetAtTop)
+  , mkIO "sharing-recovery" "noLetAtTop2"       $ return (show SharingRecovery.noLetAtTop2)
+  , mkIO "sharing-recovery" "pipe"              $ return (show SharingRecovery.pipe)
+  --
+  , mkIO "bound-variables" "stencil2" $ return (show Stencil2.varUse)
   ]
   where
     n   = cfgElements cfg

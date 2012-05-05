@@ -6,9 +6,10 @@ import Util
 
 import Control.Exception
 import System.Random.MWC
-import Data.Array.Unboxed           hiding (Array)
-import Data.Array.Accelerate        hiding (round, min, max, fromIntegral)
-import qualified Data.Array.IArray  as IArray
+import Data.Array.Unboxed              hiding (Array)
+import Data.Array.Accelerate           hiding (round, min, max, fromIntegral)
+import qualified Data.Array.Accelerate as A
+import qualified Data.Array.IArray     as IArray
 
 
 
@@ -61,6 +62,34 @@ test_stencil2_2D n2 = withSystemRandom $ \gen -> do
                     t + b + l + r - ((x+y) / 2)
       in
       array sh [(ix, f ix) | ix <- range sh]
+
+varUse :: (Acc (Array DIM2 Int), Acc (Array DIM2 Float), Acc (Array DIM2 Float))
+varUse = (first, both, second)
+  where
+    is :: Array DIM2 Int
+    is = fromList (Z:.10:.10) [0..]
+    
+    fs :: Array DIM2 Float
+    fs = fromList (Z:.10:.10) [0..]
+
+    -- Ignoring the first parameter
+    first = stencil2 centre Clamp (use fs) Clamp (use is)
+      where
+        centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Int
+        centre _ (_,(_,y,_),_)  = y
+
+    -- Using both
+    both = stencil2 centre Clamp (use fs) Clamp (use is)
+      where
+        centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
+        centre (_,(_,x,_),_) (_,(_,y,_),_)  = x + A.fromIntegral y
+
+    -- Not using the second parameter
+    second = stencil2 centre Clamp (use fs) Clamp (use is)
+      where
+        centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
+        centre (_,(_,x,_),_) _  = x
+
 
 -- Main
 -- ----
