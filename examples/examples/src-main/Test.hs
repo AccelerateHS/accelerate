@@ -50,7 +50,6 @@ import Prelude                                          hiding (catch)
 import Criterion                                        (Benchmark, bench, whnf)
 import Data.Maybe
 import Data.Array.IArray
-import Control.Monad
 import Control.Exception
 import System.IO
 import System.IO.Unsafe
@@ -214,18 +213,18 @@ verifyTest cfg test = do
   where
     run acc      = backend cfg $ acc ()
     verify quiet = do
-      unless quiet $ putStr (title test ++ ": ") >> hFlush stdout
+      putStr (title test ++ ": ") >> hFlush stdout
       result <- case test of
         Test _ _ ref acc cvt ->
           return $ case validate (ref ()) (cvt $ run acc) of
                      []   -> Ok
-                     errs -> Failed . unlines . ("":)
-                                    $ map (\(i,v) -> ">>> " ++ shows i " : " ++ show v) errs
-
+                     errs -> Failed $
+                       if quiet then ("(" ++ show (length errs) ++ " differences)")
+                                else unlines . ("":) $ map (\(i,v) -> ">>> " ++ shows i " : " ++ show v) errs
         TestNoRef _ _ acc -> return $ run acc `seq` Ok
         TestIO _ _ act    -> act >>= \v -> v `seq` return Ok
       --
-      unless quiet $ putStrLn (show result)
+      putStrLn (show result)
       return result
 
 
