@@ -4,8 +4,9 @@ module Scatter where
 
 import Random
 
-import Control.Monad
+import Data.List
 import Data.Array.ST
+import Control.Monad
 import System.Random.MWC
 import Data.Array.Unboxed
 import qualified Data.Array.MArray  as M
@@ -52,13 +53,16 @@ run :: String -> Int -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run alg n = withSystemRandom $ \gen -> do
   let m = 2 * n
 
-  vec       <- randomUArrayR (-1, 1) gen n
-  vec'      <- convertUArray vec
-
-  mapV      <- randomUArrayR (0, m - 1) gen n
+  (mapV,n') <- do
+    uniq    <- fmap (nub . elems) (randomUArrayR (0, m - 1) gen n)
+    let n'  =  length uniq
+    return  $ (listArray (0, n'-1) uniq, n')
   mapV'     <- convertUArray mapV
 
-  maskV     <- randomUArrayR (0, n) gen n
+  vec       <- randomUArrayR (-1, 1) gen n'
+  vec'      <- convertUArray vec
+
+  maskV     <- randomUArrayR (0, n') gen n'
   maskV'    <- convertUArray maskV
 
   defaultV  <- randomUArrayR (-1, 1) gen m
