@@ -21,7 +21,6 @@ Backend specific notes:
 -----------------------
 
 CUDA: known failures
-  * permute-hist: see issue #5
-  * slices: `Any` is not implemented yet
+  * Lacking support for `Char` and `Bool` (hence, `gather-if` fails)
   * scanseg-sum: works intermittently
 
