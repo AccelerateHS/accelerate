@@ -8,6 +8,9 @@ For a list of available options and test programs, run:
 If you have found a bug, please report it to:
 https://github.com/AccelerateHS/accelerate/issues
 
+Current status for each backend:
+https://github.com/AccelerateHS/accelerate-examples/wiki/Status-of-regression-tests
+
 
 Adding new backends:
 --------------------

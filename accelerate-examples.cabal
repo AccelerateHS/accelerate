@@ -88,11 +88,11 @@ Executable accelerate-quickcheck
 --
 Executable accelerate-examples
   Main-is:              Main.hs
-  hs-source-dirs:       examples/examples/src-main
-                        examples/examples/src-tests/io
-                        examples/examples/src-tests/image-processing
-                        examples/examples/src-tests/primitives
-                        examples/examples/src-tests/simple
+  hs-source-dirs:       examples/tests
+                        examples/tests/io
+                        examples/tests/image-processing
+                        examples/tests/primitives
+                        examples/tests/simple
 
   other-modules:        Benchmark, Config, Random, Test, Util, Validate,
 
@@ -112,7 +112,7 @@ Executable accelerate-examples
                         SharingRecovery, SliceExamples, SMVM, SMVM.Matrix, SMVM.MatrixMarket
 
 
-  c-sources:            examples/examples/src-tests/io/fill_with_values.cpp
+  c-sources:            examples/tests/io/fill_with_values.cpp
   extra-libraries:      stdc++
 
   ghc-options:          -Wall -O2
