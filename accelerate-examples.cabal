@@ -142,6 +142,7 @@ Executable accelerate-examples
                         deepseq                 >= 1.1,
                         directory               >= 1.0,
                         filepath                >= 1.0,
+                        hashtables              >= 1.0.1,
                         mtl                     >= 1.1,
                         mwc-random              >= 0.8,
                         pgm                     >= 0.1,

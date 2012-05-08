@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Scatter where
@@ -5,13 +6,17 @@ module Scatter where
 import Random
 
 import Data.List
+import Data.Maybe
 import Data.Array.ST
 import Control.Monad
+import Control.Applicative
 import System.Random.MWC
 import Data.Array.Unboxed
-import qualified Data.Array.MArray  as M
-import Data.Array.Accelerate        as Acc hiding ((!))
-import Prelude                      as P
+
+import Prelude                          as P
+import Data.Array.Accelerate            as Acc hiding ((!))
+import qualified Data.Array.MArray      as M
+import qualified Data.HashTable.IO      as Hash
 
 
 -- Tests
@@ -47,17 +52,34 @@ evenRef :: Int -> Bool
 evenRef = even
 
 
+-- Random
+-- ------
+
+uniqueRandomUArrayR :: GenIO -> (Int,Int) -> Int -> IO (UArray Int Int)
+uniqueRandomUArrayR gen lim n = do
+  set   <- Hash.new     :: IO (Hash.BasicHashTable Int ())
+
+  let go !i !m | i >= n         = return m
+               | otherwise      = do
+                  v             <- uniformR lim gen
+                  exists        <- isJust <$> Hash.lookup set v
+                  if exists
+                     then                         go (i+1) m
+                     else Hash.insert set v () >> go (i+1) (m+1)
+
+  n'    <- go 0 0
+  listArray (0, n'-1) . P.map P.fst <$> Hash.toList set
+
+
 -- Main
 -- ----
 run :: String -> Int -> IO (() -> UArray Int Float, () -> Acc (Vector Float))
 run alg n = withSystemRandom $ \gen -> do
   let m = 2 * n
 
-  (mapV,n') <- do
-    uniq    <- fmap (nub . elems) (randomUArrayR (0, m - 1) gen n)
-    let n'  =  length uniq
-    return  $ (listArray (0, n'-1) uniq, n')
+  mapV      <- uniqueRandomUArrayR gen (0, m-1) n
   mapV'     <- convertUArray mapV
+  let n'     = rangeSize (bounds mapV)
 
   vec       <- randomUArrayR (-1, 1) gen n'
   vec'      <- convertUArray vec
