@@ -715,8 +715,8 @@ evalOpenExp (IndexScalar acc ix) env aenv
                               --       ensure bounds checking
 
 evalOpenExp (Shape acc) _ aenv 
-  = case force $ evalOpenAcc acc aenv of
-      Array sh _ -> Sugar.toElt sh
+  = case evalOpenAcc acc aenv of
+      DelayedPair DelayedUnit (DelayedArray sh _) -> Sugar.toElt sh
 
 evalOpenExp (ShapeSize sh) env aenv = size $ Sugar.fromElt $ evalOpenExp sh env aenv
 
