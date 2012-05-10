@@ -25,7 +25,7 @@ class Elt e => Radix e where
   radix  :: Exp Int -> Exp e -> Exp Int
 
 instance Radix Int32 where
-  passes _  = bitSize (undefined :: Int)
+  passes    = bitSize
   radix i e = i ==* (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
     where
       radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
