@@ -544,8 +544,8 @@ gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
 
 -- | Copy elements from source array to destination array according to a map. This
 --   is a forward-permute operation where a 'map' vector encodes an input to output
---   index mapping. Output elements for indicies that are not mapped asume the default
---   vector's value.  For example:
+--   index mapping. Output elements for indices that are not mapped assume the
+--   default vector's value.  For example:
 --
 --    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 --    map     = [1, 3, 7, 2, 5, 8]
@@ -570,8 +570,8 @@ scatter mapV defaultV inputV = permute (const) defaultV pF inputV
 --   to a map. This is a forward-permute operation where a 'map' vector encodes an
 --   input to output index mapping. In addition, there is a 'mask' vector, and an
 --   associated predicate function, that specifies whether an elements will be
---   copied. If not copied, the ouput array assumes the default vector's value. For
---   example:
+--   copied. If not copied, the output array assumes the default vector's value.
+--   For example:
 --
 --    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 --    map     = [1, 3, 7, 2, 5, 8]
