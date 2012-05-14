@@ -24,6 +24,11 @@ Description:            This library defines an embedded language for
                         .
                         Known bugs: <https://github.com/AccelerateHS/accelerate/issues>
                         .
+                        * New in 0.12.0.0: Full sharing recovery in scalar expressions and array
+                            computations. Two new example applications in package accelerate-examples:
+                            Real-time Canny edge detection and fluid flow simulator (both including a
+                            graphical frontend). Bug fixes.
+                        .
                         * New in 0.11.0.0: New functions zip3, zip4, unzip3, unzip4, fill,
                             enumFromN, enumFromStepN, tail, init, drop, take, slit, gather,
                             gatherIf, scatter, scatterIf, and shapeSize.  New simplified AST
@@ -55,7 +60,7 @@ Author:                 Manuel M T Chakravarty,
                         Ryan Newtown,
                         Sean Seefried
 Maintainer:             Manuel M T Chakravarty <chak@cse.unsw.edu.au>
-Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
+Homepage:               https://github.com/AccelerateHS/accelerate/
 Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
