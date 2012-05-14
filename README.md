@@ -61,7 +61,7 @@ Mailing list and contacts
 -------------------------
 
   * Mailing list: [`accelerate-haskell@googlegroups.com`](mailto:accelerate-haskell@googlegroups.com) (discussions on both use and development are welcome)
-
+  * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
   * Bug reports and issues tracking: [GitHub project page][Issues].
 
 The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> (aka TacticalGrace on #haskell and related channels).
@@ -90,6 +90,7 @@ Here is a list of features that are currently missing:
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
+  [Google-Group]:          http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
