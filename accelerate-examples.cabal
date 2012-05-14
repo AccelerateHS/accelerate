@@ -181,6 +181,12 @@ Executable accelerate-crystal
 Executable accelerate-fluid
   Main-is:              Main.hs
   hs-source-dirs:       examples/fluid/src
+  other-modules:        Config
+                        Event
+                        Fluid
+                        Type
+                        World
+
   ghc-options:          -O2 -Wall
 
   if flag(cuda)
