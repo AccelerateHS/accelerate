@@ -34,6 +34,8 @@ The following supported addons are available as separate packages on Hackage and
   * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
   * [`accelerate-buildbot`][accelerate-buildbot] Build bot for automatic performance & regression testing
 
+Install them from Hackage with `cabal install PACKAGENAME`.
+
 The following additional components are experimental and incomplete:
 
   * [`accelerate-opencl`][accelerate-opencl] Backend targeting GPUs via the OpenCL standard
@@ -55,14 +57,14 @@ The GitHub repository contains a submodule [accelerate-examples][accelerate-exam
   * Online documentation is on the [GitHub wiki][Wiki].
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
 
-Contacts
---------
+Mailing list and contacts
+-------------------------
+
+  * Mailing list: [`accelerate-haskell@googlegroups.com`](mailto:accelerate-haskell@googlegroups.com) (discussions on both use and development are welcome)
+
+  * Bug reports and issues tracking: [GitHub project page][Issues].
 
 The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> (aka TacticalGrace on #haskell and related channels).
-
-Both user and developer questions and discussions are welcome at `accelerate@projects.haskell.org`.  **Sorry, this mailing list is currently unavailable.**
-
-Bug reports and issues tracking are on the [GitHub project page][Issues].
 
 What's missing?
 ---------------
