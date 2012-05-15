@@ -47,7 +47,7 @@ import qualified Data.Array.Unsafe  as Unsafe
 #endif
 import Data.Array.ST      (STUArray)
 import Data.Array.Unboxed (UArray)
-import Data.Array.Base    (UArray(UArray), STUArray(STUArray), bOOL_SCALE,
+import Data.Array.Base    (UArray(UArray), STUArray(STUArray),
                            wORD_SCALE, fLOAT_SCALE, dOUBLE_SCALE)
 
 -- friends
@@ -92,7 +92,7 @@ data instance GArrayData ba Float   = AD_Float   (ba Float)
 data instance GArrayData ba Double  = AD_Double  (ba Double)
 -- data instance GArrayData ba CFloat  = AD_CFloat  (ba CFloat)
 -- data instance GArrayData ba CDouble = AD_CDouble (ba CDouble)
-data instance GArrayData ba Bool    = AD_Bool    (ba Bool)
+data instance GArrayData ba Bool    = AD_Bool    (ba Word8)
 data instance GArrayData ba Char    = AD_Char    (ba Char)
 -- data instance GArrayData ba CChar   = AD_CChar   (ba CChar)
 -- data instance GArrayData ba CSChar  = AD_CSChar  (ba CSChar)
@@ -304,32 +304,44 @@ instance ArrayElt Double where
 -- CFloat
 -- CDouble
 
+-- Bool arrays are stored as arrays of bytes. While this is memory inefficient,
+-- it is better suited to parallel backends than the native Unboxed Bool
+-- array representation that uses packed bit vectors, as that would require
+-- atomic operations when writing data necessarily serialising threads.
+--
 instance ArrayElt Bool where
   type ArrayPtrs Bool = Ptr Word8
-  indexArrayData (AD_Bool ba) i = ba IArray.! i
---  ptrsOfArrayData (AD_Bool ba) = uArrayPtr ba???currently wrong
---    Unboxed Bool arrays are stored as bit vectors, which is unsuitable
---    for parallel processing (might be useful with sequential LLVM code though)
---    - Do we want to represent 'Array sh Bool' differently or do we want to
---      copy the array on marshaling (but then we also have to copy back
---      results of the same type)
-  newArrayData size = liftM AD_Bool $ unsafeNewArray_ size bOOL_SCALE
-  readArrayData (AD_Bool ba) i = MArray.readArray ba i
-  writeArrayData (AD_Bool ba) i e = MArray.writeArray ba i e
+  indexArrayData (AD_Bool ba) i = toBool (ba IArray.! i)
+  ptrsOfArrayData (AD_Bool ba) = uArrayPtr ba
+  newArrayData size = liftM AD_Bool $ unsafeNewArray_ size (\x -> x)
+  readArrayData (AD_Bool ba) i = liftM toBool $ MArray.readArray ba i
+  writeArrayData (AD_Bool ba) i e = MArray.writeArray ba i (fromBool e)
   unsafeFreezeArrayData (AD_Bool ba) = liftM AD_Bool $ Unsafe.unsafeFreeze ba
---  ptrsOfMutableArrayData (AD_Bool ba) = sTUArrayPtr ba???
---    see ptrsOfArrayData
+  ptrsOfMutableArrayData (AD_Bool ba) = sTUArrayPtr ba
   arrayElt = ArrayEltRbool
 
+{-# INLINE toBool #-}
+toBool :: Word8 -> Bool
+toBool 0 = False
+toBool _ = True
+
+{-# INLINE fromBool #-}
+fromBool :: Bool -> Word8
+fromBool True  = 1
+fromBool False = 0
+
+
+-- Unboxed Char is stored as a wide character, which is 4-bytes
+--
 instance ArrayElt Char where
---  type ArrayPtrs Char = ???unicode???
+  type ArrayPtrs Char = Ptr Char
   indexArrayData (AD_Char ba) i = ba IArray.! i
---  ptrsOfArrayData (AD_Char ba) = ???
+  ptrsOfArrayData (AD_Char ba) = uArrayPtr ba
   newArrayData size = liftM AD_Char $ unsafeNewArray_ size (*# 4#)
   readArrayData (AD_Char ba) i = MArray.readArray ba i
   writeArrayData (AD_Char ba) i e = MArray.writeArray ba i e
   unsafeFreezeArrayData (AD_Char ba) = liftM AD_Char $ Unsafe.unsafeFreeze ba
---  ptrsOfMutableArrayData (AD_Char ba) = ???
+  ptrsOfMutableArrayData (AD_Char ba) = sTUArrayPtr ba
   arrayElt = ArrayEltRchar
 
 -- FIXME:
