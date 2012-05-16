@@ -24,6 +24,5 @@ Backend specific notes:
 -----------------------
 
 CUDA: known failures
-  * Lacking support for `Char` and `Bool` (hence, `gather-if` fails)
   * scanseg-sum: works intermittently
 
