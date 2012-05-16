@@ -71,7 +71,6 @@ What's missing?
 
 Here is a list of features that are currently missing:
 
- * The CUDA backend does not support arrays of type Char and Bool at the moment.
  * Preliminary API (parts of the API may still change in subsequent releases)
 
 
