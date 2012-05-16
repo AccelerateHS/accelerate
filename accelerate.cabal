@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.12.0.0
+Version:                0.13.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 7.0.3
 Build-type:             Simple
@@ -14,9 +14,8 @@ Description:            This library defines an embedded language for
                         language and (2) a CUDA backend generating code for
                         CUDA-capable NVIDIA GPUs.
                         .
-                        To use the CUDA backend, you need to have CUDA version 3.x
-                        installed.  The CUDA backend currently doesn't support 'Char'
-                        and 'Bool' arrays.
+                        To use the CUDA backend, you need to have the CUDA SDK version 3.x
+                        installed and have hardware supporting compute capability 1.2 or higher.
                         .
                         An experimental OpenCL backend is available at <https://github.com/HIPERFIT/accelerate-opencl>
                         and an experimental multicore CPU backend building on the Repa array library
