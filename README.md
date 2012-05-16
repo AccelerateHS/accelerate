@@ -28,7 +28,7 @@ Additional components
 
 The following supported addons are available as separate packages on Hackage and included as submodules in the GitHub repository:
 
-  * [`accelerate-cuda`][accelerate-cuda] Backend targeting CUDA-enabled NVIDA GPUs
+  * [`accelerate-cuda`][accelerate-cuda] Backend targeting CUDA-enabled NVIDA GPUs — requires the NVIDIA CUDA SDK and hardware with compute capability 1.2 or greater (see the [table on Wikipedia][wiki-cc])
   * [`accelerate-examples`][accelerate-examples] Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * [`accelerate-io`][accelerate-io] Fast conversion between Accelerate arrays and other array formats (including Repa arrays)
   * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
@@ -94,3 +94,4 @@ Here is a list of features that are currently missing:
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
+  [wiki-cc]: http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
