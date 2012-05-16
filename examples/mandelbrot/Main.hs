@@ -16,7 +16,7 @@ import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 import Prelude                                  as P
-import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate                    as A hiding ( size )
 import qualified Graphics.Gloss                 as G
 
 
@@ -27,16 +27,15 @@ type F            = Float       -- Double not supported on all devices
 type Complex      = (F,F)
 type ComplexPlane = Array DIM2 Complex
 
-mandelbrot :: Options -> F -> F -> F -> F -> Int -> Int -> Int -> Array DIM2 (F,F,Int)
-mandelbrot opt x y x' y' screenX screenY depth
+mandelbrot :: F -> F -> F -> F -> Int -> Int -> Int -> Acc (Array DIM2 (F,F,Int))
+mandelbrot x y x' y' screenX screenY depth
   = foldl (flip ($)) zs0 (P.take depth (repeat go))
   where
-   (cs, zs0) = run opt $ lift (cs', zs0')
-        where cs'  = genPlane x y x' y' screenX screenY
-              zs0' = mkinit cs'
+    cs  = genPlane x y x' y' screenX screenY
+    zs0 = mkinit cs
 
-   go :: Array DIM2 (F,F,Int) -> Array DIM2 (F,F,Int)
-   go zs = zs `seq` run1 opt (A.zipWith iter (use cs)) zs
+    go :: Acc (Array DIM2 (F,F,Int)) -> Acc (Array DIM2 (F,F,Int))
+    go = A.zipWith iter cs
 
 
 genPlane :: F -> F
@@ -116,10 +115,10 @@ prettyRGBA lIMIT s' = r + g + b + a
     a           = 0xFF
 
 
-makePicture :: Options -> Int -> Array DIM2 (F, F, Int) -> G.Picture
+makePicture :: Options -> Int -> Acc (Array DIM2 (F, F, Int)) -> G.Picture
 makePicture opt limit zs = pic
   where
-    arrPixels   = zs `seq` run opt $ A.map (prettyRGBA (constant limit)) (use zs)
+    arrPixels   = run opt $ A.map (prettyRGBA (constant limit)) zs
     (Z:.h:.w)   = arrayShape arrPixels
 
     {-# NOINLINE rawData #-}
@@ -145,7 +144,7 @@ main
             y'          = -0.75
             --
             image       = makePicture config limit
-                        $ mandelbrot config x y x' y' size size limit
+                        $ mandelbrot x y x' y' size size limit
 
         void $ evaluate image
 
