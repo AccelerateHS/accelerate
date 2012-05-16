@@ -175,6 +175,30 @@ Executable accelerate-crystal
                         fclabels                >= 1.0,
                         gloss                   >= 1.5
 
+-- A simple mandelbrot generator
+
+Executable accelerate-mandelbrot
+  hs-source-dirs:       examples/mandelbrot
+  Main-is:              Main.hs
+  other-modules:        Config
+  ghc-options:          -O2 -Wall
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.12
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl       == 0.1.*
+
+  build-depends:        accelerate              >= 0.12,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        gloss                   >= 1.5
+
 
 -- A stable fluid simulation
 --
