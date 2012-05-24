@@ -66,13 +66,12 @@ module Data.Array.Accelerate.Language (
   cond, (?|),
 
   -- ** Lifting and Unlifting
-
   -- | A value of type `Int` is a plain Haskell value (unlifted),
   --   whereas an @Exp Int@ is a /lifted/ value, that is, an integer
   --   lifted into the domain of expressions (an abstract syntax tree
   --   in disguise).  Both `Acc` and `Exp` are /surface types/ into
   --   which values may be lifted.
-  --
+  -- 
   --   In general an @Exp Int@ cannot be unlifted into an `Int`,
   --   because the actual number will not be available until a later stage of
   --   execution (e.g. GPU execution, when `run` is called).  However,
@@ -490,11 +489,11 @@ c ?| (t, e) = cond c t e
 class Lift c e where
   -- | An associated-type (i.e. a type-level function) that strips all
   --   instances of surface type constructors @c@ from the input type @e@.
-  --
+  -- 
   --   For example, the tuple types @(Exp Int, Int)@ and @(Int, Exp
   --   Int)@ have the same \"Plain\" representation.  That is, the
   --   following type equality holds:
-  --
+  -- 
   --    @Plain (Exp Int, Int) ~ (Int,Int) ~ Plain (Int, Exp Int)@
   type Plain e
 
