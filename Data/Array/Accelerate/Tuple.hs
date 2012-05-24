@@ -38,6 +38,8 @@ data Tuple c t where
 -- TLM: It is irritating that we need a separate data type for tuples of scalars
 --   vs. arrays, purely to carry the class constraint.
 --
+-- | Tuples of Arrays.  Note that this carries the `Arrays` class
+--   constraint rather than `Elt` in the case of tuples of scalars.
 data Atuple c t where
   NilAtup  ::                                  Atuple c ()
   SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
