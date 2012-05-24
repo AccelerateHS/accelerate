@@ -66,6 +66,21 @@ module Data.Array.Accelerate.Language (
   cond, (?|),
 
   -- ** Lifting and unlifting
+  
+  -- | A value of type `Int` is a plain Haskell value (unlifted),
+  --   whereas an @Exp Int@ is a /lifted/ value, that is, an integer
+  --   lifted into the domain of expressions (an abstract syntax tree
+  --   in disguise).  Both `Acc` and `Exp` are /surface types/ into
+  --   which values may be lifted.
+  -- 
+  --   In general an @Exp Int@ cannot be unlifted into an `Int`,
+  --   because the actual number will not be available until a later stage of
+  --   execution (e.g. GPU execution, when `run` is called).  However,
+  --   in some cases unlifting makes sense.  For example, unlifting
+  --   can convert unpack an expression of tuple type into a tuple of
+  --   expressions; those expressions, at runtime, will become tuple
+  --   dereferences.
+  
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
 
   -- ** Tuple construction and destruction
@@ -465,7 +480,16 @@ c ?| (t, e) = cond c t e
 -- Lifting surface expressions
 -- ---------------------------
 
+-- | The class of types @e@ which can be lifted into @c@.
 class Lift c e where
+  -- | An associated-type (i.e. a type-level function) that strips all
+  --   instances of surface type constructors @c@ from the input type @e@.
+  -- 
+  --   For example, the tuple types @(Exp Int, Int)@ and @(Int, Exp
+  --   Int)@ have the same \"Plain\" representation.  That is, the
+  --   following type equality holds:
+  -- 
+  --    @Plain (Exp Int, Int) ~ (Int,Int) ~ Plain (Int, Exp Int)@
   type Plain e
 
   -- | Lift the given value into a surface type 'c' --- either 'Exp' for scalar
@@ -474,6 +498,7 @@ class Lift c e where
   --
   lift :: e -> c (Plain e)
 
+-- | A limited subset of types which can be lifted, can also be unlifted.
 class Lift c e => Unlift c e where
 
   -- | Unlift the outermost constructor through the surface type. This is only
