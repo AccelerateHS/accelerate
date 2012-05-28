@@ -216,6 +216,11 @@ instance Show (ScalarType a) where
   show (NumScalarType ty)    = show ty
   show (NonNumScalarType ty) = show ty
 
+instance Show (TupleType a) where 
+  show UnitTuple = "()"
+  show (SingleTuple scalarTy) = show scalarTy
+  show (PairTuple a b) = "("++show a++", "++show b++")"
+
 -- Querying scalar type representations
 -- 
 
@@ -590,7 +595,6 @@ data TupleType a where
   UnitTuple   ::                               TupleType ()
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
-
 
 -- Stencil support
 -- ---------------
