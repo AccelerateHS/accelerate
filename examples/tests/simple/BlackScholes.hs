@@ -17,14 +17,14 @@ volatility = 0.30
 -------------------------------
 
 horner :: Num a => [a] -> a -> a
-horner coeff x = foldr1 madd coeff
+horner coeff x = x * foldr1 madd coeff
   where
-    madd a b = b*x + a
+    madd a b = a + x*b
 
 cnd' :: Floating a => a -> a
 cnd' d =
   let poly     = horner coeff
-      coeff    = [0.0,0.31938153,-0.356563782,1.781477937,-1.821255978,1.330274429]
+      coeff    = [0.31938153,-0.356563782,1.781477937,-1.821255978,1.330274429]
       rsqrt2pi = 0.39894228040143267793994605993438
       k        = 1.0 / (1.0 + 0.2316419 * abs d)
   in
@@ -36,18 +36,18 @@ blackscholesAcc xs = Acc.map go (Acc.use xs)
   where
   go x =
     let (price, strike, years) = Acc.unlift x
-        r     = Acc.constant riskfree
-        v     = Acc.constant volatility
-        sqrtT = sqrt years
-        d1    = (log (price / strike) + (r + 0.5 * v * v) * years) / (v * sqrtT)
-        d2    = d1 - v * sqrtT
-        cnd d = d >* 0 ? (1.0 - cnd' d, cnd' d)
-        cndD1 = cnd d1
-        cndD2 = cnd d2
-        expRT = exp (-r * years)
+        r       = Acc.constant riskfree
+        v       = Acc.constant volatility
+        v_sqrtT = v * sqrt years
+        d1      = (log (price / strike) + (r + 0.5 * v * v) * years) / v_sqrtT
+        d2      = d1 - v_sqrtT
+        cnd d   = let c = cnd' d in d >* 0 ? (1.0 - c, c)
+        cndD1   = cnd d1
+        cndD2   = cnd d2
+        x_expRT = strike * exp (-r * years)
     in
-    Acc.lift ( price * cndD1 - strike * expRT * cndD2
-             , strike * expRT * (1.0 - cndD2) - price * (1.0 - cndD1))
+    Acc.lift ( price * cndD1 - x_expRT * cndD2
+             , x_expRT * (1.0 - cndD2) - price * (1.0 - cndD1))
 
 
 blackscholesRef :: IArray.Array Int (Float,Float,Float) -> IArray.Array Int (Float,Float)
