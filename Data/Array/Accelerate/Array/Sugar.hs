@@ -58,23 +58,23 @@ import qualified Data.Array.Accelerate.Array.Representation as Repr
 -- |Rank-0 index
 --
 data Z = Z
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- |Increase an index rank by one dimension
 --
 infixl 3 :.
 data tail :. head = tail :. head
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- |Marker for entire dimensions in slice descriptors
 --
 data All = All
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- |Marker for arbitrary shapes in slice descriptors
 --
 data Any sh = Any
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- Representation change for array element types
 -- ---------------------------------------------
