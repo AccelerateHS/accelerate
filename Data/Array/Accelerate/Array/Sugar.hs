@@ -61,14 +61,14 @@ import qualified Data.Array.Accelerate.Array.Representation as Repr
 -- |Rank-0 index
 --
 data Z = Z
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- |Increase an index rank by one dimension.  The `:.` operator is
 --  used to construct both values and types.
 --
 infixl 3 :.
 data tail :. head = tail :. head
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- | Marker for entire dimensions in slice descriptors.
 --
@@ -78,7 +78,7 @@ data tail :. head = tail :. head
 -- introduced by replication.
 --
 data All = All
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- |Marker for arbitrary shapes in slice descriptors.  Such arbitrary
 --  shapes may include an unknown number of dimensions.
@@ -92,7 +92,7 @@ data All = All
 -- > repN n a = replicate (constant$ Any :. n) a
 --
 data Any sh = Any
-  deriving (Typeable, Show)
+  deriving (Typeable, Show, Eq)
 
 -- Representation change for array element types
 -- ---------------------------------------------
