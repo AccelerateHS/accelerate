@@ -43,7 +43,11 @@ defaultOptions = Options
   , _optZoom            = 3
   , _optScale           = 30
   , _optDegree          = 5
+#ifdef ACCELERATE_ENABLE_GUI
   , _optBench           = False
+#else
+  , _optBench           = True
+#endif
   , _optHelp            = False
   }
 

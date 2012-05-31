@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 --
 -- A stable fluid simulation
 --
@@ -66,6 +67,10 @@ main = do
      then withArgs noms $ defaultMain
               [ bench "fluid" $ whnfIO (force `fmap` simulate 1.0 initialWorld) ]
 
+#ifndef ACCELERATE_ENABLE_GUI
+     else return ()
+
+#else
      -- simulate
      else playIO
               (InWindow "accelerate-fluid" (width, height) (10, 20))
@@ -75,4 +80,5 @@ main = do
               (render opt)              -- render world state into a picture
               (react opt)               -- handle user events
               simulate                  -- one step of the simulation
+#endif
 

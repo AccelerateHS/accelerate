@@ -29,6 +29,11 @@ Description:            This package defines a number of example programs for ve
                         * io: Extra tests for reading and writing arrays in various formats
                         .
 
+Flag gui
+  Description:          Enable gloss-based GUIs, where applicable. If not
+                        enabled, the application always runs in benchmark mode.
+  Default:              True
+
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
@@ -161,6 +166,9 @@ Executable accelerate-crystal
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
+
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.12
@@ -184,6 +192,9 @@ Executable accelerate-mandelbrot
   ghc-options:          -O2 -Wall
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
+
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
@@ -212,6 +223,9 @@ Executable accelerate-fluid
                         World
 
   ghc-options:          -O2 -Wall
+
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND

@@ -181,7 +181,10 @@ main
            then withArgs nops $ defaultMain
                     [ bench "crystal" $ whnf (force . render) (A.fromList Z [1.0]) ]
 
-#if MIN_VERSION_gloss(1,6,0)
+#ifndef ACCELERATE_ENABLE_GUI
+           else return ()
+
+#elif MIN_VERSION_gloss(1,6,0)
            else G.animate
                     (G.InWindow "Quasicrystals" (size  * zoom, size * zoom) (10, 10))
                     (G.black)

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 --
 -- A Mandelbrot set generator. Submitted by Simon Marlow as part of Issue #49.
 --
@@ -154,8 +155,20 @@ main
                     [ bench "mandelbrot" $
                       whnf (force . run config . mandelbrot x y x' y' size size) limit ]
 
+#ifndef ACCELERATE_ENABLE_GUI
+           else return ()
+
+#elif MIN_VERSION_gloss(1,6,0)
            else G.display
                     (G.InWindow "Mandelbrot" (size, size) (10, 10))
                     G.black
                     image
+#else
+           else G.displayInWindow
+                    "Mandelbrot"
+                    (size, size)
+                    (10, 10)
+                    G.black
+                    image
+#endif
 

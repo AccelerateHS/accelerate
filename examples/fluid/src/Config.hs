@@ -66,7 +66,11 @@ defaultOptions = Options
   , _displayFramerate   = 20
 
   , _optBackend         = maxBound
+#ifdef ACCELERATE_ENABLE_GUI
   , _optBench           = False
+#else
+  , _optBench           = True
+#endif
   , _optHelp            = False
   }
 
