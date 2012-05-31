@@ -52,26 +52,42 @@ import qualified Data.Array.Accelerate.Array.Representation as Repr
 -- Surface types representing array indices and slices
 -- ---------------------------------------------------
 
--- |Array indices are snoc type lists.
--- For example, the type of a rank-2 array index is @Z :.Int :. Int@.
+-- |Array indices are snoc type lists.  That is, they're backwards --
+-- the end-of-list token, `Z`, occurs first.  For example, the type of a
+-- rank-2 array index is @Z :. Int :. Int@.
+-- 
+-- In Accelerate the rightmost dimension is the /fastest varying/ or innermost.
 
 -- |Rank-0 index
 --
 data Z = Z
   deriving (Typeable, Show, Eq)
 
--- |Increase an index rank by one dimension
+-- |Increase an index rank by one dimension.  The `:.` operator is
+--  used to construct both values and types.
 --
 infixl 3 :.
 data tail :. head = tail :. head
   deriving (Typeable, Show, Eq)
 
--- |Marker for entire dimensions in slice descriptors
+-- |Marker for entire dimensions in slice descriptors.  
+-- 
+-- For example, when used in slices passed to `replicate`, the
+-- occurrences of `All` indicate the dimensions into which the array's
+-- existing extent will be placed, rather than the new dimensions
+-- introduced by replication.
 --
 data All = All
   deriving (Typeable, Show, Eq)
 
--- |Marker for arbitrary shapes in slice descriptors
+-- |Marker for arbitrary shapes (including an unknown number of dimensions) in slice descriptors.
+--
+--  `Any` can be used in the leftmost position of a `:.` chain instead
+--  of `Z`.  For example, in the following definition `Any` is used to
+--  match against whatever shape the type variable `sh` takes:
+-- 
+-- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
+-- > repN n a = replicate (constant$ Any :. n) a
 --
 data Any sh = Any
   deriving (Typeable, Show, Eq)
