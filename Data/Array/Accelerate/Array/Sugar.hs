@@ -80,11 +80,13 @@ data tail :. head = tail :. head
 data All = All
   deriving (Typeable, Show)
 
--- |Marker for arbitrary shapes (including an unknown number of dimensions) in slice descriptors.
+-- |Marker for arbitrary shapes in slice descriptors.  Such arbitrary
+--  shapes may include an unknown number of dimensions.
 --
---  `Any` can be used in the leftmost position of a `:.` chain instead
---  of `Z`.  For example, in the following definition `Any` is used to
---  match against whatever shape the type variable `sh` takes:
+--  `Any` can be used in the leftmost position of a slice instead of
+--  `Z`, for example @(Any :. _ :. _)@.  In the following definition
+--  `Any` is used to match against whatever shape the type variable
+--  `sh` takes:
 -- 
 -- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
 -- > repN n a = replicate (constant$ Any :. n) a
