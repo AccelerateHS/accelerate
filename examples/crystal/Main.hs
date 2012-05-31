@@ -173,12 +173,13 @@ main
             scale       = get optScale config
             degree      = get optDegree config
             render      = run config $ makeImage size scale degree
+            force arr   = A.indexArray arr (Z:.0:.0) `seq` arr
 
         void . evaluate $ render (A.fromList Z [0])
 
         if get optBench config
            then withArgs nops $ defaultMain
-                    [ bench "crystal" $ whnf render (A.fromList Z [1.0]) ]
+                    [ bench "crystal" $ whnf (force . render) (A.fromList Z [1.0]) ]
 
 #if MIN_VERSION_gloss(1,6,0)
            else G.animate

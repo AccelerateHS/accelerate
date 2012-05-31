@@ -36,6 +36,12 @@ main = do
                       sh        = Z :. length ix
                   in  ( A.fromList sh ix, A.fromList sh ss )
 
+      -- for benchmarking
+      --
+      force world =
+        indexArray (densityField  world) (Z:.0:.0) `seq`
+        indexArray (velocityField world) (Z:.0:.0) `seq` ()
+
       -- Prepare to execute the next step of the simulation.
       --
       -- Critically, we use the run1 execution form to ensure we bypass all
@@ -58,7 +64,7 @@ main = do
   if get optBench opt
      -- benchmark
      then withArgs noms $ defaultMain
-              [ bench "fluid" $ whnfIO (simulate 1.0 initialWorld) ]
+              [ bench "fluid" $ whnfIO (force `fmap` simulate 1.0 initialWorld) ]
 
      -- simulate
      else playIO

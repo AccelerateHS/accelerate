@@ -143,6 +143,7 @@ main
             x'          =  0.0
             y'          = -0.75
             --
+            force arr   = indexArray arr (Z:.0:.0) `seq` arr
             image       = makePicture config limit
                         $ mandelbrot x y x' y' size size limit
 
@@ -150,7 +151,8 @@ main
 
         if get optBench config
            then withArgs nops $ defaultMain
-                    [ bench "mandelbrot" $ whnf (\() -> image) () ]
+                    [ bench "mandelbrot" $
+                      whnf (force . run config . mandelbrot x y x' y' size size) limit ]
 
            else G.display
                     (G.InWindow "Mandelbrot" (size, size) (10, 10))
