@@ -68,9 +68,9 @@ done
 
 # These libs are installed by Cabal
 #
-accelerate=accelerate-0.12.0.0
-accelerate_cuda=accelerate-cuda-0.12.0.0
-accelerate_io=accelerate-io-0.12.0.0
+accelerate=accelerate-0.13.0.0
+accelerate_cuda=accelerate-cuda-0.13.0.0
+accelerate_io=accelerate-io-0.13.0.0
 blaze_builder=blaze-builder-0.3.1.0
 cereal=cereal-0.3.5.1
 cpphs=cpphs-1.13.3
@@ -92,7 +92,7 @@ mtl=mtl-2.0.1.0
 primitive=primitive-0.4.1
 QuickCheck=QuickCheck-2.4.2
 random=random-1.0.1.1
-repa=repa-3.1.1.1
+repa=repa-3.1.4.2
 srcloc=srcloc-0.1.1.1
 stm=stm-2.2.0.1
 syb=syb-0.3.6
