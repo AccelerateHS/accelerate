@@ -41,7 +41,7 @@ module Data.Array.Accelerate (
   -- ** Array data types
   Acc, Arrays, Array, Scalar, Vector, Segments,
 
-  -- ** Array element type
+  -- ** Array element types
   Elt,
 
   -- ** Shapes & Indices
@@ -54,11 +54,11 @@ module Data.Array.Accelerate (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- ** Accessors
-  -- *** Shape information
-  shape, size, shapeSize,
-
   -- *** Indexing
   (!), the,
+
+  -- *** Shape information
+  shape, size, shapeSize,
 
   -- *** Extracting sub-arrays
   slice,
