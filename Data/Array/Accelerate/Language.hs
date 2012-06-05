@@ -134,7 +134,7 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 -- Array introduction
 -- ------------------
 
--- |Array inlet: makes an array available for processing using the Accelerate
+-- | Array inlet: makes an array available for processing using the Accelerate
 -- language.
 --
 -- Depending upon the backend used to execute array computations, this may
@@ -143,13 +143,13 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 use :: Arrays arrays => arrays -> Acc arrays
 use = Acc . Use
 
--- |Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
+-- | Scalar inlet: injects a scalar (or a tuple of scalars) into a singleton
 -- array for use in the Accelerate language.
 --
 unit :: Elt e => Exp e -> Acc (Scalar e)
 unit = Acc . Unit
 
--- |Replicate an array across one or more dimensions as specified by the
+-- | Replicate an array across one or more dimensions as specified by the
 -- /generalised/ array index provided as the first argument.
 --
 -- For example, assuming 'arr' is a vector (one-dimensional array),
@@ -165,7 +165,7 @@ replicate :: (Slice slix, Elt e)
           -> Acc (Array (FullShape  slix) e)
 replicate = Acc $$ Replicate
 
--- |Construct a new array by applying a function to each index.
+-- | Construct a new array by applying a function to each index.
 --
 -- For example, the following will generate a one-dimensional array
 -- (`Vector`) of three floating point numbers:
@@ -191,7 +191,7 @@ generate = Acc $$ Generate
 -- Shape manipulation
 -- ------------------
 
--- |Change the shape of an array without altering its contents. The 'size' of
+-- | Change the shape of an array without altering its contents. The 'size' of
 -- the source and result arrays must be identical.
 --
 -- > precondition: size ix == size ix'
@@ -205,7 +205,7 @@ reshape = Acc $$ Reshape
 -- Extraction of sub-arrays
 -- ------------------------
 
--- |Index an array with a /generalised/ array index, supplied as the second
+-- | Index an array with a /generalised/ array index, supplied as the second
 -- argument. The result is a new array (possibly a singleton) containing all
 -- dimensions in their entirety.
 --
@@ -218,7 +218,7 @@ slice = Acc $$ Index
 -- Map-like functions
 -- ------------------
 
--- |Apply the given function element-wise to the given array.
+-- | Apply the given function element-wise to the given array.
 --
 map :: (Shape ix, Elt a, Elt b)
     => (Exp a -> Exp b)
@@ -226,7 +226,7 @@ map :: (Shape ix, Elt a, Elt b)
     -> Acc (Array ix b)
 map = Acc $$ Map
 
--- |Apply the given binary function element-wise to the two arrays.  The extent of the resulting
+-- | Apply the given binary function element-wise to the two arrays.  The extent of the resulting
 -- array is the intersection of the extents of the two source arrays.
 --
 zipWith :: (Shape ix, Elt a, Elt b, Elt c)
@@ -239,8 +239,9 @@ zipWith = Acc $$$ ZipWith
 -- Reductions
 -- ----------
 
--- |Reduction of the innermost dimension of an array of arbitrary rank.  The first argument needs to
--- be an /associative/ function to enable an efficient parallel implementation.
+-- | Reduction of the innermost dimension of an array of arbitrary rank.  The
+-- first argument needs to be an /associative/ function to enable an efficient
+-- parallel implementation.
 --
 fold :: (Shape ix, Elt a)
      => (Exp a -> Exp a -> Exp a)
@@ -249,8 +250,9 @@ fold :: (Shape ix, Elt a)
      -> Acc (Array ix a)
 fold = Acc $$$ Fold
 
--- |Variant of 'fold' that requires the reduced array to be non-empty and doesn't need an default
--- value.
+-- | Variant of 'fold' that requires the reduced array to be non-empty and
+-- doesn't need an default value.  The first argument needs to be an
+-- /associative/ function to enable an efficient parallel implementation.
 --
 fold1 :: (Shape ix, Elt a)
       => (Exp a -> Exp a -> Exp a)
@@ -258,11 +260,12 @@ fold1 :: (Shape ix, Elt a)
       -> Acc (Array ix a)
 fold1 = Acc $$ Fold1
 
--- |Segmented reduction along the innermost dimension.  Performs one individual reduction per
--- segment of the source array.  These reductions proceed in parallel.
+-- | Segmented reduction along the innermost dimension.  Performs one individual
+-- reduction per segment of the source array.  These reductions proceed in
+-- parallel.
 --
--- The source array must have at least rank 1.  The 'Segments' array determines the lengths of the
--- logical sub-arrays, each of which is folded separately.
+-- The source array must have at least rank 1.  The 'Segments' array determines
+-- the lengths of the logical sub-arrays, each of which is folded separately.
 --
 foldSeg :: (Shape ix, Elt a, Elt i, IsIntegral i)
         => (Exp a -> Exp a -> Exp a)
@@ -272,11 +275,11 @@ foldSeg :: (Shape ix, Elt a, Elt i, IsIntegral i)
         -> Acc (Array (ix:.Int) a)
 foldSeg = Acc $$$$ FoldSeg
 
--- |Variant of 'foldSeg' that requires /all/ segments of the reduced array to be non-empty and
--- doesn't need a default value.
+-- | Variant of 'foldSeg' that requires /all/ segments of the reduced array to
+-- be non-empty and doesn't need a default value.
 --
--- The source array must have at least rank 1. The 'Segments' array determines the lengths of the
--- logical sub-arrays, each of which is folded separately.
+-- The source array must have at least rank 1. The 'Segments' array determines
+-- the lengths of the logical sub-arrays, each of which is folded separately.
 --
 fold1Seg :: (Shape ix, Elt a, Elt i, IsIntegral i)
          => (Exp a -> Exp a -> Exp a)
@@ -327,7 +330,7 @@ scanl1 :: Elt a
        -> Acc (Vector a)
 scanl1 = Acc $$ Scanl1
 
--- |Right-to-left variant of 'scanl'.
+-- | Right-to-left variant of 'scanl'.
 --
 scanr :: Elt a
       => (Exp a -> Exp a -> Exp a)
@@ -336,7 +339,7 @@ scanr :: Elt a
       -> Acc (Vector a)
 scanr = Acc $$$ Scanr
 
--- |Right-to-left variant of 'scanl''.
+-- | Right-to-left variant of 'scanl''.
 --
 scanr' :: Elt a
        => (Exp a -> Exp a -> Exp a)
@@ -345,7 +348,7 @@ scanr' :: Elt a
        -> (Acc (Vector a), Acc (Scalar a))
 scanr' = unlift . Acc $$$ Scanr'
 
--- |Right-to-left variant of 'scanl1'.
+-- | Right-to-left variant of 'scanl1'.
 --
 scanr1 :: Elt a
        => (Exp a -> Exp a -> Exp a)
@@ -356,7 +359,7 @@ scanr1 = Acc $$ Scanr1
 -- Permutations
 -- ------------
 
--- |Forward permutation specified by an index mapping.  The result array is
+-- | Forward permutation specified by an index mapping.  The result array is
 -- initialised with the given defaults and any further values that are permuted
 -- into the result array are added to the current value using the given
 -- combination function.
@@ -372,7 +375,8 @@ permute :: (Shape ix, Shape ix', Elt a)
         -> Acc (Array ix' a)
 permute = Acc $$$$ Permute
 
--- |Backward permutation
+-- | Backward permutation specified by an index mapping from the destination
+-- array specifying which element of the source array to read.
 --
 backpermute :: (Shape ix, Shape ix', Elt a)
             => Exp ix'                  -- ^shape of the result array
@@ -427,8 +431,8 @@ stencil :: (Shape ix, Elt a, Elt b, Stencil ix a stencil)
         -> Acc (Array ix b)                   -- ^destination array
 stencil = Acc $$$ Stencil
 
--- |Map a binary stencil of an array.  The extent of the resulting array is the intersection of
--- the extents of the two source arrays.
+-- | Map a binary stencil of an array.  The extent of the resulting array is the
+-- intersection of the extents of the two source arrays.
 --
 stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
              Stencil ix a stencil1,
@@ -445,7 +449,7 @@ stencil2 = Acc $$$$$ Stencil2
 -- Composition of array computations
 -- ---------------------------------
 
--- |Pipelining of two array computations.
+-- | Pipelining of two array computations.
 --
 -- Denotationally, we have
 --
@@ -463,7 +467,7 @@ infixl 1 >->
 -- Flow control constructs
 -- -----------------------
 
--- |An array-level if-then-else construct.
+-- | An array-level if-then-else construct.
 --
 cond :: (Arrays a)
      => Exp Bool          -- ^if-condition
@@ -472,7 +476,7 @@ cond :: (Arrays a)
      -> Acc a
 cond = Acc $$$ Acond
 
--- |Infix version of 'cond'.
+-- | Infix version of 'cond'.
 --
 infix 0 ?|
 (?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
@@ -486,11 +490,11 @@ c ?| (t, e) = cond c t e
 class Lift c e where
   -- | An associated-type (i.e. a type-level function) that strips all
   --   instances of surface type constructors @c@ from the input type @e@.
-  -- 
+  --
   --   For example, the tuple types @(Exp Int, Int)@ and @(Int, Exp
   --   Int)@ have the same \"Plain\" representation.  That is, the
   --   following type equality holds:
-  -- 
+  --
   --    @Plain (Exp Int, Int) ~ (Int,Int) ~ Plain (Int, Exp Int)@
   type Plain e
 

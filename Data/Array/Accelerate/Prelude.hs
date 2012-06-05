@@ -14,11 +14,10 @@
 
 module Data.Array.Accelerate.Prelude (
 
-  -- * Element-wise operations
-  -- ** Zipping
+  -- * Zipping
   zip, zip3, zip4,
 
-  -- ** Unzipping
+  -- * Unzipping
   unzip, unzip3, unzip4,
 
   -- * Reductions
@@ -34,23 +33,24 @@ module Data.Array.Accelerate.Prelude (
   scanlSeg, scanl'Seg, scanl1Seg, prescanlSeg, postscanlSeg,
   scanrSeg, scanr'Seg, scanr1Seg, prescanrSeg, postscanrSeg,
 
-  -- ** Shape manipulation
+  -- * Shape manipulation
   flatten,
 
-  -- ** Enumeration and filling
+  -- * Enumeration and filling
   fill, enumFromN, enumFromStepN,
 
   -- * Working with predicates
   -- ** Filtering
   filter,
 
-  -- ** Gather
-  gather, gatherIf,
-
-  -- ** Scatter
+  -- ** Scatter / Gather
   scatter, scatterIf,
+  gather,  gatherIf,
 
-  -- ** Extracting sub-vectors
+  -- * Permutations
+  reverse, transpose,
+
+  -- * Extracting sub-vectors
   init, tail, take, drop, slit
 
 ) where
@@ -148,8 +148,7 @@ unzip4 abcds = (as, bs, cs, ds)
 -- Reductions
 -- ----------
 
--- |Reduction of an array of arbitrary rank to a single scalar value.  The first argument needs to be
--- an /associative/ function to enable an efficient parallel implementation.
+-- | Reduction of an array of arbitrary rank to a single scalar value.
 --
 foldAll :: (Shape sh, Elt a)
         => (Exp a -> Exp a -> Exp a)
@@ -158,8 +157,8 @@ foldAll :: (Shape sh, Elt a)
         -> Acc (Scalar a)
 foldAll f e arr = fold f e (flatten arr)
 
--- |Variant of 'foldAll' that requires the reduced array to be non-empty and doesn't need an default
--- value.
+-- | Variant of 'foldAll' that requires the reduced array to be non-empty and
+-- doesn't need an default value.
 --
 fold1All :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
@@ -701,10 +700,26 @@ scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
     pF ix = (pred (maskV ! ix)) ? (lift (Z :. (mapV ! ix)), ignore)
 
 
+-- Permutations
+-- ------------
 
--- Extracting subvectors
--- ---------------------
+-- | Reverse the elements of a vector.
+--
+reverse :: Elt e => Acc (Vector e) -> Acc (Vector e)
+reverse xs =
+  let len = unindex1 (shape xs)
+  in  backpermute (shape xs) (\ix -> index1 $ len - (unindex1 ix) - 1) xs
 
+-- | Transpose the rows and columns of a matrix.
+--
+transpose :: Elt e => Acc (Array DIM2 e) -> Acc (Array DIM2 e)
+transpose mat =
+  let swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z:.Exp Int:.Exp Int
+  in  backpermute (swap $ shape mat) swap mat
+
+
+-- Extracting sub-vectors
+-- ----------------------
 
 -- | Yield the first @n@ elements of the input vector. The vector must contain
 -- no more than @n@ elements.

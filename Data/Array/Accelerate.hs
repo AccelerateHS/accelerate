@@ -88,6 +88,9 @@ module Data.Array.Accelerate (
   -- *** Permutations
   permute, backpermute, ignore,
 
+  -- *** Specialised permutations
+  reverse, transpose,
+
   -- ** Element-wise operations
   -- *** Mapping
   map,
@@ -109,7 +112,7 @@ module Data.Array.Accelerate (
   gather,  gatherIf,
 
   -- ** Folding
-  fold, foldAll, fold1, fold1All,
+  fold, fold1, foldAll, fold1All,
 
   -- *** Segmented reductions
   foldSeg, fold1Seg,
