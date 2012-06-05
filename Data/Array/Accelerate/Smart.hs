@@ -2357,7 +2357,7 @@ tix8 = SuccTupIdx tix7
 -- Smart constructor for literals
 --
 
--- |Constant scalar expression
+-- | Scalar expression inlet.
 --
 constant :: Elt t => t -> Exp t
 constant = Exp . Const

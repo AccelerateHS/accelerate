@@ -37,47 +37,209 @@
 
 module Data.Array.Accelerate (
 
-  -- * Scalar element types
+  -- * The /Accelerate/ Array Language
+  -- ** Array data types
+  Acc, Arrays, Array, Scalar, Vector, Segments,
+
+  -- ** Array element type
+  Elt,
+
+  -- ** Shapes & Indices
+  --
+  -- | Array indices are snoc type lists; that is, they are backwards and the
+  -- end-of-list token, `Z`, occurs on the left. For example, the type of a
+  -- rank-2 array index is @Z :. Int :. Int@.
+  --
+  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..),
+  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
+
+  -- ** Accessors
+  -- *** Shape information
+  shape, size, shapeSize,
+
+  -- *** Indexing
+  (!), the,
+
+  -- *** Extracting sub-arrays
+  slice,
+  init, tail, take, drop, slit,
+
+  -- ** Construction
+  -- *** Introduction
+  use, unit,
+
+  -- *** Initialisation
+  generate, replicate, fill,
+
+  -- *** Enumeration
+  enumFromN, enumFromStepN,
+
+  -- ** Composition
+  -- *** Flow control
+  (?|), cond,
+
+  -- *** Pipelining
+  (>->),
+
+  -- ** Modifying Arrays
+  -- *** Shape manipulation
+  reshape, flatten,
+
+  -- *** Permutations
+  permute, backpermute, ignore,
+
+  -- ** Element-wise operations
+  -- *** Mapping
+  map,
+
+  -- *** Zipping
+  zipWith, zip, zip3, zip4,
+
+  -- *** Unzipping
+  unzip, unzip3, unzip4,
+
+  -- ** Working with predicates
+  -- *** Filtering
+  filter,
+
+  -- *** Scatter
+  scatter, scatterIf,
+
+  -- *** Gather
+  gather,  gatherIf,
+
+  -- ** Folding
+  fold, foldAll, fold1, fold1All,
+
+  -- *** Segmented reductions
+  foldSeg, fold1Seg,
+
+  -- *** Specialised folds
+  all, any, and, or, sum, product, minimum, maximum,
+
+  -- ** Prefix sums (scans)
+  scanl, scanl1, scanl', scanr, scanr1, scanr',
+  prescanl, postscanl, prescanr, postscanr,
+
+  -- *** Segmented scans
+  scanlSeg, scanl1Seg, scanl'Seg, prescanlSeg, postscanlSeg,
+  scanrSeg, scanr1Seg, scanr'Seg, prescanrSeg, postscanrSeg,
+
+  -- ** Stencil
+  stencil, stencil2,
+
+  -- *** Specification
+  Stencil, Boundary(..),
+
+  -- *** Common stencil patterns
+  Stencil3, Stencil5, Stencil7, Stencil9,
+  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
+  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
+  Stencil3x5x5, Stencil5x5x5,
+
+  -- ---------------------------------------------------------------------------
+
+  -- * The /Accelerate/ Expression Language
+  -- ** Scalar data types
+  Exp,
+
+  -- ** Type classes
+  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
+
+  -- ** Element types
   Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32, Word64,
   CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
   Float, Double, CFloat, CDouble,
   Bool, Char, CChar, CSChar, CUChar,
 
-  -- * Scalar type classes
-  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
+  -- ** Lifting and Unlifting
 
-  -- * Array data types
-  Arrays, Array, Scalar, Vector, Segments,
+  -- | A value of type `Int` is a plain Haskell value (unlifted), whereas an
+  -- @Exp Int@ is a /lifted/ value, that is, an integer lifted into the domain
+  -- of expressions (an abstract syntax tree in disguise).  Both `Acc` and `Exp`
+  -- are /surface types/ into which values may be lifted.
+  --
+  -- In general an @Exp Int@ cannot be unlifted into an `Int`, because the
+  -- actual number will not be available until a later stage of execution (e.g.
+  -- GPU execution, when `run` is called).  However, in some cases unlifting
+  -- makes sense.  For example, unlifting can convert, or unpack, an expression
+  -- of tuple type into a tuple of expressions; those expressions, at runtime,
+  -- will become tuple dereferences.
+  --
+  Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
 
-  -- * Array element types
-  Elt,
+  -- ** Operations
+  --
+  -- | Some of the standard Haskell 98 typeclass functions need to be
+  -- reimplemented because their types change. If so, function names kept the
+  -- same and infix operations are suffixed by an asterisk. If not reimplemented
+  -- here, the standard typeclass instances apply.
+  --
 
-  -- * Array shapes & indices
-  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..),
-  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
+  -- *** Introduction
+  constant,
 
-  -- * Operations to use Accelerate arrays from plain Haskell
-  arrayDim, arrayShape, arraySize, indexArray, fromIArray, toIArray, fromList, toList,
+  -- *** Tuples
+  fst, snd, curry, uncurry,
 
-  -- * The /Accelerate/ language
-  module Data.Array.Accelerate.Language,
-  module Data.Array.Accelerate.Prelude,
+  -- *** Conditional
+  (?),
 
-  -- * Deprecated names for backwards compatibility
+  -- *** Basic operations
+  (&&*), (||*), not,
+  (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
+
+  -- *** Numeric functions
+  truncate, round, floor, ceiling,
+
+  -- *** Bitwise functions
+  bit, setBit, clearBit, complementBit, testBit,
+  shift,  shiftL,  shiftR,
+  rotate, rotateL, rotateR,
+
+  -- *** Shape manipulation
+  index0, index1, unindex1, index2, unindex2,
+
+  -- *** Conversions
+  boolToInt, fromIntegral,
+
+  -- ---------------------------------------------------------------------------
+
+  -- * Plain arrays
+  -- ** Operations
+  arrayDim, arrayShape, arraySize, indexArray,
+
+  -- ** Conversions
+  --
+  -- | For additional conversion routines, see the accelerate-io package:
+  -- <http://hackage.haskell.org/package/accelerate-io>
+
+  -- *** Lists
+  fromList, toList,
+
+  -- *** 'Data.Array.IArray.IArray'
+  fromIArray, toIArray,
+
+  -- * Miscellaneous
+  -- ** Deprecated aliases
   Elem, Ix, SliceIx, tuple, untuple,
-  
-  -- * Diagnostics
+
+  -- ** Diagnostics
   initTrace
 
 ) where
 
 -- friends
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar hiding ((!), shape, dim, size)
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
-import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Debug
+import Data.Array.Accelerate.Prelude
+import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), shape, dim, size, ignore)
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+
+-- system
+import Prelude (Float, Double, Bool, Char)
+import qualified Prelude
 
 
 -- Renamings
@@ -92,17 +254,20 @@ import Data.Array.Accelerate.Debug
 indexArray :: Array sh e -> sh -> e
 indexArray = (Sugar.!)
 
--- rename as 'shape' is already used by the EDSL to query an array's shape
+-- | Rank of an array
+--
+arrayDim :: Shape sh => sh -> Int
+arrayDim = Sugar.dim
+-- FIXME: Rename to rank
 
 -- |Array shape in plain Haskell code
 --
 arrayShape :: Shape sh => Array sh e -> sh
 arrayShape = Sugar.shape
+-- rename as 'shape' is already used by the EDSL to query an array's shape
 
--- FIXME: Rename to rank
-arrayDim :: Shape sh => sh -> Int
-arrayDim = Sugar.dim
-
+-- | Total number of elements in an array of the given 'Shape'
+--
 arraySize :: Shape sh => sh -> Int
 arraySize = Sugar.size
 
@@ -128,3 +293,4 @@ tuple = lift
 {-# DEPRECATED untuple "Use 'unlift' instead" #-}
 untuple :: Unlift Exp e => Exp (Plain e) -> e
 untuple = unlift
+

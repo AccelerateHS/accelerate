@@ -51,11 +51,11 @@ import qualified Data.Array.Accelerate.Array.Representation as Repr
 
 -- Surface types representing array indices and slices
 -- ---------------------------------------------------
-
--- |Array indices are snoc type lists.  That is, they're backwards --
+--
+-- Array indices are snoc type lists.  That is, they're backwards --
 -- the end-of-list token, `Z`, occurs first.  For example, the type of a
 -- rank-2 array index is @Z :. Int :. Int@.
--- 
+--
 -- In Accelerate the rightmost dimension is the /fastest varying/ or innermost.
 
 -- |Rank-0 index
@@ -70,8 +70,8 @@ infixl 3 :.
 data tail :. head = tail :. head
   deriving (Typeable, Show)
 
--- |Marker for entire dimensions in slice descriptors.  
--- 
+-- | Marker for entire dimensions in slice descriptors.
+--
 -- For example, when used in slices passed to `replicate`, the
 -- occurrences of `All` indicate the dimensions into which the array's
 -- existing extent will be placed, rather than the new dimensions
@@ -87,7 +87,7 @@ data All = All
 --  `Z`, for example @(Any :. _ :. _)@.  In the following definition
 --  `Any` is used to match against whatever shape the type variable
 --  `sh` takes:
--- 
+--
 -- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
 -- > repN n a = replicate (constant$ Any :. n) a
 --
@@ -97,10 +97,10 @@ data Any sh = Any
 -- Representation change for array element types
 -- ---------------------------------------------
 
--- |Type representation mapping
+-- | Type representation mapping
 --
--- We represent tuples by using '()' and '(,)' as type-level nil and snoc to construct snoc-lists of
--- types.
+-- We represent tuples by using '()' and '(,)' as type-level nil and snoc to
+-- construct snoc-lists of types.
 --
 type family EltRepr a :: *
 type instance EltRepr () = ()
@@ -143,7 +143,7 @@ type instance EltRepr (a, b, c, d, e) = (EltRepr (a, b, c, d), EltRepr' e)
 type instance EltRepr (a, b, c, d, e, f) = (EltRepr (a, b, c, d, e), EltRepr' f)
 type instance EltRepr (a, b, c, d, e, f, g) = (EltRepr (a, b, c, d, e, f), EltRepr' g)
 type instance EltRepr (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr' h)
-type instance EltRepr (a, b, c, d, e, f, g, h, i) 
+type instance EltRepr (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
 
 -- To avoid overly nested pairs, we use a flattened representation at the
@@ -190,17 +190,21 @@ type instance EltRepr' (a, b, c, d, e) = (EltRepr (a, b, c, d), EltRepr' e)
 type instance EltRepr' (a, b, c, d, e, f) = (EltRepr (a, b, c, d, e), EltRepr' f)
 type instance EltRepr' (a, b, c, d, e, f, g) = (EltRepr (a, b, c, d, e, f), EltRepr' g)
 type instance EltRepr' (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr' h)
-type instance EltRepr' (a, b, c, d, e, f, g, h, i) 
+type instance EltRepr' (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
 
 
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
--- |Class that characterises the types of values that can be array elements, and hence, appear in
--- scalar Accelerate expressions.
+-- | Accelerate supports as array elements only simple atomic types, and tuples
+-- thereof. These element types are stored efficiently in memory, unpacked as
+-- consecutive elements without pointers.
 --
-class (Show a, Typeable a, 
+-- This class characterises the types of values that can be array elements, and
+-- hence, appear in scalar Accelerate expressions.
+--
+class (Show a, Typeable a,
        Typeable (EltRepr a), Typeable (EltRepr' a),
        ArrayElt (EltRepr a), ArrayElt (EltRepr' a))
       => Elt a where
@@ -211,7 +215,7 @@ class (Show a, Typeable a,
   eltType' :: {-dummy-} a -> TupleType (EltRepr' a)
   fromElt' :: a -> EltRepr' a
   toElt'   :: EltRepr' a -> a
-  
+
 instance Elt () where
   eltType _ = UnitTuple
   fromElt = id
@@ -244,27 +248,27 @@ instance Elt All where
   fromElt All    = ((), ())
   toElt ((), ()) = All
 
-  eltType' _      = UnitTuple
-  fromElt' All    = ()
-  toElt' ()       = All
+  eltType' _     = UnitTuple
+  fromElt' All   = ()
+  toElt' ()      = All
 
 instance Elt (Any Z) where
   eltType _ = UnitTuple
   fromElt _ = ()
-  toElt _ = Any
-  
+  toElt _   = Any
+
   eltType' _ = UnitTuple
   fromElt' _ = ()
-  toElt' _ = Any
+  toElt' _   = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
   eltType _ = PairTuple (eltType (undefined::Any sh)) UnitTuple
   fromElt _ = (fromElt (undefined :: Any sh), ())
-  toElt _ = Any
+  toElt _   = Any
 
   eltType' _ = PairTuple (eltType' (undefined::Any sh)) UnitTuple
   fromElt' _ = (fromElt' (undefined :: Any sh), ())
-  toElt' _ = Any
+  toElt' _   = Any
 
 instance Elt Int where
   eltType       = singletonScalarType
@@ -516,105 +520,105 @@ instance Elt CUChar where
 -}
 
 instance (Elt a, Elt b) => Elt (a, b) where
-  eltType (_::(a, b)) 
+  eltType (_::(a, b))
     = PairTuple (eltType (undefined :: a)) (eltType' (undefined :: b))
   fromElt (a, b)  = (fromElt a, fromElt' b)
   toElt (a, b)  = (toElt a, toElt' b)
 
-  eltType' (_::(a, b)) 
+  eltType' (_::(a, b))
     = PairTuple (eltType (undefined :: a)) (eltType' (undefined :: b))
   fromElt' (a, b) = (fromElt a, fromElt' b)
   toElt' (a, b) = (toElt a, toElt' b)
 
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
-  eltType (_::(a, b, c)) 
+  eltType (_::(a, b, c))
     = PairTuple (eltType (undefined :: (a, b))) (eltType' (undefined :: c))
   fromElt (a, b, c) = (fromElt (a, b), fromElt' c)
   toElt (ab, c) = let (a, b) = toElt ab in (a, b, toElt' c)
-  
-  eltType' (_::(a, b, c)) 
+
+  eltType' (_::(a, b, c))
     = PairTuple (eltType (undefined :: (a, b))) (eltType' (undefined :: c))
   fromElt' (a, b, c) = (fromElt (a, b), fromElt' c)
   toElt' (ab, c) = let (a, b) = toElt ab in (a, b, toElt' c)
-  
+
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
-  eltType (_::(a, b, c, d)) 
+  eltType (_::(a, b, c, d))
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
   fromElt (a, b, c, d) = (fromElt (a, b, c), fromElt' d)
   toElt (abc, d) = let (a, b, c) = toElt abc in (a, b, c, toElt' d)
 
-  eltType' (_::(a, b, c, d)) 
+  eltType' (_::(a, b, c, d))
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
   fromElt' (a, b, c, d) = (fromElt (a, b, c), fromElt' d)
   toElt' (abc, d) = let (a, b, c) = toElt abc in (a, b, c, toElt' d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
-  eltType (_::(a, b, c, d, e)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d))) 
+  eltType (_::(a, b, c, d, e))
+    = PairTuple (eltType (undefined :: (a, b, c, d)))
                 (eltType' (undefined :: e))
   fromElt (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt' e)
   toElt (abcd, e) = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt' e)
 
-  eltType' (_::(a, b, c, d, e)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d))) 
+  eltType' (_::(a, b, c, d, e))
+    = PairTuple (eltType (undefined :: (a, b, c, d)))
                 (eltType' (undefined :: e))
   fromElt' (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt' e)
   toElt' (abcd, e) = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt' e)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
-  eltType (_::(a, b, c, d, e, f)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e))) 
+  eltType (_::(a, b, c, d, e, f))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e)))
                 (eltType' (undefined :: f))
   fromElt (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt' f)
   toElt (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt' f)
 
-  eltType' (_::(a, b, c, d, e, f)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e))) 
+  eltType' (_::(a, b, c, d, e, f))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e)))
                 (eltType' (undefined :: f))
   fromElt' (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt' f)
   toElt' (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt' f)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g) 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g) where
-  eltType (_::(a, b, c, d, e, f, g)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f))) 
+  eltType (_::(a, b, c, d, e, f, g))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f)))
                 (eltType' (undefined :: g))
   fromElt (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt' g)
   toElt (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef in (a, b, c, d, e, f, toElt' g)
 
-  eltType' (_::(a, b, c, d, e, f, g)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f))) 
+  eltType' (_::(a, b, c, d, e, f, g))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f)))
                 (eltType' (undefined :: g))
   fromElt' (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt' g)
   toElt' (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef in (a, b, c, d, e, f, toElt' g)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h) 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
-  eltType (_::(a, b, c, d, e, f, g, h)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g))) 
+  eltType (_::(a, b, c, d, e, f, g, h))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType' (undefined :: h))
   fromElt (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt' h)
-  toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg 
+  toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
                         in (a, b, c, d, e, f, g, toElt' h)
 
-  eltType' (_::(a, b, c, d, e, f, g, h)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g))) 
+  eltType' (_::(a, b, c, d, e, f, g, h))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType' (undefined :: h))
   fromElt' (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt' h)
-  toElt' (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg 
+  toElt' (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
                          in (a, b, c, d, e, f, g, toElt' h)
 
-instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i) 
+instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
-  eltType (_::(a, b, c, d, e, f, g, h, i)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h))) 
+  eltType (_::(a, b, c, d, e, f, g, h, i))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType' (undefined :: i))
   fromElt (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt' i)
   toElt (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
                         in (a, b, c, d, e, f, g, h, toElt' i)
 
-  eltType' (_::(a, b, c, d, e, f, g, h, i)) 
-    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h))) 
+  eltType' (_::(a, b, c, d, e, f, g, h, i))
+    = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType' (undefined :: i))
   fromElt' (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt' i)
   toElt' (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
@@ -626,25 +630,25 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
 singletonScalarType :: IsScalar a => a -> TupleType ((), a)
 singletonScalarType _ = PairTuple UnitTuple (SingleTuple scalarType)
 
-liftToElt :: (Elt a, Elt b) 
+liftToElt :: (Elt a, Elt b)
           => (EltRepr a -> EltRepr b)
           -> (a -> b)
 {-# INLINE liftToElt #-}
 liftToElt f = toElt . f . fromElt
 
-liftToElt2 :: (Elt a, Elt b, Elt c) 
+liftToElt2 :: (Elt a, Elt b, Elt c)
            => (EltRepr a -> EltRepr b -> EltRepr c)
            -> (a -> b -> c)
 {-# INLINE liftToElt2 #-}
 liftToElt2 f = \x y -> toElt $ f (fromElt x) (fromElt y)
 
-sinkFromElt :: (Elt a, Elt b) 
+sinkFromElt :: (Elt a, Elt b)
             => (a -> b)
             -> (EltRepr a -> EltRepr b)
 {-# INLINE sinkFromElt #-}
 sinkFromElt f = fromElt . f . toElt
 
-sinkFromElt2 :: (Elt a, Elt b, Elt c) 
+sinkFromElt2 :: (Elt a, Elt b, Elt c)
              => (a -> b -> c)
              -> (EltRepr a -> EltRepr b -> EltRepr c)
 {-# INLINE sinkFromElt2 #-}
@@ -800,32 +804,33 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
 
 
--- |Multi-dimensional arrays for array processing
+-- |Multi-dimensional arrays for array processing.
 --
--- * If device and host memory are separate, arrays will be transferred to the
---   device when necessary (if possible asynchronously and in parallel with
---   other tasks) and cached on the device if sufficient memory is available.
+-- If device and host memory are separate, arrays will be transferred to the
+-- device when necessary (if possible asynchronously and in parallel with other
+-- tasks) and cached on the device if sufficient memory is available.
 --
 data Array sh e where
-  Array :: (Shape sh, Elt e) 
+  Array :: (Shape sh, Elt e)
         => EltRepr sh                 -- extent of dimensions = shape
         -> ArrayData (EltRepr e)      -- array payload
         -> Array sh e
 
-deriving instance Typeable2 Array 
+deriving instance Typeable2 Array
 
--- |Scalars
+-- |Scalars arrays hold a single element
 --
 type Scalar e = Array DIM0 e
 
--- |Vectors
+-- |Vectors are one-dimensional arrays
 --
 type Vector e = Array DIM1 e
 
--- |Segment descriptor (vector of segment lengths)
+-- |Segment descriptor (vector of segment lengths).
 --
--- To represent nested one-dimensional arrays, we use a flat array of data values in conjunction
--- with a /segment descriptor/, which stores the lengths of the subarrays.
+-- To represent nested one-dimensional arrays, we use a flat array of data
+-- values in conjunction with a /segment descriptor/, which stores the lengths
+-- of the subarrays.
 --
 type Segments i = Vector i
 
@@ -843,7 +848,7 @@ type DIM8 = DIM7:.Int
 type DIM9 = DIM8:.Int
 
 -- Shape constraints and indexing
--- 
+-- ------------------------------
 
 -- |Shapes and indices of multi-dimensional arrays
 --
@@ -851,15 +856,15 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   dim    :: sh -> Int
-  
+
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
 
   -- |Magic value identifying elements ignored in 'permute'.
   ignore :: sh
-  
-  -- |Map a multi-dimensional index into one in a linear, row-major 
-  -- representation of the array (first argument is the /shape/, second 
+
+  -- |Map a multi-dimensional index into one in a linear, row-major
+  -- representation of the array (first argument is the /shape/, second
   -- argument is the index).
   index  :: sh -> sh -> Int
 
@@ -873,7 +878,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   -- |Convert a minpoint-maxpoint index into a /shape/.
   rangeToShape ::  (sh, sh) -> sh
-  
+
   -- |Convert a /shape/ into a minpoint-maxpoint index.
   shapeToRange ::  sh -> (sh, sh)
 
@@ -899,7 +904,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   iter sh f c r = Repr.iter (fromElt sh) (f . toElt) c r
 
-  rangeToShape (low, high) 
+  rangeToShape (low, high)
     = toElt (Repr.rangeToShape (fromElt low, fromElt high))
   shapeToRange ix
     = let (low, high) = Repr.shapeToRange (fromElt ix)
@@ -911,14 +916,14 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
 instance Shape Z where
   sliceAnyIndex _ = Repr.SliceNil
-  
+
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
 
 -- |Slices, aka generalised indices, as /n/-tuples and mappings of slice indices to slices,
 -- co-slices, and slice dimensions
 --
-class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl)) 
+class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
   type SliceShape   sl :: *
   type CoSliceShape sl :: *
@@ -952,6 +957,7 @@ instance Shape sh => Slice (Any sh) where
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
 
+
 -- Array operations
 -- ----------------
 
@@ -974,10 +980,10 @@ infixl 9 !
 newArray :: (Shape sh, Elt e) => sh -> (sh -> e) -> Array sh e
 {-# INLINE newArray #-}
 newArray sh f = adata `seq` Array (fromElt sh) adata
-  where 
+  where
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (size sh)
-                   let write ix = writeArrayData arr (index sh ix) 
+                   let write ix = writeArrayData arr (index sh ix)
                                                      (fromElt (f ix))
                    iter sh write (>>) (return ())
                    return (arr, undefined)
@@ -991,7 +997,12 @@ allocateArray sh = adata `seq` Array (fromElt sh) adata
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
--- |Convert an 'IArray' to an accelerated array.
+-- | Convert an 'IArray' to an accelerated array.
+--
+-- While the type signature mentions Accelerate internals that are not exported,
+-- in practice satisfying the type equality is straight forward. The index type
+-- @ix@ must be the unit type @()@ for singleton arrays, or an @Int@ or tuple of
+-- @Int@'s for multidimensional arrays.
 --
 fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
            => a ix e -> Array sh e
@@ -1000,16 +1011,16 @@ fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
     (lo,hi) = IArray.bounds iarr
     sh      = Repr.rangeToShape (fromElt lo, fromElt hi)
 
--- |Convert an accelerated array to an 'IArray'
--- 
-toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e) 
+-- | Convert an accelerated array to an 'IArray'.
+--
+toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
          => Array sh e -> a ix e
 toIArray arr = IArray.array bnds [(ix, arr ! toElt (fromElt ix)) | ix <- IArray.range bnds]
   where
     (lo,hi) = Repr.shapeToRange (fromElt (shape arr))
     bnds    = (toElt lo, toElt hi)
 
--- |Convert a list (with elements in row-major order) to an accelerated array.
+-- | Convert a list, with elements in row-major order, into an accelerated array.
 --
 fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
@@ -1025,7 +1036,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
                     go 0 xs
                     return (arr, undefined)
 
--- |Convert an accelerated array to a list in row-major order.
+-- | Convert an accelerated array to a list in row-major order.
 --
 toList :: forall sh e. Array sh e -> [e]
 toList (Array sh adata) = iter sh' idx (.) id []
@@ -1036,7 +1047,7 @@ toList (Array sh adata) = iter sh' idx (.) id []
 -- Convert an array to a string
 --
 instance Show (Array sh e) where
-  show arr@(Array sh _adata) 
+  show arr@(Array sh _adata)
     = "Array (" ++ showShape (toElt sh :: sh) ++ ") " ++ show (toList arr)
 
 -- | Nicely format a shape as a string

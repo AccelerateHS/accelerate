@@ -14,41 +14,51 @@
 
 module Data.Array.Accelerate.Prelude (
 
-  -- ** Map-like
+  -- * Element-wise operations
+  -- ** Zipping
   zip, zip3, zip4,
+
+  -- ** Unzipping
   unzip, unzip3, unzip4,
 
-  -- ** Reductions
+  -- * Reductions
   foldAll, fold1All,
 
-  -- ** Scans
+  -- ** Specialised folds
+  all, any, and, or, sum, product, minimum, maximum,
+
+  -- * Scans
   prescanl, postscanl, prescanr, postscanr,
 
   -- ** Segmented scans
   scanlSeg, scanl'Seg, scanl1Seg, prescanlSeg, postscanlSeg,
   scanrSeg, scanr'Seg, scanr1Seg, prescanrSeg, postscanrSeg,
 
-  -- ** Reshaping of arrays
+  -- ** Shape manipulation
   flatten,
 
   -- ** Enumeration and filling
   fill, enumFromN, enumFromStepN,
 
-  -- ** Gather and scatter
-  gather, gatherIf, scatter, scatterIf,
+  -- * Working with predicates
   -- ** Filtering
   filter,
 
-  -- ** Subvector extraction
+  -- ** Gather
+  gather, gatherIf,
+
+  -- ** Scatter
+  scatter, scatterIf,
+
+  -- ** Extracting sub-vectors
   init, tail, take, drop, slit
 
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude hiding (
-  replicate, zip, zip3, unzip, unzip3, map, zipWith, scanl, scanl1, scanr,
-  scanr1, init, tail, take, drop, filter, max, min, not, fst, snd, curry,
-  uncurry, fromIntegral, abs, pred )
+--
+import Data.Bool
+import Prelude ((.), ($), (+), (-), (*), const, subtract, id)
 import qualified Prelude
 
 -- friends
@@ -69,7 +79,7 @@ zip :: (Shape sh, Elt a, Elt b)
     -> Acc (Array sh (a, b))
 zip = zipWith (curry lift)
 
--- |Take three arrays and and return an array of triples, analogous to zip.
+-- |Take three arrays and return an array of triples, analogous to zip.
 --
 zip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
      => Acc (Array sh a)
@@ -146,7 +156,7 @@ foldAll :: (Shape sh, Elt a)
         -> Exp a
         -> Acc (Array sh a)
         -> Acc (Scalar a)
-foldAll f e arr = fold f e (reshape (index1 $ size arr) arr)
+foldAll f e arr = fold f e (flatten arr)
 
 -- |Variant of 'foldAll' that requires the reduced array to be non-empty and doesn't need an default
 -- value.
@@ -155,7 +165,72 @@ fold1All :: (Shape sh, Elt a)
          => (Exp a -> Exp a -> Exp a)
          -> Acc (Array sh a)
          -> Acc (Scalar a)
-fold1All f arr = fold1 f (reshape (index1 $ size arr) arr)
+fold1All f arr = fold1 f (flatten arr)
+
+
+-- Specialised reductions
+-- ----------------------
+--
+-- Leave the results of these as scalar arrays to make it clear that these are
+-- array computations, and thus can not be nested.
+
+-- | Check if all elements satisfy a predicate
+--
+all :: (Shape sh, Elt e)
+    => (Exp e -> Exp Bool)
+    -> Acc (Array sh e)
+    -> Acc (Scalar Bool)
+all f = and . map f
+
+-- | Check if any element satisfies the predicate
+--
+any :: (Shape sh, Elt e)
+    => (Exp e -> Exp Bool)
+    -> Acc (Array sh e)
+    -> Acc (Scalar Bool)
+any f = or . map f
+
+-- | Check if all elements are 'True'
+--
+and :: Shape sh
+    => Acc (Array sh Bool)
+    -> Acc (Scalar Bool)
+and = foldAll (&&*) (constant True)
+
+-- | Check if any element is 'True'
+--
+or :: Shape sh
+   => Acc (Array sh Bool)
+   -> Acc (Scalar Bool)
+or = foldAll (||*) (constant False)
+
+-- | Compute the sum of elements
+--
+sum :: (Shape sh, Elt e, IsNum e)
+    => Acc (Array sh e)
+    -> Acc (Scalar e)
+sum = foldAll (+) 0
+
+-- | Compute the product of the elements
+--
+product :: (Shape sh, Elt e, IsNum e)
+        => Acc (Array sh e)
+        -> Acc (Scalar e)
+product = foldAll (*) 1
+
+-- | Yield the minimum element of an array. The array must not be empty.
+--
+minimum :: (Shape sh, Elt e, IsScalar e)
+        => Acc (Array sh e)
+        -> Acc (Scalar e)
+minimum = fold1All min
+
+-- | Yield the maximum element of an array. The array must not be empty.
+--
+maximum :: (Shape sh, Elt e, IsScalar e)
+        => Acc (Array sh e)
+        -> Acc (Scalar e)
+maximum = fold1All max
 
 
 -- Composite scans
@@ -211,7 +286,7 @@ postscanr f e = map (`f` e) . scanr1 f
 -- Segmented scans
 -- ---------------
 
--- |Segmented version of 'scanl'.
+-- |Segmented version of 'scanl'
 --
 scanlSeg :: forall a i. (Elt a, Elt i, IsIntegral i)
          => (Exp a -> Exp a -> Exp a)
@@ -253,7 +328,7 @@ scanlSeg f e arr seg = scans
     zerosArr  = generate (shape arr) (const 0)
     zerosArr' = generate nSh (const 0)
 
--- |Segmented version of 'scanl''.
+-- |Segmented version of 'scanl''
 --
 -- The first element of the resulting tuple is a vector of scanned values. The
 -- second element is a vector of segment scan totals and has the same size as
@@ -461,7 +536,7 @@ index1' = index1 . fromIntegral
 
 -- | Flattens a given array of arbitrary dimension.
 --
-flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Array DIM1 a)
+flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Vector a)
 flatten a = reshape (index1 $ size a) a
 
 -- Enumeration and filling
@@ -478,13 +553,13 @@ fill sh c = generate sh (const c)
 enumFromN :: (Shape sh, Elt e, IsNum e) => Exp sh -> Exp e -> Acc (Array sh e)
 enumFromN sh x = enumFromStepN sh x 1
 
--- | Create an array of the given shape containing the values x, x+y, x+y+y, etc
---   (in row-major order).
+-- | Create an array of the given shape containing the values @x@, @x+y@,
+-- @x+y+y@ etc. (in row-major order).
 --
 enumFromStepN :: (Shape sh, Elt e, IsNum e)
               => Exp sh
-              -> Exp e    -- ^x
-              -> Exp e    -- ^y
+              -> Exp e    -- ^ x: start
+              -> Exp e    -- ^ y: step
               -> Acc (Array sh e)
 enumFromStepN sh x y = reshape sh
                      $ generate (index1 $ shapeSize sh)
@@ -518,12 +593,14 @@ filter p arr
 
 -- | Copy elements from source array to destination array according to a map. This
 --   is a backpermute operation where a 'map' vector encodes the ouput to input
---   index mapping. For example:
+--   index mapping.
 --
---    input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---    map    = [1, 3, 7, 2, 5, 3]
+--   For example:
 --
---    output = [9, 4, 1, 6, 2, 4]
+--  > input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--  > map    = [1, 3, 7, 2, 5, 3]
+--  >
+--  > output = [9, 4, 1, 6, 2, 4]
 --
 gather :: (Elt e)
        => Acc (Vector Int)      -- ^map
@@ -539,15 +616,16 @@ gather mapV inputV = backpermute (shape mapV) bpF inputV
 --   output to input index mapping. In addition, there is a 'mask' vector, and an
 --   associated predication function, that specifies whether an element will be
 --   copied. If not copied, the output array assumes the default vector's value.
+--
 --   For example:
 --
---    default = [6, 6, 6, 6, 6, 6]
---    map     = [1, 3, 7, 2, 5, 3]
---    mask    = [3, 4, 9, 2, 7, 5]
---    pred    = (> 4)
---    input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---
---    output  = [6, 6, 1, 6, 2, 4]
+--  > default = [6, 6, 6, 6, 6, 6]
+--  > map     = [1, 3, 7, 2, 5, 3]
+--  > mask    = [3, 4, 9, 2, 7, 5]
+--  > pred    = (> 4)
+--  > input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
+--  >
+--  > output  = [6, 6, 1, 6, 2, 4]
 --
 gatherIf :: (Elt e, Elt e')
          => Acc (Vector Int)    -- ^map
@@ -569,13 +647,15 @@ gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
 -- | Copy elements from source array to destination array according to a map. This
 --   is a forward-permute operation where a 'map' vector encodes an input to output
 --   index mapping. Output elements for indices that are not mapped assume the
---   default vector's value.  For example:
+--   default vector's value.
 --
---    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---    map     = [1, 3, 7, 2, 5, 8]
---    input   = [1, 9, 6, 4, 4, 2, 5]
+--   For example:
 --
---    output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
+--  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--  > map     = [1, 3, 7, 2, 5, 8]
+--  > input   = [1, 9, 6, 4, 4, 2, 5]
+--  >
+--  > output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
 --
 --   Note if the same index appears in the map more than once, the result is
 --   undefined. The map vector cannot be larger than the input vector.
@@ -595,15 +675,16 @@ scatter mapV defaultV inputV = permute (const) defaultV pF inputV
 --   input to output index mapping. In addition, there is a 'mask' vector, and an
 --   associated predicate function, that specifies whether an elements will be
 --   copied. If not copied, the output array assumes the default vector's value.
+--
 --   For example:
 --
---    default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---    map     = [1, 3, 7, 2, 5, 8]
---    mask    = [3, 4, 9, 2, 7, 5]
---    pred    = (> 4)
---    input   = [1, 9, 6, 4, 4, 2]
---
---    output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
+--  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+--  > map     = [1, 3, 7, 2, 5, 8]
+--  > mask    = [3, 4, 9, 2, 7, 5]
+--  > pred    = (> 4)
+--  > input   = [1, 9, 6, 4, 4, 2]
+--  >
+--  > output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
 --
 --   Note if the same index appears in the map more than once, the result is
 --   undefined. The map and input vector must be of the same length.
@@ -625,34 +706,37 @@ scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
 -- ---------------------
 
 
--- | Yield the first 'n' elements of the input vector. The vector must contain
---   no more than 'n' elements.
+-- | Yield the first @n@ elements of the input vector. The vector must contain
+-- no more than @n@ elements.
 --
 take :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
 take n = backpermute (index1 n) id
 
--- | Yield all but the first 'n' elements of the input vector. The vector must
---   contain no more than 'n' elements.
+-- | Yield all but the first @n@ elements of the input vector. The vector must
+--   contain no more than @n@ elements.
 --
 drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
 drop n arr = backpermute (ilift1 (\x -> x - n) $ shape arr) (ilift1 (+ n)) arr
 
 
--- | Yield all but the last element of the input vector. The vector may not
---   be empty.
+-- | Yield all but the last element of the input vector. The vector must not be
+--   empty.
 --
 init :: Elt e => Acc (Vector e) -> Acc (Vector e)
 init arr = take ((unindex1 $ shape arr) - 1) arr
 
 
--- | Yield all but the first element of the input vector. The vector may not
---   be empty.
+-- | Yield all but the first element of the input vector. The vector must not be
+--   empty.
+--
 tail :: Elt e => Acc (Vector e) -> Acc (Vector e)
 tail = drop 1
 
 
 -- | Yield a slit (slice) from the vector. The vector must contain at least
---   i + n elements.
+--   @i + n@ elements. Denotationally, we have:
+--
+-- > slit i n = take n . drop i
 --
 slit :: Elt e
       => Exp Int

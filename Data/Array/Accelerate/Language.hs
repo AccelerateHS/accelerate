@@ -65,14 +65,14 @@ module Data.Array.Accelerate.Language (
   -- ** Array-level flow-control
   cond, (?|),
 
-  -- ** Lifting and unlifting
-  
+  -- ** Lifting and Unlifting
+
   -- | A value of type `Int` is a plain Haskell value (unlifted),
   --   whereas an @Exp Int@ is a /lifted/ value, that is, an integer
   --   lifted into the domain of expressions (an abstract syntax tree
   --   in disguise).  Both `Acc` and `Exp` are /surface types/ into
   --   which values may be lifted.
-  -- 
+  --
   --   In general an @Exp Int@ cannot be unlifted into an `Int`,
   --   because the actual number will not be available until a later stage of
   --   execution (e.g. GPU execution, when `run` is called).  However,
@@ -80,7 +80,6 @@ module Data.Array.Accelerate.Language (
   --   can convert unpack an expression of tuple type into a tuple of
   --   expressions; those expressions, at runtime, will become tuple
   --   dereferences.
-  
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
 
   -- ** Tuple construction and destruction
@@ -127,16 +126,19 @@ import Data.Bits (Bits((.&.), (.|.), xor, complement))
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
-import qualified Data.Array.Accelerate.Array.Sugar as Sugar
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, index)
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 -- Array introduction
 -- ------------------
 
 -- |Array inlet: makes an array available for processing using the Accelerate
--- language; triggers asynchronous host->device transfer if necessary.
+-- language.
+--
+-- Depending upon the backend used to execute array computations, this may
+-- trigger (asynchronous) data transfer.
 --
 use :: Arrays arrays => arrays -> Acc arrays
 use = Acc . Use
@@ -148,7 +150,7 @@ unit :: Elt e => Exp e -> Acc (Scalar e)
 unit = Acc . Unit
 
 -- |Replicate an array across one or more dimensions as specified by the
--- *generalised* array index provided as the first argument.
+-- /generalised/ array index provided as the first argument.
 --
 -- For example, assuming 'arr' is a vector (one-dimensional array),
 --
@@ -189,7 +191,8 @@ generate = Acc $$ Generate
 -- Shape manipulation
 -- ------------------
 
--- |Change the shape of an array without altering its contents, where
+-- |Change the shape of an array without altering its contents. The 'size' of
+-- the source and result arrays must be identical.
 --
 -- > precondition: size ix == size ix'
 --
@@ -202,9 +205,9 @@ reshape = Acc $$ Reshape
 -- Extraction of sub-arrays
 -- ------------------------
 
--- |Index an array with a *generalised* array index (supplied as the second
--- argument).  The result is a new array (possibly a singleton) containing
--- all dimensions in their entirety.
+-- |Index an array with a /generalised/ array index, supplied as the second
+-- argument. The result is a new array (possibly a singleton) containing all
+-- dimensions in their entirety.
 --
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
@@ -285,9 +288,10 @@ fold1Seg = Acc $$$ Fold1Seg
 -- Scan functions
 -- --------------
 
--- |'Data.List'-style left-to-right scan, but with the additional restriction that the first
--- argument needs to be an /associative/ function to enable an efficient parallel implementation.
--- The initial value (second argument) may be arbitrary.
+-- | Data.List style left-to-right scan, but with the additional restriction
+-- that the first argument needs to be an /associative/ function to enable an
+-- efficient parallel implementation. The initial value (second argument) may be
+-- arbitrary.
 --
 scanl :: Elt a
       => (Exp a -> Exp a -> Exp a)
@@ -296,10 +300,10 @@ scanl :: Elt a
       -> Acc (Vector a)
 scanl = Acc $$$ Scanl
 
--- |Variant of 'scanl', where the final result of the reduction is returned separately.
--- Denotationally, we have
+-- | Variant of 'scanl', where the final result of the reduction is returned
+-- separately. Denotationally, we have
 --
--- > scanl' f e arr = (crop 0 (len - 1) res, unit (res!len))
+-- > scanl' f e arr = (init res, unit (res!len))
 -- >   where
 -- >     len = shape arr
 -- >     res = scanl f e arr
@@ -311,13 +315,11 @@ scanl' :: Elt a
        -> (Acc (Vector a), Acc (Scalar a))
 scanl' = unlift . Acc $$$ Scanl'
 
--- |'Data.List' style left-to-right scan without an initial value (aka inclusive scan).  Again, the
--- first argument needs to be an /associative/ function.  Denotationally, we have
+-- | Data.List style left-to-right scan without an initial value (aka inclusive
+-- scan).  Again, the first argument needs to be an /associative/ function.
+-- Denotationally, we have
 --
--- > scanl1 f e arr = crop 1 len res
--- >   where
--- >     len = shape arr
--- >     res = scanl f e arr
+-- > scanl1 f e arr = tail (scanl f e arr)
 --
 scanl1 :: Elt a
        => (Exp a -> Exp a -> Exp a)
@@ -360,7 +362,7 @@ scanr1 = Acc $$ Scanr1
 -- combination function.
 --
 -- The combination function must be /associative/.  Elements that are mapped to
--- the magic value 'ignore' by the permutation function are being dropped.
+-- the magic value 'ignore' by the permutation function are dropped.
 --
 permute :: (Shape ix, Shape ix', Elt a)
         => (Exp a -> Exp a -> Exp a)    -- ^combination function
@@ -929,7 +931,8 @@ unindex2 ix = let Z :. i :. j = unlift ix in lift ((i, j) :: (Exp Int, Exp Int))
 -- Conditional expressions
 -- -----------------------
 
--- |Conditional expression.
+-- |Conditional expression. If the predicate evaluates to 'True', the first
+-- component of the tuple is returned, else the second.
 --
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
@@ -939,29 +942,28 @@ c ? (t, e) = Exp $ Cond c t e
 -- Array operations with a scalar result
 -- -------------------------------------
 
--- |Expression form that extracts a scalar from an array.
+-- |Expression form that extracts a scalar from an array
 --
 infixl 9 !
 (!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
 (!) arr ix = Exp $ IndexScalar arr ix
 
--- |Extraction of the element in a singleton array.
+-- |Extraction of the element in a singleton array
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
 
--- |Expression form that yields the shape of an array.
+-- |Expression form that yields the shape of an array
 --
 shape :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix
 shape = Exp . Shape
 
--- |Expression form that yields the size of an array.
+-- |Expression form that yields the size of an array
 --
 size :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int
 size = shapeSize . shape
 
--- |The same as `size` but not operates directly on a shape without the
---  array.
+-- |The total number of elements in an array of the given 'Shape'
 --
 shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
@@ -994,24 +996,71 @@ instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
   complement = mkBNot
   -- FIXME: argh, the rest have fixed types in their signatures
 
-shift, shiftL, shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+
+-- | @'shift' x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
+-- @-i@ bits otherwise. Right shifts perform sign extension on signed number
+-- types; i.e. they fill the top bits with 1 if the @x@ is negative and with 0
+-- otherwise.
+--
+shift :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shift  x i = i ==* 0 ? (x, i <* 0 ? (x `shiftR` (-i), x `shiftL` i))
-shiftL     = mkBShiftL
-shiftR     = mkBShiftR
 
-rotate, rotateL, rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotate  x i = i ==* 0 ? (x, i <* 0 ? (x `rotateR` (-i), x `rotateL` i))
-rotateL     = mkBRotateL
-rotateR     = mkBRotateR
+-- | Shift the argument left by the specified number of bits
+-- (which must be non-negative).
+--
+shiftL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftL = mkBShiftL
 
+-- | Shift the first argument right by the specified number of bits. The result
+-- is undefined for negative shift amounts and shift amounts greater or equal to
+-- the 'bitSize'.
+--
+-- Right shifts perform sign extension on signed number types; i.e. they fill
+-- the top bits with 1 if the @x@ is negative and with 0 otherwise.
+--
+shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+shiftR = mkBShiftR
+
+-- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right by
+-- @-i@ bits otherwise.
+--
+rotate :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotate x i = i ==* 0 ? (x, i <* 0 ? (x `rotateR` (-i), x `rotateL` i))
+
+-- | Rotate the argument left by the specified number of bits
+-- (which must be non-negative).
+--
+rotateL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotateL = mkBRotateL
+
+-- | Rotate the argument right by the specified number of bits
+-- (which must be non-negative).
+--
+rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+rotateR = mkBRotateR
+
+-- | @bit i@ is a value with the @i@th bit set and all other bits clear
+--
 bit :: (Elt t, IsIntegral t) => Exp Int -> Exp t
 bit x = 1 `shiftL` x
 
-setBit, clearBit, complementBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `setBit` i        = x .|. bit i
-x `clearBit` i      = x .&. complement (bit i)
+-- | @x \`setBit\` i@ is the same as @x .|. bit i@
+--
+setBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+x `setBit` i = x .|. bit i
+
+-- | @x \`clearBit\` i@ is the same as @x .&. complement (bit i)@
+--
+clearBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
+x `clearBit` i = x .&. complement (bit i)
+
+-- | @x \`complementBit\` i@ is the same as @x \`xor\` bit i@
+--
+complementBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 x `complementBit` i = x `xor` bit i
 
+-- | Return 'True' if the @n@th bit of the argument is 1
+--
 testBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
 x `testBit` i       = (x .&. bit i) /=* 0
 
@@ -1116,17 +1165,27 @@ max = mkMax
 min :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
 min = mkMin
 
--- |Conversions from the RealFrac class
+-- Conversions from the RealFrac class
+--
+
+-- | @truncate x@ returns the integer nearest @x@ between zero and @x@.
 --
 truncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
 truncate = mkTruncate
 
+-- | @round x@ returns the nearest integer to @x@, or the even integer if @x@ is
+-- equidistant between two integers.
+--
 round :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
 round = mkRound
 
+-- | @floor x@ returns the greatest integer not greater than @x@.
+--
 floor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
 floor = mkFloor
 
+-- | @ceiling x@ returns the least integer not less than @x@.
+--
 ceiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
 ceiling = mkCeiling
 
