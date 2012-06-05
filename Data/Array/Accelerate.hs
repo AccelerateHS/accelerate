@@ -96,7 +96,8 @@ module Data.Array.Accelerate (
   map,
 
   -- *** Zipping
-  zipWith, zip, zip3, zip4,
+  zipWith, zipWith3, zipWith4,
+  zip, zip3, zip4,
 
   -- *** Unzipping
   unzip, unzip3, unzip4,

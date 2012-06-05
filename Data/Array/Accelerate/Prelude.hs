@@ -15,6 +15,7 @@
 module Data.Array.Accelerate.Prelude (
 
   -- * Zipping
+  zipWith3, zipWith4,
   zip, zip3, zip4,
 
   -- * Unzipping
@@ -70,7 +71,32 @@ import Data.Array.Accelerate.Type
 -- Map-like composites
 -- -------------------
 
--- |Combine the elements of two arrays pairwise.  The shape of the result is
+-- | Zip three arrays with the given function
+--
+zipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
+         => (Exp a -> Exp b -> Exp c -> Exp d)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+zipWith3 f as bs cs
+  = map (\x -> let (a,b,c) = unlift x in f a b c)
+  $ zip3 as bs cs
+
+-- | Zip four arrays with the given function
+--
+zipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+zipWith4 f as bs cs ds
+  = map (\x -> let (a,b,c,d) = unlift x in f a b c d)
+  $ zip4 as bs cs ds
+
+-- | Combine the elements of two arrays pairwise.  The shape of the result is
 -- the intersection of the two argument shapes.
 --
 zip :: (Shape sh, Elt a, Elt b)
@@ -79,7 +105,7 @@ zip :: (Shape sh, Elt a, Elt b)
     -> Acc (Array sh (a, b))
 zip = zipWith (curry lift)
 
--- |Take three arrays and return an array of triples, analogous to zip.
+-- | Take three arrays and return an array of triples, analogous to zip.
 --
 zip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
      => Acc (Array sh a)
@@ -90,7 +116,7 @@ zip3 as bs cs
   = zipWith (\a bc -> let (b, c) = unlift bc :: (Exp b, Exp c) in lift (a, b, c)) as
   $ zip bs cs
 
--- |Take three arrays and and return an array of quadruples, analogous to zip.
+-- | Take four arrays and return an array of quadruples, analogous to zip.
 --
 zip4 :: forall sh. forall a. forall b. forall c. forall d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
      => Acc (Array sh a)
@@ -102,7 +128,7 @@ zip4 as bs cs ds
   = zipWith (\a bcd -> let (b, c, d) = unlift bcd :: (Exp b, Exp c, Exp d) in lift (a, b, c, d)) as
   $ zip3 bs cs ds
 
--- |The converse of 'zip', but the shape of the two results is identical to the
+-- | The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
 --
 unzip :: (Shape sh, Elt a, Elt b)
@@ -110,35 +136,35 @@ unzip :: (Shape sh, Elt a, Elt b)
       -> (Acc (Array sh a), Acc (Array sh b))
 unzip arr = (map fst arr, map snd arr)
 
--- |Take an array of triples and return three arrays, analogous to unzip.
+-- | Take an array of triples and return three arrays, analogous to unzip.
 --
-unzip3
-    :: forall sh a b c. (Shape sh, Elt a, Elt b, Elt c)
-    => Acc (Array sh (a, b, c))
-    -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
+unzip3 :: (Shape sh, Elt a, Elt b, Elt c)
+       => Acc (Array sh (a, b, c))
+       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
 unzip3 abcs = (as, bs, cs)
   where
     (bs, cs)  = unzip bcs
     (as, bcs) = unzip $ map swizzle abcs
 
-    swizzle :: Exp (a, b, c) -> Exp (a, (b, c))
+    swizzle :: forall a b c. (Elt a, Elt b, Elt c)
+            => Exp (a, b, c) -> Exp (a, (b, c))
     swizzle abc = let (a, b, c) = unlift abc  :: (Exp a, Exp b, Exp c)
                       bc        = lift (b, c) :: Exp (b, c)
                   in lift (a, bc)
 
--- |Take an array of quadruples and return four arrays, analogous to unzip.
+-- | Take an array of quadruples and return four arrays, analogous to unzip.
 --
-unzip4
-    :: forall sh a b c d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
-    => Acc (Array sh (a, b, c, d))
-    -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
+unzip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
+       => Acc (Array sh (a, b, c, d))
+       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
 unzip4 abcds = (as, bs, cs, ds)
   where
     (abs, cds)  = unzip $ map swizzle abcds
     (as,  bs)   = unzip abs
     (cs,  ds)   = unzip cds
 
-    swizzle :: Exp (a, b, c, d) -> Exp ((a, b), (c, d))
+    swizzle :: forall a b c d. (Elt a, Elt b, Elt c, Elt d)
+            => Exp (a, b, c, d) -> Exp ((a, b), (c, d))
     swizzle abcd = let (a, b, c, d) = unlift abcd :: (Exp a, Exp b, Exp c, Exp d)
                        ab           = lift (a, b) :: Exp (a, b)
                        cd           = lift (c, d) :: Exp (c, d)
