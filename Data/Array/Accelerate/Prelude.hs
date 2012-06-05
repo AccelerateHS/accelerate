@@ -36,6 +36,8 @@ module Data.Array.Accelerate.Prelude (
 
   -- ** Gather and scatter
   gather, gatherIf, scatter, scatterIf,
+  -- ** Filtering
+  filter,
 
   -- ** Subvector extraction
   init, tail, take, drop, slit
@@ -487,6 +489,28 @@ enumFromStepN :: (Shape sh, Elt e, IsNum e)
 enumFromStepN sh x y = reshape sh
                      $ generate (index1 $ shapeSize sh)
                                 ((\i -> ((fromIntegral i) * y) + x) . unindex1)
+
+
+-- Filtering
+-- ---------
+
+-- | Drop elements that do not satisfy the predicate
+--
+filter :: Elt a
+       => (Exp a -> Exp Bool)
+       -> Acc (Vector a)
+       -> Acc (Vector a)
+filter p arr
+  = let flags            = map (boolToInt . p) arr
+        (targetIdx, len) = scanl' (+) 0 flags
+        arr'             = backpermute (index1 $ the len) id arr
+    in
+    permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) arr
+    -- FIXME: This is abusing 'permute' in that the first two arguments are
+    --        only justified because we know the permutation function will
+    --        write to each location in the target exactly once.
+    --        Instead, we should have a primitive that directly encodes the
+    --        compaction pattern of the permutation function.
 
 
 -- Gather operations
