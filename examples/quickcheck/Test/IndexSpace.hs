@@ -100,21 +100,12 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
 
     -- Reverse a vector
     --
-    reverseRef xs = fromList (arrayShape xs) (reverse $ toList xs)
-    reverseAcc xs =
-      let xs'       = use xs
-          n         = unindex1 $ shape xs'
-      in
-      backpermute (shape xs') (\ix -> index1 $ n - unindex1 ix - 1) xs'
+    reverseAcc xs = Acc.reverse (use xs)
+    reverseRef xs = fromList (arrayShape xs) (P.reverse $ toList xs)
 
     -- Transpose a 2D matrix
     --
-    transposeAcc xs =
-      let xs'       = use xs
-          swap      = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z :. Exp Int :. Exp Int
-      in
-      backpermute (swap (shape xs')) swap xs'
-
+    transposeAcc xs = Acc.transpose (use xs)
     transposeRef xs =
       let swap (Z:.x:.y)    = Z :. y :. x
       in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))

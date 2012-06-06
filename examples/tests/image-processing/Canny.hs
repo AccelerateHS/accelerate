@@ -14,12 +14,14 @@ type Stencil1x7 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a,
 
 
 convolve7x1 :: (Elt a, IsNum a) => [Exp a] -> Stencil7x1 a -> Exp a
-convolve7x1 kernel (_, (a,b,c,d,e,f,g), _) =
-  sum $ zipWith (*) kernel [a,b,c,d,e,f,g]
+convolve7x1 kernel (_, (a,b,c,d,e,f,g), _)
+  = foldl (+) 0
+  $ zipWith (*) kernel [a,b,c,d,e,f,g]
 
 convolve1x7 :: (Elt a, IsNum a) => [Exp a] -> Stencil1x7 a -> Exp a
-convolve1x7 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_), (_,f,_), (_,g,_)) =
-  sum $ zipWith (*) kernel [a,b,c,d,e,f,g]
+convolve1x7 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_), (_,f,_), (_,g,_))
+  = foldl (+) 0
+  $ zipWith (*) kernel [a,b,c,d,e,f,g]
 
 
 -- Gaussian smoothing

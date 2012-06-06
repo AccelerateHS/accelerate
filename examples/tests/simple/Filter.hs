@@ -11,28 +11,11 @@ import Data.Array.Accelerate    as Acc
 
 -- Filter
 -- ------
-filterAcc :: Elt a
-          => (Exp a -> Exp Bool)
-          -> Vector a
-          -> Acc (Vector a)
-filterAcc p vec
-  = let arr              = Acc.use vec
-        flags            = Acc.map (boolToInt . p) arr
-        (targetIdx, len) = Acc.scanl' (+) 0 flags
-        arr'             = Acc.backpermute (index1 $ the len) id arr
-    in
-    Acc.permute const arr' (\ix -> flags!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) arr
-    -- FIXME: This is abusing 'permute' in that the first two arguments are
-    --        only justified because we know the permutation function will
-    --        write to each location in the target exactly once.
-    --        Instead, we should have a primitive that directly encodes the
-    --        compaction pattern of the permutation function.
+filterAcc :: Elt a => (Exp a -> Exp Bool) -> Vector a -> Acc (Vector a)
+filterAcc p vec = Acc.filter p (use vec)
 
 
-filterRef :: IArray UArray e
-          => (e -> Bool)
-          -> UArray Int e
-          -> UArray Int e
+filterRef :: IArray UArray e => (e -> Bool) -> UArray Int e -> UArray Int e
 filterRef p xs
   = let xs' = Prelude.filter p (elems xs)
     in

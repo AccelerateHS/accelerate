@@ -48,7 +48,7 @@ run alg m = withSystemRandom $ \gen -> do
 
   -- generate elements
   --
-  let ne = P.fromIntegral $ sum (elems seg)
+  let ne = P.fromIntegral $ P.sum (elems seg)
   vec  <- randomUArrayR (-1,1) gen ne
   vec' <- convertUArray vec
   --

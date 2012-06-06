@@ -17,22 +17,14 @@ import Prelude               as P
 -- -----
 
 reverseAcc :: Vector Float -> Acc (Vector Float)
-reverseAcc xs =
-  let xs' = use xs
-      len = unindex1 (shape xs')
-  in
-  backpermute (shape xs') (\ix -> index1 $ len - (unindex1 ix) - 1) xs'
+reverseAcc xs = Acc.reverse (use xs)
 
 reverseRef :: UArray Int Float -> UArray Int Float
-reverseRef xs = listArray (bounds xs) (reverse (elems xs))
+reverseRef xs = listArray (bounds xs) (P.reverse (elems xs))
 
 
 transposeAcc :: Acc.Array DIM2 Float -> Acc (Acc.Array DIM2 Float)
-transposeAcc mat =
-  let mat' = use mat
-      swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z:.Exp Int:.Exp Int
-  in
-  backpermute (swap $ shape mat') swap mat'
+transposeAcc mat = Acc.transpose (use mat)
 
 transposeRef :: UArray (Int,Int) Float -> UArray (Int,Int) Float
 transposeRef mat =

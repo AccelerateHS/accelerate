@@ -7,6 +7,7 @@ import Random
 import System.Random.MWC
 import Data.Array.Unboxed
 import Data.Array.Accelerate as Acc
+import Prelude               as P
 
 
 -- Dot product
@@ -23,7 +24,7 @@ dotpRef :: UArray Int Float
         -> UArray Int Float
         -> UArray ()  Float
 dotpRef xs ys
-  = listArray ((), ()) [sum [x * y | x <- elems xs | y <- elems ys]]
+  = listArray ((), ()) [P.sum [x * y | x <- elems xs | y <- elems ys]]
 
 
 -- Main
