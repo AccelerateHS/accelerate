@@ -17,13 +17,13 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Options -> Event -> World -> IO World
+react :: Options -> Event -> World -> World
 react opt event world =
   case event of
     EventKey (Char c) s m _                     -> keyboard c s m
-    EventKey (MouseButton LeftButton) s m uv    -> return $ mouse m s (coord uv)
-    EventMotion uv                              -> return $ motion (coord uv)
-    _                                           -> return $ world
+    EventKey (MouseButton LeftButton) s m uv    -> mouse m s (coord uv)
+    EventMotion uv                              -> motion (coord uv)
+    _                                           -> world
   where
     -- Inject a new density source when the left button is clicked.
     --
@@ -50,9 +50,9 @@ react opt event world =
     -- Handle key presses
     --
     keyboard 'r' Down _         = initialise opt
-    keyboard 'd' Down _         = return $ world { displayDensity  = not (displayDensity  world) }
-    keyboard 'v' Down _         = return $ world { displayVelocity = not (displayVelocity world) }
-    keyboard _   _    _         = return world
+    keyboard 'd' Down _         = world { displayDensity  = not (displayDensity  world) }
+    keyboard 'v' Down _         = world { displayVelocity = not (displayVelocity world) }
+    keyboard _   _    _         = world
 
     -- As the mouse moves, keep inserting density sources, or adding source
     -- velocities
@@ -65,12 +65,14 @@ react opt event world =
                                  , velocitySource = addVelocity x0y0 xy }
         _               -> world
     --
-    addDensity (x,y)            = (Z:.y:.x, 1) : densitySource world
+    addDensity (x,y)            = (Z:.y:.x, density) : densitySource world
 
-    addVelocity (x0,y0) (x1,y1) = let u = fromIntegral (x1-x0)
-                                      v = fromIntegral (y1-y0)
-                                  in  (Z:.y0:.x0, (u * width, v * height)) : velocitySource world
+    addVelocity (x0,y0) (x1,y1) = let u    = fromIntegral (x1-x0)
+                                      v    = fromIntegral (y1-y0)
+                                  in  (Z:.y0:.x0, (u * velocity, v * velocity)) : velocitySource world
     --
+    density     = get inputDensity opt
+    velocity    = get inputVelocity opt
     zoom        = fromIntegral $ get displayScale opt
     width       = fromIntegral $ get simulationWidth  opt
     height      = fromIntegral $ get simulationHeight opt

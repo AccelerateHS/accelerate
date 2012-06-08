@@ -9,23 +9,18 @@ module World (World(..), Source(..), initialise, render) where
 import Type
 import Config
 
-import Codec.BMP
-import Data.Bits
-import Data.Int
 import Data.Word
 import Data.Label
-import Control.Monad
 import Graphics.Gloss.Interface.IO.Game
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import Foreign.Storable
 import Foreign.Marshal.Alloc
-import Data.Array.Accelerate                            ( Z(..), (:.)(..), Exp )
+import Data.Array.Accelerate                            ( Z(..), (:.)(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array(..) )
 
-import qualified Data.Array.Accelerate.Array.Data       as A
-import qualified Data.Array.Accelerate.IO               as A
 import qualified Data.Array.Accelerate                  as A
+import qualified Data.Array.Accelerate.Array.Data       as A
 
 
 data World = World
@@ -52,88 +47,17 @@ data Source = Density  (Int, Int)
 -- Initialisation --------------------------------------------------------------
 -- --------------                                                             --
 
-initialise :: Options -> IO World
+initialise :: Options -> World
 initialise opt =
-  let width     = get simulationWidth  opt
-      height    = get simulationHeight opt
-  in do
-  density       <- initialDensity  opt width height
-  velocity      <- initialVelocity opt width height
-
-  return $ World
-    { densityField      = density
-    , velocityField     = velocity
+  World
+    { densityField      = get initialDensity opt
+    , velocityField     = get initialVelocity opt
     , densitySource     = []
     , velocitySource    = []
     , currentSource     = None
     , displayDensity    = True
     , displayVelocity   = False
     }
-
-
-initialDensity :: Options -> Int -> Int -> IO DensityField
-initialDensity opt width height
-  -- Load the file, and use the luminance value as scalar density
-  --
-  | Just file   <- get densityBMP opt
-  = do
-      arr               <- readImageFromBMP file
-      let (Z:.h:.w)     =  A.arrayShape arr
-
-      when (w /= width || h /= height)
-        $ error "fluid: density-bmp does not match width x height"
-
-      return . run opt $ A.map densityOfRGBA (A.use arr)
-
-  -- No density file given, just set the field to zero
-  --
-  | otherwise
-  = return $ A.fromList (Z :. height :. width) (repeat 0)
-
-
-initialVelocity :: Options -> Int -> Int -> IO VelocityField
-initialVelocity opt width height
-  -- Load the file, and use the red and green channels for x- and y- velocity
-  -- values respectively
-  --
-  | Just file   <- get velocityBMP opt
-  = do
-      arr               <- readImageFromBMP file
-      let (Z:.h:.w)     =  A.arrayShape arr
-
-      when (w /= width || h /= height)
-        $ error "fluid: velocity-bmp does not match width x height"
-
-      return . run opt $ A.map velocityOfRGBA (A.use arr)
-
-  -- No density file given, just set to zero
-  --
-  | otherwise
-  = return $ A.fromList (Z :. height :. width) (repeat (0,0))
-
-
-readImageFromBMP :: FilePath -> IO (Image RGBA)
-readImageFromBMP file = do
-  bmp           <- either (error . show) id `fmap` readBMP file
-  let (w,h)     =  bmpDimensions bmp
-  --
-  A.fromByteString (Z :. h :. w) ((), unpackBMPToRGBA32 bmp)
-
-
-densityOfRGBA :: Exp RGBA -> Exp Density
-densityOfRGBA rgba =
-  let b = (0.11 / 255) * A.fromIntegral ((rgba `div` 0x100)     .&. 0xFF)
-      g = (0.59 / 255) * A.fromIntegral ((rgba `div` 0x10000)   .&. 0xFF)
-      r = (0.3  / 255) * A.fromIntegral ((rgba `div` 0x1000000) .&. 0xFF)
-  in
-  r + g + b
-
-velocityOfRGBA :: Exp RGBA -> Exp Velocity
-velocityOfRGBA rgba =
-  let g = A.fromIntegral (-128 + A.fromIntegral ((rgba `div` 0x10000)   .&. 0xFF) :: Exp Int32)
-      r = A.fromIntegral (-128 + A.fromIntegral ((rgba `div` 0x1000000) .&. 0xFF) :: Exp Int32)
-  in
-  A.lift (r * 0.001, g * 0.001)
 
 
 -- Rendering -------------------------------------------------------------------

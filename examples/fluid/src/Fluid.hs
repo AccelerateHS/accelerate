@@ -9,14 +9,12 @@ module Fluid (
 ) where
 
 import Type
-
-import Data.Array.Accelerate ( Z(..), (:.)(..), Exp, Acc, Scalar, Vector, (?|), (==*) )
-import qualified Data.Array.Accelerate  as A
+import Prelude                  as P
+import Data.Array.Accelerate    as A
 
 
 type Simulation
-  =  Acc ( Scalar Timestep              -- time to evolve the simulation
-         , DensitySource                -- locations to add density sources
+  =  Acc ( DensitySource                -- locations to add density sources
          , VelocitySource               -- locations to add velocity sources
          , DensityField                 -- the current density field
          , VelocityField )              -- the current velocity field
@@ -25,11 +23,11 @@ type Simulation
 
 -- A fluid simulation
 --
-fluid :: Viscosity -> Diffusion -> Simulation
-fluid dp dn inputs =
-  let (dt, ds, vs, df, vf)      = A.unlift inputs
-      df'                       = density  dn dt ds vf df
-      vf'                       = velocity dp dt vs vf
+fluid :: Int -> Timestep -> Viscosity -> Diffusion -> Simulation
+fluid steps dt dp dn inputs =
+  let (ds, vs, df, vf)  = A.unlift inputs
+      vf'               = velocity steps dt dp vs vf
+      df'               = density  steps dt dn ds vf' df
   in
   A.lift (df', vf')
 
@@ -39,28 +37,28 @@ fluid dp dn inputs =
 --   3. self-advection
 --
 velocity
-    :: Viscosity
-    -> Acc (Scalar Timestep)
+    :: Int
+    -> Timestep
+    -> Viscosity
     -> Acc VelocitySource
     -> Acc VelocityField
     -> Acc VelocityField
-velocity dp dt vs vf0
-  = project
+velocity steps dt dp vs vf0
+  = project steps
   . advect dt vf0
-  . project
-  . diffuse dp dt
+  . project steps
+  . diffuse steps dt dp
   $ inject vs vf0
 
 
 -- Ensure the velocity field conserves mass
 --
-project :: Acc VelocityField -> Acc VelocityField
-project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
+project :: Int -> Acc VelocityField -> Acc VelocityField
+project steps vf = A.stencil2 poisson (A.Constant zero) vf (A.Constant zero) p
   where
-    steps       = 20
-    grad        = A.stencil divF A.Mirror vf
-    p1          = A.stencil2 pF (A.Constant 0) grad A.Mirror
-    p           = foldl1 (.) (replicate steps p1) grad
+    grad        = A.stencil divF (A.Constant zero) vf
+    p1          = A.stencil2 pF (A.Constant zero) grad (A.Constant zero)
+    p           = foldl1 (.) (P.replicate steps p1) grad
 
     poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
     poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, t-b)
@@ -79,15 +77,16 @@ project vf = A.stencil2 poisson A.Mirror vf A.Mirror p
 --   3. motion through the velocity field
 --
 density
-    :: Diffusion
-    -> Acc (Scalar Timestep)
+    :: Int
+    -> Timestep
+    -> Diffusion
     -> Acc DensitySource
     -> Acc VelocityField
     -> Acc DensityField
     -> Acc DensityField
-density dn dt ds vf
+density steps dt dn ds vf
   = advect dt vf
-  . diffuse dn dt
+  . diffuse steps dt dn
   . inject ds
 
 
@@ -109,19 +108,19 @@ inject source field =
 
 diffuse
     :: FieldElt e
-    => Diffusion
-    -> Acc (Scalar Timestep)
+    => Int
+    -> Timestep
+    -> Diffusion
     -> Acc (Field e)
     -> Acc (Field e)
-diffuse dn dt df0 =
+diffuse steps dt dn df0 =
   a ==* 0
-    ?| ( df0 , foldl1 (.) (replicate steps diffuse1) df0 )
+    ?| ( df0 , foldl1 (.) (P.replicate steps diffuse1) df0 )
   where
-    steps       = 20
-    a           = A.the dt * A.constant dn * (A.fromIntegral (A.size df0))
+    a           = A.constant dt * A.constant dn * (A.fromIntegral (A.size df0))
     c           = 1 + 4*a
 
-    diffuse1 df = A.stencil2 relax (A.Constant zero) df0 A.Mirror df
+    diffuse1 df = A.stencil2 relax (A.Constant zero) df0 (A.Constant zero) df
 
     relax :: FieldElt e => A.Stencil3x3 e -> A.Stencil3x3 e -> Exp e
     relax (_,(_,x0,_),_) ((_,t,_), (l,_,r), (_,b,_)) = (x0 .+. a .*. (l.+.t.+.r.+.b)) ./. c
@@ -129,13 +128,12 @@ diffuse dn dt df0 =
 
 advect
     :: FieldElt e
-    => Acc (Scalar Timestep)
+    => Timestep
     -> Acc VelocityField
     -> Acc (Field e)
     -> Acc (Field e)
-advect dt' vf df = A.generate sh backtrace
+advect dt vf df = A.generate sh backtrace
   where
-    dt          = A.the dt'
     sh          = A.shape vf
     Z :. h :. w = A.unlift sh
 
