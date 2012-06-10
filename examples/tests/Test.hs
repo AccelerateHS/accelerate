@@ -139,17 +139,16 @@ allTests cfg = sequence'
   , mkTest "permute-hist"          "histogram"                                  $ Permute.run "histogram" n
   , mkTest "backpermute-reverse"   "reverse a vector"                           $ Backpermute.run "reverse" n
   , mkTest "backpermute-transpose" "transpose a matrix"                         $ Backpermute.run2d "transpose" n
-  , mkTest "init"            "vector init"                                      $ Vector.run "init" n
-  , mkTest "tail"            "vector tail"                                      $ Vector.run "tail" n
-  , mkTest "take"            "vector take"                                      $ Vector.run "take" n
-  , mkTest "drop"            "vector drop"                                      $ Vector.run "drop" n
-  , mkTest "slit"            "vector slit"                                      $ Vector.run "slit" n
-  , mkTest "gather"          "backpermute via index mapping vector"             $ Gather.run "gather" n
-  , mkTest "gather-if"       "cond. backpermute via index mapping vector"       $ Gather.run "gather-if" n
-  , mkTest "scatter"         "permute via index mapping vector"                 $ Scatter.run "scatter" n
-  , mkTest "scatter-if"      "cond. permute via index mapping vector"           $ Scatter.run "scatter-if" n
+  , mkTest "init"                  "vector init"                                $ Vector.run "init" n
+  , mkTest "tail"                  "vector tail"                                $ Vector.run "tail" n
+  , mkTest "take"                  "vector take"                                $ Vector.run "take" n
+  , mkTest "drop"                  "vector drop"                                $ Vector.run "drop" n
+  , mkTest "slit"                  "vector slit"                                $ Vector.run "slit" n
+  , mkTest "gather"                "backpermute via index mapping vector"       $ Gather.run "gather" n
+  , mkTest "gather-if"             "conditional backwards index mapping"        $ Gather.run "gather-if" n
+  , mkTest "scatter"               "permute via index mapping vector"           $ Scatter.run "scatter" n
+  , mkTest "scatter-if"            "conditional permutation via index mapping"  $ Scatter.run "scatter-if" n
 
-  
     -- simple examples
   , mkTest "sasum"                 "sum of absolute values"                     $ SASUM.run n
   , mkTest "saxpy"                 "scalar alpha*x + y"                         $ SAXPY.run n
@@ -165,13 +164,13 @@ allTests cfg = sequence'
 #endif
 
   --  image processing
-  , mkNoRef "canny"          "canny edge detection"                       $ Canny.run img
-  , mkNoRef "integral-image" "image integral (2D scan)"                   $ IntegralImage.run img
+  , mkIO    "canny"                "canny edge detection"                       $ Canny.canny (backend cfg) img 50 100
+  , mkNoRef "integral-image"       "image integral (2D scan)"                   $ IntegralImage.run img
   -- slices
   , mkTest "slices"  "replicate (Z:.2:.All:.All)" $ SliceExamples.run1
   , mkTest "slices"  "replicate (Z:.All:.2:.All)" $ SliceExamples.run2
   , mkTest "slices"  "replicate (Z:.All:.All:.2)" $ SliceExamples.run3
-  , mkTest "slices"  "replicate (Any:.2)"         $ SliceExamples.run4  
+  , mkTest "slices"  "replicate (Any:.2)"         $ SliceExamples.run4
   , mkTest "slices"  "replicate (Z:.2:.2:.2)"     $ SliceExamples.run5
   --
   , mkIO "sharing-recovery" "simple"            $ return (show SharingRecovery.simple)

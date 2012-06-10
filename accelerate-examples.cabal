@@ -74,14 +74,14 @@ Executable accelerate-quickcheck
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 >= 0.12,
+    build-depends:      accelerate-cuda                 >= 0.13,
                         cuda                            >= 0.4
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl               == 0.1.*
 
-  build-depends:        accelerate                      >= 0.12,
+  build-depends:        accelerate                      >= 0.13,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,
                         test-framework-quickcheck2      >= 0.2,
@@ -126,7 +126,7 @@ Executable accelerate-examples
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.12
+    build-depends:      accelerate-cuda         >= 0.13
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -134,9 +134,9 @@ Executable accelerate-examples
 
   if flag(io)
     CPP-options:        -DACCELERATE_IO
-    build-depends:      accelerate-io           >= 0.12
 
-  build-depends:        accelerate              >= 0.12,
+  build-depends:        accelerate              >= 0.13,
+                        accelerate-io           >= 0.13,
                         array                   >= 0.3,
                         attoparsec              >= 0.10,
                         base                    == 4.*,
@@ -152,6 +152,7 @@ Executable accelerate-examples
                         mwc-random              >= 0.8,
                         pgm                     >= 0.1,
                         pretty                  >= 1.0,
+                        repa                    >= 3.1,
                         vector                  >= 0.7,
                         vector-algorithms       >= 0.4
 
@@ -171,13 +172,13 @@ Executable accelerate-crystal
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.12
+    build-depends:      accelerate-cuda         >= 0.13
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
 
-  build-depends:        accelerate              >= 0.12,
+  build-depends:        accelerate              >= 0.13,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -198,13 +199,13 @@ Executable accelerate-mandelbrot
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.12
+    build-depends:      accelerate-cuda         >= 0.13
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
 
-  build-depends:        accelerate              >= 0.12,
+  build-depends:        accelerate              >= 0.13,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -229,10 +230,10 @@ Executable accelerate-fluid
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.12
+    build-depends:      accelerate-cuda         >= 0.13
 
-  Build-depends:        accelerate              >= 0.12,
-                        accelerate-io           >= 0.12,
+  Build-depends:        accelerate              >= 0.13,
+                        accelerate-io           >= 0.13,
                         base                    == 4.*,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
