@@ -44,11 +44,11 @@ velocity
     -> Acc VelocityField
     -> Acc VelocityField
 velocity steps dt dp vs vf0
-  = project steps
-  . advect dt vf0
-  . project steps
-  . diffuse steps dt dp
-  $ inject vs vf0
+  = let vf' = project steps
+            . diffuse steps dt dp
+            $ inject vs vf0
+    in
+    project steps $ advect dt vf' vf'
 
 
 -- Ensure the velocity field conserves mass
@@ -61,14 +61,13 @@ project steps vf = A.stencil2 poisson (A.Constant zero) vf (A.Constant zero) p
     p           = foldl1 (.) (P.replicate steps p1) grad
 
     poisson :: A.Stencil3x3 Velocity -> A.Stencil3x3 Float -> Exp Velocity
-    poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, t-b)
+    poisson (_,(_,uv,_),_) ((_,t,_), (l,_,r), (_,b,_)) = uv .-. 0.5 .*. A.lift (r-l, b-t)
 
     divF :: A.Stencil3x3 Velocity -> Exp Float
-    divF ((_,t,_), (l,_,r), (_,b,_)) = -0.5 * (A.fst r - A.fst l + A.snd t - A.snd b)
+    divF ((_,t,_), (l,_,r), (_,b,_)) = -0.5 * (A.fst r - A.fst l + A.snd b - A.snd t)
 
     pF :: A.Stencil3x3 Float -> A.Stencil3x3 Float -> Exp Float
     pF (_,(_,x,_),_) ((_,t,_), (l,_,r), (_,b,_)) = 0.25 * (x + l + t + r + b)
-
 
 
 -- The density over a timestep evolves due to three causes:
@@ -136,6 +135,8 @@ advect dt vf df = A.generate sh backtrace
   where
     sh          = A.shape vf
     Z :. h :. w = A.unlift sh
+    width       = A.fromIntegral w
+    height      = A.fromIntegral h
 
     backtrace ix = s0.*.(t0.*.d00 .+. t1.*.d10) .+. s1.*.(t0.*.d01 .+. t1.*.d11)
       where
@@ -143,13 +144,13 @@ advect dt vf df = A.generate sh backtrace
         (u, v)  = A.unlift (vf A.! ix)
 
         -- backtrack densities based on velocity field
-        clamp z = A.max 0.5 . A.min (A.fromIntegral z - 1.5)
-        x       = w `clamp` (A.fromIntegral i - dt * u)
-        y       = h `clamp` (A.fromIntegral j - dt * v)
+        clamp z = A.max (-0.5) . A.min (z + 0.5)
+        x       = width  `clamp` (A.fromIntegral i - A.constant dt * width  * u)
+        y       = height `clamp` (A.fromIntegral j - A.constant dt * height * v)
 
         -- discrete locations surrounding point
-        i0      = A.truncate x
-        j0      = A.truncate y
+        i0      = A.truncate (x + 1) - 1
+        j0      = A.truncate (y + 1) - 1
         i1      = i0 + 1
         j1      = j0 + 1
 
@@ -160,8 +161,12 @@ advect dt vf df = A.generate sh backtrace
         t0      = 1 - t1
 
         -- read the density values surrounding the calculated advection point
-        d00     = df A.! A.lift (Z :. j0 :. i0)
-        d10     = df A.! A.lift (Z :. j1 :. i0)
-        d01     = df A.! A.lift (Z :. j0 :. i1)
-        d11     = df A.! A.lift (Z :. j1 :. i1)
+        get ix'@(Z :. j' :. i')
+          = (j' <* 0 ||* i' <* 0 ||* j' >=* h ||* i' >=* w)
+          ? (A.constant zero, df A.! A.lift ix')
+
+        d00     = get (Z :. j0 :. i0)
+        d10     = get (Z :. j1 :. i0)
+        d01     = get (Z :. j0 :. i1)
+        d11     = get (Z :. j1 :. i1)
 

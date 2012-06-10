@@ -111,7 +111,7 @@ renderVelocity vf
       let x     = fromIntegral x0
           y     = fromIntegral y0
           (u,v) = A.indexArray vf (Z:.y0:.x0)
-      in  Color red $ Line [ (x,y), (x+u, y+v) ]
+      in  Color red $ Line [ (x,y), (x+ 25*u, y+ 25*v) ]
 
 
 -- Float to Word8 conversion because the one in the GHC libraries doesn't have
