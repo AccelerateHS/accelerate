@@ -52,8 +52,8 @@ MainView* globalMainView;
         NSInteger iBlurEnable   = [oBlurEnable    state];
         NSInteger iInvertOutput = [oInvertOutput  state];
 
-        float thresholdLow      = [oThresholdLow  floatValue] / 200;
-        float thresholdHigh     = [oThresholdHigh floatValue] / 200;
+        float thresholdLow      = [oThresholdLow  floatValue];
+        float thresholdHigh     = [oThresholdHigh floatValue];
 
         if (thresholdLow > thresholdHigh) {
                 thresholdLow = thresholdHigh;

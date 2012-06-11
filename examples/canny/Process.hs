@@ -1,5 +1,4 @@
-{-# LANGUAGE BangPatterns  #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BangPatterns        #-}
 
 -- | Canny Edge Detection
 --
@@ -9,7 +8,6 @@ import Data.Bits
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import Foreign.Marshal
-import Foreign.Storable
 import System.Mem
 import Prelude                                          as P
 
@@ -38,50 +36,54 @@ processImage
     -> Int              -- image height
     -> Ptr Word8        -- pointer to image data
     -> IO ()
-processImage phase enableBlur enableInvert threshLow threshHigh width height ptr
+processImage phase enableBlur enableInvert threshLow threshHigh width height buffer
  = do
       -- Copy the input to a new accelerate array (avoid copying?)
       --
-      input     <- A.fromPtr (Z :. height :. width) ((), castPtr ptr)
+      input     <- A.fromPtr (Z :. height :. width) ((), castPtr buffer)
+      edges     <- newForeignPtr_ (castPtr buffer)
 
-      let -- The canny algorithm, step by step
+      -- The canny algorithm, step by step
+      --
+      let low       = unit (constant threshLow)
+          high      = unit (constant threshHigh)
+
+          grey      = toGreyscale
+          blurred   = gaussianY . gaussianX . grey
+          gradX     = gradientX . (if enableBlur then blurred else grey)
+          gradY     = gradientY . (if enableBlur then blurred else grey)
+          magdir a  = gradientMagDir low (gradX a) (gradY a)
+          suppress  = nonMaximumSuppression low high . magdir
+
+          stage1 x  = let img' = suppress x
+                      in  lift $ (img', selectStrong img')
+
+          -- Trace out strong and weak edges on the CPU
           --
-          threshold     = A.unit $ A.constant (threshLow, threshHigh)
-          greyscale     = A.map fromRGBA (A.use input)
-          smooth        = gaussianX $ gaussianY greyscale
-          gradX         = gradientX $ if enableBlur then smooth else greyscale
-          gradY         = gradientY $ if enableBlur then smooth else greyscale
-          gradMag       = gradientMagnitude gradX gradY
-          suppress      = nonMaximumSuppression threshold gradX gradY gradMag
+          link =
+            let (img, str) = run1 stage1 input
+            in  wildfire (toRepa img) (toRepa str) edges enableInvert
 
-          -- Link strong and weak edges on the CPU, write result directly to the
+          -- Render the chosen part of the algorithm and write that to the
           -- output buffer
           --
-          link = do
-            let img     =  A.toRepa $ CUDA.run suppress
-            --
-            strong      <- selectStrong img
-            edges       <- newForeignPtr_ (castPtr ptr)
-            wildfire img strong edges enableInvert
-
-          -- Fill the output buffer
-          --
           render =
-            case phase of
-              0 -> fill greyscale
-              1 -> fill smooth
-              2 -> fill gradX
-              3 -> fill gradY
-              4 -> fill gradMag
-              5 -> fill (A.zipWith atan2 gradX gradY)
-              6 -> fill suppress
+            let display = A.map (toRGBA enableInvert)
+            in case phase of
+              0 -> stage $ run1 (display . grey)
+              1 -> stage $ run1 (display . blurred)
+              2 -> stage $ run1 (display . gradX)
+              3 -> stage $ run1 (display . gradY)
+              4 -> stage $ run1 (A.map (toRGBA enableInvert . A.fst)                  . magdir)
+              5 -> stage $ run1 (A.map (toRGBA enableInvert . A.fromIntegral . A.snd) . magdir)
+              6 -> stage $ run1 (display . suppress)
               _ -> link
 
-          fill acc = do
-            let Array _ adata   = CUDA.run $ A.map (toRGBA enableInvert) acc
-                ((),ptr')       = ptrsOfArrayData adata
+          stage f = do
+            let Array _ adata   = f input
+                ((), ptr)       = ptrsOfArrayData adata
             --
-            copyArray ptr (castPtr ptr') (width * height * 4)
+            copyArray buffer (castPtr ptr) (width * height * 4)
 
       -- Render the appropriate phase of the algorithm into the output buffer
       render
@@ -93,7 +95,7 @@ processImage phase enableBlur enableInvert threshLow threshHigh width height ptr
 -- Image conversion ------------------------------------------------------------
 -- ----------------                                                           --
 
-fromRGBA :: (Elt a, IsFloating a) => Exp RGBA -> Exp a
+fromRGBA :: Exp RGBA -> Exp Float
 fromRGBA rgba =
   let b = (0.11 / 255) * A.fromIntegral ((rgba `div` 0x100)     .&. 0xFF)
       g = (0.59 / 255) * A.fromIntegral ((rgba `div` 0x10000)   .&. 0xFF)
@@ -101,7 +103,7 @@ fromRGBA rgba =
   in
   r + g + b
 
-toRGBA :: (Elt a, IsFloating a) => Bool -> Exp a -> Exp RGBA
+toRGBA :: Bool -> Exp Float -> Exp RGBA
 toRGBA invert val = r + b + g + a
   where
     u   = A.truncate (255 * (0 `A.max` val `A.min` 1))
@@ -115,39 +117,40 @@ toRGBA invert val = r + b + g + a
 -- Canny Edge Detection --------------------------------------------------------
 -- --------------------                                                       --
 
+-- Accelerate component --------------------------------------------------------
+
 type RGBA         = Word32
 type Image a      = Array DIM2 a
+
 type Stencil5x1 a = (Stencil3 a, Stencil5 a, Stencil3 a)
-type Stencil7x1 a = (Stencil3 a, Stencil7 a, Stencil3 a)
 type Stencil1x5 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
-type Stencil1x7 a = (Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a, Stencil3 a)
 
 -- Classification of the output pixel
-data Edge       = None | Weak | Strong
+data Orient     = Undef | PosD | Vert | NegD | Horiz
+data Edge       = None  | Weak | Strong
 
-edge :: (Elt a, IsFloating a) => Edge -> a
+orient :: Orient -> Int
+orient Undef    = 0
+orient PosD     = 64
+orient Vert     = 128
+orient NegD     = 192
+orient Horiz    = 255
+
+orient' :: Orient -> Exp Int
+orient' = constant . orient
+
+edge :: Edge -> Float
 edge None       = 0
 edge Weak       = 0.5
 edge Strong     = 1.0
 
-edge' :: (Elt a, IsFloating a) => Edge -> Exp a
+edge' :: Edge -> Exp Float
 edge' = constant . edge
-
-
-convolve7x1 :: (Elt a, IsNum a) => [Exp a] -> Stencil7x1 a -> Exp a
-convolve7x1 kernel (_, (a,b,c,d,e,f,g), _)
-  = P.foldl1 (+)
-  $ P.zipWith (*) kernel [a,b,c,d,e,f,g]
 
 convolve5x1 :: (Elt a, IsNum a) => [Exp a] -> Stencil5x1 a -> Exp a
 convolve5x1 kernel (_, (a,b,c,d,e), _)
   = P.foldl1 (+)
   $ P.zipWith (*) kernel [a,b,c,d,e]
-
-convolve1x7 :: (Elt a, IsNum a) => [Exp a] -> Stencil1x7 a -> Exp a
-convolve1x7 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_), (_,f,_), (_,g,_))
-  = P.foldl1 (+)
-  $ P.zipWith (*) kernel [a,b,c,d,e,f,g]
 
 convolve1x5 :: (Elt a, IsNum a) => [Exp a] -> Stencil1x5 a -> Exp a
 convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
@@ -155,112 +158,167 @@ convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
   $ P.zipWith (*) kernel [a,b,c,d,e]
 
 
--- Gaussian smoothing
+-- RGB to Greyscale conversion, in the range [0,255]
 --
--- This is used to remove high-frequency noise from the image. Since the
--- Gaussian function is symmetric, it is separable into two 1D filters along
--- each dimension.
---
-gaussian :: (Elt a, IsFloating a) => [Exp a]
-gaussian = [ 0.00442012927963
-           , 0.05384819825462
-           , 0.24133088157513
-           , 0.39788735772974
-           , 0.24133088157513
-           , 0.05384819825462
-           , 0.00442012927963 ]
+toGreyscale :: Acc (Image RGBA) -> Acc (Image Float)
+toGreyscale = A.map luminanceOfRGBA
+
+luminanceOfRGBA :: (Elt a, IsFloating a) => Exp RGBA -> Exp a
+luminanceOfRGBA rgba =
+  let r = 0.3  * A.fromIntegral (rgba                 .&. 0xFF)
+      g = 0.59 * A.fromIntegral ((rgba `div` 0x100)   .&. 0xFF)
+      b = 0.11 * A.fromIntegral ((rgba `div` 0x10000) .&. 0xFF)
+  in
+  r + g + b
 
 
-gaussianX :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a)
-gaussianX = stencil (convolve7x1 gaussian) (Constant 0)
-
-gaussianY :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a)
-gaussianY = stencil (convolve1x7 gaussian) (Constant 0)
-
-
--- Gaussian derivative and gradient quantisation
---
-gaussian' :: (Elt a, IsFloating a) => [Exp a]
-gaussian' = [ 0.02121662054222
-            , 0.17231423441479
-            , 0.38612941052022
-            , 0.0
-            ,-0.38612941052022
-            ,-0.17231423441479
-            ,-0.02121662054222 ]
-
-gradientX :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a)
-gradientX = stencil (convolve7x1 gaussian') (Constant 0)
-
-gradientY :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a)
-gradientY = stencil (convolve1x7 gaussian') (Constant 0)
-
-gradientMagnitude :: (Elt a, IsFloating a) => Acc (Image a) -> Acc (Image a) -> Acc (Image a)
-gradientMagnitude = A.zipWith magdir
+rgbaOfLuminance :: (Elt a, IsFloating a) => Bool -> Exp a -> Exp RGBA
+rgbaOfLuminance invert val = r + b + g + a
   where
-    magdir dx dy = let mag = sqrt (dx*dx + dy*dy)
-                       -- dir = atan2 dy dx
-                   in  mag -- lift (mag, dir)
+    u   = A.truncate (255 * (0 `A.max` val `A.min` 1))
+    v   = if invert then 0xFF - u else u
+    r   = v
+    g   = v * 0x100
+    b   = v * 0x10000
+    a   =     0xFF000000
 
 
--- Non-maximum suppression
+-- Separable Gaussian blur in the x- and y-directions
+--
+gaussianX :: Acc (Image Float) -> Acc (Image Float)
+gaussianX = stencil (convolve5x1 gaussian) Clamp
+  where
+    gaussian = [ 1, 4, 6, 4, 1 ]
+
+gaussianY :: Acc (Image Float) -> Acc (Image Float)
+gaussianY = stencil (convolve1x5 gaussian) Clamp
+  where
+    gaussian = P.map (/256) [ 1, 4, 6, 4, 1 ]
+
+
+-- Gradients in the x- and y- directions
+--
+gradientX :: Acc (Image Float) -> Acc (Image Float)
+gradientX = stencil grad Clamp
+  where
+    grad :: Stencil3x3 Float -> Exp Float
+    grad ((u, _, x)
+         ,(v, _, y)
+         ,(w, _, z)) = x + (2*y) + z - u - (2*v) - w
+
+gradientY :: Acc (Image Float) -> Acc (Image Float)
+gradientY = stencil grad Clamp
+  where
+    grad :: Stencil3x3 Float -> Exp Float
+    grad ((x, y, z)
+         ,(_, _, _)
+         ,(u, v, w)) = x + (2*y) + z - u - (2*v) - w
+
+
+-- Classify the magnitude and orientation of the image gradient
+--
+gradientMagDir
+  :: Acc (Scalar Float)
+  -> Acc (Image Float)
+  -> Acc (Image Float)
+  -> Acc (Image (Float, Int))
+gradientMagDir threshLow = A.zipWith (\dx dy -> lift (magnitude dx dy, direction dx dy))
+  where
+    low                 = the threshLow
+    magnitude dx dy     = sqrt (dx * dx + dy + dy)
+    direction dx dy =
+      let -- Determine the angle of the vector and rotate it around a bit to
+          -- make the segments easier to classify
+          --
+          theta         = atan2 dy dx
+          alpha         = (theta - (pi/8)) * (4/pi)
+
+          -- Normalise the angle to between [0..8)
+          --
+          norm          = alpha + 8 * A.fromIntegral (boolToInt (alpha <=* 0))
+
+          -- Try to avoid doing explicit tests, to avoid warp divergence
+          --
+          undef         = abs dx <=* low &&* abs dy <=* low
+      in
+      boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
+
+
+-- Non-maximum suppression classifies pixels that are the local maximum along
+-- the direction of the image gradient as either strong or weak edges. All other
+-- pixels are not considered edges at all.
+--
+-- The image intensity is in the range [0,1]
 --
 nonMaximumSuppression
-  :: (Elt a, IsFloating a)
-  => Acc (Scalar (a,a))
-  -> Acc (Image a)
-  -> Acc (Image a)
-  -> Acc (Image a)
-  -> Acc (Image a)
-nonMaximumSuppression threshold gradX gradY gradM =
-  generate (shape gradX) $ \ix ->
-    let dx              = gradX ! ix
-        dy              = gradY ! ix
-        mag             = gradM ! ix
-        alpha           = 1.3065629648763766  -- 0.5 / sin (pi / 8.0)
-        offsetx         = A.round (alpha * dx / mag)
-        offsety         = A.round (alpha * dy / mag)
+  :: Acc (Scalar Float)
+  -> Acc (Scalar Float)
+  -> Acc (Image (Float,Int))
+  -> Acc (Image Float)
+nonMaximumSuppression threshLow threshHigh magdir =
+  generate (shape magdir) $ \ix ->
+    let -- The input parameters
         --
-        Z :. m :. n     = unlift (shape gradX)
-        Z :. x :. y     = unlift ix
-        fwd             = gradM ! lift (clamp (x+offsetx, y+offsety))
-        rev             = gradM ! lift (clamp (x-offsetx, y-offsety))
-        (low, high)     = unlift $ the threshold
+        low             = the threshLow
+        high            = the threshHigh
+        (mag, dir)      = unlift (magdir ! ix)
+        Z :. h :. w     = unlift (shape magdir)
+        Z :. y :. x     = unlift ix
+
+        -- Determine the points that lie either side of this point along to the
+        -- direction of the image gradient.
         --
-        clamp (u,v)     = lift (Z:. 0 `A.max` u `A.min` (m-1) :. 0 `A.max` v `A.min` (n-1))
+        -- The direction coding:
+        --
+        --   192   128   64
+        --          |
+        --   255 --- ---
+        --
+        offsetx         = dir >* orient' Vert  ? (-1, dir <* orient' Vert ? (1, 0))
+        offsety         = dir <* orient' Horiz ? (-1, 0)
+
+        (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
+        (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
+
+        clamp (Z:.u:.v) = Z :. 0 `A.max` u `A.min` (h-1) :. 0 `A.max` v `A.min` (w-1)
+
+        -- Try to avoid doing explicit tests to avoid warp divergence.
+        --
+        none            = dir ==* orient' Undef ||* mag <* low ||* mag <* fwd ||* mag <* rev
+        strong          = mag >=* high
     in
-    (mag <* low ||* mag <* fwd ||* mag <* rev) ?
-      (edge' None, mag <* high ? (edge' Weak, edge' Strong))
+    A.fromIntegral (boolToInt (A.not none) * (1 + boolToInt strong)) * 0.5
 
 
--- Select the indices of strong edges.
+-- Extract the linear indices of the strong edges
 --
 selectStrong
-    :: (IsFloating a, Elt a, Storable a, Eq a, R.Repr r a)
-    => R.Array r R.DIM2 a
-    -> IO (R.Array R.U R.DIM1 Int)
-selectStrong img = R.selectP match process (R.size $ R.extent img)
-  where
-    {-# INLINE match   #-}
-    {-# INLINE process #-}
-    match ix    = img `R.unsafeLinearIndex` ix == edge Strong
-    process ix  = ix
+  :: Acc (Image Float)
+  -> Acc (Array DIM1 Int)
+selectStrong img =
+  let strong            = A.map (\x -> boolToInt (x ==* edge' Strong)) (flatten img)
+      (targetIdx, len)  = A.scanl' (+) 0 strong
+      indices           = A.enumFromN (index1 $ size img) 0
+      zeros             = A.fill (index1 $ the len) 0
+  in
+  A.permute const zeros (\ix -> strong!ix ==* 0 ? (ignore, index1 $ targetIdx!ix)) indices
 
+
+-- Repa component --------------------------------------------------------------
 
 -- Trace out strong edges in the final image, and also trace out weak edges
 -- that are connected to strong edges.
 --
 wildfire
-    :: (IsFloating a, Elt a, Storable a, Eq a, R.Repr r a)
-    => R.Array r   R.DIM2 a             -- Image with strong and weak edges set
-    -> R.Array R.U R.DIM1 Int           -- Array containing flat indices of strong edges
+    :: R.Array A R.DIM2 Float           -- Image with strong and weak edges set
+    -> R.Array A R.DIM1 Int             -- Array containing flat indices of strong edges
     -> ForeignPtr RGBA                  -- Buffer to trace connected edges into
     -> Bool                             -- Invert output
     -> IO ()
 wildfire img arrStrong edges invert = do
 
   -- Stack of image indices we still need to consider.
-  vStrong       <- U.unsafeThaw (R.toUnboxed arrStrong)
+  vStrong       <- U.unsafeThaw . R.toUnboxed =<< R.computeUnboxedP (R.delay arrStrong)
   vStack        <- UM.unsafeGrow vStrong (lenImg - lenStrong)
 
   -- Burn in new edges.

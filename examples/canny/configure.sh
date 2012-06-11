@@ -72,40 +72,41 @@ accelerate=accelerate-0.13.0.0
 accelerate_cuda=accelerate-cuda-0.13.0.0
 accelerate_io=accelerate-io-0.13.0.0
 blaze_builder=blaze-builder-0.3.1.0
+bmp=bmp-1.2.1.1
 cereal=cereal-0.3.5.1
 cpphs=cpphs-1.13.3
-crypto_api=crypto-api-0.10.1
-cryptohash=cryptohash-0.7.4
+crypto_api=crypto-api-0.10.2
+cryptohash=cryptohash-0.7.5
 cuda=cuda-0.4.1.1
 entropy=entropy-0.2.1
-exception_mtl=exception-mtl-0.3.0.1
-exception_transformers=exception-transformers-0.3.0.1
-fclabels=fclabels-1.1.1.1
+exception_mtl=exception-mtl-0.3.0.2
+exception_transformers=exception-transformers-0.3.0.2
+fclabels=fclabels-1.1.3
 hashable=hashable-1.1.2.3
-hashtables=hashtables-1.0.1.3
-haskell_src_exts=haskell-src-exts-1.13.2
+hashtables=hashtables-1.0.1.6
+haskell_src_exts=haskell-src-exts-1.13.3
 haskell_src_meta=haskell-src-meta-0.5.1.2
-language_c_quote=language-c-quote-0.3.1.0
+language_c_quote=language-c-quote-0.3.1.2
 largeword=largeword-1.0.1
-mainland_pretty=mainland-pretty-0.1.1.1
-mtl=mtl-2.0.1.0
+mainland_pretty=mainland-pretty-0.1.2.0
+mtl=mtl-2.1.1
 primitive=primitive-0.4.1
 QuickCheck=QuickCheck-2.4.2
 random=random-1.0.1.1
-repa=repa-3.1.4.2
+repa=repa-3.2.1.1
 srcloc=srcloc-0.1.1.1
-stm=stm-2.2.0.1
-syb=syb-0.3.6
+stm=stm-2.3
+syb=syb-0.3.6.1
 symbol=symbol-0.1.1.1
-tagged=tagged-0.4.2
-text=text-0.11.2.0
+tagged=tagged-0.4.2.1
+text=text-0.11.2.1
 th_lift=th-lift-0.5.5
-transformers=transformers-0.2.2.0
+transformers=transformers-0.3.0.0
 unordered_containers=unordered-containers-0.2.1.0
 vector=vector-0.9.1
 
-for lib in $accelerate $accelerate_cuda $accelerate_io $blaze_builder $cereal \
-  $cpphs $crypto_api $cryptohash $cuda $entropy $exception_mtl \
+for lib in $accelerate $accelerate_cuda $accelerate_io $blaze_builder $bmp \
+  $cereal $cpphs $crypto_api $cryptohash $cuda $entropy $exception_mtl \
   $exception_transformers $fclabels $hashable $hashtables $haskell_src_exts \
   $haskell_src_meta $language_c_quote $largeword $mainland_pretty $mtl \
   $primitive $QuickCheck $random $repa $srcloc $stm $syb $symbol $tagged $text \
