@@ -43,12 +43,12 @@ velocity
     -> Acc VelocitySource
     -> Acc VelocityField
     -> Acc VelocityField
-velocity steps dt dp vs vf0
-  = let vf' = project steps
-            . diffuse steps dt dp
-            $ inject vs vf0
-    in
-    project steps $ advect dt vf' vf'
+velocity steps dt dp vs
+  = project steps
+  . (\vf' -> advect dt vf' vf')
+  . project steps
+  . diffuse steps dt dp
+  . inject vs
 
 
 -- Ensure the velocity field conserves mass
