@@ -99,11 +99,11 @@ Executable accelerate-examples
                         examples/tests/primitives
                         examples/tests/simple
 
-  other-modules:        Benchmark, Config, Random, Test, Util, Validate,
+  other-modules:        Benchmark, Config, PGM, Random, Test, Util, Validate,
 
                         -- tests:
                         --  image-processing
-                        Canny, IntegralImage, PGM,
+                        Canny, IntegralImage,
 
                         --  io
                         BlockCopy, VectorCopy,
