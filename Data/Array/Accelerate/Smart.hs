@@ -110,7 +110,7 @@ recoverExpSharing = True
 -- -------
 
 -- A layout of an environment has an entry for each entry of the environment.
--- Each entry in the layout holds the deBruijn index that refers to the
+-- Each entry in the layout holds the de Bruijn index that refers to the
 -- corresponding entry in the environment.
 --
 data Layout env env' where
@@ -151,7 +151,7 @@ incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 -- ------------------
 
 -- The level of lambda-bound variables. The root has level 0; then it increases with each bound
--- variable — i.e., it is the same as the size of the environment at the defining occurence.
+-- variable — i.e., it is the same as the size of the environment at the defining occurrence.
 --
 type Level = Int
 
@@ -697,24 +697,24 @@ convertStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
 
 -- Sharing recovery proceeds in two phases:
 --
--- /Phase One: build the occurence map/
+-- /Phase One: build the occurrence map/
 --
 -- This is a top-down traversal of the AST that computes a map from AST nodes to the number of
--- occurences of that AST node in the overall Accelerate program.  An occurrences count of two or
+-- occurrences of that AST node in the overall Accelerate program.  An occurrences count of two or
 -- more indicates sharing.
 --
 -- IMPORTANT: To avoid unfolding the sharing, we do not descent into subtrees that we have
---   previously encountered.  Hence, the complexity is proprtional to the number of nodes in the
---   tree /with/ sharing.  Consequently, the occurence count is that in the tree with sharing
+--   previously encountered.  Hence, the complexity is proportional to the number of nodes in the
+--   tree /with/ sharing.  Consequently, the occurrence count is that in the tree with sharing
 --   as well.
 --
--- During computation of the occurences, the tree is annotated with stable names on every node
--- using 'AccSharing' constructors and all but the first occurence of shared subtrees are pruned
+-- During computation of the occurrences, the tree is annotated with stable names on every node
+-- using 'AccSharing' constructors and all but the first occurrence of shared subtrees are pruned
 -- using 'AvarSharing' constructors (see 'SharingAcc' below).  This phase is impure as it is based
 -- on stable names.
 --
 -- We use a hash table (instead of 'Data.Map') as computing stable names forces us to live in IO
--- anyway.  Once, the computation of occurence counts is complete, we freeze the hash table into
+-- anyway.  Once, the computation of occurrence counts is complete, we freeze the hash table into
 -- a 'Data.Map'.
 --
 -- (Implemented by 'makeOccMap'.)
@@ -722,11 +722,11 @@ convertStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
 -- /Phase Two: determine scopes and inject sharing information/
 --
 -- This is a bottom-up traversal that determines the scope for every binding to be introduced
--- to share a subterm.  It uses the occurence map to determine, for every shared subtree, the
+-- to share a subterm.  It uses the occurrence map to determine, for every shared subtree, the
 -- lowest AST node at which the binding for that shared subtree can be placed (using a
--- 'AletSharing' constructor)— it's the meet of all the shared subtree occurences.
+-- 'AletSharing' constructor)— it's the meet of all the shared subtree occurrences.
 --
--- The second phase is also replacing the first occurence of each shared subtree with a
+-- The second phase is also replacing the first occurrence of each shared subtree with a
 -- 'AvarSharing' node and floats the shared subtree up to its binding point.
 --
 --  (Implemented by 'determineScopes'.)
@@ -735,24 +735,24 @@ convertStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
 --
 -- We recover sharing for each expression (including function bodies) independently of any other
 -- expression — i.e., we cannot share scalar expressions across array computations.  Hence, during
--- Phase One, we mark all scalar expression nodes with a stable name and compute one occurence map
+-- Phase One, we mark all scalar expression nodes with a stable name and compute one occurrence map
 -- for every scalar expression (including functions) that occurs in an array computation.  These
--- occurence maps are added to the root of scalar expressions using 'RootExp'.
+-- occurrence maps are added to the root of scalar expressions using 'RootExp'.
 --
 -- NB: We do not need to worry sharing recovery will try to float a shared subexpression past a
 --     binder that occurs in that subexpression.  Why?  Otherwise, the binder would already occur
---     out of scope in the orignal source program.
+--     out of scope in the original source program.
 --
 -- /Lambda bound variables/
 --
 -- During sharing recovery, lambda bound variables appear in the form of 'Atag' and 'Tag' data
 -- constructors.  The tag values are determined during Phase One of sharing recovery by computing
--- the /level/ of each variable at its binding occurence.  The level at the root of the AST is 0
+-- the /level/ of each variable at its binding occurrence.  The level at the root of the AST is 0
 -- and increases by one with each lambda on each path through the AST.
 
 -- Stable names
 
--- Opaque stable name for AST nodes — used to key the occurence map.
+-- Opaque stable name for AST nodes — used to key the occurrence map.
 --
 data StableASTName c where
   StableASTName :: (Typeable1 c, Typeable t) => StableName (c t) -> StableASTName c
@@ -781,14 +781,14 @@ StableNameHeight _ h1 `higherSNH` StableNameHeight _ h2 = h1 > h2
 hashStableNameHeight :: StableNameHeight t -> Int
 hashStableNameHeight (StableNameHeight sn _) = hashStableName sn
 
--- Mutable occurence map
+-- Mutable occurrence map
 
 -- Hash table keyed on the stable names of array computations.
 --    
 type ASTHashTable c v = Hash.HashTable (StableASTName c) v
 
 -- Mutable hashtable version of the occurrence map, which associates each AST node with an
--- occurence count and the height of the AST.
+-- occurrence count and the height of the AST.
 --
 type OccMapHash c = ASTHashTable c (Int, Int)
 
@@ -800,10 +800,10 @@ newASTHashTable = Hash.new (==) hashStableAST
     hashStableAST (StableASTName sn) = fromIntegral (hashStableName sn)
 
 -- Enter one AST node occurrence into an occurrence map.  Returns 'Just h' if this is a repeated
--- occurence and the height of the repeatedly occuring AST is 'h'.
+-- occurrence and the height of the repeatedly occurring AST is 'h'.
 --
--- If this is the first occurence, the 'height' *argument* must provide the height of the AST;
--- otherwise, the height will be *extracted* from the occurence map.  In the latter case, this
+-- If this is the first occurrence, the 'height' *argument* must provide the height of the AST;
+-- otherwise, the height will be *extracted* from the occurrence map.  In the latter case, this
 -- function yields the AST height.
 --
 enterOcc :: OccMapHash c -> StableASTName c -> Int -> IO (Maybe Int)
@@ -814,15 +814,15 @@ enterOcc occMap sa height
         Nothing           -> Hash.insert occMap sa (1    , height)  >> return Nothing
         Just (n, heightS) -> Hash.update occMap sa (n + 1, heightS) >> return (Just heightS)    
 
--- Immutable occurence map
+-- Immutable occurrence map
 
--- Immutable version of the occurence map (storing the occurence count only, not the height).  We
+-- Immutable version of the occurrence map (storing the occurrence count only, not the height).  We
 -- use the 'StableName' hash to index an 'IntMap' and disambiguate 'StableName's with identical
 -- hashes explicitly, storing them in a list in the 'IntMap'.
 --
 type OccMap c = IntMap.IntMap [(StableASTName c, Int)]
 
--- Turn a mutable into an immutable occurence map.
+-- Turn a mutable into an immutable occurrence map.
 --
 freezeOccMap :: OccMapHash c -> IO (OccMap c)
 freezeOccMap oc
@@ -834,22 +834,22 @@ freezeOccMap oc
     sameKey kv1 kv2           = key kv1 == key kv2
     dropHeight (k, (cnt, _))  = (k, cnt)
 
--- Look up the occurence map keyed by array computations using a stable name.  If a the key does
--- not exist in the map, return an occurence count of '1'.
+-- Look up the occurrence map keyed by array computations using a stable name.  If the key does
+-- not exist in the map, return an occurrence count of '1'.
 --
 lookupWithASTName :: OccMap c -> StableASTName c -> Int
 lookupWithASTName oc sa@(StableASTName sn) 
   = fromMaybe 1 $ IntMap.lookup (hashStableName sn) oc >>= Prelude.lookup sa
     
--- Look up the occurence map keyed by array computations using a sharing array computation.  If an
--- the key does not exist in the map, return an occurence count of '1'.
+-- Look up the occurrence map keyed by array computations using a sharing array computation.  If an
+-- the key does not exist in the map, return an occurrence count of '1'.
 --
 lookupWithSharingAcc :: OccMap Acc -> StableSharingAcc -> Int
 lookupWithSharingAcc oc (StableSharingAcc (StableNameHeight sn _) _) 
   = lookupWithASTName oc (StableASTName sn)
 
--- Look up the occurence map keyed by scalar expressions using a sharing expression.  If an
--- the key does not exist in the map, return an occurence count of '1'.
+-- Look up the occurrence map keyed by scalar expressions using a sharing expression.  If an
+-- the key does not exist in the map, return an occurrence count of '1'.
 --
 lookupWithSharingExp :: OccMap Exp -> StableSharingExp -> Int
 lookupWithSharingExp oc (StableSharingExp (StableNameHeight sn _) _) 
@@ -918,8 +918,8 @@ data SharingExp t where
 
 -- Expressions rooted in 'Acc' computations.
 --
--- * Between counting occurences and determining scopes, the root of every expression embedded in an
---   'Acc' is annotated by (1) the tags of free scalar variables and (2) an occurence map for that
+-- * Between counting occurrences and determining scopes, the root of every expression embedded in an
+--   'Acc' is annotated by (1) the tags of free scalar variables and (2) an occurrence map for that
 --   one expression (excluding any subterms that are rooted in embedded 'Acc's.)
 -- * After determining scopes, the root of every expression is annotated with a sorted environment of
 --   the 'StableSharingExp's corresponding to its free expression-valued variables.
@@ -956,18 +956,18 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 noStableExpName :: StableExpName t
 noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
 
--- Compute the 'Acc' occurence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
--- and drop repeated occurences of shared 'Acc' and 'Exp' subtrees (Phase One).
+-- Compute the 'Acc' occurrence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
+-- and drop repeated occurrences of shared 'Acc' and 'Exp' subtrees (Phase One).
 --
--- We compute a single 'Acc' occurence map for the whole AST, but one 'Exp' occurence map for each  
+-- We compute a single 'Acc' occurrence map for the whole AST, but one 'Exp' occurrence map for each  
 -- sub-expression rooted in an 'Acc' operation.  This is as we cannot float 'Exp' subtrees across
 -- 'Acc' operations, but we can float 'Acc' subtrees out of 'Exp' expressions.
 --
 -- Note [Traversing functions and side effects]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- We need to descent into function bodies to build the 'OccMap' with all occurences in the
--- function bodies.  Due to the side effects in the construction of the occurence map and, more
--- importantly, the dependence of the second phase on /global/ occurence information, we may not
+-- We need to descent into function bodies to build the 'OccMap' with all occurrences in the
+-- function bodies.  Due to the side effects in the construction of the occurrence map and, more
+-- importantly, the dependence of the second phase on /global/ occurrence information, we may not
 -- delay the body traversals by putting them under a lambda.  Hence, we apply each function, to
 -- traverse its body and use a /dummy abstraction/ of the result.
 --
@@ -994,19 +994,19 @@ makeOccMap lvl rootAcc
                 => Level -> OccMapHash Acc -> Acc arrs -> IO (SharingAcc arrs, Int)
     traverseAcc lvl occMap acc@(Acc pacc)
       = mfix $ \ ~(_, height) -> do 
-        {   -- Compute stable name and enter it into the occurence map
-        ; sn                        <- makeStableAST acc
-        ; heightIfRepeatedOccurence <- enterOcc occMap (StableASTName sn) height
+        {   -- Compute stable name and enter it into the occurrence map
+        ; sn                         <- makeStableAST acc
+        ; heightIfRepeatedOccurrence <- enterOcc occMap (StableASTName sn) height
           
         ; traceLine (showPreAccOp pacc) $
-            case heightIfRepeatedOccurence of
-              Just height -> "REPEATED occurence (sn = " ++ show (hashStableName sn) ++ 
+            case heightIfRepeatedOccurrence of
+              Just height -> "REPEATED occurrence (sn = " ++ show (hashStableName sn) ++ 
                              "; height = " ++ show height ++ ")"
-              Nothing     -> "first occurence (sn = " ++ show (hashStableName sn) ++ ")"
+              Nothing     -> "first occurrence (sn = " ++ show (hashStableName sn) ++ ")"
 
             -- Reconstruct the computation in shared form.
             --
-            -- In case of a repeated occurence, the height comes from the occurence map; otherwise,
+            -- In case of a repeated occurrence, the height comes from the occurrence map; otherwise
             -- it is computed by the traversal function passed in 'newAcc'.  See also 'enterOcc'.
             --
             -- NB: This function can only be used in the case alternatives below; outside of the
@@ -1015,7 +1015,7 @@ makeOccMap lvl rootAcc
                           => IO (PreAcc SharingAcc RootExp arrs, Int)
                           -> IO (SharingAcc arrs, Int)
               reconstruct newAcc 
-                = case heightIfRepeatedOccurence of 
+                = case heightIfRepeatedOccurrence of 
                     Just height | recoverAccSharing 
                       -> return (AvarSharing (StableNameHeight sn height), height)
                     _ -> do
@@ -1198,7 +1198,7 @@ makeOccMap lvl rootAcc
                                     (stencilPrj (undefined::sh) (undefined::c) (Exp $ Tag lvl))
           return (\_ _ -> body, h + 2)
 
-    -- Enter an 'Exp' subtree from an 'Acc' tree => need a local 'Exp' occurence map
+    -- Enter an 'Exp' subtree from an 'Acc' tree => need a local 'Exp' occurrence map
     --
     -- First argument is the level (of bound variables) and the second are the tags of newly
     -- introduced free scalar variables in this expression.
@@ -1220,20 +1220,20 @@ makeOccMap lvl rootAcc
     traverseExp :: forall a. Typeable a => Level -> OccMapHash Acc -> OccMapHash Exp -> Exp a -> IO (SharingExp a, Int)
     traverseExp lvl accOccMap expOccMap exp@(Exp pexp)
       = mfix $ \ ~(_, height) -> do
-        {   -- Compute stable name and enter it into the occurence map
-        ; sn                        <- makeStableAST exp
-        ; heightIfRepeatedOccurence <- enterOcc expOccMap (StableASTName sn) height
+        {   -- Compute stable name and enter it into the occurrence map
+        ; sn                         <- makeStableAST exp
+        ; heightIfRepeatedOccurrence <- enterOcc expOccMap (StableASTName sn) height
 
         ; traceLine (showPreExpOp pexp) $
-            case heightIfRepeatedOccurence of
-              Just height -> "REPEATED occurence (sn = " ++ show (hashStableName sn) ++ 
+            case heightIfRepeatedOccurrence of
+              Just height -> "REPEATED occurrence (sn = " ++ show (hashStableName sn) ++ 
                              "; height = " ++ show height ++ ")"
-              Nothing     -> "first occurence (sn = " ++ show (hashStableName sn) ++ ")"
+              Nothing     -> "first occurrence (sn = " ++ show (hashStableName sn) ++ ")"
 
 
             -- Reconstruct the computation in shared form.
             --
-            -- In case of a repeated occurence, the height comes from the occurence map; otherwise,
+            -- In case of a repeated occurrence, the height comes from the occurrence map; otherwise
             -- it is computed by the traversal function passed in 'newExp'.  See also 'enterOcc'.
             --
             -- NB: This function can only be used in the case alternatives below; outside of the
@@ -1242,7 +1242,7 @@ makeOccMap lvl rootAcc
                           => IO (PreExp SharingAcc SharingExp a, Int)
                           -> IO (SharingExp a, Int)
               reconstruct newExp
-                = case heightIfRepeatedOccurence of 
+                = case heightIfRepeatedOccurrence of 
                     Just height | recoverExpSharing
                       -> return (VarSharing (StableNameHeight sn height), height)
                     _ -> do
@@ -1322,13 +1322,13 @@ makeOccMap lvl rootAcc
                                     (e'  , h2) <- traverseExp lvl accOccMap expOccMap e
                                     return (SnocTup tup' e', h1 `max` h2 + 1)
 
--- Type used to maintain how often each shared subterm, so far, occured during a bottom-up sweep.
+-- Type used to maintain how often each shared subterm, so far, occurred during a bottom-up sweep.
 --
 --   Invariants: 
 --   - If one shared term 's' is itself a subterm of another shared term 't', then 's' must occur
 --     *after* 't' in the 'NodeCounts'.
 --   - No shared term occurs twice.
---   - A term may have a final occurence count of only 1 iff it is either a free variable ('Atag'
+--   - A term may have a final occurrence count of only 1 iff it is either a free variable ('Atag'
 --     or 'Tag') or an array computation listed out of an expression.
 --   - All 'Exp' node counts precede all 'Acc' node counts as we don't share 'Exp' nodes across 'Acc'
 --     nodes.
@@ -1394,7 +1394,7 @@ us +++ vs = foldr insert us vs
     
 -- Build an initial environment for the tag values given in the first argument for traversing an
 -- array expression.  The 'StableSharingAcc's for all tags /actually used/ in the expressions are
--- in the second argument. (Tags are not used if a bound variable has no usage occurence.)
+-- in the second argument. (Tags are not used if a bound variable has no usage occurrence.)
 --
 -- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
 -- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
@@ -1406,7 +1406,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
     lookupSA sas tag1
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
-          [sa] -> sa                 -- tag has a unique occurence
+          [sa] -> sa                 -- tag has a unique occurrence
           sas2 -> INTERNAL_ERROR(error) "buildInitialEnvAcc" 
                     ("Encountered duplicate 'ATag's\n  " ++ concat (intersperse ", " (map showSA sas2)))
       where
@@ -1425,7 +1425,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
 
 -- Build an initial environment for the tag values given in the first argument for traversing a
 -- scalar expression.  The 'StableSharingExp's for all tags /actually used/ in the expressions are
--- in the second argument. (Tags are not used if a bound variable has no usage occurence.)
+-- in the second argument. (Tags are not used if a bound variable has no usage occurrence.)
 --
 -- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
 -- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
@@ -1437,7 +1437,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
     lookupSE ses tag1
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
-          [se] -> se                 -- tag has a unique occurence
+          [se] -> se                 -- tag has a unique occurrence
           ses2 -> INTERNAL_ERROR(error) "buildInitialEnvExp" 
                     ("Encountered a duplicate 'Tag'\n  " ++ concat (intersperse ", " (map showSE ses2)))
       where
@@ -1636,7 +1636,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
           where
             (acc', accCount) = scopesAcc acc
 
-          -- Occurence count of the currently processed node
+          -- Occurrence count of the currently processed node
         accOccCount = let StableNameHeight sn' _ = sn
                       in
                       lookupWithASTName accOccMap (StableASTName sn')
@@ -1647,8 +1647,8 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
         --   node and float the shared subtree out wrapped in a 'NodeCounts' value.
         -- * If the current node is not shared, reconstruct it in place.
         -- * Special case for free variables ('Atag'): Replace the tree by a sharing variable and
-        --   float the 'Atag' out in a 'NodeCounts' value.  This is idependent of the number of
-        --   occurences.
+        --   float the 'Atag' out in a 'NodeCounts' value.  This is independent of the number of
+        --   occurrences.
         --
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
         -- node.
@@ -1657,7 +1657,8 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
                     => PreAcc SharingAcc RootExp arrs -> NodeCounts 
                     -> (SharingAcc arrs, NodeCounts)
         reconstruct newAcc@(Atag _) _subCount
-              -- free variable => replace by a sharing variable regardless of the number of occ.s
+              -- free variable => replace by a sharing variable regardless of the number of
+              -- occurrences
           = let thisCount = StableSharingAcc sn (AccSharing sn newAcc) `accNodeCount` 1
             in
             tracePure "FREE" (show thisCount) $
@@ -1686,7 +1687,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
                       | otherwise     = "(" ++ show (length bindHere) ++ " lets)"
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
-        -- to the number of occurences of that node in the overall expression).
+        -- to the number of occurrences of that node in the overall expression).
         -- 
         -- Nodes with a completed node count should be let bound at the currently processed node.
         --
@@ -1700,7 +1701,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
             in (counts', [sa | AccNodeCount sa _ <- completed])
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
-            -- of occurences for that node in the whole program, with the exception that free
+            -- of occurrences for that node in the whole program, with the exception that free
             -- variables are never complete
             notComplete nc@(AccNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingAcc accOccMap sa > n
             notComplete _                                             = True
@@ -1809,7 +1810,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
         abstract (AletSharing sa acc)  lets = abstract acc (lets . AletSharing sa)
         abstract acc@(AccSharing sn _) lets = (AvarSharing sn, StableSharingAcc sn (lets acc))
 
-          -- Occurence count of the currently processed node
+          -- Occurrence count of the currently processed node
         expOccCount = let StableNameHeight sn' _ = sn
                       in
                       lookupWithASTName expOccMap (StableASTName sn')
@@ -1820,8 +1821,8 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
         --   node and float the shared subtree out wrapped in a 'NodeCounts' value.
         -- * If the current node is not shared, reconstruct it in place.
         -- * Special case for free variables ('Tag'): Replace the tree by a sharing variable and
-        --   float the 'Tag' out in a 'NodeCounts' value.  This is idependent of the number of
-        --   occurences.
+        --   float the 'Tag' out in a 'NodeCounts' value.  This is independent of the number of
+        --   occurrences.
         --
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'LetSharing'
         -- node.
@@ -1829,7 +1830,8 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
         reconstruct :: PreExp SharingAcc SharingExp t -> NodeCounts 
                     -> (SharingExp t, NodeCounts)
         reconstruct newExp@(Tag _) _subCount
-              -- free variable => replace by a sharing variable regardless of the number of occ.s
+              -- free variable => replace by a sharing variable regardless of the number of
+              -- occurrences
           = let thisCount = StableSharingExp sn (ExpSharing sn newExp) `expNodeCount` 1
             in
             tracePure "FREE" (show thisCount) $
@@ -1858,7 +1860,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
                       | otherwise     = " (" ++ show (length bindHere) ++ " lets)"
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
-        -- to the number of occurences of that node in the overall expression).
+        -- to the number of occurrences of that node in the overall expression).
         -- 
         -- Nodes with a completed node count should be let bound at the currently processed node.
         --
@@ -1872,7 +1874,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
             in (counts', [sa | ExpNodeCount sa _ <- completed])
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
-            -- of occurences for that node in the whole program, with the exception that free
+            -- of occurrences for that node in the whole program, with the exception that free
             -- variables are never complete
             notComplete nc@(ExpNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingExp expOccMap sa > n
             notComplete _                                             = True
