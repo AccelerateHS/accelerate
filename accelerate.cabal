@@ -111,6 +111,7 @@ Library
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
+                        Data.Array.Accelerate.Sharing
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Substitution
                         Data.Array.Accelerate.Tuple

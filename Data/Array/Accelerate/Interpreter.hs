@@ -1,6 +1,10 @@
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE CPP, GADTs, BangPatterns, TypeOperators, PatternGuards #-}
-{-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
@@ -46,11 +50,12 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments)
+  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import qualified Data.Array.Accelerate.Smart            as Sugar
+import qualified Data.Array.Accelerate.Sharing          as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
