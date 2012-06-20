@@ -79,6 +79,7 @@ data Config = Config
     -- criterion hooks
   , cfgPerformGC   :: Bool
   , cfgConfidence  :: Maybe Double
+  , cfgSamples     :: Maybe Int
   , cfgResamples   :: Maybe Int
   , cfgSummaryFile :: Maybe FilePath
 
@@ -161,9 +162,14 @@ defaultConfig testPrograms =
 
   , cfgResamples = def
       &= explicit
-      &= name "s"
       &= name "resamples"
       &= help "Number of bootstrap resamples to perform"
+
+  , cfgSamples = def
+      &= explicit
+      &= name "s"
+      &= name "samples"
+      &= help "Number of samples to collect"
 
   , cfgSummaryFile = def
       &= name "u"

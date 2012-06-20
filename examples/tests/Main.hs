@@ -49,6 +49,7 @@ runTiming cfg tests = do
   unless (verbose == Quiet) $ putStrLn ""
   let args = [ maybe "" (\ci -> "--ci=" ++ show ci)       (cfgConfidence cfg)
              , maybe "" (\r  -> "--resamples=" ++ show r) (cfgResamples cfg)
+             , maybe "" (\r  -> "--samples=" ++ show r)   (cfgSamples cfg)
              , maybe "" (\f  -> "--summary=" ++ f)        (cfgSummaryFile cfg)
              , if cfgPerformGC cfg then "-g" else "-G"
              , case verbose of
