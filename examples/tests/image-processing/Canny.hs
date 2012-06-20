@@ -35,11 +35,8 @@ canny run fileIn threshLow threshHigh = do
       high      = unit (constant threshHigh)
 
       grey      = toGreyscale
-      blurX     = gaussianX . grey
-      blurred   = gaussianY . blurX
-      gradX     = gradientX . blurred
-      gradY     = gradientY . blurred
-      magdir a  = gradientMagDir low (gradX a) (gradY a)
+      blurred   = gaussianY . gaussianX . grey
+      magdir    = gradientMagDir low . blurred
       suppress  = nonMaximumSuppression low high . magdir
 
       (image,strong)    = run $ stage1 (use img)
@@ -57,6 +54,7 @@ canny run fileIn threshLow threshHigh = do
   -- Benchmark each (accelerate) stage. The "kernels" group is intended to be
   -- run under nvvp, whereas the canny group is for end-to-end benchmarks.
   --
+  (args,rest)   <- break (== "--") `fmap` getArgs
   let opts      = if null rest then [] else P.tail rest
       force2 a  = A.indexArray a (Z:.0:.0 :: DIM2) `seq` ()
       force1 a  = A.indexArray a (Z:.0    :: DIM1) `seq` ()
@@ -68,7 +66,7 @@ canny run fileIn threshLow threshHigh = do
       blurred'  = run $ gaussianY (use blurX')
       gradX'    = run $ gradientX (use blurred')
       gradY'    = run $ gradientY (use blurred')
-      magdir'   = run $ gradientMagDir low (use gradX') (use gradY')
+      magdir'   = run $ gradientMagDir low (use blurred')
       suppress' = run $ nonMaximumSuppression low high (use magdir')
 
   withArgs opts $ defaultMain
@@ -78,7 +76,7 @@ canny run fileIn threshLow threshHigh = do
       , bench "blur-y"      $ whnf (force2 . run . gaussianY) (use blurX')
       , bench "grad-x"      $ whnf (force2 . run . gradientX) (use blurred')
       , bench "grad-y"      $ whnf (force2 . run . gradientY) (use blurred')
-      , bench "mag-orient"  $ whnf (force2 . run . gradientMagDir low (use gradX')) (use gradY')
+      , bench "mag-orient"  $ whnf (force2 . run . gradientMagDir low) (use blurred')
       , bench "suppress"    $ whnf (force2 . run . nonMaximumSuppression low high) (use magdir')
       , bench "strong"      $ whnf (force1 . run . selectStrong) (use suppress')
       ]
@@ -134,7 +132,7 @@ convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
 -- RGB to Greyscale conversion, in the range [0,255]
 --
 toGreyscale :: Acc (Image RGBA) -> Acc (Image Float)
-toGreyscale = A.map luminanceOfRGBA32
+toGreyscale = A.map (\rgba -> 255 * luminanceOfRGBA32 rgba)
 
 
 -- Separable Gaussian blur in the x- and y-directions
@@ -169,33 +167,46 @@ gradientY = stencil grad Clamp
          ,(u, v, w)) = x + (2*y) + z - u - (2*v) - w
 
 
--- Classify the magnitude and orientation of the image gradient
+-- Classify the magnitude and orientation of the image gradient.
+--
+-- Because accelerate supports generalised stencil functions, not just
+-- convolutions, we can combine the x- and y- sobel operators and save some
+-- memory bandwidth.
 --
 gradientMagDir
-  :: Acc (Scalar Float)
-  -> Acc (Image Float)
-  -> Acc (Image Float)
-  -> Acc (Image (Float, Int))
-gradientMagDir threshLow = A.zipWith (\dx dy -> lift (magnitude dx dy, direction dx dy))
+    :: Acc (Scalar Float)
+    -> Acc (Image Float)
+    -> Acc (Array DIM2 (Float,Int))
+gradientMagDir threshLow = stencil magdir Clamp
   where
-    low                 = the threshLow
-    magnitude dx dy     = sqrt (dx * dx + dy + dy)
-    direction dx dy =
-      let -- Determine the angle of the vector and rotate it around a bit to
-          -- make the segments easier to classify
+    magdir :: Stencil3x3 Float -> Exp (Float,Int)
+    magdir ((v0, v1, v2)
+           ,(v3,  _, v4)
+           ,(v5, v6, v7)) =
+      let
+          -- Image gradients
+          dx          = v2 + (2*v4) + v7 - v0 - (2*v3) - v5
+          dy          = v0 + (2*v1) + v2 - v5 - (2*v6) - v7
+
+          -- Magnitude
+          mag         = sqrt (dx * dx + dy + dy)
+
+          -- Direction
           --
-          theta         = atan2 dy dx
-          alpha         = (theta - (pi/8)) * (4/pi)
+          -- Determine the angle of the vector and rotate it around a bit to
+          -- make the segments easier to classify
+          theta       = atan2 dy dx
+          alpha       = (theta - (pi/8)) * (4/pi)
 
           -- Normalise the angle to between [0..8)
-          --
-          norm          = alpha + 8 * A.fromIntegral (boolToInt (alpha <=* 0))
+          norm        = alpha + 8 * A.fromIntegral (boolToInt (alpha <=* 0))
 
           -- Try to avoid doing explicit tests, to avoid warp divergence
-          --
-          undef         = abs dx <=* low &&* abs dy <=* low
+          low         = the threshLow
+          undef       = abs dx <=* low &&* abs dy <=* low
+          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
       in
-      boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
+      lift (mag, dir)
 
 
 -- Non-maximum suppression classifies pixels that are the local maximum along
