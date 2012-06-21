@@ -367,11 +367,11 @@ data PreOpenAcc acc aenv a where
   -- permutation functions).  The combination function needs to be
   -- /associative/ and /commutative/ .  We drop every element for which the
   -- permutation function yields -1 (i.e., a tuple of -1 values).
-  Permute     :: (Shape sh, Elt e)
               => PreFun     acc aenv (e -> e -> e)        -- combination function
               -> acc            aenv (Array sh' e)        -- default values
               -> PreFun     acc aenv (sh -> sh')          -- permutation function
               -> acc            aenv (Array sh e)         -- source array
+  Permute     :: (Shape sh, Shape sh', Elt e)
               -> PreOpenAcc acc aenv (Array sh' e)
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
