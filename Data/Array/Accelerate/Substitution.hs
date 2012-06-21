@@ -1,7 +1,16 @@
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes     #-}
-{-# OPTIONS_HADDOCK hide    #-}
+{-# OPTIONS_HADDOCK hide #-}
+-- |
+-- Module      : Data.Array.Accelerate.Substitution
+-- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
 
 module Data.Array.Accelerate.Substitution (
 
@@ -119,7 +128,7 @@ shiftE _ ZeroIdx      = varIn ZeroIdx
 shiftE v (SuccIdx ix) = weakenExp (v ix)
 
 rebuildE
-    :: (SyntacticExp f, Elt t)
+    :: SyntacticExp f
     => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
     -> PreOpenExp acc env  aenv t
     -> PreOpenExp acc env' aenv t
@@ -157,7 +166,7 @@ rebuildTE v tup =
 -- -----------------
 
 type RebuildAcc acc =
-  forall aenv aenv' f a. (SyntacticAcc f, Arrays a)
+  forall aenv aenv' f a. SyntacticAcc f
     => (forall a'. Arrays a' => Idx aenv a' -> f acc aenv' a')
     -> acc aenv  a
     -> acc aenv' a
@@ -181,7 +190,7 @@ instance SyntacticAcc PreOpenAcc where
 
 
 rebuildOpenAcc
-    :: (SyntacticAcc f, Arrays t)
+    :: SyntacticAcc f
     => (forall t'. Arrays t' => Idx aenv t' -> f OpenAcc aenv' t')
     -> OpenAcc aenv  t
     -> OpenAcc aenv' t
@@ -198,7 +207,7 @@ shiftA _ _ ZeroIdx      = avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k (v ix)
 
 rebuildA
-    :: (SyntacticAcc f, Arrays t)
+    :: SyntacticAcc f
     => RebuildAcc acc
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenAcc acc aenv  t
@@ -240,7 +249,7 @@ rebuildA rebuild v acc =
 --
 
 rebuildAfun
-    :: (SyntacticAcc f, Arrays t)
+    :: SyntacticAcc f
     => RebuildAcc acc
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenAfun acc aenv  t
