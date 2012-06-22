@@ -141,34 +141,36 @@ unzip arr = (map fst arr, map snd arr)
 unzip3 :: (Shape sh, Elt a, Elt b, Elt c)
        => Acc (Array sh (a, b, c))
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
-unzip3 abcs = (as, bs, cs)
+unzip3 xs = (map get1 xs, map get2 xs, map get3 xs)
   where
-    (bs, cs)  = unzip bcs
-    (as, bcs) = unzip $ map swizzle abcs
+    get1 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp a
+    get1 x = let (a, _ :: Exp b, _ :: Exp c) = unlift x in a
 
-    swizzle :: forall a b c. (Elt a, Elt b, Elt c)
-            => Exp (a, b, c) -> Exp (a, (b, c))
-    swizzle abc = let (a, b, c) = unlift abc  :: (Exp a, Exp b, Exp c)
-                      bc        = lift (b, c) :: Exp (b, c)
-                  in lift (a, bc)
+    get2 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp b
+    get2 x = let (_ :: Exp a, b, _ :: Exp c) = unlift x in b
+
+    get3 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp c
+    get3 x = let (_ :: Exp a, _ :: Exp b, c) = unlift x in c
+
 
 -- | Take an array of quadruples and return four arrays, analogous to unzip.
 --
 unzip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
        => Acc (Array sh (a, b, c, d))
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
-unzip4 abcds = (as, bs, cs, ds)
+unzip4 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs)
   where
-    (abs, cds)  = unzip $ map swizzle abcds
-    (as,  bs)   = unzip abs
-    (cs,  ds)   = unzip cds
+    get1 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp a
+    get1 x = let (a, _ :: Exp b, _ :: Exp c, _ :: Exp d) = unlift x in a
 
-    swizzle :: forall a b c d. (Elt a, Elt b, Elt c, Elt d)
-            => Exp (a, b, c, d) -> Exp ((a, b), (c, d))
-    swizzle abcd = let (a, b, c, d) = unlift abcd :: (Exp a, Exp b, Exp c, Exp d)
-                       ab           = lift (a, b) :: Exp (a, b)
-                       cd           = lift (c, d) :: Exp (c, d)
-                   in  lift (ab, cd)
+    get2 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp b
+    get2 x = let (_ :: Exp a, b, _ :: Exp c, _ :: Exp d) = unlift x in b
+
+    get3 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp c
+    get3 x = let (_ :: Exp a, _ :: Exp b, c, _ :: Exp d) = unlift x in c
+
+    get4 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp d
+    get4 x = let (_ :: Exp a, _ :: Exp b, _ :: Exp c, d) = unlift x in d
 
 
 -- Reductions
