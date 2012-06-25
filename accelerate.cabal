@@ -109,6 +109,7 @@ Library
                         Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Fusion
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Sharing
@@ -153,3 +154,4 @@ Library
 Source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
+

@@ -73,6 +73,12 @@ prettyPreAcc pp alvl wrap (Unit e)
 prettyPreAcc pp alvl wrap (Generate sh f)
   = wrap
   $ prettyArrOp "generate" [prettyPreExp pp 0 alvl parens sh, parens (prettyPreFun pp alvl f)]
+prettyPreAcc pp alvl wrap (Transform sh ix f acc)
+  = wrap
+  $ prettyArrOp "transform" [ prettyPreExp pp 0 alvl parens sh
+                            , parens (prettyPreFun pp alvl ix)
+                            , parens (prettyPreFun pp alvl f)
+                            , pp alvl parens acc ]
 prettyPreAcc pp alvl wrap (Reshape sh acc)
   = wrap $ prettyArrOp "reshape" [prettyPreExp pp 0 alvl parens sh, pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Replicate _ty ix acc)
@@ -222,6 +228,12 @@ prettyPreExp pp lvl alvl wrap (IndexTail ix)
   = wrap $ text "indexTail" <+> prettyPreExp pp lvl alvl parens ix
 prettyPreExp _ _ _ wrap (IndexAny)
   = wrap $ text "indexAny"
+prettyPreExp pp lvl alvl wrap (ToIndex sh ix)
+  = wrap $ text "toIndex" <+> prettyPreExp pp lvl alvl parens sh
+                          <+> prettyPreExp pp lvl alvl parens ix
+prettyPreExp pp lvl alvl wrap (FromIndex sh ix)
+  = wrap $ text "fromIndex" <+> prettyPreExp pp lvl alvl parens sh
+                            <+> prettyPreExp pp lvl alvl parens ix
 prettyPreExp pp lvl alvl wrap (Cond c t e)
   = wrap $ sep [prettyPreExp pp lvl alvl parens c <+> char '?',
                 parens (prettyPreExp pp lvl alvl noParens t <> comma <+>
@@ -248,6 +260,9 @@ prettyPreExp pp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> pp alvl parens idx
 prettyPreExp pp lvl alvl wrap (ShapeSize idx)
   = wrap $ text "shapeSize" <+> parens (prettyPreExp pp lvl alvl parens idx)
+prettyPreExp pp lvl alvl wrap (Intersect sh1 sh2)
+  = wrap $ text "intersect" <+> prettyPreExp pp lvl alvl wrap sh1
+                            <+> prettyPreExp pp lvl alvl wrap sh2
 
 -- Pretty print nested pairs as a proper tuple.
 --

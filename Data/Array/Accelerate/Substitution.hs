@@ -14,10 +14,18 @@
 
 module Data.Array.Accelerate.Substitution (
 
-  -- * Scalar Expressions
-  inline, compose
+  -- * Scalar substitution
+  inline, substitute, compose,
 
-  -- * Array Expressions
+  -- * Array substitution
+
+  -- * Internals
+  weakenAcc, IdxA(IA),
+  weakenExp, IdxE(IE),
+
+  rebuildA, rebuildAfun, rebuildOpenAcc,
+  rebuildE, rebuildEA,
+  rebuildFA, rebuildFE
 
 ) where
 
@@ -79,6 +87,21 @@ inline f g = rebuildE (subTop g) f
     subTop s ZeroIdx      = s
     subTop _ (SuccIdx ix) = Var ix
 
+-- | Replace an expression that uses the top environment variable with another.
+-- The result of the first is let bound into the second.
+--
+substitute :: (Elt b, Elt c)
+           => PreOpenExp acc (env, b) aenv c
+           -> PreOpenExp acc (env, a) aenv b
+           -> PreOpenExp acc (env, a) aenv c
+substitute f g
+  | Var ZeroIdx <- g    = f     -- don't rebind an identity function
+  | otherwise           = Let g $ rebuildE split f
+  where
+    split :: Elt c => Idx (env,b) c -> PreOpenExp acc ((env,a),b) aenv c
+    split ZeroIdx       = Var ZeroIdx
+    split (SuccIdx ix)  = Var (SuccIdx (SuccIdx ix))
+
 
 -- | Composition of unary functions.
 --
@@ -86,13 +109,19 @@ compose :: Elt c
         => PreOpenFun acc env aenv (b -> c)
         -> PreOpenFun acc env aenv (a -> b)
         -> PreOpenFun acc env aenv (a -> c)
-compose (Lam (Body f)) (Lam (Body g)) = Lam . Body $ rebuildE (dot g) f
-  where
-    dot :: Elt c => PreOpenExp acc (env, a) aenv b -> Idx (env, b) c -> PreOpenExp acc (env, a) aenv c
-    dot s ZeroIdx      = s
-    dot _ (SuccIdx ix) = Var (SuccIdx ix)
+compose (Lam (Body f)) (Lam (Body g)) = Lam . Body $ substitute f g
+compose _              _              = error "compose: impossible evaluation"
 
-compose _              _              = error "impossible evaluation"
+-- compose' :: Elt c
+--          => PreOpenFun acc env aenv (b -> c)
+--          -> PreOpenFun acc env aenv (a -> b)
+--          -> PreOpenFun acc env aenv (a -> c)
+-- compose' (Lam (Body f)) (Lam (Body g)) = Lam . Body $ rebuildE (dot g) f
+--   where
+--     dot :: Elt c => PreOpenExp acc (env, a) aenv b -> Idx (env, b) c -> PreOpenExp acc (env, a) aenv c
+--     dot s ZeroIdx      = s
+--     dot _ (SuccIdx ix) = Var (SuccIdx ix)
+-- compose' _              _              = error "compose: impossible evaluation"
 
 
 -- Scalar expressions
@@ -144,12 +173,15 @@ rebuildE v exp =
     IndexHead sh        -> IndexHead (rebuildE v sh)
     IndexTail sh        -> IndexTail (rebuildE v sh)
     IndexAny            -> IndexAny
+    ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
+    FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
     Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
     IndexScalar a sh    -> IndexScalar a (rebuildE v sh)
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
+    Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
 
 rebuildTE
     :: SyntacticExp f
@@ -160,6 +192,16 @@ rebuildTE v tup =
   case tup of
     NilTup      -> NilTup
     SnocTup t e -> rebuildTE v t `SnocTup` rebuildE v e
+
+rebuildFE
+    :: SyntacticExp f
+    => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
+    -> PreOpenFun acc env  aenv t
+    -> PreOpenFun acc env' aenv t
+rebuildFE v fun =
+  case fun of
+    Body e      -> Body (rebuildE v e)
+    Lam f       -> Lam (rebuildFE (shiftE v) f)
 
 
 -- Array expressions
@@ -224,6 +266,7 @@ rebuildA rebuild v acc =
     Unit e              -> Unit (rebuildEA rebuild v e)
     Reshape e a         -> Reshape (rebuildEA rebuild v e) (rebuild v a)
     Generate e f        -> Generate (rebuildEA rebuild v e) (rebuildFA rebuild v f)
+    Transform sh ix f a -> Transform (rebuildEA rebuild v sh) (rebuildFA rebuild v ix) (rebuildFA rebuild v f) (rebuild v a)
     Replicate sl slix a -> Replicate sl (rebuildEA rebuild v slix) (rebuild v a)
     Index sl a slix     -> Index sl (rebuild v a) (rebuildEA rebuild v slix)
     Map f a             -> Map (rebuildFA rebuild v f) (rebuild v a)
@@ -292,12 +335,15 @@ rebuildEA k v exp =
     IndexHead sh        -> IndexHead (rebuildEA k v sh)
     IndexTail sh        -> IndexTail (rebuildEA k v sh)
     IndexAny            -> IndexAny
+    ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
+    FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
     Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
     IndexScalar a sh    -> IndexScalar (k v a) (rebuildEA k v sh)
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
+    Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
 
 rebuildTA
     :: SyntacticAcc f

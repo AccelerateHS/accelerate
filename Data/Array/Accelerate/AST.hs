@@ -246,6 +246,15 @@ data PreOpenAcc acc aenv a where
               -> PreFun     acc aenv (sh -> e)                  -- representation function
               -> PreOpenAcc acc aenv (Array sh e)
 
+  -- Hybrid map/backpermute, where we separate the index and value
+  -- transformations.
+  Transform   :: (Elt a, Elt b, Shape sh, Shape sh')
+              => PreExp     acc aenv sh'                        -- dimension of the result
+              -> PreFun     acc aenv (sh' -> sh)                -- index permutation function
+              -> PreFun     acc aenv (a   -> b)                 -- function to apply at each element
+              ->            acc aenv (Array sh  a)              -- source array
+              -> PreOpenAcc acc aenv (Array sh' b)
+
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
@@ -691,6 +700,16 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   IndexAny      :: Shape sh
                 => PreOpenExp acc env aenv (Any sh)
 
+  -- Shape and index conversion
+  ToIndex       :: Shape sh
+                => PreOpenExp acc env aenv sh           -- ^ shape of the array
+                -> PreOpenExp acc env aenv sh           -- ^ index into the array
+                -> PreOpenExp acc env aenv Int
+
+  FromIndex     :: Shape sh
+                => PreOpenExp acc env aenv sh           -- ^ shape of the array
+                -> PreOpenExp acc env aenv Int          -- ^ index into linear representation
+                -> PreOpenExp acc env aenv sh
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond          :: PreOpenExp acc env aenv Bool
@@ -726,6 +745,12 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   ShapeSize     :: Shape dim
                 => PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv Int
+
+  -- Intersection of two shapes
+  Intersect     :: Shape dim
+                => PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
 
 -- |Vanilla open expression
 --
