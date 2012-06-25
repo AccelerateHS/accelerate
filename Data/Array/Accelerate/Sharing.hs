@@ -149,7 +149,7 @@ convertAccFun1 f = Alam (Abody openF)
             (ZeroIdx :: Idx ((), a) a)
     openF = convertOpenAcc (lvl + 1) [lvl] alyt (f (Acc a))
 
--- |Convert an array expression with given array environment layout and sharing information into
+-- | Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
 -- bindings).  The latter implements the third phase of sharing recovery.
 --
@@ -640,15 +640,18 @@ type StableAccName arrs = StableNameHeight (Acc arrs)
 --
 data SharingAcc arrs where
   AvarSharing :: Arrays arrs
-              => StableAccName arrs                                      -> SharingAcc arrs
-  AletSharing :: StableSharingAcc -> SharingAcc arrs                     -> SharingAcc arrs
+              => StableAccName arrs                                   -> SharingAcc arrs
+  AletSharing :: StableSharingAcc -> SharingAcc arrs                  -> SharingAcc arrs
   AccSharing  :: Arrays arrs
               => StableAccName arrs -> PreAcc SharingAcc RootExp arrs -> SharingAcc arrs
 
 -- Stable name for an array computation associated with its sharing-annotated version.
 --
 data StableSharingAcc where
-  StableSharingAcc :: Arrays arrs => StableAccName arrs -> SharingAcc arrs -> StableSharingAcc
+  StableSharingAcc :: Arrays arrs
+                   => StableAccName arrs
+                   -> SharingAcc arrs
+                   -> StableSharingAcc
 
 instance Show StableSharingAcc where
   show (StableSharingAcc sn _) = show $ hashStableNameHeight sn
@@ -728,6 +731,7 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 --
 noStableExpName :: StableExpName t
 noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
+
 
 -- Compute the 'Acc' occurrence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
 -- and drop repeated occurrences of shared 'Acc' and 'Exp' subtrees (Phase One).
