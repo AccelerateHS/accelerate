@@ -21,18 +21,7 @@
 module Data.Array.Accelerate.Sharing (
 
   -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAccFun1,
-
-  -- ** Sharing recovery
-  SharingAcc(..), StableSharingAcc(..), recoverSharingAcc,
-  SharingExp(..), StableSharingExp(..),
-  RootExp(..),
-
-  -- ** Environments
-  Layout(..), prjIdx, incLayout,
-
-  -- ** Internals
-  matchStableAcc, matchStableExp, hashStableNameHeight,
+  convertAcc, convertAccFun1
 
 ) where
 

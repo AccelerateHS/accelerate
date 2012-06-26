@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,562 +18,368 @@
 module Data.Array.Accelerate.Fusion (
 
   -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAccFun1,
+  convertAcc, convertAccFun1
 
 ) where
 
 -- standard library
-import Data.List                                        ( findIndex )
 import Prelude                                          hiding ( exp )
 
 -- friends
-import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Substitution
--- import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt, EltRepr )
-import Data.Array.Accelerate.Sharing                    hiding ( convertAcc, convertAccFun1 )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
-import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp )
-import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
+import qualified Data.Array.Accelerate.Smart            as Smart
+import qualified Data.Array.Accelerate.Sharing          as Smart
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
-#include "accelerate.h"
-
-
--- Conversion from HOAS to de Bruijn computation AST
--- =================================================
-
--- Array computations
--- ------------------
 
 -- | Convert a closed array expression to de Bruijn form while also
 -- incorporating sharing observation and array fusion.
 --
-convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
-convertAcc = convertOpenAcc 0 [] EmptyLayout
+convertAcc :: Arrays arrs => Smart.Acc arrs -> Acc arrs
+convertAcc = fuseOpenAcc . Smart.convertAcc
 
 -- | Convert a unary function over array computations
 --
-convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1 f = Alam (Abody openF)
-  where
-    lvl         = 0
-    a           = Atag lvl
-    alyt        = EmptyLayout `PushLayout` ZeroIdx
-    openF       = convertOpenAcc (lvl+1) [lvl] alyt (f (Acc a))
-
--- | Convert an open array expression to de Bruijn form while also
--- incorporating sharing observation and array fusion.
---
-convertOpenAcc
-    :: Arrays arrs
-    => Level
-    -> [Level]
-    -> Layout aenv aenv
-    -> Acc arrs
-    -> AST.OpenAcc aenv arrs
-convertOpenAcc lvl fvs alyt acc =
-  let (sharingAcc, initialEnv)  = recoverSharingAcc True lvl fvs acc
-  in
-  force $ convertFuseSharingAcc alyt initialEnv sharingAcc
+convertAccFun1 :: (Arrays a, Arrays b) => (Smart.Acc a -> Smart.Acc b) -> Afun (a -> b)
+convertAccFun1 = fuseOpenAfun . Smart.convertAccFun1
 
 
--- | Convert an array expression with given array environment layout and sharing
--- information into de Bruijn form while recovering sharing and fusing adjacent
--- array operations. This implements the third phase of sharing recovery.
+-- Array fusion of a de Bruijn computation AST
+-- ===========================================
+
+-- Array computations
+-- ------------------
+
+fuseOpenAfun :: OpenAfun aenv t -> OpenAfun aenv t
+fuseOpenAfun (Alam  f) = Alam  (fuseOpenAfun f)
+fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
+
+
+fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+fuseOpenAcc = force . delayOpenAcc
+
+
+-- TLM: we may be able to mash an Extend in here for zipwith?
 --
--- The sharing environment 'env' keeps track of all currently bound sharing
--- variables, keeping them in reverse chronological order (outermost variable is
--- at the end of the list).
---
-convertFuseSharingAcc
-    :: forall aenv arrs. Arrays arrs
-    => Layout aenv aenv
-    -> [StableSharingAcc]
-    -> SharingAcc arrs
+delayOpenAcc
+    :: OpenAcc    aenv arrs
     -> DelayedAcc aenv arrs
-convertFuseSharingAcc alyt aenv = cvt
-  where
-    cvt :: Arrays arrs' => SharingAcc arrs' -> DelayedAcc aenv arrs'
-    cvt (AvarSharing sa)
-      | Just i <- findIndex (matchStableAcc sa) aenv
-      = Done    $ AST.Avar (prjIdx (context ++ "; i = " ++ show i) i alyt)
-      | null aenv
-      = error userErr
-      | otherwise
-      = INTERNAL_ERROR(error) "convertFuseSharingAcc" intErr
-      where
-        context     = "shared 'Acc' tree with stable name " ++ show (hashStableNameHeight sa)
-        intErr      = "inconsistent valuation @ " ++ context ++ ";\n  aenv = " ++ show aenv
-        userErr     = "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
+delayOpenAcc (OpenAcc pacc) =
+  let cvt :: OpenAcc aenv a -> DelayedAcc aenv a
+      cvt = delayOpenAcc
 
-    cvt (AletSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
-      = let alyt'   = incLayout alyt `PushLayout` ZeroIdx
-        in
-        Done $ AST.Alet (force $ convertFuseSharingAcc alyt      aenv  boundAcc)
-                        (force $ convertFuseSharingAcc alyt' (sa:aenv) bodyAcc)
+      cvtE :: OpenExp env aenv t -> OpenExp env aenv t
+      cvtE = fuseOpenExp
 
-    cvt (AccSharing _ preAcc)
-      = let cvtE :: Elt e => RootExp e -> AST.Exp aenv e
-            cvtE = convertFuseExp alyt aenv
+      cvtF :: OpenFun env aenv t -> OpenFun env aenv t
+      cvtF = fuseOpenFun
+  --
+  in case pacc of
+    -- Forms that introduce environment manipulations and control flow. These
+    -- stable points of the expression we generally don't want to fuse past.
+    --
+    Alet bndAcc bodyAcc
+      -> Done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
 
-            cvtF1 :: (Elt a, Elt b) => (Exp a -> RootExp b) -> AST.Fun aenv (a -> b)
-            cvtF1 = convertFuseFun1 alyt aenv
+    Avar ix
+      -> Done $ Avar ix
 
-            cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> RootExp c) -> AST.Fun aenv (a -> b -> c)
-            cvtF2 = convertFuseFun2 alyt aenv
-        --
-        in case preAcc of
-          -- Forms that introduce environment manipulations and control flow. These
-          -- stable points of the expression we generally don't want to fuse past.
-          --
-          Atag i
-            -> Done $ AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
+    Atuple arrs
+      -> Done $ Atuple (fuseAtuple arrs)
 
-          Pipe afun1 afun2 acc
-            -> let boundAcc = convertAccFun1 afun1 `AST.Apply` force (cvt acc)
-                   bodyAcc  = convertAccFun1 afun2 `AST.Apply` AST.OpenAcc (AST.Avar ZeroIdx)
-               in
-               Done $ AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
+    Aprj ix arrs
+      -> Done $ Aprj ix (fuseOpenAcc arrs)
 
-          Acond p acc1 acc2
-            -> Done $ AST.Acond (cvtE p) (force (cvt acc1)) (force (cvt acc2))
+    Apply f a
+      -> Done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
 
-          Atuple arrs
-            -> Done $ AST.Atuple (convertFuseSharingAtuple alyt aenv arrs)
+    Acond p acc1 acc2
+      -> Done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
 
-          Aprj ix arrs
-            -> Done $ AST.Aprj ix (force (cvt arrs))
+    -- Array injection
+    --
+    Use arrs
+      -> Done $ Use arrs
 
-          -- Manifest arrays
-          --
-          Use array
-            -> Done $ AST.Use (Sugar.fromArr array)
+    Unit e
+      -> Done $ Unit e
+--        -> Yield BaseEnv (Const ()) (Lam (Body (weakenE (cvtE e))))
 
-          Unit e
-            -> Done $ AST.Unit (cvtE e)
---            -> Yield BaseEnv (AST.Const ()) (AST.Lam (AST.Body (weakenE $ cvtE e)))
+    -- Index space transforms
+    --
+    Reshape sl acc
+      -> let sh'        = cvtE sl
+         in case cvt acc of
+           -- TLM: there was a runtime check to ensure the old and new shapes
+           -- contained the same number of elements: this has been lost!
+           --
+           Done a
+            -> Done $ Reshape sh' (OpenAcc a)
 
-          -- Index space transformations
-          --
-          Reshape sl acc
-            -> let sh'  = cvtE sl
-               in case cvt acc of
-                 Done a'
-                   -> Done $ AST.Reshape sh' (AST.OpenAcc a')
+           Step env sh ix f a
+            -> Step env (sinkE env sh')
+                        (ix `compose` fromIndex sh `compose` toIndex (sinkE env sh')) f a
 
-                 -- TLM: There was a runtime check to ensure the old and new
-                 -- shapes contained exactly the same number of elements. This
-                 -- has been lost!
-                 --
-                 Step env sh ix f a
-                   -> Step env (sinkE env sh')
-                               (ix `compose` fromIndex sh `compose` toIndex (sinkE env sh')) f a
+           Yield env sh f
+            -> Yield env (sinkE env sh')
+                         (f `compose` fromIndex sh `compose` toIndex (sinkE env sh'))
 
-                 Yield env sh f
-                  -> Yield env (sinkE env sh')
-                               (f  `compose` fromIndex sh `compose` toIndex (sinkE env sh'))
+    Replicate _slix _sh _a
+      -> error "delay: Replicate"
 
-          Replicate _slix _a
-            -> error "Replicate"
+    Index _slix _a _sh
+      -> error "delay: Index"
 
-          Index _a _slix
-            -> error "Index"
+    Backpermute sl p acc
+      -> backpermuteD (cvtE sl) (cvtF p) (cvt acc)
 
-          -- Computation forms
-          --
-          Generate sh f
-            -> Yield BaseEnv (cvtE sh) (cvtF1 f)
+    -- Producers
+    --
+    Generate sh f
+      -> Yield BaseEnv (cvtE sh) (cvtF f)
 
-          Map f a
-            -> delay (cvtF1 f) (cvt a)
+    Transform sl p f acc
+      -> backpermuteD (cvtE sl) (cvtF p)
+       $ mapD (cvtF f) (cvt acc)
 
-          ZipWith f a b
-            -> delay2 (cvtF2 f) (cvt a) (cvt b)
+    Map f a
+      -> mapD (cvtF f) (cvt a)
 
-          Fold f z a
-            -> Done $ AST.Fold (cvtF2 f) (cvtE z) (force (cvt a))
+    ZipWith f a b
+      -> zipWithD (cvtF f) (cvt a) (cvt b)
 
-          Fold1 f a
-            -> Done $ AST.Fold1 (cvtF2 f) (force (cvt a))
+    -- Consumers
+    --
+    Fold f z a
+      -> Done $ Fold (cvtF f) (cvtE z) (force (cvt a))
 
-          FoldSeg f z a s
-            -> Done $ AST.FoldSeg (cvtF2 f) (cvtE z) (force (cvt a)) (force (cvt s))
+    Fold1 f a
+      -> Done $ Fold1 (cvtF f) (force (cvt a))
 
-          Fold1Seg f a s
-            -> Done $ AST.Fold1Seg (cvtF2 f) (force (cvt a)) (force (cvt s))
+    FoldSeg f z a s
+      -> Done $ FoldSeg (cvtF f) (cvtE z) (force (cvt a)) (force (cvt s))
 
-          Scanl f z a
-            -> Done $ AST.Scanl (cvtF2 f) (cvtE z) (force (cvt a))
+    Fold1Seg f a s
+      -> Done $ Fold1Seg (cvtF f) (force (cvt a)) (force (cvt s))
 
-          Scanl' f z a
-            -> Done $ AST.Scanl' (cvtF2 f) (cvtE z) (force (cvt a))
+    Scanl f z a
+      -> Done $ Scanl (cvtF f) (cvtE z) (force (cvt a))
 
-          Scanl1 f a
-            -> Done $ AST.Scanl1 (cvtF2 f) (force (cvt a))
+    Scanl' f z a
+      -> Done $ Scanl' (cvtF f) (cvtE z) (force (cvt a))
 
-          Scanr f z a
-            -> Done $ AST.Scanr (cvtF2 f) (cvtE z) (force (cvt a))
+    Scanl1 f a
+      -> Done $ Scanl1 (cvtF f) (force (cvt a))
 
-          Scanr' f z a
-            -> Done $ AST.Scanr' (cvtF2 f) (cvtE z) (force (cvt a))
+    Scanr f z a
+      -> Done $ Scanr (cvtF f) (cvtE z) (force (cvt a))
 
-          Scanr1 f a
-            -> Done $ AST.Scanr1 (cvtF2 f) (force (cvt a))
+    Scanr' f z a
+      -> Done $ Scanr' (cvtF f) (cvtE z) (force (cvt a))
 
-          Permute f d ix a
-            -> Done $ AST.Permute (cvtF2 f) (force (cvt d)) (cvtF1 ix) (force (cvt a))
+    Scanr1 f a
+      -> Done $ Scanr1 (cvtF f) (force (cvt a))
 
-          Backpermute sl p acc
-            -> let sh'  = cvtE  sl
-                   ix'  = cvtF1 p
-               in case cvt acc of
-                 Step env _ ix f a      -> Step env (sinkE env sh') (ix `compose` sinkF env ix') f a
-                 Yield env _ f          -> Yield env (sinkE env sh') (f `compose` sinkF env ix')
-                 Done a
-                   | AST.Avar _ <- a    -> Step BaseEnv sh' ix' identity a
-                   | otherwise          -> Step (BaseEnv `PushEnv` AST.OpenAcc a)
-                                                (weakenEA sh')
-                                                (weakenFA ix')
-                                                identity
-                                                (AST.Avar ZeroIdx)
+    Permute f d ix a
+      -> Done $ Permute (cvtF f) (force (cvt d)) (cvtF ix) (force (cvt a))
 
-          Stencil f b a
-            -> Done $ AST.Stencil (convertFuseStencilFun a alyt aenv f)
-                                  (convertBoundary b) (force (cvt a))
+    Stencil f b a
+      -> Done $ Stencil (cvtF f) b (force (cvt a))
 
-          Stencil2 f b1 a1 b0 a0
-            -> Done $ AST.Stencil2 (convertFuseStencilFun2 a1 a0 alyt aenv f)
-                                   (convertBoundary b1) (force (cvt a1))
-                                   (convertBoundary b0) (force (cvt a0))
-
--- mkReplicate
---     :: (Shape sh, Elt slix)
---     => SliceIndex (EltRepr slix)
---                   (EltRepr sl)
---                   co
---                   (EltRepr sh)
---     -> AST.Exp aenv slix
---     -> AST.Exp aenv sl
---     -> (AST.Exp aenv sh, AST.Fun aenv (sh -> sl))
--- mkReplicate _ slix sl = undefined
---   where
---     extend :: SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
---            -> AST.Exp aenv slix
---            -> AST.Exp aenv sl
---            -> (AST.Exp aenv sh, AST.Fun aenv (sh -> sl))
---     extend SliceNil             AST.IndexNil    AST.IndexNil    = (AST.IndexNil, AST.Lam (AST.Body AST.IndexNil))
---
---     extend (SliceAll sliceIdx)  x               y
---       = let slx         = AST.IndexTail x
---             sl          = AST.IndexTail y
---             sz          = AST.IndexHead y
---             (dim', f')  = extend sliceIdx slx sl
---         in
---         ( AST.IndexCons dim' sz
---         , undefined )
+    Stencil2 f b1 a1 b0 a0
+      -> Done $ Stencil2 (cvtF f) b1 (force (cvt a1))
+                                  b0 (force (cvt a0))
 
 
--- | Convert a boundary condition
---
-convertBoundary :: Elt e => Boundary e -> Boundary (EltRepr e)
-convertBoundary Clamp        = Clamp
-convertBoundary Mirror       = Mirror
-convertBoundary Wrap         = Wrap
-convertBoundary (Constant e) = Constant (Sugar.fromElt e)
-
-
--- | Convert an array tuple expression
---
-convertFuseSharingAtuple
-    :: forall aenv a.
-       Layout aenv aenv
-    -> [StableSharingAcc]
-    -> Tuple.Atuple SharingAcc         a
-    -> Tuple.Atuple (AST.OpenAcc aenv) a
-convertFuseSharingAtuple alyt aenv = cvt
-  where
-    cvt :: Tuple.Atuple SharingAcc a' -> Tuple.Atuple (AST.OpenAcc aenv) a'
-    cvt NilAtup         = NilAtup
-    cvt (SnocAtup t a)  = cvt t `SnocAtup` force (convertFuseSharingAcc alyt aenv a)
+fuseAtuple
+    :: Tuple.Atuple (OpenAcc aenv) a
+    -> Tuple.Atuple (OpenAcc aenv) a
+fuseAtuple NilAtup          = NilAtup
+fuseAtuple (SnocAtup tup a) = fuseAtuple tup `SnocAtup` fuseOpenAcc a
 
 
 -- Scalar expressions
 -- ------------------
 
--- | Convert an open expression with given environment layouts and sharing
--- information into de Bruijn form while recovering sharing by introducing
--- appropriate let bindings. The latter implements the third stage of sharing
--- recovery.
---
--- The sharing environments 'env' and 'aenv' keep track of all currently bound
--- sharing variables in reverse chronological order (outermost binding is at the
--- end of the list).
---
-convertFuseSharingExp
-    :: forall env aenv t. Elt t
-    => Layout env  env
-    -> Layout aenv aenv
-    -> [StableSharingExp]
-    -> [StableSharingAcc]
-    -> SharingExp t
-    -> AST.OpenExp env aenv t
-convertFuseSharingExp lyt alyt env aenv = cvt
+fuseOpenExp
+    :: OpenExp env aenv t
+    -> OpenExp env aenv t
+fuseOpenExp = cvt
   where
-    cvt :: Elt t' => SharingExp t' -> AST.OpenExp env aenv t'
-    cvt (VarSharing se)
-      | Just i <- findIndex (matchStableExp se) env
-      = AST.Var (prjIdx (context ++ "; i = " ++ show i) i lyt)
-      | null env
-      = error userErr
-      | otherwise
-      = INTERNAL_ERROR(error) "convertFuseSharingExp" intErr
-      where
-        context     = "shared 'Exp' tree with stable name " ++ show (hashStableNameHeight se)
-        intErr      = "inconsistent valuation @ " ++ context ++ ";\n  env = " ++ show env
-        userErr     = "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableNameHeight se) ++ ")"
+    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
+    cvtA = fuseOpenAcc
 
-    cvt (LetSharing se@(StableSharingExp _ boundExp) bodyExp)
-      = let lyt'    = incLayout lyt `PushLayout` ZeroIdx
-        in
-        AST.Let (convertFuseSharingExp lyt  alyt     env  aenv boundExp)
-                (convertFuseSharingExp lyt' alyt (se:env) aenv bodyExp)
-
-    cvt (ExpSharing _ preExp)
-      = let cvtA :: Arrays arrs => SharingAcc arrs -> AST.OpenAcc aenv arrs
-            cvtA = force . convertFuseSharingAcc alyt aenv
-
-        in case preExp of
-          Tag i           -> AST.Var (prjIdx ("de Bruijn conversion tag " ++ show i) i lyt)
-          Const v         -> AST.Const (Sugar.fromElt v)
-          Tuple tup       -> AST.Tuple (convertFuseTuple lyt alyt env aenv tup)
-          Prj idx e       -> AST.Prj idx (cvt e)
-          IndexNil        -> AST.IndexNil
-          IndexCons ix i  -> AST.IndexCons (cvt ix) (cvt i)
-          IndexHead i     -> AST.IndexHead (cvt i)
-          IndexTail ix    -> AST.IndexTail (cvt ix)
-          IndexAny        -> AST.IndexAny
-          Cond e1 e2 e3   -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
-          PrimConst c     -> AST.PrimConst c
-          PrimApp p e     -> AST.PrimApp p (cvt e)
-          IndexScalar a e -> AST.IndexScalar (cvtA a) (cvt e)
-          Shape a         -> AST.Shape (cvtA a)
-          ShapeSize e     -> AST.ShapeSize (cvt e)
+    cvt :: OpenExp env aenv t -> OpenExp env aenv t
+    cvt exp = case exp of
+      Let bnd body      -> Let (cvt bnd) (cvt body)
+      Var ix            -> Var ix
+      Const c           -> Const c
+      Tuple tup         -> Tuple (fuseTuple tup)
+      Prj tup ix        -> Prj tup (cvt ix)
+      IndexNil          -> IndexNil
+      IndexCons sh sz   -> IndexCons (cvt sh) (cvt sz)
+      IndexHead sh      -> IndexHead (cvt sh)
+      IndexTail sh      -> IndexTail (cvt sh)
+      IndexAny          -> IndexAny
+      ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
+      FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
+      Cond p t e        -> Cond (cvt p) (cvt t) (cvt e)
+      PrimConst c       -> PrimConst c
+      PrimApp f x       -> PrimApp f (cvt x)
+      IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
+      Shape a           -> Shape (cvtA a)
+      ShapeSize sh      -> ShapeSize (cvt sh)
+      Intersect s t     -> Intersect (cvt s) (cvt t)
 
 
-convertFuseTuple
-    :: forall env aenv t.
-       Layout env  env
-    -> Layout aenv aenv
-    -> [StableSharingExp]
-    -> [StableSharingAcc]
-    -> Tuple.Tuple SharingExp             t
-    -> Tuple.Tuple (AST.OpenExp env aenv) t
-convertFuseTuple lyt alyt env aenv = cvt
-  where
-    cvt :: Tuple.Tuple SharingExp t' -> Tuple.Tuple (AST.OpenExp env aenv) t'
-    cvt NilTup          = NilTup
-    cvt (SnocTup t e)   = cvt t `SnocTup` convertFuseSharingExp lyt alyt env aenv e
+fuseOpenFun
+    :: OpenFun env aenv t
+    -> OpenFun env aenv t
+fuseOpenFun (Lam f)  = Lam  (fuseOpenFun f)
+fuseOpenFun (Body b) = Body (fuseOpenExp b)
 
 
-convertFuseExp
-    :: Elt t
-    => Layout aenv aenv
-    -> [StableSharingAcc]
-    -> RootExp t
-    -> AST.Exp aenv t
-convertFuseExp alyt aenv rootExp
-  | EnvExp env exp <- rootExp   = convertFuseSharingExp EmptyLayout alyt env aenv exp
-  | otherwise                   = INTERNAL_ERROR(error) "convertFuseExp" "not an 'EnvExp'"
+fuseTuple
+    :: Tuple.Tuple (OpenExp env aenv) t
+    -> Tuple.Tuple (OpenExp env aenv) t
+fuseTuple NilTup          = NilTup
+fuseTuple (SnocTup tup e) = fuseTuple tup `SnocTup` fuseOpenExp e
 
-
-convertFuseFun1
-    :: (Elt a, Elt b)
-    => Layout aenv aenv
-    -> [StableSharingAcc]
-    -> (Exp a -> RootExp b)
-    -> AST.Fun aenv (a -> b)
-convertFuseFun1 alyt aenv f = Lam (Body openF)
-  where
-    a                   = Exp undefined
-    lyt                 = EmptyLayout `PushLayout` ZeroIdx
-    EnvExp env body     = f a
-    openF               = convertFuseSharingExp lyt alyt env aenv body
-
-convertFuseFun2
-    :: (Elt a, Elt b, Elt c)
-    => Layout aenv aenv
-    -> [StableSharingAcc]
-    -> (Exp a -> Exp b -> RootExp c)
-    -> AST.Fun aenv (a -> b -> c)
-convertFuseFun2 alyt aenv f = Lam (Lam (Body openF))
-  where
-    a                   = Exp undefined
-    b                   = Exp undefined
-    lyt                 = EmptyLayout `PushLayout` SuccIdx ZeroIdx
-                                      `PushLayout` ZeroIdx
-    EnvExp env body     = f a b
-    openF               = convertFuseSharingExp lyt alyt env aenv body
-
-convertFuseStencilFun
-    :: forall a b sh stencil aenv. (Elt a, Elt b, Stencil sh a stencil)
-    => SharingAcc (Array sh a)          {- dummy -}
-    -> Layout aenv aenv
-    -> [StableSharingAcc]
-    -> (stencil -> RootExp b)
-    -> AST.Fun aenv (StencilRepr sh stencil -> b)
-convertFuseStencilFun _ alyt aenv stencilFun = Lam (Body openStencilF)
-  where
-    stencil             = Exp undefined
-    lyt                 = EmptyLayout `PushLayout` ZeroIdx
-    EnvExp env body     = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil)
-    openStencilF        = convertFuseSharingExp lyt alyt env aenv body
-
-convertFuseStencilFun2
-    :: forall a b c sh stencil1 stencil2 aenv.
-       (Elt a, Elt b, Elt c, Stencil sh a stencil1, Stencil sh b stencil2)
-    => SharingAcc (Array sh a)          {- dummy -}
-    -> SharingAcc (Array sh b)          {- dummy -}
-    -> Layout aenv aenv
-    -> [StableSharingAcc]
-    -> (stencil1 -> stencil2 -> RootExp c)
-    -> AST.Fun aenv (StencilRepr sh stencil1 -> StencilRepr sh stencil2 -> c)
-convertFuseStencilFun2 _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilF))
-  where
-    stencil1            = Exp undefined
-    stencil2            = Exp undefined
-    lyt                 = EmptyLayout `PushLayout` SuccIdx ZeroIdx
-                                      `PushLayout` ZeroIdx
-    EnvExp env body     = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil1)
-                                     (stencilPrj (undefined::sh) (undefined::b) stencil2)
-    openStencilF        = convertFuseSharingExp lyt alyt env aenv body
 
 
 -- Array Fusion
 -- ============
 
-
-data DelayedAcc aenv a where
-  Done  :: AST.PreOpenAcc AST.OpenAcc aenv a
-        -> DelayedAcc                 aenv a
+data DelayedAcc aenv a where            -- expose aenv' ?
+  Done  :: PreOpenAcc OpenAcc aenv a
+        -> DelayedAcc         aenv a
 
   Step  :: (Elt a, Elt b, Shape sh, Shape sh')
         => Extend aenv aenv'
-        -> AST.PreExp     AST.OpenAcc aenv' sh'
-        -> AST.PreFun     AST.OpenAcc aenv' (sh' -> sh)
-        -> AST.PreFun     AST.OpenAcc aenv' (a   -> b)
-        -> AST.PreOpenAcc AST.OpenAcc aenv' (Array sh  a)
-        -> DelayedAcc                 aenv  (Array sh' b)
+        -> PreExp     OpenAcc aenv' sh'
+        -> PreFun     OpenAcc aenv' (sh' -> sh)
+        -> PreFun     OpenAcc aenv' (a   -> b)
+        -> PreOpenAcc OpenAcc aenv' (Array sh  a)
+        -> DelayedAcc         aenv  (Array sh' b)
 
   Yield :: (Shape sh, Elt a)
         => Extend aenv aenv'
-        -> AST.PreExp AST.OpenAcc aenv' sh
-        -> AST.PreFun AST.OpenAcc aenv' (sh -> a)
-        -> DelayedAcc             aenv  (Array sh a)
+        -> PreExp OpenAcc aenv' sh
+        -> PreFun OpenAcc aenv' (sh -> a)
+        -> DelayedAcc     aenv  (Array sh a)
 
 
 -- Fusion combinators
 -- ------------------
 
 identity :: Elt a => OpenFun env aenv (a -> a)
-identity
-  = AST.Lam
-  $ AST.Body
-  $ AST.Var ZeroIdx
+identity = Lam . Body $ Var ZeroIdx
 
-toIndex :: Shape sh => AST.OpenExp env aenv sh -> AST.OpenFun env aenv (sh -> Int)
-toIndex sh
-  = AST.Lam
-  $ AST.Body
-  $ AST.ToIndex (weakenE sh) (AST.Var ZeroIdx)
+toIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
+toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 
-fromIndex :: Shape sh => AST.OpenExp env aenv sh -> AST.OpenFun env aenv (Int -> sh)
-fromIndex sh
-  = AST.Lam
-  $ AST.Body
-  $ AST.FromIndex (weakenE sh) (AST.Var ZeroIdx)
+fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
+fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
 
 -- "force" a delayed array representation to produce a real AST node.
 --
-force :: forall aenv a. DelayedAcc aenv a -> AST.OpenAcc aenv a
-force delayed = AST.OpenAcc $ case delayed of
+force :: DelayedAcc aenv a -> OpenAcc aenv a
+force delayed = OpenAcc $ case delayed of
   Done a                                -> a
-  Yield env sh f                        -> bind env $ AST.Generate sh f
+  Yield env sh f                        -> bind env $ Generate sh f
   Step env sh ix f a
-   | Lam (Body (AST.Var ZeroIdx)) <- ix -> bind env $ AST.Map f             (AST.OpenAcc a)
-   | Lam (Body (AST.Var ZeroIdx)) <- f  -> bind env $ AST.Backpermute sh ix (AST.OpenAcc a)
-   | otherwise                          -> bind env $ AST.Transform sh ix f (AST.OpenAcc a)
+   | Lam (Body (Var ZeroIdx)) <- ix     -> bind env $ Map f             (OpenAcc a)
+   | Lam (Body (Var ZeroIdx)) <- f      -> bind env $ Backpermute sh ix (OpenAcc a)
+   | otherwise                          -> bind env $ Transform sh ix f (OpenAcc a)
 
 
--- Combine a unary value function of to a delayed array to produce another
--- delayed array. There is some extraneous work to not introduce extra array
--- variables for things already let-bound.
+-- Apply an index space transform that specifies where elements in the
+-- destination array read their data from in the source array.
 --
-delay :: (Shape sh, Elt a, Elt b)
-      => AST.PreFun AST.OpenAcc aenv (a -> b)
-      -> DelayedAcc             aenv (Array sh a)
-      -> DelayedAcc             aenv (Array sh b)
-delay f acc = case acc of
+backpermuteD
+    :: (Shape sh, Shape sh', Elt e)
+    => PreExp OpenAcc aenv sh'
+    -> PreFun OpenAcc aenv (sh' -> sh)
+    -> DelayedAcc     aenv (Array sh  e)
+    -> DelayedAcc     aenv (Array sh' e)
+backpermuteD sh' p acc = case acc of
+  Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
+  Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
+  Done a                -> Step BaseEnv sh' p identity a
+
+
+-- Combine a unary value function to a delayed array to produce another delayed
+-- array. There is some extraneous work to not introduce extra array variables
+-- for things already let-bound.
+--
+mapD :: (Shape sh, Elt a, Elt b)
+     => PreFun OpenAcc aenv (a -> b)
+     -> DelayedAcc     aenv (Array sh a)
+     -> DelayedAcc     aenv (Array sh b)
+mapD f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
   Done a
-    | AST.Avar _ <- a   -> Step BaseEnv (AST.Shape (AST.OpenAcc a)) identity f a
-    | otherwise         -> Step (BaseEnv `PushEnv` AST.OpenAcc a)
-                                (AST.Shape (AST.OpenAcc (AST.Avar ZeroIdx)))
+    | Avar _ <- a       -> Step BaseEnv (Shape (OpenAcc a)) identity f a
+    | otherwise         -> Step (BaseEnv `PushEnv` OpenAcc a)
+                                (Shape (OpenAcc (Avar ZeroIdx)))
                                 identity
                                 (weakenFA f)
-                                (AST.Avar ZeroIdx)
+                                (Avar ZeroIdx)
 
 
 -- Combine a binary value function and two delayed arrays to produce another
 -- delayed array.
 --
-delay2 :: forall sh a b c aenv. (Shape sh, Elt a, Elt b, Elt c)
-       => AST.PreFun AST.OpenAcc aenv (a -> b -> c)
-       -> DelayedAcc             aenv (Array sh a)
-       -> DelayedAcc             aenv (Array sh b)
-       -> DelayedAcc             aenv (Array sh c)
-delay2 fn as bs
-  | AST.Lam (AST.Lam (AST.Body combine)) <- fn
+zipWithD
+    :: forall sh a b c aenv. (Shape sh, Elt a, Elt b, Elt c)
+    => PreFun OpenAcc aenv (a -> b -> c)
+    -> DelayedAcc     aenv (Array sh a)
+    -> DelayedAcc     aenv (Array sh b)
+    -> DelayedAcc     aenv (Array sh c)
+zipWithD fn as bs
+  | Lam (Lam (Body combine)) <- fn
   = let
         index acc
-          = AST.IndexScalar acc (AST.Var ZeroIdx)
+          = IndexScalar acc (Var ZeroIdx)
 
         -- build the generator function
         --
         generate f x1 x0
-          = let open :: Elt z => Idx ((env,x),y) z -> AST.PreOpenExp acc (((env,w),x),y) aenv' z
-                open ZeroIdx                = AST.Var ZeroIdx
-                open (SuccIdx ZeroIdx)      = AST.Var (SuccIdx ZeroIdx)
-                open (SuccIdx (SuccIdx ix)) = AST.Var (SuccIdx (SuccIdx (SuccIdx ix)))
+          = let open :: Elt z => Idx ((env,x),y) z -> PreOpenExp acc (((env,w),x),y) aenv' z
+                open ZeroIdx                = Var ZeroIdx
+                open (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
+                open (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
             in
-            AST.Let x1 $ AST.Let (weakenE x0)       -- as 'x0' is now under a binder
-                       $ rebuildE open f            -- add space for the indexing environment variable
+            Let x1 $ Let (weakenE x0)           -- as 'x0' is now under a binder
+                   $ rebuildE open f            -- add space for the indexing environment variable
 
         -- now combine the second delayed array, under the already-extended
         -- environment of the first.
         --
         inner :: Extend aenv aenv'
-              -> AST.Exp aenv' sh
-              -> AST.OpenExp ((),sh) aenv' a
+              -> Exp aenv' sh
+              -> OpenExp ((),sh) aenv' a
               -> DelayedAcc             aenv (Array sh c)
         inner aenv sh1 g1 = case bs of
           Done a
-            | AST.Avar _ <- a
-            -> let sh'          = sh1 `AST.Intersect` AST.Shape v0
-                   v0           = AST.OpenAcc (sinkA aenv a)
+            | Avar _ <- a
+            -> let sh'          = sh1 `Intersect` Shape v0
+                   v0           = OpenAcc (sinkA aenv a)
                in
-               Yield aenv sh' (AST.Lam (AST.Body (generate (sinkE aenv combine) g1 (index v0))))
+               Yield aenv sh' (Lam (Body (generate (sinkE aenv combine) g1 (index v0))))
 
             | otherwise
-            -> let aenv'        = aenv `PushEnv` AST.OpenAcc (sinkA aenv a)
-                   sh'          = weakenEA sh1 `AST.Intersect` AST.Shape v0
-                   v0           = AST.OpenAcc (AST.Avar ZeroIdx)
+            -> let aenv'        = aenv `PushEnv` OpenAcc (sinkA aenv a)
+                   sh'          = weakenEA sh1 `Intersect` Shape v0
+                   v0           = OpenAcc (Avar ZeroIdx)
                in
-               Yield aenv' sh' (AST.Lam (AST.Body (generate (sinkE aenv' combine) (weakenEA g1) (index v0))))
+               Yield aenv' sh' (Lam (Body (generate (sinkE aenv' combine) (weakenEA g1) (index v0))))
 
           -- This is difficult, because we need to combine two differently
           -- extend environments:
@@ -586,22 +391,22 @@ delay2 fn as bs
     --
     in case as of
       Done a
-        | AST.Avar _ <- a
-        -> inner BaseEnv (AST.Shape (AST.OpenAcc a)) (index (AST.OpenAcc a))
+        | Avar _ <- a
+        -> inner BaseEnv (Shape (OpenAcc a)) (index (OpenAcc a))
 
         | otherwise
-        -> let aenv     = BaseEnv `PushEnv` AST.OpenAcc a
-               v0       = AST.OpenAcc (AST.Avar ZeroIdx)
+        -> let aenv     = BaseEnv `PushEnv` OpenAcc a
+               v0       = OpenAcc (Avar ZeroIdx)
            in
-           inner aenv (AST.Shape v0) (index v0)
+           inner aenv (Shape v0) (index v0)
 
       Step aenv sh ix' f' a
-        | AST.Lam (AST.Body ix) <- ix'
-        , AST.Lam (AST.Body f)  <- f'
+        | Lam (Body ix) <- ix'
+        , Lam (Body f)  <- f'
         -> case a of
-             AST.Avar _ -> inner aenv sh (f `substitute` index (AST.OpenAcc a) `substitute` ix)
-             _          -> let aenv'    = aenv `PushEnv` AST.OpenAcc a
-                               v0       = AST.OpenAcc (AST.Avar ZeroIdx)
+             Avar _ -> inner aenv sh (f `substitute` index (OpenAcc a) `substitute` ix)
+             _          -> let aenv'    = aenv `PushEnv` OpenAcc a
+                               v0       = OpenAcc (Avar ZeroIdx)
                            in
                            inner aenv' (weakenEA sh)
                                        (weakenEA f `substitute` index v0 `substitute` weakenEA ix)
@@ -609,8 +414,8 @@ delay2 fn as bs
         -> error "impossible evaluation"
 
       Yield aenv sh f'
-        | AST.Lam (AST.Body f) <- f'    -> inner aenv sh f
-        | otherwise                     -> error "impossible evaluation"
+        | Lam (Body f) <- f'    -> inner aenv sh f
+        | otherwise             -> error "impossible evaluation"
 
   | otherwise = error "impossible evaluation"
 
@@ -626,39 +431,39 @@ delay2 fn as bs
 -- presence of fused operators.
 --
 data Extend aenv aenv' where
-  BaseEnv ::                                             Extend aenv aenv
+  BaseEnv ::                                         Extend aenv aenv
   PushEnv :: Arrays a
-          => Extend aenv aenv' -> AST.OpenAcc aenv' a -> Extend aenv (aenv', a)
+          => Extend aenv aenv' -> OpenAcc aenv' a -> Extend aenv (aenv', a)
 
 -- Bind the extended environment so that the fused operators in the inner
 -- environment (aenv') can be applied in the outer (aenv).
 --
 bind :: Arrays a
      => Extend aenv aenv'
-     -> AST.PreOpenAcc AST.OpenAcc aenv' a
-     -> AST.PreOpenAcc AST.OpenAcc aenv  a
+     -> PreOpenAcc OpenAcc aenv' a
+     -> PreOpenAcc OpenAcc aenv  a
 bind BaseEnv         = id
-bind (PushEnv env a) = bind env . AST.Alet a . AST.OpenAcc
+bind (PushEnv env a) = bind env . Alet a . OpenAcc
 
 
 -- Extend array environments
 --
 sinkA :: Arrays a
       => Extend aenv aenv'
-      -> AST.PreOpenAcc AST.OpenAcc aenv  a
-      -> AST.PreOpenAcc AST.OpenAcc aenv' a
+      -> PreOpenAcc OpenAcc aenv  a
+      -> PreOpenAcc OpenAcc aenv' a
 sinkA BaseEnv       = id
 sinkA (PushEnv e _) = weakenA . sinkA e
 
 sinkE :: Extend aenv aenv'
-      -> AST.OpenExp env aenv  e
-      -> AST.OpenExp env aenv' e
+      -> OpenExp env aenv  e
+      -> OpenExp env aenv' e
 sinkE BaseEnv       = id
 sinkE (PushEnv e _) = weakenEA . sinkE e
 
 sinkF :: Extend env env'
-      -> AST.PreFun AST.OpenAcc env  f
-      -> AST.PreFun AST.OpenAcc env' f
+      -> PreFun OpenAcc env  f
+      -> PreFun OpenAcc env' f
 sinkF BaseEnv       = id
 sinkF (PushEnv e _) = weakenFA . sinkF e
 
@@ -667,23 +472,23 @@ sinkF (PushEnv e _) = weakenFA . sinkF e
 -- SEE: [Weakening]
 --
 weakenA :: Arrays t
-    => AST.PreOpenAcc AST.OpenAcc aenv      t
-    -> AST.PreOpenAcc AST.OpenAcc (aenv, s) t
+    => PreOpenAcc OpenAcc aenv      t
+    -> PreOpenAcc OpenAcc (aenv, s) t
 weakenA = rebuildA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
 weakenE
     :: Elt t
-    => AST.OpenExp env      aenv t
-    -> AST.OpenExp (env, s) aenv t
+    => OpenExp env      aenv t
+    -> OpenExp (env, s) aenv t
 weakenE = rebuildE (weakenExp . IE)
 
 weakenEA
-    :: AST.OpenExp env aenv     t
-    -> AST.OpenExp env (aenv,s) t
+    :: OpenExp env aenv     t
+    -> OpenExp env (aenv,s) t
 weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
 weakenFA
-    :: AST.PreOpenFun AST.OpenAcc env aenv t
-    -> AST.PreOpenFun AST.OpenAcc env (aenv,s) t
+    :: PreOpenFun OpenAcc env aenv t
+    -> PreOpenFun OpenAcc env (aenv,s) t
 weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
