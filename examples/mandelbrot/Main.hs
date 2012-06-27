@@ -11,8 +11,8 @@ import Control.Exception
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import System.IO.Unsafe
-import System.Environment
-import Criterion.Main                           ( defaultMain, bench, whnf )
+import System.Environment                       (getArgs, withArgs)
+import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
@@ -135,7 +135,8 @@ makePicture opt limit zs = pic
 
 main :: IO ()
 main
-  = do  (config, nops) <- processArgs =<< getArgs
+  = do  
+        (config, critConf, nops) <- processArgs =<< getArgs
         let size        = get optSize config
             limit       = get optLimit config
             --
@@ -148,10 +149,14 @@ main
             image       = makePicture config limit
                         $ mandelbrot x y x' y' size size limit
 
+        case nops of 
+          [] -> return ()
+          ls -> putStrLn$ "Warning: unrecognized options: "++show ls
+        
         void $ evaluate image
 
         if get optBench config
-           then withArgs nops $ defaultMain
+           then withArgs nops $ defaultMainWith critConf (return ())
                     [ bench "mandelbrot" $
                       whnf (force . run config . mandelbrot x y x' y' size size) limit ]
 

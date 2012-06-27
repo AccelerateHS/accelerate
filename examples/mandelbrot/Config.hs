@@ -9,9 +9,11 @@ module Config (
 
 ) where
 
+import qualified Criterion.Main                         as Crit
+import qualified Criterion.Config                       as Crit
 import Data.Label
 import System.Exit
-import System.Console.GetOpt
+import System.Console.GetOpt (OptDescr(..), ArgDescr(..), ArgOrder(Permute), getOpt', usageInfo)
 import Data.Array.Accelerate                            ( Arrays, Acc )
 import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
@@ -78,19 +80,23 @@ options =
   ]
 
 
-processArgs :: [String] -> IO (Options, [String])
+-- | Two levels of argument parsing -- ours and criterions.
+processArgs :: [String] -> IO (Options, Crit.Config, [String])
 processArgs argv =
   case getOpt' Permute options argv of
-    (o,_,n,[])  -> case foldl (flip id) defaultOptions o of
-                     opts | False <- get optHelp opts   -> return (opts, n)
-                     opts | True  <- get optBench opts  -> return (opts, "--help":n)
-                     _                                  -> putStrLn (helpMsg []) >> exitSuccess
+    (o,_,n,[])  -> do -- Pass unrecognized options onward:
+                      (critConf,rst) <- Crit.parseArgs Crit.defaultConfig Crit.defaultOptions n
+                      case foldl (flip id) defaultOptions o of
+                        opts | False <- get optHelp opts   -> return (opts, critConf, rst)
+                        opts | True  <- get optBench opts  -> return (opts, critConf, "--help":rst)
+                        _                                  -> putStrLn (helpMsg []) >> exitSuccess
+                   
     (_,_,_,err) -> error (helpMsg err)
   where
-    helpMsg err = concat err ++ usageInfo header options
+    helpMsg err = concat err ++ usageInfo header options ++ 
+                  usageInfo "\nGeneric criterion options:" Crit.defaultOptions
     header      = unlines
       [ "accelerate-mandelbrot (c) [2011..2012] The Accelerate Team"
       , ""
       , "Usage: accelerate-mandelbrot [OPTIONS]"
       ]
-
