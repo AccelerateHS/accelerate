@@ -58,16 +58,6 @@ absRelTol u v
     epsilonRel = 0.001
     epsilonAbs = 0.00001
 
-
--- some "missing" instances
---
-instance Eq Z where
-  Z == Z = True
-
-instance (Eq sh, Shape sh) => Eq (sh :. Int) where
-  (sh1 :. n1) == (sh2 :. n2)    = n1 == n2 && sh1 == sh2
-  (sh1 :. n1) /= (sh2 :. n2)    = n1 /= n2 || sh1 /= sh2
-
 instance (Eq e, Eq sh, Shape sh) => Eq (Array sh e) where
   a1 == a2      =  arrayShape a1 == arrayShape a2
                 && toList a1     == toList a2
