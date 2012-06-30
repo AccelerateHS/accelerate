@@ -82,6 +82,8 @@ delayOpenAcc (OpenAcc pacc) =
     -- Forms that introduce environment manipulations and control flow. These
     -- stable points of the expression we generally don't want to fuse past.
     --
+    -- TLM: may want to float upwards let of Use nodes
+    --
     Alet bndAcc bodyAcc
       -> Done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
 
@@ -149,8 +151,8 @@ delayOpenAcc (OpenAcc pacc) =
     Map f a
       -> mapD (cvtF f) (cvt a)
 
-    ZipWith f a b
-      -> zipWithD (cvtF f) (cvt a) (cvt b)
+    ZipWith f acc1 acc2
+      -> zipWithD (cvtF f) acc1 acc2
 
     -- Consumers
     --
@@ -285,6 +287,14 @@ toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
 fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
+intersect :: Shape sh => OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
+intersect sh1 sh2
+  | Shape (OpenAcc (Avar v1)) <- sh1
+  , Shape (OpenAcc (Avar v2)) <- sh2
+  , idxToInt v1 == idxToInt v2          = sh1
+  --
+  | otherwise                           = Intersect sh1 sh2
+
 
 -- "force" a delayed array representation to produce a real AST node.
 --
@@ -326,98 +336,99 @@ mapD f acc = case acc of
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
   Done a
     | Avar _ <- a       -> Step BaseEnv (Shape (OpenAcc a)) identity f a
-    | otherwise         -> Step (BaseEnv `PushEnv` OpenAcc a)
+    | otherwise         -> Step (BaseEnv `PushEnv` a)
                                 (Shape (OpenAcc (Avar ZeroIdx)))
                                 identity
                                 (weakenFA f)
                                 (Avar ZeroIdx)
 
 
--- Combine a binary value function and two delayed arrays to produce another
--- delayed array.
+-- Combine a binary value function and two arrays to produce a delayed array.
+-- The trick is that we need to delay one array and then the other, so that the
+-- extended environments are built atop each other.
 --
 zipWithD
     :: forall sh a b c aenv. (Shape sh, Elt a, Elt b, Elt c)
-    => PreFun OpenAcc aenv (a -> b -> c)
-    -> DelayedAcc     aenv (Array sh a)
-    -> DelayedAcc     aenv (Array sh b)
-    -> DelayedAcc     aenv (Array sh c)
-zipWithD fn as bs
-  | Lam (Lam (Body combine)) <- fn
-  = let
-        index acc
-          = IndexScalar acc (Var ZeroIdx)
+    => Fun        aenv (a -> b -> c)
+    -> OpenAcc    aenv (Array sh a)
+    -> OpenAcc    aenv (Array sh b)
+    -> DelayedAcc aenv (Array sh c)
+zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
+  Done a1
+    | Avar _ <- a1      -> inner BaseEnv (shape a1) (index a1)
+    | otherwise         -> inner (BaseEnv `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
 
-        -- build the generator function
-        --
-        generate f x1 x0
-          = let open :: Elt z => Idx ((env,x),y) z -> PreOpenExp acc (((env,w),x),y) aenv' z
-                open ZeroIdx                = Var ZeroIdx
-                open (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
-                open (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
-            in
-            Let x1 $ Let (weakenE x0)           -- as 'x0' is now under a binder
-                   $ rebuildE open f            -- add space for the indexing environment variable
+  Step env1 sh1 ix1 g1 a1
+    | Avar _ <- a1      -> inner env1 sh1 (g1 `compose` index a1 `compose` ix1)
+    | otherwise         -> inner (env1 `PushEnv` a1)
+                                 (weakenEA sh1)
+                                 (weakenFA g1 `compose` index (Avar ZeroIdx) `compose` weakenFA ix1)
 
-        -- now combine the second delayed array, under the already-extended
-        -- environment of the first.
-        --
-        inner :: Extend aenv aenv'
-              -> Exp aenv' sh
-              -> OpenExp ((),sh) aenv' a
-              -> DelayedAcc             aenv (Array sh c)
-        inner aenv sh1 g1 = case bs of
-          Done a
-            | Avar _ <- a
-            -> let sh'          = sh1 `Intersect` Shape v0
-                   v0           = OpenAcc (sinkA aenv a)
-               in
-               Yield aenv sh' (Lam (Body (generate (sinkE aenv combine) g1 (index v0))))
+  Yield env1 sh1 g1     -> inner env1 sh1 g1
+  --
+  where
+    shape :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Exp aenv' dim
+    shape = Shape . OpenAcc
 
-            | otherwise
-            -> let aenv'        = aenv `PushEnv` OpenAcc (sinkA aenv a)
-                   sh'          = weakenEA sh1 `Intersect` Shape v0
-                   v0           = OpenAcc (Avar ZeroIdx)
-               in
-               Yield aenv' sh' (Lam (Body (generate (sinkE aenv' combine) (weakenEA g1) (index v0))))
+    index :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Fun aenv' (dim -> e)
+    index a = Lam . Body $ IndexScalar (OpenAcc a) (Var ZeroIdx)
 
-          -- This is difficult, because we need to combine two differently
-          -- extend environments:
-          --
-          -- > Extend env env' `merge` Extend env env'' --> Extend env ???
-          --
-          Step _ _ _ _ _ -> error "delay2: inner/step"
-          Yield _ _ _    -> error "delay2: inner/yield"
-    --
-    in case as of
-      Done a
-        | Avar _ <- a
-        -> inner BaseEnv (Shape (OpenAcc a)) (index (OpenAcc a))
+    inner :: Extend aenv aenv'
+          -> Exp        aenv' sh
+          -> Fun        aenv' (sh -> a)
+          -> DelayedAcc aenv  (Array sh c)
+    inner env1 sh1 g1 = case delayOpenAcc (sinkOpenA env1 acc2) of
+      Done a2
+        | Avar _ <- a2  -> Yield env1 (sh1 `intersect` shape a2) (generate (sinkF env1 f) g1 (index a2))
+        | otherwise     ->
+            let env = env1 `PushEnv` a2
+            in  Yield env (weakenEA sh1 `intersect` shape (Avar ZeroIdx))
+                          (generate (sinkF env f) (weakenFA g1) (index (Avar ZeroIdx)))
 
-        | otherwise
-        -> let aenv     = BaseEnv `PushEnv` OpenAcc a
-               v0       = OpenAcc (Avar ZeroIdx)
-           in
-           inner aenv (Shape v0) (index v0)
+      Step env2 sh2 ix2 g2 a2
+        | Avar _ <- a2  ->
+            let env = cat env1 env2
+            in  Yield env (sinkE env2 sh1 `intersect` sh2)
+                          (generate (sinkF env f) (sinkF env2 g1) (g2 `compose` index a2 `compose` ix2))
+        | otherwise     ->
+            let env = cat env1 env2 `PushEnv` a2
+            in  Yield env (weakenEA (sinkE env2 sh1 `intersect` sh2))
+                          (generate (sinkF env f) (weakenFA (sinkF env2 g1)) (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
 
-      Step aenv sh ix' f' a
-        | Lam (Body ix) <- ix'
-        , Lam (Body f)  <- f'
-        -> case a of
-             Avar _ -> inner aenv sh (f `substitute` index (OpenAcc a) `substitute` ix)
-             _          -> let aenv'    = aenv `PushEnv` OpenAcc a
-                               v0       = OpenAcc (Avar ZeroIdx)
-                           in
-                           inner aenv' (weakenEA sh)
-                                       (weakenEA f `substitute` index v0 `substitute` weakenEA ix)
-        | otherwise
-        -> error "impossible evaluation"
+      Yield env2 sh2 g2
+        -> let env = cat env1 env2
+           in  Yield env (sinkE env2 sh1 `intersect` sh2)
+                         (generate (sinkF env f) (sinkF env2 g1) g2)
 
-      Yield aenv sh f'
-        | Lam (Body f) <- f'    -> inner aenv sh f
-        | otherwise             -> error "impossible evaluation"
 
-  | otherwise = error "impossible evaluation"
+
+-- Substitution
+-- ------------
+
+substitute2
+    :: (Elt a, Elt b, Elt c)
+    => OpenExp ((env, a), b) aenv c
+    -> OpenExp (env, x)      aenv a
+    -> OpenExp (env, x)      aenv b
+    -> OpenExp (env, x)      aenv c
+substitute2 f a b
+  = Let a
+  $ Let (weakenE b)             -- as 'b' has been pushed under a binder
+  $ rebuildE split2 f           -- add space for the index environment variable
+  where
+    split2 :: Elt c => Idx ((env,a),b) c -> PreOpenExp acc (((env,x),a),b) aenv c
+    split2 ZeroIdx                = Var ZeroIdx
+    split2 (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
+    split2 (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
+
+generate
+    :: (Elt a, Elt b, Elt c, Shape sh)
+    => OpenFun env aenv (a -> b -> c)
+    -> OpenFun env aenv (sh -> a)
+    -> OpenFun env aenv (sh -> b)
+    -> OpenFun env aenv (sh -> c)
+generate (Lam (Lam (Body f))) (Lam (Body a)) (Lam (Body b)) = Lam . Body $ substitute2 f a b
+generate _                    _              _              = error "generate: impossible evaluation"
 
 
 -- Environment manipulation
@@ -431,9 +442,12 @@ zipWithD fn as bs
 -- presence of fused operators.
 --
 data Extend aenv aenv' where
-  BaseEnv ::                                         Extend aenv aenv
+  BaseEnv :: Extend aenv aenv
+
   PushEnv :: Arrays a
-          => Extend aenv aenv' -> OpenAcc aenv' a -> Extend aenv (aenv', a)
+          => Extend aenv aenv'
+          -> PreOpenAcc OpenAcc aenv' a
+          -> Extend aenv (aenv', a)
 
 -- Bind the extended environment so that the fused operators in the inner
 -- environment (aenv') can be applied in the outer (aenv).
@@ -443,13 +457,12 @@ bind :: Arrays a
      -> PreOpenAcc OpenAcc aenv' a
      -> PreOpenAcc OpenAcc aenv  a
 bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet a . OpenAcc
+bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
 
 
 -- Extend array environments
 --
-sinkA :: Arrays a
-      => Extend aenv aenv'
+sinkA :: Extend aenv aenv'
       -> PreOpenAcc OpenAcc aenv  a
       -> PreOpenAcc OpenAcc aenv' a
 sinkA BaseEnv       = id
@@ -468,27 +481,43 @@ sinkF BaseEnv       = id
 sinkF (PushEnv e _) = weakenFA . sinkF e
 
 
+sinkOpenA
+    :: Extend aenv aenv'
+    -> OpenAcc aenv  a
+    -> OpenAcc aenv' a
+sinkOpenA BaseEnv       = id
+sinkOpenA (PushEnv e _) = weakenOpenA . sinkOpenA e
+
+
 -- Increase the scope of scalar or array environments.
 -- SEE: [Weakening]
 --
-weakenA :: Arrays t
-    => PreOpenAcc OpenAcc aenv      t
-    -> PreOpenAcc OpenAcc (aenv, s) t
+weakenA :: PreOpenAcc OpenAcc aenv      t
+        -> PreOpenAcc OpenAcc (aenv, s) t
 weakenA = rebuildA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
-weakenE
-    :: Elt t
-    => OpenExp env      aenv t
-    -> OpenExp (env, s) aenv t
+weakenE :: OpenExp env      aenv t
+        -> OpenExp (env, s) aenv t
 weakenE = rebuildE (weakenExp . IE)
 
-weakenEA
-    :: OpenExp env aenv     t
-    -> OpenExp env (aenv,s) t
+weakenEA :: OpenExp env aenv     t
+         -> OpenExp env (aenv,s) t
 weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
-weakenFA
-    :: PreOpenFun OpenAcc env aenv t
-    -> PreOpenFun OpenAcc env (aenv,s) t
+weakenFA :: PreOpenFun OpenAcc env aenv     t
+         -> PreOpenFun OpenAcc env (aenv,s) t
 weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+
+
+weakenOpenA
+    :: OpenAcc aenv      a
+    -> OpenAcc (aenv, s) a
+weakenOpenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+
+
+-- Concatenate two environments
+--
+cat :: Extend env env' -> Extend env' env'' -> Extend env env''
+cat x BaseEnv           = x
+cat x (PushEnv e a)     = cat x e `PushEnv` a
 
