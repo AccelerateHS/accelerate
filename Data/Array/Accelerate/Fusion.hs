@@ -33,7 +33,6 @@ import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Smart            as Smart
 import qualified Data.Array.Accelerate.Sharing          as Smart
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 -- | Convert a closed array expression to de Bruijn form while also
@@ -377,7 +376,7 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
           -> Exp        aenv' sh
           -> Fun        aenv' (sh -> a)
           -> DelayedAcc aenv  (Array sh c)
-    inner env1 sh1 g1 = case delayOpenAcc (sinkOpenA env1 acc2) of
+    inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
       Done a2
         | Avar _ <- a2  -> Yield env1 (sh1 `intersect` shape a2) (generate (sinkF env1 f) g1 (index a2))
         | otherwise     ->
@@ -463,8 +462,8 @@ bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
 -- Extend array environments
 --
 sinkA :: Extend aenv aenv'
-      -> PreOpenAcc OpenAcc aenv  a
-      -> PreOpenAcc OpenAcc aenv' a
+      -> OpenAcc aenv  a
+      -> OpenAcc aenv' a
 sinkA BaseEnv       = id
 sinkA (PushEnv e _) = weakenA . sinkA e
 
@@ -474,27 +473,19 @@ sinkE :: Extend aenv aenv'
 sinkE BaseEnv       = id
 sinkE (PushEnv e _) = weakenEA . sinkE e
 
-sinkF :: Extend env env'
-      -> PreFun OpenAcc env  f
-      -> PreFun OpenAcc env' f
+sinkF :: Extend aenv aenv'
+      -> OpenFun env aenv  f
+      -> OpenFun env aenv' f
 sinkF BaseEnv       = id
 sinkF (PushEnv e _) = weakenFA . sinkF e
-
-
-sinkOpenA
-    :: Extend aenv aenv'
-    -> OpenAcc aenv  a
-    -> OpenAcc aenv' a
-sinkOpenA BaseEnv       = id
-sinkOpenA (PushEnv e _) = weakenOpenA . sinkOpenA e
 
 
 -- Increase the scope of scalar or array environments.
 -- SEE: [Weakening]
 --
-weakenA :: PreOpenAcc OpenAcc aenv      t
-        -> PreOpenAcc OpenAcc (aenv, s) t
-weakenA = rebuildA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+weakenA :: OpenAcc aenv      t
+        -> OpenAcc (aenv, s) t
+weakenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
 weakenE :: OpenExp env      aenv t
         -> OpenExp (env, s) aenv t
@@ -507,12 +498,6 @@ weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 weakenFA :: PreOpenFun OpenAcc env aenv     t
          -> PreOpenFun OpenAcc env (aenv,s) t
 weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
-
-
-weakenOpenA
-    :: OpenAcc aenv      a
-    -> OpenAcc (aenv, s) a
-weakenOpenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
 
 -- Concatenate two environments
