@@ -14,18 +14,14 @@
 
 module Data.Array.Accelerate.Substitution (
 
-  -- * Scalar substitution
+  -- * Renaming & Substitution
   inline, substitute, compose,
 
-  -- * Array substitution
+  -- * Weakening
+  weakenA, weakenEA, weakenFA, weakenE,
 
-  -- * Internals
-  weakenAcc, IdxA(IA),
-  weakenExp, IdxE(IE),
-
-  rebuildA, rebuildAfun, rebuildOpenAcc,
-  rebuildE, rebuildEA,
-  rebuildFA, rebuildFE
+  -- * Rebuilding
+  rebuildE, rebuildA, rebuildOpenAcc,
 
 ) where
 
@@ -58,20 +54,6 @@ import Prelude                                  hiding ( exp )
 -- The Syntactic class tells us what we need to know about 'f' if we want to be
 -- able to rebuild terms. In essence, the crucial functionality is to propagate
 -- a class of operations on variables that is closed under shifting.
---
-
--- NOTE: [Weakening]
---
--- Weakening is something we usually take for granted: every time you learn a
--- new word, old sentences still make sense. If a conclusion is justified by a
--- hypothesis, it is still justified if you add more hypotheses. Similarly, a
--- term remains in scope if you bind more (fresh) variables. Weakening is the
--- operation of shifting things from one scope to a larger scope in which new
--- things have become meaningful, but no old things have vanished.
---
--- When we use a named representation (or HOAS) we get weakening for free. But
--- in the de Bruijn representation weakening takes work: you have to shift all
--- variable references to make room for the new bindings.
 --
 
 -- | Replace the first variable with the given expression. The environment
@@ -112,17 +94,44 @@ compose :: Elt c
 compose (Lam (Body f)) (Lam (Body g)) = Lam . Body $ substitute f g
 compose _              _              = error "compose: impossible evaluation"
 
--- compose' :: Elt c
---          => PreOpenFun acc env aenv (b -> c)
---          -> PreOpenFun acc env aenv (a -> b)
---          -> PreOpenFun acc env aenv (a -> c)
--- compose' (Lam (Body f)) (Lam (Body g)) = Lam . Body $ rebuildE (dot g) f
---   where
---     dot :: Elt c => PreOpenExp acc (env, a) aenv b -> Idx (env, b) c -> PreOpenExp acc (env, a) aenv c
---     dot s ZeroIdx      = s
---     dot _ (SuccIdx ix) = Var (SuccIdx ix)
--- compose' _              _              = error "compose: impossible evaluation"
 
+-- NOTE: [Weakening]
+--
+-- Weakening is something we usually take for granted: every time you learn a
+-- new word, old sentences still make sense. If a conclusion is justified by a
+-- hypothesis, it is still justified if you add more hypotheses. Similarly, a
+-- term remains in scope if you bind more (fresh) variables. Weakening is the
+-- operation of shifting things from one scope to a larger scope in which new
+-- things have become meaningful, but no old things have vanished.
+--
+-- When we use a named representation (or HOAS) we get weakening for free. But
+-- in the de Bruijn representation weakening takes work: you have to shift all
+-- variable references to make room for the new bindings.
+--
+
+-- Functions to increase the scope of scalar or array environments of OpenAcc
+-- expressions.
+--
+weakenA :: OpenAcc aenv      t
+        -> OpenAcc (aenv, s) t
+weakenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+
+weakenE :: OpenExp env      aenv t
+        -> OpenExp (env, s) aenv t
+weakenE = rebuildE (weakenExp . IE)
+
+weakenEA :: OpenExp env aenv     t
+         -> OpenExp env (aenv,s) t
+weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+
+weakenFA :: PreOpenFun OpenAcc env aenv     t
+         -> PreOpenFun OpenAcc env (aenv,s) t
+weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+
+
+
+-- Implementation ==============================================================
+--
 
 -- Scalar expressions
 -- ------------------

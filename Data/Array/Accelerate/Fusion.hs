@@ -480,26 +480,6 @@ sinkF BaseEnv       = id
 sinkF (PushEnv e _) = weakenFA . sinkF e
 
 
--- Increase the scope of scalar or array environments.
--- SEE: [Weakening]
---
-weakenA :: OpenAcc aenv      t
-        -> OpenAcc (aenv, s) t
-weakenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
-
-weakenE :: OpenExp env      aenv t
-        -> OpenExp (env, s) aenv t
-weakenE = rebuildE (weakenExp . IE)
-
-weakenEA :: OpenExp env aenv     t
-         -> OpenExp env (aenv,s) t
-weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
-
-weakenFA :: PreOpenFun OpenAcc env aenv     t
-         -> PreOpenFun OpenAcc env (aenv,s) t
-weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
-
-
 -- Concatenate two environments
 --
 cat :: Extend env env' -> Extend env' env'' -> Extend env env''
