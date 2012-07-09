@@ -241,10 +241,6 @@ labelForConst (PrimMinBound _) = "PrimMinBound"
 labelForConst (PrimMaxBound _) = "PrimMaxBound"
 labelForConst (PrimPi       _) = "PrimPi"
 
-tupleIdxToInt :: TupleIdx t e -> Int
-tupleIdxToInt ZeroTupIdx     = 0
-tupleIdxToInt (SuccTupIdx n) = 1 + tupleIdxToInt n
-
 -- Auxiliary ops
 --
 
