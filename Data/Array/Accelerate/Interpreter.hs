@@ -55,7 +55,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import qualified Data.Array.Accelerate.Smart            as Sugar
-import qualified Data.Array.Accelerate.Sharing          as Sugar
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 

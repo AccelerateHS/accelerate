@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Fusion
+-- Module      : Data.Array.Accelerate.Trafo.Fusion
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -15,7 +15,7 @@
 -- while incorporating sharing observation and array fusion.
 --
 
-module Data.Array.Accelerate.Fusion (
+module Data.Array.Accelerate.Trafo.Fusion (
 
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1
@@ -27,12 +27,12 @@ import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Substitution
+import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Smart            as Smart
-import qualified Data.Array.Accelerate.Sharing          as Smart
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Smart
 
 
 -- | Convert a closed array expression to de Bruijn form while also
@@ -62,8 +62,6 @@ fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
 fuseOpenAcc = force . delayOpenAcc
 
 
--- TLM: we may be able to mash an Extend in here for zipwith?
---
 delayOpenAcc
     :: OpenAcc    aenv arrs
     -> DelayedAcc aenv arrs
@@ -255,7 +253,7 @@ fuseTuple (SnocTup tup e) = fuseTuple tup `SnocTup` fuseOpenExp e
 -- Array Fusion
 -- ============
 
-data DelayedAcc aenv a where            -- expose aenv' ?
+data DelayedAcc aenv a where
   Done  :: PreOpenAcc OpenAcc aenv a
         -> DelayedAcc         aenv a
 
@@ -401,7 +399,6 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
         -> let env = cat env1 env2
            in  Yield env (sinkE env2 sh1 `intersect` sh2)
                          (generate (sinkF env f) (sinkF env2 g1) g2)
-
 
 
 -- Substitution

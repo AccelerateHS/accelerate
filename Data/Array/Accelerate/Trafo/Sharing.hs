@@ -6,7 +6,7 @@
 {-# OPTIONS -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Sharing
+-- Module      : Data.Array.Accelerate.Trafo.Sharing
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 -- License     : BSD3
 --
@@ -18,7 +18,7 @@
 -- while incorporating sharing information.
 --
 
-module Data.Array.Accelerate.Sharing (
+module Data.Array.Accelerate.Trafo.Sharing (
 
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1

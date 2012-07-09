@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Substitution
+-- Module      : Data.Array.Accelerate.Trafo.Substitution
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -12,7 +12,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Substitution (
+module Data.Array.Accelerate.Trafo.Substitution (
 
   -- * Renaming & Substitution
   inline, substitute, compose,
