@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.CSE
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -27,6 +28,7 @@ import Data.Hashable
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Array.Sugar                ( Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
@@ -52,10 +54,10 @@ lookupEnv :: Typeable t
           => Gamma   env env' aenv
           -> OpenExp env      aenv t
           -> Maybe  (Idx env' t)
-lookupEnv EmptyEnv        _                = Nothing
+lookupEnv EmptyEnv        _             = Nothing
 lookupEnv (PushEnv env e) x
-  | maybe False (matchOpenExp e) (gcast x) = gcast ZeroIdx
-  | otherwise                              = SuccIdx `fmap` lookupEnv env x
+  | Just REFL <- matchOpenExp e x       = Just ZeroIdx
+  | otherwise                           = SuccIdx `fmap` lookupEnv env x
 
 
 -- Simplify scalar expressions. Currently this takes the form of a pretty weedy
@@ -130,78 +132,133 @@ cseOpenFun env (Body e) = Body (cseOpenExp env e)
 cseOpenFun env (Lam  f) = Lam  (cseOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
 
 
+-- Witness equality between types. A value of a :=: b is a proof that types a
+-- and b are equal. By pattern matching on REFL this fact is introduced to the
+-- type checker.
+--
+data s :=: t where
+  REFL :: s :=: s
+
+refl :: (Typeable s, Typeable t) => (x -> y -> Bool) -> x -> y -> Maybe (s :=: t)
+refl f a b | f a b     = gcast REFL
+           | otherwise = Nothing
+
+
 -- Compute the congruence of two scalar expressions. Two nodes are congruent if
 -- either:
 --
 --  1. The nodes label constants and the contents are equal
 --  2. They have the same operator and their operands are congruent
 --
-(==^) :: (Typeable a, Typeable b) => OpenExp env aenv a -> OpenExp env aenv b -> Bool
-(==^) x y = maybe False (matchOpenExp x) (gcast y)
+--  The below attempts to use real typed equality, but occasionally still needs
+--  to use a cast, particularly when we can only match the representation types.
+--
+matchOpenExp :: OpenExp env aenv s -> OpenExp env aenv t -> Maybe (s :=: t)
+matchOpenExp (Let x1 e1)         (Let x2 e2)
+  | Just REFL <- matchOpenExp x1 x2
+  , Just REFL <- matchOpenExp e1 e2
+  = Just REFL
 
-matchOpenExp :: OpenExp env aenv a -> OpenExp env aenv a -> Bool
-matchOpenExp (Let _ _)           (Let _ _)           = error "matchOpenExp: Let"  -- False? We don't expect to get here.
-matchOpenExp (Var v1)            (Var v2)            = idxToInt v1 == idxToInt v2
-matchOpenExp (Const c1)          (Const c2)          = c1 == c2
-matchOpenExp (Tuple t1)          (Tuple t2)          = matchTuple t1 t2
-matchOpenExp (Prj ix1 t1)        (Prj ix2 t2)        = tupleIdxToInt ix1 == tupleIdxToInt ix2 && t1 ==^ t2
-matchOpenExp IndexAny            IndexAny            = True
-matchOpenExp IndexNil            IndexNil            = True
-matchOpenExp (IndexCons sl1 a1)  (IndexCons sl2 a2)  = sl1 ==^ sl2 && a1 ==^ a2
-matchOpenExp (IndexHead sl1)     (IndexHead sl2)     = sl1 ==^ sl2
-matchOpenExp (IndexTail sl1)     (IndexTail sl2)     = sl1 ==^ sl2
-matchOpenExp (ToIndex sh1 i1)    (ToIndex sh2 i2)    = sh1 ==^ sh2 && i1 ==^ i2
-matchOpenExp (FromIndex sh1 i1)  (FromIndex sh2 i2)  = sh1 ==^ sh2 && i1 ==^ i2
-matchOpenExp (Cond p1 t1 e1)     (Cond p2 t2 e2)     = p1  ==^ p2  && t1 ==^ t2 && e1 ==^ e2
-matchOpenExp (PrimConst c1)      (PrimConst c2)      = matchPrimConst c1 c2
+matchOpenExp (Var v1)            (Var v2)            = matchIdx v1 v2
+matchOpenExp (Const c1)          (Const c2)          = refl (==) c1 =<< cast c2
+matchOpenExp (Tuple t1)          (Tuple t2)
+  | Just REFL <- matchTuple t1 t2
+  = gcast REFL
+
+matchOpenExp (Prj ix1 t1)        (Prj ix2 t2)
+  | Just REFL <- matchOpenExp  t1  t2
+  , Just REFL <- matchTupleIdx ix1 ix2
+  = Just REFL
+
+matchOpenExp IndexAny            IndexAny            = gcast REFL
+matchOpenExp IndexNil            IndexNil            = Just REFL
+matchOpenExp (IndexCons sl1 a1)  (IndexCons sl2 a2)
+  | Just REFL <- matchOpenExp sl1 sl2
+  , Just REFL <- matchOpenExp a1 a2
+  = Just REFL
+
+matchOpenExp (IndexHead sl1)     (IndexHead sl2)
+  | Just REFL <- matchOpenExp sl1 sl2
+  = Just REFL
+
+matchOpenExp (IndexTail sl1)     (IndexTail sl2)
+  | Just REFL <- matchOpenExp sl1 sl2
+  = Just REFL
+
+matchOpenExp (ToIndex sh1 i1)    (ToIndex sh2 i2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchOpenExp i1 i2
+  = Just REFL
+
+matchOpenExp (FromIndex sh1 i1)  (FromIndex sh2 i2)  = matchOpenExp i1 i2 >> matchOpenExp sh1 sh2
+matchOpenExp (Cond p1 t1 e1)     (Cond p2 t2 e2)     = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
+matchOpenExp (PrimConst c1)      (PrimConst c2)      = refl matchPrimConst c1 =<< gcast c2
 matchOpenExp (PrimApp f1 x1)     (PrimApp f2 x2)
-  | not (maybe False (matchPrimFun f1) (gcast f2))
-  = False
+  | Just REFL <- associative f1
+  , Just REFL <- associative f2
+  , Just REFL <- matchOpenExp (swizzle x1) (swizzle x2)
+  , Just REFL <- matchPrimFun f1 f2
+  = Just REFL
 
-  | associative f1
-  , Tuple (NilTup `SnocTup` a1 `SnocTup` b1)  <- x1
-  , Tuple (NilTup `SnocTup` a2 `SnocTup` b2)  <- x2
-  = let sub1  = hashOpenExp a1 < hashOpenExp b1
-        sub2  = hashOpenExp a2 < hashOpenExp b2
-    in
-    if sub1     -- compare small hashes first
-       then if sub2
-               then a1 ==^ a2 && b1 ==^ b2
-               else a1 ==^ b2 && b1 ==^ a2
-       else if sub2
-               then b1 ==^ a2 && a1 ==^ b2
-               else b1 ==^ b2 && a1 ==^ a2
-
-  | otherwise
-  = x1 ==^ x2
+  | Just REFL <- matchOpenExp x1 x2
+  , Just REFL <- matchPrimFun f1 f2
+  = Just REFL
 
 matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
   | OpenAcc (Avar v1) <- a1
   , OpenAcc (Avar v2) <- a2
-  = idxToInt v1 == idxToInt v2 && x1 ==^ x2
-
-  | otherwise
-  = error "Eq: IndexScalar: expected array variable"
+  , Just REFL         <- matchIdx v1 v2
+  , Just REFL         <- matchOpenExp x1 x2
+  = Just REFL
 
 matchOpenExp (Shape a1)          (Shape a2)
   | OpenAcc (Avar v1) <- a1
   , OpenAcc (Avar v2) <- a2
-  = idxToInt v1 == idxToInt v2
+  , Just REFL         <- matchIdx v1 v2
+  = gcast REFL
 
-  | otherwise
-  = error "Eq: Shape: expected array variable"
+matchOpenExp (ShapeSize sh1)     (ShapeSize sh2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  = Just REFL
 
-matchOpenExp (ShapeSize sh1)     (ShapeSize sh2)     = sh1 ==^ sh2
-matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2) = sa1 ==^ sa2 && sb1 ==^ sb2
-
-matchOpenExp _                   _                   = False
-
+matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2) = matchOpenExp sa1 sa2 >> matchOpenExp sb1 sb2
+matchOpenExp _                   _                   = Nothing
 
 
-matchTuple :: Tuple.Tuple (OpenExp env aenv) t -> Tuple.Tuple (OpenExp env aenv) t -> Bool
-matchTuple NilTup          NilTup          = True
-matchTuple (SnocTup t1 e1) (SnocTup t2 e2) = matchTuple t1 t2 && matchOpenExp e1 e2
-matchTuple _               _               = False
+
+swizzle :: OpenExp env aenv (a,a) -> OpenExp env aenv (a,a)
+swizzle (Tuple (NilTup `SnocTup` x `SnocTup` y))
+  | hashOpenExp x <= hashOpenExp y      = Tuple $ NilTup `SnocTup` x `SnocTup` y
+  | otherwise                           = Tuple $ NilTup `SnocTup` y `SnocTup` x
+swizzle _                               = error "swizzle: expected tuple"
+
+
+-- Environment projection indices
+--
+matchIdx :: Idx env s -> Idx env t -> Maybe (s :=: t)
+matchIdx ZeroIdx     ZeroIdx     = Just REFL
+matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
+matchIdx _           _           = Nothing
+
+-- Tuple projection indices
+--
+matchTupleIdx :: TupleIdx tup s -> TupleIdx tup t -> Maybe (s :=: t)
+matchTupleIdx ZeroTupIdx     ZeroTupIdx     = Just REFL
+matchTupleIdx (SuccTupIdx s) (SuccTupIdx t) = matchTupleIdx s t
+matchTupleIdx _              _              = Nothing
+
+
+matchTuple :: Tuple.Tuple (OpenExp env aenv) s
+           -> Tuple.Tuple (OpenExp env aenv) t
+           -> Maybe (s :=: t)
+matchTuple NilTup          NilTup               = Just REFL
+matchTuple (SnocTup t1 e1) (SnocTup t2 e2)
+  | Just REFL <- matchTuple   t1 t2
+  , Just REFL <- matchOpenExp e1 e2
+  = Just REFL
+
+matchTuple _               _                    = Nothing
+
 
 matchPrimConst :: PrimConst c -> PrimConst c -> Bool
 matchPrimConst (PrimMinBound _) (PrimMinBound _) = True
@@ -210,66 +267,71 @@ matchPrimConst (PrimPi _)       (PrimPi _)       = True
 matchPrimConst _                _                = False
 
 
-matchPrimFun :: PrimFun f -> PrimFun f -> Bool
-matchPrimFun (PrimAdd _)            (PrimAdd _)            = True
-matchPrimFun (PrimSub _)            (PrimSub _)            = True
-matchPrimFun (PrimMul _)            (PrimMul _)            = True
-matchPrimFun (PrimNeg _)            (PrimNeg _)            = True
-matchPrimFun (PrimAbs _)            (PrimAbs _)            = True
-matchPrimFun (PrimSig _)            (PrimSig _)            = True
-matchPrimFun (PrimQuot _)           (PrimQuot _)           = True
-matchPrimFun (PrimRem _)            (PrimRem _)            = True
-matchPrimFun (PrimIDiv _)           (PrimIDiv _)           = True
-matchPrimFun (PrimMod _)            (PrimMod _)            = True
-matchPrimFun (PrimBAnd _)           (PrimBAnd _)           = True
-matchPrimFun (PrimBOr _)            (PrimBOr _)            = True
-matchPrimFun (PrimBXor _)           (PrimBXor _)           = True
-matchPrimFun (PrimBNot _)           (PrimBNot _)           = True
-matchPrimFun (PrimBShiftL _)        (PrimBShiftL _)        = True
-matchPrimFun (PrimBShiftR _)        (PrimBShiftR _)        = True
-matchPrimFun (PrimBRotateL _)       (PrimBRotateL _)       = True
-matchPrimFun (PrimBRotateR _)       (PrimBRotateR _)       = True
-matchPrimFun (PrimFDiv _)           (PrimFDiv _)           = True
-matchPrimFun (PrimRecip _)          (PrimRecip _)          = True
-matchPrimFun (PrimSin _)            (PrimSin _)            = True
-matchPrimFun (PrimCos _)            (PrimCos _)            = True
-matchPrimFun (PrimTan _)            (PrimTan _)            = True
-matchPrimFun (PrimAsin _)           (PrimAsin _)           = True
-matchPrimFun (PrimAcos _)           (PrimAcos _)           = True
-matchPrimFun (PrimAtan _)           (PrimAtan _)           = True
-matchPrimFun (PrimAsinh _)          (PrimAsinh _)          = True
-matchPrimFun (PrimAcosh _)          (PrimAcosh _)          = True
-matchPrimFun (PrimAtanh _)          (PrimAtanh _)          = True
-matchPrimFun (PrimExpFloating _)    (PrimExpFloating _)    = True
-matchPrimFun (PrimSqrt _)           (PrimSqrt _)           = True
-matchPrimFun (PrimLog _)            (PrimLog _)            = True
-matchPrimFun (PrimFPow _)           (PrimFPow _)           = True
-matchPrimFun (PrimLogBase _)        (PrimLogBase _)        = True
-matchPrimFun (PrimAtan2 _)          (PrimAtan2 _)          = True
-matchPrimFun (PrimTruncate _ _)     (PrimTruncate _ _)     = True
-matchPrimFun (PrimRound _ _)        (PrimRound _ _)        = True
-matchPrimFun (PrimFloor _ _)        (PrimFloor _ _)        = True
-matchPrimFun (PrimCeiling _ _)      (PrimCeiling _ _)      = True
-matchPrimFun (PrimLt _)             (PrimLt _)             = True
-matchPrimFun (PrimGt _)             (PrimGt _)             = True
-matchPrimFun (PrimLtEq _)           (PrimLtEq _)           = True
-matchPrimFun (PrimGtEq _)           (PrimGtEq _)           = True
-matchPrimFun (PrimEq _)             (PrimEq _)             = True
-matchPrimFun (PrimNEq _)            (PrimNEq _)            = True
-matchPrimFun (PrimMax _)            (PrimMax _)            = True
-matchPrimFun (PrimMin _)            (PrimMin _)            = True
-matchPrimFun (PrimFromIntegral _ _) (PrimFromIntegral _ _) = True
-matchPrimFun PrimLAnd               PrimLAnd               = True
-matchPrimFun PrimLOr                PrimLOr                = True
-matchPrimFun PrimLNot               PrimLNot               = True
-matchPrimFun PrimOrd                PrimOrd                = True
-matchPrimFun PrimChr                PrimChr                = True
-matchPrimFun PrimBoolToInt          PrimBoolToInt          = True
-matchPrimFun _                      _                      = False
+matchPrimFun :: (Elt s, Elt t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :=: t)
+matchPrimFun (PrimAdd _)            (PrimAdd _)            = Just REFL
+matchPrimFun (PrimSub _)            (PrimSub _)            = Just REFL
+matchPrimFun (PrimMul _)            (PrimMul _)            = Just REFL
+matchPrimFun (PrimNeg _)            (PrimNeg _)            = Just REFL
+matchPrimFun (PrimAbs _)            (PrimAbs _)            = Just REFL
+matchPrimFun (PrimSig _)            (PrimSig _)            = Just REFL
+matchPrimFun (PrimQuot _)           (PrimQuot _)           = Just REFL
+matchPrimFun (PrimRem _)            (PrimRem _)            = Just REFL
+matchPrimFun (PrimIDiv _)           (PrimIDiv _)           = Just REFL
+matchPrimFun (PrimMod _)            (PrimMod _)            = Just REFL
+matchPrimFun (PrimBAnd _)           (PrimBAnd _)           = Just REFL
+matchPrimFun (PrimBOr _)            (PrimBOr _)            = Just REFL
+matchPrimFun (PrimBXor _)           (PrimBXor _)           = Just REFL
+matchPrimFun (PrimBNot _)           (PrimBNot _)           = Just REFL
+matchPrimFun (PrimBShiftL _)        (PrimBShiftL _)        = Just REFL
+matchPrimFun (PrimBShiftR _)        (PrimBShiftR _)        = Just REFL
+matchPrimFun (PrimBRotateL _)       (PrimBRotateL _)       = Just REFL
+matchPrimFun (PrimBRotateR _)       (PrimBRotateR _)       = Just REFL
+matchPrimFun (PrimFDiv _)           (PrimFDiv _)           = Just REFL
+matchPrimFun (PrimRecip _)          (PrimRecip _)          = Just REFL
+matchPrimFun (PrimSin _)            (PrimSin _)            = Just REFL
+matchPrimFun (PrimCos _)            (PrimCos _)            = Just REFL
+matchPrimFun (PrimTan _)            (PrimTan _)            = Just REFL
+matchPrimFun (PrimAsin _)           (PrimAsin _)           = Just REFL
+matchPrimFun (PrimAcos _)           (PrimAcos _)           = Just REFL
+matchPrimFun (PrimAtan _)           (PrimAtan _)           = Just REFL
+matchPrimFun (PrimAsinh _)          (PrimAsinh _)          = Just REFL
+matchPrimFun (PrimAcosh _)          (PrimAcosh _)          = Just REFL
+matchPrimFun (PrimAtanh _)          (PrimAtanh _)          = Just REFL
+matchPrimFun (PrimExpFloating _)    (PrimExpFloating _)    = Just REFL
+matchPrimFun (PrimSqrt _)           (PrimSqrt _)           = Just REFL
+matchPrimFun (PrimLog _)            (PrimLog _)            = Just REFL
+matchPrimFun (PrimFPow _)           (PrimFPow _)           = Just REFL
+matchPrimFun (PrimLogBase _)        (PrimLogBase _)        = Just REFL
+matchPrimFun (PrimAtan2 _)          (PrimAtan2 _)          = Just REFL
+matchPrimFun (PrimTruncate _ _)     (PrimTruncate _ _)     = gcast REFL -- output type
+matchPrimFun (PrimRound _ _)        (PrimRound _ _)        = gcast REFL
+matchPrimFun (PrimFloor _ _)        (PrimFloor _ _)        = gcast REFL
+matchPrimFun (PrimCeiling _ _)      (PrimCeiling _ _)      = gcast REFL
+matchPrimFun (PrimLt _)             (PrimLt _)             = Just REFL
+matchPrimFun (PrimGt _)             (PrimGt _)             = Just REFL
+matchPrimFun (PrimLtEq _)           (PrimLtEq _)           = Just REFL
+matchPrimFun (PrimGtEq _)           (PrimGtEq _)           = Just REFL
+matchPrimFun (PrimEq _)             (PrimEq _)             = Just REFL
+matchPrimFun (PrimNEq _)            (PrimNEq _)            = Just REFL
+matchPrimFun (PrimMax _)            (PrimMax _)            = Just REFL
+matchPrimFun (PrimMin _)            (PrimMin _)            = Just REFL
+matchPrimFun (PrimFromIntegral _ _) (PrimFromIntegral _ _) = gcast REFL
+matchPrimFun PrimLAnd               PrimLAnd               = Just REFL
+matchPrimFun PrimLOr                PrimLOr                = Just REFL
+matchPrimFun PrimLNot               PrimLNot               = Just REFL
+matchPrimFun PrimOrd                PrimOrd                = Just REFL
+matchPrimFun PrimChr                PrimChr                = Just REFL
+matchPrimFun PrimBoolToInt          PrimBoolToInt          = Just REFL
+matchPrimFun _                      _                      = Nothing
 
 
 -- Discriminate binary associative functions
+-- TLM: how to extract the 'a' as a pair type?
 --
+associative :: PrimFun (a -> r) -> Maybe (a :=: (x,x))
+associative _ = Nothing
+
+{--
 associative :: PrimFun f -> Bool
 associative f = case f of
   PrimAdd     _ -> True
@@ -284,7 +346,7 @@ associative f = case f of
   PrimLAnd      -> True
   PrimLOr       -> True
   _             -> False
-
+--}
 
 
 -- Hashable scalar expressions
