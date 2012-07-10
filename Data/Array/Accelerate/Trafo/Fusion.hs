@@ -27,24 +27,25 @@ import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Trafo.CSE
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Smart            as Smart
-import qualified Data.Array.Accelerate.Trafo.Sharing    as Smart
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 
 
 -- | Convert a closed array expression to de Bruijn form while also
 -- incorporating sharing observation and array fusion.
 --
 convertAcc :: Arrays arrs => Smart.Acc arrs -> Acc arrs
-convertAcc = fuseOpenAcc . Smart.convertAcc
+convertAcc = fuseOpenAcc . Sharing.convertAcc
 
 -- | Convert a unary function over array computations
 --
 convertAccFun1 :: (Arrays a, Arrays b) => (Smart.Acc a -> Smart.Acc b) -> Afun (a -> b)
-convertAccFun1 = fuseOpenAfun . Smart.convertAccFun1
+convertAccFun1 = fuseOpenAfun . Sharing.convertAccFun1
 
 
 -- Array fusion of a de Bruijn computation AST
@@ -301,11 +302,15 @@ intersect sh1 sh2
 force :: DelayedAcc aenv a -> OpenAcc aenv a
 force delayed = OpenAcc $ case delayed of
   Done a                                -> a
-  Yield env sh f                        -> bind env $ Generate sh f
+  Yield env sh f                        -> bind env $ Generate (simplifyExp sh) (simplifyFun f)
   Step env sh ix f a
-   | Lam (Body (Var ZeroIdx)) <- ix     -> bind env $ Map f             (OpenAcc a)
-   | Lam (Body (Var ZeroIdx)) <- f      -> bind env $ Backpermute sh ix (OpenAcc a)
-   | otherwise                          -> bind env $ Transform sh ix f (OpenAcc a)
+   | Lam (Body (Var ZeroIdx)) <- ix     -> bind env $ Map f'               (OpenAcc a)
+   | Lam (Body (Var ZeroIdx)) <- f      -> bind env $ Backpermute sh' ix'  (OpenAcc a)
+   | otherwise                          -> bind env $ Transform sh' ix' f' (OpenAcc a)
+   where
+     f'  = simplifyFun f
+     ix' = simplifyFun ix
+     sh' = simplifyExp sh
 
 
 -- Apply an index space transform that specifies where elements in the

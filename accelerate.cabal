@@ -94,6 +94,7 @@ Library
                         base            == 4.*,
                         containers      >= 0.3 && < 0.5,
                         ghc-prim        == 0.2.*,
+                        hashable        >= 1.1 && < 1.2,
                         pretty          >= 1.0 && < 1.2
 
   if flag(more-pp)
@@ -122,6 +123,7 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
+                        Data.Array.Accelerate.Trafo.CSE
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Substitution

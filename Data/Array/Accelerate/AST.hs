@@ -716,7 +716,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv sh
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
-  Cond          :: PreOpenExp acc env aenv Bool
+  Cond          :: Elt t
+                => PreOpenExp acc env aenv Bool
                 -> PreOpenExp acc env aenv t
                 -> PreOpenExp acc env aenv t
                 -> PreOpenExp acc env aenv t
@@ -755,6 +756,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
+
 
 -- |Vanilla open expression
 --
