@@ -1,7 +1,8 @@
 {-# LANGUAGE TypeOperators, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
--- Copyright   : [2010..2011] Manuel M T Chakravarty, Ben Lever
+-- Copyright   : [2010..2011] Manuel M T Chakravarty, Gabriele Keller, Ben Lever
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
