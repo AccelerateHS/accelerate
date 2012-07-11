@@ -27,6 +27,7 @@ import Data.Hashable
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
@@ -143,12 +144,6 @@ cseOpenFun env (Lam  f) = Lam  (cseOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
 data s :=: t where
   REFL :: s :=: s
 
--- Attempt to lift a test on value equality to type equality as well.
---
-refl :: (Typeable s, Typeable t) => (x -> y -> Bool) -> x -> y -> Maybe (s :=: t)
-refl f a b | f a b     = gcast REFL
-           | otherwise = Nothing
-
 
 -- Compute the congruence of two scalar expressions. Two nodes are congruent if
 -- either:
@@ -169,11 +164,12 @@ matchOpenExp (Var v1) (Var v2)
   = matchIdx v1 v2
 
 matchOpenExp (Const c1) (Const c2)
-  = refl (==) c1 =<< cast c2
+  | Just c2' <- cast c2, c1 == c2'
+  = gcast REFL  -- surface/representation type
 
 matchOpenExp (Tuple t1) (Tuple t2)
   | Just REFL <- matchTuple t1 t2
-  = gcast REFL
+  = gcast REFL  -- surface/representation type
 
 matchOpenExp (Prj ix1 t1) (Prj ix2 t2)
   | Just REFL <- matchOpenExp  t1  t2
@@ -181,7 +177,7 @@ matchOpenExp (Prj ix1 t1) (Prj ix2 t2)
   = Just REFL
 
 matchOpenExp IndexAny IndexAny
-  = gcast REFL
+  = gcast REFL  -- ???
 
 matchOpenExp IndexNil IndexNil
   = Just REFL
@@ -211,7 +207,7 @@ matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
   = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
 
 matchOpenExp (PrimConst c1) (PrimConst c2)
-  = refl matchPrimConst c1 =<< gcast c2
+  = matchPrimConst c1 c2
 
 matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   | Just x1'  <- commutes f1 x1
@@ -232,10 +228,8 @@ matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
   = Just REFL
 
 matchOpenExp (Shape a1) (Shape a2)
-  | OpenAcc (Avar v1) <- a1
-  , OpenAcc (Avar v2) <- a2
-  , Just REFL         <- matchIdx v1 v2
-  = gcast REFL
+  | Just REFL <- matchAvarIdx a1 a2
+  = Just REFL
 
 matchOpenExp (ShapeSize sh1) (ShapeSize sh2)
   | Just REFL <- matchOpenExp sh1 sh2
@@ -254,6 +248,13 @@ matchIdx :: Idx env s -> Idx env t -> Maybe (s :=: t)
 matchIdx ZeroIdx     ZeroIdx     = Just REFL
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
+
+matchAvarIdx :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
+matchAvarIdx (OpenAcc (Avar v1)) (OpenAcc (Avar v2))
+  | Just REFL <- matchIdx v1 v2
+  = Just REFL
+matchAvarIdx _ _
+  = error "matchAvarIdx: expected array variable"
 
 -- Tuple projection indices. Given the same tuple expression structure (tup),
 -- check that the indices project identical elements.
@@ -277,11 +278,11 @@ matchTuple (SnocTup t1 e1) (SnocTup t2 e2)
 matchTuple _               _                    = Nothing
 
 
-matchPrimConst :: PrimConst c -> PrimConst c -> Bool
-matchPrimConst (PrimMinBound _) (PrimMinBound _) = True
-matchPrimConst (PrimMaxBound _) (PrimMaxBound _) = True
-matchPrimConst (PrimPi _)       (PrimPi _)       = True
-matchPrimConst _                _                = False
+matchPrimConst :: (Elt s, Elt t) => PrimConst s -> PrimConst t -> Maybe (s :=: t)
+matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
+matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
+matchPrimConst (PrimPi s)       (PrimPi t)       = matchFloatingType s t
+matchPrimConst _                _                = Nothing
 
 
 matchPrimFun :: (Elt s, Elt t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :=: t)
@@ -320,10 +321,10 @@ matchPrimFun (PrimLog _)            (PrimLog _)            = Just REFL
 matchPrimFun (PrimFPow _)           (PrimFPow _)           = Just REFL
 matchPrimFun (PrimLogBase _)        (PrimLogBase _)        = Just REFL
 matchPrimFun (PrimAtan2 _)          (PrimAtan2 _)          = Just REFL
-matchPrimFun (PrimTruncate _ _)     (PrimTruncate _ _)     = gcast REFL -- output type
-matchPrimFun (PrimRound _ _)        (PrimRound _ _)        = gcast REFL -- output type
-matchPrimFun (PrimFloor _ _)        (PrimFloor _ _)        = gcast REFL -- output type
-matchPrimFun (PrimCeiling _ _)      (PrimCeiling _ _)      = gcast REFL -- output type
+matchPrimFun (PrimTruncate _ s)     (PrimTruncate _ t)     = matchIntegralType s t
+matchPrimFun (PrimRound _ s)        (PrimRound _ t)        = matchIntegralType s t
+matchPrimFun (PrimFloor _ s)        (PrimFloor _ t)        = matchIntegralType s t
+matchPrimFun (PrimCeiling _ s)      (PrimCeiling _ t)      = matchIntegralType s t
 matchPrimFun (PrimLt _)             (PrimLt _)             = Just REFL
 matchPrimFun (PrimGt _)             (PrimGt _)             = Just REFL
 matchPrimFun (PrimLtEq _)           (PrimLtEq _)           = Just REFL
@@ -332,7 +333,7 @@ matchPrimFun (PrimEq _)             (PrimEq _)             = Just REFL
 matchPrimFun (PrimNEq _)            (PrimNEq _)            = Just REFL
 matchPrimFun (PrimMax _)            (PrimMax _)            = Just REFL
 matchPrimFun (PrimMin _)            (PrimMin _)            = Just REFL
-matchPrimFun (PrimFromIntegral _ _) (PrimFromIntegral _ _) = gcast REFL -- output type
+matchPrimFun (PrimFromIntegral _ s) (PrimFromIntegral _ t) = matchNumType s t
 matchPrimFun PrimLAnd               PrimLAnd               = Just REFL
 matchPrimFun PrimLOr                PrimLOr                = Just REFL
 matchPrimFun PrimLNot               PrimLNot               = Just REFL
@@ -340,6 +341,54 @@ matchPrimFun PrimOrd                PrimOrd                = Just REFL
 matchPrimFun PrimChr                PrimChr                = Just REFL
 matchPrimFun PrimBoolToInt          PrimBoolToInt          = Just REFL
 matchPrimFun _                      _                      = Nothing
+
+-- Match reified type dictionaries
+--
+matchNumType :: NumType s -> NumType t -> Maybe (s :=: t)
+matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
+matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
+matchNumType _                   _                   = Nothing
+
+matchBoundedType :: BoundedType s -> BoundedType t -> Maybe (s :=: t)
+matchBoundedType (IntegralBoundedType s) (IntegralBoundedType t) = matchIntegralType s t
+matchBoundedType (NonNumBoundedType s)   (NonNumBoundedType t)   = matchNonNumType s t
+matchBoundedType _                       _                       = Nothing
+
+matchIntegralType :: IntegralType s -> IntegralType t -> Maybe (s :=: t)
+matchIntegralType (TypeInt _)     (TypeInt _)     = Just REFL
+matchIntegralType (TypeInt8 _)    (TypeInt8 _)    = Just REFL
+matchIntegralType (TypeInt16 _)   (TypeInt16 _)   = Just REFL
+matchIntegralType (TypeInt32 _)   (TypeInt32 _)   = Just REFL
+matchIntegralType (TypeInt64 _)   (TypeInt64 _)   = Just REFL
+matchIntegralType (TypeWord _)    (TypeWord _)    = Just REFL
+matchIntegralType (TypeWord8 _)   (TypeWord8 _)   = Just REFL
+matchIntegralType (TypeWord16 _)  (TypeWord16 _)  = Just REFL
+matchIntegralType (TypeWord32 _)  (TypeWord32 _)  = Just REFL
+matchIntegralType (TypeWord64 _)  (TypeWord64 _)  = Just REFL
+matchIntegralType (TypeCShort _)  (TypeCShort _)  = Just REFL
+matchIntegralType (TypeCUShort _) (TypeCUShort _) = Just REFL
+matchIntegralType (TypeCInt _)    (TypeCInt _)    = Just REFL
+matchIntegralType (TypeCUInt _)   (TypeCUInt _)   = Just REFL
+matchIntegralType (TypeCLong _)   (TypeCLong _)   = Just REFL
+matchIntegralType (TypeCULong _)  (TypeCULong _)  = Just REFL
+matchIntegralType (TypeCLLong _)  (TypeCLLong _)  = Just REFL
+matchIntegralType (TypeCULLong _) (TypeCULLong _) = Just REFL
+matchIntegralType _               _               = Nothing
+
+matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :=: t)
+matchFloatingType (TypeFloat _)   (TypeFloat _)   = Just REFL
+matchFloatingType (TypeDouble _)  (TypeDouble _)  = Just REFL
+matchFloatingType (TypeCFloat _)  (TypeCFloat _)  = Just REFL
+matchFloatingType (TypeCDouble _) (TypeCDouble _) = Just REFL
+matchFloatingType _               _               = Nothing
+
+matchNonNumType :: NonNumType s -> NonNumType t -> Maybe (s :=: t)
+matchNonNumType (TypeBool _)   (TypeBool _)   = Just REFL
+matchNonNumType (TypeChar _)   (TypeChar _)   = Just REFL
+matchNonNumType (TypeCChar _)  (TypeCChar _)  = Just REFL
+matchNonNumType (TypeCSChar _) (TypeCSChar _) = Just REFL
+matchNonNumType (TypeCUChar _) (TypeCUChar _) = Just REFL
+matchNonNumType _              _              = Nothing
 
 
 -- Discriminate binary functions that commute, and if so return the operands in
