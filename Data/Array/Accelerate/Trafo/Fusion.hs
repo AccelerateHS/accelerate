@@ -77,18 +77,14 @@ delayOpenAcc (OpenAcc pacc) =
     -- Forms that introduce environment manipulations and control flow. These
     -- stable points of the expression we generally don't want to fuse past.
     --
-    -- As an exception, let bound Use nodes are allowed to float upwards.
+    -- As an exception, let bound nodes of manifest arrays are allowed to float
+    -- upwards.
     --
     Alet bndAcc bodyAcc
       -> case bndAcc of
-           OpenAcc a@(Use _) ->
-             let bnd = BaseEnv `PushEnv` a
-             in case cvt bodyAcc of
-                  Done env b            -> Done  (cat bnd env) b
-                  Step env sh ix f b    -> Step  (cat bnd env) sh ix f b
-                  Yield env sh f        -> Yield (cat bnd env) sh f
-
-           _ -> done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
+           OpenAcc bnd@(Use _)  -> float bnd (cvt bodyAcc)
+           OpenAcc bnd@(Unit _) -> float bnd (cvt bodyAcc)
+           _                    -> done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
 
     Avar ix
       -> done $ Avar ix
@@ -112,7 +108,6 @@ delayOpenAcc (OpenAcc pacc) =
 
     Unit e
       -> done $ Unit e
---        -> Yield BaseEnv (Const ()) (Lam (Body (weakenE (cvtE e))))
 
     -- Index space transforms
     --
@@ -283,6 +278,9 @@ data DelayedAcc aenv a where
 -- Fusion combinators
 -- ------------------
 
+done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
+done = Done BaseEnv
+
 identity :: Elt a => OpenFun env aenv (a -> a)
 identity = Lam . Body $ Var ZeroIdx
 
@@ -304,10 +302,6 @@ intersect sh1 sh2
   | otherwise                           = Intersect sh1 sh2
 
 
-done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
-done = Done BaseEnv
-
-
 -- "force" a delayed array representation to produce a real AST node.
 --
 force :: DelayedAcc aenv a -> OpenAcc aenv a
@@ -323,6 +317,18 @@ force delayed = OpenAcc $ case delayed of
      ix' = simplifyFun ix
      sh' = simplifyExp sh
 
+-- let floating
+--
+float :: Arrays a
+      => PreOpenAcc OpenAcc aenv      a
+      -> DelayedAcc         (aenv, a) b
+      -> DelayedAcc         aenv      b
+float a delayed =
+  let bnd = BaseEnv `PushEnv` a
+  in case delayed of
+    Done env b            -> Done  (cat bnd env) b
+    Step env sh ix f b    -> Step  (cat bnd env) sh ix f b
+    Yield env sh f        -> Yield (cat bnd env) sh f
 
 -- Apply an index space transform that specifies where elements in the
 -- destination array read their data from in the source array.
