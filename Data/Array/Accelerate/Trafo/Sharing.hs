@@ -1737,9 +1737,6 @@ recoverSharingAcc floatOutAcc lvl fvs acc
 -- Pretty printing
 -- ---------------
 
-instance Arrays arrs => Show (Acc arrs) where
-  show = show . convertAcc
-
 instance Elt a => Show (Exp a) where
   show = show . convertExp EmptyLayout [] . EnvExp undefined . toSharingExp
     where

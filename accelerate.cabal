@@ -113,6 +113,7 @@ Library
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
+                        Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 

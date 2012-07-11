@@ -16,8 +16,8 @@
 
 module Data.Array.Accelerate.Trafo.Fusion (
 
-  -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAccFun1
+  -- * Fuse array computations
+  fuseAcc, fuseAccFun1
 
 ) where
 
@@ -31,20 +31,17 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
-import qualified Data.Array.Accelerate.Smart            as Smart
-import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 
 
--- | Convert a closed array expression to de Bruijn form while also
--- incorporating sharing observation and array fusion.
+-- | Apply the array fusion transformation to a de Bruijn AST
 --
-convertAcc :: Arrays arrs => Smart.Acc arrs -> Acc arrs
-convertAcc = fuseOpenAcc . Sharing.convertAcc
+fuseAcc :: Acc arrs -> Acc arrs
+fuseAcc = fuseOpenAcc
 
--- | Convert a unary function over array computations
+-- | Fuse a unary function over array computations
 --
-convertAccFun1 :: (Arrays a, Arrays b) => (Smart.Acc a -> Smart.Acc b) -> Afun (a -> b)
-convertAccFun1 = fuseOpenAfun . Sharing.convertAccFun1
+fuseAccFun1 :: (Arrays a, Arrays b) => Afun (a -> b) -> Afun (a -> b)
+fuseAccFun1 = fuseOpenAfun
 
 
 -- Array fusion of a de Bruijn computation AST
