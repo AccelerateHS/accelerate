@@ -194,9 +194,9 @@ matchOpenExp (FromIndex sh1 i1)  (FromIndex sh2 i2)  = matchOpenExp i1 i2 >> mat
 matchOpenExp (Cond p1 t1 e1)     (Cond p2 t2 e2)     = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
 matchOpenExp (PrimConst c1)      (PrimConst c2)      = refl matchPrimConst c1 =<< gcast c2
 matchOpenExp (PrimApp f1 x1)     (PrimApp f2 x2)
-  | Just REFL <- associative f1
-  , Just REFL <- associative f2
-  , Just REFL <- matchOpenExp (swizzle x1) (swizzle x2)
+  | Just x1'  <- commutes f1 x1
+  , Just x2'  <- commutes f2 x2
+  , Just REFL <- matchOpenExp x1' x2'
   , Just REFL <- matchPrimFun f1 f2
   = Just REFL
 
@@ -223,14 +223,6 @@ matchOpenExp (ShapeSize sh1)     (ShapeSize sh2)
 
 matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2) = matchOpenExp sa1 sa2 >> matchOpenExp sb1 sb2
 matchOpenExp _                   _                   = Nothing
-
-
-
-swizzle :: OpenExp env aenv (a,a) -> OpenExp env aenv (a,a)
-swizzle (Tuple (NilTup `SnocTup` x `SnocTup` y))
-  | hashOpenExp x <= hashOpenExp y      = Tuple $ NilTup `SnocTup` x `SnocTup` y
-  | otherwise                           = Tuple $ NilTup `SnocTup` y `SnocTup` x
-swizzle _                               = error "swizzle: expected tuple"
 
 
 -- Environment projection indices
@@ -325,28 +317,31 @@ matchPrimFun PrimBoolToInt          PrimBoolToInt          = Just REFL
 matchPrimFun _                      _                      = Nothing
 
 
--- Discriminate binary associative functions
--- TLM: how to extract the 'a' as a pair type?
+-- Discriminate binary functions that commute, and if so return the operands in
+-- a stable ordering such that matching recognises expressions modulo
+-- commutativity.
 --
-associative :: PrimFun (a -> r) -> Maybe (a :=: (x,x))
-associative _ = Nothing
+commutes :: PrimFun (a -> r) -> OpenExp env aenv a -> Maybe (OpenExp env aenv a)
+commutes f x = case f of
+  PrimAdd     _ -> Just (swizzle x)
+  PrimMul     _ -> Just (swizzle x)
+  PrimBAnd    _ -> Just (swizzle x)
+  PrimBOr     _ -> Just (swizzle x)
+  PrimBXor    _ -> Just (swizzle x)
+  PrimEq      _ -> Just (swizzle x)
+  PrimNEq     _ -> Just (swizzle x)
+  PrimMax     _ -> Just (swizzle x)
+  PrimMin     _ -> Just (swizzle x)
+  PrimLAnd      -> Just (swizzle x)
+  PrimLOr       -> Just (swizzle x)
+  _             -> Nothing
+  where
+    swizzle :: OpenExp env aenv (a,a) -> OpenExp env aenv (a,a)
+    swizzle exp
+      | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
+      , hashOpenExp a > hashOpenExp b           = Tuple (NilTup `SnocTup` b `SnocTup` a)
 
-{--
-associative :: PrimFun f -> Bool
-associative f = case f of
-  PrimAdd     _ -> True
-  PrimMul     _ -> True
-  PrimBAnd    _ -> True
-  PrimBOr     _ -> True
-  PrimBXor    _ -> True
-  PrimEq      _ -> True
-  PrimNEq     _ -> True
-  PrimMax     _ -> True
-  PrimMin     _ -> True
-  PrimLAnd      -> True
-  PrimLOr       -> True
-  _             -> False
---}
+      | otherwise                               = exp
 
 
 -- Hashable scalar expressions
@@ -372,7 +367,7 @@ hashOpenExp (IndexTail sl)              = hash "IndexTail"      `combine` hashOp
 hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e
-hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp x
+hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
 hashOpenExp (IndexScalar a ix)
   | OpenAcc (Avar v) <- a               = hash "IndexScalar"    `combine` hashIdx v      `combine` hashOpenExp ix
