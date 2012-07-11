@@ -139,6 +139,8 @@ cseOpenFun env (Lam  f) = Lam  (cseOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
 data s :=: t where
   REFL :: s :=: s
 
+-- Attempt to lift a test on value equality to type equality as well.
+--
 refl :: (Typeable s, Typeable t) => (x -> y -> Bool) -> x -> y -> Maybe (s :=: t)
 refl f a b | f a b     = gcast REFL
            | otherwise = Nothing
@@ -150,50 +152,64 @@ refl f a b | f a b     = gcast REFL
 --  1. The nodes label constants and the contents are equal
 --  2. They have the same operator and their operands are congruent
 --
---  The below attempts to use real typed equality, but occasionally still needs
---  to use a cast, particularly when we can only match the representation types.
+-- The below attempts to use real typed equality, but occasionally still needs
+-- to use a cast, particularly when we can only match the representation types.
 --
 matchOpenExp :: OpenExp env aenv s -> OpenExp env aenv t -> Maybe (s :=: t)
-matchOpenExp (Let x1 e1)         (Let x2 e2)
+matchOpenExp (Let x1 e1) (Let x2 e2)
   | Just REFL <- matchOpenExp x1 x2
   , Just REFL <- matchOpenExp e1 e2
   = Just REFL
 
-matchOpenExp (Var v1)            (Var v2)            = matchIdx v1 v2
-matchOpenExp (Const c1)          (Const c2)          = refl (==) c1 =<< cast c2
-matchOpenExp (Tuple t1)          (Tuple t2)
+matchOpenExp (Var v1) (Var v2)
+  = matchIdx v1 v2
+
+matchOpenExp (Const c1) (Const c2)
+  = refl (==) c1 =<< cast c2
+
+matchOpenExp (Tuple t1) (Tuple t2)
   | Just REFL <- matchTuple t1 t2
   = gcast REFL
 
-matchOpenExp (Prj ix1 t1)        (Prj ix2 t2)
+matchOpenExp (Prj ix1 t1) (Prj ix2 t2)
   | Just REFL <- matchOpenExp  t1  t2
   , Just REFL <- matchTupleIdx ix1 ix2
   = Just REFL
 
-matchOpenExp IndexAny            IndexAny            = gcast REFL
-matchOpenExp IndexNil            IndexNil            = Just REFL
-matchOpenExp (IndexCons sl1 a1)  (IndexCons sl2 a2)
+matchOpenExp IndexAny IndexAny
+  = gcast REFL
+
+matchOpenExp IndexNil IndexNil
+  = Just REFL
+
+matchOpenExp (IndexCons sl1 a1) (IndexCons sl2 a2)
   | Just REFL <- matchOpenExp sl1 sl2
   , Just REFL <- matchOpenExp a1 a2
   = Just REFL
 
-matchOpenExp (IndexHead sl1)     (IndexHead sl2)
+matchOpenExp (IndexHead sl1) (IndexHead sl2)
   | Just REFL <- matchOpenExp sl1 sl2
   = Just REFL
 
-matchOpenExp (IndexTail sl1)     (IndexTail sl2)
+matchOpenExp (IndexTail sl1) (IndexTail sl2)
   | Just REFL <- matchOpenExp sl1 sl2
   = Just REFL
 
-matchOpenExp (ToIndex sh1 i1)    (ToIndex sh2 i2)
+matchOpenExp (ToIndex sh1 i1) (ToIndex sh2 i2)
   | Just REFL <- matchOpenExp sh1 sh2
   , Just REFL <- matchOpenExp i1 i2
   = Just REFL
 
-matchOpenExp (FromIndex sh1 i1)  (FromIndex sh2 i2)  = matchOpenExp i1 i2 >> matchOpenExp sh1 sh2
-matchOpenExp (Cond p1 t1 e1)     (Cond p2 t2 e2)     = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
-matchOpenExp (PrimConst c1)      (PrimConst c2)      = refl matchPrimConst c1 =<< gcast c2
-matchOpenExp (PrimApp f1 x1)     (PrimApp f2 x2)
+matchOpenExp (FromIndex sh1 i1) (FromIndex sh2 i2)
+  = matchOpenExp i1 i2 >> matchOpenExp sh1 sh2
+
+matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
+  = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
+
+matchOpenExp (PrimConst c1) (PrimConst c2)
+  = refl matchPrimConst c1 =<< gcast c2
+
+matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   | Just x1'  <- commutes f1 x1
   , Just x2'  <- commutes f2 x2
   , Just REFL <- matchOpenExp x1' x2'
@@ -211,18 +227,21 @@ matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
   , Just REFL         <- matchOpenExp x1 x2
   = Just REFL
 
-matchOpenExp (Shape a1)          (Shape a2)
+matchOpenExp (Shape a1) (Shape a2)
   | OpenAcc (Avar v1) <- a1
   , OpenAcc (Avar v2) <- a2
   , Just REFL         <- matchIdx v1 v2
   = gcast REFL
 
-matchOpenExp (ShapeSize sh1)     (ShapeSize sh2)
+matchOpenExp (ShapeSize sh1) (ShapeSize sh2)
   | Just REFL <- matchOpenExp sh1 sh2
   = Just REFL
 
-matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2) = matchOpenExp sa1 sa2 >> matchOpenExp sb1 sb2
-matchOpenExp _                   _                   = Nothing
+matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2)
+  = matchOpenExp sa1 sa2 >> matchOpenExp sb1 sb2
+
+matchOpenExp _ _
+  = Nothing
 
 
 -- Environment projection indices
@@ -232,14 +251,16 @@ matchIdx ZeroIdx     ZeroIdx     = Just REFL
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
 
--- Tuple projection indices
+-- Tuple projection indices. Given the same tuple expression structure (tup),
+-- check that the indices project identical elements.
 --
 matchTupleIdx :: TupleIdx tup s -> TupleIdx tup t -> Maybe (s :=: t)
 matchTupleIdx ZeroTupIdx     ZeroTupIdx     = Just REFL
 matchTupleIdx (SuccTupIdx s) (SuccTupIdx t) = matchTupleIdx s t
 matchTupleIdx _              _              = Nothing
 
-
+-- Tuples
+--
 matchTuple :: Tuple.Tuple (OpenExp env aenv) s
            -> Tuple.Tuple (OpenExp env aenv) t
            -> Maybe (s :=: t)
@@ -296,9 +317,9 @@ matchPrimFun (PrimFPow _)           (PrimFPow _)           = Just REFL
 matchPrimFun (PrimLogBase _)        (PrimLogBase _)        = Just REFL
 matchPrimFun (PrimAtan2 _)          (PrimAtan2 _)          = Just REFL
 matchPrimFun (PrimTruncate _ _)     (PrimTruncate _ _)     = gcast REFL -- output type
-matchPrimFun (PrimRound _ _)        (PrimRound _ _)        = gcast REFL
-matchPrimFun (PrimFloor _ _)        (PrimFloor _ _)        = gcast REFL
-matchPrimFun (PrimCeiling _ _)      (PrimCeiling _ _)      = gcast REFL
+matchPrimFun (PrimRound _ _)        (PrimRound _ _)        = gcast REFL -- output type
+matchPrimFun (PrimFloor _ _)        (PrimFloor _ _)        = gcast REFL -- output type
+matchPrimFun (PrimCeiling _ _)      (PrimCeiling _ _)      = gcast REFL -- output type
 matchPrimFun (PrimLt _)             (PrimLt _)             = Just REFL
 matchPrimFun (PrimGt _)             (PrimGt _)             = Just REFL
 matchPrimFun (PrimLtEq _)           (PrimLtEq _)           = Just REFL
@@ -307,7 +328,7 @@ matchPrimFun (PrimEq _)             (PrimEq _)             = Just REFL
 matchPrimFun (PrimNEq _)            (PrimNEq _)            = Just REFL
 matchPrimFun (PrimMax _)            (PrimMax _)            = Just REFL
 matchPrimFun (PrimMin _)            (PrimMin _)            = Just REFL
-matchPrimFun (PrimFromIntegral _ _) (PrimFromIntegral _ _) = gcast REFL
+matchPrimFun (PrimFromIntegral _ _) (PrimFromIntegral _ _) = gcast REFL -- output type
 matchPrimFun PrimLAnd               PrimLAnd               = Just REFL
 matchPrimFun PrimLOr                PrimLOr                = Just REFL
 matchPrimFun PrimLNot               PrimLNot               = Just REFL
@@ -323,15 +344,15 @@ matchPrimFun _                      _                      = Nothing
 --
 commutes :: PrimFun (a -> r) -> OpenExp env aenv a -> Maybe (OpenExp env aenv a)
 commutes f x = case f of
-  PrimAdd     _ -> Just (swizzle x)
-  PrimMul     _ -> Just (swizzle x)
-  PrimBAnd    _ -> Just (swizzle x)
-  PrimBOr     _ -> Just (swizzle x)
-  PrimBXor    _ -> Just (swizzle x)
-  PrimEq      _ -> Just (swizzle x)
-  PrimNEq     _ -> Just (swizzle x)
-  PrimMax     _ -> Just (swizzle x)
-  PrimMin     _ -> Just (swizzle x)
+  PrimAdd _     -> Just (swizzle x)
+  PrimMul _     -> Just (swizzle x)
+  PrimBAnd _    -> Just (swizzle x)
+  PrimBOr _     -> Just (swizzle x)
+  PrimBXor _    -> Just (swizzle x)
+  PrimEq _      -> Just (swizzle x)
+  PrimNEq _     -> Just (swizzle x)
+  PrimMax _     -> Just (swizzle x)
+  PrimMin _     -> Just (swizzle x)
   PrimLAnd      -> Just (swizzle x)
   PrimLOr       -> Just (swizzle x)
   _             -> Nothing
@@ -340,7 +361,7 @@ commutes f x = case f of
     swizzle exp
       | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
       , hashOpenExp a > hashOpenExp b           = Tuple (NilTup `SnocTup` b `SnocTup` a)
-
+      --
       | otherwise                               = exp
 
 
