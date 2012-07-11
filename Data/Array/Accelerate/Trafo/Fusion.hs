@@ -73,36 +73,45 @@ delayOpenAcc (OpenAcc pacc) =
       cvtF = fuseOpenFun
   --
   in case pacc of
+    --
     -- Forms that introduce environment manipulations and control flow. These
     -- stable points of the expression we generally don't want to fuse past.
     --
-    -- TLM: may want to float upwards let of Use nodes
+    -- As an exception, let bound Use nodes are allowed to float upwards.
     --
     Alet bndAcc bodyAcc
-      -> Done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
+      -> case bndAcc of
+           OpenAcc a@(Use _) ->
+             let bnd = BaseEnv `PushEnv` a
+             in case cvt bodyAcc of
+                  Done env b            -> Done  (cat bnd env) b
+                  Step env sh ix f b    -> Step  (cat bnd env) sh ix f b
+                  Yield env sh f        -> Yield (cat bnd env) sh f
+
+           _ -> done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
 
     Avar ix
-      -> Done $ Avar ix
+      -> done $ Avar ix
 
     Atuple arrs
-      -> Done $ Atuple (fuseAtuple arrs)
+      -> done $ Atuple (fuseAtuple arrs)
 
     Aprj ix arrs
-      -> Done $ Aprj ix (fuseOpenAcc arrs)
+      -> done $ Aprj ix (fuseOpenAcc arrs)
 
     Apply f a
-      -> Done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
+      -> done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
 
     Acond p acc1 acc2
-      -> Done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
+      -> done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
 
     -- Array injection
     --
     Use arrs
-      -> Done $ Use arrs
+      -> done $ Use arrs
 
     Unit e
-      -> Done $ Unit e
+      -> done $ Unit e
 --        -> Yield BaseEnv (Const ()) (Lam (Body (weakenE (cvtE e))))
 
     -- Index space transforms
@@ -113,8 +122,8 @@ delayOpenAcc (OpenAcc pacc) =
            -- TLM: there was a runtime check to ensure the old and new shapes
            -- contained the same number of elements: this has been lost!
            --
-           Done a
-            -> Done $ Reshape sh' (OpenAcc a)
+           Done env a
+            -> Done env $ Reshape (sinkE env sh') (OpenAcc a)
 
            Step env sh ix f a
             -> Step env (sinkE env sh')
@@ -151,43 +160,43 @@ delayOpenAcc (OpenAcc pacc) =
     -- Consumers
     --
     Fold f z a
-      -> Done $ Fold (cvtF f) (cvtE z) (force (cvt a))
+      -> done $ Fold (cvtF f) (cvtE z) (force (cvt a))
 
     Fold1 f a
-      -> Done $ Fold1 (cvtF f) (force (cvt a))
+      -> done $ Fold1 (cvtF f) (force (cvt a))
 
     FoldSeg f z a s
-      -> Done $ FoldSeg (cvtF f) (cvtE z) (force (cvt a)) (force (cvt s))
+      -> done $ FoldSeg (cvtF f) (cvtE z) (force (cvt a)) (force (cvt s))
 
     Fold1Seg f a s
-      -> Done $ Fold1Seg (cvtF f) (force (cvt a)) (force (cvt s))
+      -> done $ Fold1Seg (cvtF f) (force (cvt a)) (force (cvt s))
 
     Scanl f z a
-      -> Done $ Scanl (cvtF f) (cvtE z) (force (cvt a))
+      -> done $ Scanl (cvtF f) (cvtE z) (force (cvt a))
 
     Scanl' f z a
-      -> Done $ Scanl' (cvtF f) (cvtE z) (force (cvt a))
+      -> done $ Scanl' (cvtF f) (cvtE z) (force (cvt a))
 
     Scanl1 f a
-      -> Done $ Scanl1 (cvtF f) (force (cvt a))
+      -> done $ Scanl1 (cvtF f) (force (cvt a))
 
     Scanr f z a
-      -> Done $ Scanr (cvtF f) (cvtE z) (force (cvt a))
+      -> done $ Scanr (cvtF f) (cvtE z) (force (cvt a))
 
     Scanr' f z a
-      -> Done $ Scanr' (cvtF f) (cvtE z) (force (cvt a))
+      -> done $ Scanr' (cvtF f) (cvtE z) (force (cvt a))
 
     Scanr1 f a
-      -> Done $ Scanr1 (cvtF f) (force (cvt a))
+      -> done $ Scanr1 (cvtF f) (force (cvt a))
 
     Permute f d ix a
-      -> Done $ Permute (cvtF f) (force (cvt d)) (cvtF ix) (force (cvt a))
+      -> done $ Permute (cvtF f) (force (cvt d)) (cvtF ix) (force (cvt a))
 
     Stencil f b a
-      -> Done $ Stencil (cvtF f) b (force (cvt a))
+      -> done $ Stencil (cvtF f) b (force (cvt a))
 
     Stencil2 f b1 a1 b0 a0
-      -> Done $ Stencil2 (cvtF f) b1 (force (cvt a1))
+      -> done $ Stencil2 (cvtF f) b1 (force (cvt a1))
                                   b0 (force (cvt a0))
 
 
@@ -251,8 +260,10 @@ fuseTuple (SnocTup tup e) = fuseTuple tup `SnocTup` fuseOpenExp e
 -- ============
 
 data DelayedAcc aenv a where
-  Done  :: PreOpenAcc OpenAcc aenv a
-        -> DelayedAcc         aenv a
+  Done  :: Arrays a
+        => Extend aenv aenv'
+        -> PreOpenAcc OpenAcc aenv' a
+        -> DelayedAcc         aenv  a
 
   Step  :: (Elt a, Elt b, Shape sh, Shape sh')
         => Extend aenv aenv'
@@ -293,11 +304,15 @@ intersect sh1 sh2
   | otherwise                           = Intersect sh1 sh2
 
 
+done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
+done = Done BaseEnv
+
+
 -- "force" a delayed array representation to produce a real AST node.
 --
 force :: DelayedAcc aenv a -> OpenAcc aenv a
 force delayed = OpenAcc $ case delayed of
-  Done a                                -> a
+  Done env a                            -> bind env a
   Yield env sh f                        -> bind env $ Generate (simplifyExp sh) (simplifyFun f)
   Step env sh ix f a
    | Lam (Body (Var ZeroIdx)) <- ix     -> bind env $ Map f'               (OpenAcc a)
@@ -321,7 +336,7 @@ backpermuteD
 backpermuteD sh' p acc = case acc of
   Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
-  Done a                -> Step BaseEnv sh' p identity a
+  Done env a            -> Step env (sinkE env sh') (sinkF env p) identity a
 
 
 -- Combine a unary value function to a delayed array to produce another delayed
@@ -335,12 +350,12 @@ mapD :: (Shape sh, Elt a, Elt b)
 mapD f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
-  Done a
-    | Avar _ <- a       -> Step BaseEnv (Shape (OpenAcc a)) identity f a
-    | otherwise         -> Step (BaseEnv `PushEnv` a)
+  Done env a
+    | Avar _ <- a       -> Step env (Shape (OpenAcc a)) identity (sinkF env f) a
+    | otherwise         -> Step (env `PushEnv` a)
                                 (Shape (OpenAcc (Avar ZeroIdx)))
                                 identity
-                                (weakenFA f)
+                                (weakenFA (sinkF env f))
                                 (Avar ZeroIdx)
 
 
@@ -355,9 +370,9 @@ zipWithD
     -> OpenAcc    aenv (Array sh b)
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
-  Done a1
-    | Avar _ <- a1      -> inner BaseEnv (shape a1) (index a1)
-    | otherwise         -> inner (BaseEnv `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
+  Done env a1
+    | Avar _ <- a1      -> inner env (shape a1) (index a1)
+    | otherwise         -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
 
   Step env1 sh1 ix1 g1 a1
     | Avar _ <- a1      -> inner env1 sh1 (g1 `compose` index a1 `compose` ix1)
@@ -379,12 +394,16 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
           -> Fun        aenv' (sh -> a)
           -> DelayedAcc aenv  (Array sh c)
     inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
-      Done a2
-        | Avar _ <- a2  -> Yield env1 (sh1 `intersect` shape a2) (generate (sinkF env1 f) g1 (index a2))
+      Done env2 a2
+        | Avar _ <- a2  ->
+            let env = cat env1 env2
+            in  Yield env (sinkE env2 sh1 `intersect` shape a2)
+                          (generate (sinkF env f) (sinkF env2 g1) (index a2))
+
         | otherwise     ->
-            let env = env1 `PushEnv` a2
-            in  Yield env (weakenEA sh1 `intersect` shape (Avar ZeroIdx))
-                          (generate (sinkF env f) (weakenFA g1) (index (Avar ZeroIdx)))
+            let env = cat env1 env2 `PushEnv` a2
+            in  Yield env (weakenEA (sinkE env2 sh1) `intersect` shape (Avar ZeroIdx))
+                          (generate (sinkF env f) (weakenFA (sinkF env2 g1)) (index (Avar ZeroIdx)))
 
       Step env2 sh2 ix2 g2 a2
         | Avar _ <- a2  ->
