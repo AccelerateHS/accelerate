@@ -107,7 +107,11 @@ cseOpenExp env = cvt
       IndexAny          -> IndexAny
       ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e        -> Cond (cvt p) (cvt t) (cvt e)
+      Cond p t e        -> let t' = cvt t
+                               e' = cvt e
+                           in case matchOpenExp t' e' of
+                                Just REFL     -> t'
+                                _             -> Cond (cvt p) t' e'
       PrimConst c       -> PrimConst c
       PrimApp f x       -> PrimApp f (cvt x)
       IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
