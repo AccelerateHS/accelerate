@@ -28,14 +28,15 @@ type F            = Float       -- Double not supported on all devices
 type Complex      = (F,F)
 type ComplexPlane = Array DIM2 Complex
 
-mandelbrot :: F -> F -> F -> F -> Int -> Int -> Int -> Acc (Array DIM2 (F,F,Int))
+
+mandelbrot :: F -> F -> F -> F -> Int -> Int -> Int -> Acc (Array DIM2 (Complex,Int))
 mandelbrot x y x' y' screenX screenY depth
   = foldl (flip ($)) zs0 (P.take depth (repeat go))
   where
     cs  = genPlane x y x' y' screenX screenY
     zs0 = mkinit cs
 
-    go :: Acc (Array DIM2 (F,F,Int)) -> Acc (Array DIM2 (F,F,Int))
+    go :: Acc (Array DIM2 (Complex,Int)) -> Acc (Array DIM2 (Complex,Int))
     go = A.zipWith iter cs
 
 
@@ -72,7 +73,7 @@ next c z = c `plus` (z `times` z)
 plus :: Exp Complex -> Exp Complex -> Exp Complex
 plus = lift2 f
   where f :: (Exp F, Exp F) -> (Exp F, Exp F) -> (Exp F, Exp F)
-        f (x1,y1) (x2,y2) = (x1+x2,y1+y2)
+        f (x1,y1) (x2,y2) = (x1+x2, y1+y2)
 
 times :: Exp Complex -> Exp Complex -> Exp Complex
 times = lift2 f
@@ -85,38 +86,35 @@ dot = lift1 f
         f (x,y) = x*x + y*y
 
 
-iter :: Exp Complex -> Exp (F,F,Int) -> Exp (F,F,Int)
-iter c z = f (unlift z)
+iter :: Exp Complex -> Exp (Complex,Int) -> Exp (Complex,Int)
+iter c zi = f (A.fst zi) (A.snd zi)
  where
-  f :: (Exp F, Exp F, Exp Int) -> Exp (F,F,Int)
-  f (x,y,i) =
-     (dot z' >* 4.0) ? ( lift (x,y,i)
-                       , lift (A.fst z', A.snd z', i+1) )
-     where z' = A.curry (next c) x y
+  f :: Exp Complex -> Exp Int -> Exp (Complex,Int)
+  f z i =
+    let z' = next c z
+    in (dot z' >* 4.0) ? ( zi , lift (z', i+1) )
 
 
-mkinit :: Acc ComplexPlane -> Acc (Array DIM2 (F,F,Int))
-mkinit cs = A.map (lift1 f) cs
-  where f :: (Exp F, Exp F) -> (Exp F, Exp F, Exp Int)
-        f (x,y) = (x,y,0)
+mkinit :: Acc ComplexPlane -> Acc (Array DIM2 (Complex,Int))
+mkinit cs = A.zip cs (A.fill (A.shape cs) 0)
 
 
 -- Rendering -------------------------------------------------------------------
 
 type RGBA = Word32
 
-prettyRGBA :: Exp Int -> Exp (F, F, Int) -> Exp RGBA
+prettyRGBA :: Exp Int -> Exp (Complex, Int) -> Exp RGBA
 prettyRGBA lIMIT s' = r + g + b + a
   where
-    (_, _, s)   = unlift s' :: (Exp F, Exp F, Exp Int)
-    t           = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
-    r           = (t     `mod` 128 + 64) * 0x1000000
-    g           = (t * 2 `mod` 128 + 64) * 0x10000
-    b           = (t * 3 `mod` 256     ) * 0x100
-    a           = 0xFF
+    s   = A.snd s'
+    t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
+    r   = (t     `mod` 128 + 64) * 0x1000000
+    g   = (t * 2 `mod` 128 + 64) * 0x10000
+    b   = (t * 3 `mod` 256     ) * 0x100
+    a   = 0xFF
 
 
-makePicture :: Options -> Int -> Acc (Array DIM2 (F, F, Int)) -> G.Picture
+makePicture :: Options -> Int -> Acc (Array DIM2 (Complex, Int)) -> G.Picture
 makePicture opt limit zs = pic
   where
     arrPixels   = run opt $ A.map (prettyRGBA (constant limit)) zs
