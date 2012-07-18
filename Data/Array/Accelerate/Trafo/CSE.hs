@@ -154,7 +154,7 @@ data s :=: t where
 -- The below attempts to use real typed equality, but occasionally still needs
 -- to use a cast, particularly when we can only match the representation types.
 --
-matchOpenExp :: OpenExp env aenv s -> OpenExp env aenv t -> Maybe (s :=: t)
+matchOpenExp :: forall env aenv s t. OpenExp env aenv s -> OpenExp env aenv t -> Maybe (s :=: t)
 matchOpenExp (Let x1 e1) (Let x2 e2)
   | Just REFL <- matchOpenExp x1 x2
   , Just REFL <- matchOpenExp e1 e2
@@ -164,7 +164,8 @@ matchOpenExp (Var v1) (Var v2)
   = matchIdx v1 v2
 
 matchOpenExp (Const c1) (Const c2)
-  | Just c2' <- cast c2, c1 == c2'
+  | Just REFL <- matchTupleType (Sugar.eltType (undefined::s)) (Sugar.eltType (undefined::t))
+  , c1 == c2
   = gcast REFL  -- surface/representation type
 
 matchOpenExp (Tuple t1) (Tuple t2)
@@ -254,7 +255,8 @@ matchAvarIdx (OpenAcc (Avar v1)) (OpenAcc (Avar v2))
   | Just REFL <- matchIdx v1 v2
   = Just REFL
 matchAvarIdx _ _
-  = error "matchAvarIdx: expected array variable"
+  = error "matchAvarIdx: expected array variable"       -- not strictly necessary
+
 
 -- Tuple projection indices. Given the same tuple expression structure (tup),
 -- check that the indices project identical elements.
@@ -342,8 +344,28 @@ matchPrimFun PrimChr                PrimChr                = Just REFL
 matchPrimFun PrimBoolToInt          PrimBoolToInt          = Just REFL
 matchPrimFun _                      _                      = Nothing
 
+
+-- Match reified types
+--
+matchTupleType :: TupleType s -> TupleType t -> Maybe (s :=: t)
+matchTupleType UnitTuple         UnitTuple         = Just REFL
+matchTupleType (SingleTuple s)   (SingleTuple t)   = matchScalarType s t
+matchTupleType (PairTuple s1 s2) (PairTuple t1 t2)
+  | Just REFL <- matchTupleType s1 t1
+  , Just REFL <- matchTupleType s2 t2
+  = Just REFL
+
+matchTupleType _ _
+  = Nothing
+
+
 -- Match reified type dictionaries
 --
+matchScalarType :: ScalarType s -> ScalarType t -> Maybe (s :=: t)
+matchScalarType (NumScalarType s)    (NumScalarType t)    = matchNumType s t
+matchScalarType (NonNumScalarType s) (NonNumScalarType t) = matchNonNumType s t
+matchScalarType _                    _                    = Nothing
+
 matchNumType :: NumType s -> NumType t -> Maybe (s :=: t)
 matchNumType (IntegralNumType s) (IntegralNumType t) = matchIntegralType s t
 matchNumType (FloatingNumType s) (FloatingNumType t) = matchFloatingType s t
