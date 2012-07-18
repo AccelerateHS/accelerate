@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
--- Module      : Data.Array.Accelerate.Trafo.CSE
+-- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -12,9 +12,9 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Trafo.CSE (
+module Data.Array.Accelerate.Trafo.Simplify (
 
-  -- Scalar expressions
+  -- simplify scalar expressions
   simplifyExp,
   simplifyFun,
 

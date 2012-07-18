@@ -124,9 +124,9 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
-                        Data.Array.Accelerate.Trafo.CSE
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Sharing
+                        Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
 
   if flag(more-pp)

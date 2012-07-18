@@ -26,7 +26,7 @@ import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Trafo.CSE
+import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
