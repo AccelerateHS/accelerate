@@ -65,7 +65,7 @@ matchOpenExp (Var v1) (Var v2)
 
 matchOpenExp (Const c1) (Const c2)
   | Just REFL <- matchTupleType (Sugar.eltType (undefined::s)) (Sugar.eltType (undefined::t))
-  , c1 == c2
+  , matchConst (Sugar.eltType (undefined::s)) c1 c2
   = gcast REFL  -- surface/representation type
 
 matchOpenExp (Tuple t1) (Tuple t2)
@@ -141,6 +141,19 @@ matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2)
 
 matchOpenExp _ _
   = Nothing
+
+
+-- Matching constants
+--
+matchConst :: TupleType a -> a -> a -> Bool
+matchConst UnitTuple         ()      ()      = True
+matchConst (SingleTuple ty)  a       b       = evalEq ty (a,b)
+matchConst (PairTuple ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
+
+evalEq :: ScalarType a -> ((a, a) -> Bool)
+evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
+evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
+evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
 
 -- Environment projection indices
