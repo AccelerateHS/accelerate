@@ -58,45 +58,74 @@ lookupEnv (PushEnv env e) x
   | otherwise                           = SuccIdx `fmap` lookupEnv env x
 
 
--- Simplify scalar expressions. Currently this takes the form of a pretty weedy
+-- Simplify scalar let bindings. Currently this takes the form of a pretty weedy
 -- CSE optimisation, where we look for expressions of the form:
 --
 -- > let x = e1 in e2
 --
--- and replace all occurrences of e1 in e2 with x. This doesn't do full CSE, but
--- is enough to catch some cases, particularly redundant array indexing
--- introduced by the fusion pass.
+-- and replace all occurrences of e1 in e1 with x. This doesn't do full CSE, but
+-- is enough to catch some cases, particularly redundant operations such as
+-- array indexing introduced by the fusion pass.
+--
+simplifyLet
+    :: (Elt a, Elt b)
+    => Gamma   env env aenv
+    -> OpenExp env     aenv a
+    -> OpenExp (env,a) aenv b
+    -> OpenExp env     aenv b
+simplifyLet env bnd body
+  | Just ix <- lookupEnv env bnd        = inline body (Var ix)
+  | otherwise                           = Let bnd body
+
+
+-- Simplify conditional expressions. If the branches are equal, we can avoid the
+-- conditional altogether.
+--
+-- TODO: implement constant folding, then attempt to evaluate the predicate and
+--       insert only the appropriate branch (module Algebra).
+--
+simplifyCond
+    :: Elt t
+    => Gamma env env aenv
+    -> OpenExp env aenv Bool
+    -> OpenExp env aenv t       -- then branch
+    -> OpenExp env aenv t       -- else branch
+    -> OpenExp env aenv t
+simplifyCond _env p t e
+  | Just REFL <- matchOpenExp t e       = t
+  | otherwise                           = Cond p t e
+
+
+-- Walk over the scalar expression, applying simplifications
 --
 simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp = cseOpenExp EmptyEnv
+simplifyExp = simplifyOpenExp EmptyEnv
 
 simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun = cseOpenFun EmptyEnv
+simplifyFun = simplifyOpenFun EmptyEnv
 
 
-cseOpenExp
+simplifyOpenExp
     :: forall env aenv t.
        Gamma   env env aenv
     -> OpenExp env     aenv t
     -> OpenExp env     aenv t
-cseOpenExp env = cvt
+simplifyOpenExp env = cvt
   where
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA = id
 
     cvt :: OpenExp env aenv e -> OpenExp env aenv e
     cvt exp = case exp of
-      Let bnd body ->
-        case lookupEnv env bnd of
-          Just ix       -> cvt (inline body (Var ix))
-          _             -> let bnd' = cvt bnd
-                               env' = incEnv env `PushEnv` weakenE bnd'
+      Let bnd body      -> let bnd'  = cvt bnd
+                               env'  = incEnv env `PushEnv` weakenE bnd'
+                               body' = simplifyOpenExp env' body
                            in
-                           Let bnd' (cseOpenExp env' body)
+                           simplifyLet env bnd' body'
       --
       Var ix            -> Var ix
       Const c           -> Const c
-      Tuple tup         -> Tuple (cseTuple env tup)
+      Tuple tup         -> Tuple (simplifyTuple env tup)
       Prj tup ix        -> Prj tup (cvt ix)
       IndexNil          -> IndexNil
       IndexCons sh sz   -> IndexCons (cvt sh) (cvt sz)
@@ -105,11 +134,7 @@ cseOpenExp env = cvt
       IndexAny          -> IndexAny
       ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e        -> let t' = cvt t
-                               e' = cvt e
-                           in case matchOpenExp t' e' of
-                                Just REFL     -> t'
-                                _             -> Cond (cvt p) t' e'
+      Cond p t e        -> simplifyCond env (cvt p) (cvt t) (cvt e)
       PrimConst c       -> PrimConst c
       PrimApp f x       -> PrimApp f (cvt x)
       IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
@@ -118,20 +143,18 @@ cseOpenExp env = cvt
       Intersect s t     -> Intersect (cvt s) (cvt t)
 
 
-cseTuple
+simplifyTuple
     :: Gamma env env aenv
     -> Tuple.Tuple (OpenExp env aenv) t
     -> Tuple.Tuple (OpenExp env aenv) t
-cseTuple _   NilTup          = NilTup
-cseTuple env (SnocTup tup e) = cseTuple env tup `SnocTup` cseOpenExp env e
+simplifyTuple _   NilTup          = NilTup
+simplifyTuple env (SnocTup tup e) = simplifyTuple env tup `SnocTup` simplifyOpenExp env e
 
 
-cseOpenFun
+simplifyOpenFun
     :: Gamma   env env aenv
     -> OpenFun env     aenv t
     -> OpenFun env     aenv t
-cseOpenFun env (Body e) = Body (cseOpenExp env e)
-cseOpenFun env (Lam  f) = Lam  (cseOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
-
-
+simplifyOpenFun env (Body e) = Body (simplifyOpenExp env e)
+simplifyOpenFun env (Lam  f) = Lam  (simplifyOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
 
