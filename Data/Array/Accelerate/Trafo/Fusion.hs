@@ -26,6 +26,7 @@ import Prelude                                          hiding ( exp )
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Trafo.Match
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
@@ -292,13 +293,9 @@ fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
 intersect :: Shape sh => OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect sh1 sh2
-  | Shape (OpenAcc (Avar v1))   <- sh1
-  , Shape (OpenAcc (Avar v2))   <- sh2
-  , idxToInt v1 == idxToInt v2          = sh1
-  --
-  | Intersect sa sb             <- sh1  = sh2 `intersect` sa `intersect` sb
-  | Intersect sa sb             <- sh2  = sh1 `intersect` sa `intersect` sb
-  --
+  | Just REFL <- matchOpenExp sh1 sh2   = sh1
+  | Intersect sa sb <- sh1              = sh2 `intersect` sa `intersect` sb
+  | Intersect sa sb <- sh2              = sh1 `intersect` sa `intersect` sb
   | otherwise                           = Intersect sh1 sh2
 
 
