@@ -10,9 +10,6 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- This module implements HOAS to de Bruijn conversion of array expressions
--- while incorporating sharing observation and array fusion.
---
 
 module Data.Array.Accelerate.Trafo.Fusion (
 

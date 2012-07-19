@@ -707,13 +707,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Shape and index conversion
   ToIndex       :: Shape sh
-                => PreOpenExp acc env aenv sh           -- ^ shape of the array
-                -> PreOpenExp acc env aenv sh           -- ^ index into the array
+                => PreOpenExp acc env aenv sh           -- shape of the array
+                -> PreOpenExp acc env aenv sh           -- index into the array
                 -> PreOpenExp acc env aenv Int
 
   FromIndex     :: Shape sh
-                => PreOpenExp acc env aenv sh           -- ^ shape of the array
-                -> PreOpenExp acc env aenv Int          -- ^ index into linear representation
+                => PreOpenExp acc env aenv sh           -- shape of the array
+                -> PreOpenExp acc env aenv Int          -- index into linear representation
                 -> PreOpenExp acc env aenv sh
 
   -- Conditional expression (non-strict in 2nd and 3rd argument)
