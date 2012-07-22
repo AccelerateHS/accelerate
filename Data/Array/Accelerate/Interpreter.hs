@@ -417,14 +417,14 @@ scanlOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
     (adata, _) = runArrayData $ do
                    arr   <- newArrayData (n + 1)
                    final <- traverse arr 0 (Sugar.fromElt e)
-                   writeArrayData arr n final
+                   unsafeWriteArrayData arr n final
                    return (arr, undefined)
 
     traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
-                      writeArrayData arr i v
+                      unsafeWriteArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
 
 scanl'Op :: forall e. (e -> e -> e)
@@ -448,7 +448,7 @@ scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
-                      writeArrayData arr i v
+                      unsafeWriteArrayData arr i v
                       traverse arr (i + 1) (f' v (rf ((), i)))
 
 scanl1Op :: forall e. (e -> e -> e)
@@ -470,11 +470,11 @@ scanl1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
       | i >= n    = return ()
       | i == 0    = do
                       let e = rf ((), i)
-                      writeArrayData arr i e
+                      unsafeWriteArrayData arr i e
                       traverse arr (i + 1) e
       | otherwise = do
                       let e = f' v (rf ((), i))
-                      writeArrayData arr i e
+                      unsafeWriteArrayData arr i e
                       traverse arr (i + 1) e
 
 scanrOp :: forall e. (e -> e -> e)
@@ -490,14 +490,14 @@ scanrOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
     (adata, _) = runArrayData $ do
                    arr   <- newArrayData (n + 1)
                    final <- traverse arr n (Sugar.fromElt e)
-                   writeArrayData arr 0 final
+                   unsafeWriteArrayData arr 0 final
                    return (arr, undefined)
 
     traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
     traverse arr i v
       | i == 0    = return v
       | otherwise = do
-                      writeArrayData arr i v
+                      unsafeWriteArrayData arr i v
                       traverse arr (i - 1) (f' v (rf ((), i-1)))
 
 scanr'Op :: forall e. (e -> e -> e)
@@ -521,7 +521,7 @@ scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
     traverse arr i v
       | i < 0     = return v
       | otherwise = do
-                      writeArrayData arr i v
+                      unsafeWriteArrayData arr i v
                       traverse arr (i - 1) (f' v (rf ((), i)))
 
 scanr1Op :: forall e. (e -> e -> e)
@@ -543,11 +543,11 @@ scanr1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
       | i < 0        = return ()
       | i == (n - 1) = do
                          let e = rf ((), i)
-                         writeArrayData arr i e
+                         unsafeWriteArrayData arr i e
                          traverse arr (i - 1) e
       | otherwise    = do
                          let e = f' v (rf ((), i))
-                         writeArrayData arr i e
+                         unsafeWriteArrayData arr i e
                          traverse arr (i - 1) e
 
 permuteOp :: (e -> e -> e)
@@ -558,17 +558,17 @@ permuteOp :: (e -> e -> e)
 permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
           p (DelayedPair DelayedUnit (DelayedArray sh pf))
   = delay $ adata `seq` Array dftsSh adata
-  where 
+  where
     f' = Sugar.sinkFromElt2 f
     --
-    (adata, _) 
+    (adata, _)
       = runArrayData $ do
 
             -- new array in target dimension
           arr <- newArrayData (size dftsSh)
 
             -- initialise it with the default values
-          let write ix = writeArrayData arr (index dftsSh ix) (dftsPf ix)      
+          let write ix = unsafeWriteArrayData arr (index dftsSh ix) (dftsPf ix)
           iter dftsSh write (>>) (return ())
 
             -- traverse the source dimension and project each element into
@@ -578,8 +578,8 @@ permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
                             let target = (Sugar.sinkFromElt p) ix
                             unless (target == ignore) $ do
                               let i = index dftsSh target
-                              e <- readArrayData arr i
-                              writeArrayData arr i (pf ix `f'` e) 
+                              e <- unsafeReadArrayData arr i
+                              unsafeWriteArrayData arr i (pf ix `f'` e)
           iter sh update (>>) (return ())
 
             -- return the updated array

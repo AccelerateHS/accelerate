@@ -983,8 +983,8 @@ newArray sh f = adata `seq` Array (fromElt sh) adata
   where
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (size sh)
-                   let write ix = writeArrayData arr (index sh ix)
-                                                     (fromElt (f ix))
+                   let write ix = unsafeWriteArrayData arr (index sh ix)
+                                                           (fromElt (f ix))
                    iter sh write (>>) (return ())
                    return (arr, undefined)
 
@@ -1030,7 +1030,7 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
     (adata, _)  = runArrayData $ do
                     arr <- newArrayData (size sh)
                     let go !i _ | i >= n = return ()
-                        go !i (v:vs)     = writeArrayData arr i (fromElt v) >> go (i+1) vs
+                        go !i (v:vs)     = unsafeWriteArrayData arr i (fromElt v) >> go (i+1) vs
                         go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
                     --
                     go 0 xs
