@@ -33,7 +33,7 @@ import qualified SliceExamples
 
 #ifdef ACCELERATE_IO
 import qualified BlockCopy
-import qualified VectorCopy ()     -- FIXME: Need to add tests from here
+import qualified VectorCopy
 #endif
 
 import qualified Canny
@@ -160,7 +160,7 @@ allTests cfg = sequence'
 
 #ifdef ACCELERATE_IO
     -- Array IO
-  , mkIO   "io"                    "array IO test"                              $ BlockCopy.run
+  , mkIO   "io"                    "array IO test"                              $ BlockCopy.run >> VectorCopy.run
 #endif
 
   --  image processing
