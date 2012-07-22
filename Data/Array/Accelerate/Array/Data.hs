@@ -43,6 +43,7 @@ import qualified Data.Array.IArray  as IArray
 import qualified Data.Array.Base    as MArray (readArray, writeArray)
 #else
 import qualified Data.Array.Base    as MArray (unsafeRead, unsafeWrite)
+import qualified Data.Array.Base    as IArray (unsafeAt)
 #endif
 #if __GLASGOW_HASKELL__ >= 700 && __GLASGOW_HASKELL__ < 703
 import qualified Data.Array.MArray  as Unsafe
@@ -140,7 +141,7 @@ data ArrayEltR a where
 class ArrayElt e where
   type ArrayPtrs e
   --
-  indexArrayData         :: ArrayData e -> Int -> e
+  unsafeIndexArrayData   :: ArrayData e -> Int -> e
   ptrsOfArrayData        :: ArrayData e -> ArrayPtrs e
   --
   newArrayData           :: Int -> ST s (MutableArrayData s e)
@@ -153,7 +154,7 @@ class ArrayElt e where
 
 instance ArrayElt () where
   type ArrayPtrs () = ()
-  indexArrayData AD_Unit i          = i `seq` ()
+  unsafeIndexArrayData AD_Unit i    = i `seq` ()
   ptrsOfArrayData AD_Unit           = ()
   newArrayData size                 = size `seq` return AD_Unit
   unsafeReadArrayData AD_Unit i     = i `seq` return ()
@@ -164,7 +165,7 @@ instance ArrayElt () where
 
 instance ArrayElt Int where
   type ArrayPtrs Int = Ptr Int
-  indexArrayData (AD_Int ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Int ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int ba)          = uArrayPtr ba
   newArrayData size                    = liftM AD_Int $ unsafeNewArray_ size wORD_SCALE
   unsafeReadArrayData (AD_Int ba) i    = unsafeReadArray ba i
@@ -175,7 +176,7 @@ instance ArrayElt Int where
 
 instance ArrayElt Int8 where
   type ArrayPtrs Int8 = Ptr Int8
-  indexArrayData (AD_Int8 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Int8 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int8 ba)          = uArrayPtr ba
   newArrayData size                     = liftM AD_Int8 $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_Int8 ba) i    = unsafeReadArray ba i
@@ -186,7 +187,7 @@ instance ArrayElt Int8 where
 
 instance ArrayElt Int16 where
   type ArrayPtrs Int16 = Ptr Int16
-  indexArrayData (AD_Int16 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Int16 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int16 ba)          = uArrayPtr ba
   newArrayData size                      = liftM AD_Int16 $ unsafeNewArray_ size (*# 2#)
   unsafeReadArrayData (AD_Int16 ba) i    = unsafeReadArray ba i
@@ -197,7 +198,7 @@ instance ArrayElt Int16 where
 
 instance ArrayElt Int32 where
   type ArrayPtrs Int32 = Ptr Int32
-  indexArrayData (AD_Int32 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Int32 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int32 ba)          = uArrayPtr ba
   newArrayData size                      = liftM AD_Int32 $ unsafeNewArray_ size (*# 4#)
   unsafeReadArrayData (AD_Int32 ba) i    = unsafeReadArray ba i
@@ -208,7 +209,7 @@ instance ArrayElt Int32 where
 
 instance ArrayElt Int64 where
   type ArrayPtrs Int64 = Ptr Int64
-  indexArrayData (AD_Int64 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Int64 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int64 ba)          = uArrayPtr ba
   newArrayData size                      = liftM AD_Int64 $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_Int64 ba) i    = unsafeReadArray ba i
@@ -219,7 +220,7 @@ instance ArrayElt Int64 where
 
 instance ArrayElt Word where
   type ArrayPtrs Word = Ptr Word
-  indexArrayData (AD_Word ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Word ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word ba)          = uArrayPtr ba
   newArrayData size                     = liftM AD_Word $ unsafeNewArray_ size wORD_SCALE
   unsafeReadArrayData (AD_Word ba) i    = unsafeReadArray ba i
@@ -230,7 +231,7 @@ instance ArrayElt Word where
 
 instance ArrayElt Word8 where
   type ArrayPtrs Word8 = Ptr Word8
-  indexArrayData (AD_Word8 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Word8 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word8 ba)          = uArrayPtr ba
   newArrayData size                      = liftM AD_Word8 $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_Word8 ba) i    = unsafeReadArray ba i
@@ -241,7 +242,7 @@ instance ArrayElt Word8 where
 
 instance ArrayElt Word16 where
   type ArrayPtrs Word16 = Ptr Word16
-  indexArrayData (AD_Word16 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Word16 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word16 ba)          = uArrayPtr ba
   newArrayData size                       = liftM AD_Word16 $ unsafeNewArray_ size (*# 2#)
   unsafeReadArrayData (AD_Word16 ba) i    = unsafeReadArray ba i
@@ -252,7 +253,7 @@ instance ArrayElt Word16 where
 
 instance ArrayElt Word32 where
   type ArrayPtrs Word32 = Ptr Word32
-  indexArrayData (AD_Word32 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Word32 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word32 ba)          = uArrayPtr ba
   newArrayData size                       = liftM AD_Word32 $ unsafeNewArray_ size (*# 4#)
   unsafeReadArrayData (AD_Word32 ba) i    = unsafeReadArray ba i
@@ -263,7 +264,7 @@ instance ArrayElt Word32 where
 
 instance ArrayElt Word64 where
   type ArrayPtrs Word64 = Ptr Word64
-  indexArrayData (AD_Word64 ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Word64 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word64 ba)          = uArrayPtr ba
   newArrayData size                       = liftM AD_Word64 $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_Word64 ba) i    = unsafeReadArray ba i
@@ -284,7 +285,7 @@ instance ArrayElt Word64 where
 
 instance ArrayElt Float where
   type ArrayPtrs Float = Ptr Float
-  indexArrayData (AD_Float ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Float ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Float ba)          = uArrayPtr ba
   newArrayData size                      = liftM AD_Float $ unsafeNewArray_ size fLOAT_SCALE
   unsafeReadArrayData (AD_Float ba) i    = unsafeReadArray ba i
@@ -295,7 +296,7 @@ instance ArrayElt Float where
 
 instance ArrayElt Double where
   type ArrayPtrs Double = Ptr Double
-  indexArrayData (AD_Double ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Double ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Double ba)          = uArrayPtr ba
   newArrayData size                       = liftM AD_Double $ unsafeNewArray_ size dOUBLE_SCALE
   unsafeReadArrayData (AD_Double ba) i    = unsafeReadArray ba i
@@ -315,7 +316,7 @@ instance ArrayElt Double where
 --
 instance ArrayElt Bool where
   type ArrayPtrs Bool = Ptr Word8
-  indexArrayData (AD_Bool ba) i         = toBool (ba IArray.! i)
+  unsafeIndexArrayData (AD_Bool ba) i   = toBool (unsafeIndexArray ba i)
   ptrsOfArrayData (AD_Bool ba)          = uArrayPtr ba
   newArrayData size                     = liftM AD_Bool $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_Bool ba) i    = liftM toBool  $ unsafeReadArray ba i
@@ -339,7 +340,7 @@ fromBool False = 0
 --
 instance ArrayElt Char where
   type ArrayPtrs Char = Ptr Char
-  indexArrayData (AD_Char ba) i         = ba IArray.! i
+  unsafeIndexArrayData (AD_Char ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Char ba)          = uArrayPtr ba
   newArrayData size                     = liftM AD_Char $ unsafeNewArray_ size (*# 4#)
   unsafeReadArrayData (AD_Char ba) i    = unsafeReadArray ba i
@@ -354,9 +355,9 @@ instance ArrayElt Char where
 -- CUChar
 
 instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
-  type ArrayPtrs (a, b)          = (ArrayPtrs a, ArrayPtrs b)
-  indexArrayData (AD_Pair a b) i = (indexArrayData a i, indexArrayData b i)
-  ptrsOfArrayData (AD_Pair a b)  = (ptrsOfArrayData a, ptrsOfArrayData b)
+  type ArrayPtrs (a, b)                = (ArrayPtrs a, ArrayPtrs b)
+  unsafeIndexArrayData (AD_Pair a b) i = (unsafeIndexArrayData a i, unsafeIndexArrayData b i)
+  ptrsOfArrayData (AD_Pair a b)        = (ptrsOfArrayData a, ptrsOfArrayData b)
   newArrayData size
     = do
         a <- newArrayData size
@@ -409,6 +410,21 @@ pairArrayData = AD_Pair
 
 -- Auxiliary functions
 -- -------------------
+
+-- Returns the element of an immutable array at the specified index.
+--
+-- This does no bounds checking unless you configured with -funsafe-checks. This
+-- is usually OK, since the functions that convert from multidimensional to
+-- linear indexing do bounds checking by default.
+--
+{-# INLINE unsafeIndexArray #-}
+unsafeIndexArray :: IArray.IArray UArray e => UArray Int e -> Int -> e
+#ifdef ACCELERATE_UNSAFE_CHECKS
+unsafeIndexArray = IArray.!
+#else
+unsafeIndexArray = IArray.unsafeAt
+#endif
+
 
 -- Read an element from a mutable array.
 --

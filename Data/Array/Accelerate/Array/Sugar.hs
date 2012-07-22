@@ -973,7 +973,7 @@ infixl 9 !
 {-# INLINE (!) #-}
 -- (Array sh adata) ! ix = toElt (adata `indexArrayData` index sh ix)
 -- FIXME: using this due to a bug in 6.10.x
-(!) (Array sh adata) ix = toElt (adata `indexArrayData` index (toElt sh) ix)
+(!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` index (toElt sh) ix)
 
 -- |Create an array from its representation function
 --
@@ -1042,7 +1042,7 @@ toList :: forall sh e. Array sh e -> [e]
 toList (Array sh adata) = iter sh' idx (.) id []
   where
     sh'    = toElt sh :: sh
-    idx ix = \l -> toElt (adata `indexArrayData` index sh' ix) : l
+    idx ix = \l -> toElt (adata `unsafeIndexArrayData` index sh' ix) : l
 
 -- Convert an array to a string
 --
