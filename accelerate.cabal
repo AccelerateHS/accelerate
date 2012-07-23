@@ -104,6 +104,7 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
+                        Data.Array.Accelerate.Analysis.Match
                         Data.Array.Accelerate.Analysis.Shape
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Analysis.Type
@@ -125,7 +126,6 @@ Library
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Trafo.Fusion
-                        Data.Array.Accelerate.Trafo.Match
                         Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution

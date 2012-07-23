@@ -2,8 +2,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Trafo.Simplify
+-- Module      : Data.Array.Accelerate.Analysis.Simplify
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -12,11 +13,11 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Trafo.Match (
+module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenExp,
+  matchOpenExp, matchOpenFun,
 
 ) where
 

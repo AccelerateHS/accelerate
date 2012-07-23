@@ -25,7 +25,7 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Trafo.Match
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
