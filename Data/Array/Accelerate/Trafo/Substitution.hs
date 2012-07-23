@@ -55,6 +55,8 @@ import Prelude                                  hiding ( exp )
 -- able to rebuild terms. In essence, the crucial functionality is to propagate
 -- a class of operations on variables that is closed under shifting.
 --
+infixr `compose`
+infixr `substitute`
 
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
