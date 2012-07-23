@@ -143,19 +143,19 @@ class Slice sl where
 instance Slice () where
   type SliceShape    () = ()
   type CoSliceShape  () = ()
-  type FullShape () = ()
+  type FullShape     () = ()
   sliceIndex _ = SliceNil
 
 instance Slice sl => Slice (sl, ()) where
-  type SliceShape   (sl, ()) = (SliceShape sl, Int)
+  type SliceShape   (sl, ()) = (SliceShape  sl, Int)
   type CoSliceShape (sl, ()) = CoSliceShape sl
-  type FullShape    (sl, ()) = (FullShape sl, Int)
+  type FullShape    (sl, ()) = (FullShape   sl, Int)
   sliceIndex _ = SliceAll (sliceIndex (undefined::sl))
 
 instance Slice sl => Slice (sl, Int) where
   type SliceShape   (sl, Int) = SliceShape sl
   type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
-  type FullShape    (sl, Int) = (FullShape sl, Int)
+  type FullShape    (sl, Int) = (FullShape    sl, Int)
   sliceIndex _ = SliceFixed (sliceIndex (undefined::sl))
 
 -- |Generalised array index, which may index only in a subset of the dimensions
@@ -163,13 +163,13 @@ instance Slice sl => Slice (sl, Int) where
 --
 data SliceIndex ix slice coSlice sliceDim where
   SliceNil   :: SliceIndex () () () ()
-  SliceAll   :: 
+  SliceAll   ::
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
-  SliceFixed :: 
+  SliceFixed ::
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
 
 instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"
-  show (SliceAll rest)   = "SliceAll ("++ show rest ++ ")"
+  show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 

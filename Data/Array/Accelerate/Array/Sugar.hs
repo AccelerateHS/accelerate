@@ -90,7 +90,7 @@ data All = All
 --  `sh` takes:
 --
 -- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
--- > repN n a = replicate (constant$ Any :. n) a
+-- > repN n a = replicate (constant $ Any :. n) a
 --
 data Any sh = Any
   deriving (Typeable, Show)
@@ -926,9 +926,9 @@ instance Shape sh => Shape (sh:.Int) where
 --
 class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
-  type SliceShape   sl :: *
-  type CoSliceShape sl :: *
-  type FullShape    sl :: *
+  type SliceShape   sl :: *     -- the projected slice
+  type CoSliceShape sl :: *     -- the complement of the slice
+  type FullShape    sl :: *     -- the combined dimension
   sliceIndex :: sl -> Repr.SliceIndex (EltRepr sl)
                         (EltRepr (SliceShape   sl))
                         (EltRepr (CoSliceShape sl))
@@ -941,15 +941,15 @@ instance Slice Z where
   sliceIndex _ = Repr.SliceNil
 
 instance Slice sl => Slice (sl:.All) where
-  type SliceShape   (sl:.All) = SliceShape sl :. Int
+  type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
-  type FullShape    (sl:.All) = FullShape sl :. Int
+  type FullShape    (sl:.All) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined::sl))
 
 instance Slice sl => Slice (sl:.Int) where
-  type SliceShape   (sl:.Int) = SliceShape sl
+  type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
-  type FullShape    (sl:.Int) = FullShape sl :. Int
+  type FullShape    (sl:.Int) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined::sl))
 
 instance Shape sh => Slice (Any sh) where
