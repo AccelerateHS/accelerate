@@ -205,10 +205,10 @@ prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
 prettyPreExp pp lvl alvl wrap (Let e1 e2)
   = wrap
-  $ sep [ hang (text "let x" <> int lvl <+> char '=') 2 $
-            prettyPreExp pp lvl alvl noParens e1
-        , text "in" <+> prettyPreExp pp (lvl + 1) alvl noParens e2
-        ]
+  $ vcat [ hang (text "let x" <> int lvl <+> char '=') 2 $
+             prettyPreExp pp lvl alvl noParens e1
+         , text "in" <+> prettyPreExp pp (lvl + 1) alvl noParens e2
+         ]
 prettyPreExp _pp lvl _ _ (Var idx)
   = text $ 'x' : show (lvl - idxToInt idx - 1)
 prettyPreExp _pp _ _ _ (Const v)
