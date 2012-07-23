@@ -185,6 +185,7 @@ rebuildE v exp =
     ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
     FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
     Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
+    Iterate n f x       -> Iterate n (rebuildFE v f) (rebuildE v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
     IndexScalar a sh    -> IndexScalar a (rebuildE v sh)
@@ -347,6 +348,7 @@ rebuildEA k v exp =
     ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
     FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
     Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)
+    Iterate n f x       -> Iterate n (rebuildFA k v f) (rebuildEA k v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
     IndexScalar a sh    -> IndexScalar (k v a) (rebuildEA k v sh)

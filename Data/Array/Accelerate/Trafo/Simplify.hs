@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -67,6 +68,57 @@ lookupEnv (PushEnv env e) x
 -- is enough to catch some cases, particularly redundant operations such as
 -- array indexing introduced by the fusion pass.
 --
+localCSE
+    :: (Elt a, Elt b)
+    => Gamma   env env aenv
+    -> OpenExp env     aenv a
+    -> OpenExp (env,a) aenv b
+    -> Maybe (OpenExp env aenv b)
+localCSE env bnd body
+  | Just ix <- lookupEnv env bnd = Just $ inline body (Var ix)
+  | otherwise                    = Nothing
+
+
+-- Recover scalar loops. This looks for the pattern:
+--
+-- > let x =
+-- >   let y = e1
+-- >   in e2
+-- > in e3
+--
+-- and if e2 and e3 are congruent, replace this with the value iteration form:
+--
+-- > iterate[2] e2 e1
+--
+-- where the expression e2 is repeated twice with an initial value of e1.
+-- Similarly, loops can be joined:
+--
+-- > let x = iterate[n] f e1
+-- > in e2
+--
+-- if the function body of f matches e2, then increase the iteration count.
+--
+recoverLoops
+    :: Gamma   env env aenv
+    -> OpenExp env     aenv a
+    -> OpenExp (env,a) aenv b
+    -> Maybe (OpenExp env aenv b)
+recoverLoops _env bnd body
+  | Iterate n f x       <- bnd
+  , Just REFL           <- matchOpenFun f (Lam (Body body))
+  = Just $ Iterate (n+1) f x                    -- loop joining
+
+  | Let bnd' body'      <- bnd
+  , Just REFL           <- matchEnvTop body body'
+  , Just REFL           <- matchOpenExp body body'
+  = Just $ Iterate 2 (Lam (Body body)) bnd'     -- loop introduction
+
+  | otherwise
+  = Nothing
+  where
+    matchEnvTop :: (Elt s, Elt t) => OpenExp (env,s) aenv f -> OpenExp (env,t) aenv g -> Maybe (s :=: t)
+    matchEnvTop _ _ = gcast REFL
+
 simplifyLet
     :: (Elt a, Elt b)
     => Gamma   env env aenv
@@ -74,7 +126,8 @@ simplifyLet
     -> OpenExp (env,a) aenv b
     -> OpenExp env     aenv b
 simplifyLet env bnd body
-  | Just ix <- lookupEnv env bnd        = inline body (Var ix)
+  | Just x <- localCSE env bnd body     = x
+  | Just x <- recoverLoops env bnd body = x
   | otherwise                           = Let bnd body
 
 
@@ -96,13 +149,25 @@ simplifyCond _env p t e
   | otherwise                           = Cond p t e
 
 
--- Walk over the scalar expression, applying simplifications
+-- Walk over the scalar expression, applying simplifications. Keep doing this
+-- until no more substitutions are applied.
+--
+-- TLM: set a maximum limit, and have simplify return a boolean whether work was
+--      done rather than traversing the tree to test equality.
 --
 simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp = simplifyOpenExp EmptyEnv
+simplifyExp old
+  = let new = simplifyOpenExp EmptyEnv old
+    in case matchOpenExp old new of
+         Just REFL -> new
+         _         -> simplifyExp new
 
 simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun = simplifyOpenFun EmptyEnv
+simplifyFun old
+  = let new = simplifyOpenFun EmptyEnv old
+    in case matchOpenFun old new of
+         Just REFL -> new
+         _         -> simplifyFun new
 
 
 simplifyOpenExp
@@ -135,6 +200,7 @@ simplifyOpenExp env = cvt
       ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
       Cond p t e        -> simplifyCond env (cvt p) (cvt t) (cvt e)
+      Iterate n f x     -> Iterate n (simplifyOpenFun env f) (cvt x)
       PrimConst c       -> PrimConst c
       PrimApp f x       -> PrimApp f (cvt x)
       IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)

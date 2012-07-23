@@ -211,6 +211,9 @@ fuseOpenExp = cvt
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA = fuseOpenAcc
 
+    cvtF :: OpenFun env aenv t -> OpenFun env aenv t
+    cvtF = fuseOpenFun
+
     cvt :: OpenExp env aenv t -> OpenExp env aenv t
     cvt exp = case exp of
       Let bnd body      -> Let (cvt bnd) (cvt body)
@@ -226,6 +229,7 @@ fuseOpenExp = cvt
       ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
       Cond p t e        -> Cond (cvt p) (cvt t) (cvt e)
+      Iterate n f x	-> Iterate n (cvtF f) (cvt x)
       PrimConst c       -> PrimConst c
       PrimApp f x       -> PrimApp f (cvt x)
       IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)

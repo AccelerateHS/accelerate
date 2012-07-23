@@ -108,6 +108,12 @@ matchOpenExp (FromIndex sh1 i1) (FromIndex sh2 i2)
 matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
   = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
 
+matchOpenExp (Iterate n1 f1 x1) (Iterate n2 f2 x2)
+  | n1 == n2
+  , Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp x1 x2
+  = Just REFL
+
 matchOpenExp (PrimConst c1) (PrimConst c2)
   = matchPrimConst c1 c2
 
@@ -398,6 +404,7 @@ hashOpenExp (IndexTail sl)              = hash "IndexTail"      `combine` hashOp
 hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e
+hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `combine` hashOpenFun f `combine` hashOpenExp x
 hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
 hashOpenExp (IndexScalar a ix)

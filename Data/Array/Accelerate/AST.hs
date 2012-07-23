@@ -723,6 +723,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
                 -> PreOpenExp acc env aenv t
 
+  -- Value recursion with static loop count
+  Iterate       :: Elt a
+                => Int                                  -- number of times to repeat
+                -> PreOpenFun acc env aenv (a -> a)     -- function to iterate
+                -> PreOpenExp acc env aenv a            -- initial value
+                -> PreOpenExp acc env aenv a
+
   -- Primitive constants
   PrimConst     :: Elt t
                 => PrimConst t
