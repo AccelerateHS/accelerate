@@ -143,6 +143,23 @@ matchOpenExp _ _
   = Nothing
 
 
+-- Match scalar functions
+--
+matchOpenFun :: OpenFun env aenv s -> OpenFun env aenv t -> Maybe (s :=: t)
+matchOpenFun (Body s) (Body t)
+  = matchOpenExp s t
+
+matchOpenFun (Lam s) (Lam t)
+  | Just REFL <- matchEnvTop  s t
+  , Just REFL <- matchOpenFun s t
+  = Just REFL
+  where
+    matchEnvTop :: (Elt t, Elt s) => OpenFun (env, s) aenv f -> OpenFun (env, t) aenv g -> Maybe (s :=: t)
+    matchEnvTop _ _ = gcast REFL  -- ???
+
+matchOpenFun _ _
+  = Nothing
+
 -- Matching constants
 --
 matchConst :: TupleType a -> a -> a -> Bool
@@ -360,6 +377,10 @@ hashIdx = hash . idxToInt
 
 hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
+
+hashOpenFun :: OpenFun env aenv f -> Int
+hashOpenFun (Lam  f) = hash "Lam"  `combine` hashOpenFun f
+hashOpenFun (Body e) = hash "Body" `combine` hashOpenExp e
 
 
 hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
