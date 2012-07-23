@@ -239,6 +239,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Trafo                      () -- show instances
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), shape, dim, size, ignore)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
