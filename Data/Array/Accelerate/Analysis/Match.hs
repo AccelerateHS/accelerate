@@ -188,11 +188,8 @@ matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
 
 matchAvarIdx :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
-matchAvarIdx (OpenAcc (Avar v1)) (OpenAcc (Avar v2))
-  | Just REFL <- matchIdx v1 v2
-  = Just REFL
-matchAvarIdx _ _
-  = error "matchAvarIdx: expected array variable"       -- not strictly necessary
+matchAvarIdx (OpenAcc (Avar v1)) (OpenAcc (Avar v2)) = matchIdx v1 v2
+matchAvarIdx _                   _                   = error "matchAvarIdx: expected array variable"
 
 
 -- Tuple projection indices. Given the same tuple expression structure (tup),
