@@ -183,16 +183,19 @@ prettyPreAfun pp _alvl fun =
 prettyFun :: Int -> OpenFun env aenv fun -> Doc
 prettyFun = prettyPreFun prettyAcc
 
-prettyPreFun :: forall acc env aenv fun. PrettyAcc acc -> Int -> PreOpenFun acc env aenv fun -> Doc
-prettyPreFun pp alvl fun =
+prettyPreFun :: PrettyAcc acc -> Int -> PreOpenFun acc env aenv fun -> Doc
+prettyPreFun pp alvl fun = prettyPreOpenFun pp 0 alvl fun
+
+prettyPreOpenFun :: forall acc env aenv fun. PrettyAcc acc -> Int -> Int -> PreOpenFun acc env aenv fun -> Doc
+prettyPreOpenFun pp lvl alvl fun =
   let (n, bodyDoc) = count n fun
   in
-  char '\\' <> hsep [text $ 'x' : show idx | idx <- [0..n]] <+>
+  char '\\' <> hsep [text $ 'x' : show idx | idx <- [lvl..n]] <+>
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenFun acc env' aenv' fun' -> (Int, Doc)
-     count lvl (Body body) = (-1, prettyPreExp pp (lvl + 1) alvl noParens body)
-     count lvl (Lam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
+     count l (Body body) = (lvl-1, prettyPreExp pp (l + 1) alvl noParens body)
+     count l (Lam  fun') = let (n, body) = count l fun' in (1 + n, body)
 
 -- Pretty print an expression.
 --
