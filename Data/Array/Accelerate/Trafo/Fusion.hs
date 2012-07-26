@@ -54,7 +54,11 @@ fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
 fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc = force . delayOpenAcc
+fuseOpenAcc old =
+  let new = force (delayOpenAcc old)
+  in case matchOpenAcc old new of
+       Just REFL        -> new
+       _                -> fuseOpenAcc new
 
 
 delayOpenAcc
@@ -75,13 +79,22 @@ delayOpenAcc (OpenAcc pacc) =
     -- Forms that introduce environment manipulations and control flow. These
     -- stable points of the expression we generally don't want to fuse past.
     --
-    -- As an exception, let bound nodes of manifest arrays are allowed to float
-    -- upwards.
+    -- As always, there are exceptions:
     --
-    Alet bndAcc bodyAcc
-      -> case bndAcc of
-           OpenAcc bnd@(Use _)  -> float bnd (cvt bodyAcc)
-           OpenAcc bnd@(Unit _) -> float bnd (cvt bodyAcc)
+    --  1) let bound nodes of manifest arrays are allowed to float
+    --
+    --  2) generate-in-generate forms might be fused together, if the bound
+    --     generator is only used once within the body.
+    --
+    Alet bndAcc@(OpenAcc bnd) bodyAcc@(OpenAcc body)
+      -> case bnd of
+           Use _                -> float bnd (cvt bodyAcc)
+           Unit _               -> float bnd (cvt bodyAcc)
+           Generate sh1 f1
+             | Generate sh2 f2  <- body		-- lift to any producer: generate/transform/map
+             , Just acc         <- fuseGenInGen sh1 f1 sh2 f2
+             -> acc
+
            _                    -> done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
 
     Avar ix
@@ -333,10 +346,10 @@ float a delayed =
 --
 backpermuteD
     :: (Shape sh, Shape sh', Elt e)
-    => PreExp OpenAcc aenv sh'
-    -> PreFun OpenAcc aenv (sh' -> sh)
-    -> DelayedAcc     aenv (Array sh  e)
-    -> DelayedAcc     aenv (Array sh' e)
+    => Exp        aenv sh'
+    -> Fun        aenv (sh' -> sh)
+    -> DelayedAcc aenv (Array sh  e)
+    -> DelayedAcc aenv (Array sh' e)
 backpermuteD sh' p acc = case acc of
   Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
@@ -348,8 +361,8 @@ backpermuteD sh' p acc = case acc of
 -- for things already let-bound.
 --
 mapD :: (Shape sh, Elt a, Elt b)
-     => PreFun OpenAcc aenv (a -> b)
-     -> DelayedAcc     aenv (Array sh a)
+     => Fun        aenv (a -> b)
+     -> DelayedAcc aenv (Array sh a)
      -> DelayedAcc     aenv (Array sh b)
 mapD f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
@@ -423,6 +436,148 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
         -> let env = cat env1 env2
            in  Yield env (sinkE env2 sh1 `intersect` sh2)
                          (generate (sinkF env f) (sinkF env2 g1) g2)
+
+
+-- Combine two generator functions. We need to do a couple of things here:
+--
+--  1) Count the number of occurrences of a0 in the body computation. If there
+--     are "too many", don't do the substitution.
+--
+--  2) Replace occurrences of indexing into the bound array with the generator
+--     function for that array.
+--
+--  3) Erase the (now unused) top array variable, shrinking the environment.
+--
+fuseGenInGen
+    :: (Shape sh, Shape sh', Elt a, Elt b)
+    => Exp aenv sh
+    -> Fun aenv (sh -> a)
+    -> Exp (aenv, Array sh a) sh'
+    -> Fun (aenv, Array sh a) (sh' -> b)
+    -> Maybe (DelayedAcc aenv (Array sh' b))
+fuseGenInGen sh1 f1 sh2 f2
+  | countEA v0 sh2 <= lIMIT && countFA v0 f2 <= lIMIT
+  , countEA v0 sh' == 0     && countFA v0 f' == 0
+  = Just $ Yield BaseEnv (rebuildEA rebuildOpenAcc eraseTop sh')
+                         (rebuildFA rebuildOpenAcc eraseTop f')
+
+  | otherwise
+  = Nothing
+  where
+    -- When does the cost of re-computation out weight global memory access? For
+    -- the moment only do the substitution on a single use of the bound array,
+    -- but it is likely advantageous to be far more aggressive here.
+    --
+    lIMIT       = 1
+
+    -- The new shape and generator functions, before the top variable is erased
+    --
+    v0          = OpenAcc (Avar ZeroIdx)
+    sh'         = replaceE (Shape v0) (weakenEA sh1) sh2
+    f'          = replaceIF f1 f2
+
+    eraseTop :: Arrays t => Idx (aenv, s) t -> PreOpenAcc OpenAcc aenv t
+    eraseTop ZeroIdx      = error "it's clobberin' time!"
+    eraseTop (SuccIdx ix) = Avar ix
+
+    -- Replace the indexing function with a value generator
+    --
+    replaceIF
+        :: (Shape sh, Elt a)
+        => OpenFun env aenv (sh -> a)
+        -> OpenFun env (aenv, Array sh a) t
+        -> OpenFun env (aenv, Array sh a) t
+    replaceIF gen fun = case fun of
+      Lam f         -> Lam (replaceIF (weakenFE gen) f)
+      Body e        -> Body (replaceIE gen e)
+      where
+        replaceIT :: (Shape sh, Elt a)
+                  => OpenFun env aenv (sh -> a)
+                  -> Tuple.Tuple (OpenExp env (aenv, Array sh a)) t
+                  -> Tuple.Tuple (OpenExp env (aenv, Array sh a)) t
+        replaceIT ix tup = case tup of
+          NilTup            -> NilTup
+          SnocTup t e       -> replaceIT ix t `SnocTup` replaceIE ix e
+
+        replaceIE :: (Shape sh, Elt a)
+                  => OpenFun env aenv (sh -> a)
+                  -> OpenExp env (aenv, Array sh a) e
+                  -> OpenExp env (aenv, Array sh a) e
+        replaceIE ix exp = case exp of
+          Let bnd body          -> Let (replaceIE ix bnd) (replaceIE (weakenFE ix) body)
+          Var i                 -> Var i
+          Const c               -> Const c
+          Tuple t               -> Tuple (replaceIT ix t)
+          Prj i e               -> Prj i (replaceIE ix e)
+          IndexNil              -> IndexNil
+          IndexCons sl sz       -> IndexCons (replaceIE ix sl) (replaceIE ix sz)
+          IndexHead sh          -> IndexHead (replaceIE ix sh)
+          IndexTail sh          -> IndexTail (replaceIE ix sh)
+          IndexAny              -> IndexAny
+          ToIndex sh i          -> ToIndex (replaceIE ix sh) (replaceIE ix i)
+          FromIndex sh i        -> FromIndex (replaceIE ix sh) (replaceIE ix i)
+          Cond p t e            -> Cond (replaceIE ix p) (replaceIE ix t) (replaceIE ix e)
+          Iterate n r x         -> Iterate n (replaceIF ix r) (replaceIE ix x)
+          PrimConst c           -> PrimConst c
+          PrimApp p x           -> PrimApp p (replaceIE ix x)
+          Shape acc             -> Shape acc
+          ShapeSize sh          -> ShapeSize (replaceIE ix sh)
+          Intersect sh sl       -> Intersect (replaceIE ix sh) (replaceIE ix sl)
+          IndexScalar acc sh
+            | Just REFL         <- matchOpenAcc acc (OpenAcc (Avar ZeroIdx))
+            , Lam (Body f)      <- ix
+            -> case sh of
+                 Var _  -> inline (weakenEA f) sh
+                 _      -> Let sh (weakenEA f)
+            --
+            | otherwise -> IndexScalar acc (replaceIE ix sh)
+
+    -- Replace all occurrences of the first term with the second, in the given
+    -- expression
+    --
+    replaceE :: OpenExp env aenv a
+             -> OpenExp env aenv a
+             -> OpenExp env aenv b
+             -> OpenExp env aenv b
+    replaceE a b exp
+      | Just REFL <- matchOpenExp exp a = b
+      | otherwise =  case exp of
+          Let bnd body          -> Let (replaceE a b bnd) (replaceE (weakenE a) (weakenE b) body)
+          Var ix                -> Var ix
+          Const c               -> Const c
+          Tuple t               -> Tuple (replaceT a b t)
+          Prj ix e              -> Prj ix (replaceE a b e)
+          IndexNil              -> IndexNil
+          IndexCons sl sz       -> IndexCons (replaceE a b sl) (replaceE a b sz)
+          IndexHead sh          -> IndexHead (replaceE a b sh)
+          IndexTail sh          -> IndexTail (replaceE a b sh)
+          IndexAny              -> IndexAny
+          ToIndex sh ix         -> ToIndex (replaceE a b sh) (replaceE a b ix)
+          FromIndex sh i        -> FromIndex (replaceE a b sh) (replaceE a b i)
+          Cond p t e            -> Cond (replaceE a b p) (replaceE a b t) (replaceE a b e)
+          Iterate n f x         -> Iterate n (replaceF a b f) (replaceE a b x)
+          PrimConst c           -> PrimConst c
+          PrimApp f x           -> PrimApp f (replaceE a b x)
+          IndexScalar acc sh    -> IndexScalar acc (replaceE a b sh)
+          Shape acc             -> Shape acc
+          ShapeSize sh          -> ShapeSize (replaceE a b sh)
+          Intersect sh sl       -> Intersect (replaceE a b sh) (replaceE a b sl)
+      where
+        replaceT :: OpenExp env aenv a
+                 -> OpenExp env aenv a
+                 -> Tuple.Tuple (OpenExp env aenv) t
+                 -> Tuple.Tuple (OpenExp env aenv) t
+        replaceT a' b' tup = case tup of
+          NilTup        -> NilTup
+          SnocTup t e   -> replaceT a' b' t `SnocTup` replaceE a' b' e
+
+        replaceF :: OpenExp env' aenv a
+                 -> OpenExp env' aenv a
+                 -> OpenFun env' aenv f
+                 -> OpenFun env' aenv f
+        replaceF a' b' fun = case fun of
+          Body e        -> Body (replaceE a' b' e)
+          Lam f         -> Lam (replaceF (weakenE a') (weakenE b') f)
 
 
 -- Substitution
