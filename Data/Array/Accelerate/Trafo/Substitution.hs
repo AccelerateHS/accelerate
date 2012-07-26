@@ -18,10 +18,13 @@ module Data.Array.Accelerate.Trafo.Substitution (
   inline, substitute, compose,
 
   -- * Weakening
-  weakenA, weakenEA, weakenFA, weakenE,
+  weakenA, weakenEA, weakenFA,
+  weakenE, weakenFE,
 
   -- * Rebuilding
-  rebuildE, rebuildA, rebuildOpenAcc,
+  rebuildA, rebuildAfun, rebuildOpenAcc,
+  rebuildE, rebuildEA,
+  rebuildFA,
 
 ) where
 
@@ -126,10 +129,13 @@ weakenEA :: OpenExp env aenv     t
          -> OpenExp env (aenv,s) t
 weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
-weakenFA :: PreOpenFun OpenAcc env aenv     t
-         -> PreOpenFun OpenAcc env (aenv,s) t
+weakenFA :: OpenFun env aenv     t
+         -> OpenFun env (aenv,s) t
 weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
 
+weakenFE :: OpenFun env     aenv t
+         -> OpenFun (env,s) aenv t
+weakenFE = rebuildFE (weakenExp . IE)
 
 
 -- Implementation ==============================================================
