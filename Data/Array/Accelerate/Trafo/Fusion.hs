@@ -54,11 +54,7 @@ fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
 fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc old =
-  let new = force (delayOpenAcc old)
-  in case matchOpenAcc old new of
-       Just REFL        -> new
-       _                -> fuseOpenAcc new
+fuseOpenAcc = force . delayOpenAcc
 
 
 delayOpenAcc
@@ -86,16 +82,18 @@ delayOpenAcc (OpenAcc pacc) =
     --  2) generate-in-generate forms might be fused together, if the bound
     --     generator is only used once within the body.
     --
-    Alet bndAcc@(OpenAcc bnd) bodyAcc@(OpenAcc body)
-      -> case bnd of
-           Use _                -> float bnd (cvt bodyAcc)
-           Unit _               -> float bnd (cvt bodyAcc)
-           Generate sh1 f1
-             | Generate sh2 f2  <- body		-- lift to any producer: generate/transform/map
-             , Just acc         <- fuseGenInGen sh1 f1 sh2 f2
-             -> acc
-
-           _                    -> done $ Alet (fuseOpenAcc bndAcc) (fuseOpenAcc bodyAcc)
+    Alet bndAcc bodyAcc ->
+      let OpenAcc bnd   = fuseOpenAcc bndAcc
+          OpenAcc body  = fuseOpenAcc bodyAcc
+      in
+      case bnd of
+        Use _                   -> float bnd (cvt $ OpenAcc body)
+        Unit _                  -> float bnd (cvt $ OpenAcc body)
+        Generate sh1 f1
+          | Generate sh2 f2 <- body
+          , Just acc        <- fuseGenInGen sh1 f1 sh2 f2
+                                -> acc
+        _                       -> done $ Alet (OpenAcc bnd) (OpenAcc body)
 
     Avar ix
       -> done $ Avar ix
@@ -242,7 +240,7 @@ fuseOpenExp = cvt
       ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
       Cond p t e        -> Cond (cvt p) (cvt t) (cvt e)
-      Iterate n f x	-> Iterate n (cvtF f) (cvt x)
+      Iterate n f x     -> Iterate n (cvtF f) (cvt x)
       PrimConst c       -> PrimConst c
       PrimApp f x       -> PrimApp f (cvt x)
       IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
