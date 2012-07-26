@@ -374,6 +374,49 @@ commutes f x = case f of
       | otherwise                               = exp
 
 
+
+-- Count the number of occurrences of an array computation within the scalar
+-- expression. This assumes the search term to be an array variable.
+--
+countEA :: forall env aenv a t. OpenAcc aenv a -> OpenExp env aenv t -> Int
+countEA acc exp =
+  let incA :: OpenAcc aenv a' -> Int
+      incA = maybe 0 (const 1) . matchAvarIdx acc
+  --
+  in case exp of
+    Let bnd body        -> countEA acc bnd + countEA acc body
+    Var _               -> 0
+    Const _             -> 0
+    Tuple t             -> countTA acc t
+    Prj _ e             -> countEA acc e
+    IndexNil            -> 0
+    IndexCons sl sz     -> countEA acc sl + countEA acc sz
+    IndexHead sh        -> countEA acc sh
+    IndexTail sh        -> countEA acc sh
+    IndexAny            -> 0
+    ToIndex sh ix       -> countEA acc sh + countEA acc ix
+    FromIndex sh i      -> countEA acc sh + countEA acc i
+    Cond p t e          -> countEA acc p  + countEA acc t  + countEA acc e
+    Iterate _ f x       -> countFA acc f  + countEA acc x
+    PrimConst _         -> 0
+    PrimApp _ x         -> countEA acc x
+    IndexScalar a sh    -> incA a + countEA acc sh
+    Shape a             -> incA a
+    ShapeSize sh        -> countEA acc sh
+    Intersect sh sz     -> countEA acc sh + countEA acc sz
+
+
+countTA :: OpenAcc aenv a -> Tuple.Tuple (OpenExp env aenv) t -> Int
+countTA acc tup = case tup of
+  NilTup        -> 0
+  SnocTup t e   -> countTA acc t + countEA acc e
+
+countFA :: OpenAcc aenv a -> OpenFun env aenv f -> Int
+countFA acc fun = case fun of
+  Body e        -> countEA acc e
+  Lam f         -> countFA acc f
+
+
 -- Hashable scalar expressions
 --
 hashIdx :: Idx env t -> Int
