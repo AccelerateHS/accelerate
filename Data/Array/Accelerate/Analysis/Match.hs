@@ -17,7 +17,11 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenExp, matchOpenFun,
+  matchOpenAcc, matchOpenExp, matchOpenFun,
+  matchTupleType,
+
+  -- occurrence counting
+  countEA, countFA
 
 ) where
 
@@ -25,14 +29,15 @@ module Data.Array.Accelerate.Analysis.Match (
 import Prelude                                          hiding ( exp )
 import Data.Typeable
 import Data.Hashable
+import System.Mem.StableName
+import System.IO.Unsafe                                 ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                ( Elt )
+import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
 
@@ -44,6 +49,241 @@ data s :=: t where
   REFL :: s :=: s
 
 deriving instance Show (s :=: t)
+
+
+-- Compute the congruence of two array computations. The nodes are congruent if
+-- they have the same operator and their operands are congruent.
+--
+matchOpenAcc :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
+matchOpenAcc (OpenAcc acc1) (OpenAcc acc2) = matchPreOpenAcc acc1 acc2
+
+matchPreOpenAcc :: forall aenv s t. PreOpenAcc OpenAcc aenv s -> PreOpenAcc OpenAcc aenv t -> Maybe (s :=: t)
+matchPreOpenAcc (Alet x1 a1) (Alet x2 a2)
+  | Just REFL <- matchOpenAcc x1 x2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Avar v1) (Avar v2)
+  = matchIdx v1 v2
+
+matchPreOpenAcc (Atuple t1) (Atuple t2)
+  | Just REFL <- matchAtuple t1 t2
+  = gcast REFL  -- surface/representation type
+
+matchPreOpenAcc (Aprj ix1 t1) (Aprj ix2 t2)
+  | Just REFL <- matchOpenAcc t1 t2
+  , Just REFL <- matchTupleIdx ix1 ix2
+  = Just REFL
+
+matchPreOpenAcc (Apply f1 a1) (Apply f2 a2)
+  | Just REFL <- matchAfun    f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Acond p1 t1 e1) (Acond p2 t2 e2)
+  | Just REFL <- matchOpenExp p1 p2
+  , Just REFL <- matchOpenAcc t1 t2
+  , Just REFL <- matchOpenAcc e1 e2
+  = Just REFL
+
+matchPreOpenAcc (Use a1) (Use a2)
+  | Just REFL <- matchArrays (arrays (undefined::s)) (arrays (undefined::t)) a1 a2
+  = gcast REFL
+
+matchPreOpenAcc (Unit e1) (Unit e2)
+  | Just REFL <- matchOpenExp e1 e2
+  = Just REFL
+
+matchPreOpenAcc (Reshape sh1 a1) (Reshape sh2 a2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchOpenAcc a1  a2
+  = Just REFL
+
+matchPreOpenAcc (Generate sh1 f1) (Generate sh2 f2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchOpenFun f1  f2
+  = Just REFL
+
+matchPreOpenAcc (Transform sh1 ix1 f1 a1) (Transform sh2 ix2 f2 a2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchOpenFun ix1 ix2
+  , Just REFL <- matchOpenFun f1  f2
+  , Just REFL <- matchOpenAcc a1  a2
+  = Just REFL
+
+matchPreOpenAcc (Replicate _ slix1 a1) (Replicate _ slix2 a2)
+  | Just REFL <- matchOpenExp slix1 slix2
+  , Just REFL <- matchOpenAcc a1 a2
+  = gcast REFL  -- slice specification ??
+
+matchPreOpenAcc (Index _ a1 slix1) (Index _ a2 slix2)
+  | Just REFL <- matchOpenAcc a1 a2
+  , Just REFL <- matchOpenExp slix1 slix2
+  = gcast REFL  -- slice specification ??
+
+matchPreOpenAcc (Map f1 a1) (Map f2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (ZipWith f1 a1 b1) (ZipWith f2 a2 b2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  , Just REFL <- matchOpenAcc b1 b2
+  = Just REFL
+
+matchPreOpenAcc (Fold f1 z1 a1) (Fold f2 z2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Fold1 f1 a1) (Fold1 f2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (FoldSeg f1 z1 a1 s1) (FoldSeg f2 z2 a2 s2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  , Just REFL <- matchOpenAcc s1 s2
+  = Just REFL
+
+matchPreOpenAcc (Fold1Seg f1 a1 s1) (Fold1Seg f2 a2 s2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  , Just REFL <- matchOpenAcc s1 s2
+  = Just REFL
+
+matchPreOpenAcc (Scanl f1 z1 a1) (Scanl f2 z2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Scanl' f1 z1 a1) (Scanl' f2 z2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Scanl1 f1 a1) (Scanl1 f2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Scanr f1 z1 a1) (Scanr f2 z2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Scanr' f1 z1 a1) (Scanr' f2 z2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenExp z1 z2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Scanr1 f1 a1) (Scanr1 f2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Permute f1 d1 p1 a1) (Permute f2 d2 p2 a2)
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc d1 d2
+  , Just REFL <- matchOpenFun p1 p2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchPreOpenAcc (Backpermute sh1 ix1 a1) (Backpermute sh2 ix2 a2)
+  | Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchOpenFun ix1 ix2
+  , Just REFL <- matchOpenAcc a1  a2
+  = Just REFL
+
+matchPreOpenAcc (Stencil f1 b1 (a1 :: OpenAcc aenv (Array sh1 e1)))
+                (Stencil f2 b2 (a2 :: OpenAcc aenv (Array sh2 e2)))
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a2
+  , matchBoundary (eltType (undefined::e1)) b1 b2
+  = Just REFL
+
+matchPreOpenAcc (Stencil2 f1 b1  (a1  :: OpenAcc aenv (Array sh1  e1 )) b2  (a2 :: OpenAcc aenv (Array sh2  e2 )))
+                (Stencil2 f2 b1' (a1' :: OpenAcc aenv (Array sh1' e1')) b2' (a2':: OpenAcc aenv (Array sh2' e2')))
+  | Just REFL <- matchOpenFun f1 f2
+  , Just REFL <- matchOpenAcc a1 a1'
+  , Just REFL <- matchOpenAcc a2 a2'
+  , matchBoundary (eltType (undefined::e1)) b1 b1'
+  , matchBoundary (eltType (undefined::e2)) b2 b2'
+  = Just REFL
+
+matchPreOpenAcc _ _
+  = Nothing
+
+
+-- Array tuples
+--
+matchAtuple :: Atuple (OpenAcc aenv) s -> Atuple (OpenAcc aenv) t -> Maybe (s :=: t)
+matchAtuple (SnocAtup t1 a1) (SnocAtup t2 a2)
+  | Just REFL <- matchAtuple  t1 t2
+  , Just REFL <- matchOpenAcc a1 a2
+  = Just REFL
+
+matchAtuple NilAtup NilAtup = Just REFL
+matchAtuple _       _       = Nothing
+
+
+-- Array functions
+--
+matchAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
+matchAfun (Alam s) (Alam t)
+  | Just REFL <- matchEnvTop s t
+  , Just REFL <- matchAfun   s t
+  = Just REFL
+  where
+    matchEnvTop :: (Arrays s, Arrays t)
+                => OpenAfun (aenv, s) f -> OpenAfun (aenv, t) g -> Maybe (s :=: t)
+    matchEnvTop _ _ = gcast REFL  -- ???
+
+matchAfun (Abody s) (Abody t) = matchOpenAcc s t
+matchAfun _         _         = Nothing
+
+
+-- Match stencil boundaries
+--
+matchBoundary :: TupleType e -> Boundary e -> Boundary e -> Bool
+matchBoundary ty (Constant s) (Constant t) = matchConst ty s t
+matchBoundary _  Wrap         Wrap         = True
+matchBoundary _  Clamp        Clamp        = True
+matchBoundary _  Mirror       Mirror       = True
+matchBoundary _  _            _            = False
+
+
+-- Match arrays
+--
+-- As a convenience, we are just comparing the stable names, but we could also
+-- walk the structure comparing the underlying ptrsOfArrayData.
+--
+matchArrays :: ArraysR s -> ArraysR t -> s -> t -> Maybe (s :=: t)
+matchArrays ArraysRunit ArraysRunit () ()
+  = Just REFL
+
+matchArrays (ArraysRpair a1 b1) (ArraysRpair a2 b2) (arr1,brr1) (arr2,brr2)
+  | Just REFL <- matchArrays a1 a2 arr1 arr2
+  , Just REFL <- matchArrays b1 b2 brr1 brr2
+  = Just REFL
+
+matchArrays ArraysRarray ArraysRarray (Array _ ad1) (Array _ ad2)
+  | unsafePerformIO $ do
+      sn1 <- makeStableName ad1
+      sn2 <- makeStableName ad2
+      return $! hashStableName sn1 == hashStableName sn2
+  = gcast REFL
+
+matchArrays _ _ _ _
+  = Nothing
 
 
 -- Compute the congruence of two scalar expressions. Two nodes are congruent if
@@ -65,8 +305,8 @@ matchOpenExp (Var v1) (Var v2)
   = matchIdx v1 v2
 
 matchOpenExp (Const c1) (Const c2)
-  | Just REFL <- matchTupleType (Sugar.eltType (undefined::s)) (Sugar.eltType (undefined::t))
-  , matchConst (Sugar.eltType (undefined::s)) c1 c2
+  | Just REFL <- matchTupleType (eltType (undefined::s)) (eltType (undefined::t))
+  , matchConst (eltType (undefined::s)) c1 c2
   = gcast REFL  -- surface/representation type
 
 matchOpenExp (Tuple t1) (Tuple t2)
@@ -153,19 +393,16 @@ matchOpenExp _ _
 -- Match scalar functions
 --
 matchOpenFun :: OpenFun env aenv s -> OpenFun env aenv t -> Maybe (s :=: t)
-matchOpenFun (Body s) (Body t)
-  = matchOpenExp s t
-
 matchOpenFun (Lam s) (Lam t)
   | Just REFL <- matchEnvTop  s t
   , Just REFL <- matchOpenFun s t
   = Just REFL
   where
-    matchEnvTop :: (Elt t, Elt s) => OpenFun (env, s) aenv f -> OpenFun (env, t) aenv g -> Maybe (s :=: t)
+    matchEnvTop :: (Elt s, Elt t) => OpenFun (env, s) aenv f -> OpenFun (env, t) aenv g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL  -- ???
 
-matchOpenFun _ _
-  = Nothing
+matchOpenFun (Body s) (Body t) = matchOpenExp s t
+matchOpenFun _        _        = Nothing
 
 -- Matching constants
 --
@@ -433,7 +670,7 @@ hashOpenFun (Body e) = hash "Body" `combine` hashOpenExp e
 hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
 hashOpenExp (Let x e)                   = hash "Let"            `combine` hashOpenExp x  `combine` hashOpenExp e
 hashOpenExp (Var ix)                    = hash "Var"            `combine` hashIdx ix
-hashOpenExp (Const c)                   = hash "Const"          `hashWithSalt` show (Sugar.toElt c :: e)
+hashOpenExp (Const c)                   = hash "Const"          `hashWithSalt` show (toElt c :: e)
 hashOpenExp (Tuple t)                   = hash "Tuple"          `combine` hashTuple t
 hashOpenExp (Prj ix e)                  = hash "Prj"            `combine` hashTupleIdx ix `combine` hashOpenExp e
 hashOpenExp IndexAny                    = hash "IndexAny"
