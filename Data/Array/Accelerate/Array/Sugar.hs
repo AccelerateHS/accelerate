@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..),
+  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..), SliceIndex(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
@@ -40,9 +40,9 @@ module Data.Array.Accelerate.Array.Sugar (
 ) where
 
 -- standard library
-import Data.Array.IArray (IArray)
-import qualified Data.Array.IArray as IArray
 import Data.Typeable
+import Data.Array.IArray                ( IArray )
+import qualified Data.Array.IArray      as IArray
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -890,7 +890,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   listToShape :: [Int] -> sh
 
   -- | The slice index for slice specifier 'Any sh'
-  sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
+  sliceAnyIndex :: sh -> SliceIndex (Any sh) sh Z sh
 
   dim              = Repr.dim . fromElt
   size             = Repr.size . fromElt
@@ -916,47 +916,65 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   listToShape = toElt . Repr.listToShape
 
 instance Shape Z where
-  sliceAnyIndex _ = Repr.SliceNil
+  sliceAnyIndex _ = SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
-  sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
+  -- TLM: this is bullshit, but I don't know how to code the proof \=
+  -- sliceAnyIndex _ = unsafeCoerce $ SliceAll (sliceAnyIndex (undefined :: sh))
 
--- |Slices, aka generalised indices, as /n/-tuples and mappings of slice indices to slices,
--- co-slices, and slice dimensions
+-- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
+-- indices to slices, co-slices, and slice dimensions
 --
 class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
   type SliceShape   sl :: *     -- the projected slice
   type CoSliceShape sl :: *     -- the complement of the slice
   type FullShape    sl :: *     -- the combined dimension
-  sliceIndex :: sl -> Repr.SliceIndex (EltRepr sl)
-                        (EltRepr (SliceShape   sl))
-                        (EltRepr (CoSliceShape sl))
-                        (EltRepr (FullShape    sl))
+  sliceIndex :: sl {- dummy -}
+             -> SliceIndex sl (SliceShape sl) (CoSliceShape sl) (FullShape sl)
 
 instance Slice Z where
   type SliceShape   Z = Z
   type CoSliceShape Z = Z
   type FullShape    Z = Z
-  sliceIndex _ = Repr.SliceNil
+  sliceIndex _ = SliceNil
 
-instance Slice sl => Slice (sl:.All) where
+instance (Slice sl, Slice (SliceShape sl), Slice (FullShape sl))
+    => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape    sl :. Int
-  sliceIndex _ = Repr.SliceAll (sliceIndex (undefined::sl))
+  sliceIndex _ = SliceAll (sliceIndex (undefined :: sl))
 
-instance Slice sl => Slice (sl:.Int) where
+instance (Slice sl, Slice (SliceShape sl), Slice (FullShape sl))
+    => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
   type FullShape    (sl:.Int) = FullShape    sl :. Int
-  sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined::sl))
+  sliceIndex _ = SliceFixed (sliceIndex (undefined :: sl))
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
+
+
+data SliceIndex ix sl co sh where
+  SliceNil      :: SliceIndex ix Z Z Z
+
+  SliceAll      :: (Slice ix, Slice sl, Slice sh)
+                => SliceIndex ix sl co sh
+                -> SliceIndex (ix :. All) (sl :. Int) co (sh :. Int)
+
+  SliceFixed    :: (Slice ix, Slice sl, Slice sh)
+                => SliceIndex ix sl co sh
+                -> SliceIndex (ix :. Int) sl (co :. Int) (sh :. Int)
+
+instance Show (SliceIndex ix sl co sh) where
+  show SliceNil          = "SliceNil"
+  show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
+  show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 
 
 -- Array operations

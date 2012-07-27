@@ -142,14 +142,14 @@ data PreAcc acc exp as where
                   -- the Typeable constraints shouldn't be necessary as they are implied by
                   -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
               => exp slix
-              -> acc (Array (SliceShape slix)    e)
-              -> PreAcc acc exp (Array (FullShape slix) e)
+              -> acc            (Array (SliceShape slix) e)
+              -> PreAcc acc exp (Array (FullShape  slix) e)
 
   Index       :: (Slice slix, Elt e,
                   Typeable (SliceShape slix), Typeable (FullShape slix))
                   -- the Typeable constraints shouldn't be necessary as they are implied by
                   -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
-              => acc (Array (FullShape slix) e)
+              => acc            (Array (FullShape  slix) e)
               -> exp slix
               -> PreAcc acc exp (Array (SliceShape slix) e)
 

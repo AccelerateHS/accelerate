@@ -26,7 +26,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
+import Data.Array.Accelerate.Array.Sugar                hiding ( shape, index, sliceIndex )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 
@@ -126,22 +126,15 @@ delayOpenAcc (OpenAcc pacc) =
            -- TLM: there was a runtime check to ensure the old and new shapes
            -- contained the same number of elements: this has been lost!
            --
-           Done env a
-            -> Done env $ Reshape (sinkE env sh') (OpenAcc a)
+           Done env a           -> Done env $ Reshape (sinkE env sh') (OpenAcc a)
+           Step env sh ix f a   -> let shx = sinkE env sh' in Step env shx (ix `compose` reindex sh shx) f a
+           Yield env sh f       -> let shx = sinkE env sh' in Yield env shx (f `compose` reindex sh shx)
 
-           Step env sh ix f a
-            -> let shx = sinkE env sh'
-               in  Step env shx (ix `compose` reindex sh shx) f a
+    Replicate slix sh a
+      -> replicateD slix (cvtE sh) (cvt a)
 
-           Yield env sh f
-            -> let shx = sinkE env sh'
-               in  Yield env shx (f `compose` reindex sh shx)
-
-    Replicate _slix _sh _a
-      -> error "delay: Replicate"
-
-    Index _slix _a _sh
-      -> error "delay: Index"
+    Index slix a sh
+      -> indexD slix (cvt a) (cvtE sh)
 
     Backpermute sl p acc
       -> backpermuteD (cvtE sl) (cvtF p) (cvt acc)
@@ -365,6 +358,120 @@ backpermuteD sh' p acc = case acc of
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
   Done env a            -> Step env (sinkE env sh') (sinkF env p) identity a
 
+-- Replicate as a backwards permutation
+--
+replicateD
+    :: (Shape sh, Shape sl, Elt e)
+    => SliceIndex slix sl co sh
+    -> Exp        aenv slix
+    -> DelayedAcc aenv (Array sl e)
+    -> DelayedAcc aenv (Array sh e)
+replicateD sliceIndex slix acc = case acc of
+  Done env a
+    | Avar _ <- a
+    -> let (sh, ix) = extend sliceIndex (sinkE env slix) (Shape (OpenAcc a))
+       in  Step env sh ix identity a
+
+    | otherwise
+    -> let (sh, ix) = extend sliceIndex (weakenEA (sinkE env slix)) (Shape (OpenAcc (Avar ZeroIdx)))
+       in  Step (env `PushEnv` a) sh ix identity (Avar ZeroIdx)
+
+  Step env sl pf f a
+    -> let (sh, ix) = extend sliceIndex (sinkE env slix) sl
+       in  Step env sh (pf `compose` ix) f a
+
+  Yield env sl f
+    -> let (sh, ix) = extend sliceIndex (sinkE env slix) sl
+       in  Yield env sh (f `compose` ix)
+
+  where
+    extend :: SliceIndex slix sl co sh
+           -> OpenExp env aenv slix
+           -> OpenExp env aenv sl
+           -> (OpenExp env aenv sh, OpenFun env aenv (sh -> sl))
+    extend SliceNil _ _
+      = (IndexNil, Lam (Body IndexNil))
+
+    extend (SliceAll sliceIdx) index slice
+      = let slx     = IndexTail index
+            sl      = IndexTail slice
+            sz      = IndexHead slice
+            (sh, f) = extend sliceIdx slx sl
+        in
+        case f of
+          Lam (Body e)
+            -> let ix = IndexTail (Var ZeroIdx)
+                   i  = IndexHead (Var ZeroIdx)
+               in (IndexCons sh sz, Lam (Body (substitute e ix `IndexCons` i)))
+          _ -> error "(A) IS MADE OF FIRE!"
+
+    extend (SliceFixed sliceIdx) index slice
+      = let slx     = IndexTail index
+            sz      = IndexHead index
+            (sh, f) = extend sliceIdx slx slice
+            sl      = Lam . Body $ IndexTail (Var ZeroIdx)
+        in
+        (IndexCons sh sz, f `compose` sl)
+
+
+-- Dimensional slice as a backwards permutation
+--
+indexD
+    :: (Shape sh, Shape sl, Elt e)
+    => SliceIndex slix sl co sh
+    -> DelayedAcc aenv (Array sh e)
+    -> Exp        aenv slix
+    -> DelayedAcc aenv (Array sl e)
+indexD sliceIndex acc slix = case acc of
+  Done env a
+    | Avar _ <- a
+    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) (Shape (OpenAcc a))
+       in  Step env sl ix identity a
+
+    | otherwise
+    -> let v0       = Avar ZeroIdx
+           (sl, ix) = restrict sliceIndex (weakenEA (sinkE env slix)) (Shape (OpenAcc v0))
+       in  Step (env `PushEnv` a) sl ix identity v0
+
+  Step env sh pf f a
+    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) sh
+       in  Step env sl (pf `compose` ix) f a
+
+  Yield env sh f
+    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) sh
+       in  Yield env sl (f `compose` ix)
+
+  where
+    restrict :: SliceIndex slix sl co sh
+             -> OpenExp env aenv slix
+             -> OpenExp env aenv sh
+             -> (OpenExp env aenv sl, OpenFun env aenv (sl -> sh))
+    restrict SliceNil _  _
+      = (IndexNil, Lam (Body IndexNil))
+
+    restrict (SliceAll sliceIdx) index shape
+      = let slx     = IndexTail index
+            sl      = IndexTail shape
+            sz      = IndexHead shape
+            (sh, f) = restrict sliceIdx slx sl
+        in
+        case f of
+          Lam (Body e)
+            -> let ix = IndexTail (Var ZeroIdx)
+                   i  = IndexHead (Var ZeroIdx)
+               in (IndexCons sh sz, Lam (Body (substitute e ix `IndexCons` i)))
+          _ -> error "when I get sad, I stop being sad and be AWESOME instead"
+
+    restrict (SliceFixed sliceIdx) index shape
+      = let slx     = IndexTail index
+            i       = IndexHead index
+            sl      = IndexTail shape
+            (sh, f) = restrict sliceIdx slx sl
+        in
+        case f of
+          Lam (Body e) -> (sh, Lam (Body (substitute e (Var ZeroIdx) `IndexCons` weakenE i)))
+          _            -> error "TRUE STORY"
+
 
 -- Combine a unary value function to a delayed array to produce another delayed
 -- array. There is some extraneous work to not introduce extra array variables
@@ -430,17 +537,23 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
         | otherwise     ->
             let env = cat env1 env2 `PushEnv` a2
             in  Yield env (weakenEA (sinkE env2 sh1) `intersect` shape (Avar ZeroIdx))
-                          (generate (sinkF env f) (weakenFA (sinkF env2 g1)) (index (Avar ZeroIdx)))
+                          (generate (sinkF env f)
+                                    (weakenFA (sinkF env2 g1))
+                                    (index (Avar ZeroIdx)))
 
       Step env2 sh2 ix2 g2 a2
         | Avar _ <- a2  ->
             let env = cat env1 env2
             in  Yield env (sinkE env2 sh1 `intersect` sh2)
-                          (generate (sinkF env f) (sinkF env2 g1) (g2 `compose` index a2 `compose` ix2))
+                          (generate (sinkF env f)
+                                    (sinkF env2 g1)
+                                    (g2 `compose` index a2 `compose` ix2))
         | otherwise     ->
             let env = cat env1 env2 `PushEnv` a2
             in  Yield env (weakenEA (sinkE env2 sh1 `intersect` sh2))
-                          (generate (sinkF env f) (weakenFA (sinkF env2 g1)) (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
+                          (generate (sinkF env f)
+                                    (weakenFA (sinkF env2 g1))
+                                    (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
 
       Yield env2 sh2 g2
         -> let env = cat env1 env2
@@ -457,6 +570,9 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
 --     function for that array.
 --
 --  3) Erase the (now unused) top array variable, shrinking the environment.
+--
+--
+-- TLM: do we need to generalise this to a generate-in-generate/map/transform ?
 --
 fuseGenInGen
     :: (Shape sh, Shape sh', Elt a, Elt b)

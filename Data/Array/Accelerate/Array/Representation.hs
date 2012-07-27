@@ -116,11 +116,11 @@ instance Shape sh => Shape (sh, Int) where
       iter1' (ix,i) | i == sz-1 = f (ix,i)
                     | otherwise = f (ix,i) `c` iter1' (ix,i+1)
 
-  rangeToShape ((sh1, sz1), (sh2, sz2)) 
+  rangeToShape ((sh1, sz1), (sh2, sz2))
     = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
-  shapeToRange (sh, sz) 
+  shapeToRange (sh, sz)
     = let (low, high) = shapeToRange sh
-      in 
+      in
       ((low, 0), (high, sz - 1))
 
   shapeToList (sh,sz) = sz : shapeToList sh
