@@ -250,15 +250,17 @@ prettyPreExp pp lvl alvl wrap (Iterate i fun a)
 prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a
 prettyPreExp pp lvl alvl wrap (PrimApp p a)
+  | infixOp, Let bnd body <- a
+  = prettyPreExp pp lvl alvl wrap (Let bnd (PrimApp p body))
+
   | infixOp, Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
   = wrap $ prettyPreExp pp lvl alvl parens x <+> f <+> prettyPreExp pp lvl alvl parens y
 
   | otherwise
   = wrap $ f' <+> prettyPreExp pp lvl alvl parens a
-
   where
-    -- sometimes the infix function arguments are obstructed by, for example, a
-    -- scalar let binding. If so, add parentheses and print prefix.
+    -- sometimes the infix function arguments are obstructed by. If so, add
+    -- parentheses and print prefix.
     --
     (infixOp, f) = prettyPrim p
     f'           = if infixOp then parens f else f
