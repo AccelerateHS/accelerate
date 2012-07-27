@@ -130,12 +130,12 @@ delayOpenAcc (OpenAcc pacc) =
             -> Done env $ Reshape (sinkE env sh') (OpenAcc a)
 
            Step env sh ix f a
-            -> Step env (sinkE env sh')
-                        (ix `compose` fromIndex sh `compose` toIndex (sinkE env sh')) f a
+            -> let shx = sinkE env sh'
+               in  Step env shx (ix `compose` reindex sh shx) f a
 
            Yield env sh f
-            -> Yield env (sinkE env sh')
-                         (f `compose` fromIndex sh `compose` toIndex (sinkE env sh'))
+            -> let shx = sinkE env sh'
+               in  Yield env shx (f `compose` reindex sh shx)
 
     Replicate _slix _sh _a
       -> error "delay: Replicate"
@@ -302,6 +302,18 @@ toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 
 fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
 fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
+
+reindex :: (Shape sh, Shape sh')
+        => OpenExp env aenv sh'
+        -> OpenExp env aenv sh
+        -> OpenFun env aenv (sh -> sh')
+reindex sh' sh
+  | Just REFL <- matchOpenExp sh sh'
+  = Lam . Body $ Var ZeroIdx
+
+  | otherwise
+  = fromIndex sh' `compose` toIndex sh
+
 
 intersect :: Shape sh => OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect sh1 sh2
