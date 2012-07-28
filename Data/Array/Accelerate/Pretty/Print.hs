@@ -232,6 +232,12 @@ prettyPreExp pp lvl alvl wrap (IndexTail ix)
   = wrap $ text "indexTail" <+> prettyPreExp pp lvl alvl parens ix
 prettyPreExp _ _ _ wrap (IndexAny)
   = wrap $ text "indexAny"
+prettyPreExp pp lvl alvl wrap (IndexSlice _ slix sh)
+  = wrap $ text "indexSlice" <+> parens (prettyPreExp pp lvl alvl parens slix)
+                             <+> prettyPreExp pp lvl alvl parens sh
+prettyPreExp pp lvl alvl wrap (IndexFull _ slix sl)
+  = wrap $ text "indexFull" <+> parens (prettyPreExp pp lvl alvl parens slix)
+                            <+> prettyPreExp pp lvl alvl parens sl
 prettyPreExp pp lvl alvl wrap (ToIndex sh ix)
   = wrap $ text "toIndex" <+> prettyPreExp pp lvl alvl parens sh
                           <+> prettyPreExp pp lvl alvl parens ix

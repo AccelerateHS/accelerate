@@ -190,6 +190,8 @@ rebuildE v exp =
     IndexHead sh        -> IndexHead (rebuildE v sh)
     IndexTail sh        -> IndexTail (rebuildE v sh)
     IndexAny            -> IndexAny
+    IndexSlice x ix sh  -> IndexSlice x (rebuildE v ix) (rebuildE v sh)
+    IndexFull x ix sl   -> IndexFull x (rebuildE v ix) (rebuildE v sl)
     ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
     FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
     Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
@@ -353,6 +355,8 @@ rebuildEA k v exp =
     IndexHead sh        -> IndexHead (rebuildEA k v sh)
     IndexTail sh        -> IndexTail (rebuildEA k v sh)
     IndexAny            -> IndexAny
+    IndexSlice x ix sh  -> IndexSlice x (rebuildEA k v ix) (rebuildEA k v sh)
+    IndexFull x ix sl   -> IndexFull x (rebuildEA k v ix) (rebuildEA k v sl)
     ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
     FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
     Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)

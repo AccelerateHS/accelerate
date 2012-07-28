@@ -36,6 +36,7 @@ import System.IO.Unsafe                                 ( unsafePerformIO )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 
@@ -111,14 +112,14 @@ matchPreOpenAcc (Transform sh1 ix1 f1 a1) (Transform sh2 ix2 f2 a2)
   , Just REFL <- matchOpenAcc a1  a2
   = Just REFL
 
-matchPreOpenAcc (Replicate _ slix1 a1) (Replicate _ slix2 a2)
-  | Just REFL <- matchOpenExp slix1 slix2
-  , Just REFL <- matchOpenAcc a1 a2
+matchPreOpenAcc (Replicate _ ix1 a1) (Replicate _ ix2 a2)
+  | Just REFL <- matchOpenExp ix1 ix2
+  , Just REFL <- matchOpenAcc a1  a2
   = gcast REFL  -- slice specification ??
 
-matchPreOpenAcc (Index _ a1 slix1) (Index _ a2 slix2)
-  | Just REFL <- matchOpenAcc a1 a2
-  , Just REFL <- matchOpenExp slix1 slix2
+matchPreOpenAcc (Index _ a1 ix1) (Index _ a2 ix2)
+  | Just REFL <- matchOpenAcc a1  a2
+  , Just REFL <- matchOpenExp ix1 ix2
   = gcast REFL  -- slice specification ??
 
 matchPreOpenAcc (Map f1 a1) (Map f2 a2)
@@ -337,6 +338,18 @@ matchOpenExp (IndexTail sl1) (IndexTail sl2)
   | Just REFL <- matchOpenExp sl1 sl2
   = Just REFL
 
+matchOpenExp (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
+  | Just REFL <- matchOpenExp ix1 ix2
+  , Just REFL <- matchOpenExp sh1 sh2
+  , Just REFL <- matchSliceRestrict sliceIndex1 sliceIndex2
+  = gcast REFL  -- SliceIndex representation/surface type
+
+matchOpenExp (IndexFull sliceIndex1 ix1 sl1) (IndexFull sliceIndex2 ix2 sl2)
+  | Just REFL <- matchOpenExp ix1 ix2
+  , Just REFL <- matchOpenExp sl1 sl2
+  , Just REFL <- matchSliceExtend sliceIndex1 sliceIndex2
+  = gcast REFL  -- SliceIndex representation/surface type
+
 matchOpenExp (ToIndex sh1 i1) (ToIndex sh2 i2)
   | Just REFL <- matchOpenExp sh1 sh2
   , Just REFL <- matchOpenExp i1 i2
@@ -451,6 +464,48 @@ matchTuple (SnocTup t1 e1) (SnocTup t2 e2)
 matchTuple _               _                    = Nothing
 
 
+-- Slice specifications
+--
+matchSliceRestrict
+    :: SliceIndex slix s co  sh
+    -> SliceIndex slix t co' sh
+    -> Maybe (s :=: t)
+matchSliceRestrict SliceNil SliceNil
+  = Just REFL
+
+matchSliceRestrict (SliceAll   sl1) (SliceAll   sl2)
+  | Just REFL <- matchSliceRestrict sl1 sl2
+  = Just REFL
+
+matchSliceRestrict (SliceFixed sl1) (SliceFixed sl2)
+  | Just REFL <- matchSliceRestrict sl1 sl2
+  = Just REFL
+
+matchSliceRestrict _ _
+  = Nothing
+
+
+matchSliceExtend
+    :: SliceIndex slix sl co  s
+    -> SliceIndex slix sl co' t
+    -> Maybe (s :=: t)
+matchSliceExtend SliceNil SliceNil
+  = Just REFL
+
+matchSliceExtend (SliceAll   sl1) (SliceAll   sl2)
+  | Just REFL <- matchSliceExtend sl1 sl2
+  = Just REFL
+
+matchSliceExtend (SliceFixed sl1) (SliceFixed sl2)
+  | Just REFL <- matchSliceExtend sl1 sl2
+  = Just REFL
+
+matchSliceExtend _ _
+  = Nothing
+
+
+-- Primitive constants and functions
+--
 matchPrimConst :: (Elt s, Elt t) => PrimConst s -> PrimConst t -> Maybe (s :=: t)
 matchPrimConst (PrimMinBound s) (PrimMinBound t) = matchBoundedType s t
 matchPrimConst (PrimMaxBound s) (PrimMaxBound t) = matchBoundedType s t
@@ -630,6 +685,8 @@ countEA acc exp =
     IndexCons sl sz     -> countEA acc sl + countEA acc sz
     IndexHead sh        -> countEA acc sh
     IndexTail sh        -> countEA acc sh
+    IndexSlice _ ix sh  -> countEA acc ix + countEA acc sh
+    IndexFull _ ix sl   -> countEA acc ix + countEA acc sl
     IndexAny            -> 0
     ToIndex sh ix       -> countEA acc sh + countEA acc ix
     FromIndex sh i      -> countEA acc sh + countEA acc i
@@ -678,6 +735,8 @@ hashOpenExp IndexNil                    = hash "IndexNil"
 hashOpenExp (IndexCons sl a)            = hash "IndexCons"      `combine` hashOpenExp sl `combine` hashOpenExp a
 hashOpenExp (IndexHead sl)              = hash "IndexHead"      `combine` hashOpenExp sl
 hashOpenExp (IndexTail sl)              = hash "IndexTail"      `combine` hashOpenExp sl
+hashOpenExp (IndexSlice spec ix sh)     = hash "IndexSlice"     `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sh
+hashOpenExp (IndexFull  spec ix sl)     = hash "IndexFull"      `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sl
 hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e

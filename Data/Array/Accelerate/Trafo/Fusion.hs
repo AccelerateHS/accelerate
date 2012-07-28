@@ -26,6 +26,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                hiding ( shape, index, sliceIndex )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
@@ -220,26 +221,28 @@ fuseOpenExp = cvt
 
     cvt :: OpenExp env aenv t -> OpenExp env aenv t
     cvt exp = case exp of
-      Let bnd body      -> Let (cvt bnd) (cvt body)
-      Var ix            -> Var ix
-      Const c           -> Const c
-      Tuple tup         -> Tuple (fuseTuple tup)
-      Prj tup ix        -> Prj tup (cvt ix)
-      IndexNil          -> IndexNil
-      IndexCons sh sz   -> IndexCons (cvt sh) (cvt sz)
-      IndexHead sh      -> IndexHead (cvt sh)
-      IndexTail sh      -> IndexTail (cvt sh)
-      IndexAny          -> IndexAny
-      ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
-      FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e        -> Cond (cvt p) (cvt t) (cvt e)
-      Iterate n f x     -> Iterate n (cvtF f) (cvt x)
-      PrimConst c       -> PrimConst c
-      PrimApp f x       -> PrimApp f (cvt x)
-      IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
-      Shape a           -> Shape (cvtA a)
-      ShapeSize sh      -> ShapeSize (cvt sh)
-      Intersect s t     -> Intersect (cvt s) (cvt t)
+      Let bnd body              -> Let (cvt bnd) (cvt body)
+      Var ix                    -> Var ix
+      Const c                   -> Const c
+      Tuple tup                 -> Tuple (fuseTuple tup)
+      Prj tup ix                -> Prj tup (cvt ix)
+      IndexNil                  -> IndexNil
+      IndexCons sh sz           -> IndexCons (cvt sh) (cvt sz)
+      IndexHead sh              -> IndexHead (cvt sh)
+      IndexTail sh              -> IndexTail (cvt sh)
+      IndexAny                  -> IndexAny
+      IndexSlice x ix sh        -> IndexSlice x (cvt ix) (cvt sh)
+      IndexFull x ix sl         -> IndexFull x (cvt ix) (cvt sl)
+      ToIndex sh ix             -> ToIndex (cvt sh) (cvt ix)
+      FromIndex sh ix           -> FromIndex (cvt sh) (cvt ix)
+      Cond p t e                -> Cond (cvt p) (cvt t) (cvt e)
+      Iterate n f x             -> Iterate n (cvtF f) (cvt x)
+      PrimConst c               -> PrimConst c
+      PrimApp f x               -> PrimApp f (cvt x)
+      IndexScalar a sh          -> IndexScalar (cvtA a) (cvt sh)
+      Shape a                   -> Shape (cvtA a)
+      ShapeSize sh              -> ShapeSize (cvt sh)
+      Intersect s t             -> Intersect (cvt s) (cvt t)
 
 
 fuseOpenFun
@@ -358,11 +361,12 @@ backpermuteD sh' p acc = case acc of
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
   Done env a            -> Step env (sinkE env sh') (sinkF env p) identity a
 
+
 -- Replicate as a backwards permutation
 --
 replicateD
     :: (Shape sh, Shape sl, Elt e)
-    => SliceIndex slix sl co sh
+    => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
     -> DelayedAcc aenv (Array sh e)
@@ -385,40 +389,21 @@ replicateD sliceIndex slix acc = case acc of
        in  Yield env sh (f `compose` ix)
 
   where
-    extend :: SliceIndex slix sl co sh
-           -> OpenExp env aenv slix
-           -> OpenExp env aenv sl
-           -> (OpenExp env aenv sh, OpenFun env aenv (sh -> sl))
-    extend SliceNil _ _
-      = (IndexNil, Lam (Body IndexNil))
-
-    extend (SliceAll sliceIdx) index slice
-      = let slx     = IndexTail index
-            sl      = IndexTail slice
-            sz      = IndexHead slice
-            (sh, f) = extend sliceIdx slx sl
-        in
-        case f of
-          Lam (Body e)
-            -> let ix = IndexTail (Var ZeroIdx)
-                   i  = IndexHead (Var ZeroIdx)
-               in (IndexCons sh sz, Lam (Body (substitute e ix `IndexCons` i)))
-          _ -> error "(A) IS MADE OF FIRE!"
-
-    extend (SliceFixed sliceIdx) index slice
-      = let slx     = IndexTail index
-            sz      = IndexHead index
-            (sh, f) = extend sliceIdx slx slice
-            sl      = Lam . Body $ IndexTail (Var ZeroIdx)
-        in
-        (IndexCons sh sz, f `compose` sl)
+    extend :: (Shape sh, Shape sl)
+           => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+           -> Exp aenv slix
+           -> Exp aenv sl
+           -> (Exp aenv sh, Fun aenv (sh -> sl))
+    extend sliceIdx slx sl =
+      ( IndexFull sliceIdx slx sl
+      , Lam (Body (IndexSlice sliceIdx (weakenE slx) (Var ZeroIdx))) )
 
 
 -- Dimensional slice as a backwards permutation
 --
 indexD
     :: (Shape sh, Shape sl, Elt e)
-    => SliceIndex slix sl co sh
+    => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> DelayedAcc aenv (Array sh e)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
@@ -442,35 +427,14 @@ indexD sliceIndex acc slix = case acc of
        in  Yield env sl (f `compose` ix)
 
   where
-    restrict :: SliceIndex slix sl co sh
+    restrict :: (Shape sh, Shape sl)
+             => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
              -> OpenExp env aenv slix
              -> OpenExp env aenv sh
              -> (OpenExp env aenv sl, OpenFun env aenv (sl -> sh))
-    restrict SliceNil _  _
-      = (IndexNil, Lam (Body IndexNil))
-
-    restrict (SliceAll sliceIdx) index shape
-      = let slx     = IndexTail index
-            sl      = IndexTail shape
-            sz      = IndexHead shape
-            (sh, f) = restrict sliceIdx slx sl
-        in
-        case f of
-          Lam (Body e)
-            -> let ix = IndexTail (Var ZeroIdx)
-                   i  = IndexHead (Var ZeroIdx)
-               in (IndexCons sh sz, Lam (Body (substitute e ix `IndexCons` i)))
-          _ -> error "when I get sad, I stop being sad and be AWESOME instead"
-
-    restrict (SliceFixed sliceIdx) index shape
-      = let slx     = IndexTail index
-            i       = IndexHead index
-            sl      = IndexTail shape
-            (sh, f) = restrict sliceIdx slx sl
-        in
-        case f of
-          Lam (Body e) -> (sh, Lam (Body (substitute e (Var ZeroIdx) `IndexCons` weakenE i)))
-          _            -> error "TRUE STORY"
+    restrict sliceIdx slx sh =
+      ( IndexSlice sliceIdx slx sh
+      , Lam (Body (IndexFull sliceIdx (weakenE slx) (Var ZeroIdx))) )
 
 
 -- Combine a unary value function to a delayed array to produce another delayed
@@ -640,6 +604,8 @@ fuseGenInGen sh1 f1 sh2 f2
           IndexHead sh          -> IndexHead (replaceIE ix sh)
           IndexTail sh          -> IndexTail (replaceIE ix sh)
           IndexAny              -> IndexAny
+          IndexSlice x slix sh  -> IndexSlice x (replaceIE ix slix) (replaceIE ix sh)
+          IndexFull x slix sl   -> IndexFull x (replaceIE ix slix) (replaceIE ix sl)
           ToIndex sh i          -> ToIndex (replaceIE ix sh) (replaceIE ix i)
           FromIndex sh i        -> FromIndex (replaceIE ix sh) (replaceIE ix i)
           Cond p t e            -> Cond (replaceIE ix p) (replaceIE ix t) (replaceIE ix e)
@@ -678,6 +644,8 @@ fuseGenInGen sh1 f1 sh2 f2
           IndexHead sh          -> IndexHead (replaceE a b sh)
           IndexTail sh          -> IndexTail (replaceE a b sh)
           IndexAny              -> IndexAny
+          IndexSlice x slix sh  -> IndexSlice x (replaceE a b slix) (replaceE a b sh)
+          IndexFull x slix sl   -> IndexFull x (replaceE a b slix) (replaceE a b sl)
           ToIndex sh ix         -> ToIndex (replaceE a b sh) (replaceE a b ix)
           FromIndex sh i        -> FromIndex (replaceE a b sh) (replaceE a b i)
           Cond p t e            -> Cond (replaceE a b p) (replaceE a b t) (replaceE a b e)

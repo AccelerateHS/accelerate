@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Array.Representation (
 
 ) where
 
--- friends 
+-- friends
 import Data.Array.Accelerate.Type
 
 #include "accelerate.h"

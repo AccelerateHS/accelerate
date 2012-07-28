@@ -182,31 +182,33 @@ simplifyOpenExp env = cvt
 
     cvt :: OpenExp env aenv e -> OpenExp env aenv e
     cvt exp = case exp of
-      Let bnd body      -> let bnd'  = cvt bnd
-                               env'  = incEnv env `PushEnv` weakenE bnd'
-                               body' = simplifyOpenExp env' body
-                           in
-                           simplifyLet env bnd' body'
+      Let bnd body              -> let bnd'  = cvt bnd
+                                       env'  = incEnv env `PushEnv` weakenE bnd'
+                                       body' = simplifyOpenExp env' body
+                                   in
+                                   simplifyLet env bnd' body'
       --
-      Var ix            -> Var ix
-      Const c           -> Const c
-      Tuple tup         -> Tuple (simplifyTuple env tup)
-      Prj tup ix        -> Prj tup (cvt ix)
-      IndexNil          -> IndexNil
-      IndexCons sh sz   -> IndexCons (cvt sh) (cvt sz)
-      IndexHead sh      -> IndexHead (cvt sh)
-      IndexTail sh      -> IndexTail (cvt sh)
-      IndexAny          -> IndexAny
-      ToIndex sh ix     -> ToIndex (cvt sh) (cvt ix)
-      FromIndex sh ix   -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e        -> simplifyCond env (cvt p) (cvt t) (cvt e)
-      Iterate n f x     -> Iterate n (simplifyOpenFun env f) (cvt x)
-      PrimConst c       -> PrimConst c
-      PrimApp f x       -> PrimApp f (cvt x)
-      IndexScalar a sh  -> IndexScalar (cvtA a) (cvt sh)
-      Shape a           -> Shape (cvtA a)
-      ShapeSize sh      -> ShapeSize (cvt sh)
-      Intersect s t     -> Intersect (cvt s) (cvt t)
+      Var ix                    -> Var ix
+      Const c                   -> Const c
+      Tuple tup                 -> Tuple (simplifyTuple env tup)
+      Prj tup ix                -> Prj tup (cvt ix)
+      IndexNil                  -> IndexNil
+      IndexCons sh sz           -> IndexCons (cvt sh) (cvt sz)
+      IndexHead sh              -> IndexHead (cvt sh)
+      IndexTail sh              -> IndexTail (cvt sh)
+      IndexAny                  -> IndexAny
+      IndexSlice x ix sh        -> IndexSlice x (cvt ix) (cvt sh)
+      IndexFull x ix sl         -> IndexFull x (cvt ix) (cvt sl)
+      ToIndex sh ix             -> ToIndex (cvt sh) (cvt ix)
+      FromIndex sh ix           -> FromIndex (cvt sh) (cvt ix)
+      Cond p t e                -> simplifyCond env (cvt p) (cvt t) (cvt e)
+      Iterate n f x             -> Iterate n (simplifyOpenFun env f) (cvt x)
+      PrimConst c               -> PrimConst c
+      PrimApp f x               -> PrimApp f (cvt x)
+      IndexScalar a sh          -> IndexScalar (cvtA a) (cvt sh)
+      Shape a                   -> Shape (cvtA a)
+      ShapeSize sh              -> ShapeSize (cvt sh)
+      Intersect s t             -> Intersect (cvt s) (cvt t)
 
 
 simplifyTuple

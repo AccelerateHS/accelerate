@@ -90,7 +90,8 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar        as Sugar
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
+import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 #include "accelerate.h"
 
@@ -262,7 +263,10 @@ data PreOpenAcc acc aenv a where
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
   Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
-              => SliceIndex slix sl co sh                       -- slice type specification
+              => SliceIndex (EltRepr slix)                      -- slice type specification
+                            (EltRepr sl)
+                            co
+                            (EltRepr sh)
               -> PreExp     acc aenv slix                       -- slice value specification
               -> acc            aenv (Array sl e)               -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
@@ -270,7 +274,10 @@ data PreOpenAcc acc aenv a where
   -- Index a subarray out of an array; i.e., the dimensions not indexed are
   -- returned whole
   Index       :: (Shape sh, Shape sl, Elt slix, Elt e)
-              => SliceIndex slix sl co sh                       -- slice type specification
+              => SliceIndex (EltRepr slix)                      -- slice type specification
+                            (EltRepr sl)
+                            co
+                            (EltRepr sh)
               -> acc            aenv (Array sh e)               -- array to be indexed
               -> PreExp     acc aenv slix                       -- slice value specification
               -> PreOpenAcc acc aenv (Array sl e)
@@ -697,6 +704,18 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   IndexAny      :: Shape sh
                 => PreOpenExp acc env aenv (Any sh)
+
+  IndexSlice    :: (Shape sh, Shape sl)
+                => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+                -> PreOpenExp acc env aenv slix
+                -> PreOpenExp acc env aenv sh
+                -> PreOpenExp acc env aenv sl
+
+  IndexFull     :: (Shape sh, Shape sl)
+                => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+                -> PreOpenExp acc env aenv slix
+                -> PreOpenExp acc env aenv sl
+                -> PreOpenExp acc env aenv sh
 
   -- Shape and index conversion
   ToIndex       :: Shape sh
