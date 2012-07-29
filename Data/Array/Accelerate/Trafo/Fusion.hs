@@ -96,33 +96,21 @@ delayOpenAcc (OpenAcc pacc) =
                                 -> acc
         _                       -> done $ Alet (OpenAcc bnd) (OpenAcc body)
 
-    Avar ix
-      -> done $ Avar ix
-
-    Atuple arrs
-      -> done $ Atuple (fuseAtuple arrs)
-
-    Aprj ix arrs
-      -> done $ Aprj ix (fuseOpenAcc arrs)
-
-    Apply f a
-      -> done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
-
-    Acond p acc1 acc2
-      -> done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
+    Avar ix             -> done $ Avar ix
+    Atuple arrs         -> done $ Atuple (fuseAtuple arrs)
+    Aprj ix arrs        -> done $ Aprj ix (fuseOpenAcc arrs)
+    Apply f a           -> done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
+    Acond p acc1 acc2   -> done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
 
     -- Array injection
     --
-    Use arrs
-      -> done $ Use arrs
-
-    Unit e
-      -> done $ Unit e
+    Use arrs            -> done $ Use arrs
+    Unit e              -> done $ Unit e
 
     -- Index space transforms
     --
     Reshape sl acc
-      -> let sh'        = cvtE sl
+      -> let sh' = cvtE sl
          in case cvt acc of
            -- TLM: there was a runtime check to ensure the old and new shapes
            -- contained the same number of elements: this has been lost!
@@ -131,29 +119,16 @@ delayOpenAcc (OpenAcc pacc) =
            Step env sh ix f a   -> let shx = sinkE env sh' in Step env shx (ix `compose` reindex sh shx) f a
            Yield env sh f       -> let shx = sinkE env sh' in Yield env shx (f `compose` reindex sh shx)
 
-    Replicate slix sh a
-      -> replicateD slix (cvtE sh) (cvt a)
-
-    Index slix a sh
-      -> indexD slix (cvt a) (cvtE sh)
-
-    Backpermute sl p acc
-      -> backpermuteD (cvtE sl) (cvtF p) (cvt acc)
+    Replicate slix sh a -> replicateD slix (cvtE sh) (cvt a)
+    Index slix a sh     -> indexD slix (cvt a) (cvtE sh)
+    Backpermute sl p a  -> backpermuteD (cvtE sl) (cvtF p) (cvt a)
 
     -- Producers
     --
-    Generate sh f
-      -> Yield BaseEnv (cvtE sh) (cvtF f)
-
-    Transform sl p f acc
-      -> backpermuteD (cvtE sl) (cvtF p)
-       $ mapD (cvtF f) (cvt acc)
-
-    Map f a
-      -> mapD (cvtF f) (cvt a)
-
-    ZipWith f acc1 acc2
-      -> zipWithD (cvtF f) acc1 acc2
+    Generate sh f       -> Yield BaseEnv (cvtE sh) (cvtF f)
+    Map f a             -> mapD (cvtF f) (cvt a)
+    ZipWith f a1 a2     -> zipWithD (cvtF f) a1 a2
+    Transform sl p f a  -> backpermuteD (cvtE sl) (cvtF p) $ mapD (cvtF f) (cvt a)
 
     -- Consumers
     --
@@ -501,6 +476,30 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
            in  Yield env (sinkE env2 sh1 `intersect` sh2)
                          (generate (sinkF env f) (sinkF env2 g1) g2)
 
+    substitute2
+        :: OpenExp ((env, a), b) aenv' c
+        -> OpenExp (env, dim)    aenv' a
+        -> OpenExp (env, dim)    aenv' b
+        -> OpenExp (env, dim)    aenv' c
+    substitute2 gen a b
+      = Let a
+      $ Let (weakenE b)             -- as 'b' has been pushed under a binder
+      $ rebuildE split2 gen         -- add space for the index environment variable
+      where
+        split2 :: Elt t => Idx ((env,a),b) t -> PreOpenExp acc (((env,dim),a),b) aenv' t
+        split2 ZeroIdx                = Var ZeroIdx
+        split2 (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
+        split2 (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
+
+    generate
+        :: OpenFun env aenv' (a -> b -> c)
+        -> OpenFun env aenv' (dim -> a)
+        -> OpenFun env aenv' (dim -> b)
+        -> OpenFun env aenv' (dim -> c)
+    generate (Lam (Lam (Body e))) (Lam (Body a)) (Lam (Body b)) = Lam . Body $ substitute2 e a b
+    generate _                    _              _              = error "generate: impossible evaluation"
+
+
 
 -- Combine two generator functions. We need to do a couple of things here:
 --
@@ -513,7 +512,8 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
 --  3) Erase the (now unused) top array variable, shrinking the environment.
 --
 --
--- TLM: do we need to generalise this to a generate-in-generate/map/transform ?
+-- TLM: need to generalise this to all producer-type functions, where the
+--      binding is used only once in the body.
 --
 fuseGenInGen
     :: (Shape sh, Shape sh', Elt a, Elt b)
@@ -544,7 +544,7 @@ fuseGenInGen sh1 f1 sh2 f2
     f'          = replaceIF f1 f2
 
     eraseTop :: Arrays t => Idx (aenv, s) t -> PreOpenAcc OpenAcc aenv t
-    eraseTop ZeroIdx      = error "it's clobberin' time!"
+    eraseTop ZeroIdx      = error "IT'S CLOBBERIN' TIME!"
     eraseTop (SuccIdx ix) = Avar ix
 
     -- Replace the indexing function with a value generator
@@ -649,35 +649,6 @@ fuseGenInGen sh1 f1 sh2 f2
         replaceF a' b' fun = case fun of
           Body e        -> Body (replaceE a' b' e)
           Lam f         -> Lam (replaceF (weakenE a') (weakenE b') f)
-
-
--- Substitution
--- ------------
-
-substitute2
-    :: (Elt a, Elt b, Elt c)
-    => OpenExp ((env, a), b) aenv c
-    -> OpenExp (env, x)      aenv a
-    -> OpenExp (env, x)      aenv b
-    -> OpenExp (env, x)      aenv c
-substitute2 f a b
-  = Let a
-  $ Let (weakenE b)             -- as 'b' has been pushed under a binder
-  $ rebuildE split2 f           -- add space for the index environment variable
-  where
-    split2 :: Elt c => Idx ((env,a),b) c -> PreOpenExp acc (((env,x),a),b) aenv c
-    split2 ZeroIdx                = Var ZeroIdx
-    split2 (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
-    split2 (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
-
-generate
-    :: (Elt a, Elt b, Elt c, Shape sh)
-    => OpenFun env aenv (a -> b -> c)
-    -> OpenFun env aenv (sh -> a)
-    -> OpenFun env aenv (sh -> b)
-    -> OpenFun env aenv (sh -> c)
-generate (Lam (Lam (Body f))) (Lam (Body a)) (Lam (Body b)) = Lam . Body $ substitute2 f a b
-generate _                    _              _              = error "generate: impossible evaluation"
 
 
 -- Environment manipulation
