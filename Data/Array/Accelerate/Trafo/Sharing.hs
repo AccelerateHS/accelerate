@@ -352,7 +352,9 @@ convertSharingExp lyt alyt env aenv = cvt
           IndexAny        -> AST.IndexAny
           Cond e1 e2 e3   -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           PrimConst c     -> AST.PrimConst c
-          PrimApp p e     -> AST.PrimApp p (cvt e)
+          PrimApp f e     -> case cvt e of
+            AST.Let bnd body -> AST.Let bnd (AST.PrimApp f body)
+            xs               -> AST.PrimApp f xs
           IndexScalar a e -> AST.IndexScalar (convertSharingAcc alyt aenv a) (cvt e)
           Shape a         -> AST.Shape (convertSharingAcc alyt aenv a)
           ShapeSize e     -> AST.ShapeSize (cvt e)
