@@ -365,76 +365,53 @@ backpermuteD sh' p acc = case acc of
 -- Replicate as a backwards permutation
 --
 replicateD
-    :: (Shape sh, Shape sl, Elt e)
+    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
     -> DelayedAcc aenv (Array sh e)
 replicateD sliceIndex slix acc = case acc of
+  Step env sl pf f a    -> Step env (fullshape env sl) (pf `compose` extend env) f a
+  Yield env sl f        -> Yield env (fullshape env sl) (f `compose` extend env)
   Done env a
-    | Avar _ <- a
-    -> let (sh, ix) = extend sliceIndex (sinkE env slix) (Shape (OpenAcc a))
-       in  Step env sh ix identity a
-
-    | otherwise
-    -> let (sh, ix) = extend sliceIndex (weakenEA (sinkE env slix)) (Shape (OpenAcc (Avar ZeroIdx)))
-       in  Step (env `PushEnv` a) sh ix identity (Avar ZeroIdx)
-
-  Step env sl pf f a
-    -> let (sh, ix) = extend sliceIndex (sinkE env slix) sl
-       in  Step env sh (pf `compose` ix) f a
-
-  Yield env sl f
-    -> let (sh, ix) = extend sliceIndex (sinkE env slix) sl
-       in  Yield env sh (f `compose` ix)
+    | Avar _ <- a       -> Step env (fullshape env (Shape (OpenAcc a))) (extend env) identity a
+    | otherwise         ->
+        let env' = env `PushEnv` a
+            a0   = Avar ZeroIdx
+        in  Step env' (fullshape env' (Shape (OpenAcc a0))) (extend env') identity a0
 
   where
-    extend :: (Shape sh, Shape sl)
-           => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-           -> Exp aenv slix
-           -> Exp aenv sl
-           -> (Exp aenv sh, Fun aenv (sh -> sl))
-    extend sliceIdx slx sl =
-      ( IndexFull sliceIdx slx sl
-      , Lam (Body (IndexSlice sliceIdx (weakenE slx) (Var ZeroIdx))) )
+    fullshape :: Extend aenv aenv' -> Exp aenv' sl -> Exp aenv' sh
+    fullshape env sl = IndexFull sliceIndex (sinkE env slix) sl
+
+    extend :: Extend aenv aenv' -> Fun aenv' (sh -> sl)
+    extend env = Lam (Body (IndexSlice sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))
 
 
 -- Dimensional slice as a backwards permutation
 --
 indexD
-    :: (Shape sh, Shape sl, Elt e)
+    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> DelayedAcc aenv (Array sh e)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
 indexD sliceIndex acc slix = case acc of
+  Step env sl pf f a    -> Step env (sliceshape env sl) (pf `compose` restrict env) f a
+  Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
   Done env a
-    | Avar _ <- a
-    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) (Shape (OpenAcc a))
-       in  Step env sl ix identity a
-
-    | otherwise
-    -> let v0       = Avar ZeroIdx
-           (sl, ix) = restrict sliceIndex (weakenEA (sinkE env slix)) (Shape (OpenAcc v0))
-       in  Step (env `PushEnv` a) sl ix identity v0
-
-  Step env sh pf f a
-    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) sh
-       in  Step env sl (pf `compose` ix) f a
-
-  Yield env sh f
-    -> let (sl, ix) = restrict sliceIndex (sinkE env slix) sh
-       in  Yield env sl (f `compose` ix)
+    | Avar _ <- a       -> Step env (sliceshape env (Shape (OpenAcc a))) (restrict env) identity a
+    | otherwise         ->
+        let env' = env `PushEnv` a
+            a0   = Avar ZeroIdx
+        in  Step env' (sliceshape env' (Shape (OpenAcc a0))) (restrict env') identity a0
 
   where
-    restrict :: (Shape sh, Shape sl)
-             => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-             -> OpenExp env aenv slix
-             -> OpenExp env aenv sh
-             -> (OpenExp env aenv sl, OpenFun env aenv (sl -> sh))
-    restrict sliceIdx slx sh =
-      ( IndexSlice sliceIdx slx sh
-      , Lam (Body (IndexFull sliceIdx (weakenE slx) (Var ZeroIdx))) )
+    sliceshape :: Extend aenv aenv' -> Exp aenv' sh -> Exp aenv' sl
+    sliceshape env sh = IndexSlice sliceIndex (sinkE env slix) sh
+
+    restrict :: Extend aenv aenv' -> Fun aenv' (sl -> sh)
+    restrict env = Lam (Body (IndexFull sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))
 
 
 -- Combine a unary value function to a delayed array to produce another delayed
