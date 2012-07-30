@@ -940,15 +940,13 @@ instance Slice Z where
   type FullShape    Z = Z
   sliceIndex _ = Repr.SliceNil
 
-instance (Slice sl, Slice (SliceShape sl), Slice (FullShape sl))
-    => Slice (sl:.All) where
+instance Slice sl => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
 
-instance (Slice sl, Slice (SliceShape sl), Slice (FullShape sl))
-    => Slice (sl:.Int) where
+instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
   type FullShape    (sl:.Int) = FullShape    sl :. Int
