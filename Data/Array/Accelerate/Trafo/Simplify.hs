@@ -22,15 +22,19 @@ module Data.Array.Accelerate.Trafo.Simplify (
 
 -- standard library
 import Prelude                                          hiding ( exp )
+import Data.List                                        ( intercalate )
 import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Elt )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
+
+import qualified Debug.Trace                            as Debug
 
 
 -- An environment that holds let-bound scalar expressions. The second
@@ -40,7 +44,7 @@ import qualified Data.Array.Accelerate.Tuple            as Tuple
 data Gamma env env' aenv where
   EmptyEnv :: Gamma env () aenv
 
-  PushEnv  :: Typeable t
+  PushEnv  :: Elt t
            => Gamma   env env'      aenv
            -> OpenExp env           aenv t
            -> Gamma   env (env', t) aenv
@@ -75,7 +79,7 @@ localCSE
     -> OpenExp (env,a) aenv b
     -> Maybe (OpenExp env aenv b)
 localCSE env bnd body
-  | Just ix <- lookupEnv env bnd = Just $ inline body (Var ix)
+  | Just ix <- lookupEnv env bnd = trace "CSE" (show bnd) $ Just $ inline body (Var ix)
   | otherwise                    = Nothing
 
 
@@ -104,14 +108,17 @@ recoverLoops
     -> OpenExp (env,a) aenv b
     -> Maybe (OpenExp env aenv b)
 recoverLoops _env bnd body
-  | Iterate n f x       <- bnd
-  , Just REFL           <- matchOpenFun f (Lam (Body body))
-  = Just $ Iterate (n+1) f x                    -- loop joining
+  | Iterate n f x               <- bnd
+  , Just REFL                   <- matchOpenFun f (Lam (Body body))
+  = trace "loop join" (show f)
+  $ Just $ Iterate (n+1) f x                    -- loop joining
 
-  | Let bnd' body'      <- bnd
-  , Just REFL           <- matchEnvTop body body'
-  , Just REFL           <- matchOpenExp body body'
-  = Just $ Iterate 2 (Lam (Body body)) bnd'     -- loop introduction
+  | Let bnd' body'              <- bnd
+  , Just REFL                   <- matchEnvTop body body'
+  , Just REFL                   <- matchOpenExp body body'
+  = trace "loop intro" (show body)
+  $ Just $ Iterate 2 (Lam (Body body)) bnd'     -- loop introduction
+
 
   | otherwise
   = Nothing
@@ -213,4 +220,24 @@ simplifyOpenFun
     -> OpenFun env     aenv t
 simplifyOpenFun env (Body e) = Body (simplifyOpenExp env e)
 simplifyOpenFun env (Lam  f) = Lam  (simplifyOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
+
+
+
+-- Debugging ===================================================================
+--
+
+dump_simplify :: Bool
+dump_simplify = False
+
+trace :: String -> String -> a -> a
+trace phase str x
+  | dump_simplify       = Debug.trace msg x
+  | otherwise           = x
+  where
+    msg = intercalate "\n"
+        [ ""
+        , ">> " ++ phase ++ ' ' : replicate (80 - 4 - length phase) '-'
+        , str
+        , replicate 80 '-'
+        ]
 
