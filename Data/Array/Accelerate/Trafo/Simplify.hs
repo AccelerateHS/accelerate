@@ -149,25 +149,13 @@ simplifyCond _env p t e
   | otherwise                           = Cond p t e
 
 
--- Walk over the scalar expression, applying simplifications. Keep doing this
--- until no more substitutions are applied.
---
--- TLM: set a maximum limit, and have simplify return a boolean whether work was
---      done rather than traversing the tree to test equality.
+-- Walk over the scalar expression, applying simplifications.
 --
 simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp old
-  = let new = simplifyOpenExp EmptyEnv old
-    in case matchOpenExp old new of
-         Just REFL -> new
-         _         -> simplifyExp new
+simplifyExp = simplifyOpenExp EmptyEnv
 
 simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun old
-  = let new = simplifyOpenFun EmptyEnv old
-    in case matchOpenFun old new of
-         Just REFL -> new
-         _         -> simplifyFun new
+simplifyFun = simplifyOpenFun EmptyEnv
 
 
 simplifyOpenExp
