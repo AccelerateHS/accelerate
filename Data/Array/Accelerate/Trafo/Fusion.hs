@@ -27,7 +27,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                hiding ( shape, index, sliceIndex )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Array, Elt, EltRepr, Shape )
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 
@@ -340,7 +340,7 @@ backpermuteD sh' p acc = case acc of
 -- Replicate as a backwards permutation
 --
 replicateD
-    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt e)
+    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
@@ -366,7 +366,7 @@ replicateD sliceIndex slix acc = case acc of
 -- Dimensional slice as a backwards permutation
 --
 indexD
-    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt e)
+    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> DelayedAcc aenv (Array sh e)
     -> Exp        aenv slix

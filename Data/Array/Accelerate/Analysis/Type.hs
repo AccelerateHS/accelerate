@@ -90,6 +90,7 @@ preAccType k pacc =
     Use ((),a)          -> arrayType a
     Unit _              -> eltType (undefined::e)
     Generate _ _        -> eltType (undefined::e)
+    Transform _ _ _ _   -> eltType (undefined::e)
     Reshape _ acc       -> k acc
     Replicate _ _ acc   -> k acc
     Index _ acc _       -> k acc
@@ -133,12 +134,18 @@ preExpType k e =
     IndexHead _       -> eltType (undefined::t)
     IndexTail _       -> eltType (undefined::t)
     IndexAny          -> eltType (undefined::t)
+    IndexSlice _ _ _  -> eltType (undefined::t)
+    IndexFull _ _ _   -> eltType (undefined::t)
+    ToIndex _ _       -> eltType (undefined::t)
+    FromIndex _ _     -> eltType (undefined::t)
     Cond _ t _        -> preExpType k t
+    Iterate _ _ _     -> eltType (undefined::t)
     PrimConst _       -> eltType (undefined::t)
     PrimApp _ _       -> eltType (undefined::t)
     IndexScalar acc _ -> k acc
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
+    Intersect _ _     -> eltType (undefined::t)
 
 
 -- |Size of a tuple type, in bytes

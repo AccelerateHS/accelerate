@@ -56,6 +56,7 @@ preAccDim k pacc =
     Use ((),(Array _ _)) -> ndim (eltType (undefined::sh))
     Unit _               -> 0
     Generate _ _         -> ndim (eltType (undefined::sh))
+    Transform _ _ _ _    -> ndim (eltType (undefined::sh))
     Reshape _ _          -> ndim (eltType (undefined::sh))
     Replicate _ _ _      -> ndim (eltType (undefined::sh))
     Index _ _ _          -> ndim (eltType (undefined::sh))

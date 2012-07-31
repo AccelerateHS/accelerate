@@ -64,7 +64,7 @@ import Prelude ((.), ($), (+), (-), (*), const, subtract, id)
 import qualified Prelude
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, index)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Type
 

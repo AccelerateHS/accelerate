@@ -22,6 +22,9 @@ module Data.Array.Accelerate.Array.Representation (
 -- friends
 import Data.Array.Accelerate.Type
 
+-- standard library
+import GHC.Base                                         ( quotInt, remInt )
+
 #include "accelerate.h"
 
 
@@ -38,8 +41,9 @@ class (Eq sh, Slice sh) => Shape sh where
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
   ignore    :: sh              -- identifies ignored elements in 'permute'
-  index     :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
+  toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
+  fromIndex :: sh -> Int -> sh -- inverse of `toIndex`
   bound     :: sh -> sh -> Boundary e -> Either e sh
                                -- apply a boundary condition to an index
 
@@ -68,7 +72,8 @@ instance Shape () where
 
   () `intersect` () = ()
   ignore            = ()
-  index () ()       = 0
+  toIndex () ()     = 0
+  fromIndex () _    = ()
   bound () () _     = Right ()
   iter  () f _ _    = f ()
   iter1 () f _      = f ()
@@ -86,8 +91,16 @@ instance Shape sh => Shape (sh, Int) where
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
-  index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
-                                    $ index sh ix * sz + i
+  toIndex (sh, sz) (ix, i)          = BOUNDS_CHECK(checkIndex) "toIndex" i sz
+                                    $ toIndex sh ix * sz + i
+
+  fromIndex (sh, sz) i              = (fromIndex sh (i `quotInt` sz), r)
+    -- If we assume that the index is in range, there is no point in computing
+    -- the remainder for the highest dimension since i < sz must hold.
+    --
+    where
+      r | dim sh == 0   = i
+        | otherwise     = i `remInt` sz
 
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
