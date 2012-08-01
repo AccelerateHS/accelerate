@@ -1,9 +1,11 @@
 {-# LANGUAGE CPP #-}
 --
--- A Mandelbrot set generator. Submitted by Simon Marlow as part of Issue #49.
+-- A Mandelbrot set generator.
+-- Originally submitted by Simon Marlow as part of Issue #49.
 --
 
 
+import Event
 import Config
 import Data.Label
 import Control.Monad
@@ -11,7 +13,7 @@ import Control.Exception
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import System.IO.Unsafe
-import System.Environment                       (getArgs, withArgs)
+import System.Environment                       ( getArgs, withArgs )
 import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
@@ -21,49 +23,56 @@ import Data.Array.Accelerate                    as A hiding ( size )
 import qualified Graphics.Gloss                 as G
 
 
--- Mandelbrot Set --------------------------------------------------------------
+-- Types -----------------------------------------------------------------------
 
-type F            = Float       -- Double not supported on all devices
+-- Real values. Use single precision, as double is not supported on all devices
+type R            = Float
 
-type Complex      = (F,F)
+-- Complex numbers
+type Complex      = (R,R)
 type ComplexPlane = Array DIM2 Complex
 
+-- Image data
+type RGBA         = Word32
+type Bitmap       = Array DIM2 RGBA
 
-mandelbrot :: F -> F -> F -> F -> Int -> Int -> Int -> Acc (Array DIM2 (Complex,Int))
-mandelbrot x y x' y' screenX screenY depth
-  = foldl (flip ($)) zs0 (P.take depth (repeat go))
+-- Action to render a frame
+type Render       = Scalar View -> Bitmap
+
+
+-- Mandelbrot Set --------------------------------------------------------------
+
+mandelbrot :: Int -> Int -> Int -> Acc (Scalar View) -> Acc (Array DIM2 (Complex,Int))
+mandelbrot screenX screenY depth view
+  = foldr ($) zs0 (P.take depth (repeat go))
   where
-    cs  = genPlane x y x' y' screenX screenY
+    cs  = genPlane screenX screenY view
     zs0 = mkinit cs
 
     go :: Acc (Array DIM2 (Complex,Int)) -> Acc (Array DIM2 (Complex,Int))
     go = A.zipWith iter cs
 
 
-genPlane :: F -> F
-         -> F -> F
+genPlane :: Int
          -> Int
-         -> Int
+         -> Acc (Scalar View)
          -> Acc ComplexPlane
-genPlane lowx lowy highx highy viewx viewy
-   = generate (constant (Z:.viewy:.viewx))
-              (\ix -> let pr = unindex2 ix
-                          x = A.fromIntegral (A.fst pr)
-                          y = A.fromIntegral (A.snd pr)
-                      in
-                        lift ( elowx + (x * exsize) / eviewx
-                             , elowy + (y * eysize) / eviewy))
-   where
-      elowx, elowy, exsize, eysize, eviewx, eviewy :: Exp F
+genPlane screenX screenY view
+  = generate (constant (Z:.screenY:.screenX))
+             (\ix -> let pr = unindex2 ix
+                         x = A.fromIntegral (A.fst pr)
+                         y = A.fromIntegral (A.snd pr)
+                     in
+                       lift ( xmin + (x * sizex) / viewx
+                            , ymin + (y * sizey) / viewy))
+  where
+    (xmin,ymin,xmax,ymax) = unlift (the view)
 
-      elowx  = constant lowx
-      elowy  = constant lowy
+    sizex = xmax - xmin
+    sizey = ymax - ymin
 
-      exsize = constant (highx - lowx)
-      eysize = constant (highy - lowy)
-
-      eviewx = constant (P.fromIntegral viewx)
-      eviewy = constant (P.fromIntegral viewy)
+    viewx = constant (P.fromIntegral screenX)
+    viewy = constant (P.fromIntegral screenY)
 
 
 next :: Exp Complex -> Exp Complex -> Exp Complex
@@ -72,17 +81,17 @@ next c z = c `plus` (z `times` z)
 
 plus :: Exp Complex -> Exp Complex -> Exp Complex
 plus = lift2 f
-  where f :: (Exp F, Exp F) -> (Exp F, Exp F) -> (Exp F, Exp F)
+  where f :: (Exp R, Exp R) -> (Exp R, Exp R) -> (Exp R, Exp R)
         f (x1,y1) (x2,y2) = (x1+x2, y1+y2)
 
 times :: Exp Complex -> Exp Complex -> Exp Complex
 times = lift2 f
-  where f :: (Exp F, Exp F) -> (Exp F, Exp F) -> (Exp F, Exp F)
+  where f :: (Exp R, Exp R) -> (Exp R, Exp R) -> (Exp R, Exp R)
         f (x,y) (x',y')   =  (x*x'-y*y', x*y'+y*x')
 
-dot :: Exp Complex -> Exp F
+dot :: Exp Complex -> Exp R
 dot = lift1 f
-  where f :: (Exp F, Exp F) -> Exp F
+  where f :: (Exp R, Exp R) -> Exp R
         f (x,y) = x*x + y*y
 
 
@@ -101,8 +110,6 @@ mkinit cs = A.zip cs (A.fill (A.shape cs) 0)
 
 -- Rendering -------------------------------------------------------------------
 
-type RGBA = Word32
-
 prettyRGBA :: Exp Int -> Exp (Complex, Int) -> Exp RGBA
 prettyRGBA lIMIT s' = r + g + b + a
   where
@@ -114,10 +121,11 @@ prettyRGBA lIMIT s' = r + g + b + a
     a   = 0xFF
 
 
-makePicture :: Options -> Int -> Acc (Array DIM2 (Complex, Int)) -> G.Picture
-makePicture opt limit zs = pic
+makePicture :: Render -> View -> G.Picture
+makePicture render viewport = pic
   where
-    arrPixels   = run opt $ A.map (prettyRGBA (constant limit)) zs
+    view        = A.fromList Z [viewport]
+    arrPixels   = render view
     (Z:.h:.w)   = arrayShape arrPixels
 
     {-# NOINLINE rawData #-}
@@ -133,45 +141,39 @@ makePicture opt limit zs = pic
 
 main :: IO ()
 main
-  = do  
+  = do
         (config, critConf, nops) <- processArgs =<< getArgs
         let size        = get optSize config
             limit       = get optLimit config
+            fps         = get optFramerate config
             --
-            x           = -0.25         -- should get this from command line as well
-            y           = -1.0
-            x'          =  0.0
-            y'          = -0.75
+            view        = (-0.25, -1.0, 0.0, -0.75)     -- should get this from command line as well
+            render      = run1 config
+                        $ A.map (prettyRGBA (constant limit))
+                        . mandelbrot size size limit
             --
             force arr   = indexArray arr (Z:.0:.0) `seq` arr
-            image       = makePicture config limit
-                        $ mandelbrot x y x' y' size size limit
 
-        case nops of 
-          [] -> return ()
-          ls -> putStrLn$ "Warning: unrecognized options: "++show ls
-        
-        void $ evaluate image
+        unless (null nops) $
+          putStrLn $ "Warning: unrecognized options: " ++ show nops
+
+        void $ evaluate (force $ render (fromList Z [view]))
 
         if get optBench config
            then withArgs nops $ defaultMainWith critConf (return ())
                     [ bench "mandelbrot" $
-                      whnf (force . run config . mandelbrot x y x' y' size size) limit ]
+                      whnf (force . render) $ fromList Z [view] ]
 
 #ifndef ACCELERATE_ENABLE_GUI
            else return ()
-
-#elif MIN_VERSION_gloss(1,6,0)
-           else G.display
+#else
+           else G.play
                     (G.InWindow "Mandelbrot" (size, size) (10, 10))
                     G.black
-                    image
-#else
-           else G.displayInWindow
-                    "Mandelbrot"
-                    (size, size)
-                    (10, 10)
-                    G.black
-                    image
+                    fps
+                    view
+                    (makePicture render)
+                    (react config)
+                    (flip const)
 #endif
 

@@ -4,7 +4,7 @@
 
 module Config (
 
-  Options, optBackend, optSize, optLimit, optBench,
+  Options, optBackend, optSize, optLimit, optFramerate, optBench,
   processArgs, run, run1
 
 ) where
@@ -31,6 +31,7 @@ data Options = Options
     _optBackend         :: Backend
   , _optSize            :: Int
   , _optLimit           :: Int
+  , _optFramerate       :: Int
   , _optBench           :: Bool
   , _optHelp            :: Bool
   }
@@ -43,6 +44,7 @@ defaultOptions = Options
   { _optBackend         = maxBound
   , _optSize            = 512
   , _optLimit           = 255
+  , _optFramerate       = 10
 #ifdef ACCELERATE_ENABLE_GUI
   , _optBench           = False
 #else
@@ -75,6 +77,7 @@ options =
 #endif
   , Option []   ["size"]        (ReqArg (set optSize . read) "INT")     "visualisation size (512)"
   , Option []   ["limit"]       (ReqArg (set optLimit . read) "INT")    "iteration limit for escape (255)"
+  , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INt")"visualisation framerate (10)"
   , Option []   ["benchmark"]   (NoArg  (set optBench True))            "benchmark instead of displaying animation (False)"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))             "show help message"
   ]
@@ -90,13 +93,15 @@ processArgs argv =
                         opts | False <- get optHelp opts   -> return (opts, critConf, rst)
                         opts | True  <- get optBench opts  -> return (opts, critConf, "--help":rst)
                         _                                  -> putStrLn (helpMsg []) >> exitSuccess
-                   
+
     (_,_,_,err) -> error (helpMsg err)
   where
-    helpMsg err = concat err ++ usageInfo header options ++ 
+    helpMsg err = concat err ++ usageInfo header options ++
                   usageInfo "\nGeneric criterion options:" Crit.defaultOptions
     header      = unlines
       [ "accelerate-mandelbrot (c) [2011..2012] The Accelerate Team"
       , ""
       , "Usage: accelerate-mandelbrot [OPTIONS]"
+      , ""
+      , "Translate the display using the arrow keys, zoom with 'z' and 'x'"
       ]
