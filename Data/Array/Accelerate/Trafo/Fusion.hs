@@ -298,13 +298,15 @@ intersect sh1 sh2
 --
 force :: DelayedAcc aenv a -> OpenAcc aenv a
 force delayed = OpenAcc $ case delayed of
-  Done env a                            -> bind env a
-  Yield env sh f                        -> bind env $ Generate (simplifyExp sh) (simplifyFun f)
+  Done env a                                    -> bind env a
+  Yield env sh f                                -> bind env $ Generate (simplifyExp sh) (simplifyFun f)
   Step env sh ix f a
-   | Lam (Body (Var ZeroIdx)) <- ix     -> bind env $ Map f'               (OpenAcc a)
-   | Lam (Body (Var ZeroIdx)) <- f      -> bind env $ Backpermute sh' ix'  (OpenAcc a)
-   | otherwise                          -> bind env $ Transform sh' ix' f' (OpenAcc a)
+   | Lam (Body (Var ZeroIdx)) <- ix
+   , Just REFL <- matchOpenExp sh (Shape a')    -> bind env $ Map f' a'
+   | Lam (Body (Var ZeroIdx)) <- f              -> bind env $ Backpermute sh' ix' a'
+   | otherwise                                  -> bind env $ Transform sh' ix' f' a'
    where
+     a'  = OpenAcc a
      f'  = simplifyFun f
      ix' = simplifyFun ix
      sh' = simplifyExp sh
