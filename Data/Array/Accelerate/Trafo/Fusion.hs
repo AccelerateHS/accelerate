@@ -289,8 +289,6 @@ reindex sh' sh
 intersect :: Shape sh => OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect sh1 sh2
   | Just REFL <- matchOpenExp sh1 sh2   = sh1
-  | Intersect sa sb <- sh1              = sa  `intersect` sa `intersect` sh2
-  | Intersect sa sb <- sh2              = sh1 `intersect` sa `intersect` sb
   | otherwise                           = Intersect sh1 sh2
 
 
