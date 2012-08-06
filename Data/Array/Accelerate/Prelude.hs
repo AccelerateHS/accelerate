@@ -327,27 +327,27 @@ scanlSeg f e arr seg = scans
     scans      = scanl1Seg f idInjArr seg'
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) headFlags $ zip idsArr arrShifted
 
-    headFlags  = permute (+) zerosArr' (\ix -> index1' $ segOffsets' ! ix)
+    headFlags  = permute (+) zerosArr' (\ix -> index1 $ segOffsets' ! ix)
                $ generate (shape seg) (const (1 :: Exp i))
 
-    arrShifted = backpermute nSh (\ix -> index1' $ shiftCoords ! ix) arr
+    arrShifted = backpermute nSh (\ix -> index1 $ shiftCoords ! ix) arr
 
     idsArr     = generate nSh (const e)
 
     -- As the identity elements are injected in to the vector for each segment, the
     -- remaining elements must be shifted forwarded (to the left). shiftCoords specifies
     -- how each element is backpermuted to its shifted position.
-    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1' i) + 1) coords
+    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1 i) + 1) coords
     coords      = Prelude.fst $ scanl' (+) 0 onesArr
 
-    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1' $ segOffsets ! ix) segIxs
-    segIxs      = Prelude.fst $ scanl' (+) 0 $ generate (index1' $ size seg) (const 1)
+    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix) segIxs
+    segIxs      = Prelude.fst $ scanl' (+) 0 $ generate (index1 $ size seg) (const 1)
 
     segOffsets' = Prelude.fst $ scanl' (+) 0 seg'
     segOffsets  = Prelude.fst $ scanl' (+) 0 seg
 
     --
-    nSh       = index1' $ size arr + size seg
+    nSh       = index1 $ size arr + size seg
     seg'      = map (+ 1) seg
     onesArr   = generate (shape arr) (const 1)
     zerosArr  = generate (shape arr) (const 0)
@@ -373,7 +373,7 @@ scanl'Seg f e arr seg = (scans, sums)
     scans      = scanl1Seg f idInjArr seg
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) headFlags $ zip idsArr arrShifted
 
-    headFlags  = permute (+) zerosArr (\ix -> index1' $ segOffsets ! ix)
+    headFlags  = permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix)
                $ generate (shape seg) (const (1 :: Exp i))
     segOffsets = Prelude.fst $ scanl' (+) 0 seg
 
@@ -385,7 +385,7 @@ scanl'Seg f e arr seg = (scans, sums)
     -- Sum of each segment is computed by performing a segmented postscan on
     -- the original vector and taking the tail elements.
     sums       = map (`f` e)
-               $ backpermute (shape seg) (\ix -> index1' $ sumOffsets ! ix)
+               $ backpermute (shape seg) (\ix -> index1 $ sumOffsets ! ix)
                $ scanl1Seg f arr seg
     sumOffsets = map (subtract 1) $ scanl1 (+) seg
 
@@ -432,25 +432,25 @@ scanrSeg f e arr seg = scans
     scans      = scanr1Seg f idInjArr seg'
     idInjArr   = zipWith (\h x -> h ==* 1 ? (fst x, snd x)) tailFlags $ zip idsArr arrShifted
 
-    tailFlags  = permute (+) zerosArr' (\ix -> index1' $ (segOffsets' ! ix) - 1)
+    tailFlags  = permute (+) zerosArr' (\ix -> index1 $ (segOffsets' ! ix) - 1)
                $ generate (shape seg) (const (1 :: Exp i))
 
-    arrShifted = backpermute nSh (\ix -> index1' $ shiftCoords ! ix) arr
+    arrShifted = backpermute nSh (\ix -> index1 $ shiftCoords ! ix) arr
 
     idsArr     = generate nSh (const e)
 
     --
-    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1' i)) coords
+    shiftCoords = permute (+) zerosArr' (ilift1 $ \i -> i + (offsetArr ! index1 i)) coords
     coords      = Prelude.fst $ scanl' (+) 0 onesArr
 
-    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1' $ segOffsets ! ix) segIxs
+    offsetArr   = scanl1 max $ permute (+) zerosArr (\ix -> index1 $ segOffsets ! ix) segIxs
     segIxs      = Prelude.fst $ scanl' (+) 0 $ generate (shape seg) (const 1)
 
     segOffsets' = scanl1 (+) seg'
     segOffsets  = Prelude.fst $ scanl' (+) 0 seg
 
     --
-    nSh       = index1' $ size arr + size seg
+    nSh       = index1 $ size arr + size seg
     seg'      = map (+ 1) seg
     onesArr   = generate (shape arr) (const 1)
     zerosArr  = generate (shape arr) (const 0)
@@ -470,7 +470,7 @@ scanr'Seg f e arr seg = (scans, sums)
     scans      = scanr1Seg f idInjArr seg
     idInjArr   = zipWith (\t x -> t ==* 1 ? (fst x, snd x)) tailFlags $ zip idsArr arrShifted
 
-    tailFlags  = permute (+) zerosArr (\ix -> index1' $ (segOffsets ! ix) - 1)
+    tailFlags  = permute (+) zerosArr (\ix -> index1 $ (segOffsets ! ix) - 1)
                $ generate (shape seg) (const (1 :: Exp i))
     segOffsets = scanl1 (+) seg
 
@@ -480,7 +480,7 @@ scanr'Seg f e arr seg = (scans, sums)
     zerosArr   = generate (shape arr) (const 0)
 
     --
-    sums       = map (`f` e) $  backpermute (shape seg) (\ix -> index1' $ sumOffsets ! ix)
+    sums       = map (`f` e) $  backpermute (shape seg) (\ix -> index1 $ sumOffsets ! ix)
                $ scanr1Seg f arr seg
     sumOffsets = Prelude.fst $ scanl' (+) 0 seg
 
@@ -520,20 +520,20 @@ postscanrSeg f e arr seg = map (`f` e) $ scanr1Seg f arr seg
 -- |Compute head flags vector from segment vector for left-scans.
 --
 mkHeadFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
-mkHeadFlags seg = permute (\_ _ -> 1) zerosArr (\ix -> index1' (segOffsets ! ix)) segOffsets
+mkHeadFlags seg = permute (\_ _ -> 1) zerosArr (\ix -> index1 (segOffsets ! ix)) segOffsets
   where
     (segOffsets, len) = scanl' (+) 0 seg
-    zerosArr          = generate (index1' $ the len) (const 0)
+    zerosArr          = generate (index1 $ the len) (const 0)
 
 -- |Compute tail flags vector from segment vector for right-scans.
 --
 mkTailFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
 mkTailFlags seg
-  = permute (\_ _ -> 1) zerosArr (ilift1 $ \i -> (fromIntegral $ segOffsets ! index1' i) - 1) segOffsets
+  = permute (\_ _ -> 1) zerosArr (ilift1 $ \i -> (fromIntegral $ segOffsets ! index1 i) - 1) segOffsets
   where
     segOffsets = scanl1 (+) seg
-    len        = segOffsets ! index1' (size seg - 1)
-    zerosArr   = generate (index1' len) (const 0)
+    len        = segOffsets ! index1 (size seg - 1)
+    zerosArr   = generate (index1 len) (const 0)
 
 -- |Construct a segmented version of apply from a non-segmented version. The segmented apply
 -- operates on a head-flag value tuple.
@@ -549,11 +549,6 @@ mkSegApply op = apply
         aV = snd a
         bF = fst b
         bV = snd b
-
--- As 'index1', but parameterised in the first argument over integral types
---
-index1' :: (Elt i, IsIntegral i) => Exp i -> Exp (Z :. Int)
-index1' = index1 . fromIntegral
 
 
 -- Reshaping of arrays
@@ -586,9 +581,10 @@ enumFromStepN :: (Shape sh, Elt e, IsNum e)
               -> Exp e    -- ^ x: start
               -> Exp e    -- ^ y: step
               -> Acc (Array sh e)
-enumFromStepN sh x y = reshape sh
-                     $ generate (index1 $ shapeSize sh)
-                                ((\i -> ((fromIntegral i) * y) + x) . unindex1)
+enumFromStepN sh x y
+  = reshape sh
+  $ generate (index1 $ shapeSize sh)
+             (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
 
 
 -- Filtering
@@ -733,8 +729,9 @@ scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
 --
 reverse :: Elt e => Acc (Vector e) -> Acc (Vector e)
 reverse xs =
-  let len = unindex1 (shape xs)
-  in  backpermute (shape xs) (\ix -> index1 $ len - (unindex1 ix) - 1) xs
+  let len       = unindex1 (shape xs)
+      pf i      = len - i - 1
+  in  backpermute (shape xs) (ilift1 pf) xs
 
 -- | Transpose the rows and columns of a matrix.
 --
