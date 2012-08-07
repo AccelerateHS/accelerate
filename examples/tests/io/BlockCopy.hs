@@ -17,7 +17,7 @@ assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
 assertEqual preface expected actual =
   unless (actual == expected) (throw $ AssertionFailed msg)
   where
-    msg = (if null preface then "" else preface ++ "\n")  ++
+    msg = (if P.null preface then "" else preface ++ "\n")  ++
           "expected: " ++ show expected ++ "\n but got: " ++ show actual
 
 run :: IO ()

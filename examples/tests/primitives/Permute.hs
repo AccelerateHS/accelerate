@@ -18,7 +18,7 @@ histogramAcc (m,n) vec =
       zeros = generate (constant (Z:. n-m)) (const 0)
       ones  = generate (shape vec') (const 1)
   in
-  permute (+) zeros (\ix -> index1 $ Acc.floor (vec' Acc.! ix)) ones
+  permute (+) zeros (\ix -> index1 (Acc.floor (vec' Acc.! ix) :: Exp Int)) ones
 
 histogramRef :: (Int,Int) -> UArray Int Float -> UArray Int Int32
 histogramRef (m,n) vec =
