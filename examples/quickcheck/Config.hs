@@ -57,8 +57,8 @@ defaultOptions =  Options
   , _float              = True
   , _int64              = True
   , _int32              = True
-  , _int16              = True
-  , _int8               = True
+  , _int16              = False
+  , _int8               = False
   }
 
 
