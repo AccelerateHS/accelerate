@@ -91,7 +91,7 @@ module Data.Array.Accelerate.Language (
   (?),
 
   -- ** Array operations with a scalar result
-  (!), the, shape, size, shapeSize,
+  (!), the, null, shape, size, shapeSize,
 
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
@@ -115,9 +115,10 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry,
-                         truncate, round, floor, ceiling, fromIntegral)
+import Prelude  hiding (
+  replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith, filter,
+  max, min, not, fst, snd, curry, uncurry, null, truncate, round, floor,
+  ceiling, fromIntegral)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
@@ -962,6 +963,11 @@ infixl 9 !
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
+
+-- |Test whether an array is empty
+--
+null :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Bool
+null arr = size arr ==* 0
 
 -- |Expression form that yields the shape of an array
 --
