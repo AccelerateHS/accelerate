@@ -106,6 +106,13 @@ dim2 = mkDim 2
 
 splitEvery :: Int -> [a] -> [[a]]
 splitEvery _ [] = cycle [[]]
-splitEvery n xs = let (h,t) = splitAt n xs
-                  in h : splitEvery n t
+splitEvery n xs =
+  let (h,t) = splitAt n xs
+  in  h : splitEvery n t
+
+splitPlaces :: Integral i => [i] -> [a] -> [[a]]
+splitPlaces []     _  = []
+splitPlaces (i:is) vs =
+  let (h,t) = splitAt (P.fromIntegral i) vs
+  in  h : splitPlaces is t
 

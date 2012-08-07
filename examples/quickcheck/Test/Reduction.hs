@@ -207,7 +207,7 @@ foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- spl
     (sh :. n)   = arrayShape arr
     (Z  :. sz)  = arrayShape seg
     seg'        = toList seg
-    foldseg xs  = P.map (foldl' f z) (split seg' xs)
+    foldseg xs  = P.map (foldl' f z) (splitPlaces seg' xs)
 
 fold1SegRef :: (Shape sh, Elt e, Elt i, Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 fold1SegRef f arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
@@ -215,11 +215,5 @@ fold1SegRef f arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- spli
     (sh :. n)   = arrayShape arr
     (Z  :. sz)  = arrayShape seg
     seg'        = toList seg
-    foldseg xs  = P.map (foldl1' f) (split seg' xs)
-
-split :: Integral i => [i] -> [a] -> [[a]]
-split []     _  = []
-split (i:is) vs =
-  let (h,t) = splitAt (P.fromIntegral i) vs
-  in  h : split is t
+    foldseg xs  = P.map (foldl1' f) (splitPlaces seg' xs)
 

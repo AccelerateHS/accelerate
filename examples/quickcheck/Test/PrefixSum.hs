@@ -4,7 +4,7 @@
 
 module Test.PrefixSum where
 
-import Prelude                                          as P hiding ( sum )
+import Prelude                                          as P
 import Test.QuickCheck
 import Data.Label
 import Data.Maybe
@@ -14,7 +14,7 @@ import Test.Framework.Providers.QuickCheck2
 
 import Config
 import Test.Base
-import Arbitrary.Array                                  ()
+import Arbitrary.Array
 import Data.Array.Accelerate                            as Acc
 
 
@@ -40,30 +40,64 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
     testElt ok _
       | P.not (get ok opt)  = Nothing
       | otherwise           = Just $ testGroup (show (typeOf (undefined :: e)))
-          [ testProperty "scanl"  (test_scanl  :: Vector e -> Property)
-          , testProperty "scanl'" (test_scanl' :: Vector e -> Property)
-          , testProperty "scanl1" (test_scanl1 :: Vector e -> Property)
-          , testProperty "scanr"  (test_scanr  :: Vector e -> Property)
-          , testProperty "scanr'" (test_scanr' :: Vector e -> Property)
-          , testProperty "scanr1" (test_scanr1 :: Vector e -> Property)
+          [ testProperty "scanl"        (test_scanl  :: Vector e -> Property)
+          , testProperty "scanl'"       (test_scanl' :: Vector e -> Property)
+          , testProperty "scanl1"       (test_scanl1 :: Vector e -> Property)
+          , testProperty "scanr"        (test_scanr  :: Vector e -> Property)
+          , testProperty "scanr'"       (test_scanr' :: Vector e -> Property)
+          , testProperty "scanr1"       (test_scanr1 :: Vector e -> Property)
+          --
+          , testProperty "scanl1Seg"    (test_scanl1seg :: Vector e -> Property)
+          , testProperty "scanr1Seg"    (test_scanr1seg :: Vector e -> Property)
+          , testProperty "scanlSeg"     (test_scanlseg  :: Vector e -> Property)
+          , testProperty "scanrSeg"     (test_scanrseg  :: Vector e -> Property)
+          , testProperty "scanl'Seg"    (test_scanl'seg :: Vector e -> Property)
+          , testProperty "scanr'Seg"    (test_scanr'seg :: Vector e -> Property)
           ]
 
     -- left scan
     --
-    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs))    .==. scanlRef (+) 0 xs
-    test_scanl1 xs = run opt (Acc.scanl1 Acc.min (use xs)) .==. scanl1Ref P.min xs
-    test_scanl' xs =
-      let (vec, sum) = Acc.scanl' (+) 0 (use xs)
-      in  (run opt vec, run opt sum) .==. scanl'Ref (+) 0 xs
+    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
+    test_scanl1 xs = run opt (Acc.scanl1 Acc.min (use xs))          .==. scanl1Ref P.min xs
+    test_scanl' xs = run opt (Acc.lift $ Acc.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
 
     -- right scan
     --
-    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs))    .==. scanrRef (+) 0 xs
-    test_scanr1 xs = run opt (Acc.scanr1 Acc.max (use xs)) .==. scanr1Ref P.max xs
-    test_scanr' xs =
-      let (vec, sum) = Acc.scanr' (+) 0 (use xs)
-      in  (run opt vec, run opt sum) .==. scanr'Ref (+) 0 xs
+    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
+    test_scanr1 xs = run opt (Acc.scanr1 Acc.max (use xs))          .==. scanr1Ref P.max xs
+    test_scanr' xs = run opt (Acc.lift $ Acc.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
 
+    -- segmented left/right scan
+    --
+    test_scanl1seg elt =
+      forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
+
+    test_scanr1seg elt =
+      forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
+
+    test_scanlseg elt =
+      forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
+
+    test_scanrseg elt =
+      forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
+
+    test_scanl'seg elt =
+      forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
+
+    test_scanr'seg elt =
+      forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
+      forAll (arbitrarySegmentedArray seg) $ \xs  ->
+        run opt (Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
 
 -- Reference implementation
@@ -102,4 +136,57 @@ scanr1Ref f vec
   = Acc.fromList (arrayShape vec)
   . P.scanr1 f
   . Acc.toList $ vec
+
+
+-- segmented operations
+--
+scanlSegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
+scanlSegRef f z vec seg =
+  let seg'      = toList seg
+      vec'      = toList vec
+      n         = P.sum $ P.map (\x -> P.fromIntegral x + 1) seg'
+  in  fromList (Z :. n) $
+        concat [ P.scanl f z v | v <- splitPlaces seg' vec' ]
+
+scanl1SegRef :: (Elt e, Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
+scanl1SegRef f vec seg =
+  let seg'      = toList seg
+      vec'      = toList vec
+      n         = P.sum $ P.map P.fromIntegral seg'
+  in  fromList (Z :. n) $
+        concat [ P.scanl1 f v | v <- splitPlaces seg' vec' ]
+
+scanl'SegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
+scanl'SegRef f z vec seg =
+  let seg'              = toList seg
+      vec'              = toList vec
+      scanl'_ v         = let res = P.scanl f z v in (P.init res, P.last res)
+      (scans, sums)     = P.unzip [ scanl'_ v | v <- splitPlaces seg' vec']
+  in  ( fromList (arrayShape vec) (concat scans)
+      , fromList (arrayShape seg) sums )
+
+scanrSegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
+scanrSegRef f z vec seg =
+  let seg'      = toList seg
+      vec'      = toList vec
+      n         = P.sum $ P.map (\x -> P.fromIntegral x + 1) seg'
+  in  fromList (Z :. n) $
+        concat [ P.scanr f z v | v <- splitPlaces seg' vec' ]
+
+scanr1SegRef :: (Elt e, Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
+scanr1SegRef f vec seg =
+  let seg'      = toList seg
+      vec'      = toList vec
+      n         = P.sum $ P.map P.fromIntegral seg'
+  in  fromList (Z :. n) $
+        concat [ P.scanr1 f v | v <- splitPlaces seg' vec' ]
+
+scanr'SegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
+scanr'SegRef f z vec seg =
+  let seg'              = toList seg
+      vec'              = toList vec
+      scanr'_ v         = let res = P.scanr f z v in (P.tail res, P.head res)
+      (scans, sums)     = P.unzip [ scanr'_ v | v <- splitPlaces seg' vec']
+  in  ( fromList (arrayShape vec) (concat scans)
+      , fromList (arrayShape seg) sums )
 
