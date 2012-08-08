@@ -21,6 +21,9 @@ module Data.Array.Accelerate.Trafo.Substitution (
   weakenA, weakenEA, weakenFA,
   weakenE, weakenFE,
 
+  weakenByA, weakenByEA, weakenByFA,
+  weakenByE, weakenByFE,
+
   -- * Rebuilding
   rebuildA, rebuildAfun, rebuildOpenAcc,
   rebuildE, rebuildEA,
@@ -115,27 +118,50 @@ compose _              _              = error "compose: impossible evaluation"
 --
 
 -- Functions to increase the scope of scalar or array environments of OpenAcc
--- expressions.
+-- tied expressions by a single index.
 --
-weakenA :: OpenAcc aenv      t
-        -> OpenAcc (aenv, s) t
-weakenA = rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+weakenA :: OpenAcc aenv t -> OpenAcc (aenv, s) t
+weakenA = weakenByA SuccIdx
 
-weakenE :: OpenExp env      aenv t
-        -> OpenExp (env, s) aenv t
-weakenE = rebuildE (weakenExp . IE)
+weakenE :: OpenExp env aenv t -> OpenExp (env, s) aenv t
+weakenE = weakenByE SuccIdx
 
-weakenEA :: OpenExp env aenv     t
-         -> OpenExp env (aenv,s) t
-weakenEA = rebuildEA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+weakenEA :: OpenExp env aenv t -> OpenExp env (aenv,s) t
+weakenEA = weakenByEA SuccIdx
 
-weakenFA :: OpenFun env aenv     t
-         -> OpenFun env (aenv,s) t
-weakenFA = rebuildFA rebuildOpenAcc (weakenAcc rebuildOpenAcc . IA)
+weakenFA :: OpenFun env aenv t -> OpenFun env (aenv,s) t
+weakenFA = weakenByFA SuccIdx
 
-weakenFE :: OpenFun env     aenv t
-         -> OpenFun (env,s) aenv t
-weakenFE = rebuildFE (weakenExp . IE)
+weakenFE :: OpenFun env aenv t -> OpenFun (env,s) aenv t
+weakenFE = weakenByFE SuccIdx
+
+
+-- Weakening functions parameterised by an index manipulation
+--
+weakenByA :: (forall t'. Idx aenv t' -> Idx aenv' t')
+          -> OpenAcc aenv  t
+          -> OpenAcc aenv' t
+weakenByA k = rebuildOpenAcc (Avar . k)
+
+weakenByE :: (forall t'. Idx env t' -> Idx env' t')
+          -> OpenExp env  aenv t
+          -> OpenExp env' aenv t
+weakenByE k = rebuildE (Var . k)
+
+weakenByEA :: (forall t'. Idx aenv t' -> Idx aenv' t')
+           -> OpenExp env aenv  t
+           -> OpenExp env aenv' t
+weakenByEA k = rebuildEA rebuildOpenAcc (Avar . k)
+
+weakenByFA :: (forall t'. Idx aenv t' -> Idx aenv' t')
+           -> OpenFun env aenv  t
+           -> OpenFun env aenv' t
+weakenByFA k = rebuildFA rebuildOpenAcc (Avar . k)
+
+weakenByFE :: (forall t'. Idx env t' -> Idx env' t')
+           -> OpenFun env  aenv t
+           -> OpenFun env' aenv t
+weakenByFE k = rebuildFE (Var . k)
 
 
 -- Implementation ==============================================================

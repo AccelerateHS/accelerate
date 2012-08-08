@@ -682,23 +682,26 @@ bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
 
 -- Extend array environments
 --
+sink :: Extend env env'
+     -> Idx env  t
+     -> Idx env' t
+sink BaseEnv       = id
+sink (PushEnv e _) = SuccIdx . sink e
+
 sinkA :: Extend aenv aenv'
       -> OpenAcc aenv  a
       -> OpenAcc aenv' a
-sinkA BaseEnv       = id
-sinkA (PushEnv e _) = weakenA . sinkA e
+sinkA env = weakenByA (sink env)
 
 sinkE :: Extend aenv aenv'
       -> OpenExp env aenv  e
       -> OpenExp env aenv' e
-sinkE BaseEnv       = id
-sinkE (PushEnv e _) = weakenEA . sinkE e
+sinkE env = weakenByEA (sink env)
 
 sinkF :: Extend aenv aenv'
       -> OpenFun env aenv  f
       -> OpenFun env aenv' f
-sinkF BaseEnv       = id
-sinkF (PushEnv e _) = weakenFA . sinkF e
+sinkF env = weakenByFA (sink env)
 
 
 -- Concatenate two environments
