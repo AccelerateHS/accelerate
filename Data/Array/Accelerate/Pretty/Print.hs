@@ -208,12 +208,12 @@ prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
 prettyPreExp pp lvl alvl wrap (Let e1 e2)
   | not (isLet e1) && isLet e2
-  = wrap $ vcat [ text "let" <+> x <+> equals <+> e1' <+> text "in"
-                , e2' ]
+  = wrap $ sep [ text "let" <+> x <+> equals <+> e1' <+> text "in"
+               , e2' ]
   --
   | otherwise
-  = wrap $ vcat [ hang (text "let" <+> x <+> equals) 2 e1'
-                , text "in" <+> e2' ]
+  = wrap $ sep [ hang (text "let" <+> x <+> equals) 2 e1'
+               , text "in" <+> e2' ]
   where
     isLet (Let _ _)     = True
     isLet _             = False
