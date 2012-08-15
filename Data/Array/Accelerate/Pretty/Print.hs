@@ -259,8 +259,8 @@ prettyPreExp pp lvl alvl wrap (Cond c t e)
                         prettyPreExp pp lvl alvl noParens e)]
 prettyPreExp pp lvl alvl wrap (Iterate i fun a)
   = wrap $ text "iterate" <>  brackets (int i)
-                          <+> wrap   (prettyPreExp     pp lvl alvl parens a)
-                          <+> parens (prettyPreOpenFun pp lvl alvl fun)
+                          <+> sep [ wrap   (prettyPreExp     pp lvl alvl parens a)
+                                  , parens (prettyPreOpenFun pp lvl alvl fun) ]
 
 prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a
