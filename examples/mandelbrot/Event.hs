@@ -26,7 +26,6 @@ data Move       = Fwd | Rev
 
 data World      = World
   { _viewport   :: View
-
   , _zooming    :: Maybe Zoom
   , _horizontal :: Maybe Move
   , _vertical   :: Maybe Move
@@ -96,9 +95,9 @@ refocus = move . zoom
 react :: Options -> Event -> World -> World
 react _opt event view
   = case event of
-      EventKey (Char c) s _ _                   -> char (toLower c) s view
-      EventKey (SpecialKey c) s _ _             -> special c s view
-      _                                         -> view
+      EventKey (Char c) s _ _           -> char (toLower c) s view
+      EventKey (SpecialKey c) s _ _     -> special c s view
+      _                                 -> view
   where
     char ';'            = toggle zooming In
     char 'z'            = toggle zooming In
