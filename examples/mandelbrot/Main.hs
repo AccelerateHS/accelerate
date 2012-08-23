@@ -121,10 +121,10 @@ prettyRGBA lIMIT s' = r + g + b + a
     a   = 0xFF
 
 
-makePicture :: Render -> View -> G.Picture
-makePicture render viewport = pic
+makePicture :: Render -> World -> G.Picture
+makePicture render world = pic
   where
-    view        = A.fromList Z [viewport]
+    view        = A.fromList Z [get viewport world]
     arrPixels   = render view
     (Z:.h:.w)   = arrayShape arrPixels
 
@@ -171,9 +171,9 @@ main
                     (G.InWindow "Mandelbrot" (size, size) (10, 10))
                     G.black
                     fps
-                    view
+                    (frame view)
                     (makePicture render)
                     (react config)
-                    (flip const)
+                    (const refocus)
 #endif
 

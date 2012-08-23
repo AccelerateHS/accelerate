@@ -44,7 +44,7 @@ defaultOptions = Options
   { _optBackend         = maxBound
   , _optSize            = 512
   , _optLimit           = 255
-  , _optFramerate       = 10
+  , _optFramerate       = 25
 #ifdef ACCELERATE_ENABLE_GUI
   , _optBench           = False
 #else
