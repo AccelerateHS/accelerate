@@ -71,7 +71,7 @@ module Data.Array.Accelerate.Language (
   --   lifted into the domain of expressions (an abstract syntax tree
   --   in disguise).  Both `Acc` and `Exp` are /surface types/ into
   --   which values may be lifted.
-  -- 
+  --
   --   In general an @Exp Int@ cannot be unlifted into an `Int`,
   --   because the actual number will not be available until a later stage of
   --   execution (e.g. GPU execution, when `run` is called).  However,
@@ -91,7 +91,7 @@ module Data.Array.Accelerate.Language (
   (?),
 
   -- ** Array operations with a scalar result
-  (!), the, shape, size, shapeSize,
+  (!), the, null, shape, size, shapeSize,
 
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
@@ -115,9 +115,10 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- avoid clashes with Prelude functions
-import Prelude   hiding (replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-                         filter, max, min, not, fst, snd, curry, uncurry,
-                         truncate, round, floor, ceiling, fromIntegral)
+import Prelude  hiding (
+  replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith, filter,
+  max, min, not, fst, snd, curry, uncurry, null, truncate, round, floor,
+  ceiling, fromIntegral)
 
 -- standard libraries
 import Data.Bits (Bits((.&.), (.|.), xor, complement))
@@ -861,23 +862,28 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
 -- |Lift a unary function into 'Exp'.
 --
 lift1 :: (Unlift Exp e1, Lift Exp e2)
-      => (e1 -> e2) -> Exp (Plain e1) -> Exp (Plain e2)
+      => (e1 -> e2)
+      -> Exp (Plain e1)
+      -> Exp (Plain e2)
 lift1 f = lift . f . unlift
 
 -- |Lift a binary function into 'Exp'.
 --
 lift2 :: (Unlift Exp e1, Unlift Exp e2, Lift Exp e3)
-      => (e1 -> e2 -> e3) -> Exp (Plain e1) -> Exp (Plain e2) -> Exp (Plain e3)
+      => (e1 -> e2 -> e3)
+      -> Exp (Plain e1)
+      -> Exp (Plain e2)
+      -> Exp (Plain e3)
 lift2 f x y = lift $ f (unlift x) (unlift y)
 
 -- |Lift a unary function to a computation over rank-1 indices.
 --
-ilift1 :: (Exp Int -> Exp Int) -> Exp (Z :. Int) -> Exp (Z :. Int)
+ilift1 :: (Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1
 ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
 
 -- |Lift a binary function to a computation over rank-1 indices.
 --
-ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp (Z :. Int) -> Exp (Z :. Int) -> Exp (Z :. Int)
+ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
 ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 
 
@@ -912,23 +918,25 @@ index0 = lift Z
 
 -- |Turn an 'Int' expression into a rank-1 indexing expression.
 --
-index1 :: Exp Int -> Exp (Z:. Int)
-index1 = lift . (Z:.)
+index1 :: (Elt i, IsIntegral i) => Exp i -> Exp DIM1
+index1 i = lift (Z :. fromIntegral i)
 
 -- |Turn a rank-1 indexing expression into an 'Int' expression.
 --
-unindex1 :: Exp (Z:. Int) -> Exp Int
-unindex1 ix = let Z:.i = unlift ix in i
+unindex1 :: (Elt i, IsIntegral i) => Exp DIM1 -> Exp i
+unindex1 ix = let Z :. i = unlift ix in fromIntegral i
 
 -- | Creates a rank-2 index from two Exp Int`s
 --
-index2 :: Exp Int -> Exp Int -> Exp DIM2
-index2 i j = lift (Z :. i :. j)
+index2 :: (Elt i, IsIntegral i) => Exp i -> Exp i -> Exp DIM2
+index2 i j = lift (Z :. fromIntegral i :. fromIntegral j)
 
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
-unindex2 :: Exp DIM2 -> Exp (Int, Int)
-unindex2 ix = let Z :. i :. j = unlift ix in lift ((i, j) :: (Exp Int, Exp Int))
+unindex2 :: (Elt i, IsIntegral i) => Exp DIM2 -> Exp (i, i)
+unindex2 ix
+  = let Z :. i :. j = unlift ix :: Z :. Exp Int :. Exp Int
+    in  lift (fromIntegral i, fromIntegral j)
 
 
 -- Conditional expressions
@@ -955,6 +963,11 @@ infixl 9 !
 --
 the :: Elt e => Acc (Scalar e) -> Exp e
 the = (!index0)
+
+-- |Test whether an array is empty
+--
+null :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Bool
+null arr = size arr ==* 0
 
 -- |Expression form that yields the shape of an array
 --

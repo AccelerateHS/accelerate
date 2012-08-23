@@ -58,7 +58,7 @@ module Data.Array.Accelerate (
   (!), the,
 
   -- *** Shape information
-  shape, size, shapeSize,
+  null, shape, size, shapeSize,
 
   -- *** Extracting sub-arrays
   slice,
