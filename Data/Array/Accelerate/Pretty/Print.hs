@@ -83,9 +83,9 @@ prettyPreAcc pp alvl wrap (Transform sh ix f acc)
 prettyPreAcc pp alvl wrap (Reshape sh acc)
   = wrap $ prettyArrOp "reshape" [prettyPreExp pp 0 alvl parens sh, pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Replicate _ty ix acc)
-  = wrap $ prettyArrOp "replicate" [prettyPreExp pp 0 alvl id ix, pp alvl parens acc]
+  = wrap $ prettyArrOp "replicate" [prettyPreExp pp 0 alvl noParens ix, pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Index _ty acc ix)
-  = wrap $ sep [pp alvl parens acc, char '!', prettyPreExp pp 0 alvl id ix]
+  = wrap $ sep [pp alvl parens acc, char '!', prettyPreExp pp 0 alvl noParens ix]
 prettyPreAcc pp alvl wrap (Map f acc)
   = wrap $ prettyArrOp "map" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (ZipWith f acc1 acc2)
@@ -229,12 +229,10 @@ prettyPreExp pp lvl alvl _ (Tuple tup)
   = prettyTuple pp lvl alvl tup
 prettyPreExp pp lvl alvl wrap (Prj idx e)
   = wrap $ char '#' <> prettyTupleIdx idx <+> prettyPreExp pp lvl alvl parens e
-prettyPreExp _pp _lvl _alvl wrap IndexNil
-  = wrap $ text "index Z"
+prettyPreExp _pp _lvl _alvl _wrap IndexNil
+  = char 'Z'
 prettyPreExp pp lvl alvl wrap (IndexCons t h)
-  = wrap $
-      text "index" <+>
-      parens (prettyPreExp pp lvl alvl parens t <+> text ":." <+> prettyPreExp pp lvl alvl parens h)
+  = wrap $ prettyPreExp pp lvl alvl noParens t <+> text ":." <+> prettyPreExp pp lvl alvl noParens h
 prettyPreExp pp lvl alvl wrap (IndexHead ix)
   = wrap $ text "indexHead" <+> prettyPreExp pp lvl alvl parens ix
 prettyPreExp pp lvl alvl wrap (IndexTail ix)
@@ -242,21 +240,21 @@ prettyPreExp pp lvl alvl wrap (IndexTail ix)
 prettyPreExp _ _ _ wrap (IndexAny)
   = wrap $ text "indexAny"
 prettyPreExp pp lvl alvl wrap (IndexSlice _ slix sh)
-  = wrap $ text "indexSlice" <+> parens (prettyPreExp pp lvl alvl parens slix)
-                             <+> prettyPreExp pp lvl alvl parens sh
+  = wrap $ text "indexSlice" <+> sep [ prettyPreExp pp lvl alvl parens slix
+                                     , prettyPreExp pp lvl alvl parens sh ]
 prettyPreExp pp lvl alvl wrap (IndexFull _ slix sl)
-  = wrap $ text "indexFull" <+> parens (prettyPreExp pp lvl alvl parens slix)
-                            <+> prettyPreExp pp lvl alvl parens sl
+  = wrap $ text "indexFull" <+> sep [ prettyPreExp pp lvl alvl parens slix
+                                    , prettyPreExp pp lvl alvl parens sl ]
 prettyPreExp pp lvl alvl wrap (ToIndex sh ix)
-  = wrap $ text "toIndex" <+> prettyPreExp pp lvl alvl parens sh
-                          <+> prettyPreExp pp lvl alvl parens ix
+  = wrap $ text "toIndex" <+> sep [ prettyPreExp pp lvl alvl parens sh
+                                  , prettyPreExp pp lvl alvl parens ix ]
 prettyPreExp pp lvl alvl wrap (FromIndex sh ix)
-  = wrap $ text "fromIndex" <+> prettyPreExp pp lvl alvl parens sh
-                            <+> prettyPreExp pp lvl alvl parens ix
+  = wrap $ text "fromIndex" <+> sep [ prettyPreExp pp lvl alvl parens sh
+                                    , prettyPreExp pp lvl alvl parens ix ]
 prettyPreExp pp lvl alvl wrap (Cond c t e)
-  = wrap $ sep [prettyPreExp pp lvl alvl parens c <+> char '?',
-                parens (prettyPreExp pp lvl alvl noParens t <> comma <+>
-                        prettyPreExp pp lvl alvl noParens e)]
+  = wrap $ sep [ prettyPreExp pp lvl alvl parens c <+> char '?',
+                 tuple [ prettyPreExp pp lvl alvl noParens t
+                       , prettyPreExp pp lvl alvl noParens e ] ]
 prettyPreExp pp lvl alvl wrap (Iterate i fun a)
   = wrap $ text "iterate" <>  brackets (int i)
                           <+> sep [ wrap   (prettyPreExp     pp lvl alvl parens a)
@@ -284,8 +282,8 @@ prettyPreExp pp _lvl alvl wrap (Shape idx)
 prettyPreExp pp lvl alvl wrap (ShapeSize idx)
   = wrap $ text "shapeSize" <+> parens (prettyPreExp pp lvl alvl parens idx)
 prettyPreExp pp lvl alvl wrap (Intersect sh1 sh2)
-  = wrap $ text "intersect" <+> prettyPreExp pp lvl alvl wrap sh1
-                            <+> prettyPreExp pp lvl alvl wrap sh2
+  = wrap $ text "intersect" <+> sep [ prettyPreExp pp lvl alvl wrap sh1
+                                    , prettyPreExp pp lvl alvl wrap sh2 ]
 
 -- Pretty print nested pairs as a proper tuple.
 --
@@ -294,15 +292,15 @@ prettyAtuple :: forall acc aenv t.
              -> Int
              -> Atuple (acc aenv) t
              -> Doc
-prettyAtuple pp alvl = encloseSep lparen rparen comma . collect
+prettyAtuple pp alvl = tuple . collect
   where
     collect :: Atuple (acc aenv) t' -> [Doc]
     collect NilAtup          = []
-    collect (SnocAtup tup a) = collect tup ++ [pp alvl id a]
+    collect (SnocAtup tup a) = collect tup ++ [pp alvl noParens a]
 
 prettyTuple :: forall acc env aenv t.
                PrettyAcc acc -> Int -> Int -> Tuple (PreOpenExp acc env aenv) t -> Doc
-prettyTuple pp lvl alvl = encloseSep lparen rparen comma . collect
+prettyTuple pp lvl alvl = tuple . collect
   where
     collect :: Tuple (PreOpenExp acc env aenv) t' -> [Doc]
     collect NilTup          = []
@@ -394,7 +392,7 @@ prettyAnyType ty = text $ show ty
 -- TLM: seems to flatten the nesting structure
 --
 prettyArrays :: ArraysR arrs -> arrs -> Doc
-prettyArrays arrs = encloseSep lparen rparen comma . collect arrs
+prettyArrays arrs = tuple . collect arrs
   where
     collect :: ArraysR arrs -> arrs -> [Doc]
     collect ArraysRunit         _        = []
@@ -422,12 +420,16 @@ prettyArray arr@(Array sh _)
 noParens :: Doc -> Doc
 noParens = id
 
+tuple :: [Doc] -> Doc
+tuple = encloseSep lparen rparen comma
+
 encloseSep :: Doc -> Doc -> Doc -> [Doc] -> Doc
 encloseSep left right p ds =
   case ds of
     []  -> left <> right
     [d] -> left <> d <> right
     _   -> left <> sep (punctuate p ds) <> right
+
 
 -- Auxiliary ops
 --
@@ -446,3 +448,4 @@ runScalarShow (NumScalarType (FloatingNumType ty))
 runScalarShow (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = show
 -}
+
