@@ -1,4 +1,6 @@
-{-# LANGUAGE GADTs, OverloadedStrings, ScopedTypeVariables, NoMonomorphismRestriction #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.HTML
 -- Copyright   : [2010..2011] Sean Seefried
@@ -20,15 +22,15 @@ module Data.Array.Accelerate.Pretty.HTML  (
 -- standard libraries
 import Data.String
 import Data.Monoid
-import qualified Data.Text as T
-import Text.Blaze.Renderer.Utf8
-import Text.Blaze.Html4.Transitional ((!))
-import qualified Text.Blaze.Html4.Transitional as H
-import qualified Text.Blaze.Html4.Transitional.Attributes as A
+import Text.Blaze.Html.Renderer.Utf8
+import Text.Blaze.Html4.Transitional                            ( (!) )
+import qualified Data.Text                                      as T
+import qualified Text.Blaze.Html4.Transitional                  as H
+import qualified Text.Blaze.Html4.Transitional.Attributes       as A
 
-import System.IO
-import System.IO.Error hiding (catch)
-import qualified Data.ByteString.Lazy as BS
+import System.IO.Error
+import Control.Exception
+import qualified Data.ByteString.Lazy                           as BS
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -38,12 +40,12 @@ combineHtml :: String -> String -> [H.Html] -> H.Html
 combineHtml cssClass label nodes = do
    let inner = foldl (>>) (return ()) nodes
    H.div ! A.class_ ("node " `mappend` fromString cssClass `mappend` " expanded") $ do
-     H.span ! A.class_ "selector" $ H.text (fromString label)
+     H.span ! A.class_ "selector" $ H.toMarkup label
      inner
 leafHtml :: String -> String -> H.Html
 leafHtml cssClass label =
   H.div ! A.class_ ("node " `mappend` fromString cssClass `mappend` " leaf") $
-    H.span $ H.text (fromString label)
+    H.span $ H.toMarkup label
 
 htmlLabels :: Labels
 htmlLabels = Labels { accFormat = "array-node"
@@ -68,7 +70,7 @@ htmlAST acc = H.docTypeHtml $
         H.script ! A.type_ "text/javascript" !
                    A.src "https://ajax.googleapis.com/ajax/libs/jquery/1.4.4/jquery.min.js" $ mempty
         H.link ! A.rel "stylesheet" ! A.href "accelerate.css" ! A.type_ "text/css"
-        H.script ! A.type_ "text/javascript" $ H.text $
+        H.script ! A.type_ "text/javascript" $ H.toMarkup $
           T.unlines ["function collapse() {"
                     ,"  var parent=$(this).parent();"
                     ,"  var that = $(this);"
@@ -177,15 +179,13 @@ dumpHtmlAST basename acc =
   where
     writeHtmlFile = do
       let cssPath = "accelerate.css"
-      h <- openFile cssPath WriteMode
-      hPutStr h accelerateCSS
-      hClose h
-      let path = basename ++ ".html"
-      h <- openFile path WriteMode
-      BS.hPutStr h (renderHtml $ htmlAST acc)
+      let path    = basename ++ ".html"
+      --
+      writeFile cssPath accelerateCSS
+      BS.writeFile path (renderHtml $ htmlAST acc)
       putStrLn ("HTML file successfully written to `" ++ path ++ "'\n" ++
                 "CSS file written to `" ++ cssPath ++ "'")
-      hClose h
+
     handler :: IOError -> IO ()
     handler e =
       case True of
