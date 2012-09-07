@@ -92,8 +92,8 @@ Library
   Include-Dirs:         include
   Build-depends:        array           >= 0.3 && < 0.5,
                         base            == 4.*,
-                        containers      >= 0.3 && < 0.5,
-                        ghc-prim        == 0.2.*,
+                        containers      >= 0.3 && < 0.6,
+                        ghc-prim        >= 0.2 && < 0.4,
                         pretty          >= 1.0 && < 1.2
 
   if flag(more-pp)
