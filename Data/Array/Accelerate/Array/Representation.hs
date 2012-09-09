@@ -99,7 +99,7 @@ instance Shape sh => Shape (sh, Int) where
     -- the remainder for the highest dimension since i < sz must hold.
     --
     where
-      r | dim sh == 0   = i
+      r | dim sh == 0   = BOUNDS_CHECK(checkIndex) "fromIndex" i sz i
         | otherwise     = i `remInt` sz
 
   bound (sh, sz) (ix, i) bndy
