@@ -115,9 +115,9 @@ prettyRGBA lIMIT s' = r + g + b + a
   where
     s   = A.snd s'
     t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
-    r   = (t     `mod` 128 + 64) * 0x1000000
-    g   = (t * 2 `mod` 128 + 64) * 0x10000
-    b   = (t * 3 `mod` 256     ) * 0x100
+    r   = (t     `rem` 128 + 64) * 0x1000000
+    g   = (t * 2 `rem` 128 + 64) * 0x10000
+    b   = (t * 3 `rem` 256     ) * 0x100
     a   = 0xFF
 
 
