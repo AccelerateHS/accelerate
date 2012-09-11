@@ -30,8 +30,9 @@ import Control.Applicative                              hiding ( Const )
 import Control.Monad.Fix
 import Data.List
 import Data.Maybe
+import Data.Hashable
 import Data.Typeable
-import Data.HashTable                                   as Hash
+import qualified Data.HashTable.IO                      as Hash
 import qualified Data.IntMap                            as IntMap
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
@@ -47,6 +48,8 @@ import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 
 #include "accelerate.h"
+
+type HashTable key val  = Hash.BasicHashTable key val
 
 
 -- Configuration
@@ -540,6 +543,9 @@ instance Eq (StableASTName c) where
     | Just sn1' <- gcast sn1 = sn1' == sn2
     | otherwise              = False
 
+instance Hashable (StableASTName c) where
+  hash (StableASTName sn) = hashStableName sn
+
 makeStableAST :: c t -> IO (StableName (c t))
 makeStableAST e = e `seq` makeStableName e
 
@@ -560,7 +566,7 @@ hashStableNameHeight (StableNameHeight sn _) = hashStableName sn
 
 -- Hash table keyed on the stable names of array computations.
 --
-type ASTHashTable c v = Hash.HashTable (StableASTName c) v
+type ASTHashTable c v = HashTable (StableASTName c) v
 
 -- Mutable hashtable version of the occurrence map, which associates each AST node with an
 -- occurrence count and the height of the AST.
@@ -570,9 +576,7 @@ type OccMapHash c = ASTHashTable c (Int, Int)
 -- Create a new hash table keyed on AST nodes.
 --
 newASTHashTable :: IO (ASTHashTable c v)
-newASTHashTable = Hash.new (==) hashStableAST
-  where
-    hashStableAST (StableASTName sn) = fromIntegral (hashStableName sn)
+newASTHashTable = Hash.new
 
 -- Enter one AST node occurrence into an occurrence map.  Returns 'Just h' if this is a repeated
 -- occurrence and the height of the repeatedly occurring AST is 'h'.
@@ -587,7 +591,7 @@ enterOcc occMap sa height
       entry <- Hash.lookup occMap sa
       case entry of
         Nothing           -> Hash.insert occMap sa (1    , height)  >> return Nothing
-        Just (n, heightS) -> Hash.update occMap sa (n + 1, heightS) >> return (Just heightS)
+        Just (n, heightS) -> Hash.insert occMap sa (n + 1, heightS) >> return (Just heightS)
 
 -- Immutable occurrence map
 

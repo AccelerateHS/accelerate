@@ -95,6 +95,7 @@ Library
                         containers      >= 0.3,
                         ghc-prim        >= 0.2,
                         hashable        >= 1.1,
+                        hashtables      >= 1.0,
                         pretty          >= 1.0
 
   if flag(more-pp)
