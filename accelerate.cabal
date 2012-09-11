@@ -90,17 +90,17 @@ Flag internal-checks
 
 Library
   Include-Dirs:         include
-  Build-depends:        array           >= 0.3 && < 0.5,
+  Build-depends:        array           >= 0.3,
                         base            == 4.*,
-                        containers      >= 0.3 && < 0.5,
-                        ghc-prim        == 0.2.*,
-                        hashable        >= 1.1 && < 1.2,
-                        pretty          >= 1.0 && < 1.2
+                        containers      >= 0.3,
+                        ghc-prim        >= 0.2,
+                        hashable        >= 1.1,
+                        pretty          >= 1.0
 
   if flag(more-pp)
-    Build-depends:      bytestring      == 0.9.*,
-                        blaze-html      == 0.3.*,
-                        text            == 0.10.*
+    Build-depends:      bytestring      >= 0.9,
+                        blaze-html      >= 0.3,
+                        text            >= 0.10
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
