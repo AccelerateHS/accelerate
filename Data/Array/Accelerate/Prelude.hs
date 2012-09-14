@@ -334,7 +334,7 @@ scanlSeg f z vec seg = scanl1Seg f vec' seg'
     seg'        = map (+1) seg
     vec'        = permute const
                           (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1 $ unindex1 ix + inc ! ix)
+                          (\ix -> index1' $ unindex1' ix + inc ! ix)
                           vec
 
     -- Each element in the segments must be shifted to the right one additional
@@ -381,7 +381,7 @@ scanl'Seg f z vec seg = result
     --
     seg'        = map (+1) seg
     tails       = zipWith (+) seg . P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1 $ tails ! ix) vec'
+    sums        = backpermute (shape seg) (\ix -> index1' $ tails ! ix) vec'
 
     -- Slice out the body of each segment.
     --
@@ -394,11 +394,11 @@ scanl'Seg f z vec seg = result
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
                 $ permute (+) (fill (index1 $ size vec + 1) 0)
-                              (\ix -> index1 $ offset ! ix)
+                              (\ix -> index1' $ offset ! ix)
                               (fill (shape seg) (1 :: Exp i))
 
     body        = backpermute (shape vec)
-                              (\ix -> index1 $ unindex1 ix + inc ! ix)
+                              (\ix -> index1' $ unindex1' ix + inc ! ix)
                               vec'
 
 
@@ -458,7 +458,7 @@ scanrSeg f z vec seg = scanr1Seg f vec' seg'
     seg'        = map (+1) seg
     vec'        = permute const
                           (fill (index1 $ size vec + size seg) z)
-                          (\ix -> index1 $ unindex1 ix + inc ! ix - 1)
+                          (\ix -> index1' $ unindex1' ix + inc ! ix - 1)
                           vec
 
 
@@ -480,12 +480,12 @@ scanr'Seg f z vec seg = result
     -- reduction values
     seg'        = map (+1) seg
     heads       = P.fst $ scanl' (+) 0 seg'
-    sums        = backpermute (shape seg) (\ix -> index1 $ heads ! ix) vec'
+    sums        = backpermute (shape seg) (\ix -> index1' $ heads ! ix) vec'
 
     -- body segments
     inc         = scanl1 (+) $ mkHeadFlags seg
     body        = backpermute (shape vec)
-                              (\ix -> index1 $ unindex1 ix + inc ! ix)
+                              (\ix -> index1' $ unindex1' ix + inc ! ix)
                               vec'
 
 
@@ -541,11 +541,11 @@ postscanrSeg f e vec seg
 mkHeadFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1 (offset ! ix)) ones
+  $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
   where
     (offset, len)       = scanl' (+) 0 seg
-    zeros               = fill (index1 $ the len + 1) 0
-    ones                = fill (index1 $ size offset) 1
+    zeros               = fill (index1' $ the len + 1) 0
+    ones                = fill (index1  $ size offset) 1
 
 -- |Compute tail flags vector from segment vector for right-scans. That is, the
 -- flag is placed at the last place in each segment.
@@ -553,11 +553,11 @@ mkHeadFlags seg
 mkTailFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> index1 (the len - 1 - offset ! ix)) ones
+  $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
   where
     (offset, len)       = scanr' (+) 0 seg
-    zeros               = fill (index1 $ the len + 1) 0
-    ones                = fill (index1 $ size offset) 1
+    zeros               = fill (index1' $ the len + 1) 0
+    ones                = fill (index1  $ size offset) 1
 
 -- |Construct a segmented version of a function from a non-segmented version.
 -- The segmented apply operates on a head-flag value tuple, and follows the
@@ -571,6 +571,23 @@ segmented f a b =
       (bF, bV) = unlift b
   in
   lift (aF .|. bF, bF /=* 0 ? (bV, f aV bV))
+
+-- |Index construction and destruction generalised to integral types.
+--
+-- We generalise the segment descriptor to integral types because some
+-- architectures, such as GPUs, have poor performance for 64-bit types. So,
+-- there is a tension between performance and requiring 64-bit indices for some
+-- applications, and we would not like to restrict ourselves to either one.
+--
+-- As we don't yet support non-Int dimensions in shapes, we will need to convert
+-- back to concrete Int. However, don't put these generalised forms into the
+-- base library, because it results in too many ambiguity errors.
+--
+index1' ::  (Elt i, IsIntegral i) => Exp i -> Exp DIM1
+index1' i = lift (Z :. fromIntegral i)
+
+unindex1' :: (Elt i, IsIntegral i) => Exp DIM1 -> Exp i
+unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 
 
 -- Reshaping of arrays

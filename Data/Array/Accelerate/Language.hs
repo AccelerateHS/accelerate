@@ -918,25 +918,30 @@ index0 = lift Z
 
 -- |Turn an 'Int' expression into a rank-1 indexing expression.
 --
-index1 :: (Elt i, IsIntegral i) => Exp i -> Exp DIM1
-index1 i = lift (Z :. fromIntegral i)
+index1 :: Elt i => Exp i -> Exp (Z :. i)
+index1 i = lift (Z :. i)
 
 -- |Turn a rank-1 indexing expression into an 'Int' expression.
 --
-unindex1 :: (Elt i, IsIntegral i) => Exp DIM1 -> Exp i
-unindex1 ix = let Z :. i = unlift ix in fromIntegral i
+unindex1 :: Elt i => Exp (Z :. i) -> Exp i
+unindex1 ix = let Z :. i = unlift ix in i
 
 -- | Creates a rank-2 index from two Exp Int`s
 --
-index2 :: (Elt i, IsIntegral i) => Exp i -> Exp i -> Exp DIM2
-index2 i j = lift (Z :. fromIntegral i :. fromIntegral j)
+index2 :: (Elt i, Slice (Z :. i))
+       => Exp i
+       -> Exp i
+       -> Exp (Z :. i :. i)
+index2 i j = lift (Z :. i :. j)
 
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
-unindex2 :: (Elt i, IsIntegral i) => Exp DIM2 -> Exp (i, i)
+unindex2 :: forall i. (Elt i, Slice (Z :. i))
+         => Exp (Z :. i :. i)
+         -> Exp (i, i)
 unindex2 ix
-  = let Z :. i :. j = unlift ix :: Z :. Exp Int :. Exp Int
-    in  lift (fromIntegral i, fromIntegral j)
+  = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
+    in  lift (i, j)
 
 
 -- Conditional expressions
