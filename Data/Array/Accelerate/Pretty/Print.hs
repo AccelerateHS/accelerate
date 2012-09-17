@@ -67,8 +67,8 @@ prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
   = wrap $ prettyArrOp "cond" [prettyPreExp pp 0 alvl parens e, pp alvl parens acc1, pp alvl parens acc2]
-prettyPreAcc _  _    wrap (Use arr)
-  = wrap $ prettyArrOp "use" [prettyArrays (arrays (undefined::a)) arr]
+prettyPreAcc _  _    _    (Use arr)
+  = prettyArrOp "use" [prettyArrays (arrays (undefined::a)) arr]
 prettyPreAcc pp alvl wrap (Unit e)
   = wrap $ prettyArrOp "unit" [prettyPreExp pp 0 alvl parens e]
 prettyPreAcc pp alvl wrap (Generate sh f)
@@ -401,10 +401,9 @@ prettyArrays arrs = tuple . collect arrs
 
 prettyArray :: forall dim e. Array dim e -> Doc
 prettyArray arr@(Array sh _)
-  = parens $
-      hang (text "Array") 2 $
-        sep [ parens . text $ showShape (toElt sh :: dim)
-            , dataDoc]
+  = hang (text "Array") 2
+  $ sep [ parens . text $ showShape (toElt sh :: dim)
+        , dataDoc]
   where
     showDoc :: forall a. Show a => a -> Doc
     showDoc = text . show
