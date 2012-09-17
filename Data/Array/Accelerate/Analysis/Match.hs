@@ -17,10 +17,10 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenAcc, matchOpenExp, matchOpenFun, matchTupleType,
+  matchOpenAcc, matchOpenExp, matchOpenFun,
 
-  -- matching indices
-  matchIdx, matchAvarIdx,
+  -- auxiliary
+  matchIdx, matchTupleType,
 
   -- occurrence counting
   countEA, countFA
@@ -52,6 +52,15 @@ data s :=: t where
   REFL :: s :=: s
 
 deriving instance Show (s :=: t)
+
+
+-- The types for traversing recursive array computations.
+--
+-- TODO: Parameterise functions by the recursive knot. Tediously, we need to
+--       carry functions for both matching and hashing.
+--
+-- type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
+-- type HashAcc  acc = forall aenv a.   acc aenv a -> Int
 
 
 -- Compute the congruence of two array computations. The nodes are congruent if
@@ -358,10 +367,15 @@ matchOpenExp (ToIndex sh1 i1) (ToIndex sh2 i2)
   = Just REFL
 
 matchOpenExp (FromIndex sh1 i1) (FromIndex sh2 i2)
-  = matchOpenExp i1 i2 >> matchOpenExp sh1 sh2
+  | Just REFL <- matchOpenExp i1 i2
+  , Just REFL <- matchOpenExp sh1 sh2
+  = Just REFL
 
 matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
-  = matchOpenExp p1 p2 >> matchOpenExp t1 t2 >> matchOpenExp e1 e2
+  | Just REFL <- matchOpenExp p1 p2
+  , Just REFL <- matchOpenExp t1 t2
+  , Just REFL <- matchOpenExp e1 e2
+  = Just REFL
 
 matchOpenExp (Iterate n1 f1 x1) (Iterate n2 f2 x2)
   | n1 == n2
@@ -384,14 +398,12 @@ matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   = Just REFL
 
 matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
-  | OpenAcc (Avar v1) <- a1
-  , OpenAcc (Avar v2) <- a2
-  , Just REFL         <- matchIdx v1 v2
-  , Just REFL         <- matchOpenExp x1 x2
+  | Just REFL <- matchOpenAcc a1 a2     -- should only be array indices
+  , Just REFL <- matchOpenExp x1 x2
   = Just REFL
 
 matchOpenExp (Shape a1) (Shape a2)
-  | Just REFL <- matchAvarIdx a1 a2
+  | Just REFL <- matchOpenAcc a1 a2     -- should only be array indices
   = Just REFL
 
 matchOpenExp (ShapeSize sh1) (ShapeSize sh2)
@@ -399,7 +411,9 @@ matchOpenExp (ShapeSize sh1) (ShapeSize sh2)
   = Just REFL
 
 matchOpenExp (Intersect sa1 sb1) (Intersect sa2 sb2)
-  = matchOpenExp sa1 sa2 >> matchOpenExp sb1 sb2
+  | Just REFL <- matchOpenExp sa1 sa2
+  , Just REFL <- matchOpenExp sb1 sb2
+  = Just REFL
 
 matchOpenExp _ _
   = Nothing
@@ -438,10 +452,6 @@ matchIdx :: Idx env s -> Idx env t -> Maybe (s :=: t)
 matchIdx ZeroIdx     ZeroIdx     = Just REFL
 matchIdx (SuccIdx u) (SuccIdx v) = matchIdx u v
 matchIdx _           _           = Nothing
-
-matchAvarIdx :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
-matchAvarIdx (OpenAcc (Avar v1)) (OpenAcc (Avar v2)) = matchIdx v1 v2
-matchAvarIdx _                   _                   = error "matchAvarIdx: expected array variable"
 
 
 -- Tuple projection indices. Given the same tuple expression structure (tup),
