@@ -24,6 +24,9 @@ module Data.Array.Accelerate.Trafo.Substitution (
   weakenByA, weakenByEA, weakenByFA,
   weakenByE, weakenByFE,
 
+  -- * Shrinking
+  shrink, usesOfE,
+
   -- * Rebuilding
   rebuildA, rebuildAfun, rebuildOpenAcc,
   rebuildE, rebuildEA,
@@ -33,6 +36,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays )
 import Prelude                                  hiding ( exp )
 
@@ -138,33 +142,23 @@ weakenFE = weakenByFE SuccIdx
 
 -- Weakening functions parameterised by an index manipulation
 --
-weakenByA :: (forall t'. Idx aenv t' -> Idx aenv' t')
-          -> OpenAcc aenv  t
-          -> OpenAcc aenv' t
+weakenByA :: (forall t'. Idx aenv t' -> Idx aenv' t') -> OpenAcc aenv t -> OpenAcc aenv' t
 weakenByA k = rebuildOpenAcc (Avar . k)
 
-weakenByE :: (forall t'. Idx env t' -> Idx env' t')
-          -> OpenExp env  aenv t
-          -> OpenExp env' aenv t
+weakenByE :: (forall t'. Idx env t' -> Idx env' t') -> OpenExp env aenv t -> OpenExp env' aenv t
 weakenByE k = rebuildE (Var . k)
 
-weakenByEA :: (forall t'. Idx aenv t' -> Idx aenv' t')
-           -> OpenExp env aenv  t
-           -> OpenExp env aenv' t
+weakenByEA :: (forall t'. Idx aenv t' -> Idx aenv' t') -> OpenExp env aenv t -> OpenExp env aenv' t
 weakenByEA k = rebuildEA rebuildOpenAcc (Avar . k)
 
-weakenByFA :: (forall t'. Idx aenv t' -> Idx aenv' t')
-           -> OpenFun env aenv  t
-           -> OpenFun env aenv' t
+weakenByFA :: (forall t'. Idx aenv t' -> Idx aenv' t') -> OpenFun env aenv t -> OpenFun env aenv' t
 weakenByFA k = rebuildFA rebuildOpenAcc (Avar . k)
 
-weakenByFE :: (forall t'. Idx env t' -> Idx env' t')
-           -> OpenFun env  aenv t
-           -> OpenFun env' aenv t
+weakenByFE :: (forall t'. Idx env t' -> Idx env' t') -> OpenFun env aenv t -> OpenFun env' aenv t
 weakenByFE k = rebuildFE (Var . k)
 
 
--- Implementation ==============================================================
+-- Simultaneous Substitution ===================================================
 --
 
 -- Scalar expressions
@@ -415,4 +409,105 @@ rebuildFA k v fun =
   case fun of
     Body e      -> Body (rebuildEA k v e)
     Lam f       -> Lam  (rebuildFA k v f)
+
+
+-- Shrinking ===================================================================
+--
+-- The shrinking substitution arises as a restriction of beta-reduction to cases
+-- where the bound variable is used zero (dead-code elimination) or one (linear
+-- inlining) times.
+--
+
+-- Scalar expressions
+-- ------------------
+
+shrink :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+shrink exp =
+  case exp of
+    Let bnd body
+      | usesOfE ZeroIdx body' <= 1      -> shrink (inline body' bnd')
+      | otherwise                       -> Let bnd' body'
+      where
+        bnd'    = shrink bnd
+        body'   = shrink body
+    --
+    Var idx             -> Var idx
+    Const c             -> Const c
+    Tuple t             -> Tuple (shrinkTE t)
+    Prj tup e           -> Prj tup (shrink e)
+    IndexNil            -> IndexNil
+    IndexCons sl sz     -> IndexCons (shrink sl) (shrink sz)
+    IndexHead sh        -> IndexHead (shrink sh)
+    IndexTail sh        -> IndexTail (shrink sh)
+    IndexSlice x ix sh  -> IndexSlice x (shrink ix) (shrink sh)
+    IndexFull x ix sl   -> IndexFull x (shrink ix) (shrink sl)
+    IndexAny            -> IndexAny
+    ToIndex sh ix       -> ToIndex (shrink sh) (shrink ix)
+    FromIndex sh i      -> FromIndex (shrink sh) (shrink i)
+    Cond p t e          -> Cond (shrink p) (shrink t) (shrink e)
+    Iterate n f x       -> Iterate n (shrinkFE f) (shrink x)
+    PrimConst c         -> PrimConst c
+    PrimApp f x         -> PrimApp f (shrink x)
+    IndexScalar a sh    -> IndexScalar a (shrink sh)
+    Shape a             -> Shape a
+    ShapeSize sh        -> ShapeSize (shrink sh)
+    Intersect sh sz     -> Intersect (shrink sh) (shrink sz)
+
+shrinkFE
+    :: PreOpenFun acc env aenv f
+    -> PreOpenFun acc env aenv f
+shrinkFE fun =
+  case fun of
+    Body e      -> Body (shrink e)
+    Lam f       -> Lam (shrinkFE f)
+
+shrinkTE
+    :: Tuple (PreOpenExp acc env aenv) t
+    -> Tuple (PreOpenExp acc env aenv) t
+shrinkTE tup =
+  case tup of
+    NilTup      -> NilTup
+    SnocTup t e -> SnocTup (shrinkTE t) (shrink e)
+
+
+usesOfE :: forall acc env aenv s t. Idx env s -> PreOpenExp acc env aenv t -> Int
+usesOfE idx exp =
+  case exp of
+    Let bnd body        -> usesOfE idx bnd + usesOfE (SuccIdx idx) body
+    Var idx'
+      | Just REFL <- matchIdx idx idx'  -> 1
+      | otherwise                       -> 0
+    Const _             -> 0
+    Tuple t             -> usesOfTE idx t
+    Prj _ e             -> usesOfE idx e
+    IndexNil            -> 0
+    IndexCons sl sz     -> usesOfE idx sl + usesOfE idx sz
+    IndexHead sh        -> usesOfE idx sh
+    IndexTail sh        -> usesOfE idx sh
+    IndexSlice _ ix sh  -> usesOfE idx ix + usesOfE idx sh
+    IndexFull _ ix sl   -> usesOfE idx ix + usesOfE idx sl
+    IndexAny            -> 0
+    ToIndex sh ix       -> usesOfE idx sh + usesOfE idx ix
+    FromIndex sh i      -> usesOfE idx sh + usesOfE idx i
+    Cond p t e          -> usesOfE idx p  + usesOfE idx t  + usesOfE idx e
+    Iterate _ f x       -> usesOfFE idx f + usesOfE idx x
+    PrimConst _         -> 0
+    PrimApp _ x         -> usesOfE idx x
+    IndexScalar _ sh    -> usesOfE idx sh
+    Shape _             -> 0
+    ShapeSize sh        -> usesOfE idx sh
+    Intersect sh sz     -> usesOfE idx sh + usesOfE idx sz
+
+usesOfTE :: Idx env s -> Tuple (PreOpenExp acc env aenv) t -> Int
+usesOfTE idx tup =
+  case tup of
+    NilTup      -> 0
+    SnocTup t e -> usesOfTE idx t + usesOfE idx e
+
+usesOfFE :: Idx env s -> PreOpenFun acc env aenv f -> Int
+usesOfFE idx fun =
+  case fun of
+    Body e      -> usesOfE  idx           e
+    Lam f       -> usesOfFE (SuccIdx idx) f
+
 

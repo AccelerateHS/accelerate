@@ -17,8 +17,10 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenAcc, matchOpenExp, matchOpenFun,
-  matchTupleType,
+  matchOpenAcc, matchOpenExp, matchOpenFun, matchTupleType,
+
+  -- matching indices
+  matchIdx, matchAvarIdx,
 
   -- occurrence counting
   countEA, countFA
