@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   weakenByE, weakenByFE,
 
   -- * Shrinking
-  shrink,
+  shrink,  shrinkFE,
   shrinkA, shrinkAfun, shrinkOpenAcc,
 
   -- * Rebuilding
@@ -426,6 +426,7 @@ shrink :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
 shrink exp =
   case exp of
     Let bnd body
+      | Var _ <- bnd                    -> shrink (inline body  bnd)
       | usesOfE ZeroIdx body' <= 1      -> shrink (inline body' bnd')
       | otherwise                       -> Let bnd' body'
       where

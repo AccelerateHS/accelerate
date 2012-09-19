@@ -159,10 +159,10 @@ simplifyCond _env p t e
 -- Walk over the scalar expression, applying simplifications.
 --
 simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp = simplifyOpenExp EmptyEnv
+simplifyExp = shrink   . simplifyOpenExp EmptyEnv
 
 simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun = simplifyOpenFun EmptyEnv
+simplifyFun = shrinkFE . simplifyOpenFun EmptyEnv
 
 
 simplifyOpenExp
