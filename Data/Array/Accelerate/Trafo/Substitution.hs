@@ -25,7 +25,8 @@ module Data.Array.Accelerate.Trafo.Substitution (
   weakenByE, weakenByFE,
 
   -- * Shrinking
-  shrink, usesOfE,
+  shrink,
+  shrinkA, shrinkAfun, shrinkOpenAcc,
 
   -- * Rebuilding
   rebuildA, rebuildAfun, rebuildOpenAcc,
@@ -510,4 +511,200 @@ usesOfFE idx fun =
     Body e      -> usesOfE  idx           e
     Lam f       -> usesOfFE (SuccIdx idx) f
 
+
+
+-- Array expressions
+-- -----------------
+
+type UsesOfAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Int
+type ShrinkAcc acc = forall aenv a.   acc aenv a -> acc aenv a
+type UnwrapAcc acc = forall aenv t.   acc aenv t -> PreOpenAcc acc aenv t       -- hmm...
+
+shrinkOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+shrinkOpenAcc (OpenAcc acc)
+  = OpenAcc
+  $ shrinkA rebuildOpenAcc shrinkOpenAcc usesOfOpenAcc (\(OpenAcc a) -> a) acc
+
+
+shrinkA
+    :: RebuildAcc acc -> ShrinkAcc acc -> UsesOfAcc acc -> UnwrapAcc acc
+    -> PreOpenAcc acc aenv t
+    -> PreOpenAcc acc aenv t
+shrinkA k s u pre acc =
+  let subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
+      subTop t ZeroIdx          = t
+      subTop _ (SuccIdx idx)    = Avar idx
+  in
+  case acc of
+    Alet bnd body
+      | Avar _ <- pre bnd       -> shrinkA k s u pre (rebuildA k (subTop (pre bnd))  (pre body))
+      | u ZeroIdx body' <= 1    -> shrinkA k s u pre (rebuildA k (subTop (pre bnd')) (pre body'))
+      | otherwise               -> Alet bnd' body'
+      where
+        bnd'    = s bnd
+        body'   = s body
+    --
+    Avar ix             -> Avar ix
+    Atuple tup          -> Atuple (shrinkATA s tup)
+    Aprj tup a          -> Aprj tup (s a)
+    Apply f a           -> Apply f (s a)
+    Acond p t e         -> Acond (shrinkEA s p) (s t) (s e)
+    Use a               -> Use a
+    Unit e              -> Unit (shrinkEA s e)
+    Reshape e a         -> Reshape (shrinkEA s e) (s a)
+    Generate e f        -> Generate (shrinkEA s e) (shrinkFA s f)
+    Transform sh ix f a -> Transform (shrinkEA s sh) (shrinkFA s ix) (shrinkFA s f) (s a)
+    Replicate sl slix a -> Replicate sl (shrinkEA s slix) (s a)
+    Index sl a slix     -> Index sl (s a) (shrinkEA s slix)
+    Map f a             -> Map (shrinkFA s f) (s a)
+    ZipWith f a1 a2     -> ZipWith (shrinkFA s f) (s a1) (s a2)
+    Fold f z a          -> Fold (shrinkFA s f) (shrinkEA s z) (s a)
+    Fold1 f a           -> Fold1 (shrinkFA s f) (s a)
+    FoldSeg f z a b     -> FoldSeg (shrinkFA s f) (shrinkEA s z) (s a) (s b)
+    Fold1Seg f a b      -> Fold1Seg (shrinkFA s f) (s a) (s b)
+    Scanl f z a         -> Scanl (shrinkFA s f) (shrinkEA s z) (s a)
+    Scanl' f z a        -> Scanl' (shrinkFA s f) (shrinkEA s z) (s a)
+    Scanl1 f a          -> Scanl1 (shrinkFA s f) (s a)
+    Scanr f z a         -> Scanr (shrinkFA s f) (shrinkEA s z) (s a)
+    Scanr' f z a        -> Scanr' (shrinkFA s f) (shrinkEA s z) (s a)
+    Scanr1 f a          -> Scanr1 (shrinkFA s f) (s a)
+    Permute f1 a1 f2 a2 -> Permute (shrinkFA s f1) (s a1) (shrinkFA s f2) (s a2)
+    Backpermute sh f a  -> Backpermute (shrinkEA s sh) (shrinkFA s f) (s a)
+    Stencil f b a       -> Stencil (shrinkFA s f) b (s a)
+    Stencil2 f b1 a1 b2 a2
+                        -> Stencil2 (shrinkFA s f) b1 (s a1) b2 (s a2)
+
+
+shrinkAfun :: ShrinkAcc acc -> PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
+shrinkAfun s afun =
+  case afun of
+    Abody b     -> Abody (s b)
+    Alam f      -> Alam (shrinkAfun s f)
+
+shrinkATA :: ShrinkAcc acc -> Atuple (acc aenv) t -> Atuple (acc aenv) t
+shrinkATA s atup =
+  case atup of
+    NilAtup      -> NilAtup
+    SnocAtup t a -> shrinkATA s t `SnocAtup` s a
+
+shrinkFA :: ShrinkAcc acc -> PreOpenFun acc env aenv t -> PreOpenFun acc env aenv t
+shrinkFA s fun =
+  case fun of
+    Body b      -> Body (shrinkEA s b)
+    Lam f       -> Lam (shrinkFA s f)
+
+shrinkEA :: ShrinkAcc acc -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+shrinkEA s exp =
+  case exp of
+    Let bnd body        -> Let (shrinkEA s bnd) (shrinkEA s body)
+    Var idx             -> Var idx
+    Const c             -> Const c
+    Tuple t             -> Tuple (shrinkTA s t)
+    Prj tup e           -> Prj tup (shrinkEA s e)
+    IndexNil            -> IndexNil
+    IndexCons sl sz     -> IndexCons (shrinkEA s sl) (shrinkEA s sz)
+    IndexHead sh        -> IndexHead (shrinkEA s sh)
+    IndexTail sh        -> IndexTail (shrinkEA s sh)
+    IndexSlice x ix sh  -> IndexSlice x (shrinkEA s ix) (shrinkEA s sh)
+    IndexFull x ix sl   -> IndexFull x (shrinkEA s ix) (shrinkEA s sl)
+    IndexAny            -> IndexAny
+    ToIndex sh ix       -> ToIndex (shrinkEA s sh) (shrinkEA s ix)
+    FromIndex sh i      -> FromIndex (shrinkEA s sh) (shrinkEA s i)
+    Cond p t e          -> Cond (shrinkEA s p) (shrinkEA s t) (shrinkEA s e)
+    Iterate n f x       -> Iterate n (shrinkFA s f) (shrinkEA s x)
+    PrimConst c         -> PrimConst c
+    PrimApp f x         -> PrimApp f (shrinkEA s x)
+    IndexScalar a sh    -> IndexScalar (s a) (shrinkEA s sh)
+    Shape a             -> Shape (s a)
+    ShapeSize sh        -> ShapeSize (shrinkEA s sh)
+    Intersect sh sz     -> Intersect (shrinkEA s sh) (shrinkEA s sz)
+
+shrinkTA :: ShrinkAcc acc -> Tuple (PreOpenExp acc env aenv) t -> Tuple (PreOpenExp acc env aenv) t
+shrinkTA s tup =
+  case tup of
+    NilTup      -> NilTup
+    SnocTup t e -> shrinkTA s t `SnocTup` shrinkEA s e
+
+
+usesOfOpenAcc :: Idx aenv s -> OpenAcc aenv t -> Int
+usesOfOpenAcc idx (OpenAcc acc) = usesOfA usesOfOpenAcc idx acc
+
+usesOfA :: UsesOfAcc acc -> Idx aenv s -> PreOpenAcc acc aenv t -> Int
+usesOfA u idx acc =
+  case acc of
+    Alet bnd body       -> u idx bnd + u (SuccIdx idx) body
+    Avar idx'
+      | Just REFL <- matchIdx idx idx'  -> 1
+      | otherwise                       -> 0
+    Atuple tup          -> usesOfATA u idx tup
+    Aprj _ a            -> u idx a
+    Apply _ a           -> u idx a
+    Acond p t e         -> usesOfEA u idx p + u idx t + u idx e
+    Use _               -> 0
+    Unit e              -> usesOfEA u idx e
+    Reshape e a         -> usesOfEA u idx e + u idx a
+    Generate e f        -> usesOfEA u idx e + usesOfFA u idx f
+    Transform sh ix f a -> usesOfEA u idx sh + usesOfFA u idx ix + usesOfFA u idx f + u idx a
+    Replicate _ slix a  -> usesOfEA u idx slix + u idx a
+    Index _ a slix      -> usesOfEA u idx slix + u idx a
+    Map f a             -> usesOfFA u idx f + u idx a
+    ZipWith f a1 a2     -> usesOfFA u idx f + u idx a1 + u idx a2
+    Fold f z a          -> usesOfFA u idx f + usesOfEA u idx z + u idx a
+    Fold1 f a           -> usesOfFA u idx f + u idx a
+    FoldSeg f z a s     -> usesOfFA u idx f + usesOfEA u idx z + u idx a + u idx s
+    Fold1Seg f a s      -> usesOfFA u idx f + u idx a + u idx s
+    Scanl f z a         -> usesOfFA u idx f + usesOfEA u idx z + u idx a
+    Scanl' f z a        -> usesOfFA u idx f + usesOfEA u idx z + u idx a
+    Scanl1 f a          -> usesOfFA u idx f + u idx a
+    Scanr f z a         -> usesOfFA u idx f + usesOfEA u idx z + u idx a
+    Scanr' f z a        -> usesOfFA u idx f + usesOfEA u idx z + u idx a
+    Scanr1 f a          -> usesOfFA u idx f + u idx a
+    Permute f1 a1 f2 a2 -> usesOfFA u idx f1 + u idx a1 + usesOfFA u idx f2 + u idx a2
+    Backpermute sh f a  -> usesOfEA u idx sh + usesOfFA u idx f + u idx a
+    Stencil f _ a       -> usesOfFA u idx f + u idx a
+    Stencil2 f _ a1 _ a2-> usesOfFA u idx f + u idx a1 + u idx a2
+
+usesOfATA :: UsesOfAcc acc -> Idx aenv s -> Atuple (acc aenv) t -> Int
+usesOfATA s idx atup =
+  case atup of
+    NilAtup      -> 0
+    SnocAtup t a -> usesOfATA s idx t + s idx a
+
+usesOfEA :: UsesOfAcc acc -> Idx aenv a -> PreOpenExp acc env aenv t -> Int
+usesOfEA s idx exp =
+  case exp of
+    Let bnd body        -> usesOfEA s idx bnd + usesOfEA s idx body
+    Var _               -> 0
+    Const _             -> 0
+    Tuple t             -> usesOfTA s idx t
+    Prj _ e             -> usesOfEA s idx e
+    IndexNil            -> 0
+    IndexCons sl sz     -> usesOfEA s idx sl + usesOfEA s idx sz
+    IndexHead sh        -> usesOfEA s idx sh
+    IndexTail sh        -> usesOfEA s idx sh
+    IndexSlice _ ix sh  -> usesOfEA s idx ix + usesOfEA s idx sh
+    IndexFull _ ix sl   -> usesOfEA s idx ix + usesOfEA s idx sl
+    IndexAny            -> 0
+    ToIndex sh ix       -> usesOfEA s idx sh + usesOfEA s idx ix
+    FromIndex sh i      -> usesOfEA s idx sh + usesOfEA s idx i
+    Cond p t e          -> usesOfEA s idx p  + usesOfEA s idx t  + usesOfEA s idx e
+    Iterate _ f x       -> usesOfFA s idx f  + usesOfEA s idx x
+    PrimConst _         -> 0
+    PrimApp _ x         -> usesOfEA s idx x
+    IndexScalar a sh    -> s idx a + usesOfEA s idx sh
+    Shape a             -> s idx a
+    ShapeSize sh        -> usesOfEA s idx sh
+    Intersect sh sz     -> usesOfEA s idx sh + usesOfEA s idx sz
+
+usesOfTA :: UsesOfAcc acc -> Idx aenv a -> Tuple (PreOpenExp acc env aenv) t -> Int
+usesOfTA s idx tup =
+  case tup of
+    NilTup      -> 0
+    SnocTup t e -> usesOfTA s idx t + usesOfEA s idx e
+
+usesOfFA :: UsesOfAcc acc -> Idx aenv a -> PreOpenFun acc env aenv f -> Int
+usesOfFA s idx fun =
+  case fun of
+    Body e      -> usesOfEA s idx e
+    Lam f       -> usesOfFA s idx f
 
