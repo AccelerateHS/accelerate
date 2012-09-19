@@ -55,7 +55,7 @@ fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
 fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc = force . delayOpenAcc
+fuseOpenAcc = shrinkOpenAcc . force . delayOpenAcc
 
 
 delayOpenAcc
@@ -348,13 +348,11 @@ replicateD
 replicateD sliceIndex slix acc = case acc of
   Step env sl pf f a    -> Step env (fullshape env sl) (pf `compose` extend env) f a
   Yield env sl f        -> Yield env (fullshape env sl) (f `compose` extend env)
-  Done env a
-    | Avar _ <- a       -> Step env (fullshape env (Shape (OpenAcc a))) (extend env) identity a
-    | otherwise         ->
-        let env' = env `PushEnv` a
-            a0   = Avar ZeroIdx
-        in  Step env' (fullshape env' (Shape (OpenAcc a0))) (extend env') identity a0
-
+  Done env a            ->
+    let env' = env `PushEnv` a
+        a0   = Avar ZeroIdx
+    in  Step env' (fullshape env' (Shape (OpenAcc a0))) (extend env') identity a0
+  --
   where
     fullshape :: Extend aenv aenv' -> Exp aenv' sl -> Exp aenv' sh
     fullshape env sl = IndexFull sliceIndex (sinkE env slix) sl
@@ -374,13 +372,11 @@ indexD
 indexD sliceIndex acc slix = case acc of
   Step env sl pf f a    -> Step env (sliceshape env sl) (pf `compose` restrict env) f a
   Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
-  Done env a
-    | Avar _ <- a       -> Step env (sliceshape env (Shape (OpenAcc a))) (restrict env) identity a
-    | otherwise         ->
-        let env' = env `PushEnv` a
-            a0   = Avar ZeroIdx
-        in  Step env' (sliceshape env' (Shape (OpenAcc a0))) (restrict env') identity a0
-
+  Done env a            ->
+    let env' = env `PushEnv` a
+        a0   = Avar ZeroIdx
+    in  Step env' (sliceshape env' (Shape (OpenAcc a0))) (restrict env') identity a0
+  --
   where
     sliceshape :: Extend aenv aenv' -> Exp aenv' sh -> Exp aenv' sl
     sliceshape env sh = IndexSlice sliceIndex (sinkE env slix) sh
@@ -400,9 +396,7 @@ mapD :: (Shape sh, Elt a, Elt b)
 mapD f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
-  Done env a
-    | Avar _ <- a       -> Step env (Shape (OpenAcc a)) identity (sinkF env f) a
-    | otherwise         -> Step (env `PushEnv` a)
+  Done env a            -> Step (env `PushEnv` a)
                                 (Shape (OpenAcc (Avar ZeroIdx)))
                                 identity
                                 (weakenFA (sinkF env f))
@@ -421,14 +415,12 @@ zipWithD
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
   Done env a1
-    | Avar _ <- a1      -> inner env (shape a1) (index a1)
-    | otherwise         -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
+    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
 
   Step env1 sh1 ix1 g1 a1
-    | Avar _ <- a1      -> inner env1 sh1 (g1 `compose` index a1 `compose` ix1)
-    | otherwise         -> inner (env1 `PushEnv` a1)
-                                 (weakenEA sh1)
-                                 (weakenFA g1 `compose` index (Avar ZeroIdx) `compose` weakenFA ix1)
+    -> inner (env1 `PushEnv` a1)
+             (weakenEA sh1)
+             (weakenFA g1 `compose` index (Avar ZeroIdx) `compose` weakenFA ix1)
 
   Yield env1 sh1 g1     -> inner env1 sh1 g1
   --
@@ -445,31 +437,18 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
           -> DelayedAcc aenv  (Array sh c)
     inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
       Done env2 a2
-        | Avar _ <- a2  ->
-            let env = cat env1 env2
-            in  Yield env (sinkE env2 sh1 `intersect` shape a2)
-                          (generate (sinkF env f) (sinkF env2 g1) (index a2))
-
-        | otherwise     ->
-            let env = cat env1 env2 `PushEnv` a2
-            in  Yield env (weakenEA (sinkE env2 sh1) `intersect` shape (Avar ZeroIdx))
-                          (generate (sinkF env f)
-                                    (weakenFA (sinkF env2 g1))
-                                    (index (Avar ZeroIdx)))
+        -> let env = join env1 env2 `PushEnv` a2
+           in  Yield env (weakenEA (sinkE env2 sh1) `intersect` shape (Avar ZeroIdx))
+                         (generate (sinkF env f)
+                                   (weakenFA (sinkF env2 g1))
+                                   (index (Avar ZeroIdx)))
 
       Step env2 sh2 ix2 g2 a2
-        | Avar _ <- a2  ->
-            let env = cat env1 env2
-            in  Yield env (sinkE env2 sh1 `intersect` sh2)
-                          (generate (sinkF env f)
-                                    (sinkF env2 g1)
-                                    (g2 `compose` index a2 `compose` ix2))
-        | otherwise     ->
-            let env = cat env1 env2 `PushEnv` a2
-            in  Yield env (weakenEA (sinkE env2 sh1 `intersect` sh2))
-                          (generate (sinkF env f)
-                                    (weakenFA (sinkF env2 g1))
-                                    (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
+        -> let env = join env1 env2 `PushEnv` a2
+           in  Yield env (weakenEA (sinkE env2 sh1 `intersect` sh2))
+                         (generate (sinkF env f)
+                                   (weakenFA (sinkF env2 g1))
+                                   (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
 
       Yield env2 sh2 g2
         -> let env = cat env1 env2
