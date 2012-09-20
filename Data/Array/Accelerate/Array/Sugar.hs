@@ -4,7 +4,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -39,9 +40,9 @@ module Data.Array.Accelerate.Array.Sugar (
 ) where
 
 -- standard library
-import Data.Array.IArray (IArray)
-import qualified Data.Array.IArray as IArray
 import Data.Typeable
+import Data.Array.IArray                ( IArray )
+import qualified Data.Array.IArray      as IArray
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -89,7 +90,7 @@ data All = All
 --  `sh` takes:
 --
 -- > repN :: (Shape sh, Elt e) => Int -> Acc (Array sh e) -> Acc (Array (sh:.Int) e)
--- > repN n a = replicate (constant$ Any :. n) a
+-- > repN n a = replicate (constant $ Any :. n) a
 --
 data Any sh = Any
   deriving (Typeable, Show, Eq)
@@ -863,10 +864,16 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- |Magic value identifying elements ignored in 'permute'.
   ignore :: sh
 
+  -- |Yield the intersection of two shapes
+  intersect :: sh -> sh -> sh
+
   -- |Map a multi-dimensional index into one in a linear, row-major
   -- representation of the array (first argument is the /shape/, second
   -- argument is the index).
-  index  :: sh -> sh -> Int
+  toIndex   :: sh -> sh -> Int
+
+  -- |Inverse of 'toIndex'.
+  fromIndex :: sh -> Int -> sh
 
   -- |Apply a boundary condition to an index.
   bound  :: sh -> sh -> Boundary a -> Either a sh
@@ -891,18 +898,21 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- | The slice index for slice specifier 'Any sh'
   sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
-  dim              = Repr.dim . fromElt
-  size             = Repr.size . fromElt
-  -- (#) must be individually defined, as it only hold for all instances *except* the one with the
-  -- largest arity
+  dim                   = Repr.dim . fromElt
+  size                  = Repr.size . fromElt
+  -- (#) must be individually defined, as it holds for all instances *except*
+  -- the one with the largest arity
 
-  ignore           = toElt Repr.ignore
-  index sh ix      = Repr.index (fromElt sh) (fromElt ix)
-  bound sh ix bndy = case Repr.bound (fromElt sh) (fromElt ix) bndy of
-                       Left v    -> Left v
-                       Right ix' -> Right $ toElt ix'
+  ignore                = toElt Repr.ignore
+  intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
+  fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
+  toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
 
-  iter sh f c r = Repr.iter (fromElt sh) (f . toElt) c r
+  bound sh ix bndy      = case Repr.bound (fromElt sh) (fromElt ix) bndy of
+                            Left v    -> Left v
+                            Right ix' -> Right $ toElt ix'
+
+  iter sh f c r         = Repr.iter (fromElt sh) (f . toElt) c r
 
   rangeToShape (low, high)
     = toElt (Repr.rangeToShape (fromElt low, fromElt high))
@@ -920,18 +930,18 @@ instance Shape Z where
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
 
--- |Slices, aka generalised indices, as /n/-tuples and mappings of slice indices to slices,
--- co-slices, and slice dimensions
+-- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
+-- indices to slices, co-slices, and slice dimensions
 --
 class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape sl))
        => Slice sl where
-  type SliceShape   sl :: *
-  type CoSliceShape sl :: *
-  type FullShape    sl :: *
-  sliceIndex :: sl -> Repr.SliceIndex (EltRepr sl)
-                        (EltRepr (SliceShape   sl))
-                        (EltRepr (CoSliceShape sl))
-                        (EltRepr (FullShape    sl))
+  type SliceShape   sl :: *     -- the projected slice
+  type CoSliceShape sl :: *     -- the complement of the slice
+  type FullShape    sl :: *     -- the combined dimension
+  sliceIndex :: sl {- dummy -} -> Repr.SliceIndex (EltRepr sl)
+                                    (EltRepr (SliceShape   sl))
+                                    (EltRepr (CoSliceShape sl))
+                                    (EltRepr (FullShape    sl))
 
 instance Slice Z where
   type SliceShape   Z = Z
@@ -940,16 +950,16 @@ instance Slice Z where
   sliceIndex _ = Repr.SliceNil
 
 instance Slice sl => Slice (sl:.All) where
-  type SliceShape   (sl:.All) = SliceShape sl :. Int
+  type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
-  type FullShape    (sl:.All) = FullShape sl :. Int
-  sliceIndex _ = Repr.SliceAll (sliceIndex (undefined::sl))
+  type FullShape    (sl:.All) = FullShape    sl :. Int
+  sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
 
 instance Slice sl => Slice (sl:.Int) where
-  type SliceShape   (sl:.Int) = SliceShape sl
+  type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
-  type FullShape    (sl:.Int) = FullShape sl :. Int
-  sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined::sl))
+  type FullShape    (sl:.Int) = FullShape    sl :. Int
+  sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined :: sl))
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
@@ -973,7 +983,7 @@ infixl 9 !
 {-# INLINE (!) #-}
 -- (Array sh adata) ! ix = toElt (adata `indexArrayData` index sh ix)
 -- FIXME: using this due to a bug in 6.10.x
-(!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` index (toElt sh) ix)
+(!) (Array sh adata) ix = toElt (adata `unsafeIndexArrayData` toIndex (toElt sh) ix)
 
 -- |Create an array from its representation function
 --
@@ -983,7 +993,7 @@ newArray sh f = adata `seq` Array (fromElt sh) adata
   where
     (adata, _) = runArrayData $ do
                    arr <- newArrayData (size sh)
-                   let write ix = unsafeWriteArrayData arr (index sh ix)
+                   let write ix = unsafeWriteArrayData arr (toIndex sh ix)
                                                            (fromElt (f ix))
                    iter sh write (>>) (return ())
                    return (arr, undefined)
@@ -1042,7 +1052,7 @@ toList :: forall sh e. Array sh e -> [e]
 toList (Array sh adata) = iter sh' idx (.) id []
   where
     sh'    = toElt sh :: sh
-    idx ix = \l -> toElt (adata `unsafeIndexArrayData` index sh' ix) : l
+    idx ix = \l -> toElt (adata `unsafeIndexArrayData` toIndex sh' ix) : l
 
 -- Convert an array to a string
 --

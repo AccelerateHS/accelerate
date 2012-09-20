@@ -90,11 +90,13 @@ Flag internal-checks
 
 Library
   Include-Dirs:         include
-  Build-depends:        array           >= 0.3 && < 0.5,
+  Build-depends:        array           >= 0.3,
                         base            == 4.*,
-                        containers      >= 0.3 && < 0.6,
-                        ghc-prim        >= 0.2 && < 0.4,
-                        pretty          >= 1.0 && < 1.2
+                        containers      >= 0.3,
+                        ghc-prim        >= 0.2,
+                        hashable        >= 1.1,
+                        hashtables      >= 1.0,
+                        pretty          >= 1.0
 
   if flag(more-pp)
     Build-depends:      bytestring      >= 0.9,
@@ -108,6 +110,7 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
+                        Data.Array.Accelerate.Analysis.Match
                         Data.Array.Accelerate.Analysis.Shape
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Analysis.Type
@@ -117,6 +120,7 @@ Library
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
+                        Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
@@ -127,6 +131,10 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
+                        Data.Array.Accelerate.Trafo.Fusion
+                        Data.Array.Accelerate.Trafo.Sharing
+                        Data.Array.Accelerate.Trafo.Simplify
+                        Data.Array.Accelerate.Trafo.Substitution
 
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
@@ -156,3 +164,4 @@ Library
 Source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
+

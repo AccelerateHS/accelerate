@@ -1,9 +1,14 @@
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK prune #-}
-{-# LANGUAGE CPP, GADTs, BangPatterns, TypeOperators, PatternGuards #-}
-{-# LANGUAGE TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -46,11 +51,12 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments)
+  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import qualified Data.Array.Accelerate.Smart            as Sugar
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
@@ -137,12 +143,15 @@ evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
 evalPreOpenAcc (Generate sh f) aenv
   = generateOp (evalExp sh aenv) (evalFun f aenv)
 
-evalPreOpenAcc (Reshape e acc) aenv 
+evalPreOpenAcc (Transform sh ix f acc) aenv
+  = transformOp (evalExp sh aenv) (evalFun ix aenv) (evalFun f aenv) (evalOpenAcc acc aenv)
+
+evalPreOpenAcc (Reshape e acc) aenv
   = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
   = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
-  
+
 evalPreOpenAcc (Index sliceIndex acc slix) aenv
   = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
 
@@ -225,6 +234,19 @@ generateOp :: (Sugar.Shape dim, Sugar.Elt e)
 generateOp sh rf
   = DelayedPair DelayedUnit
   $ DelayedArray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
+
+transformOp
+      :: (Sugar.Shape sh', Sugar.Elt b)
+      => sh'
+      -> (sh' -> sh)
+      -> (a -> b)
+      -> Delayed (Array sh  a)
+      -> Delayed (Array sh' b)
+transformOp sh' ix f (DelayedPair DelayedUnit (DelayedArray _sh rf))
+  = DelayedPair DelayedUnit
+  $ DelayedArray (Sugar.fromElt sh')
+                 (Sugar.sinkFromElt f . rf . Sugar.sinkFromElt ix)
+
 
 reshapeOp :: Sugar.Shape dim
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
@@ -568,7 +590,7 @@ permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
           arr <- newArrayData (size dftsSh)
 
             -- initialise it with the default values
-          let write ix = unsafeWriteArrayData arr (index dftsSh ix) (dftsPf ix)
+          let write ix = unsafeWriteArrayData arr (toIndex dftsSh ix) (dftsPf ix)
           iter dftsSh write (>>) (return ())
 
             -- traverse the source dimension and project each element into
@@ -577,7 +599,7 @@ permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
           let update ix = do
                             let target = (Sugar.sinkFromElt p) ix
                             unless (target == ignore) $ do
-                              let i = index dftsSh target
+                              let i = toIndex dftsSh target
                               e <- unsafeReadArrayData arr i
                               unsafeWriteArrayData arr i (pf ix `f'` e)
           iter sh update (>>) (return ())
@@ -695,30 +717,75 @@ evalOpenExp (IndexTail ix) env aenv
 evalOpenExp (IndexAny) _ _
   = Sugar.Any
 
-evalOpenExp (Cond c t e) env aenv 
+evalOpenExp (IndexSlice sliceIndex slix sh) env aenv
+  = Sugar.toElt
+  $ restrict sliceIndex (Sugar.fromElt $ evalOpenExp slix env aenv)
+                        (Sugar.fromElt $ evalOpenExp sh   env aenv)
+  where
+    restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl
+    restrict SliceNil              ()        ()       = ()
+    restrict (SliceAll sliceIdx)   (slx, ()) (sl, sz)
+      = let sl' = restrict sliceIdx slx sl
+        in  (sl', sz)
+    restrict (SliceFixed sliceIdx) (slx, _i)  (sl, _sz)
+      = restrict sliceIdx slx sl
+
+evalOpenExp (IndexFull sliceIndex slix sh) env aenv
+  = Sugar.toElt
+  $ extend sliceIndex (Sugar.fromElt $ evalOpenExp slix env aenv)
+                      (Sugar.fromElt $ evalOpenExp sh   env aenv)
+  where
+    extend :: SliceIndex slix sl co sh -> slix -> sl -> sh
+    extend SliceNil              ()        ()       = ()
+    extend (SliceAll sliceIdx)   (slx, ()) (sl, sz)
+      = let sh' = extend sliceIdx slx sl
+        in  (sh', sz)
+    extend (SliceFixed sliceIdx) (slx, sz) sl
+      = let sh' = extend sliceIdx slx sl
+        in  (sh', sz)
+
+evalOpenExp (ToIndex sh ix) env aenv
+  = Sugar.toIndex (evalOpenExp sh env aenv) (evalOpenExp ix env aenv)
+
+evalOpenExp (FromIndex sh ix) env aenv
+  = Sugar.fromIndex (evalOpenExp sh env aenv) (evalOpenExp ix env aenv)
+
+evalOpenExp (Cond c t e) env aenv
   = if evalOpenExp c env aenv
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
+evalOpenExp (Iterate lIMIT loop seed) env aenv
+  = let f = evalOpenFun loop env aenv
+        x = evalOpenExp seed env aenv
+        --
+        go !i !acc | i >= lIMIT = acc
+                   | otherwise  = go (i+1) (f acc)
+    in go 0 x
+
 evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 
-evalOpenExp (PrimApp p arg) env aenv 
+evalOpenExp (PrimApp p arg) env aenv
   = evalPrim p (evalOpenExp arg env aenv)
 
-evalOpenExp (IndexScalar acc ix) env aenv 
+evalOpenExp (IndexScalar acc ix) env aenv
   = case evalOpenAcc acc aenv of
       DelayedPair DelayedUnit (DelayedArray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
         in
-        index sh ix' `seq` (Sugar.toElt $ pf ix')
+        toIndex sh ix' `seq` (Sugar.toElt $ pf ix')
                               -- FIXME: This is ugly, but (possibly) needed to
                               --       ensure bounds checking
 
-evalOpenExp (Shape acc) _ aenv 
+evalOpenExp (Shape acc) _ aenv
   = case evalOpenAcc acc aenv of
       DelayedPair DelayedUnit (DelayedArray sh _) -> Sugar.toElt sh
 
-evalOpenExp (ShapeSize sh) env aenv = size $ Sugar.fromElt $ evalOpenExp sh env aenv
+evalOpenExp (ShapeSize sh) env aenv
+  = Sugar.size (evalOpenExp sh env aenv)
+
+evalOpenExp (Intersect sh1 sh2) env aenv
+  = Sugar.intersect (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
 
 -- Evaluate a closed expression
 --

@@ -2,7 +2,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Shape
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -55,6 +56,7 @@ preAccDim k pacc =
     Use ((),(Array _ _)) -> ndim (eltType (undefined::sh))
     Unit _               -> 0
     Generate _ _         -> ndim (eltType (undefined::sh))
+    Transform _ _ _ _    -> ndim (eltType (undefined::sh))
     Reshape _ _          -> ndim (eltType (undefined::sh))
     Replicate _ _ _      -> ndim (eltType (undefined::sh))
     Index _ _ _          -> ndim (eltType (undefined::sh))

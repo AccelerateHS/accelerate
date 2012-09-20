@@ -3,7 +3,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Representation
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -18,8 +19,11 @@ module Data.Array.Accelerate.Array.Representation (
 
 ) where
 
--- friends 
+-- friends
 import Data.Array.Accelerate.Type
+
+-- standard library
+import GHC.Base                                         ( quotInt, remInt )
 
 #include "accelerate.h"
 
@@ -37,8 +41,9 @@ class (Eq sh, Slice sh) => Shape sh where
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
   ignore    :: sh              -- identifies ignored elements in 'permute'
-  index     :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
+  toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
+  fromIndex :: sh -> Int -> sh -- inverse of `toIndex`
   bound     :: sh -> sh -> Boundary e -> Either e sh
                                -- apply a boundary condition to an index
 
@@ -67,7 +72,8 @@ instance Shape () where
 
   () `intersect` () = ()
   ignore            = ()
-  index () ()       = 0
+  toIndex () ()     = 0
+  fromIndex () _    = ()
   bound () () _     = Right ()
   iter  () f _ _    = f ()
   iter1 () f _      = f ()
@@ -85,8 +91,16 @@ instance Shape sh => Shape (sh, Int) where
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
-  index (sh, sz) (ix, i)            = BOUNDS_CHECK(checkIndex) "index" i sz
-                                    $ index sh ix * sz + i
+  toIndex (sh, sz) (ix, i)          = BOUNDS_CHECK(checkIndex) "toIndex" i sz
+                                    $ toIndex sh ix * sz + i
+
+  fromIndex (sh, sz) i              = (fromIndex sh (i `quotInt` sz), r)
+    -- If we assume that the index is in range, there is no point in computing
+    -- the remainder for the highest dimension since i < sz must hold.
+    --
+    where
+      r | dim sh == 0   = BOUNDS_CHECK(checkIndex) "fromIndex" i sz i
+        | otherwise     = i `remInt` sz
 
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
@@ -115,11 +129,11 @@ instance Shape sh => Shape (sh, Int) where
       iter1' (ix,i) | i == sz-1 = f (ix,i)
                     | otherwise = f (ix,i) `c` iter1' (ix,i+1)
 
-  rangeToShape ((sh1, sz1), (sh2, sz2)) 
+  rangeToShape ((sh1, sz1), (sh2, sz2))
     = (rangeToShape (sh1, sh2), sz2 - sz1 + 1)
-  shapeToRange (sh, sz) 
+  shapeToRange (sh, sz)
     = let (low, high) = shapeToRange sh
-      in 
+      in
       ((low, 0), (high, sz - 1))
 
   shapeToList (sh,sz) = sz : shapeToList sh
@@ -142,19 +156,19 @@ class Slice sl where
 instance Slice () where
   type SliceShape    () = ()
   type CoSliceShape  () = ()
-  type FullShape () = ()
+  type FullShape     () = ()
   sliceIndex _ = SliceNil
 
 instance Slice sl => Slice (sl, ()) where
-  type SliceShape   (sl, ()) = (SliceShape sl, Int)
+  type SliceShape   (sl, ()) = (SliceShape  sl, Int)
   type CoSliceShape (sl, ()) = CoSliceShape sl
-  type FullShape    (sl, ()) = (FullShape sl, Int)
+  type FullShape    (sl, ()) = (FullShape   sl, Int)
   sliceIndex _ = SliceAll (sliceIndex (undefined::sl))
 
 instance Slice sl => Slice (sl, Int) where
   type SliceShape   (sl, Int) = SliceShape sl
   type CoSliceShape (sl, Int) = (CoSliceShape sl, Int)
-  type FullShape    (sl, Int) = (FullShape sl, Int)
+  type FullShape    (sl, Int) = (FullShape    sl, Int)
   sliceIndex _ = SliceFixed (sliceIndex (undefined::sl))
 
 -- |Generalised array index, which may index only in a subset of the dimensions
@@ -162,13 +176,13 @@ instance Slice sl => Slice (sl, Int) where
 --
 data SliceIndex ix slice coSlice sliceDim where
   SliceNil   :: SliceIndex () () () ()
-  SliceAll   :: 
+  SliceAll   ::
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
-  SliceFixed :: 
+  SliceFixed ::
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
 
 instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"
-  show (SliceAll rest)   = "SliceAll ("++ show rest ++ ")"
+  show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 

@@ -3,7 +3,8 @@
 
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell
+-- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
+--               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -238,6 +239,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Trafo                      () -- show instances
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), shape, dim, size, ignore)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
