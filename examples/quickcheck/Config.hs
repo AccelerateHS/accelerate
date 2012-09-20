@@ -25,6 +25,7 @@ import Data.Array.Accelerate                            ( Arrays, Acc )
 import qualified Data.Array.Accelerate.Interpreter      as Interp
 
 #ifdef ACCELERATE_CUDA_BACKEND
+import qualified Foreign.CUDA.Analysis                  as CUDA
 import qualified Foreign.CUDA.Driver                    as CUDA
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
@@ -129,7 +130,7 @@ configureBackend opts = case _optBackend opts of
     n           <- CUDA.count
     devs        <- mapM CUDA.device [0 .. n-1]
     props       <- mapM CUDA.props devs
-    return      $! opts { _double = any (\dev -> CUDA.computeCapability dev >= 1.3) props }
+    return      $! opts { _double = any (\dev -> CUDA.computeCapability dev >= CUDA.Compute 1 3) props }
 #endif
 
 

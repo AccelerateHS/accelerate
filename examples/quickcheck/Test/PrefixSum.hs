@@ -92,12 +92,12 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
     test_scanl'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run opt (lift $ Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanr'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run opt (lift $ Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
 
 -- Reference implementation

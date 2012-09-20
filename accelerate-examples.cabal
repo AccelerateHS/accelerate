@@ -75,7 +75,7 @@ Executable accelerate-quickcheck
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 >= 0.13,
-                        cuda                            >= 0.4
+                        cuda                            >= 0.5
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
