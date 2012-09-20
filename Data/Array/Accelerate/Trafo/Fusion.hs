@@ -55,7 +55,15 @@ fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
 fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc = force . delayOpenAcc
+fuseOpenAcc = go 0
+  where
+    go :: Int -> OpenAcc aenv a -> OpenAcc aenv a
+    go i acc
+      | i < lIMIT, Nothing <- matchOpenAcc acc acc'     = go (i+1) acc'
+      | otherwise                                       = acc'
+      where
+        lIMIT   = 10
+        acc'    = force (delayOpenAcc acc)
 
 
 delayOpenAcc
@@ -524,10 +532,12 @@ aletD bndAcc bodyAcc =
         -- the moment only do the substitution on a single use of the bound array,
         -- but it is likely advantageous to be far more aggressive here.
         --
-        lIMIT :: Int
         lIMIT = 1
 
-        OpenAcc bnd     = force $ Yield BaseEnv sh1 f1          -- will be eliminated by shrinking
+        -- If we do the merge, 'bnd' becomes dead code and will be later
+        -- eliminated by the shrinking step.
+        --
+        OpenAcc bnd     = force $ Yield BaseEnv sh1 f1
         a0              = sink env2 ZeroIdx
         env2'           = bnd `cons` env2
         sh1'            = sinkE env2' sh1
