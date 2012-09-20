@@ -26,12 +26,21 @@ import System.FilePath
 import System.Directory
 import System.Posix.Process
 import System.IO
+#if !MIN_VERSION_base(4,6,0)
 import System.IO.Error hiding (catch)
+#else
+import System.IO.Error
+#endif
 import Text.Printf
 
 -- friends
 import Data.Array.Accelerate.Pretty.Traverse
 import Data.Array.Accelerate.AST
+
+#if !MIN_VERSION_base(4,6,0)
+catchIOError :: IO a -> (IOError -> IO a) -> IO a
+catchIOError = catch
+#endif
 
 -- | Detects if the dot command line tool from the Graphviz package exists.
 -- If it does outputs a Postscript file, otherwise a ".dot" file.
@@ -58,7 +67,7 @@ dumpAcc basename acc = do
              writeDotFile       -- fall back to writing the dot file
     --
     writeDotFile :: IO ()
-    writeDotFile  = catch writeDotFile' handler
+    writeDotFile  = catchIOError writeDotFile' handler
     writeDotFile'  = do
       let path = basename ++ ".dot"
       h <- openFile path WriteMode
@@ -80,7 +89,7 @@ dumpAcc basename acc = do
 
 withTempFile :: String -> (FilePath -> Handle -> IO a) -> IO a
 withTempFile pattern f = do
-  tempDir <- catch getTemporaryDirectory (\_ -> return ".")
+  tempDir <- catchIOError getTemporaryDirectory (\_ -> return ".")
   (tempFile, tempH) <- openTempFile tempDir pattern
   finally (f tempFile tempH) (hClose tempH >> removeFile tempFile)
 
