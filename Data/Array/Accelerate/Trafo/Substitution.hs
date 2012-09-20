@@ -427,11 +427,15 @@ shrinkE exp =
   case exp of
     Let bnd body
       | Var _ <- bnd                    -> shrinkE (inline body  bnd)
-      | usesOfE ZeroIdx body' <= 1      -> shrinkE (inline body' bnd')
+      | usesOfE ZeroIdx body' <= lIMIT  -> shrinkE (inline body' bnd')
       | otherwise                       -> Let bnd' body'
       where
         bnd'    = shrinkE bnd
         body'   = shrinkE body
+
+        -- Allow inlining and dead-code elimination
+        --
+        lIMIT   = 1
     --
     Var idx             -> Var idx
     Const c             -> Const c
@@ -538,12 +542,18 @@ shrinkA k s u pre acc =
   in
   case acc of
     Alet bnd body
-      | Avar _ <- pre bnd       -> shrinkA k s u pre (rebuildA k (subTop (pre bnd))  (pre body))
-      | u ZeroIdx body' <= 1    -> shrinkA k s u pre (rebuildA k (subTop (pre bnd')) (pre body'))
-      | otherwise               -> Alet bnd' body'
+      | Avar _ <- pre bnd        -> shrinkA k s u pre (rebuildA k (subTop (pre bnd))  (pre body))
+      | u ZeroIdx body' <= lIMIT -> shrinkA k s u pre (rebuildA k (subTop (pre bnd')) (pre body'))
+      | otherwise                -> Alet bnd' body'
       where
         bnd'    = s bnd
         body'   = s body
+
+        -- Allow only dead code elimination, otherwise we might inline array
+        -- computations directly into scalar expressions, and later stages rely
+        -- on there being only variables embedded in scalar expressions.
+        --
+        lIMIT   = 0
     --
     Avar ix             -> Avar ix
     Atuple tup          -> Atuple (shrinkATA s tup)
