@@ -55,7 +55,7 @@ fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
 fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc = shrinkOpenAcc . force . delayOpenAcc
+fuseOpenAcc = force . delayOpenAcc
 
 
 delayOpenAcc
@@ -266,28 +266,21 @@ reindex sh' sh
   = fromIndex sh' `compose` toIndex sh
 
 
-intersect :: Shape sh => OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
-intersect sh1 sh2
-  | Just REFL <- matchOpenExp sh1 sh2   = sh1
-  | otherwise                           = Intersect sh1 sh2
-
-
 -- "force" a delayed array representation to produce a real AST node.
 --
 force :: DelayedAcc aenv a -> OpenAcc aenv a
-force delayed = OpenAcc $ case delayed of
-  Done env a                                    -> bind env a
-  Yield env sh f                                -> bind env $ Generate (simplifyExp sh) (simplifyFun f)
-  Step env sh ix f a
-    | Just REFL <- matchOpenExp sh (Shape a')
-    , Lam (Body (Var ZeroIdx)) <- ix            -> bind env $ Map f' a'
-    | Lam (Body (Var ZeroIdx)) <- f             -> bind env $ Backpermute sh' ix' a'
-    | otherwise                                 -> bind env $ Transform sh' ix' f' a'
-    where
-      a'  = OpenAcc a
-      f'  = simplifyFun f
-      ix' = simplifyFun ix
-      sh' = simplifyExp sh
+force delayed
+  = simplifyOpenAcc . OpenAcc
+  $ case delayed of
+      Done env a                                -> bind env a
+      Yield env sh f                            -> bind env $ Generate sh f
+      Step env sh ix f a
+        | Just REFL <- matchOpenExp sh (Shape a')
+        , Lam (Body (Var ZeroIdx)) <- ix        -> bind env $ Map f a'
+        | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a'
+        | otherwise                             -> bind env $ Transform sh ix f a'
+        where
+          a'    = OpenAcc a
 
 
 -- Apply an index space transform that specifies where elements in the
@@ -407,21 +400,21 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
     inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
       Done env2 a2
         -> let env = join env1 env2 `PushEnv` a2
-           in  Yield env (weakenEA (sinkE env2 sh1) `intersect` shape (Avar ZeroIdx))
+           in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape (Avar ZeroIdx))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
                                    (index (Avar ZeroIdx)))
 
       Step env2 sh2 ix2 g2 a2
         -> let env = join env1 env2 `PushEnv` a2
-           in  Yield env (weakenEA (sinkE env2 sh1 `intersect` sh2))
+           in  Yield env (weakenEA (sinkE env2 sh1 `Intersect` sh2))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
                                    (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
 
       Yield env2 sh2 g2
         -> let env = join env1 env2
-           in  Yield env (sinkE env2 sh1 `intersect` sh2)
+           in  Yield env (sinkE env2 sh1 `Intersect` sh2)
                          (generate (sinkF env f) (sinkF env2 g1) g2)
 
     substitute2

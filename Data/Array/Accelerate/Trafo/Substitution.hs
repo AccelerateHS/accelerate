@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   weakenByE, weakenByFE,
 
   -- * Shrinking
-  shrink,  shrinkFE,
+  shrinkE, shrinkFE,
   shrinkA, shrinkAfun, shrinkOpenAcc,
 
   -- * Rebuilding
@@ -422,45 +422,45 @@ rebuildFA k v fun =
 -- Scalar expressions
 -- ------------------
 
-shrink :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
-shrink exp =
+shrinkE :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+shrinkE exp =
   case exp of
     Let bnd body
-      | Var _ <- bnd                    -> shrink (inline body  bnd)
-      | usesOfE ZeroIdx body' <= 1      -> shrink (inline body' bnd')
+      | Var _ <- bnd                    -> shrinkE (inline body  bnd)
+      | usesOfE ZeroIdx body' <= 1      -> shrinkE (inline body' bnd')
       | otherwise                       -> Let bnd' body'
       where
-        bnd'    = shrink bnd
-        body'   = shrink body
+        bnd'    = shrinkE bnd
+        body'   = shrinkE body
     --
     Var idx             -> Var idx
     Const c             -> Const c
     Tuple t             -> Tuple (shrinkTE t)
-    Prj tup e           -> Prj tup (shrink e)
+    Prj tup e           -> Prj tup (shrinkE e)
     IndexNil            -> IndexNil
-    IndexCons sl sz     -> IndexCons (shrink sl) (shrink sz)
-    IndexHead sh        -> IndexHead (shrink sh)
-    IndexTail sh        -> IndexTail (shrink sh)
-    IndexSlice x ix sh  -> IndexSlice x (shrink ix) (shrink sh)
-    IndexFull x ix sl   -> IndexFull x (shrink ix) (shrink sl)
+    IndexCons sl sz     -> IndexCons (shrinkE sl) (shrinkE sz)
+    IndexHead sh        -> IndexHead (shrinkE sh)
+    IndexTail sh        -> IndexTail (shrinkE sh)
+    IndexSlice x ix sh  -> IndexSlice x (shrinkE ix) (shrinkE sh)
+    IndexFull x ix sl   -> IndexFull x (shrinkE ix) (shrinkE sl)
     IndexAny            -> IndexAny
-    ToIndex sh ix       -> ToIndex (shrink sh) (shrink ix)
-    FromIndex sh i      -> FromIndex (shrink sh) (shrink i)
-    Cond p t e          -> Cond (shrink p) (shrink t) (shrink e)
-    Iterate n f x       -> Iterate n (shrinkFE f) (shrink x)
+    ToIndex sh ix       -> ToIndex (shrinkE sh) (shrinkE ix)
+    FromIndex sh i      -> FromIndex (shrinkE sh) (shrinkE i)
+    Cond p t e          -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
+    Iterate n f x       -> Iterate n (shrinkFE f) (shrinkE x)
     PrimConst c         -> PrimConst c
-    PrimApp f x         -> PrimApp f (shrink x)
-    IndexScalar a sh    -> IndexScalar a (shrink sh)
+    PrimApp f x         -> PrimApp f (shrinkE x)
+    IndexScalar a sh    -> IndexScalar a (shrinkE sh)
     Shape a             -> Shape a
-    ShapeSize sh        -> ShapeSize (shrink sh)
-    Intersect sh sz     -> Intersect (shrink sh) (shrink sz)
+    ShapeSize sh        -> ShapeSize (shrinkE sh)
+    Intersect sh sz     -> Intersect (shrinkE sh) (shrinkE sz)
 
 shrinkFE
     :: PreOpenFun acc env aenv f
     -> PreOpenFun acc env aenv f
 shrinkFE fun =
   case fun of
-    Body e      -> Body (shrink e)
+    Body e      -> Body (shrinkE e)
     Lam f       -> Lam (shrinkFE f)
 
 shrinkTE
@@ -469,7 +469,7 @@ shrinkTE
 shrinkTE tup =
   case tup of
     NilTup      -> NilTup
-    SnocTup t e -> SnocTup (shrinkTE t) (shrink e)
+    SnocTup t e -> SnocTup (shrinkTE t) (shrinkE e)
 
 
 usesOfE :: forall acc env aenv s t. Idx env s -> PreOpenExp acc env aenv t -> Int
@@ -548,7 +548,7 @@ shrinkA k s u pre acc =
     Avar ix             -> Avar ix
     Atuple tup          -> Atuple (shrinkATA s tup)
     Aprj tup a          -> Aprj tup (s a)
-    Apply f a           -> Apply f (s a)
+    Apply f a           -> Apply (shrinkAfun s f) (s a)
     Acond p t e         -> Acond (shrinkEA s p) (s t) (s e)
     Use a               -> Use a
     Unit e              -> Unit (shrinkEA s e)

@@ -18,6 +18,9 @@ module Data.Array.Accelerate.Trafo.Simplify (
   simplifyExp,
   simplifyFun,
 
+  -- simplify array computations
+  simplifyOpenAcc,
+
 ) where
 
 -- standard library
@@ -30,9 +33,8 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Elt )
-import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
-import qualified Data.Array.Accelerate.Tuple            as Tuple
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape )
+import Data.Array.Accelerate.Tuple
 
 import qualified Debug.Trace                            as Debug
 
@@ -156,15 +158,22 @@ simplifyCond _env p t e
   | otherwise                           = Cond p t e
 
 
+-- Simplify shape intersection. Currently this only compares the terms as given,
+-- but it would be possible to be cleverer and get the set of all intersections
+-- in the sub-terms.
+--
+simplifyIntersect
+    :: Shape sh
+    => OpenExp env aenv sh
+    -> OpenExp env aenv sh
+    -> OpenExp env aenv sh
+simplifyIntersect sh1 sh2
+  | Just REFL <- matchOpenExp sh1 sh2   = sh1
+  | otherwise                           = Intersect sh1 sh2     -- stable ordering?
+
+
 -- Walk over the scalar expression, applying simplifications.
 --
-simplifyExp :: Exp aenv t -> Exp aenv t
-simplifyExp = shrink   . simplifyOpenExp EmptyEnv
-
-simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun = shrinkFE . simplifyOpenFun EmptyEnv
-
-
 simplifyOpenExp
     :: forall env aenv t.
        Gamma   env env aenv
@@ -173,7 +182,7 @@ simplifyOpenExp
 simplifyOpenExp env = cvt
   where
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
-    cvtA = id
+    cvtA = simplifyOpenAcc
 
     cvt :: OpenExp env aenv e -> OpenExp env aenv e
     cvt exp = case exp of
@@ -203,13 +212,13 @@ simplifyOpenExp env = cvt
       IndexScalar a sh          -> IndexScalar (cvtA a) (cvt sh)
       Shape a                   -> Shape (cvtA a)
       ShapeSize sh              -> ShapeSize (cvt sh)
-      Intersect s t             -> Intersect (cvt s) (cvt t)
+      Intersect s t             -> simplifyIntersect (cvt s) (cvt t)
 
 
 simplifyTuple
     :: Gamma env env aenv
-    -> Tuple.Tuple (OpenExp env aenv) t
-    -> Tuple.Tuple (OpenExp env aenv) t
+    -> Tuple (OpenExp env aenv) t
+    -> Tuple (OpenExp env aenv) t
 simplifyTuple _   NilTup          = NilTup
 simplifyTuple env (SnocTup tup e) = simplifyTuple env tup `SnocTup` simplifyOpenExp env e
 
@@ -221,6 +230,72 @@ simplifyOpenFun
 simplifyOpenFun env (Body e) = Body (simplifyOpenExp env e)
 simplifyOpenFun env (Lam  f) = Lam  (simplifyOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
 
+
+-- Scalar expressions
+-- ------------------
+
+simplifyExp :: Exp aenv t -> Exp aenv t
+simplifyExp = simplifyOpenExp EmptyEnv . shrinkE
+
+simplifyFun :: Fun aenv t -> Fun aenv t
+simplifyFun = simplifyOpenFun EmptyEnv . shrinkFE
+
+
+-- Array computations
+-- ------------------
+
+simplifyOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+simplifyOpenAcc = cvtA . shrinkOpenAcc
+  where
+    cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
+    cvtT atup = case atup of
+      NilAtup         -> NilAtup
+      SnocAtup t a    -> cvtT t `SnocAtup` cvtA a
+
+    cvtE :: Exp aenv t -> Exp aenv t
+    cvtE = simplifyExp
+
+    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF = simplifyFun
+
+    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
+    cvtA (OpenAcc acc) = OpenAcc $ case acc of
+      Alet bnd body             -> Alet (cvtA bnd) (cvtA body)
+      Avar ix                   -> Avar ix
+      Atuple tup                -> Atuple (cvtT tup)
+      Aprj tup a                -> Aprj tup (cvtA a)
+      Apply f a                 -> Apply (simplifyOpenAfun f) (cvtA a)
+      Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
+      Use a                     -> Use a
+      Unit e                    -> Unit (cvtE e)
+      Reshape e a               -> Reshape (cvtE e) (cvtA a)
+      Generate e f              -> Generate (cvtE e) (cvtF f)
+      Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
+      Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
+      Index sl a slix           -> Index sl (cvtA a) (cvtE slix)
+      Map f a                   -> Map (cvtF f) (cvtA a)
+      ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
+      Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
+      Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
+      FoldSeg f z a b           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA b)
+      Fold1Seg f a b            -> Fold1Seg (cvtF f) (cvtA a) (cvtA b)
+      Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
+      Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+      Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
+      Scanr f z a               -> Scanr (cvtF f) (cvtE z) (cvtA a)
+      Scanr' f z a              -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+      Scanr1 f a                -> Scanr1 (cvtF f) (cvtA a)
+      Permute f1 a1 f2 a2       -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
+      Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
+      Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
+      Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+
+
+simplifyOpenAfun :: OpenAfun aenv t -> OpenAfun aenv t
+simplifyOpenAfun afun =
+  case afun of
+    Abody b     -> Abody (simplifyOpenAcc b)
+    Alam f      -> Alam (simplifyOpenAfun f)
 
 
 -- Debugging ===================================================================
