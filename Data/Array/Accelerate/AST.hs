@@ -636,9 +636,8 @@ invertShape =  listToShape . reverse . shapeToList
 -- |Parametrised open function abstraction
 --
 data PreOpenFun (acc :: * -> * -> *) env aenv t where
-  Body :: PreOpenExp acc env      aenv t -> PreOpenFun acc env aenv t
-  Lam  :: Elt a
-       => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
+  Body :: Elt t => PreOpenExp acc env      aenv t -> PreOpenFun acc env aenv t
+  Lam  :: Elt a => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
 -- |Vanilla open function abstraction
 --
