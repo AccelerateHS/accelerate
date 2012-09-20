@@ -26,6 +26,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 -- standard library
 import Prelude                                          hiding ( exp )
 import Data.List                                        ( intercalate )
+import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
 
 -- friends
@@ -46,8 +47,7 @@ import qualified Debug.Trace                            as Debug
 data Gamma env env' aenv where
   EmptyEnv :: Gamma env () aenv
 
-  PushEnv  :: Elt t
-           => Gamma   env env'      aenv
+  PushEnv  :: Gamma   env env'      aenv
            -> OpenExp env           aenv t
            -> Gamma   env (env', t) aenv
 
@@ -55,8 +55,7 @@ incEnv :: Gamma env env' aenv -> Gamma (env, s) env' aenv
 incEnv EmptyEnv        = EmptyEnv
 incEnv (PushEnv env e) = incEnv env `PushEnv` weakenE e
 
-lookupEnv :: Typeable t
-          => Gamma   env env' aenv
+lookupEnv :: Gamma   env env' aenv
           -> OpenExp env      aenv t
           -> Maybe  (Idx env' t)
 lookupEnv EmptyEnv        _             = Nothing
@@ -65,23 +64,21 @@ lookupEnv (PushEnv env e) x
   | otherwise                           = SuccIdx `fmap` lookupEnv env x
 
 
--- Simplify scalar let bindings. Currently this takes the form of a pretty weedy
--- CSE optimisation, where we look for expressions of the form:
+-- Currently this takes the form of a pretty weedy CSE optimisation, where we
+-- look for expressions of the form:
 --
 -- > let x = e1 in e2
 --
--- and replace all occurrences of e1 in e1 with x. This doesn't do full CSE, but
--- is enough to catch some cases, particularly redundant operations such as
--- array indexing introduced by the fusion pass.
+-- and replace all occurrences of e1 in e2 with x. This doesn't do full CSE, but
+-- is enough to catch some cases.
 --
 localCSE
-    :: (Elt a, Elt b)
+    :: Elt a
     => Gamma   env env aenv
     -> OpenExp env     aenv a
-    -> OpenExp (env,a) aenv b
-    -> Maybe (OpenExp env aenv b)
-localCSE env bnd body
-  | Just ix <- lookupEnv env bnd = trace "CSE" (show bnd) $ Just $ inline body (Var ix)
+    -> Maybe (OpenExp env aenv a)
+localCSE env exp
+  | Just ix <- lookupEnv env exp = trace "CSE" (show exp) $ Just (Var ix)
   | otherwise                    = Nothing
 
 
@@ -105,7 +102,8 @@ localCSE env bnd body
 -- if the function body of f matches e2, then increase the iteration count.
 --
 recoverLoops
-    :: Gamma   env env aenv
+    :: Elt b
+    => Gamma   env env aenv
     -> OpenExp env     aenv a
     -> OpenExp (env,a) aenv b
     -> Maybe (OpenExp env aenv b)
@@ -128,6 +126,14 @@ recoverLoops _env bnd body
     matchEnvTop :: (Elt s, Elt t) => OpenExp (env,s) aenv f -> OpenExp (env,t) aenv g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL
 
+
+-- Simplify scalar let bindings. This will:
+--
+--  a) This will check if the binding already exists in the environment, and so
+--     replace all occurrences with that existing variable
+--
+--  b) Check for a specific pattern of let bindings that represent scalar loops
+--
 simplifyLet
     :: (Elt a, Elt b)
     => Gamma   env env aenv
@@ -135,8 +141,8 @@ simplifyLet
     -> OpenExp (env,a) aenv b
     -> OpenExp env     aenv b
 simplifyLet env bnd body
-  | Just x <- localCSE env bnd body     = x
   | Just x <- recoverLoops env bnd body = x
+  | Just x <- lookupEnv env bnd         = inline body (Var x)
   | otherwise                           = Let bnd body
 
 
@@ -175,8 +181,8 @@ simplifyIntersect sh1 sh2
 -- Walk over the scalar expression, applying simplifications.
 --
 simplifyOpenExp
-    :: forall env aenv t.
-       Gamma   env env aenv
+    :: forall env aenv t. Elt t
+    => Gamma   env env aenv
     -> OpenExp env     aenv t
     -> OpenExp env     aenv t
 simplifyOpenExp env = cvt
@@ -184,35 +190,37 @@ simplifyOpenExp env = cvt
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA = simplifyOpenAcc
 
-    cvt :: OpenExp env aenv e -> OpenExp env aenv e
-    cvt exp = case exp of
-      Let bnd body              -> let bnd'  = cvt bnd
+    cvt :: Elt e => OpenExp env aenv e -> OpenExp env aenv e
+    cvt exp
+      = flip fromMaybe (localCSE env exp)
+      $ case exp of
+          Let bnd body          -> let bnd'  = cvt bnd
                                        env'  = incEnv env `PushEnv` weakenE bnd'
                                        body' = simplifyOpenExp env' body
                                    in
                                    simplifyLet env bnd' body'
-      --
-      Var ix                    -> Var ix
-      Const c                   -> Const c
-      Tuple tup                 -> Tuple (simplifyTuple env tup)
-      Prj tup ix                -> Prj tup (cvt ix)
-      IndexNil                  -> IndexNil
-      IndexCons sh sz           -> IndexCons (cvt sh) (cvt sz)
-      IndexHead sh              -> IndexHead (cvt sh)
-      IndexTail sh              -> IndexTail (cvt sh)
-      IndexAny                  -> IndexAny
-      IndexSlice x ix sh        -> IndexSlice x (cvt ix) (cvt sh)
-      IndexFull x ix sl         -> IndexFull x (cvt ix) (cvt sl)
-      ToIndex sh ix             -> ToIndex (cvt sh) (cvt ix)
-      FromIndex sh ix           -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e                -> simplifyCond env (cvt p) (cvt t) (cvt e)
-      Iterate n f x             -> Iterate n (simplifyOpenFun env f) (cvt x)
-      PrimConst c               -> PrimConst c
-      PrimApp f x               -> PrimApp f (cvt x)
-      IndexScalar a sh          -> IndexScalar (cvtA a) (cvt sh)
-      Shape a                   -> Shape (cvtA a)
-      ShapeSize sh              -> ShapeSize (cvt sh)
-      Intersect s t             -> simplifyIntersect (cvt s) (cvt t)
+          --
+          Var ix                -> Var ix
+          Const c               -> Const c
+          Tuple tup             -> Tuple (simplifyTuple env tup)
+          Prj tup ix            -> Prj tup (cvt ix)
+          IndexNil              -> IndexNil
+          IndexCons sh sz       -> IndexCons (cvt sh) (cvt sz)
+          IndexHead sh          -> IndexHead (cvt sh)
+          IndexTail sh          -> IndexTail (cvt sh)
+          IndexAny              -> IndexAny
+          IndexSlice x ix sh    -> IndexSlice x (cvt ix) (cvt sh)
+          IndexFull x ix sl     -> IndexFull x (cvt ix) (cvt sl)
+          ToIndex sh ix         -> ToIndex (cvt sh) (cvt ix)
+          FromIndex sh ix       -> FromIndex (cvt sh) (cvt ix)
+          Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
+          Iterate n f x         -> Iterate n (simplifyOpenFun env f) (cvt x)
+          PrimConst c           -> PrimConst c
+          PrimApp f x           -> PrimApp f (cvt x)
+          IndexScalar a sh      -> IndexScalar (cvtA a) (cvt sh)
+          Shape a               -> Shape (cvtA a)
+          ShapeSize sh          -> ShapeSize (cvt sh)
+          Intersect s t         -> simplifyIntersect (cvt s) (cvt t)
 
 
 simplifyTuple
@@ -234,7 +242,7 @@ simplifyOpenFun env (Lam  f) = Lam  (simplifyOpenFun (incEnv env `PushEnv` Var Z
 -- Scalar expressions
 -- ------------------
 
-simplifyExp :: Exp aenv t -> Exp aenv t
+simplifyExp :: Elt t => Exp aenv t -> Exp aenv t
 simplifyExp = simplifyOpenExp EmptyEnv . shrinkE
 
 simplifyFun :: Fun aenv t -> Fun aenv t
@@ -252,7 +260,7 @@ simplifyOpenAcc = cvtA . shrinkOpenAcc
       NilAtup         -> NilAtup
       SnocAtup t a    -> cvtT t `SnocAtup` cvtA a
 
-    cvtE :: Exp aenv t -> Exp aenv t
+    cvtE :: Elt t => Exp aenv t -> Exp aenv t
     cvtE = simplifyExp
 
     cvtF :: Fun aenv t -> Fun aenv t
