@@ -23,8 +23,9 @@ module Data.Array.Accelerate.Pretty.Print (
 ) where
 
 -- standard libraries
+import Prelude                                  hiding ( exp )
+import Data.List
 import Text.PrettyPrint
-import Prelude hiding (exp)
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar
@@ -52,11 +53,23 @@ prettyPreAcc
     -> PreOpenAcc acc aenv a
     -> Doc
 prettyPreAcc pp alvl wrap (Alet acc1 acc2)
-  = wrap
-  $ sep [ hang (text "let a" <> int alvl <+> char '=') 2 $
-            pp alvl noParens acc1
-        , text "in" <+> pp (alvl + 1) noParens acc2
-        ]
+  | not (isAlet acc1') && isAlet acc2'
+  = wrap $ sep [ text "let" <+> a <+> equals <+> acc1' <+> text "in"
+               , acc2' ]
+  --
+  | otherwise
+  = wrap $ sep [ hang (text "let" <+> a <+> equals) 2 acc1'
+               , text "in" <+> acc2' ]
+  where
+    -- TLM: derp, can't unwrap into a PreOpenAcc to pattern match on Alet
+    --
+    isAlet doc  = "let" `isPrefixOf` render doc
+
+    acc1'       = pp alvl     noParens acc1
+    acc2'       = pp (alvl+1) noParens acc2
+    a           = char 'a' <> int alvl
+
+
 prettyPreAcc _  alvl _    (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)
 prettyPreAcc pp alvl wrap (Aprj ix arrs)
