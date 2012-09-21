@@ -295,8 +295,8 @@ prettyPreExp pp _lvl alvl wrap (Shape idx)
 prettyPreExp pp lvl alvl wrap (ShapeSize idx)
   = wrap $ text "shapeSize" <+> parens (prettyPreExp pp lvl alvl parens idx)
 prettyPreExp pp lvl alvl wrap (Intersect sh1 sh2)
-  = wrap $ text "intersect" <+> sep [ prettyPreExp pp lvl alvl wrap sh1
-                                    , prettyPreExp pp lvl alvl wrap sh2 ]
+  = wrap $ text "intersect" <+> sep [ prettyPreExp pp lvl alvl parens sh1
+                                    , prettyPreExp pp lvl alvl parens sh2 ]
 
 -- Pretty print nested pairs as a proper tuple.
 --
