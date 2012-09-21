@@ -26,21 +26,12 @@ import System.FilePath
 import System.Directory
 import System.Posix.Process
 import System.IO
-#if !MIN_VERSION_base(4,6,0)
-import System.IO.Error hiding (catch)
-#else
 import System.IO.Error
-#endif
 import Text.Printf
 
 -- friends
 import Data.Array.Accelerate.Pretty.Traverse
 import Data.Array.Accelerate.AST
-
-#if !MIN_VERSION_base(4,6,0)
-catchIOError :: IO a -> (IOError -> IO a) -> IO a
-catchIOError = catch
-#endif
 
 -- | Detects if the dot command line tool from the Graphviz package exists.
 -- If it does outputs a Postscript file, otherwise a ".dot" file.
