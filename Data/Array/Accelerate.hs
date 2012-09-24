@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
-  -- only for the deprecated class aliases
-
 -- |
 -- Module      : Data.Array.Accelerate
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -226,9 +223,6 @@ module Data.Array.Accelerate (
   fromIArray, toIArray,
 
   -- * Miscellaneous
-  -- ** Deprecated aliases
-  Elem, Ix, SliceIx, tuple, untuple,
-
   -- ** Diagnostics
   initTrace
 
@@ -276,27 +270,4 @@ arrayShape = Sugar.shape
 --
 arraySize :: Shape sh => sh -> Int
 arraySize = Sugar.size
-
--- Deprecated aliases for backwards compatibility
---
-
-{-# DEPRECATED Elem "Use 'Elt' instead" #-}
-class Elt e => Elem e
-instance Elt e => Elem e
-
-{-# DEPRECATED Ix "Use 'Shape' instead" #-}
-class Shape sh => Ix sh
-instance Shape sh => Ix sh
-
-{-# DEPRECATED SliceIx "Use 'Slice' instead" #-}
-class Slice sh => SliceIx sh
-instance Slice sh => SliceIx sh
-
-{-# DEPRECATED tuple "Use 'lift' instead" #-}
-tuple :: Lift Exp e => e -> Exp (Plain e)
-tuple = lift
-
-{-# DEPRECATED untuple "Use 'unlift' instead" #-}
-untuple :: Unlift Exp e => Exp (Plain e) -> e
-untuple = unlift
 
