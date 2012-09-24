@@ -229,16 +229,16 @@ fuseTuple (SnocTup tup e) = fuseTuple tup `SnocTup` fuseOpenExp e
 data DelayedAcc aenv a where
   Done  :: Arrays a
         => Extend aenv aenv'
-        -> PreOpenAcc OpenAcc aenv' a
+        -> PreOpenAcc OpenAcc aenv' a   -- a sub-term
         -> DelayedAcc         aenv  a
 
   Step  :: (Elt a, Elt b, Shape sh, Shape sh')
         => Extend aenv aenv'
-        -> PreExp     OpenAcc aenv' sh'
-        -> PreFun     OpenAcc aenv' (sh' -> sh)
-        -> PreFun     OpenAcc aenv' (a   -> b)
-        -> PreOpenAcc OpenAcc aenv' (Array sh  a)
-        -> DelayedAcc         aenv  (Array sh' b)
+        -> PreExp OpenAcc aenv' sh'
+        -> PreFun OpenAcc aenv' (sh' -> sh)
+        -> PreFun OpenAcc aenv' (a   -> b)
+        -> Idx            aenv' (Array sh  a)
+        -> DelayedAcc     aenv  (Array sh' b)
 
   Yield :: (Shape sh, Elt a)
         => Extend aenv aenv'
@@ -288,7 +288,7 @@ force delayed
         | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a'
         | otherwise                             -> bind env $ Transform sh ix f a'
         where
-          a'    = OpenAcc a
+          a'    = OpenAcc (Avar a)
 
 
 -- Apply an index space transform that specifies where elements in the
@@ -303,7 +303,9 @@ backpermuteD
 backpermuteD sh' p acc = case acc of
   Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
-  Done env a            -> Step env (sinkE env sh') (sinkF env p) identity a
+  Done env a            ->
+    let env' = env `PushEnv` a
+    in  Step env' (sinkE env' sh') (sinkF env' p) identity ZeroIdx
 
 
 -- Replicate as a backwards permutation
@@ -319,8 +321,8 @@ replicateD sliceIndex slix acc = case acc of
   Yield env sl f        -> Yield env (fullshape env sl) (f `compose` extend env)
   Done env a            ->
     let env' = env `PushEnv` a
-        a0   = Avar ZeroIdx
-    in  Step env' (fullshape env' (Shape (OpenAcc a0))) (extend env') identity a0
+        a0   = OpenAcc (Avar ZeroIdx)
+    in  Step env' (fullshape env' (Shape a0)) (extend env') identity ZeroIdx
   --
   where
     fullshape :: Extend aenv aenv' -> Exp aenv' sl -> Exp aenv' sh
@@ -343,8 +345,8 @@ indexD sliceIndex acc slix = case acc of
   Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
   Done env a            ->
     let env' = env `PushEnv` a
-        a0   = Avar ZeroIdx
-    in  Step env' (sliceshape env' (Shape (OpenAcc a0))) (restrict env') identity a0
+        a0   = OpenAcc (Avar ZeroIdx)
+    in  Step env' (sliceshape env' (Shape a0)) (restrict env') identity ZeroIdx
   --
   where
     sliceshape :: Extend aenv aenv' -> Exp aenv' sh -> Exp aenv' sl
@@ -369,7 +371,7 @@ mapD f acc = case acc of
                                 (Shape (OpenAcc (Avar ZeroIdx)))
                                 identity
                                 (weakenFA (sinkF env f))
-                                (Avar ZeroIdx)
+                                ZeroIdx
 
 
 -- Combine a binary value function and two arrays to produce a delayed array.
@@ -384,12 +386,12 @@ zipWithD
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
   Done env a1
-    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index (Avar ZeroIdx))
+    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index ZeroIdx)
 
   Step env1 sh1 ix1 g1 a1
-    -> inner (env1 `PushEnv` a1)
+    -> inner (env1 `PushEnv` Avar a1)
              (weakenEA sh1)
-             (weakenFA g1 `compose` index (Avar ZeroIdx) `compose` weakenFA ix1)
+             (weakenFA g1 `compose` index ZeroIdx `compose` weakenFA ix1)
 
   Yield env1 sh1 g1
     -> inner env1 sh1 g1
@@ -398,8 +400,8 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
     shape :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Exp aenv' dim
     shape = Shape . OpenAcc
 
-    index :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Fun aenv' (dim -> e)
-    index a = Lam . Body $ IndexScalar (OpenAcc a) (Var ZeroIdx)
+    index :: (Shape dim, Elt e) => Idx aenv' (Array dim e) -> Fun aenv' (dim -> e)
+    index a = Lam . Body $ IndexScalar (OpenAcc (Avar a)) (Var ZeroIdx)
 
     inner :: Extend aenv aenv'
           -> Exp        aenv' sh
@@ -411,14 +413,14 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
            in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape (Avar ZeroIdx))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
-                                   (index (Avar ZeroIdx)))
+                                   (index ZeroIdx))
 
       Step env2 sh2 ix2 g2 a2
-        -> let env = join env1 env2 `PushEnv` a2
+        -> let env = join env1 env2 `PushEnv` Avar a2
            in  Yield env (weakenEA (sinkE env2 sh1 `Intersect` sh2))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
-                                   (weakenFA g2 `compose` index (Avar ZeroIdx) `compose` weakenFA ix2))
+                                   (weakenFA g2 `compose` index ZeroIdx `compose` weakenFA ix2))
 
       Yield env2 sh2 g2
         -> let env = join env1 env2
@@ -464,10 +466,10 @@ aletD bndAcc bodyAcc =
     -- let-floating.
     --
     Done env1 a
-      -> case delayOpenAcc (sinkA1 env1 bodyAcc) of
-           Done env2 b                  -> Done  (env1 `join` a `cons` env2) b
-           Step env2 sh2 ix2 f2 b       -> Step  (env1 `join` a `cons` env2) sh2 ix2 f2 b
-           Yield env2 sh2 f2            -> Yield (env1 `join` a `cons` env2) sh2 f2
+     -> case delayOpenAcc (sinkA1 env1 bodyAcc) of
+          Done env2 b                   -> Done  (env1 `join` a `cons` env2) b
+          Step env2 sh2 ix2 f2 b        -> Step  (env1 `join` a `cons` env2) sh2 ix2 f2 b
+          Yield env2 sh2 f2             -> Yield (env1 `join` a `cons` env2) sh2 f2
 
     -- If instead the binding is still in a delayed state, we might be able to
     -- fuse it directly into the body. For example, functions such as reverse
@@ -481,48 +483,42 @@ aletD bndAcc bodyAcc =
     -- can generate the shape directly.
     --
     Step env1 sh1 ix1 f1 a1
-      -> let OpenAcc bnd = force $ Step BaseEnv sh1 ix1 f1 a1
-         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
-           Done env2 b
-             -> Done (env1 `join` bnd `cons` env2) b
+     -> let OpenAcc bnd = force $ Step BaseEnv sh1 ix1 f1 a1
+        in case delayOpenAcc (sinkA1 env1 bodyAcc) of
+          Done env2 b
+           -> Done (env1 `join` bnd `cons` env2) b
 
-           Step env2 sh2 ix2 f2 a2
-             -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
-                          (inner env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1)
-                                                   (f2 `compose` index a2 `compose` ix2))
+          -- TLM: there is a more specific case to do here, although I can't
+          --      quite figure it out. Consider (reverse . reverse).
+          --
+          Step env2 sh2 ix2 f2 a2
+           -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
+                        (yield env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1)
+                                                 (f2 `compose` index a2 `compose` ix2))
 
-           Yield env2 sh2 f2
-             -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
-                          (inner env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1) f2)
+          Yield env2 sh2 f2
+           -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
+                        (yield env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1) f2)
 
     Yield env1 sh1 f1
-      -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
-         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
-           Done env2 b
-             -> Done (env1 `join` bnd `cons` env2) b
+     -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
+        in case delayOpenAcc (sinkA1 env1 bodyAcc) of
+          Done env2 b
+           -> Done (env1 `join` bnd `cons` env2) b
 
-           Step env2 sh2 ix2 f2 b
-             -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 b)
-                          (inner env1 env2 sh1 sh2 f1 (f2 `compose` index b `compose` ix2))
+          Step env2 sh2 ix2 f2 a2
+           -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
+                        (yield env1 env2 sh1 sh2 f1 (f2 `compose` index a2 `compose` ix2))
 
-           Yield env2 sh2 f2
-             -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
-                          (inner env1 env2 sh1 sh2 f1 f2)
+          Yield env2 sh2 f2
+           -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
+                        (yield env1 env2 sh1 sh2 f1 f2)
 
   where
-    index :: (Shape sh, Elt e) => PreOpenAcc OpenAcc aenv (Array sh e) -> Fun aenv (sh -> e)
-    index a = Lam . Body $ IndexScalar (OpenAcc a) (Var ZeroIdx)
+    index a = Lam . Body $ IndexScalar (OpenAcc (Avar a)) (Var ZeroIdx)
 
-    inner :: (Shape sh, Shape sh', Elt e, Elt e')
-          => Extend aenv                aenv'
-          -> Extend (aenv', Array sh e) aenv''
-          -> Exp aenv'  sh
-          -> Exp aenv'' sh'
-          -> Fun aenv'  (sh  -> e)
-          -> Fun aenv'' (sh' -> e')
-          -> Maybe (DelayedAcc aenv (Array sh' e'))
-    inner env1 env2 sh1 sh2 f1 f2
-      | usesOfAX a0 env2 + usesOfEA a0 sh2 + usesOfFA a0 f2 <= lIMIT
+    yield env1 env2 sh1 sh2 f1 f2
+      | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
       = Just $ Yield (env1 `join` env2') (replaceE sh1' f1' a0 sh2) (replaceF sh1' f1' a0 f2)
 
       | otherwise
