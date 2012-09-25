@@ -125,7 +125,7 @@ matchPreOpenAcc (Replicate _ ix1 a1) (Replicate _ ix2 a2)
   , Just REFL <- matchOpenAcc a1  a2
   = gcast REFL  -- slice specification ??
 
-matchPreOpenAcc (Index _ a1 ix1) (Index _ a2 ix2)
+matchPreOpenAcc (Slice _ a1 ix1) (Slice _ a2 ix2)
   | Just REFL <- matchOpenAcc a1  a2
   , Just REFL <- matchOpenExp ix1 ix2
   = gcast REFL  -- slice specification ??

@@ -309,7 +309,7 @@ rebuildA rebuild v acc =
     Generate e f        -> Generate (rebuildEA rebuild v e) (rebuildFA rebuild v f)
     Transform sh ix f a -> Transform (rebuildEA rebuild v sh) (rebuildFA rebuild v ix) (rebuildFA rebuild v f) (rebuild v a)
     Replicate sl slix a -> Replicate sl (rebuildEA rebuild v slix) (rebuild v a)
-    Index sl a slix     -> Index sl (rebuild v a) (rebuildEA rebuild v slix)
+    Slice sl a slix     -> Slice sl (rebuild v a) (rebuildEA rebuild v slix)
     Map f a             -> Map (rebuildFA rebuild v f) (rebuild v a)
     ZipWith f a1 a2     -> ZipWith (rebuildFA rebuild v f) (rebuild v a1) (rebuild v a2)
     Fold f z a          -> Fold (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
@@ -566,7 +566,7 @@ shrinkA k s u pre acc =
     Generate e f        -> Generate (shrinkEA s e) (shrinkFA s f)
     Transform sh ix f a -> Transform (shrinkEA s sh) (shrinkFA s ix) (shrinkFA s f) (s a)
     Replicate sl slix a -> Replicate sl (shrinkEA s slix) (s a)
-    Index sl a slix     -> Index sl (s a) (shrinkEA s slix)
+    Slice sl a slix     -> Slice sl (s a) (shrinkEA s slix)
     Map f a             -> Map (shrinkFA s f) (s a)
     ZipWith f a1 a2     -> ZipWith (shrinkFA s f) (s a1) (s a2)
     Fold f z a          -> Fold (shrinkFA s f) (shrinkEA s z) (s a)
@@ -657,7 +657,7 @@ usesOfA u idx acc =
     Generate e f        -> usesOfEA u idx e + usesOfFA u idx f
     Transform sh ix f a -> usesOfEA u idx sh + usesOfFA u idx ix + usesOfFA u idx f + u idx a
     Replicate _ slix a  -> usesOfEA u idx slix + u idx a
-    Index _ a slix      -> usesOfEA u idx slix + u idx a
+    Slice _ a slix      -> usesOfEA u idx slix + u idx a
     Map f a             -> usesOfFA u idx f + u idx a
     ZipWith f a1 a2     -> usesOfFA u idx f + u idx a1 + u idx a2
     Fold f z a          -> usesOfFA u idx f + usesOfEA u idx z + u idx a

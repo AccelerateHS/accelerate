@@ -152,8 +152,8 @@ evalPreOpenAcc (Reshape e acc) aenv
 evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
   = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
 
-evalPreOpenAcc (Index sliceIndex acc slix) aenv
-  = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
+evalPreOpenAcc (Slice sliceIndex acc slix) aenv
+  = sliceOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
 
 evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
@@ -283,7 +283,7 @@ replicateOp sliceIndex slix (DelayedPair DelayedUnit (DelayedArray sh pf))
         in
         ((dim', sz), \(ix, _) -> f' ix)
 
-indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
+sliceOp :: (Sugar.Shape sl, Sugar.Elt slix)
         => SliceIndex (Sugar.EltRepr slix)
                       (Sugar.EltRepr sl)
                       co
@@ -291,7 +291,7 @@ indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
         -> Delayed (Array dim e)
         -> slix
         -> Delayed (Array sl e)
-indexOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
+sliceOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
   = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
@@ -308,7 +308,7 @@ indexOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
         in
-        BOUNDS_CHECK(checkIndex) "index" i sz $ (sl', \ix -> (f' ix, i))
+        BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 mapOp :: Sugar.Elt e' 
       => (e -> e') 

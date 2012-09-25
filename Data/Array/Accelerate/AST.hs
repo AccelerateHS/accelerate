@@ -271,9 +271,9 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sl e)               -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
 
-  -- Index a subarray out of an array; i.e., the dimensions not indexed are
+  -- Index a sub-array out of an array; i.e., the dimensions not indexed are
   -- returned whole
-  Index       :: (Shape sh, Shape sl, Elt slix, Elt e)
+  Slice       :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)                      -- slice type specification
                             (EltRepr sl)
                             co

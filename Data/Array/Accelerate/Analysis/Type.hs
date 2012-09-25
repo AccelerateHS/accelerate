@@ -93,7 +93,7 @@ preAccType k pacc =
     Transform _ _ _ _   -> eltType (undefined::e)
     Reshape _ acc       -> k acc
     Replicate _ _ acc   -> k acc
-    Index _ acc _       -> k acc
+    Slice _ acc _       -> k acc
     Map _ _             -> eltType (undefined::e)
     ZipWith _ _ _       -> eltType (undefined::e)
     Fold _ _ acc        -> k acc

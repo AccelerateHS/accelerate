@@ -145,7 +145,7 @@ data PreAcc acc exp as where
               -> acc            (Array (SliceShape slix) e)
               -> PreAcc acc exp (Array (FullShape  slix) e)
 
-  Index       :: (Slice slix, Elt e,
+  Slice       :: (Slice slix, Elt e,
                   Typeable (SliceShape slix), Typeable (FullShape slix))
                   -- the Typeable constraints shouldn't be necessary as they are implied by
                   -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that

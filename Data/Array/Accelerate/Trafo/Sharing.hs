@@ -207,7 +207,7 @@ convertSharingAcc alyt env (AccSharing _ preAcc)
         -> AST.Reshape (convertExp alyt env e) (convertSharingAcc alyt env acc)
       Replicate ix acc
         -> mkReplicate (convertExp alyt env ix) (convertSharingAcc alyt env acc)
-      Index acc ix
+      Slice acc ix
         -> mkIndex (convertSharingAcc alyt env acc) (convertExp alyt env ix)
       Map f acc
         -> AST.Map (convertFun1 alyt env f) (convertSharingAcc alyt env acc)
@@ -293,7 +293,7 @@ mkIndex :: forall slix e aenv. (Slice slix, Elt e)
         => AST.OpenAcc                aenv (Array (FullShape  slix) e)
         -> AST.Exp                    aenv slix
         -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
-mkIndex arr e = AST.Index (sliceIndex slix) arr e
+mkIndex arr e = AST.Slice (sliceIndex slix) arr e
   where
     slix = undefined :: slix
 
@@ -830,7 +830,7 @@ makeOccMap lvl rootAcc
                                           return (Generate e' f', h1 `max` h2 + 1)
             Reshape e acc            -> reconstruct $ travEA Reshape e acc
             Replicate e acc          -> reconstruct $ travEA Replicate e acc
-            Index acc e              -> reconstruct $ travEA (flip Index) e acc
+            Slice acc e              -> reconstruct $ travEA (flip Slice) e acc
             Map f acc                -> reconstruct $ do
                                           (f'  , h1) <- traverseFun1 lvl occMap f
                                           (acc', h2) <- traverseAcc lvl  occMap acc
@@ -1302,7 +1302,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
                                      reconstruct (Generate sh' f') (accCount1 +++ accCount2)
           Reshape sh acc          -> travEA Reshape sh acc
           Replicate n acc         -> travEA Replicate n acc
-          Index acc i             -> travEA (flip Index) i acc
+          Slice acc i             -> travEA (flip Slice) i acc
           Map f acc               -> let
                                        (f'  , accCount1) = scopesFun1 f
                                        (acc', accCount2) = scopesAcc  acc
@@ -1783,7 +1783,7 @@ showPreAccOp (Unit _)             = "Unit"
 showPreAccOp (Generate _ _)       = "Generate"
 showPreAccOp (Reshape _ _)        = "Reshape"
 showPreAccOp (Replicate _ _)      = "Replicate"
-showPreAccOp (Index _ _)          = "Index"
+showPreAccOp (Slice _ _)          = "Slice"
 showPreAccOp (Map _ _)            = "Map"
 showPreAccOp (ZipWith _ _ _)      = "ZipWith"
 showPreAccOp (Fold _ _ _)         = "Fold"

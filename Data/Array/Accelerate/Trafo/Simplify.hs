@@ -280,7 +280,7 @@ simplifyOpenAcc = cvtA . shrinkOpenAcc
       Generate e f              -> Generate (cvtE e) (cvtF f)
       Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
       Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
-      Index sl a slix           -> Index sl (cvtA a) (cvtE slix)
+      Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
       Map f a                   -> Map (cvtF f) (cvtA a)
       ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
       Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)

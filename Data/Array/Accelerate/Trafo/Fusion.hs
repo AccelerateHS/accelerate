@@ -108,7 +108,7 @@ delayOpenAcc (OpenAcc pacc) =
            Yield env sh f       -> let shx = sinkE env sh' in Yield env shx (f `compose` reindex sh shx)
 
     Replicate slix sh a -> replicateD slix (cvtE sh) (cvt a)
-    Index slix a sh     -> indexD slix (cvt a) (cvtE sh)
+    Slice slix a sh     -> sliceD slix (cvt a) (cvtE sh)
     Backpermute sl p a  -> backpermuteD (cvtE sl) (cvtF p) (cvt a)
 
     -- Producers
@@ -334,13 +334,13 @@ replicateD sliceIndex slix acc = case acc of
 
 -- Dimensional slice as a backwards permutation
 --
-indexD
+sliceD
     :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> DelayedAcc aenv (Array sh e)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
-indexD sliceIndex acc slix = case acc of
+sliceD sliceIndex acc slix = case acc of
   Step env sl pf f a    -> Step env (sliceshape env sl) (pf `compose` restrict env) f a
   Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
   Done env a            ->
@@ -569,7 +569,7 @@ aletD bndAcc bodyAcc =
         Generate e f        -> usesOfEA idx e + usesOfFA idx f
         Transform sh ix f a -> usesOfEA idx sh + usesOfFA idx ix + usesOfFA idx f + usesOf idx a
         Replicate _ slix a  -> usesOfEA idx slix + usesOf idx a
-        Index _ a slix      -> usesOfEA idx slix + usesOf idx a
+        Slice _ a slix      -> usesOfEA idx slix + usesOf idx a
         Map f a             -> usesOfFA idx f + usesOf idx a
         ZipWith f a1 a2     -> usesOfFA idx f + usesOf idx a1 + usesOf idx a2
         Fold f z a          -> usesOfFA idx f + usesOfEA idx z + usesOf idx a

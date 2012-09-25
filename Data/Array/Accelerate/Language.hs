@@ -214,7 +214,7 @@ slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
       -> Acc (Array (SliceShape slix) e)
-slice = Acc $$ Index
+slice = Acc $$ Slice
 
 -- Map-like functions
 -- ------------------

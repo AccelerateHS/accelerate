@@ -97,7 +97,7 @@ prettyPreAcc pp alvl wrap (Reshape sh acc)
   = wrap $ prettyArrOp "reshape" [prettyPreExp pp 0 alvl parens sh, pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Replicate _ty ix acc)
   = wrap $ prettyArrOp "replicate" [prettyPreExp pp 0 alvl noParens ix, pp alvl parens acc]
-prettyPreAcc pp alvl wrap (Index _ty acc ix)
+prettyPreAcc pp alvl wrap (Slice _ty acc ix)
   = wrap $ sep [pp alvl parens acc, char '!', prettyPreExp pp 0 alvl noParens ix]
 prettyPreAcc pp alvl wrap (Map f acc)
   = wrap $ prettyArrOp "map" [parens (prettyPreFun pp alvl f), pp alvl parens acc]

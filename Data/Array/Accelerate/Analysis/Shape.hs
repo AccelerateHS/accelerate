@@ -59,7 +59,7 @@ preAccDim k pacc =
     Transform _ _ _ _    -> ndim (eltType (undefined::sh))
     Reshape _ _          -> ndim (eltType (undefined::sh))
     Replicate _ _ _      -> ndim (eltType (undefined::sh))
-    Index _ _ _          -> ndim (eltType (undefined::sh))
+    Slice _ _ _          -> ndim (eltType (undefined::sh))
     Map _ acc            -> k acc
     ZipWith _ _ acc      -> k acc
     Fold _ _ acc         -> k acc - 1
