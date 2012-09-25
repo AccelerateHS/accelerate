@@ -299,7 +299,7 @@ data PreExp acc exp t where
               => PrimConst t                    -> PreExp acc exp t
   PrimApp     :: (Elt a, Elt r)
               => PrimFun (a -> r) -> exp a      -> PreExp acc exp r
-  IndexScalar :: (Shape sh, Elt t)
+  Index       :: (Shape sh, Elt t)
               => acc (Array sh t) -> exp sh     -> PreExp acc exp t
   Shape       :: (Shape sh, Elt e)
               => acc (Array sh e)               -> PreExp acc exp sh

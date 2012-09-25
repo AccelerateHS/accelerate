@@ -358,7 +358,7 @@ convertSharingExp lyt alyt env aenv = cvt
           PrimApp f e     -> case cvt e of
             AST.Let bnd body -> AST.Let bnd (AST.PrimApp f body)
             xs               -> AST.PrimApp f xs
-          IndexScalar a e -> AST.IndexScalar (convertSharingAcc alyt aenv a) (cvt e)
+          Index a e       -> AST.Index (convertSharingAcc alyt aenv a) (cvt e)
           Shape a         -> AST.Shape (convertSharingAcc alyt aenv a)
           ShapeSize e     -> AST.ShapeSize (cvt e)
 
@@ -1048,7 +1048,7 @@ makeOccMap lvl rootAcc
             Cond e1 e2 e3   -> reconstruct $ travE3 Cond e1 e2 e3
             PrimConst c     -> reconstruct $ return (PrimConst c, 1)
             PrimApp p e     -> reconstruct $ travE1 (PrimApp p) e
-            IndexScalar a e -> reconstruct $ travAE IndexScalar a e
+            Index a e       -> reconstruct $ travAE Index a e
             Shape a         -> reconstruct $ travA Shape a
             ShapeSize e     -> reconstruct $ travE1 ShapeSize e
           }
@@ -1522,7 +1522,7 @@ determineScopes floatOutAcc fvs accOccMap rootAcc
           Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
           PrimConst c     -> reconstruct (PrimConst c) noNodeCounts
           PrimApp p e     -> travE1 (PrimApp p) e
-          IndexScalar a e -> travAE IndexScalar a e
+          Index a e       -> travAE Index a e
           Shape a         -> travA Shape a
           ShapeSize e     -> travE1 ShapeSize e
       where
@@ -1762,7 +1762,7 @@ instance Elt a => Show (Exp a) where
                                                            (toSharingExp e3)
             PrimConst c     -> ExpSharing undefined $ PrimConst c
             PrimApp p e     -> ExpSharing undefined $ PrimApp p (toSharingExp e)
-            IndexScalar a e -> ExpSharing undefined $ IndexScalar (fst $ recoverSharingAcc False 0 [] a)
+            Index a e       -> ExpSharing undefined $ Index (fst $ recoverSharingAcc False 0 [] a)
                                                                   (toSharingExp e)
             Shape a         -> ExpSharing undefined $ Shape (fst $ recoverSharingAcc False 0 [] a)
             ShapeSize e     -> ExpSharing undefined $ ShapeSize (toSharingExp e)
@@ -1840,7 +1840,7 @@ showPreExpOp IndexAny          = "IndexAny"
 showPreExpOp (Cond _ _ _)      = "Cons"
 showPreExpOp (PrimConst _)     = "PrimConst"
 showPreExpOp (PrimApp _ _)     = "PrimApp"
-showPreExpOp (IndexScalar _ _) = "IndexScalar"
+showPreExpOp (Index _ _)       = "Index"
 showPreExpOp (Shape _)         = "Shape"
 showPreExpOp (ShapeSize _)     = "ShapeSize"
 

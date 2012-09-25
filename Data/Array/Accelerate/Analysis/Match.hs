@@ -394,8 +394,13 @@ matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   , Just REFL <- matchPrimFun f1 f2
   = Just REFL
 
-matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
+matchOpenExp (Index a1 x1) (Index a2 x2)
   | Just REFL <- matchOpenAcc a1 a2     -- should only be array indices
+  , Just REFL <- matchOpenExp x1 x2
+  = Just REFL
+
+matchOpenExp (LinearIndex a1 x1) (LinearIndex a2 x2)
+  | Just REFL <- matchOpenAcc a1 a2
   , Just REFL <- matchOpenExp x1 x2
   = Just REFL
 
@@ -707,9 +712,13 @@ hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOp
 hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `combine` hashOpenFun f `combine` hashOpenExp x
 hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
-hashOpenExp (IndexScalar a ix)
-  | OpenAcc (Avar v) <- a               = hash "IndexScalar"    `combine` hashIdx v      `combine` hashOpenExp ix
-  | otherwise                           = error "hash: IndexScalar: expected array variable"
+hashOpenExp (Index a ix)
+  | OpenAcc (Avar v) <- a               = hash "Index"          `combine` hashIdx v      `combine` hashOpenExp ix
+  | otherwise                           = error "hash: Index: expected array variable"
+--
+hashOpenExp (LinearIndex a ix)
+  | OpenAcc (Avar v) <- a               = hash "LinearIndex"    `combine` hashIdx v      `combine` hashOpenExp ix
+  | otherwise                           = error "hash: LinearIndex: expected array variable"
 --
 hashOpenExp (Shape a)
   | OpenAcc (Avar v) <- a               = hash "Shape"          `combine` hashIdx v

@@ -217,7 +217,8 @@ simplifyOpenExp env = cvt
           Iterate n f x         -> Iterate n (simplifyOpenFun env f) (cvt x)
           PrimConst c           -> PrimConst c
           PrimApp f x           -> PrimApp f (cvt x)
-          IndexScalar a sh      -> IndexScalar (cvtA a) (cvt sh)
+          Index a sh            -> Index (cvtA a) (cvt sh)
+          LinearIndex a i       -> LinearIndex (cvtA a) (cvt i)
           Shape a               -> Shape (cvtA a)
           ShapeSize sh          -> ShapeSize (cvt sh)
           Intersect s t         -> simplifyIntersect (cvt s) (cvt t)

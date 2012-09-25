@@ -288,7 +288,9 @@ prettyPreExp pp lvl alvl wrap (PrimApp p a)
     (infixOp, f) = prettyPrim p
     f'           = if infixOp then parens f else f
 
-prettyPreExp pp lvl alvl wrap (IndexScalar idx i)
+prettyPreExp pp lvl alvl wrap (Index idx i)
+  = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
+prettyPreExp pp lvl alvl wrap (LinearIndex idx i)
   = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> pp alvl parens idx

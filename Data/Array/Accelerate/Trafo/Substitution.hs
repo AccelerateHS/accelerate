@@ -219,7 +219,8 @@ rebuildE v exp =
     Iterate n f x       -> Iterate n (rebuildFE v f) (rebuildE v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
-    IndexScalar a sh    -> IndexScalar a (rebuildE v sh)
+    Index a sh          -> Index a (rebuildE v sh)
+    LinearIndex a i     -> LinearIndex a (rebuildE v i)
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
     Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
@@ -384,7 +385,8 @@ rebuildEA k v exp =
     Iterate n f x       -> Iterate n (rebuildFA k v f) (rebuildEA k v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
-    IndexScalar a sh    -> IndexScalar (k v a) (rebuildEA k v sh)
+    Index a sh          -> Index (k v a) (rebuildEA k v sh)
+    LinearIndex a i     -> LinearIndex (k v a) (rebuildEA k v i)
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
     Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
@@ -454,7 +456,8 @@ shrinkE exp =
     Iterate n f x       -> Iterate n (shrinkFE f) (shrinkE x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkE x)
-    IndexScalar a sh    -> IndexScalar a (shrinkE sh)
+    Index a sh          -> Index a (shrinkE sh)
+    LinearIndex a i     -> LinearIndex a (shrinkE i)
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (shrinkE sh)
     Intersect sh sz     -> Intersect (shrinkE sh) (shrinkE sz)
@@ -499,7 +502,8 @@ usesOfE idx exp =
     Iterate _ f x       -> usesOfFE idx f + usesOfE idx x
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfE idx x
-    IndexScalar _ sh    -> usesOfE idx sh
+    Index _ sh          -> usesOfE idx sh
+    LinearIndex _ i     -> usesOfE idx i
     Shape _             -> 0
     ShapeSize sh        -> usesOfE idx sh
     Intersect sh sz     -> usesOfE idx sh + usesOfE idx sz
@@ -625,7 +629,8 @@ shrinkEA s exp =
     Iterate n f x       -> Iterate n (shrinkFA s f) (shrinkEA s x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkEA s x)
-    IndexScalar a sh    -> IndexScalar (s a) (shrinkEA s sh)
+    Index a sh          -> Index (s a) (shrinkEA s sh)
+    LinearIndex a i     -> LinearIndex (s a) (shrinkEA s i)
     Shape a             -> Shape (s a)
     ShapeSize sh        -> ShapeSize (shrinkEA s sh)
     Intersect sh sz     -> Intersect (shrinkEA s sh) (shrinkEA s sz)
@@ -702,7 +707,8 @@ usesOfEA s idx exp =
     Iterate _ f x       -> usesOfFA s idx f  + usesOfEA s idx x
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfEA s idx x
-    IndexScalar a sh    -> s idx a + usesOfEA s idx sh
+    Index a sh          -> s idx a + usesOfEA s idx sh
+    LinearIndex a i     -> s idx a + usesOfEA s idx i
     Shape a             -> s idx a
     ShapeSize sh        -> usesOfEA s idx sh
     Intersect sh sz     -> usesOfEA s idx sh + usesOfEA s idx sz

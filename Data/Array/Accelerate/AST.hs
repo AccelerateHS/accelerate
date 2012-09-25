@@ -754,9 +754,14 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Project a single scalar from an array.
   -- The array expression can not contain any free scalar variables.
-  IndexScalar   :: (Shape dim, Elt t)
+  Index         :: (Shape dim, Elt t)
                 => acc                aenv (Array dim t)
                 -> PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv t
+
+  LinearIndex   :: Elt t
+                => acc                aenv (Array dim t)
+                -> PreOpenExp acc env aenv Int
                 -> PreOpenExp acc env aenv t
 
   -- Array shape.

@@ -202,7 +202,8 @@ fuseOpenExp = cvt
       Iterate n f x             -> Iterate n (cvtF f) (cvt x)
       PrimConst c               -> PrimConst c
       PrimApp f x               -> PrimApp f (cvt x)
-      IndexScalar a sh          -> IndexScalar (cvtA a) (cvt sh)
+      Index a sh                -> Index (cvtA a) (cvt sh)
+      LinearIndex a i           -> LinearIndex (cvtA a) (cvt i)
       Shape a                   -> Shape (cvtA a)
       ShapeSize sh              -> ShapeSize (cvt sh)
       Intersect s t             -> Intersect (cvt s) (cvt t)
@@ -401,7 +402,7 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
     shape = Shape . OpenAcc
 
     index :: (Shape dim, Elt e) => Idx aenv' (Array dim e) -> Fun aenv' (dim -> e)
-    index a = Lam . Body $ IndexScalar (OpenAcc (Avar a)) (Var ZeroIdx)
+    index a = Lam . Body $ Index (OpenAcc (Avar a)) (Var ZeroIdx)
 
     inner :: Extend aenv aenv'
           -> Exp        aenv' sh
@@ -515,7 +516,7 @@ aletD bndAcc bodyAcc =
                         (yield env1 env2 sh1 sh2 f1 f2)
 
   where
-    index a = Lam . Body $ IndexScalar (OpenAcc (Avar a)) (Var ZeroIdx)
+    index a = Lam . Body $ Index (OpenAcc (Avar a)) (Var ZeroIdx)
 
     yield env1 env2 sh1 sh2 f1 f2
       | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
@@ -621,7 +622,8 @@ aletD bndAcc bodyAcc =
         -- together, it is not necessary to consider the contribution of Shape since
         -- this would be replaced with a simple scalar expression.
         --
-        IndexScalar a sh    -> usesOf idx a + usesOfEA idx sh
+        Index a sh          -> usesOf idx a + usesOfEA idx sh
+        LinearIndex a i     -> usesOf idx a + usesOfEA idx i
         Shape _             -> 0
 
     usesOfTA :: Idx aenv a -> Tuple (OpenExp env aenv) t -> Int
@@ -695,14 +697,23 @@ aletD bndAcc bodyAcc =
           | otherwise
           -> exp
         --
-        IndexScalar (OpenAcc a) sh
+        Index (OpenAcc a) sh
           | Avar idx'       <- a
           , Just REFL       <- matchIdx idx idx'
           , Lam (Body f)    <- ix_
           -> Let sh f
 
           | otherwise
-          -> IndexScalar (OpenAcc a) (travE sh)
+          -> Index (OpenAcc a) (travE sh)
+        --
+        LinearIndex (OpenAcc a) i
+          | Avar idx'       <- a
+          , Just REFL       <- matchIdx idx idx'
+          , Lam (Body f)    <- ix_
+          -> Let (Let i (FromIndex (weakenE sh_) (Var ZeroIdx))) f
+
+          | otherwise
+          -> LinearIndex (OpenAcc a) (travE i)
 
 
 -- Environment manipulation
