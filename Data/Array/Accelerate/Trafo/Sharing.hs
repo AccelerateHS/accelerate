@@ -355,12 +355,19 @@ convertSharingExp lyt alyt env aenv = cvt
           IndexAny        -> AST.IndexAny
           Cond e1 e2 e3   -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           PrimConst c     -> AST.PrimConst c
-          PrimApp f e     -> case cvt e of
-            AST.Let bnd body -> AST.Let bnd (AST.PrimApp f body)
-            xs               -> AST.PrimApp f xs
+          PrimApp f e     -> cvtPrimFun f (cvt e)
           Index a e       -> AST.Index (convertSharingAcc alyt aenv a) (cvt e)
           Shape a         -> AST.Shape (convertSharingAcc alyt aenv a)
           ShapeSize e     -> AST.ShapeSize (cvt e)
+
+    -- Push primitive function applications down through let bindings so that
+    -- they are adjacent to their arguments. It looks a bit nicer this way.
+    --
+    cvtPrimFun :: (Elt a, Elt r)
+               => AST.PrimFun (a -> r) -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' r
+    cvtPrimFun f e = case e of
+      AST.Let bnd body    -> AST.Let bnd (cvtPrimFun f body)
+      x                   -> AST.PrimApp f x
 
 -- | Convert a tuple expression
 --
@@ -1112,7 +1119,7 @@ makeOccMap lvl rootAcc
 --     *after* 't' in the 'NodeCounts'.
 --   - No shared term occurs twice.
 --   - A term may have a final occurrence count of only 1 iff it is either a free variable ('Atag'
---     or 'Tag') or an array computation listed out of an expression.
+--     or 'Tag') or an array computation lifted out of an expression.
 --   - All 'Exp' node counts precede all 'Acc' node counts as we don't share 'Exp' nodes across 'Acc'
 --     nodes.
 --
