@@ -195,10 +195,10 @@ data PreOpenAcc acc aenv a where
 
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Alet         :: (Arrays bndArrs, Arrays bodyArrs)
-               => acc            aenv            bndArrs        -- bound expression
-               -> acc            (aenv, bndArrs) bodyArrs       -- the bound expression scope
-               -> PreOpenAcc acc aenv            bodyArrs
+  Alet        :: (Arrays bndArrs, Arrays bodyArrs)
+              => acc            aenv            bndArrs         -- bound expression
+              -> acc            (aenv, bndArrs) bodyArrs        -- the bound expression scope
+              -> PreOpenAcc acc aenv            bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
