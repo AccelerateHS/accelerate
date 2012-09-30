@@ -269,6 +269,9 @@ toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
 fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
+indexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (sh -> e)
+indexArray v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
+
 reindex :: (Shape sh, Shape sh')
         => OpenExp env aenv sh'
         -> OpenExp env aenv sh
@@ -393,12 +396,12 @@ zipWithD
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
   Done env a1
-    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (index ZeroIdx)
+    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (indexArray ZeroIdx)
 
   Step env1 sh1 ix1 g1 a1
     -> inner (env1 `PushEnv` Avar a1)
              (weakenEA sh1)
-             (weakenFA g1 `compose` index ZeroIdx `compose` weakenFA ix1)
+             (weakenFA g1 `compose` indexArray ZeroIdx `compose` weakenFA ix1)
 
   Yield env1 sh1 g1
     -> inner env1 sh1 g1
@@ -406,9 +409,6 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
   where
     shape :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Exp aenv' dim
     shape = Shape . OpenAcc
-
-    index :: (Shape dim, Elt e) => Idx aenv' (Array dim e) -> Fun aenv' (dim -> e)
-    index a = Lam . Body $ Index (OpenAcc (Avar a)) (Var ZeroIdx)
 
     inner :: Extend aenv aenv'
           -> Exp        aenv' sh
@@ -420,14 +420,14 @@ zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
            in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape (Avar ZeroIdx))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
-                                   (index ZeroIdx))
+                                   (indexArray ZeroIdx))
 
       Step env2 sh2 ix2 g2 a2
         -> let env = join env1 env2 `PushEnv` Avar a2
            in  Yield env (weakenEA (sinkE env2 sh1 `Intersect` sh2))
                          (generate (sinkF env f)
                                    (weakenFA (sinkF env2 g1))
-                                   (weakenFA g2 `compose` index ZeroIdx `compose` weakenFA ix2))
+                                   (weakenFA g2 `compose` indexArray ZeroIdx `compose` weakenFA ix2))
 
       Yield env2 sh2 g2
         -> let env = join env1 env2
@@ -500,12 +500,12 @@ aletD bndAcc bodyAcc =
           --
           Step env2 sh2 ix2 f2 a2
            -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
-                        (yield env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1)
-                                                 (f2 `compose` index a2 `compose` ix2))
+                        (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1)
+                                                 (f2 `compose` indexArray a2 `compose` ix2))
 
           Yield env2 sh2 f2
            -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
-                        (yield env1 env2 sh1 sh2 (f1 `compose` index a1 `compose` ix1) f2)
+                        (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1) f2)
 
     Yield env1 sh1 f1
      -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
@@ -515,15 +515,13 @@ aletD bndAcc bodyAcc =
 
           Step env2 sh2 ix2 f2 a2
            -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
-                        (yield env1 env2 sh1 sh2 f1 (f2 `compose` index a2 `compose` ix2))
+                        (yield env1 env2 sh1 sh2 f1 (f2 `compose` indexArray a2 `compose` ix2))
 
           Yield env2 sh2 f2
            -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
                         (yield env1 env2 sh1 sh2 f1 f2)
 
   where
-    index a = Lam . Body $ Index (OpenAcc (Avar a)) (Var ZeroIdx)
-
     yield env1 env2 sh1 sh2 f1 f2
       | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
       = Just $ Yield (env1 `join` env2') (replaceE sh1' f1' a0 sh2) (replaceF sh1' f1' a0 f2)
@@ -643,7 +641,6 @@ aletD bndAcc bodyAcc =
       case fun of
         Body e      -> usesOfEA idx e
         Lam f       -> usesOfFA idx f
-
 
     -- Substitute shape and array indexing with scalar functions at the given
     -- array index.
