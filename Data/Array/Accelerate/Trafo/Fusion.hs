@@ -167,7 +167,6 @@ delayOpenAcc (OpenAcc pacc) =
               Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Done  BaseEnv a2))
               Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
               Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-
   --
   in case pacc of
     -- Forms that introduce environment manipulations and control flow. These
@@ -465,39 +464,28 @@ zipWithD
     -> OpenAcc    aenv (Array sh b)
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
-  Done env a1
-    -> inner (env `PushEnv` a1) (shape (Avar ZeroIdx)) (indexArray ZeroIdx)
-
-  Step env1 sh1 ix1 g1 a1
-    -> inner (env1 `PushEnv` Avar a1)
-             (weakenEA sh1)
-             (weakenFA g1 `compose` indexArray ZeroIdx `compose` weakenFA ix1)
-
-  Yield env1 sh1 g1
-    -> inner env1 sh1 g1
-  --
+  Done env a1                   -> inner (env `PushEnv` a1) (shape ZeroIdx) (indexArray ZeroIdx)
+  Step env1 sh1 ix1 g1 a1       -> inner env1 sh1 (g1 `compose` indexArray a1 `compose` ix1)
+  Yield env1 sh1 g1             -> inner env1 sh1 g1
   where
-    shape :: (Shape dim, Elt e) => PreOpenAcc OpenAcc aenv' (Array dim e) -> Exp aenv' dim
-    shape = Shape . OpenAcc
+    shape :: (Shape dim, Elt e) => Idx aenv' (Array dim e) -> Exp aenv' dim
+    shape v = Shape (OpenAcc (Avar v))
 
     inner :: Extend aenv aenv'
           -> Exp        aenv' sh
           -> Fun        aenv' (sh -> a)
           -> DelayedAcc aenv  (Array sh c)
     inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
-      Done env2 a2
-        -> let env = join env1 env2 `PushEnv` a2
-           in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape (Avar ZeroIdx))
-                         (generate (sinkF env f)
-                                   (weakenFA (sinkF env2 g1))
-                                   (indexArray ZeroIdx))
+      Done env2 a2 -> let env = join env1 env2 `PushEnv` a2
+                      in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape ZeroIdx)
+                                    (generate (sinkF env f)
+                                              (weakenFA (sinkF env2 g1))
+                                              (indexArray ZeroIdx))
 
       Step env2 sh2 ix2 g2 a2
-        -> let env = join env1 env2 `PushEnv` Avar a2
-           in  Yield env (weakenEA (sinkE env2 sh1 `Intersect` sh2))
-                         (generate (sinkF env f)
-                                   (weakenFA (sinkF env2 g1))
-                                   (weakenFA g2 `compose` indexArray ZeroIdx `compose` weakenFA ix2))
+        -> let env = join env1 env2
+           in  Yield env (sinkE env2 sh1 `Intersect` sh2)
+                         (generate (sinkF env f) (sinkF env2 g1) (g2 `compose` indexArray a2 `compose` ix2))
 
       Yield env2 sh2 g2
         -> let env = join env1 env2
@@ -565,9 +553,6 @@ aletD bndAcc bodyAcc =
           Done env2 b
            -> Done (env1 `join` bnd `cons` env2) b
 
-          -- TLM: there is a more specific case to do here, although I can't
-          --      quite figure it out. Consider (reverse . reverse).
-          --
           Step env2 sh2 ix2 f2 a2
            -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
                         (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1)
