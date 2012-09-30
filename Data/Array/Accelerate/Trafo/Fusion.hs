@@ -103,7 +103,13 @@ delayOpenAcc (OpenAcc pacc) =
            -- TLM: there was a runtime check to ensure the old and new shapes
            -- contained the same number of elements: this has been lost!
            --
-           Done env a           -> Done env $ Reshape (sinkE env sh') (OpenAcc a)
+           Done env a
+            -> let env' = env `PushEnv` a
+                   shx  = sinkE env' sh'
+                   ix   = reindex (Shape (OpenAcc (Avar ZeroIdx))) shx
+               in
+               Step env' shx ix identity ZeroIdx
+           --
            Step env sh ix f a   -> let shx = sinkE env sh' in Step env shx (ix `compose` reindex sh shx) f a
            Yield env sh f       -> let shx = sinkE env sh' in Yield env shx (f `compose` reindex sh shx)
 
