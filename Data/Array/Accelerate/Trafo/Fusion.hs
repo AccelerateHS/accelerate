@@ -78,6 +78,96 @@ delayOpenAcc (OpenAcc pacc) =
 
       cvtF :: OpenFun env aenv t -> OpenFun env aenv t
       cvtF = fuseOpenFun
+
+      -- Move bindings around so that consumers are next to producers
+      --
+      consumeFA
+          :: Arrays arrs'
+          => (forall aenv'. Fun aenv' c -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
+          -> Fun        aenv c
+          -> OpenAcc    aenv arrs
+          -> DelayedAcc aenv arrs'
+      consumeFA op c arr =
+        case delayOpenAcc (fuseOpenAcc arr) of
+          Done env a            -> Done env (op (sinkF env c) (force $ Done  BaseEnv a))
+          Step env sh ix f v    -> Done env (op (sinkF env c) (force $ Step  BaseEnv sh ix f v))
+          Yield env sh f        -> Done env (op (sinkF env c) (force $ Yield BaseEnv sh f))
+
+      consumeFEA
+          :: Arrays arrs'
+          => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
+          -> Fun        aenv c
+          -> Exp        aenv z
+          -> OpenAcc    aenv arrs
+          -> DelayedAcc aenv arrs'
+      consumeFEA op c z arr =
+        case delayOpenAcc (fuseOpenAcc arr) of
+          Done env a            -> Done env (op (sinkF env c) (sinkE env z) (force $ Done  BaseEnv a))
+          Step env sh ix f v    -> Done env (op (sinkF env c) (sinkE env z) (force $ Step  BaseEnv sh ix f v))
+          Yield env sh f        -> Done env (op (sinkF env c) (sinkE env z) (force $ Yield BaseEnv sh f))
+
+      consumeFA2
+          :: forall arrs' aenv c as bs. Arrays arrs'
+          => (forall aenv'. Fun aenv' c -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
+          -> Fun        aenv c
+          -> OpenAcc    aenv as
+          -> OpenAcc    aenv bs
+          -> DelayedAcc aenv arrs'
+      consumeFA2 op c arr1 arr2 =
+        case delayOpenAcc (fuseOpenAcc arr1) of
+          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
+          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
+        where
+          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
+          inner env1 a1 =
+            case delayOpenAcc (fuseOpenAcc (sinkA env1 arr2)) of
+              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Done  BaseEnv a2))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+
+      consumeFEA2
+          :: forall arrs' aenv c z as bs. Arrays arrs'
+          => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
+          -> Fun        aenv c
+          -> Exp        aenv z
+          -> OpenAcc    aenv as
+          -> OpenAcc    aenv bs
+          -> DelayedAcc aenv arrs'
+      consumeFEA2 op c z arr1 arr2 =
+        case delayOpenAcc (fuseOpenAcc arr1) of
+          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
+          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
+        where
+          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
+          inner env1 a1 =
+            case delayOpenAcc (fuseOpenAcc (sinkA env1 arr2)) of
+              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Done  BaseEnv a2))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+
+      consumeF2A2
+          :: forall arrs' aenv c p as bs. Arrays arrs'
+          => (forall aenv'. Fun aenv' c -> Fun aenv' p -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
+          -> Fun        aenv c
+          -> Fun        aenv p
+          -> OpenAcc    aenv as
+          -> OpenAcc    aenv bs
+          -> DelayedAcc aenv arrs'
+      consumeF2A2 op c p arr1 arr2 =
+        case delayOpenAcc (fuseOpenAcc arr1) of
+          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
+          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
+        where
+          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
+          inner env1 a1 =
+            case delayOpenAcc (fuseOpenAcc (sinkA env1 arr2)) of
+              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Done  BaseEnv a2))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+
   --
   in case pacc of
     -- Forms that introduce environment manipulations and control flow. These
@@ -111,45 +201,19 @@ delayOpenAcc (OpenAcc pacc) =
 
     -- Consumers
     --
-    Fold f z a
-      -> done $ Fold (cvtF f) (cvtE z) (force (cvt a))
-
-    Fold1 f a
-      -> done $ Fold1 (cvtF f) (force (cvt a))
-
-    FoldSeg f z a s
-      -> done $ FoldSeg (cvtF f) (cvtE z) (force (cvt a)) (force (cvt s))
-
-    Fold1Seg f a s
-      -> done $ Fold1Seg (cvtF f) (force (cvt a)) (force (cvt s))
-
-    Scanl f z a
-      -> done $ Scanl (cvtF f) (cvtE z) (force (cvt a))
-
-    Scanl' f z a
-      -> done $ Scanl' (cvtF f) (cvtE z) (force (cvt a))
-
-    Scanl1 f a
-      -> done $ Scanl1 (cvtF f) (force (cvt a))
-
-    Scanr f z a
-      -> done $ Scanr (cvtF f) (cvtE z) (force (cvt a))
-
-    Scanr' f z a
-      -> done $ Scanr' (cvtF f) (cvtE z) (force (cvt a))
-
-    Scanr1 f a
-      -> done $ Scanr1 (cvtF f) (force (cvt a))
-
-    Permute f d ix a
-      -> done $ Permute (cvtF f) (force (cvt d)) (cvtF ix) (force (cvt a))
-
-    Stencil f b a
-      -> done $ Stencil (cvtF f) b (force (cvt a))
-
-    Stencil2 f b1 a1 b0 a0
-      -> done $ Stencil2 (cvtF f) b1 (force (cvt a1))
-                                  b0 (force (cvt a0))
+    Fold f z a          -> consumeFEA Fold (cvtF f) (cvtE z) a
+    Fold1 f a           -> consumeFA Fold1 (cvtF f) a
+    FoldSeg f z a s     -> consumeFEA2 FoldSeg (cvtF f) (cvtE z) a s
+    Fold1Seg f a s      -> consumeFA2 Fold1Seg (cvtF f) a s
+    Scanl1 f a          -> consumeFA Scanl1 (cvtF f) a
+    Scanl f z a         -> consumeFEA Scanl (cvtF f) (cvtE z) a
+    Scanl' f z a        -> consumeFEA Scanl' (cvtF f) (cvtE z) a
+    Scanr1 f a          -> consumeFA Scanr1 (cvtF f) a
+    Scanr f z a         -> consumeFEA Scanr (cvtF f) (cvtE z) a
+    Scanr' f z a        -> consumeFEA Scanr' (cvtF f) (cvtE z) a
+    Permute f d p a     -> consumeF2A2 (\f' p' d' a' -> Permute f' d' p' a') (cvtF f) (cvtF p) d a
+    Stencil f x a       -> consumeFA (\f' a' -> Stencil f' x a') (cvtF f) a
+    Stencil2 f x a y b  -> consumeFA2 (\f' a' b' -> Stencil2 f' x a' y b') (cvtF f) a b
 
 
 fuseAtuple
