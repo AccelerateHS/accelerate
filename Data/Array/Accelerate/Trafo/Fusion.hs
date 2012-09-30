@@ -70,8 +70,8 @@ delayOpenAcc
     :: OpenAcc    aenv arrs
     -> DelayedAcc aenv arrs
 delayOpenAcc (OpenAcc pacc) =
-  let cvt :: OpenAcc aenv a -> DelayedAcc aenv a
-      cvt = delayOpenAcc
+  let cvtA :: OpenAcc aenv a -> DelayedAcc aenv a
+      cvtA = delayOpenAcc
 
       cvtE :: OpenExp env aenv t -> OpenExp env aenv t
       cvtE = fuseOpenExp
@@ -97,32 +97,17 @@ delayOpenAcc (OpenAcc pacc) =
 
     -- Index space transforms
     --
-    Reshape sl acc
-      -> let sh' = cvtE sl
-         in case cvt acc of
-           -- TLM: there was a runtime check to ensure the old and new shapes
-           -- contained the same number of elements: this has been lost!
-           --
-           Done env a
-            -> let env' = env `PushEnv` a
-                   shx  = sinkE env' sh'
-                   ix   = reindex (Shape (OpenAcc (Avar ZeroIdx))) shx
-               in
-               Step env' shx ix identity ZeroIdx
-           --
-           Step env sh ix f a   -> let shx = sinkE env sh' in Step env shx (ix `compose` reindex sh shx) f a
-           Yield env sh f       -> let shx = sinkE env sh' in Yield env shx (f `compose` reindex sh shx)
-
-    Replicate slix sh a -> replicateD slix (cvtE sh) (cvt a)
-    Slice slix a sh     -> sliceD slix (cvt a) (cvtE sh)
-    Backpermute sl p a  -> backpermuteD (cvtE sl) (cvtF p) (cvt a)
+    Reshape sl acc      -> reshapeD (cvtE sl) (cvtA acc)
+    Replicate slix sh a -> replicateD slix (cvtE sh) (cvtA a)
+    Slice slix a sh     -> sliceD slix (cvtA a) (cvtE sh)
+    Backpermute sl p a  -> backpermuteD (cvtE sl) (cvtF p) (cvtA a)
 
     -- Producers
     --
     Generate sh f       -> Yield BaseEnv (cvtE sh) (cvtF f)
-    Map f a             -> mapD (cvtF f) (cvt a)
+    Map f a             -> mapD (cvtF f) (cvtA a)
     ZipWith f a1 a2     -> zipWithD (cvtF f) a1 a2
-    Transform sl p f a  -> backpermuteD (cvtE sl) (cvtF p) $ mapD (cvtF f) (cvt a)
+    Transform sl p f a  -> backpermuteD (cvtE sl) (cvtF p) $ mapD (cvtF f) (cvtA a)
 
     -- Consumers
     --
@@ -292,13 +277,34 @@ force delayed
   $ case delayed of
       Done env a                                -> bind env a
       Yield env sh f                            -> bind env $ Generate sh f
-      Step env sh ix f a
-        | Just REFL <- matchOpenExp sh (Shape a')
-        , Lam (Body (Var ZeroIdx)) <- ix        -> bind env $ Map f a'
-        | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a'
-        | otherwise                             -> bind env $ Transform sh ix f a'
+      Step env sh ix f v
+        | Just REFL <- matchOpenExp sh (Shape a)
+        , Lam (Body (Var ZeroIdx)) <- ix        -> bind env $ Map f a
+        | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a
+        | otherwise                             -> bind env $ Transform sh ix f a
         where
-          a'    = OpenAcc (Avar a)
+          a = OpenAcc (Avar v)
+
+
+-- Reshape a delayed array.
+--
+-- TLM: there was a runtime check to ensure the old and new shapes contained the
+--      same number of elements: this has been lost!
+--
+reshapeD
+    :: (Shape sh, Shape sh', Elt e)
+    => Exp        aenv sh'
+    -> DelayedAcc aenv (Array sh  e)
+    -> DelayedAcc aenv (Array sh' e)
+reshapeD sl acc = case acc of
+  Step env sh ix f v    -> let sl' = sinkE env sl in Step env sl' (ix `compose` reindex sh sl') f v
+  Yield env sh f        -> let sl' = sinkE env sl in Yield env sl' (f `compose` reindex sh sl')
+  Done env a            ->
+    let env'    = env `PushEnv` a
+        sl'     = sinkE env' sl
+        ix      = reindex (Shape (OpenAcc (Avar ZeroIdx))) sl'
+    in
+    Step env' sl' ix identity ZeroIdx
 
 
 -- Apply an index space transform that specifies where elements in the
