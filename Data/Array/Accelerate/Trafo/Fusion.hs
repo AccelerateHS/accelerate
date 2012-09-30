@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fusion
@@ -79,7 +80,9 @@ delayOpenAcc (OpenAcc pacc) =
       cvtF :: OpenFun env aenv t -> OpenFun env aenv t
       cvtF = fuseOpenFun
 
-      -- Move bindings around so that consumers are next to producers
+      -- Move bindings around so that consumers are next to producers. We need
+      -- to run (delay . fuse) so that the producer Acc is optimised in the
+      -- presence of its let bindings before being integrated (cf. aletD)
       --
       consumeFA
           :: Arrays arrs'
@@ -169,8 +172,8 @@ delayOpenAcc (OpenAcc pacc) =
               Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
   --
   in case pacc of
-    -- Forms that introduce environment manipulations and control flow. These
-    -- stable points of the expression we generally don't want to fuse past.
+    -- Forms that introduce environment manipulations and control flow. We
+    -- generally don't want to fuse past these points in the expression.
     --
     Alet bnd body       -> aletD bnd body
     Avar ix             -> done $ Avar ix
@@ -325,11 +328,8 @@ reindex :: (Shape sh, Shape sh')
         -> OpenExp env aenv sh
         -> OpenFun env aenv (sh -> sh')
 reindex sh' sh
-  | Just REFL <- matchOpenExp sh sh'
-  = Lam . Body $ Var ZeroIdx
-
-  | otherwise
-  = fromIndex sh' `compose` toIndex sh
+  | Just REFL <- matchOpenExp sh sh'    = identity
+  | otherwise                           = fromIndex sh' `compose` toIndex sh
 
 
 -- "force" a delayed array representation to produce a real AST node.
@@ -366,8 +366,7 @@ reshapeD sl acc = case acc of
     let env'    = env `PushEnv` a
         sl'     = sinkE env' sl
         ix      = reindex (Shape (OpenAcc (Avar ZeroIdx))) sl'
-    in
-    Step env' sl' ix identity ZeroIdx
+    in  Step env' sl' ix identity ZeroIdx
 
 
 -- Apply an index space transform that specifies where elements in the
