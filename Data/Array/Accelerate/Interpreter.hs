@@ -678,7 +678,7 @@ evalFun f aenv = evalOpenFun f EmptyElt aenv
 
 -- Evaluate an open expression
 --
--- NB: The implementation of 'IndexScalar' and 'Shape' demonstrate clearly why
+-- NB: The implementation of 'Index' and 'Shape' demonstrate clearly why
 --     array expressions must be hoisted out of scalar expressions before code
 --     execution.  If these operations are in the body of a function that
 --     gets mapped over an array, the array argument would be forced many times
@@ -768,7 +768,7 @@ evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 evalOpenExp (PrimApp p arg) env aenv
   = evalPrim p (evalOpenExp arg env aenv)
 
-evalOpenExp (IndexScalar acc ix) env aenv
+evalOpenExp (Index acc ix) env aenv
   = case evalOpenAcc acc aenv of
       DelayedPair DelayedUnit (DelayedArray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
@@ -776,6 +776,13 @@ evalOpenExp (IndexScalar acc ix) env aenv
         toIndex sh ix' `seq` (Sugar.toElt $ pf ix')
                               -- FIXME: This is ugly, but (possibly) needed to
                               --       ensure bounds checking
+
+evalOpenExp (LinearIndex acc i) env aenv
+  = case evalOpenAcc acc aenv of
+      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+        let i' = evalOpenExp i env aenv
+            v  = pf (fromIndex sh i')
+        in Sugar.toElt v
 
 evalOpenExp (Shape acc) _ aenv
   = case evalOpenAcc acc aenv of
