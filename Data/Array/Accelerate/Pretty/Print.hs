@@ -291,7 +291,7 @@ prettyPreExp pp lvl alvl wrap (PrimApp p a)
 prettyPreExp pp lvl alvl wrap (Index idx i)
   = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp lvl alvl wrap (LinearIndex idx i)
-  = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
+  = wrap $ cat [pp alvl parens idx, text "!!", prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> pp alvl parens idx
 prettyPreExp pp lvl alvl wrap (ShapeSize idx)
