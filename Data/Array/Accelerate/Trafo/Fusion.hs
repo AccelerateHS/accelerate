@@ -883,36 +883,3 @@ join :: Extend env env' -> Extend env' env'' -> Extend env env''
 join x BaseEnv        = x
 join x (PushEnv xs a) = join x xs `PushEnv` a
 
-
-
-{--
--- We use a type family to represent how to concatenate environments, so we can
--- separate the base environment (aenv) from just the part that extends it
--- (aenv'). In this way, we can manipulate both the head and tail of the
--- extended environment, and are not limited to simply putting more things onto
--- the end.
---
-type family Cat env env' :: *
-type instance Cat env ()       = env
-type instance Cat env (env',s) = (Cat env env', s)
-
-
-cat :: Extend env env' -> Extend env env'' -> Extend env (Cat env' env'')
-cat x BaseEnv       = x
-cat x (PushEnv e a) = cat x e `PushEnv` split x e a
-  where
-    split :: Extend env env'
-          -> Extend env env''
-          -> PreOpenAcc OpenAcc (Cat env env'')            a
-          -> PreOpenAcc OpenAcc (Cat env (Cat env' env'')) a
-    split env1 env2 = rebuildA rebuildOpenAcc (Avar . open env1 env2)
-
-    open :: Extend env env'
-         -> Extend env env''
-         -> Idx (Cat env env'')            t
-         -> Idx (Cat env (Cat env' env'')) t
-    open e BaseEnv       ix           = sink e ix
-    open _ (PushEnv _ _) ZeroIdx      = ZeroIdx
-    open e (PushEnv n _) (SuccIdx ix) = SuccIdx (open e n ix)
---}
-
