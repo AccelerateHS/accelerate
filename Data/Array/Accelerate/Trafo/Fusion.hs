@@ -320,6 +320,9 @@ toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
 fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
+arrayShape :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Exp aenv sh
+arrayShape = Shape . OpenAcc . Avar
+
 indexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (sh -> e)
 indexArray v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
 
@@ -446,7 +449,7 @@ mapD f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
   Done env a            -> Step (env `PushEnv` a)
-                                (Shape (OpenAcc (Avar ZeroIdx)))
+                                (arrayShape ZeroIdx)
                                 identity
                                 (weakenFA (sinkF env f))
                                 ZeroIdx
@@ -463,20 +466,17 @@ zipWithD
     -> OpenAcc    aenv (Array sh b)
     -> DelayedAcc aenv (Array sh c)
 zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
-  Done env a1                   -> inner (env `PushEnv` a1) (shape ZeroIdx) (indexArray ZeroIdx)
+  Done env a1                   -> inner (env `PushEnv` a1) (arrayShape ZeroIdx) (indexArray ZeroIdx)
   Step env1 sh1 ix1 g1 a1       -> inner env1 sh1 (g1 `compose` indexArray a1 `compose` ix1)
   Yield env1 sh1 g1             -> inner env1 sh1 g1
   where
-    shape :: (Shape dim, Elt e) => Idx aenv' (Array dim e) -> Exp aenv' dim
-    shape v = Shape (OpenAcc (Avar v))
-
     inner :: Extend aenv aenv'
           -> Exp        aenv' sh
           -> Fun        aenv' (sh -> a)
           -> DelayedAcc aenv  (Array sh c)
     inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
       Done env2 a2 -> let env = join env1 env2 `PushEnv` a2
-                      in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` shape ZeroIdx)
+                      in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` arrayShape ZeroIdx)
                                     (generate (sinkF env f)
                                               (weakenFA (sinkF env2 g1))
                                               (indexArray ZeroIdx))
