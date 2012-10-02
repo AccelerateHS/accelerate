@@ -759,7 +759,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv t
 
-  LinearIndex   :: Elt t
+  LinearIndex   :: (Shape dim, Elt t)
                 => acc                aenv (Array dim t)
                 -> PreOpenExp acc env aenv Int
                 -> PreOpenExp acc env aenv t
