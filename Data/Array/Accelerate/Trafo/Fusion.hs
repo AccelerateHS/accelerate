@@ -309,7 +309,7 @@ data DelayedAcc aenv a where
 -- ------------------
 
 done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
-done = Done BaseEnv
+done a = Done (BaseEnv `PushEnv` a) (Avar ZeroIdx)
 
 identity :: Elt a => OpenFun env aenv (a -> a)
 identity = Lam . Body $ Var ZeroIdx
