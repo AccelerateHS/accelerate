@@ -550,7 +550,7 @@ aletD bndAcc bodyAcc =
      -> let OpenAcc bnd = force $ Step BaseEnv sh1 ix1 f1 a1
         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
           Done env2 b
-           -> Done (env1 `join` bnd `cons` env2) b
+           -> into (env1 `join` bnd `cons` env2) env2 sh1 (f1 `compose` indexArray a1 `compose` ix1) b
 
           Step env2 sh2 ix2 f2 a2
            -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
@@ -565,7 +565,7 @@ aletD bndAcc bodyAcc =
      -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
           Done env2 b
-           -> Done (env1 `join` bnd `cons` env2) b
+           -> into (env1 `join` bnd `cons` env2) env2 sh1 f1 b
 
           Step env2 sh2 ix2 f2 a2
            -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
@@ -576,6 +576,23 @@ aletD bndAcc bodyAcc =
                         (yield env1 env2 sh1 sh2 f1 f2)
 
   where
+    -- When does the cost of re-computation out weight global memory access? For
+    -- the moment only do the substitution on a single use of the bound array,
+    -- but it is likely advantageous to be far more aggressive here.
+    --
+    lIMIT = 1
+
+    -- Eliminating a let binding pushes the binding subject into the body as a
+    -- scalar shape and generator function, producing a delayed Yield node.
+    --
+    yield :: (Shape sh, Shape sh', Elt e, Elt e')
+          => Extend aenv                aenv'
+          -> Extend (aenv', Array sh e) aenv''
+          -> Exp aenv'  sh
+          -> Exp aenv'' sh'
+          -> Fun aenv'  (sh -> e)
+          -> Fun aenv'' (sh' -> e')
+          -> Maybe (DelayedAcc aenv (Array sh' e'))
     yield env1 env2 sh1 sh2 f1 f2
       | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
       = Just $ Yield (env1 `join` env2') (replaceE sh1' f1' a0 sh2) (replaceF sh1' f1' a0 f2)
@@ -583,12 +600,6 @@ aletD bndAcc bodyAcc =
       | otherwise
       = Nothing
       where
-        -- When does the cost of re-computation out weight global memory access? For
-        -- the moment only do the substitution on a single use of the bound array,
-        -- but it is likely advantageous to be far more aggressive here.
-        --
-        lIMIT = 1
-
         -- If we do the merge, 'bnd' becomes dead code and will be later
         -- eliminated by the shrinking step.
         --
@@ -598,6 +609,26 @@ aletD bndAcc bodyAcc =
         sh1'            = sinkE env2' sh1
         f1'             = sinkF env2' f1
 
+    -- If the body is forward permutation, we might be able to fuse into this.
+    --
+    into :: (Shape sh, Elt e, Arrays a)
+         => Extend aenv                aenv''
+         -> Extend (aenv', Array sh e) aenv''
+         -> Exp aenv' sh
+         -> Fun aenv' (sh -> e)
+         -> PreOpenAcc OpenAcc aenv'' a
+         -> DelayedAcc         aenv   a
+    into env env2 sh1 f1 body
+      | Permute c2 d2 ix2 s2 <- body
+      , usesOfFA a0 c2 + usesOfFA a0 ix2 + usesOfAX a0 env2 <= lIMIT
+      = Done env $ Permute (replaceF sh1' f1' a0 c2) d2 (replaceF sh1' f1' a0 ix2) s2
+
+      | otherwise
+      = Done env body
+      where
+        a0      = sink  env2 ZeroIdx
+        sh1'    = sinkE env2 $ weakenEA sh1
+        f1'     = sinkF env2 $ weakenFA f1
 
     -- Count the number of uses of an array variable. This is specialised from
     -- the procedure for shrinking in that we ignore uses that occur as part of
