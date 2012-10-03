@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenAcc, matchOpenExp, matchOpenFun,
+  matchOpenAcc, matchOpenAfun, matchOpenExp, matchOpenFun,
 
   -- auxiliary
   matchIdx, matchTupleType,
@@ -85,8 +85,8 @@ matchPreOpenAcc (Aprj ix1 t1) (Aprj ix2 t2)
   = Just REFL
 
 matchPreOpenAcc (Apply f1 a1) (Apply f2 a2)
-  | Just REFL <- matchAfun    f1 f2
-  , Just REFL <- matchOpenAcc a1 a2
+  | Just REFL <- matchOpenAfun f1 f2
+  , Just REFL <- matchOpenAcc  a1 a2
   = Just REFL
 
 matchPreOpenAcc (Acond p1 t1 e1) (Acond p2 t2 e2)
@@ -246,18 +246,18 @@ matchAtuple _       _       = Nothing
 
 -- Array functions
 --
-matchAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
-matchAfun (Alam s) (Alam t)
-  | Just REFL <- matchEnvTop s t
-  , Just REFL <- matchAfun   s t
+matchOpenAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
+matchOpenAfun (Alam s) (Alam t)
+  | Just REFL <- matchEnvTop   s t
+  , Just REFL <- matchOpenAfun s t
   = Just REFL
   where
     matchEnvTop :: (Arrays s, Arrays t)
                 => OpenAfun (aenv, s) f -> OpenAfun (aenv, t) g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL  -- ???
 
-matchAfun (Abody s) (Abody t) = matchOpenAcc s t
-matchAfun _         _         = Nothing
+matchOpenAfun (Abody s) (Abody t) = matchOpenAcc s t
+matchOpenAfun _         _         = Nothing
 
 
 -- Match stencil boundaries
