@@ -623,7 +623,7 @@ aletD bndAcc bodyAcc =
          -> DelayedAcc         aenv   a
     into env env2 sh1 f1 body
       | Permute c2 d2 ix2 s2 <- body
-      , usesOfFA a0 c2 + usesOfFA a0 ix2 + usesOfAX a0 env2 <= lIMIT
+      , usesOfFA a0 c2 + usesOfFA a0 ix2 + usesOfAX a0 env2 + usesOf a0 d2 + usesOf a0 s2 <= lIMIT
       = Done env $ Permute (replaceF sh1' f1' a0 c2) d2 (replaceF sh1' f1' a0 ix2) s2
 
       | otherwise
