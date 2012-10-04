@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A hiding ( size )
+import Data.Array.Accelerate.IO                 as A
 import qualified Graphics.Gloss                 as G
 
 
@@ -33,8 +34,7 @@ type Complex      = (R,R)
 type ComplexPlane = Array DIM2 Complex
 
 -- Image data
-type RGBA         = Word32
-type Bitmap       = Array DIM2 RGBA
+type Bitmap       = Array DIM2 RGBA32
 
 -- Action to render a frame
 type Render       = Scalar View -> Bitmap
@@ -110,15 +110,63 @@ mkinit cs = A.zip cs (A.fill (A.shape cs) 0)
 
 -- Rendering -------------------------------------------------------------------
 
-prettyRGBA :: Exp Int -> Exp (Complex, Int) -> Exp RGBA
-prettyRGBA lIMIT s' = r + g + b + a
-  where
-    s   = A.snd s'
-    t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
-    r   = (t     `rem` 128 + 64) * 0x1000000
-    g   = (t * 2 `rem` 128 + 64) * 0x10000
-    b   = (t * 3 `rem` 256     ) * 0x100
-    a   = 0xFF
+-- A simple colour scheme
+--
+-- prettyRGBA :: Exp Int -> Exp (Complex, Int) -> Exp RGBA32
+-- prettyRGBA lIMIT s' = r + g + b + a
+--   where
+--     s   = A.snd s'
+--     t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
+--     r   = (t     `rem` 128 + 64) * 0x1000000
+--     g   = (t * 2 `rem` 128 + 64) * 0x10000
+--     b   = (t * 3 `rem` 256     ) * 0x100
+--     a   = 0xFF
+
+prettyRGBA :: Exp Int -> Exp (Complex, Int) -> Exp RGBA32
+prettyRGBA lIMIT s =
+  let cmax      = A.fromIntegral lIMIT          :: Exp R
+      c         = A.fromIntegral (A.snd s)      :: Exp R
+  in
+  c >* 250 ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
+
+-- Standard Hot-to-Cold hypsometric colour ramp. Colour sequence is
+--   Red, Yellow, Green, Cyan, Blue
+--
+rampColourHotToCold
+    :: (Ord a, IsFloating a, Elt a)
+    => Exp a                            -- ^ minimum value of the range
+    -> Exp a                            -- ^ maximum value of the range
+    -> Exp a                            -- ^ data value
+    -> Exp RGBA32
+rampColourHotToCold vmin vmax vNotNorm
+  = let v       = vmin `A.max` vNotNorm `A.min` vmax
+        dv      = vmax - vmin
+        --
+        result  = v <* vmin + 0.28 * dv
+                ? ( lift ( constant 0.0
+                         , 4 * (v-vmin) / dv
+                         , constant 1.0
+                         , constant 1.0 )
+
+                , v <* vmin + 0.5 * dv
+                ? ( lift ( constant 0.0
+                         , constant 1.0
+                         , 1 + 4 * (vmin + 0.25 * dv - v) / dv
+                         , constant 1.0 )
+
+                , v <* vmin + 0.75 * dv
+                ? ( lift ( 4 * (v - vmin - 0.5 * dv) / dv
+                         , constant 1.0
+                         , constant 0.0
+                         , constant 1.0 )
+
+                ,   lift ( constant 1.0
+                         , 1 + 4 * (vmin + 0.75 * dv - v) / dv
+                         , constant 0.0
+                         , constant 1.0 )
+                )))
+    in
+    rgba32OfFloat result
 
 
 makePicture :: Render -> World -> G.Picture

@@ -77,7 +77,7 @@ options =
 #endif
   , Option []   ["size"]        (ReqArg (set optSize . read) "INT")     "visualisation size (512)"
   , Option []   ["limit"]       (ReqArg (set optLimit . read) "INT")    "iteration limit for escape (255)"
-  , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INt")"visualisation framerate (10)"
+  , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INT")"visualisation framerate (10)"
   , Option []   ["benchmark"]   (NoArg  (set optBench True))            "benchmark instead of displaying animation (False)"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))             "show help message"
   ]
