@@ -103,5 +103,6 @@ processArgs argv =
       , ""
       , "Usage: accelerate-mandelbrot [OPTIONS]"
       , ""
-      , "Translate the display using the arrow keys, zoom with 'z' and 'x'"
+      , "Translate the display using the arrow keys, zoom with 'z' and 'x'."
+      , "Switch between calculation using float or double with 'f' and 'd'."
       ]

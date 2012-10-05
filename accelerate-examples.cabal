@@ -189,7 +189,7 @@ Executable accelerate-crystal
 Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot
   Main-is:              Main.hs
-  other-modules:        Config
+  other-modules:        Config World Mandel
   ghc-options:          -O2 -Wall
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
