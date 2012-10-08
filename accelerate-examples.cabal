@@ -240,6 +240,36 @@ Executable accelerate-fluid
                         fclabels                >= 1.0,
                         gloss                   >= 1.7
 
+Executable accelerate-nbody
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/n-body
+  other-modules:        Config
+                        Common.Body
+                        Common.Dump
+                        Common.Tree
+                        Common.Type
+                        Common.Util
+                        Common.World
+                        Gloss.Draw
+                        Gloss.Event
+                        Gloss.Simulate
+                        Random.Array
+                        Random.Position
+                        Solver.BarnsHut
+                        Solver.Naive
+
+  if flag(gui)
+    cpp-options:        -DACCELERATE_ENABLE_GUI
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.13
+
+  Build-depends:        accelerate              >= 0.13,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        gloss                   >= 1.7
 
 source-repository head
   type:                 git
