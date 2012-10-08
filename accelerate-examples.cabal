@@ -182,7 +182,7 @@ Executable accelerate-crystal
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   >= 1.5
+                        gloss                   >= 1.7
 
 -- A simple mandelbrot generator
 
@@ -209,7 +209,7 @@ Executable accelerate-mandelbrot
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   >= 1.5
+                        gloss                   >= 1.7
 
 
 -- A stable fluid simulation

@@ -130,9 +130,9 @@ rampColour v = ra + g + b
 
 
 -- Rendering ------------------------------------------------------------------
--- | Compute a single frame of the animation as a Gloss picture.
---frame :: Size -> Scale -> Zoom -> Degree -> Float -> G.Picture
 
+-- | Compute a single frame of the animation as a Gloss picture.
+--
 frame :: Render -> Size -> Zoom -> Float -> G.Picture
 frame render size zoom time = G.scale zoom' zoom' pic
   where
@@ -183,17 +183,9 @@ main
 
 #ifndef ACCELERATE_ENABLE_GUI
            else return ()
-
-#elif MIN_VERSION_gloss(1,6,0)
+#else
            else G.animate
                     (G.InWindow "Quasicrystals" (size  * zoom, size * zoom) (10, 10))
-                    (G.black)
-                    (frame render size zoom)
-#else
-           else G.animateInWindow
-                    "Quasicrystals"
-                    (size  * zoom, size * zoom)
-                    (10, 10)
                     (G.black)
                     (frame render size zoom)
 #endif
