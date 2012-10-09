@@ -40,7 +40,7 @@ convertAcc = Fusion.fuseAcc . Sharing.convertAcc
 -- | Convert a unary function over array computations
 --
 convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1 = Fusion.fuseAccFun1 . Sharing.convertAccFun1
+convertAccFun1 = Fusion.fuseAfun . Sharing.convertAccFun1
 
 
 -- Pretty printing

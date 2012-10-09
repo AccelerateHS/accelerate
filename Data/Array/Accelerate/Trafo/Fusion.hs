@@ -15,12 +15,12 @@
 module Data.Array.Accelerate.Trafo.Fusion (
 
   -- * Fuse array computations
-  fuseAcc, fuseAccFun1
+  fuseAcc, fuseAfun,
 
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp, iterate )
+import Prelude                                          hiding ( exp, until )
 import Data.Maybe
 
 -- friends
@@ -36,23 +36,22 @@ import Data.Array.Accelerate.Tuple
 -- | Apply the array fusion transformation to a de Bruijn AST
 --
 fuseAcc :: Acc arrs -> Acc arrs
-fuseAcc = iterate fuseOpenAcc matchOpenAcc
+fuseAcc = until matchOpenAcc fuseOpenAcc
 
 -- | Fuse a unary function over array computations
 --
-fuseAccFun1 :: (Arrays a, Arrays b) => Afun (a -> b) -> Afun (a -> b)
-fuseAccFun1 = iterate fuseOpenAfun matchOpenAfun
+fuseAfun :: Afun f -> Afun f
+fuseAfun = until matchOpenAfun fuseOpenAfun
 
-iterate :: forall f done. (f -> f) -> (f -> f -> Maybe done) -> f -> f
-iterate process stop = go 0
+until :: forall f done. (f -> f -> Maybe done) -> (f -> f) -> f -> f
+until stop process = go 0
   where
     go :: Int -> f -> f
-    go i x
-      | i < lIMIT, Nothing <- stop x x' = go (i+1) x'
-      | otherwise                       = x'
-      where
-        lIMIT   = 10
-        x'      = process x
+    go i x | i < lIMIT, Nothing <- stop x x' = go (i+1) x'
+           | otherwise                       = x'
+           where
+             lIMIT = 10
+             x'    = process x
 
 
 -- Array fusion of a de Bruijn computation AST
