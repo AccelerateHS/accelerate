@@ -66,22 +66,29 @@ import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 -- Program execution
 -- -----------------
 
--- |Run a complete embedded array program using the reference interpreter.
+-- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
 run = force . evalAcc . Sugar.convertAcc
+
+-- | Prepare and run an embedded array program of one argument
+--
+run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
+run1 afun = \a -> exec acc a
+  where
+    acc = Sugar.convertAccFun1 afun
+
+    exec :: Afun (a -> b) -> a -> b
+    exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)
+    exec _                _ = error "Hey type checker! We can not get here!"
+
 
 -- | Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
 --
 stream :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> [a] -> [b]
-stream afun = map (run1 acc)
-  where
-    acc = Sugar.convertAccFun1 afun
-
-    run1 :: Afun (a -> b) -> a -> b
-    run1 (Alam (Abody f)) = \a -> force (evalOpenAcc f (Empty `Push` a))
-    run1 _                = error "Hey type checker! We can not get here!"
+stream afun arrs = let go = run1 afun
+                   in  map go arrs
 
 
 -- Delayed arrays
