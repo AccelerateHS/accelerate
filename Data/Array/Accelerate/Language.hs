@@ -206,10 +206,19 @@ reshape = Acc $$ Reshape
 -- Extraction of sub-arrays
 -- ------------------------
 
--- | Index an array with a /generalised/ array index, supplied as the second
--- argument. The result is a new array (possibly a singleton) containing all
--- dimensions in their entirety.
+-- | Index an array with a /generalised/ array index, supplied as the
+-- second argument. The result is a new array (possibly a singleton)
+-- containing the selected dimensions (`All`s) in their entirety.
 --
+-- This can be used to /cut out/ entire dimensions.  The opposite of
+-- `replicate`.  For example, if 'mat' is a two dimensional array, the
+-- following will select a specific row and yield a one dimensional
+-- result:
+--
+-- > slice mat (constant (Z :. (2::Int) :. All))
+--
+-- A fully specified index (with no `All`s) would return a single
+-- element (zero dimensional array).
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
