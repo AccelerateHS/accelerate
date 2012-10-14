@@ -43,15 +43,16 @@ fuseAcc = until matchOpenAcc fuseOpenAcc
 fuseAfun :: Afun f -> Afun f
 fuseAfun = until matchOpenAfun fuseOpenAfun
 
+
 until :: forall f done. (f -> f -> Maybe done) -> (f -> f) -> f -> f
-until stop process = go 0
+until stop go = fix 0
   where
-    go :: Int -> f -> f
-    go i x | i < lIMIT, Nothing <- stop x x' = go (i+1) x'
-           | otherwise                       = x'
-           where
-             lIMIT = 10
-             x'    = process x
+    fix :: Int -> f -> f
+    fix i x | i < lIMIT, Nothing <- stop x x'   = fix (i+1) x'
+            | otherwise                         = x'
+            where
+              lIMIT = 10
+              x'    = go x
 
 
 -- Array fusion of a de Bruijn computation AST
