@@ -17,6 +17,8 @@ module Data.Array.Accelerate.Trafo.Fusion (
   -- * Fuse array computations
   fuseAcc, fuseAfun,
 
+  Delayed(..), delayAcc,
+
 ) where
 
 -- standard library
@@ -53,6 +55,44 @@ until stop go = fix 0
             where
               lIMIT = 10
               x'    = go x
+
+
+-- | Convert an array computation into an embeddable delayed representation.
+--   TLM: make this nicer-er.
+--
+data Delayed aenv sh e
+  = (Shape sh, Elt e) =>
+    DelayedArray { extent      :: Exp aenv sh
+                 , index       :: Fun aenv (sh  -> e)
+                 , linearIndex :: Fun aenv (Int -> e)
+                 }
+
+delayAcc :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> Maybe (Delayed aenv sh e)
+delayAcc (OpenAcc pacc)
+  | Generate sh f       <- pacc
+  = Just $ DelayedArray sh f (f `compose` fromIndex sh)
+
+  | Avar v              <- pacc
+  = Just $ DelayedArray (arrayShape v) (indexArray v) (linearIndexArray v)
+
+  | Map f a             <- pacc
+  , OpenAcc (Avar v)    <- a
+  = Just $ DelayedArray (arrayShape v)
+                        (f `compose` indexArray v)
+                        (f `compose` linearIndexArray v)
+
+  | Backpermute sh ix a <- pacc
+  , OpenAcc (Avar v)    <- a
+  = Just $ DelayedArray sh (indexArray v `compose` ix)
+                           (indexArray v `compose` ix `compose` fromIndex sh)
+
+  | Transform sh ix f a <- pacc
+  , OpenAcc (Avar v)    <- a
+  = Just $ DelayedArray sh (f `compose` indexArray v `compose` ix)
+                           (f `compose` indexArray v `compose` ix `compose` fromIndex sh)
+
+  | otherwise
+  = Nothing
 
 
 -- Array fusion of a de Bruijn computation AST
@@ -331,6 +371,9 @@ arrayShape = Shape . OpenAcc . Avar
 
 indexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (sh -> e)
 indexArray v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
+
+linearIndexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (Int -> e)
+linearIndexArray v = Lam . Body $ LinearIndex (OpenAcc (Avar v)) (Var ZeroIdx)
 
 reindex :: (Shape sh, Shape sh')
         => OpenExp env aenv sh'
