@@ -37,7 +37,7 @@ import Data.Array.Accelerate.Tuple
 
 -- | Apply the array fusion transformation to a de Bruijn AST
 --
-fuseAcc :: Acc arrs -> Acc arrs
+fuseAcc :: Arrays arrs => Acc arrs -> Acc arrs
 fuseAcc = until matchOpenAcc fuseOpenAcc
 
 -- | Fuse a unary function over array computations
@@ -106,15 +106,16 @@ fuseOpenAfun (Alam  f) = Alam  (fuseOpenAfun f)
 fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
 
 
-fuseOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
+fuseOpenAcc :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
 fuseOpenAcc = force . delayOpenAcc
 
 
 delayOpenAcc
-    :: OpenAcc    aenv arrs
+    :: Arrays arrs
+    => OpenAcc    aenv arrs
     -> DelayedAcc aenv arrs
 delayOpenAcc (OpenAcc pacc) =
-  let cvtA :: OpenAcc aenv a -> DelayedAcc aenv a
+  let cvtA :: Arrays a => OpenAcc aenv a -> DelayedAcc aenv a
       cvtA = delayOpenAcc
 
       cvtE :: OpenExp env aenv t -> OpenExp env aenv t
@@ -123,7 +124,7 @@ delayOpenAcc (OpenAcc pacc) =
       cvtF :: OpenFun env aenv t -> OpenFun env aenv t
       cvtF = fuseOpenFun
 
-      delayA :: OpenAcc aenv a -> DelayedAcc aenv a
+      delayA :: Arrays a => OpenAcc aenv a -> DelayedAcc aenv a
       delayA = delayOpenAcc . until matchOpenAcc fuseOpenAcc
 
       a0 :: Arrays a => OpenAcc (aenv, a) a
@@ -134,7 +135,7 @@ delayOpenAcc (OpenAcc pacc) =
       -- presence of its let bindings before being integrated (cf. aletD)
       --
       consumeFA
-          :: Arrays arrs'
+          :: (Arrays arrs, Arrays arrs')
           => (forall aenv'. Fun aenv' c -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
           -> Fun        aenv c
           -> OpenAcc    aenv arrs
@@ -146,7 +147,7 @@ delayOpenAcc (OpenAcc pacc) =
           Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) a0)
 
       consumeFEA
-          :: Arrays arrs'
+          :: (Arrays arrs, Arrays arrs')
           => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
           -> Fun        aenv c
           -> Exp        aenv z
@@ -159,7 +160,7 @@ delayOpenAcc (OpenAcc pacc) =
           Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) (sinkE env' z) a0)
 
       consumeFA2
-          :: forall arrs' aenv c as bs. Arrays arrs'
+          :: forall arrs' aenv c as bs. (Arrays as, Arrays bs, Arrays arrs')
           => (forall aenv'. Fun aenv' c -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
           -> Fun        aenv c
           -> OpenAcc    aenv as
@@ -180,7 +181,7 @@ delayOpenAcc (OpenAcc pacc) =
                                            in  Done env' (op (sinkF env' c) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeFEA2
-          :: forall arrs' aenv c z as bs. Arrays arrs'
+          :: forall arrs' aenv c z as bs. (Arrays as, Arrays bs, Arrays arrs')
           => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
           -> Fun        aenv c
           -> Exp        aenv z
@@ -202,7 +203,7 @@ delayOpenAcc (OpenAcc pacc) =
                                            in  Done env' (op (sinkF env' c) (sinkE env' z) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeF2A2
-          :: forall arrs' aenv c p as bs. Arrays arrs'
+          :: forall arrs' aenv c p as bs. (Arrays as, Arrays bs, Arrays arrs')
           => (forall aenv'. Fun aenv' c -> Fun aenv' p -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
           -> Fun        aenv c
           -> Fun        aenv p
@@ -285,7 +286,7 @@ fuseOpenExp
     -> OpenExp env aenv t
 fuseOpenExp = cvt
   where
-    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
+    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
     cvtA = fuseOpenAcc
 
     cvtF :: OpenFun env aenv t -> OpenFun env aenv t
@@ -392,9 +393,9 @@ reindex sh' sh
 
 -- "force" a delayed array representation to produce a real AST node.
 --
-force :: DelayedAcc aenv a -> OpenAcc aenv a
+force :: Arrays a => DelayedAcc aenv a -> OpenAcc aenv a
 force delayed
-  = simplifyOpenAcc . OpenAcc
+  = simplifyOpenAcc EmptyAcc . OpenAcc  -- TLM: hax
   $ case delayed of
       Done env a                                -> bind env a
       Yield env sh f                            -> bind env $ Generate sh f

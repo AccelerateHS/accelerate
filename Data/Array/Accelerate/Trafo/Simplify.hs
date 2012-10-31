@@ -15,11 +15,10 @@
 module Data.Array.Accelerate.Trafo.Simplify (
 
   -- simplify scalar expressions
-  simplifyExp,
-  simplifyFun,
+  simplifyExp, simplifyFun,
 
   -- simplify array computations
-  simplifyOpenAcc,
+  simplifyAcc, simplifyAfun, simplifyOpenAcc, Delta(..),
 
 ) where
 
@@ -31,37 +30,40 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape )
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape )
 
 import qualified Debug.Trace                            as Debug
 
+
+-- Scalar expressions
+-- ------------------
 
 -- An environment that holds let-bound scalar expressions. The second
 -- environment variable env' is used to project out the corresponding
 -- index when looking up in the environment congruent expressions.
 --
 data Gamma env env' aenv where
-  EmptyEnv :: Gamma env () aenv
+  EmptyExp :: Gamma   env aenv'     aenv
 
-  PushEnv  :: Gamma   env env'      aenv
+  PushExp  :: Gamma   env env'      aenv
            -> OpenExp env           aenv t
            -> Gamma   env (env', t) aenv
 
-incEnv :: Gamma env env' aenv -> Gamma (env, s) env' aenv
-incEnv EmptyEnv        = EmptyEnv
-incEnv (PushEnv env e) = incEnv env `PushEnv` weakenE e
+incExp :: Gamma env env' aenv -> Gamma (env, s) env' aenv
+incExp EmptyExp        = EmptyExp
+incExp (PushExp env e) = incExp env `PushExp` weakenE e
 
-lookupEnv :: Gamma   env env' aenv
+lookupExp :: Gamma   env env' aenv
           -> OpenExp env      aenv t
           -> Maybe  (Idx env' t)
-lookupEnv EmptyEnv        _             = Nothing
-lookupEnv (PushEnv env e) x
-  | Just REFL <- matchOpenExp e x       = Just ZeroIdx
-  | otherwise                           = SuccIdx `fmap` lookupEnv env x
+lookupExp EmptyExp        _       = Nothing
+lookupExp (PushExp env e) x
+  | Just REFL <- matchOpenExp e x = Just ZeroIdx
+  | otherwise                     = SuccIdx `fmap` lookupExp env x
 
 
 -- Currently this takes the form of a pretty weedy CSE optimisation, where we
@@ -78,7 +80,7 @@ localCSE
     -> OpenExp env     aenv a
     -> Maybe (OpenExp env aenv a)
 localCSE env exp
-  | Just ix <- lookupEnv env exp = trace "CSE" (show exp) $ Just (Var ix)
+  | Just ix <- lookupExp env exp = trace "CSE" (show exp) $ Just (Var ix)
   | otherwise                    = Nothing
 
 
@@ -142,7 +144,7 @@ simplifyLet
     -> OpenExp env     aenv b
 simplifyLet env bnd body
   | Just x <- recoverLoops env bnd body = x
-  | Just x <- lookupEnv env bnd         = inline body (Var x)
+  | Just x <- lookupExp env bnd         = inline body (Var x)
   | otherwise                           = Let bnd body
 
 
@@ -182,27 +184,28 @@ simplifyIntersect sh1 sh2
 --
 simplifyOpenExp
     :: forall env aenv t. Elt t
-    => Gamma   env env aenv
+    => Gamma env env aenv
+    -> Delta aenv aenv
     -> OpenExp env     aenv t
     -> OpenExp env     aenv t
-simplifyOpenExp env = cvt
+simplifyOpenExp env aenv = cvt
   where
-    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
-    cvtA = simplifyOpenAcc
+    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
+    cvtA = simplifyOpenAcc aenv
 
     cvt :: Elt e => OpenExp env aenv e -> OpenExp env aenv e
     cvt exp
       = flip fromMaybe (localCSE env exp)
       $ case exp of
           Let bnd body          -> let bnd'  = cvt bnd
-                                       env'  = incEnv env `PushEnv` weakenE bnd'
-                                       body' = simplifyOpenExp env' body
+                                       env'  = incExp env `PushExp` weakenE bnd'
+                                       body' = simplifyOpenExp env' aenv body
                                    in
                                    simplifyLet env bnd' body'
           --
           Var ix                -> Var ix
           Const c               -> Const c
-          Tuple tup             -> Tuple (simplifyTuple env tup)
+          Tuple tup             -> Tuple (simplifyTuple env aenv tup)
           Prj tup ix            -> Prj tup (cvt ix)
           IndexNil              -> IndexNil
           IndexCons sh sz       -> IndexCons (cvt sh) (cvt sz)
@@ -214,7 +217,7 @@ simplifyOpenExp env = cvt
           ToIndex sh ix         -> ToIndex (cvt sh) (cvt ix)
           FromIndex sh ix       -> FromIndex (cvt sh) (cvt ix)
           Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
-          Iterate n f x         -> Iterate n (simplifyOpenFun env f) (cvt x)
+          Iterate n f x         -> Iterate n (simplifyOpenFun env aenv f) (cvt x)
           PrimConst c           -> PrimConst c
           PrimApp f x           -> PrimApp f (cvt x)
           Index a sh            -> Index (cvtA a) (cvt sh)
@@ -226,35 +229,73 @@ simplifyOpenExp env = cvt
 
 simplifyTuple
     :: Gamma env env aenv
+    -> Delta aenv aenv
     -> Tuple (OpenExp env aenv) t
     -> Tuple (OpenExp env aenv) t
-simplifyTuple _   NilTup          = NilTup
-simplifyTuple env (SnocTup tup e) = simplifyTuple env tup `SnocTup` simplifyOpenExp env e
-
+simplifyTuple _   _    NilTup          = NilTup
+simplifyTuple env aenv (SnocTup tup e) = simplifyTuple env aenv tup `SnocTup` simplifyOpenExp env aenv e
 
 simplifyOpenFun
-    :: Gamma   env env aenv
-    -> OpenFun env     aenv t
-    -> OpenFun env     aenv t
-simplifyOpenFun env (Body e) = Body (simplifyOpenExp env e)
-simplifyOpenFun env (Lam  f) = Lam  (simplifyOpenFun (incEnv env `PushEnv` Var ZeroIdx) f)
+    :: Gamma env env aenv
+    -> Delta aenv aenv
+    -> OpenFun env aenv t
+    -> OpenFun env aenv t
+simplifyOpenFun env aenv (Body e) = Body (simplifyOpenExp env aenv e)
+simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun (incExp env `PushExp` Var ZeroIdx) aenv f)
 
 
--- Scalar expressions
--- ------------------
+simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
+simplifyExp aenv = simplifyOpenExp EmptyExp aenv . shrinkE
 
-simplifyExp :: Elt t => Exp aenv t -> Exp aenv t
-simplifyExp = simplifyOpenExp EmptyEnv . shrinkE
-
-simplifyFun :: Fun aenv t -> Fun aenv t
-simplifyFun = simplifyOpenFun EmptyEnv . shrinkFE
+simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
+simplifyFun aenv = simplifyOpenFun EmptyExp aenv . shrinkFE
 
 
 -- Array computations
 -- ------------------
 
-simplifyOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-simplifyOpenAcc = cvtA . shrinkOpenAcc
+-- An environment which holds let-bound array expressions.
+--
+data Delta aenv aenv' where
+  EmptyAcc :: Delta   aenv aenv'
+
+  PushAcc  :: Delta   aenv aenv'
+           -> OpenAcc aenv            a
+           -> Delta   aenv (aenv', a)
+
+incAcc :: Delta aenv aenv' -> Delta (aenv,s) aenv'
+incAcc EmptyAcc         = EmptyAcc
+incAcc (PushAcc aenv a) = incAcc aenv `PushAcc` weakenA a
+
+lookupAcc :: Delta   aenv aenv'
+          -> OpenAcc aenv a
+          -> Maybe (Idx aenv' a)
+lookupAcc EmptyAcc         _      = Nothing
+lookupAcc (PushAcc aenv a) x
+  | Just REFL <- matchOpenAcc a x = Just ZeroIdx
+  | otherwise                     = SuccIdx `fmap` lookupAcc aenv x
+
+
+-- Our weedy CSE optimisation lifted array types.
+--
+globalCSE
+    :: Arrays a
+    => Delta aenv aenv
+    -> OpenAcc aenv a
+    -> Maybe (OpenAcc aenv a)
+globalCSE aenv acc
+  | Just ix <- lookupAcc aenv acc = trace "CSE" (show acc) $ Just (OpenAcc (Avar ix))
+  | otherwise                     = Nothing
+
+
+-- Walk over an array expression, applying simplifications.
+--
+simplifyOpenAcc
+    :: forall aenv arrs. Arrays arrs
+    => Delta aenv aenv
+    -> OpenAcc aenv arrs
+    -> OpenAcc aenv arrs
+simplifyOpenAcc aenv = cvtA . shrinkOpenAcc
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of
@@ -262,49 +303,63 @@ simplifyOpenAcc = cvtA . shrinkOpenAcc
       SnocAtup t a    -> cvtT t `SnocAtup` cvtA a
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
-    cvtE = simplifyExp
+    cvtE = simplifyExp aenv
 
     cvtF :: Fun aenv t -> Fun aenv t
-    cvtF = simplifyFun
+    cvtF = simplifyFun aenv
 
-    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
-    cvtA (OpenAcc acc) = OpenAcc $ case acc of
-      Alet bnd body             -> Alet (cvtA bnd) (cvtA body)
-      Avar ix                   -> Avar ix
-      Atuple tup                -> Atuple (cvtT tup)
-      Aprj tup a                -> Aprj tup (cvtA a)
-      Apply f a                 -> Apply (simplifyOpenAfun f) (cvtA a)
-      Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
-      Use a                     -> Use a
-      Unit e                    -> Unit (cvtE e)
-      Reshape e a               -> Reshape (cvtE e) (cvtA a)
-      Generate e f              -> Generate (cvtE e) (cvtF f)
-      Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
-      Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
-      Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
-      Map f a                   -> Map (cvtF f) (cvtA a)
-      ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
-      Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
-      Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
-      FoldSeg f z a b           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA b)
-      Fold1Seg f a b            -> Fold1Seg (cvtF f) (cvtA a) (cvtA b)
-      Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
-      Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
-      Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
-      Scanr f z a               -> Scanr (cvtF f) (cvtE z) (cvtA a)
-      Scanr' f z a              -> Scanr' (cvtF f) (cvtE z) (cvtA a)
-      Scanr1 f a                -> Scanr1 (cvtF f) (cvtA a)
-      Permute f1 a1 f2 a2       -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
-      Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
-      Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
-      Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
+    cvtA acc@(OpenAcc pacc)
+      = flip fromMaybe (globalCSE aenv acc) $ OpenAcc
+      $ case pacc of
+          Alet bnd body                 -> let bnd'  = cvtA bnd
+                                               aenv' = incAcc aenv `PushAcc` weakenA bnd'
+                                               body' = simplifyOpenAcc aenv' body
+                                           in
+                                           Alet bnd' body'
+          --
+          Avar ix                       -> Avar ix
+          Atuple tup                    -> Atuple (cvtT tup)
+          Aprj tup a                    -> Aprj tup (cvtA a)
+          Apply f a                     -> Apply (simplifyAfun f) (cvtA a)
+          Acond p t e                   -> Acond (cvtE p) (cvtA t) (cvtA e)
+          Use a                         -> Use a
+          Unit e                        -> Unit (cvtE e)
+          Reshape e a                   -> Reshape (cvtE e) (cvtA a)
+          Generate e f                  -> Generate (cvtE e) (cvtF f)
+          Transform sh ix f a           -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
+          Replicate sl slix a           -> Replicate sl (cvtE slix) (cvtA a)
+          Slice sl a slix               -> Slice sl (cvtA a) (cvtE slix)
+          Map f a                       -> Map (cvtF f) (cvtA a)
+          ZipWith f a1 a2               -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
+          Fold f z a                    -> Fold (cvtF f) (cvtE z) (cvtA a)
+          Fold1 f a                     -> Fold1 (cvtF f) (cvtA a)
+          FoldSeg f z a b               -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA b)
+          Fold1Seg f a b                -> Fold1Seg (cvtF f) (cvtA a) (cvtA b)
+          Scanl f z a                   -> Scanl (cvtF f) (cvtE z) (cvtA a)
+          Scanl' f z a                  -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+          Scanl1 f a                    -> Scanl1 (cvtF f) (cvtA a)
+          Scanr f z a                   -> Scanr (cvtF f) (cvtE z) (cvtA a)
+          Scanr' f z a                  -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+          Scanr1 f a                    -> Scanr1 (cvtF f) (cvtA a)
+          Permute f1 a1 f2 a2           -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
+          Backpermute sh f a            -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
+          Stencil f b a                 -> Stencil (cvtF f) b (cvtA a)
+          Stencil2 f b1 a1 b2 a2        -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
 
 
-simplifyOpenAfun :: OpenAfun aenv t -> OpenAfun aenv t
-simplifyOpenAfun afun =
+simplifyOpenAfun :: Delta aenv aenv -> OpenAfun aenv t -> OpenAfun aenv t
+simplifyOpenAfun aenv afun =
   case afun of
-    Abody b     -> Abody (simplifyOpenAcc b)
-    Alam f      -> Alam (simplifyOpenAfun f)
+    Abody b     -> Abody (simplifyOpenAcc aenv b)
+    Alam f      -> Alam (simplifyOpenAfun (incAcc aenv `PushAcc` (OpenAcc (Avar ZeroIdx))) f)
+
+
+simplifyAcc :: Arrays arrs => Acc arrs -> Acc arrs
+simplifyAcc = simplifyOpenAcc EmptyAcc
+
+simplifyAfun :: Afun f -> Afun f
+simplifyAfun = simplifyOpenAfun EmptyAcc
 
 
 -- Debugging ===================================================================
