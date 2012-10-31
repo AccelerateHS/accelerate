@@ -156,9 +156,8 @@ prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsist
 -- |Function abstraction over parametrised array computations
 --
 data PreOpenAfun acc aenv t where
-  Abody :: acc             aenv       t -> PreOpenAfun acc aenv t
-  Alam  :: (Arrays as, Arrays t)
-        => PreOpenAfun acc (aenv, as) t -> PreOpenAfun acc aenv (as -> t)
+  Abody :: Arrays t => acc             aenv      t -> PreOpenAfun acc aenv t
+  Alam  :: Arrays a => PreOpenAfun acc (aenv, a) t -> PreOpenAfun acc aenv (a -> t)
 
 -- Function abstraction over vanilla open array computations
 --
