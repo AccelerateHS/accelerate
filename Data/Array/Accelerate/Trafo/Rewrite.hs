@@ -34,9 +34,7 @@ convertSegments = cvtA
       SnocAtup t a -> cvtT t `SnocAtup` cvtA a
 
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
-    cvtAfun afun = case afun of
-      Abody b -> Abody (cvtA b)
-      Alam f  -> Alam (cvtAfun f)
+    cvtAfun = convertSegmentsAfun
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
     cvtE = id
@@ -98,4 +96,11 @@ convertSegments = cvtA
       Fold1Seg f a s            -> Alet (segments s) (OpenAcc (Fold1Seg (cvtF f') (cvtA a') a0))
         where f' = weakenFA f
               a' = weakenA a
+
+
+convertSegmentsAfun :: OpenAfun aenv t -> OpenAfun aenv t
+convertSegmentsAfun afun =
+  case afun of
+    Abody b     -> Abody (convertSegments b)
+    Alam f      -> Alam (convertSegmentsAfun f)
 
