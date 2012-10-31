@@ -126,6 +126,9 @@ delayOpenAcc (OpenAcc pacc) =
       delayA :: OpenAcc aenv a -> DelayedAcc aenv a
       delayA = delayOpenAcc . until matchOpenAcc fuseOpenAcc
 
+      a0 :: Arrays a => OpenAcc (aenv, a) a
+      a0 = OpenAcc (Avar ZeroIdx)
+
       -- Move bindings around so that consumers are next to producers. We need
       -- to run (delay . fuse) so that the producer Acc is optimised in the
       -- presence of its let bindings before being integrated (cf. aletD)
@@ -138,9 +141,9 @@ delayOpenAcc (OpenAcc pacc) =
           -> DelayedAcc aenv arrs'
       consumeFA op c arr =
         case delayA arr of
-          Done env a            -> Done env (op (sinkF env c) (force $ Done  BaseEnv a))
-          Step env sh ix f v    -> Done env (op (sinkF env c) (force $ Step  BaseEnv sh ix f v))
           Yield env sh f        -> Done env (op (sinkF env c) (force $ Yield BaseEnv sh f))
+          Step env sh ix f v    -> Done env (op (sinkF env c) (force $ Step  BaseEnv sh ix f v))
+          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) a0)
 
       consumeFEA
           :: Arrays arrs'
@@ -151,9 +154,9 @@ delayOpenAcc (OpenAcc pacc) =
           -> DelayedAcc aenv arrs'
       consumeFEA op c z arr =
         case delayA arr of
-          Done env a            -> Done env (op (sinkF env c) (sinkE env z) (force $ Done  BaseEnv a))
-          Step env sh ix f v    -> Done env (op (sinkF env c) (sinkE env z) (force $ Step  BaseEnv sh ix f v))
           Yield env sh f        -> Done env (op (sinkF env c) (sinkE env z) (force $ Yield BaseEnv sh f))
+          Step env sh ix f v    -> Done env (op (sinkF env c) (sinkE env z) (force $ Step  BaseEnv sh ix f v))
+          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) (sinkE env' z) a0)
 
       consumeFA2
           :: forall arrs' aenv c as bs. Arrays arrs'
@@ -164,16 +167,17 @@ delayOpenAcc (OpenAcc pacc) =
           -> DelayedAcc aenv arrs'
       consumeFA2 op c arr1 arr2 =
         case delayA arr1 of
-          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
           Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
         where
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Done  BaseEnv a2))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
               Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
+                                           in  Done env' (op (sinkF env' c) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeFEA2
           :: forall arrs' aenv c z as bs. Arrays arrs'
@@ -185,16 +189,17 @@ delayOpenAcc (OpenAcc pacc) =
           -> DelayedAcc aenv arrs'
       consumeFEA2 op c z arr1 arr2 =
         case delayA arr1 of
-          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
           Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
         where
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Done  BaseEnv a2))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
               Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
+                                           in  Done env' (op (sinkF env' c) (sinkE env' z) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeF2A2
           :: forall arrs' aenv c p as bs. Arrays arrs'
@@ -206,16 +211,17 @@ delayOpenAcc (OpenAcc pacc) =
           -> DelayedAcc aenv arrs'
       consumeF2A2 op c p arr1 arr2 =
         case delayA arr1 of
-          Done env a1           -> inner env (force $ Done  BaseEnv a1)
+          Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
           Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
         where
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Done env2 a2              -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Done  BaseEnv a2))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
               Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
+                                           in  Done env' (op (sinkF env' c) (sinkF env' p) (sinkA (env2 `PushEnv` a2) a1) a0)
   --
   in case pacc of
     -- Forms that introduce environment manipulations and control flow. We
