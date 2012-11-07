@@ -175,20 +175,18 @@ prettyArrOp name docs = hang (text name) 2 $ sep docs
 
 -- Pretty print a function over array computations.
 --
--- At the moment restricted to /closed/ functions.
---
-prettyAfun :: Int -> Afun fun -> Doc
+prettyAfun :: Int -> OpenAfun aenv t -> Doc
 prettyAfun = prettyPreAfun prettyAcc
 
-prettyPreAfun :: forall acc fun. PrettyAcc acc -> Int -> PreAfun acc fun -> Doc
-prettyPreAfun pp _alvl fun =
+prettyPreAfun :: forall acc aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc aenv fun -> Doc
+prettyPreAfun pp alvl fun =
   let (n, bodyDoc) = count n fun
   in
   char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
-     count lvl (Abody body) = (-1, pp (lvl + 1) noParens body) -- 'lvl+1' ok as functions is closed!
+     count lvl (Abody body) = (-1, pp (lvl + alvl + 1) noParens body)
      count lvl (Alam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print a function over scalar expressions.

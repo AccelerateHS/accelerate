@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -104,6 +105,9 @@ convertAccFun1With ok acc
 
 instance Arrays arrs => Show (Acc arrs) where
   show = show . convertAcc
+
+instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
+  show = show . convertAccFun1
 
 -- Show instance for scalar expressions inherited from Sharing module. Note that
 -- this does not incorporate Sharing or other optimisations.

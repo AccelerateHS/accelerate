@@ -37,6 +37,9 @@ wide = style { lineLength = 150 }
 instance Show (OpenAcc aenv a) where
   show c = renderStyle wide $ prettyAcc 0 noParens c
 
+instance Show (OpenAfun aenv f) where
+  show f = renderStyle wide $ prettyAfun 0 f
+
 instance Show (OpenFun env aenv f) where
   show f = renderStyle wide $ prettyFun 0 f
 
