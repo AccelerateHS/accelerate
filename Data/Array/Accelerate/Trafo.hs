@@ -13,10 +13,13 @@
 module Data.Array.Accelerate.Trafo (
 
   -- * HOAS -> de Bruijn conversion
-  Config(..), defaultConfig,
+  Phase(..), phases,
 
   convertAcc,     convertAccWith,
-  convertAccFun1, convertAccFun1With
+  convertAccFun1, convertAccFun1With,
+
+  -- * Fusion
+  Fusion.embedOpenAcc, Fusion.Embedded(..),
 
 ) where
 
@@ -31,7 +34,7 @@ import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- Configuration
 -- -------------
 
-data Config = Config
+data Phase = Phase
   {
     -- | Recover sharing of array computations?
     recoverAccSharing           :: Bool
@@ -55,8 +58,8 @@ data Config = Config
 -- | The default method of converting from HOAS to de Bruijn; incorporating
 --   sharing recovery and fusion optimisation.
 --
-defaultConfig :: Config
-defaultConfig = Config True True True True False
+phases :: Phase
+phases = Phase True True True True False
 
 
 -- HOAS -> de Bruijn conversion
@@ -66,9 +69,9 @@ defaultConfig = Config True True True True False
 --   incorporating sharing observation and array fusion.
 --
 convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
-convertAcc = convertAccWith defaultConfig
+convertAcc = convertAccWith phases
 
-convertAccWith :: Arrays arrs => Config -> Acc arrs -> AST.Acc arrs
+convertAccWith :: Arrays arrs => Phase -> Acc arrs -> AST.Acc arrs
 convertAccWith ok acc
   = Fusion.fuseAcc          `when` enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
@@ -83,9 +86,9 @@ convertAccWith ok acc
 --   observation and array fusion
 --
 convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1 = convertAccFun1With defaultConfig
+convertAccFun1 = convertAccFun1With phases
 
-convertAccFun1With :: (Arrays a, Arrays b) => Config -> (Acc a -> Acc b) -> AST.Afun (a -> b)
+convertAccFun1With :: (Arrays a, Arrays b) => Phase -> (Acc a -> Acc b) -> AST.Afun (a -> b)
 convertAccFun1With ok acc
   = Fusion.fuseAfun             `when` enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
@@ -102,5 +105,6 @@ convertAccFun1With ok acc
 instance Arrays arrs => Show (Acc arrs) where
   show = show . convertAcc
 
--- show instance for scalar expressions inherited from Sharing module
+-- Show instance for scalar expressions inherited from Sharing module. Note that
+-- this does not incorporate Sharing or other optimisations.
 

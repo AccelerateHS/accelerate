@@ -16,8 +16,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
 
   -- * Fuse array computations
   fuseAcc, fuseAfun,
-
-  Delayed(..), delayAcc,
+  Embedded(..), embedOpenAcc,
 
 ) where
 
@@ -60,15 +59,15 @@ until stop go = fix 0
 -- | Convert an array computation into an embeddable delayed representation.
 --   TLM: make this nicer-er.
 --
-data Delayed aenv sh e
+data Embedded aenv sh e
   = (Shape sh, Elt e) =>
     DelayedArray { extent      :: Exp aenv sh
                  , index       :: Fun aenv (sh  -> e)
                  , linearIndex :: Fun aenv (Int -> e)
                  }
 
-delayAcc :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> Maybe (Delayed aenv sh e)
-delayAcc (OpenAcc pacc)
+embedOpenAcc :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> Maybe (Embedded aenv sh e)
+embedOpenAcc (OpenAcc pacc)
   | Generate sh f       <- pacc
   = Just $ DelayedArray sh f (f `compose` fromIndex sh)
 
@@ -665,7 +664,8 @@ aletD bndAcc bodyAcc =
         sh1'            = sinkE env2' sh1
         f1'             = sinkF env2' f1
 
-    -- If the body is forward permutation, we might be able to fuse into this.
+    -- If the body is forward permutation, we might be able to fuse into the
+    -- shape and index transformation. See radix sort for an example.
     --
     into :: (Shape sh, Elt e, Arrays a)
          => Extend aenv                aenv''

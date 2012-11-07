@@ -71,7 +71,7 @@ import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 run :: Arrays a => Sugar.Acc a -> a
 run = force . evalAcc . Sugar.convertAccWith config
   where
-    config      = Sugar.defaultConfig { Sugar.enableAccFusion = False }
+    config      = Sugar.phases { Sugar.enableAccFusion = False }
 
 
 -- | Prepare and run an embedded array program of one argument
@@ -79,7 +79,7 @@ run = force . evalAcc . Sugar.convertAccWith config
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
 run1 afun = \a -> exec acc a
   where
-    config      = Sugar.defaultConfig { Sugar.enableAccFusion = False }
+    config      = Sugar.phases { Sugar.enableAccFusion = False }
     acc         = Sugar.convertAccFun1With config afun
 
     exec :: Afun (a -> b) -> a -> b
