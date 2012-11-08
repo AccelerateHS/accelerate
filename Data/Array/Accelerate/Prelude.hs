@@ -796,7 +796,9 @@ take n = backpermute (index1 n) id
 --   contain no more than @n@ elements.
 --
 drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
-drop n arr = backpermute (ilift1 (\x -> x - n) $ shape arr) (ilift1 (+ n)) arr
+drop n arr =
+  let n' = unit n
+  in  backpermute (ilift1 (subtract n) (shape arr)) (ilift1 (+ the n')) arr
 
 
 -- | Yield all but the last element of the input vector. The vector must not be
@@ -823,5 +825,7 @@ slit :: Elt e
       -> Exp Int
       -> Acc (Vector e)
       -> Acc (Vector e)
-slit i n = backpermute (index1 n) (ilift1 (+ i))
+slit i n =
+  let i' = unit i
+  in  backpermute (index1 n) (ilift1 (+ the i'))
 
