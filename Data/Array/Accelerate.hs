@@ -37,10 +37,10 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  Acc, Arrays, Array, Scalar, Vector, Segments,
+  L.Acc, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
 
   -- ** Array element types
-  Elt,
+  S.Elt,
 
   -- ** Shapes & Indices
   --
@@ -48,111 +48,111 @@ module Data.Array.Accelerate (
   -- end-of-list token, `Z`, occurs on the left. For example, the type of a
   -- rank-2 array index is @Z :. Int :. Int@.
   --
-  Z(..), (:.)(..), Shape, All(..), Any(..), Slice(..),
-  DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
+  S.Z(..), (S.:.)(..), S.Shape, S.All(..), S.Any(..), S.Slice(..),
+  S.DIM0, S.DIM1, S.DIM2, S.DIM3, S.DIM4, S.DIM5, S.DIM6, S.DIM7, S.DIM8, S.DIM9,
 
   -- ** Accessors
   -- *** Indexing
-  (!), the,
+  (L.!), L.the,
 
   -- *** Shape information
-  null, shape, size, shapeSize,
+  L.null, L.shape, L.size, L.shapeSize,
 
   -- *** Extracting sub-arrays
-  slice,
-  init, tail, take, drop, slit,
+  L.slice,
+  P.init, P.tail, P.take, P.drop, P.slit,
 
   -- ** Construction
   -- *** Introduction
-  use, unit,
+  L.use, L.unit,
 
   -- *** Initialisation
-  generate, replicate, fill,
+  L.generate, L.replicate, P.fill,
 
   -- *** Enumeration
-  enumFromN, enumFromStepN,
+  P.enumFromN, P.enumFromStepN,
 
   -- ** Composition
   -- *** Flow control
-  (?|), cond,
+  (L.?|), L.cond,
 
   -- *** Pipelining
-  (>->),
+  (L.>->),
 
   -- ** Modifying Arrays
   -- *** Shape manipulation
-  reshape, flatten,
+  L.reshape, P.flatten,
 
   -- *** Permutations
-  permute, backpermute, ignore,
+  L.permute, L.backpermute, L.ignore,
 
   -- *** Specialised permutations
-  reverse, transpose,
+  P.reverse, P.transpose,
 
   -- ** Element-wise operations
   -- *** Mapping
-  map,
+  L.map,
 
   -- *** Zipping
-  zipWith, zipWith3, zipWith4,
-  zip, zip3, zip4,
+  L.zipWith, P.zipWith3, P.zipWith4,
+  P.zip, P.zip3, P.zip4,
 
   -- *** Unzipping
-  unzip, unzip3, unzip4,
+  P.unzip, P.unzip3, P.unzip4,
 
   -- ** Working with predicates
   -- *** Filtering
-  filter,
+  P.filter,
 
   -- *** Scatter
-  scatter, scatterIf,
+  P.scatter, P.scatterIf,
 
   -- *** Gather
-  gather,  gatherIf,
+  P.gather,  P.gatherIf,
 
   -- ** Folding
-  fold, fold1, foldAll, fold1All,
+  L.fold, L.fold1, P.foldAll, P.fold1All,
 
   -- *** Segmented reductions
-  foldSeg, fold1Seg,
+  L.foldSeg, L.fold1Seg,
 
   -- *** Specialised folds
-  all, any, and, or, sum, product, minimum, maximum,
+  P.all, P.any, P.and, P.or, P.sum, P.product, P.minimum, P.maximum,
 
   -- ** Prefix sums (scans)
-  scanl, scanl1, scanl', scanr, scanr1, scanr',
-  prescanl, postscanl, prescanr, postscanr,
+  L.scanl, L.scanl1, L.scanl', L.scanr, L.scanr1, L.scanr',
+  P.prescanl, P.postscanl, P.prescanr, P.postscanr,
 
   -- *** Segmented scans
-  scanlSeg, scanl1Seg, scanl'Seg, prescanlSeg, postscanlSeg,
-  scanrSeg, scanr1Seg, scanr'Seg, prescanrSeg, postscanrSeg,
+  P.scanlSeg, P.scanl1Seg, P.scanl'Seg, P.prescanlSeg, P.postscanlSeg,
+  P.scanrSeg, P.scanr1Seg, P.scanr'Seg, P.prescanrSeg, P.postscanrSeg,
 
   -- ** Stencil
-  stencil, stencil2,
+  L.stencil, L.stencil2,
 
   -- *** Specification
-  Stencil, Boundary(..),
+  L.Stencil, L.Boundary(..),
 
   -- *** Common stencil patterns
-  Stencil3, Stencil5, Stencil7, Stencil9,
-  Stencil3x3, Stencil5x3, Stencil3x5, Stencil5x5,
-  Stencil3x3x3, Stencil5x3x3, Stencil3x5x3, Stencil3x3x5, Stencil5x5x3, Stencil5x3x5,
-  Stencil3x5x5, Stencil5x5x5,
+  L.Stencil3, L.Stencil5, L.Stencil7, L.Stencil9,
+  L.Stencil3x3, L.Stencil5x3, L.Stencil3x5, L.Stencil5x5,
+  L.Stencil3x3x3, L.Stencil5x3x3, L.Stencil3x5x3, L.Stencil3x3x5, L.Stencil5x5x3, L.Stencil5x3x5,
+  L.Stencil3x5x5, L.Stencil5x5x5,
 
   -- ---------------------------------------------------------------------------
 
   -- * The /Accelerate/ Expression Language
   -- ** Scalar data types
-  Exp,
+  L.Exp,
 
   -- ** Type classes
-  IsScalar, IsNum, IsBounded, IsIntegral, IsFloating, IsNonNum,
+  T.IsScalar, T.IsNum, T.IsBounded, T.IsIntegral, T.IsFloating, T.IsNonNum,
 
   -- ** Element types
-  Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32, Word64,
-  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
-  Float, Double, CFloat, CDouble,
-  Bool, Char, CChar, CSChar, CUChar,
+  T.Int, T.Int8, T.Int16, T.Int32, T.Int64, T.Word, T.Word8, T.Word16, T.Word32, T.Word64,
+  T.CShort, T.CUShort, T.CInt, T.CUInt, T.CLong, T.CULong, T.CLLong, T.CULLong,
+  Float, Double, T.CFloat, T.CDouble,
+  Bool, Char, T.CChar, T.CSChar, T.CUChar,
 
   -- ** Lifting and Unlifting
 
@@ -168,7 +168,7 @@ module Data.Array.Accelerate (
   -- of tuple type into a tuple of expressions; those expressions, at runtime,
   -- will become tuple dereferences.
   --
-  Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
+  L.Lift(..), L.Unlift(..), L.lift1, L.lift2, L.ilift1, L.ilift2,
 
   -- ** Operations
   --
@@ -179,31 +179,31 @@ module Data.Array.Accelerate (
   --
 
   -- *** Introduction
-  constant,
+  L.constant,
 
   -- *** Tuples
-  fst, snd, curry, uncurry,
+  L.fst, L.snd, L.curry, L.uncurry,
 
   -- *** Conditional
-  (?),
+  (L.?),
 
   -- *** Basic operations
-  (&&*), (||*), not,
-  (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
+  (L.&&*), (L.||*), L.not,
+  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*), L.max, L.min,
 
   -- *** Numeric functions
-  truncate, round, floor, ceiling,
+  L.truncate, L.round, L.floor, L.ceiling,
 
   -- *** Bitwise functions
-  bit, setBit, clearBit, complementBit, testBit,
-  shift,  shiftL,  shiftR,
-  rotate, rotateL, rotateR,
+  L.bit, L.setBit, L.clearBit, L.complementBit, L.testBit,
+  L.shift,  L.shiftL,  L.shiftR,
+  L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  index0, index1, unindex1, index2, unindex2,
+  L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
 
   -- *** Conversions
-  boolToInt, fromIntegral,
+  L.boolToInt, L.fromIntegral,
 
   -- ---------------------------------------------------------------------------
 
@@ -217,10 +217,10 @@ module Data.Array.Accelerate (
   -- <http://hackage.haskell.org/package/accelerate-io>
 
   -- *** Lists
-  fromList, toList,
+  S.fromList, S.toList,
 
   -- *** 'Data.Array.IArray.IArray'
-  fromIArray, toIArray,
+  S.fromIArray, S.toIArray,
 
   -- * Miscellaneous
   -- ** Diagnostics
@@ -229,13 +229,13 @@ module Data.Array.Accelerate (
 ) where
 
 -- friends
-import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Debug
-import Data.Array.Accelerate.Prelude
-import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Trafo                      () -- show instances
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), shape, dim, size, ignore)
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Array.Accelerate.Type         as T
+import Data.Array.Accelerate.Debug                  (initTrace)
+import qualified Data.Array.Accelerate.Prelude      as P
+import qualified Data.Array.Accelerate.Language     as L
+import Data.Array.Accelerate.Trafo                  () -- show instances
+import qualified Data.Array.Accelerate.Array.Sugar  as S
+import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
 
 -- system
 import Prelude (Float, Double, Bool, Char)
@@ -251,23 +251,23 @@ import qualified Prelude
 
 -- |Array indexing in plain Haskell code
 --
-indexArray :: Array sh e -> sh -> e
-indexArray = (Sugar.!)
+indexArray :: S.Array sh e -> sh -> e
+indexArray = (S.!)
 
 -- | Rank of an array
 --
-arrayDim :: Shape sh => sh -> Int
-arrayDim = Sugar.dim
+arrayDim :: S.Shape sh => sh -> T.Int
+arrayDim = S.dim
 -- FIXME: Rename to rank
 
 -- |Array shape in plain Haskell code
 --
-arrayShape :: Shape sh => Array sh e -> sh
-arrayShape = Sugar.shape
+arrayShape :: S.Shape sh => S.Array sh e -> sh
+arrayShape = S.shape
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
 -- | Total number of elements in an array of the given 'Shape'
 --
-arraySize :: Shape sh => sh -> Int
-arraySize = Sugar.size
+arraySize :: S.Shape sh => sh -> T.Int
+arraySize = S.size
 
