@@ -1,2 +1,9 @@
-To load the example programs from within GHCi, copy the file 'dot_ghci' to
-'.ghci' in root of the accelerate-examples source tree.
+This directory contains some utilities to load the example programs from within
+GHCi.
+
+Copy (or symlink) the wrapper script 'ghci' to the root directory of the
+accelerate-examples source tree. The script can be called from the root
+directory, or from the root of any of the example programs. It will also
+attempt to load the CUDA backend from source. You might also like to copy the
+file 'dot_ghci' to '.ghci' into the root directory.
+
