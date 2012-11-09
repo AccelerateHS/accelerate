@@ -121,6 +121,7 @@ recoverLoops _env bnd body
   = trace "loop intro" (show body)
   $ Just $ Iterate 2 (Lam (Body body)) bnd'     -- loop introduction
 
+  -- TLM TODO: nested loop recovery
 
   | otherwise
   = Nothing
