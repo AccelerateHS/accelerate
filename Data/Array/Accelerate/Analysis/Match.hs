@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Analysis.Match (
 
   -- matching expressions
   (:=:)(..),
-  matchOpenAcc, matchOpenExp, matchOpenFun,
+  matchOpenAcc, matchOpenAfun, matchOpenExp, matchOpenFun,
 
   -- auxiliary
   matchIdx, matchTupleType,
@@ -85,8 +85,8 @@ matchPreOpenAcc (Aprj ix1 t1) (Aprj ix2 t2)
   = Just REFL
 
 matchPreOpenAcc (Apply f1 a1) (Apply f2 a2)
-  | Just REFL <- matchAfun    f1 f2
-  , Just REFL <- matchOpenAcc a1 a2
+  | Just REFL <- matchOpenAfun f1 f2
+  , Just REFL <- matchOpenAcc  a1 a2
   = Just REFL
 
 matchPreOpenAcc (Acond p1 t1 e1) (Acond p2 t2 e2)
@@ -125,7 +125,7 @@ matchPreOpenAcc (Replicate _ ix1 a1) (Replicate _ ix2 a2)
   , Just REFL <- matchOpenAcc a1  a2
   = gcast REFL  -- slice specification ??
 
-matchPreOpenAcc (Index _ a1 ix1) (Index _ a2 ix2)
+matchPreOpenAcc (Slice _ a1 ix1) (Slice _ a2 ix2)
   | Just REFL <- matchOpenAcc a1  a2
   , Just REFL <- matchOpenExp ix1 ix2
   = gcast REFL  -- slice specification ??
@@ -246,18 +246,18 @@ matchAtuple _       _       = Nothing
 
 -- Array functions
 --
-matchAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
-matchAfun (Alam s) (Alam t)
-  | Just REFL <- matchEnvTop s t
-  , Just REFL <- matchAfun   s t
+matchOpenAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
+matchOpenAfun (Alam s) (Alam t)
+  | Just REFL <- matchEnvTop   s t
+  , Just REFL <- matchOpenAfun s t
   = Just REFL
   where
     matchEnvTop :: (Arrays s, Arrays t)
                 => OpenAfun (aenv, s) f -> OpenAfun (aenv, t) g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL  -- ???
 
-matchAfun (Abody s) (Abody t) = matchOpenAcc s t
-matchAfun _         _         = Nothing
+matchOpenAfun (Abody s) (Abody t) = matchOpenAcc s t
+matchOpenAfun _         _         = Nothing
 
 
 -- Match stencil boundaries
@@ -394,8 +394,13 @@ matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
   , Just REFL <- matchPrimFun f1 f2
   = Just REFL
 
-matchOpenExp (IndexScalar a1 x1) (IndexScalar a2 x2)
+matchOpenExp (Index a1 x1) (Index a2 x2)
   | Just REFL <- matchOpenAcc a1 a2     -- should only be array indices
+  , Just REFL <- matchOpenExp x1 x2
+  = Just REFL
+
+matchOpenExp (LinearIndex a1 x1) (LinearIndex a2 x2)
+  | Just REFL <- matchOpenAcc a1 a2
   , Just REFL <- matchOpenExp x1 x2
   = Just REFL
 
@@ -707,9 +712,13 @@ hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOp
 hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `combine` hashOpenFun f `combine` hashOpenExp x
 hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
-hashOpenExp (IndexScalar a ix)
-  | OpenAcc (Avar v) <- a               = hash "IndexScalar"    `combine` hashIdx v      `combine` hashOpenExp ix
-  | otherwise                           = error "hash: IndexScalar: expected array variable"
+hashOpenExp (Index a ix)
+  | OpenAcc (Avar v) <- a               = hash "Index"          `combine` hashIdx v      `combine` hashOpenExp ix
+  | otherwise                           = error "hash: Index: expected array variable"
+--
+hashOpenExp (LinearIndex a ix)
+  | OpenAcc (Avar v) <- a               = hash "LinearIndex"    `combine` hashIdx v      `combine` hashOpenExp ix
+  | otherwise                           = error "hash: LinearIndex: expected array variable"
 --
 hashOpenExp (Shape a)
   | OpenAcc (Avar v) <- a               = hash "Shape"          `combine` hashIdx v

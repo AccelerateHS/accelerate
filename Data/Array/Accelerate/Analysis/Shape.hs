@@ -15,6 +15,7 @@ module Data.Array.Accelerate.Analysis.Shape (
 
   -- * query AST dimensionality
   AccDim, accDim, preAccDim,
+  expDim,
 
 ) where
 
@@ -59,7 +60,7 @@ preAccDim k pacc =
     Transform _ _ _ _    -> ndim (eltType (undefined::sh))
     Reshape _ _          -> ndim (eltType (undefined::sh))
     Replicate _ _ _      -> ndim (eltType (undefined::sh))
-    Index _ _ _          -> ndim (eltType (undefined::sh))
+    Slice _ _ _          -> ndim (eltType (undefined::sh))
     Map _ acc            -> k acc
     ZipWith _ _ acc      -> k acc
     Fold _ _ acc         -> k acc - 1
@@ -74,6 +75,12 @@ preAccDim k pacc =
     Backpermute _ _ _    -> ndim (eltType (undefined::sh))
     Stencil _ _ acc      -> k acc
     Stencil2 _ _ acc _ _ -> k acc
+
+
+-- |Reify dimensionality of a scalar expression yielding a shape
+--
+expDim :: forall acc env aenv sh. Shape sh => PreOpenExp acc env aenv sh -> Int
+expDim _ = ndim (eltType (undefined :: sh))
 
 
 -- Count the number of components to a tuple type

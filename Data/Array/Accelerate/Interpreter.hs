@@ -56,7 +56,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import qualified Data.Array.Accelerate.Smart            as Sugar
-import qualified Data.Array.Accelerate.Trafo.Sharing    as Sugar
+import qualified Data.Array.Accelerate.Trafo            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
@@ -66,22 +66,33 @@ import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 -- Program execution
 -- -----------------
 
--- |Run a complete embedded array program using the reference interpreter.
+-- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sugar.convertAcc
+run = force . evalAcc . Sugar.convertAccWith config
+  where
+    config      = Sugar.phases { Sugar.enableAccFusion = False }
+
+
+-- | Prepare and run an embedded array program of one argument
+--
+run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
+run1 afun = \a -> exec acc a
+  where
+    config      = Sugar.phases { Sugar.enableAccFusion = False }
+    acc         = Sugar.convertAccFun1With config afun
+
+    exec :: Afun (a -> b) -> a -> b
+    exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)
+    exec _                _ = error "Hey type checker! We can not get here!"
+
 
 -- | Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
 --
 stream :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> [a] -> [b]
-stream afun = map (run1 acc)
-  where
-    acc = Sugar.convertAccFun1 afun
-
-    run1 :: Afun (a -> b) -> a -> b
-    run1 (Alam (Abody f)) = \a -> force (evalOpenAcc f (Empty `Push` a))
-    run1 _                = error "Hey type checker! We can not get here!"
+stream afun arrs = let go = run1 afun
+                   in  map go arrs
 
 
 -- Delayed arrays
@@ -152,8 +163,8 @@ evalPreOpenAcc (Reshape e acc) aenv
 evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
   = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
 
-evalPreOpenAcc (Index sliceIndex acc slix) aenv
-  = indexOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
+evalPreOpenAcc (Slice sliceIndex acc slix) aenv
+  = sliceOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
 
 evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
@@ -283,7 +294,7 @@ replicateOp sliceIndex slix (DelayedPair DelayedUnit (DelayedArray sh pf))
         in
         ((dim', sz), \(ix, _) -> f' ix)
 
-indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
+sliceOp :: (Sugar.Shape sl, Sugar.Elt slix)
         => SliceIndex (Sugar.EltRepr slix)
                       (Sugar.EltRepr sl)
                       co
@@ -291,7 +302,7 @@ indexOp :: (Sugar.Shape sl, Sugar.Elt slix)
         -> Delayed (Array dim e)
         -> slix
         -> Delayed (Array sl e)
-indexOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
+sliceOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
   = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
@@ -308,7 +319,7 @@ indexOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
         in
-        BOUNDS_CHECK(checkIndex) "index" i sz $ (sl', \ix -> (f' ix, i))
+        BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 mapOp :: Sugar.Elt e' 
       => (e -> e') 
@@ -678,7 +689,7 @@ evalFun f aenv = evalOpenFun f EmptyElt aenv
 
 -- Evaluate an open expression
 --
--- NB: The implementation of 'IndexScalar' and 'Shape' demonstrate clearly why
+-- NB: The implementation of 'Index' and 'Shape' demonstrate clearly why
 --     array expressions must be hoisted out of scalar expressions before code
 --     execution.  If these operations are in the body of a function that
 --     gets mapped over an array, the array argument would be forced many times
@@ -768,7 +779,7 @@ evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 evalOpenExp (PrimApp p arg) env aenv
   = evalPrim p (evalOpenExp arg env aenv)
 
-evalOpenExp (IndexScalar acc ix) env aenv
+evalOpenExp (Index acc ix) env aenv
   = case evalOpenAcc acc aenv of
       DelayedPair DelayedUnit (DelayedArray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
@@ -776,6 +787,13 @@ evalOpenExp (IndexScalar acc ix) env aenv
         toIndex sh ix' `seq` (Sugar.toElt $ pf ix')
                               -- FIXME: This is ugly, but (possibly) needed to
                               --       ensure bounds checking
+
+evalOpenExp (LinearIndex acc i) env aenv
+  = case evalOpenAcc acc aenv of
+      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+        let i' = evalOpenExp i env aenv
+            v  = pf (fromIndex sh i')
+        in Sugar.toElt v
 
 evalOpenExp (Shape acc) _ aenv
   = case evalOpenAcc acc aenv of

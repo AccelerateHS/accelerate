@@ -219,7 +219,8 @@ rebuildE v exp =
     Iterate n f x       -> Iterate n (rebuildFE v f) (rebuildE v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
-    IndexScalar a sh    -> IndexScalar a (rebuildE v sh)
+    Index a sh          -> Index a (rebuildE v sh)
+    LinearIndex a i     -> LinearIndex a (rebuildE v i)
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
     Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
@@ -309,7 +310,7 @@ rebuildA rebuild v acc =
     Generate e f        -> Generate (rebuildEA rebuild v e) (rebuildFA rebuild v f)
     Transform sh ix f a -> Transform (rebuildEA rebuild v sh) (rebuildFA rebuild v ix) (rebuildFA rebuild v f) (rebuild v a)
     Replicate sl slix a -> Replicate sl (rebuildEA rebuild v slix) (rebuild v a)
-    Index sl a slix     -> Index sl (rebuild v a) (rebuildEA rebuild v slix)
+    Slice sl a slix     -> Slice sl (rebuild v a) (rebuildEA rebuild v slix)
     Map f a             -> Map (rebuildFA rebuild v f) (rebuild v a)
     ZipWith f a1 a2     -> ZipWith (rebuildFA rebuild v f) (rebuild v a1) (rebuild v a2)
     Fold f z a          -> Fold (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
@@ -384,7 +385,8 @@ rebuildEA k v exp =
     Iterate n f x       -> Iterate n (rebuildFA k v f) (rebuildEA k v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
-    IndexScalar a sh    -> IndexScalar (k v a) (rebuildEA k v sh)
+    Index a sh          -> Index (k v a) (rebuildEA k v sh)
+    LinearIndex a i     -> LinearIndex (k v a) (rebuildEA k v i)
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
     Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
@@ -454,7 +456,8 @@ shrinkE exp =
     Iterate n f x       -> Iterate n (shrinkFE f) (shrinkE x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkE x)
-    IndexScalar a sh    -> IndexScalar a (shrinkE sh)
+    Index a sh          -> Index a (shrinkE sh)
+    LinearIndex a i     -> LinearIndex a (shrinkE i)
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (shrinkE sh)
     Intersect sh sz     -> Intersect (shrinkE sh) (shrinkE sz)
@@ -499,7 +502,8 @@ usesOfE idx exp =
     Iterate _ f x       -> usesOfFE idx f + usesOfE idx x
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfE idx x
-    IndexScalar _ sh    -> usesOfE idx sh
+    Index _ sh          -> usesOfE idx sh
+    LinearIndex _ i     -> usesOfE idx i
     Shape _             -> 0
     ShapeSize sh        -> usesOfE idx sh
     Intersect sh sz     -> usesOfE idx sh + usesOfE idx sz
@@ -566,7 +570,7 @@ shrinkA k s u pre acc =
     Generate e f        -> Generate (shrinkEA s e) (shrinkFA s f)
     Transform sh ix f a -> Transform (shrinkEA s sh) (shrinkFA s ix) (shrinkFA s f) (s a)
     Replicate sl slix a -> Replicate sl (shrinkEA s slix) (s a)
-    Index sl a slix     -> Index sl (s a) (shrinkEA s slix)
+    Slice sl a slix     -> Slice sl (s a) (shrinkEA s slix)
     Map f a             -> Map (shrinkFA s f) (s a)
     ZipWith f a1 a2     -> ZipWith (shrinkFA s f) (s a1) (s a2)
     Fold f z a          -> Fold (shrinkFA s f) (shrinkEA s z) (s a)
@@ -625,7 +629,8 @@ shrinkEA s exp =
     Iterate n f x       -> Iterate n (shrinkFA s f) (shrinkEA s x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkEA s x)
-    IndexScalar a sh    -> IndexScalar (s a) (shrinkEA s sh)
+    Index a sh          -> Index (s a) (shrinkEA s sh)
+    LinearIndex a i     -> LinearIndex (s a) (shrinkEA s i)
     Shape a             -> Shape (s a)
     ShapeSize sh        -> ShapeSize (shrinkEA s sh)
     Intersect sh sz     -> Intersect (shrinkEA s sh) (shrinkEA s sz)
@@ -657,7 +662,7 @@ usesOfA u idx acc =
     Generate e f        -> usesOfEA u idx e + usesOfFA u idx f
     Transform sh ix f a -> usesOfEA u idx sh + usesOfFA u idx ix + usesOfFA u idx f + u idx a
     Replicate _ slix a  -> usesOfEA u idx slix + u idx a
-    Index _ a slix      -> usesOfEA u idx slix + u idx a
+    Slice _ a slix      -> usesOfEA u idx slix + u idx a
     Map f a             -> usesOfFA u idx f + u idx a
     ZipWith f a1 a2     -> usesOfFA u idx f + u idx a1 + u idx a2
     Fold f z a          -> usesOfFA u idx f + usesOfEA u idx z + u idx a
@@ -702,7 +707,8 @@ usesOfEA s idx exp =
     Iterate _ f x       -> usesOfFA s idx f  + usesOfEA s idx x
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfEA s idx x
-    IndexScalar a sh    -> s idx a + usesOfEA s idx sh
+    Index a sh          -> s idx a + usesOfEA s idx sh
+    LinearIndex a i     -> s idx a + usesOfEA s idx i
     Shape a             -> s idx a
     ShapeSize sh        -> usesOfEA s idx sh
     Intersect sh sz     -> usesOfEA s idx sh + usesOfEA s idx sz

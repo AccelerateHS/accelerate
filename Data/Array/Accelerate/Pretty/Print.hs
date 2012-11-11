@@ -80,8 +80,8 @@ prettyPreAcc pp alvl wrap (Apply afun acc)
   = wrap $ sep [parens (prettyPreAfun pp alvl afun), pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Acond e acc1 acc2)
   = wrap $ prettyArrOp "cond" [prettyPreExp pp 0 alvl parens e, pp alvl parens acc1, pp alvl parens acc2]
-prettyPreAcc _  _    _    (Use arr)
-  = prettyArrOp "use" [prettyArrays (arrays (undefined::a)) arr]
+prettyPreAcc _  _    wrap (Use arr)
+  = wrap $ prettyArrOp "use" [prettyArrays (arrays (undefined::a)) arr]
 prettyPreAcc pp alvl wrap (Unit e)
   = wrap $ prettyArrOp "unit" [prettyPreExp pp 0 alvl parens e]
 prettyPreAcc pp alvl wrap (Generate sh f)
@@ -97,7 +97,7 @@ prettyPreAcc pp alvl wrap (Reshape sh acc)
   = wrap $ prettyArrOp "reshape" [prettyPreExp pp 0 alvl parens sh, pp alvl parens acc]
 prettyPreAcc pp alvl wrap (Replicate _ty ix acc)
   = wrap $ prettyArrOp "replicate" [prettyPreExp pp 0 alvl noParens ix, pp alvl parens acc]
-prettyPreAcc pp alvl wrap (Index _ty acc ix)
+prettyPreAcc pp alvl wrap (Slice _ty acc ix)
   = wrap $ sep [pp alvl parens acc, char '!', prettyPreExp pp 0 alvl noParens ix]
 prettyPreAcc pp alvl wrap (Map f acc)
   = wrap $ prettyArrOp "map" [parens (prettyPreFun pp alvl f), pp alvl parens acc]
@@ -175,20 +175,18 @@ prettyArrOp name docs = hang (text name) 2 $ sep docs
 
 -- Pretty print a function over array computations.
 --
--- At the moment restricted to /closed/ functions.
---
-prettyAfun :: Int -> Afun fun -> Doc
+prettyAfun :: Int -> OpenAfun aenv t -> Doc
 prettyAfun = prettyPreAfun prettyAcc
 
-prettyPreAfun :: forall acc fun. PrettyAcc acc -> Int -> PreAfun acc fun -> Doc
-prettyPreAfun pp _alvl fun =
+prettyPreAfun :: forall acc aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc aenv fun -> Doc
+prettyPreAfun pp alvl fun =
   let (n, bodyDoc) = count n fun
   in
   char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
-     count lvl (Abody body) = (-1, pp (lvl + 1) noParens body) -- 'lvl+1' ok as functions is closed!
+     count lvl (Abody body) = (-1, pp (lvl + alvl + 1) noParens body)
      count lvl (Alam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
 -- Pretty print a function over scalar expressions.
@@ -288,8 +286,10 @@ prettyPreExp pp lvl alvl wrap (PrimApp p a)
     (infixOp, f) = prettyPrim p
     f'           = if infixOp then parens f else f
 
-prettyPreExp pp lvl alvl wrap (IndexScalar idx i)
+prettyPreExp pp lvl alvl wrap (Index idx i)
   = wrap $ cat [pp alvl parens idx, char '!', prettyPreExp pp lvl alvl parens i]
+prettyPreExp pp lvl alvl wrap (LinearIndex idx i)
+  = wrap $ cat [pp alvl parens idx, text "!!", prettyPreExp pp lvl alvl parens i]
 prettyPreExp pp _lvl alvl wrap (Shape idx)
   = wrap $ text "shape" <+> pp alvl parens idx
 prettyPreExp pp lvl alvl wrap (ShapeSize idx)

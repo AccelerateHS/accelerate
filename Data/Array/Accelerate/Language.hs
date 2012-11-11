@@ -223,7 +223,7 @@ slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
       -> Acc (Array (SliceShape slix) e)
-slice = Acc $$ Index
+slice = Acc $$ Slice
 
 -- Map-like functions
 -- ------------------
@@ -901,22 +901,22 @@ ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 
 -- |Extract the first component of a pair.
 --
-fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
-fst e = let (x, _:: Exp b) = unlift e in x
+fst :: forall f a b. Unlift f (f a, f b) => f (Plain (f a), Plain (f b)) -> f a
+fst e = let (x, _:: f b) = unlift e in x
 
 -- |Extract the second component of a pair.
 --
-snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
-snd e = let (_ :: Exp a, y) = unlift e in y
+snd :: forall f a b. Unlift f (f a, f b) => f (Plain (f a), Plain (f b)) -> f b
+snd e = let (_::f a, y) = unlift e in y
 
 -- |Converts an uncurried function to a curried function.
 --
-curry :: (Elt a, Elt b) => (Exp (a, b) -> Exp c) -> Exp a -> Exp b -> Exp c
+curry :: Lift f (f a, f b) => (f (Plain (f a), Plain (f b)) -> f c) -> f a -> f b -> f c
 curry f x y = f (lift (x, y))
 
 -- |Converts a curried function to a function on pairs.
 --
-uncurry :: (Elt a, Elt b) => (Exp a -> Exp b -> Exp c) -> Exp (a, b) -> Exp c
+uncurry :: Unlift f (f a, f b) => (f a -> f b -> f c) -> f (Plain (f a), Plain (f b)) -> f c
 uncurry f t = let (x, y) = unlift t in f x y
 
 -- Helpers to lift shapes and indices
@@ -972,7 +972,7 @@ c ? (t, e) = Exp $ Cond c t e
 --
 infixl 9 !
 (!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
-(!) arr ix = Exp $ IndexScalar arr ix
+(!) arr ix = Exp $ Index arr ix
 
 -- |Extraction of the element in a singleton array
 --

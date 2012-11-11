@@ -156,9 +156,8 @@ prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsist
 -- |Function abstraction over parametrised array computations
 --
 data PreOpenAfun acc aenv t where
-  Abody :: acc             aenv       t -> PreOpenAfun acc aenv t
-  Alam  :: (Arrays as, Arrays t)
-        => PreOpenAfun acc (aenv, as) t -> PreOpenAfun acc aenv (as -> t)
+  Abody :: Arrays t => acc             aenv      t -> PreOpenAfun acc aenv t
+  Alam  :: Arrays a => PreOpenAfun acc (aenv, a) t -> PreOpenAfun acc aenv (a -> t)
 
 -- Function abstraction over vanilla open array computations
 --
@@ -195,10 +194,10 @@ data PreOpenAcc acc aenv a where
 
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
-  Alet         :: (Arrays bndArrs, Arrays bodyArrs)
-               => acc            aenv            bndArrs        -- bound expression
-               -> acc            (aenv, bndArrs) bodyArrs       -- the bound expression scope
-               -> PreOpenAcc acc aenv            bodyArrs
+  Alet        :: (Arrays bndArrs, Arrays bodyArrs)
+              => acc            aenv            bndArrs         -- bound expression
+              -> acc            (aenv, bndArrs) bodyArrs        -- the bound expression scope
+              -> PreOpenAcc acc aenv            bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
@@ -271,9 +270,9 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sl e)               -- data to be replicated
               -> PreOpenAcc acc aenv (Array sh e)
 
-  -- Index a subarray out of an array; i.e., the dimensions not indexed are
+  -- Index a sub-array out of an array; i.e., the dimensions not indexed are
   -- returned whole
-  Index       :: (Shape sh, Shape sl, Elt slix, Elt e)
+  Slice       :: (Shape sh, Shape sl, Elt slix, Elt e)
               => SliceIndex (EltRepr slix)                      -- slice type specification
                             (EltRepr sl)
                             co
@@ -754,9 +753,14 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Project a single scalar from an array.
   -- The array expression can not contain any free scalar variables.
-  IndexScalar   :: (Shape dim, Elt t)
+  Index         :: (Shape dim, Elt t)
                 => acc                aenv (Array dim t)
                 -> PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv t
+
+  LinearIndex   :: (Shape dim, Elt t)
+                => acc                aenv (Array dim t)
+                -> PreOpenExp acc env aenv Int
                 -> PreOpenExp acc env aenv t
 
   -- Array shape.

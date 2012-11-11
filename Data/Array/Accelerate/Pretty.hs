@@ -31,12 +31,18 @@ import Data.Array.Accelerate.AST
 -- |Show instances
 -- ---------------
 
+wide :: Style
+wide = style { lineLength = 150 }
+
 instance Show (OpenAcc aenv a) where
-  show c = render $ prettyAcc 0 noParens c
+  show c = renderStyle wide $ prettyAcc 0 noParens c
+
+instance Show (OpenAfun aenv f) where
+  show f = renderStyle wide $ prettyAfun 0 f
 
 instance Show (OpenFun env aenv f) where
-  show f = render $ prettyFun 0 f
+  show f = renderStyle wide $ prettyFun 0 f
 
 instance Show (OpenExp env aenv t) where
-  show e = render $ prettyExp 0 0 noParens e
+  show e = renderStyle wide $ prettyExp 0 0 noParens e
 

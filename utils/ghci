@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Adjust to the installed location of ghci, if this script can not find it.
+#
+GHC=`which -a ghci | grep -v "\./ghci"`
+VER=`$GHC --numeric-version`
+
+# We assume that the dependent packages are install with 'cabal'. If you have
+# installed them with another tool such as 'cabal-dev', add the following to the
+# command.
+#
+#    -package-conf cabal-dev/packages-$VER.conf
+
+# And go...
+#
+$GHC -DACCELERATE_BOUNDS_CHECKS \
+     -DACCELERATE_INTERNAL_CHECKS \
+     -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h \
+     $@
+

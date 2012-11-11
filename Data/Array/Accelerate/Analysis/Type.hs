@@ -93,7 +93,7 @@ preAccType k pacc =
     Transform _ _ _ _   -> eltType (undefined::e)
     Reshape _ acc       -> k acc
     Replicate _ _ acc   -> k acc
-    Index _ acc _       -> k acc
+    Slice _ acc _       -> k acc
     Map _ _             -> eltType (undefined::e)
     ZipWith _ _ _       -> eltType (undefined::e)
     Fold _ _ acc        -> k acc
@@ -142,7 +142,8 @@ preExpType k e =
     Iterate _ _ _     -> eltType (undefined::t)
     PrimConst _       -> eltType (undefined::t)
     PrimApp _ _       -> eltType (undefined::t)
-    IndexScalar acc _ -> k acc
+    Index acc _       -> k acc
+    LinearIndex acc _ -> k acc
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)

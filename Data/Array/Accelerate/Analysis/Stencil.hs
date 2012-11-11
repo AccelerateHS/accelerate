@@ -1,4 +1,6 @@
-{-# LANGUAGE GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.CUDA.Analysis.Stencil
@@ -40,40 +42,49 @@ offsets2 _ _ _ =
 -- |Position calculation on reified stencil values.
 --
 positionsR :: StencilR sh e pat -> [sh]
-positionsR StencilRunit3 = map (Z:.) [          1, 0,-1          ]
-positionsR StencilRunit5 = map (Z:.) [       2, 1, 0,-1,-2       ]
-positionsR StencilRunit7 = map (Z:.) [    3, 2, 1, 0,-1,-2,-3    ]
-positionsR StencilRunit9 = map (Z:.) [ 4, 3, 2, 1, 0,-1,-2,-3,-4 ]
+positionsR StencilRunit3 = map (Z:.) [         -1, 0, 1          ]
+positionsR StencilRunit5 = map (Z:.) [      -2,-1, 0, 1, 2       ]
+positionsR StencilRunit7 = map (Z:.) [   -3,-2,-1, 0, 1, 2, 3    ]
+positionsR StencilRunit9 = map (Z:.) [-4,-3,-2,-1, 0, 1, 2, 3, 4 ]
 
 positionsR (StencilRtup3 c b a) = concat
-  [ map (:.  1 ) $ positionsR c
-  , map (:.  0 ) $ positionsR b
-  , map (:.(-1)) $ positionsR a ]
+  [ map (innermost (:. -1)) $ positionsR c
+  , map (innermost (:.  0)) $ positionsR b
+  , map (innermost (:.  1)) $ positionsR a ]
 
 positionsR (StencilRtup5 e d c b a) = concat
-  [ map (:.  2 ) $ positionsR e
-  , map (:.  1 ) $ positionsR d
-  , map (:.  0 ) $ positionsR c
-  , map (:.(-1)) $ positionsR b
-  , map (:.(-2)) $ positionsR a ]
+  [ map (innermost (:. -2)) $ positionsR e
+  , map (innermost (:. -1)) $ positionsR d
+  , map (innermost (:.  0)) $ positionsR c
+  , map (innermost (:.  1)) $ positionsR b
+  , map (innermost (:.  2)) $ positionsR a ]
 
 positionsR (StencilRtup7 g f e d c b a) = concat
-  [ map (:.  3 ) $ positionsR g
-  , map (:.  2 ) $ positionsR f
-  , map (:.  1 ) $ positionsR e
-  , map (:.  0 ) $ positionsR d
-  , map (:.(-1)) $ positionsR c
-  , map (:.(-2)) $ positionsR b
-  , map (:.(-3)) $ positionsR a ]
+  [ map (innermost (:. -3)) $ positionsR g
+  , map (innermost (:. -2)) $ positionsR f
+  , map (innermost (:. -1)) $ positionsR e
+  , map (innermost (:.  0)) $ positionsR d
+  , map (innermost (:.  1)) $ positionsR c
+  , map (innermost (:.  2)) $ positionsR b
+  , map (innermost (:.  3)) $ positionsR a ]
 
 positionsR (StencilRtup9 i h g f e d c b a) = concat
-  [ map (:.  4 ) $ positionsR i
-  , map (:.  3 ) $ positionsR h
-  , map (:.  2 ) $ positionsR g
-  , map (:.  1 ) $ positionsR f
-  , map (:.  0 ) $ positionsR e
-  , map (:.(-1)) $ positionsR d
-  , map (:.(-2)) $ positionsR c
-  , map (:.(-3)) $ positionsR b
-  , map (:.(-4)) $ positionsR a ]
+  [ map (innermost (:. -4)) $ positionsR i
+  , map (innermost (:. -3)) $ positionsR h
+  , map (innermost (:. -2)) $ positionsR g
+  , map (innermost (:. -1)) $ positionsR f
+  , map (innermost (:.  0)) $ positionsR e
+  , map (innermost (:.  1)) $ positionsR d
+  , map (innermost (:.  2)) $ positionsR c
+  , map (innermost (:.  3)) $ positionsR b
+  , map (innermost (:.  4)) $ positionsR a ]
+
+
+-- Inject a dimension component inner-most
+--
+innermost :: Shape sh => (sh -> sh :. Int) -> sh -> sh :. Int
+innermost f = invertShape . f . invertShape
+
+invertShape :: Shape sh => sh -> sh
+invertShape =  listToShape . reverse . shapeToList
 
