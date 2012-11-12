@@ -87,16 +87,16 @@ defaultConfig = Config
     _configBackend              = maxBound
   , _configSolver               = Naive         -- no barns-hut yet!
 
-  , _configWindowSize           = 300
+  , _configWindowSize           = 1000
   , _configShouldDrawTree       = False         -- no barns-hut yet!
-  , _configRate                 = 10
+  , _configRate                 = 30
 
   , _configBodyCount            = 200
-  , _configBodyMass             = 10
+  , _configBodyMass             = 1000
   , _configTimeStep             = 1
-  , _configEpsilon              = 100
+  , _configEpsilon              = 50
 
-  , _configStartDiscSize        = 50
+  , _configStartDiscSize        = 250
   , _configStartSpeed           = 0.5
 
   , _configMaxSteps             = Nothing
