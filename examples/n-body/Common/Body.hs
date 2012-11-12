@@ -31,15 +31,17 @@ import Data.Array.Accelerate            as A
 --   separation-squared relation.
 --
 accel   :: Exp R                -- ^ Smoothing parameter
-        -> Exp PointMass        -- ^ The point being accelerated
-        -> Exp PointMass        -- ^ Neighbouring point
+        -> Exp Body             -- ^ The point being accelerated
+        -> Exp Body             -- ^ Neighbouring point
         -> Exp Accel
 
-accel epsilon mp1 mp2
+accel epsilon body1 body2
   = lift (aabs * dx / r , aabs * dy / r)
   where
     (x1, y1)    = unlift $ positionOfPointMass mp1
     (x2, y2)    = unlift $ positionOfPointMass mp2
+    mp1         = pointMassOfBody body1
+    mp2         = pointMassOfBody body2
     m1          = massOfPointMass mp1
     m2          = massOfPointMass mp2
 
@@ -124,7 +126,7 @@ setStartVelOfBody startVel body = lift (pm, vel'', acc)
   where
     pm          = pointMassOfBody body
     acc         = accelOfBody body
-    pos         = A.fst pm
+    pos         = positionOfPointMass pm
 
     pos'        = normaliseV pos
     vel'        = lift (y', -x')
