@@ -20,6 +20,7 @@ import Data.Array.Accelerate                    as A hiding ( size )
 import Prelude                                  as P
 import Data.Label
 import System.Environment
+import System.Random.MWC                        ( uniformR )
 import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Graphics.Gloss.Interface.Pure.Game
 
@@ -32,6 +33,7 @@ main
                             Naive       -> Naive.calcAccels
                             BarnsHut    -> BarnsHut.calcAccels
 
+            n           = get configBodyCount conf
             size        = get configWindowSize conf
             fps         = get configRate conf
             epsilon     = get configEpsilon conf
@@ -40,12 +42,12 @@ main
             -- the origin. Start the system rotating with particle speed
             -- proportional to distance from the origin
             --
-            positions   = randomArrayOf (disc (0,0) (get configStartDiscSize conf))
-                                        (Z :. get configBodyCount conf)
+            positions   = randomArrayOf (disc (0,0) (get configStartDiscSize conf)) (Z :. n)
+            masses      = randomArrayOf (\_ -> uniformR (1, get configBodyMass conf)) (Z :. n)
 
             bodies      = run conf
                         $ A.map (setStartVelOfBody . constant $ get configStartSpeed conf)
-                        $ A.map (setMassOfBody     . constant $ get configBodyMass   conf)
+                        $ A.zipWith setMassOfBody (A.use masses)
                         $ A.map (A.uncurry unitBody)
                         $ A.use positions
 
@@ -75,7 +77,7 @@ main
                   black                                         -- background colour
                   fps                                           -- number of simulation steps per second
                   universe                                      -- initial world
-                  draw                                          -- fn to convert a world into a picture
+                  (draw conf)                                   -- fn to convert a world into a picture
                   react                                         -- fn to handle input events
                   (simulate advance)                            -- fn to advance the world
 

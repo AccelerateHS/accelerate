@@ -5,6 +5,7 @@
 module Gloss.Draw ( draw )
   where
 
+import Config
 import Common.Type
 import Common.World
 import Gloss.Simulate
@@ -14,23 +15,17 @@ import Graphics.Gloss
 import qualified Data.Array.Accelerate                  as A
 
 
--- | Radius of the circle representing each body.
---
-pointSize :: Float
-pointSize = 4
-
-
 -- | Draw the simulation, optionally showing the Barnes-Hut tree.
 --
-draw :: Simulate -> Picture
-draw universe
+draw :: Config -> Simulate -> Picture
+draw conf universe
   = let
         shouldDrawTree  = get simulateDrawTree universe
         world           = get simulateWorld    universe
 
         picPoints       = Color (makeColor 1 1 1 0.4)
                         $ Pictures
-                        $ map drawBody
+                        $ map (drawBody conf)
                         $ A.toList
                         $ worldBodies world
 
@@ -98,17 +93,21 @@ drawBHTree' depth bht
 --}
 
 
--- | Draw a single body.
+-- | Draw a single body. Set the size of the body depending on it's mass, in
+-- five size categories.
 --
-drawBody :: Body -> Picture
-drawBody ((position, _), _, _)
-  = drawPoint position
+drawBody :: Config -> Body -> Picture
+drawBody conf ((position, mass), _, _)
+  = let sizeMax = get configBodyMass conf / 5
+        size    = 1 `max` mass / sizeMax
+    in
+    drawPoint position (size + 1)
 
 
 -- | Draw a point using a filled circle.
 --
-drawPoint :: Position -> Picture
-drawPoint (x, y)
+drawPoint :: Position -> R -> Picture
+drawPoint (x, y) size
   = Translate (realToFrac x) (realToFrac y)
-  $ ThickCircle (pointSize / 2) pointSize
+  $ ThickCircle (size / 2) size
 
