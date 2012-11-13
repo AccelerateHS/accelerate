@@ -60,7 +60,13 @@ data Phase = Phase
 --   sharing recovery and fusion optimisation.
 --
 phases :: Phase
-phases = Phase True True True True False
+phases =  Phase
+  { recoverAccSharing      = True
+  , recoverExpSharing      = True
+  , floatOutAccFromExp     = True
+  , enableAccFusion        = True
+  , convertOffsetOfSegment = False
+  }
 
 
 -- HOAS -> de Bruijn conversion
