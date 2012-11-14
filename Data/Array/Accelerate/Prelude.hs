@@ -650,6 +650,11 @@ filter p arr
     --        Instead, we should have a primitive that directly encodes the
     --        compaction pattern of the permutation function.
 
+{-# RULES
+  "ACC filter/filter" forall f g arr.
+    filter f (filter g arr) = filter (\x -> g x &&* f x) arr
+ #-}
+
 
 -- Gather operations
 -- -----------------
