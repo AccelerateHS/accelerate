@@ -131,6 +131,8 @@ Library
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
+                        Data.Array.Accelerate.Trafo.Algebra
+                        Data.Array.Accelerate.Trafo.Common
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
                         Data.Array.Accelerate.Trafo.Sharing

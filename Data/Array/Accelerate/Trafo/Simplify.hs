@@ -33,6 +33,8 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape )
 
@@ -41,30 +43,6 @@ import qualified Debug.Trace                            as Debug
 
 -- Scalar expressions
 -- ------------------
-
--- An environment that holds let-bound scalar expressions. The second
--- environment variable env' is used to project out the corresponding
--- index when looking up in the environment congruent expressions.
---
-data Gamma env env' aenv where
-  EmptyExp :: Gamma   env aenv'     aenv
-
-  PushExp  :: Gamma   env env'      aenv
-           -> OpenExp env           aenv t
-           -> Gamma   env (env', t) aenv
-
-incExp :: Gamma env env' aenv -> Gamma (env, s) env' aenv
-incExp EmptyExp        = EmptyExp
-incExp (PushExp env e) = incExp env `PushExp` weakenE e
-
-lookupExp :: Gamma   env env' aenv
-          -> OpenExp env      aenv t
-          -> Maybe  (Idx env' t)
-lookupExp EmptyExp        _       = Nothing
-lookupExp (PushExp env e) x
-  | Just REFL <- matchOpenExp e x = Just ZeroIdx
-  | otherwise                     = SuccIdx `fmap` lookupExp env x
-
 
 -- Currently this takes the form of a pretty weedy CSE optimisation, where we
 -- look for expressions of the form:
@@ -163,6 +141,8 @@ simplifyCond
     -> OpenExp env aenv t       -- else branch
     -> OpenExp env aenv t
 simplifyCond _env p t e
+  | Const ((), True)  <- p              = t
+  | Const ((), False) <- p              = e
   | Just REFL <- matchOpenExp t e       = t
   | otherwise                           = Cond p t e
 
@@ -220,7 +200,7 @@ simplifyOpenExp env aenv = cvt
           Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
           Iterate n f x         -> Iterate n (simplifyOpenFun env aenv f) (cvt x)
           PrimConst c           -> PrimConst c
-          PrimApp f x           -> PrimApp f (cvt x)
+          PrimApp f x           -> evalPrimApp f (cvt x) env
           Index a sh            -> Index (cvtA a) (cvt sh)
           LinearIndex a i       -> LinearIndex (cvtA a) (cvt i)
           Shape a               -> Shape (cvtA a)
@@ -254,28 +234,6 @@ simplifyFun aenv = simplifyOpenFun EmptyExp aenv . shrinkFE
 
 -- Array computations
 -- ------------------
-
--- An environment which holds let-bound array expressions.
---
-data Delta aenv aenv' where
-  EmptyAcc :: Delta   aenv aenv'
-
-  PushAcc  :: Delta   aenv aenv'
-           -> OpenAcc aenv            a
-           -> Delta   aenv (aenv', a)
-
-incAcc :: Delta aenv aenv' -> Delta (aenv,s) aenv'
-incAcc EmptyAcc         = EmptyAcc
-incAcc (PushAcc aenv a) = incAcc aenv `PushAcc` weakenA a
-
-lookupAcc :: Delta   aenv aenv'
-          -> OpenAcc aenv a
-          -> Maybe (Idx aenv' a)
-lookupAcc EmptyAcc         _      = Nothing
-lookupAcc (PushAcc aenv a) x
-  | Just REFL <- matchOpenAcc a x = Just ZeroIdx
-  | otherwise                     = SuccIdx `fmap` lookupAcc aenv x
-
 
 -- Our weedy CSE optimisation lifted array types.
 --

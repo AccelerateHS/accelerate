@@ -18,9 +18,14 @@ module Data.Array.Accelerate.Analysis.Match (
   -- matching expressions
   (:=:)(..),
   matchOpenAcc, matchOpenAfun, matchOpenExp, matchOpenFun,
+  matchPrimFun, matchPrimFun',
 
   -- auxiliary
   matchIdx, matchTupleType,
+  matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
+
+  -- hashing expressions
+  hashOpenExp,
 
 ) where
 
@@ -527,6 +532,8 @@ matchPrimConst (PrimPi s)       (PrimPi t)       = matchFloatingType s t
 matchPrimConst _                _                = Nothing
 
 
+-- Covariant function matching
+--
 matchPrimFun :: (Elt s, Elt t) => PrimFun (a -> s) -> PrimFun (a -> t) -> Maybe (s :=: t)
 matchPrimFun (PrimAdd _)            (PrimAdd _)            = Just REFL
 matchPrimFun (PrimSub _)            (PrimSub _)            = Just REFL
@@ -583,6 +590,85 @@ matchPrimFun PrimOrd                PrimOrd                = Just REFL
 matchPrimFun PrimChr                PrimChr                = Just REFL
 matchPrimFun PrimBoolToInt          PrimBoolToInt          = Just REFL
 matchPrimFun _                      _                      = Nothing
+
+
+-- Contravariant function matching
+--
+matchPrimFun' :: (Elt s, Elt t) => PrimFun (s -> a) -> PrimFun (t -> a) -> Maybe (s :=: t)
+matchPrimFun' (PrimAdd _)            (PrimAdd _)            = Just REFL
+matchPrimFun' (PrimSub _)            (PrimSub _)            = Just REFL
+matchPrimFun' (PrimMul _)            (PrimMul _)            = Just REFL
+matchPrimFun' (PrimNeg _)            (PrimNeg _)            = Just REFL
+matchPrimFun' (PrimAbs _)            (PrimAbs _)            = Just REFL
+matchPrimFun' (PrimSig _)            (PrimSig _)            = Just REFL
+matchPrimFun' (PrimQuot _)           (PrimQuot _)           = Just REFL
+matchPrimFun' (PrimRem _)            (PrimRem _)            = Just REFL
+matchPrimFun' (PrimIDiv _)           (PrimIDiv _)           = Just REFL
+matchPrimFun' (PrimMod _)            (PrimMod _)            = Just REFL
+matchPrimFun' (PrimBAnd _)           (PrimBAnd _)           = Just REFL
+matchPrimFun' (PrimBOr _)            (PrimBOr _)            = Just REFL
+matchPrimFun' (PrimBXor _)           (PrimBXor _)           = Just REFL
+matchPrimFun' (PrimBNot _)           (PrimBNot _)           = Just REFL
+matchPrimFun' (PrimBShiftL _)        (PrimBShiftL _)        = Just REFL
+matchPrimFun' (PrimBShiftR _)        (PrimBShiftR _)        = Just REFL
+matchPrimFun' (PrimBRotateL _)       (PrimBRotateL _)       = Just REFL
+matchPrimFun' (PrimBRotateR _)       (PrimBRotateR _)       = Just REFL
+matchPrimFun' (PrimFDiv _)           (PrimFDiv _)           = Just REFL
+matchPrimFun' (PrimRecip _)          (PrimRecip _)          = Just REFL
+matchPrimFun' (PrimSin _)            (PrimSin _)            = Just REFL
+matchPrimFun' (PrimCos _)            (PrimCos _)            = Just REFL
+matchPrimFun' (PrimTan _)            (PrimTan _)            = Just REFL
+matchPrimFun' (PrimAsin _)           (PrimAsin _)           = Just REFL
+matchPrimFun' (PrimAcos _)           (PrimAcos _)           = Just REFL
+matchPrimFun' (PrimAtan _)           (PrimAtan _)           = Just REFL
+matchPrimFun' (PrimAsinh _)          (PrimAsinh _)          = Just REFL
+matchPrimFun' (PrimAcosh _)          (PrimAcosh _)          = Just REFL
+matchPrimFun' (PrimAtanh _)          (PrimAtanh _)          = Just REFL
+matchPrimFun' (PrimExpFloating _)    (PrimExpFloating _)    = Just REFL
+matchPrimFun' (PrimSqrt _)           (PrimSqrt _)           = Just REFL
+matchPrimFun' (PrimLog _)            (PrimLog _)            = Just REFL
+matchPrimFun' (PrimFPow _)           (PrimFPow _)           = Just REFL
+matchPrimFun' (PrimLogBase _)        (PrimLogBase _)        = Just REFL
+matchPrimFun' (PrimAtan2 _)          (PrimAtan2 _)          = Just REFL
+matchPrimFun' (PrimTruncate s _)     (PrimTruncate t _)     = matchFloatingType s t
+matchPrimFun' (PrimRound s _)        (PrimRound t _)        = matchFloatingType s t
+matchPrimFun' (PrimFloor s _)        (PrimFloor t _)        = matchFloatingType s t
+matchPrimFun' (PrimCeiling s _)      (PrimCeiling t _)      = matchFloatingType s t
+matchPrimFun' (PrimMax _)            (PrimMax _)            = Just REFL
+matchPrimFun' (PrimMin _)            (PrimMin _)            = Just REFL
+matchPrimFun' (PrimFromIntegral s _) (PrimFromIntegral t _) = matchIntegralType s t
+matchPrimFun' PrimLAnd               PrimLAnd               = Just REFL
+matchPrimFun' PrimLOr                PrimLOr                = Just REFL
+matchPrimFun' PrimLNot               PrimLNot               = Just REFL
+matchPrimFun' PrimOrd                PrimOrd                = Just REFL
+matchPrimFun' PrimChr                PrimChr                = Just REFL
+matchPrimFun' PrimBoolToInt          PrimBoolToInt          = Just REFL
+matchPrimFun' (PrimLt s) (PrimLt t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' (PrimGt s) (PrimGt t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' (PrimLtEq s) (PrimLtEq t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' (PrimGtEq s) (PrimGtEq t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' (PrimEq s) (PrimEq t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' (PrimNEq s) (PrimNEq t)
+  | Just REFL <- matchScalarType s t
+  = Just REFL
+
+matchPrimFun' _ _
+  = Nothing
 
 
 -- Match reified types
