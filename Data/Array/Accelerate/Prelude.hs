@@ -817,7 +817,7 @@ init arr = take ((unindex1 $ shape arr) - 1) arr
 --   empty.
 --
 tail :: Elt e => Acc (Vector e) -> Acc (Vector e)
-tail = drop 1
+tail arr = backpermute (ilift1 (subtract 1) (shape arr)) (ilift1 (+1)) arr
 
 
 -- | Yield a slit (slice) from the vector. The vector must contain at least
@@ -825,11 +825,7 @@ tail = drop 1
 --
 -- > slit i n = take n . drop i
 --
-slit :: Elt e
-      => Exp Int
-      -> Exp Int
-      -> Acc (Vector e)
-      -> Acc (Vector e)
+slit :: Elt e => Exp Int -> Exp Int -> Acc (Vector e) -> Acc (Vector e)
 slit i n =
   let i' = unit i
   in  backpermute (index1 n) (ilift1 (+ the i'))
