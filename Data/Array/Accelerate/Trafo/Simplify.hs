@@ -281,7 +281,7 @@ simplifyOpenAcc !aenv !acc = cvtA (shrinkOpenAcc acc)
           Avar ix                       -> Avar ix
           Atuple tup                    -> Atuple (cvtT tup)
           Aprj tup a                    -> Aprj tup (cvtA a)
-          Apply f a                     -> Apply (simplifyAfun f) (cvtA a)
+          Apply f a                     -> Apply f (cvtA a)
           Acond p t e                   -> Acond (cvtE p) (cvtA t) (cvtA e)
           Use a                         -> Use a
           Unit e                        -> Unit (cvtE e)
