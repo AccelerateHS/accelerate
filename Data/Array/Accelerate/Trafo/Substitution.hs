@@ -527,31 +527,36 @@ usesOfFE idx fun =
 
 type UsesOfAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Int
 type ShrinkAcc acc = forall aenv a.   acc aenv a -> acc aenv a
-type UnwrapAcc acc = forall aenv t.   acc aenv t -> PreOpenAcc acc aenv t       -- hmm...
+
 
 shrinkOpenAcc :: OpenAcc aenv a -> OpenAcc aenv a
-shrinkOpenAcc (OpenAcc acc)
-  = OpenAcc
-  $ shrinkA rebuildOpenAcc shrinkOpenAcc usesOfOpenAcc (\(OpenAcc a) -> a) acc
+shrinkOpenAcc (OpenAcc pacc) =
+  OpenAcc (shrinkA rebuildOpenAcc shrinkOpenAcc usesOfOpenAcc pacc)
 
 
+-- TLM: Shrinking of array expressions is currently specialised to OpenAcc
+--      because we need to unwrap terms to do further substitution and
+--      shrinking at the Alet case.
+--
 shrinkA
-    :: RebuildAcc acc -> ShrinkAcc acc -> UsesOfAcc acc -> UnwrapAcc acc
-    -> PreOpenAcc acc aenv t
-    -> PreOpenAcc acc aenv t
-shrinkA k s u pre acc =
+    :: RebuildAcc OpenAcc
+    -> ShrinkAcc OpenAcc
+    -> UsesOfAcc OpenAcc
+    -> PreOpenAcc OpenAcc aenv t
+    -> PreOpenAcc OpenAcc aenv t
+shrinkA k s u pacc =
   let subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
       subTop t ZeroIdx          = t
       subTop _ (SuccIdx idx)    = Avar idx
   in
-  case acc of
-    Alet bnd body
-      | Avar _ <- pre bnd        -> shrinkA k s u pre (rebuildA k (subTop (pre bnd))  (pre body))
-      | u ZeroIdx body' <= lIMIT -> shrinkA k s u pre (rebuildA k (subTop (pre bnd')) (pre body'))
+  case pacc of
+    Alet bnd@(OpenAcc pbnd) body@(OpenAcc pbody)
+      | Avar _ <- pbnd           -> shrinkA k s u (rebuildA k (subTop pbnd)  pbody)
+      | u ZeroIdx body' <= lIMIT -> shrinkA k s u (rebuildA k (subTop pbnd') pbody')
       | otherwise                -> Alet bnd' body'
       where
-        bnd'    = s bnd
-        body'   = s body
+        bnd'@(OpenAcc pbnd')    = s bnd
+        body'@(OpenAcc pbody')  = s body
 
         -- Allow only dead code elimination, otherwise we might inline array
         -- computations directly into scalar expressions, and later stages rely
