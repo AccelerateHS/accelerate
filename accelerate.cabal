@@ -153,6 +153,7 @@ Library
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
   ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
+  ghc-prof-options:     -caf-all -auto-all
 
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
