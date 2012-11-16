@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -87,7 +88,7 @@ recoverLoops
     -> OpenExp env     aenv a
     -> OpenExp (env,a) aenv b
     -> Maybe (OpenExp env aenv b)
-recoverLoops _env bnd body
+recoverLoops _env !bnd !body
   | Iterate n f x               <- bnd
   , Just REFL                   <- matchOpenFun f (Lam (Body body))
   = trace "loop join" (show f)
@@ -121,7 +122,7 @@ simplifyLet
     -> OpenExp env     aenv a
     -> OpenExp (env,a) aenv b
     -> OpenExp env     aenv b
-simplifyLet env bnd body
+simplifyLet !env !bnd !body
   | Just x <- recoverLoops env bnd body = x
   | Just x <- lookupExp env bnd         = inline body (Var x)
   | otherwise                           = Let bnd body
@@ -140,7 +141,7 @@ simplifyCond
     -> OpenExp env aenv t       -- then branch
     -> OpenExp env aenv t       -- else branch
     -> OpenExp env aenv t
-simplifyCond _env p t e
+simplifyCond _env p !t !e
   | Const ((), True)  <- p              = t
   | Const ((), False) <- p              = e
   | Just REFL <- matchOpenExp t e       = t
@@ -167,9 +168,9 @@ simplifyOpenExp
     :: forall env aenv t. Elt t
     => Gamma env env aenv
     -> Delta aenv aenv
-    -> OpenExp env     aenv t
-    -> OpenExp env     aenv t
-simplifyOpenExp env aenv = cvt
+    -> OpenExp env aenv t
+    -> OpenExp env aenv t
+simplifyOpenExp env !aenv = cvt
   where
     cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
     cvtA = simplifyOpenAcc aenv
@@ -213,7 +214,7 @@ simplifyTuple
     -> Delta aenv aenv
     -> Tuple (OpenExp env aenv) t
     -> Tuple (OpenExp env aenv) t
-simplifyTuple _   _    NilTup          = NilTup
+simplifyTuple !_  !_   NilTup          = NilTup
 simplifyTuple env aenv (SnocTup tup e) = simplifyTuple env aenv tup `SnocTup` simplifyOpenExp env aenv e
 
 simplifyOpenFun
@@ -221,15 +222,15 @@ simplifyOpenFun
     -> Delta aenv aenv
     -> OpenFun env aenv t
     -> OpenFun env aenv t
-simplifyOpenFun env aenv (Body e) = Body (simplifyOpenExp env aenv e)
-simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun (incExp env `PushExp` Var ZeroIdx) aenv f)
+simplifyOpenFun !env !aenv (Body e) = Body (simplifyOpenExp env aenv e)
+simplifyOpenFun !env !aenv (Lam  f) = Lam  (simplifyOpenFun (incExp env `PushExp` Var ZeroIdx) aenv f)
 
 
 simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
-simplifyExp aenv = simplifyOpenExp EmptyExp aenv . shrinkE
+simplifyExp !aenv = simplifyOpenExp EmptyExp aenv . shrinkE
 
 simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
-simplifyFun aenv = simplifyOpenFun EmptyExp aenv . shrinkFE
+simplifyFun !aenv = simplifyOpenFun EmptyExp aenv . shrinkFE
 
 
 -- Array computations
@@ -254,7 +255,7 @@ simplifyOpenAcc
     => Delta aenv aenv
     -> OpenAcc aenv arrs
     -> OpenAcc aenv arrs
-simplifyOpenAcc aenv = cvtA . shrinkOpenAcc
+simplifyOpenAcc !aenv !acc = cvtA (shrinkOpenAcc acc)
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of
@@ -269,7 +270,7 @@ simplifyOpenAcc aenv = cvtA . shrinkOpenAcc
 
     cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
     cvtA acc@(OpenAcc pacc)
-      = flip fromMaybe (globalCSE aenv acc) $ OpenAcc
+      = flip fromMaybe (globalCSE aenv acc) . OpenAcc
       $ case pacc of
           Alet bnd body                 -> let bnd'  = cvtA bnd
                                                aenv' = incAcc aenv `PushAcc` weakenA bnd'
@@ -308,7 +309,7 @@ simplifyOpenAcc aenv = cvtA . shrinkOpenAcc
 
 
 simplifyOpenAfun :: Delta aenv aenv -> OpenAfun aenv t -> OpenAfun aenv t
-simplifyOpenAfun aenv afun =
+simplifyOpenAfun !aenv afun =
   case afun of
     Abody b     -> Abody (simplifyOpenAcc aenv b)
     Alam f      -> Alam (simplifyOpenAfun (incAcc aenv `PushAcc` (OpenAcc (Avar ZeroIdx))) f)

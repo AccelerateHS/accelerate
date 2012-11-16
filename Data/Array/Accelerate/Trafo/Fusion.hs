@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -49,11 +50,11 @@ until :: forall f done. (f -> f -> Maybe done) -> (f -> f) -> f -> f
 until stop go = fix 0
   where
     fix :: Int -> f -> f
-    fix i x | i < lIMIT, Nothing <- stop x x'   = fix (i+1) x'
-            | otherwise                         = x'
-            where
-              lIMIT = 10
-              x'    = go x
+    fix !i !x | i < lIMIT, Nothing <- stop x x'   = fix (i+1) x'
+              | otherwise                         = x'
+              where
+                !lIMIT = 10
+                !x'    = go x
 
 
 -- | Convert an array computation into an embeddable delayed representation.
@@ -139,11 +140,12 @@ delayOpenAcc (OpenAcc pacc) =
           -> Fun        aenv c
           -> OpenAcc    aenv arrs
           -> DelayedAcc aenv arrs'
-      consumeFA op c arr =
+      consumeFA !op !c arr =
         case delayA arr of
           Yield env sh f        -> Done env (op (sinkF env c) (force $ Yield BaseEnv sh f))
           Step env sh ix f v    -> Done env (op (sinkF env c) (force $ Step  BaseEnv sh ix f v))
-          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) a0)
+          Done env a            -> let !env' = env `PushEnv` a
+                                   in Done env' (op (sinkF env' c) a0)
 
       consumeFEA
           :: (Arrays arrs, Arrays arrs')
@@ -152,11 +154,12 @@ delayOpenAcc (OpenAcc pacc) =
           -> Exp        aenv z
           -> OpenAcc    aenv arrs
           -> DelayedAcc aenv arrs'
-      consumeFEA op c z arr =
+      consumeFEA !op !c !z arr =
         case delayA arr of
           Yield env sh f        -> Done env (op (sinkF env c) (sinkE env z) (force $ Yield BaseEnv sh f))
           Step env sh ix f v    -> Done env (op (sinkF env c) (sinkE env z) (force $ Step  BaseEnv sh ix f v))
-          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) (sinkE env' z) a0)
+          Done env a            -> let !env' = env `PushEnv` a
+                                   in Done env' (op (sinkF env' c) (sinkE env' z) a0)
 
       consumeFA2
           :: forall arrs' aenv c as bs. (Arrays as, Arrays bs, Arrays arrs')
@@ -165,7 +168,7 @@ delayOpenAcc (OpenAcc pacc) =
           -> OpenAcc    aenv as
           -> OpenAcc    aenv bs
           -> DelayedAcc aenv arrs'
-      consumeFA2 op c arr1 arr2 =
+      consumeFA2 !op !c arr1 arr2 =
         case delayA arr1 of
           Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
@@ -174,10 +177,10 @@ delayOpenAcc (OpenAcc pacc) =
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkA (env2 `PushEnv` a2) a1) a0)
+              Yield env2 sh f           -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let !env' = join env1 env2 `PushEnv` a2
+                                           in Done env' (op (sinkF env' c) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeFEA2
           :: forall arrs' aenv c z as bs. (Arrays as, Arrays bs, Arrays arrs')
@@ -187,7 +190,7 @@ delayOpenAcc (OpenAcc pacc) =
           -> OpenAcc    aenv as
           -> OpenAcc    aenv bs
           -> DelayedAcc aenv arrs'
-      consumeFEA2 op c z arr1 arr2 =
+      consumeFEA2 !op !c !z arr1 arr2 =
         case delayA arr1 of
           Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
@@ -196,10 +199,10 @@ delayOpenAcc (OpenAcc pacc) =
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkE env' z) (sinkA (env2 `PushEnv` a2) a1) a0)
+              Yield env2 sh f           -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let !env' = join env1 env2 `PushEnv` a2
+                                           in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA (env2 `PushEnv` a2) a1) a0)
 
       consumeF2A2
           :: forall arrs' aenv c p as bs. (Arrays as, Arrays bs, Arrays arrs')
@@ -209,7 +212,7 @@ delayOpenAcc (OpenAcc pacc) =
           -> OpenAcc    aenv as
           -> OpenAcc    aenv bs
           -> DelayedAcc aenv arrs'
-      consumeF2A2 op c p arr1 arr2 =
+      consumeF2A2 !op !c !p arr1 arr2 =
         case delayA arr1 of
           Done env a1           -> inner (env `PushEnv` a1) a0
           Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
@@ -218,10 +221,10 @@ delayOpenAcc (OpenAcc pacc) =
           inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
           inner env1 a1 =
             case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkF env' p) (sinkA (env2 `PushEnv` a2) a1) a0)
+              Yield env2 sh f           -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
+              Step env2 sh ix f v       -> let !env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
+              Done env2 a2              -> let !env' = join env1 env2 `PushEnv` a2
+                                           in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA (env2 `PushEnv` a2) a1) a0)
   --
   in case pacc of
     -- Forms that introduce environment manipulations and control flow. We
@@ -361,25 +364,25 @@ data DelayedAcc aenv a where
 -- ------------------
 
 done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
-done a = Done (BaseEnv `PushEnv` a) (Avar ZeroIdx)
+done !a = Done (BaseEnv `PushEnv` a) (Avar ZeroIdx)
 
 identity :: Elt a => OpenFun env aenv (a -> a)
 identity = Lam . Body $ Var ZeroIdx
 
 toIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
-toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
+toIndex !sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
 
 fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
-fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
+fromIndex !sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
 
 arrayShape :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Exp aenv sh
-arrayShape = Shape . OpenAcc . Avar
+arrayShape !ix = Shape (OpenAcc (Avar ix))
 
 indexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (sh -> e)
-indexArray v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
+indexArray !v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
 
 linearIndexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndexArray v = Lam . Body $ LinearIndex (OpenAcc (Avar v)) (Var ZeroIdx)
+linearIndexArray !v = Lam . Body $ LinearIndex (OpenAcc (Avar v)) (Var ZeroIdx)
 
 reindex :: (Shape sh, Shape sh')
         => OpenExp env aenv sh'
@@ -417,7 +420,7 @@ reshapeD
     => Exp        aenv sh'
     -> DelayedAcc aenv (Array sh  e)
     -> DelayedAcc aenv (Array sh' e)
-reshapeD sl acc = case acc of
+reshapeD !sl acc = case acc of
   Step env sh ix f v    -> let sl' = sinkE env sl in Step env sl' (ix `compose` reindex sh sl') f v
   Yield env sh f        -> let sl' = sinkE env sl in Yield env sl' (f `compose` reindex sh sl')
   Done env a            ->
@@ -436,7 +439,7 @@ backpermuteD
     -> Fun        aenv (sh' -> sh)
     -> DelayedAcc aenv (Array sh  e)
     -> DelayedAcc aenv (Array sh' e)
-backpermuteD sh' p acc = case acc of
+backpermuteD !sh' !p acc = case acc of
   Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
   Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
   Done env a            ->
@@ -452,7 +455,7 @@ replicateD
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
     -> DelayedAcc aenv (Array sh e)
-replicateD sliceIndex slix acc = case acc of
+replicateD !sliceIndex !slix acc = case acc of
   Step env sl pf f a    -> Step env (fullshape env sl) (pf `compose` extend env) f a
   Yield env sl f        -> Yield env (fullshape env sl) (f `compose` extend env)
   Done env a            ->
@@ -476,7 +479,7 @@ sliceD
     -> DelayedAcc aenv (Array sh e)
     -> Exp        aenv slix
     -> DelayedAcc aenv (Array sl e)
-sliceD sliceIndex acc slix = case acc of
+sliceD !sliceIndex acc !slix = case acc of
   Step env sl pf f a    -> Step env (sliceshape env sl) (pf `compose` restrict env) f a
   Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
   Done env a            ->
@@ -500,7 +503,7 @@ mapD :: (Shape sh, Elt a, Elt b)
      => Fun        aenv (a -> b)
      -> DelayedAcc aenv (Array sh a)
      -> DelayedAcc     aenv (Array sh b)
-mapD f acc = case acc of
+mapD !f acc = case acc of
   Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
   Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
   Done env a            -> Step (env `PushEnv` a)
@@ -520,7 +523,7 @@ zipWithD
     -> OpenAcc    aenv (Array sh a)
     -> OpenAcc    aenv (Array sh b)
     -> DelayedAcc aenv (Array sh c)
-zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
+zipWithD !f !acc1 !acc2 = case delayOpenAcc acc1 of
   Done env a1                   -> inner (env `PushEnv` a1) (arrayShape ZeroIdx) (indexArray ZeroIdx)
   Step env1 sh1 ix1 g1 a1       -> inner env1 sh1 (g1 `compose` indexArray a1 `compose` ix1)
   Yield env1 sh1 g1             -> inner env1 sh1 g1
@@ -602,7 +605,7 @@ aletD bndAcc bodyAcc =
     -- can generate the shape directly.
     --
     Step env1 sh1 ix1 f1 a1
-     -> let OpenAcc bnd = force $ Step BaseEnv sh1 ix1 f1 a1
+     -> let OpenAcc !bnd = force $ Step BaseEnv sh1 ix1 f1 a1
         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
           Done env2 b
            -> into (env1 `join` bnd `cons` env2) env2 sh1 (f1 `compose` indexArray a1 `compose` ix1) b
@@ -617,7 +620,7 @@ aletD bndAcc bodyAcc =
                         (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1) f2)
 
     Yield env1 sh1 f1
-     -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
+     -> let OpenAcc !bnd = force $ Yield BaseEnv sh1 f1
         in case delayOpenAcc (sinkA1 env1 bodyAcc) of
           Done env2 b
            -> into (env1 `join` bnd `cons` env2) env2 sh1 f1 b
@@ -648,7 +651,7 @@ aletD bndAcc bodyAcc =
           -> Fun aenv'  (sh -> e)
           -> Fun aenv'' (sh' -> e')
           -> Maybe (DelayedAcc aenv (Array sh' e'))
-    yield env1 env2 sh1 sh2 f1 f2
+    yield !env1 !env2 !sh1 !sh2 !f1 !f2
       | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
       = Just $ Yield (env1 `join` env2') (replaceE sh1' f1' a0 sh2) (replaceF sh1' f1' a0 f2)
 
@@ -674,7 +677,7 @@ aletD bndAcc bodyAcc =
          -> Fun aenv' (sh -> e)
          -> PreOpenAcc OpenAcc aenv'' a
          -> DelayedAcc         aenv   a
-    into env env2 sh1 f1 body
+    into !env !env2 !sh1 !f1 body
       | Permute c2 d2 ix2 s2 <- body
       , usesOfFA a0 c2 + usesOfFA a0 ix2 + usesOfAX a0 env2 + usesOf a0 d2 + usesOf a0 s2 <= lIMIT
       = Done env $ Permute (replaceF sh1' f1' a0 c2) d2 (replaceF sh1' f1' a0 ix2) s2
@@ -691,15 +694,15 @@ aletD bndAcc bodyAcc =
     -- a Shape.
     --
     usesOfAX :: Idx aenv' a -> Extend (aenv, a) aenv' -> Int
-    usesOfAX _             BaseEnv         = 0
+    usesOfAX !_            BaseEnv         = 0
     usesOfAX (SuccIdx idx) (PushEnv env a) = usesOfPA idx a + usesOfAX idx env
-    usesOfAX _             _               = error "usesOfAExt: inconsistent valuation"
+    usesOfAX !_            !_              = error "usesOfAExt: inconsistent valuation"
 
     usesOf :: Idx aenv s -> OpenAcc aenv t -> Int
     usesOf idx (OpenAcc acc) = usesOfPA idx acc
 
     usesOfPA :: Idx aenv s -> PreOpenAcc OpenAcc aenv t -> Int
-    usesOfPA idx acc =
+    usesOfPA !idx acc =
       case acc of
         Alet bnd body       -> usesOf idx bnd + usesOf (SuccIdx idx) body
         Avar idx'
@@ -734,13 +737,13 @@ aletD bndAcc bodyAcc =
         Stencil2 f _ a1 _ a2-> usesOfFA idx f + usesOf idx a1 + usesOf idx a2
 
     usesOfATA :: Idx aenv s -> Atuple (OpenAcc aenv) t -> Int
-    usesOfATA idx atup =
+    usesOfATA !idx atup =
       case atup of
         NilAtup      -> 0
         SnocAtup t a -> usesOfATA idx t + usesOf idx a
 
     usesOfEA :: Idx aenv a -> OpenExp env aenv t -> Int
-    usesOfEA idx exp =
+    usesOfEA !idx exp =
       case exp of
         Let bnd body        -> usesOfEA idx bnd + usesOfEA idx body
         Var _               -> 0
@@ -772,13 +775,13 @@ aletD bndAcc bodyAcc =
         Shape _             -> 0
 
     usesOfTA :: Idx aenv a -> Tuple (OpenExp env aenv) t -> Int
-    usesOfTA idx tup =
+    usesOfTA !idx tup =
       case tup of
         NilTup      -> 0
         SnocTup t e -> usesOfTA idx t + usesOfEA idx e
 
     usesOfFA :: Idx aenv a -> OpenFun env aenv f -> Int
-    usesOfFA idx fun =
+    usesOfFA !idx fun =
       case fun of
         Body e      -> usesOfEA idx e
         Lam f       -> usesOfFA idx f
@@ -792,7 +795,7 @@ aletD bndAcc bodyAcc =
              -> Idx          aenv (Array sh e)
              -> OpenFun env' aenv f
              -> OpenFun env' aenv f
-    replaceF sh ix idx fun =
+    replaceF !sh !ix !idx fun =
       case fun of
         Body e      -> Body (replaceE sh ix idx e)
         Lam f       -> Lam  (replaceF (weakenE sh) (weakenFE ix) idx f)
@@ -804,7 +807,7 @@ aletD bndAcc bodyAcc =
         -> Idx         aenv (Array sh e)
         -> OpenExp env aenv t
         -> OpenExp env aenv t
-    replaceE sh_ ix_ idx exp =
+    replaceE !sh_ !ix_ !idx exp =
       let travE :: OpenExp env aenv t' -> OpenExp env aenv t'
           travE = replaceE sh_ ix_ idx
 
@@ -883,8 +886,8 @@ bind :: Arrays a
      => Extend aenv aenv'
      -> PreOpenAcc OpenAcc aenv' a
      -> PreOpenAcc OpenAcc aenv  a
-bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
+bind BaseEnv         !acc = acc
+bind (PushEnv env a) !acc = bind env $ Alet (OpenAcc a) $ OpenAcc acc
 
 
 -- Extend array environments
@@ -892,30 +895,30 @@ bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
 sink :: Extend env env'
      -> Idx env  t
      -> Idx env' t
-sink BaseEnv       = id
-sink (PushEnv e _) = SuccIdx . sink e
+sink BaseEnv       !ix = ix
+sink (PushEnv e _) !ix = SuccIdx (sink e ix)
 
 sinkA :: Extend aenv aenv'
       -> OpenAcc aenv  a
       -> OpenAcc aenv' a
-sinkA env = weakenByA (sink env)
+sinkA !env = weakenByA (sink env)
 
 sinkE :: Extend aenv aenv'
       -> OpenExp env aenv  e
       -> OpenExp env aenv' e
-sinkE env = weakenByEA (sink env)
+sinkE !env = weakenByEA (sink env)
 
 sinkF :: Extend aenv aenv'
       -> OpenFun env aenv  f
       -> OpenFun env aenv' f
-sinkF env = weakenByFA (sink env)
+sinkF !env = weakenByFA (sink env)
 
 
 sink1 :: Extend env env'
       -> Idx (env, a) t
       -> Idx (env',a) t
-sink1 BaseEnv       = id
-sink1 (PushEnv e _) = split1 . sink1 e
+sink1 BaseEnv       !ix = ix
+sink1 (PushEnv e _) !ix = split1 (sink1 e ix)
   where
     split1 :: Idx (env, a) t -> Idx ((env, s), a) t
     split1 ZeroIdx      = ZeroIdx
@@ -924,7 +927,7 @@ sink1 (PushEnv e _) = split1 . sink1 e
 sinkA1 :: Extend aenv aenv'
        -> OpenAcc (aenv,  a) b
        -> OpenAcc (aenv', a) b
-sinkA1 env = weakenByA (sink1 env)
+sinkA1 !env = weakenByA (sink1 env)
 
 
 -- Manipulating environments
@@ -933,9 +936,9 @@ infixr `cons`
 infixr `join`
 
 cons :: Arrays a => PreOpenAcc OpenAcc aenv a -> Extend (aenv,a) aenv' -> Extend aenv aenv'
-cons a = join (BaseEnv `PushEnv` a)
+cons !a = join (BaseEnv `PushEnv` a)
 
 join :: Extend env env' -> Extend env' env'' -> Extend env env''
-join x BaseEnv        = x
-join x (PushEnv xs a) = join x xs `PushEnv` a
+join !x BaseEnv        = x
+join !x (PushEnv xs a) = join x xs `PushEnv` a
 

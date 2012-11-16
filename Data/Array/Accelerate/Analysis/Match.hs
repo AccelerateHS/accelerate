@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
@@ -268,11 +269,11 @@ matchOpenAfun _         _         = Nothing
 -- Match stencil boundaries
 --
 matchBoundary :: TupleType e -> Boundary e -> Boundary e -> Bool
-matchBoundary ty (Constant s) (Constant t) = matchConst ty s t
-matchBoundary _  Wrap         Wrap         = True
-matchBoundary _  Clamp        Clamp        = True
-matchBoundary _  Mirror       Mirror       = True
-matchBoundary _  _            _            = False
+matchBoundary !ty (Constant s) (Constant t) = matchConst ty s t
+matchBoundary !_  Wrap         Wrap         = True
+matchBoundary !_  Clamp        Clamp        = True
+matchBoundary !_  Mirror       Mirror       = True
+matchBoundary !_  _            _            = False
 
 
 -- Match arrays
@@ -296,7 +297,7 @@ matchArrays ArraysRarray ArraysRarray (Array _ ad1) (Array _ ad2)
       return $! hashStableName sn1 == hashStableName sn2
   = gcast REFL
 
-matchArrays _ _ _ _
+matchArrays !_ !_ !_ !_
   = Nothing
 
 
@@ -444,7 +445,7 @@ matchOpenFun _        _        = Nothing
 --
 matchConst :: TupleType a -> a -> a -> Bool
 matchConst UnitTuple         ()      ()      = True
-matchConst (SingleTuple ty)  a       b       = evalEq ty (a,b)
+matchConst (SingleTuple ty)  !a      !b      = evalEq ty (a,b)
 matchConst (PairTuple ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
 evalEq :: ScalarType a -> ((a, a) -> Bool)
@@ -744,7 +745,7 @@ matchNonNumType _              _              = Nothing
 -- commutativity.
 --
 commutes :: PrimFun (a -> r) -> OpenExp env aenv a -> Maybe (OpenExp env aenv a)
-commutes f x = case f of
+commutes f !x = case f of
   PrimAdd _     -> Just (swizzle x)
   PrimMul _     -> Just (swizzle x)
   PrimBAnd _    -> Just (swizzle x)
