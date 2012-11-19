@@ -402,12 +402,16 @@ force delayed
       Done env a                                -> bind env a
       Yield env sh f                            -> bind env $ Generate sh f
       Step env sh ix f v
-        | Just REFL <- matchOpenExp sh (Shape a)
+        | Just REFL <- s
+        , Lam (Body (Var ZeroIdx)) <- ix
+        , Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Avar v
+        | Just REFL <- s
         , Lam (Body (Var ZeroIdx)) <- ix        -> bind env $ Map f a
         | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a
         | otherwise                             -> bind env $ Transform sh ix f a
         where
           a = OpenAcc (Avar v)
+          s = matchOpenExp sh (Shape a)
 
 
 -- Reshape a delayed array.

@@ -248,6 +248,22 @@ globalCSE aenv acc
   | otherwise                     = Nothing
 
 
+-- Simplify array conditionals by attempting to prune branches.
+--
+simplifyAcond
+    :: Arrays a
+    => Delta aenv aenv
+    -> Exp aenv Bool
+    -> OpenAcc aenv a           -- then branch
+    -> OpenAcc aenv a           -- else branch
+    -> PreOpenAcc OpenAcc aenv a
+simplifyAcond _aenv p !t@(OpenAcc tacc) !e@(OpenAcc eacc)
+  | Const ((), True)  <- p              = tacc
+  | Const ((), False) <- p              = eacc
+  | Just REFL <- matchOpenAcc t e       = tacc
+  | otherwise                           = Acond p t e
+
+
 -- Walk over an array expression, applying simplifications.
 --
 simplifyOpenAcc
@@ -282,7 +298,7 @@ simplifyOpenAcc !aenv !topAcc = cvtA (shrinkOpenAcc topAcc)
           Atuple tup                    -> Atuple (cvtT tup)
           Aprj tup a                    -> Aprj tup (cvtA a)
           Apply f a                     -> Apply f (cvtA a)
-          Acond p t e                   -> Acond (cvtE p) (cvtA t) (cvtA e)
+          Acond p t e                   -> simplifyAcond aenv (cvtE p) (cvtA t) (cvtA e)
           Use a                         -> Use a
           Unit e                        -> Unit (cvtE e)
           Reshape e a                   -> Reshape (cvtE e) (cvtA a)

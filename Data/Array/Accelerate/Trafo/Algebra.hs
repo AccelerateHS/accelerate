@@ -180,24 +180,26 @@ associates
     -> OpenExp env aenv a
     -> Maybe (OpenExp env aenv r)
 associates fun !exp = case fun of
-  PrimLAnd      -> swizzle PrimLAnd exp
-  PrimLOr       -> swizzle PrimLOr  exp
-  _             -> swizzle fun exp
+  PrimAdd _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
+  PrimSub _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
+  PrimLAnd      -> swizzle fun exp [fun]
+  PrimLOr       -> swizzle fun exp [fun]
+  _             -> swizzle fun exp [fun]
   where
     -- TODO: check the list of ops is complete (and correct)
     ty  = undefined
     ops = [ PrimMul ty, PrimFDiv ty, PrimAdd ty, PrimSub ty, PrimBAnd ty, PrimBOr ty, PrimBXor ty ]
 
-    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> OpenExp env aenv a -> Maybe (OpenExp env aenv r)
-    swizzle f x
+    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> OpenExp env aenv a -> [PrimFun (a -> r)] -> Maybe (OpenExp env aenv r)
+    swizzle f x lvl
       | Just REFL   <- matches f ops
       , Just (a,bc) <- untup2 x
       , PrimApp g y <- bc
-      , Just REFL   <- matchPrimFun' f g
+      , Just REFL   <- matches g lvl
       , Just (b,c)  <- untup2 y
       = Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
 
-    swizzle !_ !_
+    swizzle !_ !_ !_
       = Nothing
 
     matches :: (Elt s, Elt t) => PrimFun (s -> a) -> [PrimFun (t -> a)] -> Maybe (s :=: t)
@@ -263,7 +265,7 @@ evalSub :: Elt a => NumType a -> (a,a) :-> a
 evalSub ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalSub' ty
 evalSub ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalSub' ty
 
-evalSub' :: (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
+evalSub' :: forall a. (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
 evalSub' !ty (untup2 -> Just (!x,!y)) !env
   | Just b      <- propagate y env
   , b == 0
@@ -276,6 +278,9 @@ evalSub' !ty (untup2 -> Just (!x,!y)) !env
   | Just a      <- propagate x env
   , Just b      <- propagate y env
   = Just $ Const (fromElt (a-b))
+
+  | Just REFL   <- matchOpenExp x y
+  = Just $ Const (fromElt (0::a))       -- TLM: definitely the purview of rewrite rules
 
 evalSub' !_ !_ !_
   = Nothing
