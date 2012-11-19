@@ -921,8 +921,8 @@ sink1 BaseEnv       !ix = ix
 sink1 (PushEnv e _) !ix = split1 (sink1 e ix)
   where
     split1 :: Idx (env, a) t -> Idx ((env, s), a) t
-    split1 ZeroIdx      = ZeroIdx
-    split1 (SuccIdx ix) = SuccIdx (SuccIdx ix)
+    split1 ZeroIdx       = ZeroIdx
+    split1 (SuccIdx idx) = SuccIdx (SuccIdx idx)
 
 sinkA1 :: Extend aenv aenv'
        -> OpenAcc (aenv,  a) b

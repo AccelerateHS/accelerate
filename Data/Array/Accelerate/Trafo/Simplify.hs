@@ -255,7 +255,7 @@ simplifyOpenAcc
     => Delta aenv aenv
     -> OpenAcc aenv arrs
     -> OpenAcc aenv arrs
-simplifyOpenAcc !aenv !acc = cvtA (shrinkOpenAcc acc)
+simplifyOpenAcc !aenv !topAcc = cvtA (shrinkOpenAcc topAcc)
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of
