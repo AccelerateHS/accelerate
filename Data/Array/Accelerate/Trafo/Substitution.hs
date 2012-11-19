@@ -568,7 +568,7 @@ shrinkA !k !s !u pacc =
     Avar ix             -> Avar ix
     Atuple tup          -> Atuple (shrinkATA s tup)
     Aprj tup a          -> Aprj tup (s a)
-    Apply f a           -> Apply (shrinkAfun s f) (s a)
+    Apply f a           -> Apply f (s a)
     Acond p t e         -> Acond (shrinkEA s p) (s t) (s e)
     Use a               -> Use a
     Unit e              -> Unit (shrinkEA s e)
