@@ -37,7 +37,7 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Common
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape, toElt, fromElt )
 
 import qualified Debug.Trace                            as Debug
 
@@ -188,7 +188,7 @@ simplifyOpenExp env !aenv = cvt
           Var ix                -> Var ix
           Const c               -> Const c
           Tuple tup             -> Tuple (simplifyTuple env aenv tup)
-          Prj tup ix            -> Prj tup (cvt ix)
+          Prj ix t              -> simplifyPrj env aenv ix t
           IndexNil              -> IndexNil
           IndexCons sh sz       -> IndexCons (cvt sh) (cvt sz)
           IndexHead sh          -> IndexHead (cvt sh)
@@ -201,7 +201,7 @@ simplifyOpenExp env !aenv = cvt
           Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
           Iterate n f x         -> Iterate n (simplifyOpenFun env aenv f) (cvt x)
           PrimConst c           -> PrimConst c
-          PrimApp f x           -> evalPrimApp f (cvt x) env
+          PrimApp f x           -> evalPrimApp env f (cvt x)
           Index a sh            -> Index (cvtA a) (cvt sh)
           LinearIndex a i       -> LinearIndex (cvtA a) (cvt i)
           Shape a               -> Shape (cvtA a)
@@ -216,6 +216,30 @@ simplifyTuple
     -> Tuple (OpenExp env aenv) t
 simplifyTuple !_  !_   NilTup          = NilTup
 simplifyTuple env aenv (SnocTup tup e) = simplifyTuple env aenv tup `SnocTup` simplifyOpenExp env aenv e
+
+simplifyPrj
+    :: forall env aenv t e. (Elt e, Elt t, IsTuple t)
+    => Gamma env env aenv
+    -> Delta aenv aenv
+    -> TupleIdx (TupleRepr t) e
+    -> OpenExp env aenv t
+    -> OpenExp env aenv e
+simplifyPrj env aenv ix exp
+  | Tuple t <- exp      = cvtT ix t
+  | Const c <- exp      = cvtC ix (fromTuple (toElt c :: t))
+  | otherwise           = Prj ix (cvtE exp)
+  where
+    cvtE :: Elt s => OpenExp env aenv s -> OpenExp env aenv s
+    cvtE = simplifyOpenExp env aenv
+
+    cvtT :: TupleIdx tup e -> Tuple (OpenExp env aenv) tup -> OpenExp env aenv e
+    cvtT ZeroTupIdx       (SnocTup _ e) = cvtE e
+    cvtT (SuccTupIdx idx) (SnocTup t _) = cvtT idx t
+    cvtT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
+
+    cvtC :: TupleIdx tup e -> tup -> OpenExp env aenv e
+    cvtC ZeroTupIdx       (_,   v) = Const (fromElt v)
+    cvtC (SuccTupIdx idx) (tup, _) = cvtC idx tup
 
 simplifyOpenFun
     :: Gamma env env aenv

@@ -42,27 +42,42 @@ import Data.Array.Accelerate.Trafo.Common
 -- Propagate constant expressions, which are either constant valued expressions
 -- or constant let bindings. Be careful not to follow self-cycles.
 --
-propagate :: OpenExp env aenv a -> Gamma env env aenv -> Maybe a
-propagate exp !env = case exp of
-  Const c                                -> Just (toElt c)
-  PrimConst c                            -> Just (evalPrimConst c)
-  Var ix
-    | exp'      <- prjExp ix env
-    , Nothing   <- matchOpenExp exp exp' -> propagate exp' env
-  _                                      -> Nothing
+propagate :: forall env aenv exp. Gamma env env aenv -> OpenExp env aenv exp -> Maybe exp
+propagate !env = cvtE
+  where
+    cvtE :: OpenExp env aenv e -> Maybe e
+    cvtE exp = case exp of
+      Const c                                   -> Just (toElt c)
+      PrimConst c                               -> Just (evalPrimConst c)
+      Prj ix (Var v) | Tuple t <- prjExp v env  -> cvtT ix t
+      Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple c)
+      Var ix
+        | e         <- prjExp ix env
+        , Nothing   <- matchOpenExp exp e       -> cvtE e
+      --
+      _                                         -> Nothing
+
+    cvtP :: TupleIdx t e -> t -> Maybe e
+    cvtP ZeroTupIdx       (_, v)   = Just v
+    cvtP (SuccTupIdx idx) (tup, _) = cvtP idx tup
+
+    cvtT :: TupleIdx t e -> Tuple (OpenExp env aenv) t -> Maybe e
+    cvtT ZeroTupIdx       (SnocTup _   e) = cvtE e
+    cvtT (SuccTupIdx idx) (SnocTup tup _) = cvtT idx tup
+    cvtT _                _               = error "hey what's the head angle on that thing?"
 
 
 -- Attempt to evaluate primitive function applications
 --
 evalPrimApp
     :: forall env aenv a r. (Elt a, Elt r)
-    => PrimFun (a -> r)
+    => Gamma env env aenv
+    -> PrimFun (a -> r)
     -> OpenExp env aenv a
-    -> Gamma env env aenv
     -> OpenExp env aenv r
-evalPrimApp f x env
+evalPrimApp env f x
   -- First attempt to move constant values towards the left
-  | Just r      <- commutes f x env     = evalPrimApp f r env
+  | Just r      <- commutes f x env     = evalPrimApp env f r
   | Just r      <- associates f x       = r
 
   -- Now attempt to evaluate any expressions
@@ -151,12 +166,12 @@ commutes f !x !env = case f of
   where
     swizzle :: OpenExp env aenv (b,b) -> Maybe (OpenExp env aenv (b,b))
     swizzle (Tuple (NilTup `SnocTup` a `SnocTup` b))
-      | Nothing         <- propagate a env
-      , Just _          <- propagate b env
+      | Nothing         <- propagate env a
+      , Just _          <- propagate env b
       = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
-      | Nothing         <- propagate a env
-      , Nothing         <- propagate b env
+      | Nothing         <- propagate env a
+      , Nothing         <- propagate env b
       , hashOpenExp a > hashOpenExp b
       = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
@@ -219,13 +234,13 @@ type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Mayb
 
 eval1 :: Elt b => (a -> b) -> a :-> b
 eval1 !f !x !env
-  | Just a <- propagate x env   = Just $ Const (fromElt (f a))
+  | Just a <- propagate env x   = Just $ Const (fromElt (f a))
   | otherwise                   = Nothing
 
 eval2 :: Elt c => (a -> b -> c) -> (a,b) :-> c
 eval2 !f (untup2 -> Just (!x,!y)) !env
-  | Just a <- propagate x env
-  , Just b <- propagate y env
+  | Just a <- propagate env x
+  , Just b <- propagate env y
   = Just $ Const (fromElt (f a b))
 
 eval2 !_ !_ !_
@@ -249,12 +264,12 @@ evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalAdd'
 
 evalAdd' :: (Elt a, Eq a, Num a) => (a,a) :-> a
 evalAdd' (untup2 -> Just (!x,!y)) !env
-  | Just a      <- propagate x env
+  | Just a      <- propagate env x
   , a == 0
   = Just y
 
-  | Just a      <- propagate x env
-  , Just b      <- propagate y env
+  | Just a      <- propagate env x
+  , Just b      <- propagate env y
   = Just $ Const (fromElt (a+b))
 
 evalAdd' !_ !_
@@ -267,16 +282,16 @@ evalSub ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalSub' t
 
 evalSub' :: forall a. (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
 evalSub' !ty (untup2 -> Just (!x,!y)) !env
-  | Just b      <- propagate y env
+  | Just b      <- propagate env y
   , b == 0
   = Just x
 
-  | Nothing     <- propagate x env
-  , Just b      <- propagate y env
-  = Just $ evalPrimApp (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x) env
+  | Nothing     <- propagate env x
+  , Just b      <- propagate env y
+  = Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just a      <- propagate x env
-  , Just b      <- propagate y env
+  | Just a      <- propagate env x
+  , Just b      <- propagate env y
   = Just $ Const (fromElt (a-b))
 
   | Just REFL   <- matchOpenExp x y
@@ -292,15 +307,15 @@ evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalMul'
 
 evalMul' :: (Elt a, Eq a, Num a) => (a,a) :-> a
 evalMul' (untup2 -> Just (!x,!y)) !env
-  | Just a      <- propagate x env
-  , Nothing     <- propagate y env
+  | Just a      <- propagate env x
+  , Nothing     <- propagate env y
   = case a of
       0         -> Just x
       1         -> Just y
       _         -> Nothing
 
-  | Just a      <- propagate x env
-  , Just b      <- propagate y env
+  | Just a      <- propagate env x
+  , Just b      <- propagate env y
   = Just $ Const (fromElt (a * b))
 
 evalMul' !_ !_
@@ -484,7 +499,7 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 
 evalLAnd :: (Bool,Bool) :-> Bool
 evalLAnd (untup2 -> Just (!x,!y)) !env
-  | Just a      <- propagate x env
+  | Just a      <- propagate env x
   = case a of
       True      -> Just y
       False     -> Just $ Const (fromElt False)
@@ -494,7 +509,7 @@ evalLAnd !_ !_
 
 evalLOr  :: (Bool,Bool) :-> Bool
 evalLOr (untup2 -> Just (!x,!y)) !env
-  | Just a      <- propagate x env
+  | Just a      <- propagate env x
   = case a of
       True      -> Just $ Const (fromElt True)
       _         -> Just y
