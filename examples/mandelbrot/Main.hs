@@ -9,7 +9,6 @@ import Config
 
 import Data.Label
 import Control.Monad
-import Control.Exception
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import System.IO.Unsafe
@@ -48,25 +47,23 @@ main
         let world       = initialWorld config view
             fps         = get optFramerate config
             size        = get optSize config
-
             view        = (-0.25, -1.0, 0.0, -0.75)
 
             force arr   = indexArray arr (Z:.0:.0) `seq` arr
 
-        unless (P.null nops) $
-          putStrLn $ "Warning: unrecognized options: " ++ show nops
+            mandel
+              | get optBench config
+              = withArgs nops $ defaultMainWith critConf (return ())
+                    [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
+#ifdef ACCELERATE_ENABLE_GUI
+              | fps == 0
+              = G.display
+                    (G.InWindow "Mandelbrot" (size, size) (10, 10))
+                    G.black
+                    (makePicture world)
 
-        void $ evaluate (force $ renderWorld world)
-
-        if get optBench config
-           then withArgs nops $ defaultMainWith critConf (return ())
-                    [ bench "mandelbrot" $
-                      whnf (force . renderWorld) world ]
-
-#ifndef ACCELERATE_ENABLE_GUI
-           else return ()
-#else
-           else G.play
+              | fps > 0
+              = G.play
                     (G.InWindow "Mandelbrot" (size, size) (10, 10))
                     G.black
                     fps
@@ -75,4 +72,12 @@ main
                     (react config)
                     (const refocus)
 #endif
+              | otherwise
+              = return ()
+
+
+        unless (P.null nops) $
+          putStrLn $ "Warning: unrecognized options: " ++ show nops
+
+        mandel
 

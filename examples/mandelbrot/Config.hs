@@ -78,6 +78,7 @@ options =
   , Option []   ["size"]        (ReqArg (set optSize . read) "INT")     "visualisation size (512)"
   , Option []   ["limit"]       (ReqArg (set optLimit . read) "INT")    "iteration limit for escape (255)"
   , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INT")"visualisation framerate (10)"
+  , Option []   ["static"]      (NoArg  (set optFramerate 0))           "do not animate the image"
   , Option []   ["benchmark"]   (NoArg  (set optBench True))            "benchmark instead of displaying animation (False)"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))             "show help message"
   ]
