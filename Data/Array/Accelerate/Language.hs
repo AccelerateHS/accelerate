@@ -1,5 +1,12 @@
-{-# LANGUAGE TypeOperators, FlexibleContexts, TypeFamilies, RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverlappingInstances  #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
@@ -87,6 +94,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Index construction and destruction
   index0, index1, unindex1, index2, unindex2,
+  indexHead, indexTail,
 
   -- ** Conditional expressions
   (?),
@@ -554,6 +562,9 @@ instance (Elt e, Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
 instance (Elt e, Slice (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
   unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
 
+instance (Elt e, Slice ix) => Unlift Exp (Exp ix :. Exp e) where
+  unlift e = (Exp $ IndexTail e) :. Exp (IndexHead e)
+
 instance Shape sh => Lift Exp (Any sh) where
  type Plain (Any sh) = Any sh
  lift Any = Exp $ IndexAny
@@ -952,6 +963,16 @@ unindex2 :: forall i. (Elt i, Slice (Z :. i))
 unindex2 ix
   = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
     in  lift (i, j)
+
+-- | Get the outermost dimension of a shape
+--
+indexHead :: Slice sh => Exp (sh :. Int) -> Exp Int
+indexHead = Exp . IndexHead
+
+-- | Get all but the outermost element of a shape
+--
+indexTail :: Slice sh => Exp (sh :. Int) -> Exp sh
+indexTail = Exp . IndexTail
 
 
 -- Conditional expressions
