@@ -16,7 +16,7 @@ import Test.Framework.Providers.QuickCheck2
 import Config
 import Test.Base
 import Arbitrary.Array
-import Data.Array.Accelerate                            as Acc
+import Data.Array.Accelerate                            as Acc hiding (indexHead, indexTail)
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 
