@@ -293,6 +293,10 @@ data PreExp acc exp t where
               => exp (sl:.a)                    -> PreExp acc exp sl
   IndexAny    :: Shape sh
               =>                                   PreExp acc exp (Any sh)
+  ToIndex     :: Shape sh
+              => exp sh -> exp sh               -> PreExp acc exp Int
+  FromIndex   :: Shape sh
+              => exp sh -> exp Int              -> PreExp acc exp sh
   Cond        :: Elt t
               => exp Bool -> exp t -> exp t     -> PreExp acc exp t
   PrimConst   :: Elt t
@@ -301,6 +305,8 @@ data PreExp acc exp t where
               => PrimFun (a -> r) -> exp a      -> PreExp acc exp r
   Index       :: (Shape sh, Elt t)
               => acc (Array sh t) -> exp sh     -> PreExp acc exp t
+  LinearIndex :: (Shape sh, Elt t)
+              => acc (Array sh t) -> exp Int    -> PreExp acc exp t
   Shape       :: (Shape sh, Elt e)
               => acc (Array sh e)               -> PreExp acc exp sh
   ShapeSize   :: Shape sh

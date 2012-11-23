@@ -94,13 +94,13 @@ module Data.Array.Accelerate.Language (
 
   -- ** Index construction and destruction
   index0, index1, unindex1, index2, unindex2,
-  indexHead, indexTail,
+  indexHead, indexTail, toIndex, fromIndex,
 
   -- ** Conditional expressions
   (?),
 
   -- ** Array operations with a scalar result
-  (!), the, null, shape, size, shapeSize,
+  (!), (!!), the, null, shape, size, shapeSize,
 
   -- ** Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
@@ -125,8 +125,8 @@ module Data.Array.Accelerate.Language (
 
 -- avoid clashes with Prelude functions
 import Prelude  hiding (
-  replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith, filter,
-  max, min, not, fst, snd, curry, uncurry, null, truncate, round, floor,
+  (!!), replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
+  filter, max, min, not, fst, snd, curry, uncurry, null, truncate, round, floor,
   ceiling, fromIntegral)
 
 -- standard libraries
@@ -136,7 +136,7 @@ import Data.Bits (Bits((.&.), (.|.), xor, complement))
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size)
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -974,6 +974,17 @@ indexHead = Exp . IndexHead
 indexTail :: Slice sh => Exp (sh :. Int) -> Exp sh
 indexTail = Exp . IndexTail
 
+-- | Map a multi-dimensional index into a linear, row-major representation of an
+-- array. The first argument is the array shape, the second is the index.
+--
+toIndex :: Shape sh => Exp sh -> Exp sh -> Exp Int
+toIndex = Exp $$ ToIndex
+
+-- | Inverse of 'fromIndex'
+--
+fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
+fromIndex = Exp $$ FromIndex
+
 
 -- Conditional expressions
 -- -----------------------
@@ -994,6 +1005,12 @@ c ? (t, e) = Exp $ Cond c t e
 infixl 9 !
 (!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp ix -> Exp e
 (!) arr ix = Exp $ Index arr ix
+
+-- |Expression form that extracts a scalar from an array at a linear index
+--
+infixl 9 !!
+(!!) :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Int -> Exp e
+(!!) arr i = Exp $ LinearIndex arr i
 
 -- |Extraction of the element in a singleton array
 --

@@ -345,10 +345,13 @@ convertSharingExp config lyt alyt env aenv = cvt
           IndexHead i     -> AST.IndexHead (cvt i)
           IndexTail ix    -> AST.IndexTail (cvt ix)
           IndexAny        -> AST.IndexAny
+          ToIndex sh ix   -> AST.ToIndex (cvt sh) (cvt ix)
+          FromIndex sh e  -> AST.FromIndex (cvt sh) (cvt e)
           Cond e1 e2 e3   -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           PrimConst c     -> AST.PrimConst c
           PrimApp f e     -> cvtPrimFun f (cvt e)
           Index a e       -> AST.Index (cvtA a) (cvt e)
+          LinearIndex a i -> AST.LinearIndex (cvtA a) (cvt i)
           Shape a         -> AST.Shape (cvtA a)
           ShapeSize e     -> AST.ShapeSize (cvt e)
 
@@ -1070,10 +1073,13 @@ makeOccMap config lvl rootAcc
             IndexHead i     -> reconstruct $ travE1 IndexHead i
             IndexTail ix    -> reconstruct $ travE1 IndexTail ix
             IndexAny        -> reconstruct $ return (IndexAny, 1)
+            ToIndex sh ix   -> reconstruct $ travE2 ToIndex sh ix
+            FromIndex sh e  -> reconstruct $ travE2 FromIndex sh e
             Cond e1 e2 e3   -> reconstruct $ travE3 Cond e1 e2 e3
             PrimConst c     -> reconstruct $ return (PrimConst c, 1)
             PrimApp p e     -> reconstruct $ travE1 (PrimApp p) e
             Index a e       -> reconstruct $ travAE Index a e
+            LinearIndex a i -> reconstruct $ travAE LinearIndex a i
             Shape a         -> reconstruct $ travA Shape a
             ShapeSize e     -> reconstruct $ travE1 ShapeSize e
           }
@@ -1549,10 +1555,13 @@ determineScopes config fvs accOccMap rootAcc
           IndexHead i     -> travE1 IndexHead i
           IndexTail ix    -> travE1 IndexTail ix
           IndexAny        -> reconstruct IndexAny noNodeCounts
+          ToIndex sh ix   -> travE2 ToIndex sh ix
+          FromIndex sh e  -> travE2 FromIndex sh e
           Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
           PrimConst c     -> reconstruct (PrimConst c) noNodeCounts
           PrimApp p e     -> travE1 (PrimApp p) e
           Index a e       -> travAE Index a e
+          LinearIndex a e -> travAE LinearIndex a e
           Shape a         -> travA Shape a
           ShapeSize e     -> travE1 ShapeSize e
       where
@@ -1803,10 +1812,13 @@ instance Elt e => Show (Exp e) where
             IndexHead ix    -> ExpSharing undefined $ IndexHead (toSharingExp ix)
             IndexTail ix    -> ExpSharing undefined $ IndexTail (toSharingExp ix)
             IndexAny        -> ExpSharing undefined $ IndexAny
+            ToIndex sh ix   -> ExpSharing undefined $ ToIndex (toSharingExp sh) (toSharingExp ix)
+            FromIndex sh e  -> ExpSharing undefined $ FromIndex (toSharingExp sh) (toSharingExp e)
             Cond e1 e2 e3   -> ExpSharing undefined $ Cond (toSharingExp e1) (toSharingExp e2) (toSharingExp e3)
             PrimConst c     -> ExpSharing undefined $ PrimConst c
             PrimApp p e     -> ExpSharing undefined $ PrimApp p (toSharingExp e)
             Index a e       -> ExpSharing undefined $ Index (toSharingAcc a) (toSharingExp e)
+            LinearIndex a e -> ExpSharing undefined $ LinearIndex (toSharingAcc a) (toSharingExp e)
             Shape a         -> ExpSharing undefined $ Shape (toSharingAcc a)
             ShapeSize e     -> ExpSharing undefined $ ShapeSize (toSharingExp e)
 
@@ -1880,10 +1892,13 @@ showPreExpOp (IndexCons _ _)   = "IndexCons"
 showPreExpOp (IndexHead _)     = "IndexHead"
 showPreExpOp (IndexTail _)     = "IndexTail"
 showPreExpOp IndexAny          = "IndexAny"
+showPreExpOp (ToIndex _ _)     = "ToIndex"
+showPreExpOp (FromIndex _ _)   = "FromIndex"
 showPreExpOp (Cond _ _ _)      = "Cons"
 showPreExpOp (PrimConst _)     = "PrimConst"
 showPreExpOp (PrimApp _ _)     = "PrimApp"
 showPreExpOp (Index _ _)       = "Index"
+showPreExpOp (LinearIndex _ _) = "LinearIndex"
 showPreExpOp (Shape _)         = "Shape"
 showPreExpOp (ShapeSize _)     = "ShapeSize"
 

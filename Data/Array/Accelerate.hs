@@ -53,7 +53,7 @@ module Data.Array.Accelerate (
 
   -- ** Accessors
   -- *** Indexing
-  (L.!), L.the,
+  (L.!), (L.!!), L.the,
 
   -- *** Shape information
   L.null, L.shape, L.size, L.shapeSize,
@@ -202,6 +202,7 @@ module Data.Array.Accelerate (
   -- *** Shape manipulation
   L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
   L.indexHead, L.indexTail,
+  L.toIndex, L.fromIndex,
 
   -- *** Conversions
   L.boolToInt, L.fromIntegral,
