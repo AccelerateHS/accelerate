@@ -25,7 +25,7 @@ randomArrayOf f sh
         (adata, _)      = runArrayData $ do
                             gen <- create
                             arr <- newArrayData n
-                            let write ix = unsafeWriteArrayData arr (toIndex sh ix)
+                            let write ix = unsafeWriteArrayData arr (Sugar.toIndex sh ix)
                                          . fromElt =<< f ix gen
 
                             iter sh write (>>) (return ())
@@ -49,7 +49,7 @@ randomArrayOfWithSeed f seed sh
         (adata, _)      = runArrayData $ do
                             gen <- restore seed
                             arr <- newArrayData n
-                            let write ix = unsafeWriteArrayData arr (toIndex sh ix)
+                            let write ix = unsafeWriteArrayData arr (Sugar.toIndex sh ix)
                                          . fromElt =<< f ix gen
 
                             iter sh write (>>) (return ())
