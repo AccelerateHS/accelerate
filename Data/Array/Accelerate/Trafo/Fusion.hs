@@ -469,7 +469,7 @@ replicateD !sliceIndex !slix acc = case acc of
   --
   where
     fullshape :: Extend aenv aenv' -> Exp aenv' sl -> Exp aenv' sh
-    fullshape env sl = IndexFull sliceIndex (sinkE env slix) sl
+    fullshape env = IndexFull sliceIndex (sinkE env slix)
 
     extend :: Extend aenv aenv' -> Fun aenv' (sh -> sl)
     extend env = Lam (Body (IndexSlice sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))
@@ -493,7 +493,7 @@ sliceD !sliceIndex acc !slix = case acc of
   --
   where
     sliceshape :: Extend aenv aenv' -> Exp aenv' sh -> Exp aenv' sl
-    sliceshape env sh = IndexSlice sliceIndex (sinkE env slix) sh
+    sliceshape env = IndexSlice sliceIndex (sinkE env slix)
 
     restrict :: Extend aenv aenv' -> Fun aenv' (sl -> sh)
     restrict env = Lam (Body (IndexFull sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))

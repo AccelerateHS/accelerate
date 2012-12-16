@@ -1,4 +1,9 @@
-{-# LANGUAGE GADTs, FlexibleInstances, TypeOperators, ScopedTypeVariables, RankNTypes #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -195,7 +200,7 @@ prettyFun :: Int -> OpenFun env aenv fun -> Doc
 prettyFun = prettyPreFun prettyAcc
 
 prettyPreFun :: PrettyAcc acc -> Int -> PreOpenFun acc env aenv fun -> Doc
-prettyPreFun pp alvl fun = prettyPreOpenFun pp 0 alvl fun
+prettyPreFun pp = prettyPreOpenFun pp 0
 
 prettyPreOpenFun :: forall acc env aenv fun. PrettyAcc acc -> Int -> Int -> PreOpenFun acc env aenv fun -> Doc
 prettyPreOpenFun pp lvl alvl fun =

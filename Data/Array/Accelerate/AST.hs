@@ -1,6 +1,14 @@
-{-# LANGUAGE BangPatterns, CPP, GADTs, DeriveDataTypeable, StandaloneDeriving #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeFamilies, TypeOperators #-}
-{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances, ScopedTypeVariables #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
@@ -532,9 +540,9 @@ instance (Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row3) => Stencil (sh:.Int:.Int) a (row1, row2, row3) where
   stencil = StencilRtup3 stencil stencil stencil
-  stencilAccess rf xi = ((stencilAccess (rf' (i - 1)) ix),
-                         (stencilAccess (rf'  i     ) ix),
-                         (stencilAccess (rf' (i + 1)) ix))
+  stencilAccess rf xi = (stencilAccess (rf' (i - 1)) ix,
+                         stencilAccess (rf'  i     ) ix,
+                         stencilAccess (rf' (i + 1)) ix)
 
     where
       -- Invert then re-invert to ensure each recursive step gets a shape in the

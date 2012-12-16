@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns   #-}
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PatternGuards  #-}
 {-# LANGUAGE RankNTypes     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
