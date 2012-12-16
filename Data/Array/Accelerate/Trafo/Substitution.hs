@@ -218,7 +218,7 @@ rebuildE !v exp =
     ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
     FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
     Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
-    Iterate n f x       -> Iterate n (rebuildFE v f) (rebuildE v x)
+    Iterate n f x       -> Iterate (rebuildE v n) (rebuildE (shiftE v) f) (rebuildE v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
     Index a sh          -> Index a (rebuildE v sh)
@@ -384,7 +384,7 @@ rebuildEA !k !v exp =
     ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
     FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
     Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)
-    Iterate n f x       -> Iterate n (rebuildFA k v f) (rebuildEA k v x)
+    Iterate n f x       -> Iterate (rebuildEA k v n) (rebuildEA k v f) (rebuildEA k v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
     Index a sh          -> Index (k v a) (rebuildEA k v sh)
@@ -455,7 +455,7 @@ shrinkE exp =
     ToIndex sh ix       -> ToIndex (shrinkE sh) (shrinkE ix)
     FromIndex sh i      -> FromIndex (shrinkE sh) (shrinkE i)
     Cond p t e          -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
-    Iterate n f x       -> Iterate n (shrinkFE f) (shrinkE x)
+    Iterate n f x       -> Iterate (shrinkE n) (shrinkE f) (shrinkE x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkE x)
     Index a sh          -> Index a (shrinkE sh)
@@ -500,8 +500,8 @@ usesOfE !idx exp =
     IndexAny            -> 0
     ToIndex sh ix       -> usesOfE idx sh + usesOfE idx ix
     FromIndex sh i      -> usesOfE idx sh + usesOfE idx i
-    Cond p t e          -> usesOfE idx p  + usesOfE idx t  + usesOfE idx e
-    Iterate _ f x       -> usesOfFE idx f + usesOfE idx x
+    Cond p t e          -> usesOfE idx p  + usesOfE idx t + usesOfE idx e
+    Iterate n f x       -> usesOfE idx n  + usesOfE idx x + usesOfE (SuccIdx idx) f
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfE idx x
     Index _ sh          -> usesOfE idx sh
@@ -515,13 +515,6 @@ usesOfTE !idx tup =
   case tup of
     NilTup      -> 0
     SnocTup t e -> usesOfTE idx t + usesOfE idx e
-
-usesOfFE :: Idx env s -> PreOpenFun acc env aenv f -> Int
-usesOfFE !idx fun =
-  case fun of
-    Body e      -> usesOfE  idx           e
-    Lam f       -> usesOfFE (SuccIdx idx) f
-
 
 
 -- Array expressions
@@ -633,7 +626,7 @@ shrinkEA !s exp =
     ToIndex sh ix       -> ToIndex (shrinkEA s sh) (shrinkEA s ix)
     FromIndex sh i      -> FromIndex (shrinkEA s sh) (shrinkEA s i)
     Cond p t e          -> Cond (shrinkEA s p) (shrinkEA s t) (shrinkEA s e)
-    Iterate n f x       -> Iterate n (shrinkFA s f) (shrinkEA s x)
+    Iterate n f x       -> Iterate (shrinkEA s n) (shrinkEA s f) (shrinkEA s x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (shrinkEA s x)
     Index a sh          -> Index (s a) (shrinkEA s sh)
@@ -711,7 +704,7 @@ usesOfEA !s !idx exp =
     ToIndex sh ix       -> usesOfEA s idx sh + usesOfEA s idx ix
     FromIndex sh i      -> usesOfEA s idx sh + usesOfEA s idx i
     Cond p t e          -> usesOfEA s idx p  + usesOfEA s idx t  + usesOfEA s idx e
-    Iterate _ f x       -> usesOfFA s idx f  + usesOfEA s idx x
+    Iterate n f x       -> usesOfEA s idx n  + usesOfEA s idx f  + usesOfEA s idx x
     PrimConst _         -> 0
     PrimApp _ x         -> usesOfEA s idx x
     Index a sh          -> s idx a + usesOfEA s idx sh

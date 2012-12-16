@@ -766,11 +766,12 @@ evalOpenExp (Cond c t e) env aenv
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
-evalOpenExp (Iterate lIMIT loop seed) env aenv
-  = let f = evalOpenFun loop env aenv
-        x = evalOpenExp seed env aenv
+evalOpenExp (Iterate limit loop seed) env aenv
+  = let f = evalOpenFun (Lam (Body loop)) env aenv
+        x = evalOpenExp seed  env aenv
+        n = evalOpenExp limit env aenv
         --
-        go !i !acc | i >= lIMIT = acc
+        go !i !acc | i >= n     = acc
                    | otherwise  = go (i+1) (f acc)
     in go 0 x
 

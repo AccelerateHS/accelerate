@@ -31,6 +31,7 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
@@ -90,21 +91,25 @@ recoverLoops
     -> Maybe (OpenExp env aenv b)
 recoverLoops _env !bnd !body
   | Iterate n f x               <- bnd
-  , Just REFL                   <- matchOpenFun f (Lam (Body body))
+  , Just REFL                   <- matchOpenExp f body
   = trace "loop join" (show f)
-  $ Just $ Iterate (n+1) f x                    -- loop joining
+  $ Just $ Iterate (plus1 n) f x                -- loop joining
 
   | Let bnd' body'              <- bnd
   , Just REFL                   <- matchEnvTop body body'
   , Just REFL                   <- matchOpenExp body body'
   = trace "loop intro" (show body)
-  $ Just $ Iterate 2 (Lam (Body body)) bnd'     -- loop introduction
+  $ Just $ Iterate (Const ((),2)) body bnd'     -- loop introduction
 
   -- TLM TODO: nested loop recovery
 
   | otherwise
   = Nothing
   where
+    plus1 :: OpenExp env aenv Int -> OpenExp env aenv Int
+    plus1 x = PrimApp (PrimAdd numType)
+            $ Tuple $ NilTup `SnocTup` Const ((),1) `SnocTup` x
+
     matchEnvTop :: (Elt s, Elt t) => OpenExp (env,s) aenv f -> OpenExp (env,t) aenv g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL
 
@@ -199,7 +204,7 @@ simplifyOpenExp env !aenv = cvt
           ToIndex sh ix         -> ToIndex (cvt sh) (cvt ix)
           FromIndex sh ix       -> FromIndex (cvt sh) (cvt ix)
           Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
-          Iterate n f x         -> Iterate n (simplifyOpenFun env aenv f) (cvt x)
+          Iterate n f x         -> Iterate (cvt n) (simplifyOpenExp (incExp env `PushExp` Var ZeroIdx) aenv f) (cvt x)
           PrimConst c           -> PrimConst c
           PrimApp f x           -> evalPrimApp env f (cvt x)
           Index a sh            -> Index (cvtA a) (cvt sh)
@@ -352,7 +357,7 @@ simplifyOpenAfun :: Delta aenv aenv -> OpenAfun aenv t -> OpenAfun aenv t
 simplifyOpenAfun !aenv afun =
   case afun of
     Abody b     -> Abody (simplifyOpenAcc aenv b)
-    Alam f      -> Alam (simplifyOpenAfun (incAcc aenv `PushAcc` (OpenAcc (Avar ZeroIdx))) f)
+    Alam f      -> Alam (simplifyOpenAfun (incAcc aenv `PushAcc` OpenAcc (Avar ZeroIdx)) f)
 
 
 simplifyAcc :: Arrays arrs => Acc arrs -> Acc arrs

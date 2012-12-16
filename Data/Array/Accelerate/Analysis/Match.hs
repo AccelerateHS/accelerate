@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -32,6 +33,7 @@ module Data.Array.Accelerate.Analysis.Match (
 
 -- standard library
 import Prelude                                          hiding ( exp )
+import Data.Maybe
 import Data.Typeable
 import Data.Hashable
 import System.Mem.StableName
@@ -381,9 +383,9 @@ matchOpenExp (Cond p1 t1 e1) (Cond p2 t2 e2)
   = Just REFL
 
 matchOpenExp (Iterate n1 f1 x1) (Iterate n2 f2 x2)
-  | n1 == n2
-  , Just REFL <- matchOpenFun f1 f2
+  | Just REFL <- matchOpenExp n1 n2
   , Just REFL <- matchOpenExp x1 x2
+  , Just REFL <- matchOpenExp f1 f2
   = Just REFL
 
 matchOpenExp (PrimConst c1) (PrimConst c2)
@@ -775,10 +777,6 @@ hashIdx = hash . idxToInt
 hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
 
-hashOpenFun :: OpenFun env aenv f -> Int
-hashOpenFun (Lam  f) = hash "Lam"  `combine` hashOpenFun f
-hashOpenFun (Body e) = hash "Body" `combine` hashOpenExp e
-
 
 hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
 hashOpenExp (Let x e)                   = hash "Let"            `combine` hashOpenExp x  `combine` hashOpenExp e
@@ -796,8 +794,8 @@ hashOpenExp (IndexFull  spec ix sl)     = hash "IndexFull"      `hashWithSalt` s
 hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
 hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e
-hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `combine` hashOpenFun f `combine` hashOpenExp x
-hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
+hashOpenExp (Iterate n f x)             = hash "Iterate"        `combine` hashOpenExp n  `combine` hashOpenExp f `combine` hashOpenExp x
+hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (fromMaybe x (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
 hashOpenExp (Index a ix)
   | OpenAcc (Avar v) <- a               = hash "Index"          `combine` hashIdx v      `combine` hashOpenExp ix

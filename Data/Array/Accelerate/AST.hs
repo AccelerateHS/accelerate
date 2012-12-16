@@ -743,8 +743,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Value recursion with static loop count
   Iterate       :: Elt a
-                => Int                                  -- number of times to repeat
-                -> PreOpenFun acc env aenv (a -> a)     -- function to iterate
+                => PreOpenExp acc env aenv Int          -- number of times to repeat
+                -> PreOpenExp acc (env, a) aenv a       -- function to iterate
                 -> PreOpenExp acc env aenv a            -- initial value
                 -> PreOpenExp acc env aenv a
 

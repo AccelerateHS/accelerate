@@ -291,9 +291,6 @@ fuseOpenExp = cvt
     cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
     cvtA = fuseOpenAcc
 
-    cvtF :: OpenFun env aenv t -> OpenFun env aenv t
-    cvtF = fuseOpenFun
-
     cvt :: OpenExp env aenv t -> OpenExp env aenv t
     cvt exp = case exp of
       Let bnd body              -> Let (cvt bnd) (cvt body)
@@ -311,7 +308,7 @@ fuseOpenExp = cvt
       ToIndex sh ix             -> ToIndex (cvt sh) (cvt ix)
       FromIndex sh ix           -> FromIndex (cvt sh) (cvt ix)
       Cond p t e                -> Cond (cvt p) (cvt t) (cvt e)
-      Iterate n f x             -> Iterate n (cvtF f) (cvt x)
+      Iterate n f x             -> Iterate (cvt n) (cvt f) (cvt x)
       PrimConst c               -> PrimConst c
       PrimApp f x               -> PrimApp f (cvt x)
       Index a sh                -> Index (cvtA a) (cvt sh)
@@ -764,7 +761,7 @@ aletD bndAcc bodyAcc =
         ToIndex sh ix       -> usesOfEA idx sh + usesOfEA idx ix
         FromIndex sh i      -> usesOfEA idx sh + usesOfEA idx i
         Cond p t e          -> usesOfEA idx p  + usesOfEA idx t  + usesOfEA idx e
-        Iterate _ f x       -> usesOfFA idx f  + usesOfEA idx x
+        Iterate n f x       -> usesOfEA idx n  + usesOfEA idx f  + usesOfEA idx x
         PrimConst _         -> 0
         PrimApp _ x         -> usesOfEA idx x
         ShapeSize sh        -> usesOfEA idx sh
@@ -835,7 +832,7 @@ aletD bndAcc bodyAcc =
         ToIndex sh ix       -> ToIndex (travE sh) (travE ix)
         FromIndex sh i      -> FromIndex (travE sh) (travE i)
         Cond p t e          -> Cond (travE p) (travE t) (travE e)
-        Iterate n f x       -> Iterate n (replaceF sh_ ix_ idx f) (travE x)
+        Iterate n f x       -> Iterate (travE n) (replaceE (weakenE sh_) (weakenFE ix_) idx f) (travE x)
         PrimConst c         -> PrimConst c
         PrimApp g x         -> PrimApp g (travE x)
         ShapeSize sh        -> ShapeSize (travE sh)
