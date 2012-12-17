@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -54,7 +53,7 @@ prjExp (SuccIdx ix) (PushExp env _) = prjExp ix env
 prjExp _            _               = INTERNAL_ERROR(error) "prjExp" "inconsistent valuation"
 
 lookupExp :: Gamma env env' aenv -> OpenExp env aenv t -> Maybe (Idx env' t)
-lookupExp EmptyExp        !_      = Nothing
+lookupExp EmptyExp        _       = Nothing
 lookupExp (PushExp env e) x
   | Just REFL <- matchOpenExp e x = Just ZeroIdx
   | otherwise                     = SuccIdx `fmap` lookupExp env x
@@ -79,7 +78,7 @@ prjAcc (SuccIdx ix) (PushAcc env _) = prjAcc ix env
 prjAcc _            _               = INTERNAL_ERROR(error) "prjAcc" "inconsistent valuation"
 
 lookupAcc :: Delta aenv aenv' -> OpenAcc aenv a -> Maybe (Idx aenv' a)
-lookupAcc EmptyAcc         !_     = Nothing
+lookupAcc EmptyAcc         _      = Nothing
 lookupAcc (PushAcc aenv a) x
   | Just REFL <- matchOpenAcc a x = Just ZeroIdx
   | otherwise                     = SuccIdx `fmap` lookupAcc aenv x

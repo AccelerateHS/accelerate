@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns   #-}
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PatternGuards  #-}
@@ -78,7 +77,7 @@ inline :: Elt t
        => PreOpenExp acc (env, s) aenv t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
-inline !f !g = rebuildE (subTop g) f
+inline f g = rebuildE (subTop g) f
   where
     subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
     subTop s ZeroIdx      = s
@@ -91,7 +90,7 @@ substitute :: (Elt b, Elt c)
            => PreOpenExp acc (env, b) aenv c
            -> PreOpenExp acc (env, a) aenv b
            -> PreOpenExp acc (env, a) aenv c
-substitute !f !g
+substitute f g
   | Var ZeroIdx <- g    = f     -- don't rebind an identity function
   | otherwise           = Let g $ rebuildE split f
   where
@@ -178,14 +177,14 @@ class SyntacticExp f where
 newtype IdxE (acc :: * -> * -> *) env aenv t = IE { unIE :: Idx env t }
 
 instance SyntacticExp IdxE where
-  varIn !ix     = IE ix
-  expOut !e     = Var (unIE e)
-  weakenExp !e  = IE (SuccIdx (unIE e))
+  varIn         = IE
+  expOut        = Var . unIE
+  weakenExp     = IE . SuccIdx . unIE
 
 instance SyntacticExp PreOpenExp where
-  varIn !ix     = Var ix
-  expOut !e     = e
-  weakenExp !e  = rebuildE (weakenExp . IE) e
+  varIn         = Var
+  expOut        = id
+  weakenExp     = rebuildE (weakenExp . IE)
 
 
 shiftE
@@ -201,7 +200,7 @@ rebuildE
     => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
     -> PreOpenExp acc env  aenv t
     -> PreOpenExp acc env' aenv t
-rebuildE !v exp =
+rebuildE v exp =
   case exp of
     Let a b             -> Let (rebuildE v a) (rebuildE (shiftE v) b)
     Var ix              -> expOut (v ix)
@@ -232,7 +231,7 @@ rebuildTE
     => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
     -> Tuple (PreOpenExp acc env  aenv) t
     -> Tuple (PreOpenExp acc env' aenv) t
-rebuildTE !v tup =
+rebuildTE v tup =
   case tup of
     NilTup      -> NilTup
     SnocTup t e -> rebuildTE v t `SnocTup` rebuildE v e
@@ -242,7 +241,7 @@ rebuildFE
     => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
     -> PreOpenFun acc env  aenv t
     -> PreOpenFun acc env' aenv t
-rebuildFE !v fun =
+rebuildFE v fun =
   case fun of
     Body e      -> Body (rebuildE v e)
     Lam f       -> Lam (rebuildFE (shiftE v) f)
@@ -265,14 +264,14 @@ class SyntacticAcc f where
 newtype IdxA (acc :: * -> * -> *) aenv t = IA { unIA :: Idx aenv t }
 
 instance SyntacticAcc IdxA where
-  avarIn !ix      = IA ix
-  accOut !a       = Avar (unIA a)
-  weakenAcc !_ !a = IA (SuccIdx (unIA a))
+  avarIn        = IA
+  accOut        = Avar . unIA
+  weakenAcc _   = IA . SuccIdx . unIA
 
 instance SyntacticAcc PreOpenAcc where
-  avarIn !ix      = Avar ix
-  accOut !a       = a
-  weakenAcc !k !a = rebuildA k (weakenAcc k . IA) a
+  avarIn        = Avar
+  accOut        = id
+  weakenAcc k   = rebuildA k (weakenAcc k . IA)
 
 
 rebuildOpenAcc
@@ -280,7 +279,7 @@ rebuildOpenAcc
     => (forall t'. Arrays t' => Idx aenv t' -> f OpenAcc aenv' t')
     -> OpenAcc aenv  t
     -> OpenAcc aenv' t
-rebuildOpenAcc !v (OpenAcc acc) = OpenAcc (rebuildA rebuildOpenAcc v acc)
+rebuildOpenAcc v (OpenAcc acc) = OpenAcc (rebuildA rebuildOpenAcc v acc)
 
 
 shiftA
@@ -289,8 +288,8 @@ shiftA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> Idx     (aenv,  s) t
     -> f   acc (aenv', s) t
-shiftA !_ !_ ZeroIdx      = avarIn ZeroIdx
-shiftA !k !v (SuccIdx ix) = weakenAcc k (v ix)
+shiftA _ _ ZeroIdx      = avarIn ZeroIdx
+shiftA k v (SuccIdx ix) = weakenAcc k (v ix)
 
 rebuildA
     :: SyntacticAcc f
@@ -298,7 +297,7 @@ rebuildA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenAcc acc aenv  t
     -> PreOpenAcc acc aenv' t
-rebuildA !rebuild !v acc =
+rebuildA rebuild v acc =
   case acc of
     Alet a b            -> Alet (rebuild v a) (rebuild (shiftA rebuild v) b)
     Avar ix             -> accOut (v ix)
@@ -341,7 +340,7 @@ rebuildAfun
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenAfun acc aenv  t
     -> PreOpenAfun acc aenv' t
-rebuildAfun !k !v afun =
+rebuildAfun k v afun =
   case afun of
     Abody b     -> Abody (k v b)
     Alam f      -> Alam (rebuildAfun k (shiftA k v) f)
@@ -352,7 +351,7 @@ rebuildATA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> Atuple (acc aenv)  t
     -> Atuple (acc aenv') t
-rebuildATA !k !v atup =
+rebuildATA k v atup =
   case atup of
     NilAtup      -> NilAtup
     SnocAtup t a -> rebuildATA k v t `SnocAtup` k v a
@@ -367,7 +366,7 @@ rebuildEA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenExp acc env aenv  t
     -> PreOpenExp acc env aenv' t
-rebuildEA !k !v exp =
+rebuildEA k v exp =
   case exp of
     Let a b             -> Let (rebuildEA k v a) (rebuildEA k v b)
     Var ix              -> Var ix
@@ -399,7 +398,7 @@ rebuildTA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> Tuple (PreOpenExp acc env aenv)  t
     -> Tuple (PreOpenExp acc env aenv') t
-rebuildTA !k !v tup =
+rebuildTA k v tup =
   case tup of
     NilTup      -> NilTup
     SnocTup t e -> rebuildTA k v t `SnocTup` rebuildEA k v e
@@ -410,7 +409,7 @@ rebuildFA
     -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
     -> PreOpenFun acc env aenv  t
     -> PreOpenFun acc env aenv' t
-rebuildFA !k !v fun =
+rebuildFA k v fun =
   case fun of
     Body e      -> Body (rebuildEA k v e)
     Lam f       -> Lam  (rebuildFA k v f)
@@ -482,7 +481,7 @@ shrinkTE tup =
 
 
 usesOfE :: forall acc env aenv s t. Idx env s -> PreOpenExp acc env aenv t -> Int
-usesOfE !idx exp =
+usesOfE idx exp =
   case exp of
     Let bnd body        -> usesOfE idx bnd + usesOfE (SuccIdx idx) body
     Var idx'
@@ -511,7 +510,7 @@ usesOfE !idx exp =
     Intersect sh sz     -> usesOfE idx sh + usesOfE idx sz
 
 usesOfTE :: Idx env s -> Tuple (PreOpenExp acc env aenv) t -> Int
-usesOfTE !idx tup =
+usesOfTE idx tup =
   case tup of
     NilTup      -> 0
     SnocTup t e -> usesOfTE idx t + usesOfE idx e
@@ -539,7 +538,7 @@ shrinkA
     -> UsesOfAcc OpenAcc
     -> PreOpenAcc OpenAcc aenv t
     -> PreOpenAcc OpenAcc aenv t
-shrinkA !k !s !u pacc =
+shrinkA k s u pacc =
   let subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
       subTop t ZeroIdx          = t
       subTop _ (SuccIdx idx)    = Avar idx
@@ -591,25 +590,25 @@ shrinkA !k !s !u pacc =
 
 
 shrinkAfun :: ShrinkAcc acc -> PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
-shrinkAfun !s afun =
+shrinkAfun s afun =
   case afun of
     Abody b     -> Abody (s b)
     Alam f      -> Alam (shrinkAfun s f)
 
 shrinkATA :: ShrinkAcc acc -> Atuple (acc aenv) t -> Atuple (acc aenv) t
-shrinkATA !s atup =
+shrinkATA s atup =
   case atup of
     NilAtup      -> NilAtup
     SnocAtup t a -> shrinkATA s t `SnocAtup` s a
 
 shrinkFA :: ShrinkAcc acc -> PreOpenFun acc env aenv t -> PreOpenFun acc env aenv t
-shrinkFA !s fun =
+shrinkFA s fun =
   case fun of
     Body b      -> Body (shrinkEA s b)
     Lam f       -> Lam (shrinkFA s f)
 
 shrinkEA :: ShrinkAcc acc -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
-shrinkEA !s exp =
+shrinkEA s exp =
   case exp of
     Let bnd body        -> Let (shrinkEA s bnd) (shrinkEA s body)
     Var idx             -> Var idx
@@ -636,17 +635,17 @@ shrinkEA !s exp =
     Intersect sh sz     -> Intersect (shrinkEA s sh) (shrinkEA s sz)
 
 shrinkTA :: ShrinkAcc acc -> Tuple (PreOpenExp acc env aenv) t -> Tuple (PreOpenExp acc env aenv) t
-shrinkTA !s tup =
+shrinkTA s tup =
   case tup of
     NilTup      -> NilTup
     SnocTup t e -> shrinkTA s t `SnocTup` shrinkEA s e
 
 
 usesOfOpenAcc :: Idx aenv s -> OpenAcc aenv t -> Int
-usesOfOpenAcc !idx (OpenAcc !acc) = usesOfA usesOfOpenAcc idx acc
+usesOfOpenAcc idx (OpenAcc acc) = usesOfA usesOfOpenAcc idx acc
 
 usesOfA :: UsesOfAcc acc -> Idx aenv s -> PreOpenAcc acc aenv t -> Int
-usesOfA !u !idx acc =
+usesOfA u idx acc =
   case acc of
     Alet bnd body       -> u idx bnd + u (SuccIdx idx) body
     Avar idx'
@@ -681,13 +680,13 @@ usesOfA !u !idx acc =
     Stencil2 f _ a1 _ a2-> usesOfFA u idx f + u idx a1 + u idx a2
 
 usesOfATA :: UsesOfAcc acc -> Idx aenv s -> Atuple (acc aenv) t -> Int
-usesOfATA !s !idx atup =
+usesOfATA s idx atup =
   case atup of
     NilAtup      -> 0
     SnocAtup t a -> usesOfATA s idx t + s idx a
 
 usesOfEA :: UsesOfAcc acc -> Idx aenv a -> PreOpenExp acc env aenv t -> Int
-usesOfEA !s !idx exp =
+usesOfEA s idx exp =
   case exp of
     Let bnd body        -> usesOfEA s idx bnd + usesOfEA s idx body
     Var _               -> 0
@@ -714,13 +713,13 @@ usesOfEA !s !idx exp =
     Intersect sh sz     -> usesOfEA s idx sh + usesOfEA s idx sz
 
 usesOfTA :: UsesOfAcc acc -> Idx aenv a -> Tuple (PreOpenExp acc env aenv) t -> Int
-usesOfTA !s !idx tup =
+usesOfTA s idx tup =
   case tup of
     NilTup      -> 0
     SnocTup t e -> usesOfTA s idx t + usesOfEA s idx e
 
 usesOfFA :: UsesOfAcc acc -> Idx aenv a -> PreOpenFun acc env aenv f -> Int
-usesOfFA !s !idx fun =
+usesOfFA s idx fun =
   case fun of
     Body e      -> usesOfEA s idx e
     Lam f       -> usesOfFA s idx f

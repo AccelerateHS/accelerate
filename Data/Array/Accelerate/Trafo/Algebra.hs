@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -43,7 +42,7 @@ import Data.Array.Accelerate.Trafo.Common
 -- or constant let bindings. Be careful not to follow self-cycles.
 --
 propagate :: forall env aenv exp. Gamma env env aenv -> OpenExp env aenv exp -> Maybe exp
-propagate !env = cvtE
+propagate env = cvtE
   where
     cvtE :: OpenExp env aenv e -> Maybe e
     cvtE exp = case exp of
@@ -150,7 +149,7 @@ commutes
     -> OpenExp env aenv a
     -> Gamma env env aenv
     -> Maybe (OpenExp env aenv a)
-commutes f !x !env = case f of
+commutes f x env = case f of
   PrimAdd _     -> swizzle x
   PrimMul _     -> swizzle x
   PrimBAnd _    -> swizzle x
@@ -175,7 +174,7 @@ commutes f !x !env = case f of
       , hashOpenExp a > hashOpenExp b
       = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
-    swizzle !_
+    swizzle _
       = Nothing
 
 
@@ -194,7 +193,7 @@ associates
     => PrimFun (a -> r)
     -> OpenExp env aenv a
     -> Maybe (OpenExp env aenv r)
-associates fun !exp = case fun of
+associates fun exp = case fun of
   PrimAdd _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
   PrimSub _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
   PrimLAnd      -> swizzle fun exp [fun]
@@ -214,12 +213,12 @@ associates fun !exp = case fun of
       , Just (b,c)  <- untup2 y
       = Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
 
-    swizzle !_ !_ !_
+    swizzle _ _ _
       = Nothing
 
     matches :: (Elt s, Elt t) => PrimFun (s -> a) -> [PrimFun (t -> a)] -> Maybe (s :=: t)
-    matches !_ []     = Nothing
-    matches f  (x:xs)
+    matches _ []        = Nothing
+    matches f (x:xs)
       | Just REFL <- matchPrimFun' f x
       = Just REFL
 
@@ -233,21 +232,21 @@ associates fun !exp = case fun of
 type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
 
 eval1 :: Elt b => (a -> b) -> a :-> b
-eval1 !f !x !env
+eval1 f x env
   | Just a <- propagate env x   = Just $ Const (fromElt (f a))
   | otherwise                   = Nothing
 
 eval2 :: Elt c => (a -> b -> c) -> (a,b) :-> c
-eval2 !f (untup2 -> Just (!x,!y)) !env
+eval2 f (untup2 -> Just (x,y)) env
   | Just a <- propagate env x
   , Just b <- propagate env y
   = Just $ Const (fromElt (f a b))
 
-eval2 !_ !_ !_
+eval2 _ _ _
   = Nothing
 
 tup2 :: (Elt a, Elt b) => (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
-tup2 (!a,!b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
+tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
 
 untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
 untup2 exp
@@ -263,7 +262,7 @@ evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = evalAdd'
 evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalAdd'
 
 evalAdd' :: (Elt a, Eq a, Num a) => (a,a) :-> a
-evalAdd' (untup2 -> Just (!x,!y)) !env
+evalAdd' (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , a == 0
   = Just y
@@ -272,7 +271,7 @@ evalAdd' (untup2 -> Just (!x,!y)) !env
   , Just b      <- propagate env y
   = Just $ Const (fromElt (a+b))
 
-evalAdd' !_ !_
+evalAdd' _ _
   = Nothing
 
 
@@ -281,7 +280,7 @@ evalSub ty@(IntegralNumType ty') | IntegralDict <- integralDict ty' = evalSub' t
 evalSub ty@(FloatingNumType ty') | FloatingDict <- floatingDict ty' = evalSub' ty
 
 evalSub' :: forall a. (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
-evalSub' !ty (untup2 -> Just (!x,!y)) !env
+evalSub' ty (untup2 -> Just (x,y)) env
   | Just b      <- propagate env y
   , b == 0
   = Just x
@@ -297,7 +296,7 @@ evalSub' !ty (untup2 -> Just (!x,!y)) !env
   | Just REFL   <- matchOpenExp x y
   = Just $ Const (fromElt (0::a))       -- TLM: definitely the purview of rewrite rules
 
-evalSub' !_ !_ !_
+evalSub' _ _ _
   = Nothing
 
 
@@ -306,7 +305,7 @@ evalMul (IntegralNumType ty) | IntegralDict <- integralDict ty = evalMul'
 evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = evalMul'
 
 evalMul' :: (Elt a, Eq a, Num a) => (a,a) :-> a
-evalMul' (untup2 -> Just (!x,!y)) !env
+evalMul' (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , Nothing     <- propagate env y
   = case a of
@@ -318,7 +317,7 @@ evalMul' (untup2 -> Just (!x,!y)) !env
   , Just b      <- propagate env y
   = Just $ Const (fromElt (a * b))
 
-evalMul' !_ !_
+evalMul' _ _
   = Nothing
 
 
@@ -498,23 +497,23 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 -- -----------------
 
 evalLAnd :: (Bool,Bool) :-> Bool
-evalLAnd (untup2 -> Just (!x,!y)) !env
+evalLAnd (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   = case a of
       True      -> Just y
       False     -> Just $ Const (fromElt False)
 
-evalLAnd !_ !_
+evalLAnd _ _
   = Nothing
 
 evalLOr  :: (Bool,Bool) :-> Bool
-evalLOr (untup2 -> Just (!x,!y)) !env
+evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   = case a of
       True      -> Just $ Const (fromElt True)
       _         -> Just y
 
-evalLOr !_ !_
+evalLOr _ _
   = Nothing
 
 evalLNot :: Bool :-> Bool
