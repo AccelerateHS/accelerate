@@ -24,11 +24,15 @@ module Data.Array.Accelerate.Trafo (
 
 ) where
 
+import Prelude                                          hiding ( exp )
+
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                ( Arrays )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
+import Data.Array.Accelerate.Trafo.Common
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
+import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 
 
@@ -106,6 +110,29 @@ convertAccFun1With ok acc
       | otherwise       = id
 
 
+-- | Convert a closed scalar expression, incorporating sharing observation and
+--   optimisation.
+--
+convertExp :: Elt e => Exp e -> AST.Exp () e
+convertExp exp
+  = Rewrite.simplifyExp EmptyAcc
+  $ Sharing.convertExp (recoverExpSharing phases) exp
+
+
+-- | Convert closed scalar functions, incorporating sharing observation and
+--   optimisation.
+--
+convertFun1 :: (Elt a, Elt b) => (Exp a -> Exp b) -> AST.Fun () (a -> b)
+convertFun1 fun
+  = Rewrite.simplifyFun EmptyAcc
+  $ Sharing.convertFun1 (recoverExpSharing phases) fun
+
+convertFun2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> AST.Fun () (a -> b -> c)
+convertFun2 fun
+  = Rewrite.simplifyFun EmptyAcc
+  $ Sharing.convertFun2 (recoverExpSharing phases) fun
+
+
 -- Pretty printing
 -- ---------------
 
@@ -115,6 +142,12 @@ instance Arrays arrs => Show (Acc arrs) where
 instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
   show = show . convertAccFun1
 
--- Show instance for scalar expressions inherited from Sharing module. Note that
--- this does not incorporate Sharing or other optimisations.
+instance Elt e => Show (Exp e) where
+  show = show . convertExp
+
+instance (Elt a, Elt b) => Show (Exp a -> Exp b) where
+  show = show . convertFun1
+
+instance (Elt a, Elt b, Elt c) => Show (Exp a -> Exp b -> Exp c) where
+  show = show . convertFun2
 

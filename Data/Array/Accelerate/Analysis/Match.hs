@@ -449,7 +449,7 @@ matchConst UnitTuple         ()      ()      = True
 matchConst (SingleTuple ty)  a       b       = evalEq ty (a,b)
 matchConst (PairTuple ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
-evalEq :: ScalarType a -> ((a, a) -> Bool)
+evalEq :: ScalarType a -> (a, a) -> Bool
 evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
 evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
 evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
@@ -768,14 +768,92 @@ commutes f x = case f of
       | otherwise                               = exp
 
 
--- Hashable scalar expressions
---
+-- Hashing
+-- =======
+
 hashIdx :: Idx env t -> Int
 hashIdx = hash . idxToInt
 
 hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
 
+
+-- Array computations
+-- ------------------
+
+hashOpenAcc :: forall aenv arrs. OpenAcc aenv arrs -> Int
+hashOpenAcc (OpenAcc pacc)
+  = let
+      hashEA :: String -> OpenExp env aenv e -> OpenAcc aenv a -> Int
+      hashEA tag e a = hash tag `combine` hashOpenExp e `combine` hashOpenAcc a
+
+      hashFA :: String -> OpenFun env aenv f -> OpenAcc aenv a -> Int
+      hashFA tag f a = hash tag `combine` hashOpenFun f `combine` hashOpenAcc a
+
+      hashFA2 :: String -> OpenFun env aenv f -> OpenAcc aenv a1 -> OpenAcc aenv a2 -> Int
+      hashFA2 tag f a1 a2 = hash tag `combine` hashOpenFun f `combine` hashOpenAcc a1 `combine` hashOpenAcc a2
+
+      hashFEA :: String -> OpenFun env aenv f -> OpenExp env aenv e -> OpenAcc aenv a -> Int
+      hashFEA tag f e a = hash tag `combine` hashOpenFun f `combine` hashOpenExp e `combine` hashOpenAcc a
+    in
+    case pacc of
+      Alet bnd body             -> hash "Alet"                  `combine` hashOpenAcc bnd `combine` hashOpenAcc body
+      Avar v                    -> hash "Avar"                  `combine` hashIdx v
+      Atuple t                  -> hash "Atuple"                `combine` hashAtuple t
+      Aprj ix a                 -> hash "Aprj"                  `combine` hashTupleIdx ix `combine` hashOpenAcc a
+      Apply f a                 -> hash "Apply"                 `combine` hashAfun f `combine` hashOpenAcc a
+      Use a                     -> hash "Use"                   `combine` hashArrays (arrays (undefined::arrs)) a
+      Unit e                    -> hash "Unit"                  `combine` hashOpenExp e
+      Generate e f              -> hash "Generate"              `combine` hashOpenExp e `combine` hashOpenFun f
+      Acond e a1 a2             -> hash "Acond"                 `combine` hashOpenExp e `combine` hashOpenAcc a1 `combine` hashOpenAcc a2
+      Reshape sh a              -> hashEA  "Reshape" sh a
+      Transform e f1 f2 a       -> hashFEA "Transform" f1 e a   `combine` hashOpenFun f2
+      Replicate spec ix a       -> hashEA  "Replicate" ix a     `hashWithSalt` show spec
+      Slice spec a ix           -> hashEA  "Slice" ix a         `hashWithSalt` show spec
+      Map f a                   -> hashFA  "Map" f a
+      ZipWith f a1 a2           -> hashFA2 "ZipWith" f a1 a2
+      Fold f e a                -> hashFEA "Fold" f e a
+      Fold1 f a                 -> hashFA  "Fold1" f a
+      FoldSeg f e a s           -> hashFA2 "FoldSeg" f a s      `combine` hashOpenExp e
+      Fold1Seg f a s            -> hashFA2 "Fold1Seg" f a s
+      Scanl f e a               -> hashFEA "Scanl" f e a
+      Scanl' f e a              -> hashFEA "Scanl'" f e a
+      Scanl1 f a                -> hashFA  "Scanl1" f a
+      Scanr f e a               -> hashFEA "Scanr" f e a
+      Scanr' f e a              -> hashFEA "Scanr'" f e a
+      Scanr1 f a                -> hashFA  "Scanr1" f a
+      Backpermute sh f a        -> hashFEA "Backpermute" f sh a
+      Permute f1 a1 f2 a2       -> hashFA2 "Permute" f1 a1 a2   `combine` hashOpenFun f2
+      Stencil f b a             -> hashFA  "Stencil" f a        `combine` hashBoundary a b
+      Stencil2 f b1 a1 b2 a2    -> hashFA2 "Stencil2" f a1 a2   `combine` hashBoundary a1 b1 `combine` hashBoundary a2 b2
+
+
+hashAtuple :: Tuple.Atuple (OpenAcc aenv) a -> Int
+hashAtuple NilAtup              = hash "NilAtup"
+hashAtuple (SnocAtup t a)       = hash "SnocAtup"       `combine` hashAtuple t `combine` hashOpenAcc a
+
+hashAfun :: OpenAfun aenv f -> Int
+hashAfun (Abody b)              = hash "Abody"          `combine` hashOpenAcc b
+hashAfun (Alam f)               = hash "Alam"           `combine` hashAfun f
+
+hashArrays :: ArraysR a -> a -> Int
+hashArrays ArraysRunit         ()       = hash ()
+hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
+hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
+
+hashBoundary :: forall aenv sh e. Elt e => OpenAcc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
+hashBoundary _ Wrap             = hash "Wrap"
+hashBoundary _ Clamp            = hash "Clamp"
+hashBoundary _ Mirror           = hash "Mirror"
+hashBoundary _ (Constant c)     = hash "Constant" `hashWithSalt` show (toElt c :: e)
+
+
+-- Scalar expressions
+-- ------------------
+
+hashOpenFun :: OpenFun env aenv f -> Int
+hashOpenFun (Body b)                    = hash "Body"           `combine` hashOpenExp b
+hashOpenFun (Lam f)                     = hash "Lam"            `combine` hashOpenFun f
 
 hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
 hashOpenExp (Let x e)                   = hash "Let"            `combine` hashOpenExp x  `combine` hashOpenExp e
@@ -796,18 +874,9 @@ hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOp
 hashOpenExp (Iterate n f x)             = hash "Iterate"        `combine` hashOpenExp n  `combine` hashOpenExp f `combine` hashOpenExp x
 hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (fromMaybe x (commutes f x))
 hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
-hashOpenExp (Index a ix)
-  | OpenAcc (Avar v) <- a               = hash "Index"          `combine` hashIdx v      `combine` hashOpenExp ix
-  | otherwise                           = error "hash: Index: expected array variable"
---
-hashOpenExp (LinearIndex a ix)
-  | OpenAcc (Avar v) <- a               = hash "LinearIndex"    `combine` hashIdx v      `combine` hashOpenExp ix
-  | otherwise                           = error "hash: LinearIndex: expected array variable"
---
-hashOpenExp (Shape a)
-  | OpenAcc (Avar v) <- a               = hash "Shape"          `combine` hashIdx v
-  | otherwise                           = error "hash: Shape: expected array variable"
---
+hashOpenExp (Index a ix)                = hash "Index"          `combine` hashOpenAcc a  `combine` hashOpenExp ix
+hashOpenExp (LinearIndex a ix)          = hash "LinearIndex"    `combine` hashOpenAcc a  `combine` hashOpenExp ix
+hashOpenExp (Shape a)                   = hash "Shape"          `combine` hashOpenAcc a
 hashOpenExp (ShapeSize sh)              = hash "ShapeSize"      `combine` hashOpenExp sh
 hashOpenExp (Intersect sa sb)           = hash "Intersect"      `combine` hashOpenExp sa `combine` hashOpenExp sb
 
