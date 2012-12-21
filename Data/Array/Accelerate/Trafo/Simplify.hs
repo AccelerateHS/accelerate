@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
   simplifyExp, simplifyFun,
 
   -- simplify array computations
-  simplifyAcc, simplifyAfun, simplifyOpenAcc, Delta(..),
+  simplifyAcc, simplifyAfun, simplifyOpenAcc,
 
 ) where
 
@@ -255,10 +255,14 @@ simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun (incExp env `PushExp` 
 
 
 simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
-simplifyExp aenv = simplifyOpenExp EmptyExp aenv . shrinkE
+simplifyExp aenv
+  = shrinkE
+  . simplifyOpenExp EmptyExp aenv
 
 simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
-simplifyFun aenv = simplifyOpenFun EmptyExp aenv . shrinkFE
+simplifyFun aenv
+  = shrinkFE
+  . simplifyOpenFun EmptyExp aenv
 
 
 -- Array computations

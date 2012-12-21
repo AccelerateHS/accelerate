@@ -28,6 +28,7 @@ import Data.Maybe
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Trafo.Common
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
