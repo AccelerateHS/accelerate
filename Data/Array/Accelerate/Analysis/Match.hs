@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -47,7 +48,6 @@ import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 
 
-
 -- Witness equality between types. A value of a :=: b is a proof that types a
 -- and b are equal. By pattern matching on REFL this fact is introduced to the
 -- type checker.
@@ -60,12 +60,18 @@ deriving instance Show (s :=: t)
 
 -- The types for traversing recursive array computations.
 --
--- TODO: Parameterise functions by the recursive knot. Tediously, we need to
---       carry functions for both matching and hashing.
+-- TODO:
+--   Parameterise functions by the recursive knot. Tediously, we need to carry
+--   functions for both matching and hashing.
 --
--- type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
--- type HashAcc  acc = forall aenv a.   acc aenv a -> Int
-
+--   type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
+--   type HashAcc  acc = forall aenv a.   acc aenv a -> Int
+--
+-- ALTERNATE TODO:
+--   Define Hashable instances, and lift the matching functions to a class of
+--   homogeneous equality, returning evidence on the positive case instead of a
+--   plain Boolean.
+--
 
 -- Compute the congruence of two array computations. The nodes are congruent if
 -- they have the same operator and their operands are congruent.
@@ -781,115 +787,124 @@ hashTupleIdx = hash . tupleIdxToInt
 -- Array computations
 -- ------------------
 
-hashOpenAcc :: forall aenv arrs. OpenAcc aenv arrs -> Int
-hashOpenAcc (OpenAcc pacc)
-  = let
-      hashEA :: String -> OpenExp env aenv e -> OpenAcc aenv a -> Int
-      hashEA tag e a = hash tag `combine` hashOpenExp e `combine` hashOpenAcc a
+hashOpenAcc :: OpenAcc aenv arrs -> Int
+hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc pacc
 
-      hashFA :: String -> OpenFun env aenv f -> OpenAcc aenv a -> Int
-      hashFA tag f a = hash tag `combine` hashOpenFun f `combine` hashOpenAcc a
+hashPreOpenAcc :: forall aenv arrs. PreOpenAcc OpenAcc aenv arrs -> Int
+hashPreOpenAcc pacc =
+  let
+    hashA :: Int -> OpenAcc aenv' a -> Int
+    hashA salt = hashWithSalt salt . hashOpenAcc
 
-      hashFA2 :: String -> OpenFun env aenv f -> OpenAcc aenv a1 -> OpenAcc aenv a2 -> Int
-      hashFA2 tag f a1 a2 = hash tag `combine` hashOpenFun f `combine` hashOpenAcc a1 `combine` hashOpenAcc a2
+    hashE :: Int -> OpenExp env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashOpenExp
 
-      hashFEA :: String -> OpenFun env aenv f -> OpenExp env aenv e -> OpenAcc aenv a -> Int
-      hashFEA tag f e a = hash tag `combine` hashOpenFun f `combine` hashOpenExp e `combine` hashOpenAcc a
-    in
-    case pacc of
-      Alet bnd body             -> hash "Alet"                  `combine` hashOpenAcc bnd `combine` hashOpenAcc body
-      Avar v                    -> hash "Avar"                  `combine` hashIdx v
-      Atuple t                  -> hash "Atuple"                `combine` hashAtuple t
-      Aprj ix a                 -> hash "Aprj"                  `combine` hashTupleIdx ix `combine` hashOpenAcc a
-      Apply f a                 -> hash "Apply"                 `combine` hashAfun f `combine` hashOpenAcc a
-      Use a                     -> hash "Use"                   `combine` hashArrays (arrays (undefined::arrs)) a
-      Unit e                    -> hash "Unit"                  `combine` hashOpenExp e
-      Generate e f              -> hash "Generate"              `combine` hashOpenExp e `combine` hashOpenFun f
-      Acond e a1 a2             -> hash "Acond"                 `combine` hashOpenExp e `combine` hashOpenAcc a1 `combine` hashOpenAcc a2
-      Reshape sh a              -> hashEA  "Reshape" sh a
-      Transform e f1 f2 a       -> hashFEA "Transform" f1 e a   `combine` hashOpenFun f2
-      Replicate spec ix a       -> hashEA  "Replicate" ix a     `hashWithSalt` show spec
-      Slice spec a ix           -> hashEA  "Slice" ix a         `hashWithSalt` show spec
-      Map f a                   -> hashFA  "Map" f a
-      ZipWith f a1 a2           -> hashFA2 "ZipWith" f a1 a2
-      Fold f e a                -> hashFEA "Fold" f e a
-      Fold1 f a                 -> hashFA  "Fold1" f a
-      FoldSeg f e a s           -> hashFA2 "FoldSeg" f a s      `combine` hashOpenExp e
-      Fold1Seg f a s            -> hashFA2 "Fold1Seg" f a s
-      Scanl f e a               -> hashFEA "Scanl" f e a
-      Scanl' f e a              -> hashFEA "Scanl'" f e a
-      Scanl1 f a                -> hashFA  "Scanl1" f a
-      Scanr f e a               -> hashFEA "Scanr" f e a
-      Scanr' f e a              -> hashFEA "Scanr'" f e a
-      Scanr1 f a                -> hashFA  "Scanr1" f a
-      Backpermute sh f a        -> hashFEA "Backpermute" f sh a
-      Permute f1 a1 f2 a2       -> hashFA2 "Permute" f1 a1 a2   `combine` hashOpenFun f2
-      Stencil f b a             -> hashFA  "Stencil" f a        `combine` hashBoundary a b
-      Stencil2 f b1 a1 b2 a2    -> hashFA2 "Stencil2" f a1 a2   `combine` hashBoundary a1 b1 `combine` hashBoundary a2 b2
+    hashF :: Int -> OpenFun env' aenv' f -> Int
+    hashF salt = hashWithSalt salt . hashOpenFun
 
+  in case pacc of
+    Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
+    Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
+    Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple t
+    Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix `hashA` a
+    Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun f      `hashA` a
+    Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
+    Unit e                      -> hash "Unit"          `hashE` e
+    Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
+    Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
+    Reshape sh a                -> hash "Reshape"       `hashE` sh `hashA` a
+    Transform sh f1 f2 a        -> hash "Transform"     `hashE` sh `hashF` f1 `hashF` f2 `hashA` a
+    Replicate spec ix a         -> hash "Replicate"     `hashE` ix `hashA` a  `hashWithSalt` show spec
+    Slice spec a ix             -> hash "Slice"         `hashE` ix `hashA` a  `hashWithSalt` show spec
+    Map f a                     -> hash "Map"           `hashF` f  `hashA` a
+    ZipWith f a1 a2             -> hash "ZipWith"       `hashF` f  `hashA` a1 `hashA` a2
+    Fold f e a                  -> hash "Fold"          `hashF` f  `hashE` e  `hashA` a
+    Fold1 f a                   -> hash "Fold1"         `hashF` f  `hashA` a
+    FoldSeg f e a s             -> hash "FoldSeg"       `hashF` f  `hashE` e  `hashA` a  `hashA` s
+    Fold1Seg f a s              -> hash "Fold1Seg"      `hashF` f  `hashA` a  `hashA` s
+    Scanl f e a                 -> hash "Scanl"         `hashF` f  `hashE` e  `hashA` a
+    Scanl' f e a                -> hash "Scanl'"        `hashF` f  `hashE` e  `hashA` a
+    Scanl1 f a                  -> hash "Scanl1"        `hashF` f  `hashA` a
+    Scanr f e a                 -> hash "Scanr"         `hashF` f  `hashE` e  `hashA` a
+    Scanr' f e a                -> hash "Scanr'"        `hashF` f  `hashE` e  `hashA` a
+    Scanr1 f a                  -> hash "Scanr1"        `hashF` f  `hashA` a
+    Backpermute sh f a          -> hash "Backpermute"   `hashF` f  `hashE` sh `hashA` a
+    Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
+    Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
+    Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
 
-hashAtuple :: Tuple.Atuple (OpenAcc aenv) a -> Int
-hashAtuple NilAtup              = hash "NilAtup"
-hashAtuple (SnocAtup t a)       = hash "SnocAtup"       `combine` hashAtuple t `combine` hashOpenAcc a
-
-hashAfun :: OpenAfun aenv f -> Int
-hashAfun (Abody b)              = hash "Abody"          `combine` hashOpenAcc b
-hashAfun (Alam f)               = hash "Alam"           `combine` hashAfun f
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
+hashAtuple :: Tuple.Atuple (OpenAcc aenv) a -> Int
+hashAtuple NilAtup              = hash "NilAtup"
+hashAtuple (SnocAtup t a)       = hash "SnocAtup"       `hashWithSalt` hashAtuple t `hashWithSalt` hashOpenAcc a
+
+hashAfun :: OpenAfun aenv f -> Int
+hashAfun (Abody b)              = hash "Abody"          `hashWithSalt` hashOpenAcc b
+hashAfun (Alam f)               = hash "Alam"           `hashWithSalt` hashAfun f
+
 hashBoundary :: forall aenv sh e. Elt e => OpenAcc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
 hashBoundary _ Wrap             = hash "Wrap"
 hashBoundary _ Clamp            = hash "Clamp"
 hashBoundary _ Mirror           = hash "Mirror"
-hashBoundary _ (Constant c)     = hash "Constant" `hashWithSalt` show (toElt c :: e)
+hashBoundary _ (Constant c)     = hash "Constant"       `hashWithSalt` show (toElt c :: e)
 
 
 -- Scalar expressions
 -- ------------------
 
+hashOpenExp :: forall env aenv exp. OpenExp env aenv exp -> Int
+hashOpenExp exp =
+  let
+    hashA :: Int -> OpenAcc aenv' a -> Int
+    hashA salt = hashWithSalt salt . hashOpenAcc
+
+    hashE :: Int -> OpenExp env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashOpenExp
+
+  in case exp of
+    Let bnd body                -> hash "Let"           `hashE` bnd `hashE` body
+    Var ix                      -> hash "Var"           `hashWithSalt` hashIdx ix
+    Const c                     -> hash "Const"         `hashWithSalt` show (toElt c :: exp)
+    Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple t
+    Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashE` e
+    IndexAny                    -> hash "IndexAny"
+    IndexNil                    -> hash "IndexNil"
+    IndexCons sl a              -> hash "IndexCons"     `hashE` sl `hashE` a
+    IndexHead sl                -> hash "IndexHead"     `hashE` sl
+    IndexTail sl                -> hash "IndexTail"     `hashE` sl
+    IndexSlice spec ix sh       -> hash "IndexSlice"    `hashE` ix `hashE` sh `hashWithSalt` show spec
+    IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
+    ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
+    FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
+    Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t `hashE` e
+    Iterate n f x               -> hash "Iterate"       `hashE` n  `hashE` f `hashE` x
+    PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes f x)
+    PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
+    Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix
+    LinearIndex a ix            -> hash "LinearIndex"   `hashA` a  `hashE` ix
+    Shape a                     -> hash "Shape"         `hashA` a
+    ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
+    Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
+
+
 hashOpenFun :: OpenFun env aenv f -> Int
-hashOpenFun (Body b)                    = hash "Body"           `combine` hashOpenExp b
-hashOpenFun (Lam f)                     = hash "Lam"            `combine` hashOpenFun f
-
-hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
-hashOpenExp (Let x e)                   = hash "Let"            `combine` hashOpenExp x  `combine` hashOpenExp e
-hashOpenExp (Var ix)                    = hash "Var"            `combine` hashIdx ix
-hashOpenExp (Const c)                   = hash "Const"          `hashWithSalt` show (toElt c :: e)
-hashOpenExp (Tuple t)                   = hash "Tuple"          `combine` hashTuple t
-hashOpenExp (Prj ix e)                  = hash "Prj"            `combine` hashTupleIdx ix `combine` hashOpenExp e
-hashOpenExp IndexAny                    = hash "IndexAny"
-hashOpenExp IndexNil                    = hash "IndexNil"
-hashOpenExp (IndexCons sl a)            = hash "IndexCons"      `combine` hashOpenExp sl `combine` hashOpenExp a
-hashOpenExp (IndexHead sl)              = hash "IndexHead"      `combine` hashOpenExp sl
-hashOpenExp (IndexTail sl)              = hash "IndexTail"      `combine` hashOpenExp sl
-hashOpenExp (IndexSlice spec ix sh)     = hash "IndexSlice"     `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sh
-hashOpenExp (IndexFull  spec ix sl)     = hash "IndexFull"      `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sl
-hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
-hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
-hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e
-hashOpenExp (Iterate n f x)             = hash "Iterate"        `combine` hashOpenExp n  `combine` hashOpenExp f `combine` hashOpenExp x
-hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (fromMaybe x (commutes f x))
-hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
-hashOpenExp (Index a ix)                = hash "Index"          `combine` hashOpenAcc a  `combine` hashOpenExp ix
-hashOpenExp (LinearIndex a ix)          = hash "LinearIndex"    `combine` hashOpenAcc a  `combine` hashOpenExp ix
-hashOpenExp (Shape a)                   = hash "Shape"          `combine` hashOpenAcc a
-hashOpenExp (ShapeSize sh)              = hash "ShapeSize"      `combine` hashOpenExp sh
-hashOpenExp (Intersect sa sb)           = hash "Intersect"      `combine` hashOpenExp sa `combine` hashOpenExp sb
-
+hashOpenFun (Body b)            = hash "Body"           `hashWithSalt` hashOpenExp b
+hashOpenFun (Lam f)             = hash "Lam"            `hashWithSalt` hashOpenFun f
 
 hashTuple :: Tuple.Tuple (OpenExp env aenv) e -> Int
-hashTuple NilTup                        = hash "NilTup"
-hashTuple (SnocTup t e)                 = hash "SnocTup"        `combine` hashTuple t `combine` hashOpenExp e
+hashTuple NilTup                = hash "NilTup"
+hashTuple (SnocTup t e)         = hash "SnocTup"        `hashWithSalt` hashTuple t `hashWithSalt` hashOpenExp e
 
 
 hashPrimConst :: PrimConst c -> Int
-hashPrimConst (PrimMinBound _)          = hash "PrimMinBound"
-hashPrimConst (PrimMaxBound _)          = hash "PrimMaxBound"
-hashPrimConst (PrimPi _)                = hash "PrimPi"
+hashPrimConst (PrimMinBound _)  = hash "PrimMinBound"
+hashPrimConst (PrimMaxBound _)  = hash "PrimMaxBound"
+hashPrimConst (PrimPi _)        = hash "PrimPi"
 
 hashPrimFun :: PrimFun f -> Int
 hashPrimFun (PrimAdd _)                 = hash "PrimAdd"
