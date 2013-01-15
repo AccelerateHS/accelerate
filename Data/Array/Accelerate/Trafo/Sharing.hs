@@ -2,8 +2,8 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS -fno-warn-orphans        #-}
-{-# OPTIONS -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -fno-warn-orphans        #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Sharing
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

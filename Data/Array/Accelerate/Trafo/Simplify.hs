@@ -219,7 +219,8 @@ simplifyTuple
     -> Tuple (OpenExp env aenv) t
     -> Tuple (OpenExp env aenv) t
 simplifyTuple _   _    NilTup          = NilTup
-simplifyTuple env aenv (SnocTup tup e) = simplifyTuple env aenv tup `SnocTup` simplifyOpenExp env aenv e
+simplifyTuple env aenv (SnocTup tup e) = simplifyTuple   env aenv tup
+                               `SnocTup` simplifyOpenExp env aenv e
 
 simplifyPrj
     :: forall env aenv t e. (Elt e, Elt t, IsTuple t)
@@ -250,8 +251,10 @@ simplifyOpenFun
     -> Delta aenv aenv
     -> OpenFun env aenv t
     -> OpenFun env aenv t
-simplifyOpenFun env aenv (Body e) = Body (simplifyOpenExp env aenv e)
-simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun (incExp env `PushExp` Var ZeroIdx) aenv f)
+simplifyOpenFun env aenv (Body e) = Body (simplifyOpenExp env  aenv e)
+simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun env' aenv f)
+  where
+    env' = incExp env `PushExp` Var ZeroIdx
 
 
 simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t

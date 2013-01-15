@@ -499,9 +499,8 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 evalLAnd :: (Bool,Bool) :-> Bool
 evalLAnd (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = case a of
-      True      -> Just y
-      False     -> Just $ Const (fromElt False)
+  = Just $ if a then y
+                else Const (fromElt False)
 
 evalLAnd _ _
   = Nothing
@@ -509,9 +508,8 @@ evalLAnd _ _
 evalLOr  :: (Bool,Bool) :-> Bool
 evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = case a of
-      True      -> Just $ Const (fromElt True)
-      _         -> Just y
+  = Just $ if a then Const (fromElt True)
+                else y
 
 evalLOr _ _
   = Nothing
