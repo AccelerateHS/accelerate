@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -26,7 +27,8 @@ module Data.Array.Accelerate.Analysis.Match (
   matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
 
   -- hashing expressions
-  hashOpenExp,
+  hashPreOpenAcc, hashOpenAcc,
+  hashPreOpenExp, hashOpenExp,
 
 ) where
 
@@ -396,8 +398,8 @@ matchOpenExp (PrimConst c1) (PrimConst c2)
   = matchPrimConst c1 c2
 
 matchOpenExp (PrimApp f1 x1) (PrimApp f2 x2)
-  | Just x1'  <- commutes f1 x1
-  , Just x2'  <- commutes f2 x2
+  | Just x1'  <- commutes hashOpenAcc f1 x1
+  , Just x2'  <- commutes hashOpenAcc f2 x2
   , Just REFL <- matchOpenExp x1' x2'
   , Just REFL <- matchPrimFun f1 f2
   = Just REFL
@@ -750,8 +752,13 @@ matchNonNumType _              _              = Nothing
 -- a stable ordering such that matching recognises expressions modulo
 -- commutativity.
 --
-commutes :: PrimFun (a -> r) -> OpenExp env aenv a -> Maybe (OpenExp env aenv a)
-commutes f x = case f of
+commutes
+    :: forall acc env aenv a r.
+       HashAcc acc
+    -> PrimFun (a -> r)
+    -> PreOpenExp acc env aenv a
+    -> Maybe (PreOpenExp acc env aenv a)
+commutes h f x = case f of
   PrimAdd _     -> Just (swizzle x)
   PrimMul _     -> Just (swizzle x)
   PrimBAnd _    -> Just (swizzle x)
@@ -765,10 +772,10 @@ commutes f x = case f of
   PrimLOr       -> Just (swizzle x)
   _             -> Nothing
   where
-    swizzle :: OpenExp env aenv (a,a) -> OpenExp env aenv (a,a)
+    swizzle :: PreOpenExp acc env aenv (a',a') -> PreOpenExp acc env aenv (a',a')
     swizzle exp
       | Tuple (NilTup `SnocTup` a `SnocTup` b)  <- exp
-      , hashOpenExp a > hashOpenExp b           = Tuple (NilTup `SnocTup` b `SnocTup` a)
+      , hashPreOpenExp h a > hashPreOpenExp h b = Tuple (NilTup `SnocTup` b `SnocTup` a)
       --
       | otherwise                               = exp
 
@@ -786,27 +793,30 @@ hashTupleIdx = hash . tupleIdxToInt
 -- Array computations
 -- ------------------
 
+type HashAcc acc = forall aenv a. acc aenv a -> Int
+
+
 hashOpenAcc :: OpenAcc aenv arrs -> Int
-hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc pacc
+hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
-hashPreOpenAcc :: forall aenv arrs. PreOpenAcc OpenAcc aenv arrs -> Int
-hashPreOpenAcc pacc =
+hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
+hashPreOpenAcc hashAcc pacc =
   let
-    hashA :: Int -> OpenAcc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashOpenAcc
+    hashA :: Int -> acc aenv' a -> Int
+    hashA salt = hashWithSalt salt . hashAcc
 
-    hashE :: Int -> OpenExp env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashOpenExp
+    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
 
-    hashF :: Int -> OpenFun env' aenv' f -> Int
-    hashF salt = hashWithSalt salt . hashOpenFun
+    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
+    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
     Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
-    Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple t
-    Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix `hashA` a
-    Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun f      `hashA` a
+    Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
+    Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a
+    Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
     Unit e                      -> hash "Unit"          `hashE` e
     Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
@@ -838,15 +848,15 @@ hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
-hashAtuple :: Tuple.Atuple (OpenAcc aenv) a -> Int
-hashAtuple NilAtup              = hash "NilAtup"
-hashAtuple (SnocAtup t a)       = hash "SnocAtup"       `hashWithSalt` hashAtuple t `hashWithSalt` hashOpenAcc a
+hashAtuple :: HashAcc acc -> Tuple.Atuple (acc aenv) a -> Int
+hashAtuple _ NilAtup            = hash "NilAtup"
+hashAtuple h (SnocAtup t a)     = hash "SnocAtup"       `hashWithSalt` hashAtuple h t `hashWithSalt` h a
 
-hashAfun :: OpenAfun aenv f -> Int
-hashAfun (Abody b)              = hash "Abody"          `hashWithSalt` hashOpenAcc b
-hashAfun (Alam f)               = hash "Alam"           `hashWithSalt` hashAfun f
+hashAfun :: HashAcc acc -> PreOpenAfun acc aenv f -> Int
+hashAfun h (Abody b)            = hash "Abody"          `hashWithSalt` h b
+hashAfun h (Alam f)             = hash "Alam"           `hashWithSalt` hashAfun h f
 
-hashBoundary :: forall aenv sh e. Elt e => OpenAcc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
+hashBoundary :: forall acc aenv sh e. Elt e => acc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
 hashBoundary _ Wrap             = hash "Wrap"
 hashBoundary _ Clamp            = hash "Clamp"
 hashBoundary _ Mirror           = hash "Mirror"
@@ -856,20 +866,23 @@ hashBoundary _ (Constant c)     = hash "Constant"       `hashWithSalt` show (toE
 -- Scalar expressions
 -- ------------------
 
-hashOpenExp :: forall env aenv exp. OpenExp env aenv exp -> Int
-hashOpenExp exp =
-  let
-    hashA :: Int -> OpenAcc aenv' a -> Int
-    hashA salt = hashWithSalt salt . hashOpenAcc
+hashOpenExp :: OpenExp env aenv exp -> Int
+hashOpenExp = hashPreOpenExp hashOpenAcc
 
-    hashE :: Int -> OpenExp env' aenv' e -> Int
-    hashE salt = hashWithSalt salt . hashOpenExp
+hashPreOpenExp :: forall acc env aenv exp. HashAcc acc -> PreOpenExp acc env aenv exp -> Int
+hashPreOpenExp hashAcc exp =
+  let
+    hashA :: Int -> acc aenv' a -> Int
+    hashA salt = hashWithSalt salt . hashAcc
+
+    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
 
   in case exp of
     Let bnd body                -> hash "Let"           `hashE` bnd `hashE` body
     Var ix                      -> hash "Var"           `hashWithSalt` hashIdx ix
     Const c                     -> hash "Const"         `hashWithSalt` show (toElt c :: exp)
-    Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple t
+    Tuple t                     -> hash "Tuple"         `hashWithSalt` hashTuple hashAcc t
     Prj i e                     -> hash "Prj"           `hashWithSalt` hashTupleIdx i `hashE` e
     IndexAny                    -> hash "IndexAny"
     IndexNil                    -> hash "IndexNil"
@@ -880,9 +893,9 @@ hashOpenExp exp =
     IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
     FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
-    Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t `hashE` e
-    Iterate n f x               -> hash "Iterate"       `hashE` n  `hashE` f `hashE` x
-    PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes f x)
+    Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
+    Iterate n f x               -> hash "Iterate"       `hashE` n  `hashE` f  `hashE` x
+    PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
     PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
     Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix
     LinearIndex a ix            -> hash "LinearIndex"   `hashA` a  `hashE` ix
@@ -891,13 +904,13 @@ hashOpenExp exp =
     Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
 
 
-hashOpenFun :: OpenFun env aenv f -> Int
-hashOpenFun (Body b)            = hash "Body"           `hashWithSalt` hashOpenExp b
-hashOpenFun (Lam f)             = hash "Lam"            `hashWithSalt` hashOpenFun f
+hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int
+hashPreOpenFun h (Body e)       = hash "Body"           `hashWithSalt` hashPreOpenExp h e
+hashPreOpenFun h (Lam f)        = hash "Lam"            `hashWithSalt` hashPreOpenFun h f
 
-hashTuple :: Tuple.Tuple (OpenExp env aenv) e -> Int
-hashTuple NilTup                = hash "NilTup"
-hashTuple (SnocTup t e)         = hash "SnocTup"        `hashWithSalt` hashTuple t `hashWithSalt` hashOpenExp e
+hashTuple :: HashAcc acc -> Tuple.Tuple (PreOpenExp acc env aenv) e -> Int
+hashTuple _ NilTup              = hash "NilTup"
+hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
 
 
 hashPrimConst :: PrimConst c -> Int
