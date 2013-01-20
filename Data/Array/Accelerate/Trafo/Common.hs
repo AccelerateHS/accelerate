@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -15,11 +16,17 @@
 
 module Data.Array.Accelerate.Trafo.Common (
 
+  -- Controlling optimisations
+  until,
+
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
   Delta(..), incAcc, prjAcc, lookupAcc,
 
 ) where
+
+-- standard library
+import Prelude                                          hiding ( until )
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -27,6 +34,20 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
 
 #include "accelerate.h"
+
+
+-- Repeatedly evaluate a transformation until no changes are made, or an
+-- iteration limit (10) is reached.
+--
+until :: forall f done. (f -> f -> Maybe done) -> (f -> f) -> f -> f
+until stop go = fix 0
+  where
+    fix :: Int -> f -> f
+    fix !i !x | i < lIMIT, Nothing <- stop x x'   = fix (i+1) x'
+              | otherwise                         = x'
+              where
+                !lIMIT = 10
+                !x'    = go x
 
 
 -- Environments

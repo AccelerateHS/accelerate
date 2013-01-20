@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp )
+import Prelude                                          hiding ( exp, until )
 import Data.List                                        ( intercalate )
 import Data.Maybe                                       ( fromMaybe )
 import Data.Typeable
@@ -259,13 +259,13 @@ simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun env' aenv f)
 
 simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
 simplifyExp aenv
-  = shrinkE
-  . simplifyOpenExp EmptyExp aenv
+  = until matchOpenExp (shrinkE . simplifyOpenExp EmptyExp aenv)
+  . shrinkE
 
 simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
 simplifyFun aenv
-  = shrinkFE
-  . simplifyOpenFun EmptyExp aenv
+  = until matchOpenFun (shrinkFE . simplifyOpenFun EmptyExp aenv)
+  . shrinkFE
 
 
 -- Array computations
@@ -306,7 +306,7 @@ simplifyOpenAcc
     => Delta aenv aenv
     -> OpenAcc aenv arrs
     -> OpenAcc aenv arrs
-simplifyOpenAcc aenv = cvtA . shrinkOpenAcc
+simplifyOpenAcc aenv = shrinkOpenAcc . cvtA . shrinkOpenAcc
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of

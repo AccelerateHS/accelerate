@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -45,17 +44,6 @@ fuseAcc = until matchOpenAcc fuseOpenAcc
 --
 fuseAfun :: Afun f -> Afun f
 fuseAfun = until matchOpenAfun fuseOpenAfun
-
-
-until :: forall f done. (f -> f -> Maybe done) -> (f -> f) -> f -> f
-until stop go = fix 0
-  where
-    fix :: Int -> f -> f
-    fix !i !x | i < lIMIT, Nothing <- stop x x'   = fix (i+1) x'
-              | otherwise                         = x'
-              where
-                !lIMIT = 10
-                !x'    = go x
 
 
 -- | Convert an array computation into an embeddable delayed representation.
