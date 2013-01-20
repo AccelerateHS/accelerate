@@ -267,12 +267,8 @@ evalAdd' (untup2 -> Just (x,y)) env
   , a == 0
   = Just y
 
-  | Just a      <- propagate env x
-  , Just b      <- propagate env y
-  = Just $ Const (fromElt (a+b))
-
-evalAdd' _ _
-  = Nothing
+evalAdd' arg env
+  = eval2 (+) arg env
 
 
 evalSub :: Elt a => NumType a -> (a,a) :-> a
@@ -289,15 +285,11 @@ evalSub' ty (untup2 -> Just (x,y)) env
   , Just b      <- propagate env y
   = Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just a      <- propagate env x
-  , Just b      <- propagate env y
-  = Just $ Const (fromElt (a-b))
-
   | Just REFL   <- matchOpenExp x y
   = Just $ Const (fromElt (0::a))       -- TLM: definitely the purview of rewrite rules
 
-evalSub' _ _ _
-  = Nothing
+evalSub' _ arg env
+  = eval2 (-) arg env
 
 
 evalMul :: Elt a => NumType a -> (a,a) :-> a
@@ -313,13 +305,8 @@ evalMul' (untup2 -> Just (x,y)) env
       1         -> Just y
       _         -> Nothing
 
-  | Just a      <- propagate env x
-  , Just b      <- propagate env y
-  = Just $ Const (fromElt (a * b))
-
-evalMul' _ _
-  = Nothing
-
+evalMul' arg env
+  = eval2 (*) arg env
 
 evalNeg :: Elt a => NumType a -> a :-> a
 evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 negate
@@ -344,7 +331,15 @@ evalRem :: Elt a => IntegralType a -> (a,a) :-> a
 evalRem ty | IntegralDict <- integralDict ty = eval2 rem
 
 evalIDiv :: Elt a => IntegralType a -> (a,a) :-> a
-evalIDiv ty | IntegralDict <- integralDict ty = eval2 div
+evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
+
+evalIDiv' :: (Elt a, Integral a, Eq a) => (a,a) :-> a
+evalIDiv' (untup2 -> Just (x,y)) env
+  | Just 1      <- propagate env y
+  = Just x
+
+evalIDiv' arg env
+  = eval2 div arg env
 
 evalMod :: Elt a => IntegralType a -> (a,a) :-> a
 evalMod ty | IntegralDict <- integralDict ty = eval2 mod
@@ -378,7 +373,16 @@ evalBRotateR ty | IntegralDict <- integralDict ty = eval2 rotateR
 -- --------------------------------
 
 evalFDiv :: Elt a => FloatingType a -> (a,a) :-> a
-evalFDiv ty | FloatingDict <- floatingDict ty = eval2 (/)
+evalFDiv ty | FloatingDict <- floatingDict ty = evalFDiv'
+
+evalFDiv' :: (Elt a, Fractional a, Eq a) => (a,a) :-> a
+evalFDiv' (untup2 -> Just (x,y)) env
+  | Just 1      <- propagate env y
+  = Just x
+
+evalFDiv' arg env
+  = eval2 (/) arg env
+
 
 evalRecip :: Elt a => FloatingType a -> a :-> a
 evalRecip ty | FloatingDict <- floatingDict ty = eval1 recip
