@@ -566,7 +566,7 @@ instance Eq (StableASTName c) where
     | otherwise              = False
 
 instance Hashable (StableASTName c) where
-  hash (StableASTName sn) = hashStableName sn
+  hashWithSalt _ (StableASTName sn) = hashStableName sn
 
 makeStableAST :: c t -> IO (StableName (c t))
 makeStableAST e = e `seq` makeStableName e

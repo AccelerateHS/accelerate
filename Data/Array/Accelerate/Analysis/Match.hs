@@ -776,48 +776,48 @@ hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
 
 hashOpenFun :: OpenFun env aenv f -> Int
-hashOpenFun (Lam  f) = hash "Lam"  `combine` hashOpenFun f
-hashOpenFun (Body e) = hash "Body" `combine` hashOpenExp e
+hashOpenFun (Lam  f) = hash "Lam"  `hashWithSalt` hashOpenFun f
+hashOpenFun (Body e) = hash "Body" `hashWithSalt` hashOpenExp e
 
 
 hashOpenExp :: forall env aenv e. OpenExp env aenv e -> Int
-hashOpenExp (Let x e)                   = hash "Let"            `combine` hashOpenExp x  `combine` hashOpenExp e
-hashOpenExp (Var ix)                    = hash "Var"            `combine` hashIdx ix
+hashOpenExp (Let x e)                   = hash "Let"            `hashWithSalt` hashOpenExp x  `hashWithSalt` hashOpenExp e
+hashOpenExp (Var ix)                    = hash "Var"            `hashWithSalt` hashIdx ix
 hashOpenExp (Const c)                   = hash "Const"          `hashWithSalt` show (toElt c :: e)
-hashOpenExp (Tuple t)                   = hash "Tuple"          `combine` hashTuple t
-hashOpenExp (Prj ix e)                  = hash "Prj"            `combine` hashTupleIdx ix `combine` hashOpenExp e
+hashOpenExp (Tuple t)                   = hash "Tuple"          `hashWithSalt` hashTuple t
+hashOpenExp (Prj ix e)                  = hash "Prj"            `hashWithSalt` hashTupleIdx ix `hashWithSalt` hashOpenExp e
 hashOpenExp IndexAny                    = hash "IndexAny"
 hashOpenExp IndexNil                    = hash "IndexNil"
-hashOpenExp (IndexCons sl a)            = hash "IndexCons"      `combine` hashOpenExp sl `combine` hashOpenExp a
-hashOpenExp (IndexHead sl)              = hash "IndexHead"      `combine` hashOpenExp sl
-hashOpenExp (IndexTail sl)              = hash "IndexTail"      `combine` hashOpenExp sl
-hashOpenExp (IndexSlice spec ix sh)     = hash "IndexSlice"     `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sh
-hashOpenExp (IndexFull  spec ix sl)     = hash "IndexFull"      `hashWithSalt` show spec `combine` hashOpenExp ix `combine` hashOpenExp sl
-hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `combine` hashOpenExp sh `combine` hashOpenExp i
-hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `combine` hashOpenExp sh `combine` hashOpenExp i
-hashOpenExp (Cond c t e)                = hash "Cond"           `combine` hashOpenExp c  `combine` hashOpenExp t `combine` hashOpenExp e
-hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `combine` hashOpenFun f `combine` hashOpenExp x
-hashOpenExp (PrimApp f x)               = hash "PrimApp"        `combine` hashPrimFun f  `combine` hashOpenExp (maybe x id (commutes f x))
-hashOpenExp (PrimConst c)               = hash "PrimConst"      `combine` hashPrimConst c
+hashOpenExp (IndexCons sl a)            = hash "IndexCons"      `hashWithSalt` hashOpenExp sl `hashWithSalt` hashOpenExp a
+hashOpenExp (IndexHead sl)              = hash "IndexHead"      `hashWithSalt` hashOpenExp sl
+hashOpenExp (IndexTail sl)              = hash "IndexTail"      `hashWithSalt` hashOpenExp sl
+hashOpenExp (IndexSlice spec ix sh)     = hash "IndexSlice"     `hashWithSalt` show spec `hashWithSalt` hashOpenExp ix `hashWithSalt` hashOpenExp sh
+hashOpenExp (IndexFull  spec ix sl)     = hash "IndexFull"      `hashWithSalt` show spec `hashWithSalt` hashOpenExp ix `hashWithSalt` hashOpenExp sl
+hashOpenExp (ToIndex sh i)              = hash "ToIndex"        `hashWithSalt` hashOpenExp sh `hashWithSalt` hashOpenExp i
+hashOpenExp (FromIndex sh i)            = hash "FromIndex"      `hashWithSalt` hashOpenExp sh `hashWithSalt` hashOpenExp i
+hashOpenExp (Cond c t e)                = hash "Cond"           `hashWithSalt` hashOpenExp c  `hashWithSalt` hashOpenExp t `hashWithSalt` hashOpenExp e
+hashOpenExp (Iterate n f x)             = hash "Iterate"        `hashWithSalt` n         `hashWithSalt` hashOpenFun f `hashWithSalt` hashOpenExp x
+hashOpenExp (PrimApp f x)               = hash "PrimApp"        `hashWithSalt` hashPrimFun f  `hashWithSalt` hashOpenExp (maybe x id (commutes f x))
+hashOpenExp (PrimConst c)               = hash "PrimConst"      `hashWithSalt` hashPrimConst c
 hashOpenExp (Index a ix)
-  | OpenAcc (Avar v) <- a               = hash "Index"          `combine` hashIdx v      `combine` hashOpenExp ix
+  | OpenAcc (Avar v) <- a               = hash "Index"          `hashWithSalt` hashIdx v      `hashWithSalt` hashOpenExp ix
   | otherwise                           = error "hash: Index: expected array variable"
 --
 hashOpenExp (LinearIndex a ix)
-  | OpenAcc (Avar v) <- a               = hash "LinearIndex"    `combine` hashIdx v      `combine` hashOpenExp ix
+  | OpenAcc (Avar v) <- a               = hash "LinearIndex"    `hashWithSalt` hashIdx v      `hashWithSalt` hashOpenExp ix
   | otherwise                           = error "hash: LinearIndex: expected array variable"
 --
 hashOpenExp (Shape a)
-  | OpenAcc (Avar v) <- a               = hash "Shape"          `combine` hashIdx v
+  | OpenAcc (Avar v) <- a               = hash "Shape"          `hashWithSalt` hashIdx v
   | otherwise                           = error "hash: Shape: expected array variable"
 --
-hashOpenExp (ShapeSize sh)              = hash "ShapeSize"      `combine` hashOpenExp sh
-hashOpenExp (Intersect sa sb)           = hash "Intersect"      `combine` hashOpenExp sa `combine` hashOpenExp sb
+hashOpenExp (ShapeSize sh)              = hash "ShapeSize"      `hashWithSalt` hashOpenExp sh
+hashOpenExp (Intersect sa sb)           = hash "Intersect"      `hashWithSalt` hashOpenExp sa `hashWithSalt` hashOpenExp sb
 
 
 hashTuple :: Tuple.Tuple (OpenExp env aenv) e -> Int
 hashTuple NilTup                        = hash "NilTup"
-hashTuple (SnocTup t e)                 = hash "SnocTup"        `combine` hashTuple t `combine` hashOpenExp e
+hashTuple (SnocTup t e)                 = hash "SnocTup"        `hashWithSalt` hashTuple t `hashWithSalt` hashOpenExp e
 
 
 hashPrimConst :: PrimConst c -> Int
