@@ -169,10 +169,14 @@ commutes f x env = case f of
       , Just _          <- propagate env b
       = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
-      | Nothing         <- propagate env a
-      , Nothing         <- propagate env b
-      , hashOpenExp a > hashOpenExp b
-      = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
+--    TLM: changing the ordering here when neither term can be reduced can be
+--         disadvantageous: for example in (x &&* y), the user might have put a
+--         simpler condition first that is designed to fail fast.
+--
+--      | Nothing         <- propagate env a
+--      , Nothing         <- propagate env b
+--      , hashOpenExp a > hashOpenExp b
+--      = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
     swizzle _
       = Nothing
