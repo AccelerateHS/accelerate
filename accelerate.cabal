@@ -68,6 +68,21 @@ Stability:              Experimental
 Extra-source-files:     INSTALL
                         include/accelerate.h
 
+Flag debug
+  Description:
+    Enable tracing message flags. These are read from the command-line
+    arguments, which is convenient but may cause problems interacting with the
+    user program, so are disabled by default. The available options are:
+    .
+    * -ddump-sharing: print sharing recovery information
+    .
+    * -ddump-simpl-stats: dump statistics counts from the simplifier phase
+    .
+    * -ddump-simpl-iterations: dump the program after each iteration of the simplifier
+    .
+    * -dverbose: other, uncategorised messages
+    .
+
 Flag llvm
   Description:          Enable the LLVM backend (sequential)
   Default:              False
@@ -93,6 +108,7 @@ Library
   Build-depends:        array           >= 0.3,
                         base            == 4.*,
                         containers      >= 0.3,
+                        fclabels        >= 1.0,
                         ghc-prim        >= 0.2,
                         hashable        >= 1.1,
                         hashtables      >= 1.0,
@@ -142,6 +158,9 @@ Library
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
                         Data.Array.Accelerate.Pretty.Graphviz
+
+  if flag(debug)
+    cpp-options:        -DACCELERATE_DEBUG
 
   if flag(bounds-checks)
     cpp-options:        -DACCELERATE_BOUNDS_CHECKS

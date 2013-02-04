@@ -224,15 +224,10 @@ module Data.Array.Accelerate (
   -- *** 'Data.Array.IArray.IArray'
   S.fromIArray, S.toIArray,
 
-  -- * Miscellaneous
-  -- ** Diagnostics
-  initTrace
-
 ) where
 
 -- friends
 import Data.Array.Accelerate.Trafo                  () -- show instances
-import Data.Array.Accelerate.Debug                  (initTrace)
 import qualified Data.Array.Accelerate.Array.Sugar  as S
 import qualified Data.Array.Accelerate.Language     as L
 import qualified Data.Array.Accelerate.Prelude      as P

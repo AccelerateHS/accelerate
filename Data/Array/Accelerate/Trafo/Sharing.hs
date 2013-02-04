@@ -39,7 +39,6 @@ import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 
 -- friends
-import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
@@ -47,6 +46,7 @@ import Data.Array.Accelerate.AST                        hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
+import qualified Data.Array.Accelerate.Debug            as Debug
 
 #include "accelerate.h"
 
@@ -1990,6 +1990,22 @@ recoverSharingExp config lvl fvar exp
 
 -- Debugging
 -- ---------
+
+traceLine :: String -> String -> IO ()
+traceLine header msg
+  = Debug.traceMessage Debug.dump_sharing
+  $ header ++ ": " ++ msg
+
+traceChunk :: String -> String -> IO ()
+traceChunk header msg
+  = Debug.traceMessage Debug.dump_sharing
+  $ header ++ "\n      " ++ msg
+
+tracePure :: String -> String -> a -> a
+tracePure header msg
+  = Debug.tracePure Debug.dump_sharing
+  $ header ++ ": " ++ msg
+
 
 showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
 showPreAccOp (Atag i)           = "Atag " ++ show i
