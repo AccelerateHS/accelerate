@@ -20,22 +20,31 @@
 
 module Data.Array.Accelerate.Debug (
 
-  -- * Conditional tracing
+  -- * Dynamic debugging flags
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, verbose,
   queryFlag, setFlag,
 
+  -- * Tracing
   traceMessage, traceEvent, tracePure,
+
+  -- * Statistics
+  inline, ruleFired, knownBranch, betaReduce, substitution, simplifierDone, fusionDone,
+  resetSimplCount,
 
 ) where
 
 -- standard libraries
+import Data.Function                            ( on )
 import Data.IORef
 import Data.Label
-import Data.List
+import Data.List                                ( groupBy, sortBy, isPrefixOf )
+import Data.Ord                                 ( comparing )
 import Numeric
+import Text.PrettyPrint
 import System.CPUTime
 import System.Environment
 import System.IO.Unsafe                         ( unsafePerformIO )
+import qualified Data.Map.Strict                as Map
 
 -- friends
 import Data.Array.Accelerate.Pretty ()
@@ -62,16 +71,16 @@ data FlagSpec flag = Option String              -- external form
 data Flags = Flags
   {
     -- debugging
-    _dump_sharing               :: Bool         -- sharing recovery phase
-  , _dump_simpl_stats           :: Bool         -- statistics form fusion/simplification
-  , _dump_simpl_iterations      :: Bool         -- output from each simplifier iteration
-  , _verbose                    :: Bool         -- additional, uncategorised status messages
+    _dump_sharing               :: !Bool                -- sharing recovery phase
+  , _dump_simpl_stats           :: !Bool                -- statistics form fusion/simplification
+  , _dump_simpl_iterations      :: !Bool                -- output from each simplifier iteration
+  , _verbose                    :: !Bool                -- additional, uncategorised status messages
 
     -- functionality / phase control
-  , _acc_sharing                :: Maybe Bool   -- recover sharing of array computations
-  , _exp_sharing                :: Maybe Bool   -- recover sharing of scalar expressions
-  , _fusion                     :: Maybe Bool   -- fuse array expressions
-  , _simplify                   :: Maybe Bool   -- simplify scalar expressions
+  , _acc_sharing                :: !(Maybe Bool)        -- recover sharing of array computations
+  , _exp_sharing                :: !(Maybe Bool)        -- recover sharing of scalar expressions
+  , _fusion                     :: !(Maybe Bool)        -- fuse array expressions
+  , _simplify                   :: !(Maybe Bool)        -- simplify scalar expressions
   }
 
 $(mkLabels [''Flags])
@@ -151,8 +160,8 @@ when _ _        = return ()
 #endif
 
 
+-- -----------------------------------------------------------------------------
 -- Trace messages
--- --------------
 
 -- Emit a trace message if the corresponding debug flag is set.
 --
@@ -184,4 +193,161 @@ tracePure f msg next = unsafePerformIO (traceMessage f msg) `seq` next
 #else
 tracePure _ _   next = next
 #endif
+
+
+-- -----------------------------------------------------------------------------
+-- Recording statistics
+
+ruleFired, inline, knownBranch, betaReduce, substitution :: String -> a -> a
+inline          = annotate Inline
+ruleFired       = annotate RuleFired
+knownBranch     = annotate KnownBranch
+betaReduce      = annotate BetaReduce
+substitution    = annotate Substitution
+
+simplifierDone, fusionDone :: a -> a
+simplifierDone  = tick SimplifierDone
+fusionDone      = tick FusionDone
+
+
+-- Add an entry to the statistics counters
+--
+tick :: Tick -> a -> a
+tick t next = unsafePerformIO (modifyIORef' statistics (simplTick t)) `seq` next
+
+-- Add an entry to the statistics counters with an annotation
+--
+annotate :: (Id -> Tick) -> String -> a -> a
+annotate name ctx = tick (name (Id ctx))
+
+
+-- Simplifier counts
+-- -----------------
+
+data SimplStats
+  = Simple         {-# UNPACK #-} !Int          -- when we don't want detailed stats
+
+  | Detail {
+      ticks     :: {-# UNPACK #-} !Int,         -- total ticks
+      details   :: !TickCount                   -- how many of each type
+    }
+
+instance Show SimplStats where
+  show = render . pprSimplCount
+
+
+-- Stores the current statistics counters
+--
+{-# NOINLINE statistics #-}
+statistics :: IORef SimplStats
+statistics = unsafePerformIO $ newIORef =<< initSimplCount
+
+
+-- Initialise the statistics counters. If we are dumping the stats
+-- (-ddump-simpl-stats) record extra information, else just a total tick count.
+--
+initSimplCount :: IO SimplStats
+#ifdef ACCELERATE_DEBUG
+initSimplCount = do
+  d <- queryFlag dump_simpl_stats
+  return $! if d then Detail { ticks = 0, details = Map.empty }
+                 else Simple 0
+#else
+initSimplCount = return $! Simple 0
+#endif
+
+-- Reset the statistics counters. Do this at the beginning at each HOAS -> de
+-- Bruijn conversion + optimisation pass.
+--
+resetSimplCount :: IO ()
+resetSimplCount = writeIORef statistics =<< initSimplCount
+
+-- Tick a counter
+--
+simplTick :: Tick -> SimplStats -> SimplStats
+simplTick _ (Simple n)     = Simple (n+1)
+simplTick t (Detail n dts) = Detail (n+1) (dts `addTick` t)
+
+-- Pretty print the tick counts. Remarkably reminiscent of GHC style...
+--
+pprSimplCount :: SimplStats -> Doc
+pprSimplCount (Simple n)     = text "Total ticks:" <+> int n
+pprSimplCount (Detail n dts)
+  = vcat [ text "Total ticks:" <+> int n
+         , text ""
+         , pprTickCount dts
+         ]
+
+
+-- Ticks
+-- -----
+
+type TickCount = Map.Map Tick Int
+
+data Id = Id String
+  deriving (Eq, Ord)
+
+data Tick
+  = Inline              Id
+  | RuleFired           Id
+  | KnownBranch         Id
+  | BetaReduce          Id
+  | Substitution        Id
+
+  -- tick at each iteration
+  | SimplifierDone
+  | FusionDone
+  deriving (Eq, Ord)
+
+
+addTick :: TickCount -> Tick -> TickCount
+addTick tc t =
+  let x = 1 + Map.findWithDefault 0 t tc
+  in  x `seq` Map.insert t x tc
+
+pprTickCount :: TickCount -> Doc
+pprTickCount counts =
+  vcat (map pprTickGroup groups)
+  where
+    groups  = groupBy sameTag (Map.toList counts)
+    sameTag = (==) `on` tickToTag . fst
+
+pprTickGroup :: [(Tick,Int)] -> Doc
+pprTickGroup []    = error "pprTickGroup"
+pprTickGroup group =
+  hang (int groupTotal <+> text groupName)
+     2 (vcat [ int n <+> pprTickCtx t | (t,n) <- sortBy (flip (comparing snd)) group ])
+  where
+    groupName  = tickToStr (fst (head group))
+    groupTotal = sum [n | (_,n) <- group]
+
+tickToTag :: Tick -> Int
+tickToTag Inline{}              = 0
+tickToTag RuleFired{}           = 1
+tickToTag KnownBranch{}         = 2
+tickToTag BetaReduce{}          = 3
+tickToTag Substitution{}        = 4
+tickToTag SimplifierDone        = 99
+tickToTag FusionDone            = 100
+
+tickToStr :: Tick -> String
+tickToStr Inline{}              = "Inline"
+tickToStr RuleFired{}           = "RuleFired"
+tickToStr KnownBranch{}         = "KnownBranch"
+tickToStr BetaReduce{}          = "BetaReduce"
+tickToStr Substitution{}        = "Substitution"
+tickToStr SimplifierDone        = "SimplifierDone"
+tickToStr FusionDone            = "FusionDone"
+
+pprTickCtx :: Tick -> Doc
+pprTickCtx (Inline v)           = pprId v
+pprTickCtx (RuleFired v)        = pprId v
+pprTickCtx (KnownBranch v)      = pprId v
+pprTickCtx (BetaReduce v)       = pprId v
+pprTickCtx (Substitution v)     = pprId v
+pprTickCtx SimplifierDone       = empty
+pprTickCtx FusionDone           = empty
+
+pprId :: Id -> Doc
+pprId (Id s) = text s
 
