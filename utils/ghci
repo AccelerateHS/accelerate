@@ -15,6 +15,7 @@ VER=`$GHC --numeric-version`
 #
 $GHC -DACCELERATE_BOUNDS_CHECKS \
      -DACCELERATE_INTERNAL_CHECKS \
+     -DACCELERATE_DEBUG \
      -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h \
      $@
 
