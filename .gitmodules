@@ -15,4 +15,4 @@
 	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
 [submodule "accelerate-cpu"]
 	path = accelerate-cpu
-	url = https://github.com/rrnewton/accelerate-cpu.git
+	url = https://github.com/iu-parfunc/accelerate-cpu.git
