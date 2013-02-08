@@ -266,6 +266,10 @@ Executable accelerate-nbody
                         Solver.BarnsHut
                         Solver.Naive
 
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
   if flag(gui)
     cpp-options:        -DACCELERATE_ENABLE_GUI
 
@@ -274,6 +278,37 @@ Executable accelerate-nbody
     build-depends:      accelerate-cuda         >= 0.13
 
   Build-depends:        accelerate              >= 0.13,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        gloss                   >= 1.7
+
+
+-- A celular automata
+
+Executable accelerate-smoothlife
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/smoothlife
+  other-modules:        Config
+                        Smoothlife
+                        Gloss.Draw
+                        Gloss.Event
+                        Gloss.Simulate
+                        Random.Array
+
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(gui)
+    cpp-options:        -DACCELERATE_ENABLE_GUI
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.13
+
+  Build-depends:        accelerate              >= 0.13,
+                        accelerate-fft          >= 0.13,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
