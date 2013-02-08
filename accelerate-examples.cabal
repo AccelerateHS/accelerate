@@ -120,9 +120,12 @@ Executable accelerate-examples
   c-sources:            examples/tests/io/fill_with_values.cpp
   extra-libraries:      stdc++
 
-  ghc-options:          -Wall -O2
+  ghc-options:          -Wall -O2 -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
+
+  if impl(ghc >= 7.6)
+    ghc-options:        -fsimpl-tick-factor=130
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
@@ -163,7 +166,7 @@ Executable accelerate-crystal
   hs-source-dirs:       examples/crystal
   Main-is:              Main.hs
   other-modules:        Config
-  ghc-options:          -O2 -Wall
+  ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -190,7 +193,7 @@ Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot
   Main-is:              Main.hs
   other-modules:        Config World Mandel
-  ghc-options:          -O2 -Wall
+  ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -223,7 +226,9 @@ Executable accelerate-fluid
                         Type
                         World
 
-  ghc-options:          -O2 -Wall
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
