@@ -36,6 +36,7 @@ import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Common
 import Data.Array.Accelerate.Trafo.Algebra
+import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape, toElt, fromElt )
 
