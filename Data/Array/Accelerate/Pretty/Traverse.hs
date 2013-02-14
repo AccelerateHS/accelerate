@@ -72,6 +72,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
+    travAcc' (Foreign ff afun acc)                 = combine ("Foreign " ++ strForeign ff) [travAfun f c l afun, travAcc f c l acc]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

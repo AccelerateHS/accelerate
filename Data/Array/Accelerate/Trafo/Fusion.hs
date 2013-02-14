@@ -223,6 +223,7 @@ delayOpenAcc (OpenAcc pacc) =
     Aprj ix arrs        -> done $ Aprj ix (fuseOpenAcc arrs)
     Apply f a           -> done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
     Acond p acc1 acc2   -> done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
+    Foreign ff afun acc -> done $ Foreign ff (fuseOpenAfun afun) (fuseOpenAcc acc)
 
     -- Array injection
     --
@@ -723,6 +724,7 @@ aletD bndAcc bodyAcc =
         Backpermute sh f a  -> usesOfEA idx sh + usesOfFA idx f + usesOf idx a
         Stencil f _ a       -> usesOfFA idx f + usesOf idx a
         Stencil2 f _ a1 _ a2-> usesOfFA idx f + usesOf idx a1 + usesOf idx a2
+        Foreign _ _ a       -> usesOf idx a
 
     usesOfATA :: Idx aenv s -> Atuple (OpenAcc aenv) t -> Int
     usesOfATA idx atup =

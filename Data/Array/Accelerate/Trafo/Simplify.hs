@@ -357,6 +357,7 @@ simplifyOpenAcc aenv = shrinkOpenAcc . cvtA . shrinkOpenAcc
           Backpermute sh f a            -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
           Stencil f b a                 -> Stencil (cvtF f) b (cvtA a)
           Stencil2 f b1 a1 b2 a2        -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+          Foreign ff afun a             -> Foreign ff (simplifyAfun afun) (cvtA a)
 
 
 simplifyOpenAfun :: Delta aenv aenv -> OpenAfun aenv t -> OpenAfun aenv t
