@@ -54,12 +54,7 @@ import qualified Data.Array.Accelerate.Array.Representation as Repr
 -- an instance.
 -- --------------------------------------------------------------------------------
 --
-class ForeignFun (f :: * -> * -> *) where
-  data BackendRepr args results
-
-  -- Conversion to and from the backend represention of the foreign function
-  toBackendRepr :: f args results -> BackendRepr args results
-
+class (Typeable2 f) => ForeignFun (f :: * -> * -> *) where
   -- Backends should be able to produce a string representation of the foreign function
   -- for pretty printing. It should contain the backend name and ideally a string uniquely
   -- identifying the foreign function being used.
