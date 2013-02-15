@@ -67,6 +67,9 @@ module Data.Array.Accelerate.Language (
   -- ** Stencil operations
   stencil, stencil2,
 
+  -- ** Foreign functions
+  foreignAcc, foreignAcc2, foreignAcc3,
+
   -- ** Pipelining
   (>->),
 
@@ -463,6 +466,38 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
         -> Acc (Array ix c)                   -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
 
+-- Foreign function calling
+-- ------------------------
+
+-- | Call a foreign function. The form the function takes is dependent on the backend being used.
+-- The arguments are passed as either a single array or as a tuple of arrays. In addition a pure
+-- Accelerate version of the function needs to be provided to support backends other than the one
+-- the one being targeted.
+foreignAcc :: (Arrays acc, Arrays res, ForeignFun ff) 
+           => ff acc res 
+           -> (Acc acc -> Acc res) 
+           -> Acc acc 
+           -> Acc res
+foreignAcc = Acc $$$ Foreign
+
+-- | Call a foreign function with foreign implementations for two different backends.
+foreignAcc2 :: (Arrays acc, Arrays res, ForeignFun ff1, ForeignFun ff2) 
+            => ff1 acc res 
+            -> ff2 acc res
+            -> (Acc acc -> Acc res) 
+            -> Acc acc 
+            -> Acc res
+foreignAcc2 ff1 = Acc $$$ Foreign ff1 $$ Acc $$$ Foreign
+
+-- | Call a foreign function with foreign implementations for three different backends.
+foreignAcc3 :: (Arrays acc, Arrays res, ForeignFun ff1, ForeignFun ff2, ForeignFun ff3) 
+            => ff1 acc res 
+            -> ff2 acc res
+            -> ff3 acc res
+            -> (Acc acc -> Acc res) 
+            -> Acc acc 
+            -> Acc res
+foreignAcc3 ff1 ff2 = Acc $$$ Foreign ff1 $$ Acc $$$ Foreign ff2 $$ Acc $$$ Foreign
 
 -- Composition of array computations
 -- ---------------------------------

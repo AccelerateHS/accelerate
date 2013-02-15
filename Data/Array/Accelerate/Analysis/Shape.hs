@@ -75,6 +75,9 @@ preAccDim k pacc =
     Backpermute _ _ _    -> ndim (eltType (undefined::sh))
     Stencil _ _ acc      -> k acc
     Stencil2 _ _ acc _ _ -> k acc
+    Foreign _ _ _        -> case arrays' (undefined :: Array sh e) of
+                              ArraysRarray -> ndim (eltType (undefined::sh))
+                              _            -> error "Ummmmm"
 
 
 -- |Reify dimensionality of a scalar expression yielding a shape

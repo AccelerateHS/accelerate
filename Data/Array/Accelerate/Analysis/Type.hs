@@ -108,6 +108,9 @@ preAccType k pacc =
     Backpermute _ _ acc -> k acc
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
+    Foreign _ _ _       -> case arrays' (undefined :: Array sh e) of
+                             ArraysRarray -> eltType (undefined::e)
+                             _            -> error "Who on earth wrote all these weird error messages?"
 
 
 -- |Reify the result type of a scalar expression.
