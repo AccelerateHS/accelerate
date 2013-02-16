@@ -261,12 +261,10 @@ simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun env' aenv f)
 simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
 simplifyExp aenv
   = until matchOpenExp (shrinkE . simplifyOpenExp EmptyExp aenv)
-  . shrinkE
 
 simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
 simplifyFun aenv
   = until matchOpenFun (shrinkFE . simplifyOpenFun EmptyExp aenv)
-  . shrinkFE
 
 
 -- Array computations
@@ -307,7 +305,7 @@ simplifyOpenAcc
     => Delta aenv aenv
     -> OpenAcc aenv arrs
     -> OpenAcc aenv arrs
-simplifyOpenAcc aenv = shrinkOpenAcc . cvtA . shrinkOpenAcc
+simplifyOpenAcc aenv = shrinkOpenAcc . cvtA
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of
