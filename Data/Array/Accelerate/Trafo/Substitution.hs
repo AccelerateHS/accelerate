@@ -329,6 +329,7 @@ rebuildA rebuild v acc =
     Stencil f b a       -> Stencil (rebuildFA rebuild v f) b (rebuild v a)
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
+    Foreign ff afun as  -> Foreign ff afun (rebuild v as)
 
 
 -- Rebuilding array computations
@@ -587,6 +588,7 @@ shrinkA k s u pacc =
     Stencil f b a       -> Stencil (shrinkFA s f) b (s a)
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (shrinkFA s f) b1 (s a1) b2 (s a2)
+    Foreign ff afun a   -> Foreign ff afun $ s a
 
 
 shrinkAfun :: ShrinkAcc acc -> PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
@@ -678,6 +680,7 @@ usesOfA u idx acc =
     Backpermute sh f a  -> usesOfEA u idx sh + usesOfFA u idx f + u idx a
     Stencil f _ a       -> usesOfFA u idx f + u idx a
     Stencil2 f _ a1 _ a2-> usesOfFA u idx f + u idx a1 + u idx a2
+    Foreign _ _ a       -> u idx a
 
 usesOfATA :: UsesOfAcc acc -> Idx aenv s -> Atuple (acc aenv) t -> Int
 usesOfATA s idx atup =

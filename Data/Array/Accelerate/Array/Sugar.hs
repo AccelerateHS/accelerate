@@ -35,7 +35,7 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Miscellaneous
-  showShape,
+  showShape, ForeignFun(..)
 
 ) where
 
@@ -48,6 +48,17 @@ import qualified Data.Array.IArray      as IArray
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
+
+-- Class for backends to choose their own representation of foreign functions.
+-- By default it has no instances. If a backend wishes to have an FFI it must provide
+-- an instance.
+-- --------------------------------------------------------------------------------
+--
+class (Typeable2 f) => ForeignFun (f :: * -> * -> *) where
+  -- Backends should be able to produce a string representation of the foreign function
+  -- for pretty printing. It should contain the backend name and ideally a string uniquely
+  -- identifying the foreign function being used.
+  strForeign :: f args results -> String
 
 
 -- Surface types representing array indices and slices

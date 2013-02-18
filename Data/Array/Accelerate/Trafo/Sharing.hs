@@ -258,6 +258,11 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
+      Foreign ff afun acc         -> let a = recoverAccSharing config
+                                         e = recoverExpSharing config
+                                         f = floatOutAcc config
+                                     in 
+                                     AST.Foreign ff (convertAccFun1 a e f afun) (cvtA acc) 
 
 convertSharingAtuple
     :: forall aenv a.
@@ -1008,6 +1013,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc2', h3) <- traverseAcc lvl acc2
                                              return (Stencil2 s' bnd1 acc1' bnd2 acc2',
                                                      h1 `max` h2 `max` h3 + 1)
+
+            Foreign ff afun acc         -> reconstruct $ travA (Foreign ff afun) acc
+
       where
         travA :: Arrays arrs'
               => (SharingAcc arrs' -> PreAcc SharingAcc RootExp arrs)
@@ -1554,6 +1562,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
                                        (accCount1 +++ accCount2 +++ accCount3)
+          Foreign ff afun acc        -> let
+                                       (acc', accCount) = scopesAcc acc
+                                     in 
+                                     reconstruct (Foreign ff afun acc') accCount
       where
         travEA :: Arrays arrs
                => (RootExp e -> SharingAcc arrs' -> PreAcc SharingAcc RootExp arrs)
@@ -2035,6 +2047,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
+showPreAccOp Foreign{}          = "Foreign"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

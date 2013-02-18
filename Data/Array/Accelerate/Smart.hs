@@ -250,6 +250,12 @@ data PreAcc acc exp as where
               -> acc (Array sh b)
               -> PreAcc acc exp (Array sh c)
 
+  Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
+              => ff arrs results
+              -> (Acc arrs -> Acc results)
+              -> acc arrs
+              -> PreAcc acc exp results
+
 -- |Array-valued collective computations
 --
 newtype Acc a = Acc (PreAcc Acc Exp a)

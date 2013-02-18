@@ -254,6 +254,12 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
+    match (Foreign _ f1 a1) (Foreign _ f2 a2)
+      | Just REFL <- matchAcc a1 a2
+      , Just REFL <- matchPreOpenAfun matchAcc f1 f2 -- If the pure accelerate versions of the function match, 
+                                                     -- then we assume the foreign ones do as well.
+      = Just REFL
+
     match _ _
       = Nothing
 
@@ -883,6 +889,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
+    Foreign _ f a               -> hash "Foreign"       `hashWithSalt` hashAfun hashAcc f `hashA` a
 
 
 hashArrays :: ArraysR a -> a -> Int

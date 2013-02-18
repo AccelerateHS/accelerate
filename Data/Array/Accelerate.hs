@@ -139,6 +139,9 @@ module Data.Array.Accelerate (
   L.Stencil3x3x3, L.Stencil5x3x3, L.Stencil3x5x3, L.Stencil3x3x5, L.Stencil5x5x3, L.Stencil5x3x5,
   L.Stencil3x5x5, L.Stencil5x5x5,
 
+  -- ** Foreign
+  L.foreignAcc, L.foreignAcc2, L.foreignAcc3,
+
   -- ---------------------------------------------------------------------------
 
   -- * The /Accelerate/ Expression Language
