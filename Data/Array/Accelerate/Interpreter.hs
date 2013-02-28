@@ -813,6 +813,17 @@ evalOpenExp (ShapeSize sh) env aenv
 evalOpenExp (Intersect sh1 sh2) env aenv
   = Sugar.intersect (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
 
+evalOpenExp (ForeignExp _ f e) env aenv
+  = evalOpenExp e' env aenv
+  where
+    wExp :: Idx ((),a) t -> Idx (env,a) t
+    wExp ZeroIdx = ZeroIdx
+    wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
+                                        
+    e' = case f of
+           (Lam (Body b)) -> Let e $ Sugar.weakenByEA undefined (Sugar.weakenByE wExp b) 
+           _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
+
 -- Evaluate a closed expression
 --
 evalExp :: Exp aenv t -> Val aenv -> t

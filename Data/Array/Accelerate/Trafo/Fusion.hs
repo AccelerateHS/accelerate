@@ -304,6 +304,7 @@ fuseOpenExp = cvt
       Shape a                   -> Shape (cvtA a)
       ShapeSize sh              -> ShapeSize (cvt sh)
       Intersect s t             -> Intersect (cvt s) (cvt t)
+      ForeignExp ff f e         -> ForeignExp ff (fuseOpenFun f) (cvt e)
 
 
 fuseOpenFun
@@ -763,6 +764,7 @@ aletD bndAcc bodyAcc =
         Index a sh          -> usesOf idx a + usesOfEA idx sh
         LinearIndex a i     -> usesOf idx a + usesOfEA idx i
         Shape _             -> 0
+        ForeignExp _ _ e    -> usesOfEA idx e
 
     usesOfTA :: Idx aenv a -> Tuple (OpenExp env aenv) t -> Int
     usesOfTA idx tup =
@@ -851,6 +853,8 @@ aletD bndAcc bodyAcc =
 
           | otherwise
           -> LinearIndex (OpenAcc a) (travE i)
+        --
+        ForeignExp ff f e   -> ForeignExp ff f (travE e)
 
 
 -- Environment manipulation

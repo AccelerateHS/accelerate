@@ -150,6 +150,7 @@ preExpType k e =
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)
+    ForeignExp _ _ _  -> eltType (undefined::t)
 
 
 -- |Size of a tuple type, in bytes

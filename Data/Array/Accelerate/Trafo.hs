@@ -22,6 +22,15 @@ module Data.Array.Accelerate.Trafo (
   -- * Fusion
   Fusion.embedOpenAcc, Fusion.Embedded(..),
 
+  -- * Substitution and weakening
+  inline, substitute, compose,
+
+  weakenA, weakenEA, weakenFA,
+  weakenE, weakenFE,
+
+  weakenByA, weakenByEA, weakenByFA,
+  weakenByE, weakenByFE,
+
 ) where
 
 import Prelude                                          hiding ( exp )
@@ -29,6 +38,7 @@ import Prelude                                          hiding ( exp )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite

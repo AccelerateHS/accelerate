@@ -951,6 +951,7 @@ hashPreOpenExp hashAcc exp =
     Shape a                     -> hash "Shape"         `hashA` a
     ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
     Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
+    ForeignExp _ f e            -> hash "ForeignExp"    `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
 
 
 hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int

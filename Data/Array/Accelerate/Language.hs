@@ -69,6 +69,7 @@ module Data.Array.Accelerate.Language (
 
   -- ** Foreign functions
   foreignAcc, foreignAcc2, foreignAcc3,
+  foreignExp, foreignExp2, foreignExp3,
 
   -- ** Pipelining
   (>->),
@@ -472,7 +473,7 @@ stencil2 = Acc $$$$$ Stencil2
 -- | Call a foreign function. The form the function takes is dependent on the backend being used.
 -- The arguments are passed as either a single array or as a tuple of arrays. In addition a pure
 -- Accelerate version of the function needs to be provided to support backends other than the one
--- the one being targeted.
+-- being targeted.
 foreignAcc :: (Arrays acc, Arrays res, ForeignFun ff) 
            => ff acc res 
            -> (Acc acc -> Acc res) 
@@ -498,6 +499,37 @@ foreignAcc3 :: (Arrays acc, Arrays res, ForeignFun ff1, ForeignFun ff2, ForeignF
             -> Acc acc 
             -> Acc res
 foreignAcc3 ff1 ff2 = Acc $$$ Foreign ff1 $$ Acc $$$ Foreign ff2 $$ Acc $$$ Foreign
+
+-- | Call a foreign expression function. The form the function takes is dependent on the 
+-- backend being used. The arguments are passed as either a single scalar element or as a 
+-- tuple of elements. In addition a pure Accelerate version of the function needs to be 
+-- provided to support backends other than the one being targeted.
+foreignExp :: (Elt e, Elt res, ForeignFun ff)
+           => ff e res
+           -> (Exp e -> Exp res)
+           -> Exp e
+           -> Exp res
+foreignExp = Exp $$$ ForeignExp
+
+-- | Call a foreign function with foreign implementations for two different backends.
+foreignExp2 :: (Elt e, Elt res, ForeignFun ff1, ForeignFun ff2)
+            => ff1 e res 
+            -> ff2 e res
+            -> (Exp e -> Exp res) 
+            -> Exp e 
+            -> Exp res
+foreignExp2 ff1 = Exp $$$ ForeignExp ff1 $$ Exp $$$ ForeignExp
+
+-- | Call a foreign function with foreign implementations for three different backends.
+foreignExp3 :: (Elt e, Elt res, ForeignFun ff1, ForeignFun ff2, ForeignFun ff3) 
+            => ff1 e res 
+            -> ff2 e res
+            -> ff3 e res
+            -> (Exp e -> Exp res) 
+            -> Exp e 
+            -> Exp res
+foreignExp3 ff1 ff2 = Exp $$$ ForeignExp ff1 $$ Exp $$$ ForeignExp ff2 $$ Exp $$$ ForeignExp
+
 
 -- Composition of array computations
 -- ---------------------------------

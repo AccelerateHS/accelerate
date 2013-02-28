@@ -225,6 +225,7 @@ rebuildE v exp =
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
     Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
+    ForeignExp ff f e   -> ForeignExp ff f (rebuildE v e)
 
 rebuildTE
     :: SyntacticExp f
@@ -392,6 +393,7 @@ rebuildEA k v exp =
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
     Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
+    ForeignExp ff f e   -> ForeignExp ff f (rebuildEA k v e)
 
 rebuildTA
     :: SyntacticAcc f
@@ -463,6 +465,7 @@ shrinkE exp =
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (shrinkE sh)
     Intersect sh sz     -> Intersect (shrinkE sh) (shrinkE sz)
+    ForeignExp ff f e   -> ForeignExp ff (shrinkFE f) (shrinkE e)
 
 shrinkFE
     :: PreOpenFun acc env aenv f
@@ -509,6 +512,7 @@ usesOfE idx exp =
     Shape _             -> 0
     ShapeSize sh        -> usesOfE idx sh
     Intersect sh sz     -> usesOfE idx sh + usesOfE idx sz
+    ForeignExp _ _ e   -> usesOfE idx e
 
 usesOfTE :: Idx env s -> Tuple (PreOpenExp acc env aenv) t -> Int
 usesOfTE idx tup =
@@ -635,6 +639,7 @@ shrinkEA s exp =
     Shape a             -> Shape (s a)
     ShapeSize sh        -> ShapeSize (shrinkEA s sh)
     Intersect sh sz     -> Intersect (shrinkEA s sh) (shrinkEA s sz)
+    ForeignExp ff f e   -> ForeignExp ff (shrinkFE f) (shrinkEA s e)
 
 shrinkTA :: ShrinkAcc acc -> Tuple (PreOpenExp acc env aenv) t -> Tuple (PreOpenExp acc env aenv) t
 shrinkTA s tup =
@@ -714,6 +719,7 @@ usesOfEA s idx exp =
     Shape a             -> s idx a
     ShapeSize sh        -> usesOfEA s idx sh
     Intersect sh sz     -> usesOfEA s idx sh + usesOfEA s idx sz
+    ForeignExp _ _ e    -> usesOfEA s idx e
 
 usesOfTA :: UsesOfAcc acc -> Idx aenv a -> Tuple (PreOpenExp acc env aenv) t -> Int
 usesOfTA s idx tup =

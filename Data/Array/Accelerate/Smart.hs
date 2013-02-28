@@ -317,6 +317,10 @@ data PreExp acc exp t where
               => acc (Array sh e)               -> PreExp acc exp sh
   ShapeSize   :: Shape sh
               => exp sh                         -> PreExp acc exp Int
+  ForeignExp  :: (Elt args, Elt results, ForeignFun ff)
+              => ff args results
+              -> (Exp args -> Exp results) -- Using Exp instead of exp to aid in sharing recovery.
+              -> exp args                       -> PreExp acc exp results
 
 -- | Scalar expressions for plain array computations.
 --

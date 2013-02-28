@@ -107,6 +107,7 @@ travExp f c l expr = travExp' expr
     travExp' (Shape idx)                = combine "Shape" [ travAcc f c l idx ]
     travExp' (ShapeSize e)              = combine "ShapeSize" [ travExp f c l e ]
     travExp' (Intersect sh1 sh2)        = combine "Intersect" [ travExp f c l sh1, travExp f c l sh2 ]
+    travExp' (ForeignExp ff fun e)      = combine ("ForeignExp " ++ strForeign ff) [ travFun f c l fun, travExp f c l e ]
 
 
 travAfun :: forall m b aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)

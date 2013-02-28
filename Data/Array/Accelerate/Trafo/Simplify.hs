@@ -211,6 +211,7 @@ simplifyOpenExp env aenv = cvt
           Shape a               -> Shape (cvtA a)
           ShapeSize sh          -> ShapeSize (cvt sh)
           Intersect s t         -> simplifyIntersect (cvt s) (cvt t)
+          ForeignExp ff f e     -> ForeignExp ff (simplifyFun EmptyAcc f) (cvt e)
 
 
 simplifyTuple

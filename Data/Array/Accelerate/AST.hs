@@ -796,6 +796,12 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
 
+  ForeignExp    :: (ForeignFun ff, Elt args, Elt results)
+                => ff args results
+                -> PreFun acc () (args -> results)
+                -> PreOpenExp acc env aenv args
+                -> PreOpenExp acc env aenv results
+
 
 -- |Vanilla open expression
 --

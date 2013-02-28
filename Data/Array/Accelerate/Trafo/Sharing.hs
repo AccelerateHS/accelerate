@@ -428,6 +428,7 @@ convertSharingExp config lyt alyt env aenv = cvt
           LinearIndex a i       -> AST.LinearIndex (cvtA a) (cvt i)
           Shape a               -> AST.Shape (cvtA a)
           ShapeSize e           -> AST.ShapeSize (cvt e)
+          ForeignExp ff f e     -> AST.ForeignExp ff (convertFun1 (recoverExpSharing config) f) (cvt e) 
 
     cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -1239,6 +1240,9 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             LinearIndex a i     -> reconstruct $ travAE LinearIndex a i
             Shape a             -> reconstruct $ travA Shape a
             ShapeSize e         -> reconstruct $ travE1 ShapeSize e
+            ForeignExp ff f e   -> reconstruct $ do
+                                                   (e', h) <- travE lvl e
+                                                   return  (ForeignExp ff f e', h+ 1)
 
       where
         traverseAcc :: Typeable arrs => Level -> Acc arrs -> IO (SharingAcc arrs, Int)
@@ -1805,6 +1809,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           LinearIndex a e -> travAE LinearIndex a e
           Shape a         -> travA Shape a
           ShapeSize e     -> travE1 ShapeSize e
+          ForeignExp ff f e-> travE1 (ForeignExp ff f) e 
       where
         travTup :: Tuple.Tuple SharingExp tup -> (Tuple.Tuple SharingExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)
@@ -2094,4 +2099,5 @@ showPreExpOp Index{}            = "Index"
 showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
+showPreExpOp ForeignExp{}       = "ForeignExp"
 
