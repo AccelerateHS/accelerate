@@ -59,7 +59,6 @@ import Data.Array.Accelerate.Array.Data
 import qualified Data.Array.Accelerate.Array.Representation as Repr
 
 
-
 -- Surface types representing array indices and slices
 -- ---------------------------------------------------
 --
@@ -1063,9 +1062,12 @@ fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
 fromList sh xs = adata `seq` Array (fromElt sh) adata
   where
+    -- Assume the array is in dense row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
     !n          = size sh
     (adata, _)  = runArrayData $ do
-                    arr <- newArrayData (size sh)
+                    arr <- newArrayData n
                     let go !i _ | i >= n = return ()
                         go !i (v:vs)     = unsafeWriteArrayData arr i (fromElt v) >> go (i+1) vs
                         go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
@@ -1076,10 +1078,15 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
 -- | Convert an accelerated array to a list in row-major order.
 --
 toList :: forall sh e. Array sh e -> [e]
-toList (Array sh adata) = iter sh' idx (.) id []
+{-# INLINE toList #-}
+toList (Array sh adata) = go 0
   where
-    sh'    = toElt sh :: sh
-    idx ix = \l -> toElt (adata `unsafeIndexArrayData` toIndex sh' ix) : l
+    -- Assume underling array is in row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
+    !n                  = Repr.size sh
+    go !i | i >= n      = []
+          | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
 
 -- Convert an array to a string
 --
