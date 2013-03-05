@@ -42,7 +42,7 @@ makePicture world = pic
 main :: IO ()
 main
   = do
-        (config, critConf, nops) <- processArgs =<< getArgs
+        (config, critConf, nops) <- parseArgs =<< getArgs
 
         let world       = initialWorld config view
             fps         = get optFramerate config

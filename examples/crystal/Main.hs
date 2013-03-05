@@ -15,7 +15,7 @@ import Data.Label
 import Foreign.Ptr
 import Control.Monad
 import Control.Exception
-import Criterion.Main                                   ( defaultMain, bench, whnf )
+import Criterion.Main                                   ( defaultMainWith, bench, whnf )
 import Foreign.ForeignPtr
 import System.Environment
 import System.IO.Unsafe
@@ -167,7 +167,7 @@ frame render size zoom time = G.scale zoom' zoom' pic
 -- Main -----------------------------------------------------------------------
 main :: IO ()
 main
-  = do  (config, nops) <- processArgs =<< getArgs
+  = do  (config, crit, nops) <- parseArgs =<< getArgs
         let size        = get optSize config
             zoom        = get optZoom config
             scale       = get optScale config
@@ -178,7 +178,7 @@ main
         void . evaluate $ render (A.fromList Z [0])
 
         if get optBench config
-           then withArgs nops $ defaultMain
+           then withArgs nops $ defaultMainWith crit (return ())
                     [ bench "crystal" $ whnf (force . render) (A.fromList Z [1.0]) ]
 
 #ifndef ACCELERATE_ENABLE_GUI

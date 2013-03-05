@@ -12,7 +12,7 @@ import World
 import Fluid
 import Event
 import Data.Label
-import Criterion.Main
+import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Control.Exception
 import System.Environment
 import Graphics.Gloss.Interface.IO.Game
@@ -23,7 +23,7 @@ import Data.Array.Accelerate                    as A
 
 main :: IO ()
 main = do
-  (opt,noms)    <- processArgs =<< getArgs
+  (opt,crit,noms) <- parseArgs =<< getArgs
   let -- configuration parameters
       --
       width     = get simulationWidth  opt * get displayScale opt
@@ -71,7 +71,7 @@ main = do
   if get optBench opt
 #endif
      -- benchmark
-     then withArgs noms $ defaultMain
+     then withArgs noms $ defaultMainWith crit (return ())
               [ bench "fluid" $ whnf simulate initialWorld ]
 
      -- simulate

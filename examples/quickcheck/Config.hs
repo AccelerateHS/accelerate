@@ -6,7 +6,7 @@ module Config (
 
   -- options & test configuration
   Options,
-  processArgs,
+  parseArgs,
   optBackend, double, float, int64, int32, int16, int8,
 
   -- running tests
@@ -134,8 +134,8 @@ configureBackend opts = case _optBackend opts of
 #endif
 
 
-processArgs :: [String] -> IO (Options, RunnerOptions)
-processArgs argv = do
+parseArgs :: [String] -> IO (Options, RunnerOptions)
+parseArgs argv = do
   args                  <- interpretArgs argv
   (options, runner)     <- case args of
     Left msg            -> error msg

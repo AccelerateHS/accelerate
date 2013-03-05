@@ -12,18 +12,22 @@ module Config (
   simulationWidth, simulationHeight, initialDensity, initialVelocity,
   displayScale, displayFramerate, optBench,
 
-  processArgs, run, run1
+  parseArgs, run, run1
 
 ) where
 
 import Type
 
+import Data.Char
+import Data.List
 import Data.IORef
 import Data.Label
 import Control.Monad
 import System.Console.GetOpt
 import System.Exit
 import Prelude                                          as P
+import qualified Criterion.Main                         as Criterion
+import qualified Criterion.Config                       as Criterion
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
@@ -106,8 +110,8 @@ run1 opts f = case _optBackend opts of
 #endif
 
 
-processArgs :: [String] -> IO (Options, [String])
-processArgs argv = do
+parseArgs :: [String] -> IO (Options, Criterion.Config, [String])
+parseArgs argv = do
 
   -- Some additional options, which we will use to determine how to set up the
   -- initial conditions of the simulator.
@@ -122,16 +126,18 @@ processArgs argv = do
 
   -- Parse the command-line options
   --
-  let options :: [OptDescr (Options -> IO Options)]
-      options =
-        -- Backend execution setup
+  let backends :: [OptDescr (Options -> IO Options)]
+      backends =
         [ Option [] ["interpreter"]     (NoArg (return . set optBackend Interpreter)) "reference implementation (sequential)"
 #ifdef ACCELERATE_CUDA_BACKEND
         , Option [] ["cuda"]            (NoArg (return . set optBackend CUDA))        "implementation for NVIDIA GPUs (parallel)"
 #endif
+        ]
 
+      options :: [OptDescr (Options -> IO Options)]
+      options = backends ++
         -- Simulation options
-        , Option [] ["viscosity"]       (ReqArg (parse viscosity) "FLOAT")      (describe viscosity "viscosity for velocity damping")
+        [ Option [] ["viscosity"]       (ReqArg (parse viscosity) "FLOAT")      (describe viscosity "viscosity for velocity damping")
         , Option [] ["diffusion"]       (ReqArg (parse diffusion) "FLOAT")      (describe diffusion "diffusion rate for mass dispersion")
         , Option [] ["delta"]           (ReqArg (parse timestep) "FLOAT")       (describe timestep "simulation time between each frame")
         , Option [] ["density"]         (ReqArg (parse inputDensity) "FLOAT")   (describe inputDensity "magnitude of user input density")
@@ -154,32 +160,55 @@ processArgs argv = do
 
       parse f x         = return . set f (read x)
       describe f msg    = msg ++ " (" ++ show (get f defaultOptions) ++ ")"
-      helpMsg errs      = concat errs ++ usageInfo header options ++ footer
-      header            = unlines
-        [ "accelerate-fluid (c) 2011 Trevor L. McDonell"
+
+      basicHeader       = unlines
+        [ "accelerate-fluid (c) [2011..2013] The Accelerate Team"
         , ""
         , "Usage: accelerate-fluid [OPTIONS]"
         ]
 
-      footer = unlines
+      basicFooter       = unlines
         [ ""
         , "Runtime usage:"
-        , ""
-        , "          click                    add density sources to the image"
-        , "          shift-click              add velocity sources"
-        , "          r                        reset the image"
-        , "          d                        toggle display of density field"
-        , "          v                        toggle display of velocity field lines"
+        , "     click        add density sources to the image"
+        , "     shift-click  add velocity sources"
+        , "     r            reset the image"
+        , "     d            toggle display of density field"
+        , "     v            toggle display of velocity field lines"
         ]
 
-  (opts, rest)
+      helpMsg errs      = concat errs
+        ++ usageInfo basicHeader                    options
+        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
+
+      fancyHeader :: Options -> String
+      fancyHeader opts = unlines (header : table ++ lines basicFooter)
+        where
+          active this         = if this == P.map toLower (show $ get optBackend opts) then "*" else ""
+          (ss,bs,ds)          = P.unzip3 $ P.map (\(b,d) -> (active b, b, d)) $ concatMap extract backends
+          table               = P.zipWith3 paste (sameLen ss) (sameLen bs) ds
+          paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
+          sameLen xs          = flushLeft ((P.maximum . P.map P.length) xs) xs
+          flushLeft n xs      = [ P.take n (x ++ repeat ' ') | x <- xs ]
+          --
+          extract (Option _ los _ descr) =
+            let losFmt  = intercalate ", " los
+            in  case lines descr of
+                  []          -> [(losFmt, "")]
+                  (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
+          --
+          header = intercalate "\n" [ basicHeader, "Available backends:" ]
+
+  (opts, crit, rest)
     <- case getOpt' RequireOrder options argv of
          (actions,_,n,[])       -> do
-           o     <- foldl (>>=) (return defaultOptions) actions
-           case get optHelp o of
-             False                      -> return (o,n)
-             _ | True <- get optBench o -> return (o,"--help":n)
-             _                          -> putStrLn (helpMsg []) >> exitSuccess
+           opts                 <- foldl (>>=) (return defaultOptions) actions
+           (cconf, rest)        <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions n
+
+           case get optHelp opts of
+             False      -> putStrLn (fancyHeader opts) >> return (opts, cconf, rest)
+             _          -> putStrLn (helpMsg [])       >> exitSuccess
+
          (_,_,_,errors)         -> error (helpMsg errors)
 
   -- Extract option values, and set up the initial conditions
@@ -278,5 +307,5 @@ processArgs argv = do
   density       <- mkInitialDensity
   velocity      <- mkInitialVelocity
 
-  return ( opts { _initialDensity = density, _initialVelocity = velocity }, rest )
+  return ( opts { _initialDensity = density, _initialVelocity = velocity }, crit, rest )
 

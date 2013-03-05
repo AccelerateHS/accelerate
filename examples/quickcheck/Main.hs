@@ -15,7 +15,7 @@ main :: IO ()
 main = do
   -- process command line args, and print a brief usage message
   --
-  (options, runner)     <- processArgs =<< getArgs
+  (options, runner)     <- parseArgs =<< getArgs
 
   -- the default execution order uses some knowledge of what functionality is
   -- required for each operation in the CUDA backend.

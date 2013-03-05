@@ -7,6 +7,8 @@ module Config
 
 import Prelude                                          as P hiding ((.), id, fst, snd)
 import qualified Prelude                                as P
+import Data.Char
+import Data.List
 import Data.Label
 import System.Exit
 import Control.Category
@@ -106,8 +108,8 @@ run1 config f =
 
 -- | The set of available command-line options
 --
-defaultOptions :: [OptDescr (Config -> Config)]
-defaultOptions =
+backends :: [OptDescr (Config -> Config)]
+backends =
   [ Option  [] ["interpreter"]
             (NoArg (set configBackend Interpreter))
             "reference implementation (sequential)"
@@ -117,8 +119,12 @@ defaultOptions =
             (NoArg (set configBackend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
 #endif
+  ]
 
-  , Option  [] ["size"]
+
+defaultOptions :: [OptDescr (Config -> Config)]
+defaultOptions = backends ++
+  [ Option  [] ["size"]
             (ReqArg (set configWindowSize . read) "INT")
             (describe configWindowSize "visualisation size")
 
@@ -189,19 +195,38 @@ defaultOptions =
     fst = lens P.fst (\a (_,b) -> (a,b))
     snd = lens P.snd (\b (a,_) -> (a,b))
 
+basicHeader :: String
+basicHeader = unlines
+  [ "accelerate-smoothlife (c) [2012..2013] The Accelerate Team"
+  , ""
+  , "Usage: accelerate-smoothlife [OPTIONS]"
+  ]
+
+fancyHeader :: Config -> String
+fancyHeader opts = unlines (header : table)
+  where
+    active this         = if this == map toLower (show $ get configBackend opts) then "*" else ""
+    (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract backends
+    table               = zipWith3 paste (sameLen ss) (sameLen bs) ds
+    paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
+    sameLen xs          = flushLeft ((maximum . map length) xs) xs
+    flushLeft n xs      = [ take n (x ++ repeat ' ') | x <- xs ]
+    --
+    extract (Option _ los _ descr) =
+      let losFmt  = intercalate ", " los
+      in  case lines descr of
+            []          -> [(losFmt, "")]
+            (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
+    --
+    header = intercalate "\n" [ basicHeader, "Available backends:" ]
+
 
 parseArgs :: [String] -> IO (Config, Criterion.Config, [String])
 parseArgs argv
   = let
-        helpMsg err     = concat err
-          ++ usageInfo header                         defaultOptions
+        helpMsg err = concat err
+          ++ usageInfo basicHeader                    defaultOptions
           ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
-
-        header          = unlines
-          [ "accelerate-smoothlife (c) [2012] The Accelerate Team"
-          , ""
-          , "Usage: accelerate-smoothlife [OPTIONS]"
-          ]
 
   in case getOpt' Permute defaultOptions argv of
       (o,_,n,[])  -> do
@@ -209,9 +234,8 @@ parseArgs argv
         -- pass unrecognised options to criterion
         (cconf, rest)     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions n
         case foldr id defaultConfig o of
-          conf | False <- get configHelp conf           -> return (conf, cconf,          rest)
-          conf | True  <- get configBenchmark conf      -> return (conf, cconf, "--help":rest)
-          _                                             -> putStrLn (helpMsg []) >> exitSuccess
+          conf | False <- get configHelp conf   -> putStrLn (fancyHeader conf) >> return (conf, cconf, rest)
+          _                                     -> putStrLn (helpMsg [])       >> exitSuccess
 
       (_,_,_,err) -> error (helpMsg err)
 
