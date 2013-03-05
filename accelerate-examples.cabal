@@ -40,7 +40,7 @@ Flag cuda
 
 Flag opencl
   Description:          Enable the OpenCL parallel backend
-  Default:              True
+  Default:              False
 
 Flag io
   Description:          Provide access to the block copy I/O functionality
