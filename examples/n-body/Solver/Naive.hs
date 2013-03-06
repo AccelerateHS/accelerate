@@ -19,5 +19,5 @@ calcAccels epsilon bodies
         rows    = A.replicate (lift $ Z :. All :. n) bodies
 
     in
-    A.fold plusV (constant (0,0)) $ A.zipWith (accel epsilon) rows cols
+    A.fold (.+.) (vec 0) $ A.zipWith (accel epsilon) rows cols
 

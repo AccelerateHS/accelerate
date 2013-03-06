@@ -10,22 +10,26 @@ module Common.Type where
 --
 type R          = Float
 
+-- | A data point in space
+--
+type Vec a      = (a, a, a)
+
 -- | Units of time
 --
 type Time       = R
 
 -- | The velocity of a point.
 --
-type Velocity   = (R, R)
+type Velocity   = Vec R
 
 -- | The acceleration of a point.
 --
-type Accel      = (R, R)
+type Accel      = Vec R
 
 -- | A point in 2D space with its mass.
 --
 type Mass       = R
-type Position   = (R, R)
+type Position   = Vec R
 type PointMass  = (Position, Mass)
 
 -- | Bodies consist of a Position and Mass, but also carry their velocity and

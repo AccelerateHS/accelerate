@@ -42,13 +42,13 @@ main
             -- the origin. Start the system rotating with particle speed
             -- proportional to distance from the origin
             --
-            positions   = randomArrayOf (disc (0,0) (get configStartDiscSize conf)) (Z :. n)
+            positions   = randomArrayOf (disc (0,0,0) (get configStartDiscSize conf)) (Z :. n)
             masses      = randomArrayOf (\_ -> uniformR (1, get configBodyMass conf)) (Z :. n)
 
             bodies      = run conf
                         $ A.map (setStartVelOfBody . constant $ get configStartSpeed conf)
                         $ A.zipWith setMassOfBody (A.use masses)
-                        $ A.map (A.uncurry unitBody)
+                        $ A.map unitBody
                         $ A.use positions
 
             -- The initial simulation state

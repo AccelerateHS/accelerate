@@ -67,16 +67,14 @@ accel   :: Exp R                -- ^ Smoothing parameter
         -> Exp Body             -- ^ Neighbouring point
         -> Exp Accel
 
-accel epsilon bodyi bodyj = lift (dx * s, dy * s)
+accel epsilon bodyi bodyj = vec s .*. r
   where
-    (xi, yi)    = unlift . positionOfPointMass . pointMassOfBody $ bodyi
-    (xj, yj)    = unlift . positionOfPointMass . pointMassOfBody $ bodyj
-    mj          = massOfPointMass . pointMassOfBody $ bodyj
+    pmi         = pointMassOfBody bodyi
+    pmj         = pointMassOfBody bodyj
+    mj          = massOfPointMass pmj
 
-    dx          = xj - xi
-    dy          = yj - yi
-
-    rsqr        = dx * dx + dy * dy + epsilon * epsilon
+    r           = positionOfPointMass pmj .-. positionOfPointMass pmi
+    rsqr        = dot r r + epsilon * epsilon
     invr        = 1 / sqrt rsqr
     invr3       = invr * invr * invr
 
@@ -88,11 +86,10 @@ accel epsilon bodyi bodyj = lift (dx * s, dy * s)
 
 -- | Make a stationary Body of unit mass
 --
-unitBody :: Exp R -> Exp R -> Exp Body
-unitBody x y = lift (pointmass, constant (0,0), constant (0,0))
+unitBody :: Exp (Vec R) -> Exp Body
+unitBody pos = lift (pointmass, vec 0, vec 0)
   where
-    pos         = lift (x, y)                   :: Exp Position
-    pointmass   = lift (pos, constant 1)        :: Exp PointMass
+    pointmass = lift (pos, constant 1)          :: Exp PointMass
 
 
 -- | Take the Velocity of a Body
@@ -159,11 +156,11 @@ setStartVelOfBody startVel body = lift (pm, vel'', acc)
     acc         = accelOfBody body
     pos         = positionOfPointMass pm
 
-    pos'        = normaliseV pos
-    vel'        = lift (y', -x')
-    vel''       = mulSV (sqrt (magV pos) * startVel) vel'
+    pos'        = normalise pos
+    vel'        = lift (y', -x', z')
+    vel''       = (sqrt (magnitude pos) * startVel) *. vel'
 
-    (x', y')    = unlift pos'   :: (Exp R, Exp R)
+    (x',y',z')  = unlift pos'   :: Vec (Exp R)
 
 
 -- | Advance a body forwards in time.
@@ -172,13 +169,12 @@ advanceBody :: Exp Time -> Exp Body -> Exp Body
 advanceBody time body = lift ( pm', vel', acc )
   where
     pm          = pointMassOfBody body
-    mass        = massOfPointMass pm
+    pos         = positionOfPointMass pm
+    vel         = velocityOfBody body
     acc         = accelOfBody body
-    (px, py)    = unlift $ positionOfPointMass pm
-    (vx, vy)    = unlift $ velocityOfBody body
-    (ax, ay)    = unlift acc
+    mass        = massOfPointMass pm
 
-    pm'         = lift (pos', mass)                     :: Exp PointMass
-    pos'        = lift (px + time * vx, py + time * vy) :: Exp Velocity
-    vel'        = lift (vx + time * ax, vy + time * ay) :: Exp Accel
+    pm'         = lift (pos', mass)             :: Exp PointMass
+    pos'        = pos .+. time *. vel
+    vel'        = vel .+. time *. acc
 
