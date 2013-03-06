@@ -50,13 +50,13 @@ module Data.Array.Accelerate.Array.Sugar (
 
 -- standard library
 import Data.Typeable
-import Data.Array.IArray                ( IArray )
-import qualified Data.Array.IArray      as IArray
+import Data.Array.IArray                                        ( IArray )
+import qualified Data.Array.IArray                              as IArray
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import qualified Data.Array.Accelerate.Array.Representation as Repr
+import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
 -- Surface types representing array indices and slices
