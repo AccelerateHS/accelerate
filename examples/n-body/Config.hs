@@ -92,11 +92,11 @@ defaultConfig = Config
   , _configRate                 = 30
 
   , _configBodyCount            = 200
-  , _configBodyMass             = 1000
+  , _configBodyMass             = 100
   , _configTimeStep             = 1
   , _configEpsilon              = 50
 
-  , _configStartDiscSize        = 250
+  , _configStartDiscSize        = 350
   , _configStartSpeed           = 0.5
 
   , _configMaxSteps             = Nothing

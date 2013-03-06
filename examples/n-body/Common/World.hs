@@ -34,7 +34,8 @@ advanceBodies calcAccels timeStep bodies
 
         -- Apply the accelerations to the bodies and advance them
         advance b a     = let (ax, ay)  = unlift a              :: (Exp R, Exp R)
-                              a'        = lift (-ax, -ay)
+                              m         = massOfPointMass (pointMassOfBody b)
+                              a'        = lift (ax * m, ay * m)
                           in advanceBody (the timeStep) (setAccelOfBody a' b)
     in
     A.zipWith advance bodies accels
