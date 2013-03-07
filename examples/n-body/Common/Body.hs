@@ -67,7 +67,7 @@ accel   :: Exp R                -- ^ Smoothing parameter
         -> Exp Body             -- ^ Neighbouring point
         -> Exp Accel
 
-accel epsilon bodyi bodyj = vec s .*. r
+accel epsilon bodyi bodyj = s *. r
   where
     pmi         = pointMassOfBody bodyi
     pmj         = pointMassOfBody bodyj

@@ -43,9 +43,9 @@ infixl 6 .+.
 infixl 6 .-.
 
 (.+.), (.-.), (.*.) :: (Elt a, IsNum a) => Exp (Vec a) -> Exp (Vec a) -> Exp (Vec a)
-(.+.) = componentwise (+)
-(.-.) = componentwise (-)
-(.*.) = componentwise (*)
+(.+.) = vzipWith (+)
+(.-.) = vzipWith (-)
+(.*.) = vzipWith (*)
 
 -- | Apply a scalar value component-wise to each element of the vector
 --
@@ -54,15 +54,21 @@ infixl 6 +.
 infixl 6 -.
 
 (+.), (-.), (*.) :: (Elt a, IsNum a) => Exp a -> Exp (Vec a) -> Exp (Vec a)
-c +. v = vec c .+. v
-c -. v = vec c .-. v
-c *. v = vec c .*. v
+(+.) c = vmap (c+)
+(-.) c = vmap (c-)
+(*.) c = vmap (c*)
 
 -- | Arithmetic lifted to our vector type. As far as possible, want to gloss
 --   over whether we are calculating in 2D or 3D.
 --
-componentwise :: (Elt a, Elt b) => (Exp a -> Exp a -> Exp b) -> Exp (Vec a) -> Exp (Vec a) -> Exp (Vec b)
-componentwise f v1 v2
+vmap :: (Elt a, Elt b) => (Exp a -> Exp b) -> Exp (Vec a) -> Exp (Vec b)
+vmap f v
+  = let (x1,y1,z1) = unlift v
+    in
+    lift (f x1, f y1, f z1)
+
+vzipWith :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> Exp (Vec a) -> Exp (Vec b) -> Exp (Vec c)
+vzipWith f v1 v2
   = let (x1,y1,z1) = unlift v1
         (x2,y2,z2) = unlift v2
     in
