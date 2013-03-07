@@ -290,7 +290,7 @@ Executable accelerate-smoothlife
   Main-is:              Main.hs
   hs-source-dirs:       examples/smoothlife
   other-modules:        Config
-                        Smoothlife
+                        SmoothLife
                         Gloss.Draw
                         Gloss.Event
                         Gloss.Simulate
