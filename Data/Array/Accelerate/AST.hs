@@ -423,11 +423,11 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
 
-  -- Call a backend specific foreign function.
+  -- Call a backend specific foreign function. A pure Accelerate version must be
+  -- supplied for use by other backends, which must be a closed function.
   Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
-              => ff arrs results                                -- The foreign function
-              -> PreAfun      acc      (arrs -> results)        -- A pure accelerate version for backends that don't support 
-                                                                -- the given foreign function. Must be a closed function.
+              => ff arrs results                                -- The foreign function for a given backend
+              -> PreAfun      acc      (arrs -> results)        -- A pure accelerate version
               -> acc              aenv arrs                     -- Arguments to the function
               -> PreOpenAcc   acc aenv results
 
