@@ -61,6 +61,14 @@ traceEventIO :: String -> IO ()
 traceEventIO = traceIO
 #endif
 
+#if !MIN_VERSION_base(4,6,0)
+modifyIORef' :: IORef a -> (a -> a) -> IO ()
+modifyIORef' ref f = do
+  x <- readIORef ref
+  let x' = f x
+  x' `seq` writeIORef ref x'
+#endif
+
 
 -- -----------------------------------------------------------------------------
 -- Flag option parsing
