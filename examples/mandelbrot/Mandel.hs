@@ -64,8 +64,8 @@ genPlane :: (Elt a, IsFloating a) => Int -> Int -> Acc (Scalar (View a)) -> Acc 
 genPlane screenX screenY view
   = generate (constant (Z:.screenY:.screenX))
              (\ix -> let pr = unindex2 ix
-                         x = A.fromIntegral (A.fst pr :: Exp Int)
-                         y = A.fromIntegral (A.snd pr :: Exp Int)
+                         x = A.fromIntegral (A.snd pr :: Exp Int)
+                         y = A.fromIntegral (A.fst pr :: Exp Int)
                      in
                        lift ( xmin + (x * sizex) / viewx
                             , ymin + (y * sizey) / viewy))

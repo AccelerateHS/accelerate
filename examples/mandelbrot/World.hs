@@ -95,7 +95,7 @@ refocus = move . zoom
                Just Fwd  ->  0.025
                Just Rev  -> -0.025
 
-        translate (i,j) (x,y,x',y') =
+        translate (j,i) (x,y,x',y') =
           let sizex = x' - x
               sizey = y' - y
           in (x+i*sizex, y+j*sizey, x'+i*sizex, y'+j*sizey)
