@@ -44,7 +44,7 @@ import Text.PrettyPrint
 import System.CPUTime
 import System.Environment
 import System.IO.Unsafe                         ( unsafePerformIO )
-import qualified Data.Map.Strict                as Map
+import qualified Data.Map                       as Map
 
 -- friends
 import Data.Array.Accelerate.Pretty ()
