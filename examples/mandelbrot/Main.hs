@@ -46,8 +46,13 @@ main
 
         let world       = initialWorld config view
             fps         = get optFramerate config
-            size        = get optSize config
-            view        = (-0.25, -1.0, 0.0, -0.75)
+            width       = get optWidth config
+            height      = get optHeight config
+
+            -- Centre coordinates: Re(c) = -0.7; Im(c) = 0
+            -- View width: 3.0769
+            --
+            view        = (-2.23, -1.15, 0.83, 1.15)
 
             force arr   = indexArray arr (Z:.0:.0) `seq` arr
 
