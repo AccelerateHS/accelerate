@@ -18,7 +18,7 @@ import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 import Prelude                                  as P
-import Data.Array.Accelerate                    as A hiding ( size )
+import Data.Array.Accelerate                    as A
 import qualified Graphics.Gloss                 as G
 
 
@@ -36,7 +36,7 @@ makePicture world = pic
                   in
                   unsafePerformIO       $ newForeignPtr_ (castPtr ptr)
 
-    pic         = G.bitmapOfForeignPtr h w rawData False
+    pic         = G.bitmapOfForeignPtr w h rawData False
 
 
 main :: IO ()
@@ -58,13 +58,13 @@ main
 #ifdef ACCELERATE_ENABLE_GUI
               | fps == 0
               = G.display
-                    (G.InWindow "Mandelbrot" (size, size) (10, 10))
+                    (G.InWindow "Mandelbrot" (width, height) (10, 10))
                     G.black
                     (makePicture world)
 
               | fps > 0
               = G.play
-                    (G.InWindow "Mandelbrot" (size, size) (10, 10))
+                    (G.InWindow "Mandelbrot" (width, height) (10, 10))
                     G.black
                     fps
                     world

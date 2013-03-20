@@ -16,7 +16,7 @@ import Config
 
 import Data.Char
 import Data.Label
-import Data.Array.Accelerate                    as A hiding ( size )
+import Data.Array.Accelerate                    as A
 import Graphics.Gloss.Interface.Pure.Game       hiding ( translate, scale )
 
 
@@ -57,13 +57,14 @@ initialWorld config view
 setPrecisionOfWorld :: Precision -> Options -> World -> World
 setPrecisionOfWorld f config (World p _ z h v)
   = let
-        size    = get optSize config
+        width   = get optWidth config
+        height  = get optHeight config
         limit   = get optLimit config
 
         render :: (Elt a, IsFloating a) => Render a
         render  = run1 config
                 $ A.map (prettyRGBA (constant limit))
-                . mandelbrot size size limit
+                . mandelbrot width height limit
 
     in case f of
          Float  -> World (convertView p :: View Float)  render z h v

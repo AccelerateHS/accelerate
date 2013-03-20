@@ -4,7 +4,7 @@
 
 module Config (
 
-  Options, optBackend, optSize, optLimit, optFramerate, optBench,
+  Options, optBackend, optWidth, optHeight, optLimit, optFramerate, optBench,
   parseArgs, run, run1
 
 ) where
@@ -32,7 +32,8 @@ data Backend = Interpreter
 data Options = Options
   {
     _optBackend         :: Backend
-  , _optSize            :: Int
+  , _optWidth           :: Int
+  , _optHeight          :: Int
   , _optLimit           :: Int
   , _optFramerate       :: Int
   , _optBench           :: Bool
@@ -45,7 +46,8 @@ $(mkLabels [''Options])
 defaultOptions :: Options
 defaultOptions = Options
   { _optBackend         = maxBound
-  , _optSize            = 512
+  , _optWidth           = 800
+  , _optHeight          = 600
   , _optLimit           = 255
   , _optFramerate       = 25
 #ifdef ACCELERATE_ENABLE_GUI
@@ -82,7 +84,8 @@ backends =
 
 options :: [OptDescr (Options -> Options)]
 options = backends ++
-  [ Option []   ["size"]        (ReqArg (set optSize . read) "INT")     "visualisation size (512)"
+  [ Option []   ["width"]       (ReqArg (set optWidth . read) "INT")    "visualisation width (800)"
+  , Option []   ["height"]      (ReqArg (set optHeight . read) "INT")   "visualisation height (600)"
   , Option []   ["limit"]       (ReqArg (set optLimit . read) "INT")    "iteration limit for escape (255)"
   , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INT")"visualisation framerate (10)"
   , Option []   ["static"]      (NoArg  (set optFramerate 0))           "do not animate the image"
