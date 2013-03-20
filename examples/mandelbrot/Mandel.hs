@@ -114,24 +114,45 @@ mkinit cs = A.zip cs (A.fill (A.shape cs) 0)
 
 -- Rendering -------------------------------------------------------------------
 
+prettyRGBA :: forall a. (Elt a, IsFloating a) => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
+prettyRGBA lIMIT s =
+  let cmax      = A.fromIntegral lIMIT
+      c         = A.fromIntegral (A.snd s)
+  in
+  c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
+
+-- Directly convert the iteration count on escape to a colour. The base set
+-- (x,y,z) yields a dark background with light highlights.
+--
+escapeToColour :: Exp Int -> Exp RGBA32
+escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (x,y,z,w))
+  where
+    w   = constant 0
+    x   = A.fromIntegral (3 * m)
+    y   = A.fromIntegral (5 * m)
+    z   = A.fromIntegral (7 * m)
+
+
+{--
 -- A simple colour scheme
 --
--- prettyRGBA :: Elt a => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
--- prettyRGBA lIMIT s' = r + g + b + a
---   where
---     s   = A.snd s'
---     t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
---     r   = (t     `rem` 128 + 64) * 0x1000000
---     g   = (t * 2 `rem` 128 + 64) * 0x10000
---     b   = (t * 3 `rem` 256     ) * 0x100
---     a   = 0xFF
-
+prettyRGBA :: Elt a => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
+prettyRGBA lIMIT s' = r + g + b + a
+  where
+    s   = A.snd s'
+    t   = A.fromIntegral $ ((lIMIT - s) * 255) `quot` lIMIT
+    r   = (t     `rem` 128 + 64) * 0x1000000
+    g   = (t * 2 `rem` 128 + 64) * 0x10000
+    b   = (t * 3 `rem` 256     ) * 0x100
+    a   = 0xFF
+--}
+{--
 prettyRGBA :: forall a. (Elt a, IsFloating a) => Exp Int -> Exp (Complex a, Int) -> Exp RGBA32
 prettyRGBA lIMIT s =
   let cmax      = A.fromIntegral lIMIT          :: Exp a
       c         = A.fromIntegral (A.snd s)
   in
-  c >* 250 ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
+  c >* 0.98 * cmax ? ( 0xFF000000, rampColourHotToCold 0 cmax c )
 
 -- Standard Hot-to-Cold hypsometric colour ramp. Colour sequence is
 --   Red, Yellow, Green, Cyan, Blue
@@ -171,4 +192,4 @@ rampColourHotToCold vmin vmax vNotNorm
                 )))
     in
     rgba32OfFloat result
-
+--}
