@@ -254,11 +254,13 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Foreign _ f1 a1) (Foreign _ f2 a2)
-      | Just REFL <- matchAcc a1 a2
-      , Just REFL <- matchPreOpenAfun matchAcc f1 f2 -- If the pure accelerate versions of the function match, 
-                                                     -- then we assume the foreign ones do as well.
-      = Just REFL
+    match (Foreign ff1 _ a1) (Foreign ff2 _ a2)
+      | Just REFL <- matchAcc a1 a2,
+        unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
 
     match _ _
       = Nothing
@@ -467,6 +469,14 @@ matchPreOpenExp matchAcc hashAcc = match
       | Just REFL <- match sa1 sa2
       , Just REFL <- match sb1 sb2
       = Just REFL
+
+    match (ForeignExp ff1 _ e1) (ForeignExp ff2 _ e2)
+      | Just REFL <- match e1 e2
+      , unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
 
     match _ _
       = Nothing
