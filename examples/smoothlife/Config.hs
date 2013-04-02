@@ -28,6 +28,17 @@ type R          = Float
 type C          = Complex R
 type Matrix a   = Array DIM2 a
 
+data SigmoidFunction
+  = Hard
+  | Smooth
+  | Atan
+  | Atancos
+  | Overshoot
+  | Linear
+  | Hermite
+  | Sin
+  deriving (Eq, Show, Read, Enum, Bounded)
+
 
 -- | Program configuration
 --
@@ -56,6 +67,12 @@ data Config = Config
   , _configDeathInterval        :: (R,R)        -- (d1, d2)
   , _configStep                 :: (R,R)        -- (alpha_n, alpha_m)
 
+   -- Timestep and sigmoid functions
+  , _configTimestepMode         :: Int
+  , _configSigmode              :: Int
+  , _configSigtype              :: SigmoidFunction
+  , _configMixtype              :: SigmoidFunction
+
     -- Terminating conditions
   , _configMaxSteps             :: Maybe Int
   , _configBenchmark            :: Bool
@@ -76,10 +93,15 @@ defaultConfig = Config
 
   -- generic smooth glider
   , _configRim                  = 1
-  , _configDiscRadius           = (3, 12)
+  , _configDiscRadius           = (4, 12)
   , _configBirthInterval        = (0.278, 0.365)
   , _configDeathInterval        = (0.267, 0.445)
   , _configStep                 = (0.028, 0.147)
+
+  , _configTimestepMode         = 0
+  , _configSigmode              = 2
+  , _configSigtype              = Smooth
+  , _configMixtype              = Smooth
 
   , _configMaxSteps             = Nothing
   , _configBenchmark            = False
@@ -176,6 +198,22 @@ defaultOptions = backends ++
             (ReqArg (set (snd . configStep) . read) "FLOAT")
             (describe (snd . configStep) "upper step interval")
 
+  , Option  [] ["tsm", "timestep-mode"]
+            (ReqArg (set configTimestepMode . read) "INT")
+            (describe configTimestepMode "timestep mode 0..2")
+
+  , Option  [] ["sigmode"]
+            (ReqArg (set configSigmode . read) "INT")
+            (describe configSigmode "sigmode 1..4")
+
+  , Option  [] ["sigtype"]
+            (ReqArg (set configSigtype . read) "SIGMOIDFUNCTION")
+            (describe configSigtype "sigtype")
+
+  , Option  [] ["mixtype"]
+            (ReqArg (set configMixtype . read) "SIGMOIDFUNCTION")
+            (describe configMixtype "mixtype")
+
   , Option  [] ["max-steps"]
             (ReqArg (set configMaxSteps . read) "INT")
             (describe configMaxSteps "exit simulation after this many steps")
@@ -226,7 +264,13 @@ parseArgs argv
   = let
         helpMsg err = concat err
           ++ usageInfo basicHeader                    defaultOptions
+          ++ sigmoidDescription
           ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
+
+        sigmoidDescription = unlines
+          [ "\nFor options requiring a SIGMOIDFUNCTION the available functions are:"
+          , show (enumFrom minBound :: [SigmoidFunction])
+          ]
 
   in case getOpt' Permute defaultOptions argv of
       (o,_,n,[])  -> do
