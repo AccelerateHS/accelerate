@@ -79,7 +79,7 @@ preAccDim k pacc =
 
 -- |Reify dimensionality of a scalar expression yielding a shape
 --
-expDim :: forall acc env aenv sh. Shape sh => PreOpenExp acc env aenv sh -> Int
+expDim :: forall acc env aenv sh. Elt sh => PreOpenExp acc env aenv sh -> Int
 expDim _ = ndim (eltType (undefined :: sh))
 
 
