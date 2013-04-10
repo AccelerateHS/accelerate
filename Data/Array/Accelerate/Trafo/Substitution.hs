@@ -20,7 +20,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   inline, substitute, compose,
 
   -- * Weakening
-  (:<),
+  (:>),
   weakenA, weakenEA, weakenFA,
   weakenE, weakenFE,
 
@@ -28,14 +28,17 @@ module Data.Array.Accelerate.Trafo.Substitution (
   RebuildAcc,
   rebuildA, rebuildAfun, rebuildOpenAcc,
   rebuildE, rebuildEA,
-  rebuildFA,
+  rebuildFA, rebuildFE,
 
 ) where
+
+import Prelude                                  hiding ( exp )
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays )
-import Prelude                                  hiding ( exp )
+
+import qualified Data.Array.Accelerate.Debug    as Stats
 
 
 -- NOTE: [Renaming and Substitution]
@@ -72,7 +75,7 @@ inline :: Elt t
        => PreOpenExp acc (env, s) aenv t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
-inline f g = rebuildE (subTop g) f
+inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
   where
     subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
     subTop s ZeroIdx      = s
@@ -86,6 +89,8 @@ substitute :: (Elt b, Elt c)
            -> PreOpenExp acc (env, a) aenv b
            -> PreOpenExp acc (env, a) aenv c
 substitute f g
+  | Stats.substitution "substitute" False = undefined
+
   | Var ZeroIdx <- g    = f     -- don't rebind an identity function
   | otherwise           = Let g $ rebuildE split f
   where
@@ -100,7 +105,7 @@ compose :: Elt c
         => PreOpenFun acc env aenv (b -> c)
         -> PreOpenFun acc env aenv (a -> b)
         -> PreOpenFun acc env aenv (a -> c)
-compose (Lam (Body f)) (Lam (Body g)) = Lam . Body $ substitute f g
+compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute f g
 compose _              _              = error "compose: impossible evaluation"
 
 
@@ -120,24 +125,41 @@ compose _              _              = error "compose: impossible evaluation"
 
 -- The type of shifting terms from one context into another
 --
-type env :< env' = forall t'. Idx env t' -> Idx env' t'
+type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
-weakenA :: RebuildAcc acc -> aenv :< aenv' -> PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' a
-weakenA k v = rebuildA k (Avar . v)
+weakenA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' a
+weakenA k v = Stats.substitution "weakenA" . rebuildA k (Avar . v)
 
-weakenEA :: RebuildAcc acc -> aenv :< aenv' -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv' t
-weakenEA k v = rebuildEA k (Avar . v)
+weakenEA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv' t
+weakenEA k v = Stats.substitution "weakenEA" . rebuildEA k (Avar . v)
 
-weakenFA :: RebuildAcc acc -> aenv :< aenv' -> PreOpenFun acc env aenv f -> PreOpenFun acc env aenv' f
-weakenFA k v = rebuildFA k (Avar . v)
+weakenFA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenFun acc env aenv f -> PreOpenFun acc env aenv' f
+weakenFA k v = Stats.substitution "weakenFA" . rebuildFA k (Avar . v)
 
 
-weakenE :: env :< env' -> PreOpenExp acc env aenv t -> PreOpenExp acc env' aenv t
-weakenE v = rebuildE (Var . v)
+weakenE :: env :> env' -> PreOpenExp acc env aenv t -> PreOpenExp acc env' aenv t
+weakenE v = Stats.substitution "weakenE" . rebuildE (Var . v)
 
-weakenFE :: env :< env' -> PreOpenFun acc env aenv f -> PreOpenFun acc env' aenv f
-weakenFE v = rebuildFE (Var . v)
+weakenFE :: env :> env' -> PreOpenFun acc env aenv f -> PreOpenFun acc env' aenv f
+weakenFE v = Stats.substitution "weakenFE" . rebuildFE (Var . v)
 
+
+{-# RULES
+"weakenA/weakenA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenA k v1 (weakenA k v2 a) = weakenA k (v1 . v2) a
+
+"weakenEA/weakenEA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenEA k v1 (weakenEA k v2 a) = weakenEA k (v1 . v2) a
+
+"weakenFA/weakenFA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenFA k v1 (weakenFA k v2 a) = weakenFA k (v1 . v2) a
+
+"weakenE/weakenE" forall e (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenE v1 (weakenE v2 e) = weakenE (v1 . v2) e
+
+"weakenFE/weakenFE" forall e (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenFE v1 (weakenFE v2 e) = weakenFE (v1 . v2) e
+ #-}
 
 -- Simultaneous Substitution ===================================================
 --
