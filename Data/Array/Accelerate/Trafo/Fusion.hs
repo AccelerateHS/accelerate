@@ -321,7 +321,7 @@ delayPreAcc delayAcc elimAcc pacc =
     -- independently of all others, and so we can aggressively fuse arbitrary
     -- sequences of these operations.
     --
-    Generate sh f       -> Yield BaseEnv (cvtE sh) (cvtF f)
+    Generate sh f       -> generateD (cvtE sh) (cvtF f)
 
     Map f a             -> mapD (cvtF f) (delayAcc a)
     ZipWith f a1 a0     -> zipWithD delayAcc (cvtF f) (delayAcc a1) a0
@@ -670,6 +670,16 @@ compute (Step  env (simplify -> sh) (simplify -> p) (simplify -> f) v)
 computeAcc :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> acc aenv arrs
 computeAcc = termOut . compute
 
+
+-- Representation of a generator as a delayed array
+--
+generateD :: (Shape sh, Elt e)
+          => PreExp     acc aenv sh
+          -> PreFun     acc aenv (sh -> e)
+          -> Cunctation acc aenv (Array sh e)
+generateD sh f
+  = Stats.ruleFired "generateD"
+  $ Yield BaseEnv sh f
 
 -- Fuse a unary function into a delayed array.
 --
