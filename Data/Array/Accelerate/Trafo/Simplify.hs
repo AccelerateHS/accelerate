@@ -1,10 +1,14 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE PatternGuards       #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE BangPatterns         #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
--- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -14,379 +18,340 @@
 
 module Data.Array.Accelerate.Trafo.Simplify (
 
-  -- simplify scalar expressions
-  simplifyExp, simplifyFun,
-
-  -- simplify array computations
-  simplifyAcc, simplifyAfun, simplifyOpenAcc,
+  Simplify(..),
 
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp, until )
-import Data.List                                        ( intercalate )
-import Data.Maybe                                       ( fromMaybe )
+import Prelude                                          hiding ( exp, iterate )
+import Data.Maybe
 import Data.Typeable
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                        hiding ( prj )
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Pretty                     ()
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Common
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Shape, toElt, fromElt )
+import Data.Array.Accelerate.Analysis.Shape
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..) )
 
-import qualified Debug.Trace                            as Debug
+import Data.Array.Accelerate.Pretty.Print
+import qualified Data.Array.Accelerate.Debug            as Stats
+
+#include "accelerate.h"
 
 
--- Scalar expressions
--- ------------------
+class Simplify f where
+  simplify :: f -> f
 
--- Currently this takes the form of a pretty weedy CSE optimisation, where we
--- look for expressions of the form:
+instance Kit acc => Simplify (PreFun acc aenv f) where
+  simplify = simplifyFun
+
+instance Kit acc => Simplify (PreExp acc aenv e) where
+  simplify = simplifyExp
+
+
+-- Scalar optimisations
+-- ====================
+
+-- Common subexpression elimination finds computations that are performed at
+-- least twice on a given execution path and eliminates the second and later
+-- occurrences, replacing them with uses of saved values. This implements a
+-- simplified version of that idea, where we look for the expressions of the
+-- form:
 --
--- > let x = e1 in e2
+--   let x = e1 in e2
 --
--- and replace all occurrences of e1 in e2 with x. This doesn't do full CSE, but
--- is enough to catch some cases.
+-- and replace all occurrences of e1 in e2 with x. This is not full redundancy
+-- elimination, but good enough to catch some cases, and in particular those
+-- likely to be introduced by scalar composition of terms in the fusion process.
 --
-localCSE
-    :: Elt a
-    => Gamma   env env aenv
-    -> OpenExp env     aenv a
-    -> Maybe (OpenExp env aenv a)
-localCSE env exp
-  | Just ix <- lookupExp env exp = trace "CSE" (show exp) $ Just (Var ix)
+-- While it may seem that common subexpression elimination is always worthwhile,
+-- as it reduces the number of arithmetic operations performed, this is not
+-- necessarily advantageous. The simplest case in which it may not be desirable
+-- is if it causes a register to be occupied for a long time in order to hold
+-- the shared expression's value, which hence reduces the number of registers
+-- available for other uses. Even worse is if the value has to be spilled to
+-- memory because there are insufficient registers available. We sidestep this
+-- tricky and target-dependent issue by, for now, simply ignoring it.
+--
+localCSE :: (Kit acc, Elt a, Elt b)
+         => Gamma      acc env env aenv
+         -> PreOpenExp acc env     aenv a
+         -> PreOpenExp acc (env,a) aenv b
+         -> Maybe (PreOpenExp acc env aenv b)
+localCSE env bnd body
+  | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
   | otherwise                    = Nothing
 
 
--- Recover scalar loops. This looks for the pattern:
+-- Compared to regular Haskell, the scalar expression language of Accelerate is
+-- rather limited in order to meet the restrictions of what can be efficiently
+-- implemented on specialised hardware, such as GPUs. For example, to avoid
+-- excessive SIMD divergence, we do not support any form of recursion or
+-- iteration in scalar expressions. This harmonises well with the stratified
+-- design of the Accelerate language: collective array operations comprise many
+-- scalar computations that are executed in parallel, so for simplicity of
+-- scheduling these operations we would like some assurance that each scalar
+-- computation takes approximately the same time to execute as all others.
 --
--- > let x =
--- >   let y = e1
--- >   in e2
--- > in e3
+-- However, some computations are naturally expressed in terms of iteration. For
+-- some problems, we can instead use generative techniques to implement the
+-- program by defining a single step of a recurrence relation as an Accelerate
+-- collective operation and using standard Haskell to unroll the loop a _fixed_
+-- number of times.
 --
--- and if e2 and e3 are congruent, replace this with the value iteration form:
+-- However, this is outrageously slow because the intermediate values are
+-- written to memory at the end of every iteration. Luckily the fusion process
+-- will eliminate this intermediate memory traffic by combining the 'n'
+-- collective operations into a single operation with 'n' instances of the loop
+-- body. However, doing this we uncover an embarrassing secret: C compilers do
+-- not compile C code, they compile _idiomatic_ C code.
 --
--- > iterate[2] e2 e1
---
--- where the expression e2 is repeated twice with an initial value of e1.
--- Similarly, loops can be joined:
---
--- > let x = iterate[n] f e1
--- > in e2
---
--- if the function body of f matches e2, then increase the iteration count.
+-- This process recovers the iteration structure that was lost in the process of
+-- fusing the collective operations. This allows a backend to generate explicit
+-- loops in its target language.
 --
 recoverLoops
-    :: Elt b
-    => Gamma   env env aenv
-    -> OpenExp env     aenv a
-    -> OpenExp (env,a) aenv b
-    -> Maybe (OpenExp env aenv b)
-recoverLoops _env bnd body
-  | Iterate n f x               <- bnd
-  , Just REFL                   <- matchOpenExp f body
-  = trace "loop join" (show f)
-  $ Just $ Iterate (plus1 n) f x                -- loop joining
+    :: (Kit acc, Elt b)
+    => Gamma      acc env env aenv
+    -> PreOpenExp acc env     aenv a
+    -> PreOpenExp acc (env,a) aenv b
+    -> Maybe (PreOpenExp acc env aenv b)
+recoverLoops _ bnd e3
+  -- To introduce scaler loops, we look for expressions of the form:
+  --
+  --   let x =
+  --     let y = e1 in e2
+  --   in e3
+  --
+  -- and if e2 and e3 are congruent, replace with:
+  --
+  --   iterate[2] (\y -> e2) e1
+  --
+  | Let e1 e2           <- bnd
+  , Just REFL           <- matchEnvTop e2 e3
+  , Just REFL           <- match e2 e3
+  = Stats.ruleFired "loop recovery/intro" . Just
+  $ Iterate (constant 2) e2 e1
 
-  | Let bnd' body'              <- bnd
-  , Just REFL                   <- matchEnvTop body body'
-  , Just REFL                   <- matchOpenExp body body'
-  = trace "loop intro" (show body)
-  $ Just $ Iterate (Const ((),2)) body bnd'     -- loop introduction
-
-  -- TLM TODO: nested loop recovery
+  -- To merge expressions into a loop body, look for the pattern:
+  --
+  --   let x = iterate[n] f e1
+  --   in e3
+  --
+  -- and if e3 matches the loop body, replace the let binding with the bare
+  -- iteration with the trip count increased by one.
+  --
+  | Iterate n f e1      <- bnd
+  , Just REFL           <- match f e3
+  = Stats.ruleFired "loop recovery/merge" . Just
+  $ Iterate (constant 1 `plus` n) f e1
 
   | otherwise
   = Nothing
-  where
-    plus1 :: OpenExp env aenv Int -> OpenExp env aenv Int
-    plus1 x = PrimApp (PrimAdd numType)
-            $ Tuple $ NilTup `SnocTup` Const ((),1) `SnocTup` x
 
-    matchEnvTop :: (Elt s, Elt t) => OpenExp (env,s) aenv f -> OpenExp (env,t) aenv g -> Maybe (s :=: t)
+  where
+    plus :: PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int -> PreOpenExp acc env aenv Int
+    plus x y = PrimApp (PrimAdd numType) $ Tuple $ NilTup `SnocTup` x `SnocTup` y
+
+    constant :: Int -> PreOpenExp acc env aenv Int
+    constant i = Const ((),i)
+
+    matchEnvTop :: (Elt s, Elt t)
+                => PreOpenExp acc (env,s) aenv f
+                -> PreOpenExp acc (env,t) aenv g
+                -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL
 
 
--- Simplify scalar let bindings. This will:
+-- Walk a scalar expression applying simplifications to terms bottom-up.
 --
---  a) This will check if the binding already exists in the environment, and so
---     replace all occurrences with that existing variable
---
---  b) Check for a specific pattern of let bindings that represent scalar loops
---
-simplifyLet
-    :: (Elt a, Elt b)
-    => Gamma   env env aenv
-    -> OpenExp env     aenv a
-    -> OpenExp (env,a) aenv b
-    -> OpenExp env     aenv b
-simplifyLet env bnd body
-  | Just x <- recoverLoops env bnd body = x
-  | Just x <- lookupExp env bnd         = inline body (Var x)
-  | otherwise                           = Let bnd body
-
-
--- Simplify conditional expressions. If the branches are equal, we can avoid the
--- conditional altogether.
---
--- TODO: implement constant folding, then attempt to evaluate the predicate and
---       insert only the appropriate branch (module Algebra).
---
-simplifyCond
-    :: Elt t
-    => Gamma env env aenv
-    -> OpenExp env aenv Bool
-    -> OpenExp env aenv t       -- then branch
-    -> OpenExp env aenv t       -- else branch
-    -> OpenExp env aenv t
-simplifyCond _env p t e
-  | Const ((), True)  <- p              = t
-  | Const ((), False) <- p              = e
-  | Just REFL <- matchOpenExp t e       = t
-  | otherwise                           = Cond p t e
-
-
--- Simplify shape intersection. Currently this only compares the terms as given,
--- but it would be possible to be cleverer and get the set of all intersections
--- in the sub-terms.
---
-simplifyIntersect
-    :: Shape sh
-    => OpenExp env aenv sh
-    -> OpenExp env aenv sh
-    -> OpenExp env aenv sh
-simplifyIntersect sh1 sh2
-  | Just REFL <- matchOpenExp sh1 sh2   = sh1
-  | otherwise                           = Intersect sh1 sh2     -- stable ordering?
-
-
--- Walk over the scalar expression, applying simplifications.
+-- TODO: Look for particular patterns of expressions that can be replaced by
+--       something equivalent and simpler. In particular, indexing operations
+--       introduced by the fusion transformation. This would benefit from a
+--       rewrite rule schema.
 --
 simplifyOpenExp
-    :: forall env aenv t. Elt t
-    => Gamma env env aenv
-    -> Delta aenv aenv
-    -> OpenExp env aenv t
-    -> OpenExp env aenv t
-simplifyOpenExp env aenv = cvt
+    :: forall acc env aenv e. Kit acc
+    => Gamma acc env env aenv
+    -> PreOpenExp acc env aenv e
+    -> PreOpenExp acc env aenv e
+simplifyOpenExp env = cvtE
   where
-    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
-    cvtA = simplifyOpenAcc aenv
+    cvtE :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+    cvtE exp = case exp of
+      Let bnd body
+        | Just reduct <- localCSE env bnd' body'        -> cvtE reduct
+        | Just reduct <- recoverLoops env bnd' body'    -> cvtE reduct
+        | otherwise                                     -> Let bnd' body'
+        where
+          bnd'  = cvtE bnd
+          env'  = env `PushExp` bnd'
+          body' = simplifyOpenExp (incExp env') body
 
-    cvt :: Elt e => OpenExp env aenv e -> OpenExp env aenv e
-    cvt exp
-      = flip fromMaybe (localCSE env exp)
-      $ case exp of
-          Let bnd body          -> let bnd'  = cvt bnd
-                                       env'  = incExp env `PushExp` weakenE bnd'
-                                       body' = simplifyOpenExp env' aenv body
-                                   in
-                                   simplifyLet env bnd' body'
-          --
-          Var ix                -> Var ix
-          Const c               -> Const c
-          Tuple tup             -> Tuple (simplifyTuple env aenv tup)
-          Prj ix t              -> simplifyPrj env aenv ix t
-          IndexNil              -> IndexNil
-          IndexCons sh sz       -> IndexCons (cvt sh) (cvt sz)
-          IndexHead sh          -> IndexHead (cvt sh)
-          IndexTail sh          -> IndexTail (cvt sh)
-          IndexAny              -> IndexAny
-          IndexSlice x ix sh    -> IndexSlice x (cvt ix) (cvt sh)
-          IndexFull x ix sl     -> IndexFull x (cvt ix) (cvt sl)
-          ToIndex sh ix         -> ToIndex (cvt sh) (cvt ix)
-          FromIndex sh ix       -> FromIndex (cvt sh) (cvt ix)
-          Cond p t e            -> simplifyCond env (cvt p) (cvt t) (cvt e)
-          Iterate n f x         -> Iterate (cvt n) (simplifyOpenExp (incExp env `PushExp` Var ZeroIdx) aenv f) (cvt x)
-          PrimConst c           -> PrimConst c
-          PrimApp f x           -> evalPrimApp env f (cvt x)
-          Index a sh            -> Index (cvtA a) (cvt sh)
-          LinearIndex a i       -> LinearIndex (cvtA a) (cvt i)
-          Shape a               -> Shape (cvtA a)
-          ShapeSize sh          -> ShapeSize (cvt sh)
-          Intersect s t         -> simplifyIntersect (cvt s) (cvt t)
+      Var ix                    -> Var ix
+      Const c                   -> Const c
+      Tuple tup                 -> Tuple (cvtT tup)
+      Prj ix t                  -> prj ix (cvtE t)
+      IndexNil                  -> IndexNil
+      IndexCons sh sz           -> indexCons (cvtE sh) (cvtE sz)
+      IndexHead sh              -> indexHead (cvtE sh)
+      IndexTail sh              -> indexTail (cvtE sh)
+      IndexAny                  -> IndexAny
+      IndexSlice x ix sh        -> IndexSlice x (cvtE ix) (cvtE sh)
+      IndexFull x ix sl         -> IndexFull x (cvtE ix) (cvtE sl)
+      ToIndex sh ix             -> ToIndex (cvtE sh) (cvtE ix)
+      FromIndex sh ix           -> FromIndex (cvtE sh) (cvtE ix)
+      Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
+      Iterate n f x             -> Iterate (cvtE n) (simplifyOpenExp (incExp env `PushExp` Var ZeroIdx) f) (cvtE x)
+      PrimConst c               -> PrimConst c
+      PrimApp f x               -> evalPrimApp env f (cvtE x)
+      Index a sh                -> Index a (cvtE sh)
+      LinearIndex a i           -> LinearIndex a (cvtE i)
+      Shape a                   -> Shape a
+      ShapeSize sh              -> ShapeSize (cvtE sh)
+      Intersect s t             -> cvtE s `intersect` cvtE t
+
+    cvtT :: Tuple (PreOpenExp acc env aenv) t -> Tuple (PreOpenExp acc env aenv) t
+    cvtT NilTup        = NilTup
+    cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
+
+    -- If the head terms of a shape intersection match, avoid the intersection
+    -- test and return the shape.
+    --
+    intersect :: Shape t => PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+    intersect sh1 sh2
+      | Just REFL <- match sh1 sh2      = Stats.ruleFired "intersect" sh1
+      | otherwise                       = Intersect sh1 sh2
+
+    -- Simplify conditional expressions, in particular by eliminating branches
+    -- when the predicate is a known constant.
+    --
+    cond :: Elt t
+         => PreOpenExp acc env aenv Bool
+         -> PreOpenExp acc env aenv t
+         -> PreOpenExp acc env aenv t
+         -> PreOpenExp acc env aenv t
+    cond p t e
+      | Const ((),True)  <- p   = Stats.knownBranch "True"      t
+      | Const ((),False) <- p   = Stats.knownBranch "False"     e
+      | Just REFL <- match t e  = Stats.knownBranch "redundant" e
+      | otherwise               = Cond p t e
+
+    -- If we are projecting elements from a tuple structure or tuple of constant
+    -- valued tuple, pick out the appropriate component directly.
+    --
+    prj :: forall s t. (Elt s, Elt t, IsTuple t)
+        => TupleIdx (TupleRepr t) s
+        -> PreOpenExp acc env aenv t
+        -> PreOpenExp acc env aenv s
+    prj ix exp
+      | Tuple t <- exp          = Stats.inline "prj/Tuple" $ prjT ix t
+      | Const c <- exp          = Stats.inline "prj/Const" $ prjC ix (fromTuple (toElt c :: t))
+      | otherwise               = Prj ix exp
+      where
+        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env aenv) tup -> PreOpenExp acc env aenv s
+        prjT ZeroTupIdx       (SnocTup _ e) = e
+        prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
+        prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
+
+        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env aenv s
+        prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
+        prjC (SuccTupIdx idx) (tup, _) = prjC idx tup
+
+    -- Shape manipulations
+    --
+    indexCons :: (Slice sl, Elt sz)
+              => PreOpenExp acc env aenv sl
+              -> PreOpenExp acc env aenv sz
+              -> PreOpenExp acc env aenv (sl :. sz)
+    indexCons sl sz
+      | Just REFL       <- match sl IndexNil
+      , IndexHead sh    <- sz
+      , expDim sz == 1  -- no type information that this is a 1D shape, hence gcast next
+      , Just sh'        <- gcast sh
+      = sh'
+
+    indexCons sl sz
+      = IndexCons sl sz
+
+    indexHead :: (Slice sl, Elt sz) => PreOpenExp acc env aenv (sl :. sz) -> PreOpenExp acc env aenv sz
+    indexHead (IndexCons _ sz)  = sz
+    indexHead sh                = IndexHead sh
+
+    indexTail :: (Slice sl, Elt sz) => PreOpenExp acc env aenv (sl :. sz) -> PreOpenExp acc env aenv sl
+    indexTail (IndexCons sl _)  = sl
+    indexTail sh                = IndexTail sh
 
 
-simplifyTuple
-    :: Gamma env env aenv
-    -> Delta aenv aenv
-    -> Tuple (OpenExp env aenv) t
-    -> Tuple (OpenExp env aenv) t
-simplifyTuple _   _    NilTup          = NilTup
-simplifyTuple env aenv (SnocTup tup e) = simplifyTuple   env aenv tup
-                               `SnocTup` simplifyOpenExp env aenv e
-
-simplifyPrj
-    :: forall env aenv t e. (Elt e, Elt t, IsTuple t)
-    => Gamma env env aenv
-    -> Delta aenv aenv
-    -> TupleIdx (TupleRepr t) e
-    -> OpenExp env aenv t
-    -> OpenExp env aenv e
-simplifyPrj env aenv ix exp
-  | Tuple t <- exp      = cvtT ix t
-  | Const c <- exp      = cvtC ix (fromTuple (toElt c :: t))
-  | otherwise           = Prj ix (cvtE exp)
-  where
-    cvtE :: Elt s => OpenExp env aenv s -> OpenExp env aenv s
-    cvtE = simplifyOpenExp env aenv
-
-    cvtT :: TupleIdx tup e -> Tuple (OpenExp env aenv) tup -> OpenExp env aenv e
-    cvtT ZeroTupIdx       (SnocTup _ e) = cvtE e
-    cvtT (SuccTupIdx idx) (SnocTup t _) = cvtT idx t
-    cvtT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
-
-    cvtC :: TupleIdx tup e -> tup -> OpenExp env aenv e
-    cvtC ZeroTupIdx       (_,   v) = Const (fromElt v)
-    cvtC (SuccTupIdx idx) (tup, _) = cvtC idx tup
-
+-- Simplification for open functions
+--
 simplifyOpenFun
-    :: Gamma env env aenv
-    -> Delta aenv aenv
-    -> OpenFun env aenv t
-    -> OpenFun env aenv t
-simplifyOpenFun env aenv (Body e) = Body (simplifyOpenExp env  aenv e)
-simplifyOpenFun env aenv (Lam  f) = Lam  (simplifyOpenFun env' aenv f)
+    :: Kit acc
+    => Gamma acc env env aenv
+    -> PreOpenFun acc env aenv f
+    -> PreOpenFun acc env aenv f
+simplifyOpenFun env (Body e) = Body (simplifyOpenExp env  e)
+simplifyOpenFun env (Lam f)  = Lam  (simplifyOpenFun env' f)
   where
     env' = incExp env `PushExp` Var ZeroIdx
 
 
-simplifyExp :: Elt t => Delta aenv aenv -> Exp aenv t -> Exp aenv t
-simplifyExp aenv
-  = until matchOpenExp (shrinkE . simplifyOpenExp EmptyExp aenv)
-
-simplifyFun :: Delta aenv aenv -> Fun aenv t -> Fun aenv t
-simplifyFun aenv
-  = until matchOpenFun (shrinkFE . simplifyOpenFun EmptyExp aenv)
-
-
--- Array computations
--- ------------------
-
--- Our weedy CSE optimisation lifted array types.
+-- Simplify closed expressions and functions. The process is applied repeatedly
+-- until no more changes are made.
 --
-globalCSE
-    :: Arrays a
-    => Delta aenv aenv
-    -> OpenAcc aenv a
-    -> Maybe (OpenAcc aenv a)
-globalCSE aenv acc
-  | Just ix <- lookupAcc aenv acc = trace "CSE" (show acc) $ Just (OpenAcc (Avar ix))
-  | otherwise                     = Nothing
+simplifyExp :: Kit acc => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
+
+simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
+simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyExp)
 
 
--- Simplify array conditionals by attempting to prune branches.
+-- NOTE: [Simplifier iterations]
 --
-simplifyAcond
-    :: Arrays a
-    => Delta aenv aenv
-    -> Exp aenv Bool
-    -> OpenAcc aenv a           -- then branch
-    -> OpenAcc aenv a           -- else branch
-    -> PreOpenAcc OpenAcc aenv a
-simplifyAcond _aenv p t@(OpenAcc tacc) e@(OpenAcc eacc)
-  | Const ((), True)  <- p              = tacc
-  | Const ((), False) <- p              = eacc
-  | Just REFL <- matchOpenAcc t e       = tacc
-  | otherwise                           = Acond p t e
-
-
--- Walk over an array expression, applying simplifications.
+-- Run the simplification pass _before_ the shrinking step. There are cases
+-- where it is better to run shrinking first, and then simplification would
+-- complete in a single step, but the converse is also true. However, as
+-- shrinking can remove some structure of the let bindings, which might be
+-- useful for the transformations (e.g. loop recovery) we want to maintain this
+-- information for at least the first pass.
 --
-simplifyOpenAcc
-    :: forall aenv arrs. Arrays arrs
-    => Delta aenv aenv
-    -> OpenAcc aenv arrs
-    -> OpenAcc aenv arrs
-simplifyOpenAcc aenv = shrinkOpenAcc . cvtA
+-- We iterate the (shrink . simplify) step until the expression no longer
+-- changes, using `match` to test for congruence. This could be improved by
+-- having both simplify and shrink indicate on return whether any work was done.
+-- The process then becomes:
+--
+--   1. apply simplification, continue to (2) regardless of changes made.
+--   2. apply shrinking. If no changes then exit, else (3).
+--   3. apply simplification. If no changes then exit, else (2).
+--
+{-# SPECIALISE iterate :: (Exp aenv t -> String) -> (Exp aenv t -> Exp aenv t) -> Exp aenv t -> Exp aenv t #-}
+{-# SPECIALISE iterate :: (Fun aenv t -> String) -> (Fun aenv t -> Fun aenv t) -> Fun aenv t -> Fun aenv t #-}
+
+iterate :: forall f a. (Match f, Shrink (f a)) => (f a -> String) -> (f a -> f a) -> f a -> f a
+iterate ppr go = fix 0
   where
-    cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
-    cvtT atup = case atup of
-      NilAtup         -> NilAtup
-      SnocAtup t a    -> cvtT t `SnocAtup` cvtA a
+    -- The maximum number of simplifier iterations. To be conservative and avoid
+    -- excessive run times, we set this value very low.
+    --
+    lIMIT = 1
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
-    cvtE = simplifyExp aenv
+    fix :: Int -> f a -> f a
+    fix !i !x
+      | i < lIMIT, x /=^ x'     = fix (i+1) x'
+      | otherwise               = INTERNAL_CHECK(warning) "iterate" "iteration limit reached" (x' ==^ go x') x'
+      where
+        x'      = Stats.simplifierDone . dump . shrink $ go x
 
-    cvtF :: Fun aenv t -> Fun aenv t
-    cvtF = simplifyFun aenv
+        u ==^ v = isJust (match u v)
+        u /=^ v = not (u ==^ v)
 
-    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
-    cvtA acc@(OpenAcc pacc)
-      = flip fromMaybe (globalCSE aenv acc) $ OpenAcc
-      $ case pacc of
-          Alet bnd body                 -> let bnd'  = cvtA bnd
-                                               aenv' = incAcc aenv `PushAcc` weakenA bnd'
-                                               body' = simplifyOpenAcc aenv' body
-                                           in
-                                           Alet bnd' body'
-          --
-          Avar ix                       -> Avar ix
-          Atuple tup                    -> Atuple (cvtT tup)
-          Aprj tup a                    -> Aprj tup (cvtA a)
-          Apply f a                     -> Apply f (cvtA a)
-          Acond p t e                   -> simplifyAcond aenv (cvtE p) (cvtA t) (cvtA e)
-          Use a                         -> Use a
-          Unit e                        -> Unit (cvtE e)
-          Reshape e a                   -> Reshape (cvtE e) (cvtA a)
-          Generate e f                  -> Generate (cvtE e) (cvtF f)
-          Transform sh ix f a           -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
-          Replicate sl slix a           -> Replicate sl (cvtE slix) (cvtA a)
-          Slice sl a slix               -> Slice sl (cvtA a) (cvtE slix)
-          Map f a                       -> Map (cvtF f) (cvtA a)
-          ZipWith f a1 a2               -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
-          Fold f z a                    -> Fold (cvtF f) (cvtE z) (cvtA a)
-          Fold1 f a                     -> Fold1 (cvtF f) (cvtA a)
-          FoldSeg f z a b               -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA b)
-          Fold1Seg f a b                -> Fold1Seg (cvtF f) (cvtA a) (cvtA b)
-          Scanl f z a                   -> Scanl (cvtF f) (cvtE z) (cvtA a)
-          Scanl' f z a                  -> Scanl' (cvtF f) (cvtE z) (cvtA a)
-          Scanl1 f a                    -> Scanl1 (cvtF f) (cvtA a)
-          Scanr f z a                   -> Scanr (cvtF f) (cvtE z) (cvtA a)
-          Scanr' f z a                  -> Scanr' (cvtF f) (cvtE z) (cvtA a)
-          Scanr1 f a                    -> Scanr1 (cvtF f) (cvtA a)
-          Permute f1 a1 f2 a2           -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
-          Backpermute sh f a            -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
-          Stencil f b a                 -> Stencil (cvtF f) b (cvtA a)
-          Stencil2 f b1 a1 b2 a2        -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-
-
-simplifyOpenAfun :: Delta aenv aenv -> OpenAfun aenv t -> OpenAfun aenv t
-simplifyOpenAfun aenv afun =
-  case afun of
-    Abody b     -> Abody (simplifyOpenAcc aenv b)
-    Alam f      -> Alam (simplifyOpenAfun (incAcc aenv `PushAcc` OpenAcc (Avar ZeroIdx)) f)
-
-
-simplifyAcc :: Arrays arrs => Acc arrs -> Acc arrs
-simplifyAcc = simplifyOpenAcc EmptyAcc
-
-simplifyAfun :: Afun f -> Afun f
-simplifyAfun = simplifyOpenAfun EmptyAcc
-
-
--- Debugging ===================================================================
---
-
-dump_simplify :: Bool
-dump_simplify = False
-
-trace :: String -> String -> a -> a
-trace phase str x
-  | dump_simplify       = Debug.trace msg x
-  | otherwise           = x
-  where
-    msg = intercalate "\n"
-        [ ""
-        , ">> " ++ phase ++ ' ' : replicate (80 - 4 - length phase) '-'
-        , str
-        , replicate 80 '-'
-        ]
+        -- debugging
+        msg v   = unlines [ "simplifier done", ppr v ]
+        dump v  = Stats.tracePure Stats.dump_simpl_iterations (msg v) v
 
