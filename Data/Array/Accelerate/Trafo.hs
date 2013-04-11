@@ -85,7 +85,7 @@ convertAccWith ok acc =
 #ifdef ACCELERATE_DEBUG
     unsafePerformIO resetSimplCount `seq`
 #endif
-    Fusion.anneal           `when` enableAccFusion
+    Fusion.annealAcc        `when` enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
   where
