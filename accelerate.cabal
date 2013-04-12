@@ -178,31 +178,11 @@ Library
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
 
-  Extensions:           BangPatterns
-                        CPP
-                        DeriveDataTypeable
-                        FlexibleContexts
-                        FlexibleInstances
-                        GADTs
-                        IncoherentInstances
-                        KindSignatures
-                        MagicHash
-                        MultiParamTypeClasses
-                        OverlappingInstances
-                        OverloadedStrings
-                        PatternGuards
-                        RankNTypes
-                        RecordWildCards
-                        ScopedTypeVariables
-                        StandaloneDeriving
-                        TemplateHaskell
-                        TupleSections
-                        TypeFamilies
-                        TypeOperators
-                        TypeSynonymInstances
-                        UnboxedTuples
-                        UndecidableInstances
-                        ViewPatterns
+  -- Don't add the extensions list here. Instead, place individual LANGUAGE
+  -- pragmas in the files that require a specific extension. This means the
+  -- project loads in GHCi, and avoids extension clashes.
+  --
+  -- Extensions:
 
 Source-repository head
   Type:                 git
