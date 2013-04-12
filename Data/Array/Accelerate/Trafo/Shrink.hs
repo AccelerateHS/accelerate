@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Shrink
@@ -47,16 +48,21 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 
 -- standard library
 import Prelude                                          hiding ( exp )
+import Data.Monoid
+import Control.Applicative                              hiding ( Const )
 
 
 class Shrink f where
-  shrink :: f -> f
+  shrink  :: f -> f
+  shrink' :: f -> (Bool, f)
+
+  shrink = snd . shrink'
 
 instance Shrink (PreOpenExp acc env aenv e) where
-  shrink = shrinkExp
+  shrink' = shrinkExp
 
 instance Shrink (PreOpenFun acc env aenv f) where
-  shrink = shrinkFun
+  shrink' = shrinkFun
 
 
 -- Shrinking
@@ -66,8 +72,8 @@ instance Shrink (PreOpenFun acc env aenv f) where
 -- instance of beta-reduction to cases where the bound variable is used zero
 -- (dead-code elimination) or one (linear inlining) times.
 --
-shrinkExp :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
-shrinkExp = Stats.substitution "shrink exp" shrinkE
+shrinkExp :: PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
+shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. In cases where it is not used at all, this is equivalent
@@ -75,51 +81,54 @@ shrinkExp = Stats.substitution "shrink exp" shrinkE
     --
     lIMIT = 1
 
-    shrinkE :: PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
+    shrinkE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     shrinkE exp = case exp of
       Let bnd body
-        | Var _ <- bnd  -> Stats.inline "Var"   $ shrinkE (inline body  bnd)
-        | uses <= lIMIT -> Stats.betaReduce msg $ shrinkE (inline body' bnd')
-        | otherwise     -> Let bnd' body'
+        | Var _ <- bnd  -> Stats.inline "Var"   . (Any True,) . snd $ shrinkE (inline body bnd)
+        | uses <= lIMIT -> Stats.betaReduce msg . (Any True,) . snd $ shrinkE (inline (snd body') (snd bnd'))
+        | otherwise     -> Let <$> bnd' <*> body'
         where
           bnd'  = shrinkE bnd
           body' = shrinkE body
-          uses  = usesOfExp ZeroIdx body'
+          uses  = usesOfExp ZeroIdx (snd body')
 
           msg   = case uses of
             0 -> "dead exp"
             _ -> "inline exp"   -- forced inlining when lIMIT > 1
       --
-      Var idx                   -> Var idx
-      Const c                   -> Const c
-      Tuple t                   -> Tuple (shrinkT t)
-      Prj tup e                 -> Prj tup (shrinkE e)
-      IndexNil                  -> IndexNil
-      IndexCons sl sz           -> IndexCons (shrinkE sl) (shrinkE sz)
-      IndexHead sh              -> IndexHead (shrinkE sh)
-      IndexTail sh              -> IndexTail (shrinkE sh)
-      IndexSlice x ix sh        -> IndexSlice x (shrinkE ix) (shrinkE sh)
-      IndexFull x ix sl         -> IndexFull x (shrinkE ix) (shrinkE sl)
-      IndexAny                  -> IndexAny
-      ToIndex sh ix             -> ToIndex (shrinkE sh) (shrinkE ix)
-      FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
-      Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
-      Iterate n f x             -> Iterate (shrinkE n) (shrinkE f) (shrinkE x)
-      PrimConst c               -> PrimConst c
-      PrimApp f x               -> PrimApp f (shrinkE x)
-      Index a sh                -> Index a (shrinkE sh)
-      LinearIndex a i           -> LinearIndex a (shrinkE i)
-      Shape a                   -> Shape a
-      ShapeSize sh              -> ShapeSize (shrinkE sh)
-      Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
+      Var idx                   -> pure (Var idx)
+      Const c                   -> pure (Const c)
+      Tuple t                   -> Tuple <$> shrinkT t
+      Prj tup e                 -> Prj tup <$> shrinkE e
+      IndexNil                  -> pure IndexNil
+      IndexCons sl sz           -> IndexCons <$> shrinkE sl <*> shrinkE sz
+      IndexHead sh              -> IndexHead <$> shrinkE sh
+      IndexTail sh              -> IndexTail <$> shrinkE sh
+      IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
+      IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
+      IndexAny                  -> pure IndexAny
+      ToIndex sh ix             -> ToIndex <$> shrinkE sh <*> shrinkE ix
+      FromIndex sh i            -> FromIndex <$> shrinkE sh <*> shrinkE i
+      Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
+      Iterate n f x             -> Iterate <$> shrinkE n <*> shrinkE f <*> shrinkE x
+      PrimConst c               -> pure (PrimConst c)
+      PrimApp f x               -> PrimApp f <$> shrinkE x
+      Index a sh                -> Index a <$> shrinkE sh
+      LinearIndex a i           -> LinearIndex a <$> shrinkE i
+      Shape a                   -> pure (Shape a)
+      ShapeSize sh              -> ShapeSize <$> shrinkE sh
+      Intersect sh sz           -> Intersect <$> shrinkE sh <*> shrinkE sz
 
-    shrinkT :: Tuple (PreOpenExp acc env aenv) t -> Tuple (PreOpenExp acc env aenv) t
-    shrinkT NilTup        = NilTup
-    shrinkT (SnocTup t e) = shrinkT t `SnocTup` shrinkE e
+    shrinkT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
+    shrinkT NilTup        = pure NilTup
+    shrinkT (SnocTup t e) = SnocTup <$> shrinkT t <*> shrinkE e
 
-shrinkFun :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
-shrinkFun (Lam f)  = Lam  (shrinkFun f)
-shrinkFun (Body b) = Body (shrinkExp b)
+    first :: (a -> a') -> (a,b) -> (a',b)
+    first f (x,y) = (f x, y)
+
+shrinkFun :: PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
+shrinkFun (Lam f)  = Lam  <$> shrinkFun f
+shrinkFun (Body b) = Body <$> shrinkExp b
 
 
 -- The shrinking substitution for array computations. This is further limited to
