@@ -137,6 +137,8 @@ Library
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
+                        Data.Array.Accelerate.Trafo.Fusion
+                        Data.Array.Accelerate.Trafo.Substitution
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
@@ -149,12 +151,10 @@ Library
                         Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Common
-                        Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
                         Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
-                        Data.Array.Accelerate.Trafo.Substitution
 
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
