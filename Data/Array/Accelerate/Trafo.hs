@@ -144,13 +144,13 @@ instance Arrays arrs => Show (Acc arrs) where
   show = withSimplStats
        . if enableAccFusion phases
             then show . Fusion.quenchAcc . convertAcc
-            else show . convertAcc
+            else show                    . convertAcc
 
 instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
   show = withSimplStats
        . if enableAccFusion phases
             then show . Fusion.quenchAfun . convertAccFun1
-            else show . convertAccFun1
+            else show                     . convertAccFun1
 
 instance Elt e => Show (Exp e) where
   show = withSimplStats . show . convertExp

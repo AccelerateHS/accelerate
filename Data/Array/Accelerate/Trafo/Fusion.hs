@@ -94,11 +94,12 @@ instance Kit DelayedOpenAcc where
   prettyAcc     = error "DelayedAcc.prettyAcc"
 
 
--- | Apply the fusion transformation _and also_ embed the delayed representation
--- of producers into the AST. This makes fused consumer/producer terms explicit.
+-- | An optional second phase of the fusion transformation that makes the
+-- representation of fused consumer/producer terms explicit. Note that quenching
+-- happens after annealing.
 --
 quenchAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-quenchAcc = cvtA . annealAcc
+quenchAcc = cvtA
   where
     -- Convert array computations into an embeddable delayed representation.
     -- This is essentially the reverse of 'compute'. While this is defined
