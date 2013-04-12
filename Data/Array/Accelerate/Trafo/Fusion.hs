@@ -941,6 +941,9 @@ zipWithD f cc1 cc0
 -- the cost of completely evaluating the array and subsequently retrieving the
 -- data from memory.
 --
+-- TODO: instead of relying on later shrinking, remove the eliminated binding
+--       from the environment straight away.
+--
 aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
       => DelayAcc acc
       -> ElimAcc  acc
