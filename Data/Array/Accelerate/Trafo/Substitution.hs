@@ -16,15 +16,15 @@
 
 module Data.Array.Accelerate.Trafo.Substitution (
 
-  -- * Renaming & Substitution
+  -- ** Renaming & Substitution
   inline, substitute, compose,
 
-  -- * Weakening
+  -- ** Weakening
   (:>),
   weakenA, weakenEA, weakenFA,
   weakenE, weakenFE,
 
-  -- * Rebuilding terms
+  -- ** Rebuilding terms
   RebuildAcc,
   rebuildA, rebuildAfun, rebuildOpenAcc,
   rebuildE, rebuildEA,

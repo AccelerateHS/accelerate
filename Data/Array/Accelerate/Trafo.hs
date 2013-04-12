@@ -20,6 +20,12 @@ module Data.Array.Accelerate.Trafo (
   convertAcc,     convertAccWith,
   convertAccFun1, convertAccFun1With,
 
+  -- * Fusion
+  module Data.Array.Accelerate.Trafo.Fusion,
+
+  -- * Substitution
+  module Data.Array.Accelerate.Trafo.Substitution,
+
 ) where
 
 import System.IO.Unsafe
@@ -27,7 +33,8 @@ import System.IO.Unsafe
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
-import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedAfun )
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun )
+import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite

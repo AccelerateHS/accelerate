@@ -31,11 +31,11 @@
 
 module Data.Array.Accelerate.Trafo.Fusion (
 
-  -- * Types
+  -- ** Types
   DelayedAcc, DelayedAfun, DelayedOpenAcc(..),
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
-  -- * Fusion
+  -- ** Conversion
   convertAcc, convertAfun,
 
 ) where
