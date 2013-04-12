@@ -98,6 +98,8 @@ instance Kit DelayedOpenAcc where
 -- representation of fused consumer/producer terms explicit. Note that quenching
 -- happens after annealing.
 --
+-- TODO: integrate this with the first phase?
+--
 quenchAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
 quenchAcc = cvtA
   where
