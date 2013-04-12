@@ -36,8 +36,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- * Fusion
-  annealAcc, annealAfun,
-  quenchAcc, quenchAfun,
+  convertAcc, convertAfun,
 
 ) where
 
@@ -57,8 +56,32 @@ import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), Arr
 import Data.Array.Accelerate.Tuple
 
 import qualified Data.Array.Accelerate.Debug            as Stats
+#ifdef ACCELERATE_DEBUG
+import System.IO.Unsafe -- for debugging
+#endif
 
 #include "accelerate.h"
+
+
+-- Delayed Array Fusion
+-- ====================
+
+-- | Apply the fusion transformation to a closed de Bruijn AST
+--
+convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
+convertAcc = withSimplStats . quenchAcc . annealAcc
+
+-- | Apply the fusion transformation to a function of array arguments
+--
+convertAfun :: Afun f -> DelayedAfun f
+convertAfun = withSimplStats . quenchAfun . annealAfun
+
+withSimplStats :: a -> a
+#ifdef ACCELERATE_DEBUG
+withSimplStats x = unsafePerformIO Stats.resetSimplCount `seq` x
+#else
+withSimplStats x = x
+#endif
 
 
 -- Delayed Arrays
@@ -68,8 +91,8 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 -- in the recursive knot to distinguish standard AST terms from operand arrays
 -- that should be embedded into their consumers.
 --
-type DelayedAcc a       = DelayedOpenAcc () a
-type DelayedAfun        = PreOpenAfun DelayedOpenAcc
+type DelayedAcc         = DelayedOpenAcc ()
+type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
@@ -234,7 +257,7 @@ quenchAcc = cvtA
     cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
 
-quenchAfun :: OpenAfun aenv f -> DelayedAfun aenv f
+quenchAfun :: OpenAfun aenv f -> DelayedOpenAfun aenv f
 quenchAfun (Alam  f) = Alam  (quenchAfun f)
 quenchAfun (Abody b) = Abody (quenchAcc b)
 

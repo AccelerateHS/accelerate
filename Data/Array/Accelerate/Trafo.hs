@@ -27,6 +27,7 @@ import System.IO.Unsafe
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
+import Data.Array.Accelerate.Trafo.Fusion               ( DelayedAcc, DelayedAfun )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
@@ -50,7 +51,7 @@ data Phase = Phase
   , floatOutAccFromExp          :: Bool
 
     -- | Fuse array computations? This also implies simplifying scalar
-    --   expressions.
+    --   expressions. NOTE: currently always enabled.
   , enableAccFusion             :: Bool
 
     -- | Convert segment length arrays into segment offset arrays?
@@ -77,15 +78,12 @@ phases =  Phase
 -- | Convert a closed array expression to de Bruijn form while also
 --   incorporating sharing observation and array fusion.
 --
-convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
+convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
 convertAcc = convertAccWith phases
 
-convertAccWith :: Arrays arrs => Phase -> Acc arrs -> AST.Acc arrs
-convertAccWith ok acc =
-#ifdef ACCELERATE_DEBUG
-    unsafePerformIO resetSimplCount `seq`
-#endif
-    Fusion.annealAcc        `when` enableAccFusion
+convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
+convertAccWith ok acc
+  = Fusion.convertAcc    -- `when` enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
   where
@@ -97,15 +95,12 @@ convertAccWith ok acc =
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> AST.Afun (a -> b)
+convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> DelayedAfun (a -> b)
 convertAccFun1 = convertAccFun1With phases
 
-convertAccFun1With :: (Arrays a, Arrays b) => Phase -> (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1With ok acc =
-#ifdef ACCELERATE_DEBUG
-    unsafePerformIO resetSimplCount `seq`
-#endif
-    Fusion.annealAfun           `when` enableAccFusion
+convertAccFun1With :: (Arrays a, Arrays b) => Phase -> (Acc a -> Acc b) -> DelayedAfun (a -> b)
+convertAccFun1With ok acc
+  = Fusion.convertAfun       -- `when` enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ Sharing.convertAccFun1 (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
   where
@@ -141,16 +136,10 @@ convertFun2
 -- ---------------
 
 instance Arrays arrs => Show (Acc arrs) where
-  show = withSimplStats
-       . if enableAccFusion phases
-            then show . Fusion.quenchAcc . convertAcc
-            else show                    . convertAcc
+  show = withSimplStats . show . convertAcc
 
 instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
-  show = withSimplStats
-       . if enableAccFusion phases
-            then show . Fusion.quenchAfun . convertAccFun1
-            else show                     . convertAccFun1
+  show = withSimplStats . show . convertAccFun1
 
 instance Elt e => Show (Exp e) where
   show = withSimplStats . show . convertExp

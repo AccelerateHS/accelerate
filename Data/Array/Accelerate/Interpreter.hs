@@ -56,8 +56,8 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import Data.Array.Accelerate.Trafo.Substitution
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Smart            as Sugar
-import qualified Data.Array.Accelerate.Trafo            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
@@ -70,9 +70,7 @@ import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sugar.convertAccWith config
-  where
-    config      = Sugar.phases { Sugar.enableAccFusion = False }
+run = force . evalAcc . Sharing.convertAcc True True True
 
 
 -- | Prepare and run an embedded array program of one argument
@@ -80,8 +78,7 @@ run = force . evalAcc . Sugar.convertAccWith config
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
 run1 afun = \a -> exec acc a
   where
-    config      = Sugar.phases { Sugar.enableAccFusion = False }
-    acc         = Sugar.convertAccFun1With config afun
+    acc = Sharing.convertAccFun1 True True True afun
 
     exec :: Afun (a -> b) -> a -> b
     exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)
