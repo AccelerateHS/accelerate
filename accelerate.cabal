@@ -178,12 +178,31 @@ Library
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
 
-  Extensions:           BangPatterns, CPP, DeriveDataTypeable, EmptyDataDecls,
-                        FlexibleContexts, FlexibleInstances, GADTs, MagicHash,
-                        MultiParamTypeClasses, PatternGuards, RankNTypes,
-                        ScopedTypeVariables, StandaloneDeriving,
-                        TemplateHaskell, TupleSections, TypeFamilies,
-                        TypeOperators, TypeSynonymInstances, UnboxedTuples
+  Extensions:           BangPatterns
+                        CPP
+                        DeriveDataTypeable
+                        FlexibleContexts
+                        FlexibleInstances
+                        GADTs
+                        IncoherentInstances
+                        KindSignatures
+                        MagicHash
+                        MultiParamTypeClasses
+                        OverlappingInstances
+                        OverloadedStrings
+                        PatternGuards
+                        RankNTypes
+                        RecordWildCards
+                        ScopedTypeVariables
+                        StandaloneDeriving
+                        TemplateHaskell
+                        TupleSections
+                        TypeFamilies
+                        TypeOperators
+                        TypeSynonymInstances
+                        UnboxedTuples
+                        UndecidableInstances
+                        ViewPatterns
 
 Source-repository head
   Type:                 git
