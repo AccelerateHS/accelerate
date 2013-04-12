@@ -222,7 +222,11 @@ fusionDone      = tick FusionDone
 -- Add an entry to the statistics counters
 --
 tick :: Tick -> a -> a
+#ifdef ACCELERATE_DEBUG
 tick t next = unsafePerformIO (modifyIORef' statistics (simplTick t)) `seq` next
+#else
+tick _ next = next
+#endif
 
 -- Add an entry to the statistics counters with an annotation
 --
@@ -269,7 +273,11 @@ initSimplCount = return $! Simple 0
 -- Bruijn conversion + optimisation pass.
 --
 resetSimplCount :: IO ()
+#ifdef ACCELERATE_DEBUG
 resetSimplCount = writeIORef statistics =<< initSimplCount
+#else
+resetSimplCount = return ()
+#endif
 
 -- Tick a counter
 --
