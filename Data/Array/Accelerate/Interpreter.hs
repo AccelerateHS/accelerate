@@ -55,6 +55,7 @@ import Data.Array.Accelerate.Array.Sugar (
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
+import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Smart            as Sugar
 import qualified Data.Array.Accelerate.Trafo            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
@@ -819,9 +820,9 @@ evalOpenExp (ForeignExp _ f e) env aenv
     wExp :: Idx ((),a) t -> Idx (env,a) t
     wExp ZeroIdx = ZeroIdx
     wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
-                                        
+
     e' = case f of
-           (Lam (Body b)) -> Let e $ Sugar.weakenByEA undefined (Sugar.weakenByE wExp b) 
+           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE wExp b)
            _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
 
 -- Evaluate a closed expression

@@ -19,10 +19,11 @@ module Data.Array.Accelerate.Pretty.Print (
 
   -- * Pretty printing functions
   PrettyAcc,
-  prettyPreAcc,  prettyAcc,
+  prettyPreAcc,  prettyOpenAcc,
   prettyPreExp,  prettyExp,
   prettyPreAfun, prettyAfun,
   prettyPreFun,  prettyFun,
+  prettyPrim,
   noParens
 
 ) where
@@ -47,8 +48,8 @@ type PrettyAcc acc = forall aenv t. Int -> (Doc -> Doc) -> acc aenv t -> Doc
 
 -- Pretty print an array expression
 --
-prettyAcc :: PrettyAcc OpenAcc
-prettyAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyAcc alvl wrap acc
+prettyOpenAcc :: PrettyAcc OpenAcc
+prettyOpenAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyOpenAcc alvl wrap acc
 
 prettyPreAcc
     :: forall acc aenv a.
@@ -169,7 +170,7 @@ prettyPreAcc pp alvl wrap (Stencil2 sten bndy1 acc1 bndy2 acc2)
                             pp alvl parens acc2]
 prettyPreAcc pp alvl wrap (Foreign ff afun acc)
   = wrap $ prettyArrOp "foreign" [text (strForeign ff),
-                                  parens (prettyPreAfun pp alvl afun), 
+                                  parens (prettyPreAfun pp alvl afun),
                                   pp alvl parens acc]
 
 prettyBoundary :: forall acc aenv dim e. Elt e
@@ -185,7 +186,7 @@ prettyArrOp name docs = hang (text name) 2 $ sep docs
 -- Pretty print a function over array computations.
 --
 prettyAfun :: Int -> OpenAfun aenv t -> Doc
-prettyAfun = prettyPreAfun prettyAcc
+prettyAfun = prettyPreAfun prettyOpenAcc
 
 prettyPreAfun :: forall acc aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc aenv fun -> Doc
 prettyPreAfun pp alvl fun =
@@ -201,7 +202,7 @@ prettyPreAfun pp alvl fun =
 -- Pretty print a function over scalar expressions.
 --
 prettyFun :: Int -> OpenFun env aenv fun -> Doc
-prettyFun = prettyPreFun prettyAcc
+prettyFun = prettyPreFun prettyOpenAcc
 
 prettyPreFun :: PrettyAcc acc -> Int -> PreOpenFun acc env aenv fun -> Doc
 prettyPreFun pp = prettyPreOpenFun pp 0
@@ -222,7 +223,7 @@ prettyPreOpenFun pp lvl alvl fun =
 -- * Apply the wrapping combinator (3rd argument) to any compound expressions.
 --
 prettyExp :: Int -> Int -> (Doc -> Doc) -> OpenExp env aenv t -> Doc
-prettyExp = prettyPreExp prettyAcc
+prettyExp = prettyPreExp prettyOpenAcc
 
 prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
@@ -278,11 +279,11 @@ prettyPreExp pp lvl alvl wrap (Cond c t e)
 prettyPreExp pp lvl alvl wrap (Iterate i fun a)
   = wrap $ text "iterate" <>  brackets (prettyPreExp pp lvl alvl id i)
                           <+> sep [ wrap   (prettyPreExp pp lvl alvl parens a)
-                                  , parens (prettyPreExp pp lvl alvl parens fun) ]
+                                  , parens (prettyPreOpenFun pp lvl alvl (Lam (Body fun))) ]
 prettyPreExp pp lvl alvl wrap (ForeignExp ff f e)
   = wrap $ text "foreignExp" <+> text (strForeign ff)
                              <+> prettyPreFun pp alvl f
-                             <+> prettyPreExp pp lvl alvl parens e 
+                             <+> prettyPreExp pp lvl alvl parens e
 
 prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a

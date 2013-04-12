@@ -18,12 +18,13 @@ module Data.Array.Accelerate.Internal.Check (
 
   -- * Bounds checking and assertion infrastructure
   Checks(..), doChecks,
-  error, check, assert, checkIndex, checkLength, checkSlice
+  error, check, warning, assert, checkIndex, checkLength, checkSlice
 
 ) where
 
-import Prelude hiding( error )
-import qualified Prelude as P
+import Prelude                          hiding ( error )
+import Debug.Trace
+import qualified Prelude                as P
 
 data Checks = Bounds | Unsafe | Internal deriving( Eq )
 
@@ -55,21 +56,33 @@ doChecks Bounds   = doBoundsChecks
 doChecks Unsafe   = doUnsafeChecks
 doChecks Internal = doInternalChecks
 
+message :: String -> Int -> Checks -> String -> String -> String
+{-# INLINE message #-}
+message file line kind loc msg
+  = unlines
+  $ (if kind == Internal
+       then ([""
+             ,"*** Internal error in package accelerate ***"
+             ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]++)
+       else id)
+    [ file ++ ":" ++ show line ++ " (" ++ loc ++ "): " ++ msg ]
+
 error :: String -> Int -> Checks -> String -> String -> a
+{-# INLINE error #-}
 error file line kind loc msg
-  = P.error . unlines $
-      (if kind == Internal
-         then ([""
-               ,"*** Internal error in package accelerate ***"
-               ,"*** Please submit a bug report at https://github.com/AccelerateHS/accelerate/issues"]++)
-         else id)
-      [ file ++ ":" ++ show line ++ " (" ++ loc ++ "): " ++ msg ]
+  = P.error (message file line kind loc msg)
 
 check :: String -> Int -> Checks -> String -> String -> Bool -> a -> a
 {-# INLINE check #-}
 check file line kind loc msg cond x
   | not (doChecks kind) || cond = x
-  | otherwise = error file line kind loc msg
+  | otherwise                   = error file line kind loc msg
+
+warning :: String -> Int -> Checks -> String -> String -> Bool -> a -> a
+{-# INLINE warning #-}
+warning file line kind loc msg cond x
+  | not (doChecks kind) || cond = x
+  | otherwise                   = trace (message file line kind loc msg) x
 
 assert_msg :: String
 assert_msg = "assertion failure"

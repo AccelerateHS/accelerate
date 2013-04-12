@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Debug (
 
   -- * Statistics
   inline, ruleFired, knownBranch, betaReduce, substitution, simplifierDone, fusionDone,
-  resetSimplCount,
+  resetSimplCount, simplCount,
 
 ) where
 
@@ -121,6 +121,7 @@ fflags =
   , Option "exp-sharing"                (set' exp_sharing)              -- sharing of scalar expressions
   , Option "fusion"                     (set' fusion)                   -- fusion of array computations
   , Option "simplify"                   (set' simplify)                 -- scalar expression simplification
+--  , Option "unfolding-use-threshold"                                  -- the magic cut-off figure for inlining
   ]
   where
     set' f v = set f (Just v)
@@ -285,6 +286,9 @@ pprSimplCount (Detail n dts)
          , text ""
          , pprTickCount dts
          ]
+
+simplCount :: IO Doc
+simplCount = pprSimplCount `fmap` readIORef statistics
 
 
 -- Ticks
