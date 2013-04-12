@@ -168,10 +168,10 @@ prettyPreAcc pp alvl wrap (Stencil2 sten bndy1 acc1 bndy2 acc2)
                             pp alvl parens acc1,
                             prettyBoundary acc2 bndy2,
                             pp alvl parens acc2]
-prettyPreAcc pp alvl wrap (Foreign ff afun acc)
-  = wrap $ prettyArrOp "foreign" [text (strForeign ff),
-                                  parens (prettyPreAfun pp alvl afun),
-                                  pp alvl parens acc]
+prettyPreAcc pp alvl wrap (Aforeign ff afun acc)
+  = wrap $ prettyArrOp "aforeign" [text (strForeign ff),
+                                   parens (prettyPreAfun pp alvl afun),
+                                   pp alvl parens acc]
 
 prettyBoundary :: forall acc aenv dim e. Elt e
                => {-dummy-}acc aenv (Array dim e) -> Boundary (EltRepr e) -> Doc
@@ -280,8 +280,8 @@ prettyPreExp pp lvl alvl wrap (Iterate i fun a)
   = wrap $ text "iterate" <>  brackets (prettyPreExp pp lvl alvl id i)
                           <+> sep [ wrap   (prettyPreExp pp lvl alvl parens a)
                                   , parens (prettyPreOpenFun pp lvl alvl (Lam (Body fun))) ]
-prettyPreExp pp lvl alvl wrap (ForeignExp ff f e)
-  = wrap $ text "foreignExp" <+> text (strForeign ff)
+prettyPreExp pp lvl alvl wrap (Foreign ff f e)
+  = wrap $ text "foreign" <+> text (strForeign ff)
                              <+> prettyPreFun pp alvl f
                              <+> prettyPreExp pp lvl alvl parens e
 

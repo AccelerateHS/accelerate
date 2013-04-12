@@ -115,6 +115,14 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just REFL <- matchAcc                  a1 a2
       = Just REFL
 
+    match (Aforeign ff1 _ a1) (Aforeign ff2 _ a2)
+      | Just REFL <- matchAcc a1 a2,
+        unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+
     match (Acond p1 t1 e1) (Acond p2 t2 e2)
       | Just REFL <- matchExp p1 p2
       , Just REFL <- matchAcc t1 t2
@@ -254,14 +262,6 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Foreign ff1 _ a1) (Foreign ff2 _ a2)
-      | Just REFL <- matchAcc a1 a2,
-        unsafePerformIO $ do
-          sn1 <- makeStableName ff1
-          sn2 <- makeStableName ff2
-          return $! hashStableName sn1 == hashStableName sn2
-      = gcast REFL
-
     match _ _
       = Nothing
 
@@ -366,6 +366,14 @@ matchPreOpenExp matchAcc hashAcc = match
     match (Var v1) (Var v2)
       = matchIdx v1 v2
 
+    match (Foreign ff1 _ e1) (Foreign ff2 _ e2)
+      | Just REFL <- match e1 e2
+      , unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+
     match (Const c1) (Const c2)
       | Just REFL <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
       , matchConst (eltType (undefined::s')) c1 c2
@@ -469,14 +477,6 @@ matchPreOpenExp matchAcc hashAcc = match
       | Just REFL <- match sa1 sa2
       , Just REFL <- match sb1 sb2
       = Just REFL
-
-    match (ForeignExp ff1 _ e1) (ForeignExp ff2 _ e2)
-      | Just REFL <- match e1 e2
-      , unsafePerformIO $ do
-          sn1 <- makeStableName ff1
-          sn2 <- makeStableName ff2
-          return $! hashStableName sn1 == hashStableName sn2
-      = gcast REFL
 
     match _ _
       = Nothing
@@ -875,6 +875,7 @@ hashPreOpenAcc hashAcc pacc =
     Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
     Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a
     Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
+    Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
     Unit e                      -> hash "Unit"          `hashE` e
     Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
@@ -899,7 +900,6 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Foreign _ f a               -> hash "Foreign"       `hashWithSalt` hashAfun hashAcc f `hashA` a
 
 
 hashArrays :: ArraysR a -> a -> Int
@@ -961,7 +961,7 @@ hashPreOpenExp hashAcc exp =
     Shape a                     -> hash "Shape"         `hashA` a
     ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
     Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
-    ForeignExp _ f e            -> hash "ForeignExp"    `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
+    Foreign _ f e               -> hash "Foreign"       `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
 
 
 hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int

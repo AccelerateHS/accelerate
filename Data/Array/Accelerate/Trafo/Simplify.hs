@@ -219,8 +219,7 @@ simplifyOpenExp env = first getAny . cvtE
       Shape a                   -> pure $ Shape a
       ShapeSize sh              -> ShapeSize <$> cvtE sh
       Intersect s t             -> cvtE s `intersect` cvtE t
-      ForeignExp ff f e         -> ForeignExp ff <$> first Any (simplifyOpenFun EmptyExp f)
-                                                 <*> cvtE e
+      Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
 
     cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     cvtT NilTup        = pure NilTup

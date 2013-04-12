@@ -228,6 +228,15 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv arrs1
               -> PreOpenAcc acc aenv arrs2
 
+  -- Apply a backend-specific foreign function to an array, with a pure
+  -- Accelerate version for use with other backends. The functions must be
+  -- closed.
+  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
+              => f arrs a                                       -- The foreign function for a given backend
+              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
+              -> acc              aenv arrs                     -- Arguments to the function
+              -> PreOpenAcc   acc aenv a
+
   -- If-then-else for array-level computations
   Acond       :: (Arrays arrs)
               => PreExp     acc aenv Bool
@@ -422,14 +431,6 @@ data PreOpenAcc acc aenv a where
               -> Boundary            (EltRepr e2)               -- boundary condition #2
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
-
-  -- Call a backend specific foreign function. A pure Accelerate version must be
-  -- supplied for use by other backends, which must be a closed function.
-  Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
-              => ff arrs results                                -- The foreign function for a given backend
-              -> PreAfun      acc      (arrs -> results)        -- A pure accelerate version
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv results
 
 
 -- Vanilla open array computations
@@ -685,6 +686,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => Idx env t
                 -> PreOpenExp acc env aenv t
 
+  -- Apply a backend-specific foreign function
+  Foreign       :: (Foreign f, Elt x, Elt y)
+                => f x y
+                -> PreFun acc () (x -> y)
+                -> PreOpenExp acc env aenv x
+                -> PreOpenExp acc env aenv y
+
   -- Constant values
   Const         :: Elt t
                 => EltRepr t
@@ -795,12 +803,6 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
-
-  ForeignExp    :: (ForeignFun ff, Elt args, Elt results)
-                => ff args results
-                -> PreFun acc () (args -> results)
-                -> PreOpenExp acc env aenv args
-                -> PreOpenExp acc env aenv results
 
 
 -- |Vanilla open expression

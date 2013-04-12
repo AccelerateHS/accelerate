@@ -41,6 +41,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Alet acc1 acc2)                      = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Avar idx)                            = leaf   ("AVar " `cat` idxToInt idx)
     travAcc' (Apply afun acc)                      = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
+    travAcc' (Aforeign ff afun acc)                = combine ("Aforeign " ++ strForeign ff) [travAfun f c l afun, travAcc f c l acc]
     travAcc' (Acond e acc1 acc2)                   = combine "Acond" [travExp f c l e, travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Atuple tup)                          = combine "Atuple" [ travAtuple f c l tup ]
     travAcc' (Aprj idx a)                          = combine ("Aprj " `cat` tupleIdxToInt idx) [ travAcc f c l a ]
@@ -72,7 +73,6 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (Foreign ff afun acc)                 = combine ("Foreign " ++ strForeign ff) [travAfun f c l afun, travAcc f c l acc]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
@@ -107,7 +107,7 @@ travExp f c l expr = travExp' expr
     travExp' (Shape idx)                = combine "Shape" [ travAcc f c l idx ]
     travExp' (ShapeSize e)              = combine "ShapeSize" [ travExp f c l e ]
     travExp' (Intersect sh1 sh2)        = combine "Intersect" [ travExp f c l sh1, travExp f c l sh2 ]
-    travExp' (ForeignExp ff fun e)      = combine ("ForeignExp " ++ strForeign ff) [ travFun f c l fun, travExp f c l e ]
+    travExp' (Foreign ff fun e)         = combine ("Foreign " ++ strForeign ff) [ travFun f c l fun, travExp f c l e ]
 
 
 travAfun :: forall m b aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)

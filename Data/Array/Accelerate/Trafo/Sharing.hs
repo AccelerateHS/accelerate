@@ -225,6 +225,13 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
+      Aforeign ff afun acc
+        -> let a = recoverAccSharing config
+               e = recoverExpSharing config
+               f = floatOutAcc config
+           in
+           AST.Aforeign ff (convertAccFun1 a e f afun) (cvtA acc)
+
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Atuple arrs                 -> AST.Atuple (convertSharingAtuple config alyt aenv arrs)
       Aprj ix a                   -> AST.Aprj ix (cvtA a)
@@ -258,11 +265,6 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      Foreign ff afun acc         -> let a = recoverAccSharing config
-                                         e = recoverExpSharing config
-                                         f = floatOutAcc config
-                                     in 
-                                     AST.Foreign ff (convertAccFun1 a e f afun) (cvtA acc) 
 
 convertSharingAtuple
     :: forall aenv a.
@@ -428,7 +430,7 @@ convertSharingExp config lyt alyt env aenv = cvt
           LinearIndex a i       -> AST.LinearIndex (cvtA a) (cvt i)
           Shape a               -> AST.Shape (cvtA a)
           ShapeSize e           -> AST.ShapeSize (cvt e)
-          ForeignExp ff f e     -> AST.ForeignExp ff (convertFun1 (recoverExpSharing config) f) (cvt e) 
+          Foreign ff f e        -> AST.Foreign ff (convertFun1 (recoverExpSharing config) f) (cvt e)
 
     cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
@@ -948,6 +950,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           case pacc of
             Atag i                      -> reconstruct $ return (Atag i, 0)           -- height is 0!
             Pipe afun1 afun2 acc        -> reconstruct $ travA (Pipe afun1 afun2) acc
+            Aforeign ff afun acc        -> reconstruct $ travA (Aforeign ff afun) acc
             Acond e acc1 acc2           -> reconstruct $ do
                                              (e'   , h1) <- traverseExp lvl e
                                              (acc1', h2) <- traverseAcc lvl acc1
@@ -1014,8 +1017,6 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc2', h3) <- traverseAcc lvl acc2
                                              return (Stencil2 s' bnd1 acc1' bnd2 acc2',
                                                      h1 `max` h2 `max` h3 + 1)
-
-            Foreign ff afun acc         -> reconstruct $ travA (Foreign ff afun) acc
 
       where
         travA :: Arrays arrs'
@@ -1240,9 +1241,9 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             LinearIndex a i     -> reconstruct $ travAE LinearIndex a i
             Shape a             -> reconstruct $ travA Shape a
             ShapeSize e         -> reconstruct $ travE1 ShapeSize e
-            ForeignExp ff f e   -> reconstruct $ do
-                                                   (e', h) <- travE lvl e
-                                                   return  (ForeignExp ff f e', h+ 1)
+            Foreign ff f e      -> reconstruct $ do
+                                      (e', h) <- travE lvl e
+                                      return  (Foreign ff f e', h+1)
 
       where
         traverseAcc :: Typeable arrs => Level -> Acc arrs -> IO (SharingAcc arrs, Int)
@@ -1490,6 +1491,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
           Atag i                  -> reconstruct (Atag i) noNodeCounts
           Pipe afun1 afun2 acc    -> travA (Pipe afun1 afun2) acc
             -- we are not traversing 'afun1' & 'afun2' — see Note [Pipe and sharing recovery]
+          Aforeign ff afun acc    -> let
+                                       (acc', accCount) = scopesAcc acc
+                                     in
+                                     reconstruct (Aforeign ff afun acc') accCount
           Acond e acc1 acc2       -> let
                                        (e'   , accCount1) = scopesExp e
                                        (acc1', accCount2) = scopesAcc acc1
@@ -1566,10 +1571,6 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
                                        (accCount1 +++ accCount2 +++ accCount3)
-          Foreign ff afun acc        -> let
-                                       (acc', accCount) = scopesAcc acc
-                                     in 
-                                     reconstruct (Foreign ff afun acc') accCount
       where
         travEA :: Arrays arrs
                => (RootExp e -> SharingAcc arrs' -> PreAcc SharingAcc RootExp arrs)
@@ -1809,7 +1810,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           LinearIndex a e -> travAE LinearIndex a e
           Shape a         -> travA Shape a
           ShapeSize e     -> travE1 ShapeSize e
-          ForeignExp ff f e-> travE1 (ForeignExp ff f) e 
+          Foreign ff f e  -> travE1 (Foreign ff f) e
       where
         travTup :: Tuple.Tuple SharingExp tup -> (Tuple.Tuple SharingExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)
@@ -2052,7 +2053,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Foreign{}          = "Foreign"
+showPreAccOp Aforeign{}         = "Aforeign"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr
@@ -2099,5 +2100,5 @@ showPreExpOp Index{}            = "Index"
 showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
-showPreExpOp ForeignExp{}       = "ForeignExp"
+showPreExpOp Foreign{}          = "Foreign"
 

@@ -226,7 +226,7 @@ rebuildE v exp =
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
     Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
-    ForeignExp ff f e   -> ForeignExp ff f (rebuildE v e)
+    Foreign ff f e      -> Foreign ff f (rebuildE v e)
 
 rebuildTE
     :: SyntacticExp f
@@ -306,6 +306,7 @@ rebuildA rebuild v acc =
     Atuple tup          -> Atuple (rebuildATA rebuild v tup)
     Aprj tup a          -> Aprj tup (rebuild v a)
     Apply f a           -> Apply f (rebuild v a)
+    Aforeign ff afun as -> Aforeign ff afun (rebuild v as)
     Acond p t e         -> Acond (rebuildEA rebuild v p) (rebuild v t) (rebuild v e)
     Use a               -> Use a
     Unit e              -> Unit (rebuildEA rebuild v e)
@@ -331,7 +332,6 @@ rebuildA rebuild v acc =
     Stencil f b a       -> Stencil (rebuildFA rebuild v f) b (rebuild v a)
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
-    Foreign ff afun as  -> Foreign ff afun (rebuild v as)
 
 
 -- Rebuilding array computations
@@ -394,7 +394,7 @@ rebuildEA k v exp =
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
     Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
-    ForeignExp ff f e   -> ForeignExp ff f (rebuildEA k v e)
+    Foreign ff f e      -> Foreign ff f (rebuildEA k v e)
 
 rebuildTA
     :: SyntacticAcc f

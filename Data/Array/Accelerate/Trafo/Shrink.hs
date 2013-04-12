@@ -118,7 +118,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       Shape a                   -> pure (Shape a)
       ShapeSize sh              -> ShapeSize <$> shrinkE sh
       Intersect sh sz           -> Intersect <$> shrinkE sh <*> shrinkE sz
-      ForeignExp ff f e         -> ForeignExp ff <$> shrinkF f <*> shrinkE e
+      Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
 
     shrinkT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     shrinkT NilTup        = pure NilTup
@@ -161,6 +161,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Atuple tup                -> Atuple (shrinkAT tup)
       Aprj tup a                -> Aprj tup (shrinkAcc a)
       Apply f a                 -> Apply (shrinkAF f) (shrinkAcc a)
+      Aforeign ff af a          -> Aforeign ff af (shrinkAcc a)
       Acond p t e               -> Acond (shrinkE p) (shrinkAcc t) (shrinkAcc e)
       Use a                     -> Use a
       Unit e                    -> Unit (shrinkE e)
@@ -185,7 +186,6 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Foreign ff af a           -> Foreign ff af (shrinkAcc a)
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -212,7 +212,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Shape a                   -> Shape (shrinkAcc a)
       ShapeSize sh              -> ShapeSize (shrinkE sh)
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
-      ForeignExp ff f e         -> ForeignExp ff (shrinkF f) (shrinkE e)
+      Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
 
     shrinkF :: PreOpenFun acc env aenv' f -> PreOpenFun acc env aenv' f
     shrinkF (Lam f)  = Lam (shrinkF f)
@@ -298,7 +298,7 @@ usesOfExp idx = countE
       Shape _                   -> 0
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
-      ForeignExp _ _ e          -> countE e
+      Foreign _ _ e             -> countE e
 
     countT :: Tuple (PreOpenExp acc env aenv) e -> Int
     countT NilTup        = 0
@@ -330,6 +330,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Atuple tup                -> countAT tup
       Aprj _ a                  -> countA a     -- special case discount?
       Apply _ a                 -> countA a
+      Aforeign _ _ a            -> countA a
       Acond p t e               -> countE p  + countA t `max` countA e
       Use _                     -> 0
       Unit e                    -> countE e
@@ -354,7 +355,6 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Foreign _ _ a             -> countA a
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
@@ -386,7 +386,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Shape a
         | withShape             -> countA a
         | otherwise             -> 0
-      ForeignExp _ _ e          -> countE e
+      Foreign _ _ e             -> countE e
 
     countF :: PreOpenFun acc env aenv f -> Int
     countF (Lam  f) = countF f

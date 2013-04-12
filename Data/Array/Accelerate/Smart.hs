@@ -104,6 +104,12 @@ data PreAcc acc exp as where
               -> acc as
               -> PreAcc acc exp cs
 
+  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
+              => f arrs a
+              -> (Acc arrs -> Acc a)
+              -> acc arrs
+              -> PreAcc acc exp a
+
   Acond       :: (Arrays as)
               => exp Bool
               -> acc as
@@ -250,12 +256,6 @@ data PreAcc acc exp as where
               -> acc (Array sh b)
               -> PreAcc acc exp (Array sh c)
 
-  Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
-              => ff arrs results
-              -> (Acc arrs -> Acc results)
-              -> acc arrs
-              -> PreAcc acc exp results
-
 -- |Array-valued collective computations
 --
 newtype Acc a = Acc (PreAcc Acc Exp a)
@@ -281,7 +281,7 @@ data PreExp acc exp t where
               => Level                          -> PreExp acc exp t
                  -- environment size at defining occurrence
 
-    -- All the same constructors as 'AST.Exp'
+  -- All the same constructors as 'AST.Exp'
   Const       :: Elt t
               => t                              -> PreExp acc exp t
 
@@ -317,10 +317,10 @@ data PreExp acc exp t where
               => acc (Array sh e)               -> PreExp acc exp sh
   ShapeSize   :: Shape sh
               => exp sh                         -> PreExp acc exp Int
-  ForeignExp  :: (Elt args, Elt results, ForeignFun ff)
-              => ff args results
-              -> (Exp args -> Exp results) -- Using Exp instead of exp to aid in sharing recovery.
-              -> exp args                       -> PreExp acc exp results
+  Foreign     :: (Elt x, Elt y, Foreign f)
+              => f x y
+              -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
+              -> exp x                          -> PreExp acc exp y
 
 -- | Scalar expressions for plain array computations.
 --

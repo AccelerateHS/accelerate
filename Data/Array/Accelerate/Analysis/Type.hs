@@ -86,6 +86,10 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Hey look! even the leaves are falling for you."
 
+    Aforeign _ _ _      -> case arrays' (undefined :: Array sh e) of
+                             ArraysRarray -> eltType (undefined::e)
+                             _            -> error "Who on earth wrote all these weird error messages?"
+
     Acond _ acc _       -> k acc
     Use ((),a)          -> arrayType a
     Unit _              -> eltType (undefined::e)
@@ -108,9 +112,6 @@ preAccType k pacc =
     Backpermute _ _ acc -> k acc
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
-    Foreign _ _ _       -> case arrays' (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
-                             _            -> error "Who on earth wrote all these weird error messages?"
 
 
 -- |Reify the result type of a scalar expression.
@@ -150,7 +151,7 @@ preExpType k e =
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)
-    ForeignExp _ _ _  -> eltType (undefined::t)
+    Foreign _ _ _     -> eltType (undefined::t)
 
 
 -- |Size of a tuple type, in bytes

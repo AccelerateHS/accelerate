@@ -474,61 +474,61 @@ stencil2 = Acc $$$$$ Stencil2
 -- The arguments are passed as either a single array or as a tuple of arrays. In addition a pure
 -- Accelerate version of the function needs to be provided to support backends other than the one
 -- being targeted.
-foreignAcc :: (Arrays acc, Arrays res, ForeignFun ff) 
-           => ff acc res 
-           -> (Acc acc -> Acc res) 
-           -> Acc acc 
+foreignAcc :: (Arrays acc, Arrays res, Foreign ff)
+           => ff acc res
+           -> (Acc acc -> Acc res)
+           -> Acc acc
            -> Acc res
-foreignAcc = Acc $$$ Foreign
+foreignAcc = Acc $$$ Aforeign
 
 -- | Call a foreign function with foreign implementations for two different backends.
-foreignAcc2 :: (Arrays acc, Arrays res, ForeignFun ff1, ForeignFun ff2) 
-            => ff1 acc res 
+foreignAcc2 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2)
+            => ff1 acc res
             -> ff2 acc res
-            -> (Acc acc -> Acc res) 
-            -> Acc acc 
+            -> (Acc acc -> Acc res)
+            -> Acc acc
             -> Acc res
-foreignAcc2 ff1 = Acc $$$ Foreign ff1 $$ Acc $$$ Foreign
+foreignAcc2 ff1 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign
 
 -- | Call a foreign function with foreign implementations for three different backends.
-foreignAcc3 :: (Arrays acc, Arrays res, ForeignFun ff1, ForeignFun ff2, ForeignFun ff3) 
-            => ff1 acc res 
+foreignAcc3 :: (Arrays acc, Arrays res, Foreign ff1, Foreign ff2, Foreign ff3)
+            => ff1 acc res
             -> ff2 acc res
             -> ff3 acc res
-            -> (Acc acc -> Acc res) 
-            -> Acc acc 
+            -> (Acc acc -> Acc res)
+            -> Acc acc
             -> Acc res
-foreignAcc3 ff1 ff2 = Acc $$$ Foreign ff1 $$ Acc $$$ Foreign ff2 $$ Acc $$$ Foreign
+foreignAcc3 ff1 ff2 = Acc $$$ Aforeign ff1 $$ Acc $$$ Aforeign ff2 $$ Acc $$$ Aforeign
 
--- | Call a foreign expression function. The form the function takes is dependent on the 
--- backend being used. The arguments are passed as either a single scalar element or as a 
--- tuple of elements. In addition a pure Accelerate version of the function needs to be 
+-- | Call a foreign expression function. The form the function takes is dependent on the
+-- backend being used. The arguments are passed as either a single scalar element or as a
+-- tuple of elements. In addition a pure Accelerate version of the function needs to be
 -- provided to support backends other than the one being targeted.
-foreignExp :: (Elt e, Elt res, ForeignFun ff)
+foreignExp :: (Elt e, Elt res, Foreign ff)
            => ff e res
            -> (Exp e -> Exp res)
            -> Exp e
            -> Exp res
-foreignExp = Exp $$$ ForeignExp
+foreignExp = Exp $$$ Foreign
 
 -- | Call a foreign function with foreign implementations for two different backends.
-foreignExp2 :: (Elt e, Elt res, ForeignFun ff1, ForeignFun ff2)
-            => ff1 e res 
+foreignExp2 :: (Elt e, Elt res, Foreign ff1, Foreign ff2)
+            => ff1 e res
             -> ff2 e res
-            -> (Exp e -> Exp res) 
-            -> Exp e 
+            -> (Exp e -> Exp res)
+            -> Exp e
             -> Exp res
-foreignExp2 ff1 = Exp $$$ ForeignExp ff1 $$ Exp $$$ ForeignExp
+foreignExp2 ff1 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign
 
 -- | Call a foreign function with foreign implementations for three different backends.
-foreignExp3 :: (Elt e, Elt res, ForeignFun ff1, ForeignFun ff2, ForeignFun ff3) 
-            => ff1 e res 
+foreignExp3 :: (Elt e, Elt res, Foreign ff1, Foreign ff2, Foreign ff3)
+            => ff1 e res
             -> ff2 e res
             -> ff3 e res
-            -> (Exp e -> Exp res) 
-            -> Exp e 
+            -> (Exp e -> Exp res)
+            -> Exp e
             -> Exp res
-foreignExp3 ff1 ff2 = Exp $$$ ForeignExp ff1 $$ Exp $$$ ForeignExp ff2 $$ Exp $$$ ForeignExp
+foreignExp3 ff1 ff2 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign ff2 $$ Exp $$$ Foreign
 
 
 -- Composition of array computations
@@ -575,11 +575,11 @@ c ?| (t, e) = cond c t e
 class Lift c e where
   -- | An associated-type (i.e. a type-level function) that strips all
   --   instances of surface type constructors @c@ from the input type @e@.
-  -- 
+  --
   --   For example, the tuple types @(Exp Int, Int)@ and @(Int, Exp
   --   Int)@ have the same \"Plain\" representation.  That is, the
   --   following type equality holds:
-  -- 
+  --
   --    @Plain (Exp Int, Int) ~ (Int,Int) ~ Plain (Int, Exp Int)@
   type Plain e
 

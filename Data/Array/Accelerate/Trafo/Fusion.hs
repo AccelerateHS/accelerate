@@ -144,7 +144,7 @@ quenchAcc = cvtA . annealAcc
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Apply f a               -> Apply (cvtAF f) (cvtA a)
-        Foreign ff f a          -> Foreign ff (cvtAF f) (cvtA a)
+        Aforeign ff f a         -> Aforeign ff (cvtAF f) (cvtA a)
 
         -- Producers
         -- ---------
@@ -224,7 +224,7 @@ quenchAcc = cvtA . annealAcc
         Shape a                 -> Shape (cvtA a)
         ShapeSize sh            -> ShapeSize (cvtE sh)
         Intersect s t           -> Intersect (cvtE s) (cvtE t)
-        ForeignExp ff f e       -> ForeignExp ff (cvtF f) (cvtE e)
+        Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
 
     cvtT :: Tuple (OpenExp env aenv) t -> Tuple (DelayedOpenExp env aenv) t
     cvtT NilTup        = NilTup
@@ -307,7 +307,7 @@ delayPreAcc delayAcc elimAcc pacc =
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Aprj ix tup         -> done $ Aprj ix (cvtA tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
-    Foreign ff f a      -> done $ Foreign ff (cvtAF f) (cvtA a)
+    Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -428,7 +428,7 @@ delayPreAcc delayAcc elimAcc pacc =
         Shape a                 -> Shape (cvtA a)
         ShapeSize sh            -> ShapeSize (cvtE' sh)
         Intersect s t           -> Intersect (cvtE' s) (cvtE' t)
-        ForeignExp ff f e       -> ForeignExp ff (cvtF' f) (cvtE' e)
+        Foreign ff f e          -> Foreign ff (cvtF' f) (cvtE' e)
 
     cvtT :: Tuple (PreOpenExp acc env aenv') t -> Tuple (PreOpenExp acc env aenv') t
     cvtT NilTup          = NilTup
@@ -1122,6 +1122,7 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
       case exp of
         Let x y                         -> Let (travE x) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar y)
         Var i                           -> Var i
+        Foreign ff f e                  -> Foreign ff f (travE e)
         Const c                         -> Const c
         Tuple t                         -> Tuple (travT t)
         Prj ix e                        -> Prj ix (travE e)
@@ -1153,8 +1154,6 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
           | Just REFL    <- match a a'
           , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (travE i)
-
-        ForeignExp ff f e               -> ForeignExp ff f (travE e)
 
       where
         a' = avarIn avar

@@ -219,10 +219,10 @@ evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
 -- The interpreter does not handle foreign functions so use the pure accelerate version
-evalPreOpenAcc (Foreign _ (Alam (Abody funAcc)) acc) aenv
+evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv
     in evalOpenAcc funAcc (Empty `Push` arr)
-evalPreOpenAcc (Foreign _ _ _) _
+evalPreOpenAcc (Aforeign _ _ _) _
   = error "This case is not possible"
 
 -- Evaluate a closed array expressions
@@ -814,7 +814,7 @@ evalOpenExp (ShapeSize sh) env aenv
 evalOpenExp (Intersect sh1 sh2) env aenv
   = Sugar.intersect (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
 
-evalOpenExp (ForeignExp _ f e) env aenv
+evalOpenExp (Foreign _ f e) env aenv
   = evalOpenExp e' env aenv
   where
     wExp :: Idx ((),a) t -> Idx (env,a) t

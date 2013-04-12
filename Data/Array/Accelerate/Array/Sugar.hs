@@ -44,7 +44,7 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Miscellaneous
-  showShape, ForeignFun(..)
+  showShape, Foreign(..)
 
 ) where
 
@@ -679,7 +679,7 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 -- By default it has no instances. If a backend wishes to have an FFI it must
 -- provide an instance.
 --
-class Typeable2 f => ForeignFun (f :: * -> * -> *) where
+class Typeable2 f => Foreign (f :: * -> * -> *) where
 
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing. It should contain the backend name and
