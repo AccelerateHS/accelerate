@@ -49,17 +49,16 @@ import Prelude                                          hiding ( sum )
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments )
+  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Smart            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 
 #include "accelerate.h"
 
@@ -91,27 +90,6 @@ run1 afun = \a -> exec acc a
 stream :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> [a] -> [b]
 stream afun arrs = let go = run1 afun
                    in  map go arrs
-
-
--- Delayed arrays
---
-type Delayed a = Sugar.Delayed (Sugar.ArrRepr a)
-
-delay :: Arrays a => a -> Delayed a
-delay arr = go (Sugar.arrays arr) (Sugar.fromArr arr)
-  where
-    go :: ArraysR a -> a -> Sugar.Delayed a
-    go ArraysRunit         ()       = DelayedUnit
-    go ArraysRarray        a        = Sugar.delay a
-    go (ArraysRpair r1 r2) (a1, a2) = DelayedPair (go r1 a1) (go r2 a2)
-
-force :: forall a. Arrays a => Delayed a -> a
-force arr = Sugar.toArr $ go (Sugar.arrays (undefined::a)) arr
-  where
-    go :: ArraysR a' -> Sugar.Delayed a' -> a'
-    go ArraysRunit         DelayedUnit         = ()
-    go ArraysRarray        a                   = Sugar.force a
-    go (ArraysRpair r1 r2) (DelayedPair d1 d2) = (go r1 d1, go r2 d2)
 
 
 -- Array expression evaluation
@@ -240,16 +218,16 @@ evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, force $ evalOpenAcc a aenv)
 
 unitOp :: Sugar.Elt e => e -> Delayed (Scalar e)
 unitOp e
-  = DelayedPair DelayedUnit
-  $ DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
 
 generateOp :: (Sugar.Shape dim, Sugar.Elt e)
       => dim
       -> (dim -> e)
       -> Delayed (Array dim e)
 generateOp sh rf
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
 
 transformOp
       :: (Sugar.Shape sh', Sugar.Elt b)
@@ -258,15 +236,15 @@ transformOp
       -> (a -> b)
       -> Delayed (Array sh  a)
       -> Delayed (Array sh' b)
-transformOp sh' ix f (DelayedPair DelayedUnit (DelayedArray _sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh')
+transformOp sh' ix f (DelayedRpair DelayedRunit (DelayedRarray _sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh')
                  (Sugar.sinkFromElt f . rf . Sugar.sinkFromElt ix)
 
 
 reshapeOp :: Sugar.Shape dim
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
-reshapeOp newShape darr@(DelayedPair DelayedUnit (DelayedArray {shapeDA = oldShape}))
+reshapeOp newShape darr@(DelayedRpair DelayedRunit (DelayedRarray {shapeDA = oldShape}))
   = let Array _ adata = force darr
     in
     BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
@@ -280,8 +258,8 @@ replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
             -> slix
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
-replicateOp sliceIndex slix (DelayedPair DelayedUnit (DelayedArray sh pf))
-  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
+replicateOp sliceIndex slix (DelayedRpair DelayedRunit (DelayedRarray sh pf))
+  = DelayedRpair DelayedRunit (DelayedRarray sh' (pf . pf'))
   where
     (sh', pf') = extend sliceIndex (Sugar.fromElt slix) sh
 
@@ -307,8 +285,8 @@ sliceOp :: (Sugar.Shape sl, Sugar.Elt slix)
         -> Delayed (Array dim e)
         -> slix
         -> Delayed (Array sl e)
-sliceOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
-  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
+sliceOp sliceIndex (DelayedRpair DelayedRunit (DelayedRarray sh pf)) slix
+  = DelayedRpair DelayedRunit (DelayedRarray sh' (pf . pf'))
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
 
@@ -330,18 +308,18 @@ mapOp :: Sugar.Elt e'
       => (e -> e') 
       -> Delayed (Array dim e) 
       -> Delayed (Array dim e')
-mapOp f (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh (Sugar.sinkFromElt f . rf)
+mapOp f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh (Sugar.sinkFromElt f . rf)
 
 zipWithOp :: Sugar.Elt e3
           => (e1 -> e2 -> e3) 
           -> Delayed (Array dim e1) 
           -> Delayed (Array dim e2) 
           -> Delayed (Array dim e3)
-zipWithOp f (DelayedPair DelayedUnit (DelayedArray sh1 rf1)) (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (sh1 `intersect` sh2) 
+zipWithOp f (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1)) (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (sh1 `intersect` sh2) 
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: Sugar.Shape dim
@@ -349,24 +327,24 @@ foldOp :: Sugar.Shape dim
        -> e
        -> Delayed (Array (dim:.Int) e)
        -> Delayed (Array dim e)
-foldOp f e (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
+foldOp f e (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
   | size sh == 0
-  = DelayedPair DelayedUnit
-  $ DelayedArray (listToShape . map (max 1) . shapeToList $ sh)
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (listToShape . map (max 1) . shapeToList $ sh)
       (\_ -> Sugar.fromElt e)
   --
   | otherwise
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh
       (\ix -> iter ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f) (Sugar.fromElt e))
 
 fold1Op :: Sugar.Shape dim
         => (e -> e -> e)
         -> Delayed (Array (dim:.Int) e)
         -> Delayed (Array dim e)
-fold1Op f (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
+fold1Op f (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
 
 foldSegOp :: IntegralType i
           -> (e -> e -> e)
@@ -383,10 +361,10 @@ foldSegOp' :: forall i e dim. Integral i
            -> Delayed (Array (dim:.Int) e)
            -> Delayed (Segments i)
            -> Delayed (Array (dim:.Int) e)
-foldSegOp' f e (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
+foldSegOp' f e (DelayedRpair DelayedRunit (DelayedRarray (sh, _n) rf)) seg@(DelayedRpair DelayedRunit (DelayedRarray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair (DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts)) _ = scanl'Op (+) 0 seg
+    DelayedRpair (DelayedRpair DelayedRunit (DelayedRarray _shSeg rfStarts)) _ = scanl'Op (+) 0 seg
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
@@ -417,11 +395,11 @@ fold1SegOp' :: forall i e dim. Integral i
             -> Delayed (Array (dim:.Int) e)
             -> Delayed (Segments i)
             -> Delayed (Array (dim:.Int) e)
-fold1SegOp' f (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
+fold1SegOp' f (DelayedRpair DelayedRunit (DelayedRarray (sh, _n) rf)) seg@(DelayedRpair DelayedRunit (DelayedRarray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair prefix _sum                                = scanl'Op (+) 0 seg
-    DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts) = prefix
+    DelayedRpair prefix _sum                                = scanl'Op (+) 0 seg
+    DelayedRpair DelayedRunit (DelayedRarray _shSeg rfStarts) = prefix
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
@@ -446,7 +424,7 @@ scanlOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanlOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanlOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -469,13 +447,13 @@ scanl'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair (delay $ adata `seq` Array sh adata) final
+scanl'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+    DelayedRpair DelayedRunit final = unitOp (Sugar.toElt asum)
 
     (adata, asum) = runArrayData $ do
                       arr <- newArrayData n
@@ -492,7 +470,7 @@ scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
 scanl1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanl1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanl1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -519,7 +497,7 @@ scanrOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanrOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanrOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -542,13 +520,13 @@ scanr'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair (delay $ adata `seq` Array sh adata) final
+scanr'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+    DelayedRpair DelayedRunit final = unitOp (Sugar.toElt asum)
 
     (adata, asum) = runArrayData $ do
                       arr <- newArrayData n
@@ -565,7 +543,7 @@ scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
 scanr1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanr1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanr1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -593,8 +571,8 @@ permuteOp :: (e -> e -> e)
           -> (dim -> dim')
           -> Delayed (Array dim e)
           -> Delayed (Array dim' e)
-permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
-          p (DelayedPair DelayedUnit (DelayedArray sh pf))
+permuteOp f (DelayedRpair DelayedRunit (DelayedRarray dftsSh dftsPf))
+          p (DelayedRpair DelayedRunit (DelayedRarray sh pf))
   = delay $ adata `seq` Array dftsSh adata
   where
     f' = Sugar.sinkFromElt2 f
@@ -628,18 +606,18 @@ backpermuteOp :: Sugar.Shape dim'
               -> (dim' -> dim)
               -> Delayed (Array dim e)
               -> Delayed (Array dim' e)
-backpermuteOp sh' p (DelayedPair DelayedUnit (DelayedArray _sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
+backpermuteOp sh' p (DelayedRpair DelayedRunit (DelayedRarray _sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
 
 stencilOp :: forall dim e e' stencil. (Sugar.Elt e, Sugar.Elt e', Stencil dim e stencil)
           => (stencil -> e')
           -> Boundary (Sugar.EltRepr e)
           -> Delayed (Array dim e)
           -> Delayed (Array dim e')
-stencilOp sten bndy (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh rf'
+stencilOp sten bndy (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh rf'
   where
     rf' = Sugar.sinkFromElt (sten . stencilAccess rfBounded)
 
@@ -658,9 +636,9 @@ stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
            -> Boundary (Sugar.EltRepr e2)
            -> Delayed (Array dim e2)
            -> Delayed (Array dim e')
-stencil2Op sten bndy1 (DelayedPair DelayedUnit (DelayedArray sh1 rf1))
-                bndy2 (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
-  = DelayedPair DelayedUnit (DelayedArray (sh1 `intersect` sh2) rf')
+stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
+                bndy2 (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
+  = DelayedRpair DelayedRunit (DelayedRarray (sh1 `intersect` sh2) rf')
   where
     rf' = Sugar.sinkFromElt (\ix -> sten (stencilAccess rf1Bounded ix)
                                          (stencilAccess rf2Bounded ix))
@@ -787,7 +765,7 @@ evalOpenExp (PrimApp p arg) env aenv
 
 evalOpenExp (Index acc ix) env aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+      DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
         in
         toIndex sh ix' `seq` (Sugar.toElt $ pf ix')
@@ -796,14 +774,14 @@ evalOpenExp (Index acc ix) env aenv
 
 evalOpenExp (LinearIndex acc i) env aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+      DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let i' = evalOpenExp i env aenv
             v  = pf (fromIndex sh i')
         in Sugar.toElt v
 
 evalOpenExp (Shape acc) _ aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh _) -> Sugar.toElt sh
+      DelayedRpair DelayedRunit (DelayedRarray sh _) -> Sugar.toElt sh
 
 evalOpenExp (ShapeSize sh) env aenv
   = Sugar.size (evalOpenExp sh env aenv)
