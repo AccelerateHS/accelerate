@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeOperators        #-}
 -- |
--- Module      : Data.Array.Accelerate.Trafo.Common
+-- Module      : Data.Array.Accelerate.Trafo.Base
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
@@ -17,7 +17,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Trafo.Common (
+module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),

@@ -47,7 +47,7 @@ import Text.PrettyPrint
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Pretty.Print
-import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution

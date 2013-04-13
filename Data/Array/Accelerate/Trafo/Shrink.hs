@@ -40,8 +40,8 @@ module Data.Array.Accelerate.Trafo.Shrink (
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Array.Sugar                ( Arrays )
-import Data.Array.Accelerate.Trafo.Common
 import Data.Array.Accelerate.Trafo.Substitution
 
 import qualified Data.Array.Accelerate.Debug            as Stats
