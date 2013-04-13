@@ -32,6 +32,7 @@ import System.IO.Unsafe
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Debug
+import Data.Array.Accelerate.Pretty                     ( )     -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun )
 import Data.Array.Accelerate.Trafo.Substitution

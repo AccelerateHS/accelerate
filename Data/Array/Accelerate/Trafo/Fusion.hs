@@ -42,11 +42,9 @@ module Data.Array.Accelerate.Trafo.Fusion (
 
 -- standard library
 import Prelude                                          hiding ( exp, until )
-import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
@@ -82,39 +80,6 @@ withSimplStats x = unsafePerformIO Stats.resetSimplCount `seq` x
 #else
 withSimplStats x = x
 #endif
-
-
--- Delayed Arrays
--- ==============
-
--- The type of delayed arrays. This representation is used to annotate the AST
--- in the recursive knot to distinguish standard AST terms from operand arrays
--- that should be embedded into their consumers.
---
-type DelayedAcc         = DelayedOpenAcc ()
-type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
-
-type DelayedExp         = DelayedOpenExp ()
-type DelayedFun         = DelayedOpenFun ()
-type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
-type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
-type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
-
-data DelayedOpenAcc aenv a where
-  Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
-
-  Delayed               :: (Shape sh, Elt e) =>
-    { extentD           :: PreExp DelayedOpenAcc aenv sh
-    , indexD            :: PreFun DelayedOpenAcc aenv (sh  -> e)
-    , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
-    }                   -> DelayedOpenAcc aenv (Array sh e)
-
-instance Kit DelayedOpenAcc where
-  termOut       = Manifest
-  rebuildAcc    = error "DelayedAcc.rebuildAcc"
-  matchAcc      = error "DelayedAcc.matchAcc"
-  hashAcc       = error "DelayedAcc.hashAcc"
-  prettyAcc     = error "DelayedAcc.prettyAcc"
 
 
 -- | An optional second phase of the fusion transformation that makes the
@@ -1270,33 +1235,4 @@ indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
 
 linearIndex :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (Int -> e)
 linearIndex v = Lam (Body (LinearIndex (avarIn v) (Var ZeroIdx)))
-
-
--- Pretty Printing
--- ===============
-
-wide :: Style
-wide = style { lineLength = 150 }
-
-prettyDelayedAcc :: PrettyAcc DelayedOpenAcc
-prettyDelayedAcc alvl wrap acc = case acc of
-  Manifest pacc         -> prettyPreAcc prettyDelayedAcc alvl wrap pacc
-  Delayed sh f _        ->
-    wrap $ hang (text "Delayed") 2
-         $ sep [ prettyPreExp prettyDelayedAcc 0 alvl parens sh
-               , parens (prettyPreFun prettyDelayedAcc alvl f)
-               ]
-
-instance Show (DelayedOpenAcc aenv a) where
-  show c = renderStyle wide $ prettyDelayedAcc 0 noParens c
-
-instance Show (DelayedOpenAfun aenv f) where
-  show f = renderStyle wide $ prettyPreAfun prettyDelayedAcc 0 f
-
-instance Show (DelayedOpenExp env aenv t) where
-  show e = renderStyle wide $ prettyPreExp prettyDelayedAcc 0 0 noParens e
-
-instance Show (DelayedOpenFun env aenv t) where
-  show f = renderStyle wide $ prettyPreFun prettyDelayedAcc 0 f
-
 

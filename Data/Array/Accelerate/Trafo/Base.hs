@@ -23,6 +23,11 @@ module Data.Array.Accelerate.Trafo.Base (
   Kit(..), Match(..), (:=:)(REFL),
   avarIn,
 
+  -- Delayed Arrays
+  DelayedAcc,  DelayedOpenAcc(..),
+  DelayedAfun, DelayedOpenAfun,
+  DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
+
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
 --  Delta(..), incAcc, prjAcc, lookupAcc,
@@ -31,10 +36,11 @@ module Data.Array.Accelerate.Trafo.Base (
 
 -- standard library
 import Prelude                                          hiding ( until )
+import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar                ( Arrays )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Pretty.Print
@@ -43,7 +49,7 @@ import Data.Array.Accelerate.Pretty.Print
 
 
 -- Toolkit
--- -------
+-- =======
 
 -- The bat utility belt of operations required to manipulate terms parameterised
 -- by the recursive closure.
@@ -88,8 +94,50 @@ instance Kit acc => Match (acc aenv) where      -- overlapping, undecidable, inc
   match = matchAcc
 
 
+-- Delayed Arrays
+-- ==============
+
+-- The type of delayed arrays. This representation is used to annotate the AST
+-- in the recursive knot to distinguish standard AST terms from operand arrays
+-- that should be embedded into their consumers.
+--
+type DelayedAcc         = DelayedOpenAcc ()
+type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
+
+type DelayedExp         = DelayedOpenExp ()
+type DelayedFun         = DelayedOpenFun ()
+type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
+type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
+type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
+
+data DelayedOpenAcc aenv a where
+  Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
+
+  Delayed               :: (Shape sh, Elt e) =>
+    { extentD           :: PreExp DelayedOpenAcc aenv sh
+    , indexD            :: PreFun DelayedOpenAcc aenv (sh  -> e)
+    , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
+    }                   -> DelayedOpenAcc aenv (Array sh e)
+
+instance Kit DelayedOpenAcc where
+  termOut       = Manifest
+  rebuildAcc    = error "DelayedAcc.rebuildAcc"
+  matchAcc      = error "DelayedAcc.matchAcc"
+  hashAcc       = error "DelayedAcc.hashAcc"
+  prettyAcc     = prettyDelayedAcc
+
+prettyDelayedAcc :: PrettyAcc DelayedOpenAcc
+prettyDelayedAcc alvl wrap acc = case acc of
+  Manifest pacc         -> prettyPreAcc prettyDelayedAcc alvl wrap pacc
+  Delayed sh f _        ->
+    wrap $ hang (text "Delayed") 2
+         $ sep [ prettyPreExp prettyDelayedAcc 0 alvl parens sh
+               , parens (prettyPreFun prettyDelayedAcc alvl f)
+               ]
+
+
 -- Environments
--- ------------
+-- ============
 
 -- An environment that holds let-bound scalar expressions. The second
 -- environment variable env' is used to project out the corresponding

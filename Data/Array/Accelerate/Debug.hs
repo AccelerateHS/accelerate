@@ -46,8 +46,6 @@ import System.Environment
 import System.IO.Unsafe                         ( unsafePerformIO )
 import qualified Data.Map                       as Map
 
--- friends
-import Data.Array.Accelerate.Pretty ()
 
 #if __GLASGOW_HASKELL__ >= 704
 import Debug.Trace                              ( traceIO, traceEventIO )
