@@ -172,7 +172,7 @@ quenchAcc = cvtA
         Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (embed a)
         Scanr1 f a              -> Scanr1   (cvtF f) (embed a)
         Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (embed a)
-        Permute f d p a         -> Permute  (cvtF f) (embed d) (cvtF p) (embed a)
+        Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (embed a)
         Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
 
