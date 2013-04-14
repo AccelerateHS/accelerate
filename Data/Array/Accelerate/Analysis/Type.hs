@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
   AccType, arrayType, sizeOf,
-  accType, expType, delayedType, delayedExpType,
+  accType, expType, delayedAccType, delayedExpType,
   preAccType, preExpType
 
 ) where
@@ -60,9 +60,9 @@ type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRep
 accType :: AccType OpenAcc
 accType (OpenAcc acc) = preAccType accType acc
 
-delayedType :: AccType DelayedOpenAcc
-delayedType (Manifest acc) = preAccType delayedType acc
-delayedType (Delayed _ f _)
+delayedAccType :: AccType DelayedOpenAcc
+delayedAccType (Manifest acc) = preAccType delayedAccType acc
+delayedAccType (Delayed _ f _)
   | Lam (Body e) <- f   = delayedExpType e
   | otherwise           = error "my favourite place in the world is wherever you happen to be"
 
@@ -131,7 +131,7 @@ expType :: OpenExp env aenv t -> TupleType (EltRepr t)
 expType = preExpType accType
 
 delayedExpType :: DelayedOpenExp env aenv t -> TupleType (EltRepr t)
-delayedExpType = preExpType delayedType
+delayedExpType = preExpType delayedAccType
 
 -- |Reify the result types of of a scalar expression using the expression AST before tying the
 -- knot.
