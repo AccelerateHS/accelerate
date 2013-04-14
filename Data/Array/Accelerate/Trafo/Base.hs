@@ -31,7 +31,6 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
---  Delta(..), incAcc, prjAcc, lookupAcc,
 
 ) where
 
