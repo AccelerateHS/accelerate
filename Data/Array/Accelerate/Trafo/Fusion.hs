@@ -32,7 +32,8 @@
 module Data.Array.Accelerate.Trafo.Fusion (
 
   -- ** Types
-  DelayedAcc, DelayedAfun, DelayedOpenAcc(..),
+  DelayedAcc, DelayedOpenAcc(..),
+  DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
