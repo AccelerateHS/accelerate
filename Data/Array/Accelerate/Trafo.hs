@@ -24,6 +24,7 @@ module Data.Array.Accelerate.Trafo (
   module Data.Array.Accelerate.Trafo.Fusion,
 
   -- * Substitution
+  rebuildAcc,
   module Data.Array.Accelerate.Trafo.Substitution,
 
 ) where
@@ -34,6 +35,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Pretty                     ( )     -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST

@@ -5,6 +5,7 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeOperators        #-}
 -- |
@@ -121,18 +122,25 @@ data DelayedOpenAcc aenv a where
 
 instance Kit DelayedOpenAcc where
   termOut       = Manifest
-  rebuildAcc    = error "DelayedAcc.rebuildAcc"
+  rebuildAcc    = rebuildDelayed
   matchAcc      = error "DelayedAcc.matchAcc"
   hashAcc       = error "DelayedAcc.hashAcc"
-  prettyAcc     = prettyDelayedAcc
+  prettyAcc     = prettyDelayed
 
-prettyDelayedAcc :: PrettyAcc DelayedOpenAcc
-prettyDelayedAcc alvl wrap acc = case acc of
-  Manifest pacc         -> prettyPreAcc prettyDelayedAcc alvl wrap pacc
+rebuildDelayed :: RebuildAcc DelayedOpenAcc
+rebuildDelayed v acc = case acc of
+  Manifest pacc -> Manifest (rebuildA rebuildDelayed v pacc)
+  Delayed{..}   -> Delayed (rebuildEA rebuildDelayed v extentD)
+                           (rebuildFA rebuildDelayed v indexD)
+                           (rebuildFA rebuildDelayed v linearIndexD)
+
+prettyDelayed :: PrettyAcc DelayedOpenAcc
+prettyDelayed alvl wrap acc = case acc of
+  Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
   Delayed sh f _        ->
     wrap $ hang (text "Delayed") 2
-         $ sep [ prettyPreExp prettyDelayedAcc 0 alvl parens sh
-               , parens (prettyPreFun prettyDelayedAcc alvl f)
+         $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
+               , parens (prettyPreFun prettyDelayed alvl f)
                ]
 
 
