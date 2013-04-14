@@ -2,7 +2,6 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Shrink
@@ -84,8 +83,8 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
     shrinkE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     shrinkE exp = case exp of
       Let bnd body
-        | Var _ <- bnd  -> Stats.inline "Var"   . (Any True,) . snd $ shrinkE (inline body bnd)
-        | uses <= lIMIT -> Stats.betaReduce msg . (Any True,) . snd $ shrinkE (inline (snd body') (snd bnd'))
+        | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
+        | uses <= lIMIT -> Stats.betaReduce msg . yes $ shrinkE (inline (snd body') (snd bnd'))
         | otherwise     -> Let <$> bnd' <*> body'
         where
           bnd'  = shrinkE bnd
@@ -129,6 +128,9 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
+
+    yes :: (Any, x) -> (Any, x)
+    yes (_, x) = (Any True, x)
 
 shrinkFun :: PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
 shrinkFun (Lam f)  = Lam  <$> shrinkFun f

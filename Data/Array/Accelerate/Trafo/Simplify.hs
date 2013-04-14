@@ -4,7 +4,6 @@
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 -- |
@@ -189,8 +188,8 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     cvtE exp = case exp of
       Let bnd body
-        | Just reduct <- localCSE env (snd bnd') (snd body')     -> (Any True,) . snd $ cvtE reduct
-        | Just reduct <- recoverLoops env (snd bnd') (snd body') -> (Any True,) . snd $ cvtE reduct
+        | Just reduct <- localCSE env (snd bnd') (snd body')     -> yes . snd $ cvtE reduct
+        | Just reduct <- recoverLoops env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
         | otherwise                                              -> Let <$> bnd' <*> body'
         where
           bnd'  = cvtE bnd
@@ -236,7 +235,7 @@ simplifyOpenExp env = first getAny . cvtE
               -> (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
     intersect sh1@(_,sh1') sh2@(_,sh2')
-      | Just REFL <- match sh1' sh2' = Stats.ruleFired "intersect" (Any True, sh1')
+      | Just REFL <- match sh1' sh2' = Stats.ruleFired "intersect" (yes sh1')
       | otherwise                    = Intersect <$> sh1 <*> sh2
 
     -- Simplify conditional expressions, in particular by eliminating branches
@@ -248,9 +247,9 @@ simplifyOpenExp env = first getAny . cvtE
          -> (Any, PreOpenExp acc env aenv t)
          -> (Any, PreOpenExp acc env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const ((),True)  <- p'   = Stats.knownBranch "True"      (Any True, t')
-      | Const ((),False) <- p'   = Stats.knownBranch "False"     (Any True, e')
-      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (Any True, e')
+      | Const ((),True)  <- p'   = Stats.knownBranch "True"      (yes t')
+      | Const ((),False) <- p'   = Stats.knownBranch "False"     (yes e')
+      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
     -- If we are projecting elements from a tuple structure or tuple of constant
@@ -261,8 +260,8 @@ simplifyOpenExp env = first getAny . cvtE
         -> (Any, PreOpenExp acc env aenv t)
         -> (Any, PreOpenExp acc env aenv s)
     prj ix exp@(_,exp')
-      | Tuple t <- exp' = Stats.inline "prj/Tuple" $ (Any True, prjT ix t)
-      | Const c <- exp' = Stats.inline "prj/Const" $ (Any True, prjC ix (fromTuple (toElt c :: t)))
+      | Tuple t <- exp' = Stats.inline "prj/Tuple" . yes $ prjT ix t
+      | Const c <- exp' = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
       | otherwise       = Prj ix <$> exp
       where
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env aenv) tup -> PreOpenExp acc env aenv s
@@ -285,21 +284,24 @@ simplifyOpenExp env = first getAny . cvtE
       , IndexHead sh    <- sz'
       , expDim sz' == 1  -- no type information that this is a 1D shape, hence gcast next
       , Just sh'        <- gcast sh
-      = (Any True, sh')
+      = yes sh'
 
     indexCons sl sz
       = IndexCons <$> sl <*> sz
 
     indexHead :: (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
-    indexHead (_, IndexCons _ sz) = (Any True, sz)
+    indexHead (_, IndexCons _ sz) = yes sz
     indexHead sh                  = IndexHead <$> sh
 
     indexTail :: (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
-    indexTail (_, IndexCons sl _) = (Any True, sl)
+    indexTail (_, IndexCons sl _) = yes sl
     indexTail sh                  = IndexTail <$> sh
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
+
+    yes :: x -> (Any, x)
+    yes x = (Any True, x)
 
 
 -- Simplification for open functions
