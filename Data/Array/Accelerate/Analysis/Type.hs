@@ -1,5 +1,8 @@
-{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE GADTs, TypeFamilies, PatternGuards #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Type
@@ -21,8 +24,8 @@
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  AccType,
-  arrayType, accType, expType, sizeOf,
+  AccType, arrayType, sizeOf,
+  accType, expType, delayedType, delayedExpType,
   preAccType, preExpType
 
 ) where
@@ -34,6 +37,7 @@ import qualified Foreign.Storable as F
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Trafo
 
 
 
@@ -55,6 +59,13 @@ type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRep
 --
 accType :: AccType OpenAcc
 accType (OpenAcc acc) = preAccType accType acc
+
+delayedType :: AccType DelayedOpenAcc
+delayedType (Manifest acc) = preAccType delayedType acc
+delayedType (Delayed _ f _)
+  | Lam (Body e) <- f   = delayedExpType e
+  | otherwise           = error "my favourite place in the world is wherever you happen to be"
+
 
 -- |Reify the element type of the result of an array computation using the array computation AST
 -- before tying the knot.
@@ -116,8 +127,11 @@ preAccType k pacc =
 
 -- |Reify the result type of a scalar expression.
 --
-expType :: OpenExp aenv env t -> TupleType (EltRepr t)
+expType :: OpenExp env aenv t -> TupleType (EltRepr t)
 expType = preExpType accType
+
+delayedExpType :: DelayedOpenExp env aenv t -> TupleType (EltRepr t)
+delayedExpType = preExpType delayedType
 
 -- |Reify the result types of of a scalar expression using the expression AST before tying the
 -- knot.

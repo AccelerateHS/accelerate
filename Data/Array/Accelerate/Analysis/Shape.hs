@@ -1,4 +1,6 @@
-{-# LANGUAGE ScopedTypeVariables, GADTs, RankNTypes #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Shape
@@ -14,13 +16,14 @@
 module Data.Array.Accelerate.Analysis.Shape (
 
   -- * query AST dimensionality
-  AccDim, accDim, preAccDim,
+  AccDim, accDim, delayedDim, preAccDim,
   expDim,
 
 ) where
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Array.Sugar
 
 
@@ -30,6 +33,11 @@ type AccDim acc  = forall aenv sh e. acc aenv (Array sh e) -> Int
 --
 accDim :: AccDim OpenAcc
 accDim (OpenAcc acc) = preAccDim accDim acc
+
+delayedDim :: AccDim DelayedOpenAcc
+delayedDim (Manifest acc)   = preAccDim delayedDim acc
+delayedDim (Delayed sh _ _) = expDim sh
+
 
 -- |Reify dimensionality of a computation parameterised over a recursive closure
 --
