@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators   #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 {-# OPTIONS -fno-warn-unused-binds   #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee

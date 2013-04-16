@@ -874,7 +874,7 @@ zipWithD f cc1 cc0
             -> PreFun acc aenv (e -> c)
     combine c ixa ixb
       | Lam (Lam (Body c'))     <- weakenFE SuccIdx c   :: PreOpenFun acc ((),e) aenv (a -> b -> c)
-      , Lam (Body ixa')         <- ixa                          -- ^ else the soklem 'e' will escape
+      , Lam (Body ixa')         <- ixa                          -- else the skolem 'e' will escape
       , Lam (Body ixb')         <- ixb
       = Lam $ Body $ Let ixa' $ Let (weakenE SuccIdx ixb') c'
 
