@@ -974,12 +974,12 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
   , Step sh0 p0 f0 v0   <- cc0
   , Just REFL           <- match v0 (sink env0 ZeroIdx)
   , Just REFL           <- isIdentity f1
-  , sh1'                <- sink env0 (weakenEA rebuildAcc SuccIdx sh1)
-  , f1'                 <- sink env0 (weakenFA rebuildAcc SuccIdx (f1 `compose` indexArray v1 `compose` p1))
+  , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
+  , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) (f1 `compose` indexArray v1 `compose` p1)
   = Stats.ruleFired "aletD/step-step"
   $ Term env'
   $ Step (replaceE sh1' f1' v0 sh0)
-         (replaceF sh1' f1' v0 (sink env0 (weakenFA rebuildAcc SuccIdx p1) `compose` p0))
+         (replaceF sh1' f1' v0 (weakenFA rebuildAcc (sink env0 . SuccIdx) p1) `compose` p0)
          (replaceF sh1' f1' v0 f0)
          (sink env0 (SuccIdx v1))
 
@@ -994,8 +994,8 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
   , Just (Yield sh1 f1) <- yield' cc1
   , Done v0             <- cc0
   , Permute c0 d0 p0 a0 <- prjExtend v0 env0
-  , sh1'                <- sink env0 (weakenEA rebuildAcc SuccIdx sh1)
-  , f1'                 <- sink env0 (weakenFA rebuildAcc SuccIdx f1)
+  , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
+  , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
   , v1'                 <- sink env0 ZeroIdx
   = Stats.ruleFired "aletD/permute"
   $ Term (env' `PushEnv` Permute (replaceF sh1' f1' v1' c0) d0 (replaceF sh1' f1' v1' p0) a0)
@@ -1066,8 +1066,8 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
              -> Delayed acc aenv (Array sh0' e0')
     intoStep env1 sh1 f1 bnd1 env0 sh0 p0 f0 v0
       | shouldInline
-      , sh1'            <- sink env0 (weakenEA rebuildAcc SuccIdx sh1)
-      , f1'             <- sink env0 (weakenFA rebuildAcc SuccIdx f1)
+      , sh1'            <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
+      , f1'             <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
       , v1'             <- sink env0 ZeroIdx
       , f0'             <- f0 `compose` indexArray v0 `compose` p0
       = Stats.ruleFired "aletD/eliminate"
@@ -1091,8 +1091,8 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
               -> Delayed acc aenv (Array sh0 e0)
     intoYield env1 sh1 f1 bnd1 env0 sh0 f0
       | shouldInline
-      , sh1'          <- sink env0 (weakenEA rebuildAcc SuccIdx sh1)
-      , f1'           <- sink env0 (weakenFA rebuildAcc SuccIdx f1)
+      , sh1'          <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
+      , f1'           <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
       , v1'           <- sink env0 ZeroIdx
       = Stats.ruleFired "aletD/eliminate"
       $ Term (env1 `PushEnv` eliminated `join` env0)
