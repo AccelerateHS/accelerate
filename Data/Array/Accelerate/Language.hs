@@ -1365,7 +1365,8 @@ fromIntegral = mkFromIntegral
 -- Constants
 -- ---------
 
--- |Magic value identifying elements that are ignored in a forward permutation
+-- |Magic value identifying elements that are ignored in a forward permutation.
+-- Note that this currently does not work for singleton arrays.
 --
 ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore

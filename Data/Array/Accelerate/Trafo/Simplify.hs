@@ -39,7 +39,7 @@ import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, Z, (:.)(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..) )
 
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -249,8 +249,7 @@ simplifyOpenExp env = first getAny . cvtE
     cond p@(_,p') t@(_,t') e@(_,e')
       | Const ((),True)  <- p'   = Stats.knownBranch "True"      (yes t')
       | Const ((),False) <- p'   = Stats.knownBranch "False"     (yes e')
-      | typeOf (undefined :: t) /= typeOf (undefined :: Z)
-      , Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
+      | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
     -- If we are projecting elements from a tuple structure or tuple of constant
