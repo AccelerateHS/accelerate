@@ -342,7 +342,7 @@ simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyEx
 -- shrink and simplify return a boolean indicating whether any work was done; we
 -- stop as soon as either returns false.
 --
--- With internal errors on, we also issue a warning if the iteration limit is
+-- With internal checks on, we also issue a warning if the iteration limit is
 -- reached, but it was still possible to make changes to the expression.
 --
 {-# SPECIALISE iterate :: (Exp aenv t -> String) -> (Exp aenv t -> (Bool, Exp aenv t)) -> Exp aenv t -> Exp aenv t #-}
@@ -354,26 +354,34 @@ iterate
     -> (f a -> (Bool, f a))
     -> f a
     -> f a
-iterate ppr go = fix 0 . snd . go
+iterate ppr f = fix 0 . setup . simplify'
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
     -- excessive run times, we set this value very low.
     --
-    lIMIT = 1
+    lIMIT       = 1
+
+    simplify'   = Stats.simplifierDone . f
+    setup (_,x) = msg x x
 
     fix :: Int -> f a -> f a
-    fix !i !x
-      | i >= lIMIT      = INTERNAL_CHECK(warning) "iterate" "iteration limit reached" (x ==^ go x) x
-      | not shrunk      = x'
-      | not changed     = x''
-      | otherwise       = fix (i+1) x''
+    fix !i !x0
+      | i >= lIMIT      = INTERNAL_CHECK(warning) "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+      | not shrunk      = x1
+      | not simplified  = x2
+      | otherwise       = fix (i+1) x2
       where
-        (shrunk,  x')   = dump "/shrink"                      $ shrink' x
-        (changed, x'')  = Stats.simplifierDone . dump "/step" $ go x'
+        (shrunk,     x1) = trace $ shrink' x0
+        (simplified, x2) = trace $ simplify' x1
 
-        -- debugging
-        u ==^ (_,v)     = isJust (match u v)
-        dump h v        = Stats.tracePure Stats.dump_simpl_iterations (msg h v) v
-        msg h (c,v)     = unlines [ "simplifier done" ++ h ++ if c then "" else " (done)"
-                                  , ppr v ]
+    -- debugging support
+    --
+    u ==^ (_,v)         = isJust (match u v)
+
+    trace v@(changed,x)
+      | changed         = msg x v
+      | otherwise       = v
+
+    msg :: f a -> x -> x
+    msg x next          = Stats.tracePure Stats.dump_simpl_iterations (unlines [ "simplifier done", ppr x ]) next
 
