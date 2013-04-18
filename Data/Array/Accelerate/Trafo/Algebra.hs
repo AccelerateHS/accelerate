@@ -84,7 +84,7 @@ evalPrimApp
     -> PreOpenExp acc env aenv r
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
---  | Just r      <- commutes f x env     = evalPrimApp env f r
+  | Just r      <- commutes f x env     = evalPrimApp env f r
 --  | Just r      <- associates f x       = r
 
   -- Now attempt to evaluate any expressions
