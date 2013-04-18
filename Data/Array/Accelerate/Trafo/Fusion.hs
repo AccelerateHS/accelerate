@@ -647,10 +647,10 @@ bind BaseEnv         = id
 bind (PushEnv env a) = bind env . Alet (termOut a) . termOut
 
 
-prjExtend :: Kit acc => Idx env' t -> Extend acc env env' -> PreOpenAcc acc env' t
-prjExtend ZeroIdx       (PushEnv _   v) = weakenA rebuildAcc SuccIdx v
-prjExtend (SuccIdx idx) (PushEnv env _) = weakenA rebuildAcc SuccIdx $ prjExtend idx env
-prjExtend _             _               = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
+prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
+prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
+prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
+prjExtend _               _             = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
 
 
 -- Sink a term from one array environment into another, where additional
@@ -994,7 +994,7 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
   | shouldInline
   , Just (Yield sh1 f1) <- yield' cc1
   , Done v0             <- cc0
-  , Permute c0 d0 p0 a0 <- prjExtend v0 env0
+  , Permute c0 d0 p0 a0 <- prjExtend env0 v0
   , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
   , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
   , v1'                 <- sink env0 ZeroIdx
