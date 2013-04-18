@@ -248,7 +248,7 @@ annealAcc = shrinkAcc . computeAcc . delayAcc
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
     -- into the use site, but it is likely advantageous to be far more
-    -- aggressive here.
+    -- aggressive here. SEE: [Sharing vs. Fusion]
     --
     elimAcc :: Idx aenv s -> OpenAcc aenv t -> Bool
     elimAcc v acc = countAcc False v acc <= lIMIT
@@ -938,29 +938,56 @@ zipWithD f cc1 cc0
 -- the cost of completely evaluating the array and subsequently retrieving the
 -- data from memory.
 --
--- TODO: instead of relying on later shrinking, remove the eliminated binding
---       from the environment straight away.
---
-aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+aletD :: (Kit acc, Arrays arrs, Arrays brrs)
       => DelayAcc acc
       -> ElimAcc  acc
       ->          acc aenv        arrs
       ->          acc (aenv,arrs) brrs
       -> Delayed  acc aenv        brrs
-aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -> Term env0 cc0)
+aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
 
   -- let-floating
   -- ------------
   --
   -- Immediately inline the variable referring to the bound expression into the
   -- body, instead of adding to the environments and creating an indirection
-  -- that must be later eliminated by the simplifier. If we don't, repeated
-  -- evaluations of the forging process will delay termination.
+  -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Term env0 cc0       <- delayAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) body
+  , Term env0 cc0       <- delayAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Term (env1 `join` env0) cc0
+
+  -- Handle the remaining cases in a separate function. It turns out that this
+  -- is important so we aren't excessively sinking/delaying terms.
+  --
+  | otherwise
+  , Term env0 cc0       <- delayAcc $ sink1 env1 acc0
+  = case cc1 of
+      Step{}    -> aletD' elimAcc env1 cc1 env0 cc0
+      Yield{}   -> aletD' elimAcc env1 cc1 env0 cc0
+
+  where
+    subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
+    subTop t ZeroIdx       = t
+    subTop _ (SuccIdx idx) = Avar idx
+
+
+-- The second stage of eliminating let bindings, once we can establish that the
+-- bound term is in a delayed state. Crucially, this also means we do not
+-- preemptively delay the body term, which can lead to a complexity blowup.
+--
+-- TODO: instead of relying on later shrinking, remove the eliminated binding
+--       from the environment straight away.
+--
+aletD' :: forall acc aenv aenv' aenv'' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+       => ElimAcc    acc
+       -> Extend     acc aenv                aenv'
+       -> Cunctation acc                     aenv'  (Array sh e)
+       -> Extend     acc (aenv', Array sh e) aenv''
+       -> Cunctation acc                     aenv'' brrs
+       -> Delayed    acc aenv                       brrs
+aletD' elimAcc env1 cc1 env0 cc0
 
   -- let-elimination: step/step
   -- --------------------------
@@ -992,7 +1019,7 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
   -- permutation.
   --
   | shouldInline
-  , Just (Yield sh1 f1) <- yield' cc1
+  , Yield sh1 f1        <- yield cc1
   , Done v0             <- cc0
   , Permute c0 d0 p0 a0 <- prjExtend env0 v0
   , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
@@ -1012,26 +1039,16 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
   | Step sh1 p1 f1 v1   <- cc1
   = case cc0 of
       Done v0           -> Term env (Done v0)
-      Step sh0 p0 f0 v0 -> intoStep  env1 sh1 (f1 `compose` indexArray v1 `compose` p1) bnd' env0 sh0 p0 f0 v0
-      Yield sh0 f0      -> intoYield env1 sh1 (f1 `compose` indexArray v1 `compose` p1) bnd' env0 sh0 f0
+      Step sh0 p0 f0 v0 -> intoStep  sh1 (f1 `compose` indexArray v1 `compose` p1) sh0 p0 f0 v0
+      Yield sh0 f0      -> intoYield sh1 (f1 `compose` indexArray v1 `compose` p1) sh0 f0
 
   | Yield sh1 f1        <- cc1
   = case cc0 of
       Done v0           -> Term env (Done v0)
-      Step sh0 p0 f0 v0 -> intoStep  env1 sh1 f1 bnd' env0 sh0 p0 f0 v0
-      Yield sh0 f0      -> intoYield env1 sh1 f1 bnd' env0 sh0 f0
+      Step sh0 p0 f0 v0 -> intoStep  sh1 f1 sh0 p0 f0 v0
+      Yield sh0 f0      -> intoYield sh1 f1 sh0 f0
 
   where
-    subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
-
-    yield' :: Kit acc => Cunctation acc aenv' a -> Maybe (Cunctation acc aenv' a)
-    yield' cc = case cc of
-      Done{}    -> Nothing              -- TLM: can't determine if (a ~ Array sh e)
-      Step{}    -> Just (yield cc)
-      Yield{}   -> Just cc
-
     -- The body term, optimised and then re-made manifest. This is fine because
     -- we only call delay once, either here or in the let-floating branch.
     --
@@ -1049,63 +1066,57 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) body@(delayAcc . sink1 env1 -
     -- being reported prematurely. This works because the transformations don't
     -- inspect the contents of Use nodes.
     --
-    eliminated :: forall aenv a. Arrays a => PreOpenAcc acc aenv a
+    eliminated :: Arrays a => PreOpenAcc acc aenv' a
     eliminated = Use $ INTERNAL_ERROR(error) "aletD" "let binding not eliminated"
 
     -- Combine a bound term into a body that was represented as a Step function
     --
-    intoStep :: (Kit acc, Shape sh1, Shape sh0, Shape sh0', Elt e1, Elt e0, Elt e0')
-             => Extend acc aenv aenv'
-             -> PreExp acc aenv' sh1
-             -> PreFun acc aenv' (sh1 -> e1)
-             -> PreOpenAcc acc aenv' (Array sh1 e1)
-             -> Extend acc (aenv', Array sh1 e1) aenv''
+    intoStep :: (Shape sh0, Shape sh0', Elt e0, Elt e0')
+             => PreExp acc aenv' sh
+             -> PreFun acc aenv' (sh -> e)
              -> PreExp acc aenv'' sh0'
              -> PreFun acc aenv'' (sh0' -> sh0)
              -> PreFun acc aenv'' (e0   -> e0')
              -> Idx aenv'' (Array sh0 e0)
              -> Delayed acc aenv (Array sh0' e0')
-    intoStep env1 sh1 f1 bnd1 env0 sh0 p0 f0 v0
+    intoStep sh1 f1 sh0 p0 f0 v0
       | shouldInline
       , sh1'            <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
       , f1'             <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
       , v1'             <- sink env0 ZeroIdx
       , f0'             <- f0 `compose` indexArray v0 `compose` p0
       = Stats.ruleFired "aletD/eliminate"
-      $ Term (env1 `PushEnv` eliminated `join` env0)
-      $ Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0')
+      $ Term env' (Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0'))
 
       | otherwise
-      = Term (env1 `PushEnv` bnd1 `join` env0)
-      $ Step sh0 p0 f0 v0
+      = Term env  (Step sh0 p0 f0 v0)
 
     -- Combine a bound term into a body that was represented as a Yield function
     --
-    intoYield :: (Kit acc, Shape sh1, Shape sh0, Elt e1, Elt e0)
-              => Extend acc aenv aenv'
-              -> PreExp acc aenv' sh1
-              -> PreFun acc aenv' (sh1 -> e1)
-              -> PreOpenAcc acc aenv' (Array sh1 e1)
-              -> Extend acc (aenv', Array sh1 e1) aenv''
+    intoYield :: (Kit acc, Shape sh, Shape sh0, Elt e0)
+              => PreExp acc aenv' sh
+              -> PreFun acc aenv' (sh -> e)
               -> PreExp acc aenv'' sh0
               -> PreFun acc aenv'' (sh0 -> e0)
               -> Delayed acc aenv (Array sh0 e0)
-    intoYield env1 sh1 f1 bnd1 env0 sh0 f0
+    intoYield sh1 f1 sh0 f0
       | shouldInline
       , sh1'          <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
       , f1'           <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
       , v1'           <- sink env0 ZeroIdx
       = Stats.ruleFired "aletD/eliminate"
-      $ Term (env1 `PushEnv` eliminated `join` env0)
-      $ Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0)
+      $ Term env' (Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0))
 
       | otherwise
-      = Term (env1 `PushEnv` bnd1 `join` env0)
-      $ Yield sh0 f0
+      = Term env  (Yield sh0 f0)
 
     -- As part of let-elimination, we need to replace uses of array variables in
     -- scalar expressions with an equivalent expression that generates the
     -- result directly
+    --
+    -- TODO: when we inline bindings we ought to let bind at the first
+    --       occurrence and use a variable at all subsequent locations.
+    --
     --
     replaceE :: forall acc env aenv sh e t. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
