@@ -34,6 +34,7 @@ module Data.Array.Accelerate.Analysis.Match (
   HashAcc,
   hashPreOpenAcc, hashOpenAcc,
   hashPreOpenExp, hashOpenExp,
+  hashPreOpenFun,
 
 ) where
 

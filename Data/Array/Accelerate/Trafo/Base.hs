@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
 -- standard library
 import Prelude                                          hiding ( until )
+import Data.Hashable
 import Text.PrettyPrint
 
 -- friends
@@ -122,9 +123,30 @@ data DelayedOpenAcc aenv a where
 instance Kit DelayedOpenAcc where
   termOut       = Manifest
   rebuildAcc    = rebuildDelayed
-  matchAcc      = error "DelayedAcc.matchAcc"
-  hashAcc       = error "DelayedAcc.hashAcc"
+  matchAcc      = matchDelayed
+  hashAcc       = hashDelayed
   prettyAcc     = prettyDelayed
+
+
+hashDelayed :: HashAcc DelayedOpenAcc
+hashDelayed (Manifest pacc)     = hash "Manifest"       `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayed Delayed{..}         = hash "Delayed"        `hashE` extentD `hashF` indexD `hashF` linearIndexD
+  where
+    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
+
+matchDelayed :: MatchAcc DelayedOpenAcc
+matchDelayed (Manifest pacc1) (Manifest pacc2)
+  = matchPreOpenAcc matchAcc hashAcc pacc1 pacc2
+
+matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
+  | Just REFL   <- matchPreOpenExp matchAcc hashAcc sh1 sh2
+  , Just REFL   <- matchPreOpenFun matchAcc hashAcc ix1 ix2
+  , Just REFL   <- matchPreOpenFun matchAcc hashAcc lx1 lx2
+  = Just REFL
+
+matchDelayed _ _
+  = Nothing
 
 rebuildDelayed :: RebuildAcc DelayedOpenAcc
 rebuildDelayed v acc = case acc of
