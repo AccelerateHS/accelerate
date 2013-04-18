@@ -379,7 +379,8 @@ delayPreAcc delayAcc elimAcc pacc =
     stencil2 x y f a b  = Stencil2 f x a y b
 
     -- Conversions for closed scalar functions and expressions, with
-    -- pre-simplification.
+    -- pre-simplification. We don't bother traversing array-valued terms in
+    -- scalar expressions, as these are guaranteed to only be array variables.
     --
     cvtF :: PreFun acc aenv t -> PreFun acc aenv t
     cvtF = cvtF' . simplify
@@ -415,9 +416,9 @@ delayPreAcc delayAcc elimAcc pacc =
         Iterate n f x           -> Iterate (cvtE' n) (cvtE' f) (cvtE' x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE' x)
-        Index a sh              -> Index (cvtA a) (cvtE' sh)
-        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE' i)
-        Shape a                 -> Shape (cvtA a)
+        Index a sh              -> Index a (cvtE' sh)
+        LinearIndex a i         -> LinearIndex a (cvtE' i)
+        Shape a                 -> Shape a
         ShapeSize sh            -> ShapeSize (cvtE' sh)
         Intersect s t           -> Intersect (cvtE' s) (cvtE' t)
         Foreign ff f e          -> Foreign ff (cvtF' f) (cvtE' e)
