@@ -282,8 +282,8 @@ prettyPreExp pp lvl alvl wrap (Iterate i fun a)
                                   , parens (prettyPreOpenFun pp lvl alvl (Lam (Body fun))) ]
 prettyPreExp pp lvl alvl wrap (Foreign ff f e)
   = wrap $ text "foreign" <+> text (strForeign ff)
-                             <+> prettyPreFun pp alvl f
-                             <+> prettyPreExp pp lvl alvl parens e
+                          <+> prettyPreFun pp alvl f
+                          <+> prettyPreExp pp lvl alvl parens e
 
 prettyPreExp _pp _ _ _ (PrimConst a)
  = prettyConst a
