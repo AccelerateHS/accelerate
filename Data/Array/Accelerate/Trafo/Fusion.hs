@@ -146,7 +146,8 @@ quenchAcc = cvtA
         Map f a                 -> Map (cvtF f) (embed a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (embed a)
-        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (embed a)
+        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (embed a)
+
         Reshape{}               -> fusionError
         Replicate{}             -> fusionError
         Slice{}                 -> fusionError
@@ -173,6 +174,18 @@ quenchAcc = cvtA
         Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (embed a)
         Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+
+    -- A backwards permutation at this stage might be further simplified as a
+    -- reshape operation, which can be executed in constant time without
+    -- actually executing any array operations.
+    --
+    backpermute sh p a
+      | Manifest (Avar v)       <- a
+      , Just REFL               <- match p (simplify $ reindex (arrayShape v) sh)
+      = Reshape sh a
+
+      | otherwise
+      = Backpermute sh p a
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup
@@ -825,8 +838,15 @@ sliceD sliceIndex slix cc
 
 -- Reshape an array
 --
+-- For delayed arrays this is implemented as an index space transformation.
+-- However for manifest arrays this can be done in constant time. However, if
+-- the reshaped array is later consumed, for example in foldAll, this won't be
+-- fused into the consumer. At this point always convert into a delayed
+-- representation, and attempt to recover the reshape operation in the final
+-- quenching phase.
+--
 -- TLM: there was a runtime check to ensure the old and new shapes contained the
---      same number of elements: this has been lost!
+--      same number of elements: this has been lost for the delayed cases!
 --
 reshapeD
     :: (Kit acc, Shape sh, Shape sl)
