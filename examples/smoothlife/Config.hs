@@ -88,17 +88,29 @@ defaultConfig = Config
 
   , _configWindowSize           = 256
   , _configWindowZoom           = 3
-  , _configFramerate            = 10
+  , _configFramerate            = 30
   , _configTimestep             = 0.1
 
   -- generic smooth glider
+  --, _configRim                  = 1
+  --, _configDiscRadius           = (4, 12)
+  --, _configBirthInterval        = (0.278, 0.365)
+  --, _configDeathInterval        = (0.267, 0.445)
+  --, _configStep                 = (0.028, 0.147)
+
+  --, _configTimestepMode         = 0
+  --, _configSigmode              = 2
+  --, _configSigtype              = Smooth
+  --, _configMixtype              = Smooth
+
+  -- SmoothLifeL
   , _configRim                  = 1
-  , _configDiscRadius           = (4, 12)
-  , _configBirthInterval        = (0.278, 0.365)
-  , _configDeathInterval        = (0.267, 0.445)
+  , _configDiscRadius           = (10.0/3.0, 10)
+  , _configBirthInterval        = (0.257, 0.336)
+  , _configDeathInterval        = (0.365, 0.549)
   , _configStep                 = (0.028, 0.147)
 
-  , _configTimestepMode         = 0
+  , _configTimestepMode         = 1
   , _configSigmode              = 2
   , _configSigtype              = Smooth
   , _configMixtype              = Smooth

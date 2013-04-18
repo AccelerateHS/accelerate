@@ -38,8 +38,8 @@ smoothlife conf aa
     mf          = A.zipWith (*) aaf (use kdf')
     n           = A.map (\x -> real x / kflr'') (fft2D' Inverse size size nf)
     m           = A.map (\x -> real x / kfld'') (fft2D' Inverse size size mf)
-    aa'         = clamp $ snm conf sn sm b1 b2 d1 d2 n m
-    aa''        = A.zipWith timestepMode aa' aa
+    aa'         = snm conf sn sm b1 b2 d1 d2 n m
+    aa''        = clamp $ A.zipWith timestepMode aa' aa
 
     -- simulation parameters
     --
