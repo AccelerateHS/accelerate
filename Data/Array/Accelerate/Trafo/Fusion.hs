@@ -996,7 +996,8 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
 -- preemptively delay the body term, which can lead to a complexity blowup.
 --
 -- TODO: instead of relying on later shrinking, remove the eliminated binding
---       from the environment straight away.
+--       from the environment straight away. Sadly, my poor brain is unable to
+--       figure out how to do this for the Extend structure.
 --
 aletD' :: forall acc aenv aenv' aenv'' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
        => ElimAcc    acc
@@ -1043,8 +1044,10 @@ aletD' elimAcc env1 cc1 env0 cc0
   , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
   , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
   , v1'                 <- sink env0 ZeroIdx
+  , d0'                 <- kmap (replaceA sh1' f1' v1') d0
+  , a0'                 <- kmap (replaceA sh1' f1' v1') a0
   = Stats.ruleFired "aletD/permute"
-  $ Term (env' `PushEnv` Permute (replaceF sh1' f1' v1' c0) d0 (replaceF sh1' f1' v1' p0) a0)
+  $ Term (env' `PushEnv` Permute (replaceF sh1' f1' v1' c0) d0' (replaceF sh1' f1' v1' p0) a0')
          (Done ZeroIdx)
 
   -- let-elimination: general cases
@@ -1133,8 +1136,9 @@ aletD' elimAcc env1 cc1 env0 cc0
     -- result directly
     --
     -- TODO: when we inline bindings we ought to let bind at the first
-    --       occurrence and use a variable at all subsequent locations.
-    --
+    -- occurrence and use a variable at all subsequent locations. At the moment
+    -- we are just hoping CSE in the simplifier phase does good things, but that
+    -- is limited in what it looks for.
     --
     replaceE :: forall acc env aenv sh e t. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
@@ -1195,6 +1199,36 @@ aletD' elimAcc env1 cc1 env0 cc0
       case fun of
         Body e          -> Body (replaceE sh' f' avar e)
         Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f)
+
+    replaceA :: forall aenv sh e a. (Kit acc, Shape sh, Elt e)
+             => PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
+             -> PreOpenAcc acc aenv a
+             -> PreOpenAcc acc aenv a
+    replaceA sh' f' avar pacc =
+      case pacc of
+        Avar v
+          | Just REFL <- match v avar   -> Avar avar
+          | otherwise                   -> Avar v
+        Generate sh f                   -> Generate (travE sh) (travF f)
+        Map f a                         -> Map (travF f) (travA a)
+        Backpermute sh p a              -> Backpermute (travE sh) (travF p) (travA a)
+        Transform sh p f a              -> Transform (travE sh) (travF p) (travF f) (travA a)
+
+        -- TLM: I am pretty sure that it will only be useful to replace scalar
+        -- shape and value generation functions from within arrays that will
+        -- ultimately be embedded. As such, flag this as an error because
+        -- otherwise we might want to rethink this operation.
+        --
+        _ -> INTERNAL_ERROR(error) "aletD" "assumption invalid"
+      where
+        travA :: acc aenv s -> acc aenv s
+        travA = kmap (replaceA sh' f' avar)
+
+        travE :: PreExp acc aenv s -> PreExp acc aenv s
+        travE = replaceE sh' f' avar
+
+        travF :: PreFun acc aenv s -> PreFun acc aenv s
+        travF = replaceF sh' f' avar
 
 
 -- Array conditionals, in particular eliminate branches when the predicate

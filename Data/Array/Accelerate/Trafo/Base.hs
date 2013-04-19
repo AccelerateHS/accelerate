@@ -57,13 +57,17 @@ import Data.Array.Accelerate.Pretty.Print
 --
 class Kit acc where
   termOut       :: PreOpenAcc acc aenv a -> acc aenv a
+  kmap          :: (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
+  --
   rebuildAcc    :: RebuildAcc acc
   matchAcc      :: MatchAcc acc
   hashAcc       :: HashAcc acc
   prettyAcc     :: PrettyAcc acc
 
 instance Kit OpenAcc where
-  termOut       = OpenAcc
+  termOut               = OpenAcc
+  kmap f (OpenAcc pacc) = OpenAcc (f pacc)
+
   rebuildAcc    = rebuildOpenAcc
   matchAcc      = matchOpenAcc
   hashAcc       = hashOpenAcc
@@ -122,6 +126,8 @@ data DelayedOpenAcc aenv a where
 
 instance Kit DelayedOpenAcc where
   termOut       = Manifest
+  kmap          = error "DelayedAcc.kmap"
+  --
   rebuildAcc    = rebuildDelayed
   matchAcc      = matchDelayed
   hashAcc       = hashDelayed
