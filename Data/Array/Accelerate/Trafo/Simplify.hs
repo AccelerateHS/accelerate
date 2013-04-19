@@ -262,6 +262,7 @@ simplifyOpenExp env = first getAny . cvtE
     prj ix exp@(_,exp')
       | Tuple t <- exp' = Stats.inline "prj/Tuple" . yes $ prjT ix t
       | Const c <- exp' = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
+      | Let a b <- exp' = Stats.ruleFired "prj/Let"      $ cvtE (Let a (Prj ix b))
       | otherwise       = Prj ix <$> exp
       where
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env aenv) tup -> PreOpenExp acc env aenv s
