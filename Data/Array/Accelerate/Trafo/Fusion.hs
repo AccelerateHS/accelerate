@@ -99,20 +99,20 @@ quenchAcc = cvtA
     embed (OpenAcc pacc) =
       case pacc of
         Avar v
-          -> Manifest (Avar v)
+          -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
 
         Generate (cvtE -> sh) (cvtF -> f)
           -> Delayed sh f (f `compose` fromIndex sh)
 
-        Map (cvtF -> f) (OpenAcc (Avar v))
-          -> Delayed (arrayShape v) (f `compose` indexArray v) (f `compose` linearIndex v)
+        Map (cvtF -> f) (embed -> Delayed{..})
+          -> Delayed extentD (f `compose` indexD) (f `compose` linearIndexD)
 
-        Backpermute (cvtE -> sh) (cvtF -> p) (OpenAcc (Avar v))
-          -> let p' = indexArray v `compose` p
+        Backpermute (cvtE -> sh) (cvtF -> p) (embed -> Delayed{..})
+          -> let p' = indexD `compose` p
              in  Delayed sh p'(p' `compose` fromIndex sh)
 
-        Transform (cvtE -> sh) (cvtF -> p) (cvtF -> f) (OpenAcc (Avar v))
-          -> let f' = f `compose` indexArray v `compose` p
+        Transform (cvtE -> sh) (cvtF -> p) (cvtF -> f) (embed -> Delayed{..})
+          -> let f' = f `compose` indexD `compose` p
              in  Delayed sh f' (f' `compose` fromIndex sh)
 
         _ -> INTERNAL_ERROR(error) "quench" "tried to consume a non-embeddable term"
