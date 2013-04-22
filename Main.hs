@@ -26,11 +26,11 @@ main = do
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
   --
-  putStr "reading wordlist... " >> hFlush stdout
+  putStr "loading dictionary... " >> hFlush stdout
   (tdict, dict) <- time $ readDict conf (get configDict conf)
 
   let (Z :. _ :. entries) = A.arrayShape dict
-  putStrLn $ printf "%d words in %s\n" entries (secs tdict)
+  putStrLn $ printf "%d words in %s" entries (secs tdict)
 
   -- Attempt to recover one hash at a time by comparing it to entries in the
   -- database. This rehashes the entire word list every time, rather than
