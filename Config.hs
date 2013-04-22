@@ -34,8 +34,10 @@ data Config
     _configBackend              :: Backend
 
     -- Input data
-  , _configWordlist             :: [FilePath]
   , _configDigests              :: Either [FilePath] String
+  , _configWordlist             :: Maybe FilePath
+  , _configMaxWords             :: Maybe Int
+  , _configSkipWords            :: Int
 
   , _configHelp                 :: Bool
   }
@@ -47,8 +49,10 @@ defaultConfig :: Config
 defaultConfig = Config
   {
     _configBackend              = maxBound
-  , _configWordlist             = []
   , _configDigests              = Left []
+  , _configWordlist             = Nothing
+  , _configMaxWords             = Nothing
+  , _configSkipWords            = 0
   , _configHelp                 = False
   }
 
@@ -94,15 +98,23 @@ defaultOptions :: [OptDescr (Config -> Config)]
 defaultOptions = backends ++
   [ Option      ['s'] []
                 (ReqArg (set configDigests . Right) "STRING")
-                ("Lookup the plain text of a given checksum")
+                "Lookup the plain text of a given checksum"
 
   , Option      ['f'] []
                 (ReqArg (modify configDigests . addDigestFile) "FILE")
-                ("Lookup the plain text for each checksum in the fine file(s)")
+                "Lookup the plain text for each checksum in the given file(s)"
 
   , Option      ['d'] ["dictionary"]
-                (ReqArg (modify configWordlist . (:)) "FILE")
-                ("Plain text word list(s) to search against")
+                (ReqArg (set configWordlist . Just) "FILE")
+                "Plain text word list to search against"
+
+  , Option      ['j'] ["skip-words"]
+                (ReqArg (set configSkipWords . read) "INT")
+                "Skip this many entries from the start of the word list"
+
+  , Option      ['k'] ["max-words"]
+                (ReqArg (set configMaxWords . Just . read) "INT")
+                "Use at most this many words from the list"
 
   , Option      ['h', '?'] ["help"]
                 (NoArg (set configHelp True))
@@ -146,7 +158,7 @@ parseArgs argv =
   let
       helpMsg err = concat err
         ++ usageInfo basicHeader                    defaultOptions
-        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
+--        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
 
   in case getOpt' Permute defaultOptions argv of
       (o,_,n,[])  -> do
