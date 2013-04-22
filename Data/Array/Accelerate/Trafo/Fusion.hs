@@ -141,12 +141,13 @@ quenchAcc = cvtA
         --
         -- Some producers might still exist as a manifest array. Typically
         -- this is because they are the last stage of the computation, or the
-        -- result of a let-binding to be used multiple times.
+        -- result of a let-binding to be used multiple times. The input array
+        -- here should be an array variable, else something went wrong.
         --
-        Map f a                 -> Map (cvtF f) (embed a)
+        Map f a                 -> Map (cvtF f) (cvtV a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
-        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (embed a)
-        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (embed a)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (cvtV a)
+        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (cvtV a)
 
         Reshape{}               -> fusionError
         Replicate{}             -> fusionError
@@ -174,6 +175,12 @@ quenchAcc = cvtA
         Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (embed a)
         Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+
+    cvtV :: OpenAcc aenv a -> DelayedOpenAcc aenv a
+    cvtV (OpenAcc pacc) = Manifest $
+      case pacc of
+        Avar ix                 -> Avar ix
+        _                       -> fusionError
 
     -- A backwards permutation at this stage might be further simplified as a
     -- reshape operation, which can be executed in constant time without
