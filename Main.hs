@@ -8,6 +8,7 @@ import Config
 import Numeric
 import Data.List
 import Data.Label
+import Data.Maybe
 import Text.Printf
 import Control.Monad
 import Criterion.Measurement
@@ -23,11 +24,10 @@ main = do
   (conf, _cconf, _nops) <- parseArgs =<< getArgs
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
-  -- for hashing. Since we use Accelerate for the final processing stage, this
-  -- will already be resident on compute device.
+  -- for hashing.
   --
   putStr "reading wordlist... " >> hFlush stdout
-  (tdict, dict) <- time $ runDigest conf =<< digestFiles (get configWordlist conf)
+  (tdict, dict) <- time $ runDigest =<< digestFile conf (fromJust $ get configWordlist conf)
 
   let (Z :. _ :. entries) = A.arrayShape dict
   putStrLn $ printf "%d words in %s\n" entries (secs tdict)
