@@ -27,7 +27,7 @@ main = do
   -- for hashing.
   --
   putStr "reading wordlist... " >> hFlush stdout
-  (tdict, dict) <- time $ runDigest =<< digestFile conf (get configDict conf)
+  (tdict, dict) <- time $ readDict conf (get configDict conf)
 
   let (Z :. _ :. entries) = A.arrayShape dict
   putStrLn $ printf "%d words in %s\n" entries (secs tdict)
