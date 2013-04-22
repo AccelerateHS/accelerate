@@ -1,7 +1,7 @@
 
-#ifndef NOT_ACCELERATE_MODULE
+#ifndef ACCELERATE_H
+#define ACCELERATE_H
 import qualified Data.Array.Accelerate.Internal.Check as Ck
-#endif
 
 #define ERROR(f)  (Ck.f __FILE__ __LINE__)
 #define ASSERT (Ck.assert __FILE__ __LINE__)
@@ -22,4 +22,6 @@ import qualified Data.Array.Accelerate.Internal.Check as Ck
 #define INTERNAL_ASSERT (ASSERT Ck.Internal)
 #define INTERNAL_ENSURE (ENSURE Ck.Internal)
 #define INTERNAL_CHECK(f) (CHECK(f) Ck.Internal)
+
+#endif
 
