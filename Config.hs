@@ -34,8 +34,8 @@ data Config
     _configBackend              :: Backend
 
     -- Input data
-  , _configDigests              :: Either [FilePath] String
-  , _configWordlist             :: Maybe FilePath
+  , _configStrings              :: [String]
+  , _configDict                 :: FilePath
   , _configMaxWords             :: Maybe Int
   , _configSkipWords            :: Int
 
@@ -49,8 +49,8 @@ defaultConfig :: Config
 defaultConfig = Config
   {
     _configBackend              = maxBound
-  , _configDigests              = Left []
-  , _configWordlist             = Nothing
+  , _configStrings              = []
+  , _configDict                 = []
   , _configMaxWords             = Nothing
   , _configSkipWords            = 0
   , _configHelp                 = False
@@ -97,22 +97,18 @@ backends =
 defaultOptions :: [OptDescr (Config -> Config)]
 defaultOptions = backends ++
   [ Option      ['s'] []
-                (ReqArg (set configDigests . Right) "STRING")
+                (ReqArg (modify configStrings . (:)) "STRING")
                 "Lookup the plain text of a given checksum"
 
-  , Option      ['f'] []
-                (ReqArg (modify configDigests . addDigestFile) "FILE")
-                "Lookup the plain text for each checksum in the given file(s)"
-
   , Option      ['d'] ["dictionary"]
-                (ReqArg (set configWordlist . Just) "FILE")
+                (ReqArg (set configDict) "FILE")
                 "Plain text word list to search against"
 
   , Option      ['j'] ["skip-words"]
                 (ReqArg (set configSkipWords . read) "INT")
                 "Skip this many entries from the start of the word list"
 
-  , Option      ['k'] ["max-words"]
+  , Option      ['n'] ["max-words"]
                 (ReqArg (set configMaxWords . Just . read) "INT")
                 "Use at most this many words from the list"
 
@@ -120,9 +116,6 @@ defaultOptions = backends ++
                 (NoArg (set configHelp True))
                 "show this help message"
   ]
-  where
-    addDigestFile f (Right _) = Left [f]
-    addDigestFile f (Left fs) = Left (f:fs)
 
 
 -- | Process the command line options
@@ -131,7 +124,7 @@ basicHeader :: String
 basicHeader = unlines
   [ "accelerate-hashcat (c) [2013] The Accelerate Team"
   , ""
-  , "Usage: accelerate-hashcat [OPTIONS]"
+  , "Usage: accelerate-hashcat [OPTIONS] [file ...]"
   ]
 
 fancyHeader :: Config -> String
@@ -158,16 +151,18 @@ parseArgs argv =
   let
       helpMsg err = concat err
         ++ usageInfo basicHeader                    defaultOptions
---        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
+        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
 
   in case getOpt' Permute defaultOptions argv of
-      (o,_,n,[])  -> do
+      (o,n,u,[])  -> do
 
         -- pass unrecognised options to criterion
-        (cconf, rest)     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions n
+        (cconf, rest)     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
         case foldr id defaultConfig o of
-          conf | False <- get configHelp conf   -> putStrLn (fancyHeader conf) >> return (conf, cconf, rest)
-          _                                     -> putStrLn (helpMsg [])       >> exitSuccess
+          conf | False <- get configHelp conf
+               , False <- null (get configDict conf)
+            -> putStrLn (fancyHeader conf) >> return (conf, cconf, n++rest)
+          _ -> putStrLn (helpMsg [])       >> exitSuccess
 
       (_,_,_,err) -> error (helpMsg err)
 

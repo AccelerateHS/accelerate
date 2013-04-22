@@ -8,9 +8,9 @@ import Config
 import Numeric
 import Data.List
 import Data.Label
-import Data.Maybe
 import Text.Printf
 import Control.Monad
+import Control.Applicative
 import Criterion.Measurement
 import System.IO
 import System.Environment
@@ -21,13 +21,13 @@ import qualified Data.ByteString.Lazy.Char8     as L
 
 main :: IO ()
 main = do
-  (conf, _cconf, _nops) <- parseArgs =<< getArgs
+  (conf, _cconf, files) <- parseArgs =<< getArgs
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
   --
   putStr "reading wordlist... " >> hFlush stdout
-  (tdict, dict) <- time $ runDigest =<< digestFile conf (fromJust $ get configWordlist conf)
+  (tdict, dict) <- time $ runDigest =<< digestFile conf (get configDict conf)
 
   let (Z :. _ :. entries) = A.arrayShape dict
   putStrLn $ printf "%d words in %s\n" entries (secs tdict)
@@ -54,9 +54,10 @@ main = do
       showText hash text = do
         L.putStr hash >> putStr " = \"" >> L.putStr text >> putStrLn "\""
 
-  digests <- case get configDigests conf of
-               Right s  -> return [L.pack s]
-               Left fs  -> concat `fmap` mapM (\f -> L.lines `fmap` L.readFile f) fs
+  -- Queue up all the message digests to process
+  --
+  digests <- concat . (map L.pack (get configStrings conf) :)
+          <$> mapM (\f -> L.lines `fmap` L.readFile f) files
 
   -- Run the lookup for each unknown hash against the given wordlists.
   --
@@ -67,13 +68,16 @@ main = do
   --
   let percent = fromIntegral r / fromIntegral t * 100.0 :: Double
       persec  = fromIntegral (t * entries) / trec
-  putStrLn $ printf "\nrecovered %d/%d (%f %%) digests in %s, %s"
-                      r t percent (secs trec)
+  putStrLn $ printf "\nrecovered %d/%d (%.2f %%) digests in %s, %s"
+                      r t percent
+                      (showFFloatSIBase (Just 2) 1000 trec   "s")
                       (showFFloatSIBase (Just 2) 1000 persec "Hash/sec")
 
   when (r == t) $ putStrLn "All hashes recovered (:"
 
 
+-- Utilities
+--
 showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> ShowS
 showFFloatSIBase p b n
   = showString
