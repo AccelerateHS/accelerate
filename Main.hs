@@ -17,53 +17,6 @@ import Data.Array.Accelerate                    ( Z(..), (:.)(..) )
 import qualified Data.Array.Accelerate          as A
 import qualified Data.ByteString.Lazy.Char8     as L
 
---import Data.Serialize                           as S
-
-
-
-
-{--
-v = L.pack $ map c2w "password"
-c = defaultConfig
-
-main = do
-  dict  <- digest c v
-
-  let r = (`A.indexArray` (Z:.0)) $ run c $ md5 (A.use dict)
-
-  print r
-  putStrLn $ showMD5 r
-
-
-import Data.Array.Accelerate
-import Text.Printf
-
-
--- "hello, world."
---
--- MD5 ("hello, world.") = 708171654200ecd0e973167d8826159c
---
-helloworld :: [Word32]
-helloworld =
-  [0x68656c6c, 0x6f2c2077, 0x6f726c64, 0x2e800000
-  ,0x00000000, 0x00000000, 0x00000000, 0x00000000
-  ,0x00000000, 0x00000000, 0x00000000, 0x00000000
-  ,0x00000000, 0x00000000, 0x00000000, 0x68000000 ]
-
-helloworld' :: [Word32]
-helloworld' = [1819043176,1998597231,1684828783,32814,0,0,0,0,0,0,0,0,0,0,104,0]
-
-main :: IO ()
-main =
-  let word      = use $ fromList (Z:.16:.1) helloworld'
-      res       = run $ md5 word
-
-      (x,y,z,w) = res `indexArray` (Z:.0)
-  in
-  printf "%x%x%x%x\n" x y z w
---}
-
-
 
 main :: IO ()
 main = do
