@@ -52,7 +52,7 @@ main = do
         foldM (\(i,n) h -> maybe (return (i,n+1)) (\t -> showText h t >> return (i+1,n+1)) (recover h)) (0,0)
 
       showText hash text = do
-        L.putStr hash >> putStr " = \"" >> L.putStr text >> putStrLn "\""
+        L.putStr hash >> putStr ": " >> L.putStrLn text
 
   -- Queue up all the message digests to process
   --
