@@ -26,7 +26,6 @@ executable accelerate-hashcat
   build-depends:        base              == 4.6.*,
                         accelerate        == 0.13.*,
                         accelerate-cuda   == 0.13.*,
-                        accelerate-io     == 0.13.*,
                         bytestring        == 0.10.*,
                         bytestring-lexing == 0.4.*,
                         cereal            == 0.3.*,
