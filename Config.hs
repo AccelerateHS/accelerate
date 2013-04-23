@@ -124,7 +124,7 @@ basicHeader :: String
 basicHeader = unlines
   [ "accelerate-hashcat (c) [2013] The Accelerate Team"
   , ""
-  , "Usage: accelerate-hashcat [OPTIONS] [file ...]"
+  , "Usage: accelerate-hashcat -d dictionary [OPTIONS] [file ...]"
   ]
 
 fancyHeader :: Config -> String
@@ -157,11 +157,14 @@ parseArgs argv =
       (o,n,u,[])  -> do
 
         -- pass unrecognised options to criterion
-        (cconf, rest)     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
+        (cconf, rest)   <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
+        let files        = n ++ rest
+
         case foldr id defaultConfig o of
           conf | False <- get configHelp conf
                , False <- null (get configDict conf)
-            -> putStrLn (fancyHeader conf) >> return (conf, cconf, n++rest)
+               , False <- null (get configStrings conf ++ files)
+            -> putStrLn (fancyHeader conf) >> return (conf, cconf, files)
           _ -> putStrLn (helpMsg [])       >> exitSuccess
 
       (_,_,_,err) -> error (helpMsg err)
