@@ -21,7 +21,7 @@ import qualified Data.ByteString.Lazy.Char8     as L
 
 main :: IO ()
 main = do
-  (conf, _cconf, files) <- parseArgs =<< getArgs
+  (conf, _cconf, files) <- parseArgs =<< takeWhile (/= "--") `fmap` getArgs
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
