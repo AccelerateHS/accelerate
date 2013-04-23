@@ -1,7 +1,12 @@
 {-# LANGUAGE ViewPatterns #-}
 
-module MD5
-  where
+module MD5 (
+
+  Dictionary,
+  hashcat, readMD5, showMD5
+
+) where
+
 
 import Prelude                                  as P
 import Numeric

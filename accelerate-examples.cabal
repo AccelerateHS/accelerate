@@ -161,7 +161,8 @@ Executable accelerate-examples
 
 
 -- A quasicrystal demo as the sum of waves in a plane
---
+-- --------------------------------------------------
+
 Executable accelerate-crystal
   hs-source-dirs:       examples/crystal
   Main-is:              Main.hs
@@ -187,7 +188,9 @@ Executable accelerate-crystal
                         fclabels                >= 1.0,
                         gloss                   >= 1.7
 
+
 -- A simple mandelbrot generator
+-- -----------------------------
 
 Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot
@@ -216,7 +219,8 @@ Executable accelerate-mandelbrot
 
 
 -- A stable fluid simulation
---
+-- -------------------------
+
 Executable accelerate-fluid
   Main-is:              Main.hs
   hs-source-dirs:       examples/fluid/src
@@ -247,6 +251,7 @@ Executable accelerate-fluid
 
 
 -- Simulation of gravitational attraction between solid particles
+-- --------------------------------------------------------------
 
 Executable accelerate-nbody
   Main-is:              Main.hs
@@ -285,6 +290,7 @@ Executable accelerate-nbody
 
 
 -- A celular automata
+-- ------------------
 
 Executable accelerate-smoothlife
   Main-is:              Main.hs
@@ -313,6 +319,35 @@ Executable accelerate-smoothlife
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         gloss                   >= 1.7
+
+
+-- A password recovery tool
+-- ------------------------
+
+Executable accelerate-hashcat
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/hashcat
+  other-modules:        Config
+                        Digest
+                        MD5
+
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.13
+
+  Build-depends:        accelerate              >= 0.13,
+                        accelerate-fft          >= 0.13,
+                        base                    == 4.*,
+                        bytestring              >= 0.9,
+                        bytestring-lexing       >= 0.2,
+                        cereal                  >= 0.3,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0
+
 
 source-repository head
   type:                 git

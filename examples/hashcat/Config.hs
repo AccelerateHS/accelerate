@@ -1,8 +1,13 @@
 {-# LANGUAGE CPP             #-}
+{-# LANGUAGE PatternGuards   #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Config
-  where
+module Config (
+
+  parseArgs, Config, configStrings, configDict, configMaxWords, configSkipWords,
+  run, run1
+
+) where
 
 import Data.Char
 import Data.List

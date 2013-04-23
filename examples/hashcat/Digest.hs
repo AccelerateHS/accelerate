@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
-module Digest where
+module Digest (readDict, extract)
+  where
 
 import MD5
 import Config

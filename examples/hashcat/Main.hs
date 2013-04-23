@@ -26,7 +26,7 @@ main = do
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
   --
-  putStr "loading dictionary... " >> hFlush stdout
+  putStr "Loading dictionary... " >> hFlush stdout
   (tdict, dict) <- time $ readDict conf (get configDict conf)
 
   let (Z :. _ :. entries) = A.arrayShape dict
@@ -61,14 +61,14 @@ main = do
 
   -- Run the lookup for each unknown hash against the given wordlists.
   --
-  putStrLn "beginning recovery..."
+  putStrLn "Beginning recovery..."
   (trec, (r, t)) <- time (recoverAll digests)
 
   -- And print a summary of results
   --
   let percent = fromIntegral r / fromIntegral t * 100.0 :: Double
       persec  = fromIntegral (t * entries) / trec
-  putStrLn $ printf "\nrecovered %d/%d (%.2f %%) digests in %s, %s"
+  putStrLn $ printf "\nRecovered %d/%d (%.2f %%) digests in %s, %s"
                       r t percent
                       (showFFloatSIBase (Just 2) 1000 trec   "s")
                       (showFFloatSIBase (Just 2) 1000 persec "Hash/sec")
