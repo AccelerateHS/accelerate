@@ -69,6 +69,7 @@ Executable accelerate-quickcheck
                         -fno-warn-orphans
                         -fno-full-laziness
                         -fno-excess-precision
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -120,7 +121,7 @@ Executable accelerate-examples
   c-sources:            examples/tests/io/fill_with_values.cpp
   extra-libraries:      stdc++
 
-  ghc-options:          -Wall -O2 -threaded
+  ghc-options:          -Wall -O2 -threaded -fno-excess-precision
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
