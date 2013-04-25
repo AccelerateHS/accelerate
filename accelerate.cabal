@@ -138,6 +138,7 @@ Library
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
+                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
@@ -151,7 +152,6 @@ Library
                         Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
-                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
