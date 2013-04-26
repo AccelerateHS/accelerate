@@ -603,7 +603,17 @@ tix8 = SuccTupIdx tix7
 -- Smart constructor for literals
 --
 
--- | Scalar expression inlet.
+-- | Scalar expression inlet: make a Haskell value available for processing in
+-- an Accelerate scalar expression.
+--
+-- Note that this embeds the value directly into the expression. Depending on
+-- the backend used to execute the computation, this might not always be
+-- desirable. For example, a backend that does external code generation may
+-- embed this constant directly into the generated code, which means new code
+-- will need to be generated and compiled every time the value changes. In such
+-- cases, consider instead lifting scalar values into (singleton) arrays so that
+-- they can be passed as an input to the computation and thus the value can
+-- change without the need to generate fresh code.
 --
 constant :: Elt t => t -> Exp t
 constant = Exp . Const
