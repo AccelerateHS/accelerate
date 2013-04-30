@@ -370,79 +370,78 @@ instance Elt Word64 where
   fromElt'      = id
   toElt'        = id
 
-{-
+
 instance Elt CShort where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUShort where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CInt where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUInt where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CULong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CLLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CULLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
 
 instance Elt Float where
   eltType       = singletonScalarType
@@ -462,25 +461,24 @@ instance Elt Double where
   fromElt'      = id
   toElt'        = id
 
-{-
 instance Elt CFloat where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CDouble where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
+
 
 instance Elt Bool where
   eltType       = singletonScalarType
@@ -500,34 +498,32 @@ instance Elt Char where
   fromElt'      = id
   toElt'        = id
 
-{-
 instance Elt CChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CSChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
 
 instance (Elt a, Elt b) => Elt (a, b) where
   eltType (_::(a, b))

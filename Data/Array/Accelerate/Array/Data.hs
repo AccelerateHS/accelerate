@@ -31,12 +31,14 @@ module Data.Array.Accelerate.Array.Data (
 
 -- standard libraries
 import Foreign            (Ptr)
+import Foreign.C.Types
 import GHC.Base           (Int(..))
 import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
                            unsafeFreezeByteArray#, Int#, (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
 import Data.Typeable
+import Data.Functor       ((<$>))
 import Control.Monad
 import Control.Monad.ST
 import qualified Data.Array.IArray  as IArray
@@ -87,23 +89,23 @@ data instance GArrayData ba Word8   = AD_Word8   (ba Word8)
 data instance GArrayData ba Word16  = AD_Word16  (ba Word16)
 data instance GArrayData ba Word32  = AD_Word32  (ba Word32)
 data instance GArrayData ba Word64  = AD_Word64  (ba Word64)
--- data instance GArrayData ba CShort  = AD_CShort  (ba CShort)
--- data instance GArrayData ba CUShort = AD_CUShort (ba CUShort)
--- data instance GArrayData ba CInt    = AD_CInt    (ba CInt)
--- data instance GArrayData ba CUInt   = AD_CUInt   (ba CUInt)
--- data instance GArrayData ba CLong   = AD_CLong   (ba CLong)
--- data instance GArrayData ba CULong  = AD_CULong  (ba CULong)
--- data instance GArrayData ba CLLong  = AD_CLLong  (ba CLLong)
--- data instance GArrayData ba CULLong = AD_CULLong (ba CULLong)
+data instance GArrayData ba CShort  = AD_CShort  (ba Int16)
+data instance GArrayData ba CUShort = AD_CUShort (ba Word16)
+data instance GArrayData ba CInt    = AD_CInt    (ba Int32)
+data instance GArrayData ba CUInt   = AD_CUInt   (ba Word32)
+data instance GArrayData ba CLong   = AD_CLong   (ba Int64)
+data instance GArrayData ba CULong  = AD_CULong  (ba Word64)
+data instance GArrayData ba CLLong  = AD_CLLong  (ba Int64)
+data instance GArrayData ba CULLong = AD_CULLong (ba Word64)
 data instance GArrayData ba Float   = AD_Float   (ba Float)
 data instance GArrayData ba Double  = AD_Double  (ba Double)
--- data instance GArrayData ba CFloat  = AD_CFloat  (ba CFloat)
--- data instance GArrayData ba CDouble = AD_CDouble (ba CDouble)
+data instance GArrayData ba CFloat  = AD_CFloat  (ba Float)
+data instance GArrayData ba CDouble = AD_CDouble (ba Double)
 data instance GArrayData ba Bool    = AD_Bool    (ba Word8)
 data instance GArrayData ba Char    = AD_Char    (ba Char)
--- data instance GArrayData ba CChar   = AD_CChar   (ba CChar)
--- data instance GArrayData ba CSChar  = AD_CSChar  (ba CSChar)
--- data instance GArrayData ba CUChar  = AD_CUChar  (ba CUChar)
+data instance GArrayData ba CChar   = AD_CChar   (ba Int8)
+data instance GArrayData ba CSChar  = AD_CSChar  (ba Int8)
+data instance GArrayData ba CUChar  = AD_CUChar  (ba Word8)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
 
@@ -115,23 +117,36 @@ instance (Typeable1 ba, Typeable e) => Typeable (GArrayData ba e) where
 -- | GADT to reify the 'ArrayElt' class.
 --
 data ArrayEltR a where
-  ArrayEltRunit   :: ArrayEltR ()
-  ArrayEltRint    :: ArrayEltR Int
-  ArrayEltRint8   :: ArrayEltR Int8
-  ArrayEltRint16  :: ArrayEltR Int16
-  ArrayEltRint32  :: ArrayEltR Int32
-  ArrayEltRint64  :: ArrayEltR Int64
-  ArrayEltRword   :: ArrayEltR Word
-  ArrayEltRword8  :: ArrayEltR Word8
-  ArrayEltRword16 :: ArrayEltR Word16
-  ArrayEltRword32 :: ArrayEltR Word32
-  ArrayEltRword64 :: ArrayEltR Word64
-  ArrayEltRfloat  :: ArrayEltR Float
-  ArrayEltRdouble :: ArrayEltR Double
-  ArrayEltRbool   :: ArrayEltR Bool
-  ArrayEltRchar   :: ArrayEltR Char
-  ArrayEltRpair   :: (ArrayElt a, ArrayElt b)
-                  => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
+  ArrayEltRunit    :: ArrayEltR ()
+  ArrayEltRint     :: ArrayEltR Int
+  ArrayEltRint8    :: ArrayEltR Int8
+  ArrayEltRint16   :: ArrayEltR Int16
+  ArrayEltRint32   :: ArrayEltR Int32
+  ArrayEltRint64   :: ArrayEltR Int64
+  ArrayEltRword    :: ArrayEltR Word
+  ArrayEltRword8   :: ArrayEltR Word8
+  ArrayEltRword16  :: ArrayEltR Word16
+  ArrayEltRword32  :: ArrayEltR Word32
+  ArrayEltRword64  :: ArrayEltR Word64
+  ArrayEltRcshort  :: ArrayEltR CShort
+  ArrayEltRcushort :: ArrayEltR CUShort
+  ArrayEltRcint    :: ArrayEltR CInt
+  ArrayEltRcuint   :: ArrayEltR CUInt
+  ArrayEltRclong   :: ArrayEltR CLong
+  ArrayEltRculong  :: ArrayEltR CULong
+  ArrayEltRcllong  :: ArrayEltR CLLong
+  ArrayEltRcullong :: ArrayEltR CULLong
+  ArrayEltRfloat   :: ArrayEltR Float
+  ArrayEltRdouble  :: ArrayEltR Double
+  ArrayEltRcfloat  :: ArrayEltR CFloat
+  ArrayEltRcdouble :: ArrayEltR CDouble
+  ArrayEltRbool    :: ArrayEltR Bool
+  ArrayEltRchar    :: ArrayEltR Char
+  ArrayEltRcchar   :: ArrayEltR CChar
+  ArrayEltRcschar  :: ArrayEltR CSChar
+  ArrayEltRcuchar  :: ArrayEltR CUChar
+  ArrayEltRpair    :: (ArrayElt a, ArrayElt b)
+                   => ArrayEltR a -> ArrayEltR b -> ArrayEltR (a,b)
 
 -- Array operations
 -- ----------------
@@ -274,15 +289,101 @@ instance ArrayElt Word64 where
   ptrsOfMutableArrayData (AD_Word64 ba)   = sTUArrayPtr ba
   arrayElt                                = ArrayEltRword64
 
--- FIXME:
--- CShort
--- CUShort
--- CInt
--- CUInt
--- CLong
--- CULong
--- CLLong
--- CULLong
+instance ArrayElt CShort where
+  type ArrayPtrs CShort = Ptr Int16
+  unsafeIndexArrayData (AD_CShort ba) i   = CShort $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CShort ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CShort $ unsafeNewArray_ size (*# 2#)
+  unsafeReadArrayData (AD_CShort ba) i    = CShort <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CShort ba) i (CShort e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CShort ba)    = liftM AD_CShort $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CShort ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRcshort
+
+instance ArrayElt CUShort where
+  type ArrayPtrs CUShort = Ptr Word16
+  unsafeIndexArrayData (AD_CUShort ba) i   = CUShort $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CUShort ba)          = uArrayPtr ba
+  newArrayData size                        = liftM AD_CUShort $ unsafeNewArray_ size (*# 2#)
+  unsafeReadArrayData (AD_CUShort ba) i    = CUShort <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CUShort ba) i (CUShort e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CUShort ba)    = liftM AD_CUShort $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CUShort ba)   = sTUArrayPtr ba
+  arrayElt                                 = ArrayEltRcushort
+
+instance ArrayElt CInt where
+  type ArrayPtrs CInt = Ptr Int32
+  unsafeIndexArrayData (AD_CInt ba) i   = CInt $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CInt ba)          = uArrayPtr ba
+  newArrayData size                     = liftM AD_CInt $ unsafeNewArray_ size (*# 2#)
+  unsafeReadArrayData (AD_CInt ba) i    = CInt <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CInt ba) i (CInt e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CInt ba)    = liftM AD_CInt $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CInt ba)   = sTUArrayPtr ba
+  arrayElt                              = ArrayEltRcint
+
+instance ArrayElt CUInt where
+  type ArrayPtrs CUInt = Ptr Word32
+  unsafeIndexArrayData (AD_CUInt ba) i   = CUInt $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CUInt ba)          = uArrayPtr ba
+  newArrayData size                      = liftM AD_CUInt $ unsafeNewArray_ size dOUBLE_SCALE
+  unsafeReadArrayData (AD_CUInt ba) i    = CUInt <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CUInt ba) i (CUInt e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CUInt ba)    = liftM AD_CUInt $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CUInt ba)   = sTUArrayPtr ba
+  arrayElt                               = ArrayEltRcuint
+
+instance ArrayElt CLong where
+  type ArrayPtrs CLong = Ptr Int64
+  unsafeIndexArrayData (AD_CLong ba) i   = CLong $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CLong ba)          = uArrayPtr ba
+  newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ size fLOAT_SCALE
+  unsafeReadArrayData (AD_CLong ba) i    = CLong <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CLong ba) i (CLong e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CLong ba)    = liftM AD_CLong $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CLong ba)   = sTUArrayPtr ba
+  arrayElt                               = ArrayEltRclong
+
+instance ArrayElt CULong where
+  type ArrayPtrs CULong = Ptr Word64
+  unsafeIndexArrayData (AD_CULong ba) i   = CULong $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CULong ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ size dOUBLE_SCALE
+  unsafeReadArrayData (AD_CULong ba) i    = CULong <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CULong ba) i (CULong e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CULong ba)    = liftM AD_CULong $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CULong ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRculong
+
+instance ArrayElt CLLong where
+  type ArrayPtrs CLLong = Ptr Int64
+  unsafeIndexArrayData (AD_CLLong ba) i   = CLLong $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CLLong ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CLLong $ unsafeNewArray_ size fLOAT_SCALE
+  unsafeReadArrayData (AD_CLLong ba) i    = CLLong <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CLLong ba) i (CLLong e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CLLong ba)    = liftM AD_CLLong $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CLLong ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRcllong
+
+instance ArrayElt CULLong where
+  type ArrayPtrs CULLong = Ptr Word64
+  unsafeIndexArrayData (AD_CULLong ba) i   = CULLong $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CULLong ba)          = uArrayPtr ba
+  newArrayData size                        = liftM AD_CULLong $ unsafeNewArray_ size dOUBLE_SCALE
+  unsafeReadArrayData (AD_CULLong ba) i    = CULLong <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CULLong ba) i (CULLong e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CULLong ba)    = liftM AD_CULLong $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CULLong ba)   = sTUArrayPtr ba
+  arrayElt                                 = ArrayEltRcullong
 
 instance ArrayElt Float where
   type ArrayPtrs Float = Ptr Float
@@ -306,9 +407,29 @@ instance ArrayElt Double where
   ptrsOfMutableArrayData (AD_Double ba)   = sTUArrayPtr ba
   arrayElt                                = ArrayEltRdouble
 
--- FIXME:
--- CFloat
--- CDouble
+instance ArrayElt CFloat where
+  type ArrayPtrs CFloat = Ptr Float
+  unsafeIndexArrayData (AD_CFloat ba) i   = CFloat $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CFloat ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CFloat $ unsafeNewArray_ size fLOAT_SCALE
+  unsafeReadArrayData (AD_CFloat ba) i    = CFloat <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CFloat ba) i (CFloat e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CFloat ba)    = liftM AD_CFloat $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CFloat ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRcfloat
+
+instance ArrayElt CDouble where
+  type ArrayPtrs CDouble = Ptr Double
+  unsafeIndexArrayData (AD_CDouble ba) i   = CDouble $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CDouble ba)          = uArrayPtr ba
+  newArrayData size                        = liftM AD_CDouble $ unsafeNewArray_ size dOUBLE_SCALE
+  unsafeReadArrayData (AD_CDouble ba) i    = CDouble <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CDouble ba) i (CDouble e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CDouble ba)    = liftM AD_CDouble $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CDouble ba)   = sTUArrayPtr ba
+  arrayElt                                 = ArrayEltRcdouble
 
 -- Bool arrays are stored as arrays of bytes. While this is memory inefficient,
 -- it is better suited to parallel backends than the native Unboxed Bool
@@ -350,10 +471,41 @@ instance ArrayElt Char where
   ptrsOfMutableArrayData (AD_Char ba)   = sTUArrayPtr ba
   arrayElt                              = ArrayEltRchar
 
--- FIXME:
--- CChar
--- CSChar
--- CUChar
+instance ArrayElt CChar where
+  type ArrayPtrs CChar = Ptr Int8
+  unsafeIndexArrayData (AD_CChar ba) i   = CChar $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CChar ba)          = uArrayPtr ba
+  newArrayData size                      = liftM AD_CChar $ unsafeNewArray_ size (*# 2#)
+  unsafeReadArrayData (AD_CChar ba) i    = CChar <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CChar ba) i (CChar e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CChar ba)    = liftM AD_CChar $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CChar ba)   = sTUArrayPtr ba
+  arrayElt                               = ArrayEltRcchar
+
+instance ArrayElt CSChar where
+  type ArrayPtrs CSChar = Ptr Int8
+  unsafeIndexArrayData (AD_CSChar ba) i   = CSChar $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CSChar ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CSChar $ unsafeNewArray_ size dOUBLE_SCALE
+  unsafeReadArrayData (AD_CSChar ba) i    = CSChar <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CSChar ba) i (CSChar e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CSChar ba)    = liftM AD_CSChar $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CSChar ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRcschar
+
+instance ArrayElt CUChar where
+  type ArrayPtrs CUChar = Ptr Word8
+  unsafeIndexArrayData (AD_CUChar ba) i   = CUChar $ unsafeIndexArray ba i
+  ptrsOfArrayData (AD_CUChar ba)          = uArrayPtr ba
+  newArrayData size                       = liftM AD_CUChar $ unsafeNewArray_ size fLOAT_SCALE
+  unsafeReadArrayData (AD_CUChar ba) i    = CUChar <$> unsafeReadArray ba i
+  unsafeWriteArrayData (AD_CUChar ba) i (CUChar e)
+    = unsafeWriteArray ba i e
+  unsafeFreezeArrayData (AD_CUChar ba)    = liftM AD_CUChar $ Unsafe.unsafeFreeze ba
+  ptrsOfMutableArrayData (AD_CUChar ba)   = sTUArrayPtr ba
+  arrayElt                                = ArrayEltRcuchar
 
 instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b)                = (ArrayPtrs a, ArrayPtrs b)
