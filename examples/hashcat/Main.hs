@@ -4,9 +4,9 @@ module Main where
 import MD5
 import Digest
 import Config
+import ParseArgs
+import Util
 
-import Numeric
-import Data.List
 import Data.Label
 import Text.Printf
 import Control.Monad
@@ -21,7 +21,8 @@ import qualified Data.ByteString.Lazy.Char8     as L
 
 main :: IO ()
 main = do
-  (conf, _cconf, files) <- parseArgs =<< takeWhile (/= "--") `fmap` getArgs
+  argv                  <- getArgs
+  (conf, _cconf, files) <- parseArgs configHelp configBackend defaultOptions defaultConfig basicHeader argv
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
@@ -39,9 +40,11 @@ main = do
   -- function are applied, but is defeated by salting passwords. This is true
   -- even if the salt is known, so long as it is unique for each password.
   --
-  let recover hash =
+  let backend = get configBackend conf
+
+      recover hash =
         let abcd = readMD5 hash
-            idx  = run1 conf (hashcat (A.use dict)) (A.fromList Z [abcd])
+            idx  = run1 backend (hashcat (A.use dict)) (A.fromList Z [abcd])
         --
         in case idx `A.indexArray` Z of
              -1 -> Nothing
@@ -74,17 +77,4 @@ main = do
                       (showFFloatSIBase (Just 2) 1000 persec "Hash/sec")
 
   when (r == t) $ putStrLn "All hashes recovered (:"
-
-
--- Utilities
---
-showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> ShowS
-showFFloatSIBase p b n
-  = showString
-  . nubBy (\x y -> x == ' ' && y == ' ')
-  $ showFFloat p n' [ ' ', si_unit ]
-  where
-    n'          = n / (b ^^ (pow-4))
-    pow         = max 0 . min 8 . (+) 4 . floor $ logBase b n
-    si_unit     = "pnµm kMGT" !! pow
 

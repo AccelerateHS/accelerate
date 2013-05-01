@@ -327,7 +327,7 @@ Executable accelerate-smoothlife
 
 Executable accelerate-hashcat
   Main-is:              Main.hs
-  hs-source-dirs:       examples/hashcat
+  hs-source-dirs:       examples/hashcat lib
   other-modules:        Config
                         Digest
                         MD5
