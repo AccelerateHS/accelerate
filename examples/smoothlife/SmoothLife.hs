@@ -59,8 +59,8 @@ smoothlife conf aa
     --
     kflr        = A.sum kr
     kfld        = A.sum kd
-    krf         = fft2D' Forward size size (fftShift2D (complex kr))
-    kdf         = fft2D' Forward size size (fftShift2D (complex kd))
+    krf         = fft2D' Forward size size (shift2D (complex kr))
+    kdf         = fft2D' Forward size size (shift2D (complex kd))
 
     kd          = A.generate sh (\ix -> 1 - linear (radius ix) ri b)
     kr          = A.generate sh (\ix -> let r = radius ix
