@@ -161,14 +161,29 @@ rebuildDelayed v acc = case acc of
                            (rebuildFA rebuildDelayed v indexD)
                            (rebuildFA rebuildDelayed v linearIndexD)
 
+
+-- Note: If we detect that the delayed array is simply accessing an array
+-- variable, then just print the variable name. That is:
+--
+-- > let a0 = <...> in map f (Delayed (shape a0) (\x0 -> a0!x0))
+--
+-- becomes
+--
+-- > let a0 = <...> in map f a0
+--
 prettyDelayed :: PrettyAcc DelayedOpenAcc
 prettyDelayed alvl wrap acc = case acc of
   Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
-  Delayed sh f _        ->
-    wrap $ hang (text "Delayed") 2
-         $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
-               , parens (prettyPreFun prettyDelayed alvl f)
-               ]
+  Delayed sh f _
+    | Shape a           <- sh
+    , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
+    -> prettyDelayed alvl wrap a
+
+    | otherwise
+    -> wrap $ hang (text "Delayed") 2
+            $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
+                  , parens (prettyPreFun prettyDelayed alvl f)
+                  ]
 
 
 -- Environments
