@@ -6,7 +6,7 @@ import Config
 
 import Prelude                                  as P
 import Data.Label
-import Graphics.Gloss                           hiding ( color )
+import Graphics.Gloss
 import Data.Array.Accelerate                    as A hiding ( size )
 import Data.Array.Accelerate.IO                 as A
 import Foreign.Ptr
@@ -17,8 +17,8 @@ import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 
-colorise :: ColourScheme -> Exp R -> Exp RGBA32
-colorise scheme = rgba32OfFloat . color scheme
+colourise :: ColourScheme -> Acc (Matrix R) -> Acc (Matrix RGBA32)
+colourise scheme = A.map (rgba32OfFloat . colour scheme)
   where
     phase       = 0.01
     alpha       = constant 1
@@ -26,19 +26,19 @@ colorise scheme = rgba32OfFloat . color scheme
     fract x     = x - A.fromIntegral (A.floor x :: Exp Int)
     mix x y a   = x*(1-a) + y*a
 
-    color RedBlack f    = lift (f, constant 0, constant 0, alpha)
-    color WhiteBlack f  = lift (f, f, f, alpha)
-    color BlackWhite f  = lift (x, x, x, alpha) where x = 1-f
-    color BrownGreen f  = lift (mix 0.5 0.5 f, mix 0.3 0.75 f, mix 0 1 f, alpha)
-    color GoldBrown f   =
+    colour RedBlack f    = lift (f, constant 0, constant 0, alpha)
+    colour WhiteBlack f  = lift (f, f, f, alpha)
+    colour BlackWhite f  = lift (x, x, x, alpha) where x = 1-f
+    colour BrownGreen f  = lift (mix 0.5 0.5 f, mix 0.3 0.75 f, mix 0 1 f, alpha)
+    colour GoldBrown f   =
       let ssf = sqrt (sqrt f)
       in  lift ( mix 0.5 (mix 1 0.3 f) ssf
                , mix 0.3 (mix 0.95 0.2 f) ssf
                , constant 0
                , alpha)
-    color Rainbow1 f    = rainbow  (fract phase * 6) f
-    color Rainbow2 f    = rainbow  (6 * sqrt (sqrt (1-f))) (sqrt (sqrt f))
-    color Rainbow3 f    = rainbow' (sqrt (sqrt (1-f))) (sqrt (sqrt f))
+    colour Rainbow1 f    = rainbow  (fract phase * 6) f
+    colour Rainbow2 f    = rainbow  (6 * sqrt (sqrt (1-f))) (sqrt (sqrt f))
+    colour Rainbow3 f    = rainbow' (sqrt (sqrt (1-f))) (sqrt (sqrt f))
 
     rainbow p x
       = p >* 0 &&* p <* 1

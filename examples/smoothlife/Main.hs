@@ -40,7 +40,7 @@ main
             scheme      = get configColourScheme conf
 
             render      = draw conf
-                        . run1 backend (A.map (colorise scheme))
+                        . run1 backend (colourise scheme)
             advance     = run1 backend (smoothlife conf)
 
         -- initialise with patches of random data
