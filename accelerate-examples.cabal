@@ -167,7 +167,7 @@ Executable accelerate-examples
 Executable accelerate-crystal
   hs-source-dirs:       examples/crystal lib
   Main-is:              Main.hs
-  other-modules:        Config
+  other-modules:        Config ParseArgs
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
@@ -196,7 +196,7 @@ Executable accelerate-crystal
 Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot lib
   Main-is:              Main.hs
-  other-modules:        Config World Mandel
+  other-modules:        Config World Mandel ParseArgs
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
@@ -258,6 +258,7 @@ Executable accelerate-nbody
   Main-is:              Main.hs
   hs-source-dirs:       examples/n-body lib
   other-modules:        Config
+                        ParseArgs
                         Common.Body
                         Common.Dump
                         Common.Tree
@@ -297,11 +298,13 @@ Executable accelerate-smoothlife
   Main-is:              Main.hs
   hs-source-dirs:       examples/smoothlife lib
   other-modules:        Config
+                        ParseArgs
                         SmoothLife
                         Gloss.Draw
                         Gloss.Event
                         Gloss.Simulate
                         Random.Array
+                        Random.Splat
 
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
@@ -329,6 +332,7 @@ Executable accelerate-hashcat
   Main-is:              Main.hs
   hs-source-dirs:       examples/hashcat lib
   other-modules:        Config
+                        ParseArgs
                         Digest
                         MD5
 
