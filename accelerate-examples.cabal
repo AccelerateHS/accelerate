@@ -165,7 +165,7 @@ Executable accelerate-examples
 -- --------------------------------------------------
 
 Executable accelerate-crystal
-  hs-source-dirs:       examples/crystal
+  hs-source-dirs:       examples/crystal lib
   Main-is:              Main.hs
   other-modules:        Config
   ghc-options:          -O2 -Wall -threaded

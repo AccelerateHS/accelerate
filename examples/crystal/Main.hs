@@ -9,6 +9,7 @@
 module Main where
 
 import Config
+import ParseArgs
 
 import Data.Word
 import Data.Label
@@ -167,12 +168,14 @@ frame render size zoom time = G.scale zoom' zoom' pic
 -- Main -----------------------------------------------------------------------
 main :: IO ()
 main
-  = do  (config, crit, nops) <- parseArgs =<< getArgs
+  = do  argv                    <- getArgs
+        (config, crit, nops)    <- parseArgs optHelp optBackend options defaults header argv
         let size        = get optSize config
             zoom        = get optZoom config
             scale       = get optScale config
             degree      = get optDegree config
-            render      = run config $ makeImage size scale degree
+            backend     = get optBackend config
+            render      = run1 backend $ makeImage size scale degree
             force arr   = A.indexArray arr (Z:.0:.0) `seq` arr
 
         void . evaluate $ render (A.fromList Z [0])
