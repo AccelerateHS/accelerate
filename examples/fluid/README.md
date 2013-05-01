@@ -40,3 +40,15 @@ You can use the flags `--bmp-density` and/or `--bmp-velocity` to introduce
 initial conditions by reading from a bitmap image file. Try using one of the
 images located in `data/images` as an initial density source.
 
+
+Alternatives
+------------
+
+The original C implementation by Jus Stam is included in this distribution. The
+paper describing the implementation can be found here:
+<http://www.dgp.toronto.edu/people/stam/reality/Research/pdf/GDC03.pdf>
+
+An implementation using Repa can be found as part of the gloss-examples package.
+<http://hackage.haskell.org/package/gloss-examples>
+
+

@@ -224,7 +224,7 @@ Executable accelerate-mandelbrot
 
 Executable accelerate-fluid
   Main-is:              Main.hs
-  hs-source-dirs:       examples/fluid/src
+  hs-source-dirs:       examples/fluid/src-acc
   other-modules:        Config
                         Event
                         Fluid
