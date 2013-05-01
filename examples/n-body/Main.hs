@@ -4,6 +4,7 @@
 
 -- friends
 import Config
+import ParseArgs
 import Common.Body
 import Common.World
 import Gloss.Draw
@@ -20,14 +21,14 @@ import Data.Array.Accelerate                    as A hiding ( size )
 import Prelude                                  as P
 import Data.Label
 import System.Environment
-import System.Random.MWC                        ( uniformR )
 import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Graphics.Gloss.Interface.Pure.Game
 
 
 main :: IO ()
 main
-  = do  (conf, cconf, nops)     <- parseArgs =<< getArgs
+  = do  argv                    <- getArgs
+        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let solver      = case get configSolver conf of
                             Naive       -> Naive.calcAccels
@@ -37,15 +38,18 @@ main
             size        = get configWindowSize conf
             fps         = get configRate conf
             epsilon     = get configEpsilon conf
+            mass        = get configBodyMass conf
+            radius      = get configStartDiscSize conf
+            backend     = get configBackend conf
 
             -- Generate random particle positions in a disc layout centred at
             -- the origin. Start the system rotating with particle speed
             -- proportional to distance from the origin
             --
-            positions   = randomArrayOf (disc (0,0,0) (get configStartDiscSize conf)) (Z :. n)
-            masses      = randomArrayOf (\_ -> uniformR (1, get configBodyMass conf)) (Z :. n)
+            positions   = randomArray (disc (0,0,0) radius) (Z :. n)
+            masses      = randomArray (uniformR (1, mass)) (Z :. n)
 
-            bodies      = run conf
+            bodies      = run backend
                         $ A.map (setStartVelOfBody . constant $ get configStartSpeed conf)
                         $ A.zipWith setMassOfBody (A.use masses)
                         $ A.map unitBody
@@ -62,7 +66,7 @@ main
             --
             advance     = advanceWorld step
             step        = P.curry
-                        $ run1 conf
+                        $ run1 backend
                         $ A.uncurry
                         $ advanceBodies (solver $ constant epsilon)
 

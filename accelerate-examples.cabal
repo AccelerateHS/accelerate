@@ -256,7 +256,7 @@ Executable accelerate-fluid
 
 Executable accelerate-nbody
   Main-is:              Main.hs
-  hs-source-dirs:       examples/n-body
+  hs-source-dirs:       examples/n-body lib
   other-modules:        Config
                         Common.Body
                         Common.Dump
