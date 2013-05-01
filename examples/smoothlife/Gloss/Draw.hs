@@ -3,7 +3,6 @@ module Gloss.Draw
   where
 
 import Config
-import ParseArgs
 
 import Prelude                                  as P
 import Data.Label
@@ -18,15 +17,9 @@ import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
 import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 
-data Scheme = RedBlack | WhiteBlack | BlackWhite | BrownGreen | GoldBrown | Rainbow1 | Rainbow2 | Rainbow3
-  deriving (Eq, Show)
-
-
-colorise :: Exp R -> Exp RGBA32
-colorise = rgba32OfFloat . color scheme
+colorise :: ColourScheme -> Exp R -> Exp RGBA32
+colorise scheme = rgba32OfFloat . color scheme
   where
-    -- TODO: make runtime configurable
-    scheme      = WhiteBlack
     phase       = 0.01
     alpha       = constant 1
 
@@ -62,20 +55,15 @@ colorise = rgba32OfFloat . color scheme
         in lift (x * c 0, x * c 1, x * c 2, alpha)
 
 
-draw :: Config -> Matrix R -> Picture
-draw conf life = scale zoom zoom pic
+draw :: Config -> Matrix RGBA32 -> Picture
+draw conf (Array _ adata) = scale zoom zoom pic
   where
     zoom        = P.fromIntegral
                 $ get configWindowZoom conf
     size        = get configWindowSize conf
-    backend     = get configBackend conf
 
-    render      = run1 backend (A.map colorise)
-
-    rawData     = let (Array _ adata)   = render life
-                      ((), ptr)         = ptrsOfArrayData adata
-                  in
-                  unsafePerformIO       $ newForeignPtr_ (castPtr ptr)
+    rawData     = let ((), ptr)         = ptrsOfArrayData adata
+                  in unsafePerformIO    $ newForeignPtr_ (castPtr ptr)
 
     pic         = bitmapOfForeignPtr
                     size size           -- raw image size

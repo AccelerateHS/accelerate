@@ -32,6 +32,18 @@ data SigmoidFunction
   deriving (Eq, Show, Read, Enum, Bounded)
 
 
+data ColourScheme
+  = RedBlack
+  | WhiteBlack
+  | BlackWhite
+  | BrownGreen
+  | GoldBrown
+  | Rainbow1
+  | Rainbow2
+  | Rainbow3
+  deriving (Eq, Show, Read, Enum, Bounded)
+
+
 data Config = Config
   {
     -- How to execute the simulation
@@ -42,6 +54,7 @@ data Config = Config
   , _configWindowZoom           :: Int
   , _configFramerate            :: Int
   , _configTimestep             :: Float
+  , _configColourScheme         :: ColourScheme
 
     -- Initial conditions
   , _configRim                  :: R            -- b
@@ -74,6 +87,7 @@ defaults = Config
   , _configWindowZoom           = 3
   , _configFramerate            = 30
   , _configTimestep             = 0.1
+  , _configColourScheme         = WhiteBlack
 
   -- generic smooth glider
   --, _configRim                  = 1
@@ -120,8 +134,12 @@ options =
             (describe configFramerate "visualisation frame rate")
 
   , Option  [] ["timestep"]
-            (ReqArg (set configTimestep . read) "Float")
+            (ReqArg (set configTimestep . read) "FLOAT")
             (describe configTimestep "simulation timestep")
+
+  , Option  [] ["colours"]
+            (ReqArg (set configColourScheme . read) "COLOURS")
+            (describe configColourScheme "visualisation colour scheme")
 
   , Option  [] ["b", "rim"]
             (ReqArg (set configRim . read) "FLOAT")
@@ -206,5 +224,8 @@ footer =
   [ ""
   , "Available sigmoid functions:"
   , "  " ++ unwords (map show [minBound .. maxBound :: SigmoidFunction])
+  , ""
+  , "Available colour schemes:"
+  , "  " ++ unwords (map show [minBound .. maxBound :: ColourScheme])
   ]
 

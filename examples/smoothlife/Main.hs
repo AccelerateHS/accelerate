@@ -37,8 +37,11 @@ main
             height      = n * zoom
 
             backend     = get configBackend conf
-            advance     = run1 backend (smoothlife conf)
+            scheme      = get configColourScheme conf
+
             render      = draw conf
+                        . run1 backend (A.map (colorise scheme))
+            advance     = run1 backend (smoothlife conf)
 
         -- initialise with patches of random data
         dots    <- randomCircles dish ra rb
