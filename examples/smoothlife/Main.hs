@@ -5,10 +5,11 @@
 
 -- friends
 import Config
+import ParseArgs
 import SmoothLife
 import Gloss.Draw
 import Random.Array
-import ParseArgs
+import Random.Splat
 
 -- system
 import Prelude                                  as P
@@ -29,8 +30,9 @@ main
             n           = get configWindowSize conf
             zoom        = get configWindowZoom conf
             fps         = get configFramerate conf
-            (_,ra)      = get configDiscRadius conf
+            (ra,rb)     = get configDiscRadius conf
 
+            dish        = Z :. n :. n
             width       = n * zoom
             height      = n * zoom
 
@@ -39,7 +41,10 @@ main
             render      = draw conf
 
         -- initialise with patches of random data
-        world <- evaluate . advance =<< randomArray (Z:.n:.n) ra
+        dots    <- randomCircles dish ra rb
+        agar    <- randomArrayWithSystemRandom (splat dots) dish
+
+        world   <- evaluate (advance agar)
 
         -- Rise minions!
         if get configBenchmark conf
