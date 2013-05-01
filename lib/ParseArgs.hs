@@ -5,7 +5,8 @@
 
 module ParseArgs (
 
-  Backend(..), parseArgs, run, run1
+  Backend(..), parseArgs, run, run1,
+  module System.Console.GetOpt,
 
 ) where
 
