@@ -73,8 +73,8 @@ withBackends backend xs = availableBackends backend ++ xs
 -- | Create the help text including a list of the available (and selected)
 --   Accelerate backends.
 --
-fancyHeader :: (config :-> Backend) -> config -> String -> String
-fancyHeader backend opts basicHeader = unlines (header : table)
+fancyHeader :: (config :-> Backend) -> config -> [String] -> [String] -> String
+fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
   where
     active this         = if this == map toLower (show (get backend opts)) then "*" else ""
     (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract (availableBackends backend)
@@ -89,7 +89,7 @@ fancyHeader backend opts basicHeader = unlines (header : table)
             []          -> [(losFmt, "")]
             (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
     --
-    header = intercalate "\n" [ basicHeader, "Available backends:" ]
+    body   = "Available backends:" : table
 
 
 -- | Process the command line arguments and return a tuple consisting of the
@@ -102,16 +102,17 @@ parseArgs :: (config :-> Bool)                  -- ^ access a help flag from the
           -> (config :-> Backend)               -- ^ access the chosen backend from the options structure
           -> [OptDescr (config -> config)]      -- ^ the option descriptions
           -> config                             -- ^ default option set
-          -> String                             -- ^ basic help header text
+          -> [String]                           -- ^ header text
+          -> [String]                           -- ^ footer text
           -> [String]                           -- ^ command line arguments
           -> IO (config, Criterion.Config, [String])
-parseArgs help backend (withBackends backend -> defaultOptions) config basicHeader (takeWhile (/= "--") -> argv) =
+parseArgs help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
   let
       helpMsg err = concat err
-        ++ usageInfo basicHeader                    defaultOptions
+        ++ usageInfo (unlines header)               options
         ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
 
-  in case getOpt' Permute defaultOptions argv of
+  in case getOpt' Permute options argv of
       (o,n,u,[])  -> do
 
         -- pass unrecognised options to criterion
@@ -119,8 +120,8 @@ parseArgs help backend (withBackends backend -> defaultOptions) config basicHead
 
         case foldr id config o of
           conf | False <- get help conf
-            -> putStrLn (fancyHeader backend conf basicHeader) >> return (conf, cconf, n ++ n')
-          _ -> putStrLn (helpMsg [])                           >> exitSuccess
+            -> putStrLn (fancyHeader backend conf header footer) >> return (conf, cconf, n ++ n')
+          _ -> putStrLn (helpMsg [])                             >> exitSuccess
 
       (_,_,_,err) -> error (helpMsg err)
 

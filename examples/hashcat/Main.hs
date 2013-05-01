@@ -22,7 +22,7 @@ import qualified Data.ByteString.Lazy.Char8     as L
 main :: IO ()
 main = do
   argv                  <- getArgs
-  (conf, _cconf, files) <- parseArgs configHelp configBackend defaultOptions defaultConfig basicHeader argv
+  (conf, _cconf, files) <- parseArgs configHelp configBackend options defaults header footer argv
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.

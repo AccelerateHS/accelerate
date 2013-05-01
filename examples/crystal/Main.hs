@@ -169,7 +169,7 @@ frame render size zoom time = G.scale zoom' zoom' pic
 main :: IO ()
 main
   = do  argv                    <- getArgs
-        (config, crit, nops)    <- parseArgs optHelp optBackend options defaults header argv
+        (config, crit, nops)    <- parseArgs optHelp optBackend options defaults header footer argv
         let size        = get optSize config
             zoom        = get optZoom config
             scale       = get optScale config

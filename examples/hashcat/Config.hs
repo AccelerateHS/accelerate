@@ -26,8 +26,8 @@ data Config
 
 $(mkLabels [''Config])
 
-defaultConfig :: Config
-defaultConfig = Config
+defaults :: Config
+defaults = Config
   {
     _configBackend              = maxBound
   , _configStrings              = []
@@ -40,8 +40,8 @@ defaultConfig = Config
 
 -- | The set of available command-line options
 --
-defaultOptions :: [OptDescr (Config -> Config)]
-defaultOptions =
+options :: [OptDescr (Config -> Config)]
+options =
   [ Option      ['s'] []
                 (ReqArg (modify configStrings . (:)) "STRING")
                 "Lookup the plain text of a given checksum"
@@ -66,10 +66,13 @@ defaultOptions =
 
 -- | Process the command line options
 --
-basicHeader :: String
-basicHeader = unlines
+header :: [String]
+header =
   [ "accelerate-hashcat (c) [2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-hashcat -d dictionary [OPTIONS] [file ...]"
   ]
+
+footer :: [String]
+footer = []
 
