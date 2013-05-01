@@ -194,7 +194,7 @@ Executable accelerate-crystal
 -- -----------------------------
 
 Executable accelerate-mandelbrot
-  hs-source-dirs:       examples/mandelbrot
+  hs-source-dirs:       examples/mandelbrot lib
   Main-is:              Main.hs
   other-modules:        Config World Mandel
   ghc-options:          -O2 -Wall -threaded

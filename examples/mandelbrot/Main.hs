@@ -6,6 +6,7 @@
 
 import World
 import Config
+import ParseArgs
 
 import Data.Label
 import Control.Monad
@@ -42,12 +43,13 @@ makePicture world = pic
 main :: IO ()
 main
   = do
-        (config, critConf, nops) <- parseArgs =<< getArgs
+        argv                    <- getArgs
+        (conf, cconf, rest)     <- parseArgs optHelp optBackend options defaults header footer argv
 
-        let world       = initialWorld config view
-            fps         = get optFramerate config
-            width       = get optWidth config
-            height      = get optHeight config
+        let world       = initialWorld conf view
+            fps         = get optFramerate conf
+            width       = get optWidth conf
+            height      = get optHeight conf
 
             -- Centre coordinates: Re(c) = -0.7; Im(c) = 0
             -- View width: 3.0769
@@ -57,8 +59,8 @@ main
             force arr   = indexArray arr (Z:.0:.0) `seq` arr
 
             mandel
-              | get optBench config
-              = withArgs nops $ defaultMainWith critConf (return ())
+              | get optBench conf
+              = withArgs rest $ defaultMainWith cconf (return ())
                     [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
 #ifdef ACCELERATE_ENABLE_GUI
               | fps == 0
@@ -74,15 +76,15 @@ main
                     fps
                     world
                     makePicture
-                    (react config)
+                    (react conf)
                     (const refocus)
 #endif
               | otherwise
               = return ()
 
 
-        unless (P.null nops) $
-          putStrLn $ "Warning: unrecognized options: " ++ show nops
+        unless (P.null rest) $
+          putStrLn $ "Warning: unrecognized options: " ++ show rest
 
         mandel
 

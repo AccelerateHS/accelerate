@@ -13,6 +13,7 @@ module World (
 
 import Mandel
 import Config
+import ParseArgs
 
 import Data.Char
 import Data.Label
@@ -60,9 +61,10 @@ setPrecisionOfWorld f config (World p _ z h v)
         width   = get optWidth config
         height  = get optHeight config
         limit   = get optLimit config
+        backend = get optBackend config
 
         render :: (Elt a, IsFloating a) => Render a
-        render  = run1 config
+        render  = run1 backend
                 $ A.map (prettyRGBA (constant limit))
                 . mandelbrot width height limit
 
