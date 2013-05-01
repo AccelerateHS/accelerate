@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns  #-}
 
-module Config (
+module ParseArgs (
 
   Backend(..), parseArgs, run, run1
 
