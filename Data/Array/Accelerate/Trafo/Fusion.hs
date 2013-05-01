@@ -144,10 +144,10 @@ quenchAcc = cvtA
         -- result of a let-binding to be used multiple times. The input array
         -- here should be an array variable, else something went wrong.
         --
-        Map f a                 -> Map (cvtF f) (cvtV a)
+        Map f a                 -> Map (cvtF f) (embed a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
-        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (cvtV a)
-        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (cvtV a)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (embed a)
+        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (embed a) a
 
         Reshape{}               -> fusionError
         Replicate{}             -> fusionError
@@ -176,20 +176,17 @@ quenchAcc = cvtA
         Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
 
-    cvtV :: OpenAcc aenv a -> DelayedOpenAcc aenv a
-    cvtV (OpenAcc pacc) = Manifest $
-      case pacc of
-        Avar ix                 -> Avar ix
-        _                       -> fusionError
-
     -- A backwards permutation at this stage might be further simplified as a
     -- reshape operation, which can be executed in constant time without
     -- actually executing any array operations.
     --
-    backpermute sh p a
-      | Manifest (Avar v)       <- a
+    -- This requires that the argument of reshape be a manifest array, which is
+    -- an exception to the rule of having all array inputs in delayed form.
+    --
+    backpermute sh p a x
+      | OpenAcc (Avar v)        <- x
       , Just REFL               <- match p (simplify $ reindex (arrayShape v) sh)
-      = Reshape sh a
+      = Reshape sh (Manifest (Avar v))
 
       | otherwise
       = Backpermute sh p a
