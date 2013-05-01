@@ -3,6 +3,7 @@ module Gloss.Draw
   where
 
 import Config
+import ParseArgs
 
 import Prelude                                  as P
 import Data.Label
@@ -62,15 +63,16 @@ colorise = rgba32OfFloat . color scheme
 
 
 draw :: Config -> Matrix R -> Picture
-draw conf arr = scale zoom zoom pic
+draw conf life = scale zoom zoom pic
   where
     zoom        = P.fromIntegral
                 $ get configWindowZoom conf
     size        = get configWindowSize conf
+    backend     = get configBackend conf
 
-    render      = run1 conf (A.map colorise)
+    render      = run1 backend (A.map colorise)
 
-    rawData     = let (Array _ adata)   = render arr
+    rawData     = let (Array _ adata)   = render life
                       ((), ptr)         = ptrsOfArrayData adata
                   in
                   unsafePerformIO       $ newForeignPtr_ (castPtr ptr)

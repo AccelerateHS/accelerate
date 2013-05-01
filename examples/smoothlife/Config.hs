@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE PatternGuards   #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Config
@@ -7,23 +5,17 @@ module Config
 
 import Prelude                                          as P hiding ((.), id, fst, snd)
 import qualified Prelude                                as P
-import Data.Char
-import Data.List
-import Data.Label
-import System.Exit
-import Control.Category
-import System.Console.GetOpt
-import qualified Criterion.Main                         as Criterion
-import qualified Criterion.Config                       as Criterion
 
-import Data.Array.Accelerate                            ( Array, Arrays, Acc, DIM2 )
-import Data.Array.Accelerate.Math.Complex               as A
-import qualified Data.Array.Accelerate.Interpreter      as Interp
-#ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA             as CUDA
-#endif
+import ParseArgs
+import Data.Label
+import Control.Category
+
+import Data.Array.Accelerate                            ( Array, DIM2 )
+import Data.Array.Accelerate.Math.Complex               ( Complex )
+
 
 -- | Types
+--
 type R          = Float
 type C          = Complex R
 type Matrix a   = Array DIM2 a
@@ -38,15 +30,6 @@ data SigmoidFunction
   | Hermite
   | Sin
   deriving (Eq, Show, Read, Enum, Bounded)
-
-
--- | Program configuration
---
-data Backend = Interpreter
-#ifdef ACCELERATE_CUDA_BACKEND
-             | CUDA
-#endif
-  deriving (Bounded, Show)
 
 
 data Config = Config
@@ -81,8 +64,9 @@ data Config = Config
 
 $(mkLabels [''Config])
 
-defaultConfig :: Config
-defaultConfig = Config
+
+defaults :: Config
+defaults = Config
   {
     _configBackend              = maxBound
 
@@ -121,43 +105,8 @@ defaultConfig = Config
   }
 
 
--- | Execute Accelerate expressions
---
-run :: Arrays a => Config -> Acc a -> a
-run config =
-  case _configBackend config of
-    Interpreter -> Interp.run
-#ifdef ACCELERATE_CUDA_BACKEND
-    CUDA        -> CUDA.run
-#endif
-
-
-run1 :: (Arrays a, Arrays b) => Config -> (Acc a -> Acc b) -> a -> b
-run1 config f =
-  case _configBackend config of
-    Interpreter -> head . Interp.stream f . return
-#ifdef ACCELERATE_CUDA_BACKEND
-    CUDA        -> CUDA.run1 f
-#endif
-
--- | The set of available command-line options
---
-backends :: [OptDescr (Config -> Config)]
-backends =
-  [ Option  [] ["interpreter"]
-            (NoArg (set configBackend Interpreter))
-            "reference implementation (sequential)"
-
-#ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] ["cuda"]
-            (NoArg (set configBackend CUDA))
-            "implementation for NVIDIA GPUs (parallel)"
-#endif
-  ]
-
-
-defaultOptions :: [OptDescr (Config -> Config)]
-defaultOptions = backends ++
+options :: [OptDescr (Config -> Config)]
+options =
   [ Option  [] ["size"]
             (ReqArg (set configWindowSize . read) "INT")
             (describe configWindowSize "visualisation size")
@@ -219,11 +168,11 @@ defaultOptions = backends ++
             (describe configSigmode "sigmode 1..4")
 
   , Option  [] ["sigtype"]
-            (ReqArg (set configSigtype . read) "SIGMOIDFUNCTION")
+            (ReqArg (set configSigtype . read) "SIGMOID")
             (describe configSigtype "sigtype")
 
   , Option  [] ["mixtype"]
-            (ReqArg (set configMixtype . read) "SIGMOIDFUNCTION")
+            (ReqArg (set configMixtype . read) "SIGMOID")
             (describe configMixtype "mixtype")
 
   , Option  [] ["max-steps"]
@@ -240,58 +189,22 @@ defaultOptions = backends ++
   ]
   where
     describe f msg
-      = msg ++ " (" ++ show (get f defaultConfig) ++ ")"
+      = msg ++ " (" ++ show (get f defaults) ++ ")"
 
     fst = lens P.fst (\a (_,b) -> (a,b))
     snd = lens P.snd (\b (a,_) -> (a,b))
 
-basicHeader :: String
-basicHeader = unlines
+header :: [String]
+header =
   [ "accelerate-smoothlife (c) [2012..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-smoothlife [OPTIONS]"
   ]
 
-fancyHeader :: Config -> String
-fancyHeader opts = unlines (header : table)
-  where
-    active this         = if this == map toLower (show $ get configBackend opts) then "*" else ""
-    (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract backends
-    table               = zipWith3 paste (sameLen ss) (sameLen bs) ds
-    paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
-    sameLen xs          = flushLeft ((maximum . map length) xs) xs
-    flushLeft n xs      = [ take n (x ++ repeat ' ') | x <- xs ]
-    --
-    extract (Option _ los _ descr) =
-      let losFmt  = intercalate ", " los
-      in  case lines descr of
-            []          -> [(losFmt, "")]
-            (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
-    --
-    header = intercalate "\n" [ basicHeader, "Available backends:" ]
-
-
-parseArgs :: [String] -> IO (Config, Criterion.Config, [String])
-parseArgs argv
-  = let
-        helpMsg err = concat err
-          ++ usageInfo basicHeader                    defaultOptions
-          ++ sigmoidDescription
-          ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
-
-        sigmoidDescription = unlines
-          [ "\nFor options requiring a SIGMOIDFUNCTION the available functions are:"
-          , show (enumFrom minBound :: [SigmoidFunction])
-          ]
-
-  in case getOpt' Permute defaultOptions argv of
-      (o,_,n,[])  -> do
-
-        -- pass unrecognised options to criterion
-        (cconf, rest)     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions n
-        case foldr id defaultConfig o of
-          conf | False <- get configHelp conf   -> putStrLn (fancyHeader conf) >> return (conf, cconf, rest)
-          _                                     -> putStrLn (helpMsg [])       >> exitSuccess
-
-      (_,_,_,err) -> error (helpMsg err)
+footer :: [String]
+footer =
+  [ ""
+  , "Available sigmoid functions:"
+  , "  " ++ unwords (map show [minBound .. maxBound :: SigmoidFunction])
+  ]
 

@@ -11,6 +11,7 @@ module SmoothLife
   where
 
 import Config
+import ParseArgs
 
 import Prelude                                  as P
 import Data.Label
@@ -69,7 +70,7 @@ smoothlife conf aa
     kflr''      = constant (kflr' `A.indexArray` Z)
     kfld''      = constant (kfld' `A.indexArray` Z)
     (kflr', kfld', krf', kdf')
-                = run conf $ lift (kflr, kfld, krf, kdf)
+                = run (get configBackend conf) $ lift (kflr, kfld, krf, kdf)
 
     -- Auxiliary
     --

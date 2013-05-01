@@ -8,6 +8,7 @@ import Config
 import SmoothLife
 import Gloss.Draw
 import Random.Array
+import ParseArgs
 
 -- system
 import Prelude                                  as P
@@ -21,7 +22,8 @@ import Criterion.Main                           ( defaultMainWith, bench, whnf )
 
 main :: IO ()
 main
-  = do  (conf, cconf, nops)     <- parseArgs =<< getArgs
+  = do  argv                    <- getArgs
+        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let -- visualisation configuration
             n           = get configWindowSize conf
@@ -32,7 +34,8 @@ main
             width       = n * zoom
             height      = n * zoom
 
-            advance     = run1 conf (smoothlife conf)
+            backend     = get configBackend conf
+            advance     = run1 backend (smoothlife conf)
             render      = draw conf
 
         -- initialise with patches of random data

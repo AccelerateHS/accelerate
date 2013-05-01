@@ -295,7 +295,7 @@ Executable accelerate-nbody
 
 Executable accelerate-smoothlife
   Main-is:              Main.hs
-  hs-source-dirs:       examples/smoothlife
+  hs-source-dirs:       examples/smoothlife lib
   other-modules:        Config
                         SmoothLife
                         Gloss.Draw
