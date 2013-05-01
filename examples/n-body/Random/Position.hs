@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 
 --
 -- Generators for various distributions of particle positions
@@ -10,13 +11,6 @@ import Common.Type
 import Control.Monad.ST                         ( ST )
 import System.Random.MWC                        ( GenST, uniformR )
 import Data.Array.Accelerate.Array.Sugar        as A
-
-
--- | A uniform distribution of points between some minimum and maximum bounds
---
-uniform :: R -> R -> sh -> GenST s -> ST s Position
-uniform pointMin pointMax _ix
-  = uniformR ((pointMin, pointMin, pointMin), (pointMax, pointMax, pointMax))
 
 
 -- | Points distributed as a disc
@@ -34,12 +28,17 @@ disc (originX, originY, originZ) radiusMax _ix gen
 
 -- | A point cloud with areas of high and low density
 --
-cloud :: Shape sh => sh -> GenST s -> ST s Position
-cloud ix gen
-  = case A.size ix `mod` 5 of
-      0 -> disc (250,250,250) 200 ix gen
-      1 -> disc (100,100,100) 80  ix gen
-      2 -> disc (150,300,300) 30  ix gen
-      3 -> disc (500,120,120) 30  ix gen
-      _ -> disc (300,200,200) 150 ix gen
+cloud :: Shape sh => (Int,Int) -> R -> sh -> GenST s -> ST s Position
+cloud (fromIntegral -> sizeX, fromIntegral -> sizeY) radiusMax ix gen
+  = let
+        blob (sx,sy,sz) r
+          = disc (sx * sizeX, sy * sizeY, sz * (sizeX `min` sizeY))
+                 (radiusMax * r)
+
+    in case A.size ix `mod` 5 of
+        0 -> blob ( 0.25, 0.25, 0.25) 1.00 ix gen
+        1 -> blob (-0.10, 0.10, 0.10) 0.60 ix gen
+        2 -> blob (-0.05, 0.30,-0.30) 0.35 ix gen
+        3 -> blob (-0.20,-0.12,-0.12) 0.45 ix gen
+        _ -> blob ( 0.15,-0.10, 0.20) 0.75 ix gen
 

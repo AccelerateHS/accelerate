@@ -61,13 +61,13 @@ defaults = Config
   , _configShouldDrawTree       = False         -- no barns-hut yet!
   , _configRate                 = 30
 
-  , _configBodyCount            = 200
-  , _configBodyMass             = 100
+  , _configBodyCount            = 1000
+  , _configBodyMass             = 40
   , _configTimeStep             = 1
   , _configEpsilon              = 50
 
-  , _configStartDiscSize        = 350
-  , _configStartSpeed           = 0.5
+  , _configStartDiscSize        = 500
+  , _configStartSpeed           = 1
 
   , _configMaxSteps             = Nothing
   , _configBenchmark            = False

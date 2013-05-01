@@ -46,7 +46,7 @@ main
             -- the origin. Start the system rotating with particle speed
             -- proportional to distance from the origin
             --
-            positions   = randomArray (disc (0,0,0) radius) (Z :. n)
+            positions   = randomArray (cloud (size,size) radius) (Z :. n)
             masses      = randomArray (uniformR (1, mass)) (Z :. n)
 
             bodies      = run backend
