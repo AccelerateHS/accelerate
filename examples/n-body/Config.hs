@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE PatternGuards   #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Config where
