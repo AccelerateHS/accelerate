@@ -1,6 +1,6 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE TupleSections   #-}
 
 module Config (
 
