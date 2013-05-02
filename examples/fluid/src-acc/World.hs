@@ -47,7 +47,7 @@ data Source = Density  (Int, Int)
 -- Initialisation --------------------------------------------------------------
 -- --------------                                                             --
 
-initialise :: Options -> World
+initialise :: Config -> World
 initialise opt =
   World
     { densityField      = get initialDensity opt
@@ -63,7 +63,7 @@ initialise opt =
 -- Rendering -------------------------------------------------------------------
 -- ---------                                                                  --
 
-render :: Options -> World -> IO Picture
+render :: Config -> World -> IO Picture
 render opt world = do
   den   <- if displayDensity world
               then renderDensity   $ densityField  world

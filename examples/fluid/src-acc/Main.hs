@@ -8,6 +8,7 @@
 module Main where
 
 import Config
+import ParseArgs
 import World
 import Fluid
 import Event
@@ -23,7 +24,10 @@ import Data.Array.Accelerate                    as A
 
 main :: IO ()
 main = do
-  (opt,crit,noms) <- parseArgs =<< getArgs
+  argv                  <- getArgs
+  (c,crit,noms)         <- parseArgs optHelp optBackend options defaults header footer argv
+  opt                   <- initialiseConfig c
+
   let -- configuration parameters
       --
       width     = get simulationWidth  opt * get displayScale opt
@@ -33,6 +37,7 @@ main = do
       dp        = get viscosity opt
       dn        = get diffusion opt
       dt        = get timestep opt
+      backend   = get optBackend opt
 
       -- Prepare user-input density and velocity sources
       --
@@ -52,7 +57,7 @@ main = do
       -- front-end conversion phases.
       --
       simulate world =
-        let step        = run1 opt (fluid steps dt dp dn)
+        let step        = run1 backend (fluid steps dt dp dn)
             ds          = sources (densitySource world)
             vs          = sources (velocitySource world)
             (df', vf')  = step ( ds, vs, densityField world, velocityField world )

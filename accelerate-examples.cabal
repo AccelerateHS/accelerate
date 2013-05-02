@@ -224,8 +224,9 @@ Executable accelerate-mandelbrot
 
 Executable accelerate-fluid
   Main-is:              Main.hs
-  hs-source-dirs:       examples/fluid/src-acc
+  hs-source-dirs:       examples/fluid/src-acc lib
   other-modules:        Config
+                        ParseArgs
                         Event
                         Fluid
                         Type

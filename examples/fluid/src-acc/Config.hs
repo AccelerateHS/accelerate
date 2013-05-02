@@ -5,46 +5,24 @@
 -- Configuration parameters
 --
 
-module Config (
-
-  Options,
-  viscosity, diffusion, timestep, inputDensity, inputVelocity, simulationSteps,
-  simulationWidth, simulationHeight, initialDensity, initialVelocity,
-  displayScale, displayFramerate, optBench,
-
-  parseArgs, run, run1
-
-) where
+module Config where
 
 import Type
+import ParseArgs
 
-import Data.Char
-import Data.List
-import Data.IORef
 import Data.Label
 import Control.Monad
-import System.Console.GetOpt
-import System.Exit
 import Prelude                                          as P
-import qualified Criterion.Main                         as Criterion
-import qualified Criterion.Config                       as Criterion
-
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
-import qualified Data.Array.Accelerate.Interpreter      as I
-#ifdef ACCELERATE_CUDA_BACKEND
-import qualified Data.Array.Accelerate.CUDA             as CUDA
-#endif
-
-data Backend
-  = Interpreter
-#ifdef ACCELERATE_CUDA_BACKEND
-  | CUDA
-#endif
-  deriving (Show, Bounded)
 
 
-data Options = Options
+data Initial a
+    = FromFile          FilePath
+    | FromFunction      (Backend -> Int -> Int -> a)
+
+
+data Config = Config
   {
     -- simulation
     _viscosity          :: !Float
@@ -66,13 +44,17 @@ data Options = Options
   , _optBackend         :: !Backend
   , _optBench           :: !Bool
   , _optHelp            :: !Bool
+
+  -- extra options to specify initial conditions for command parsing
+  , _setupDensity       :: Initial DensityField
+  , _setupVelocity      :: Initial VelocityField
   }
-  deriving Show
 
-$(mkLabels [''Options])
+$(mkLabels [''Config])
 
-defaultOptions :: Options
-defaultOptions = Options
+
+defaults :: Config
+defaults = Config
   { _viscosity          = 0
   , _diffusion          = 0
   , _timestep           = 0.1
@@ -90,222 +72,237 @@ defaultOptions = Options
   , _optBackend         = maxBound
   , _optBench           = False
   , _optHelp            = False
+
+  , _setupDensity       = FromFunction makeField_empty
+  , _setupVelocity      = FromFunction makeField_empty
   }
 
 
--- Execute an Accelerate expression using the selected backend
+-- | The set of available command-line options
 --
-run :: Arrays a => Options -> Acc a -> a
-run opts = case _optBackend opts of
-  Interpreter   -> I.run
-#ifdef ACCELERATE_CUDA_BACKEND
-  CUDA          -> CUDA.run
-#endif
+options :: [OptDescr (Config -> Config)]
+options =
+  -- Simulation options
+  [ Option  [] ["viscosity"]
+            (ReqArg (parse viscosity) "FLOAT")
+            (describe viscosity "viscosity for velocity damping")
 
-run1 :: (Arrays a, Arrays b) => Options -> (Acc a -> Acc b) -> a -> b
-run1 opts f = case _optBackend opts of
-  Interpreter   -> head . I.stream f . return
-#ifdef ACCELERATE_CUDA_BACKEND
-  CUDA          -> CUDA.run1 f
-#endif
+  , Option  [] ["diffusion"]
+            (ReqArg (parse diffusion) "FLOAT")
+            (describe diffusion "diffusion rate for mass dispersion")
+
+  , Option  [] ["delta"]
+            (ReqArg (parse timestep) "FLOAT")
+            (describe timestep "simulation time between each frame")
+
+  , Option  [] ["density"]
+            (ReqArg (parse inputDensity) "FLOAT")
+            (describe inputDensity "magnitude of user input density")
+
+  , Option  [] ["velocity"]
+            (ReqArg (parse inputVelocity) "FLOAT")
+            (describe inputVelocity "magnitude of user input velocity")
+
+  , Option  [] ["iterations"]
+            (ReqArg (parse simulationSteps) "INT")
+            (describe simulationSteps "number of iterations of the linear solver")
+
+  , Option  [] ["width"]
+            (ReqArg (parse simulationWidth) "INT")
+            (describe simulationWidth "grid width of simulation")
+
+  , Option  [] ["height"]
+            (ReqArg (parse simulationHeight) "INT")
+            (describe simulationHeight "grid height of simulation")
+
+  -- Display options
+  , Option  [] ["scale"]
+            (ReqArg (parse displayScale) "INT")
+            (describe displayScale "feature size of visualisation")
+
+  , Option  [] ["framerate"]
+            (ReqArg (parse displayFramerate) "INT")
+            (describe displayFramerate "frame rate for visualisation")
+
+  -- Initial conditions
+  , Option  [] ["bmp-density"]
+            (ReqArg (set setupDensity . FromFile) "FILE.bmp")
+            "file for initial fluid density"
+
+  , Option  [] ["bmp-velocity"]
+            (ReqArg (set setupVelocity . FromFile) "FILE.bmp")
+            "file for initial fluid velocity"
+
+  , Option  [] ["init-checks"]
+            (NoArg init_checks)
+            "initial density field with zero velocity field"
+
+  , Option  [] ["init-man"]
+            (NoArg init_man)
+            "initial density field with swirling velocity"
+
+  , Option  [] ["init-elk"]
+            (NoArg init_elk)
+            "initial density field with swirling velocity"
+
+  -- Miscellaneous
+  , Option  [] ["benchmark"]
+            (NoArg (set optBench True))
+            (describe optBench "benchmark instead of displaying animation")
+
+  , Option  ['h','?'] ["help"]
+            (NoArg (set optHelp True))
+            (describe optHelp "show help message")
+  ]
+  where
+    parse f x           = set f (read x)
+    describe f msg      = msg ++ " (" ++ show (get f defaults) ++ ")"
+
+    init_checks         = set setupDensity  (FromFunction makeDensity_checks)
+                        . set setupVelocity (FromFunction makeField_empty)
+
+    init_man            = set setupDensity  (FromFunction makeDensity_checks)
+                        . set setupVelocity (FromFunction makeVelocity_man)
+
+    init_elk            = set setupDensity  (FromFunction makeDensity_checks)
+                        . set setupVelocity (FromFunction makeVelocity_elk)
 
 
-parseArgs :: [String] -> IO (Options, Criterion.Config, [String])
-parseArgs argv = do
+header :: [String]
+header =
+  [ "accelerate-fluid (c) [2011..2013] The Accelerate Team"
+  , ""
+  , "Usage: accelerate-fluid [OPTIONS]"
+  ]
 
-  -- Some additional options, which we will use to determine how to set up the
-  -- initial conditions of the simulator.
-  --
-  densityBMPArg         <- newIORef Nothing
-  velocityBMPArg        <- newIORef Nothing
-  initialiseArg         <- newIORef False
+footer :: [String]
+footer =
+  [ ""
+  , "Runtime usage:"
+  , "     click        add density sources to the image"
+  , "     shift-click  add velocity sources"
+  , "     r            reset the image"
+  , "     d            toggle display of density field"
+  , "     v            toggle display of velocity field lines"
+  ]
 
-  let setInitialise x o  = writeIORef initialiseArg x         >> return o
-      setDensityBMP x o  = writeIORef densityBMPArg  (Just x) >> return o
-      setVelocityBMP x o = writeIORef velocityBMPArg (Just x) >> return o
 
-  -- Parse the command-line options
-  --
-  let backends :: [OptDescr (Options -> IO Options)]
-      backends =
-        [ Option [] ["interpreter"]     (NoArg (return . set optBackend Interpreter)) "reference implementation (sequential)"
-#ifdef ACCELERATE_CUDA_BACKEND
-        , Option [] ["cuda"]            (NoArg (return . set optBackend CUDA))        "implementation for NVIDIA GPUs (parallel)"
-#endif
-        ]
+-- Initial conditions
+-- ------------------
 
-      options :: [OptDescr (Options -> IO Options)]
-      options = backends ++
-        -- Simulation options
-        [ Option [] ["viscosity"]       (ReqArg (parse viscosity) "FLOAT")      (describe viscosity "viscosity for velocity damping")
-        , Option [] ["diffusion"]       (ReqArg (parse diffusion) "FLOAT")      (describe diffusion "diffusion rate for mass dispersion")
-        , Option [] ["delta"]           (ReqArg (parse timestep) "FLOAT")       (describe timestep "simulation time between each frame")
-        , Option [] ["density"]         (ReqArg (parse inputDensity) "FLOAT")   (describe inputDensity "magnitude of user input density")
-        , Option [] ["velocity"]        (ReqArg (parse inputVelocity) "FLOAT")  (describe inputVelocity "magnitude of user input velocity")
-        , Option [] ["iterations"]      (ReqArg (parse simulationSteps) "INT")  (describe simulationSteps "number of iterations of the linear solver")
-        , Option [] ["width"]           (ReqArg (parse simulationWidth) "INT")  (describe simulationWidth "grid width of simulation")
-        , Option [] ["height"]          (ReqArg (parse simulationHeight) "INT") (describe simulationHeight "grid height of simulation")
+initialiseConfig :: Config -> IO Config
+initialiseConfig conf = do
+  let backend   = get optBackend conf
+      width     = get simulationWidth conf
+      height    = get simulationHeight conf
 
-        -- Display options
-        , Option [] ["scale"]           (ReqArg (parse displayScale) "INT")     (describe displayScale "feature size of visualisation")
-        , Option [] ["framerate"]       (ReqArg (parse displayFramerate) "INT") (describe displayFramerate "frame rate for visualisation")
-        , Option [] ["bmp-density"]     (ReqArg setDensityBMP "FILE.bmp")       "file for initial fluid density"
-        , Option [] ["bmp-velocity"]    (ReqArg setVelocityBMP "FILE.bmp")      "file for initial fluid velocity"
+  dens  <- case get setupDensity conf of
+              FromFile fn       -> loadDensity_bmp backend fn width height
+              FromFunction f    -> return (f backend width height)
 
-        -- Miscellaneous
-        , Option [] ["init"]            (NoArg (setInitialise True))            "begin with a set of standard initial condition"
-        , Option [] ["benchmark"]       (NoArg (return . set optBench True))    (describe optBench "benchmark instead of displaying animation")
-        , Option "h?" ["help"]          (NoArg (return . set optHelp True))     (describe optHelp "show help message")
-        ]
+  velo  <- case get setupVelocity conf of
+              FromFile fn       -> loadVelocity_bmp backend fn width height
+              FromFunction f    -> return (f backend width height)
 
-      parse f x         = return . set f (read x)
-      describe f msg    = msg ++ " (" ++ show (get f defaultOptions) ++ ")"
+  return . set initialDensity  dens
+         . set initialVelocity velo
+         $ conf
 
-      basicHeader       = unlines
-        [ "accelerate-fluid (c) [2011..2013] The Accelerate Team"
-        , ""
-        , "Usage: accelerate-fluid [OPTIONS]"
-        ]
 
-      basicFooter       = unlines
-        [ ""
-        , "Runtime usage:"
-        , "     click        add density sources to the image"
-        , "     shift-click  add velocity sources"
-        , "     r            reset the image"
-        , "     d            toggle display of density field"
-        , "     v            toggle display of velocity field lines"
-        ]
+makeField_empty :: FieldElt e => Backend -> Int -> Int -> Field e
+makeField_empty backend width height
+  = run backend
+  $ A.fill (constant (Z:.height:.width)) (constant zero)
 
-      helpMsg errs      = concat errs
-        ++ usageInfo basicHeader                    options
-        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
 
-      fancyHeader :: Options -> String
-      fancyHeader opts = unlines (header : table ++ lines basicFooter)
-        where
-          active this         = if this == P.map toLower (show $ get optBackend opts) then "*" else ""
-          (ss,bs,ds)          = P.unzip3 $ P.map (\(b,d) -> (active b, b, d)) $ concatMap extract backends
-          table               = P.zipWith3 paste (sameLen ss) (sameLen bs) ds
-          paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
-          sameLen xs          = flushLeft ((P.maximum . P.map P.length) xs) xs
-          flushLeft n xs      = [ P.take n (x ++ repeat ' ') | x <- xs ]
-          --
-          extract (Option _ los _ descr) =
-            let losFmt  = intercalate ", " los
-            in  case lines descr of
-                  []          -> [(losFmt, "")]
-                  (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
-          --
-          header = intercalate "\n" [ basicHeader, "Available backends:" ]
+makeDensity_checks :: Backend -> Int -> Int -> DensityField
+makeDensity_checks backend width height
+  = let width'  = constant $ P.fromIntegral width
+        height' = constant $ P.fromIntegral height
+        yc      = constant $ P.fromIntegral (height `div` 2)
+        xc      = constant $ P.fromIntegral (width  `div` 2)
 
-  (opts, crit, rest)
-    <- case getOpt' RequireOrder options argv of
-         (actions,_,n,[])       -> do
-           opts                 <- foldl (>>=) (return defaultOptions) actions
-           (cconf, rest)        <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions n
+        checks ix
+          = let Z :. y :. x     = unlift ix
+                x'              = A.fromIntegral x
+                y'              = A.fromIntegral y
+                tx              = 10 * (x' - xc) / width'
+                ty              = 10 * (y' - yc) / height'
+                xk1             = abs tx >* 3*pi/2 ? (0 , cos tx)
+                yk1             = abs ty >* 3*pi/2 ? (0 , cos ty)
+                d1              = xk1 * yk1
+            in
+            0 `A.max` d1
+    in
+    run backend $ A.generate (constant (Z:.height:.width)) checks
 
-           case get optHelp opts of
-             False      -> putStrLn (fancyHeader opts) >> return (opts, cconf, rest)
-             _          -> putStrLn (helpMsg [])       >> exitSuccess
 
-         (_,_,_,errors)         -> error (helpMsg errors)
+makeVelocity_man :: Backend -> Int -> Int -> VelocityField
+makeVelocity_man backend width height
+  = let width'  = constant $ P.fromIntegral width
+        height' = constant $ P.fromIntegral height
+        yc      = constant $ P.fromIntegral (height `div` 2)
+        xc      = constant $ P.fromIntegral (width  `div` 2)
 
-  -- Extract option values, and set up the initial conditions
-  --
-  initialise    <- readIORef initialiseArg
-  densityBMP    <- readIORef densityBMPArg
-  velocityBMP   <- readIORef velocityBMPArg
+        man ix
+          = let Z :. y :. x     = unlift ix
+                x'              = A.fromIntegral x
+                y'              = A.fromIntegral y
+                xk2             = cos (19 * (x' - xc) / width')
+                yk2             = cos (17 * (y' - yc) / height')
+                d2              = xk2 * yk2 / 5
+            in
+            lift (constant 0, d2)
+    in
+    run backend $ A.generate (constant (Z:.height:.width)) man
 
-  let width     = get simulationWidth opts
-      height    = get simulationHeight opts
 
-  let mkInitialDensity
-        -- Load the density from a .bmp file, using the luminance as the scalar
-        -- density value.
-        --
-        | Just file <- densityBMP
-        = do
-            arr         <- either (error . show) id `fmap` readImageFromBMP file
-            let Z:.h:.w  = arrayShape arr
+makeVelocity_elk :: Backend -> Int -> Int -> VelocityField
+makeVelocity_elk backend width height
+  = let width'  = constant $ P.fromIntegral width
+        height' = constant $ P.fromIntegral height
+        yc      = constant $ P.fromIntegral (height `div` 2)
+        xc      = constant $ P.fromIntegral (width  `div` 2)
 
-            when (w /= width || h /= height)
-              $ error "accelerate-fluid: density-bmp does not match width x height"
+        elk ix
+          = let Z :. y :. x     = unlift ix
+                x'              = A.fromIntegral x
+                y'              = A.fromIntegral y
+                tx              = 12 * (x' - xc) / width'
+                ty              = 12 * (y' - yc) / height'
+                xk2             =  cos tx
+                yk2             = -cos ty
+                d2              = xk2 * yk2 / 5
+            in
+            lift (constant 0, d2)
+    in
+    run backend $ A.generate (constant (Z:.height:.width)) elk
 
-            return . run opts $ A.map luminanceOfRGBA32 (use arr)
 
-        -- Prime the pumps with some initial conditions (see what I did there?)
-        --
-        | initialise || get optBench opts
-        = let width'    = constant $ P.fromIntegral width
-              height'   = constant $ P.fromIntegral height
-              yc        = constant $ P.fromIntegral (height `div` 2)
-              xc        = constant $ P.fromIntegral (width  `div` 2)
-          in return . run opts
-              $ A.generate
-                  (constant $ Z :. height :. width)
-                  $ \ix -> let Z:.y:.x   = unlift ix
-                               x'        = A.fromIntegral x
-                               y'        = A.fromIntegral y
-                               kx1       = cos (10 * (x'-xc) / width')
-                               ky1       = cos (10 * (y'-yc) / height')
-                               d1        = kx1 * ky1
-                           in
-                           A.max 0 d1
+loadDensity_bmp :: Backend -> FilePath -> Int -> Int -> IO DensityField
+loadDensity_bmp backend filepath width height
+  = do  arr             <- either (error . show) id `fmap` readImageFromBMP filepath
+        let Z:.h:.w     =  arrayShape arr
 
-        -- Set the field to zero
-        --
-        | otherwise
-        = return . run opts $ A.fill (lift (Z:.height:.width)) 0
+        when (w /= width || h /= height)
+          $ error "accelerate-fluid: density-bmp does not match width x height"
 
-  let mkInitialVelocity
-        -- Load the density from .bmp file, using the red and green channels as
-        -- the x- and y- velocity components respectively.
-        --
-        | Just file <- velocityBMP
-        = do
-            arr         <- either (error . show) id `fmap` readImageFromBMP file
-            let Z:.h:.w  = arrayShape arr
+        return . run backend $ A.map luminanceOfRGBA32 (use arr)
 
-            when (w /= width || h /= height)
-              $ error "accelerate-fluid: velocity-bmp does not match width x height"
 
-            let conv rgb =
-                  let (r,g,_,_) = unlift $ unpackRGBA32 rgb :: (Exp Word8, Exp Word8, Exp Word8, Exp Word8)
-                      r'        = A.fromIntegral (-128 + A.fromIntegral r :: Exp Int)
-                      g'        = A.fromIntegral (-128 + A.fromIntegral g :: Exp Int)
-                  in lift (r' * 0.0001, g' * 0.0001)
+loadVelocity_bmp :: Backend -> FilePath -> Int -> Int -> IO VelocityField
+loadVelocity_bmp backend filepath width height
+  = do  arr             <- either (error . show) id `fmap` readImageFromBMP filepath
+        let Z:.h:.w     =  arrayShape arr
 
-            return . run opts $ A.map conv (use arr)
+        when (w /= width || h /= height)
+          $ error "accelerate-fluid: velocity-bmp does not match width x height"
 
-        -- Set some initial conditions
-        --
-        | initialise || get optBench opts
-        = let width'    = constant $ P.fromIntegral width
-              height'   = constant $ P.fromIntegral height
-              yc        = constant $ P.fromIntegral (height `div` 2)
-              xc        = constant $ P.fromIntegral (width  `div` 2)
-          in return . run opts
-              $ A.generate
-                  (constant $ Z :. height :. width)
-                  $ \ix -> let Z:.y:.x   = unlift ix
-                               x'        = A.fromIntegral x
-                               y'        = A.fromIntegral y
-                               kx1       = cos (15 * (x'-xc) / width')
-                               ky1       = cos (15 * (y'-yc) / height')
-                               d2        = kx1 * ky1 / 5
-                           in
-                           lift (constant 0, d2)
+        let conv rgb =
+              let (r,g,_,_) = unlift (unpackRGBA32 rgb) :: (Exp Word8, Exp Word8, Exp Word8, Exp Word8)
+                  r'        = A.fromIntegral (-128 + A.fromIntegral r :: Exp Int)
+                  g'        = A.fromIntegral (-128 + A.fromIntegral g :: Exp Int)
+              in lift (r' * 0.0001, g' * 0.0001)
 
-        -- Set the field to zero
-        --
-        | otherwise
-        = return . run opts $ A.fill (lift (Z:.height:.width)) (constant (0,0))
-
-  -- Return the completed options structure
-  --
-  density       <- mkInitialDensity
-  velocity      <- mkInitialVelocity
-
-  return ( opts { _initialDensity = density, _initialVelocity = velocity }, crit, rest )
+        return . run backend $ A.map conv (use arr)
 

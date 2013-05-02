@@ -17,7 +17,7 @@ import Data.Array.Accelerate          ( Z(..), (:.)(..) )
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Options -> Event -> World -> World
+react :: Config -> Event -> World -> World
 react opt event world =
   case event of
     EventKey (Char c) s m _                     -> keyboard c s m
