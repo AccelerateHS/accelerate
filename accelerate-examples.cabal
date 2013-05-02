@@ -190,6 +190,36 @@ Executable accelerate-crystal
                         gloss                   >= 1.7
 
 
+-- Image edge detection
+-- --------------------
+
+Executable accelerate-canny
+  hs-source-dirs:       examples/canny/src-acc lib
+  Main-is:              Main.hs
+  other-modules:        Config ParseArgs Canny Wildfire
+  ghc-options:          -Wall -threaded -Odph -fllvm -optlo-O3
+
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.13
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl       == 0.1.*
+
+  build-depends:        accelerate              >= 0.13,
+                        accelerate-io           >= 0.13,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        repa                    >= 3.1,
+                        repa-io                 >= 3.1,
+                        vector                  >= 0.7
+
+
 -- A simple mandelbrot generator
 -- -----------------------------
 
