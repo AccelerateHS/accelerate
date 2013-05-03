@@ -16,13 +16,7 @@ Adding new backends:
 --------------------
 
 Adding support for new Accelerate backends should require only a few minor
-additions to the file 'src/Config.hs'. See that file for instructions, and/or
-follow the example of the CUDA backend (grep 'ACCELERATE_CUDA_BACKEND').
-
-
-Backend specific notes:
------------------------
-
-CUDA: known failures
-  * scanseg-sum: works intermittently
+additions to the cabal file and the file 'lib/ParseArgs.hs'. See that file for
+instructions, and/or follow the example of the CUDA backend (grep
+'ACCELERATE_CUDA_BACKEND').
 
