@@ -311,8 +311,8 @@ delayPreAcc delayAcc elimAcc pacc =
     --
     Alet bnd body       -> aletD delayAcc elimAcc bnd body
     Acond p at ae       -> acondD delayAcc (cvtE p) at ae
+    Aprj ix tup         -> aprjD delayAcc ix tup
     Atuple tup          -> done $ Atuple (cvtAT tup)
-    Aprj ix tup         -> done $ Aprj ix (cvtA tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
 
@@ -659,7 +659,7 @@ bind :: (Kit acc, Arrays a)
      -> PreOpenAcc acc aenv' a
      -> PreOpenAcc acc aenv  a
 bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (termOut a) . termOut
+bind (PushEnv env a) = bind env . Alet (inject a) . inject
 
 
 prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
@@ -754,7 +754,7 @@ compute (Term env cc)
 -- Evaluate a delayed computation and tie the recursive knot
 --
 computeAcc :: (Kit acc, Arrays arrs) => Delayed acc aenv arrs -> acc aenv arrs
-computeAcc = termOut . compute
+computeAcc = inject . compute
 
 
 -- Representation of a generator as a delayed array
@@ -1257,6 +1257,26 @@ acondD delayAcc p t e
   | Just REFL <- match t e  = Stats.knownBranch "redundant" $ delayAcc e
   | otherwise               = done $ Acond p (computeAcc (delayAcc t))
                                              (computeAcc (delayAcc e))
+
+
+-- Array tuple projection. Whenever possible we want to peek underneath the
+-- tuple structure and continue the fusion process.
+--
+aprjD :: forall acc aenv arrs a. (Kit acc, IsTuple arrs, Arrays arrs, Arrays a)
+      => DelayAcc acc
+      -> TupleIdx (TupleRepr arrs) a
+      ->         acc aenv arrs
+      -> Delayed acc aenv a
+aprjD delayAcc ix a
+  | Atuple tup <- extract a = Stats.ruleFired "aprj/Atuple" . delayAcc $ aprjAT ix tup
+  | otherwise               = done $ Aprj ix (cvtA a)
+  where
+    cvtA :: acc aenv arrs -> acc aenv arrs
+    cvtA = computeAcc . delayAcc
+
+    aprjAT :: TupleIdx atup a -> Atuple (acc aenv) atup -> acc aenv a
+    aprjAT ZeroTupIdx      (SnocAtup _ a) = a
+    aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
 
 
 -- Scalar expressions

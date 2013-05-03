@@ -22,7 +22,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn,
+  avarIn, kmap,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -56,8 +56,8 @@ import Data.Array.Accelerate.Pretty.Print
 -- by the recursive closure.
 --
 class Kit acc where
-  termOut       :: PreOpenAcc acc aenv a -> acc aenv a
-  kmap          :: (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
+  inject        :: PreOpenAcc acc aenv a -> acc aenv a
+  extract       :: acc aenv a -> PreOpenAcc acc aenv a
   --
   rebuildAcc    :: RebuildAcc acc
   matchAcc      :: MatchAcc acc
@@ -65,8 +65,8 @@ class Kit acc where
   prettyAcc     :: PrettyAcc acc
 
 instance Kit OpenAcc where
-  termOut               = OpenAcc
-  kmap f (OpenAcc pacc) = OpenAcc (f pacc)
+  inject                 = OpenAcc
+  extract (OpenAcc pacc) = pacc
 
   rebuildAcc    = rebuildOpenAcc
   matchAcc      = matchOpenAcc
@@ -74,7 +74,10 @@ instance Kit OpenAcc where
   prettyAcc     = prettyOpenAcc
 
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
-avarIn = termOut . Avar
+avarIn = inject  . Avar
+
+kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
+kmap f = inject . f . extract
 
 
 -- A class for testing the equality of terms homogeneously, returning a witness
@@ -125,8 +128,8 @@ data DelayedOpenAcc aenv a where
     }                   -> DelayedOpenAcc aenv (Array sh e)
 
 instance Kit DelayedOpenAcc where
-  termOut       = Manifest
-  kmap          = error "DelayedAcc.kmap"
+  inject        = Manifest
+  extract       = error "DelayedAcc.extract"
   --
   rebuildAcc    = rebuildDelayed
   matchAcc      = matchDelayed
