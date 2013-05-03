@@ -36,23 +36,11 @@ main
             threshHigh  = get configThreshHigh conf
             backend     = get configBackend conf
 
-            -- Set up the kernel stages, which identify strong and weak edges in
-            -- the image. This is a bit awkward because we want to benchmark
-            -- each individual data-parallel step.
-            --
+            -- Set up the partial results so that we can benchmark individual
+            -- kernel stages.
             low                 = constant threshLow
             high                = constant threshHigh
 
-            grey                = toGreyscale
-            blurred             = gaussianY . gaussianX . grey
-            magdir              = gradientMagDir low . blurred
-            suppress            = nonMaximumSuppression low high . magdir
-
-            -- This represents the data-parallel section of the algorithm
-            stage1 x            = let s = suppress x
-                                  in (s, selectStrong s)
-
-            -- Set up partial results so that we can benchmark individual stages
             grey'               = run backend $ toGreyscale (use img)
             blurX'              = run backend $ gaussianX (use grey')
             blurred'            = run backend $ gaussianY (use blurX')
@@ -64,7 +52,7 @@ main
              -- Connect the strong and weak edges of the image using Repa, and
              -- write the final image to file
              --
-             let (image, strong) = run backend $ A.lift (stage1 (use img))
+             let (image, strong) = run backend $ A.lift (canny threshLow threshHigh (use img))
              edges              <- wildfire (A.toRepa image) (A.toRepa strong)
              R.writeImageToBMP fileOut (R.zip3 edges edges edges)
 
@@ -74,7 +62,7 @@ main
             --
             withArgs (P.drop 2 nops) $ defaultMainWith cconf (return ())
               [ bgroup "kernels"
-                [ bench "greyscale"   $ whnf (run1 backend grey) img
+                [ bench "greyscale"   $ whnf (run1 backend toGreyscale) img
                 , bench "blur-x"      $ whnf (run1 backend gaussianX) grey'
                 , bench "blur-y"      $ whnf (run1 backend gaussianY) blurX'
                 , bench "grad-x"      $ whnf (run1 backend gradientX) blurred'
@@ -85,8 +73,8 @@ main
                 ]
 
               , bgroup "canny"
-                [ bench "run"     $ whnf (run backend . (P.snd . stage1)) (use img)
-                , bench "run1"    $ whnf (run1 backend (P.snd . stage1)) img
+                [ bench "run"     $ whnf (run backend . (P.snd . canny threshLow threshHigh)) (use img)
+                , bench "run1"    $ whnf (run1 backend  (P.snd . canny threshLow threshHigh)) img
                 ]
               ]
 

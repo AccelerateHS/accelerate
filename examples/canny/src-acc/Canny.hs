@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 -- An implementation of the Canny edge detection algorithm
 --
 --   J. F. Canny, "A Computational Approach to Edge Detection" in _Pattern
@@ -15,6 +16,20 @@ import Prelude                                          as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
+
+
+-- Canny algorithm -------------------------------------------------------------
+
+canny :: Float -> Float -> Acc (Image RGBA) -> (Acc (Image Float), Acc (Vector Int))
+canny (constant -> low) (constant -> high)
+  = stage1
+  . nonMaximumSuppression low high
+  . gradientMagDir low
+  . gaussianY
+  . gaussianX
+  . toGreyscale
+  where
+    stage1 x = (x, selectStrong x)
 
 
 -- Accelerate component --------------------------------------------------------
