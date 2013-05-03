@@ -44,7 +44,8 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp )
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
+  showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Debug            as Debug
@@ -2026,80 +2027,8 @@ tracePure header msg
   $ header ++ ": " ++ msg
 
 
-showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
-showPreAccOp (Atag i)           = "Atag " ++ show i
-showPreAccOp (Use a)            = "Use "  ++ showArrays a
-showPreAccOp Pipe{}             = "Pipe"
-showPreAccOp Acond{}            = "Acond"
-showPreAccOp Atuple{}           = "Atuple"
-showPreAccOp Aprj{}             = "Aprj"
-showPreAccOp Unit{}             = "Unit"
-showPreAccOp Generate{}         = "Generate"
-showPreAccOp Reshape{}          = "Reshape"
-showPreAccOp Replicate{}        = "Replicate"
-showPreAccOp Slice{}            = "Slice"
-showPreAccOp Map{}              = "Map"
-showPreAccOp ZipWith{}          = "ZipWith"
-showPreAccOp Fold{}             = "Fold"
-showPreAccOp Fold1{}            = "Fold1"
-showPreAccOp FoldSeg{}          = "FoldSeg"
-showPreAccOp Fold1Seg{}         = "Fold1Seg"
-showPreAccOp Scanl{}            = "Scanl"
-showPreAccOp Scanl'{}           = "Scanl'"
-showPreAccOp Scanl1{}           = "Scanl1"
-showPreAccOp Scanr{}            = "Scanr"
-showPreAccOp Scanr'{}           = "Scanr'"
-showPreAccOp Scanr1{}           = "Scanr1"
-showPreAccOp Permute{}          = "Permute"
-showPreAccOp Backpermute{}      = "Backpermute"
-showPreAccOp Stencil{}          = "Stencil"
-showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Aforeign{}         = "Aforeign"
-
-showArrays :: forall arrs. Arrays arrs => arrs -> String
-showArrays = display . collect (arrays (undefined::arrs)) . fromArr
-  where
-    collect :: ArraysR a -> a -> [String]
-    collect ArraysRunit         _        = []
-    collect ArraysRarray        arr      = [showShortendArr arr]
-    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    --
-    display []  = []
-    display [x] = x
-    display xs  = "(" ++ intercalate ", " xs ++ ")"
-
-
-showShortendArr :: Elt e => Array sh e -> String
-showShortendArr arr
-  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
-  where
-    l      = Sugar.toList arr
-    cutoff = 5
-
 _showSharingAccOp :: SharingAcc arrs -> String
 _showSharingAccOp (AvarSharing sn)    = "AVAR " ++ show (hashStableNameHeight sn)
 _showSharingAccOp (AletSharing _ acc) = "ALET " ++ _showSharingAccOp acc
 _showSharingAccOp (AccSharing _ acc)  = showPreAccOp acc
-
--- for debugging
-showPreExpOp :: PreExp acc exp t -> String
-showPreExpOp (Const c)          = "Const " ++ show c
-showPreExpOp Tag{}              = "Tag"
-showPreExpOp Tuple{}            = "Tuple"
-showPreExpOp Prj{}              = "Prj"
-showPreExpOp IndexNil           = "IndexNil"
-showPreExpOp IndexCons{}        = "IndexCons"
-showPreExpOp IndexHead{}        = "IndexHead"
-showPreExpOp IndexTail{}        = "IndexTail"
-showPreExpOp IndexAny           = "IndexAny"
-showPreExpOp ToIndex{}          = "ToIndex"
-showPreExpOp FromIndex{}        = "FromIndex"
-showPreExpOp Cond{}             = "Cond"
-showPreExpOp PrimConst{}        = "PrimConst"
-showPreExpOp PrimApp{}          = "PrimApp"
-showPreExpOp Index{}            = "Index"
-showPreExpOp LinearIndex{}      = "LinearIndex"
-showPreExpOp Shape{}            = "Shape"
-showPreExpOp ShapeSize{}        = "ShapeSize"
-showPreExpOp Foreign{}          = "Foreign"
 

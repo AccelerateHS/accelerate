@@ -88,11 +88,15 @@ module Data.Array.Accelerate.AST (
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
-  PrimFun(..)
+  PrimFun(..),
+
+  -- debugging
+  showPreAccOp, showPreExpOp,
 
 ) where
 
 --standard library
+import Data.List
 import Data.Typeable
 
 -- friends
@@ -908,4 +912,87 @@ data PrimFun sig where
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want
   --   the range constructs for arrays (but that's not scalar primitives)
+
+
+-- Debugging
+-- ---------
+
+showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
+showPreAccOp Alet{}             = "Alet"
+showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
+showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
+showPreAccOp Apply{}            = "Apply"
+showPreAccOp Aforeign{}         = "Aforeign"
+showPreAccOp Acond{}            = "Acond"
+showPreAccOp Atuple{}           = "Atuple"
+showPreAccOp Aprj{}             = "Aprj"
+showPreAccOp Unit{}             = "Unit"
+showPreAccOp Generate{}         = "Generate"
+showPreAccOp Transform{}        = "Transform"
+showPreAccOp Reshape{}          = "Reshape"
+showPreAccOp Replicate{}        = "Replicate"
+showPreAccOp Slice{}            = "Slice"
+showPreAccOp Map{}              = "Map"
+showPreAccOp ZipWith{}          = "ZipWith"
+showPreAccOp Fold{}             = "Fold"
+showPreAccOp Fold1{}            = "Fold1"
+showPreAccOp FoldSeg{}          = "FoldSeg"
+showPreAccOp Fold1Seg{}         = "Fold1Seg"
+showPreAccOp Scanl{}            = "Scanl"
+showPreAccOp Scanl'{}           = "Scanl'"
+showPreAccOp Scanl1{}           = "Scanl1"
+showPreAccOp Scanr{}            = "Scanr"
+showPreAccOp Scanr'{}           = "Scanr'"
+showPreAccOp Scanr1{}           = "Scanr1"
+showPreAccOp Permute{}          = "Permute"
+showPreAccOp Backpermute{}      = "Backpermute"
+showPreAccOp Stencil{}          = "Stencil"
+showPreAccOp Stencil2{}         = "Stencil2"
+
+showArrays :: forall arrs. Arrays arrs => arrs -> String
+showArrays = display . collect (arrays (undefined::arrs)) . fromArr
+  where
+    collect :: ArraysR a -> a -> [String]
+    collect ArraysRunit         _        = []
+    collect ArraysRarray        arr      = [showShortendArr arr]
+    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    --
+    display []  = []
+    display [x] = x
+    display xs  = "(" ++ intercalate ", " xs ++ ")"
+
+
+showShortendArr :: Elt e => Array sh e -> String
+showShortendArr arr
+  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
+  where
+    l      = Sugar.toList arr
+    cutoff = 5
+
+
+showPreExpOp :: forall acc env aenv t. PreOpenExp acc env aenv t -> String
+showPreExpOp Let{}              = "Let"
+showPreExpOp (Var ix)           = "Var x" ++ show (idxToInt ix)
+showPreExpOp (Const c)          = "Const " ++ show (toElt c :: t)
+showPreExpOp Foreign{}          = "Foreign"
+showPreExpOp Tuple{}            = "Tuple"
+showPreExpOp Prj{}              = "Prj"
+showPreExpOp IndexNil           = "IndexNil"
+showPreExpOp IndexCons{}        = "IndexCons"
+showPreExpOp IndexHead{}        = "IndexHead"
+showPreExpOp IndexTail{}        = "IndexTail"
+showPreExpOp IndexAny           = "IndexAny"
+showPreExpOp IndexSlice{}       = "IndexSlice"
+showPreExpOp IndexFull{}        = "IndexFull"
+showPreExpOp ToIndex{}          = "ToIndex"
+showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp Cond{}             = "Cond"
+showPreExpOp Iterate{}          = "Iterate"
+showPreExpOp PrimConst{}        = "PrimConst"
+showPreExpOp PrimApp{}          = "PrimApp"
+showPreExpOp Index{}            = "Index"
+showPreExpOp LinearIndex{}      = "LinearIndex"
+showPreExpOp Shape{}            = "Shape"
+showPreExpOp ShapeSize{}        = "ShapeSize"
+showPreExpOp Intersect{}        = "Intersect"
 
