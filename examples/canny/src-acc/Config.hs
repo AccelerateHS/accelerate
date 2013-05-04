@@ -35,11 +35,11 @@ defaults = Config
 
 options :: [OptDescr (Config -> Config)]
 options =
-  [ Option  ['l'] ["threshold-low"]
+  [ Option  ['w'] ["threshold-low"]
             (ReqArg (set configThreshLow . read) "FLOAT")
             (describe configThreshLow "threshold value for weak edges")
 
-  , Option  ['h'] ["threshold-high"]
+  , Option  ['s'] ["threshold-high"]
             (ReqArg (set configThreshHigh . read) "FLOAT")
             (describe configThreshHigh "threshold value for strong edges")
 
