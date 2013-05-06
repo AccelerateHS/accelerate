@@ -248,17 +248,13 @@ quenchAfun (Abody b) = Abody (quenchAcc b)
 -- adjacent.
 --
 annealAcc :: Arrays arrs => OpenAcc aenv arrs -> OpenAcc aenv arrs
-annealAcc = shrinkAcc . computeAcc . delayAcc
+annealAcc = computeAcc . delayAcc
   where
     delayAcc :: Arrays a => OpenAcc aenv a -> Delayed OpenAcc aenv a
     delayAcc (OpenAcc pacc) = delayPreAcc delayAcc elimAcc pacc
 
     countAcc :: UsesOfAcc OpenAcc
     countAcc ok idx (OpenAcc pacc) = usesOfPreAcc ok countAcc idx pacc
-
-    shrinkAcc :: ShrinkAcc OpenAcc
-    shrinkAcc (OpenAcc pacc) = OpenAcc (shrinkPreAcc shrinkAcc (basicReduceAcc unwrapAcc countAcc) pacc)
-    unwrapAcc (OpenAcc pacc) = pacc
 
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
@@ -662,10 +658,10 @@ bind BaseEnv         = id
 bind (PushEnv env a) = bind env . Alet (inject a) . inject
 
 
-prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
-prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
-prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
-prjExtend _               _             = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
+-- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
+-- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
+-- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
+-- prjExtend _               _             = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
 
 
 -- Sink a term from one array environment into another, where additional
@@ -960,7 +956,7 @@ zipWithD f cc1 cc0
 -- the cost of completely evaluating the array and subsequently retrieving the
 -- data from memory.
 --
-aletD :: (Kit acc, Arrays arrs, Arrays brrs)
+aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
       => DelayAcc acc
       -> ElimAcc  acc
       ->          acc aenv        arrs
@@ -986,191 +982,87 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
   | otherwise
   , Term env0 cc0       <- delayAcc $ sink1 env1 acc0
   = case cc1 of
-      Step{}    -> aletD' elimAcc env1 cc1 env0 cc0
-      Yield{}   -> aletD' elimAcc env1 cc1 env0 cc0
+      Step{}    -> aletD' env1 cc1 env0 cc0
+      Yield{}   -> aletD' env1 cc1 env0 cc0
 
   where
-    subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
+    subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
     subTop t ZeroIdx       = t
     subTop _ (SuccIdx idx) = Avar idx
 
-
--- The second stage of eliminating let bindings, once we can establish that the
--- bound term is in a delayed state. Crucially, this also means we do not
--- preemptively delay the body term, which can lead to a complexity blowup.
---
--- TODO: instead of relying on later shrinking, remove the eliminated binding
---       from the environment straight away. Sadly, my poor brain is unable to
---       figure out how to do this for the Extend structure.
---
-aletD' :: forall acc aenv aenv' aenv'' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
-       => ElimAcc    acc
-       -> Extend     acc aenv                aenv'
-       -> Cunctation acc                     aenv'  (Array sh e)
-       -> Extend     acc (aenv', Array sh e) aenv''
-       -> Cunctation acc                     aenv'' brrs
-       -> Delayed    acc aenv                       brrs
-aletD' elimAcc env1 cc1 env0 cc0
-
-  -- let-elimination: step/step
-  -- --------------------------
-  --
-  -- A special case for step/step that combines successive index-space
-  -- transformations that do not have an intermediate value transform. This is
-  -- able to keep the node in Step form, which we can do a bit more
-  -- simplification to.
-  --
-  | shouldInline
-  , Step sh1 p1 f1 v1   <- cc1
-  , Step sh0 p0 f0 v0   <- cc0
-  , Just REFL           <- match v0 (sink env0 ZeroIdx)
-  , Just REFL           <- isIdentity f1
-  , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
-  , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) (f1 `compose` indexArray v1 `compose` p1)
-  = Stats.ruleFired "aletD/step-step"
-  $ Term env'
-  $ Step (replaceE sh1' f1' v0 sh0)
-         (replaceF sh1' f1' v0 (weakenFA rebuildAcc (sink env0 . SuccIdx) p1) `compose` p0)
-         (replaceF sh1' f1' v0 f0)
-         (sink env0 (SuccIdx v1))
-
-  -- let-elimination: delayed/permute
-  -- --------------------------------
-  --
-  -- If the let binding is a producer and the body is forward permutation, we
-  -- might be able to fuse into the shape and index transformation of a forward
-  -- permutation.
-  --
-  | shouldInline
-  , Yield sh1 f1        <- yield cc1
-  , Done v0             <- cc0
-  , Permute c0 d0 p0 a0 <- prjExtend env0 v0
-  , sh1'                <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
-  , f1'                 <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
-  , v1'                 <- sink env0 ZeroIdx
-  , d0'                 <- kmap (replaceA sh1' f1' v1') d0
-  , a0'                 <- kmap (replaceA sh1' f1' v1') a0
-  = Stats.ruleFired "aletD/permute"
-  $ Term (env' `PushEnv` Permute (replaceF sh1' f1' v1' c0) d0' (replaceF sh1' f1' v1' p0) a0')
-         (Done ZeroIdx)
-
-  -- let-elimination: general cases
-  -- ------------------------------
-  --
-  -- We need to enumerate all possibilities because we don't have a plain Array
-  -- constraint to use the helpers `step` and `yield`. If successful, the
-  -- binding is merged into the body.
-  --
-  | Step sh1 p1 f1 v1   <- cc1
-  = case cc0 of
-      Done v0           -> Term env (Done v0)
-      Step sh0 p0 f0 v0 -> intoStep  sh1 (f1 `compose` indexArray v1 `compose` p1) sh0 p0 f0 v0
-      Yield sh0 f0      -> intoYield sh1 (f1 `compose` indexArray v1 `compose` p1) sh0 f0
-
-  | Yield sh1 f1        <- cc1
-  = case cc0 of
-      Done v0           -> Term env (Done v0)
-      Step sh0 p0 f0 v0 -> intoStep  sh1 f1 sh0 p0 f0 v0
-      Yield sh0 f0      -> intoYield sh1 f1 sh0 f0
-
-  where
-    -- The body term, optimised and then re-made manifest. This is fine because
-    -- we only call delay once, either here or in the let-floating branch.
+    -- The second part of let-elimination. Splitting into two steps exposes the
+    -- extra type variables, and ensures we don't do extra work for the
+    -- let-floating case (which can lead to a complexity blowup.)
     --
-    body'               = computeAcc (Term env0 cc0)
-    bnd'                = compute (Term BaseEnv cc1)
-    shouldInline        = elimAcc ZeroIdx body'
+    aletD' :: forall aenv aenv' aenv'' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+           => Extend     acc aenv                aenv'
+           -> Cunctation acc                     aenv'  (Array sh e)
+           -> Extend     acc (aenv', Array sh e) aenv''
+           -> Cunctation acc                     aenv'' brrs
+           -> Delayed    acc aenv                       brrs
+    aletD' env1 cc1 env0 cc0
+      | not shouldInline         = Term (env1 `PushEnv` bnd `join` env0) cc0
 
-    env'                = env1 `PushEnv` eliminated `join` env0
-    env                 = env1 `PushEnv` bnd'       `join` env0
+      | Stats.ruleFired "aletD/eliminate" False
+      = undefined
 
-    -- If for some reason we have inlined a binding that isn't later removed as
-    -- dead code, report this as an error.
-    --
-    -- We need to bundle the error message inside a Use node to stop the error
-    -- being reported prematurely. This works because the transformations don't
-    -- inspect the contents of Use nodes.
-    --
-    eliminated :: Arrays a => PreOpenAcc acc aenv' a
-    eliminated = Use $ INTERNAL_ERROR(error) "aletD" "let binding not eliminated"
+      | Done v1           <- cc1 = eliminate (arrayShape v1) (indexArray v1)
+      | Step sh1 p1 f1 v1 <- cc1 = eliminate sh1 (f1 `compose` indexArray v1 `compose` p1)
+      | Yield sh1 f1      <- cc1 = eliminate sh1 f1
+      where
+        -- The main terms, remade manifest. We need to do this so that eliminating
+        -- terms considers not just the main term but any of the environment terms
+        -- (in Extend). This problem occurred in the Canny example program.
+        --
+        shouldInline = elimAcc ZeroIdx body
+        body         = computeAcc (Term env0    cc0)
+        bnd          = compute    (Term BaseEnv cc1)
 
-    -- Combine a bound term into a body that was represented as a Step function
-    --
-    intoStep :: (Shape sh0, Shape sh0', Elt e0, Elt e0')
-             => PreExp acc aenv' sh
-             -> PreFun acc aenv' (sh -> e)
-             -> PreExp acc aenv'' sh0'
-             -> PreFun acc aenv'' (sh0' -> sh0)
-             -> PreFun acc aenv'' (e0   -> e0')
-             -> Idx aenv'' (Array sh0 e0)
-             -> Delayed acc aenv (Array sh0' e0')
-    intoStep sh1 f1 sh0 p0 f0 v0
-      | shouldInline
-      , sh1'            <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
-      , f1'             <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
-      , v1'             <- sink env0 ZeroIdx
-      , f0'             <- f0 `compose` indexArray v0 `compose` p0
-      = Stats.ruleFired "aletD/eliminate"
-      $ Term env' (Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0'))
-
-      | otherwise
-      = Term env  (Step sh0 p0 f0 v0)
-
-    -- Combine a bound term into a body that was represented as a Yield function
-    --
-    intoYield :: (Kit acc, Shape sh, Shape sh0, Elt e0)
-              => PreExp acc aenv' sh
-              -> PreFun acc aenv' (sh -> e)
-              -> PreExp acc aenv'' sh0
-              -> PreFun acc aenv'' (sh0 -> e0)
-              -> Delayed acc aenv (Array sh0 e0)
-    intoYield sh1 f1 sh0 f0
-      | shouldInline
-      , sh1'          <- weakenEA rebuildAcc (sink env0 . SuccIdx) sh1
-      , f1'           <- weakenFA rebuildAcc (sink env0 . SuccIdx) f1
-      , v1'           <- sink env0 ZeroIdx
-      = Stats.ruleFired "aletD/eliminate"
-      $ Term env' (Yield (replaceE sh1' f1' v1' sh0) (replaceF sh1' f1' v1' f0))
-
-      | otherwise
-      = Term env  (Yield sh0 f0)
+        eliminate :: PreExp  acc      aenv' sh
+                  -> PreFun  acc      aenv' (sh -> e)
+                  -> Delayed acc aenv       brrs
+        eliminate sh1 f1
+          | sh1'            <- weakenEA rebuildAcc SuccIdx sh1
+          , f1'             <- weakenFA rebuildAcc SuccIdx f1
+          , Term env0' cc0' <- delayAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          = Term (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
     -- scalar expressions with an equivalent expression that generates the
     -- result directly
     --
     -- TODO: when we inline bindings we ought to let bind at the first
-    -- occurrence and use a variable at all subsequent locations. At the moment
-    -- we are just hoping CSE in the simplifier phase does good things, but that
-    -- is limited in what it looks for.
+    --       occurrence and use a variable at all subsequent locations. At the
+    --       moment we are just hoping CSE in the simplifier phase does good
+    --       things, but that is limited in what it looks for.
     --
-    replaceE :: forall acc env aenv sh e t. (Kit acc, Shape sh, Elt e)
+    replaceE :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenExp acc env aenv t
              -> PreOpenExp acc env aenv t
     replaceE sh' f' avar exp =
       case exp of
-        Let x y                         -> Let (travE x) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar y)
+        Let x y                         -> Let (cvtE x) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar y)
         Var i                           -> Var i
-        Foreign ff f e                  -> Foreign ff f (travE e)
+        Foreign ff f e                  -> Foreign ff f (cvtE e)
         Const c                         -> Const c
-        Tuple t                         -> Tuple (travT t)
-        Prj ix e                        -> Prj ix (travE e)
+        Tuple t                         -> Tuple (cvtT t)
+        Prj ix e                        -> Prj ix (cvtE e)
         IndexNil                        -> IndexNil
-        IndexCons sl sz                 -> IndexCons (travE sl) (travE sz)
-        IndexHead sh                    -> IndexHead (travE sh)
-        IndexTail sz                    -> IndexTail (travE sz)
+        IndexCons sl sz                 -> IndexCons (cvtE sl) (cvtE sz)
+        IndexHead sh                    -> IndexHead (cvtE sh)
+        IndexTail sz                    -> IndexTail (cvtE sz)
         IndexAny                        -> IndexAny
-        IndexSlice x ix sh              -> IndexSlice x (travE ix) (travE sh)
-        IndexFull x ix sl               -> IndexFull x (travE ix) (travE sl)
-        ToIndex sh ix                   -> ToIndex (travE sh) (travE ix)
-        FromIndex sh i                  -> FromIndex (travE sh) (travE i)
-        Cond p t e                      -> Cond (travE p) (travE t) (travE e)
-        Iterate n f x                   -> Iterate (travE n) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f) (travE x)
+        IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
+        ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
+        FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
+        Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
+        Iterate n f x                   -> Iterate (cvtE n) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f) (cvtE x)
         PrimConst c                     -> PrimConst c
-        PrimApp g x                     -> PrimApp g (travE x)
-        ShapeSize sh                    -> ShapeSize (travE sh)
-        Intersect sh sl                 -> Intersect (travE sh) (travE sl)
+        PrimApp g x                     -> PrimApp g (cvtE x)
+        ShapeSize sh                    -> ShapeSize (cvtE sh)
+        Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
         Shape a
           | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
           | otherwise                   -> exp
@@ -1178,24 +1070,24 @@ aletD' elimAcc env1 cc1 env0 cc0
         Index a sh
           | Just REFL    <- match a a'
           , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" $ Let sh b
-          | otherwise                   -> Index a (travE sh)
+          | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
           | Just REFL    <- match a a'
           , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
-          | otherwise                   -> LinearIndex a (travE i)
+          | otherwise                   -> LinearIndex a (cvtE i)
 
       where
         a' = avarIn avar
 
-        travE :: PreOpenExp acc env aenv s -> PreOpenExp acc env aenv s
-        travE = replaceE sh' f' avar
+        cvtE :: PreOpenExp acc env aenv s -> PreOpenExp acc env aenv s
+        cvtE = replaceE sh' f' avar
 
-        travT :: Tuple (PreOpenExp acc env aenv) s -> Tuple (PreOpenExp acc env aenv) s
-        travT NilTup        = NilTup
-        travT (SnocTup t e) = travT t `SnocTup` travE e
+        cvtT :: Tuple (PreOpenExp acc env aenv) s -> Tuple (PreOpenExp acc env aenv) s
+        cvtT NilTup        = NilTup
+        cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
-    replaceF :: forall acc env aenv sh e t. (Kit acc, Shape sh, Elt e)
+    replaceF :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenFun acc env aenv t
              -> PreOpenFun acc env aenv t
@@ -1213,26 +1105,55 @@ aletD' elimAcc env1 cc1 env0 cc0
         Avar v
           | Just REFL <- match v avar   -> Avar avar
           | otherwise                   -> Avar v
-        Generate sh f                   -> Generate (travE sh) (travF f)
-        Map f a                         -> Map (travF f) (travA a)
-        Backpermute sh p a              -> Backpermute (travE sh) (travF p) (travA a)
-        Transform sh p f a              -> Transform (travE sh) (travF p) (travF f) (travA a)
 
-        -- TLM: I am pretty sure that it will only be useful to replace scalar
-        -- shape and value generation functions from within arrays that will
-        -- ultimately be embedded. As such, flag this as an error because
-        -- otherwise we might want to rethink this operation.
-        --
-        _ -> INTERNAL_ERROR(error) "aletD" "assumption invalid"
+        Alet bnd body                   ->
+          let sh'' = weakenEA rebuildAcc SuccIdx sh'
+              f''  = weakenFA rebuildAcc SuccIdx f'
+          in
+          Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
+
+        Use arrs                -> Use arrs
+        Unit e                  -> Unit (cvtE e)
+        Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
+        Aprj ix tup             -> Aprj ix (cvtA tup)
+        Atuple tup              -> Atuple (cvtAT tup)
+        Apply f a               -> Apply f (cvtA a)            -- no sharing between f and a
+        Aforeign ff f a         -> Aforeign ff f (cvtA a)      -- no sharing between f and a
+        Generate sh f           -> Generate (cvtE sh) (cvtF f)
+        Map f a                 -> Map (cvtF f) (cvtA a)
+        ZipWith f a b           -> ZipWith (cvtF f) (cvtA a) (cvtA b)
+        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (cvtA a)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (cvtA a)
+        Slice slix a sl         -> Slice slix (cvtA a) (cvtE sl)
+        Replicate slix sh a     -> Replicate slix (cvtE sh) (cvtA a)
+        Reshape sl a            -> Reshape (cvtE sl) (cvtA a)
+        Fold f z a              -> Fold (cvtF f) (cvtE z) (cvtA a)
+        Fold1 f a               -> Fold1 (cvtF f) (cvtA a)
+        FoldSeg f z a s         -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
+        Scanl f z a             -> Scanl (cvtF f) (cvtE z) (cvtA a)
+        Scanl1 f a              -> Scanl1 (cvtF f) (cvtA a)
+        Scanl' f z a            -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+        Scanr f z a             -> Scanr (cvtF f) (cvtE z) (cvtA a)
+        Scanr1 f a              -> Scanr1 (cvtF f) (cvtA a)
+        Scanr' f z a            -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+        Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
+        Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+
       where
-        travA :: acc aenv s -> acc aenv s
-        travA = kmap (replaceA sh' f' avar)
+        cvtA :: acc aenv s -> acc aenv s
+        cvtA = kmap (replaceA sh' f' avar)
 
-        travE :: PreExp acc aenv s -> PreExp acc aenv s
-        travE = replaceE sh' f' avar
+        cvtE :: PreExp acc aenv s -> PreExp acc aenv s
+        cvtE = replaceE sh' f' avar
 
-        travF :: PreFun acc aenv s -> PreFun acc aenv s
-        travF = replaceF sh' f' avar
+        cvtF :: PreFun acc aenv s -> PreFun acc aenv s
+        cvtF = replaceF sh' f' avar
+
+        cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
+        cvtAT NilAtup          = NilAtup
+        cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
 
 
 -- Array conditionals, in particular eliminate branches when the predicate
