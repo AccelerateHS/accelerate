@@ -1,5 +1,10 @@
-{-# LANGUAGE CPP, GADTs, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE TypeOperators, TypeFamilies #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Representation
@@ -67,7 +72,7 @@ class (Eq sh, Slice sh) => Shape sh where
   listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
 
 instance Shape () where
-  dim ()            = 0
+  dim _             = 0
   size ()           = 1
 
   () `intersect` () = ()
@@ -86,7 +91,7 @@ instance Shape () where
   listToShape _  = INTERNAL_ERROR(error) "listToShape" "non-empty list when converting to unit"
 
 instance Shape sh => Shape (sh, Int) where
-  dim (sh, _)                       = dim sh + 1
+  dim _                             = dim (undefined :: sh) + 1
   size (sh, sz)                     = size sh * sz
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
