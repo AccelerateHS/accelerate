@@ -5,16 +5,22 @@
 
 module ParseArgs (
 
-  Backend(..), parseArgs, run, run1,
+  -- Options parsing
+  Backend(..), parseArgs, parseArgs',
   module System.Console.GetOpt,
+
+  -- Evaluating expressions
+  run, run1,
 
 ) where
 
 import Data.Char
 import Data.List
 import Data.Label
+import Data.Monoid
 import System.Exit
 import System.Console.GetOpt
+import qualified Test.Framework                         as TestFramework
 import qualified Criterion.Main                         as Criterion
 import qualified Criterion.Config                       as Criterion
 
@@ -112,16 +118,72 @@ parseArgs help backend (withBackends backend -> options) config header footer (t
         ++ usageInfo (unlines header)               options
         ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
 
-  in case getOpt' Permute options argv of
-      (o,n,u,[])  -> do
+  in do
 
-        -- pass unrecognised options to criterion
-        (cconf, n')     <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
-
-        case foldr id config o of
-          conf | False <- get help conf
-            -> putStrLn (fancyHeader backend conf header footer) >> return (conf, cconf, n ++ n')
-          _ -> putStrLn (helpMsg [])                             >> exitSuccess
-
+  -- Process options for the main program. Any non-options will be split out
+  -- here. Unrecognised options get passed to criterion.
+  --
+  (conf,non,u)  <- case getOpt' Permute options argv of
+      (opts,n,u,[]) -> case foldr id config opts of
+        conf | False <- get help conf
+          -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
+        _ -> putStrLn (helpMsg [])                             >> exitSuccess
+      --
       (_,_,_,err) -> error (helpMsg err)
+
+  -- Criterion
+  --
+  -- TODO: don't bail on unrecognised options. Print to screen, or return for
+  --       further processing (e.g. test-framework).
+  --
+  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
+
+  return (conf, cconf, non)
+
+
+-- | Same as 'parseArgs', but also return options for test-framework.
+--
+-- Since Criterion and test-framework both bail if they encounter unrecognised
+-- options, we run getOpt' ourselves. This means error messages might be a bit
+-- different.
+--
+parseArgs' :: (config :-> Bool)                  -- ^ access a help flag from the options structure
+           -> (config :-> Backend)               -- ^ access the chosen backend from the options structure
+           -> [OptDescr (config -> config)]      -- ^ the option descriptions
+           -> config                             -- ^ default option set
+           -> [String]                           -- ^ header text
+           -> [String]                           -- ^ footer text
+           -> [String]                           -- ^ command line arguments
+           -> IO (config, Criterion.Config, TestFramework.RunnerOptions, [String])
+parseArgs' help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
+  let
+      helpMsg err = concat err
+        ++ usageInfo (unlines header)                    options
+        ++ usageInfo "\nGeneric criterion options:"      Criterion.defaultOptions
+        ++ usageInfo "\nGeneric test-framework options:" TestFramework.optionsDescription
+
+  in do
+
+  -- In the first round process options for the main program. Any non-options
+  -- will be split out here so we can ignore them later. Unrecognised options
+  -- get passed to criterion and test-framework.
+  --
+  (conf,non,u)  <- case getOpt' Permute options argv of
+    (opts,n,u,[]) -> case foldr id config opts of
+      conf | False <- get help conf
+        -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
+      _ -> putStrLn (helpMsg [])                             >> exitSuccess
+    --
+    (_,_,_,err) -> error (helpMsg err)
+
+  -- Test Framework
+  (tfconf, u')  <- case getOpt' Permute TestFramework.optionsDescription u of
+    (oas,_,u',[]) | Just os <- sequence oas
+                -> return (mconcat os, u')
+    (_,_,_,err) -> error (helpMsg err)
+
+  -- Criterion
+  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u'
+
+  return (conf, cconf, tfconf, non)
 
