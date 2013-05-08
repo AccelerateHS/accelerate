@@ -376,7 +376,6 @@ Executable accelerate-hashcat
     build-depends:      accelerate-cuda         >= 0.13
 
   Build-depends:        accelerate              >= 0.13,
-                        accelerate-fft          >= 0.13,
                         base                    == 4.*,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
