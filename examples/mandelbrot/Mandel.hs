@@ -127,10 +127,10 @@ prettyRGBA lIMIT s =
 escapeToColour :: Exp Int -> Exp RGBA32
 escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (x,y,z,w))
   where
-    w   = constant 0
-    x   = A.fromIntegral (3 * m)
-    y   = A.fromIntegral (5 * m)
-    z   = A.fromIntegral (7 * m)
+    x   = constant 0
+    w   = A.fromIntegral (3 * m)
+    z   = A.fromIntegral (5 * m)
+    y   = A.fromIntegral (7 * m)
 
 
 {--
