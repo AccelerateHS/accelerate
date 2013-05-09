@@ -64,6 +64,8 @@ Executable accelerate-nofib
                         Test.Mapping
                         Test.PrefixSum
                         Test.Reduction
+                        Test.Replicate
+                        Test.Stencil
 
   ghc-options:          -Wall -O2
                         -threaded
@@ -83,8 +85,10 @@ Executable accelerate-nofib
     build-depends:      accelerate-opencl               == 0.1.*
 
   build-depends:        accelerate                      >= 0.13,
+                        HUnit                           >= 1.2,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,
+                        test-framework-hunit            >= 0.3,
                         test-framework-quickcheck2      >= 0.2,
                         random
 

@@ -8,10 +8,11 @@ import System.Environment
 
 import Config
 import ParseArgs
-import Test.Mapping
-import Test.Reduction
-import Test.PrefixSum
 import Test.IndexSpace
+import Test.Mapping
+import Test.PrefixSum
+import Test.Reduction
+import Test.Replicate
 import Test.Stencil
 
 
@@ -37,6 +38,7 @@ main = do
           , test_prefixsum conf         -- requires fold
           , test_foldSeg conf           -- requires scan
           , test_stencil conf
+          , test_replicate conf
           ]
 
     ]
