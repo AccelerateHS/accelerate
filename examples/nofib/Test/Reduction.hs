@@ -12,13 +12,13 @@ import Data.Typeable
 import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
+import Data.Array.Accelerate                            as A hiding (indexHead, indexTail)
+import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 import Config
 import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
-import Data.Array.Accelerate                            as Acc hiding (indexHead, indexTail)
-import Data.Array.Accelerate.Array.Sugar                as Sugar
 
 
 
@@ -65,16 +65,16 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
     --
     test_min xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (Acc.fold1All Acc.min (use xs)) .==. fold1AllRef P.min xs
+      ==> run backend (A.fold1All A.min (use xs)) .==. fold1AllRef P.min xs
 
     test_max xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (Acc.fold1All Acc.max (use xs)) .==. fold1AllRef P.max xs
+      ==> run backend (A.fold1All A.max (use xs)) .==. fold1AllRef P.max xs
 
-    test_sum xs         = run backend (Acc.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
+    test_sum xs         = run backend (A.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
     test_sum' xs z      =
       let z' = unit (constant z)
-      in  run backend (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
+      in  run backend (A.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
 
     backend = get configBackend opt
 
@@ -117,16 +117,16 @@ test_fold opt = testGroup "fold" $ catMaybes
     --
     test_min xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (Acc.fold1 Acc.min (use xs)) .==. fold1Ref P.min xs
+      ==> run backend (A.fold1 A.min (use xs)) .==. fold1Ref P.min xs
 
     test_max xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
+      ==> run backend (A.fold1 A.max (use xs)) .==. fold1Ref P.max xs
 
-    test_sum xs         = run backend (Acc.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
+    test_sum xs         = run backend (A.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
     test_sum' xs z      =
       let z' = unit (constant z)
-      in  run backend (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
+      in  run backend (A.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
 
     backend = get configBackend opt
 
@@ -162,19 +162,19 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
             testProperty "sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (Acc.foldSeg (+) 0 (use xs) (use seg)) .==. foldSegRef (+) 0 xs seg
+              run backend (A.foldSeg (+) 0 (use xs) (use seg)) .==. foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
             forAll arbitrary                     $ \z                          ->
               let z' = unit (constant z)
-              in  run backend (Acc.foldSeg (+) (the z') (use xs) (use seg)) .==. foldSegRef (+) z xs seg
+              in  run backend (A.foldSeg (+) (the z') (use xs) (use seg)) .==. foldSegRef (+) z xs seg
 
           , testProperty "minimum"
           $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (Acc.fold1Seg Acc.min (use xs) (use seg)) .==. fold1SegRef P.min xs seg
+              run backend (A.fold1Seg A.min (use xs) (use seg)) .==. fold1SegRef P.min xs seg
           ]
 
     backend = get configBackend opt
@@ -185,17 +185,17 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
 
 foldAllRef :: Elt e => (e -> e -> e) -> e -> Array sh e -> Array Z e
 foldAllRef f z
-  = Acc.fromList Z
+  = A.fromList Z
   . return
   . foldl f z
-  . Acc.toList
+  . A.toList
 
 fold1AllRef :: Elt e => (e -> e -> e) -> Array sh e -> Array Z e
 fold1AllRef f
-  = Acc.fromList Z
+  = A.fromList Z
   . return
   . foldl1 f
-  . Acc.toList
+  . A.toList
 
 foldRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Array sh e
 foldRef f z arr =

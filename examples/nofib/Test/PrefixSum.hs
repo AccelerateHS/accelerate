@@ -16,7 +16,7 @@ import Config
 import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
-import Data.Array.Accelerate                            as Acc
+import Data.Array.Accelerate                            as A
 
 
 --
@@ -60,47 +60,47 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
 
     -- left scan
     --
-    test_scanl  xs = run backend (Acc.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
-    test_scanl1 xs = run backend (Acc.scanl1 Acc.min (use xs))          .==. scanl1Ref P.min xs
-    test_scanl' xs = run backend (Acc.lift $ Acc.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
+    test_scanl  xs = run backend (A.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
+    test_scanl1 xs = run backend (A.scanl1 A.min (use xs))          .==. scanl1Ref P.min xs
+    test_scanl' xs = run backend (A.lift $ A.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
 
     -- right scan
     --
-    test_scanr  xs = run backend (Acc.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
-    test_scanr1 xs = run backend (Acc.scanr1 Acc.max (use xs))          .==. scanr1Ref P.max xs
-    test_scanr' xs = run backend (Acc.lift $ Acc.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
+    test_scanr  xs = run backend (A.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
+    test_scanr1 xs = run backend (A.scanr1 A.max (use xs))          .==. scanr1Ref P.max xs
+    test_scanr' xs = run backend (A.lift $ A.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
 
     -- segmented left/right scan
     --
     test_scanl1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (Acc.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (A.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanr1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (Acc.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (A.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanlseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (Acc.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (A.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanrseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (Acc.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (A.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanl'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (lift $ Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ A.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanr'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (lift $ Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ A.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
 
 -- Reference implementation
@@ -109,36 +109,36 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
 scanlRef :: Elt e => (e -> e -> e) -> e -> Vector e -> Vector e
 scanlRef f z vec =
   let (Z :. n)  = arrayShape vec
-  in  Acc.fromList (Z :. n+1) . P.scanl f z . Acc.toList $ vec
+  in  A.fromList (Z :. n+1) . P.scanl f z . A.toList $ vec
 
 scanl'Ref :: Elt e => (e -> e -> e) -> e -> Vector e -> (Vector e, Scalar e)
 scanl'Ref f z vec =
   let (Z :. n)  = arrayShape vec
-      result    = P.scanl f z (Acc.toList vec)
-  in  (Acc.fromList (Z :. n) result, Acc.fromList Z (P.drop n result))
+      result    = P.scanl f z (A.toList vec)
+  in  (A.fromList (Z :. n) result, A.fromList Z (P.drop n result))
 
 scanl1Ref :: Elt e => (e -> e -> e) -> Vector e -> Vector e
 scanl1Ref f vec
-  = Acc.fromList (arrayShape vec)
+  = A.fromList (arrayShape vec)
   . P.scanl1 f
-  . Acc.toList $ vec
+  . A.toList $ vec
 
 scanrRef :: Elt e => (e -> e -> e) -> e -> Vector e -> Vector e
 scanrRef f z vec =
   let (Z :. n)  = arrayShape vec
-  in  Acc.fromList (Z :. n+1) . P.scanr f z . Acc.toList $ vec
+  in  A.fromList (Z :. n+1) . P.scanr f z . A.toList $ vec
 
 scanr'Ref :: Elt e => (e -> e -> e) -> e -> Vector e -> (Vector e, Scalar e)
 scanr'Ref f z vec =
   let (Z :. n)  = arrayShape vec
-      result    = P.scanr f z (Acc.toList vec)
-  in  (Acc.fromList (Z :. n) (P.tail result), Acc.fromList Z result)
+      result    = P.scanr f z (A.toList vec)
+  in  (A.fromList (Z :. n) (P.tail result), A.fromList Z result)
 
 scanr1Ref :: Elt e => (e -> e -> e) -> Vector e -> Vector e
 scanr1Ref f vec
-  = Acc.fromList (arrayShape vec)
+  = A.fromList (arrayShape vec)
   . P.scanr1 f
-  . Acc.toList $ vec
+  . A.toList $ vec
 
 
 -- segmented operations
