@@ -47,26 +47,27 @@ Flag io
   Default:              True
 
 
--- Run some basic randomised tests of the primitive library operations, and unit
--- tests of known (hopefully prior) failures.
+-- The main test program. This includes randomised quickcheck testing for array
+-- primitives, unit tests, imaginary/spectral/real programs, and benchmarks.
 --
-Executable accelerate-quickcheck
+-- TODO: add an analysis script to scrape benchmark results
+--
+Executable accelerate-nofib
   Main-is:              Main.hs
-  hs-source-dirs:       examples/quickcheck/
+  hs-source-dirs:       examples/nofib lib
 
-  other-modules:        Config
-                        Arbitrary.Array
-                        Arbitrary.Shape
-                        Test.Base
-                        Test.IndexSpace
-                        Test.Mapping
-                        Test.PrefixSum
-                        Test.Reduction
+  other-modules:        Config ParseArgs
+                        QuickCheck.Arbitrary.Array
+                        QuickCheck.Arbitrary.Shape
+                        QuickCheck.Test.Base
+                        QuickCheck.Test.IndexSpace
+                        QuickCheck.Test.Mapping
+                        QuickCheck.Test.PrefixSum
+                        QuickCheck.Test.Reduction
 
   ghc-options:          -Wall -O2
                         -threaded
                         -fpedantic-bottoms
-                        -fno-warn-orphans
                         -fno-full-laziness
                         -fno-excess-precision
 
@@ -75,8 +76,7 @@ Executable accelerate-quickcheck
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 >= 0.13,
-                        cuda                            >= 0.5
+    build-depends:      accelerate-cuda                 >= 0.13
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
