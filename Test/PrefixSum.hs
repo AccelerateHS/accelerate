@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module QuickCheck.Test.PrefixSum where
+module Test.PrefixSum where
 
 import Prelude                                          as P
 import Test.QuickCheck
@@ -14,7 +14,7 @@ import Test.Framework.Providers.QuickCheck2
 
 import Config
 import ParseArgs
-import QuickCheck.Test.Base
+import Test.Base
 import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                            as Acc
 

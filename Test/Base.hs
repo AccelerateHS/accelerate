@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module QuickCheck.Test.Base where
+module Test.Base where
 
 import Prelude                                          as P
 import Test.QuickCheck
