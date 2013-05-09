@@ -6,10 +6,10 @@ import System.Environment
 
 import Config
 import ParseArgs
-import QuickCheck.Test.Mapping
-import QuickCheck.Test.Reduction
-import QuickCheck.Test.PrefixSum
-import QuickCheck.Test.IndexSpace
+import Test.Mapping
+import Test.Reduction
+import Test.PrefixSum
+import Test.IndexSpace
 
 
 main :: IO ()

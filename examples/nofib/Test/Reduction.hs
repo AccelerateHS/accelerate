@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module QuickCheck.Test.Reduction where
+module Test.Reduction where
 
 import Prelude                                          as P
 import Data.List
@@ -15,7 +15,7 @@ import Test.Framework.Providers.QuickCheck2
 
 import Config
 import ParseArgs
-import QuickCheck.Test.Base
+import Test.Base
 import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                            as Acc hiding (indexHead, indexTail)
 import Data.Array.Accelerate.Array.Sugar                as Sugar

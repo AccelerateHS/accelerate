@@ -59,11 +59,11 @@ Executable accelerate-nofib
   other-modules:        Config ParseArgs
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
-                        QuickCheck.Test.Base
-                        QuickCheck.Test.IndexSpace
-                        QuickCheck.Test.Mapping
-                        QuickCheck.Test.PrefixSum
-                        QuickCheck.Test.Reduction
+                        Test.Base
+                        Test.IndexSpace
+                        Test.Mapping
+                        Test.PrefixSum
+                        Test.Reduction
 
   ghc-options:          -Wall -O2
                         -threaded

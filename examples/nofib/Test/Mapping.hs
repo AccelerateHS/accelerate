@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module QuickCheck.Test.Mapping where
+module Test.Mapping where
 
 import Prelude                                          as P
 import Data.Label
@@ -15,7 +15,7 @@ import Test.Framework.Providers.QuickCheck2
 
 import Config
 import ParseArgs
-import QuickCheck.Test.Base
+import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as Acc
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
