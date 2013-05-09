@@ -51,12 +51,14 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
     ]
 
 
-arbitraryArrayOfShape
-    :: (Shape sh, Elt e, Arbitrary e)
-    => sh
-    -> Gen (Array sh e)
-arbitraryArrayOfShape sh = do
+arbitraryArray :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen (Array sh e)
+arbitraryArray sh = do
   adata         <- vectorOf (Sugar.size sh) arbitrary
+  return        $! Sugar.fromList sh adata
+
+arbitraryArrayOf :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen e -> Gen (Array sh e)
+arbitraryArrayOf sh gen = do
+  adata         <- vectorOf (Sugar.size sh) gen
   return        $! Sugar.fromList sh adata
 
 arbitrarySegmentedArray
