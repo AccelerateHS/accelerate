@@ -71,6 +71,7 @@ header =
   [ "accelerate-hashcat (c) [2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-hashcat -d dictionary [OPTIONS] [file ...]"
+  , ""
   ]
 
 footer :: [String]

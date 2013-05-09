@@ -217,6 +217,7 @@ header =
   [ "accelerate-smoothlife (c) [2012..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-smoothlife [OPTIONS]"
+  , ""
   ]
 
 footer :: [String]

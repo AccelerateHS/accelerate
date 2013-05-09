@@ -173,6 +173,7 @@ header =
   [ "accelerate-fluid (c) [2011..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-fluid [OPTIONS]"
+  , ""
   ]
 
 footer :: [String]

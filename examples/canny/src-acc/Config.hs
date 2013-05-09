@@ -64,6 +64,7 @@ header =
   [ "accelerate-canny (c) [2007..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-canny [OPTIONS] fileIn.bmp fileOut.bmp"
+  , ""
   ]
 
 footer :: [String]

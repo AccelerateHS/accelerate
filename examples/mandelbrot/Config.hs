@@ -52,6 +52,7 @@ header =
   [ "accelerate-mandelbrot (c) [2011..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-mandelbrot [OPTIONS]"
+  , ""
   ]
 
 footer :: [String]

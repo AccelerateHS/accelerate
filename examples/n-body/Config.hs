@@ -155,6 +155,7 @@ header =
   [ "accelerate-nbody (c) [2012..2013] The Accelerate Team"
   , ""
   , "Usage: accelerate-nbody [OPTIONS]"
+  , ""
   ]
 
 footer :: [String]
