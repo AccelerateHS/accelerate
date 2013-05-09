@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.IndexSpace where
+module QuickCheck.Test.IndexSpace where
 
 import Prelude                                          as P
 import Data.Label
@@ -12,8 +12,10 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import Test.Base
-import Arbitrary.Array                                  ( )
+import ParseArgs
+import QuickCheck.Test.Base
+import QuickCheck.Arbitrary.Array                       ( )
+
 import Data.Array.Unboxed                               as IArray hiding ( Array )
 import Data.Array.Accelerate                            as Acc
 import Data.Array.Accelerate.Array.Sugar                ( newArray )
@@ -23,36 +25,37 @@ import Data.Array.Accelerate.Array.Sugar                ( newArray )
 -- Forward permutation ---------------------------------------------------------
 --
 
-test_permute :: Options -> Test
+test_permute :: Config -> Test
 test_permute opt = testGroup "permute" $ catMaybes
-  [ testIntegralElt int8   (undefined :: Int8)
-  , testIntegralElt int16  (undefined :: Int16)
-  , testIntegralElt int32  (undefined :: Int32)
-  , testIntegralElt int64  (undefined :: Int64)
-  , testIntegralElt int8   (undefined :: Word8)
-  , testIntegralElt int16  (undefined :: Word16)
-  , testIntegralElt int32  (undefined :: Word32)
-  , testIntegralElt int64  (undefined :: Word64)
-  , testFloatingElt float  (undefined :: Float)
-  , testFloatingElt double (undefined :: Double)
+  [ testIntegralElt configInt8   (undefined :: Int8)
+  , testIntegralElt configInt16  (undefined :: Int16)
+  , testIntegralElt configInt32  (undefined :: Int32)
+  , testIntegralElt configInt64  (undefined :: Int64)
+  , testIntegralElt configWord8  (undefined :: Word8)
+  , testIntegralElt configWord16 (undefined :: Word16)
+  , testIntegralElt configWord32 (undefined :: Word32)
+  , testIntegralElt configWord64 (undefined :: Word64)
+  , testFloatingElt configFloat  (undefined :: Float)
+  , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
           [ testProperty "histogram" (test_histogram Acc.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
-    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
           [ testProperty "histogram" (test_histogram Acc.floor P.floor :: Vector e -> Property)
           ]
 
+    backend = get configBackend opt
     test_histogram f g xs =
-      sized $ \n -> run opt (histogramAcc n f xs) .==. histogramRef n g xs
+      sized $ \n -> run backend (histogramAcc n f xs) .==. histogramRef n g xs
 
     histogramAcc n f xs =
       let n'        = unit (constant n)
@@ -73,21 +76,21 @@ test_permute opt = testGroup "permute" $ catMaybes
 -- Backward permutation --------------------------------------------------------
 --
 
-test_backpermute :: Options -> Test
+test_backpermute :: Config -> Test
 test_backpermute opt = testGroup "backpermute" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (Elt e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)  = Nothing
       | otherwise           = Just $ testGroup (show (typeOf (undefined::e)))
@@ -95,8 +98,9 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
           , testProperty "transpose" (test_transpose :: Array DIM2 e -> Property)
           ]
 
-    test_reverse xs   = run opt (reverseAcc xs)   .==. reverseRef xs
-    test_transpose xs = run opt (transposeAcc xs) .==. transposeRef xs
+    backend           = get configBackend opt
+    test_reverse xs   = run backend (reverseAcc xs)   .==. reverseRef xs
+    test_transpose xs = run backend (transposeAcc xs) .==. transposeRef xs
 
     -- Reverse a vector
     --

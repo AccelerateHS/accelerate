@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Reduction where
+module QuickCheck.Test.Reduction where
 
 import Prelude                                          as P
 import Data.List
@@ -14,8 +14,9 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import Test.Base
-import Arbitrary.Array
+import ParseArgs
+import QuickCheck.Test.Base
+import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                            as Acc hiding (indexHead, indexTail)
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
@@ -28,21 +29,21 @@ import Data.Array.Accelerate.Array.Sugar                as Sugar
 -- foldAll
 -- -------
 
-test_foldAll :: Options -> Test
+test_foldAll :: Config -> Test
 test_foldAll opt = testGroup "foldAll" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -64,37 +65,38 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
     --
     test_min xs
       =   arraySize (arrayShape xs) > 0
-      ==> run opt (Acc.fold1All Acc.min (use xs)) .==. fold1AllRef P.min xs
+      ==> run backend (Acc.fold1All Acc.min (use xs)) .==. fold1AllRef P.min xs
 
     test_max xs
       =   arraySize (arrayShape xs) > 0
-      ==> run opt (Acc.fold1All Acc.max (use xs)) .==. fold1AllRef P.max xs
+      ==> run backend (Acc.fold1All Acc.max (use xs)) .==. fold1AllRef P.max xs
 
-    test_sum xs         = run opt (Acc.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
+    test_sum xs         = run backend (Acc.foldAll (+) 0 (use xs)) .==. foldAllRef (+) 0 xs
     test_sum' xs z      =
       let z' = unit (constant z)
-      in  run opt (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
+      in  run backend (Acc.foldAll (+) (the z') (use xs)) .==. foldAllRef (+) z xs
 
+    backend = get configBackend opt
 
 
 -- multidimensional fold
 -- ---------------------
 
-test_fold :: Options -> Test
+test_fold :: Config -> Test
 test_fold opt = testGroup "fold" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -115,36 +117,38 @@ test_fold opt = testGroup "fold" $ catMaybes
     --
     test_min xs
       =   indexHead (arrayShape xs) > 0
-      ==> run opt (Acc.fold1 Acc.min (use xs)) .==. fold1Ref P.min xs
+      ==> run backend (Acc.fold1 Acc.min (use xs)) .==. fold1Ref P.min xs
 
     test_max xs
       =   indexHead (arrayShape xs) > 0
-      ==> run opt (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
+      ==> run backend (Acc.fold1 Acc.max (use xs)) .==. fold1Ref P.max xs
 
-    test_sum xs         = run opt (Acc.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
+    test_sum xs         = run backend (Acc.fold (+) 0 (use xs)) .==. foldRef (+) 0 xs
     test_sum' xs z      =
       let z' = unit (constant z)
-      in  run opt (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
+      in  run backend (Acc.fold (+) (the z') (use xs)) .==. foldRef (+) z xs
+
+    backend = get configBackend opt
 
 
 -- segmented fold
 -- --------------
 
-test_foldSeg :: Options -> Test
+test_foldSeg :: Config -> Test
 test_foldSeg opt = testGroup "foldSeg" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -158,20 +162,22 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
             testProperty "sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run opt (Acc.foldSeg (+) 0 (use xs) (use seg)) .==. foldSegRef (+) 0 xs seg
+              run backend (Acc.foldSeg (+) 0 (use xs) (use seg)) .==. foldSegRef (+) 0 xs seg
 
           , testProperty "non-neutral sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
             forAll arbitrary                     $ \z                          ->
               let z' = unit (constant z)
-              in  run opt (Acc.foldSeg (+) (the z') (use xs) (use seg)) .==. foldSegRef (+) z xs seg
+              in  run backend (Acc.foldSeg (+) (the z') (use xs) (use seg)) .==. foldSegRef (+) z xs seg
 
           , testProperty "minimum"
           $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run opt (Acc.fold1Seg Acc.min (use xs) (use seg)) .==. fold1SegRef P.min xs seg
+              run backend (Acc.fold1Seg Acc.min (use xs) (use seg)) .==. fold1SegRef P.min xs seg
           ]
+
+    backend = get configBackend opt
 
 
 -- Reference implementation

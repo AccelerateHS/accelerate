@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.PrefixSum where
+module QuickCheck.Test.PrefixSum where
 
 import Prelude                                          as P
 import Test.QuickCheck
@@ -13,8 +13,9 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import Test.Base
-import Arbitrary.Array
+import ParseArgs
+import QuickCheck.Test.Base
+import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                            as Acc
 
 
@@ -22,21 +23,21 @@ import Data.Array.Accelerate                            as Acc
 -- prefix sum ------------------------------------------------------------------
 --
 
-test_prefixsum :: Options -> Test
+test_prefixsum :: Config -> Test
 test_prefixsum opt = testGroup "prefix sum" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Options :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)  = Nothing
       | otherwise           = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -55,49 +56,51 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
           , testProperty "scanr'Seg"    (test_scanr'seg :: Vector e -> Property)
           ]
 
+    backend = get configBackend opt
+
     -- left scan
     --
-    test_scanl  xs = run opt (Acc.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
-    test_scanl1 xs = run opt (Acc.scanl1 Acc.min (use xs))          .==. scanl1Ref P.min xs
-    test_scanl' xs = run opt (Acc.lift $ Acc.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
+    test_scanl  xs = run backend (Acc.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
+    test_scanl1 xs = run backend (Acc.scanl1 Acc.min (use xs))          .==. scanl1Ref P.min xs
+    test_scanl' xs = run backend (Acc.lift $ Acc.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
 
     -- right scan
     --
-    test_scanr  xs = run opt (Acc.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
-    test_scanr1 xs = run opt (Acc.scanr1 Acc.max (use xs))          .==. scanr1Ref P.max xs
-    test_scanr' xs = run opt (Acc.lift $ Acc.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
+    test_scanr  xs = run backend (Acc.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
+    test_scanr1 xs = run backend (Acc.scanr1 Acc.max (use xs))          .==. scanr1Ref P.max xs
+    test_scanr' xs = run backend (Acc.lift $ Acc.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
 
     -- segmented left/right scan
     --
     test_scanl1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (Acc.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanr1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (Acc.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanlseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (Acc.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanrseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (Acc.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (Acc.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanl'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (lift $ Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ Acc.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanr'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run opt (lift $ Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ Acc.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
 
 -- Reference implementation

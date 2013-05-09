@@ -1,8 +1,9 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeOperators     #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Test.Base where
+module QuickCheck.Test.Base where
 
 import Prelude                                          as P
 import Test.QuickCheck

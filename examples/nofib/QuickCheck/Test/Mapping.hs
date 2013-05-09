@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Mapping where
+module QuickCheck.Test.Mapping where
 
 import Prelude                                          as P
 import Data.Label
@@ -14,8 +14,9 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import Test.Base
-import Arbitrary.Array                                          ()
+import ParseArgs
+import QuickCheck.Test.Base
+import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as Acc
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as R
@@ -24,28 +25,29 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 -- Map -------------------------------------------------------------------------
 --
 
-test_map :: Options -> Test
+test_map :: Config -> Test
 test_map opt = testGroup "map" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    test_square xs = run opt (Acc.map (\x -> x*x) (use xs)) .==. mapRef (\x -> x*x) xs
-    test_abs    xs = run opt (Acc.map abs (use xs))         .==. mapRef abs xs
+    backend        = get configBackend opt
+    test_square xs = run backend (Acc.map (\x -> x*x) (use xs)) .==. mapRef (\x -> x*x) xs
+    test_abs    xs = run backend (Acc.map abs (use xs))         .==. mapRef abs xs
     test_plus z xs =
       let z' = unit (constant z)
-      in  run opt (Acc.map (+ the z') (use xs)) .==. mapRef (+ z) xs
+      in  run backend (Acc.map (+ the z') (use xs)) .==. mapRef (+ z) xs
 
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
-            => (Options :-> Bool)
+            => (Config :-> Bool)
             -> a
             -> Maybe Test
     testElt ok _
@@ -64,26 +66,27 @@ test_map opt = testGroup "map" $ catMaybes
           ]
 
 
-test_zipWith :: Options -> Test
+test_zipWith :: Config -> Test
 test_zipWith opt = testGroup "zipWith" $ catMaybes
-  [ testElt int8   (undefined :: Int8)
-  , testElt int16  (undefined :: Int16)
-  , testElt int32  (undefined :: Int32)
-  , testElt int64  (undefined :: Int64)
-  , testElt int8   (undefined :: Word8)
-  , testElt int16  (undefined :: Word16)
-  , testElt int32  (undefined :: Word32)
-  , testElt int64  (undefined :: Word64)
-  , testElt float  (undefined :: Float)
-  , testElt double (undefined :: Double)
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
   ]
   where
-    test_zip  xs ys = run opt (Acc.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
-    test_plus xs ys = run opt (Acc.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
-    test_min  xs ys = run opt (Acc.zipWith Acc.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
+    backend         = get configBackend opt
+    test_zip  xs ys = run backend (Acc.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
+    test_plus xs ys = run backend (Acc.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
+    test_min  xs ys = run backend (Acc.zipWith Acc.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
 
     testElt :: forall a. (Elt a, IsNum a, Ord a, Similar a, Arbitrary a)
-            => (Options :-> Bool)
+            => (Config :-> Bool)
             -> a
             -> Maybe Test
     testElt ok _
