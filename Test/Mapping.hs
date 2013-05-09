@@ -17,7 +17,7 @@ import Config
 import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
-import Data.Array.Accelerate                                    as Acc
+import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as R
 
@@ -40,11 +40,11 @@ test_map opt = testGroup "map" $ catMaybes
   ]
   where
     backend        = get configBackend opt
-    test_square xs = run backend (Acc.map (\x -> x*x) (use xs)) .==. mapRef (\x -> x*x) xs
-    test_abs    xs = run backend (Acc.map abs (use xs))         .==. mapRef abs xs
+    test_square xs = run backend (A.map (\x -> x*x) (use xs)) .==. mapRef (\x -> x*x) xs
+    test_abs    xs = run backend (A.map abs (use xs))         .==. mapRef abs xs
     test_plus z xs =
       let z' = unit (constant z)
-      in  run backend (Acc.map (+ the z') (use xs)) .==. mapRef (+ z) xs
+      in  run backend (A.map (+ the z') (use xs)) .==. mapRef (+ z) xs
 
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
             => (Config :-> Bool)
@@ -81,9 +81,9 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
   ]
   where
     backend         = get configBackend opt
-    test_zip  xs ys = run backend (Acc.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
-    test_plus xs ys = run backend (Acc.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
-    test_min  xs ys = run backend (Acc.zipWith Acc.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
+    test_zip  xs ys = run backend (A.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
+    test_plus xs ys = run backend (A.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
+    test_min  xs ys = run backend (A.zipWith A.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
 
     testElt :: forall a. (Elt a, IsNum a, Ord a, Similar a, Arbitrary a)
             => (Config :-> Bool)
