@@ -5,7 +5,7 @@
 
 module Test.Mapping where
 
-import Prelude                                          as P
+import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable

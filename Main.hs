@@ -12,6 +12,7 @@ import Test.Mapping
 import Test.Reduction
 import Test.PrefixSum
 import Test.IndexSpace
+import Test.Stencil
 
 
 main :: IO ()
@@ -35,6 +36,7 @@ main = do
           , test_permute conf
           , test_prefixsum conf         -- requires fold
           , test_foldSeg conf           -- requires scan
+          , test_stencil conf
           ]
 
     ]
