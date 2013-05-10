@@ -32,7 +32,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, stream,
+  Arrays, run, run1, stream,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
