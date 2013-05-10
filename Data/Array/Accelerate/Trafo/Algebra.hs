@@ -265,8 +265,8 @@ eval2 f (untup2 -> Just (x,y)) env
 eval2 _ _ _
   = Nothing
 
-tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
-tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
+-- tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
+-- tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
 
 untup2 :: PreOpenExp acc env aenv (a, b) -> Maybe (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b)
 untup2 exp
