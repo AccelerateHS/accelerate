@@ -795,15 +795,17 @@ transpose mat =
 -- no more than @n@ elements.
 --
 take :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
-take n = backpermute (index1 n) id
+take n =
+  let n' = the (unit n)
+  in  backpermute (index1 n') id
 
 -- | Yield all but the first @n@ elements of the input vector. The vector must
---   contain no more than @n@ elements.
+--   contain no fewer than @n@ elements.
 --
 drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
 drop n arr =
-  let n' = unit n
-  in  backpermute (ilift1 (subtract n) (shape arr)) (ilift1 (+ the n')) arr
+  let n' = the (unit n)
+  in  backpermute (ilift1 (subtract n') (shape arr)) (ilift1 (+ n')) arr
 
 
 -- | Yield all but the last element of the input vector. The vector must not be
@@ -827,6 +829,7 @@ tail arr = backpermute (ilift1 (subtract 1) (shape arr)) (ilift1 (+1)) arr
 --
 slit :: Elt e => Exp Int -> Exp Int -> Acc (Vector e) -> Acc (Vector e)
 slit i n =
-  let i' = unit i
-  in  backpermute (index1 n) (ilift1 (+ the i'))
+  let i' = the (unit i)
+      n' = the (unit n)
+  in  backpermute (index1 n') (ilift1 (+ i'))
 
