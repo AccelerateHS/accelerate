@@ -164,10 +164,6 @@ Flag debug
     * -dverbose: other, uncategorised messages
     .
 
-Flag llvm
-  Description:          Enable the LLVM backend (sequential)
-  Default:              False
-
 Flag more-pp
   Description:          Enable HTML and Graphviz pretty printing.
   Default:              False
