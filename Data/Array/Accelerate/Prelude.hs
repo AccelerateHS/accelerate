@@ -660,7 +660,7 @@ filter p arr
 -- -----------------
 
 -- | Copy elements from source array to destination array according to a map. This
---   is a backpermute operation where a 'map' vector encodes the ouput to input
+--   is a backpermute operation where a 'map' vector encodes the output to input
 --   index mapping.
 --
 --   For example:
@@ -680,7 +680,7 @@ gather mapV inputV = backpermute (shape mapV) bpF inputV
 
 
 -- | Conditionally copy elements from source array to destination array according
---   to a map. This is a backpermute opereation where a 'map' vector encdes the
+--   to a map. This is a backpermute operation where a 'map' vector encodes the
 --   output to input index mapping. In addition, there is a 'mask' vector, and an
 --   associated predication function, that specifies whether an element will be
 --   copied. If not copied, the output array assumes the default vector's value.
