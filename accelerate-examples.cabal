@@ -358,6 +358,7 @@ Executable accelerate-hashcat
                         ParseArgs
                         Digest
                         MD5
+                        Util
 
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
