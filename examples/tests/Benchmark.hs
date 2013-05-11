@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP              #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -9,7 +10,6 @@ import Data.Array.Unboxed                       (UArray)
 import Data.List
 import Data.Monoid
 import Criterion
-import Criterion.IO
 import Criterion.Config
 import Criterion.Main
 import Criterion.Monad
@@ -21,6 +21,12 @@ import Control.DeepSeq
 import System.IO
 import System.Directory
 import System.Environment
+
+#if MIN_VERSION_criterion(0,8,0)
+import Criterion.IO.Printf
+#else
+import Criterion.IO
+#endif
 
 
 instance (Ix dim, IArray UArray e) => NFData (UArray dim e) where
