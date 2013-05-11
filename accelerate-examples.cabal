@@ -1,33 +1,28 @@
 Name:                   accelerate-examples
 Version:                0.13.0.0
+Cabal-version:          >=1.6
+Tested-with:            GHC >= 7.4
+Build-type:             Simple
+
+Synopsis:               Examples using the Accelerate library
+Description:
+  This package demonstrates a number of computation kernels and applications
+  showcasing the /Accelerate/ language and associated backend implementations.
+  It is also used for performance and regression testing.
+  .
+  Refer to the main /Accelerate/ package for more information:
+  <http://hackage.haskell.org/package/accelerate>
+  .
+
 License:                BSD3
 License-file:           LICENSE
 Author:                 The Accelerate Team
 Maintainer:             Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+Homepage:               https://github.com/AccelerateHS/accelerate-examples
+Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
+
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
-Build-type:             Simple
-Cabal-version:          >=1.6
-Homepage:               http://www.cse.unsw.edu.au/~chak/project/accelerate/
-
-Synopsis:               Examples using the Accelerate library
-Description:            This package defines a number of example programs for verification and
-                        performance testing of the Accelerate language and associated backend
-                        implementations. By default the package attempts to build with all available
-                        backends, but this might not be desirable or even possible depending on your
-                        available hardware. To disable a specific component, install with the extra
-                        cabal flag(s):
-                        .
-                        . > cabal install accelerate-examples -f-opt
-                        .
-                        Where the available options are:
-                        .
-                        * cuda: A parallel CUDA backend for NVIDIA GPUs
-                        .
-                        * opencl: A parallel OpenCL backend
-                        .
-                        * io: Extra tests for reading and writing arrays in various formats
-                        .
 
 Flag gui
   Description:          Enable gloss-based GUIs, where applicable. If not
