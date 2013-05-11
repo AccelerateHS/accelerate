@@ -317,7 +317,7 @@ instance ArrayElt CInt where
   type ArrayPtrs CInt = Ptr Int32
   unsafeIndexArrayData (AD_CInt ba) i   = CInt $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CInt ba)          = uArrayPtr ba
-  newArrayData size                     = liftM AD_CInt $ unsafeNewArray_ size (*# 2#)
+  newArrayData size                     = liftM AD_CInt $ unsafeNewArray_ size (*# 4#)
   unsafeReadArrayData (AD_CInt ba) i    = CInt <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CInt ba) i (CInt e)
     = unsafeWriteArray ba i e
@@ -329,7 +329,7 @@ instance ArrayElt CUInt where
   type ArrayPtrs CUInt = Ptr Word32
   unsafeIndexArrayData (AD_CUInt ba) i   = CUInt $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CUInt ba)          = uArrayPtr ba
-  newArrayData size                      = liftM AD_CUInt $ unsafeNewArray_ size dOUBLE_SCALE
+  newArrayData size                      = liftM AD_CUInt $ unsafeNewArray_ size (*# 4#)
   unsafeReadArrayData (AD_CUInt ba) i    = CUInt <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CUInt ba) i (CUInt e)
     = unsafeWriteArray ba i e
@@ -341,7 +341,7 @@ instance ArrayElt CLong where
   type ArrayPtrs CLong = Ptr Int64
   unsafeIndexArrayData (AD_CLong ba) i   = CLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CLong ba)          = uArrayPtr ba
-  newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ size fLOAT_SCALE
+  newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_CLong ba) i    = CLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CLong ba) i (CLong e)
     = unsafeWriteArray ba i e
@@ -353,7 +353,7 @@ instance ArrayElt CULong where
   type ArrayPtrs CULong = Ptr Word64
   unsafeIndexArrayData (AD_CULong ba) i   = CULong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CULong ba)          = uArrayPtr ba
-  newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ size dOUBLE_SCALE
+  newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_CULong ba) i    = CULong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CULong ba) i (CULong e)
     = unsafeWriteArray ba i e
@@ -365,7 +365,7 @@ instance ArrayElt CLLong where
   type ArrayPtrs CLLong = Ptr Int64
   unsafeIndexArrayData (AD_CLLong ba) i   = CLLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CLLong ba)          = uArrayPtr ba
-  newArrayData size                       = liftM AD_CLLong $ unsafeNewArray_ size fLOAT_SCALE
+  newArrayData size                       = liftM AD_CLLong $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_CLLong ba) i    = CLLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CLLong ba) i (CLLong e)
     = unsafeWriteArray ba i e
@@ -377,7 +377,7 @@ instance ArrayElt CULLong where
   type ArrayPtrs CULLong = Ptr Word64
   unsafeIndexArrayData (AD_CULLong ba) i   = CULLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CULLong ba)          = uArrayPtr ba
-  newArrayData size                        = liftM AD_CULLong $ unsafeNewArray_ size dOUBLE_SCALE
+  newArrayData size                        = liftM AD_CULLong $ unsafeNewArray_ size (*# 8#)
   unsafeReadArrayData (AD_CULLong ba) i    = CULLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CULLong ba) i (CULLong e)
     = unsafeWriteArray ba i e
@@ -475,7 +475,7 @@ instance ArrayElt CChar where
   type ArrayPtrs CChar = Ptr Int8
   unsafeIndexArrayData (AD_CChar ba) i   = CChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CChar ba)          = uArrayPtr ba
-  newArrayData size                      = liftM AD_CChar $ unsafeNewArray_ size (*# 2#)
+  newArrayData size                      = liftM AD_CChar $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_CChar ba) i    = CChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CChar ba) i (CChar e)
     = unsafeWriteArray ba i e
@@ -487,7 +487,7 @@ instance ArrayElt CSChar where
   type ArrayPtrs CSChar = Ptr Int8
   unsafeIndexArrayData (AD_CSChar ba) i   = CSChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CSChar ba)          = uArrayPtr ba
-  newArrayData size                       = liftM AD_CSChar $ unsafeNewArray_ size dOUBLE_SCALE
+  newArrayData size                       = liftM AD_CSChar $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_CSChar ba) i    = CSChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CSChar ba) i (CSChar e)
     = unsafeWriteArray ba i e
@@ -499,7 +499,7 @@ instance ArrayElt CUChar where
   type ArrayPtrs CUChar = Ptr Word8
   unsafeIndexArrayData (AD_CUChar ba) i   = CUChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CUChar ba)          = uArrayPtr ba
-  newArrayData size                       = liftM AD_CUChar $ unsafeNewArray_ size fLOAT_SCALE
+  newArrayData size                       = liftM AD_CUChar $ unsafeNewArray_ size (\x -> x)
   unsafeReadArrayData (AD_CUChar ba) i    = CUChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CUChar ba) i (CUChar e)
     = unsafeWriteArray ba i e
