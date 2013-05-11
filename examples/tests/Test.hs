@@ -31,10 +31,8 @@ import qualified BlackScholes
 import qualified Radix
 import qualified SliceExamples
 
-#ifdef ACCELERATE_IO
 import qualified BlockCopy
 import qualified VectorCopy
-#endif
 
 import qualified Canny
 import qualified IntegralImage
@@ -158,10 +156,9 @@ allTests cfg = sequence'
   , mkTest "black-scholes"         "Black-Scholes option pricing"               $ BlackScholes.run n
   , mkTest "radixsort"             "radix sort"                                 $ Radix.run n
 
-#ifdef ACCELERATE_IO
     -- Array IO
-  , mkIO   "io"                    "array IO test"                              $ BlockCopy.run >> VectorCopy.run
-#endif
+  , mkIO   "io"                    "array ptr copy test"                        $ BlockCopy.run
+  , mkIO   "io"                    "array vector copy test"                     $ VectorCopy.run
 
   --  image processing
   , mkIO    "canny"                "canny edge detection"                       $ Canny.canny (backend cfg) img 50 100
