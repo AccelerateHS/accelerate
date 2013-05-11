@@ -18,8 +18,8 @@ Description:
   As a simple example, consider the computation of a dot product of two vectors
   of floating point numbers:
   .
-  >  dotp :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
-  >  dotp xs ys = fold (+) 0 (zipWith (*) xs ys)
+  > dotp :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
+  > dotp xs ys = fold (+) 0 (zipWith (*) xs ys)
   .
   Except for the type, this code is almost the same as the corresponding Haskell
   code on lists of floats. The types indicate that the computation may be
@@ -56,9 +56,9 @@ Description:
        <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
     2. @accelerate-examples@: Computational kernels and applications showcasing
-       Accelerate, as well as performance and regression tests.
+       /Accelerate/, as well as performance and regression tests.
   .
-    3. @accelerate-io@: Fast conversion between Accelerate arrays and other
+    3. @accelerate-io@: Fast conversion between /Accelerate/ arrays and other
        formats, including Repa arrays.
   .
     4. @accelerate-fft@: Computation of Discrete Fourier Transforms.
