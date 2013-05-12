@@ -9,28 +9,37 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This module defines an embedded language of array computations for
--- high-performance computing.  Computations on multi-dimensional, regular
+-- high-performance computing. Computations on multi-dimensional, regular
 -- arrays are expressed in the form of parameterised collective operations
--- (such as maps, reductions, and permutations).  These computations are online
+-- (such as maps, reductions, and permutations). These computations are online
 -- compiled and executed on a range of architectures.
 --
--- /Abstract interface/
+-- [/Abstract interface:/]
 --
 -- The types representing array computations are only exported abstractly —
 -- i.e., client code can generate array computations and submit them for
--- for execution, but it cannot inspect these computations.  This is to allow
--- for more flexibility for future extensions of this library.
+-- execution, but it cannot inspect these computations. This is to allow for
+-- more flexibility for future extensions of this library.
 --
--- /Code execution/
+-- [/Code execution:/]
 --
--- Access to the various backends is via a 'run' function in
--- backend-specific toplevel modules.  Currently, we have the following:
+-- Access to the various backends is via a 'run' function in backend-specific
+-- top level modules. Currently, we have the following:
 --
 -- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
 --   reference implementation defining the semantics of the Accelerate language
 --
 -- * "Data.Array.Accelerate.CUDA": an implementation supporting parallel
---    execution on CUDA-capable NVIDIA GPUs
+--   execution on CUDA-capable NVIDIA GPUs
+--
+-- [/Examples and documentation:/]
+--
+-- * A (draft) tutorial is available on the GitHub wiki:
+--   <https://github.com/AccelerateHS/accelerate/wiki>
+--
+-- * The @accelerate-examples@ package demonstrates a range of computational
+--   kernels and several complete applications:
+--   <http://hackage.haskell.org/package/accelerate-examples>
 --
 
 module Data.Array.Accelerate (
