@@ -2,7 +2,7 @@ Name:                   accelerate
 Version:                0.13.0.0
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 7.4.2
-Build-type:             Simple
+Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
 
@@ -146,7 +146,14 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
+Extra-tmp-files:        config.status
+                        config.log
+                        autom4te.cache
+                        accelerate.buildinfo
+
 Extra-source-files:     INSTALL
+                        configure
+                        accelerate.buildinfo.in
                         include/accelerate.h
 
 Flag debug
