@@ -1,5 +1,12 @@
-{-# LANGUAGE CPP, GADTs, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE RankNTypes, MagicHash, UnboxedTuples, ScopedTypeVariables #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -93,8 +100,8 @@ data instance GArrayData ba CShort  = AD_CShort  (ba Int16)
 data instance GArrayData ba CUShort = AD_CUShort (ba Word16)
 data instance GArrayData ba CInt    = AD_CInt    (ba Int32)
 data instance GArrayData ba CUInt   = AD_CUInt   (ba Word32)
-data instance GArrayData ba CLong   = AD_CLong   (ba Int64)
-data instance GArrayData ba CULong  = AD_CULong  (ba Word64)
+data instance GArrayData ba CLong   = AD_CLong   (ba HTYPE_LONG)
+data instance GArrayData ba CULong  = AD_CULong  (ba HTYPE_UNSIGNED_LONG)
 data instance GArrayData ba CLLong  = AD_CLLong  (ba Int64)
 data instance GArrayData ba CULLong = AD_CULLong (ba Word64)
 data instance GArrayData ba Float   = AD_Float   (ba Float)
@@ -338,10 +345,10 @@ instance ArrayElt CUInt where
   arrayElt                               = ArrayEltRcuint
 
 instance ArrayElt CLong where
-  type ArrayPtrs CLong = Ptr Int64
+  type ArrayPtrs CLong = Ptr HTYPE_LONG
   unsafeIndexArrayData (AD_CLong ba) i   = CLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CLong ba)          = uArrayPtr ba
-  newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ size (*# 8#)
+  newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ size wORD_SCALE
   unsafeReadArrayData (AD_CLong ba) i    = CLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CLong ba) i (CLong e)
     = unsafeWriteArray ba i e
@@ -350,10 +357,10 @@ instance ArrayElt CLong where
   arrayElt                               = ArrayEltRclong
 
 instance ArrayElt CULong where
-  type ArrayPtrs CULong = Ptr Word64
+  type ArrayPtrs CULong = Ptr HTYPE_UNSIGNED_LONG
   unsafeIndexArrayData (AD_CULong ba) i   = CULong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CULong ba)          = uArrayPtr ba
-  newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ size (*# 8#)
+  newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ size wORD_SCALE
   unsafeReadArrayData (AD_CULong ba) i    = CULong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CULong ba) i (CULong e)
     = unsafeWriteArray ba i e

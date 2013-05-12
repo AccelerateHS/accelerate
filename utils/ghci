@@ -2,8 +2,10 @@
 
 # Adjust to the installed location of ghci, if this script can not find it.
 #
-GHC=`which -a ghci | grep -v "\./ghci"`
+GHC=`which -a ghc`
 VER=`$GHC --numeric-version`
+GHC_FLAGS="--interactive"
+
 
 # We assume that the dependent packages are install with 'cabal'. If you have
 # installed them with another tool such as 'cabal-dev', add the following to the
@@ -11,9 +13,27 @@ VER=`$GHC --numeric-version`
 #
 #    -package-conf cabal-dev/packages-$VER.conf
 
+# We need to figure out the size of some basic types. This is the same as what
+# the configure script does when we do a regular install.
+#
+function htype {
+
+  sizeof=`$GHC -w -ignore-dot-ghci -e "import Foreign" -e "import Foreign.C" -e "sizeOf (undefined::$1)"`
+  case $sizeof in
+    4) ty="$2"32 ;;
+    8) ty="$2"64 ;;
+  esac
+
+  GHC_FLAGS="$GHC_FLAGS -optP-DSIZEOF_$3=$sizeof -optP-D$3=$ty"
+}
+
+htype CLong  Int  HTYPE_LONG
+htype CULong Word HTYPE_UNSIGNED_LONG
+
 # And go...
 #
-$GHC -DACCELERATE_BOUNDS_CHECKS \
+$GHC $GHC_FLAGS \
+     -DACCELERATE_BOUNDS_CHECKS \
      -DACCELERATE_INTERNAL_CHECKS \
      -DACCELERATE_DEBUG \
      -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h \
