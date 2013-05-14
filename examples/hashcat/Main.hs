@@ -70,7 +70,7 @@ main = do
   -- And print a summary of results
   --
   let percent = fromIntegral r / fromIntegral t * 100.0 :: Double
-      persec  = fromIntegral (t * entries) / trec
+      persec  = (fromIntegral t * fromIntegral entries) / trec
   putStrLn $ printf "\nRecovered %d/%d (%.2f %%) digests in %s, %s"
                       r t percent
                       (showFFloatSIBase (Just 2) 1000 trec   "s")
