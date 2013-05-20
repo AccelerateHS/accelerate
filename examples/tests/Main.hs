@@ -20,8 +20,9 @@ import System.Console.CmdArgs   (cmdArgs, whenNormal, getVerbosity, Verbosity(..
 --
 processArgs :: IO (Config, [Test])
 processArgs = do
+  argv     <- takeWhile (/= "--") `fmap` getArgs
   testInfo <- map (title &&& description) `fmap` allTests undefined
-  config   <- cmdArgs $ defaultConfig testInfo
+  config   <- withArgs argv $ cmdArgs $ defaultConfig testInfo
   tests    <- filter (selected config) `fmap` allTests config
   --
   return (config, tests)
