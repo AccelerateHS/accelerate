@@ -374,7 +374,8 @@ Executable accelerate-hashcat
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0
+                        fclabels                >= 1.0,
+                        mwc-random              >= 0.8
 
 
 source-repository head
