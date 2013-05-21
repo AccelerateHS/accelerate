@@ -1,5 +1,7 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -37,6 +39,7 @@ import Data.Array.Accelerate.Pretty                     ( )     -- show instance
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun )
+import Data.Array.Accelerate.Trafo.Sharing              ( Function )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -131,15 +134,10 @@ convertExp
 -- | Convert closed scalar functions, incorporating sharing observation and
 --   optimisation.
 --
-convertFun1 :: (Elt a, Elt b) => (Exp a -> Exp b) -> AST.Fun () (a -> b)
-convertFun1
+convertFun :: Function f r => f -> AST.Fun () r
+convertFun
   = Rewrite.simplify
-  . Sharing.convertFun1 (recoverExpSharing phases)
-
-convertFun2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> AST.Fun () (a -> b -> c)
-convertFun2
-  = Rewrite.simplify
-  . Sharing.convertFun2 (recoverExpSharing phases)
+  . Sharing.convertFun (recoverExpSharing phases)
 
 
 -- Pretty printing
@@ -154,11 +152,8 @@ instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
 instance Elt e => Show (Exp e) where
   show = withSimplStats . show . convertExp
 
-instance (Elt a, Elt b) => Show (Exp a -> Exp b) where
-  show = withSimplStats . show . convertFun1
-
-instance (Elt a, Elt b, Elt c) => Show (Exp a -> Exp b -> Exp c) where
-  show = withSimplStats . show . convertFun2
+instance Function (Exp a -> f) (a -> r) => Show (Exp a -> f) where
+  show = withSimplStats . show . convertFun
 
 
 -- Debugging
