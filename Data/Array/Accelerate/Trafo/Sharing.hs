@@ -1,7 +1,11 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE PatternGuards       #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PatternGuards          #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE UndecidableInstances   #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -23,7 +27,7 @@ module Data.Array.Accelerate.Trafo.Sharing (
 
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAccFun1,
-  convertExp, convertFun1, convertFun2,
+  convertExp, convertFun, Function,
 
 ) where
 
@@ -106,6 +110,9 @@ incLayout :: Layout env env' -> Layout (env, t) env'
 incLayout EmptyLayout         = EmptyLayout
 incLayout (PushLayout lyt ix) = PushLayout (incLayout lyt) (SuccIdx ix)
 
+sizeLayout :: Layout env env' -> Int
+sizeLayout EmptyLayout        = 0
+sizeLayout (PushLayout lyt _) = 1 + sizeLayout lyt
 
 
 -- Conversion from HOAS to de Bruijn computation AST
@@ -311,6 +318,46 @@ mkReplicate = AST.Replicate (sliceIndex slix)
 
 
 
+-- Scalar functions
+-- ----------------
+
+-- | Convert a closed scalar function to de Bruijn form while incorporating
+-- sharing information.
+--
+-- The current design requires all free variables to be bound at the outermost
+-- level --- we have no general apply term, and so lambdas are always outermost.
+-- In higher-order abstract syntax, this represents an n-ary, polyvariadic
+-- function.
+--
+convertFun :: Function f r => Bool => f -> AST.Fun () r
+convertFun shareExp =
+  let config = Config False shareExp False
+  in  convert config EmptyLayout
+
+
+class Function f r | f -> r where
+  -- Convert a HOAS fragment into de Bruijn form, binding variables into the
+  -- typed environment layout.
+  --
+  convert :: Config -> Layout env env -> f -> AST.OpenFun env () r
+
+instance (Elt a, Function f r) => Function (Exp a -> f) (a -> r) where
+  -- Convert binders, one at a time
+  convert config lyt f
+    = let x     = Exp $ Tag (sizeLayout lyt)
+          lyt'  = incLayout lyt `PushLayout` ZeroIdx
+      in
+      Lam $ convert config lyt' (f x)
+
+instance Elt b => Function (Exp b) b where
+  -- Convert expressions
+  convert config lyt b
+    = let lvl    = sizeLayout lyt
+          vars   = [lvl-1, lvl-2 .. 0]
+      in
+      Body $ convertOpenExp config lvl vars lyt b
+
+
 -- Scalar expressions
 -- ------------------
 
@@ -326,44 +373,6 @@ convertExp shareExp exp
   = let config = Config False shareExp False
     in
     convertOpenExp config 0 [] EmptyLayout exp
-
--- | Convert a closed scalar function of one parameter to de Bruijn form while
--- incorporating sharing information
---
-convertFun1
-    :: (Elt a, Elt b)
-    => Bool
-    -> (Exp a -> Exp b)
-    -> AST.Fun () (a -> b)
-convertFun1 shareExp f
-  = let config  = Config False shareExp False
-
-        lvl     = 0
-        x       = Exp (Tag lvl)
-        lyt     = EmptyLayout `PushLayout` ZeroIdx
-        body    = convertOpenExp config (lvl+1) [lvl] lyt (f x)
-    in
-    Lam (Body body)
-
--- | Convert a closed scalar function of two parameters to de Bruijn form while
--- incorporating sharing information
---
-convertFun2
-    :: (Elt a, Elt b, Elt c)
-    => Bool
-    -> (Exp a -> Exp b -> Exp c)
-    -> AST.Fun () (a -> b -> c)
-convertFun2 shareExp f
-  = let config  = Config False shareExp False
-
-        lvl     = 0
-        x       = Exp (Tag (lvl+1))
-        y       = Exp (Tag lvl)
-        lyt     = EmptyLayout `PushLayout` SuccIdx ZeroIdx
-                              `PushLayout` ZeroIdx
-        body    = convertOpenExp config (lvl+2) [lvl, lvl+1] lyt (f x y)
-    in
-    Lam (Lam (Body body))
 
 convertOpenExp
     :: Elt e
@@ -432,7 +441,7 @@ convertSharingExp config lyt alyt env aenv = cvt
           LinearIndex a i       -> AST.LinearIndex (cvtA a) (cvt i)
           Shape a               -> AST.Shape (cvtA a)
           ShapeSize e           -> AST.ShapeSize (cvt e)
-          Foreign ff f e        -> AST.Foreign ff (convertFun1 (recoverExpSharing config) f) (cvt e)
+          Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
 
     cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
