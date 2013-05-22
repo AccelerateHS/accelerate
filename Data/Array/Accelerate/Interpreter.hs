@@ -77,7 +77,7 @@ run = force . evalAcc . Sharing.convertAcc True True True
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
 run1 afun = \a -> exec acc a
   where
-    acc = Sharing.convertAccFun1 True True True afun
+    acc = Sharing.convertAfun True True True afun
 
     exec :: Afun (a -> b) -> a -> b
     exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)

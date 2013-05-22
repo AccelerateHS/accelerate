@@ -19,8 +19,8 @@ module Data.Array.Accelerate.Trafo (
   -- * HOAS -> de Bruijn conversion
   Phase(..), phases,
 
-  convertAcc,     convertAccWith,
-  convertAccFun1, convertAccFun1With,
+  convertAcc,  convertAccWith,
+  convertAfun, convertAfunWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
@@ -35,11 +35,11 @@ import System.IO.Unsafe
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Debug
-import Data.Array.Accelerate.Pretty                     ( )     -- show instances
+import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun )
-import Data.Array.Accelerate.Trafo.Sharing              ( Function )
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
+import Data.Array.Accelerate.Trafo.Sharing              ( Function, Afunction )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -108,14 +108,14 @@ convertAccWith ok acc
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> DelayedAfun (a -> b)
-convertAccFun1 = convertAccFun1With phases
+convertAfun :: Afunction f r => f -> DelayedAfun r
+convertAfun = convertAfunWith phases
 
-convertAccFun1With :: (Arrays a, Arrays b) => Phase -> (Acc a -> Acc b) -> DelayedAfun (a -> b)
-convertAccFun1With ok acc
+convertAfunWith :: Afunction f r => Phase -> f -> DelayedAfun r
+convertAfunWith ok acc
   = Fusion.convertAfun       -- `when` enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAccFun1 (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
+  $ Sharing.convertAfun (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
   where
     when f phase
       | phase ok        = f
@@ -146,8 +146,8 @@ convertFun
 instance Arrays arrs => Show (Acc arrs) where
   show = withSimplStats . show . convertAcc
 
-instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
-  show = withSimplStats . show . convertAccFun1
+instance Afunction (Acc a -> f) (a -> r) => Show (Acc a -> f) where
+  show = withSimplStats . show . convertAfun
 
 instance Elt e => Show (Exp e) where
   show = withSimplStats . show . convertExp
