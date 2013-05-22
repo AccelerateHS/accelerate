@@ -1,4 +1,4 @@
-AC_INIT([accelerate], [0.13.0.0], [accelerate-haskell@googlegroups.com])
+AC_INIT([accelerate], [0.14.0.0], [accelerate-haskell@googlegroups.com])
 AC_CONFIG_SRCDIR([Data/Array/Accelerate.hs])
 AC_CONFIG_FILES([accelerate.buildinfo])
 
