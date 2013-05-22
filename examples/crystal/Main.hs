@@ -9,6 +9,7 @@
 module Main where
 
 import Config
+import Monitoring
 import ParseArgs
 
 import Data.Word
@@ -168,7 +169,9 @@ frame render size zoom time = G.scale zoom' zoom' pic
 -- Main -----------------------------------------------------------------------
 main :: IO ()
 main
-  = do  argv                    <- getArgs
+  = do
+        beginMonitoring
+        argv                    <- getArgs
         (config, crit, nops)    <- parseArgs optHelp optBackend options defaults header footer argv
         let size        = get optSize config
             zoom        = get optZoom config

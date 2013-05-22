@@ -29,6 +29,10 @@ Flag gui
                         enabled, the application always runs in benchmark mode.
   Default:              True
 
+Flag ekg
+  Description:          Enable EKG remote monitoring server at <http://localhost:8000>
+  Default:              True
+
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
@@ -47,7 +51,7 @@ Executable accelerate-nofib
   Main-is:              Main.hs
   hs-source-dirs:       examples/nofib lib
 
-  other-modules:        Config ParseArgs
+  other-modules:        Config ParseArgs Monitoring
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
@@ -159,7 +163,7 @@ Executable accelerate-examples
 Executable accelerate-crystal
   hs-source-dirs:       examples/crystal lib
   Main-is:              Main.hs
-  other-modules:        Config ParseArgs
+  other-modules:        Config ParseArgs Monitoring
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
@@ -175,6 +179,11 @@ Executable accelerate-crystal
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   build-depends:        accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
@@ -188,7 +197,7 @@ Executable accelerate-crystal
 Executable accelerate-canny
   hs-source-dirs:       examples/canny/src-acc lib
   Main-is:              Main.hs
-  other-modules:        Config ParseArgs Canny Wildfire
+  other-modules:        Config ParseArgs Canny Wildfire Monitoring
   ghc-options:          -Wall -threaded -Odph -fllvm -optlo-O3
 
   if impl(ghc >= 7.0)
@@ -201,6 +210,11 @@ Executable accelerate-canny
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
+
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
 
   build-depends:        accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
@@ -218,7 +232,7 @@ Executable accelerate-canny
 Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot lib
   Main-is:              Main.hs
-  other-modules:        Config World Mandel ParseArgs
+  other-modules:        Config World Mandel ParseArgs Monitoring
   ghc-options:          -O2 -Wall -threaded
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
@@ -234,6 +248,11 @@ Executable accelerate-mandelbrot
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl       == 0.1.*
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   build-depends:        accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
@@ -247,8 +266,7 @@ Executable accelerate-mandelbrot
 Executable accelerate-fluid
   Main-is:              Main.hs
   hs-source-dirs:       examples/fluid/src-acc lib
-  other-modules:        Config
-                        ParseArgs
+  other-modules:        Config ParseArgs Monitoring
                         Event
                         Fluid
                         Type
@@ -265,6 +283,11 @@ Executable accelerate-fluid
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.14
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   Build-depends:        accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
                         base                    == 4.*,
@@ -280,8 +303,7 @@ Executable accelerate-fluid
 Executable accelerate-nbody
   Main-is:              Main.hs
   hs-source-dirs:       examples/n-body lib
-  other-modules:        Config
-                        ParseArgs
+  other-modules:        Config ParseArgs Monitoring
                         Common.Body
                         Common.Dump
                         Common.Tree
@@ -307,6 +329,11 @@ Executable accelerate-nbody
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.14
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   Build-depends:        accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
@@ -320,8 +347,7 @@ Executable accelerate-nbody
 Executable accelerate-smoothlife
   Main-is:              Main.hs
   hs-source-dirs:       examples/smoothlife lib
-  other-modules:        Config
-                        ParseArgs
+  other-modules:        Config ParseArgs Monitoring
                         SmoothLife
                         Gloss.Draw
                         Gloss.Event
@@ -340,6 +366,11 @@ Executable accelerate-smoothlife
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.14
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   Build-depends:        accelerate              >= 0.14,
                         accelerate-fft          >= 0.14,
                         base                    == 4.*,
@@ -354,8 +385,7 @@ Executable accelerate-smoothlife
 Executable accelerate-hashcat
   Main-is:              Main.hs
   hs-source-dirs:       examples/hashcat lib
-  other-modules:        Config
-                        ParseArgs
+  other-modules:        Config ParseArgs Monitoring
                         Digest
                         MD5
                         Util
@@ -367,6 +397,11 @@ Executable accelerate-hashcat
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.14
+
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
 
   Build-depends:        accelerate              >= 0.14,
                         base                    == 4.*,

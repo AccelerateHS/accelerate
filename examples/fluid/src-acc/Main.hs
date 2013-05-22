@@ -8,6 +8,7 @@
 module Main where
 
 import Config
+import Monitoring
 import ParseArgs
 import World
 import Fluid
@@ -24,6 +25,7 @@ import Data.Array.Accelerate                    as A
 
 main :: IO ()
 main = do
+  beginMonitoring
   argv                  <- getArgs
   (c,crit,noms)         <- parseArgs optHelp optBackend options defaults header footer argv
   opt                   <- initialiseConfig c

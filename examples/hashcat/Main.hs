@@ -1,9 +1,10 @@
 
 module Main where
 
-import MD5
-import Digest
 import Config
+import Digest
+import MD5
+import Monitoring
 import ParseArgs
 import Util
 
@@ -21,6 +22,7 @@ import qualified Data.ByteString.Lazy.Char8     as L
 
 main :: IO ()
 main = do
+  beginMonitoring
   argv                  <- getArgs
   (conf, _cconf, files) <- parseArgs configHelp configBackend options defaults header footer argv
 

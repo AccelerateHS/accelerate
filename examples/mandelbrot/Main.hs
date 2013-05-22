@@ -6,6 +6,7 @@
 
 import World
 import Config
+import Monitoring
 import ParseArgs
 
 import Data.Label
@@ -43,6 +44,7 @@ makePicture world = pic
 main :: IO ()
 main
   = do
+        beginMonitoring
         argv                    <- getArgs
         (conf, cconf, rest)     <- parseArgs optHelp optBackend options defaults header footer argv
 

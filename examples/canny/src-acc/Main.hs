@@ -2,8 +2,9 @@
 
 import Canny
 import Config
-import Wildfire
+import Monitoring
 import ParseArgs
+import Wildfire
 
 import Prelude                                          as P
 import Data.Label
@@ -21,7 +22,9 @@ import qualified Data.Array.Repa.Repr.Unboxed           as R
 
 main :: IO ()
 main
-  = do  argv                    <- getArgs
+  = do
+        beginMonitoring
+        argv                    <- getArgs
         (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
         (fileIn, fileOut)       <- case nops of
           (i:o:_) -> return (i,o)

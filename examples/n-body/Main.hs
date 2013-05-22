@@ -4,6 +4,7 @@
 
 -- friends
 import Config
+import Monitoring
 import ParseArgs
 import Common.Body
 import Common.World
@@ -27,7 +28,8 @@ import Graphics.Gloss.Interface.Pure.Game
 
 main :: IO ()
 main
-  = do  argv                    <- getArgs
+  = do  beginMonitoring
+        argv                    <- getArgs
         (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let solver      = case get configSolver conf of

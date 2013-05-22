@@ -5,6 +5,7 @@
 
 -- friends
 import Config
+import Monitoring
 import ParseArgs
 import SmoothLife
 import Gloss.Draw
@@ -23,7 +24,8 @@ import Criterion.Main                           ( defaultMainWith, bench, whnf )
 
 main :: IO ()
 main
-  = do  argv                    <- getArgs
+  = do  beginMonitoring
+        argv                    <- getArgs
         (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let -- visualisation configuration
