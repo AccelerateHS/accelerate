@@ -26,7 +26,7 @@
 module Data.Array.Accelerate.Trafo.Sharing (
 
   -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAccFun1,
+  convertAcc, convertAfun, Afunction,
   convertExp, convertFun, Function,
 
 ) where
@@ -136,26 +136,35 @@ convertAcc shareAcc shareExp floatAcc acc
     in
     convertOpenAcc config 0 [] EmptyLayout acc
 
--- | Convert a unary function over array computations
---
-convertAccFun1
-    :: forall a b. (Arrays a, Arrays b)
-    => Bool             -- ^ recover sharing of array computations ?
-    -> Bool             -- ^ recover sharing of scalar expressions ?
-    -> Bool             -- ^ always float array computations out of expressions?
-    -> (Acc a -> Acc b)
-    -> AST.Afun (a -> b)
-convertAccFun1 shareAcc shareExp floatAcc f
-  = let config  = Config shareAcc shareExp (shareAcc && floatAcc)
 
-        lvl     = 0
-        a       = Atag lvl
-        alyt    = EmptyLayout
-                  `PushLayout`
-                  (ZeroIdx :: Idx ((), a) a)
-        openF   = convertOpenAcc config (lvl + 1) [lvl] alyt (f (Acc a))
-    in
-    Alam (Abody openF)
+-- | Convert a closed function over array computations, while incorporating
+-- sharing information.
+--
+convertAfun :: Afunction f r => Bool -> Bool -> Bool -> f -> AST.Afun r
+convertAfun shareAcc shareExp floatAcc =
+  let config = Config shareAcc shareExp (shareAcc && floatAcc)
+  in  aconvert config EmptyLayout
+
+class Afunction f r | f -> r where
+  -- Convert a HOAS fragment into de Bruijn form, binding variables into the
+  -- typed environment layout.
+  --
+  aconvert :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv r
+
+instance (Arrays a, Afunction f r) => Afunction (Acc a -> f) (a -> r) where
+  aconvert config alyt f
+    = let a     = Acc $ Atag (sizeLayout alyt)
+          alyt' = incLayout alyt `PushLayout` ZeroIdx
+      in
+      Alam $ aconvert config alyt' (f a)
+
+instance Arrays b => Afunction (Acc b) b where
+  aconvert config alyt f
+    = let lvl    = sizeLayout alyt
+          vars   = [lvl-1, lvl-2 .. 0]
+      in
+      Abody $ convertOpenAcc config lvl vars alyt f
+
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
 -- information.
@@ -229,8 +238,8 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
         -> let a        = recoverAccSharing config
                e        = recoverExpSharing config
                f        = floatOutAcc config
-               boundAcc = convertAccFun1 a e f afun1 `AST.Apply` convertSharingAcc config alyt aenv acc
-               bodyAcc  = convertAccFun1 a e f afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
+               boundAcc = convertAfun a e f afun1 `AST.Apply` convertSharingAcc config alyt aenv acc
+               bodyAcc  = convertAfun a e f afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
@@ -239,7 +248,7 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
                e = recoverExpSharing config
                f = floatOutAcc config
            in
-           AST.Aforeign ff (convertAccFun1 a e f afun) (cvtA acc)
+           AST.Aforeign ff (convertAfun a e f afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Atuple arrs                 -> AST.Atuple (convertSharingAtuple config alyt aenv arrs)
@@ -351,6 +360,11 @@ instance (Elt a, Function f r) => Function (Exp a -> f) (a -> r) where
 
 instance Elt b => Function (Exp b) b where
   -- Convert expressions
+  --
+  -- NOTE: Due to the way we do the conversion, adding one binder at a time
+  -- left-to-right, the bound variables ('vars') will have de Bruijn index
+  -- _zero_ as the outermost binding, and thus must go onto the end of the list.
+  --
   convert config lyt b
     = let lvl    = sizeLayout lyt
           vars   = [lvl-1, lvl-2 .. 0]
