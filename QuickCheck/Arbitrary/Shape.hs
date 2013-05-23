@@ -16,7 +16,7 @@ instance Arbitrary DIM0 where
 
 instance Arbitrary DIM1 where
   arbitrary     = do
-    n   <- sized $ \n -> choose (0,n)
+    n   <- sized $ \n -> choose (0, 2*n)
     return (Z :. n)
 
   shrink (Z :. n) = [ Z :. n' | n' <- shrink n ]
