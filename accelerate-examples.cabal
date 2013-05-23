@@ -79,6 +79,11 @@ Executable accelerate-nofib
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
     build-depends:      accelerate-opencl               == 0.1.*
 
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                             >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
   build-depends:        accelerate                      >= 0.14,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.0,
