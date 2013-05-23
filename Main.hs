@@ -7,6 +7,7 @@ import System.Exit
 import System.Environment
 
 import Config
+import Monitoring
 import Test.IndexSpace
 import Test.Mapping
 import Test.PrefixSum
@@ -17,6 +18,11 @@ import Test.Stencil
 
 main :: IO ()
 main = do
+
+  -- Kick off EKG monitoring. Perhaps not particularly useful since we spend a
+  -- lot of time just generating random data, etc.
+  --
+  beginMonitoring
 
   -- process command line args, and print a brief usage message
   --
