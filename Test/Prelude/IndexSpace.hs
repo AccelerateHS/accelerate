@@ -1,7 +1,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.IndexSpace where
+module Test.Prelude.IndexSpace (
+
+  test_permute,
+  test_backpermute
+
+) where
 
 import Prelude                                          as P
 import Data.Label

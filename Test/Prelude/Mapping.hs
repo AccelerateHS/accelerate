@@ -3,7 +3,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.Mapping where
+module Test.Prelude.Mapping (
+
+  test_map,
+  test_zipWith,
+
+) where
 
 import Prelude                                                  as P
 import Data.Label

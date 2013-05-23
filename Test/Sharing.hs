@@ -1,7 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Sharing where
+module Test.Sharing (
+
+  test_sharing
+
+) where
 
 import Config
 

@@ -2,7 +2,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.Reduction where
+module Test.Prelude.Reduction (
+
+  test_fold,
+  test_foldAll,
+  test_foldSeg,
+
+) where
 
 import Prelude                                          as P
 import Data.List

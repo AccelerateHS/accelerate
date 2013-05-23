@@ -2,7 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Prelude.PrefixSum where
+module Test.Prelude.PrefixSum (
+
+  test_prefixsum,
+
+) where
 
 import Prelude                                          as P
 import Test.QuickCheck
