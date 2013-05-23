@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Reduction where
+module Test.Prelude.Reduction where
 
 import Prelude                                          as P
 import Data.List
