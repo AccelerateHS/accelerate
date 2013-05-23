@@ -12,7 +12,6 @@ import Test.Prelude.Replicate
 import Test.Prelude.Stencil
 
 
-
 test_prelude :: Config -> Test
 test_prelude conf =
   testGroup "prelude"
