@@ -205,7 +205,7 @@ module Data.Array.Accelerate (
   (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*), L.max, L.min,
 
   -- *** Numeric functions
-  L.truncate, L.round, L.floor, L.ceiling,
+  L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,
 
   -- *** Bitwise functions
   L.bit, L.setBit, L.clearBit, L.complementBit, L.testBit,

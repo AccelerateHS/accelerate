@@ -112,6 +112,7 @@ module Data.Array.Accelerate.Language (
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
   truncate, round, floor, ceiling,
+  even, odd,
 
   -- ** Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
@@ -127,14 +128,11 @@ module Data.Array.Accelerate.Language (
 
 ) where
 
--- avoid clashes with Prelude functions
-import Prelude  hiding (
-  (!!), replicate, zip, unzip, map, scanl, scanl1, scanr, scanr1, zipWith,
-  filter, max, min, not, fst, snd, curry, uncurry, null, truncate, round, floor,
-  ceiling, fromIntegral)
-
 -- standard libraries
-import Data.Bits (Bits((.&.), (.|.), xor, complement))
+import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, Float, Double, (.), ($), id, error )
+import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
+import qualified Prelude                                as P
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -1208,7 +1206,7 @@ instance (Elt t, IsNum t) => Num (Exp t) where
   negate      = mkNeg
   abs         = mkAbs
   signum      = mkSig
-  fromInteger = constant . fromInteger
+  fromInteger = constant . P.fromInteger
 
 instance (Elt t, IsNum t) => Real (Exp t)
   -- FIXME: Why did we include this class?  We won't need `toRational' until
@@ -1243,7 +1241,7 @@ instance (Elt t, IsFloating t) => Floating (Exp t) where
 instance (Elt t, IsFloating t) => Fractional (Exp t) where
   (/)          = mkFDiv
   recip        = mkRecip
-  fromRational = constant . fromRational
+  fromRational = constant . P.fromRational
 
 instance (Elt t, IsFloating t) => RealFrac (Exp t)
   -- FIXME: add other ops
@@ -1324,6 +1322,16 @@ floor = mkFloor
 --
 ceiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
 ceiling = mkCeiling
+
+-- | return if the integer is even
+--
+even :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
+even x = x .&. 1 ==* 0
+
+-- | return if the integer is odd
+--
+odd :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
+odd x = x .&. 1 ==* 1
 
 
 -- Non-overloaded standard functions, where we need other signatures
