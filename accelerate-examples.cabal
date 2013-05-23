@@ -62,6 +62,7 @@ Executable accelerate-nofib
                         Test.Prelude.Reduction
                         Test.Prelude.Replicate
                         Test.Prelude.Stencil
+                        Test.Sharing
 
   ghc-options:          -Wall -O2
                         -threaded
