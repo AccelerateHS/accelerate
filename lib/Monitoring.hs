@@ -3,9 +3,8 @@
 
 module Monitoring where
 
-import Control.Monad
-
 #ifdef ACCELERATE_ENABLE_EKG
+import Control.Monad
 import System.Remote.Monitoring
 #endif
 
