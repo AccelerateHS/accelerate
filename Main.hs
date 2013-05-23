@@ -7,7 +7,6 @@ import System.Exit
 import System.Environment
 
 import Config
-import ParseArgs
 import Test.IndexSpace
 import Test.Mapping
 import Test.PrefixSum

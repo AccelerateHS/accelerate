@@ -2,12 +2,19 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE ViewPatterns    #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 module Config where
 
 import ParseArgs
 import Data.Label
 import Data.Maybe
+import Data.Monoid
+import System.Exit
+
+import qualified Test.Framework                         as TestFramework
+import qualified Criterion.Main                         as Criterion
+import qualified Criterion.Config                       as Criterion
 
 
 data Config
@@ -124,4 +131,54 @@ header =
 
 footer :: [String]
 footer = []
+
+
+-- | Same as 'parseArgs', but also return options for test-framework.
+--
+-- Since Criterion and test-framework both bail if they encounter unrecognised
+-- options, we run getOpt' ourselves. This means error messages might be a bit
+-- different.
+--
+-- We split this out of the common ParseArgs infrastructure so we don't add an
+-- unnecessary dependency on test-framework to all the other example programs.
+--
+parseArgs' :: (config :-> Bool)                  -- ^ access a help flag from the options structure
+           -> (config :-> Backend)               -- ^ access the chosen backend from the options structure
+           -> [OptDescr (config -> config)]      -- ^ the option descriptions
+           -> config                             -- ^ default option set
+           -> [String]                           -- ^ header text
+           -> [String]                           -- ^ footer text
+           -> [String]                           -- ^ command line arguments
+           -> IO (config, Criterion.Config, TestFramework.RunnerOptions, [String])
+parseArgs' help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
+  let
+      helpMsg err = concat err
+        ++ usageInfo (unlines header)                    options
+        ++ usageInfo "\nGeneric criterion options:"      Criterion.defaultOptions
+        ++ usageInfo "\nGeneric test-framework options:" TestFramework.optionsDescription
+
+  in do
+
+  -- In the first round process options for the main program. Any non-options
+  -- will be split out here so we can ignore them later. Unrecognised options
+  -- get passed to criterion and test-framework.
+  --
+  (conf,non,u)  <- case getOpt' Permute options argv of
+    (opts,n,u,[]) -> case foldr id config opts of
+      conf | False <- get help conf
+        -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
+      _ -> putStrLn (helpMsg [])                             >> exitSuccess
+    --
+    (_,_,_,err) -> error (helpMsg err)
+
+  -- Test Framework
+  (tfconf, u')  <- case getOpt' Permute TestFramework.optionsDescription u of
+    (oas,_,u',[]) | Just os <- sequence oas
+                -> return (mconcat os, u')
+    (_,_,_,err) -> error (helpMsg err)
+
+  -- Criterion
+  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u'
+
+  return (conf, cconf, tfconf, non)
 
