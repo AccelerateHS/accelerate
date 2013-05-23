@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
-module Test.Stencil where
+module Test.Prelude.Stencil where
 
 import Prelude                                          as P
 import Data.Label

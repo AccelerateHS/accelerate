@@ -19,6 +19,7 @@ import qualified Criterion.Main                         as Criterion
 import qualified Criterion.Config                       as Criterion
 
 import Data.Array.Accelerate                            ( Arrays, Acc )
+import qualified Data.Array.Accelerate                  as A
 import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
@@ -39,6 +40,9 @@ run1 Interpreter f = Interp.run1 f
 #ifdef ACCELERATE_CUDA_BACKEND
 run1 CUDA        f = CUDA.run1 f
 #endif
+
+run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
+run2 backend f x y = run1 backend (A.uncurry f) (x,y)
 
 
 -- | The set of backends available to execute the program. The example programs

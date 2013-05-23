@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Mapping where
+module Test.Prelude.Mapping where
 
 import Prelude                                                  as P
 import Data.Label
@@ -40,11 +40,11 @@ test_map opt = testGroup "map" $ catMaybes
   ]
   where
     backend        = get configBackend opt
-    test_square xs = run backend (A.map (\x -> x*x) (use xs)) .==. mapRef (\x -> x*x) xs
-    test_abs    xs = run backend (A.map abs (use xs))         .==. mapRef abs xs
+    test_square xs = run1 backend (A.map (\x -> x*x)) xs .==. mapRef (\x -> x*x) xs
+    test_abs    xs = run1 backend (A.map abs) xs         .==. mapRef abs xs
     test_plus z xs =
       let z' = unit (constant z)
-      in  run backend (A.map (+ the z') (use xs)) .==. mapRef (+ z) xs
+      in  run1 backend (A.map (+ the z')) xs .==. mapRef (+ z) xs
 
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
             => (Config :-> Bool)
@@ -81,9 +81,9 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
   ]
   where
     backend         = get configBackend opt
-    test_zip  xs ys = run backend (A.zip             (use xs) (use ys)) .==. zipWithRef (,) xs ys
-    test_plus xs ys = run backend (A.zipWith (+)     (use xs) (use ys)) .==. zipWithRef (+) xs ys
-    test_min  xs ys = run backend (A.zipWith A.min (use xs) (use ys)) .==. zipWithRef P.min xs ys
+    test_zip  xs ys = run2 backend A.zip             xs ys .==. zipWithRef (,) xs ys
+    test_plus xs ys = run2 backend (A.zipWith (+))   xs ys .==. zipWithRef (+) xs ys
+    test_min  xs ys = run2 backend (A.zipWith A.min) xs ys .==. zipWithRef P.min xs ys
 
     testElt :: forall a. (Elt a, IsNum a, Ord a, Similar a, Arbitrary a)
             => (Config :-> Bool)

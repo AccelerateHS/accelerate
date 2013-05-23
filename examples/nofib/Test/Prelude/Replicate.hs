@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Replicate where
+module Test.Prelude.Replicate where
 
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A

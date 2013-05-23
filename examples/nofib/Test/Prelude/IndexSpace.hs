@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.IndexSpace where
+module Test.Prelude.IndexSpace where
 
 import Prelude                                          as P
 import Data.Label

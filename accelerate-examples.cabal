@@ -55,12 +55,13 @@ Executable accelerate-nofib
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
-                        Test.IndexSpace
-                        Test.Mapping
-                        Test.PrefixSum
-                        Test.Reduction
-                        Test.Replicate
-                        Test.Stencil
+                        Test.Prelude
+                        Test.Prelude.IndexSpace
+                        Test.Prelude.Mapping
+                        Test.Prelude.PrefixSum
+                        Test.Prelude.Reduction
+                        Test.Prelude.Replicate
+                        Test.Prelude.Stencil
 
   ghc-options:          -Wall -O2
                         -threaded
