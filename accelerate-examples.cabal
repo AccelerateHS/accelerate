@@ -93,6 +93,7 @@ Executable accelerate-nofib
     ghc-options:        -with-rtsopts=-T
 
   build-depends:        accelerate                      >= 0.14,
+                        containers                      >= 0.5,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,

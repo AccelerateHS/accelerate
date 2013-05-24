@@ -12,23 +12,17 @@ import Test.QuickCheck
 import System.Random                                    ( Random )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2 )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.Set                               as Set
+
 
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM0 e) where
-  arbitrary = do
-    e           <- arbitrary
-    return      $! Sugar.fromList Z [e]
-  --
-  shrink arr =
-    [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
+  arbitrary  = arbitraryArray Z
+  shrink arr = [ Sugar.fromList Z [x] | x <- shrink (arr ! Z) ]
 
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
-  arbitrary = do
-    sh          <- sized arbitraryShape
-    adata       <- vectorOf (Sugar.size sh) arbitrary
-    return      $! Sugar.fromList sh adata
-  --
+  arbitrary  = arbitraryArray =<< sized arbitraryShape
   shrink arr =
     let (Z :. n)        = Sugar.shape arr
         indices         = [ map (Z:.) (nub sz) | sz <- shrink [0 .. n-1] ]
@@ -37,11 +31,7 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM1 e) where
 
 
 instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
-  arbitrary = do
-    sh          <- sized arbitraryShape
-    adata       <- vectorOf (Sugar.size sh) arbitrary
-    return      $! Sugar.fromList sh adata
-  --
+  arbitrary  = arbitraryArray =<< sized arbitraryShape
   shrink arr =
     let (Z :. width :. height)   = Sugar.shape arr
     in
@@ -51,33 +41,65 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
     ]
 
 
+-- Generate an arbitrary array of the given shape using the default element
+-- generator
+--
 arbitraryArray :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen (Array sh e)
-arbitraryArray sh = do
-  adata         <- vectorOf (Sugar.size sh) arbitrary
-  return        $! Sugar.fromList sh adata
+arbitraryArray sh = arbitraryArrayOf sh arbitrary
 
+-- Generate an array of the given shape using the supplied element generator
+-- function.
+--
+-- TODO: generate the array directly without using fromList?
+--
 arbitraryArrayOf :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen e -> Gen (Array sh e)
 arbitraryArrayOf sh gen = do
   adata         <- vectorOf (Sugar.size sh) gen
   return        $! Sugar.fromList sh adata
 
+
+-- Generate an array where the outermost dimension satisfies the given segmented
+-- array descriptor.
+--
 arbitrarySegmentedArray
     :: (Integral i, Shape sh, Elt e, Arbitrary sh, Arbitrary e)
-    => Segments i -> Gen (Array (sh :. Int) e)
+    => Segments i
+    -> Gen (Array (sh :. Int) e)
 arbitrarySegmentedArray segs = do
   let sz        =  fromIntegral . sum $ Sugar.toList segs
   sh            <- sized $ \n -> arbitraryShape (n `div` 2)
-  adata         <- vectorOf (Sugar.size sh * sz) arbitrary
-  return        $! Sugar.fromList (sh :. sz) adata
+  arbitraryArray (sh :. sz)
 
 
+-- Generate a segment descriptor. Both the array and individual segments might
+-- be empty.
+--
 arbitrarySegments :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
-arbitrarySegments = do
-  seg    <- listOf (sized $ \n -> choose (0, fromIntegral n))
-  return $! Sugar.fromList (Z :. length seg) seg
+arbitrarySegments =
+  sized $ \n -> do
+    k <- choose (0,n)
+    arbitraryArrayOf (Z:.k) (choose (0, fromIntegral n))
 
+-- Generate a possibly empty segment descriptor, where each segment is non-empty
+--
 arbitrarySegments1 :: (Elt i, Integral i, Arbitrary i, Random i) => Gen (Segments i)
-arbitrarySegments1 = do
-  seg    <- listOf (sized $ \n -> choose (1, fromIntegral n))
-  return $! Sugar.fromList (Z :. length seg) seg
+arbitrarySegments1 =
+  sized $ \n -> do
+    k <- choose (0,n)
+    arbitraryArrayOf (Z:.k) (choose (1, 1 `max` fromIntegral n))
+
+
+-- Generate an vector approximately this many elements in it (within 10%). Every
+-- element in the array will be unique.
+--
+arbitraryUniqueVectorOf :: (Elt e, Arbitrary e, Ord e) => Int -> Gen e -> Gen (Array DIM1 e)
+arbitraryUniqueVectorOf target gen =
+  let
+      eps       = 0.1 :: Double
+      wiggle    = round $ fromIntegral target * eps
+      minsize   = target - wiggle
+      maxsize   = target + wiggle
+  in do
+  set    <- fmap Set.fromList (vectorOf maxsize gen) `suchThat` \set -> Set.size set >= minsize
+  return $! Sugar.fromList (Z :. Set.size set) (Set.toList set)
 
