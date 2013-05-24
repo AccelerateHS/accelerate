@@ -50,13 +50,31 @@ arbitraryArray sh = arbitraryArrayOf sh arbitrary
 -- Generate an array of the given shape using the supplied element generator
 -- function.
 --
--- TODO: generate the array directly without using fromList?
---
 arbitraryArrayOf :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen e -> Gen (Array sh e)
-arbitraryArrayOf sh gen = do
-  adata         <- vectorOf (Sugar.size sh) gen
-  return        $! Sugar.fromList sh adata
+arbitraryArrayOf sh gen = Sugar.fromList sh `fmap` vectorOf (Sugar.size sh) gen
 
+{--
+ -- A version that does not use fromList. It does not gain us anything while
+ -- being much more complex in implementation.
+ --
+arbitraryArrayOf :: (Shape sh, Elt e, Arbitrary e) => sh -> Gen e -> Gen (Array sh e)
+arbitraryArrayOf sh (MkGen gen)
+  = MkGen
+  $ \g k -> let !n          = Sugar.size sh
+                (adata, _)  = runArrayData $ do
+                                arr <- newArrayData n
+                                let go _  !i | i >= n = return ()
+                                    go !r !i          =
+                                      let (r1,r2) = split r
+                                          v       = gen r1 k
+                                      in
+                                      unsafeWriteArrayData arr i (Sugar.fromElt v) >> go r2 (i+1)
+                                --
+                                go g 0
+                                return (arr, undefined)
+    in
+    adata `seq` Sugar.Array (Sugar.fromElt sh) adata
+--}
 
 -- Generate an array where the outermost dimension satisfies the given segmented
 -- array descriptor.
