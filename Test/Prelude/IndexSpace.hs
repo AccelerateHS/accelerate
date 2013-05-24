@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
@@ -23,7 +24,7 @@ import QuickCheck.Arbitrary.Array
 
 import Data.Array.Unboxed                               as IArray hiding ( Array )
 import Data.Array.Accelerate                            as A
-import Data.Array.Accelerate.Array.Sugar                ( newArray )
+import Data.Array.Accelerate.Array.Sugar                ( newArray, dim )
 
 
 --
@@ -44,21 +45,49 @@ test_permute opt = testGroup "permute" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    backend = get configBackend opt
+
+    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
-          [ testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
+          [
+            test_fill (undefined :: e)
+          , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
-    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
-          [ testProperty "histogram" (test_histogram A.floor P.floor :: Vector e -> Property)
+          [
+            test_fill (undefined :: e)
+          , testProperty "histogram" (test_histogram A.floor P.floor :: Vector e -> Property)
           ]
 
-    backend = get configBackend opt
+    -- Test is permutation works by just copying elements directly from one
+    -- array to the other. Does not attempt to use elements from the defaults
+    -- array. Additionally, works for any dimension. (c.f. Issue #93)
+    --
+    test_fill :: forall e. (Elt e, IsNum e, Arbitrary e, Similar e) => e -> Test
+    test_fill _ = testGroup "fill"
+      [ -- testDim dim0         -- Accelerate issue #87
+        testDim dim1
+      , testDim dim2
+      ]
+      where
+        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
+        testDim sh = testProperty ("DIM" ++ show (dim sh)) (push_fill :: Array sh e -> Property)
+
+        push_fill xs =
+          let xs'   = use xs
+              zeros = A.fill (A.shape xs') (constant 0)
+          in
+          run backend (permute const zeros id xs') .==. xs
+
+    -- Test if the combining operation for forward permutation works, by
+    -- building a histogram. Often tricky for parallel backends.
+    --
     test_histogram f g xs =
       sized $ \n -> run backend (histogramAcc n f xs) .==. histogramRef n g xs
 
