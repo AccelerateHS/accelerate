@@ -11,7 +11,9 @@ import System.Remote.Monitoring
 
 beginMonitoring :: IO ()
 #ifdef ACCELERATE_ENABLE_EKG
-beginMonitoring = void $ forkServer "localhost" 8000
+beginMonitoring = do
+  putStrLn "EKG monitor started at: http://localhost:8000"
+  void $ forkServer "localhost" 8000
 #else
 beginMonitoring = return ()
 #endif
