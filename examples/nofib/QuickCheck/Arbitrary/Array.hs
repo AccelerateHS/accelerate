@@ -89,17 +89,13 @@ arbitrarySegments1 =
     arbitraryArrayOf (Z:.k) (choose (1, 1 `max` fromIntegral n))
 
 
--- Generate an vector approximately this many elements in it (within 10%). Every
--- element in the array will be unique.
+-- Generate an vector where every element in the array is unique. The maximum
+-- size is based on the current 'sized' parameter.
 --
-arbitraryUniqueVectorOf :: (Elt e, Arbitrary e, Ord e) => Int -> Gen e -> Gen (Array DIM1 e)
-arbitraryUniqueVectorOf target gen =
-  let
-      eps       = 0.1 :: Double
-      wiggle    = round $ fromIntegral target * eps
-      minsize   = target - wiggle
-      maxsize   = target + wiggle
-  in do
-  set    <- fmap Set.fromList (vectorOf maxsize gen) `suchThat` \set -> Set.size set >= minsize
-  return $! Sugar.fromList (Z :. Set.size set) (Set.toList set)
+arbitraryUniqueVectorOf :: (Elt e, Arbitrary e, Ord e) => Gen e -> Gen (Array DIM1 e)
+arbitraryUniqueVectorOf gen =
+  sized $ \n -> do
+    set <- fmap Set.fromList (vectorOf n gen)
+    k   <- choose (0, Set.size set)
+    return $! Sugar.fromList (Z :. k) (Set.toList set)
 

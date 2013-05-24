@@ -13,6 +13,7 @@ import Prelude                                          as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
+import Control.Monad
 import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
@@ -22,9 +23,12 @@ import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
 
-import Data.Array.Unboxed                               as IArray hiding ( Array )
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Array.Sugar                ( newArray, dim )
+
+import Data.Array.ST                                    ( runSTArray )
+import qualified Data.Array.Unboxed                     as IArray
+import qualified Data.Array.MArray                      as M
 
 
 --
@@ -53,6 +57,8 @@ test_permute opt = testGroup "permute" $ catMaybes
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
           [
             test_fill (undefined :: e)
+          , testProperty "scatter"   (test_scatter :: e -> Property)
+          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
@@ -62,6 +68,8 @@ test_permute opt = testGroup "permute" $ catMaybes
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
           [
             test_fill (undefined :: e)
+          , testProperty "scatter"   (test_scatter :: e -> Property)
+          , testProperty "scatterIf" (test_scatterIf :: e -> Property)
           , testProperty "histogram" (test_histogram A.floor P.floor :: Vector e -> Property)
           ]
 
@@ -100,10 +108,33 @@ test_permute opt = testGroup "permute" $ catMaybes
       permute (+) zeros (\ix -> index1 $ f (xs' A.! ix) `mod` the n') ones
 
     histogramRef n f xs =
-      let arr :: UArray Int Int32
-          arr =  accumArray (+) 0 (0, n-1) [ (f e `mod` n, 1) | e <- toList xs ]
+      let arr :: IArray.UArray Int Int32
+          arr =  IArray.accumArray (+) 0 (0, n-1) [ (f e `mod` n, 1) | e <- toList xs ]
       in
       fromIArray arr
+
+    -- Test for scattering functions
+    --
+    test_scatter :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
+    test_scatter _ =
+      forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
+      forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
+      forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
+      forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
+        toList (run backend $ A.scatter (use mapV) (use defaultV) (use inputV))
+        .==.
+        IArray.elems (scatterRef (toIArray mapV) (toIArray defaultV) (toIArray inputV))
+
+    test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
+    test_scatterIf _ =
+      forAll (sized $ \n -> choose (0,n))               $ \k -> let m = 2*k in
+      forAll (arbitraryArray (Z:.m+1))                  $ \defaultV ->
+      forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
+      forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
+      forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
+        toList (run backend $ A.scatterIf (use mapV) (use maskV) A.even (use defaultV) (use inputV))
+        .==.
+        IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
 
 
 --
@@ -186,32 +217,63 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
     test_gather xs =
       let n     = arraySize (arrayShape xs)
           n'    = 0 `P.max` (n-1)
-      in  forAll arbitrary                              $ \sh' ->
-          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
-            toList (run backend (A.gather (use mapv) (use xs))) .==. [ xs `indexArray` (Z:.i) | i <- toList mapv ]
+      in
+      forAll arbitrary                              $ \sh' ->
+      forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+        toList (run backend (A.gather (use mapv) (use xs)))
+        .==.
+        [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
     test_gatherIf xs =
       let n             = arraySize (arrayShape xs)
           n'            = 0 `P.max` (n-1)
+      in
+      forAll arbitrary                              $ \sh' ->
+      forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+      forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
+      forAll (arbitraryArray sh')                   $ \defaultv ->
+        toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
+        .==.
+        gatherIfRef P.even mapv maskv defaultv xs
 
-          even' :: Exp Int -> Exp Bool
-          even' v       = (v `mod` 2) ==* 0
 
-      in  forAll arbitrary                              $ \sh' ->
-          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
-          forAll (arbitraryArray sh')                   $ \maskv ->
-          forAll (arbitraryArray sh')                   $ \defaultv ->
-            gatherIfAcc even' mapv maskv defaultv xs .==. gatherIfRef even mapv maskv defaultv xs
+-- Reference Implementation
+-- ------------------------
 
-    gatherIfAcc f mapv maskv defaultv inputv
-      = toList
-      $ run backend $ A.gatherIf (use mapv) (use maskv) f (use defaultv) (use inputv)
+gatherIfRef :: (e -> Bool) -> Vector Int -> Vector e -> Vector t -> Vector t -> [t]
+gatherIfRef g mapv maskv defaultv inputv
+  = let n           = arraySize (arrayShape defaultv)
+        select ix
+          | g (maskv `indexArray` ix) = inputv   `indexArray` (Z :. mapv `indexArray` ix)
+          | otherwise                 = defaultv `indexArray` ix
+    in
+    [ select ix | i <- [0 .. n-1], let ix = Z :. i ]
 
-    gatherIfRef g mapv maskv defaultv inputv
-      = let n           = arraySize (arrayShape defaultv)
-            select ix
-              | g (maskv `indexArray` ix) = inputv   `indexArray` (Z :. mapv `indexArray` ix)
-              | otherwise                 = defaultv `indexArray` ix
-        in
-        [ select ix | i <- [0 .. n-1], let ix = Z :. i ]
+
+scatterRef
+    :: IArray.UArray Int Int
+    -> IArray.Array Int e
+    -> IArray.Array Int e
+    -> IArray.Array Int e
+scatterRef mapV defaultV inputV
+  = runSTArray
+  $ do mu <- M.thaw defaultV
+       forM_ (IArray.assocs mapV) $ \(inIx, outIx) -> M.writeArray mu outIx (inputV IArray.! inIx)
+       return mu
+
+
+scatterIfRef
+    :: IArray.UArray Int Int
+    -> IArray.Array Int e
+    -> (e -> Bool)
+    -> IArray.Array Int t
+    -> IArray.Array Int t
+    -> IArray.Array Int t
+scatterIfRef mapV maskV f defaultV inputV
+  = runSTArray
+  $ do mu <- M.thaw defaultV
+       forM_ (IArray.assocs mapV) $ \(inIx, outIx) ->
+         when (f (maskV IArray.! inIx)) $
+           M.writeArray mu outIx (inputV IArray.! inIx)
+       return mu
 
