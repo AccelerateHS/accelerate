@@ -23,7 +23,7 @@ import Data.Array.Accelerate.IO
 
 test_ptr :: Config -> Test
 test_ptr _ =
-  testGroup "BlockCopy"
+  testGroup "block copy"
     [
       testCase "toPtr Int16"            toPtrInt16
     , testCase "toPtr Int32"            toPtrInt32

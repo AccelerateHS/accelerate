@@ -1,9 +1,9 @@
 
 module Test.Prelude where
 
-import Test.Framework
-
 import Config
+
+import Test.Framework
 import Test.Prelude.IndexSpace
 import Test.Prelude.Mapping
 import Test.Prelude.PrefixSum

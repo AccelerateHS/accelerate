@@ -1,65 +1,53 @@
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 
-module VectorCopy (run) where
-
--- friends
-import Data.Array.Accelerate
-import Data.Array.Accelerate.IO         ( toVectors, fromVectors )
-
--- standard library
-import Test.QuickCheck
-
-
--- Print expected/received message on inequality
---
-infix 4 .==.
-(.==.) :: (Eq a, Show a) => a -> a -> Property
-(.==.) ans ref = printTestCase message (ref == ans)
+module Test.IO.Vector (test_vector)
   where
-    message = unlines ["*** Expected:", show ref
-                      ,"*** Received:", show ans ]
+
+import Prelude                                                  as P
+import Config
+import Data.Label
+import Data.Maybe
+import Data.Typeable
+import Test.Base
+import Test.QuickCheck
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
+import QuickCheck.Arbitrary.Array                               ()
+
+import Data.Array.Accelerate
+import Data.Array.Accelerate.IO                                 ( toVectors, fromVectors )
+import Data.Array.Accelerate.Array.Sugar                        as Sugar
 
 
-roundtrip :: (Arbitrary a, Eq a, Elt a)
-          => [a]
-          -> Property
-roundtrip xs =
-  let n   = length xs
-      sh  = Z:.n
-      arr = fromList sh xs
-  in
-  xs .==. toList (fromVectors sh (toVectors arr))
+test_vector :: Config -> Test
+test_vector opt = testGroup "vector" $ catMaybes
+  [ testElt configInt8   (undefined :: Int8)
+  , testElt configInt16  (undefined :: Int16)
+  , testElt configInt32  (undefined :: Int32)
+  , testElt configInt64  (undefined :: Int64)
+  , testElt configWord8  (undefined :: Word8)
+  , testElt configWord16 (undefined :: Word16)
+  , testElt configWord32 (undefined :: Word32)
+  , testElt configWord64 (undefined :: Word64)
+  , testElt configFloat  (undefined :: Float)
+  , testElt configDouble (undefined :: Double)
+  ]
+  where
+    testElt :: forall a. (Elt a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
+    testElt ok _
+      | P.not (get ok opt)      = Nothing
+      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
+          [ testDim dim0
+          , testDim dim1
+          , testDim dim2
+          ]
+      where
+        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
+        testDim sh = testProperty ("DIM" ++ show (dim sh)) (roundtrip :: Array sh a -> Property)
 
-
-prop_Int8_roundtrip :: [Int8] -> Property
-prop_Int8_roundtrip = roundtrip
-
-prop_Int16_roundtrip :: [Int16] -> Property
-prop_Int16_roundtrip = roundtrip
-
-prop_Int32_roundtrip :: [Int32] -> Property
-prop_Int32_roundtrip = roundtrip
-
-prop_Int64_roundtrip :: [Int64] -> Property
-prop_Int64_roundtrip = roundtrip
-
-prop_Int_roundtrip :: [Int] -> Property
-prop_Int_roundtrip = roundtrip
-
-prop_Float_roundtrip :: [Float] -> Property
-prop_Float_roundtrip = roundtrip
-
-prop_Double_roundtrip :: [Double] -> Property
-prop_Double_roundtrip = roundtrip
-
-
-run :: IO ()
-run = mapM_ quickCheck
-    [ property prop_Int8_roundtrip
-    , property prop_Int16_roundtrip
-    , property prop_Int32_roundtrip
-    , property prop_Int64_roundtrip
-    , property prop_Int_roundtrip
-    , property prop_Float_roundtrip
-    , property prop_Double_roundtrip
-    ]
+        roundtrip arr =
+          let sh = arrayShape arr
+          in  fromVectors sh (toVectors arr) .==. arr
 

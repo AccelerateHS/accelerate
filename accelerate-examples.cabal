@@ -57,6 +57,7 @@ Executable accelerate-nofib
                         Test.Base
                         Test.IO
                         Test.IO.Ptr
+                        Test.IO.Vector
                         Test.Prelude
                         Test.Prelude.IndexSpace
                         Test.Prelude.Mapping
