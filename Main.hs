@@ -8,6 +8,7 @@ import System.Environment
 
 import Config
 import Monitoring
+import Test.IO
 import Test.Prelude
 import Test.Sharing
 
@@ -32,6 +33,7 @@ main = do
   defaultMainWithOpts
     [ test_prelude conf
     , test_sharing conf
+    , test_io conf
     ]
     tfconf
     -- test-framework wants to have a nap on success; don't let it.
