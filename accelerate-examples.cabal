@@ -55,6 +55,8 @@ Executable accelerate-nofib
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
+                        Test.IO
+                        Test.IO.Ptr
                         Test.Prelude
                         Test.Prelude.IndexSpace
                         Test.Prelude.Mapping
@@ -69,6 +71,9 @@ Executable accelerate-nofib
                         -fpedantic-bottoms
                         -fno-full-laziness
                         -fno-excess-precision
+
+  c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
+  extra-libraries:      stdc++
 
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts

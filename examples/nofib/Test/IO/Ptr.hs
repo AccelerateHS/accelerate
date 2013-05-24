@@ -1,84 +1,107 @@
-{-# LANGUAGE ForeignFunctionInterface, ScopedTypeVariables, TypeOperators #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE TypeOperators            #-}
 
-module BlockCopy where
+module Test.IO.Ptr (
 
--- standard libraries
-import Prelude as P
-import Foreign.Ptr
+  test_ptr,
+
+) where
+
+import Config
+
+import Prelude                                  as P
 import Foreign.C
-import Control.Monad
-import Control.Exception
+import Foreign.Ptr
+import Test.Framework
+import Test.HUnit                               ( Assertion, (@?=) )
+import Test.Framework.Providers.HUnit
 
--- friends
 import Data.Array.Accelerate
 import Data.Array.Accelerate.IO
 
-assertEqual :: (Eq a, Show a) => String -> a -> a -> IO ()
-assertEqual preface expected actual =
-  unless (actual == expected) (throw $ AssertionFailed msg)
-  where
-    msg = (if P.null preface then "" else preface ++ "\n")  ++
-          "expected: " ++ show expected ++ "\n but got: " ++ show actual
 
-run :: IO ()
-run =
-  mapM_ (\(msg,act) -> putStrLn ("test: " ++ msg) >> act)
-    [ ("fromPtr Int",          testBlockCopyPrim)
-    , ("fromPtr (Int,Double)", testBlockCopyTuples)
-    , ("toPtr Int16",          testBlockCopyFromArrayInt16)
-    , ("toPtr Int32",          testBlockCopyFromArrayInt32)
-    , ("toPtr Int64",          testBlockCopyFromArrayInt64)
-    , ("fromArray Int",        testBlockCopyFromArrayWithFunctions) ]
+test_ptr :: Config -> Test
+test_ptr _ =
+  testGroup "BlockCopy"
+    [
+      testCase "toPtr Int16"            toPtrInt16
+    , testCase "toPtr Int32"            toPtrInt32
+    , testCase "toPtr Int64"            toPtrInt64
+    , testCase "fromPtr Int32"          fromPtrInt32
+    , testCase "fromPtr (Int32,Double)" fromPtrIntDouble
+    , testCase "fromArray Int32"        fromArrayInt32
+    ]
 
 
-testBlockCopyPrim :: IO ()
-testBlockCopyPrim = do
-  ptr <- oneToTen
-  (arr :: Vector Int32) <- fromPtr (Z :. 10) ((), ptr)
-  assertEqual "Not equal" [1..10] (toList arr)
+-- Unit tests ------------------------------------------------------------------
+--
+intToBool :: Integral a => a -> Bool
+intToBool 0 = False
+intToBool _ = True
 
-testBlockCopyTuples :: IO ()
-testBlockCopyTuples = do
-  intPtr    <- oneToTen
-  doublePtr <- tenToOne
-  (arr :: Vector (Int32, Double)) <- fromPtr (Z :. 10) (((), intPtr), doublePtr)
-  assertEqual "Not equal" [ (x, P.fromIntegral (11 - x)) | x <- [1..10]] (toList arr)
+fromPtrInt32 :: Assertion
+fromPtrInt32 = do
+  ptr   <- oneToTen
+  arr   <- fromPtr (Z :. 10) ((), ptr)  :: IO (Vector Int32)
+  toList arr @?= [1..10]
 
-testBlockCopyFromArrayWithFunctions :: IO ()
-testBlockCopyFromArrayWithFunctions = do
-  let n = 5^(3::Int)
-  let (arr :: Array (Z:.Int:.Int:.Int) Int32) = fromList (Z:.5:.5:.5) [2*x | x <- [0..n-1]]
-  ohi <- nInt32s (P.fromIntegral n)
-  fromArray arr ((), memcpy ohi)
-  b   <- isFilledWithEvens32 ohi (P.fromIntegral n)
-  assertEqual "Not equal" 1 b
+fromPtrIntDouble :: Assertion
+fromPtrIntDouble = do
+  intPtr        <- oneToTen
+  doublePtr     <- tenToOne
+  arr           <- fromPtr (Z :. 10) (((), intPtr), doublePtr)    :: IO (Vector (Int32, Double))
+  toList arr @?= [ (x, P.fromIntegral (11 - x)) | x <- [1..10]]
 
-testBlockCopyFromArrayInt16 :: IO ()
-testBlockCopyFromArrayInt16 = do
+
+toPtrInt16 :: IO ()
+toPtrInt16 = do
   let n = 50
-  let (arr :: Vector Int16) = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
+      arr :: Vector Int16
+      arr = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
+  --
   ohi <- nInt16s (P.fromIntegral n)
   toPtr arr ((), ohi)
   b   <- isFilledWithEvens16 ohi (P.fromIntegral n)
-  assertEqual "Not equal" 1 b
+  intToBool b @?= True
 
-testBlockCopyFromArrayInt32 :: IO ()
-testBlockCopyFromArrayInt32 = do
-  let (arr :: Array (Z:.Int:.Int) Int32) = fromList (Z:.10:.10) [2*x | x <- [0..99]]
-  ohi <- nInt32s 100
+toPtrInt32 :: IO ()
+toPtrInt32 = do
+  let n = 100
+      arr :: Array DIM2 Int32
+      arr = fromList (Z:.10:.10) [2 * P.fromIntegral x | x <- [0..n-1]]
+  --
+  ohi <- nInt32s n
   toPtr arr ((), ohi)
-  b   <- isFilledWithEvens32 ohi 100
-  assertEqual "Not equal" 1 b
+  b   <- isFilledWithEvens32 ohi n
+  intToBool b @?= True
 
-testBlockCopyFromArrayInt64 :: IO ()
-testBlockCopyFromArrayInt64 = do
+toPtrInt64 :: IO ()
+toPtrInt64 = do
   let n = 73
-  let (arr :: Vector Int64) = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
+      arr :: Vector Int64
+      arr = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
+  --
   ohi <- nInt64s (P.fromIntegral n)
   toPtr arr ((), ohi)
   b   <- isFilledWithEvens64 ohi (P.fromIntegral n)
-  assertEqual "Not equal" 1 b
+  intToBool b @?= True
 
+
+fromArrayInt32 :: IO ()
+fromArrayInt32 = do
+  let n = 5^(3::Int)
+      arr :: Array DIM3 Int32
+      arr = fromList (Z:.5:.5:.5) [2*x | x <- [0..n-1]]
+  --
+  ohi <- nInt32s (P.fromIntegral n)
+  fromArray arr ((), memcpy ohi)
+  b   <- isFilledWithEvens32 ohi (P.fromIntegral n)
+  intToBool b @?= True
+
+
+-- Foreign functions -----------------------------------------------------------
+--
 foreign import ccall "one_to_ten" oneToTen :: IO (Ptr Int32)
 foreign import ccall "ten_to_one" tenToOne :: IO (Ptr Double)
 foreign import ccall "n_int_16s" nInt16s :: CInt -> IO (Ptr Int16)
