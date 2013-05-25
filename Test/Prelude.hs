@@ -4,6 +4,7 @@ module Test.Prelude where
 import Config
 
 import Test.Framework
+import Test.Prelude.Filter
 import Test.Prelude.IndexSpace
 import Test.Prelude.Mapping
 import Test.Prelude.PrefixSum
@@ -25,5 +26,6 @@ test_prelude conf =
     , test_foldSeg conf         -- requires scan
     , test_stencil conf
     , test_replicate conf
+    , test_filter conf
     ]
 
