@@ -11,6 +11,7 @@ import Monitoring
 import Test.IO
 import Test.Prelude
 import Test.Sharing
+import Test.Imaginary
 
 
 main :: IO ()
@@ -34,6 +35,7 @@ main = do
     [ test_prelude conf
     , test_sharing conf
     , test_io conf
+    , test_imaginary conf
     ]
     tfconf
     -- test-framework wants to have a nap on success; don't let it.

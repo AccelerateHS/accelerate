@@ -58,6 +58,10 @@ Executable accelerate-nofib
                         Test.IO
                         Test.IO.Ptr
                         Test.IO.Vector
+                        Test.Imaginary
+                        Test.Imaginary.DotP
+                        Test.Imaginary.SASUM
+                        Test.Imaginary.SAXPY
                         Test.Prelude
                         Test.Prelude.Filter
                         Test.Prelude.IndexSpace
