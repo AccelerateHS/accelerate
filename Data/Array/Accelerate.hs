@@ -231,6 +231,9 @@ module Data.Array.Accelerate (
   -- | For additional conversion routines, see the accelerate-io package:
   -- <http://hackage.haskell.org/package/accelerate-io>
 
+  -- *** Function
+  fromFunction,
+
   -- *** Lists
   S.fromList, S.toList,
 
@@ -279,4 +282,10 @@ arrayShape = S.shape
 --
 arraySize :: S.Shape sh => sh -> T.Int
 arraySize = S.size
+
+-- | Create an array from its representation function
+--
+{-# INLINE fromFunction #-}
+fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
+fromFunction = S.newArray
 
