@@ -261,29 +261,29 @@ import qualified Prelude
 
 -- rename as '(!)' is already used by the EDSL for indexing
 
--- |Array indexing in plain Haskell code
+-- |Array indexing in plain Haskell code.
 --
 indexArray :: S.Array sh e -> sh -> e
 indexArray = (S.!)
 
--- | Rank of an array
+-- | Rank of an array.
 --
 arrayDim :: S.Shape sh => sh -> T.Int
 arrayDim = S.dim
 -- FIXME: Rename to rank
 
--- |Array shape in plain Haskell code
+-- |Array shape in plain Haskell code.
 --
 arrayShape :: S.Shape sh => S.Array sh e -> sh
 arrayShape = S.shape
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
--- | Total number of elements in an array of the given 'Shape'
+-- | Total number of elements in an array of the given 'Shape'.
 --
 arraySize :: S.Shape sh => sh -> T.Int
 arraySize = S.size
 
--- | Create an array from its representation function
+-- | Create an array from its representation function.
 --
 {-# INLINE fromFunction #-}
 fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
