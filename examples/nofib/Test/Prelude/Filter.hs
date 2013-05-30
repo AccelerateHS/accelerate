@@ -54,5 +54,5 @@ test_filter opt = testGroup "filter" $ catMaybes
       $ testProperty (show (typeOf (undefined :: e))) (run_filter (>* 0) (> 0) :: Vector e -> Property)
 
     run_filter f g xs
-      = toList (run1 backend (A.filter f) xs) .==. P.filter g (toList xs)
+      = toList (run1 backend (A.filter f) xs) ~?= P.filter g (toList xs)
 

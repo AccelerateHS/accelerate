@@ -91,13 +91,13 @@ test_permute opt = testGroup "permute" $ catMaybes
           let xs'   = use xs
               zeros = A.fill (A.shape xs') (constant 0)
           in
-          run backend (permute const zeros id xs') .==. xs
+          run backend (permute const zeros id xs') ~?= xs
 
     -- Test if the combining operation for forward permutation works, by
     -- building a histogram. Often tricky for parallel backends.
     --
     test_histogram f g xs =
-      sized $ \n -> run backend (histogramAcc n f xs) .==. histogramRef n g xs
+      sized $ \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
 
     histogramAcc n f xs =
       let n'        = unit (constant n)
@@ -122,7 +122,7 @@ test_permute opt = testGroup "permute" $ catMaybes
       forAll (arbitraryUniqueVectorOf (choose (0, m)))  $ \mapV -> let n = arraySize (arrayShape mapV) in
       forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
         toList (run backend $ A.scatter (use mapV) (use defaultV) (use inputV))
-        .==.
+        ~?=
         IArray.elems (scatterRef (toIArray mapV) (toIArray defaultV) (toIArray inputV))
 
     test_scatterIf :: forall e. (Elt e, Similar e, Arbitrary e) => e -> Property
@@ -133,7 +133,7 @@ test_permute opt = testGroup "permute" $ catMaybes
       forAll (arbitraryArray (Z:.n))                    $ \(maskV :: Vector Int) ->
       forAll (arbitraryArray (Z:.n))                    $ \(inputV :: Vector e) ->
         toList (run backend $ A.scatterIf (use mapV) (use maskV) A.even (use defaultV) (use inputV))
-        .==.
+        ~?=
         IArray.elems (scatterIfRef (toIArray mapV) (toIArray maskV) P.even (toIArray defaultV) (toIArray inputV))
 
 
@@ -171,8 +171,8 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
           ]
 
     backend           = get configBackend opt
-    test_reverse xs   = run backend (reverseAcc xs)   .==. reverseRef xs
-    test_transpose xs = run backend (transposeAcc xs) .==. transposeRef xs
+    test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
+    test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
 
     -- Reverse a vector
     --
@@ -190,27 +190,27 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
     --
     test_init xs =
       P.not (isEmptyArray xs)
-        ==> toList (run backend (A.init (A.use xs))) .==. P.init (toList xs)
+        ==> toList (run backend (A.init (A.use xs))) ~?= P.init (toList xs)
 
     test_tail xs =
       P.not (isEmptyArray xs)
-        ==> toList (run backend (A.tail (A.use xs))) .==. P.tail (toList xs)
+        ==> toList (run backend (A.tail (A.use xs))) ~?= P.tail (toList xs)
 
     test_drop xs =
       let n = arraySize (arrayShape xs)
       in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-            toList (run backend (A.drop (constant i) (use xs))) .==. P.drop i (toList xs)
+            toList (run backend (A.drop (constant i) (use xs))) ~?= P.drop i (toList xs)
 
     test_take xs =
       let n = arraySize (arrayShape xs)
       in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-            toList (run backend (A.take (constant i) (use xs))) .==. P.take i (toList xs)
+            toList (run backend (A.take (constant i) (use xs))) ~?= P.take i (toList xs)
 
     test_slit xs =
       let n = arraySize (arrayShape xs)
       in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
           forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
-            toList (run backend (A.slit (constant i) (constant j) (use xs))) .==. P.take j (P.drop i (toList xs))
+            toList (run backend (A.slit (constant i) (constant j) (use xs))) ~?= P.take j (P.drop i (toList xs))
 
     -- Gathering
     --
@@ -221,7 +221,7 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
       forAll arbitrary                              $ \sh' ->
       forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
         toList (run backend (A.gather (use mapv) (use xs)))
-        .==.
+        ~?=
         [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
     test_gatherIf xs =
@@ -233,7 +233,7 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
       forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
       forAll (arbitraryArray sh')                   $ \defaultv ->
         toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
-        .==.
+        ~?=
         gatherIfRef P.even mapv maskv defaultv xs
 
 

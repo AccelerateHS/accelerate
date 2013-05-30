@@ -49,7 +49,7 @@ test_sasum opt = testGroup "sasum" $ catMaybes
 
     run_sasum xs =
       run1 backend sasum xs `indexArray` Z
-      .==.
+      ~?=
       P.sum (P.map abs (toList xs))
 
 

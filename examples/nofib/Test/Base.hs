@@ -71,14 +71,38 @@ instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
                 && toList a1     ~= toList a2
 
 
--- Print expected/received message on inequality
+-- | Assert that the specified actual value is equal-ish to the expected value.
+-- If we are in verbose mode, the output message will contain the expected and
+-- actual values.
 --
-infix 4 .==.
-(.==.) :: (Similar a, Show a) => a -> a -> Property
-(.==.) ans ref = printTestCase message (ref ~= ans)
+assertEqual
+    :: (Similar a, Show a)
+    => Bool     -- ^ Print the test case as well?
+    -> a        -- ^ The expected value
+    -> a        -- ^ The actual value
+    -> Property
+assertEqual v expected actual =
+  printTestCase message (expected ~= actual)
   where
-    message = unlines ["*** Expected:", show ref
-                      ,"*** Received:", show ans ]
+    message
+      | P.not v         = []
+      | otherwise       = unlines [ "*** Expected:", show expected
+                                  , "*** Received:", show actual ]
+
+infix 1 ~=?, ~?=
+
+-- Short hand for a test case that asserts similarity, with the actual value on
+-- the right hand side and the expected value on the left.
+--
+(~=?) :: (Similar a, Show a) => a -> a -> Property
+(~=?) = assertEqual True
+
+-- Short hand for a test case that asserts similarity, with the actual value on
+-- the left hand side and the expected value on the right.
+--
+(~?=) :: (Similar a, Show a) => a -> a -> Property
+(~?=) = flip (~=?)
+
 
 
 -- Miscellaneous
