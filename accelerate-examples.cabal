@@ -177,10 +177,56 @@ Executable accelerate-examples
                         vector-algorithms       >= 0.4
 
 
+-- Sparse matrix vector multiplication
+-- -----------------------------------
+
+Executable accelerate-smvm
+  hs-source-dirs:       examples/smvm lib
+  Main-is:              Main.hs
+  other-modules:        ParseArgs Monitoring
+                        Config
+                        Matrix
+                        MatrixMarket
+                        SMVM
+
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if impl(ghc >= 7.6)
+    ghc-options:        -fsimpl-tick-factor=130
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.14
+
+  if flag(opencl)
+    CPP-options:        -DACCELERATE_OPENCL_BACKEND
+    build-depends:      accelerate-opencl       == 0.1.*
+
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
+  build-depends:        accelerate              >= 0.14,
+                        base                    == 4.*,
+                        attoparsec              >= 0.10,
+                        bytestring              >= 0.9,
+                        bytestring-lexing       >= 0.2,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        primitive               >= 0.5,
+                        mwc-random              >= 0.8,
+                        vector                  >= 0.7,
+                        vector-algorithms       >= 0.4
+
+
 -- A quasicrystal demo as the sum of waves in a plane
 -- --------------------------------------------------
 
 Executable accelerate-crystal
+  Buildable:            False
   hs-source-dirs:       examples/crystal lib
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Monitoring
