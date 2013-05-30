@@ -50,7 +50,7 @@ test_saxpy opt = testGroup "saxpy" $ catMaybes
 
     run_saxpy alpha xs ys =
       toList (run2 backend (saxpy (constant alpha)) xs ys)
-      .==.
+      ~?=
       [ alpha * x + y | x <- toList xs | y <- toList ys ]
 
 

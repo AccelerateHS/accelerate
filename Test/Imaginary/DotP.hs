@@ -50,7 +50,7 @@ test_dotp opt = testGroup "dot-product" $ catMaybes
 
     run_dotp xs ys =
       run2 backend dotp xs ys `indexArray` Z
-      .==.
+      ~?=
       P.sum [ x * y | x <- toList xs | y <- toList ys ]
 
 

@@ -64,47 +64,59 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
 
     -- left scan
     --
-    test_scanl  xs = run backend (A.scanl (+) 0 (use xs))             .==. scanlRef (+) 0 xs
-    test_scanl1 xs = run backend (A.scanl1 A.min (use xs))          .==. scanl1Ref P.min xs
-    test_scanl' xs = run backend (A.lift $ A.scanl' (+) 0 (use xs)) .==. scanl'Ref (+) 0 xs
+    test_scanl  xs = run backend (A.scanl (+) 0 (use xs))           ~?= scanlRef (+) 0 xs
+    test_scanl1 xs = run backend (A.scanl1 A.min (use xs))          ~?= scanl1Ref P.min xs
+    test_scanl' xs = run backend (A.lift $ A.scanl' (+) 0 (use xs)) ~?= scanl'Ref (+) 0 xs
 
     -- right scan
     --
-    test_scanr  xs = run backend (A.scanr (+) 0 (use xs))             .==. scanrRef (+) 0 xs
-    test_scanr1 xs = run backend (A.scanr1 A.max (use xs))          .==. scanr1Ref P.max xs
-    test_scanr' xs = run backend (A.lift $ A.scanr' (+) 0 (use xs)) .==. scanr'Ref (+) 0 xs
+    test_scanr  xs = run backend (A.scanr (+) 0 (use xs))           ~?= scanrRef (+) 0 xs
+    test_scanr1 xs = run backend (A.scanr1 A.max (use xs))          ~?= scanr1Ref P.max xs
+    test_scanr' xs = run backend (A.lift $ A.scanr' (+) 0 (use xs)) ~?= scanr'Ref (+) 0 xs
 
     -- segmented left/right scan
     --
     test_scanl1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (A.scanl1Seg (+) (use xs) (use seg)) .==. scanl1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (A.scanl1Seg (+) (use xs) (use seg))
+        ~?=
+        scanl1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanr1seg elt =
       forAll arbitrarySegments1            $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (A.scanr1Seg (+) (use xs) (use seg)) .==. scanr1SegRef (+) (xs `asTypeOf` elt) seg
+        run backend (A.scanr1Seg (+) (use xs) (use seg))
+        ~?=
+        scanr1SegRef (+) (xs `asTypeOf` elt) seg
 
     test_scanlseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (A.scanlSeg (+) 0 (use xs) (use seg)) .==. scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (A.scanlSeg (+) 0 (use xs) (use seg))
+        ~?=
+        scanlSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanrseg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (A.scanrSeg (+) 0 (use xs) (use seg)) .==. scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (A.scanrSeg (+) 0 (use xs) (use seg))
+        ~?=
+        scanrSegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanl'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (lift $ A.scanl'Seg (+) 0 (use xs) (use seg)) .==. scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ A.scanl'Seg (+) 0 (use xs) (use seg))
+        ~?=
+        scanl'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
     test_scanr'seg elt =
       forAll arbitrarySegments             $ \(seg :: Vector Int32) ->
       forAll (arbitrarySegmentedArray seg) $ \xs  ->
-        run backend (lift $ A.scanr'Seg (+) 0 (use xs) (use seg)) .==. scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
+        run backend (lift $ A.scanr'Seg (+) 0 (use xs) (use seg))
+        ~?=
+        scanr'SegRef (+) 0 (xs `asTypeOf` elt) seg
 
 
 -- Reference implementation

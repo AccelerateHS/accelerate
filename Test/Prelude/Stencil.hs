@@ -69,7 +69,7 @@ test_stencil opt = testGroup "stencil" $ catMaybes
     -- 1D Stencil
     --
     test_stencil1D :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Vector a -> Property
-    test_stencil1D vec = toList (acc vec) .==. elems (ref (toIArray vec))
+    test_stencil1D vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern (x,y,z) = x + z - 2 * y
 
@@ -85,7 +85,7 @@ test_stencil opt = testGroup "stencil" $ catMaybes
     -- 2D Stencil
     --
     test_stencil2D1 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 a -> Property
-    test_stencil2D1 vec = toList (acc vec) .==. elems (ref (toIArray vec))
+    test_stencil2D1 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern ( (t1, t2, t3)
                 , (l , m,  r )
@@ -108,7 +108,7 @@ test_stencil opt = testGroup "stencil" $ catMaybes
 
 
     test_stencil2D2 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 a -> Property
-    test_stencil2D2 vec = toList (acc vec) .==. elems (ref (toIArray vec))
+    test_stencil2D2 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern ( (_, t, _)
                 , (l, m, r)
@@ -131,7 +131,7 @@ test_stencil opt = testGroup "stencil" $ catMaybes
           stencil2DRef pattern clamp xs
 
     test_stencil2D3 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 (a,a) -> Property
-    test_stencil2D3 vec = toList (acc vec) .==. elems (ref (toIArray vec))
+    test_stencil2D3 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern :: forall a. (Elt a, IsNum a) => Stencil3x3 (a,a) -> Exp a
         pattern ( (_, _, _) , (x, _, _) , (y, _, z))

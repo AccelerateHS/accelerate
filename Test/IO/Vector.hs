@@ -49,5 +49,5 @@ test_vector opt = testGroup "vector" $ catMaybes
 
         roundtrip arr =
           let sh = arrayShape arr
-          in  fromVectors sh (toVectors arr) .==. arr
+          in  fromVectors sh (toVectors arr) ~?= arr
 
