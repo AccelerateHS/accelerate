@@ -49,7 +49,9 @@ Flag opencl
 --
 Executable accelerate-nofib
   Main-is:              Main.hs
-  hs-source-dirs:       examples/nofib lib
+  hs-source-dirs:       lib
+                        examples/nofib
+                        examples/smvm
 
   other-modules:        Config ParseArgs Monitoring
                         QuickCheck.Arbitrary.Array
@@ -71,6 +73,8 @@ Executable accelerate-nofib
                         Test.Prelude.Replicate
                         Test.Prelude.Stencil
                         Test.Sharing
+                        Test.Spectral
+                        Test.Spectral.SMVM
 
   ghc-options:          -Wall -O2
                         -threaded
