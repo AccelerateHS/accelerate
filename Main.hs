@@ -12,6 +12,7 @@ import Test.IO
 import Test.Prelude
 import Test.Sharing
 import Test.Imaginary
+import Test.Spectral
 
 
 main :: IO ()
@@ -36,6 +37,7 @@ main = do
     , test_sharing conf
     , test_io conf
     , test_imaginary conf
+    , test_spectral conf
     ]
     tfconf
     -- test-framework wants to have a nap on success; don't let it.

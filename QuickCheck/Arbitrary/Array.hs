@@ -117,3 +117,23 @@ arbitraryUniqueVectorOf gen =
     k   <- choose (0, Set.size set)
     return $! Sugar.fromList (Z :. k) (Set.toList set)
 
+
+-- Generate an arbitrary CSR matrix. The first parameter is the segment
+-- descriptor, the second a sparse vector of (index,value) pairs, and the third
+-- the matrix width (number of columns).
+--
+-- The matrix size is based on the current `sized` parameter.
+--
+arbitraryCSRMatrix
+    :: (Elt i, Integral i, Arbitrary i, Random i, Elt e, Arbitrary e)
+    => Gen ( Array DIM1 i, Array DIM1 (i,e), Int )
+arbitraryCSRMatrix =
+  sized $ \cols -> do
+    segd        <- arbitrarySegments
+    let nnz     =  fromIntegral . sum $ Sugar.toList segd
+    smat        <- arbitraryArrayOf (Z :. nnz) $ do
+                     val <- arbitrary
+                     ind <- choose (0, fromIntegral cols - 1)
+                     return (ind, val)
+    return (segd, smat, cols)
+
