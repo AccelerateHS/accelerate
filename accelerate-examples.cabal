@@ -75,6 +75,7 @@ Executable accelerate-nofib
                         Test.Sharing
                         Test.Spectral
                         Test.Spectral.SMVM
+                        Test.Spectral.RadixSort
 
   ghc-options:          -Wall -O2
                         -threaded
@@ -102,8 +103,12 @@ Executable accelerate-nofib
     ghc-options:        -with-rtsopts=-T
 
   build-depends:        accelerate                      >= 0.14,
+                        accelerate-io                   >= 0.14,
+                        base                            == 4.*,
                         array                           >= 0.3,
                         containers                      >= 0.5,
+                        criterion                       >= 0.5,
+                        fclabels                        >= 1.0,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,
