@@ -87,6 +87,8 @@ Executable accelerate-nofib
                         -fno-full-laziness
                         -fno-excess-precision
 
+  ghc-prof-options:     -auto-all
+
   extra-libraries:      stdc++
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
                         examples/nofib/Test/Spectral/BlackScholes.cpp
@@ -204,6 +206,8 @@ Executable accelerate-smvm
                         SMVM
 
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -240,11 +244,13 @@ Executable accelerate-smvm
 -- --------------------------------------------------
 
 Executable accelerate-crystal
-  Buildable:            False
   hs-source-dirs:       examples/crystal lib
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Monitoring
+
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -278,7 +284,9 @@ Executable accelerate-canny
   hs-source-dirs:       examples/canny/src-acc lib
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Canny Wildfire Monitoring
+
   ghc-options:          -Wall -threaded -Odph -fllvm -optlo-O3
+  ghc-prof-options:     -auto-all
 
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
@@ -313,7 +321,10 @@ Executable accelerate-mandelbrot
   hs-source-dirs:       examples/mandelbrot lib
   Main-is:              Main.hs
   other-modules:        Config World Mandel ParseArgs Monitoring
+
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -353,6 +364,8 @@ Executable accelerate-fluid
                         World
 
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -399,6 +412,8 @@ Executable accelerate-nbody
                         Solver.Naive
 
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -436,6 +451,8 @@ Executable accelerate-smoothlife
                         Random.Splat
 
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
@@ -471,6 +488,8 @@ Executable accelerate-hashcat
                         Util
 
   ghc-options:          -O2 -Wall -threaded
+  ghc-prof-options:     -auto-all
+
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
 
