@@ -77,6 +77,7 @@ Executable accelerate-nofib
                         Test.Prelude.Stencil
                         Test.Sharing
                         Test.Spectral
+                        Test.Spectral.BlackScholes
                         Test.Spectral.SMVM
                         Test.Spectral.RadixSort
 
@@ -86,8 +87,9 @@ Executable accelerate-nofib
                         -fno-full-laziness
                         -fno-excess-precision
 
-  c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
   extra-libraries:      stdc++
+  c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
+                        examples/nofib/Test/Spectral/BlackScholes.cpp
 
   if impl(ghc >= 7.0)
     ghc-options:        -rtsopts
