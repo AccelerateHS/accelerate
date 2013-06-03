@@ -32,6 +32,10 @@ import Data.Array.Accelerate                                    as A
 --
 -- Radix sort ------------------------------------------------------------------
 --
+-- This is rather slow. Speeding up the reference implementation by using, say,
+-- vector-algorithms, does not significantly change the runtime. Thus, we stick
+-- to the simple list-based representation for the time being.
+--
 
 test_radixsort :: Config -> Test
 test_radixsort opt = testGroup "radix sort" $ catMaybes
