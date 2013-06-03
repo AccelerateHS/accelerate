@@ -24,6 +24,9 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
+Extra-source-files:     data/hashcat/README.md
+                        data/matrices/README.md
+
 Flag gui
   Description:          Enable gloss-based GUIs, where applicable. If not
                         enabled, the application always runs in benchmark mode.
