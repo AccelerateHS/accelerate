@@ -3,7 +3,7 @@ base library or find a bug, please add a test case. The aim is for this program
 to evolve and be useful for both performance and regression testing.
 
 For a list of available options and test programs, run:
-> accelerate-examples --help
+> accelerate-nofib --help
 
 If you have found a bug, please report it to:
 https://github.com/AccelerateHS/accelerate/issues
