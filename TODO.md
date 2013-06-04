@@ -10,5 +10,11 @@ New tests
  - hashcat
  - nbody
 
-Benchmarking (criterion, self timed, other?)
+Benchmarking
+ - criterion, self-timed, other?
+
+Analysis script
+ - execution time
+ - memory usage (host / device)
+ - number of kernels
 
