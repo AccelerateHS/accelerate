@@ -226,11 +226,15 @@ data PreOpenAcc acc aenv a where
               ->            acc aenv arrs
               -> PreOpenAcc acc aenv a
 
-  -- Array-function application (to keep things simple for the moment, the function must be closed)
+  -- Array-function application.
+  --
+  -- The array function is not closed at the core level because we need access
+  -- to free variables introduced by 'run1' style evaluators. See Issue#95.
+  --
   Apply       :: (Arrays arrs1, Arrays arrs2)
-              => PreAfun    acc      (arrs1 -> arrs2)
-              -> acc            aenv arrs1
-              -> PreOpenAcc acc aenv arrs2
+              => PreOpenAfun acc aenv (arrs1 -> arrs2)
+              -> acc             aenv arrs1
+              -> PreOpenAcc  acc aenv arrs2
 
   -- Apply a backend-specific foreign function to an array, with a pure
   -- Accelerate version for use with other backends. The functions must be

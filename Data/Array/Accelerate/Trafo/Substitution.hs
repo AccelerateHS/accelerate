@@ -305,7 +305,7 @@ rebuildA rebuild v acc =
     Avar ix             -> accOut (v ix)
     Atuple tup          -> Atuple (rebuildATA rebuild v tup)
     Aprj tup a          -> Aprj tup (rebuild v a)
-    Apply f a           -> Apply f (rebuild v a)
+    Apply f a           -> Apply (rebuildAfun rebuild v f) (rebuild v a)
     Aforeign ff afun as -> Aforeign ff afun (rebuild v as)
     Acond p t e         -> Acond (rebuildEA rebuild v p) (rebuild v t) (rebuild v e)
     Use a               -> Use a
