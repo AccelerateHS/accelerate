@@ -235,11 +235,9 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
         -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
 
       Pipe afun1 afun2 acc
-        -> let a        = recoverAccSharing config
-               e        = recoverExpSharing config
-               f        = floatOutAcc config
-               boundAcc = convertAfun a e f afun1 `AST.Apply` convertSharingAcc config alyt aenv acc
-               bodyAcc  = convertAfun a e f afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
+        -> let alyt'    = incLayout alyt `PushLayout` ZeroIdx
+               boundAcc = aconvert config alyt  afun1 `AST.Apply` convertSharingAcc config alyt aenv acc
+               bodyAcc  = aconvert config alyt' afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
