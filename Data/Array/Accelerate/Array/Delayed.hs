@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 -- |
--- Module      : Data.Array.Accelerate
+-- Module      : Data.Array.Accelerate.Array.Delayed
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
 --               [2009..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
