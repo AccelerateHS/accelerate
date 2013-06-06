@@ -39,7 +39,7 @@ import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
-import Data.Array.Accelerate.Trafo.Sharing              ( Function, Afunction )
+import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -108,10 +108,10 @@ convertAccWith ok acc
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAfun :: Afunction f r => f -> DelayedAfun r
+convertAfun :: Afunction f => f -> DelayedAfun (AfunctionR f)
 convertAfun = convertAfunWith phases
 
-convertAfunWith :: Afunction f r => Phase -> f -> DelayedAfun r
+convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith ok acc
   = Fusion.convertAfun       -- `when` enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
@@ -134,7 +134,7 @@ convertExp
 -- | Convert closed scalar functions, incorporating sharing observation and
 --   optimisation.
 --
-convertFun :: Function f r => f -> AST.Fun () r
+convertFun :: Function f => f -> AST.Fun () (FunctionR f)
 convertFun
   = Rewrite.simplify
   . Sharing.convertFun (recoverExpSharing phases)
@@ -146,13 +146,13 @@ convertFun
 instance Arrays arrs => Show (Acc arrs) where
   show = withSimplStats . show . convertAcc
 
-instance Afunction (Acc a -> f) (a -> r) => Show (Acc a -> f) where
+instance Afunction (Acc a -> f) => Show (Acc a -> f) where
   show = withSimplStats . show . convertAfun
 
 instance Elt e => Show (Exp e) where
   show = withSimplStats . show . convertExp
 
-instance Function (Exp a -> f) (a -> r) => Show (Exp a -> f) where
+instance Function (Exp a -> f) => Show (Exp a -> f) where
   show = withSimplStats . show . convertFun
 
 

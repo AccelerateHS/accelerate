@@ -1,11 +1,9 @@
-{-# LANGUAGE CPP                    #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE PatternGuards          #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -26,8 +24,8 @@
 module Data.Array.Accelerate.Trafo.Sharing (
 
   -- * HOAS -> de Bruijn conversion
-  convertAcc, convertAfun, Afunction,
-  convertExp, convertFun, Function,
+  convertAcc, convertAfun, Afunction, AfunctionR,
+  convertExp, convertFun,  Function,  FunctionR
 
 ) where
 
@@ -140,30 +138,40 @@ convertAcc shareAcc shareExp floatAcc acc
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f r => Bool -> Bool -> Bool -> f -> AST.Afun r
+convertAfun :: Afunction f => Bool -> Bool -> Bool -> f -> AST.Afun (AfunctionR f)
 convertAfun shareAcc shareExp floatAcc =
   let config = Config shareAcc shareExp (shareAcc && floatAcc)
   in  aconvert config EmptyLayout
 
-class Afunction f r | f -> r where
-  -- Convert a HOAS fragment into de Bruijn form, binding variables into the
-  -- typed environment layout.
-  --
-  aconvert :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv r
 
-instance (Arrays a, Afunction f r) => Afunction (Acc a -> f) (a -> r) where
+-- Convert a HOAS fragment into de Bruijn form, binding variables into the typed
+-- environment layout one binder at a time.
+--
+-- NOTE: Because we convert one binder at a time left-to-right, the bound
+--       variables ('vars') will have de Bruijn index _zero_ as the outermost
+--       binding, and thus go to the end of the list.
+--
+class Afunction f where
+  type AfunctionR f
+  aconvert :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv (AfunctionR f)
+
+instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
+  type AfunctionR (Acc a -> r) = a -> AfunctionR r
+  --
   aconvert config alyt f
     = let a     = Acc $ Atag (sizeLayout alyt)
           alyt' = incLayout alyt `PushLayout` ZeroIdx
       in
       Alam $ aconvert config alyt' (f a)
 
-instance Arrays b => Afunction (Acc b) b where
-  aconvert config alyt f
+instance Arrays b => Afunction (Acc b) where
+  type AfunctionR (Acc b) = b
+  --
+  aconvert config alyt body
     = let lvl    = sizeLayout alyt
           vars   = [lvl-1, lvl-2 .. 0]
       in
-      Abody $ convertOpenAcc config lvl vars alyt f
+      Abody $ convertOpenAcc config lvl vars alyt body
 
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
@@ -338,38 +346,33 @@ mkReplicate = AST.Replicate (sliceIndex slix)
 -- In higher-order abstract syntax, this represents an n-ary, polyvariadic
 -- function.
 --
-convertFun :: Function f r => Bool => f -> AST.Fun () r
+convertFun :: Function f => Bool => f -> AST.Fun () (FunctionR f)
 convertFun shareExp =
   let config = Config False shareExp False
   in  convert config EmptyLayout
 
 
-class Function f r | f -> r where
-  -- Convert a HOAS fragment into de Bruijn form, binding variables into the
-  -- typed environment layout.
-  --
-  convert :: Config -> Layout env env -> f -> AST.OpenFun env () r
+class Function f where
+  type FunctionR f
+  convert :: Config -> Layout env env -> f -> AST.OpenFun env () (FunctionR f)
 
-instance (Elt a, Function f r) => Function (Exp a -> f) (a -> r) where
-  -- Convert binders, one at a time
+instance (Elt a, Function r) => Function (Exp a -> r) where
+  type FunctionR (Exp a -> r) = a -> FunctionR r
+  --
   convert config lyt f
     = let x     = Exp $ Tag (sizeLayout lyt)
           lyt'  = incLayout lyt `PushLayout` ZeroIdx
       in
       Lam $ convert config lyt' (f x)
 
-instance Elt b => Function (Exp b) b where
-  -- Convert expressions
+instance Elt b => Function (Exp b) where
+  type FunctionR (Exp b) = b
   --
-  -- NOTE: Due to the way we do the conversion, adding one binder at a time
-  -- left-to-right, the bound variables ('vars') will have de Bruijn index
-  -- _zero_ as the outermost binding, and thus must go onto the end of the list.
-  --
-  convert config lyt b
+  convert config lyt body
     = let lvl    = sizeLayout lyt
           vars   = [lvl-1, lvl-2 .. 0]
       in
-      Body $ convertOpenExp config lvl vars lyt b
+      Body $ convertOpenExp config lvl vars lyt body
 
 
 -- Scalar expressions
