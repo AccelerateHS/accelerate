@@ -75,13 +75,15 @@ run = force . evalAcc . Sharing.convertAcc True True True
 -- | Prepare and run an embedded array program of one argument
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 afun = \a -> exec acc a
-  where
-    acc = Sharing.convertAfun True True True afun
+run1 = run'
 
-    exec :: Afun (a -> b) -> a -> b
-    exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)
-    exec _                _ = error "Hey type checker! We can not get here!"
+
+-- | Prepare an n-ary embedded array program for execution, returning an n-ary
+-- closure to do so.
+--
+run' :: Sharing.Afunction f => f -> Sharing.AfunctionR f
+run' afun = let acc = Sharing.convertAfun True True True afun
+            in  evalOpenAfun acc Empty
 
 
 -- | Stream a lazily read list of input arrays through the given program,
@@ -94,6 +96,13 @@ stream afun arrs = let go = run1 afun
 
 -- Array expression evaluation
 -- ---------------------------
+
+-- Evaluate an open array function
+--
+evalOpenAfun :: OpenAfun aenv f -> Val aenv -> f
+evalOpenAfun (Alam  f) aenv = \a -> evalOpenAfun f (aenv `Push` a)
+evalOpenAfun (Abody b) aenv = force $ evalOpenAcc b aenv
+
 
 -- Evaluate an open array expression
 --
@@ -114,11 +123,9 @@ evalPreOpenAcc (Aprj ix (tup :: OpenAcc aenv arrs)) aenv =
   let tup'  = force $ evalOpenAcc tup aenv :: arrs
   in  delay $ evalPrj ix (fromTuple tup')
 
-evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
-  = let !arr = force $ evalOpenAcc acc aenv
-    in evalOpenAcc funAcc (aenv `Push` arr)
-evalPreOpenAcc (Apply _afun _acc) _aenv
-  = error "GHC's pattern match checker is too dumb to figure that this case is impossible"
+evalPreOpenAcc (Apply f acc) aenv =
+  let !arr  = force $ evalOpenAcc acc aenv
+  in  delay $ evalOpenAfun f aenv arr
 
 evalPreOpenAcc (Acond cond acc1 acc2) aenv
   = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
