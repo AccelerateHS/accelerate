@@ -344,7 +344,7 @@ mkReplicate = AST.Replicate (sliceIndex slix)
 -- In higher-order abstract syntax, this represents an n-ary, polyvariadic
 -- function.
 --
-convertFun :: Function f => Bool => f -> AST.Fun () (FunctionR f)
+convertFun :: Function f => Bool -> f -> AST.Fun () (FunctionR f)
 convertFun shareExp =
   let config = Config False shareExp False
   in  convert config EmptyLayout
