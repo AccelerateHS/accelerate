@@ -23,7 +23,7 @@ Description:
   .
   Except for the type, this code is almost the same as the corresponding Haskell
   code on lists of floats. The types indicate that the computation may be
-  online-compiled for performance – for example, using
+  online-compiled for performance - for example, using
   @Data.Array.Accelerate.CUDA@ it may be on-the-fly off-loaded to the GPU.
   .
   [/Available backends/]
