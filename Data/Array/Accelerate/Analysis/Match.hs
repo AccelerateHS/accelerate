@@ -117,8 +117,8 @@ matchPreOpenAcc matchAcc hashAcc = match
       = Just REFL
 
     match (Aforeign ff1 _ a1) (Aforeign ff2 _ a2)
-      | Just REFL <- matchAcc a1 a2,
-        unsafePerformIO $ do
+      | Just REFL <- matchAcc a1 a2
+      , unsafePerformIO $ do
           sn1 <- makeStableName ff1
           sn2 <- makeStableName ff2
           return $! hashStableName sn1 == hashStableName sn2
