@@ -668,55 +668,48 @@ bind (PushEnv env a) = bind env . Alet (inject a) . inject
 -- bindings have come into scope according to the witness and no old things have
 -- vanished.
 --
+sink :: Sink f => Extend acc env env' -> f env t -> f env' t
+sink env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx env t -> Idx env' t
+    k BaseEnv       = Stats.substitution "sink" id
+    k (PushEnv e _) = SuccIdx . k e
+
+sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
+sink1 env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx (env,s) t -> Idx (env',s) t
+    k BaseEnv       = Stats.substitution "sink1" id
+    k (PushEnv e _) = split . k e
+    --
+    split :: Idx (env,s) t -> Idx ((env,u),s) t
+    split ZeroIdx      = ZeroIdx
+    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
+
 class Sink f where
-  sink :: Extend acc env env' -> f env t -> f env' t
+  weaken :: env :> env' -> f env t -> f env' t
 
 instance Sink Idx where
-  sink BaseEnv       = Stats.substitution "sink" id
-  sink (PushEnv e _) = SuccIdx . sink e
+  weaken k = k
 
 instance Kit acc => Sink (PreOpenExp acc env) where
-  sink env = weakenEA rebuildAcc (sink env)
+  weaken k = weakenEA rebuildAcc k
 
 instance Kit acc => Sink (PreOpenFun acc env) where
-  sink env = weakenFA rebuildAcc (sink env)
+  weaken k = weakenFA rebuildAcc k
 
 instance Kit acc => Sink (PreOpenAcc acc) where
-  sink env = weakenA rebuildAcc (sink env)
+  weaken k = weakenA rebuildAcc k
 
-instance Kit acc => Sink acc where      -- overlapping, undecidable, incoherent
-  sink env = rebuildAcc (Avar . sink env)
+instance Kit acc => Sink acc where
+  weaken k = rebuildAcc (Avar . k)
 
 instance Kit acc => Sink (Cunctation acc) where
-  sink env cc = case cc of
-    Done v              -> Done (sink env v)
-    Step sh p f v       -> Step (sink env sh) (sink env p) (sink env f) (sink env v)
-    Yield sh f          -> Yield (sink env sh) (sink env f)
-
-
-class Sink1 f where
-  sink1 :: Extend acc env env' -> f (env,s) t -> f (env',s) t
-
-instance Sink1 Idx where
-  sink1 BaseEnv         = Stats.substitution "sink1" id
-  sink1 (PushEnv e _)   = split . sink1 e
-    where
-      split :: Idx (env,s) t -> Idx ((env,u),s) t
-      split ZeroIdx      = ZeroIdx
-      split (SuccIdx ix) = SuccIdx (SuccIdx ix)
-
-instance Kit acc => Sink1 (PreOpenExp acc env) where
-  sink1 env = weakenEA rebuildAcc (sink1 env)
-
-instance Kit acc => Sink1 (PreOpenFun acc env) where
-  sink1 env = weakenFA rebuildAcc (sink1 env)
-
-instance Kit acc => Sink1 (PreOpenAcc acc) where
-  sink1 env = weakenA rebuildAcc (sink1 env)
-
-instance Kit acc => Sink1 acc where     -- overlapping, undecidable, incoherent
-  sink1 env = rebuildAcc (Avar . sink1 env)
-
+  weaken k cc = case cc of
+    Done v              -> Done (weaken k v)
+    Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
+    Yield sh f          -> Yield (weaken k sh) (weaken k f)
 
 
 -- Array fusion of a de Bruijn computation AST
