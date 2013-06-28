@@ -539,7 +539,9 @@ data Cunctation acc aenv a where
 
   -- The base case is just a real (manifest) array term. No fusion happens here.
   -- Note that the array is referenced by an index into the extended
-  -- environment, making the term non-recursive.
+  -- environment, ensuring that the array is manifest and making the term
+  -- non-recursive in 'acc'. Also note that the return type is a general
+  -- instance of Arrays and not restricted to a single Array.
   --
   Done  :: Arrays a
         => Idx            aenv a
