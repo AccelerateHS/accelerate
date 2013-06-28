@@ -614,8 +614,7 @@ shape cc
   | Yield sh _           <- yield cc    = sh
 
 
--- Reified type of a delayed array representation. This way we don't require
--- additional class constraints on 'step' and 'yield'.
+-- Reified type of a delayed array representation.
 --
 accType' :: forall acc aenv a. Arrays a => Cunctation acc aenv a -> ArraysR (ArrRepr' a)
 accType' _ = arrays' (undefined :: a)
