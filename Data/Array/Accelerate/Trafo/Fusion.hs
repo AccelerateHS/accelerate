@@ -68,12 +68,12 @@ import System.IO.Unsafe -- for debugging
 -- | Apply the fusion transformation to a closed de Bruijn AST
 --
 convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
-convertAcc = withSimplStats . quenchAcc . annealAcc
+convertAcc = withSimplStats . convertOpenAcc
 
 -- | Apply the fusion transformation to a function of array arguments
 --
 convertAfun :: Afun f -> DelayedAfun f
-convertAfun = withSimplStats . quenchAfun . annealAfun
+convertAfun = withSimplStats . convertOpenAfun
 
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
@@ -83,20 +83,23 @@ withSimplStats x = x
 #endif
 
 
--- | An optional second phase of the fusion transformation that makes the
--- representation of fused consumer/producer terms explicit. Note that quenching
--- happens after annealing.
+-- | Apply the fusion transformation to an AST. This consists of two phases:
 --
--- TODO: integrate this with the first phase?
+--    1. A bottom-up traversal that converts nodes into the internal delayed
+--       representation, merging adjacent producer/producer pairs.
 --
-quenchAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-quenchAcc = cvtA
+--    2. A top-down traversal that makes the representation of fused
+--       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
+--       delayed nodes.
+--
+convertOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
+convertOpenAcc = cvtA . computeAcc . embedOpenAcc
   where
     -- Convert array computations into an embeddable delayed representation.
     -- This is essentially the reverse of 'compute'.
     --
-    embed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-    embed (OpenAcc pacc) =
+    delay :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
+    delay (OpenAcc pacc) =
       case pacc of
         Avar v
           -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
@@ -104,18 +107,31 @@ quenchAcc = cvtA
         Generate (cvtE -> sh) (cvtF -> f)
           -> Delayed sh f (f `compose` fromIndex sh)
 
-        Map (cvtF -> f) (embed -> Delayed{..})
+        Map (cvtF -> f) (delay -> Delayed{..})
           -> Delayed extentD (f `compose` indexD) (f `compose` linearIndexD)
 
-        Backpermute (cvtE -> sh) (cvtF -> p) (embed -> Delayed{..})
+        Backpermute (cvtE -> sh) (cvtF -> p) (delay -> Delayed{..})
           -> let p' = indexD `compose` p
              in  Delayed sh p'(p' `compose` fromIndex sh)
 
-        Transform (cvtE -> sh) (cvtF -> p) (cvtF -> f) (embed -> Delayed{..})
+        Transform (cvtE -> sh) (cvtF -> p) (cvtF -> f) (delay -> Delayed{..})
           -> let f' = f `compose` indexD `compose` p
              in  Delayed sh f' (f' `compose` fromIndex sh)
 
         _ -> INTERNAL_ERROR(error) "quench" "tried to consume a non-embeddable term"
+
+--    delay (embedOpenAcc -> Embed BaseEnv cc)
+--      = case cc of
+--          Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
+--          Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
+--          Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
+--            | sh'       <- arrayShape v
+--            , Just REFL <- match sh sh'
+--            , Just REFL <- isIdentity p
+--            -> Delayed sh' (f `compose` indexArray v) (f `compose` linearIndex v)
+--
+--            | f'        <- f `compose` indexArray v `compose` p
+--            -> Delayed sh f' (f' `compose` fromIndex sh)
 
     fusionError = INTERNAL_ERROR(error) "quench" "unexpected fusible materials"
 
@@ -144,10 +160,10 @@ quenchAcc = cvtA
         -- result of a let-binding to be used multiple times. The input array
         -- here should be an array variable, else something went wrong.
         --
-        Map f a                 -> Map (cvtF f) (embed a)
+        Map f a                 -> Map (cvtF f) (delay a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
-        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (embed a)
-        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (embed a) a
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delay a)
+        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (delay a) a
 
         Reshape{}               -> fusionError
         Replicate{}             -> fusionError
@@ -162,17 +178,17 @@ quenchAcc = cvtA
         -- argument array multiple times, we are careful not to duplicate work
         -- and instead force the argument to be a manifest array.
         --
-        Fold f z a              -> Fold     (cvtF f) (cvtE z) (embed a)
-        Fold1 f a               -> Fold1    (cvtF f) (embed a)
-        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (embed a) (embed s)
-        Fold1Seg f a s          -> Fold1Seg (cvtF f) (embed a) (embed s)
-        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (embed a)
-        Scanl1 f a              -> Scanl1   (cvtF f) (embed a)
-        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (embed a)
-        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (embed a)
-        Scanr1 f a              -> Scanr1   (cvtF f) (embed a)
-        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (embed a)
-        Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (embed a)
+        Fold f z a              -> Fold     (cvtF f) (cvtE z) (delay a)
+        Fold1 f a               -> Fold1    (cvtF f) (delay a)
+        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delay a) (delay s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (delay a) (delay s)
+        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delay a)
+        Scanl1 f a              -> Scanl1   (cvtF f) (delay a)
+        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delay a)
+        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delay a)
+        Scanr1 f a              -> Scanr1   (cvtF f) (delay a)
+        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delay a)
+        Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (delay a)
         Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
 
@@ -238,62 +254,43 @@ quenchAcc = cvtA
     cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
 
-quenchAfun :: OpenAfun aenv f -> DelayedOpenAfun aenv f
-quenchAfun (Alam  f) = Alam  (quenchAfun f)
-quenchAfun (Abody b) = Abody (quenchAcc b)
+convertOpenAfun :: OpenAfun aenv f -> DelayedOpenAfun aenv f
+convertOpenAfun (Alam  f) = Alam  (convertOpenAfun f)
+convertOpenAfun (Abody b) = Abody (convertOpenAcc b)
 
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
--- This combines producer/producer terms and makes consumer/producer nodes
--- adjacent.
+-- This converts terms into the internal delayed array representation and merges
+-- adjacent producer/producer terms. Using the reduced internal form limits the
+-- number of combinations that need to be considered.
 --
-annealAcc :: Arrays arrs => OpenAcc aenv arrs -> OpenAcc aenv arrs
-annealAcc = computeAcc . delayAcc
+type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
+type ElimAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
+
+embedOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
+embedOpenAcc (OpenAcc pacc) = embedPreAcc embedOpenAcc elimOpenAcc pacc
   where
-    delayAcc :: Arrays a => OpenAcc aenv a -> Delayed OpenAcc aenv a
-    delayAcc (OpenAcc pacc) = delayPreAcc delayAcc elimAcc pacc
-
-    countAcc :: UsesOfAcc OpenAcc
-    countAcc ok idx (OpenAcc pacc) = usesOfPreAcc ok countAcc idx pacc
-
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
     -- into the use site, but it is likely advantageous to be far more
     -- aggressive here. SEE: [Sharing vs. Fusion]
     --
-    elimAcc :: Idx aenv s -> OpenAcc aenv t -> Bool
-    elimAcc v acc = countAcc False v acc <= lIMIT
+    elimOpenAcc :: Idx aenv s -> OpenAcc aenv t -> Bool
+    elimOpenAcc v acc = count False v acc <= lIMIT
       where
         lIMIT = 1
 
-
-annealAfun :: OpenAfun aenv f -> OpenAfun aenv f
-annealAfun (Alam  f) = Alam  (annealAfun f)
-annealAfun (Abody b) = Abody (annealAcc b)
+        count :: UsesOfAcc OpenAcc
+        count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
 
 
--- | Recast terms into the internal fusion delayed array representation to be
--- forged into combined terms. Using the reduced internal form limits the number
--- of combinations that need to be considered.
---
-type DelayAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Delayed acc aenv arrs
-type ElimAcc  acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
-
-{-# SPECIALISE
-      delayPreAcc :: Arrays a
-                  => DelayAcc   OpenAcc
-                  -> ElimAcc    OpenAcc
-                  -> PreOpenAcc OpenAcc aenv a
-                  -> Delayed    OpenAcc aenv a
- #-}
-
-delayPreAcc
+embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
-    => DelayAcc   acc
+    => EmbedAcc   acc
     -> ElimAcc    acc
     -> PreOpenAcc acc aenv arrs
-    -> Delayed    acc aenv arrs
-delayPreAcc delayAcc elimAcc pacc =
+    -> Embed      acc aenv arrs
+embedPreAcc embedAcc elimAcc pacc =
   case pacc of
 
     -- Non-fusible terms
@@ -305,9 +302,9 @@ delayPreAcc delayAcc elimAcc pacc =
     -- want to fuse past array let bindings, as this would imply work
     -- duplication. SEE: [Sharing vs. Fusion]
     --
-    Alet bnd body       -> aletD delayAcc elimAcc bnd body
-    Acond p at ae       -> acondD delayAcc (cvtE p) at ae
-    Aprj ix tup         -> aprjD delayAcc ix tup
+    Alet bnd body       -> aletD embedAcc elimAcc bnd body
+    Acond p at ae       -> acondD embedAcc (cvtE p) at ae
+    Aprj ix tup         -> aprjD embedAcc ix tup
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
@@ -373,7 +370,7 @@ delayPreAcc delayAcc elimAcc pacc =
 
   where
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
-    cvtA = computeAcc . delayAcc
+    cvtA = computeAcc . embedAcc
 
     cvtAT :: Atuple (acc aenv') a -> Atuple (acc aenv') a
     cvtAT NilAtup          = NilAtup
@@ -453,45 +450,45 @@ delayPreAcc delayAcc elimAcc pacc =
 
     fuse :: Arrays as
          => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
-         ->         acc aenv as
-         -> Delayed acc aenv bs
-    fuse op (delayAcc -> Term env cc) = Term env (op env cc)
+         ->       acc aenv as
+         -> Embed acc aenv bs
+    fuse op (embedAcc -> Embed env cc) = Embed env (op env cc)
 
     fuse2 :: (Arrays as, Arrays bs)
           => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs -> Cunctation acc aenv' cs)
-          ->         acc aenv as
-          ->         acc aenv bs
-          -> Delayed acc aenv cs
+          ->       acc aenv as
+          ->       acc aenv bs
+          -> Embed acc aenv cs
     fuse2 op a1 a0
-      | Term env1 cc1   <- delayAcc a1
-      , Term env0 cc0   <- delayAcc (sink env1 a0)
+      | Embed env1 cc1  <- embedAcc a1
+      , Embed env0 cc0  <- embedAcc (sink env1 a0)
       , env             <- env1 `join` env0
-      = Term env (op env (sink env0 cc1) cc0)
+      = Embed env (op env (sink env0 cc1) cc0)
 
     embed :: (Arrays as, Arrays bs)
           => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
-          ->         acc aenv as
-          -> Delayed acc aenv bs
-    embed op (delayAcc -> Term env cc) = case cc of
-      Done v        -> Term (env `PushEnv` op env (avarIn v)) (Done ZeroIdx)
-      Step sh p f v -> Term (env `PushEnv` op env (computeAcc (Term BaseEnv (Step sh p f v)))) (Done ZeroIdx)
-      Yield sh f    -> Term (env `PushEnv` op env (computeAcc (Term BaseEnv (Yield sh f)))) (Done ZeroIdx)
+          ->       acc aenv as
+          -> Embed acc aenv bs
+    embed op (embedAcc -> Embed env cc) = case cc of
+      Done v        -> Embed (env `PushEnv` op env (avarIn v)) (Done ZeroIdx)
+      Step sh p f v -> Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv (Step sh p f v)))) (Done ZeroIdx)
+      Yield sh f    -> Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv (Yield sh f)))) (Done ZeroIdx)
 
     embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
-           ->         acc aenv as
-           ->         acc aenv bs
-           -> Delayed acc aenv cs
-    embed2 op (delayAcc -> Term env1 cc1) a0 = case cc1 of
+           ->       acc aenv as
+           ->       acc aenv bs
+           -> Embed acc aenv cs
+    embed2 op (embedAcc -> Embed env1 cc1) a0 = case cc1 of
       Done v        -> inner env1 v a0
-      Step sh p f v -> inner (env1 `PushEnv` compute (Term BaseEnv (Step sh p f v))) ZeroIdx a0
-      Yield sh f    -> inner (env1 `PushEnv` compute (Term BaseEnv (Yield sh f))) ZeroIdx a0
+      Step sh p f v -> inner (env1 `PushEnv` compute (Embed BaseEnv (Step sh p f v))) ZeroIdx a0
+      Yield sh f    -> inner (env1 `PushEnv` compute (Embed BaseEnv (Yield sh f))) ZeroIdx a0
       where
-        inner :: Extend acc aenv aenv' -> Idx aenv' as -> acc aenv bs -> Delayed acc aenv cs
-        inner env1 v1 (delayAcc . sink env1 -> Term env0 cc0) = case cc0 of
-          Done v0       -> let env = env1 `join` env0 in Term (env `PushEnv` op env (avarIn (sink env0 v1)) (avarIn v0)) (Done ZeroIdx)
-          Step sh p f v -> let env = env1 `join` env0 in Term (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Term BaseEnv (Step sh p f v)))) (Done ZeroIdx)
-          Yield sh f    -> let env = env1 `join` env0 in Term (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Term BaseEnv (Yield sh f)))) (Done ZeroIdx)
+        inner :: Extend acc aenv aenv' -> Idx aenv' as -> acc aenv bs -> Embed acc aenv cs
+        inner env1 v1 (embedAcc . sink env1 -> Embed env0 cc0) = case cc0 of
+          Done v0       -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (avarIn v0)) (Done ZeroIdx)
+          Step sh p f v -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv (Step sh p f v)))) (Done ZeroIdx)
+          Yield sh f    -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv (Yield sh f)))) (Done ZeroIdx)
 
 
 -- Internal representation
@@ -524,10 +521,10 @@ delayPreAcc delayAcc elimAcc pacc =
 -- of the fusion algorithm for an AST of N terms becomes O(r^n), where r is the
 -- number of different rules we have for combining terms.
 --
-data Delayed acc aenv a where
-  Term  :: Extend     acc aenv aenv'
+data Embed acc aenv a where
+  Embed :: Extend     acc aenv aenv'
         -> Cunctation acc      aenv' a
-        -> Delayed    acc aenv       a
+        -> Embed      acc aenv       a
 
 
 -- Cunctation (n): the action or an instance of delaying; a tardy action.
@@ -572,10 +569,10 @@ data Cunctation acc aenv a where
 
 -- Convert a real AST node into the internal representation
 --
-done :: Arrays a => PreOpenAcc acc aenv a -> Delayed acc aenv a
+done :: Arrays a => PreOpenAcc acc aenv a -> Embed acc aenv a
 done pacc
-  | Avar v <- pacc      = Term BaseEnv                  (Done v)
-  | otherwise           = Term (BaseEnv `PushEnv` pacc) (Done ZeroIdx)
+  | Avar v <- pacc      = Embed BaseEnv                  (Done v)
+  | otherwise           = Embed (BaseEnv `PushEnv` pacc) (Done ZeroIdx)
 
 
 -- Recast a cunctation into a mapping from indices to elements.
@@ -721,8 +718,8 @@ instance Kit acc => Sink (Cunctation acc) where
 -- Recast the internal representation of delayed arrays into a real AST node.
 -- Use the most specific version of a combinator whenever possible.
 --
-compute :: (Kit acc, Arrays arrs) => Delayed acc aenv arrs -> PreOpenAcc acc aenv arrs
-compute (Term env cc)
+compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute (Embed env cc)
   = bind env
   $ case cc of
       Done v                                    -> Avar v
@@ -742,19 +739,19 @@ compute (Term env cc)
 
 -- Evaluate a delayed computation and tie the recursive knot
 --
-computeAcc :: (Kit acc, Arrays arrs) => Delayed acc aenv arrs -> acc aenv arrs
+computeAcc :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> acc aenv arrs
 computeAcc = inject . compute
 
 
 -- Representation of a generator as a delayed array
 --
 generateD :: (Shape sh, Elt e)
-          => PreExp  acc aenv sh
-          -> PreFun  acc aenv (sh -> e)
-          -> Delayed acc aenv (Array sh e)
+          => PreExp acc aenv sh
+          -> PreFun acc aenv (sh -> e)
+          -> Embed  acc aenv (Array sh e)
 generateD sh f
   = Stats.ruleFired "generateD"
-  $ Term BaseEnv (Yield sh f)
+  $ Embed BaseEnv (Yield sh f)
 
 
 -- Fuse a unary function into a delayed array.
@@ -950,12 +947,12 @@ zipWithD f cc1 cc0
 -- data from memory.
 --
 aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
-      => DelayAcc acc
+      => EmbedAcc acc
       -> ElimAcc  acc
       ->          acc aenv        arrs
       ->          acc (aenv,arrs) brrs
-      -> Delayed  acc aenv        brrs
-aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
+      -> Embed    acc aenv        brrs
+aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
 
   -- let-floating
   -- ------------
@@ -965,15 +962,15 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Term env0 cc0       <- delayAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
-  $ Term (env1 `join` env0) cc0
+  $ Embed (env1 `join` env0) cc0
 
   -- Handle the remaining cases in a separate function. It turns out that this
   -- is important so we aren't excessively sinking/delaying terms.
   --
   | otherwise
-  , Term env0 cc0       <- delayAcc $ sink1 env1 acc0
+  , Embed env0 cc0      <- embedAcc $ sink1 env1 acc0
   = case cc1 of
       Step{}    -> aletD' env1 cc1 env0 cc0
       Yield{}   -> aletD' env1 cc1 env0 cc0
@@ -992,9 +989,9 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
            -> Cunctation acc                     aenv'  (Array sh e)
            -> Extend     acc (aenv', Array sh e) aenv''
            -> Cunctation acc                     aenv'' brrs
-           -> Delayed    acc aenv                       brrs
+           -> Embed      acc aenv                       brrs
     aletD' env1 cc1 env0 cc0
-      | not shouldInline         = Term (env1 `PushEnv` bnd `join` env0) cc0
+      | not shouldInline         = Embed (env1 `PushEnv` bnd `join` env0) cc0
 
       | Stats.ruleFired "aletD/eliminate" False
       = undefined
@@ -1008,17 +1005,17 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
         -- (in Extend). This problem occurred in the Canny example program.
         --
         shouldInline = elimAcc ZeroIdx body
-        body         = computeAcc (Term env0    cc0)
-        bnd          = compute    (Term BaseEnv cc1)
+        body         = computeAcc (Embed env0    cc0)
+        bnd          = compute    (Embed BaseEnv cc1)
 
-        eliminate :: PreExp  acc      aenv' sh
-                  -> PreFun  acc      aenv' (sh -> e)
-                  -> Delayed acc aenv       brrs
+        eliminate :: PreExp acc      aenv' sh
+                  -> PreFun acc      aenv' (sh -> e)
+                  -> Embed  acc aenv       brrs
         eliminate sh1 f1
-          | sh1'            <- weakenEA rebuildAcc SuccIdx sh1
-          , f1'             <- weakenFA rebuildAcc SuccIdx f1
-          , Term env0' cc0' <- delayAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
-          = Term (env1 `join` env0') cc0'
+          | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
+          , f1'                 <- weakenFA rebuildAcc SuccIdx f1
+          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          = Embed (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
     -- scalar expressions with an equivalent expression that generates the
@@ -1160,33 +1157,33 @@ aletD delayAcc elimAcc (delayAcc -> Term env1 cc1) acc0
 -- for the branch not taken.
 --
 acondD :: (Kit acc, Arrays arrs)
-       => DelayAcc acc
+       => EmbedAcc acc
        -> PreExp   acc aenv Bool
        ->          acc aenv arrs
        ->          acc aenv arrs
-       -> Delayed  acc aenv arrs
-acondD delayAcc p t e
-  | Const ((),True)  <- p   = Stats.knownBranch "True"      $ delayAcc t
-  | Const ((),False) <- p   = Stats.knownBranch "False"     $ delayAcc e
-  | Just REFL <- match t e  = Stats.knownBranch "redundant" $ delayAcc e
-  | otherwise               = done $ Acond p (computeAcc (delayAcc t))
-                                             (computeAcc (delayAcc e))
+       -> Embed    acc aenv arrs
+acondD embedAcc p t e
+  | Const ((),True)  <- p   = Stats.knownBranch "True"      $ embedAcc t
+  | Const ((),False) <- p   = Stats.knownBranch "False"     $ embedAcc e
+  | Just REFL <- match t e  = Stats.knownBranch "redundant" $ embedAcc e
+  | otherwise               = done $ Acond p (computeAcc (embedAcc t))
+                                             (computeAcc (embedAcc e))
 
 
 -- Array tuple projection. Whenever possible we want to peek underneath the
 -- tuple structure and continue the fusion process.
 --
 aprjD :: forall acc aenv arrs a. (Kit acc, IsTuple arrs, Arrays arrs, Arrays a)
-      => DelayAcc acc
+      => EmbedAcc acc
       -> TupleIdx (TupleRepr arrs) a
-      ->         acc aenv arrs
-      -> Delayed acc aenv a
-aprjD delayAcc ix a
-  | Atuple tup <- extract a = Stats.ruleFired "aprj/Atuple" . delayAcc $ aprjAT ix tup
+      ->       acc aenv arrs
+      -> Embed acc aenv a
+aprjD embedAcc ix a
+  | Atuple tup <- extract a = Stats.ruleFired "aprj/Atuple" . embedAcc $ aprjAT ix tup
   | otherwise               = done $ Aprj ix (cvtA a)
   where
     cvtA :: acc aenv arrs -> acc aenv arrs
-    cvtA = computeAcc . delayAcc
+    cvtA = computeAcc . embedAcc
 
     aprjAT :: TupleIdx atup a -> Atuple (acc aenv) atup -> acc aenv a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
