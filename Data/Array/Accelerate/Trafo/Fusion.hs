@@ -470,8 +470,7 @@ embedPreAcc embedAcc elimAcc pacc =
           ->       acc aenv as
           -> Embed acc aenv bs
     embed op (embedAcc -> Embed env cc)
-      | Done v <- cc    = Embed (env `PushEnv` op env (avarIn v)) (Done ZeroIdx)
-      | otherwise       = Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv cc))) (Done ZeroIdx)
+      = Embed (env `PushEnv` op env (inject (compute' cc))) (Done ZeroIdx)
 
     embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
@@ -479,17 +478,13 @@ embedPreAcc embedAcc elimAcc pacc =
            ->       acc aenv bs
            -> Embed acc aenv cs
     embed2 op (embedAcc -> Embed env1 cc1) a0
-      | Done v1 <- cc1  = inner env1 v1 a0
-      | otherwise       = inner (env1 `PushEnv` compute (Embed BaseEnv cc1)) ZeroIdx a0
+      | Done v1 <- cc1  = inner env1                          v1      a0
+      | otherwise       = inner (env1 `PushEnv` compute' cc1) ZeroIdx a0
       where
         inner :: Extend acc aenv aenv' -> Idx aenv' as -> acc aenv bs -> Embed acc aenv cs
         inner env1 v1 (embedAcc . sink env1 -> Embed env0 cc0)
-          | Done v0     <- cc0
-          , env         <- env1 `join` env0
-          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (avarIn v0)) (Done ZeroIdx)
-
           | env         <- env1 `join` env0
-          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv cc0))) (Done ZeroIdx)
+          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (inject (compute' cc0))) (Done ZeroIdx)
 
 
 -- Internal representation
@@ -568,6 +563,12 @@ data Cunctation acc aenv a where
         -> PreFun     acc aenv (a   -> b)
         -> Idx            aenv (Array sh  a)
         -> Cunctation acc aenv (Array sh' b)
+
+
+instance Kit acc => Simplify (Cunctation acc aenv a) where
+  simplify (Done v)        = Done v
+  simplify (Yield sh f)    = Yield (simplify sh) (simplify f)
+  simplify (Step sh p f v) = Step (simplify sh) (simplify p) (simplify f) v
 
 
 -- Convert a real AST node into the internal representation
@@ -721,22 +722,20 @@ instance Kit acc => Sink (Cunctation acc) where
 -- Use the most specific version of a combinator whenever possible.
 --
 compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
-compute (Embed env cc)
-  = bind env
-  $ case cc of
-      Done v                                    -> Avar v
-      Yield (simplify -> sh) (simplify -> f)    -> Generate sh f
-      Step  (simplify -> sh) (simplify -> p) (simplify -> f) v
-        | Just REFL <- identShape
-        , Just REFL <- isIdentity p
-        , Just REFL <- isIdentity f             -> Avar v
-        | Just REFL <- identShape
-        , Just REFL <- isIdentity p             -> Map f acc
-        | Just REFL <- isIdentity f             -> Backpermute sh p acc
-        | otherwise                             -> Transform sh p f acc
-        where
-          identShape    = match sh (arrayShape v)
-          acc           = avarIn v
+compute (Embed env cc) = bind env (compute' cc)
+
+compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute' cc = case simplify cc of
+  Done v                                        -> Avar v
+  Yield sh f                                    -> Generate sh f
+  Step sh p f v
+    | Just REFL <- match sh (arrayShape v)
+    , Just REFL <- isIdentity p
+    , Just REFL <- isIdentity f                 -> Avar v
+    | Just REFL <- match sh (arrayShape v)
+    , Just REFL <- isIdentity p                 -> Map f (avarIn v)
+    | Just REFL <- isIdentity f                 -> Backpermute sh p (avarIn v)
+    | otherwise                                 -> Transform sh p f (avarIn v)
 
 
 -- Evaluate a delayed computation and tie the recursive knot
