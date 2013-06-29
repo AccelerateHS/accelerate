@@ -469,26 +469,27 @@ embedPreAcc embedAcc elimAcc pacc =
           => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
           ->       acc aenv as
           -> Embed acc aenv bs
-    embed op (embedAcc -> Embed env cc) = case cc of
-      Done v        -> Embed (env `PushEnv` op env (avarIn v)) (Done ZeroIdx)
-      Step sh p f v -> Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv (Step sh p f v)))) (Done ZeroIdx)
-      Yield sh f    -> Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv (Yield sh f)))) (Done ZeroIdx)
+    embed op (embedAcc -> Embed env cc)
+      | Done v <- cc    = Embed (env `PushEnv` op env (avarIn v)) (Done ZeroIdx)
+      | otherwise       = Embed (env `PushEnv` op env (computeAcc (Embed BaseEnv cc))) (Done ZeroIdx)
 
     embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
            ->       acc aenv as
            ->       acc aenv bs
            -> Embed acc aenv cs
-    embed2 op (embedAcc -> Embed env1 cc1) a0 = case cc1 of
-      Done v        -> inner env1 v a0
-      Step sh p f v -> inner (env1 `PushEnv` compute (Embed BaseEnv (Step sh p f v))) ZeroIdx a0
-      Yield sh f    -> inner (env1 `PushEnv` compute (Embed BaseEnv (Yield sh f))) ZeroIdx a0
+    embed2 op (embedAcc -> Embed env1 cc1) a0
+      | Done v1 <- cc1  = inner env1 v1 a0
+      | otherwise       = inner (env1 `PushEnv` compute (Embed BaseEnv cc1)) ZeroIdx a0
       where
         inner :: Extend acc aenv aenv' -> Idx aenv' as -> acc aenv bs -> Embed acc aenv cs
-        inner env1 v1 (embedAcc . sink env1 -> Embed env0 cc0) = case cc0 of
-          Done v0       -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (avarIn v0)) (Done ZeroIdx)
-          Step sh p f v -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv (Step sh p f v)))) (Done ZeroIdx)
-          Yield sh f    -> let env = env1 `join` env0 in Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv (Yield sh f)))) (Done ZeroIdx)
+        inner env1 v1 (embedAcc . sink env1 -> Embed env0 cc0)
+          | Done v0     <- cc0
+          , env         <- env1 `join` env0
+          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (avarIn v0)) (Done ZeroIdx)
+
+          | env         <- env1 `join` env0
+          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (computeAcc (Embed BaseEnv cc0))) (Done ZeroIdx)
 
 
 -- Internal representation
