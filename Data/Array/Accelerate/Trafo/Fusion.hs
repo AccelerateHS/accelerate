@@ -950,8 +950,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- Handle the remaining cases in a separate function. It turns out that this
   -- is important so we aren't excessively sinking/delaying terms.
   --
-  | otherwise
-  , Embed env0 cc0      <- embedAcc $ sink1 env1 acc0
+  | Embed env0 cc0      <- embedAcc $ sink1 env1 acc0
   = case cc1 of
       Step{}    -> aletD' env1 cc1 env0 cc0
       Yield{}   -> aletD' env1 cc1 env0 cc0
@@ -986,8 +985,8 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         -- (in Extend). This problem occurred in the Canny example program.
         --
         shouldInline = elimAcc ZeroIdx body
-        body         = computeAcc (Embed env0    cc0)
-        bnd          = compute    (Embed BaseEnv cc1)
+        body         = computeAcc (Embed env0 cc0)
+        bnd          = compute' cc1
 
         eliminate :: PreExp acc      aenv' sh
                   -> PreFun acc      aenv' (sh -> e)
