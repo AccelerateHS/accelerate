@@ -93,64 +93,52 @@ withSimplStats x = x
 --       delayed nodes.
 --
 convertOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-convertOpenAcc = cvtA . computeAcc . embedOpenAcc
+convertOpenAcc = manifest . computeAcc . embedOpenAcc
   where
     -- Convert array computations into an embeddable delayed representation.
     -- This is essentially the reverse of 'compute'.
     --
-    delay :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-    delay (OpenAcc pacc) =
-      case pacc of
-        Avar v
-          -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
+    delayed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
+    delayed (manifest -> Manifest pacc)
+      | Avar v                          <- pacc
+      = Delayed (arrayShape v) (indexArray v) (linearIndex v)
 
-        Generate (cvtE -> sh) (cvtF -> f)
-          -> Delayed sh f (f `compose` fromIndex sh)
+      | Generate sh f                   <- pacc
+      = Delayed sh f (f `compose` fromIndex sh)
 
-        Map (cvtF -> f) (delay -> Delayed{..})
-          -> Delayed extentD (f `compose` indexD) (f `compose` linearIndexD)
+      | Map f Delayed{..}               <- pacc
+      = Delayed extentD (f `compose` indexD) (f `compose` linearIndexD)
 
-        Backpermute (cvtE -> sh) (cvtF -> p) (delay -> Delayed{..})
-          -> let p' = indexD `compose` p
-             in  Delayed sh p'(p' `compose` fromIndex sh)
+      | Backpermute sh p Delayed{..}    <- pacc
+      , p'                              <- indexD `compose` p
+      = Delayed sh p' (p' `compose` fromIndex sh)
 
-        Transform (cvtE -> sh) (cvtF -> p) (cvtF -> f) (delay -> Delayed{..})
-          -> let f' = f `compose` indexD `compose` p
-             in  Delayed sh f' (f' `compose` fromIndex sh)
+      | Transform sh p f Delayed{..}    <- pacc
+      , f'                              <- f `compose` indexD `compose` p
+      = Delayed sh f' (f' `compose` fromIndex sh)
 
-        _ -> INTERNAL_ERROR(error) "quench" "tried to consume a non-embeddable term"
+    delayed _
+      = INTERNAL_ERROR(error) "delayed" "tried to consume a non-embeddable term"
 
---    delay (embedOpenAcc -> Embed BaseEnv cc)
---      = case cc of
---          Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
---          Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
---          Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
---            | sh'       <- arrayShape v
---            , Just REFL <- match sh sh'
---            , Just REFL <- isIdentity p
---            -> Delayed sh' (f `compose` indexArray v) (f `compose` linearIndex v)
---
---            | f'        <- f `compose` indexArray v `compose` p
---            -> Delayed sh f' (f' `compose` fromIndex sh)
-
-    fusionError = INTERNAL_ERROR(error) "quench" "unexpected fusible materials"
 
     -- Convert array programs as manifest terms.
     --
-    cvtA :: OpenAcc aenv a -> DelayedOpenAcc aenv a
-    cvtA (OpenAcc pacc) = Manifest $
-      case pacc of
+    manifest :: OpenAcc aenv a -> DelayedOpenAcc aenv a
+    manifest (OpenAcc pacc) =
+      let fusionError = INTERNAL_ERROR(error) "manifest" "unexpected fusible materials"
+      in
+      Manifest $ case pacc of
         -- Non-fusible terms
         -- -----------------
         Avar ix                 -> Avar ix
         Use arr                 -> Use arr
         Unit e                  -> Unit (cvtE e)
-        Alet bnd body           -> Alet (cvtA bnd) (cvtA body)
-        Acond p t e             -> Acond (cvtE p) (cvtA t) (cvtA e)
+        Alet bnd body           -> Alet (manifest bnd) (manifest body)
+        Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
         Atuple tup              -> Atuple (cvtAT tup)
-        Aprj ix tup             -> Aprj ix (cvtA tup)
-        Apply f a               -> Apply (cvtAF f) (cvtA a)
-        Aforeign ff f a         -> Aforeign ff (cvtAF f) (cvtA a)
+        Aprj ix tup             -> Aprj ix (manifest tup)
+        Apply f a               -> Apply (cvtAF f) (manifest a)
+        Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest a)
 
         -- Producers
         -- ---------
@@ -160,10 +148,10 @@ convertOpenAcc = cvtA . computeAcc . embedOpenAcc
         -- result of a let-binding to be used multiple times. The input array
         -- here should be an array variable, else something went wrong.
         --
-        Map f a                 -> Map (cvtF f) (delay a)
+        Map f a                 -> Map (cvtF f) (delayed a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
-        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delay a)
-        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (delay a) a
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed a)
+        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (delayed a) a
 
         Reshape{}               -> fusionError
         Replicate{}             -> fusionError
@@ -178,19 +166,19 @@ convertOpenAcc = cvtA . computeAcc . embedOpenAcc
         -- argument array multiple times, we are careful not to duplicate work
         -- and instead force the argument to be a manifest array.
         --
-        Fold f z a              -> Fold     (cvtF f) (cvtE z) (delay a)
-        Fold1 f a               -> Fold1    (cvtF f) (delay a)
-        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delay a) (delay s)
-        Fold1Seg f a s          -> Fold1Seg (cvtF f) (delay a) (delay s)
-        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delay a)
-        Scanl1 f a              -> Scanl1   (cvtF f) (delay a)
-        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delay a)
-        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delay a)
-        Scanr1 f a              -> Scanr1   (cvtF f) (delay a)
-        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delay a)
-        Permute f d p a         -> Permute  (cvtF f) (cvtA d) (cvtF p) (delay a)
-        Stencil f x a           -> Stencil  (cvtF f) x (cvtA a)
-        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+        Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed a)
+        Fold1 f a               -> Fold1    (cvtF f) (delayed a)
+        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed a) (delayed s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed a) (delayed s)
+        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed a)
+        Scanl1 f a              -> Scanl1   (cvtF f) (delayed a)
+        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed a)
+        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed a)
+        Scanr1 f a              -> Scanr1   (cvtF f) (delayed a)
+        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed a)
+        Permute f d p a         -> Permute  (cvtF f) (manifest d) (cvtF p) (delayed a)
+        Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
     -- A backwards permutation at this stage might be further simplified as a
     -- reshape operation, which can be executed in constant time without
@@ -209,11 +197,11 @@ convertOpenAcc = cvtA . computeAcc . embedOpenAcc
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup
-    cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` cvtA a
+    cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest a
 
     cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
     cvtAF (Alam f)  = Alam  (cvtAF f)
-    cvtAF (Abody b) = Abody (cvtA b)
+    cvtAF (Abody b) = Abody (manifest b)
 
     -- Conversions for closed scalar functions and expressions
     --
@@ -242,9 +230,9 @@ convertOpenAcc = cvtA . computeAcc . embedOpenAcc
         Iterate n f x           -> Iterate (cvtE n) (cvtE f) (cvtE x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE x)
-        Index a sh              -> Index (cvtA a) (cvtE sh)
-        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE i)
-        Shape a                 -> Shape (cvtA a)
+        Index a sh              -> Index (manifest a) (cvtE sh)
+        LinearIndex a i         -> LinearIndex (manifest a) (cvtE i)
+        Shape a                 -> Shape (manifest a)
         ShapeSize sh            -> ShapeSize (cvtE sh)
         Intersect s t           -> Intersect (cvtE s) (cvtE t)
         Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
