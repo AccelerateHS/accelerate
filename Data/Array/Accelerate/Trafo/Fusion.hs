@@ -96,30 +96,22 @@ convertOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
 convertOpenAcc = manifest . computeAcc . embedOpenAcc
   where
     -- Convert array computations into an embeddable delayed representation.
-    -- This is essentially the reverse of 'compute'.
+    -- Reapply the embedding function from the first pass and unpack the
+    -- representation. It is safe to match on BaseEnv because the first pass
+    -- will put producers adjacent to the term consuming it.
     --
     delayed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-    delayed (manifest -> Manifest pacc)
-      | Avar v                          <- pacc
-      = Delayed (arrayShape v) (indexArray v) (linearIndex v)
+    delayed (embedOpenAcc -> Embed BaseEnv cc) =
+      case cc of
+        Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
+        Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
+        Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
+          | Just REFL <- match sh (arrayShape v)
+          , Just REFL <- isIdentity p
+          -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
 
-      | Generate sh f                   <- pacc
-      = Delayed sh f (f `compose` fromIndex sh)
-
-      | Map f Delayed{..}               <- pacc
-      = Delayed extentD (f `compose` indexD) (f `compose` linearIndexD)
-
-      | Backpermute sh p Delayed{..}    <- pacc
-      , p'                              <- indexD `compose` p
-      = Delayed sh p' (p' `compose` fromIndex sh)
-
-      | Transform sh p f Delayed{..}    <- pacc
-      , f'                              <- f `compose` indexD `compose` p
-      = Delayed sh f' (f' `compose` fromIndex sh)
-
-    delayed _
-      = INTERNAL_ERROR(error) "delayed" "tried to consume a non-embeddable term"
-
+          | f'        <- f `compose` indexArray v `compose` p
+          -> Delayed sh f' (f' `compose` fromIndex sh)
 
     -- Convert array programs as manifest terms.
     --
