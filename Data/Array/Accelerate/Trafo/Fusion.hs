@@ -4,7 +4,6 @@
 {-# LANGUAGE IncoherentInstances  #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -67,13 +66,13 @@ import System.IO.Unsafe -- for debugging
 
 -- | Apply the fusion transformation to a closed de Bruijn AST
 --
-convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
-convertAcc = withSimplStats . convertOpenAcc
+convertAcc :: Arrays arrs => Bool -> Acc arrs -> DelayedAcc arrs
+convertAcc fuseAcc = withSimplStats . convertOpenAcc fuseAcc
 
 -- | Apply the fusion transformation to a function of array arguments
 --
-convertAfun :: Afun f -> DelayedAfun f
-convertAfun = withSimplStats . convertOpenAfun
+convertAfun :: Bool -> Afun f -> DelayedAfun f
+convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
@@ -92,8 +91,8 @@ withSimplStats x = x
 --       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
 --       delayed nodes.
 --
-convertOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-convertOpenAcc = manifest . computeAcc . embedOpenAcc
+convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
+convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
   where
     -- Convert array computations into an embeddable delayed representation.
     -- Reapply the embedding function from the first pass and unpack the
@@ -101,7 +100,7 @@ convertOpenAcc = manifest . computeAcc . embedOpenAcc
     -- will put producers adjacent to the term consuming it.
     --
     delayed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-    delayed (embedOpenAcc -> Embed BaseEnv cc) =
+    delayed (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
       case cc of
         Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
         Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
@@ -234,9 +233,9 @@ convertOpenAcc = manifest . computeAcc . embedOpenAcc
     cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
 
-convertOpenAfun :: OpenAfun aenv f -> DelayedOpenAfun aenv f
-convertOpenAfun (Alam  f) = Alam  (convertOpenAfun f)
-convertOpenAfun (Abody b) = Abody (convertOpenAcc b)
+convertOpenAfun :: Bool -> OpenAfun aenv f -> DelayedOpenAfun aenv f
+convertOpenAfun c (Alam  f) = Alam  (convertOpenAfun c f)
+convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
@@ -247,8 +246,9 @@ convertOpenAfun (Abody b) = Abody (convertOpenAcc b)
 type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
 type ElimAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
 
-embedOpenAcc :: Arrays arrs => OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
-embedOpenAcc (OpenAcc pacc) = embedPreAcc embedOpenAcc elimOpenAcc pacc
+embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
+embedOpenAcc fuseAcc (OpenAcc pacc) =
+  embedPreAcc fuseAcc (embedOpenAcc fuseAcc) elimOpenAcc pacc
   where
     -- When does the cost of re-computation outweigh that of memory access? For
     -- the moment only do the substitution on a single use of the bound array
@@ -266,12 +266,14 @@ embedOpenAcc (OpenAcc pacc) = embedPreAcc embedOpenAcc elimOpenAcc pacc
 
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
-    => EmbedAcc   acc
+    => Bool
+    -> EmbedAcc   acc
     -> ElimAcc    acc
     -> PreOpenAcc acc aenv arrs
     -> Embed      acc aenv arrs
-embedPreAcc embedAcc elimAcc pacc =
-  case pacc of
+embedPreAcc fuseAcc embedAcc elimAcc pacc
+  = unembed
+  $ case pacc of
 
     -- Non-fusible terms
     -- -----------------
@@ -349,6 +351,16 @@ embedPreAcc embedAcc elimAcc pacc =
     Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
 
   where
+    -- If fusion is not enabled, force terms to the manifest representation
+    --
+    unembed :: Embed acc aenv arrs -> Embed acc aenv arrs
+    unembed x
+      | fuseAcc         = x
+      | Embed env cc <- x
+      = case cc of
+          Done v        -> Embed env                         (Done v)
+          _             -> Embed (env `PushEnv` compute' cc) (Done ZeroIdx)
+
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc
 

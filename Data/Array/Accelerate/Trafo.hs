@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -84,6 +85,10 @@ phases =  Phase
   , convertOffsetOfSegment = False
   }
 
+when :: (a -> a) -> Bool -> a -> a
+when f True  = f
+when _ False = id
+
 
 -- HOAS -> de Bruijn conversion
 -- ----------------------------
@@ -95,14 +100,11 @@ convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
 convertAcc = convertAccWith phases
 
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
-convertAccWith ok acc
-  = Fusion.convertAcc    -- `when` enableAccFusion
+convertAccWith Phase{..} acc
+  = Fusion.convertAcc enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
-  where
-    when f phase
-      | phase ok        = f
-      | otherwise       = id
+  $ Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ acc
 
 
 -- | Convert a unary function over array computations, incorporating sharing
@@ -112,14 +114,11 @@ convertAfun :: Afunction f => f -> DelayedAfun (AfunctionR f)
 convertAfun = convertAfunWith phases
 
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
-convertAfunWith ok acc
-  = Fusion.convertAfun       -- `when` enableAccFusion
+convertAfunWith Phase{..} acc
+  = Fusion.convertAfun enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAfun (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
-  where
-    when f phase
-      | phase ok        = f
-      | otherwise       = id
+  $ Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ acc
 
 
 -- | Convert a closed scalar expression, incorporating sharing observation and
