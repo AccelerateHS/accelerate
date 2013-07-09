@@ -60,12 +60,12 @@ prettyPreAcc
     -> Doc
 prettyPreAcc pp alvl wrap (Alet acc1 acc2)
   | not (isAlet acc1') && isAlet acc2'
-  = wrap $ sep [ text "let" <+> a <+> equals <+> acc1' <+> text "in"
-               , acc2' ]
+  = wrap $ vcat [ text "let" <+> a <+> equals <+> acc1' <+> text "in"
+                , acc2' ]
   --
   | otherwise
-  = wrap $ sep [ hang (text "let" <+> a <+> equals) 2 acc1'
-               , text "in" <+> acc2' ]
+  = wrap $ vcat [ hang (text "let" <+> a <+> equals) 2 acc1'
+                , text "in" <+> acc2' ]
   where
     -- TLM: derp, can't unwrap into a PreOpenAcc to pattern match on Alet
     --
@@ -229,12 +229,12 @@ prettyPreExp :: forall acc t env aenv.
                 PrettyAcc acc -> Int -> Int -> (Doc -> Doc) -> PreOpenExp acc env aenv t -> Doc
 prettyPreExp pp lvl alvl wrap (Let e1 e2)
   | not (isLet e1) && isLet e2
-  = wrap $ sep [ text "let" <+> x <+> equals <+> e1' <+> text "in"
-               , e2' ]
+  = wrap $ vcat [ text "let" <+> x <+> equals <+> e1' <+> text "in"
+                , e2' ]
   --
   | otherwise
-  = wrap $ sep [ hang (text "let" <+> x <+> equals) 2 e1'
-               , text "in" <+> e2' ]
+  = wrap $ vcat [ hang (text "let" <+> x <+> equals) 2 e1'
+                , text "in" <+> e2' ]
   where
     isLet (Let _ _)     = True
     isLet _             = False
