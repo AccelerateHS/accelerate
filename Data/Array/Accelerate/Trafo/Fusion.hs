@@ -124,7 +124,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Avar ix                 -> Avar ix
         Use arr                 -> Use arr
         Unit e                  -> Unit (cvtE e)
-        Alet bnd body           -> Alet (manifest bnd) (manifest body)
+        Alet bnd body           -> alet (manifest bnd) (manifest body)
         Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (manifest tup)
@@ -185,6 +185,17 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
 
       | otherwise
       = Backpermute sh p a
+
+    -- Flatten needless let-binds, which can be introduced by the conversion to
+    -- the internal embeddable representation.
+    --
+    alet bnd body
+      | Manifest (Avar ZeroIdx) <- body
+      , Manifest x              <- bnd
+      = x
+
+      | otherwise
+      = Alet bnd body
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup
