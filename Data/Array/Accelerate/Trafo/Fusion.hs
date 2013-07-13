@@ -356,10 +356,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     unembed :: Embed acc aenv arrs -> Embed acc aenv arrs
     unembed x
       | fuseAcc         = x
-      | Embed env cc <- x
-      = case cc of
-          Done v        -> Embed env                         (Done v)
-          _             -> Embed (env `PushEnv` compute' cc) (Done ZeroIdx)
+      | otherwise       = done (compute x)
 
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc
