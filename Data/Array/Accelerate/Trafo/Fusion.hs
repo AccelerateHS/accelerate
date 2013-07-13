@@ -947,6 +947,28 @@ zipWithD f cc1 cc0
 -- the cost of completely evaluating the array and subsequently retrieving the
 -- data from memory.
 --
+-- let-binding:
+-- ------------
+--
+-- Ultimately, we might not want to eliminate the binding. If so, evaluate it
+-- and add it to a _clean_ Extend environment for the body. If not, the Extend
+-- list effectively _flattens_ all bindings, so any terms required for the bound
+-- term get lifted out to the same scope as the body. This increases their
+-- lifetime and hence raises the maximum memory used. If we don't do this, we
+-- get terms such as:
+--
+--   let a0  = <terms for binding> in
+--   let bnd = <bound term> in
+--   <body term>
+--
+-- rather than the following, where the scope of a0 is clearly only availably
+-- when evaluating the bound term, as it should be:
+--
+--   let bnd =
+--     let a0 = <terms for binding>
+--     in <bound term>
+--   in <body term>
+--
 aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
       => EmbedAcc acc
       -> ElimAcc  acc
@@ -967,13 +989,30 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
 
+  -- let-binding
+  -- -----------
+  --
+  -- Check whether we can eliminate the let-binding. Note that we must inspect
+  -- the entire term, not just the Cunctation that would be produced by
+  -- embedAcc. If we don't we can be left with dead terms that don't get
+  -- eliminated. This problem occurred in the canny program.
+  --
+  | Embed env0 cc0      <- embedAcc acc0
+  , False               <- elimAcc ZeroIdx (computeAcc (Embed env0 cc0))
+  , acc1                <- compute (Embed env1 cc1)
+  = Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
+
+  -- let-elimination
+  -- ---------------
+  --
   -- Handle the remaining cases in a separate function. It turns out that this
   -- is important so we aren't excessively sinking/delaying terms.
   --
-  | Embed env0 cc0      <- embedAcc $ sink1 env1 acc0
-  = case cc1 of
-      Step{}    -> aletD' env1 cc1 env0 cc0
-      Yield{}   -> aletD' env1 cc1 env0 cc0
+  | acc0'               <- sink1 env1 acc0
+  = Stats.ruleFired "aletD/eliminate"
+  $ case cc1 of
+      Step{}    -> eliminate env1 cc1 acc0'
+      Yield{}   -> eliminate env1 cc1 acc0'
 
   where
     subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
@@ -981,37 +1020,24 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
     subTop _ (SuccIdx idx) = Avar idx
 
     -- The second part of let-elimination. Splitting into two steps exposes the
-    -- extra type variables, and ensures we don't do extra work for the
-    -- let-floating case (which can lead to a complexity blowup.)
+    -- extra type variables, and ensures we don't do extra work manipulating the
+    -- body when not necessary (which can lead to a complexity blowup).
     --
-    aletD' :: forall aenv aenv' aenv'' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
-           => Extend     acc aenv                aenv'
-           -> Cunctation acc                     aenv'  (Array sh e)
-           -> Extend     acc (aenv', Array sh e) aenv''
-           -> Cunctation acc                     aenv'' brrs
-           -> Embed      acc aenv                       brrs
-    aletD' env1 cc1 env0 cc0
-      | not shouldInline         = Embed (env1 `PushEnv` bnd `join` env0) cc0
-
-      | Stats.ruleFired "aletD/eliminate" False
-      = undefined
-
-      | Done v1           <- cc1 = eliminate (arrayShape v1) (indexArray v1)
-      | Step sh1 p1 f1 v1 <- cc1 = eliminate sh1 (f1 `compose` indexArray v1 `compose` p1)
-      | Yield sh1 f1      <- cc1 = eliminate sh1 f1
+    eliminate :: forall aenv aenv' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+              => Extend     acc aenv aenv'
+              -> Cunctation acc      aenv' (Array sh e)
+              ->            acc     (aenv', Array sh e) brrs
+              -> Embed      acc aenv                    brrs
+    eliminate env1 cc1 body
+      | Done v1           <- cc1 = elim (arrayShape v1) (indexArray v1)
+      | Step sh1 p1 f1 v1 <- cc1 = elim sh1 (f1 `compose` indexArray v1 `compose` p1)
+      | Yield sh1 f1      <- cc1 = elim sh1 f1
       where
-        -- The main terms, remade manifest. We need to do this so that eliminating
-        -- terms considers not just the main term but any of the environment terms
-        -- (in Extend). This problem occurred in the Canny example program.
-        --
-        shouldInline = elimAcc ZeroIdx body
-        body         = computeAcc (Embed env0 cc0)
-        bnd          = compute' cc1
+        bnd :: PreOpenAcc acc aenv' (Array sh e)
+        bnd = compute' cc1
 
-        eliminate :: PreExp acc      aenv' sh
-                  -> PreFun acc      aenv' (sh -> e)
-                  -> Embed  acc aenv       brrs
-        eliminate sh1 f1
+        elim :: PreExp acc aenv' sh -> PreFun acc aenv' (sh -> e) -> Embed acc aenv brrs
+        elim sh1 f1
           | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
           , f1'                 <- weakenFA rebuildAcc SuccIdx f1
           , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
