@@ -98,6 +98,18 @@ fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
     body   = "Available backends:" : table
 
 
+-- | Strip the short option arguments that have a required or optional argument.
+-- Because we use several different options groups, the flag and its argument
+-- get separated. The user is required to instead use a --flag=value format.
+--
+stripShortOpts :: [OptDescr a] -> [OptDescr a]
+stripShortOpts = map strip
+  where
+    strip (Option _ long arg@(ReqArg _ _) desc) = Option [] long arg desc
+    strip (Option _ long arg@(OptArg _ _) desc) = Option [] long arg desc
+    strip x                                     = x
+
+
 -- | Process the command line arguments and return a tuple consisting of the
 -- options structure, options for Criterion, and a list of unrecognised and
 -- non-options.
@@ -114,9 +126,11 @@ parseArgs :: (config :-> Bool)                  -- ^ access a help flag from the
           -> IO (config, Criterion.Config, [String])
 parseArgs help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
   let
+      criterionOptions = stripShortOpts Criterion.defaultOptions
+
       helpMsg err = concat err
         ++ usageInfo (unlines header)               options
-        ++ usageInfo "\nGeneric criterion options:" Criterion.defaultOptions
+        ++ usageInfo "\nGeneric criterion options:" criterionOptions
 
   in do
 
@@ -136,7 +150,7 @@ parseArgs help backend (withBackends backend -> options) config header footer (t
   -- TODO: don't bail on unrecognised options. Print to screen, or return for
   --       further processing (e.g. test-framework).
   --
-  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u
+  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig criterionOptions u
 
   return (conf, cconf, non)
 

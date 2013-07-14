@@ -152,10 +152,13 @@ parseArgs' :: (config :-> Bool)                  -- ^ access a help flag from th
            -> IO (config, Criterion.Config, TestFramework.RunnerOptions, [String])
 parseArgs' help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
   let
+      criterionOptions          = stripShortOpts Criterion.defaultOptions
+      testframeworkOptions      = stripShortOpts TestFramework.optionsDescription
+
       helpMsg err = concat err
         ++ usageInfo (unlines header)                    options
-        ++ usageInfo "\nGeneric criterion options:"      Criterion.defaultOptions
-        ++ usageInfo "\nGeneric test-framework options:" TestFramework.optionsDescription
+        ++ usageInfo "\nGeneric criterion options:"      criterionOptions
+        ++ usageInfo "\nGeneric test-framework options:" testframeworkOptions
 
   in do
 
@@ -172,13 +175,13 @@ parseArgs' help backend (withBackends backend -> options) config header footer (
     (_,_,_,err) -> error (helpMsg err)
 
   -- Test Framework
-  (tfconf, u')  <- case getOpt' Permute TestFramework.optionsDescription u of
+  (tfconf, u')  <- case getOpt' Permute testframeworkOptions u of
     (oas,_,u',[]) | Just os <- sequence oas
                 -> return (mconcat os, u')
     (_,_,_,err) -> error (helpMsg err)
 
   -- Criterion
-  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig Criterion.defaultOptions u'
+  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig criterionOptions u'
 
   return (conf, cconf, tfconf, non)
 
