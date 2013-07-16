@@ -56,7 +56,7 @@ endif
 DARWIN = $(strip $(findstring DARWIN, $(OSUPPER)))
 
 # Location of the CUDA Toolkit binaries and libraries
-CUDA_PATH       ?= /Developer/NVIDIA/CUDA-5.0
+CUDA_PATH       ?= /usr/local/cuda/
 CUDA_INC_PATH   ?= $(CUDA_PATH)/include
 CUDA_BIN_PATH   ?= $(CUDA_PATH)/bin
 ifneq ($(DARWIN),)
@@ -147,7 +147,6 @@ Visualize.o: Visualize.hs
 	ghc -i.. $+ -Wall
 
 nbody: nbody.o bodysystemcuda.o render_particles.o Visualize.o
-	# $(GCC) $(CCFLAGS) -o $@ $+ $(LDFLAGS) $(EXTRA_LDFLAGS)
 	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lSystem -lgcc -package accelerate-cuda
 
 run: build
