@@ -140,7 +140,7 @@ NBodyParams demoParams[] =
 int numDemos = sizeof(demoParams) / sizeof(NBodyParams);
 bool cycleDemo = true;
 int activeDemo = 0;
-float demoTime = 10000.0f; // ms
+float demoTime = 100000.0f; // ms
 StopWatchInterface *demoTimer = NULL, *timer = NULL;
 
 // run multiple iterations to compute an average sort time
