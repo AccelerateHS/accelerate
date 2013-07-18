@@ -246,7 +246,7 @@ void BodySystemAcc::update(float deltaTime)
     //Marshal the input
     float* t[] = { m_timestep };
     float* s[] = { m_softening };
-    int sht[] = { 0 }; //The timestep is contained within a rank zero array
+    int sht[] = { 0 }; //The timestep and softening factor is contained within a rank zero array
     float* p[] = { m_deviceData.dPos[m_currentRead] };
     float* v[] = { m_deviceData.dVel };
     int shb[] = { m_numBodies * 4};
@@ -256,8 +256,8 @@ void BodySystemAcc::update(float deltaTime)
     HsStablePtr resV;
 
     //Run the computation
-    printf("bodies %d, tsp: %d, bp0: %p, bp1: %p, vp: %p, sz: %d\n", m_numBodies, m_timestep, m_deviceData.dPos[0], m_deviceData.dPos[1], m_deviceData.dVel, sizeof(int));
-    stepBodies_run(m_program, s, sht, t, sht, p, shb, v, shb, &resP, &resV);
+    printf("bodies %d, time %f, tsp: %p, bp0: %p, bp1: %p, vp: %p, sz: %d\n", m_numBodies, deltaTime, m_timestep, m_deviceData.dPos[0], m_deviceData.dPos[1], m_deviceData.dVel, sizeof(int));
+    stepBodies_run(m_program, t, sht, s, sht, p, shb, v, shb, &resP, &resV);
     printf("Out of HS\n");
 
     float* ptrP;
