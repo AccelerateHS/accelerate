@@ -147,7 +147,7 @@ Visualize.o: Visualize.hs
 	ghc -i.. $+ -Wall
 
 nbody: nbody.o bodysystemcuda.o render_particles.o Visualize.o
-	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lSystem -lgcc -package accelerate-cuda
+	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lSystem -lgcc -package accelerate-cuda -threaded
 
 run: build
 	./nbody
