@@ -663,9 +663,7 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 {-# RULES
 
 "fromElt/toElt" forall e.
-  fromElt (toElt e) = e
-
-  #-}
+  fromElt (toElt e) = e #-}
 
 
 -- Foreign functions
