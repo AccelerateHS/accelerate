@@ -477,14 +477,11 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
            ->       acc aenv as
            ->       acc aenv bs
            -> Embed acc aenv cs
-    embed2 op (embedAcc -> Embed env1 cc1) a0
-      | Done v1 <- cc1  = inner env1                          v1      a0
-      | otherwise       = inner (env1 `PushEnv` compute' cc1) ZeroIdx a0
-      where
-        inner :: Extend acc aenv aenv' -> Idx aenv' as -> acc aenv bs -> Embed acc aenv cs
-        inner env1 v1 (embedAcc . sink env1 -> Embed env0 cc0)
-          | env         <- env1 `join` env0
-          = Embed (env `PushEnv` op env (avarIn (sink env0 v1)) (inject (compute' cc0))) (Done ZeroIdx)
+    embed2 op (embedAcc -> Embed env1 cc1) (embedAcc . sink env1 -> Embed env0 cc0)
+      | env     <- env1 `join` env0
+      , acc1    <- inject . compute' $ sink env0 cc1
+      , acc0    <- inject . compute' $ cc0
+      = Embed (env `PushEnv` op env acc1 acc0) (Done ZeroIdx)
 
 
 -- Internal representation
