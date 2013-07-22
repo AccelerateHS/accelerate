@@ -13,7 +13,7 @@ import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.CUDA.Foreign.Export
 
 -- Gives access to the utility functions from the C code.
-exportUtils
+foreignAccModule
 
 -- The cuda sample's representation of data.
 -- ------------------------------------------

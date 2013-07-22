@@ -15,7 +15,7 @@
 #include <cuda.h>
 #include "bodysystem.h"
 #include "bodysystemcuda.h"
-#include "Visualize_stub.h"
+#include "Visualize.h"
 
 // Accelerate BodySystem: runs on the GPU via the Accelerate library.
 class BodySystemAcc : public BodySystem<float>
@@ -62,8 +62,8 @@ class BodySystemAcc : public BodySystem<float>
 
         CUcontext m_ctx;
 
-        HsStablePtr m_hndl;
-        HsStablePtr m_program;
+        AccHandle m_hndl;
+        AccProgram m_program;
 
         float* m_timestep;
 

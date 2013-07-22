@@ -252,8 +252,8 @@ void BodySystemAcc::update(float deltaTime)
     int shb[] = { m_numBodies * 4};
 
     //Prepare for result
-    HsStablePtr resP;
-    HsStablePtr resV;
+    ResultArray resP;
+    ResultArray resV;
 
     //Run the computation
     printf("bodies %d, time %f, tsp: %p, bp0: %p, bp1: %p, vp: %p, sz: %d\n", m_numBodies, deltaTime, m_timestep, m_deviceData.dPos[0], m_deviceData.dPos[1], m_deviceData.dVel, sizeof(int));
