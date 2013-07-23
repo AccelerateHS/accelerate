@@ -52,5 +52,5 @@ inside (Z:.y:.x) (Z:.cy:.cx, r, _) =
       dx        = fromIntegral $ cx - x
       dy        = fromIntegral $ cy - y
   in
-  dx*dx + dy*dx <= r*r
+  dx*dx + dy*dy <= r*r
 
