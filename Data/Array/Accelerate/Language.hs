@@ -676,7 +676,6 @@ instance Lift Exp Word64 where
   type Plain Word64 = Word64
   lift = Exp . Const
 
-{-
 instance Lift Exp CShort where
   type Plain CShort = CShort
   lift = Exp . Const
@@ -708,7 +707,6 @@ instance Lift Exp CLLong where
 instance Lift Exp CULLong where
   type Plain CULLong = CULLong
   lift = Exp . Const
- -}
 
 instance Lift Exp Float where
   type Plain Float = Float
@@ -718,7 +716,6 @@ instance Lift Exp Double where
   type Plain Double = Double
   lift = Exp . Const
 
-{-
 instance Lift Exp CFloat where
   type Plain CFloat = CFloat
   lift = Exp . Const
@@ -726,7 +723,6 @@ instance Lift Exp CFloat where
 instance Lift Exp CDouble where
   type Plain CDouble = CDouble
   lift = Exp . Const
- -}
 
 instance Lift Exp Bool where
   type Plain Bool = Bool
@@ -736,7 +732,6 @@ instance Lift Exp Char where
   type Plain Char = Char
   lift = Exp . Const
 
-{-
 instance Lift Exp CChar where
   type Plain CChar = CChar
   lift = Exp . Const
@@ -746,10 +741,8 @@ instance Lift Exp CSChar where
   lift = Exp . Const
 
 instance Lift Exp CUChar where
-
-type Plain CUChar = CUChar
+  type Plain CUChar = CUChar
   lift = Exp . Const
- -}
 
 -- Instances for tuples
 
