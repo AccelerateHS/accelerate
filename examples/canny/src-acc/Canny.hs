@@ -131,7 +131,7 @@ gradientMagDir low = stencil magdir Clamp
           dy          = v0 + (2*v1) + v2 - v5 - (2*v6) - v7
 
           -- Magnitude
-          mag         = sqrt (dx * dx + dy + dy)
+          mag         = sqrt (dx * dx + dy * dy)
 
           -- Direction
           --
