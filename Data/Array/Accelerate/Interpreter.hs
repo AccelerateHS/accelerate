@@ -69,7 +69,7 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sharing.convertAcc True True True
+run = force . evalAcc . Sharing.convertAcc True True
 
 
 -- | Prepare and run an embedded array program of one argument
@@ -82,8 +82,8 @@ run1 = run'
 -- closure to do so.
 --
 run' :: Sharing.Afunction f => f -> Sharing.AfunctionR f
-run' afun = let acc = Sharing.convertAfun True True True afun
-            in  evalOpenAfun acc Empty
+run' afun = let acc = Sharing.convertAfun True True afun
+            in  evalOpenAfun acc EmptyElt Empty
 
 
 -- | Stream a lazily read list of input arrays through the given program,
@@ -99,125 +99,125 @@ stream afun arrs = let go = run1 afun
 
 -- Evaluate an open array function
 --
-evalOpenAfun :: OpenAfun aenv f -> Val aenv -> f
-evalOpenAfun (Alam  f) aenv = \a -> evalOpenAfun f (aenv `Push` a)
-evalOpenAfun (Abody b) aenv = force $ evalOpenAcc b aenv
+evalOpenAfun :: OpenAfun env aenv f -> ValElt env -> Val aenv -> f
+evalOpenAfun (Alam  f) env aenv = \a -> evalOpenAfun f env (aenv `Push` a)
+evalOpenAfun (Abody b) env aenv = force $ evalOpenAcc b env aenv
 
 
 -- Evaluate an open array expression
 --
-evalOpenAcc :: OpenAcc aenv a -> Val aenv -> Delayed a
+evalOpenAcc :: OpenAcc env aenv a -> ValElt env -> Val aenv -> Delayed a
 evalOpenAcc (OpenAcc acc) = evalPreOpenAcc acc
 
-evalPreOpenAcc :: forall aenv a. PreOpenAcc OpenAcc aenv a -> Val aenv -> Delayed a
+evalPreOpenAcc :: forall env aenv a. PreOpenAcc OpenAcc env aenv a -> ValElt env -> Val aenv -> Delayed a
 
-evalPreOpenAcc (Alet acc1 acc2) aenv
-  = let !arr1 = force $ evalOpenAcc acc1 aenv
-    in evalOpenAcc acc2 (aenv `Push` arr1)
+evalPreOpenAcc (Alet acc1 acc2) env aenv
+  = let !arr1 = force $ evalOpenAcc acc1 env aenv
+    in evalOpenAcc acc2 env (aenv `Push` arr1)
 
-evalPreOpenAcc (Avar idx) aenv = delay $ prj idx aenv
+evalPreOpenAcc (Avar idx) _env aenv = delay $ prj idx aenv
 
-evalPreOpenAcc (Atuple tup) aenv = delay (toTuple $ evalAtuple tup aenv :: a)
+evalPreOpenAcc (Atuple tup) env aenv = delay (toTuple $ evalAtuple tup env aenv :: a)
 
-evalPreOpenAcc (Aprj ix (tup :: OpenAcc aenv arrs)) aenv =
-  let tup'  = force $ evalOpenAcc tup aenv :: arrs
+evalPreOpenAcc (Aprj ix (tup :: OpenAcc env aenv arrs)) env aenv =
+  let tup'  = force $ evalOpenAcc tup env aenv :: arrs
   in  delay $ evalPrj ix (fromTuple tup')
 
-evalPreOpenAcc (Apply f acc) aenv =
-  let !arr  = force $ evalOpenAcc acc aenv
-  in  delay $ evalOpenAfun f aenv arr
+evalPreOpenAcc (Apply f acc) env aenv =
+  let !arr  = force $ evalOpenAcc acc env aenv
+  in  delay $ evalOpenAfun f env aenv arr
 
-evalPreOpenAcc (Acond cond acc1 acc2) aenv
-  = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
+evalPreOpenAcc (Acond cond acc1 acc2) env aenv
+  = if (evalOpenExp cond env aenv) then evalOpenAcc acc1 env aenv else evalOpenAcc acc2 env aenv
 
-evalPreOpenAcc (Use arr) _aenv = delay (Sugar.toArr arr :: a)
+evalPreOpenAcc (Use arr) _env _aenv = delay (Sugar.toArr arr :: a)
 
-evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
+evalPreOpenAcc (Unit e) env aenv = unitOp (evalOpenExp e env aenv)
 
-evalPreOpenAcc (Generate sh f) aenv
-  = generateOp (evalExp sh aenv) (evalFun f aenv)
+evalPreOpenAcc (Generate sh f) env aenv
+  = generateOp (evalOpenExp sh env aenv) (evalOpenFun f env aenv)
 
-evalPreOpenAcc (Transform sh ix f acc) aenv
-  = transformOp (evalExp sh aenv) (evalFun ix aenv) (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Transform sh ix f acc) env aenv
+  = transformOp (evalOpenExp sh env aenv) (evalOpenFun ix env aenv) (evalOpenFun f env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Reshape e acc) aenv
-  = reshapeOp (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Reshape e acc) env aenv
+  = reshapeOp (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Replicate sliceIndex slix acc) aenv
-  = replicateOp sliceIndex (evalExp slix aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Replicate sliceIndex slix acc) env aenv
+  = replicateOp sliceIndex (evalOpenExp slix env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Slice sliceIndex acc slix) aenv
-  = sliceOp sliceIndex (evalOpenAcc acc aenv) (evalExp slix aenv)
+evalPreOpenAcc (Slice sliceIndex acc slix) env aenv
+  = sliceOp sliceIndex (evalOpenAcc acc env aenv) (evalOpenExp slix env aenv)
 
-evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Map f acc) env aenv = mapOp (evalOpenFun f env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (ZipWith f acc1 acc2) aenv
-  = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+evalPreOpenAcc (ZipWith f acc1 acc2) env aenv
+  = zipWithOp (evalOpenFun f env aenv) (evalOpenAcc acc1 env aenv) (evalOpenAcc acc2 env aenv)
 
-evalPreOpenAcc (Fold f e acc) aenv
-  = foldOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Fold f e acc) env aenv
+  = foldOp (evalOpenFun f env aenv) (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Fold1 f acc) aenv
-  = fold1Op (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Fold1 f acc) env aenv
+  = fold1Op (evalOpenFun f env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (FoldSeg f e acc1 acc2) aenv
+evalPreOpenAcc (FoldSeg f e acc1 acc2) env aenv
   = foldSegOp integralType
-              (evalFun f aenv) (evalExp e aenv)
-              (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+              (evalOpenFun f env aenv) (evalOpenExp e env aenv)
+              (evalOpenAcc acc1 env aenv) (evalOpenAcc acc2 env aenv)
 
-evalPreOpenAcc (Fold1Seg f acc1 acc2) aenv
+evalPreOpenAcc (Fold1Seg f acc1 acc2) env aenv
   = fold1SegOp integralType
-               (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+               (evalOpenFun f env aenv) (evalOpenAcc acc1 env aenv) (evalOpenAcc acc2 env aenv)
 
-evalPreOpenAcc (Scanl f e acc) aenv
-  = scanlOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanl f e acc) env aenv
+  = scanlOp (evalOpenFun f env aenv) (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Scanl' f e acc) aenv
-  = scanl'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanl' f e acc) env aenv
+  = scanl'Op (evalOpenFun f env aenv) (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Scanl1 f acc) aenv
-  = scanl1Op (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanl1 f acc) env aenv
+  = scanl1Op (evalOpenFun f env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Scanr f e acc) aenv
-  = scanrOp (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanr f e acc) env aenv
+  = scanrOp (evalOpenFun f env aenv) (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Scanr' f e acc) aenv
-  = scanr'Op (evalFun f aenv) (evalExp e aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanr' f e acc) env aenv
+  = scanr'Op (evalOpenFun f env aenv) (evalOpenExp e env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Scanr1 f acc) aenv
-  = scanr1Op (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Scanr1 f acc) env aenv
+  = scanr1Op (evalOpenFun f env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Permute f dftAcc p acc) aenv
-  = permuteOp (evalFun f aenv) (evalOpenAcc dftAcc aenv)
-              (evalFun p aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Permute f dftAcc p acc) env aenv
+  = permuteOp (evalOpenFun f env aenv) (evalOpenAcc dftAcc env aenv)
+              (evalOpenFun p env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Backpermute e p acc) aenv
-  = backpermuteOp (evalExp e aenv) (evalFun p aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Backpermute e p acc) env aenv
+  = backpermuteOp (evalOpenExp e env aenv) (evalOpenFun p env aenv) (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Stencil sten bndy acc) aenv
-  = stencilOp (evalFun sten aenv) bndy (evalOpenAcc acc aenv)
+evalPreOpenAcc (Stencil sten bndy acc) env aenv
+  = stencilOp (evalOpenFun sten env aenv) bndy (evalOpenAcc acc env aenv)
 
-evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
-  = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
+evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) env aenv
+  = stencil2Op (evalOpenFun sten env aenv) bndy1 (evalOpenAcc acc1 env aenv) bndy2 (evalOpenAcc acc2 env aenv)
 
 -- The interpreter does not handle foreign functions so use the pure accelerate version
-evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
-  = let !arr = force $ evalOpenAcc acc aenv
-    in evalOpenAcc funAcc (Empty `Push` arr)
-evalPreOpenAcc (Aforeign _ _ _) _
+evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) env aenv
+  = let !arr = force $ evalOpenAcc acc env aenv
+    in evalOpenAcc funAcc EmptyElt (Empty `Push` arr)
+evalPreOpenAcc (Aforeign _ _ _) _ _
   = error "This case is not possible"
 
 -- Evaluate a closed array expressions
 --
 evalAcc :: Acc a -> Delayed a
-evalAcc acc = evalOpenAcc acc Empty
+evalAcc acc = evalOpenAcc acc EmptyElt Empty
 
 
 -- Array tuple construction and projection
 --
-evalAtuple :: Atuple (OpenAcc aenv) t -> Val aenv -> t
-evalAtuple NilAtup        _    = ()
-evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, force $ evalOpenAcc a aenv)
+evalAtuple :: Atuple (OpenAcc env aenv) t -> ValElt env -> Val aenv -> t
+evalAtuple NilAtup        _   _    = ()
+evalAtuple (SnocAtup t a) env aenv = (evalAtuple t env aenv, force $ evalOpenAcc a env aenv)
 
 
 -- Array primitives
@@ -311,22 +311,22 @@ sliceOp sliceIndex (DelayedRpair DelayedRunit (DelayedRarray sh pf)) slix
         in
         BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
 
-mapOp :: Sugar.Elt e' 
-      => (e -> e') 
-      -> Delayed (Array dim e) 
+mapOp :: Sugar.Elt e'
+      => (e -> e')
+      -> Delayed (Array dim e)
       -> Delayed (Array dim e')
 mapOp f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = DelayedRpair DelayedRunit
   $ DelayedRarray sh (Sugar.sinkFromElt f . rf)
 
 zipWithOp :: Sugar.Elt e3
-          => (e1 -> e2 -> e3) 
-          -> Delayed (Array dim e1) 
-          -> Delayed (Array dim e2) 
+          => (e1 -> e2 -> e3)
+          -> Delayed (Array dim e1)
+          -> Delayed (Array dim e2)
           -> Delayed (Array dim e3)
 zipWithOp f (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1)) (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
   = DelayedRpair DelayedRunit
-  $ DelayedRarray (sh1 `intersect` sh2) 
+  $ DelayedRarray (sh1 `intersect` sh2)
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: Sugar.Shape dim
@@ -634,8 +634,8 @@ stencilOp sten bndy (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                                     Left v    -> v
                                     Right ix' -> rf (Sugar.fromElt ix')
 
-stencil2Op :: forall dim e1 e2 e' stencil1 stencil2. 
-              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e', 
+stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
+              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e',
                Stencil dim e1 stencil1, Stencil dim e2 stencil2)
            => (stencil1 -> stencil2 -> e')
            -> Boundary (Sugar.EltRepr e1)
@@ -669,13 +669,8 @@ stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
 --
 evalOpenFun :: OpenFun env aenv t -> ValElt env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
-evalOpenFun (Lam f)  env aenv 
+evalOpenFun (Lam f)  env aenv
   = \x -> evalOpenFun f (env `PushElt` Sugar.fromElt x) aenv
-
--- Evaluate a closed function
---
-evalFun :: Fun aenv t -> Val aenv -> t
-evalFun f aenv = evalOpenFun f EmptyElt aenv
 
 -- Evaluate an open expression
 --
@@ -684,7 +679,7 @@ evalFun f aenv = evalOpenFun f EmptyElt aenv
 --     execution.  If these operations are in the body of a function that
 --     gets mapped over an array, the array argument would be forced many times
 --     leading to a large amount of wasteful recomputation.
---  
+--
 evalOpenExp :: OpenExp env aenv a -> ValElt env -> Val aenv -> a
 
 evalOpenExp (Let exp1 exp2) env aenv
@@ -697,22 +692,22 @@ evalOpenExp (Var idx) env _
 evalOpenExp (Const c) _ _
   = Sugar.toElt c
 
-evalOpenExp (Tuple tup) env aenv 
+evalOpenExp (Tuple tup) env aenv
   = toTuple $ evalTuple tup env aenv
 
-evalOpenExp (Prj idx e) env aenv 
+evalOpenExp (Prj idx e) env aenv
   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
 
-evalOpenExp IndexNil _env _aenv 
+evalOpenExp IndexNil _env _aenv
   = Z
 
-evalOpenExp (IndexCons sh i) env aenv 
+evalOpenExp (IndexCons sh i) env aenv
   = evalOpenExp sh env aenv :. evalOpenExp i env aenv
 
-evalOpenExp (IndexHead ix) env aenv 
+evalOpenExp (IndexHead ix) env aenv
   = case evalOpenExp ix env aenv of _:.h -> h
 
-evalOpenExp (IndexTail ix) env aenv 
+evalOpenExp (IndexTail ix) env aenv
   = case evalOpenExp ix env aenv of t:._ -> t
 
 evalOpenExp (IndexAny) _ _
@@ -771,7 +766,7 @@ evalOpenExp (PrimApp p arg) env aenv
   = evalPrim p (evalOpenExp arg env aenv)
 
 evalOpenExp (Index acc ix) env aenv
-  = case evalOpenAcc acc aenv of
+  = case evalOpenAcc acc env aenv of
       DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
         in
@@ -780,14 +775,14 @@ evalOpenExp (Index acc ix) env aenv
                               --       ensure bounds checking
 
 evalOpenExp (LinearIndex acc i) env aenv
-  = case evalOpenAcc acc aenv of
+  = case evalOpenAcc acc env aenv of
       DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let i' = evalOpenExp i env aenv
             v  = pf (fromIndex sh i')
         in Sugar.toElt v
 
-evalOpenExp (Shape acc) _ aenv
-  = case evalOpenAcc acc aenv of
+evalOpenExp (Shape acc) env aenv
+  = case evalOpenAcc acc env aenv of
       DelayedRpair DelayedRunit (DelayedRarray sh _) -> Sugar.toElt sh
 
 evalOpenExp (ShapeSize sh) env aenv
@@ -804,13 +799,8 @@ evalOpenExp (Foreign _ f e) env aenv
     wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
 
     e' = case f of
-           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE wExp b)
+           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE rebuildOpenAcc wExp b)
            _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
-
--- Evaluate a closed expression
---
-evalExp :: Exp aenv t -> Val aenv -> t
-evalExp e aenv = evalOpenExp e EmptyElt aenv
 
 
 -- Scalar primitives
@@ -924,25 +914,25 @@ evalFromIntegral ta (FloatingNumType tb)
 
 
 -- Extract methods from reified dictionaries
--- 
+--
 
 -- Constant methods of Bounded
--- 
+--
 
 evalMinBound :: BoundedType a -> a
-evalMinBound (IntegralBoundedType ty) 
+evalMinBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = minBound
-evalMinBound (NonNumBoundedType   ty) 
+evalMinBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = minBound
 
 evalMaxBound :: BoundedType a -> a
-evalMaxBound (IntegralBoundedType ty) 
+evalMaxBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = maxBound
-evalMaxBound (NonNumBoundedType   ty) 
+evalMaxBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = maxBound
 
 -- Constant method of floating
--- 
+--
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
@@ -1014,7 +1004,7 @@ evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
 
 -- Methods of Num
--- 
+--
 
 evalAdd :: NumType a -> ((a, a) -> a)
 evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
@@ -1085,66 +1075,66 @@ evalRecip ty | FloatingDict <- floatingDict ty = recip
 
 
 evalLt :: ScalarType a -> ((a, a) -> Bool)
-evalLt (NumScalarType (IntegralNumType ty)) 
+evalLt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<)
-evalLt (NumScalarType (FloatingNumType ty)) 
+evalLt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<)
-evalLt (NonNumScalarType ty) 
+evalLt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<)
 
 evalGt :: ScalarType a -> ((a, a) -> Bool)
-evalGt (NumScalarType (IntegralNumType ty)) 
+evalGt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>)
-evalGt (NumScalarType (FloatingNumType ty)) 
+evalGt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>)
-evalGt (NonNumScalarType ty) 
+evalGt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>)
 
 evalLtEq :: ScalarType a -> ((a, a) -> Bool)
-evalLtEq (NumScalarType (IntegralNumType ty)) 
+evalLtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<=)
-evalLtEq (NumScalarType (FloatingNumType ty)) 
+evalLtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<=)
-evalLtEq (NonNumScalarType ty) 
+evalLtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<=)
 
 evalGtEq :: ScalarType a -> ((a, a) -> Bool)
-evalGtEq (NumScalarType (IntegralNumType ty)) 
+evalGtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>=)
-evalGtEq (NumScalarType (FloatingNumType ty)) 
+evalGtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>=)
-evalGtEq (NonNumScalarType ty) 
+evalGtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>=)
 
 evalEq :: ScalarType a -> ((a, a) -> Bool)
-evalEq (NumScalarType (IntegralNumType ty)) 
+evalEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumScalarType (FloatingNumType ty)) 
+evalEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumScalarType ty) 
+evalEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
 evalNEq :: ScalarType a -> ((a, a) -> Bool)
-evalNEq (NumScalarType (IntegralNumType ty)) 
+evalNEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (/=)
-evalNEq (NumScalarType (FloatingNumType ty)) 
+evalNEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (/=)
-evalNEq (NonNumScalarType ty) 
+evalNEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (/=)
 
 evalMax :: ScalarType a -> ((a, a) -> a)
-evalMax (NumScalarType (IntegralNumType ty)) 
+evalMax (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry max
-evalMax (NumScalarType (FloatingNumType ty)) 
+evalMax (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry max
-evalMax (NonNumScalarType ty) 
+evalMax (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry max
 
 evalMin :: ScalarType a -> ((a, a) -> a)
-evalMin (NumScalarType (IntegralNumType ty)) 
+evalMin (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry min
-evalMin (NumScalarType (FloatingNumType ty)) 
+evalMin (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry min
-evalMin (NonNumScalarType ty) 
+evalMin (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry min
 

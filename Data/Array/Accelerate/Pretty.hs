@@ -39,10 +39,10 @@ import Data.Array.Accelerate.Pretty.Print
 wide :: Style
 wide = style { lineLength = 150 }
 
-instance Kit acc => Show (acc aenv a) where
+instance Kit acc => Show (acc env aenv a) where
   show c = renderStyle wide $ prettyAcc 0 noParens c
 
-instance Kit acc => Show (PreOpenAfun acc aenv f) where
+instance Kit acc => Show (PreOpenAfun acc env aenv f) where
   show f = renderStyle wide $ prettyPreAfun prettyAcc 0 f
 
 instance Kit acc => Show (PreOpenFun acc env aenv f) where

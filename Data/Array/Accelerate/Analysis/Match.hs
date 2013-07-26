@@ -67,23 +67,23 @@ deriving instance Show (s :=: t)
 
 -- The type of matching array computations
 --
-type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
+type MatchAcc acc = forall env aenv s t. acc env aenv s -> acc env aenv t -> Maybe (s :=: t)
 
 
 -- Compute the congruence of two array computations. The nodes are congruent if
 -- they have the same operator and their operands are congruent.
 --
-matchOpenAcc :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
+matchOpenAcc :: OpenAcc env aenv s -> OpenAcc env aenv t -> Maybe (s :=: t)
 matchOpenAcc (OpenAcc acc1) (OpenAcc acc2) =
   matchPreOpenAcc matchOpenAcc hashOpenAcc acc1 acc2
 
 
 matchPreOpenAcc
-    :: forall acc aenv s t.
+    :: forall acc env aenv s t.
        MatchAcc acc
     -> HashAcc  acc
-    -> PreOpenAcc acc aenv s
-    -> PreOpenAcc acc aenv t
+    -> PreOpenAcc acc env aenv s
+    -> PreOpenAcc acc env aenv t
     -> Maybe (s :=: t)
 matchPreOpenAcc matchAcc hashAcc = match
   where
@@ -93,7 +93,7 @@ matchPreOpenAcc matchAcc hashAcc = match
     matchExp :: PreOpenExp acc env aenv u -> PreOpenExp acc env aenv v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp matchAcc hashAcc
 
-    match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :=: t)
+    match :: PreOpenAcc acc env aenv s -> PreOpenAcc acc env aenv t -> Maybe (s :=: t)
     match (Alet x1 a1) (Alet x2 a2)
       | Just REFL <- matchAcc x1 x2
       , Just REFL <- matchAcc a1 a2
@@ -247,15 +247,15 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just REFL <- matchAcc a1  a2
       = Just REFL
 
-    match (Stencil f1 b1 (a1 :: acc aenv (Array sh1 e1)))
-          (Stencil f2 b2 (a2 :: acc aenv (Array sh2 e2)))
+    match (Stencil f1 b1 (a1 :: acc env aenv (Array sh1 e1)))
+          (Stencil f2 b2 (a2 :: acc env aenv (Array sh2 e2)))
       | Just REFL <- matchFun f1 f2
       , Just REFL <- matchAcc a1 a2
       , matchBoundary (eltType (undefined::e1)) b1 b2
       = Just REFL
 
-    match (Stencil2 f1 b1  (a1  :: acc aenv (Array sh1  e1 )) b2  (a2 :: acc aenv (Array sh2  e2 )))
-          (Stencil2 f2 b1' (a1' :: acc aenv (Array sh1' e1')) b2' (a2':: acc aenv (Array sh2' e2')))
+    match (Stencil2 f1 b1  (a1  :: acc env aenv (Array sh1  e1 )) b2  (a2 :: acc env aenv (Array sh2  e2 )))
+          (Stencil2 f2 b1' (a1' :: acc env aenv (Array sh1' e1')) b2' (a2':: acc env aenv (Array sh2' e2')))
       | Just REFL <- matchFun f1 f2
       , Just REFL <- matchAcc a1 a1'
       , Just REFL <- matchAcc a2 a2'
@@ -271,8 +271,8 @@ matchPreOpenAcc matchAcc hashAcc = match
 --
 matchAtuple
     :: MatchAcc acc
-    -> Atuple (acc aenv) s
-    -> Atuple (acc aenv) t
+    -> Atuple (acc env aenv) s
+    -> Atuple (acc env aenv) t
     -> Maybe (s :=: t)
 matchAtuple matchAcc (SnocAtup t1 a1) (SnocAtup t2 a2)
   | Just REFL <- matchAtuple matchAcc t1 t2
@@ -285,17 +285,17 @@ matchAtuple _ _       _       = Nothing
 
 -- Array functions
 --
-matchOpenAfun :: OpenAfun aenv s -> OpenAfun aenv t -> Maybe (s :=: t)
+matchOpenAfun :: OpenAfun env aenv s -> OpenAfun env aenv t -> Maybe (s :=: t)
 matchOpenAfun = matchPreOpenAfun matchOpenAcc
 
-matchPreOpenAfun :: MatchAcc acc -> PreOpenAfun acc aenv s -> PreOpenAfun acc aenv t -> Maybe (s :=: t)
+matchPreOpenAfun :: MatchAcc acc -> PreOpenAfun acc env aenv s -> PreOpenAfun acc env aenv t -> Maybe (s :=: t)
 matchPreOpenAfun m (Alam s) (Alam t)
   | Just REFL <- matchEnvTop        s t
   , Just REFL <- matchPreOpenAfun m s t
   = Just REFL
   where
     matchEnvTop :: (Arrays s, Arrays t)
-                => PreOpenAfun acc (aenv, s) f -> PreOpenAfun acc (aenv, t) g -> Maybe (s :=: t)
+                => PreOpenAfun acc env (aenv, s) f -> PreOpenAfun acc env (aenv, t) g -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL  -- ???
 
 matchPreOpenAfun m (Abody s) (Abody t) = m s t
@@ -852,16 +852,16 @@ hashTupleIdx = hash . tupleIdxToInt
 -- Array computations
 -- ------------------
 
-type HashAcc acc = forall aenv a. acc aenv a -> Int
+type HashAcc acc = forall env aenv a. acc env aenv a -> Int
 
 
-hashOpenAcc :: OpenAcc aenv arrs -> Int
+hashOpenAcc :: OpenAcc env aenv arrs -> Int
 hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
-hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
+hashPreOpenAcc :: forall acc env aenv arrs. HashAcc acc -> PreOpenAcc acc env aenv arrs -> Int
 hashPreOpenAcc hashAcc pacc =
   let
-    hashA :: Int -> acc aenv' a -> Int
+    hashA :: Int -> acc env aenv' a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
     hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
@@ -908,15 +908,15 @@ hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
-hashAtuple :: HashAcc acc -> Tuple.Atuple (acc aenv) a -> Int
+hashAtuple :: HashAcc acc -> Tuple.Atuple (acc env aenv) a -> Int
 hashAtuple _ NilAtup            = hash "NilAtup"
 hashAtuple h (SnocAtup t a)     = hash "SnocAtup"       `hashWithSalt` hashAtuple h t `hashWithSalt` h a
 
-hashAfun :: HashAcc acc -> PreOpenAfun acc aenv f -> Int
+hashAfun :: HashAcc acc -> PreOpenAfun acc env aenv f -> Int
 hashAfun h (Abody b)            = hash "Abody"          `hashWithSalt` h b
 hashAfun h (Alam f)             = hash "Alam"           `hashWithSalt` hashAfun h f
 
-hashBoundary :: forall acc aenv sh e. Elt e => acc aenv (Array sh e) -> Boundary (EltRepr e) -> Int
+hashBoundary :: forall acc env aenv sh e. Elt e => acc env aenv (Array sh e) -> Boundary (EltRepr e) -> Int
 hashBoundary _ Wrap             = hash "Wrap"
 hashBoundary _ Clamp            = hash "Clamp"
 hashBoundary _ Mirror           = hash "Mirror"
@@ -932,7 +932,7 @@ hashOpenExp = hashPreOpenExp hashOpenAcc
 hashPreOpenExp :: forall acc env aenv exp. HashAcc acc -> PreOpenExp acc env aenv exp -> Int
 hashPreOpenExp hashAcc exp =
   let
-    hashA :: Int -> acc aenv' a -> Int
+    hashA :: Int -> acc env aenv' a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
     hashE :: Int -> PreOpenExp acc env' aenv' e -> Int

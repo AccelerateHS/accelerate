@@ -44,7 +44,7 @@ import Data.Array.Accelerate.Type
 
 -- The type of pretty printing functions for array computations.
 --
-type PrettyAcc acc = forall aenv t. Int -> (Doc -> Doc) -> acc aenv t -> Doc
+type PrettyAcc acc = forall env aenv t. Int -> (Doc -> Doc) -> acc env aenv t -> Doc
 
 -- Pretty print an array expression
 --
@@ -52,11 +52,11 @@ prettyOpenAcc :: PrettyAcc OpenAcc
 prettyOpenAcc alvl wrap (OpenAcc acc) = prettyPreAcc prettyOpenAcc alvl wrap acc
 
 prettyPreAcc
-    :: forall acc aenv a.
+    :: forall acc env aenv a.
        PrettyAcc acc
     -> Int
     -> (Doc -> Doc)
-    -> PreOpenAcc acc aenv a
+    -> PreOpenAcc acc env aenv a
     -> Doc
 prettyPreAcc pp alvl wrap (Alet acc1 acc2)
   | not (isAlet acc1') && isAlet acc2'
@@ -185,17 +185,17 @@ prettyArrOp name docs = hang (text name) 2 $ sep docs
 
 -- Pretty print a function over array computations.
 --
-prettyAfun :: Int -> OpenAfun aenv t -> Doc
+prettyAfun :: Int -> OpenAfun env aenv t -> Doc
 prettyAfun = prettyPreAfun prettyOpenAcc
 
-prettyPreAfun :: forall acc aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc aenv fun -> Doc
+prettyPreAfun :: forall acc env aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc env aenv fun -> Doc
 prettyPreAfun pp alvl fun =
   let (n, bodyDoc) = count n fun
   in
   char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
   text "->" <+> bodyDoc
   where
-     count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
+     count :: Int -> PreOpenAfun acc env' aenv' fun' -> (Int, Doc)
      count lvl (Abody body) = (-1, pp (lvl + alvl + 1) noParens body)
      count lvl (Alam  fun') = let (n, body) = count lvl fun' in (1 + n, body)
 
@@ -314,14 +314,14 @@ prettyPreExp pp lvl alvl wrap (Intersect sh1 sh2)
 
 -- Pretty print nested pairs as a proper tuple.
 --
-prettyAtuple :: forall acc aenv t.
+prettyAtuple :: forall acc env aenv t.
                 PrettyAcc acc
              -> Int
-             -> Atuple (acc aenv) t
+             -> Atuple (acc env aenv) t
              -> Doc
 prettyAtuple pp alvl = tuple . collect
   where
-    collect :: Atuple (acc aenv) t' -> [Doc]
+    collect :: Atuple (acc env aenv) t' -> [Doc]
     collect NilAtup          = []
     collect (SnocAtup tup a) = collect tup ++ [pp alvl noParens a]
 

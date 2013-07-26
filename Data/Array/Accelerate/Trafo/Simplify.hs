@@ -50,10 +50,10 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 class Simplify f where
   simplify :: f -> f
 
-instance Kit acc => Simplify (PreFun acc aenv f) where
+instance Kit acc => Simplify (PreOpenFun acc env aenv f) where
   simplify = simplifyFun
 
-instance Kit acc => Simplify (PreExp acc aenv e) where
+instance Kit acc => Simplify (PreOpenExp acc env aenv e) where
   simplify = simplifyExp
 
 
@@ -87,7 +87,7 @@ localCSE :: (Kit acc, Elt a, Elt b)
          -> PreOpenExp acc (env,a) aenv b
          -> Maybe (PreOpenExp acc env aenv b)
 localCSE env bnd body
-  | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
+  | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline rebuildAcc body (Var ix)
   | otherwise                    = Nothing
 
 
@@ -321,10 +321,10 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
 -- Simplify closed expressions and functions. The process is applied repeatedly
 -- until no more changes are made.
 --
-simplifyExp :: Kit acc => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp :: Kit acc => PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
 simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
 
-simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
+simplifyFun :: Kit acc => PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
 simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyExp)
 
 

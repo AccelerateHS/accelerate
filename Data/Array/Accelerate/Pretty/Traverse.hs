@@ -30,14 +30,14 @@ data Labels = Labels { accFormat :: String
                      , primFunFormat :: String
                      }
 
-travAcc :: forall m b aenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
-       -> (String -> String -> m b) -> OpenAcc aenv a -> m b
+travAcc :: forall m b env aenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+       -> (String -> String -> m b) -> OpenAcc env aenv a -> m b
 travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
 
-    travAcc' :: PreOpenAcc OpenAcc aenv a -> m b
+    travAcc' :: PreOpenAcc OpenAcc env aenv a -> m b
     travAcc' (Alet acc1 acc2)                      = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
     travAcc' (Avar idx)                            = leaf   ("AVar " `cat` idxToInt idx)
     travAcc' (Apply afun acc)                      = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
@@ -110,12 +110,12 @@ travExp f c l expr = travExp' expr
     travExp' (Foreign ff fun e)         = combine ("Foreign " ++ strForeign ff) [ travFun f c l fun, travExp f c l e ]
 
 
-travAfun :: forall m b aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)
-        -> (String -> String -> m b) -> OpenAfun aenv fun -> m b
+travAfun :: forall m b env aenv fun. Monad m => Labels -> (String -> String -> [m b] -> m b)
+        -> (String -> String -> m b) -> OpenAfun env aenv fun -> m b
 travAfun f c l openAfun = travAfun' openAfun
   where
     combine = c (funFormat f)
-    travAfun' :: OpenAfun aenv fun -> m b
+    travAfun' :: OpenAfun env aenv fun -> m b
     travAfun' (Abody body) = combine "Abody" [ travAcc f c l body ]
     travAfun' (Alam fun)   = combine "Alam"  [ travAfun f c l fun ]
 
@@ -140,13 +140,13 @@ travArrays f c l = trav
 travArray :: forall dim a m b. Monad m => Labels -> (String -> String -> m b) -> Array dim a -> m b
 travArray f l (Array sh _) = l (arrayFormat f) ("Array" `cat` (toElt sh :: dim))
 
-travBoundary :: forall aenv dim e m b. (Monad m, Elt e) => Labels -> (String -> String -> m b)
-             -> {-dummy-}OpenAcc aenv (Array dim e)
+travBoundary :: forall env aenv dim e m b. (Monad m, Elt e) => Labels -> (String -> String -> m b)
+             -> {-dummy-}OpenAcc env aenv (Array dim e)
              -> Boundary (EltRepr e) -> m b
 travBoundary f l boundary = travBoundary' boundary
   where
     leaf = l (boundaryFormat f)
-    travBoundary' :: {-dummy-}OpenAcc aenv (Array dim e) -> Boundary (EltRepr e) -> m b
+    travBoundary' :: {-dummy-}OpenAcc env aenv (Array dim e) -> Boundary (EltRepr e) -> m b
     travBoundary' _ Clamp        = leaf "Clamp"
     travBoundary' _ Mirror       = leaf "Mirror"
     travBoundary' _ Wrap         = leaf "Wrap"
@@ -154,18 +154,18 @@ travBoundary f l boundary = travBoundary' boundary
 
 
 travAtuple
-    :: forall m b aenv t. Monad m
+    :: forall m b env aenv t. Monad m
     => Labels
     -> (String -> String -> [m b] -> m b)
     -> (String -> String -> m b)
-    -> Atuple (OpenAcc aenv) t
+    -> Atuple (OpenAcc env aenv) t
     -> m b
 travAtuple f c l = trav
   where
     leaf    = l (tupleFormat f)
     combine = c (tupleFormat f)
     --
-    trav :: Atuple (OpenAcc aenv) t' -> m b
+    trav :: Atuple (OpenAcc env aenv) t' -> m b
     trav NilAtup          = leaf    "NilAtup"
     trav (SnocAtup tup a) = combine "SnocAtup" [ trav tup, travAcc f c l a ]
 

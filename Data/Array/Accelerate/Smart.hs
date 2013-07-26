@@ -1036,7 +1036,7 @@ showShortendArr arr
 
 showPreExpOp :: PreExp acc exp t -> String
 showPreExpOp (Const c)          = "Const " ++ show c
-showPreExpOp Tag{}              = "Tag"
+showPreExpOp (Tag i)            = "Tag " ++ show i
 showPreExpOp Tuple{}            = "Tuple"
 showPreExpOp Prj{}              = "Prj"
 showPreExpOp IndexNil           = "IndexNil"

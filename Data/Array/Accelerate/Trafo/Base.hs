@@ -22,7 +22,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn, kmap,
+  avarIn, kmap, compose,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -46,6 +46,8 @@ import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Pretty.Print
 
+import qualified Data.Array.Accelerate.Debug    as Stats
+
 #include "accelerate.h"
 
 
@@ -56,8 +58,8 @@ import Data.Array.Accelerate.Pretty.Print
 -- by the recursive closure.
 --
 class Kit acc where
-  inject        :: PreOpenAcc acc aenv a -> acc aenv a
-  extract       :: acc aenv a -> PreOpenAcc acc aenv a
+  inject        :: PreOpenAcc acc env aenv a -> acc env aenv a
+  extract       :: acc env aenv a -> PreOpenAcc acc env aenv a
   --
   rebuildAcc    :: RebuildAcc acc
   matchAcc      :: MatchAcc acc
@@ -73,12 +75,22 @@ instance Kit OpenAcc where
   hashAcc       = hashOpenAcc
   prettyAcc     = prettyOpenAcc
 
-avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
+avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc env aenv arrs
 avarIn = inject  . Avar
 
-kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
+kmap :: Kit acc => (PreOpenAcc acc env aenv a -> PreOpenAcc acc env aenv b) -> acc env aenv a -> acc env aenv b
 kmap f = inject . f . extract
 
+infixr `compose`
+
+-- | Composition of unary functions.
+--
+compose :: (Kit acc, Elt c)
+        => PreOpenFun acc env aenv (b -> c)
+        -> PreOpenFun acc env aenv (a -> b)
+        -> PreOpenFun acc env aenv (a -> c)
+compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute rebuildAcc f g
+compose _              _              = error "compose: impossible evaluation"
 
 -- A class for testing the equality of terms homogeneously, returning a witness
 -- to the existentially quantified terms in the positive case.
@@ -95,10 +107,10 @@ instance Kit acc => Match (PreOpenExp acc env aenv) where
 instance Kit acc => Match (PreOpenFun acc env aenv) where
   match = matchPreOpenFun matchAcc hashAcc
 
-instance Kit acc => Match (PreOpenAcc acc aenv) where
+instance Kit acc => Match (PreOpenAcc acc env aenv) where
   match = matchPreOpenAcc matchAcc hashAcc
 
-instance Kit acc => Match (acc aenv) where      -- overlapping, undecidable, incoherent
+instance Kit acc => Match (acc env aenv) where      -- overlapping, undecidable, incoherent
   match = matchAcc
 
 
@@ -109,23 +121,23 @@ instance Kit acc => Match (acc aenv) where      -- overlapping, undecidable, inc
 -- in the recursive knot to distinguish standard AST terms from operand arrays
 -- that should be embedded into their consumers.
 --
-type DelayedAcc         = DelayedOpenAcc ()
-type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
+type DelayedAcc         = DelayedOpenAcc () ()
+type DelayedAfun        = PreOpenAfun DelayedOpenAcc () ()
 
-type DelayedExp         = DelayedOpenExp ()
-type DelayedFun         = DelayedOpenFun ()
+type DelayedExp         = DelayedOpenExp () ()
+type DelayedFun         = DelayedOpenFun () ()
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
 
-data DelayedOpenAcc aenv a where
-  Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
+data DelayedOpenAcc env aenv a where
+  Manifest              :: PreOpenAcc DelayedOpenAcc env aenv a -> DelayedOpenAcc env aenv a
 
   Delayed               :: (Shape sh, Elt e) =>
-    { extentD           :: PreExp DelayedOpenAcc aenv sh
-    , indexD            :: PreFun DelayedOpenAcc aenv (sh  -> e)
-    , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
-    }                   -> DelayedOpenAcc aenv (Array sh e)
+    { extentD           :: PreOpenExp DelayedOpenAcc env aenv sh
+    , indexD            :: PreOpenFun DelayedOpenAcc env aenv (sh  -> e)
+    , linearIndexD      :: PreOpenFun DelayedOpenAcc env aenv (Int -> e)
+    }                   -> DelayedOpenAcc env aenv (Array sh e)
 
 instance Kit DelayedOpenAcc where
   inject        = Manifest
@@ -158,11 +170,11 @@ matchDelayed _ _
   = Nothing
 
 rebuildDelayed :: RebuildAcc DelayedOpenAcc
-rebuildDelayed v acc = case acc of
-  Manifest pacc -> Manifest (rebuildA rebuildDelayed v pacc)
-  Delayed{..}   -> Delayed (rebuildEA rebuildDelayed v extentD)
-                           (rebuildFA rebuildDelayed v indexD)
-                           (rebuildFA rebuildDelayed v linearIndexD)
+rebuildDelayed v av acc = case acc of
+  Manifest pacc -> Manifest (rebuildPreOpenAcc rebuildDelayed v av pacc)
+  Delayed{..}   -> Delayed (rebuildPreOpenExp rebuildDelayed v av extentD)
+                           (rebuildFun rebuildDelayed v av indexD)
+                           (rebuildFun rebuildDelayed v av linearIndexD)
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
@@ -179,7 +191,7 @@ prettyDelayed alvl wrap acc = case acc of
   Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
   Delayed sh f _
     | Shape a           <- sh
-    , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
+    , Just REFL         <- match f (Lam (Body (Index (rebuildDelayed (Var . SuccIdx) Avar a) (Var ZeroIdx))))
     -> prettyDelayed alvl wrap a
 
     | otherwise
@@ -203,9 +215,9 @@ data Gamma acc env env' aenv where
            -> PreOpenExp acc env           aenv t
            -> Gamma      acc env (env', t) aenv
 
-incExp :: Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
+incExp :: (Kit acc) => Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
 incExp EmptyExp        = EmptyExp
-incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
+incExp (PushExp env e) = incExp env `PushExp` weakenE rebuildAcc SuccIdx e
 
 prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
 prjExp ZeroIdx      (PushExp _   v) = v
