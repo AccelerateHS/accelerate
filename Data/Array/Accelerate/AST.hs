@@ -167,9 +167,9 @@ prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsist
 
 -- |Function abstraction over parametrised array computations
 --
-data PreOpenAfun acc aenv t where
-  Abody :: Arrays t => acc             aenv      t -> PreOpenAfun acc aenv t
-  Alam  :: Arrays a => PreOpenAfun acc (aenv, a) t -> PreOpenAfun acc aenv (a -> t)
+data PreOpenAfun acc env aenv t where
+  Abody :: Arrays t => acc             env aenv      t -> PreOpenAfun acc env aenv t
+  Alam  :: Arrays a => PreOpenAfun acc env (aenv, a) t -> PreOpenAfun acc env aenv (a -> t)
 
 -- Function abstraction over vanilla open array computations
 --
@@ -177,11 +177,11 @@ type OpenAfun = PreOpenAfun OpenAcc
 
 -- |Parametrised array-computation function without free array variables
 --
-type PreAfun acc = PreOpenAfun acc ()
+type PreAfun acc = PreOpenAfun acc () ()
 
 -- |Vanilla array-computation function without free array variables
 --
-type Afun = OpenAfun ()
+type Afun = OpenAfun () ()
 
 -- |Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
@@ -202,29 +202,29 @@ type Afun = OpenAfun ()
 -- We use a non-recursive variant parametrised over the recursive closure, to facilitate attribute
 -- calculation in the backend.
 --
-data PreOpenAcc acc aenv a where
+data PreOpenAcc acc env aenv a where
 
   -- Local binding to represent sharing and demand explicitly; this is an
   -- eager(!) binding
   Alet        :: (Arrays bndArrs, Arrays bodyArrs)
-              => acc            aenv            bndArrs         -- bound expression
-              -> acc            (aenv, bndArrs) bodyArrs        -- the bound expression scope
-              -> PreOpenAcc acc aenv            bodyArrs
+              => acc            env aenv            bndArrs     -- bound expression
+              -> acc            env (aenv, bndArrs) bodyArrs    -- the bound expression scope
+              -> PreOpenAcc acc env aenv            bodyArrs
 
   -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
-              => Idx            aenv arrs
-              -> PreOpenAcc acc aenv arrs
+              => Idx                aenv arrs
+              -> PreOpenAcc acc env aenv arrs
 
   -- Tuples of arrays
   Atuple      :: (Arrays arrs, IsTuple arrs)
-              => Atuple    (acc aenv) (TupleRepr arrs)
-              -> PreOpenAcc acc aenv  arrs
+              => Atuple    (acc env aenv) (TupleRepr arrs)
+              -> PreOpenAcc acc env aenv  arrs
 
   Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
               => TupleIdx (TupleRepr arrs) a
-              ->            acc aenv arrs
-              -> PreOpenAcc acc aenv a
+              ->            acc env aenv arrs
+              -> PreOpenAcc acc env aenv a
 
   -- Array-function application.
   --
@@ -232,57 +232,57 @@ data PreOpenAcc acc aenv a where
   -- to free variables introduced by 'run1' style evaluators. See Issue#95.
   --
   Apply       :: (Arrays arrs1, Arrays arrs2)
-              => PreOpenAfun acc aenv (arrs1 -> arrs2)
-              -> acc             aenv arrs1
-              -> PreOpenAcc  acc aenv arrs2
+              => PreOpenAfun acc env aenv (arrs1 -> arrs2)
+              -> acc             env aenv arrs1
+              -> PreOpenAcc  acc env aenv arrs2
 
   -- Apply a backend-specific foreign function to an array, with a pure
   -- Accelerate version for use with other backends. The functions must be
   -- closed.
   Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
               => f arrs a                                       -- The foreign function for a given backend
-              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv a
+              -> PreAfun      acc          (arrs -> a)          -- A pure accelerate version
+              -> acc              env aenv arrs                 -- Arguments to the function
+              -> PreOpenAcc   acc env aenv a
 
   -- If-then-else for array-level computations
   Acond       :: (Arrays arrs)
-              => PreExp     acc aenv Bool
-              -> acc            aenv arrs
-              -> acc            aenv arrs
-              -> PreOpenAcc acc aenv arrs
+              => PreOpenExp acc env aenv Bool
+              -> acc            env aenv arrs
+              -> acc            env aenv arrs
+              -> PreOpenAcc acc env aenv arrs
 
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Arrays arrs
               => ArrRepr arrs
-              -> PreOpenAcc acc aenv arrs
+              -> PreOpenAcc acc env aenv arrs
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   Unit        :: Elt e
-              => PreExp     acc aenv e
-              -> PreOpenAcc acc aenv (Scalar e)
+              => PreOpenExp acc env aenv e
+              -> PreOpenAcc acc env aenv (Scalar e)
 
   -- Change the shape of an array without altering its contents
   -- > precondition: size dim == size dim'
   Reshape     :: (Shape sh, Shape sh', Elt e)
-              => PreExp     acc aenv sh                         -- new shape
-              -> acc            aenv (Array sh' e)              -- array to be reshaped
-              -> PreOpenAcc acc aenv (Array sh e)
+              => PreOpenExp acc env aenv sh                     -- new shape
+              -> acc            env aenv (Array sh' e)          -- array to be reshaped
+              -> PreOpenAcc acc env aenv (Array sh e)
 
   -- Construct a new array by applying a function to each index.
   Generate    :: (Shape sh, Elt e)
-              => PreExp     acc aenv sh                         -- output shape
-              -> PreFun     acc aenv (sh -> e)                  -- representation function
-              -> PreOpenAcc acc aenv (Array sh e)
+              => PreOpenExp acc env aenv sh                     -- output shape
+              -> PreOpenFun acc env aenv (sh -> e)              -- representation function
+              -> PreOpenAcc acc env aenv (Array sh e)
 
   -- Hybrid map/backpermute, where we separate the index and value
   -- transformations.
   Transform   :: (Elt a, Elt b, Shape sh, Shape sh')
-              => PreExp     acc aenv sh'                        -- dimension of the result
-              -> PreFun     acc aenv (sh' -> sh)                -- index permutation function
-              -> PreFun     acc aenv (a   -> b)                 -- function to apply at each element
-              ->            acc aenv (Array sh  a)              -- source array
-              -> PreOpenAcc acc aenv (Array sh' b)
+              => PreOpenExp acc env aenv sh'                    -- dimension of the result
+              -> PreOpenFun acc env aenv (sh' -> sh)            -- index permutation function
+              -> PreOpenFun acc env aenv (a   -> b)             -- function to apply at each element
+              ->            acc env aenv (Array sh  a)          -- source array
+              -> PreOpenAcc acc env aenv (Array sh' b)
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
@@ -291,9 +291,9 @@ data PreOpenAcc acc aenv a where
                             (EltRepr sl)
                             co
                             (EltRepr sh)
-              -> PreExp     acc aenv slix                       -- slice value specification
-              -> acc            aenv (Array sl e)               -- data to be replicated
-              -> PreOpenAcc acc aenv (Array sh e)
+              -> PreOpenExp acc env aenv slix                   -- slice value specification
+              -> acc            env aenv (Array sl e)           -- data to be replicated
+              -> PreOpenAcc acc env aenv (Array sh e)
 
   -- Index a sub-array out of an array; i.e., the dimensions not indexed are
   -- returned whole
@@ -302,96 +302,96 @@ data PreOpenAcc acc aenv a where
                             (EltRepr sl)
                             co
                             (EltRepr sh)
-              -> acc            aenv (Array sh e)               -- array to be indexed
-              -> PreExp     acc aenv slix                       -- slice value specification
-              -> PreOpenAcc acc aenv (Array sl e)
+              -> acc            env aenv (Array sh e)           -- array to be indexed
+              -> PreOpenExp acc env aenv slix                   -- slice value specification
+              -> PreOpenAcc acc env aenv (Array sl e)
 
   -- Apply the given unary function to all elements of the given array
   Map         :: (Shape sh, Elt e, Elt e')
-              => PreFun     acc aenv (e -> e')
-              -> acc            aenv (Array sh e)
-              -> PreOpenAcc acc aenv (Array sh e')
+              => PreOpenFun acc env aenv (e -> e')
+              -> acc            env aenv (Array sh e)
+              -> PreOpenAcc acc env aenv (Array sh e')
 
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
   ZipWith     :: (Shape sh, Elt e1, Elt e2, Elt e3)
-              => PreFun     acc aenv (e1 -> e2 -> e3)
-              -> acc            aenv (Array sh e1)
-              -> acc            aenv (Array sh e2)
-              -> PreOpenAcc acc aenv (Array sh e3)
+              => PreOpenFun acc env aenv (e1 -> e2 -> e3)
+              -> acc            env aenv (Array sh e1)
+              -> acc            env aenv (Array sh e2)
+              -> PreOpenAcc acc env aenv (Array sh e3)
 
   -- Fold along the innermost dimension of an array with a given /associative/ function.
   Fold        :: (Shape sh, Elt e)
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- default value
-              -> acc            aenv (Array (sh:.Int) e)        -- folded array
-              -> PreOpenAcc acc aenv (Array sh e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- default value
+              -> acc            env aenv (Array (sh:.Int) e)    -- folded array
+              -> PreOpenAcc acc env aenv (Array sh e)
 
   -- 'Fold' without a default value
   Fold1       :: (Shape sh, Elt e)
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array (sh:.Int) e)        -- folded array
-              -> PreOpenAcc acc aenv (Array sh e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> acc            env aenv (Array (sh:.Int) e)    -- folded array
+              -> PreOpenAcc acc env aenv (Array sh e)
 
   -- Segmented fold along the innermost dimension of an array with a given /associative/ function
   FoldSeg     :: (Shape sh, Elt e, Elt i, IsIntegral i)
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- default value
-              -> acc            aenv (Array (sh:.Int) e)        -- folded array
-              -> acc            aenv (Segments i)               -- segment descriptor
-              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- default value
+              -> acc            env aenv (Array (sh:.Int) e)    -- folded array
+              -> acc            env aenv (Segments i)           -- segment descriptor
+              -> PreOpenAcc acc env aenv (Array (sh:.Int) e)
 
   -- 'FoldSeg' without a default value
   Fold1Seg    :: (Shape sh, Elt e, Elt i, IsIntegral i)
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array (sh:.Int) e)        -- folded array
-              -> acc            aenv (Segments i)               -- segment descriptor
-              -> PreOpenAcc acc aenv (Array (sh:.Int) e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> acc            env aenv (Array (sh:.Int) e)    -- folded array
+              -> acc            env aenv (Segments i)           -- segment descriptor
+              -> PreOpenAcc acc env aenv (Array (sh:.Int) e)
 
   -- Left-to-right Haskell-style scan of a linear array with a given *associative*
   -- function and an initial element (which does not need to be the neutral of the
   -- associative operations)
   Scanl       :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- initial value
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e)
     -- FIXME: Make the scans rank-polymorphic?
 
   -- Like 'Scan', but produces a rightmost fold value and an array with the same length as the input
   -- array (the fold value would be the rightmost element in a Haskell-style scan)
   Scanl'      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- initial value
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e, Scalar e)
 
   -- Haskell-style scan without an initial value
   Scanl1      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e)
 
   -- Right-to-left version of 'Scanl'
   Scanr       :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- initial value
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e)
 
   -- Right-to-left version of 'Scanl\''
   Scanr'      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> PreExp     acc aenv e                          -- initial value
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e, Scalar e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> PreOpenExp acc env aenv e                      -- initial value
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e, Scalar e)
 
   -- Right-to-left version of 'Scanl1'
   Scanr1      :: Elt e
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Vector e)                 -- linear array
-              -> PreOpenAcc acc aenv (Vector e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> acc            env aenv (Vector e)             -- linear array
+              -> PreOpenAcc acc env aenv (Vector e)
 
   -- Generalised forward permutation is characterised by a permutation
   -- function that determines for each element of the source array where it
@@ -406,51 +406,50 @@ data PreOpenAcc acc aenv a where
   -- /associative/ and /commutative/ .  We drop every element for which the
   -- permutation function yields -1 (i.e., a tuple of -1 values).
   Permute     :: (Shape sh, Shape sh', Elt e)
-              => PreFun     acc aenv (e -> e -> e)              -- combination function
-              -> acc            aenv (Array sh' e)              -- default values
-              -> PreFun     acc aenv (sh -> sh')                -- permutation function
-              -> acc            aenv (Array sh e)               -- source array
-              -> PreOpenAcc acc aenv (Array sh' e)
+              => PreOpenFun acc env aenv (e -> e -> e)          -- combination function
+              -> acc            env aenv (Array sh' e)          -- default values
+              -> PreOpenFun acc env aenv (sh -> sh')            -- permutation function
+              -> acc            env aenv (Array sh e)           -- source array
+              -> PreOpenAcc acc env aenv (Array sh' e)
 
   -- Generalised multi-dimensional backwards permutation; the permutation can
   -- be between arrays of varying shape; the permutation function must be total
   Backpermute :: (Shape sh, Shape sh', Elt e)
-              => PreExp     acc aenv sh'                        -- dimensions of the result
-              -> PreFun     acc aenv (sh' -> sh)                -- permutation function
-              -> acc            aenv (Array sh e)               -- source array
-              -> PreOpenAcc acc aenv (Array sh' e)
+              => PreOpenExp acc env aenv sh'                    -- dimensions of the result
+              -> PreOpenFun acc env aenv (sh' -> sh)            -- permutation function
+              -> acc            env aenv (Array sh e)           -- source array
+              -> PreOpenAcc acc env aenv (Array sh' e)
 
   -- Map a stencil over an array.  In contrast to 'map', the domain of a stencil function is an
   -- entire /neighbourhood/ of each array element.
   Stencil     :: (Elt e, Elt e', Stencil sh e stencil)
-              => PreFun     acc aenv (stencil -> e')            -- stencil function
-              -> Boundary            (EltRepr e)                -- boundary condition
-              -> acc            aenv (Array sh e)               -- source array
-              -> PreOpenAcc acc aenv (Array sh e')
+              => PreOpenFun acc env aenv (stencil -> e')        -- stencil function
+              -> Boundary                (EltRepr e)            -- boundary condition
+              -> acc            env aenv (Array sh e)           -- source array
+              -> PreOpenAcc acc env aenv (Array sh e')
 
   -- Map a binary stencil over an array.
   Stencil2    :: (Elt e1, Elt e2, Elt e',
                   Stencil sh e1 stencil1,
                   Stencil sh e2 stencil2)
-              => PreFun     acc aenv (stencil1 ->
-                                      stencil2 -> e')           -- stencil function
-              -> Boundary            (EltRepr e1)               -- boundary condition #1
-              -> acc            aenv (Array sh e1)              -- source array #1
-              -> Boundary            (EltRepr e2)               -- boundary condition #2
-              -> acc            aenv (Array sh e2)              -- source array #2
-              -> PreOpenAcc acc aenv (Array sh e')
-
+              => PreOpenFun acc env aenv (stencil1 ->
+                                          stencil2 -> e')       -- stencil function
+              -> Boundary                (EltRepr e1)           -- boundary condition #1
+              -> acc            env aenv (Array sh e1)          -- source array #1
+              -> Boundary                (EltRepr e2)           -- boundary condition #2
+              -> acc            env aenv (Array sh e2)          -- source array #2
+              -> PreOpenAcc acc env aenv (Array sh e')
 
 -- Vanilla open array computations
 --
-newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
+newtype OpenAcc env aenv t = OpenAcc (PreOpenAcc OpenAcc env aenv t)
 
 -- deriving instance Typeable3 PreOpenAcc
-deriving instance Typeable2 OpenAcc
+deriving instance Typeable3 OpenAcc
 
 -- |Closed array expression aka an array program
 --
-type Acc = OpenAcc ()
+type Acc = OpenAcc () ()
 
 -- |Operations on stencils.
 --
@@ -659,7 +658,7 @@ invertShape =  listToShape . reverse . shapeToList
 
 -- |Parametrised open function abstraction
 --
-data PreOpenFun (acc :: * -> * -> *) env aenv t where
+data PreOpenFun (acc :: * -> * -> * -> *) env aenv t where
   Body :: Elt t => PreOpenExp acc env      aenv t -> PreOpenFun acc env aenv t
   Lam  :: Elt a => PreOpenFun acc (env, a) aenv t -> PreOpenFun acc env aenv (a -> t)
 
@@ -681,7 +680,7 @@ type Fun = OpenFun ()
 --
 -- The data type is parametrised over the surface types (not the representation type).
 --
-data PreOpenExp (acc :: * -> * -> *) env aenv t where
+data PreOpenExp (acc :: * -> * -> * -> *) env aenv t where
 
   -- Local binding of a scalar expression
   Let           :: (Elt bnd_t, Elt body_t)
@@ -786,19 +785,19 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   -- Project a single scalar from an array.
   -- The array expression can not contain any free scalar variables.
   Index         :: (Shape dim, Elt t)
-                => acc                aenv (Array dim t)
+                => acc            env aenv (Array dim t)
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv t
 
   LinearIndex   :: (Shape dim, Elt t)
-                => acc                aenv (Array dim t)
+                => acc            env aenv (Array dim t)
                 -> PreOpenExp acc env aenv Int
                 -> PreOpenExp acc env aenv t
 
   -- Array shape.
   -- The array expression can not contain any free scalar variables.
   Shape         :: (Shape dim, Elt e)
-                => acc                aenv (Array dim e)
+                => acc            env aenv (Array dim e)
                 -> PreOpenExp acc env aenv dim
 
   -- Number of elements of an array given its shape
@@ -921,7 +920,7 @@ data PrimFun sig where
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
+showPreAccOp :: forall acc env aenv arrs. PreOpenAcc acc env aenv arrs -> String
 showPreAccOp Alet{}             = "Alet"
 showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
 showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)

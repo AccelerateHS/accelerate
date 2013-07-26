@@ -53,7 +53,7 @@ arrayType (Array _ _) = eltType (undefined::e)
 -- |Determine the type of an expressions
 -- -------------------------------------
 
-type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRepr e)
+type AccType  acc = forall env aenv sh e. acc env aenv (Array sh e) -> TupleType (EltRepr e)
 
 -- |Reify the element type of the result of an array computation.
 --
@@ -70,9 +70,9 @@ delayedAccType (Delayed _ f _)
 -- |Reify the element type of the result of an array computation using the array computation AST
 -- before tying the knot.
 --
-preAccType :: forall acc aenv sh e.
+preAccType :: forall acc env aenv sh e.
               AccType acc
-           -> PreOpenAcc acc aenv (Array sh e)
+           -> PreOpenAcc acc env aenv (Array sh e)
            -> TupleType (EltRepr e)
 preAccType k pacc =
   case pacc of

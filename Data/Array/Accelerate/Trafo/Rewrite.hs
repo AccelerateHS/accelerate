@@ -25,39 +25,39 @@ import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt,
 -- index style. This is achieved by wrapping the segmented array argument in a
 -- left prefix-sum, so you must only ever apply this once.
 --
-convertSegments :: OpenAcc aenv a -> OpenAcc aenv a
+convertSegments :: OpenAcc env aenv a -> OpenAcc env aenv a
 convertSegments = cvtA
   where
-    cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
+    cvtT :: Atuple (OpenAcc env aenv) t -> Atuple (OpenAcc env aenv) t
     cvtT atup = case atup of
       NilAtup      -> NilAtup
       SnocAtup t a -> cvtT t `SnocAtup` cvtA a
 
-    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
+    cvtAfun :: OpenAfun env aenv t -> OpenAfun env aenv t
     cvtAfun = convertSegmentsAfun
 
-    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE :: Elt t => OpenExp env aenv t -> OpenExp env aenv t
     cvtE = id
 
-    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF :: OpenFun env aenv t -> OpenFun env aenv t
     cvtF = id
 
-    a0 :: Arrays a => OpenAcc (aenv, a) a
+    a0 :: Arrays a => OpenAcc env (aenv, a) a
     a0 = OpenAcc (Avar ZeroIdx)
 
-    segments :: (Elt i, IsIntegral i) => OpenAcc aenv (Segments i) -> OpenAcc aenv (Segments i)
+    segments :: (Elt i, IsIntegral i) => OpenAcc env aenv (Segments i) -> OpenAcc env aenv (Segments i)
     segments s = OpenAcc $ Scanl plus zero (cvtA s)
 
-    zero :: forall aenv i. (Elt i, IsIntegral i) => PreOpenExp OpenAcc () aenv i
+    zero :: forall env aenv i. (Elt i, IsIntegral i) => PreOpenExp OpenAcc env aenv i
     zero = Const (fromElt (0::i))
 
-    plus :: (Elt i, IsIntegral i) => PreOpenFun OpenAcc () aenv (i -> i -> i)
+    plus :: (Elt i, IsIntegral i) => PreOpenFun OpenAcc env aenv (i -> i -> i)
     plus = Lam (Lam (Body (PrimAdd numType
                           `PrimApp`
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
 
-    cvtA :: OpenAcc aenv a -> OpenAcc aenv a
+    cvtA :: OpenAcc env aenv a -> OpenAcc env aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
       Alet bnd body             -> Alet (cvtA bnd) (cvtA body)
       Avar ix                   -> Avar ix
@@ -92,14 +92,14 @@ convertSegments = cvtA
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
         where f' = weakenFA rebuildOpenAcc SuccIdx f
               z' = weakenEA rebuildOpenAcc SuccIdx z
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+              a' = rebuildOpenAcc Var (Avar . SuccIdx) a
 
       Fold1Seg f a s            -> Alet (segments s) (OpenAcc (Fold1Seg (cvtF f') (cvtA a') a0))
         where f' = weakenFA rebuildOpenAcc SuccIdx f
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+              a' = rebuildOpenAcc Var (Avar . SuccIdx) a
 
 
-convertSegmentsAfun :: OpenAfun aenv t -> OpenAfun aenv t
+convertSegmentsAfun :: OpenAfun env aenv t -> OpenAfun env aenv t
 convertSegmentsAfun afun =
   case afun of
     Abody b     -> Abody (convertSegments b)

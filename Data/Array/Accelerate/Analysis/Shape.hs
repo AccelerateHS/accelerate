@@ -27,7 +27,7 @@ import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Array.Sugar
 
 
-type AccDim acc  = forall aenv sh e. acc aenv (Array sh e) -> Int
+type AccDim acc  = forall env aenv sh e. acc env aenv (Array sh e) -> Int
 
 -- |Reify the dimensionality of the result type of an array computation
 --
@@ -41,7 +41,7 @@ delayedDim (Delayed sh _ _) = expDim sh
 
 -- |Reify dimensionality of a computation parameterised over a recursive closure
 --
-preAccDim :: forall acc aenv sh e. AccDim acc -> PreOpenAcc acc aenv (Array sh e) -> Int
+preAccDim :: forall acc env aenv sh e. AccDim acc -> PreOpenAcc acc env aenv (Array sh e) -> Int
 preAccDim k pacc =
   case pacc of
     Alet  _ acc          -> k acc

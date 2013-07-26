@@ -65,7 +65,6 @@ data Config = Config
   {
     recoverAccSharing   :: Bool         -- ^ Recover sharing of array computations ?
   , recoverExpSharing   :: Bool         -- ^ Recover sharing of scalar expressions ?
-  , floatOutAcc         :: Bool         -- ^ Always float array computations out of expressions ?
   }
 
 
@@ -126,22 +125,21 @@ convertAcc
     :: Arrays arrs
     => Bool             -- ^ recover sharing of array computations ?
     -> Bool             -- ^ recover sharing of scalar expressions ?
-    -> Bool             -- ^ always float array computations out of expressions?
     -> Acc arrs
     -> AST.Acc arrs
-convertAcc shareAcc shareExp floatAcc acc
-  = let config  = Config shareAcc shareExp (shareAcc && floatAcc)
+convertAcc shareAcc shareExp acc
+  = let config  = Config shareAcc shareExp
     in
-    convertOpenAcc config 0 [] EmptyLayout acc
+    convertOpenAcc config 0 [] EmptyLayout EmptyLayout acc
 
 
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f => Bool -> Bool -> Bool -> f -> AST.Afun (AfunctionR f)
-convertAfun shareAcc shareExp floatAcc =
-  let config = Config shareAcc shareExp (shareAcc && floatAcc)
-  in  aconvert config EmptyLayout
+convertAfun :: Afunction f => Bool -> Bool -> f -> AST.Afun (AfunctionR f)
+convertAfun shareAcc shareExp =
+  let config = Config shareAcc shareExp
+  in  aconvert config EmptyLayout EmptyLayout
 
 
 -- Convert a HOAS fragment into de Bruijn form, binding variables into the typed
@@ -153,25 +151,26 @@ convertAfun shareAcc shareExp floatAcc =
 --
 class Afunction f where
   type AfunctionR f
-  aconvert :: Config -> Layout aenv aenv -> f -> AST.OpenAfun aenv (AfunctionR f)
+  aconvert :: Config -> Layout env env -> Layout aenv aenv -> f -> AST.OpenAfun env aenv (AfunctionR f)
 
 instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   type AfunctionR (Acc a -> r) = a -> AfunctionR r
   --
-  aconvert config alyt f
+  aconvert config lyt alyt f
     = let a     = Acc $ Atag (sizeLayout alyt)
           alyt' = incLayout alyt `PushLayout` ZeroIdx
       in
-      Alam $ aconvert config alyt' (f a)
+      Alam $ aconvert config lyt alyt' (f a)
 
 instance Arrays b => Afunction (Acc b) where
   type AfunctionR (Acc b) = b
   --
-  aconvert config alyt body
+  aconvert config lyt alyt body
     = let lvl    = sizeLayout alyt
           vars   = [lvl-1, lvl-2 .. 0]
       in
-      Abody $ convertOpenAcc config lvl vars alyt body
+      tracePure "aconvert" ("lvl = " ++ show lvl ++ " vars = " ++ show vars)
+      Abody $ convertOpenAcc config lvl vars lyt alyt body
 
 
 -- | Convert an open array expression to de Bruijn form while also incorporating sharing
@@ -182,13 +181,15 @@ convertOpenAcc
     => Config
     -> Level
     -> [Level]
+    -> Layout env env
     -> Layout aenv aenv
     -> Acc arrs
-    -> AST.OpenAcc aenv arrs
-convertOpenAcc config lvl fvs alyt acc
-  = let (sharingAcc, initialEnv) = recoverSharingAcc config lvl fvs acc
+    -> AST.OpenAcc env aenv arrs
+convertOpenAcc config lvl fvs lyt alyt acc
+  = let (sharingAcc, initialEnvAcc, initialEnvExp) = recoverSharingAcc config lvl fvs acc
     in
-    convertSharingAcc config alyt initialEnv sharingAcc
+    tracePure "convertOpenAcc" ("aenv = " ++ show initialEnvAcc ++ " env = " ++ show initialEnvExp ++ " fvs = " ++ show fvs) $
+    convertSharingAcc config lyt alyt initialEnvExp initialEnvAcc sharingAcc
 
 -- | Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
@@ -198,13 +199,15 @@ convertOpenAcc config lvl fvs alyt acc
 -- in reverse chronological order (outermost variable is at the end of the list).
 --
 convertSharingAcc
-    :: forall aenv arrs. Arrays arrs
+    :: forall env aenv arrs. Arrays arrs
     => Config
+    -> Layout env env
     -> Layout aenv aenv
+    -> [StableSharingExp]
     -> [StableSharingAcc]
     -> SharingAcc arrs
-    -> AST.OpenAcc aenv arrs
-convertSharingAcc _ alyt aenv (AvarSharing sa)
+    -> AST.OpenAcc env aenv arrs
+convertSharingAcc _ _ alyt _ aenv (AvarSharing sa)
   | Just i <- findIndex (matchStableAcc sa) aenv
   = AST.OpenAcc $ AST.Avar (prjIdx (ctxt ++ "; i = " ++ show i) i alyt)
   | null aenv
@@ -216,26 +219,26 @@ convertSharingAcc _ alyt aenv (AvarSharing sa)
     ctxt = "shared 'Acc' tree with stable name " ++ show (hashStableNameHeight sa)
     err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  aenv = " ++ show aenv
 
-convertSharingAcc config alyt aenv (AletSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
+convertSharingAcc config lyt alyt env aenv (AletSharing sa@(StableSharingAcc _ boundAcc) bodyAcc)
   = AST.OpenAcc
   $ let alyt' = incLayout alyt `PushLayout` ZeroIdx
     in
-    AST.Alet (convertSharingAcc config alyt aenv boundAcc)
-             (convertSharingAcc config alyt' (sa:aenv) bodyAcc)
+    AST.Alet (convertSharingAcc config lyt alyt env aenv boundAcc)
+             (convertSharingAcc config lyt alyt' env (sa:aenv) bodyAcc)
 
-convertSharingAcc config alyt aenv (AccSharing _ preAcc)
+convertSharingAcc config lyt alyt env aenv (AccSharing _ preAcc)
   = AST.OpenAcc
-  $ let cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc aenv a
-        cvtA = convertSharingAcc config alyt aenv
+  $ let cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc env aenv a
+        cvtA = convertSharingAcc config lyt alyt env aenv
 
-        cvtE :: Elt t => RootExp t -> AST.Exp aenv t
-        cvtE = convertRootExp config alyt aenv
+        cvtE :: Elt t => RootExp t -> AST.OpenExp env aenv t
+        cvtE = convertRootExp config lyt alyt env aenv
 
-        cvtF1 :: (Elt a, Elt b) => (Exp a -> RootExp b) -> AST.Fun aenv (a -> b)
-        cvtF1 = convertSharingFun1 config alyt aenv
+        cvtF1 :: (Elt a, Elt b) => (Exp a -> RootExp b) -> AST.OpenFun env aenv (a -> b)
+        cvtF1 = convertSharingFun1 config lyt alyt env aenv
 
-        cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> RootExp c) -> AST.Fun aenv (a -> b -> c)
-        cvtF2 = convertSharingFun2 config alyt aenv
+        cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> RootExp c) -> AST.OpenFun env aenv (a -> b -> c)
+        cvtF2 = convertSharingFun2 config lyt alyt env aenv
     in
     case preAcc of
 
@@ -244,20 +247,19 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
 
       Pipe afun1 afun2 acc
         -> let alyt'    = incLayout alyt `PushLayout` ZeroIdx
-               boundAcc = aconvert config alyt  afun1 `AST.Apply` convertSharingAcc config alyt aenv acc
-               bodyAcc  = aconvert config alyt' afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
+               boundAcc = aconvert config lyt alyt  afun1 `AST.Apply` convertSharingAcc config lyt alyt env aenv acc
+               bodyAcc  = aconvert config lyt alyt' afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
       Aforeign ff afun acc
         -> let a = recoverAccSharing config
                e = recoverExpSharing config
-               f = floatOutAcc config
            in
-           AST.Aforeign ff (convertAfun a e f afun) (cvtA acc)
+           AST.Aforeign ff (convertAfun a e afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
-      Atuple arrs                 -> AST.Atuple (convertSharingAtuple config alyt aenv arrs)
+      Atuple arrs                 -> AST.Atuple (convertSharingAtuple config lyt alyt env aenv arrs)
       Aprj ix a                   -> AST.Aprj ix (cvtA a)
       Use array                   -> AST.Use (fromArr array)
       Unit e                      -> AST.Unit (cvtE e)
@@ -280,28 +282,30 @@ convertSharingAcc config alyt aenv (AccSharing _ preAcc)
       Permute f dftAcc perm acc   -> AST.Permute (cvtF2 f) (cvtA dftAcc) (cvtF1 perm) (cvtA acc)
       Backpermute newDim perm acc -> AST.Backpermute (cvtE newDim) (cvtF1 perm) (cvtA acc)
       Stencil stencil boundary acc
-        -> AST.Stencil (convertSharingStencilFun1 config acc alyt aenv stencil)
+        -> AST.Stencil (convertSharingStencilFun1 config acc lyt alyt env aenv stencil)
                        (convertBoundary boundary)
                        (cvtA acc)
       Stencil2 stencil bndy1 acc1 bndy2 acc2
-        -> AST.Stencil2 (convertSharingStencilFun2 config acc1 acc2 alyt aenv stencil)
+        -> AST.Stencil2 (convertSharingStencilFun2 config acc1 acc2 lyt alyt env aenv stencil)
                         (convertBoundary bndy1)
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
 
 convertSharingAtuple
-    :: forall aenv a.
+    :: forall env aenv a.
        Config
+    -> Layout env  env
     -> Layout aenv aenv
+    -> [StableSharingExp]
     -> [StableSharingAcc]
     -> Tuple.Atuple SharingAcc a
-    -> Tuple.Atuple (AST.OpenAcc aenv) a
-convertSharingAtuple config alyt aenv = cvt
+    -> Tuple.Atuple (AST.OpenAcc env aenv) a
+convertSharingAtuple config lyt alyt env aenv = cvt
   where
-    cvt :: Tuple.Atuple SharingAcc a' -> Tuple.Atuple (AST.OpenAcc aenv) a'
+    cvt :: Tuple.Atuple SharingAcc a' -> Tuple.Atuple (AST.OpenAcc env aenv) a'
     cvt NilAtup         = NilAtup
-    cvt (SnocAtup t a)  = cvt t `SnocAtup` convertSharingAcc config alyt aenv a
+    cvt (SnocAtup t a)  = cvt t `SnocAtup` convertSharingAcc config lyt alyt env aenv a
 
 
 -- | Convert a boundary condition
@@ -315,18 +319,18 @@ convertBoundary (Constant e) = Constant (fromElt e)
 
 -- Smart constructors to represent AST forms
 --
-mkIndex :: forall slix e aenv. (Slice slix, Elt e)
-        => AST.OpenAcc                aenv (Array (FullShape  slix) e)
-        -> AST.Exp                    aenv slix
-        -> AST.PreOpenAcc AST.OpenAcc aenv (Array (SliceShape slix) e)
+mkIndex :: forall slix e env aenv. (Slice slix, Elt e)
+        => AST.OpenAcc                env aenv (Array (FullShape  slix) e)
+        -> AST.OpenExp                env aenv slix
+        -> AST.PreOpenAcc AST.OpenAcc env aenv (Array (SliceShape slix) e)
 mkIndex = AST.Slice (sliceIndex slix)
   where
     slix = undefined :: slix
 
-mkReplicate :: forall slix e aenv. (Slice slix, Elt e)
-        => AST.Exp                    aenv slix
-        -> AST.OpenAcc                aenv (Array (SliceShape slix) e)
-        -> AST.PreOpenAcc AST.OpenAcc aenv (Array (FullShape  slix) e)
+mkReplicate :: forall slix e env aenv. (Slice slix, Elt e)
+        => AST.OpenExp                env aenv slix
+        -> AST.OpenAcc                env aenv (Array (SliceShape slix) e)
+        -> AST.PreOpenAcc AST.OpenAcc env aenv (Array (FullShape  slix) e)
 mkReplicate = AST.Replicate (sliceIndex slix)
   where
     slix = undefined :: slix
@@ -346,7 +350,7 @@ mkReplicate = AST.Replicate (sliceIndex slix)
 --
 convertFun :: Function f => Bool -> f -> AST.Fun () (FunctionR f)
 convertFun shareExp =
-  let config = Config False shareExp False
+  let config = Config False shareExp
   in  convert config EmptyLayout
 
 
@@ -385,7 +389,7 @@ convertExp
     -> Exp e            -- ^ expression to be converted
     -> AST.Exp () e
 convertExp shareExp exp
-  = let config = Config False shareExp False
+  = let config = Config False shareExp
     in
     convertOpenExp config 0 [] EmptyLayout exp
 
@@ -398,7 +402,7 @@ convertOpenExp
     -> Exp e
     -> AST.OpenExp env () e
 convertOpenExp config lvl fvar lyt exp
-  = let (sharingExp, initialEnv) = recoverSharingExp config lvl fvar exp
+  = let (sharingExp, _, initialEnv) = recoverSharingExp config lvl fvar exp
     in
     convertSharingExp config lyt EmptyLayout initialEnv [] sharingExp
 
@@ -424,14 +428,14 @@ convertSharingExp config lyt alyt env aenv = cvt
     cvt :: Elt t' => SharingExp t' -> AST.OpenExp env aenv t'
     cvt (VarSharing se)
       | Just i <- findIndex (matchStableExp se) env
-      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i) i lyt)
+      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i ++ " env = " ++ show env) i lyt)
       | null env
       = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableNameHeight se) ++ ")"
       | otherwise
       = INTERNAL_ERROR(error) "convertSharingExp" err
       where
         ctxt = "shared 'Exp' tree with stable name " ++ show (hashStableNameHeight se)
-        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env
+        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env ++ " aenv = " ++ show aenv
     cvt (LetSharing se@(StableSharingExp _ boundExp) bodyExp)
       = let lyt' = incLayout lyt `PushLayout` ZeroIdx
         in
@@ -458,8 +462,8 @@ convertSharingExp config lyt alyt env aenv = cvt
           ShapeSize e           -> AST.ShapeSize (cvt e)
           Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
 
-    cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc aenv a
-    cvtA = convertSharingAcc config alyt aenv
+    cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc env aenv a
+    cvtA = convertSharingAcc config lyt alyt env aenv
 
     cvtT :: Tuple.Tuple SharingExp tup -> Tuple.Tuple (AST.OpenExp env aenv) tup
     cvtT = convertSharingTuple config lyt alyt env aenv
@@ -494,106 +498,116 @@ convertSharingTuple config lyt alyt env aenv tup =
 convertRootExp
     :: Elt t
     => Config
+    -> Layout env env
     -> Layout aenv aenv         -- array environment
+    -> [StableSharingExp]       -- currently bound scalar sharing-variables
     -> [StableSharingAcc]       -- currently bound array sharing-variables
     -> RootExp t                -- expression to be converted
-    -> AST.Exp aenv t
-convertRootExp config alyt aenv exp
+    -> AST.OpenExp env aenv t
+convertRootExp config lyt alyt env aenv exp
   = case exp of
-      EnvExp env exp    -> convertSharingExp config EmptyLayout alyt env aenv exp
+      EnvExp env' exp   -> convertSharingExp config lyt alyt (env' ++ env) aenv exp
       _                 -> INTERNAL_ERROR(error) "convertRootExp" "not an 'EnvExp'"
 
 -- | Convert a unary functions
 --
 convertSharingFun1
-    :: forall a b aenv. (Elt a, Elt b)
+    :: forall a b env aenv. (Elt a, Elt b)
     => Config
+    -> Layout env env
     -> Layout aenv aenv
+    -> [StableSharingExp]       -- currently bound scalar sharing-variables
     -> [StableSharingAcc]       -- currently bound array sharing-variables
     -> (Exp a -> RootExp b)
-    -> AST.Fun aenv (a -> b)
-convertSharingFun1 config alyt aenv f = Lam (Body openF)
+    -> AST.OpenFun env aenv (a -> b)
+convertSharingFun1 config lyt alyt env aenv f = Lam (Body openF)
   where
     a               = Exp undefined             -- the 'tag' was already embedded in Phase 1
-    lyt             = EmptyLayout
+    lyt'            = incLayout lyt
                       `PushLayout`
-                      (ZeroIdx :: Idx ((), a) a)
-    EnvExp env body = f a
-    openF           = convertSharingExp config lyt alyt env aenv body
+                      ZeroIdx
+    exp             = f a
+    openF           = tracePure "convertSharingFun1" (show env) $ convertRootExp config lyt' alyt env aenv exp
 
 -- | Convert a binary functions
 --
 convertSharingFun2
-    :: forall a b c aenv. (Elt a, Elt b, Elt c)
+    :: forall a b c env aenv. (Elt a, Elt b, Elt c)
     => Config
+    -> Layout env env
     -> Layout aenv aenv
+    -> [StableSharingExp]       -- currently bound scalar sharing-variables
     -> [StableSharingAcc]       -- currently bound array sharing-variables
     -> (Exp a -> Exp b -> RootExp c)
-    -> AST.Fun aenv (a -> b -> c)
-convertSharingFun2 config alyt aenv f = Lam (Lam (Body openF))
+    -> AST.OpenFun env aenv (a -> b -> c)
+convertSharingFun2 config lyt alyt env aenv f = Lam (Lam (Body openF))
   where
     a               = Exp undefined
     b               = Exp undefined
-    lyt             = EmptyLayout
+    lyt'            = incLayout (incLayout lyt)
                       `PushLayout`
-                      (SuccIdx ZeroIdx :: Idx (((), a), b) a)
+                      SuccIdx ZeroIdx
                       `PushLayout`
-                      (ZeroIdx         :: Idx (((), a), b) b)
-    EnvExp env body = f a b
-    openF           = convertSharingExp config lyt alyt env aenv body
+                      ZeroIdx
+    exp             = f a b
+    openF           = convertRootExp config lyt' alyt env aenv exp
 
 -- | Convert a unary stencil function
 --
 convertSharingStencilFun1
-    :: forall sh a stencil b aenv. (Elt a, Stencil sh a stencil, Elt b)
+    :: forall sh a stencil b env aenv. (Elt a, Stencil sh a stencil, Elt b)
     => Config
     -> SharingAcc (Array sh a)          -- just passed to fix the type variables
+    -> Layout env env
     -> Layout aenv aenv
+    -> [StableSharingExp]               -- currently bound scalar sharing-variables
     -> [StableSharingAcc]               -- currently bound array sharing-variables
     -> (stencil -> RootExp b)
-    -> AST.Fun aenv (StencilRepr sh stencil -> b)
-convertSharingStencilFun1 config _ alyt aenv stencilFun = Lam (Body openStencilFun)
+    -> AST.OpenFun env aenv (StencilRepr sh stencil -> b)
+convertSharingStencilFun1 config _ lyt alyt env aenv stencilFun = Lam (Body openStencilFun)
   where
     stencil = Exp undefined :: Exp (StencilRepr sh stencil)
-    lyt     = EmptyLayout
+    lyt'    = incLayout lyt
               `PushLayout`
-              (ZeroIdx :: Idx ((), StencilRepr sh stencil)
+              (ZeroIdx :: Idx (env, StencilRepr sh stencil)
                               (StencilRepr sh stencil))
 
-    EnvExp env body = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil)
-    openStencilFun  = convertSharingExp config lyt alyt env aenv body
+    exp     = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil)
+    openStencilFun  = convertRootExp config lyt' alyt env aenv exp
 
 -- | Convert a binary stencil function
 --
 convertSharingStencilFun2
-    :: forall sh a b stencil1 stencil2 c aenv.
+    :: forall sh a b stencil1 stencil2 c env aenv.
        (Elt a, Stencil sh a stencil1,
         Elt b, Stencil sh b stencil2,
         Elt c)
     => Config
     -> SharingAcc (Array sh a)          -- just passed to fix the type variables
     -> SharingAcc (Array sh b)          -- just passed to fix the type variables
+    -> Layout env env
     -> Layout aenv aenv
+    -> [StableSharingExp]               -- currently bound scalar sharing-variables
     -> [StableSharingAcc]               -- currently bound array sharing-variables
     -> (stencil1 -> stencil2 -> RootExp c)
-    -> AST.Fun aenv (StencilRepr sh stencil1 -> StencilRepr sh stencil2 -> c)
-convertSharingStencilFun2 config _ _ alyt aenv stencilFun = Lam (Lam (Body openStencilFun))
+    -> AST.OpenFun env aenv (StencilRepr sh stencil1 -> StencilRepr sh stencil2 -> c)
+convertSharingStencilFun2 config _ _ lyt alyt env aenv stencilFun = Lam (Lam (Body openStencilFun))
   where
     stencil1 = Exp undefined :: Exp (StencilRepr sh stencil1)
     stencil2 = Exp undefined :: Exp (StencilRepr sh stencil2)
-    lyt     = EmptyLayout
+    lyt'     = incLayout (incLayout lyt)
               `PushLayout`
-              (SuccIdx ZeroIdx :: Idx (((), StencilRepr sh stencil1),
-                                            StencilRepr sh stencil2)
+              (SuccIdx ZeroIdx :: Idx ((env, StencilRepr sh stencil1),
+                                             StencilRepr sh stencil2)
                                        (StencilRepr sh stencil1))
               `PushLayout`
-              (ZeroIdx         :: Idx (((), StencilRepr sh stencil1),
-                                            StencilRepr sh stencil2)
+              (ZeroIdx         :: Idx ((env, StencilRepr sh stencil1),
+                                             StencilRepr sh stencil2)
                                        (StencilRepr sh stencil2))
 
-    EnvExp env body = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil1)
+    exp             = stencilFun (stencilPrj (undefined::sh) (undefined::a) stencil1)
                                  (stencilPrj (undefined::sh) (undefined::b) stencil2)
-    openStencilFun  = convertSharingExp config lyt alyt env aenv body
+    openStencilFun  = convertRootExp config lyt' alyt env aenv exp
 
 
 -- Sharing recovery
@@ -783,8 +797,8 @@ type StableAccName arrs = StableNameHeight (Acc arrs)
 --
 data SharingAcc arrs where
   AvarSharing :: Arrays arrs
-              => StableAccName arrs                                   -> SharingAcc arrs
-  AletSharing :: StableSharingAcc -> SharingAcc arrs                  -> SharingAcc arrs
+              => StableAccName arrs                                      -> SharingAcc arrs
+  AletSharing :: StableSharingAcc -> SharingAcc arrs                     -> SharingAcc arrs
   AccSharing  :: Arrays arrs
               => StableAccName arrs -> PreAcc SharingAcc RootExp arrs -> SharingAcc arrs
 
@@ -910,36 +924,39 @@ makeOccMapAcc
     => Config
     -> Level
     -> Acc arrs
-    -> IO (SharingAcc arrs, OccMap Acc)
+    -> IO (SharingAcc arrs, OccMap Acc, OccMap Exp)
 makeOccMapAcc config lvl acc = do
   traceLine "makeOccMapAcc" "Enter"
   accOccMap             <- newASTHashTable
-  (acc', _)             <- makeOccMapSharingAcc config accOccMap lvl acc
+  expOccMap             <- newASTHashTable
+  (acc', _)             <- makeOccMapSharingAcc config accOccMap expOccMap lvl acc
   frozenAccOccMap       <- freezeOccMap accOccMap
+  frozenExpOccMap       <- freezeOccMap expOccMap
   traceLine "makeOccMapAcc" "Exit"
-  return (acc', frozenAccOccMap)
+  return (acc', frozenAccOccMap, frozenExpOccMap)
 
 
 makeOccMapSharingAcc
     :: Typeable arrs
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Level
     -> Acc arrs
     -> IO (SharingAcc arrs, Int)
-makeOccMapSharingAcc config accOccMap = traverseAcc
+makeOccMapSharingAcc config accOccMap expOccMap = traverseAcc
   where
     traverseFun1 :: (Elt a, Typeable b) => Level -> (Exp a -> Exp b) -> IO (Exp a -> RootExp b, Int)
-    traverseFun1 = makeOccMapFun1 config accOccMap
+    traverseFun1 = makeOccMapFun1 config accOccMap expOccMap
 
     traverseFun2 :: (Elt a, Elt b, Typeable c)
                  => Level
                  -> (Exp a -> Exp b -> Exp c)
                  -> IO (Exp a -> Exp b -> RootExp c, Int)
-    traverseFun2 = makeOccMapFun2 config accOccMap
+    traverseFun2 = makeOccMapFun2 config accOccMap expOccMap
 
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
-    traverseExp = makeOccMapExp config accOccMap
+    traverseExp lvl = makeOccMapRootExp config accOccMap expOccMap lvl []
 
     traverseAcc :: forall arrs. Typeable arrs => Level -> Acc arrs -> IO (SharingAcc arrs, Int)
     traverseAcc lvl acc@(Acc pacc)
@@ -1033,12 +1050,12 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc', h3) <- traverseAcc lvl acc
                                              return (Backpermute e' p' acc', h1 `max` h2 `max` h3 + 1)
             Stencil s bnd acc           -> reconstruct $ do
-                                             (s'  , h1) <- makeOccMapStencil1 config accOccMap acc lvl s
+                                             (s'  , h1) <- makeOccMapStencil1 config accOccMap expOccMap acc lvl s
                                              (acc', h2) <- traverseAcc lvl acc
                                              return (Stencil s' bnd acc', h1 `max` h2 + 1)
             Stencil2 s bnd1 acc1
                        bnd2 acc2        -> reconstruct $ do
-                                             (s'   , h1) <- makeOccMapStencil2 config accOccMap acc1 acc2 lvl s
+                                             (s'   , h1) <- makeOccMapStencil2 config accOccMap expOccMap acc1 acc2 lvl s
                                              (acc1', h2) <- traverseAcc lvl acc1
                                              (acc2', h3) <- traverseAcc lvl acc2
                                              return (Stencil2 s' bnd1 acc1' bnd2 acc2',
@@ -1105,79 +1122,73 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 
 
 -- Generate occupancy information for scalar functions and expressions. Helper
--- functions wrapping around 'makeOccMapRootExp' with more specific types.
+-- functions wrapping around 'makeOccMapSharingExp' with more specific types.
 --
 -- See Note [Traversing functions and side effects]
 --
-makeOccMapExp
-    :: Typeable e
-    => Config
-    -> OccMapHash Acc
-    -> Level
-    -> Exp e
-    -> IO (RootExp e, Int)
-makeOccMapExp config accOccMap lvl = makeOccMapRootExp config accOccMap lvl []
-
 makeOccMapFun1
     :: (Elt a, Typeable b)
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Level
     -> (Exp a -> Exp b)
     -> IO (Exp a -> RootExp b, Int)
-makeOccMapFun1 config accOccMap lvl f = do
+makeOccMapFun1 config accOccMap expOccMap lvl f = do
   let x = Exp (Tag lvl)
   --
-  (body, height) <- makeOccMapRootExp config accOccMap (lvl+1) [lvl] (f x)
+  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+1) [lvl] (f x)
   return (const body, height)
 
 makeOccMapFun2
     :: (Elt a, Elt b, Typeable c)
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Level
     -> (Exp a -> Exp b -> Exp c)
     -> IO (Exp a -> Exp b -> RootExp c, Int)
-makeOccMapFun2 config accOccMap lvl f = do
+makeOccMapFun2 config accOccMap expOccMap lvl f = do
   let x = Exp (Tag (lvl+1))
       y = Exp (Tag lvl)
   --
-  (body, height) <- makeOccMapRootExp config accOccMap (lvl+2) [lvl, lvl+1] (f x y)
+  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+2) [lvl, lvl+2] (f x y)
   return (\_ _ -> body, height)
 
 makeOccMapStencil1
     :: forall sh a b stencil. (Stencil sh a stencil, Typeable b)
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Acc (Array sh a)         {- dummy -}
     -> Level
     -> (stencil -> Exp b)
     -> IO (stencil -> RootExp b, Int)
-makeOccMapStencil1 config accOccMap _ lvl stencil = do
+makeOccMapStencil1 config accOccMap expOccMap _ lvl stencil = do
   let x = Exp (Tag lvl)
       f = stencil . stencilPrj (undefined::sh) (undefined::a)
   --
-  (body, height) <- makeOccMapRootExp config accOccMap (lvl+1) [lvl] (f x)
+  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+1) [lvl] (f x)
   return (const body, height)
 
 makeOccMapStencil2
     :: forall sh a b c stencil1 stencil2. (Stencil sh a stencil1, Stencil sh b stencil2, Typeable c)
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Acc (Array sh a)         {- dummy -}
     -> Acc (Array sh b)         {- dummy -}
     -> Level
     -> (stencil1 -> stencil2 -> Exp c)
     -> IO (stencil1 -> stencil2 -> RootExp c, Int)
-makeOccMapStencil2 config accOccMap _ _ lvl stencil = do
+makeOccMapStencil2 config accOccMap expOccMap _ _ lvl stencil = do
   let x         = Exp (Tag (lvl+1))
       y         = Exp (Tag lvl)
       f a b     = stencil (stencilPrj (undefined::sh) (undefined::a) a)
                           (stencilPrj (undefined::sh) (undefined::b) b)
   --
-  (body, height) <- makeOccMapRootExp config accOccMap (lvl+2) [lvl, lvl+1] (f x y)
+  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+2) [lvl, lvl+1] (f x y)
   return (\_ _ -> body, height)
-
 
 -- Generate sharing information for expressions embedded in Acc computations.
 -- Expressions are annotated with:
@@ -1189,17 +1200,16 @@ makeOccMapRootExp
     :: Typeable e
     => Config
     -> OccMapHash Acc
+    -> OccMapHash Exp
     -> Level                            -- The level of currently bound scalar variables
-    -> [Int]                            -- The tags of newly introduced free scalar variables in this expression
+    -> [Level]                          -- The tags of newly introduced free scalar variables in this expression
     -> Exp e
     -> IO (RootExp e, Int)
-makeOccMapRootExp config accOccMap lvl fvs exp = do
+makeOccMapRootExp config accOccMap expOccMap lvl fvs exp = do
   traceLine "makeOccMapRootExp" "Enter"
-  expOccMap             <- newASTHashTable
   (exp', height)        <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
-  frozenExpOccMap       <- freezeOccMap expOccMap
   traceLine "makeOccMapRootExp" "Exit"
-  return (OccMapExp fvs frozenExpOccMap exp', height)
+  return (OccMapExp fvs undefined exp', height)
 
 
 -- Generate sharing information for an open scalar expression.
@@ -1242,7 +1252,8 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
                     Just height | recoverExpSharing config
-                      -> return (VarSharing (StableNameHeight sn height), height)
+                      -> tracePure "makeOccMapSharingExp" (showPreExpOp pexp) $
+                            return (VarSharing (StableNameHeight sn height), height)
                     _ -> do (exp, height) <- newExp
                             return (ExpSharing (StableNameHeight sn height) exp, height)
 
@@ -1273,7 +1284,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 
       where
         traverseAcc :: Typeable arrs => Level -> Acc arrs -> IO (SharingAcc arrs, Int)
-        traverseAcc = makeOccMapSharingAcc config accOccMap
+        traverseAcc = makeOccMapSharingAcc config accOccMap expOccMap
 
         travE1 :: Typeable b => (SharingExp b -> PreExp SharingAcc SharingExp a) -> Exp b
                -> IO (PreExp SharingAcc SharingExp a, Int)
@@ -1387,10 +1398,12 @@ us +++ vs = foldr insert us vs
       | se1 == se2          = ExpNodeCount (se1 `pickNoneVar` se2) (count1 + count2) : ys'
       | se1 `higherSSE` se2 = x : ys
       | otherwise           = y : insert x ys'
-    insert x@(AccNodeCount _ _) (y@(ExpNodeCount _ _) : ys')
-      = y : insert x ys'
-    insert x@(ExpNodeCount _ _) (y@(AccNodeCount _ _) : ys')
-      = x : insert y ys'
+    insert x@(AccNodeCount (StableSharingAcc sn1 _) _) ys@(y@(ExpNodeCount (StableSharingExp sn2 _) _) : ys')
+      | sn1 `higherSNH` sn2 = x : ys
+      | otherwise           = y : insert x ys'
+    insert x@(ExpNodeCount (StableSharingExp sn1 _) _) ys@(y@(AccNodeCount (StableSharingAcc sn2 _) _) : ys')
+      | sn1 `higherSNH` sn2 = x : ys
+      | otherwise           = y : insert x ys'
 
     (StableSharingAcc _ (AvarSharing _)) `pickNoneAvar` sa2  = sa2
     sa1                                  `pickNoneAvar` _sa2 = sa1
@@ -1487,23 +1500,28 @@ determineScopesAcc
     => Config
     -> [Level]
     -> OccMap Acc
+    -> OccMap Exp
     -> SharingAcc a
-    -> (SharingAcc a, [StableSharingAcc])
-determineScopesAcc config fvs accOccMap rootAcc
-  = let (sharingAcc, counts) = determineScopesSharingAcc config accOccMap rootAcc
+    -> (SharingAcc a, [StableSharingAcc], [StableSharingExp])
+determineScopesAcc config fvs accOccMap expOccMap rootAcc
+  = let (sharingAcc, counts) = determineScopesSharingAcc config accOccMap expOccMap rootAcc
         unboundTrees         = filter (not . isFreeVar) counts
     in
+    tracePure "determineScopesAcc" (show fvs) $
     if all isFreeVar counts
-       then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
+       then ( sharingAcc
+            , buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts]
+            , buildInitialEnvExp fvs [se | ExpNodeCount se _ <- counts])
        else INTERNAL_ERROR(error) "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
 
 
 determineScopesSharingAcc
     :: Config
     -> OccMap Acc
+    -> OccMap Exp
     -> SharingAcc a
     -> (SharingAcc a, NodeCounts)
-determineScopesSharingAcc config accOccMap = scopesAcc
+determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
   where
     scopesAcc :: forall arrs. SharingAcc arrs -> (SharingAcc arrs, NodeCounts)
     scopesAcc (AletSharing _ _)
@@ -1733,7 +1751,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             notComplete _                                             = True
 
     scopesExp :: RootExp t -> (RootExp t, NodeCounts)
-    scopesExp = determineScopesExp config accOccMap
+    scopesExp = determineScopesExp config accOccMap expOccMap
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
@@ -1781,19 +1799,16 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 determineScopesExp
     :: Config
     -> OccMap Acc
+    -> OccMap Exp
     -> RootExp t
     -> (RootExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
-determineScopesExp config accOccMap (OccMapExp fvs expOccMap exp)
+determineScopesExp config accOccMap expOccMap (OccMapExp fvs _ exp)
   = let
-        (expWithScopes, nodeCounts)     = determineScopesSharingExp config accOccMap expOccMap exp
-        (expCounts, accCounts)          = break isAccNodeCount nodeCounts
-
-        isAccNodeCount AccNodeCount{}   = True
-        isAccNodeCount _                = False
+        (expWithScopes, nodeCounts) = determineScopesSharingExp config accOccMap expOccMap exp
     in
-    (EnvExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, accCounts)
+    (EnvExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- nodeCounts]) expWithScopes, nodeCounts)
 
-determineScopesExp _ _ _ = INTERNAL_ERROR(error) "determineScopesExp" "not an 'OccMapExp'"
+determineScopesExp _ _ _ _ = INTERNAL_ERROR(error) "determineScopesExp" "not an 'OccMapExp'"
 
 
 determineScopesSharingExp
@@ -1805,7 +1820,7 @@ determineScopesSharingExp
 determineScopesSharingExp config accOccMap expOccMap = scopesExp
   where
     scopesAcc :: SharingAcc a -> (SharingAcc a, NodeCounts)
-    scopesAcc = determineScopesSharingAcc config accOccMap
+    scopesAcc = determineScopesSharingAcc config accOccMap expOccMap
 
     scopesExp :: forall t. SharingExp t -> (SharingExp t, NodeCounts)
     scopesExp (LetSharing _ _)
@@ -1874,7 +1889,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
         travA :: (SharingAcc a -> PreExp SharingAcc SharingExp t) -> SharingAcc a
               -> (SharingExp t, NodeCounts)
-        travA c acc = maybeFloatOutAcc c acc' accCount
+        travA c acc = reconstruct (c acc') accCount
           where
             (acc', accCount)  = scopesAcc acc
 
@@ -1882,28 +1897,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                -> SharingAcc a
                -> SharingExp b
                -> (SharingExp t, NodeCounts)
-        travAE c acc e = maybeFloatOutAcc (`c` e') acc' (accCountA +++ accCountE)
+        travAE c acc e = reconstruct (c acc' e') (accCountA +++ accCountE)
           where
             (acc', accCountA) = scopesAcc acc
             (e'  , accCountE) = scopesExp e
-
-        maybeFloatOutAcc :: (SharingAcc a -> PreExp SharingAcc SharingExp t)
-                         -> SharingAcc a
-                         -> NodeCounts
-                         -> (SharingExp t, NodeCounts)
-        maybeFloatOutAcc c acc@(AvarSharing _) accCount        -- nothing to float out
-          = reconstruct (c acc) accCount
-        maybeFloatOutAcc c acc                 accCount
-          | floatOutAcc config = reconstruct (c var) ((stableAcc `accNodeCount` 1) +++ accCount)
-          | otherwise          = reconstruct (c acc) accCount
-          where
-             (var, stableAcc) = abstract acc id
-
-        abstract :: SharingAcc a -> (SharingAcc a -> SharingAcc a)
-                 -> (SharingAcc a, StableSharingAcc)
-        abstract (AvarSharing _)       _    = INTERNAL_ERROR(error) "sharingAccToVar" "AvarSharing"
-        abstract (AletSharing sa acc)  lets = abstract acc (lets . AletSharing sa)
-        abstract acc@(AccSharing sn _) lets = (AvarSharing sn, StableSharingAcc sn (lets acc))
 
         -- Occurrence count of the currently processed node
         expOccCount = let StableNameHeight sn' _ = sn
@@ -1975,38 +1972,38 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             notComplete _                                             = True
 
 
--- |Recover sharing information and annotate the HOAS AST with variable and let binding
--- annotations.  The first argument determines whether array computations are floated out of
--- expressions irrespective of whether they are shared or not — 'True' implies floating them out.
---
--- Also returns the 'StableSharingAcc's of all 'Atag' leaves in environment order — they represent
--- the free variables of the AST.
---
--- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
---     determine the sharing of subterms.  The stable pointer API does not guarantee its
---     completeness; i.e., it may miss some equalities, which implies that we may fail to discover
---     some sharing.  However, sharing does not affect the denotational meaning of an array
---     computation; hence, we do not compromise denotational correctness.
---
---     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
---     variables to be shared if any of them is used more than once.  If one is duplicated, the
---     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
---     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
---
+---- |Recover sharing information and annotate the HOAS AST with variable and let binding
+---- annotations.  The first argument determines whether array computations are floated out of
+---- expressions irrespective of whether they are shared or not — 'True' implies floating them out.
+----
+---- Also returns the 'StableSharingAcc's of all 'Atag' leaves in environment order — they represent
+---- the free variables of the AST.
+----
+---- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
+----     determine the sharing of subterms.  The stable pointer API does not guarantee its
+----     completeness; i.e., it may miss some equalities, which implies that we may fail to discover
+----     some sharing.  However, sharing does not affect the denotational meaning of an array
+----     computation; hence, we do not compromise denotational correctness.
+----
+----     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
+----     variables to be shared if any of them is used more than once.  If one is duplicated, the
+----     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
+----     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
+----
 recoverSharingAcc
     :: Typeable a
     => Config
     -> Level            -- The level of currently bound array variables
     -> [Level]          -- The tags of newly introduced free array variables
     -> Acc a
-    -> (SharingAcc a, [StableSharingAcc])
+    -> (SharingAcc a, [StableSharingAcc], [StableSharingExp])
 {-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc config alvl avars acc
-  = let (acc', occMap)
+  = let (acc', accOccMap, expOccMap)
           = unsafePerformIO             -- to enable stable pointers; this is safe as explained above
           $ makeOccMapAcc config alvl acc
     in
-    determineScopesAcc config avars occMap acc'
+    determineScopesAcc config avars accOccMap expOccMap acc'
 
 
 recoverSharingExp
@@ -2015,21 +2012,26 @@ recoverSharingExp
     -> Level            -- The level of currently bound scalar variables
     -> [Level]          -- The tags of newly introduced free scalar variables
     -> Exp e
-    -> (SharingExp e, [StableSharingExp])
+    -> (SharingExp e, [StableSharingAcc], [StableSharingExp])
 {-# NOINLINE recoverSharingExp #-}
-recoverSharingExp config lvl fvar exp
+recoverSharingExp config lvl fvs exp
   = let
-        (rootExp, accOccMap) = unsafePerformIO $ do
+        (rootExp, accOccMap, expOccMap) = unsafePerformIO $ do
           accOccMap       <- newASTHashTable
-          (exp', _)       <- makeOccMapRootExp config accOccMap lvl fvar exp
+          expOccMap       <- newASTHashTable
+          (exp', _)       <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
           frozenAccOccMap <- freezeOccMap accOccMap
+          frozenExpOccMap <- freezeOccMap expOccMap
 
-          return (exp', frozenAccOccMap)
+          return (exp', frozenAccOccMap, frozenExpOccMap)
 
-        (EnvExp sse sharingExp, _) =
-          determineScopesExp config accOccMap rootExp
+        (sharingExp, counts) =
+          determineScopesSharingExp config accOccMap expOccMap rootExp
+
+        ssa = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts]
+        sse = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- counts]
     in
-    (sharingExp, sse)
+    (sharingExp, ssa, sse)
 
 
 -- Debugging
