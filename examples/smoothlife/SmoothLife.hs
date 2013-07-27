@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE CPP                 #-}
 --
 -- A cellular automata simulation over a smooth domain.
 --
@@ -20,7 +21,9 @@ import Data.Array.Accelerate.Math.FFT
 import Data.Array.Accelerate.Math.DFT.Centre
 import Data.Array.Accelerate.Math.Complex
 
+#ifdef ACCELERATE_CUDA_BACKEND
 import Data.Array.Accelerate.CUDA.Foreign
+#endif
 
 -- Smooth life
 -- ~~~~~~~~~~~
@@ -140,7 +143,12 @@ getSigmoidFunction :: SigmoidFunction -> Exp R -> Exp R -> Exp R -> Exp R
 getSigmoidFunction f x a ea
   = let
       -- __expf is CUDA's faster but less precise version of exp.
-      cexp = foreignExp (cudaExp "math_functions.h __expf") exp
+      cexp =
+#ifdef ACCELERATE_CUDA_BACKEND
+        foreignExp (cudaExp "math_functions.h __expf") exp
+#else
+        exp
+#endif
     in
     case f of
       Hard      -> x >=* a ? (1, 0)
