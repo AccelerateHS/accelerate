@@ -171,15 +171,30 @@ module Data.Array.Accelerate (
 
   -- | A value of type `Int` is a plain Haskell value (unlifted), whereas an
   -- @Exp Int@ is a /lifted/ value, that is, an integer lifted into the domain
-  -- of expressions (an abstract syntax tree in disguise).  Both `Acc` and `Exp`
-  -- are /surface types/ into which values may be lifted.
+  -- of expressions (an abstract syntax tree in disguise). Both `Acc` and `Exp`
+  -- are /surface types/ into which values may be lifted. Lifting plain array
+  -- and scalar surface types is equivalent to 'use' and 'constant'
+  -- respectively.
   --
   -- In general an @Exp Int@ cannot be unlifted into an `Int`, because the
   -- actual number will not be available until a later stage of execution (e.g.
-  -- GPU execution, when `run` is called).  However, in some cases unlifting
-  -- makes sense.  For example, unlifting can convert, or unpack, an expression
-  -- of tuple type into a tuple of expressions; those expressions, at runtime,
-  -- will become tuple dereferences.
+  -- GPU execution, when `run` is called). Similarly an @Acc array@ can not be
+  -- unlifted to a vanilla `array`; should instead `run` the expression with a
+  -- specific backend to evaluate it.
+  --
+  -- Lifting and unlift are also used to pack and unpack an expression into and
+  -- out of constructors such as tuples, respectively. Those expressions, at
+  -- runtime, will become tuple dereferences. For example:
+  --
+  -- > Exp (Z :. Int :. Int)
+  -- >     -> unlift -> (Z :. Exp Int :. Exp Int)
+  -- >     -> lift   -> Exp (Z :. Int :. Int)
+  -- >     -> ...
+  --
+  -- > Acc (Scalar Int, Vector Float)
+  -- >     -> unlift -> (Acc (Scalar Int), Acc (Vector Float))
+  -- >     -> lift   -> Acc (Scalar Int, Vector Float)
+  -- >     -> ...
   --
   L.Lift(..), L.Unlift(..), L.lift1, L.lift2, L.ilift1, L.ilift2,
 
