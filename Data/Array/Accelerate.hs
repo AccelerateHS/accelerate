@@ -217,7 +217,7 @@ module Data.Array.Accelerate (
 
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,
-  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*), L.max, L.min,
+  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*),
 
   -- *** Numeric functions
   L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,

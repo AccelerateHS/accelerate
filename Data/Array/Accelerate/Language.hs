@@ -94,7 +94,7 @@ module Data.Array.Accelerate.Language (
   (!), (!!), the, null, shape, size, shapeSize,
 
   -- ** Methods of H98 classes that we need to redefine as their signatures change
-  (==*), (/=*), (<*), (<=*), (>*), (>=*), max, min,
+  (==*), (/=*), (<*), (<=*), (>*), (>=*),
   bit, setBit, clearBit, complementBit, testBit,
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
@@ -1101,7 +1101,9 @@ instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
 
 instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
-  compare     = error "Prelude.Ord.compare applied to EDSL types"
+  compare       = error "Prelude.Ord.compare applied to EDSL types"
+  min           = mkMin
+  max           = mkMax
 
 instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd
@@ -1268,16 +1270,6 @@ infix 4 ==*, /=*, <*, <=*, >*, >=*
 --
 (<=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
 (<=*) = mkLtEq
-
--- |Determine the maximum of two scalars.
---
-max :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-max = mkMax
-
--- |Determine the minimum of two scalars.
---
-min :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp t
-min = mkMin
 
 -- Conversions from the RealFrac class
 --

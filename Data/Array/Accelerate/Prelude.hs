@@ -61,7 +61,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Bits
 import Data.Bool
-import Prelude ((.), ($), (+), (-), (*), const, subtract, id)
+import Prelude ((.), ($), (+), (-), (*), const, subtract, id, min, max)
 import qualified Prelude as P
 
 -- friends
