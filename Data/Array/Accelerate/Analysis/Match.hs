@@ -99,6 +99,11 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just REFL <- matchAcc a1 a2
       = Just REFL
 
+    match (Elet x1 a1) (Elet x2 a2)
+      | Just REFL <- matchExp x1 x2
+      , Just REFL <- matchAcc a1 a2
+      = Just REFL
+
     match (Avar v1) (Avar v2)
       = matchIdx v1 v2
 
@@ -861,7 +866,7 @@ hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 hashPreOpenAcc :: forall acc env aenv arrs. HashAcc acc -> PreOpenAcc acc env aenv arrs -> Int
 hashPreOpenAcc hashAcc pacc =
   let
-    hashA :: Int -> acc env aenv' a -> Int
+    hashA :: Int -> acc env' aenv' a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
     hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
@@ -872,6 +877,7 @@ hashPreOpenAcc hashAcc pacc =
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
+    Elet bnd body               -> hash "Elet"          `hashE` bnd `hashA` body
     Avar v                      -> hash "Avar"          `hashWithSalt` hashIdx v
     Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
     Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a

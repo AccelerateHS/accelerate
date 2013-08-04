@@ -159,6 +159,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
           bnd'  = shrinkAcc bnd
           body' = shrinkAcc body
       --
+      Elet bnd body             -> Elet (shrinkE bnd) (shrinkAcc body)
       Avar ix                   -> Avar ix
       Atuple tup                -> Atuple (shrinkAT tup)
       Aprj tup a                -> Aprj tup (shrinkAcc a)
@@ -329,6 +330,7 @@ usesOfPreAcc withShape countAcc idx = countP
         | otherwise                     -> 0
       --
       Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
+      Elet bnd body             -> countE bnd + countA body
       Atuple tup                -> countAT tup
       Aprj _ a                  -> countA a     -- special case discount?
       Apply _ a                 -> countA a

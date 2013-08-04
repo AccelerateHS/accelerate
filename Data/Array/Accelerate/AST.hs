@@ -211,6 +211,12 @@ data PreOpenAcc acc env aenv a where
               -> acc            env (aenv, bndArrs) bodyArrs    -- the bound expression scope
               -> PreOpenAcc acc env aenv            bodyArrs
 
+  -- Local binding to represent sharing of scalar values
+  Elet        :: (Elt e, Arrays arrs)
+              => PreOpenExp acc env      aenv e
+              -> acc            (env, e) aenv arrs
+              -> PreOpenAcc acc env      aenv arrs
+
   -- Variable bound by a 'Let', represented by a de Bruijn index
   Avar        :: Arrays arrs
               => Idx                aenv arrs
@@ -922,6 +928,7 @@ data PrimFun sig where
 
 showPreAccOp :: forall acc env aenv arrs. PreOpenAcc acc env aenv arrs -> String
 showPreAccOp Alet{}             = "Alet"
+showPreAccOp Elet{}             = "Elet"
 showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
 showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
 showPreAccOp Apply{}            = "Apply"

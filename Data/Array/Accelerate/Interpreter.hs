@@ -115,6 +115,10 @@ evalPreOpenAcc (Alet acc1 acc2) env aenv
   = let !arr1 = force $ evalOpenAcc acc1 env aenv
     in evalOpenAcc acc2 env (aenv `Push` arr1)
 
+evalPreOpenAcc (Elet exp acc) env aenv
+  = let !e1 = evalOpenExp exp env aenv
+    in evalOpenAcc acc (env `PushElt` Sugar.fromElt e1) aenv
+
 evalPreOpenAcc (Avar idx) _env aenv = delay $ prj idx aenv
 
 evalPreOpenAcc (Atuple tup) env aenv = delay (toTuple $ evalAtuple tup env aenv :: a)

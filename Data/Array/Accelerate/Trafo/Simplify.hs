@@ -50,11 +50,13 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 class Simplify f where
   simplify :: f -> f
 
+-- RCE: Simplifier has been turned off till vectorisations is implemented as
+-- it does not work for open expressions
 instance Kit acc => Simplify (PreOpenFun acc env aenv f) where
-  simplify = simplifyFun
+  simplify = id --simplifyFun
 
 instance Kit acc => Simplify (PreOpenExp acc env aenv e) where
-  simplify = simplifyExp
+  simplify = id --simplifyExp
 
 
 -- Scalar optimisations
