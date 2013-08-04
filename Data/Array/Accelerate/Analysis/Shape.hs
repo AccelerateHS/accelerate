@@ -45,6 +45,7 @@ preAccDim :: forall acc env aenv sh e. AccDim acc -> PreOpenAcc acc env aenv (Ar
 preAccDim k pacc =
   case pacc of
     Alet  _ acc          -> k acc
+    Elet  _ acc          -> k acc
     Avar _               -> case arrays' (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "halt, fiend!"

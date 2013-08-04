@@ -125,6 +125,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Use arr                 -> Use arr
         Unit e                  -> Unit (cvtE e)
         Alet bnd body           -> alet (manifest bnd) (manifest body)
+        Elet bnd body           -> Elet (cvtE bnd) (manifest body)
         Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (manifest tup)
@@ -296,6 +297,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- duplication. SEE: [Sharing vs. Fusion]
     --
     Alet bnd body       -> aletD embedAcc elimAcc bnd body
+    Elet bnd body       -> done $ Elet (cvtE bnd) (cvtA body)
     Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Aprj ix tup         -> aprjD embedAcc ix tup
     Atuple tup          -> done $ Atuple (cvtAT tup)
@@ -1108,7 +1110,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         Body e          -> Body (replaceE sh' f' avar e)
         Lam f           -> Lam  (replaceF (weakenE rebuildAcc SuccIdx sh') (weakenFE rebuildAcc SuccIdx f') avar f)
 
-    replaceA :: forall aenv sh e a. (Kit acc, Shape sh, Elt e)
+    replaceA :: forall env aenv sh e a. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
              -> PreOpenAcc acc env aenv a
              -> PreOpenAcc acc env aenv a
@@ -1123,6 +1125,12 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
               f''  = weakenFA rebuildAcc SuccIdx f'
           in
           Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
+
+        Elet bnd body                ->
+          let sh'' = weakenE  rebuildAcc SuccIdx sh'
+              f''  = weakenFE rebuildAcc SuccIdx f'
+          in
+          Elet (cvtE bnd) (kmap (replaceA sh'' f'' avar) body)
 
         Use arrs                -> Use arrs
         Unit e                  -> Unit (cvtE e)

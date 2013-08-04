@@ -308,6 +308,7 @@ rebuildPreOpenAcc
 rebuildPreOpenAcc k v av acc =
   case acc of
     Alet a b            -> Alet (k v av a) (k (weakenExpAcc k . v) (shiftA k av) b)
+    Elet e a            -> Elet (rebuildPreOpenExp k v av e) (k (shiftE k v) (weakenAccExp k . av) a)
     Avar ix             -> accOut (av ix)
     Atuple tup          -> Atuple (rebuildAtup k v av tup)
     Aprj tup a          -> Aprj tup (k v av a)

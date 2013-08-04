@@ -75,6 +75,22 @@ prettyPreAcc pp alvl wrap (Alet acc1 acc2)
     acc2'       = pp (alvl+1) noParens acc2
     a           = char 'a' <> int alvl
 
+prettyPreAcc pp alvl wrap (Elet exp acc)
+  | not (isElet exp') && isElet acc'
+  = wrap $ vcat [ text "let" <+> a <+> equals <+> exp' <+> text "in"
+                , acc' ]
+  --
+  | otherwise
+  = wrap $ vcat [ hang (text "let" <+> a <+> equals) 2 exp'
+                , text "in" <+> acc' ]
+  where
+    -- TLM: derp, can't unwrap into a PreOpenAcc to pattern match on Elet
+    --
+    isElet doc  = "let" `isPrefixOf` render doc
+
+    exp'        = prettyPreExp pp 0 alvl noParens exp
+    acc'        = pp (alvl+1) noParens acc
+    a           = char 'a' <> int alvl
 
 prettyPreAcc _  alvl _    (Avar idx)
   = text $ 'a' : show (alvl - idxToInt idx - 1)

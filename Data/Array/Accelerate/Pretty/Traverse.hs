@@ -39,6 +39,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
 
     travAcc' :: PreOpenAcc OpenAcc env aenv a -> m b
     travAcc' (Alet acc1 acc2)                      = combine "Alet" [travAcc f c l acc1, travAcc f c l acc2]
+    travAcc' (Elet e acc)                          = combine "Elet" [travExp f c l e, travAcc f c l acc]
     travAcc' (Avar idx)                            = leaf   ("AVar " `cat` idxToInt idx)
     travAcc' (Apply afun acc)                      = combine "Apply" [travAfun f c l afun, travAcc f c l acc]
     travAcc' (Aforeign ff afun acc)                = combine ("Aforeign " ++ strForeign ff) [travAfun f c l afun, travAcc f c l acc]

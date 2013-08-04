@@ -78,6 +78,8 @@ preAccType k pacc =
   case pacc of
     Alet  _ acc         -> k acc
 
+    Elet _ acc          -> k acc
+
     -- The following all contain impossible pattern matches, but GHC's type
     -- checker does no grok that
     --

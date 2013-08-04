@@ -87,19 +87,17 @@ data Layout env env' where
 prjIdx :: forall t env env'. Typeable t => String -> Int -> Layout env env' -> Idx env t
 prjIdx ctxt 0 (PushLayout _ (ix :: Idx env0 t0))
   = flip fromMaybe (gcast ix)
-  $ possiblyNestedErr ctxt $
+  $ prjError ctxt $
       "Couldn't match expected type `" ++ show (typeOf (undefined::t)) ++
       "' with actual type `" ++ show (typeOf (undefined::t0)) ++ "'" ++
       "\n  Type mismatch"
 prjIdx ctxt n (PushLayout l _)  = prjIdx ctxt (n - 1) l
-prjIdx ctxt _ EmptyLayout       = possiblyNestedErr ctxt "Environment doesn't contain index"
+prjIdx ctxt _ EmptyLayout       = prjError ctxt "Environment doesn't contain index"
 
-possiblyNestedErr :: String -> String -> a
-possiblyNestedErr ctxt failreason
+prjError :: String -> String -> a
+prjError ctxt failreason
   = error $ "Fatal error in Sharing.prjIdx:"
       ++ "\n  " ++ failreason ++ " at " ++ ctxt
-      ++ "\n  Possible reason: nested data parallelism — array computation that depends on a"
-      ++ "\n    scalar variable of type 'Exp a'"
 
 -- Add an entry to a layout, incrementing all indices
 --
@@ -151,7 +149,11 @@ convertAfun shareAcc shareExp =
 --
 class Afunction f where
   type AfunctionR f
-  aconvert :: Config -> Layout env env -> Layout aenv aenv -> f -> AST.OpenAfun env aenv (AfunctionR f)
+  aconvert :: Config
+           -> Layout env env
+           -> Layout aenv aenv
+           -> f
+           -> AST.OpenAfun env aenv (AfunctionR f)
 
 instance (Arrays a, Afunction r) => Afunction (Acc a -> r) where
   type AfunctionR (Acc a -> r) = a -> AfunctionR r
@@ -169,7 +171,6 @@ instance Arrays b => Afunction (Acc b) where
     = let lvl    = sizeLayout alyt
           vars   = [lvl-1, lvl-2 .. 0]
       in
-      tracePure "aconvert" ("lvl = " ++ show lvl ++ " vars = " ++ show vars)
       Abody $ convertOpenAcc config lvl vars lyt alyt body
 
 
@@ -188,15 +189,14 @@ convertOpenAcc
 convertOpenAcc config lvl fvs lyt alyt acc
   = let (sharingAcc, initialEnvAcc, initialEnvExp) = recoverSharingAcc config lvl fvs acc
     in
-    tracePure "convertOpenAcc" ("aenv = " ++ show initialEnvAcc ++ " env = " ++ show initialEnvExp ++ " fvs = " ++ show fvs) $
     convertSharingAcc config lyt alyt initialEnvExp initialEnvAcc sharingAcc
 
 -- | Convert an array expression with given array environment layout and sharing information into
 -- de Bruijn form while recovering sharing at the same time (by introducing appropriate let
 -- bindings).  The latter implements the third phase of sharing recovery.
 --
--- The sharing environment 'env' keeps track of all currently bound sharing variables, keeping them
--- in reverse chronological order (outermost variable is at the end of the list).
+-- The sharing environments 'env' and 'aenv' keeps track of all currently bound sharing variables,
+-- keeping them in reverse chronological order (outermost variable is at the end of the list).
 --
 convertSharingAcc
     :: forall env aenv arrs. Arrays arrs
@@ -226,6 +226,13 @@ convertSharingAcc config lyt alyt env aenv (AletSharing sa@(StableSharingAcc _ b
     AST.Alet (convertSharingAcc config lyt alyt env aenv boundAcc)
              (convertSharingAcc config lyt alyt' env (sa:aenv) bodyAcc)
 
+convertSharingAcc config lyt alyt env aenv (EletSharing se@(StableSharingExp _ boundExp) bodyAcc)
+  = AST.OpenAcc
+  $ let lyt' = incLayout lyt `PushLayout` ZeroIdx
+    in
+    AST.Elet (convertSharingExp config lyt alyt env aenv boundExp)
+             (convertSharingAcc config lyt' alyt (se:env) aenv bodyAcc)
+
 convertSharingAcc config lyt alyt env aenv (AccSharing _ preAcc)
   = AST.OpenAcc
   $ let cvtA :: Arrays a => SharingAcc a -> AST.OpenAcc env aenv a
@@ -237,7 +244,9 @@ convertSharingAcc config lyt alyt env aenv (AccSharing _ preAcc)
         cvtF1 :: (Elt a, Elt b) => (Exp a -> RootExp b) -> AST.OpenFun env aenv (a -> b)
         cvtF1 = convertSharingFun1 config lyt alyt env aenv
 
-        cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> RootExp c) -> AST.OpenFun env aenv (a -> b -> c)
+        cvtF2 :: (Elt a, Elt b, Elt c)
+              => (Exp a -> Exp b -> RootExp c)
+              -> AST.OpenFun env aenv (a -> b -> c)
         cvtF2 = convertSharingFun2 config lyt alyt env aenv
     in
     case preAcc of
@@ -247,8 +256,14 @@ convertSharingAcc config lyt alyt env aenv (AccSharing _ preAcc)
 
       Pipe afun1 afun2 acc
         -> let alyt'    = incLayout alyt `PushLayout` ZeroIdx
-               boundAcc = aconvert config lyt alyt  afun1 `AST.Apply` convertSharingAcc config lyt alyt env aenv acc
-               bodyAcc  = aconvert config lyt alyt' afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
+
+               boundAcc = aconvert config lyt alyt  afun1
+                          `AST.Apply`
+                          convertSharingAcc config lyt alyt env aenv acc
+
+               bodyAcc  = aconvert config lyt alyt' afun2
+                          `AST.Apply`
+                          AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
@@ -428,14 +443,14 @@ convertSharingExp config lyt alyt env aenv = cvt
     cvt :: Elt t' => SharingExp t' -> AST.OpenExp env aenv t'
     cvt (VarSharing se)
       | Just i <- findIndex (matchStableExp se) env
-      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i ++ " env = " ++ show env) i lyt)
+      = AST.Var (prjIdx (ctxt ++ "; i = " ++ show i) i lyt)
       | null env
       = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableNameHeight se) ++ ")"
       | otherwise
       = INTERNAL_ERROR(error) "convertSharingExp" err
       where
         ctxt = "shared 'Exp' tree with stable name " ++ show (hashStableNameHeight se)
-        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env ++ " aenv = " ++ show aenv
+        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env = " ++ show env
     cvt (LetSharing se@(StableSharingExp _ boundExp) bodyExp)
       = let lyt' = incLayout lyt `PushLayout` ZeroIdx
         in
@@ -527,7 +542,7 @@ convertSharingFun1 config lyt alyt env aenv f = Lam (Body openF)
                       `PushLayout`
                       ZeroIdx
     exp             = f a
-    openF           = tracePure "convertSharingFun1" (show env) $ convertRootExp config lyt' alyt env aenv exp
+    openF           = convertRootExp config lyt' alyt env aenv exp
 
 -- | Convert a binary functions
 --
@@ -642,24 +657,13 @@ convertSharingStencilFun2 config _ _ lyt alyt env aenv stencilFun = Lam (Lam (Bo
 -- This is a bottom-up traversal that determines the scope for every binding to be introduced
 -- to share a subterm.  It uses the occurrence map to determine, for every shared subtree, the
 -- lowest AST node at which the binding for that shared subtree can be placed (using a
--- 'AletSharing' constructor)— it's the meet of all the shared subtree occurrences.
+-- 'AletSharing' or 'EletSharing' constructor)— it's the meet of all the shared subtree
+-- occurrences.
 --
 -- The second phase is also replacing the first occurrence of each shared subtree with a
 -- 'AvarSharing' node and floats the shared subtree up to its binding point.
 --
 --  (Implemented by 'determineScopes*'.)
---
--- /Sharing recovery for expressions/
---
--- We recover sharing for each expression (including function bodies) independently of any other
--- expression — i.e., we cannot share scalar expressions across array computations.  Hence, during
--- Phase One, we mark all scalar expression nodes with a stable name and compute one occurrence map
--- for every scalar expression (including functions) that occurs in an array computation.  These
--- occurrence maps are added to the root of scalar expressions using 'RootExp'.
---
--- NB: We do not need to worry sharing recovery will try to float a shared subexpression past a
---     binder that occurs in that subexpression.  Why?  Otherwise, the binder would already occur
---     out of scope in the original source program.
 --
 -- /Lambda bound variables/
 --
@@ -799,6 +803,7 @@ data SharingAcc arrs where
   AvarSharing :: Arrays arrs
               => StableAccName arrs                                      -> SharingAcc arrs
   AletSharing :: StableSharingAcc -> SharingAcc arrs                     -> SharingAcc arrs
+  EletSharing :: StableSharingExp -> SharingAcc arrs                     -> SharingAcc arrs
   AccSharing  :: Arrays arrs
               => StableAccName arrs -> PreAcc SharingAcc RootExp arrs -> SharingAcc arrs
 
@@ -853,14 +858,13 @@ data SharingExp t where
 -- Expressions rooted in 'Acc' computations.
 --
 -- * Between counting occurrences and determining scopes, the root of every expression embedded in an
---   'Acc' is annotated by (1) the tags of free scalar variables and (2) an occurrence map for that
---   one expression (excluding any subterms that are rooted in embedded 'Acc's.)
+--   'Acc' is annotated by the tags of free scalar variables.
 -- * After determining scopes, the root of every expression is annotated with a sorted environment of
 --   the 'StableSharingExp's corresponding to its free expression-valued variables.
 --
 data RootExp t where
-  OccMapExp :: [Int] -> OccMap Exp -> SharingExp t -> RootExp t
-  EnvExp    :: [StableSharingExp]  -> SharingExp t -> RootExp t
+  FreeVarsExp :: [Int] -> SharingExp t -> RootExp t
+  EnvExp      :: [StableSharingExp] -> SharingExp t -> RootExp t
 
 -- Stable name for an expression associated with its sharing-annotated version.
 --
@@ -894,17 +898,13 @@ noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefine
 -- Occurrence counting
 -- ===================
 
--- Compute the 'Acc' occurrence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
--- and drop repeated occurrences of shared 'Acc' and 'Exp' subtrees (Phase One).
---
--- We compute a single 'Acc' occurrence map for the whole AST, but one 'Exp' occurrence map for each
--- sub-expression rooted in an 'Acc' operation.  This is as we cannot float 'Exp' subtrees across
--- 'Acc' operations, but we can float 'Acc' subtrees out of 'Exp' expressions.
+-- Compute the 'Acc' and `Exp` occurrence map, marks all nodes (both 'Acc' and 'Exp' nodes) with
+-- stable names, and drop repeated occurrences of shared 'Acc' and 'Exp' subtrees (Phase One).
 --
 -- Note [Traversing functions and side effects]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- We need to descent into function bodies to build the 'OccMap' with all occurrences in the
--- function bodies.  Due to the side effects in the construction of the occurrence map and, more
+-- We need to descent into function bodies to build the 'OccMap's with all occurrences in the
+-- function bodies.  Due to the side effects in the construction of the occurrence maps and, more
 -- importantly, the dependence of the second phase on /global/ occurrence information, we may not
 -- delay the body traversals by putting them under a lambda.  Hence, we apply each function, to
 -- traverse its body and use a /dummy abstraction/ of the result.
@@ -1152,7 +1152,7 @@ makeOccMapFun2 config accOccMap expOccMap lvl f = do
   let x = Exp (Tag (lvl+1))
       y = Exp (Tag lvl)
   --
-  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+2) [lvl, lvl+2] (f x y)
+  (body, height) <- makeOccMapRootExp config accOccMap expOccMap (lvl+2) [lvl, lvl+1] (f x y)
   return (\_ _ -> body, height)
 
 makeOccMapStencil1
@@ -1207,9 +1207,9 @@ makeOccMapRootExp
     -> IO (RootExp e, Int)
 makeOccMapRootExp config accOccMap expOccMap lvl fvs exp = do
   traceLine "makeOccMapRootExp" "Enter"
-  (exp', height)        <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
+  (exp', height)  <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
   traceLine "makeOccMapRootExp" "Exit"
-  return (OccMapExp fvs undefined exp', height)
+  return (FreeVarsExp fvs exp', height)
 
 
 -- Generate sharing information for an open scalar expression.
@@ -1252,8 +1252,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
                     Just height | recoverExpSharing config
-                      -> tracePure "makeOccMapSharingExp" (showPreExpOp pexp) $
-                            return (VarSharing (StableNameHeight sn height), height)
+                      -> return (VarSharing (StableNameHeight sn height), height)
                     _ -> do (exp, height) <- newExp
                             return (ExpSharing (StableNameHeight sn height) exp, height)
 
@@ -1347,8 +1346,6 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 --   - No shared term occurs twice.
 --   - A term may have a final occurrence count of only 1 iff it is either a free variable ('Atag'
 --     or 'Tag') or an array computation lifted out of an expression.
---   - All 'Exp' node counts precede all 'Acc' node counts as we don't share 'Exp' nodes across 'Acc'
---     nodes.
 --
 -- We determine the subterm property by using the tree height in 'StableNameHeight'.  Trees get
 -- smaller towards the end of a 'NodeCounts' list.  The height of free variables ('Atag' or 'Tag')
@@ -1383,8 +1380,6 @@ expNodeCount sse n = [ExpNodeCount sse n]
 --
 -- * We assume that the node counts invariant —subterms follow their parents— holds for both
 --   arguments and guarantee that it still holds for the result.
--- * In the same manner, we assume that all 'Exp' node counts precede 'Acc' node counts and
---   guarantee that this also hold for the result.
 --
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
 us +++ vs = foldr insert us vs
@@ -1441,6 +1436,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
                                                        showPreAccOp acc
     showSA (StableSharingAcc _ (AvarSharing sn))     = "AvarSharing " ++ show (hashStableNameHeight sn)
     showSA (StableSharingAcc _ (AletSharing sa _ ))  = "AletSharing " ++ show sa ++ "..."
+    showSA (StableSharingAcc _ (EletSharing se _ ))  = "EletSharing " ++ show se ++ "..."
 
 -- Build an initial environment for the tag values given in the first argument for traversing a
 -- scalar expression.  The 'StableSharingExp's for all tags /actually used/ in the expressions are
@@ -1485,12 +1481,12 @@ isFreeVar _                                                             = False
 -- ==================================
 
 -- Determine the scopes of all variables representing shared subterms (Phase Two) in a bottom-up
--- sweep.  The first argument determines whether array computations are floated out of expressions
--- irrespective of whether they are shared or not — 'True' implies floating them out.
+-- sweep.
 --
--- In addition to the AST with sharing information, yield the 'StableSharingAcc's for all free
--- variables of 'rootAcc', which are represented by 'Atag' leaves in the tree. They are in order of
--- the tag values — i.e., in the same order that they need to appear in an environment to use the
+-- In addition to the AST with sharing information, yield the 'StableSharingAcc's and
+-- 'StableSHaringExp's for all free variables of 'rootAcc', which are represented by 'Atag' and
+-- 'Tag' leaves in the tree. They are in order of the tag values — i.e., in the same order that they
+-- need to appear in an environment to use the
 -- tag for indexing into that environment.
 --
 -- Precondition: there are only 'AvarSharing' and 'AccSharing' nodes in the argument.
@@ -1507,13 +1503,12 @@ determineScopesAcc config fvs accOccMap expOccMap rootAcc
   = let (sharingAcc, counts) = determineScopesSharingAcc config accOccMap expOccMap rootAcc
         unboundTrees         = filter (not . isFreeVar) counts
     in
-    tracePure "determineScopesAcc" (show fvs) $
-    if all isFreeVar counts
-       then ( sharingAcc
-            , buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts]
-            , buildInitialEnvExp fvs [se | ExpNodeCount se _ <- counts])
-       else INTERNAL_ERROR(error) "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
-
+    if null unboundTrees then
+      ( sharingAcc
+      , buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts]
+      , buildInitialEnvExp fvs [se | ExpNodeCount se _ <- counts])
+    else
+      INTERNAL_ERROR(error) "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
 
 determineScopesSharingAcc
     :: Config
@@ -1526,6 +1521,9 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
     scopesAcc :: forall arrs. SharingAcc arrs -> (SharingAcc arrs, NodeCounts)
     scopesAcc (AletSharing _ _)
       = INTERNAL_ERROR(error) "determineScopesSharingAcc: scopesAcc" "unexpected 'AletSharing'"
+
+    scopesAcc (EletSharing _ _)
+      = INTERNAL_ERROR(error) "determineScopesSharingAcc: scopesAcc" "unexpected 'EletSharing'"
 
     scopesAcc sharingAcc@(AvarSharing sn)
       = (sharingAcc, StableSharingAcc sn sharingAcc `accNodeCount` 1)
@@ -1694,8 +1692,8 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
         --   float the 'Atag' out in a 'NodeCounts' value.  This is independent of the number of
         --   occurrences.
         --
-        -- In either case, any completed 'NodeCounts' are injected as bindings using 'AletSharing'
-        -- node.
+        -- In either case, any completed 'NodeCounts' are injected as bindings using an
+        -- 'AletSharing' or 'EletSharing' node.
         --
         reconstruct :: Arrays arrs
                     => PreAcc SharingAcc RootExp arrs -> NodeCounts
@@ -1722,13 +1720,15 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
               -- Determine the bindings that need to be attached to the current node...
             (newCount, bindHere) = filterCompleted subCount
 
-              -- ...and wrap them in 'AletSharing' constructors
-            lets       = foldl (flip (.)) id . map AletSharing $ bindHere
+              -- ...and wrap them in let sharing constructors
+            letSharing (AccNodeCount sa _) = AletSharing sa
+            letSharing (ExpNodeCount se _) = EletSharing se
+
+            lets       = foldl (flip (.)) id . map letSharing $ bindHere
             sharingAcc = lets $ AccSharing sn newAcc
 
               -- trace support
-            completed | null bindHere = ""
-                      | otherwise     = "(" ++ show (length bindHere) ++ " lets)"
+            completed = show bindHere
 
         -- Extract *leading* nodes that have a complete node count (i.e., their node count is equal
         -- to the number of occurrences of that node in the overall expression).
@@ -1739,19 +1739,21 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
         --     complete).  Otherwise, we would let-bind subterms before their parents, which leads
         --     scope errors.
         --
-        filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingAcc])
+        filterCompleted :: NodeCounts -> (NodeCounts, NodeCounts)
         filterCompleted counts
-          = let (completed, counts') = break notComplete counts
-            in (counts', [sa | AccNodeCount sa _ <- completed])
+          = let
+               (completed, counts') = break notComplete counts
+            in (counts', completed)
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
             -- of occurrences for that node in the whole program, with the exception that free
             -- variables are never complete
             notComplete nc@(AccNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingAcc accOccMap sa > n
+            notComplete nc@(ExpNodeCount se n) | not . isFreeVar $ nc = lookupWithSharingExp expOccMap se > n
             notComplete _                                             = True
 
     scopesExp :: RootExp t -> (RootExp t, NodeCounts)
-    scopesExp = determineScopesExp config accOccMap expOccMap
+    scopesExp = determineScopesRootExp config accOccMap expOccMap
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
@@ -1795,20 +1797,31 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
       where
         (body, counts) = scopesExp (stencilFun undefined undefined)
 
-
-determineScopesExp
+determineScopesRootExp
     :: Config
     -> OccMap Acc
     -> OccMap Exp
     -> RootExp t
-    -> (RootExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
-determineScopesExp config accOccMap expOccMap (OccMapExp fvs _ exp)
+    -> (RootExp t, NodeCounts)          -- Root expression plus node counts
+determineScopesRootExp config accOccMap expOccMap (FreeVarsExp fvs exp)
   = let
         (expWithScopes, nodeCounts) = determineScopesSharingExp config accOccMap expOccMap exp
-    in
-    (EnvExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- nodeCounts]) expWithScopes, nodeCounts)
 
-determineScopesExp _ _ _ _ = INTERNAL_ERROR(error) "determineScopesExp" "not an 'OccMapExp'"
+        (boundCounts, freeCounts) = partition isBoundHere nodeCounts
+
+        env = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- boundCounts]
+
+        isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag tag))) _)
+          = tag `elem` fvs
+        isBoundHere _
+          = False
+    in
+    tracePure "determineScopesRootExp"
+    (_showSharingExpOp exp ++ ": fvs = " ++ show fvs ++ " nodeCounts = " ++ show nodeCounts
+      ++ " env = " ++ show env ++ " freeCounts = " ++ show freeCounts) $
+    (EnvExp env expWithScopes, freeCounts)
+
+determineScopesRootExp _ _ _ _ = INTERNAL_ERROR(error) "determineScopesRootExp" "not a 'FreeVarsExp'"
 
 
 determineScopesSharingExp
@@ -1921,19 +1934,19 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         --
         reconstruct :: PreExp SharingAcc SharingExp t -> NodeCounts
                     -> (SharingExp t, NodeCounts)
-        reconstruct newExp@(Tag _) _subCount
+        reconstruct newExp@(Tag i) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
               -- occurrences
           = let thisCount = StableSharingExp sn (ExpSharing sn newExp) `expNodeCount` 1
             in
-            tracePure "FREE" (show thisCount)
+            tracePure "FREE" (show i ++ ", " ++ show thisCount)
             (VarSharing sn, thisCount)
         reconstruct newExp subCount
               -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
           | expOccCount > 1 && recoverExpSharing config
           = let allCount = (StableSharingExp sn sharingExp `expNodeCount` 1) +++ newCount
             in
-            tracePure ("SHARED" ++ completed) (show allCount)
+            tracePure ("SHARED" ++ completed) (showPreExpOp newExp ++ ": " ++ show allCount)
             (VarSharing sn, allCount)
               -- neither shared nor free variable => leave it as it is
           | otherwise
@@ -1941,7 +1954,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (sharingExp, newCount)
           where
               -- Determine the bindings that need to be attached to the current node...
-            (newCount, bindHere) = filterCompleted subCount
+            (newCount, bindHere) = filterCompletedExp subCount
 
               -- ...and wrap them in 'LetSharing' constructors
             lets       = foldl (flip (.)) id . map LetSharing $ bindHere
@@ -1960,9 +1973,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         --     complete).  Otherwise, we would let-bind subterms before their parents, which leads
         --     scope errors.
         --
-        filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingExp])
-        filterCompleted counts
-          = let (completed, counts') = break notComplete counts
+        filterCompletedExp :: NodeCounts -> (NodeCounts, [StableSharingExp])
+        filterCompletedExp counts
+          = let
+               (completed, counts') = break notComplete counts
             in (counts', [sa | ExpNodeCount sa _ <- completed])
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
@@ -1972,24 +1986,24 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             notComplete _                                             = True
 
 
----- |Recover sharing information and annotate the HOAS AST with variable and let binding
----- annotations.  The first argument determines whether array computations are floated out of
----- expressions irrespective of whether they are shared or not — 'True' implies floating them out.
-----
----- Also returns the 'StableSharingAcc's of all 'Atag' leaves in environment order — they represent
----- the free variables of the AST.
-----
----- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
-----     determine the sharing of subterms.  The stable pointer API does not guarantee its
-----     completeness; i.e., it may miss some equalities, which implies that we may fail to discover
-----     some sharing.  However, sharing does not affect the denotational meaning of an array
-----     computation; hence, we do not compromise denotational correctness.
-----
-----     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
-----     variables to be shared if any of them is used more than once.  If one is duplicated, the
-----     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
-----     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
-----
+-- |Recover sharing information and annotate the HOAS AST with variable and let binding
+-- annotations.  The first argument determines whether array computations are floated out of
+-- expressions irrespective of whether they are shared or not — 'True' implies floating them out.
+--
+-- Also returns the 'StableSharingAcc's of all 'Atag' and 'Tag' leaves in environment order — they
+-- represent the free variables of the AST.
+--
+-- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
+--     determine the sharing of subterms.  The stable pointer API does not guarantee its
+--     completeness; i.e., it may miss some equalities, which implies that we may fail to discover
+--     some sharing.  However, sharing does not affect the denotational meaning of an array
+--     computation; hence, we do not compromise denotational correctness.
+--
+--     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
+--     variables to be shared if any of them is used more than once.  If one is duplicated, the
+--     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
+--     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
+--
 recoverSharingAcc
     :: Typeable a
     => Config
@@ -2056,5 +2070,11 @@ tracePure header msg
 _showSharingAccOp :: SharingAcc arrs -> String
 _showSharingAccOp (AvarSharing sn)    = "AVAR " ++ show (hashStableNameHeight sn)
 _showSharingAccOp (AletSharing _ acc) = "ALET " ++ _showSharingAccOp acc
+_showSharingAccOp (EletSharing _ acc) = "ELET " ++ _showSharingAccOp acc
 _showSharingAccOp (AccSharing _ acc)  = showPreAccOp acc
+
+_showSharingExpOp :: SharingExp e -> String
+_showSharingExpOp (VarSharing sn)    = "VAR " ++ show (hashStableNameHeight sn)
+_showSharingExpOp (LetSharing _ exp) = "LET " ++ _showSharingExpOp exp
+_showSharingExpOp (ExpSharing _ exp) = showPreExpOp exp
 

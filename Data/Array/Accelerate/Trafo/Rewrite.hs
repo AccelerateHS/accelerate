@@ -60,6 +60,7 @@ convertSegments = cvtA
     cvtA :: OpenAcc env aenv a -> OpenAcc env aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
       Alet bnd body             -> Alet (cvtA bnd) (cvtA body)
+      Elet bnd body             -> Elet (cvtE bnd) (cvtA body)
       Avar ix                   -> Avar ix
       Atuple tup                -> Atuple (cvtT tup)
       Aprj tup a                -> Aprj tup (cvtA a)
