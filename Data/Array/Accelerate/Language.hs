@@ -366,13 +366,14 @@ scanr1 = Acc $$ Scanr1
 -- Permutations
 -- ------------
 
--- | Forward permutation specified by an index mapping.  The result array is
+-- | Forward permutation specified by an index mapping. The result array is
 -- initialised with the given defaults and any further values that are permuted
 -- into the result array are added to the current value using the given
 -- combination function.
 --
--- The combination function must be /associative/.  Elements that are mapped to
--- the magic value 'ignore' by the permutation function are dropped.
+-- The combination function must be /associative/ and /commutative/. Elements
+-- that are mapped to the magic value 'ignore' by the permutation function are
+-- dropped.
 --
 permute :: (Shape ix, Shape ix', Elt a)
         => (Exp a -> Exp a -> Exp a)    -- ^combination function

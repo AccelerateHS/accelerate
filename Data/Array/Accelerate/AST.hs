@@ -393,18 +393,26 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Vector e)                 -- linear array
               -> PreOpenAcc acc aenv (Vector e)
 
-  -- Generalised forward permutation is characterised by a permutation
-  -- function that determines for each element of the source array where it
-  -- should go in the target; the permutation can be between arrays of varying
-  -- shape; the permutation function must be total.
+  -- Generalised forward permutation is characterised by a permutation function
+  -- that determines for each element of the source array where it should go in
+  -- the output. The permutation can be between arrays of varying shape and
+  -- dimensionality.
   --
-  -- The target array is initialised from an array of default values (in case
-  -- some positions in the target array are never picked by the permutation
-  -- functions).  Moreover, we have a combination function (in case some
-  -- positions on the target array are picked multiple times by the
-  -- permutation functions).  The combination function needs to be
-  -- /associative/ and /commutative/ .  We drop every element for which the
-  -- permutation function yields -1 (i.e., a tuple of -1 values).
+  -- Other characteristics of the permutation function 'f':
+  --
+  --   1. 'f' is a partial function: if it evaluates to the magic value 'ignore'
+  --      (i.e. a tuple of -1 values) then those elements of the domain are
+  --      dropped.
+  --
+  --   2. 'f' is not surjective: positions in the target array need not be
+  --      picked up by the permutation function, so the target array must first
+  --      be initialised from an array of default values.
+  --
+  --   3. 'f' is not injective: distinct elements of the domain may map to the
+  --      same position in the target array. In this case the combination
+  --      function is used to combine elements, which needs to be /associative/
+  --      and /commutative/.
+  --
   Permute     :: (Shape sh, Shape sh', Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> acc            aenv (Array sh' e)              -- default values
