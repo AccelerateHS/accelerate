@@ -39,9 +39,22 @@ import Data.Array.Accelerate.Pretty.Print
 wide :: Style
 wide = style { lineLength = 150 }
 
-instance Kit acc => Show (acc aenv a) where
+-- Explicitly enumerate Show instances for the Accelerate array AST types. If we
+-- instead use a generic instance of the form:
+--
+--   instance Kit acc => Show (acc aenv a) where
+--
+-- This matches any type of kind (* -> * -> *), which can cause problems
+-- interacting with other packages. See Issue #108.
+--
+instance Show (OpenAcc aenv a) where
   show c = renderStyle wide $ prettyAcc 0 noParens c
 
+instance Show (DelayedOpenAcc aenv a) where
+  show c = renderStyle wide $ prettyAcc 0 noParens c
+
+-- These parameterised instances are fine because there is a concrete kind
+--
 instance Kit acc => Show (PreOpenAfun acc aenv f) where
   show f = renderStyle wide $ prettyPreAfun prettyAcc 0 f
 
