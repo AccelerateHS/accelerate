@@ -71,11 +71,11 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
     --
     test_min xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All A.min (use xs)) ~?= fold1AllRef P.min xs
+      ==> run backend (A.fold1All min (use xs)) ~?= fold1AllRef min xs
 
     test_max xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All A.max (use xs)) ~?= fold1AllRef P.max xs
+      ==> run backend (A.fold1All max (use xs)) ~?= fold1AllRef max xs
 
     test_sum xs         = run backend (A.foldAll (+) 0 (use xs)) ~?= foldAllRef (+) 0 xs
     test_sum' xs z      =
@@ -123,11 +123,11 @@ test_fold opt = testGroup "fold" $ catMaybes
     --
     test_min xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 A.min (use xs)) ~?= fold1Ref P.min xs
+      ==> run backend (A.fold1 min (use xs)) ~?= fold1Ref min xs
 
     test_max xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 A.max (use xs)) ~?= fold1Ref P.max xs
+      ==> run backend (A.fold1 max (use xs)) ~?= fold1Ref max xs
 
     test_sum xs         = run backend (A.fold (+) 0 (use xs)) ~?= foldRef (+) 0 xs
     test_sum' xs z      =
@@ -180,7 +180,7 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
           , testProperty "minimum"
           $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (A.fold1Seg A.min (use xs) (use seg)) ~?= fold1SegRef P.min xs seg
+              run backend (A.fold1Seg min (use xs) (use seg)) ~?= fold1SegRef min xs seg
           ]
 
     backend = get configBackend opt
