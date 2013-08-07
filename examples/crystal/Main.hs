@@ -125,7 +125,7 @@ makeImage size scale degree phi = arrPixels
 rampColour :: Exp Float -> Exp RGBA
 rampColour v = ra + g + b
   where
-    u           = 0 `A.max` v `A.min` 1
+    u           = 0 `max` v `min` 1
     ra          = 0xFF0000FF
     g           = A.truncate ((0.4 + (u * 0.6)) * 0xFF) * 0x10000
     b           = A.truncate (u                 * 0xFF) * 0x100

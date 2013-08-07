@@ -233,7 +233,7 @@ makeDensity_checks backend width height
                 yk1             = abs ty >* 3*pi/2 ? (0 , cos ty)
                 d1              = xk1 * yk1
             in
-            0 `A.max` d1
+            0 `max` d1
     in
     run backend $ A.generate (constant (Z:.height:.width)) checks
 

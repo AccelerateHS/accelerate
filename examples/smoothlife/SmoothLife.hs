@@ -95,7 +95,7 @@ smoothlife conf aa
       , (x - l + u / 2) / u ))
 
     clamp = A.map
-          (\x -> A.min (A.max x 0.0) 1.0)
+          (\x -> min (max x 0.0) 1.0)
 
     timestepModes f g
       = [ f

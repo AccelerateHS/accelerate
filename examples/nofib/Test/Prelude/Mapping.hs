@@ -86,9 +86,9 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
   ]
   where
     backend         = get configBackend opt
-    test_zip  xs ys = run2 backend A.zip             xs ys ~?= zipWithRef (,) xs ys
-    test_plus xs ys = run2 backend (A.zipWith (+))   xs ys ~?= zipWithRef (+) xs ys
-    test_min  xs ys = run2 backend (A.zipWith A.min) xs ys ~?= zipWithRef P.min xs ys
+    test_zip  xs ys = run2 backend A.zip           xs ys ~?= zipWithRef (,) xs ys
+    test_plus xs ys = run2 backend (A.zipWith (+)) xs ys ~?= zipWithRef (+) xs ys
+    test_min  xs ys = run2 backend (A.zipWith min) xs ys ~?= zipWithRef min xs ys
 
     testElt :: forall a. (Elt a, IsNum a, Ord a, Similar a, Arbitrary a)
             => (Config :-> Bool)

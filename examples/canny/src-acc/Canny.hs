@@ -145,7 +145,7 @@ gradientMagDir low = stencil magdir Clamp
 
           -- Try to avoid doing explicit tests, to avoid warp divergence
           undef       = abs dx <=* low &&* abs dy <=* low
-          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
+          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `min` 255)
       in
       lift (mag, dir)
 
@@ -184,7 +184,7 @@ nonMaximumSuppression low high magdir =
         (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
         (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
 
-        clamp (Z:.u:.v) = Z :. 0 `A.max` u `A.min` (h-1) :. 0 `A.max` v `A.min` (w-1)
+        clamp (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --

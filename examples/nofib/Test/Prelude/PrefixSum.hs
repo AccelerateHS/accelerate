@@ -65,13 +65,13 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
     -- left scan
     --
     test_scanl  xs = run backend (A.scanl (+) 0 (use xs))           ~?= scanlRef (+) 0 xs
-    test_scanl1 xs = run backend (A.scanl1 A.min (use xs))          ~?= scanl1Ref P.min xs
+    test_scanl1 xs = run backend (A.scanl1 min (use xs))            ~?= scanl1Ref min xs
     test_scanl' xs = run backend (A.lift $ A.scanl' (+) 0 (use xs)) ~?= scanl'Ref (+) 0 xs
 
     -- right scan
     --
     test_scanr  xs = run backend (A.scanr (+) 0 (use xs))           ~?= scanrRef (+) 0 xs
-    test_scanr1 xs = run backend (A.scanr1 A.max (use xs))          ~?= scanr1Ref P.max xs
+    test_scanr1 xs = run backend (A.scanr1 max (use xs))            ~?= scanr1Ref max xs
     test_scanr' xs = run backend (A.lift $ A.scanr' (+) 0 (use xs)) ~?= scanr'Ref (+) 0 xs
 
     -- segmented left/right scan
