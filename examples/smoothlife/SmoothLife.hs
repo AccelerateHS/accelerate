@@ -80,7 +80,7 @@ smoothlife conf aa
     get1 f c    = constant  $ get f c
     get2 f c    = let (x,y) = get f c in (constant x, constant y)
 
-    complex     = A.map (\x -> lift (x, constant 0))
+    complex     = A.map (\x -> lift (x :+ constant 0))
 
     radius ix   =
       let Z:.y':.x'   = unlift ix     :: Z :. Exp Int :. Exp Int
