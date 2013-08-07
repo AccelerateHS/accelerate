@@ -9,6 +9,8 @@ New tests
  - fluid simulator
  - hashcat
  - nbody
+ - Floyd-Warshall
+ - Unit tests for previous issues
 
 Benchmarking
  - criterion, self-timed, other?
