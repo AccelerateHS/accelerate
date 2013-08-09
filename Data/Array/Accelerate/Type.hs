@@ -95,18 +95,18 @@ instance (Typeable9 s, Typeable a)
 -- 
 
 data IntegralDict a where
-  IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
-                  , Bits a, Integral a, Num a, Real a, Storable a)
+  IntegralDict :: ( IsBounded a, Enum a, Eq a, Ord a, Show a
+                  , Bits a, IsIntegral a, IsNum a, Real a, Storable a)
                => IntegralDict a
 
 data FloatingDict a where
   FloatingDict :: ( Enum a, Eq a, Ord a, Show a
-                  , Floating a, Fractional a, Num a, Real a, RealFrac a
+                  , IsFloating a, Fractional a, IsNum a, Real a, RealFrac a
                   , RealFloat a, Storable a)
                => FloatingDict a
 
 data NonNumDict a where
-  NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a, Storable a)
+  NonNumDict :: (IsBounded a, Enum a, Eq a, Ord a, Show a, Storable a, IsNonNum a)
              => NonNumDict a
 
 -- Scalar type representation
@@ -227,7 +227,7 @@ instance Show (TupleType a) where
 
 -- |Integral types
 --
-class (IsScalar a, IsNum a, IsBounded a) => IsIntegral a where
+class (IsScalar a, IsNum a, IsBounded a, Integral a) => IsIntegral a where
   integralType :: IntegralType a
 
 instance IsIntegral Int where
@@ -394,7 +394,7 @@ instance IsNum CDouble where
 
 -- |Bounded types
 --
-class IsBounded a where
+class Bounded a => IsBounded a where
   boundedType :: BoundedType a
 
 instance IsBounded Int where
