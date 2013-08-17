@@ -205,7 +205,7 @@ Executable accelerate-crystal
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   >= 1.7
+                        gloss-raster-accelerate >= 1.7
 
 
 -- Image edge detection
