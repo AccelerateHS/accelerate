@@ -125,6 +125,7 @@ recoverLoops
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
 recoverLoops _ bnd e3
+{--
   -- To introduce scaler loops, we look for expressions of the form:
   --
   --   let x =
@@ -153,6 +154,7 @@ recoverLoops _ bnd e3
   , Just REFL           <- match f e3
   = Stats.ruleFired "loop recovery/merge" . Just
   $ Iterate (constant 1 `plus` n) f e1
+--}
 
   | otherwise
   = Nothing
@@ -210,7 +212,6 @@ simplifyOpenExp env = first getAny . cvtE
       ToIndex sh ix             -> ToIndex <$> cvtE sh <*> cvtE ix
       FromIndex sh ix           -> FromIndex <$> cvtE sh <*> cvtE ix
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
-      Iterate n f x             -> Iterate <$> cvtE n <*> cvtE' (incExp env `PushExp` Var ZeroIdx) f <*> cvtE x
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> evalPrimApp env f <$> cvtE x
       Index a sh                -> Index a <$> cvtE sh
@@ -219,6 +220,8 @@ simplifyOpenExp env = first getAny . cvtE
       ShapeSize sh              -> ShapeSize <$> cvtE sh
       Intersect s t             -> cvtE s `intersect` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
+      While p f x               -> let env' = incExp env `PushExp` Var ZeroIdx
+                                   in  While <$> cvtE' env' p <*> cvtE' env' f <*> cvtE x
 
     cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     cvtT NilTup        = pure NilTup

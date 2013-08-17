@@ -130,6 +130,15 @@ evalPreOpenAcc (Apply f acc) aenv =
 evalPreOpenAcc (Acond cond acc1 acc2) aenv
   = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
 
+evalPreOpenAcc (Awhile cond body acc) aenv
+  = let f       = evalOpenAfun body aenv
+        p a     = evalExp cond (aenv `Push` a)
+        go !x
+          | p x         = go (f x)
+          | otherwise   = delay x
+    in
+    go . force $ evalOpenAcc acc aenv
+
 evalPreOpenAcc (Use arr) _aenv = delay (Sugar.toArr arr :: a)
 
 evalPreOpenAcc (Unit e) aenv = unitOp (evalExp e aenv)
@@ -756,14 +765,14 @@ evalOpenExp (Cond c t e) env aenv
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
-evalOpenExp (Iterate limit loop seed) env aenv
-  = let f = evalOpenFun (Lam (Body loop)) env aenv
-        x = evalOpenExp seed  env aenv
-        n = evalOpenExp limit env aenv
-        --
-        go !i !acc | i >= n     = acc
-                   | otherwise  = go (i+1) (f acc)
-    in go 0 x
+evalOpenExp (While cond body seed) env aenv
+  = let f       = evalOpenFun (Lam (Body body)) env aenv
+        p       = evalOpenFun (Lam (Body cond)) env aenv
+        go !x
+          | p x         = go (f x)
+          | otherwise   = x
+    in
+    go (evalOpenExp seed env aenv)
 
 evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 

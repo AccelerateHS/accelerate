@@ -87,10 +87,10 @@ matchPreOpenAcc
     -> Maybe (s :=: t)
 matchPreOpenAcc matchAcc hashAcc = match
   where
-    matchFun :: PreOpenFun acc env aenv u -> PreOpenFun acc env aenv v -> Maybe (u :=: v)
+    matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :=: v)
     matchFun = matchPreOpenFun matchAcc hashAcc
 
-    matchExp :: PreOpenExp acc env aenv u -> PreOpenExp acc env aenv v -> Maybe (u :=: v)
+    matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp matchAcc hashAcc
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :=: t)
@@ -128,6 +128,12 @@ matchPreOpenAcc matchAcc hashAcc = match
       | Just REFL <- matchExp p1 p2
       , Just REFL <- matchAcc t1 t2
       , Just REFL <- matchAcc e1 e2
+      = Just REFL
+
+    match (Awhile p1 f1 a1) (Awhile p2 f2 a2)
+      | Just REFL <- matchAcc a1 a2
+      , Just REFL <- matchExp p1 p2
+      , Just REFL <- matchPreOpenAfun matchAcc f1 f2
       = Just REFL
 
     match (Use a1) (Use a2)
@@ -436,9 +442,9 @@ matchPreOpenExp matchAcc hashAcc = match
       , Just REFL <- match e1 e2
       = Just REFL
 
-    match (Iterate n1 f1 x1) (Iterate n2 f2 x2)
-      | Just REFL <- match n1 n2
-      , Just REFL <- match x1 x2
+    match (While p1 f1 x1) (While p2 f2 x2)
+      | Just REFL <- match x1 x2
+      , Just REFL <- match p1 p2
       , Just REFL <- match f1 f2
       = Just REFL
 
@@ -878,6 +884,7 @@ hashPreOpenAcc hashAcc pacc =
     Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
     Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
+    Awhile p f a                -> hash "Awhile"        `hashWithSalt` hashAfun hashAcc f `hashE` p `hashA` a
     Unit e                      -> hash "Unit"          `hashE` e
     Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
     Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
@@ -954,7 +961,7 @@ hashPreOpenExp hashAcc exp =
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
     FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
     Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
-    Iterate n f x               -> hash "Iterate"       `hashE` n  `hashE` f  `hashE` x
+    While p f x                 -> hash "While"         `hashE` p  `hashE` f  `hashE` x
     PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
     PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
     Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix

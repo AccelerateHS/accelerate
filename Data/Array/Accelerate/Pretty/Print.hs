@@ -100,6 +100,12 @@ prettyPreAcc prettyAcc alvl wrap = pp
         acc2'       = prettyAcc (alvl+1) noParens acc2
         a           = char 'a' <> int alvl
 
+    pp (Awhile p afun acc)
+      = "awhile" .$ [pfun, ppAF afun, ppA acc]
+      where
+        p'      = prettyPreExp prettyAcc 0 (alvl+1) parens p
+        pfun    = parens (text "\\a" <> int alvl <+> text "->" <+> p')
+
     pp (Atuple tup)             = prettyAtuple prettyAcc alvl tup
     pp (Avar idx)               = text $ 'a' : show (alvl - idxToInt idx - 1)
     pp (Aprj ix arrs)           = wrap $ char '#' <> prettyTupleIdx ix <+> ppA arrs
@@ -241,14 +247,13 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
     pp (ToIndex sh ix)          = "toIndex"    .$ [ ppE sh, ppE ix ]
     pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppE sh, ppE ix ]
+    pp (While p f x)            = "while"      .$ [ ppF (Lam (Body p)), ppF (Lam (Body f)), ppE x ]
     pp (Foreign ff _f e)        = "foreign"    .$ [ text (strForeign ff), {- ppF f, -} ppE e ]
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
     pp (ShapeSize idx)          = "shapeSize"  .$ [ parens (ppE idx) ]
     pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppE sh1, ppE sh2 ]
     pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE i ]
     pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE i ]
-    pp (Iterate i fun e)        = wrap $ text "iterate" <>  brackets (ppE' i)
-                                                        <+> sep [ wrap (ppE e), ppF (Lam (Body fun)) ]
 
 
 -- Pretty print nested pairs as a proper tuple.
