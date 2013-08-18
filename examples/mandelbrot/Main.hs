@@ -11,34 +11,19 @@ import ParseArgs
 
 import Data.Label
 import Control.Monad
-import Foreign.Ptr
-import Foreign.ForeignPtr
-import System.IO.Unsafe
 import System.Environment                       ( getArgs, withArgs )
 import Criterion.Main                           ( defaultMainWith, bench, whnf )
-import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
-import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
+import Graphics.Gloss.Accelerate.Data.Picture   as G
 import qualified Graphics.Gloss                 as G
 
 
 -- Main ------------------------------------------------------------------------
 
 makePicture :: World -> G.Picture
-makePicture world = pic
-  where
-    arrPixels   = renderWorld world
-    (Z:.h:.w)   = arrayShape arrPixels
-
-    {-# NOINLINE rawData #-}
-    rawData     = let (Array _ adata)   = arrPixels
-                      ((), ptr)         = ptrsOfArrayData adata
-                  in
-                  unsafePerformIO       $ newForeignPtr_ (castPtr ptr)
-
-    pic         = G.bitmapOfForeignPtr w h rawData False
+makePicture world = bitmapOfArray (renderWorld world) False
 
 
 main :: IO ()

@@ -279,7 +279,8 @@ Executable accelerate-mandelbrot
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
-                        gloss                   >= 1.7
+                        gloss                   >= 1.7,
+                        gloss-accelerate        >= 1.7
 
 
 -- A stable fluid simulation
