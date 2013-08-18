@@ -105,8 +105,8 @@ main = do
 
       -- for benchmarking
       force arr = A.indexArray arr (Z:.0:.0) `seq` arr
-      frame     = makeField (run1 backend) size size
-                            (\time -> quasicrystal scale degree (the time))
+      frame     = run1 backend
+                $ makeField size size (\time -> quasicrystal scale degree (the time))
 
   if get optBench config
      then withArgs nops $ defaultMainWith crit (return ())
