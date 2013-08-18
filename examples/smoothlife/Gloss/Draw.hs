@@ -7,14 +7,9 @@ import Config
 import Prelude                                  as P
 import Data.Label
 import Graphics.Gloss
+import Graphics.Gloss.Accelerate.Data.Picture
 import Data.Array.Accelerate                    as A hiding ( size )
 import Data.Array.Accelerate.IO                 as A
-import Foreign.Ptr
-import Foreign.ForeignPtr
-import System.IO.Unsafe
-
-import Data.Array.Accelerate.Array.Data         ( ptrsOfArrayData )
-import Data.Array.Accelerate.Array.Sugar        ( Array(..) )
 
 
 colourise :: ColourScheme -> Acc (Matrix R) -> Acc (Matrix RGBA32)
@@ -56,17 +51,8 @@ colourise scheme = A.map (rgba32OfFloat . colour scheme)
 
 
 draw :: Config -> Matrix RGBA32 -> Picture
-draw conf (Array _ adata) = scale zoom zoom pic
+draw conf arr = scale zoom zoom pic
   where
-    zoom        = P.fromIntegral
-                $ get configWindowZoom conf
-    size        = get configWindowSize conf
-
-    rawData     = let ((), ptr)         = ptrsOfArrayData adata
-                  in unsafePerformIO    $ newForeignPtr_ (castPtr ptr)
-
-    pic         = bitmapOfForeignPtr
-                    size size           -- raw image size
-                    rawData             -- the image data
-                    False               -- don't cache in texture memory
+    zoom        = P.fromIntegral (get configWindowZoom conf)
+    pic         = bitmapOfArray arr False
 
