@@ -68,7 +68,7 @@ import Prelude ((.), ($), (+), (-), (*), const, subtract, id, min, max)
 import qualified Prelude as P
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
@@ -634,17 +634,21 @@ enumFromStepN sh x y
 -- Concatenation
 -- -------------
 
--- | Concatenate two vectors
+-- | Concatenate outermost component of two arrays. The extent of the lower
+--   dimensional component is the intersection of the two arrays.
 --
 infixr 5 ++
-(++) :: Elt a => Acc (Vector a) -> Acc (Vector a) -> Acc (Vector a)
+(++) :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
 (++) xs ys
-  = let n       = unindex1 (shape xs)
-        m       = unindex1 (shape ys)
+  = let sh1 :. n        = unlift (shape xs)     :: Exp sh :. Exp Int
+        sh2 :. m        = unlift (shape ys)     :: Exp sh :. Exp Int
     in
-    generate (index1 (n + m))
-             (\ix -> let i = unindex1 ix
-                     in  i <* n ? ( xs ! ix, ys ! index1 (i-n) ))
+    generate (lift (intersect sh1 sh2 :. n + m))
+             (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
+                     in  i <* n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
 
 
 -- Filtering
