@@ -6,7 +6,8 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS -fno-warn-missing-methods #-}
 
-module Vec3 where
+module Vec3
+  where
 
 import Prelude
 import Data.Typeable
@@ -138,4 +139,9 @@ instance Num a => Num (XYZ a) where
  (*) (XYZ x1 x2 x3) (XYZ y1 y2 y3)
         = XYZ (x1 * y1) (x2 * y2) (x3 * y3)
 
+
+instance (Elt a, IsNum a) => Num (Exp (XYZ a)) where
+  (+)   = lift2 ((+) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))
+  (-)   = lift2 ((-) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))
+  (*)   = lift2 ((*) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))
 
