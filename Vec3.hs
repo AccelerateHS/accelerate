@@ -19,8 +19,8 @@ import Data.Array.Accelerate.Array.Sugar
 
 -- | Points and vectors in 3D Space
 --
-type Point      = Vec3
-type Vector     = Vec3
+type Position   = Vec3
+type Direction  = Vec3
 
 -- | A parameterised point in XYZ space.
 --

@@ -11,7 +11,7 @@ module Scene.Object
 import Vec3
 
 -- frenemies
-import Data.Array.Accelerate                                    as A hiding ( Vector )
+import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
@@ -23,31 +23,36 @@ import Data.Bits                                                ( xor )
 import Data.Typeable
 
 
+-- | All objects in the scene
+--
+type Objects = (Vector Sphere, Vector Plane)
+
+
 -- | Objects in the world. Accelerate does not have sum types, so define each
 --   object separately (and hope this works out...)
 --
-data Sphere = Sphere Point Float Color Float
+data Sphere = Sphere Position Float Color Float
   deriving (Eq, Show, Typeable)
 
-spherePos    :: Exp Sphere -> Exp Point
+spherePos    :: Exp Sphere -> Exp Position
 sphereColor  :: Exp Sphere -> Exp Color
 sphereShine  :: Exp Sphere -> Exp Float
 sphereRadius :: Exp Sphere -> Exp Float
 
 
-data Plane = Plane Point Vector Color Float
+data Plane = Plane Position Direction Color Float
   deriving (Eq, Show, Typeable)
 
-planePos    :: Exp Plane -> Exp Point
-planeNormal :: Exp Plane -> Exp Vector
+planePos    :: Exp Plane -> Exp Position
+planeNormal :: Exp Plane -> Exp Direction
 planeColor  :: Exp Plane -> Exp Color
 planeShine  :: Exp Plane -> Exp Float
 
 
 type PlaneCheck = Plane
 
-planeCheckPos    :: Exp PlaneCheck -> Exp Point
-planeCheckNormal :: Exp PlaneCheck -> Exp Vector
+planeCheckPos    :: Exp PlaneCheck -> Exp Position
+planeCheckNormal :: Exp PlaneCheck -> Exp Direction
 planeCheckShine  :: Exp PlaneCheck -> Exp Float
 
 
@@ -55,8 +60,8 @@ planeCheckShine  :: Exp PlaneCheck -> Exp Float
 --
 distanceToSphere
     :: Exp Sphere               -- ^ Object to intersect
-    -> Exp Point                -- ^ Ray cast from this point...
-    -> Exp Vector               -- ^ ...along this direction
+    -> Exp Position             -- ^ Ray cast from this point...
+    -> Exp Direction            -- ^ ...along this direction
     -> Exp (Bool, Float)        -- ^ Distance to intersection, if there is one
 distanceToSphere sphere origin direction
   = let
@@ -76,8 +81,8 @@ distanceToSphere sphere origin direction
 --
 distanceToPlane
     :: Exp Plane                -- ^ Plane to intersect
-    -> Exp Point                -- ^ Ray cast from this point
-    -> Exp Vector               -- ^ ...along this direction
+    -> Exp Position             -- ^ Ray cast from this point
+    -> Exp Direction            -- ^ ...along this direction
     -> Exp (Bool, Float)        -- ^ Distance to intersection, if there is one
 distanceToPlane plane origin direction
   = let
@@ -93,15 +98,15 @@ distanceToPlane plane origin direction
 --
 sphereNormal
     :: Exp Sphere
-    -> Exp Point                -- ^ A point on the surface of the sphere
-    -> Exp Vector               -- ^ Normal at that point
+    -> Exp Position             -- ^ A point on the surface of the sphere
+    -> Exp Direction            -- ^ Normal at that point
 sphereNormal sphere point
   = normalise (point - spherePos sphere)
 
 
 -- | A checkerboard pattern along the x/z axis
 --
-checkers :: Exp Point -> Exp Color
+checkers :: Exp Position -> Exp Color
 checkers pos
   = let
         (x,_,z) = xyzOfVec pos
@@ -140,20 +145,20 @@ planeCheckShine  = planeShine
 -- Sphere
 -- ------
 
-type instance EltRepr Sphere  = EltRepr (Point, Float, Color, Float)
-type instance EltRepr' Sphere = EltRepr' (Point, Float, Color, Float)
+type instance EltRepr Sphere  = EltRepr (Position, Float, Color, Float)
+type instance EltRepr' Sphere = EltRepr' (Position, Float, Color, Float)
 
 instance Elt Sphere where
-  eltType (_ :: Sphere)         = eltType (undefined :: (Point, Float, Color, Float))
+  eltType (_ :: Sphere)         = eltType (undefined :: (Position, Float, Color, Float))
   toElt sphere                  = let (p,r,c,s) = toElt sphere in Sphere p r c s
   fromElt (Sphere p r c s)      = fromElt (p, r, c, s)
 
-  eltType' (_ :: Sphere)        = eltType' (undefined :: (Point, Float, Color, Float))
+  eltType' (_ :: Sphere)        = eltType' (undefined :: (Position, Float, Color, Float))
   toElt' sphere                 = let (p,r,c,s) = toElt' sphere in Sphere p r c s
   fromElt' (Sphere p r c s)     = fromElt' (p, r, c, s)
 
 instance IsTuple Sphere where
-  type TupleRepr Sphere = TupleRepr (Point, Float, Color, Float)
+  type TupleRepr Sphere = TupleRepr (Position, Float, Color, Float)
   fromTuple (Sphere p r c s)    = fromTuple (p, r, c, s)
   toTuple t                     = let (p, r, c, s) = toTuple t in Sphere p r c s
 
@@ -167,20 +172,20 @@ instance Lift Exp Sphere where
 -- Plane
 -- -----
 
-type instance EltRepr Plane  = EltRepr (Point, Vector, Color, Float)
-type instance EltRepr' Plane = EltRepr' (Point, Vector, Color, Float)
+type instance EltRepr Plane  = EltRepr (Position, Direction, Color, Float)
+type instance EltRepr' Plane = EltRepr' (Position, Direction, Color, Float)
 
 instance Elt Plane where
-  eltType (_ :: Plane)          = eltType (undefined :: (Point, Vector, Color, Float))
+  eltType (_ :: Plane)          = eltType (undefined :: (Position, Direction, Color, Float))
   toElt plane                   = let (p,n,c,s) = toElt plane in Plane p n c s
   fromElt (Plane p n c s)       = fromElt (p, n, c, s)
 
-  eltType' (_ :: Plane)         = eltType' (undefined :: (Point, Vector, Color, Float))
+  eltType' (_ :: Plane)         = eltType' (undefined :: (Position, Direction, Color, Float))
   toElt' plane                  = let (p,n,c,s) = toElt' plane in Plane p n c s
   fromElt' (Plane p n c s)      = fromElt' (p, n, c, s)
 
 instance IsTuple Plane where
-  type TupleRepr Plane = TupleRepr (Point, Vector, Color, Float)
+  type TupleRepr Plane = TupleRepr (Position, Direction, Color, Float)
   fromTuple (Plane p n c s)     = fromTuple (p, n, c, s)
   toTuple t                     = let (p, n, c, s) = toTuple t in Plane p n c s
 
@@ -195,20 +200,20 @@ instance Lift Exp Plane where
 -- Checkered Plane
 -- ---------------
 
-type instance EltRepr PlaneCheck  = EltRepr (Point, Vector, Float)
-type instance EltRepr' PlaneCheck = EltRepr' (Point, Vector, Float)
+type instance EltRepr PlaneCheck  = EltRepr (Position, Direction, Float)
+type instance EltRepr' PlaneCheck = EltRepr' (Position, Direction, Float)
 
 instance Elt PlaneCheck where
-  eltType (_ :: PlaneCheck)     = eltType (undefined :: (Point, Vector, Float))
+  eltType (_ :: PlaneCheck)     = eltType (undefined :: (Position, Direction, Float))
   toElt plane                   = let (p,n,s) = toElt plane in PlaneCheck p n s
   fromElt (PlaneCheck p n s)    = fromElt (p, n, s)
 
-  eltType' (_ :: PlaneCheck)    = eltType' (undefined :: (Point, Vector, Float))
+  eltType' (_ :: PlaneCheck)    = eltType' (undefined :: (Position, Direction, Float))
   toElt' plane                  = let (p,n,s) = toElt' plane in PlaneCheck p n s
   fromElt' (PlaneCheck p n s)   = fromElt' (p, n, s)
 
 instance IsTuple PlaneCheck where
-  type TupleRepr PlaneCheck = TupleRepr (Point, Vector, Float)
+  type TupleRepr PlaneCheck = TupleRepr (Position, Direction, Float)
   fromTuple (PlaneCheck p n s)  = fromTuple (p, n, s)
   toTuple t                     = let (p, n, s) = toTuple t in PlaneCheck p n s
 
