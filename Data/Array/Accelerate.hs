@@ -81,6 +81,9 @@ module Data.Array.Accelerate (
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
 
+  -- *** Concatenation
+  (P.++),
+
   -- ** Composition
   -- *** Flow control
   (L.?|), L.cond,

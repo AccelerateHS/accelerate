@@ -41,6 +41,9 @@ module Data.Array.Accelerate.Prelude (
   -- * Enumeration and filling
   fill, enumFromN, enumFromStepN,
 
+  -- * Concatenation
+  (++),
+
   -- * Working with predicates
   -- ** Filtering
   filter,
@@ -627,6 +630,21 @@ enumFromStepN sh x y
   = reshape sh
   $ generate (index1 $ shapeSize sh)
              (\ix -> (fromIntegral (unindex1 ix :: Exp Int) * y) + x)
+
+-- Concatenation
+-- -------------
+
+-- | Concatenate two vectors
+--
+infixr 5 ++
+(++) :: Elt a => Acc (Vector a) -> Acc (Vector a) -> Acc (Vector a)
+(++) xs ys
+  = let n       = unindex1 (shape xs)
+        m       = unindex1 (shape ys)
+    in
+    generate (index1 (n + m))
+             (\ix -> let i = unindex1 ix
+                     in  i <* n ? ( xs ! ix, ys ! index1 (i-n) ))
 
 
 -- Filtering
