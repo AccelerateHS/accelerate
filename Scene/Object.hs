@@ -88,10 +88,10 @@ distanceToPlane plane origin direction
   = let
         pos             = planePos plane
         normal          = planeNormal plane
-        intersect       = direction `dot` normal
+        hit             = direction `dot` normal
     in
-    intersect >=* 0 ? ( lift (False, constant 0)
-                      , lift (True,  ((pos - origin) `dot` normal) / intersect) )
+    hit >=* 0 ? ( lift (False, constant 0)
+                , lift (True,  ((pos - origin) `dot` normal) / hit) )
 
 
 -- | Compute the surface normal of a sphere at a point
