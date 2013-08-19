@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- *** With respect to both environments
   rebuildPreOpenExp, rebuildPreOpenAcc, rebuildFun,
-  rebuildAfun,
+  rebuildAfun, rebuildTup,
 
   -- *** With respect to the scalar environment
   rebuildE, rebuildFE, rebuildAE,
