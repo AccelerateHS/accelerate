@@ -234,6 +234,7 @@ module Data.Array.Accelerate (
   L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
+  L.intersect,
 
   -- *** Conversions
   L.boolToInt, L.fromIntegral,

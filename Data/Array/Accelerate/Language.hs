@@ -86,6 +86,7 @@ module Data.Array.Accelerate.Language (
   -- ** Index construction and destruction
   index0, index1, unindex1, index2, unindex2,
   indexHead, indexTail, toIndex, fromIndex,
+  intersect,
 
   -- ** Conditional expressions
   (?),
@@ -125,7 +126,7 @@ import qualified Prelude                                as P
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex)
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -1030,6 +1031,11 @@ toIndex = Exp $$ ToIndex
 --
 fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
 fromIndex = Exp $$ FromIndex
+
+-- | Intersection of two shapes
+--
+intersect :: Shape sh => Exp sh -> Exp sh -> Exp sh
+intersect = Exp $$ Intersect
 
 
 -- Conditional expressions
