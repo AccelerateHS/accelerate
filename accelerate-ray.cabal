@@ -1,0 +1,25 @@
+Name:                   accelerate-ray
+Version:                0.1.0.0
+Synopsis:               A simple ray-tracer written in Accelerate
+Description:            A simple ray-tracer written in Accelerate
+License:                BSD3
+License-file:           LICENSE
+Author:                 Trevor L. McDonell
+Maintainer:             tmcdonell@cse.unsw.edu.au
+Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
+Build-type:             Simple
+Cabal-version:          >=1.10
+
+Executable accelerate-ray
+  Main-is:              Main
+
+  Other-modules:
+
+  Build-depends:
+        base                    == 4.6.*,
+        accelerate              == 0.14.*
+
+  ghc-options:
+        -Wall -O2
+
+-- vim: nospell
