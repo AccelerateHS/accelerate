@@ -14,6 +14,19 @@ import Data.Array.Accelerate                                    as A
 import Prelude                                                  as P
 
 
+-- | Of two intersection tests, take the nearest
+--
+nearest :: Exp (Bool, Float) -> Exp (Bool, Float) -> Exp (Bool, Float)
+nearest i1 i2
+  = let
+        -- hit test and distance for each object
+        (h1, d1)        = unlift i1
+        (h2, d2)        = unlift i2     :: (Exp Bool, Exp Float)
+    in
+    h1 &&* h2 ? ( lift (h1, min d1 d2), -- both hit, select the closest
+    h1        ? ( i1, i2 ) )            -- just the one that intersects
+
+
 -- Determine the closest intersection point (if any) for a gang of rays.
 --
 -- This tests all objects for each ray and just takes the minimum. To scale to
@@ -37,14 +50,6 @@ intersectRays objects points directions
         n_sph                   = unindex1 (shape spheres)
         n_pln                   = unindex1 (shape planes)
         miss                    = constant (False, 0)
-
-        -- Determine the nearest of two object intersections
-        nearest i1 i2
-          = let (h1, d1)        = unlift i1     -- hit test and distance for each object
-                (h2, d2)        = unlift i2     :: (Exp Bool, Exp Float)
-            in
-            h1 &&* h2 ? ( lift (h1, min d1 d2), -- both hit, select the closest
-            h1        ? ( i1, i2 ) )            -- just the one that intersects
 
         -- Intersections of all rays with the spheres and planes in the scene
         intersect_sph
