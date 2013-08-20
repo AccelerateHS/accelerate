@@ -31,7 +31,7 @@ intersectRays
     -> Acc (Array DIM2 (Bool, Float))           -- distance to the closest object
 intersectRays objects points directions
   = let
-        Z :. h :. w             = unlift $ shape points         :: Z :. Exp Int :. Exp Int
+        sh                      = shape points
 
         (spheres, planes)       = unlift objects
         n_sph                   = unindex1 (shape spheres)
@@ -49,15 +49,15 @@ intersectRays objects points directions
         -- Intersections of all rays with the spheres and planes in the scene
         intersect_sph
           = A.zipWith3 distanceToSphere
-                       (A.replicate (lift (Z :. h   :. w   :. All))   spheres)
-                       (A.replicate (lift (Z :. All :. All :. n_sph)) points)
-                       (A.replicate (lift (Z :. All :. All :. n_sph)) directions)
+                       (A.replicate (lift (sh  :. All))   spheres)
+                       (A.replicate (lift (Any :. n_sph)) points)
+                       (A.replicate (lift (Any :. n_sph)) directions)
 
         intersect_pln
           = A.zipWith3 distanceToPlane
-                       (A.replicate (lift (Z :. h   :. w   :. All))   planes)
-                       (A.replicate (lift (Z :. All :. All :. n_pln)) points)
-                       (A.replicate (lift (Z :. All :. All :. n_pln)) directions)
+                       (A.replicate (lift (sh  :. All))   planes)
+                       (A.replicate (lift (Any :. n_pln)) points)
+                       (A.replicate (lift (Any :. n_pln)) directions)
     in
     A.fold nearest miss (intersect_sph A.++ intersect_pln)
 
