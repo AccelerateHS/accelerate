@@ -88,10 +88,10 @@ distanceToPlane plane origin direction
   = let
         pos             = planePos plane
         normal          = planeNormal plane
-        hit             = direction `dot` normal
+        theta           = direction `dot` normal        -- TLM: name?
     in
-    hit >=* 0 ? ( lift (False, constant 0)
-                , lift (True,  ((pos - origin) `dot` normal) / hit) )
+    theta >=* 0 ? ( lift (False, constant 0)
+                  , lift (True,  ((pos - origin) `dot` normal) / theta) )
 
 
 -- | Compute the surface normal of a sphere at a point
