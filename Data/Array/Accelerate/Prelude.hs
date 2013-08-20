@@ -16,11 +16,11 @@
 module Data.Array.Accelerate.Prelude (
 
   -- * Zipping
-  zipWith3, zipWith4,
-  zip, zip3, zip4,
+  zipWith3, zipWith4, zipWith5,
+  zip, zip3, zip4, zip5,
 
   -- * Unzipping
-  unzip, unzip3, unzip4,
+  unzip, unzip3, unzip4, unzip5,
 
   -- * Reductions
   foldAll, fold1All,
@@ -86,8 +86,8 @@ zipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
          -> Acc (Array sh c)
          -> Acc (Array sh d)
 zipWith3 f as bs cs
-  = map (\x -> let (a,b,c) = unlift x in f a b c)
-  $ zip3 as bs cs
+  = generate (shape as `intersect` shape bs `intersect` shape cs)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
 
 -- | Zip four arrays with the given function
 --
@@ -99,8 +99,25 @@ zipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
          -> Acc (Array sh d)
          -> Acc (Array sh e)
 zipWith4 f as bs cs ds
-  = map (\x -> let (a,b,c,d) = unlift x in f a b c d)
-  $ zip4 as bs cs ds
+  = generate (shape as `intersect` shape bs `intersect`
+              shape cs `intersect` shape ds)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
+
+-- | Zip five arrays with the given function
+--
+zipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+         -> Acc (Array sh f)
+zipWith5 f as bs cs ds es
+  = generate (shape as `intersect` shape bs `intersect` shape cs
+                       `intersect` shape ds `intersect` shape es)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
+
 
 -- | Combine the elements of two arrays pairwise.  The shape of the result is
 -- the intersection of the two argument shapes.
@@ -113,26 +130,35 @@ zip = zipWith (curry lift)
 
 -- | Take three arrays and return an array of triples, analogous to zip.
 --
-zip3 :: forall sh. forall a. forall b. forall c. (Shape sh, Elt a, Elt b, Elt c)
+zip3 :: (Shape sh, Elt a, Elt b, Elt c)
      => Acc (Array sh a)
      -> Acc (Array sh b)
      -> Acc (Array sh c)
      -> Acc (Array sh (a, b, c))
-zip3 as bs cs
-  = zipWith (\a bc -> let (b, c) = unlift bc :: (Exp b, Exp c) in lift (a, b, c)) as
-  $ zip bs cs
+zip3 = zipWith3 (\a b c -> lift (a,b,c))
 
 -- | Take four arrays and return an array of quadruples, analogous to zip.
 --
-zip4 :: forall sh. forall a. forall b. forall c. forall d. (Shape sh, Elt a, Elt b, Elt c, Elt d)
+zip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
      => Acc (Array sh a)
      -> Acc (Array sh b)
      -> Acc (Array sh c)
      -> Acc (Array sh d)
      -> Acc (Array sh (a, b, c, d))
-zip4 as bs cs ds
-  = zipWith (\a bcd -> let (b, c, d) = unlift bcd :: (Exp b, Exp c, Exp d) in lift (a, b, c, d)) as
-  $ zip3 bs cs ds
+zip4 = zipWith4 (\a b c d -> lift (a,b,c,d))
+
+
+-- | Take five arrays and return an array of five-tuples, analogous to zip.
+--
+zip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh e)
+     -> Acc (Array sh (a, b, c, d, e))
+zip5 = zipWith5 (\a b c d e -> lift (a,b,c,d,e))
+
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
 -- shape of the argument.
@@ -177,6 +203,28 @@ unzip4 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs)
 
     get4 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp d
     get4 x = let (_ :: Exp a, _ :: Exp b, _ :: Exp c, d) = unlift x in d
+
+-- | Take an array of 5-tuples and return five arrays, analogous to unzip.
+--
+unzip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
+       => Acc (Array sh (a, b, c, d, e))
+       -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d), Acc (Array sh e))
+unzip5 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs)
+  where
+    get1 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp a
+    get1 x = let (a,_,_,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in a
+
+    get2 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp b
+    get2 x = let (_,b,_,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in b
+
+    get3 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp c
+    get3 x = let (_,_,c,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in c
+
+    get4 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp d
+    get4 x = let (_,_,_,d,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in d
+
+    get5 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp e
+    get5 x = let (_,_,_,_,e) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in e
 
 
 -- Reductions
