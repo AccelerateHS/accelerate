@@ -19,6 +19,8 @@ module Data.Array.Accelerate.Array.Sugar (
   Array(..), Scalar, Vector, Segments,
   Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
 
+  TupTree(..), EltKind (..),
+
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr, EltRepr',
 
@@ -228,6 +230,19 @@ class (Show a, Typeable a,
   fromElt' :: a -> EltRepr' a
   toElt'   :: EltRepr' a -> a
 
+  -- | This function reifies the structure of the surface tuple
+  -- representation and captures the information which is LOST by the
+  -- EltRepr type function.
+  reifyTupTree :: {-dummy-} a -> (EltKind, TupTree)
+
+-- | Reify the structure of the external/surface tuple and index types:
+data TupTree = TupLeaf | TupTree [TupTree]
+  deriving (Show,Eq,Ord,Read)
+
+-- | Does 'Elt' represent a plain tuple or a (Z :. _ :. _) value.
+data EltKind = TupKind | ZKind | AllKind | AnyKind
+  deriving (Show,Eq,Ord,Read)
+
 instance Elt () where
   eltType _ = UnitTuple
   fromElt = id
@@ -236,6 +251,9 @@ instance Elt () where
   eltType' _ = UnitTuple
   fromElt' = id
   toElt'   = id
+
+--  reifyTupTree _ = (TupKind, TupLeaf)
+  reifyTupTree _ = (TupKind, TupTree [])
 
 instance Elt Z where
   eltType _ = UnitTuple
@@ -246,6 +264,8 @@ instance Elt Z where
   fromElt' Z = ()
   toElt' ()  = Z
 
+  reifyTupTree _ = (ZKind, TupLeaf)
+
 instance (Elt t, Elt h) => Elt (t:.h) where
   eltType (_::(t:.h)) = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
   fromElt (t:.h)      = (fromElt t, fromElt' h)
@@ -254,6 +274,11 @@ instance (Elt t, Elt h) => Elt (t:.h) where
   eltType' (_::(t:.h)) = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
   fromElt' (t:.h)      = (fromElt t, fromElt' h)
   toElt' (t, h)        = toElt t :. toElt' h
+
+  reifyTupTree (_::(t:.h)) =
+    let (_,t') = reifyTupTree (undefined::t)
+        (_,h') = reifyTupTree (undefined::h)
+    in (ZKind, TupTree [t',h'])
 
 instance Elt All where
   eltType _      = PairTuple UnitTuple UnitTuple
@@ -264,6 +289,8 @@ instance Elt All where
   fromElt' All   = ()
   toElt' ()      = All
 
+  reifyTupTree _ = (AllKind, TupLeaf)
+
 instance Elt (Any Z) where
   eltType _ = UnitTuple
   fromElt _ = ()
@@ -272,6 +299,8 @@ instance Elt (Any Z) where
   eltType' _ = UnitTuple
   fromElt' _ = ()
   toElt' _   = Any
+
+  reifyTupTree _ = (AnyKind, TupLeaf)
 
 instance Shape sh => Elt (Any (sh:.Int)) where
   eltType _ = PairTuple (eltType (undefined::Any sh)) UnitTuple
@@ -282,6 +311,9 @@ instance Shape sh => Elt (Any (sh:.Int)) where
   fromElt' _ = (fromElt' (undefined :: Any sh), ())
   toElt' _   = Any
 
+  reifyTupTree (_ :: Any (sh:.Int)) =
+    (AnyKind, snd (reifyTupTree (undefined :: (sh :. Int))))
+
 instance Elt Int where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -290,6 +322,7 @@ instance Elt Int where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+  reifyTupTree _ = (TupKind, TupLeaf)
 
 instance Elt Int8 where
   eltType       = singletonScalarType
@@ -299,7 +332,8 @@ instance Elt Int8 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Int16 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -308,7 +342,8 @@ instance Elt Int16 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Int32 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -317,7 +352,8 @@ instance Elt Int32 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Int64 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -326,6 +362,7 @@ instance Elt Int64 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+  reifyTupTree _ = (TupKind, TupLeaf)
 
 instance Elt Word where
   eltType       = singletonScalarType
@@ -335,7 +372,8 @@ instance Elt Word where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Word8 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -344,7 +382,8 @@ instance Elt Word8 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Word16 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -353,7 +392,8 @@ instance Elt Word16 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Word32 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -362,7 +402,8 @@ instance Elt Word32 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Word64 where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -371,7 +412,8 @@ instance Elt Word64 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 {-
 instance Elt CShort where
   --eltType       = singletonScalarType
@@ -454,7 +496,8 @@ instance Elt Float where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Double where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -463,7 +506,8 @@ instance Elt Double where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 {-
 instance Elt CFloat where
   --eltType       = singletonScalarType
@@ -492,7 +536,8 @@ instance Elt Bool where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 instance Elt Char where
   eltType       = singletonScalarType
   fromElt v     = ((), v)
@@ -501,7 +546,8 @@ instance Elt Char where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
-
+  reifyTupTree _ = (TupKind, TupLeaf)
+  
 {-
 instance Elt CChar where
   --eltType       = singletonScalarType
@@ -542,6 +588,11 @@ instance (Elt a, Elt b) => Elt (a, b) where
   fromElt' (a, b) = (fromElt a, fromElt' b)
   toElt' (a, b) = (toElt a, toElt' b)
 
+  reifyTupTree (_::(a, b)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+    in (TupKind, TupTree [ta,tb])
+
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   eltType (_::(a, b, c))
     = PairTuple (eltType (undefined :: (a, b))) (eltType' (undefined :: c))
@@ -553,6 +604,12 @@ instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   fromElt' (a, b, c) = (fromElt (a, b), fromElt' c)
   toElt' (ab, c) = let (a, b) = toElt ab in (a, b, toElt' c)
 
+  reifyTupTree (_::(a, b, c)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+    in (TupKind, TupTree [ta,tb,tc])
+
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
   eltType (_::(a, b, c, d))
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
@@ -563,6 +620,13 @@ instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
   fromElt' (a, b, c, d) = (fromElt (a, b, c), fromElt' d)
   toElt' (abc, d) = let (a, b, c) = toElt abc in (a, b, c, toElt' d)
+
+  reifyTupTree (_::(a,b,c,d)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+    in (TupKind, TupTree [ta,tb,tc,td])
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   eltType (_::(a, b, c, d, e))
@@ -577,6 +641,15 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   fromElt' (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt' e)
   toElt' (abcd, e) = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt' e)
 
+  reifyTupTree (_::(a,b,c,d,e)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+        (_,te) = reifyTupTree (undefined::e) 
+    in (TupKind, TupTree [ta,tb,tc,td,te])
+
+
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
   eltType (_::(a, b, c, d, e, f))
     = PairTuple (eltType (undefined :: (a, b, c, d, e)))
@@ -589,6 +662,15 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) wh
                 (eltType' (undefined :: f))
   fromElt' (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt' f)
   toElt' (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt' f)
+
+  reifyTupTree (_::(a,b,c,d,e,f)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+        (_,te) = reifyTupTree (undefined::e)
+        (_,tf) = reifyTupTree (undefined::f)
+    in (TupKind, TupTree [ta,tb,tc,td,te,tf])
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g) where
@@ -603,6 +685,16 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
                 (eltType' (undefined :: g))
   fromElt' (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt' g)
   toElt' (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef in (a, b, c, d, e, f, toElt' g)
+
+  reifyTupTree (_::(a,b,c,d,e,f,g)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+        (_,te) = reifyTupTree (undefined::e)
+        (_,tf) = reifyTupTree (undefined::f)
+        (_,tg) = reifyTupTree (undefined::g)
+    in (TupKind, TupTree [ta,tb,tc,td,te,tf,tg])
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
@@ -620,6 +712,17 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   toElt' (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
                          in (a, b, c, d, e, f, g, toElt' h)
 
+  reifyTupTree (_::(a,b,c,d,e,f,g,h)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+        (_,te) = reifyTupTree (undefined::e)
+        (_,tf) = reifyTupTree (undefined::f)
+        (_,tg) = reifyTupTree (undefined::g)
+        (_,th) = reifyTupTree (undefined::h)        
+    in (TupKind, TupTree [ta,tb,tc,td,te,tf,tg,th])
+
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
   eltType (_::(a, b, c, d, e, f, g, h, i))
@@ -635,6 +738,19 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   fromElt' (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt' i)
   toElt' (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
                          in (a, b, c, d, e, f, g, h, toElt' i)
+
+  reifyTupTree (_::(a,b,c,d,e,f,g,h,i)) =
+    let (_,ta) = reifyTupTree (undefined::a)
+        (_,tb) = reifyTupTree (undefined::b)
+        (_,tc) = reifyTupTree (undefined::c)
+        (_,td) = reifyTupTree (undefined::d)
+        (_,te) = reifyTupTree (undefined::e)
+        (_,tf) = reifyTupTree (undefined::f)
+        (_,tg) = reifyTupTree (undefined::g)
+        (_,th) = reifyTupTree (undefined::h)
+        (_,ti) = reifyTupTree (undefined::i)        
+    in (TupKind, TupTree [ta,tb,tc,td,te,tf,tg,th,ti])
+
 
 -- |Convenience functions
 --
@@ -720,7 +836,9 @@ class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a wher
   fromArr  :: a -> ArrRepr  a
   fromArr' :: a -> ArrRepr' a
 
-
+  -- | At the array level, we play a similar trick to recover the surface tuple structure.
+  reifyArrTupTree :: {-dummy-} a -> TupTree
+  
 instance Arrays () where
   arrays  _ = ArraysRunit
   arrays' _ = ArraysRunit
@@ -729,6 +847,7 @@ instance Arrays () where
   toArr'    = id
   fromArr   = id
   fromArr'  = id
+  reifyArrTupTree _ = TupTree []
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  _       = ArraysRpair ArraysRunit ArraysRarray
@@ -738,6 +857,7 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
   toArr'          = id
   fromArr arr     = ((), arr)
   fromArr'        = id
+  reifyArrTupTree _ = TupLeaf
 
 instance (Arrays b, Arrays a) => Arrays (b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
@@ -748,6 +868,11 @@ instance (Arrays b, Arrays a) => Arrays (b, a) where
   fromArr  (b, a) = (fromArr b, fromArr' a)
   fromArr' (b, a) = (fromArr b, fromArr' a)
 
+  reifyArrTupTree (_:: (b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+    in (TupTree [tb,ta])
+
 instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
@@ -756,6 +881,12 @@ instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
   toArr'   (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
   fromArr  (c, b, a) = (fromArr (c, b), fromArr' a)
   fromArr' (c, b, a) = (fromArr (c, b), fromArr' a)
+
+  reifyArrTupTree (_:: (c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c) 
+    in (TupTree [tc,tb,ta])
 
 instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
@@ -766,6 +897,13 @@ instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
   fromArr  (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
   fromArr' (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
 
+  reifyArrTupTree (_:: (d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)         
+    in (TupTree [td,tc,tb,ta])
+
 instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
@@ -774,6 +912,14 @@ instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, 
   toArr'   (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
   fromArr  (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
   fromArr' (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
+
+  reifyArrTupTree (_:: (e, d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)
+        te = reifyArrTupTree (undefined::e)        
+    in (TupTree [te,td,tc,tb,ta])       
 
 instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (f, e, d, c, b, a) where
@@ -785,6 +931,16 @@ instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   fromArr  (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
   fromArr' (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
 
+  reifyArrTupTree (_:: (f, e, d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)
+        te = reifyArrTupTree (undefined::e)
+        tf = reifyArrTupTree (undefined::f)
+    in (TupTree [tf,te,td,tc,tb,ta])
+
+
 instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
@@ -794,6 +950,16 @@ instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   toArr'   (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
   fromArr  (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
   fromArr' (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
+
+  reifyArrTupTree (_:: (g, f, e, d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)
+        te = reifyArrTupTree (undefined::e)
+        tf = reifyArrTupTree (undefined::f)
+        tg = reifyArrTupTree (undefined::g)
+    in (TupTree [tg,tf,te,td,tc,tb,ta])
 
 instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (h, g, f, e, d, c, b, a) where
@@ -805,6 +971,17 @@ instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, 
   fromArr  (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
   fromArr' (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
 
+  reifyArrTupTree (_:: (h, g, f, e, d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)
+        te = reifyArrTupTree (undefined::e)
+        tf = reifyArrTupTree (undefined::f)
+        tg = reifyArrTupTree (undefined::g)
+        th = reifyArrTupTree (undefined::h)        
+    in (TupTree [th,tg,tf,te,td,tc,tb,ta])
+
 instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (i, h, g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
@@ -815,6 +992,17 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
 
+  reifyArrTupTree (_:: (i, h, g, f, e, d, c, b, a)) =
+    let ta = reifyArrTupTree (undefined::a)
+        tb = reifyArrTupTree (undefined::b)
+        tc = reifyArrTupTree (undefined::c)
+        td = reifyArrTupTree (undefined::d)
+        te = reifyArrTupTree (undefined::e)
+        tf = reifyArrTupTree (undefined::f)
+        tg = reifyArrTupTree (undefined::g)
+        th = reifyArrTupTree (undefined::h)
+        ti = reifyArrTupTree (undefined::i)        
+    in (TupTree [ti,th,tg,tf,te,td,tc,tb,ta])
 
 -- |Multi-dimensional arrays for array processing.
 --

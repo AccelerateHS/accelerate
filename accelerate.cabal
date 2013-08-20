@@ -139,6 +139,8 @@ Library
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
+-- Temp:
+                        Data.Array.Accelerate.Trafo.Sharing
 
   Other-modules:        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Array.Delayed
@@ -151,7 +153,6 @@ Library
                         Data.Array.Accelerate.Trafo.Common
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
-                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
 
