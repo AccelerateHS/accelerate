@@ -341,7 +341,9 @@ usesOfPreAcc withShape countAcc idx = countP
       Transform sh ix f a       -> countE sh + countF ix + countF f  + countA a
       Replicate _ sh a          -> countE sh + countA a
       Slice _ a sl              -> countE sl + countA a
-      Map f a                   -> countF f  + countA a
+      Map f a
+        | unzips f a            -> 0
+        | otherwise             -> countF f  + countA a
       ZipWith f a1 a2           -> countF f  + countA a1 + countA a2
       Fold f z a                -> countF f  + countE z  + countA a
       Fold1 f a                 -> countF f  + countA a
@@ -401,4 +403,13 @@ usesOfPreAcc withShape countAcc idx = countP
     countAT :: Atuple (acc aenv) a -> Int
     countAT NilAtup        = 0
     countAT (SnocAtup t a) = countAT t + countA a
+
+    -- The definition of 'unzip' in the prelude applies 'map' to the array
+    -- projecting out the appropriate element. If we spot this operation applied
+    -- to manifest data, we don't need to create the unzipped array in memory.
+    --
+    unzips f a
+      | Lam (Body (Prj _ _))    <- f
+      , Avar _                  <- extract a    = True
+      | otherwise                               = False
 
