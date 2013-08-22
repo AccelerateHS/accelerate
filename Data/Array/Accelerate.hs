@@ -83,7 +83,7 @@ module Data.Array.Accelerate (
 
   -- ** Composition
   -- *** Flow control
-  (L.?|), L.cond,
+  (L.?|), L.cond, L.awhile,
 
   -- *** Pipelining
   (L.>->),
@@ -212,8 +212,8 @@ module Data.Array.Accelerate (
   -- *** Tuples
   L.fst, L.snd, L.curry, L.uncurry,
 
-  -- *** Conditional
-  (L.?),
+  -- *** Flow-control
+  (L.?), L.while,
 
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,

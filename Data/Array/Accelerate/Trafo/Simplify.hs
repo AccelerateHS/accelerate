@@ -220,8 +220,7 @@ simplifyOpenExp env = first getAny . cvtE
       ShapeSize sh              -> ShapeSize <$> cvtE sh
       Intersect s t             -> cvtE s `intersect` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
-      While p f x               -> let env' = incExp env `PushExp` Var ZeroIdx
-                                   in  While <$> cvtE' env' p <*> cvtE' env' f <*> cvtE x
+      While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
 
     cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     cvtT NilTup        = pure NilTup
@@ -229,6 +228,9 @@ simplifyOpenExp env = first getAny . cvtE
 
     cvtE' :: Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
+
+    cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
+    cvtF env' = first Any . simplifyOpenFun env'
 
     -- If the head terms of a shape intersection match, avoid the intersection
     -- test and return the shape.

@@ -254,10 +254,10 @@ data PreOpenAcc acc aenv a where
 
   -- Value-recursion for array-level computations
   Awhile      :: Arrays arrs
-              => PreExp      acc (aenv, arrs) Bool              -- continue iteration while true
-              -> PreOpenAfun acc aenv         (arrs -> arrs)    -- function to iterate
-              -> acc             aenv         arrs              -- initial value
-              -> PreOpenAcc  acc aenv         arrs
+              => PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
+              -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
+              -> acc             aenv arrs                      -- initial value
+              -> PreOpenAcc  acc aenv arrs
 
 
   -- Array inlet (triggers async host->device transfer if necessary)
@@ -783,8 +783,8 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   -- Value recursion
   While         :: Elt a
-                => PreOpenExp acc (env, a) aenv Bool    -- continue while true
-                -> PreOpenExp acc (env, a) aenv a       -- function to iterate
+                => PreOpenFun acc env aenv (a -> Bool)  -- continue while true
+                -> PreOpenFun acc env aenv (a -> a)     -- function to iterate
                 -> PreOpenExp acc env aenv a            -- initial value
                 -> PreOpenExp acc env aenv a
 

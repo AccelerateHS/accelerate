@@ -132,10 +132,10 @@ evalPreOpenAcc (Acond cond acc1 acc2) aenv
 
 evalPreOpenAcc (Awhile cond body acc) aenv
   = let f       = evalOpenAfun body aenv
-        p a     = evalExp cond (aenv `Push` a)
+        p       = evalOpenAfun cond aenv
         go !x
-          | p x         = go (f x)
-          | otherwise   = delay x
+          | (p x) Sugar.! Z = go (f x)
+          | otherwise       = delay x
     in
     go . force $ evalOpenAcc acc aenv
 
@@ -320,22 +320,22 @@ sliceOp sliceIndex (DelayedRpair DelayedRunit (DelayedRarray sh pf)) slix
         in
         BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
 
-mapOp :: Sugar.Elt e' 
-      => (e -> e') 
-      -> Delayed (Array dim e) 
+mapOp :: Sugar.Elt e'
+      => (e -> e')
+      -> Delayed (Array dim e)
       -> Delayed (Array dim e')
 mapOp f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = DelayedRpair DelayedRunit
   $ DelayedRarray sh (Sugar.sinkFromElt f . rf)
 
 zipWithOp :: Sugar.Elt e3
-          => (e1 -> e2 -> e3) 
-          -> Delayed (Array dim e1) 
-          -> Delayed (Array dim e2) 
+          => (e1 -> e2 -> e3)
+          -> Delayed (Array dim e1)
+          -> Delayed (Array dim e2)
           -> Delayed (Array dim e3)
 zipWithOp f (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1)) (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
   = DelayedRpair DelayedRunit
-  $ DelayedRarray (sh1 `intersect` sh2) 
+  $ DelayedRarray (sh1 `intersect` sh2)
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: Sugar.Shape dim
@@ -643,8 +643,8 @@ stencilOp sten bndy (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                                     Left v    -> v
                                     Right ix' -> rf (Sugar.fromElt ix')
 
-stencil2Op :: forall dim e1 e2 e' stencil1 stencil2. 
-              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e', 
+stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
+              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e',
                Stencil dim e1 stencil1, Stencil dim e2 stencil2)
            => (stencil1 -> stencil2 -> e')
            -> Boundary (Sugar.EltRepr e1)
@@ -678,7 +678,7 @@ stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
 --
 evalOpenFun :: OpenFun env aenv t -> ValElt env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
-evalOpenFun (Lam f)  env aenv 
+evalOpenFun (Lam f)  env aenv
   = \x -> evalOpenFun f (env `PushElt` Sugar.fromElt x) aenv
 
 -- Evaluate a closed function
@@ -693,7 +693,7 @@ evalFun f aenv = evalOpenFun f EmptyElt aenv
 --     execution.  If these operations are in the body of a function that
 --     gets mapped over an array, the array argument would be forced many times
 --     leading to a large amount of wasteful recomputation.
---  
+--
 evalOpenExp :: OpenExp env aenv a -> ValElt env -> Val aenv -> a
 
 evalOpenExp (Let exp1 exp2) env aenv
@@ -706,22 +706,22 @@ evalOpenExp (Var idx) env _
 evalOpenExp (Const c) _ _
   = Sugar.toElt c
 
-evalOpenExp (Tuple tup) env aenv 
+evalOpenExp (Tuple tup) env aenv
   = toTuple $ evalTuple tup env aenv
 
-evalOpenExp (Prj idx e) env aenv 
+evalOpenExp (Prj idx e) env aenv
   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
 
-evalOpenExp IndexNil _env _aenv 
+evalOpenExp IndexNil _env _aenv
   = Z
 
-evalOpenExp (IndexCons sh i) env aenv 
+evalOpenExp (IndexCons sh i) env aenv
   = evalOpenExp sh env aenv :. evalOpenExp i env aenv
 
-evalOpenExp (IndexHead ix) env aenv 
+evalOpenExp (IndexHead ix) env aenv
   = case evalOpenExp ix env aenv of _:.h -> h
 
-evalOpenExp (IndexTail ix) env aenv 
+evalOpenExp (IndexTail ix) env aenv
   = case evalOpenExp ix env aenv of t:._ -> t
 
 evalOpenExp (IndexAny) _ _
@@ -766,8 +766,8 @@ evalOpenExp (Cond c t e) env aenv
     else evalOpenExp e env aenv
 
 evalOpenExp (While cond body seed) env aenv
-  = let f       = evalOpenFun (Lam (Body body)) env aenv
-        p       = evalOpenFun (Lam (Body cond)) env aenv
+  = let f       = evalOpenFun body env aenv
+        p       = evalOpenFun cond env aenv
         go !x
           | p x         = go (f x)
           | otherwise   = x
@@ -933,25 +933,25 @@ evalFromIntegral ta (FloatingNumType tb)
 
 
 -- Extract methods from reified dictionaries
--- 
+--
 
 -- Constant methods of Bounded
--- 
+--
 
 evalMinBound :: BoundedType a -> a
-evalMinBound (IntegralBoundedType ty) 
+evalMinBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = minBound
-evalMinBound (NonNumBoundedType   ty) 
+evalMinBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = minBound
 
 evalMaxBound :: BoundedType a -> a
-evalMaxBound (IntegralBoundedType ty) 
+evalMaxBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = maxBound
-evalMaxBound (NonNumBoundedType   ty) 
+evalMaxBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = maxBound
 
 -- Constant method of floating
--- 
+--
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
@@ -1023,7 +1023,7 @@ evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
 
 -- Methods of Num
--- 
+--
 
 evalAdd :: NumType a -> ((a, a) -> a)
 evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
@@ -1094,66 +1094,66 @@ evalRecip ty | FloatingDict <- floatingDict ty = recip
 
 
 evalLt :: ScalarType a -> ((a, a) -> Bool)
-evalLt (NumScalarType (IntegralNumType ty)) 
+evalLt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<)
-evalLt (NumScalarType (FloatingNumType ty)) 
+evalLt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<)
-evalLt (NonNumScalarType ty) 
+evalLt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<)
 
 evalGt :: ScalarType a -> ((a, a) -> Bool)
-evalGt (NumScalarType (IntegralNumType ty)) 
+evalGt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>)
-evalGt (NumScalarType (FloatingNumType ty)) 
+evalGt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>)
-evalGt (NonNumScalarType ty) 
+evalGt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>)
 
 evalLtEq :: ScalarType a -> ((a, a) -> Bool)
-evalLtEq (NumScalarType (IntegralNumType ty)) 
+evalLtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<=)
-evalLtEq (NumScalarType (FloatingNumType ty)) 
+evalLtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<=)
-evalLtEq (NonNumScalarType ty) 
+evalLtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<=)
 
 evalGtEq :: ScalarType a -> ((a, a) -> Bool)
-evalGtEq (NumScalarType (IntegralNumType ty)) 
+evalGtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>=)
-evalGtEq (NumScalarType (FloatingNumType ty)) 
+evalGtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>=)
-evalGtEq (NonNumScalarType ty) 
+evalGtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>=)
 
 evalEq :: ScalarType a -> ((a, a) -> Bool)
-evalEq (NumScalarType (IntegralNumType ty)) 
+evalEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumScalarType (FloatingNumType ty)) 
+evalEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumScalarType ty) 
+evalEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
 evalNEq :: ScalarType a -> ((a, a) -> Bool)
-evalNEq (NumScalarType (IntegralNumType ty)) 
+evalNEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (/=)
-evalNEq (NumScalarType (FloatingNumType ty)) 
+evalNEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (/=)
-evalNEq (NonNumScalarType ty) 
+evalNEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (/=)
 
 evalMax :: ScalarType a -> ((a, a) -> a)
-evalMax (NumScalarType (IntegralNumType ty)) 
+evalMax (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry max
-evalMax (NumScalarType (FloatingNumType ty)) 
+evalMax (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry max
-evalMax (NonNumScalarType ty) 
+evalMax (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry max
 
 evalMin :: ScalarType a -> ((a, a) -> a)
-evalMin (NumScalarType (IntegralNumType ty)) 
+evalMin (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry min
-evalMin (NumScalarType (FloatingNumType ty)) 
+evalMin (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry min
-evalMin (NonNumScalarType ty) 
+evalMin (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry min
 

@@ -75,7 +75,7 @@ module Data.Array.Accelerate.Language (
   (>->),
 
   -- ** Array-level flow-control
-  cond, (?|),
+  cond, (?|), awhile,
 
   -- ** Lifting and Unlifting
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
@@ -87,8 +87,8 @@ module Data.Array.Accelerate.Language (
   index0, index1, unindex1, index2, unindex2,
   indexHead, indexTail, toIndex, fromIndex,
 
-  -- ** Conditional expressions
-  (?),
+  -- ** Flow-control
+  (?), while,
 
   -- ** Array operations with a scalar result
   (!), (!!), the, null, shape, size, shapeSize,
@@ -552,6 +552,15 @@ cond = Acc $$$ Acond
 infix 0 ?|
 (?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
 c ?| (t, e) = cond c t e
+
+-- | An array-level while construct
+--
+awhile :: (Arrays a)
+       => (Acc a -> Acc (Scalar Bool))
+       -> (Acc a -> Acc a)
+       -> Acc a
+       -> Acc a
+awhile = Acc $$$ Awhile
 
 
 -- Lifting surface expressions
@@ -1032,7 +1041,7 @@ fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
 fromIndex = Exp $$ FromIndex
 
 
--- Conditional expressions
+-- Flow-control
 -- -----------------------
 
 -- |Conditional expression. If the predicate evaluates to 'True', the first
@@ -1041,6 +1050,16 @@ fromIndex = Exp $$ FromIndex
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = Exp $ Cond c t e
+
+-- | While construct. Continue to apply the given function, starting with the
+-- initial value, until the test function evaluates to true.
+--
+while :: Elt e
+      => (Exp e -> Exp Bool)
+      -> (Exp e -> Exp e)
+      -> Exp e
+      -> Exp e
+while = Exp $$$ While
 
 
 -- Array operations with a scalar result

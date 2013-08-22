@@ -126,7 +126,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Unit e                  -> Unit (cvtE e)
         Alet bnd body           -> alet (manifest bnd) (manifest body)
         Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
-        Awhile p f a            -> Awhile (cvtE p) (cvtAF f) (manifest a)
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest a)
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (manifest tup)
         Apply f a               -> Apply (cvtAF f) (manifest a)
@@ -230,7 +230,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
         Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
-        While p f x             -> While (cvtE p) (cvtE f) (cvtE x)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE x)
         Index a sh              -> Index (manifest a) (cvtE sh)
@@ -299,7 +299,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Alet bnd body       -> aletD embedAcc elimAcc bnd body
     Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Aprj ix tup         -> aprjD embedAcc ix tup
-    Awhile p f a        -> done $ Awhile (cvtE p) (cvtAF f) (cvtA a)
+    Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
@@ -423,7 +423,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         ToIndex sh ix           -> ToIndex (cvtE' sh) (cvtE' ix)
         FromIndex sh ix         -> FromIndex (cvtE' sh) (cvtE' ix)
         Cond p t e              -> Cond (cvtE' p) (cvtE' t) (cvtE' e)
-        While p f x             -> While (cvtE' p) (cvtE' f) (cvtE' x)
+        While p f x             -> While (cvtF' p) (cvtF' f) (cvtE' x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE' x)
         Index a sh              -> Index a (cvtE' sh)
@@ -1077,10 +1077,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize sh                    -> ShapeSize (cvtE sh)
         Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
-        While p f x                     ->
-          let sh'' = weakenE SuccIdx sh'
-              f''  = weakenFE SuccIdx f'
-          in While (replaceE sh'' f'' avar p) (replaceE sh'' f'' avar f) (cvtE x)
+        While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
 
         Shape a
           | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
