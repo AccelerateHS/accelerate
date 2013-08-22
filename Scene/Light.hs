@@ -23,7 +23,8 @@ import Graphics.Gloss.Accelerate.Data.Color
 import Data.Typeable
 
 
--- | An omnidirectional point light source
+-- | An omnidirectional point light source, whose intensity drops off with
+--   distance from the source.
 --
 data Light = Light Position Color
   deriving (Eq, Show, Typeable)
@@ -53,7 +54,15 @@ colorOfLight light point normal
 
 
 -- | Get the colour at each position as a function of all lights acting on the
---   ray along the given direction.
+--   point on a surface at a given normal direction.
+--
+--    normal
+--         ^           x light
+--         |        .
+--         |     . objects?
+--         |  .
+--   ______x______ surface
+--       point
 --
 applyLighting
     :: Acc Objects
@@ -71,10 +80,10 @@ applyLighting objects lights points normals
         miss                    = constant (False, 0)
 
         -- For all lights, what is the direction and distance from the light
-        -- source to the surface?
+        -- source to the point on the surface?
         --
-        -- TLM: we have multiple uses of this term, which means this replicated
-        --      array will be created as a manifest array in memory. Disaster!
+        -- TLM: we have multiple uses of the 'dirLights' term, which means this
+        --      replicated array will be created as a manifest array in memory.
         --
         (dirLights, distLights)
           = A.unzip
@@ -84,7 +93,7 @@ applyLighting objects lights points normals
                       (A.replicate (lift (Any :. n_l)) points)
 
         -- For all lights, find the closest object to that light in the
-        -- direction of the vector from the light to the point.
+        -- direction of the vector from the light to the surface point.
         obstructions
           = let dist_sph = A.zipWith3 distanceToSphere
                               (A.replicate (lift (sh  :. n_l :. All))   spheres)
