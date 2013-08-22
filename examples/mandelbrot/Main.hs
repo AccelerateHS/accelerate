@@ -71,7 +71,7 @@ main
 
 
         unless (P.null rest) $
-          putStrLn $ "Warning: unrecognized options: " ++ show rest
+          putStrLn $ "Warning: unrecognized options: " P.++ show rest
 
         mandel
 

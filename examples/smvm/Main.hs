@@ -40,9 +40,9 @@ main = withSystemRandom $ \gen -> do
 
       backend   = get configBackend conf
 
-  putStrLn $ "Reading matrix: " ++ fileIn
-  putStrLn $ "  with shape: " ++ shows (V.length segd') " x " ++ shows cols " and "
-                              ++ shows (V.length svec') " entries\n"
+  putStrLn $ "Reading matrix: " P.++ fileIn
+  putStrLn $ "  with shape: " P.++ shows (V.length segd') " x " P.++ shows cols " and "
+                              P.++ shows (V.length svec') " entries\n"
 
   -- Benchmark
   --

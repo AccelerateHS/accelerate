@@ -156,7 +156,7 @@ options =
   ]
   where
     parse f x           = set f (read x)
-    describe f msg      = msg ++ " (" ++ show (get f defaults) ++ ")"
+    describe f msg      = msg P.++ " (" P.++ show (get f defaults) P.++ ")"
 
     init_checks         = set setupDensity  (FromFunction makeDensity_checks)
                         . set setupVelocity (FromFunction makeField_empty)

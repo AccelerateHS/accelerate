@@ -64,7 +64,7 @@ test_map opt = testGroup "map" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" ++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (dim sh))
           [ testProperty "abs"    (test_abs    :: Array sh a -> Property)
           , testProperty "plus"   (test_plus   :: a -> Array sh a -> Property)
           , testProperty "square" (test_square :: Array sh a -> Property)
@@ -103,7 +103,7 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" ++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (dim sh))
           [ testProperty "zip"  (test_zip  :: Array sh a -> Array sh a -> Property)
           , testProperty "plus" (test_plus :: Array sh a -> Array sh a -> Property)
           , testProperty "min"  (test_min  :: Array sh a -> Array sh a -> Property)
