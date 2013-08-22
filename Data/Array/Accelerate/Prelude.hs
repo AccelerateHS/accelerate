@@ -77,7 +77,7 @@ import Data.Array.Accelerate.Type
 -- Map-like composites
 -- -------------------
 
--- | Zip three arrays with the given function
+-- | Zip three arrays with the given function, analogous to 'zipWith'.
 --
 zipWith3 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
          => (Exp a -> Exp b -> Exp c -> Exp d)
@@ -89,7 +89,7 @@ zipWith3 f as bs cs
   = generate (shape as `intersect` shape bs `intersect` shape cs)
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix))
 
--- | Zip four arrays with the given function
+-- | Zip four arrays with the given function, analogous to 'zipWith'.
 --
 zipWith4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
          => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e)
@@ -103,7 +103,7 @@ zipWith4 f as bs cs ds
               shape cs `intersect` shape ds)
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix))
 
--- | Zip five arrays with the given function
+-- | Zip five arrays with the given function, analogous to 'zipWith'.
 --
 zipWith5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
          => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f)
