@@ -85,7 +85,7 @@ test_permute opt = testGroup "permute" $ catMaybes
       ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
-        testDim sh = testProperty ("DIM" ++ show (dim sh)) (push_fill :: Array sh e -> Property)
+        testDim sh = testProperty ("DIM" P.++ show (dim sh)) (push_fill :: Array sh e -> Property)
 
         push_fill xs =
           let xs'   = use xs

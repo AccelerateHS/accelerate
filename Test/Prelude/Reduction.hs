@@ -59,7 +59,7 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
-        testDim sh = testGroup ("DIM" ++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (dim sh))
           [
             testProperty "sum"             (test_sum  :: Array sh e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
@@ -111,7 +111,7 @@ test_fold opt = testGroup "fold" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
-        testDim sh = testGroup ("DIM" ++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (dim sh))
           [
             testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
@@ -163,7 +163,7 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
-        testDim sh = testGroup ("DIM" ++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (dim sh))
           [
             testProperty "sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
