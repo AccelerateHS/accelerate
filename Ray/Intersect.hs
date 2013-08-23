@@ -5,7 +5,6 @@ module Ray.Intersect
 
 -- friends
 import Vec3
-import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
@@ -17,14 +16,14 @@ import Prelude                                                  as P
 -- | Of two intersection tests, take the nearest
 --
 nearest :: Exp (Bool, Float) -> Exp (Bool, Float) -> Exp (Bool, Float)
-nearest i1 i2
+nearest x y
   = let
         -- hit test and distance for each object
-        (h1, d1)        = unlift i1
-        (h2, d2)        = unlift i2     :: (Exp Bool, Exp Float)
+        (h1, d1)        = unlift x
+        (h2, d2)        = unlift y      :: (Exp Bool, Exp Float)
     in
     h1 &&* h2 ? ( lift (h1, min d1 d2), -- both hit, select the closest
-    h1        ? ( i1, i2 ) )            -- just the one that intersects
+    h1        ? ( x, y ) )              -- just the one that intersects
 
 
 -- Determine the closest intersection point (if any) for a gang of rays.
@@ -38,31 +37,37 @@ nearest i1 i2
 -- https://developer.nvidia.com/content/thinking-parallel-part-iii-tree-construction-gpu
 --
 intersectRays
-    :: Acc Objects                              -- objects in the scene
-    -> Acc (Array DIM2 Position)                -- source of each ray
-    -> Acc (Array DIM2 Direction)               -- direction of each ray
-    -> Acc (Array DIM2 (Bool, Float))           -- distance to the closest object
-intersectRays objects points directions
+    :: Elt object
+    => (Exp object -> Exp Position -> Exp Direction -> Exp (Bool, Float))
+    -> Acc (Array DIM1 object)          -- objects to test
+    -> Acc (Array DIM2 Position)        -- source of each ray
+    -> Acc (Array DIM2 Direction)       -- direction of each ray
+    -> Acc (Array DIM2 ( Bool           -- was there was an intersection?
+                       , Float          -- distance to object from the point in the direction of the normal
+                       , Int))          -- array index of the nearest intersected object
+intersectRays distanceToObject objects points normals
   = let
-        sh                      = shape points
+        sh              = shape points
+        n_obj           = unindex1 (shape objects)
 
-        (spheres, planes)       = unlift objects
-        n_sph                   = unindex1 (shape spheres)
-        n_pln                   = unindex1 (shape planes)
-        miss                    = constant (False, 0)
+        intersects
+          = let obj'    = A.replicate (lift (sh  :. All))   objects
+                pts'    = A.replicate (lift (Any :. n_obj)) points
+                dirs'   = A.replicate (lift (Any :. n_obj)) normals
+            in
+            A.generate (lift (sh :. n_obj))
+                       (\ix -> let _ :. i       = unlift ix     :: Exp DIM2 :. Exp Int
+                                   (hit, dist)  = unlift $ distanceToObject (obj' ! ix) (pts' ! ix) (dirs' ! ix)        :: (Exp Bool, Exp Float)
+                               in
+                               lift (hit, dist, i))
 
-        -- Intersections of all rays with the spheres and planes in the scene
-        intersect_sph
-          = A.zipWith3 distanceToSphere
-                       (A.replicate (lift (sh  :. All))   spheres)
-                       (A.replicate (lift (Any :. n_sph)) points)
-                       (A.replicate (lift (Any :. n_sph)) directions)
-
-        intersect_pln
-          = A.zipWith3 distanceToPlane
-                       (A.replicate (lift (sh  :. All))   planes)
-                       (A.replicate (lift (Any :. n_pln)) points)
-                       (A.replicate (lift (Any :. n_pln)) directions)
-    in
-    A.fold nearest miss (intersect_sph A.++ intersect_pln)
+        miss            = constant (False, 0, 0)
+        nearest' x y
+          = let (h1, d1, _) = unlift x  :: (Exp Bool, Exp Float, Exp Int)
+                (h2, d2, _) = unlift y  :: (Exp Bool, Exp Float, Exp Int)
+            in
+            h1 &&* h2 ? ( d1 <* d2 ? (x, y)     -- both objects intersect; take the nearest
+                        , h1 ?       (x, y) )   -- only one object intersects
+     in
+     A.fold nearest' miss intersects
 
