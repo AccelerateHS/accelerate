@@ -393,7 +393,7 @@ encloseSep left right p ds =
   case ds of
     []  -> left <> right
     [d] -> left <> d <> right
-    _   -> left <> sep (punctuate p ds) <> right
+    _   -> cat (zipWith (<>) (left : repeat p) ds) <> right
 
 
 -- Auxiliary ops
