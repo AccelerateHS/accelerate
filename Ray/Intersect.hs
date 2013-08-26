@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 
 module Ray.Intersect
   where
@@ -26,6 +27,19 @@ nearest x y
     h1        ? ( x, y ) )              -- just the one that intersects
 
 
+nearest' :: forall a. Elt a
+         => Exp (Bool, Float, a)
+         -> Exp (Bool, Float, a)
+         -> Exp (Bool, Float, a)
+nearest' x y
+  = let
+        (h1, d1, _ :: Exp a) = unlift x
+        (h2, d2, _ :: Exp a) = unlift y
+    in
+    h1 &&* h2 ? ( d1 <* d2 ? (x, y)     -- both objects intersect; take the nearest
+                , h1 ?       (x, y) )   -- only one object intersects
+
+
 -- Determine the closest intersection point (if any) for a gang of rays.
 --
 -- This tests all objects for each ray and just takes the minimum. To scale to
@@ -49,25 +63,21 @@ intersectRays distanceToObject objects points normals
   = let
         sh              = shape points
         n_obj           = unindex1 (shape objects)
+        miss            = constant (False, 0, 0)
 
         intersects
-          = let obj'    = A.replicate (lift (sh  :. All))   objects
-                pts'    = A.replicate (lift (Any :. n_obj)) points
-                dirs'   = A.replicate (lift (Any :. n_obj)) normals
+          = let objs    = A.replicate (lift (sh  :. All))   objects
+                pts     = A.replicate (lift (Any :. n_obj)) points
+                dirs    = A.replicate (lift (Any :. n_obj)) normals
             in
             A.generate (lift (sh :. n_obj))
-                       (\ix -> let _ :. i       = unlift ix     :: Exp DIM2 :. Exp Int
-                                   (hit, dist)  = unlift $ distanceToObject (obj' ! ix) (pts' ! ix) (dirs' ! ix)        :: (Exp Bool, Exp Float)
+                       (\ix -> let _ :. i       = unlift ix :: Exp DIM2 :. Exp Int
+                                   obj          = objs ! ix
+                                   pt           = pts  ! ix
+                                   dir          = dirs ! ix
+                                   (hit, dist)  = unlift $ distanceToObject obj pt dir :: (Exp Bool, Exp Float)
                                in
                                lift (hit, dist, i))
-
-        miss            = constant (False, 0, 0)
-        nearest' x y
-          = let (h1, d1, _) = unlift x  :: (Exp Bool, Exp Float, Exp Int)
-                (h2, d2, _) = unlift y  :: (Exp Bool, Exp Float, Exp Int)
-            in
-            h1 &&* h2 ? ( d1 <* d2 ? (x, y)     -- both objects intersect; take the nearest
-                        , h1 ?       (x, y) )   -- only one object intersects
      in
      A.fold nearest' miss intersects
 
