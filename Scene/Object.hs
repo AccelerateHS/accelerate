@@ -25,7 +25,7 @@ import Data.Typeable
 
 -- | All objects in the scene
 --
-type Objects = (Vector Sphere, Vector Plane)
+type Objects = (Array DIM1 Sphere, Array DIM1 Plane)
 
 
 -- | Objects in the world. Accelerate does not have sum types, so define each

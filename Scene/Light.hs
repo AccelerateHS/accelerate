@@ -29,6 +29,8 @@ import Data.Typeable
 data Light = Light Position Color
   deriving (Eq, Show, Typeable)
 
+type Lights = Array DIM1 Light
+
 lightPos   :: Exp Light -> Exp Position
 lightColor :: Exp Light -> Exp Color
 
@@ -66,7 +68,7 @@ colorOfLight light point normal
 --
 applyLighting
     :: Acc Objects
-    -> Acc (Vector Light)
+    -> Acc Lights
     -> Acc (Array DIM2 Position)
     -> Acc (Array DIM2 Direction)
     -> Acc (Array DIM2 Color)
