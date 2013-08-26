@@ -255,7 +255,7 @@ convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 -- number of combinations that need to be considered.
 --
 type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
-type ElimAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
+type ElimAcc  acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Bool
 
 embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
 embedOpenAcc fuseAcc (OpenAcc pacc) =
@@ -266,8 +266,22 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
     -- into the use site, but it is likely advantageous to be far more
     -- aggressive here. SEE: [Sharing vs. Fusion]
     --
-    elimOpenAcc :: Idx aenv s -> OpenAcc aenv t -> Bool
-    elimOpenAcc v acc = count False v acc <= lIMIT
+    -- As a special case, look for the definition of 'unzip' applied to manifest
+    -- data, which is defined in the prelude as a map projecting out the
+    -- appropriate element.
+    --
+    elimOpenAcc :: ElimAcc OpenAcc
+    elimOpenAcc bnd body
+      | Map f a                 <- extract bnd
+      , Avar _                  <- extract a
+      , Lam (Body (Prj _ _))    <- f
+      = True
+
+      | count False ZeroIdx body <= lIMIT
+      = True
+
+      | otherwise
+      = False
       where
         lIMIT = 1
 
@@ -995,7 +1009,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- eliminated. This problem occurred in the canny program.
   --
   | Embed env0 cc0      <- embedAcc acc0
-  , False               <- elimAcc ZeroIdx (computeAcc (Embed env0 cc0))
+  , False               <- elimAcc (computeAcc (Embed env1 cc1)) (computeAcc (Embed env0 cc0))
   , acc1                <- compute (Embed env1 cc1)
   = Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
 
