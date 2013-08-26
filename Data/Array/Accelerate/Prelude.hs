@@ -16,11 +16,11 @@
 module Data.Array.Accelerate.Prelude (
 
   -- * Zipping
-  zipWith3, zipWith4, zipWith5,
-  zip, zip3, zip4, zip5,
+  zipWith3, zipWith4, zipWith5, zipWith6, zipWith7, zipWith8, zipWith9,
+  zip, zip3, zip4, zip5, zip6, zip7, zip8, zip9,
 
   -- * Unzipping
-  unzip, unzip3, unzip4, unzip5,
+  unzip, unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9,
 
   -- * Reductions
   foldAll, fold1All,
@@ -118,6 +118,82 @@ zipWith5 f as bs cs ds es
                        `intersect` shape ds `intersect` shape es)
              (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix))
 
+-- | Zip six arrays with the given function, analogous to 'zipWith'.
+--
+zipWith6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+         -> Acc (Array sh f)
+         -> Acc (Array sh g)
+zipWith6 f as bs cs ds es fs
+  = generate (shape as `intersect` shape bs `intersect` shape cs
+                       `intersect` shape ds `intersect` shape es
+                       `intersect` shape fs)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix))
+
+-- | Zip seven arrays with the given function, analogous to 'zipWith'.
+--
+zipWith7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+         -> Acc (Array sh f)
+         -> Acc (Array sh g)
+         -> Acc (Array sh h)
+zipWith7 f as bs cs ds es fs gs
+  = generate (shape as `intersect` shape bs `intersect` shape cs
+                       `intersect` shape ds `intersect` shape es
+                       `intersect` shape fs `intersect` shape gs)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix))
+
+-- | Zip eight arrays with the given function, analogous to 'zipWith'.
+--
+zipWith8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+         -> Acc (Array sh f)
+         -> Acc (Array sh g)
+         -> Acc (Array sh h)
+         -> Acc (Array sh i)
+zipWith8 f as bs cs ds es fs gs hs
+  = generate (shape as `intersect` shape bs `intersect` shape cs
+                       `intersect` shape ds `intersect` shape es
+                       `intersect` shape fs `intersect` shape gs
+                       `intersect` shape hs)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix))
+
+-- | Zip nine arrays with the given function, analogous to 'zipWith'.
+--
+zipWith9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
+         => (Exp a -> Exp b -> Exp c -> Exp d -> Exp e -> Exp f -> Exp g -> Exp h -> Exp i -> Exp j)
+         -> Acc (Array sh a)
+         -> Acc (Array sh b)
+         -> Acc (Array sh c)
+         -> Acc (Array sh d)
+         -> Acc (Array sh e)
+         -> Acc (Array sh f)
+         -> Acc (Array sh g)
+         -> Acc (Array sh h)
+         -> Acc (Array sh i)
+         -> Acc (Array sh j)
+zipWith9 f as bs cs ds es fs gs hs is
+  = generate (shape as `intersect` shape bs `intersect` shape cs
+                       `intersect` shape ds `intersect` shape es
+                       `intersect` shape fs `intersect` shape gs
+                       `intersect` shape hs `intersect` shape is)
+             (\ix -> f (as ! ix) (bs ! ix) (cs ! ix) (ds ! ix) (es ! ix) (fs ! ix) (gs ! ix) (hs ! ix) (is ! ix))
+
 
 -- | Combine the elements of two arrays pairwise.  The shape of the result is
 -- the intersection of the two argument shapes.
@@ -147,7 +223,6 @@ zip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
      -> Acc (Array sh (a, b, c, d))
 zip4 = zipWith4 (\a b c d -> lift (a,b,c,d))
 
-
 -- | Take five arrays and return an array of five-tuples, analogous to zip.
 --
 zip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
@@ -158,6 +233,60 @@ zip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
      -> Acc (Array sh e)
      -> Acc (Array sh (a, b, c, d, e))
 zip5 = zipWith5 (\a b c d e -> lift (a,b,c,d,e))
+
+-- | Take six arrays and return an array of six-tuples, analogous to zip.
+--
+zip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh e)
+     -> Acc (Array sh f)
+     -> Acc (Array sh (a, b, c, d, e, f))
+zip6 = zipWith6 (\a b c d e f -> lift (a,b,c,d,e,f))
+
+-- | Take seven arrays and return an array of seven-tuples, analogous to zip.
+--
+zip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh e)
+     -> Acc (Array sh f)
+     -> Acc (Array sh g)
+     -> Acc (Array sh (a, b, c, d, e, f, g))
+zip7 = zipWith7 (\a b c d e f g -> lift (a,b,c,d,e,f,g))
+
+-- | Take seven arrays and return an array of seven-tuples, analogous to zip.
+--
+zip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh e)
+     -> Acc (Array sh f)
+     -> Acc (Array sh g)
+     -> Acc (Array sh h)
+     -> Acc (Array sh (a, b, c, d, e, f, g, h))
+zip8 = zipWith8 (\a b c d e f g h -> lift (a,b,c,d,e,f,g,h))
+
+-- | Take seven arrays and return an array of seven-tuples, analogous to zip.
+--
+zip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+     => Acc (Array sh a)
+     -> Acc (Array sh b)
+     -> Acc (Array sh c)
+     -> Acc (Array sh d)
+     -> Acc (Array sh e)
+     -> Acc (Array sh f)
+     -> Acc (Array sh g)
+     -> Acc (Array sh h)
+     -> Acc (Array sh i)
+     -> Acc (Array sh (a, b, c, d, e, f, g, h, i))
+zip9 = zipWith9 (\a b c d e f g h i -> lift (a,b,c,d,e,f,g,h,i))
 
 
 -- | The converse of 'zip', but the shape of the two results is identical to the
@@ -175,14 +304,9 @@ unzip3 :: (Shape sh, Elt a, Elt b, Elt c)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c))
 unzip3 xs = (map get1 xs, map get2 xs, map get3 xs)
   where
-    get1 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp a
-    get1 x = let (a, _ :: Exp b, _ :: Exp c) = unlift x in a
-
-    get2 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp b
-    get2 x = let (_ :: Exp a, b, _ :: Exp c) = unlift x in b
-
-    get3 :: forall a b c. (Elt a, Elt b, Elt c) => Exp (a,b,c) -> Exp c
-    get3 x = let (_ :: Exp a, _ :: Exp b, c) = unlift x in c
+    get1 x = let (a,_,_) = untup3 x in a
+    get2 x = let (_,b,_) = untup3 x in b
+    get3 x = let (_,_,c) = untup3 x in c
 
 
 -- | Take an array of quadruples and return four arrays, analogous to unzip.
@@ -192,17 +316,10 @@ unzip4 :: (Shape sh, Elt a, Elt b, Elt c, Elt d)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d))
 unzip4 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs)
   where
-    get1 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp a
-    get1 x = let (a, _ :: Exp b, _ :: Exp c, _ :: Exp d) = unlift x in a
-
-    get2 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp b
-    get2 x = let (_ :: Exp a, b, _ :: Exp c, _ :: Exp d) = unlift x in b
-
-    get3 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp c
-    get3 x = let (_ :: Exp a, _ :: Exp b, c, _ :: Exp d) = unlift x in c
-
-    get4 :: forall a b c d. (Elt a, Elt b, Elt c, Elt d) => Exp (a,b,c,d) -> Exp d
-    get4 x = let (_ :: Exp a, _ :: Exp b, _ :: Exp c, d) = unlift x in d
+    get1 x = let (a,_,_,_) = untup4 x in a
+    get2 x = let (_,b,_,_) = untup4 x in b
+    get3 x = let (_,_,c,_) = untup4 x in c
+    get4 x = let (_,_,_,d) = untup4 x in d
 
 -- | Take an array of 5-tuples and return five arrays, analogous to unzip.
 --
@@ -211,20 +328,86 @@ unzip5 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e)
        -> (Acc (Array sh a), Acc (Array sh b), Acc (Array sh c), Acc (Array sh d), Acc (Array sh e))
 unzip5 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs)
   where
-    get1 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp a
-    get1 x = let (a,_,_,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in a
+    get1 x = let (a,_,_,_,_) = untup5 x in a
+    get2 x = let (_,b,_,_,_) = untup5 x in b
+    get3 x = let (_,_,c,_,_) = untup5 x in c
+    get4 x = let (_,_,_,d,_) = untup5 x in d
+    get5 x = let (_,_,_,_,e) = untup5 x in e
 
-    get2 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp b
-    get2 x = let (_,b,_,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in b
+-- | Take an array of 6-tuples and return six arrays, analogous to unzip.
+--
+unzip6 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f)
+       => Acc (Array sh (a, b, c, d, e, f))
+       -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
+          , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f))
+unzip6 xs = (map get1 xs, map get2 xs, map get3 xs, map get4 xs, map get5 xs, map get6 xs)
+  where
+    get1 x = let (a,_,_,_,_,_) = untup6 x in a
+    get2 x = let (_,b,_,_,_,_) = untup6 x in b
+    get3 x = let (_,_,c,_,_,_) = untup6 x in c
+    get4 x = let (_,_,_,d,_,_) = untup6 x in d
+    get5 x = let (_,_,_,_,e,_) = untup6 x in e
+    get6 x = let (_,_,_,_,_,f) = untup6 x in f
 
-    get3 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp c
-    get3 x = let (_,_,c,_,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in c
+-- | Take an array of 7-tuples and return seven arrays, analogous to unzip.
+--
+unzip7 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
+       => Acc (Array sh (a, b, c, d, e, f, g))
+       -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
+          , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
+          , Acc (Array sh g))
+unzip7 xs = ( map get1 xs, map get2 xs, map get3 xs
+            , map get4 xs, map get5 xs, map get6 xs
+            , map get7 xs )
+  where
+    get1 x = let (a,_,_,_,_,_,_) = untup7 x in a
+    get2 x = let (_,b,_,_,_,_,_) = untup7 x in b
+    get3 x = let (_,_,c,_,_,_,_) = untup7 x in c
+    get4 x = let (_,_,_,d,_,_,_) = untup7 x in d
+    get5 x = let (_,_,_,_,e,_,_) = untup7 x in e
+    get6 x = let (_,_,_,_,_,f,_) = untup7 x in f
+    get7 x = let (_,_,_,_,_,_,g) = untup7 x in g
 
-    get4 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp d
-    get4 x = let (_,_,_,d,_) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in d
+-- | Take an array of 8-tuples and return eight arrays, analogous to unzip.
+--
+unzip8 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
+       => Acc (Array sh (a, b, c, d, e, f, g, h))
+       -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
+          , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
+          , Acc (Array sh g), Acc (Array sh h) )
+unzip8 xs = ( map get1 xs, map get2 xs, map get3 xs
+            , map get4 xs, map get5 xs, map get6 xs
+            , map get7 xs, map get8 xs )
+  where
+    get1 x = let (a,_,_,_,_,_,_,_) = untup8 x in a
+    get2 x = let (_,b,_,_,_,_,_,_) = untup8 x in b
+    get3 x = let (_,_,c,_,_,_,_,_) = untup8 x in c
+    get4 x = let (_,_,_,d,_,_,_,_) = untup8 x in d
+    get5 x = let (_,_,_,_,e,_,_,_) = untup8 x in e
+    get6 x = let (_,_,_,_,_,f,_,_) = untup8 x in f
+    get7 x = let (_,_,_,_,_,_,g,_) = untup8 x in g
+    get8 x = let (_,_,_,_,_,_,_,h) = untup8 x in h
 
-    get5 :: forall a b c d e. (Elt a, Elt b, Elt c, Elt d, Elt e) => Exp (a,b,c,d,e) -> Exp e
-    get5 x = let (_,_,_,_,e) = unlift x :: (Exp a, Exp b, Exp c, Exp d, Exp e) in e
+-- | Take an array of 8-tuples and return eight arrays, analogous to unzip.
+--
+unzip9 :: (Shape sh, Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
+       => Acc (Array sh (a, b, c, d, e, f, g, h, i))
+       -> ( Acc (Array sh a), Acc (Array sh b), Acc (Array sh c)
+          , Acc (Array sh d), Acc (Array sh e), Acc (Array sh f)
+          , Acc (Array sh g), Acc (Array sh h), Acc (Array sh i))
+unzip9 xs = ( map get1 xs, map get2 xs, map get3 xs
+            , map get4 xs, map get5 xs, map get6 xs
+            , map get7 xs, map get8 xs, map get9 xs )
+  where
+    get1 x = let (a,_,_,_,_,_,_,_,_) = untup9 x in a
+    get2 x = let (_,b,_,_,_,_,_,_,_) = untup9 x in b
+    get3 x = let (_,_,c,_,_,_,_,_,_) = untup9 x in c
+    get4 x = let (_,_,_,d,_,_,_,_,_) = untup9 x in d
+    get5 x = let (_,_,_,_,e,_,_,_,_) = untup9 x in e
+    get6 x = let (_,_,_,_,_,f,_,_,_) = untup9 x in f
+    get7 x = let (_,_,_,_,_,_,g,_,_) = untup9 x in g
+    get8 x = let (_,_,_,_,_,_,_,h,_) = untup9 x in h
+    get9 x = let (_,_,_,_,_,_,_,_,i) = untup9 x in i
 
 
 -- Reductions

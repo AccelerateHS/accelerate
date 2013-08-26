@@ -106,11 +106,11 @@ module Data.Array.Accelerate (
   L.map,
 
   -- *** Zipping
-  L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5,
-  P.zip, P.zip3, P.zip4, P.zip5,
+  L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,
+  P.zip, P.zip3, P.zip4, P.zip5, P.zip6, P.zip7, P.zip8, P.zip9,
 
   -- *** Unzipping
-  P.unzip, P.unzip3, P.unzip4, P.unzip5,
+  P.unzip, P.unzip3, P.unzip4, P.unzip5, P.unzip6, P.unzip7, P.unzip8, P.unzip9,
 
   -- ** Working with predicates
   -- *** Filtering
