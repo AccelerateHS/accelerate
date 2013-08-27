@@ -82,8 +82,8 @@ traceRays lIMIT ambient objects lights = go 0
                         (h2, d2, i2)            = unlift pln
 
                         defaults                = lift (dir, black, constant 0)
-                        hit_sph                 = h1 ? (hitSphere (spheres ! index1 i1) d1 orig dir, defaults)
-                        hit_pln                 = h2 ? (hitPlane  (planes  ! index1 i2) d2 orig dir, defaults)
+                        hit_sph                 = h1 ? (hitSphere     (spheres ! index1 i1) d1 orig dir, defaults)
+                        hit_pln                 = h2 ? (hitPlaneCheck (planes  ! index1 i2) d2 orig dir, defaults)
 
                         (hit, dist, x)          = unlift $ nearest' (lift (h1, d1, hit_sph)) (lift (h2, d2, hit_pln))
                         (normal, color, shine)  = unlift x
@@ -145,4 +145,16 @@ hitPlane pln dist orig dir
         shine   = planeShine pln
     in
     lift (normal, color, shine)
+
+hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Direction, Color, Float)
+hitPlaneCheck pln dist orig dir
+  = let
+        point   = orig + dist .* dir
+        normal  = planeCheckNormal pln
+        color   = checkers point
+        shine   = planeCheckShine pln
+    in
+    lift (normal, color, shine)
+
+
 
