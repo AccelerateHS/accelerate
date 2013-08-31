@@ -980,7 +980,7 @@ zipWithD f cc1 cc0
 --     in <bound term>
 --   in <body term>
 --
-aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+aletD :: (Kit acc, Arrays arrs, Arrays brrs)
       => EmbedAcc acc
       -> ElimAcc  acc
       ->          acc aenv        arrs
@@ -1000,6 +1000,24 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
 
+  -- Ensure we only call 'embedAcc' once on the body expression
+  --
+  | otherwise
+  = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
+  where
+    subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
+    subTop t ZeroIdx       = t
+    subTop _ (SuccIdx idx) = Avar idx
+
+
+aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+       => EmbedAcc acc
+       -> ElimAcc  acc
+       -> Embed    acc aenv         arrs
+       -> Embed    acc (aenv, arrs) brrs
+       -> Embed    acc aenv         brrs
+aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
+
   -- let-binding
   -- -----------
   --
@@ -1008,10 +1026,10 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- embedAcc. If we don't we can be left with dead terms that don't get
   -- eliminated. This problem occurred in the canny program.
   --
-  | Embed env0 cc0      <- embedAcc acc0
-  , False               <- elimAcc (computeAcc (Embed env1 cc1)) (computeAcc (Embed env0 cc0))
-  , acc1                <- compute (Embed env1 cc1)
-  = Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
+  | acc1                <- compute (Embed env1 cc1)
+  , False               <- elimAcc (inject acc1) acc0
+  = Stats.ruleFired "aletD/bind"
+  $ Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
 
   -- let-elimination
   -- ---------------
@@ -1029,6 +1047,9 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
     subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
     subTop t ZeroIdx       = t
     subTop _ (SuccIdx idx) = Avar idx
+
+    acc0 = computeAcc (Embed env0 cc0)
+
 
     -- The second part of let-elimination. Splitting into two steps exposes the
     -- extra type variables, and ensures we don't do extra work manipulating the
