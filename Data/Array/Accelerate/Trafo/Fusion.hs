@@ -996,7 +996,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
 
@@ -1004,10 +1004,6 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   --
   | otherwise
   = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
-  where
-    subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
 
 
 aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
@@ -1044,12 +1040,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       Yield{}   -> eliminate env1 cc1 acc0'
 
   where
-    subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
-
     acc0 = computeAcc (Embed env0 cc0)
-
 
     -- The second part of let-elimination. Splitting into two steps exposes the
     -- extra type variables, and ensures we don't do extra work manipulating the
@@ -1072,7 +1063,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         elim sh1 f1
           | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
           , f1'                 <- weakenFA rebuildAcc SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in

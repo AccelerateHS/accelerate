@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Renaming & Substitution
   inline, substitute, compose,
+  subTop, subAtop,
 
   -- ** Weakening
   (:>),
@@ -76,10 +77,6 @@ inline :: Elt t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
 inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
-  where
-    subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
-    subTop s ZeroIdx      = s
-    subTop _ (SuccIdx ix) = Var ix
 
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
@@ -107,6 +104,15 @@ compose :: Elt c
         -> PreOpenFun acc env aenv (a -> c)
 compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute f g
 compose _              _              = error "compose: impossible evaluation"
+
+
+subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
+subTop s ZeroIdx      = s
+subTop _ (SuccIdx ix) = Var ix
+
+subAtop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv, s) t -> PreOpenAcc acc aenv t
+subAtop t ZeroIdx       = t
+subAtop _ (SuccIdx idx) = Avar idx
 
 
 -- NOTE: [Weakening]
