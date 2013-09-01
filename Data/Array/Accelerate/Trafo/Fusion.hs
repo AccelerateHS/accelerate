@@ -275,7 +275,7 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
       | Map f a                 <- extract bnd
       , Avar _                  <- extract a
       , Lam (Body (Prj _ _))    <- f
-      = True
+      = Stats.ruleFired "unzipD" True
 
       | count False ZeroIdx body <= lIMIT
       = True
