@@ -31,7 +31,7 @@ import Control.Applicative                              hiding ( Const )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
-import Data.Array.Accelerate.Type
+-- import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
@@ -124,8 +124,10 @@ recoverLoops
     -> PreOpenExp acc env     aenv a
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
-recoverLoops _ bnd e3
+recoverLoops _ _ _
+  = Nothing
 {--
+recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
   --   let x =
@@ -154,7 +156,6 @@ recoverLoops _ bnd e3
   , Just REFL           <- match f e3
   = Stats.ruleFired "loop recovery/merge" . Just
   $ Iterate (constant 1 `plus` n) f e1
---}
 
   | otherwise
   = Nothing
@@ -171,6 +172,7 @@ recoverLoops _ bnd e3
                 -> PreOpenExp acc (env,t) aenv g
                 -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL
+--}
 
 
 -- Walk a scalar expression applying simplifications to terms bottom-up.

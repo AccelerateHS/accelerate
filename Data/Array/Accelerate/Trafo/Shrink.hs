@@ -303,7 +303,7 @@ usesOfExp idx = countE
       Intersect sh sz           -> countE sh + countE sz
       Foreign _ _ e             -> countE e
 
-    countF :: forall env f. Idx env s -> PreOpenFun acc env aenv f -> Int
+    countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
     countF idx' (Lam  f) = countF (SuccIdx idx') f
     countF idx' (Body b) = usesOfExp idx' b
 
