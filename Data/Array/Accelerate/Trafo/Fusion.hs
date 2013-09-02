@@ -91,6 +91,11 @@ withSimplStats x = x
 --       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
 --       delayed nodes.
 --
+-- TLM: Note that there really is no ambiguity as to which state an array will
+--      be in following this process: an array will be either delayed or
+--      manifest, and the two helper functions are even named as such! We should
+--      encode this property in the type somehow...
+--
 convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
 convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
   where
