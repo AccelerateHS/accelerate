@@ -75,7 +75,7 @@ module Data.Array.Accelerate.Language (
   (>->),
 
   -- ** Array-level flow-control
-  cond, (?|),
+  (?|), acond,
 
   -- ** Lifting and Unlifting
   Lift(..), Unlift(..), lift1, lift2, ilift1, ilift2,
@@ -88,8 +88,8 @@ module Data.Array.Accelerate.Language (
   indexHead, indexTail, toIndex, fromIndex,
   intersect,
 
-  -- ** Conditional expressions
-  (?),
+  -- ** Flow-control
+  (?), cond,
 
   -- ** Array operations with a scalar result
   (!), (!!), the, null, shape, size, shapeSize,
@@ -541,18 +541,18 @@ infixl 1 >->
 
 -- | An array-level if-then-else construct.
 --
-cond :: (Arrays a)
-     => Exp Bool          -- ^if-condition
-     -> Acc a             -- ^then-array
-     -> Acc a             -- ^else-array
-     -> Acc a
-cond = Acc $$$ Acond
+acond :: Arrays a
+      => Exp Bool               -- ^ if-condition
+      -> Acc a                  -- ^ then-array
+      -> Acc a                  -- ^ else-array
+      -> Acc a
+acond = Acc $$$ Acond
 
--- | Infix version of 'cond'.
+-- | Infix version of 'acond'.
 --
 infix 0 ?|
 (?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
-c ?| (t, e) = cond c t e
+c ?| (t, e) = acond c t e
 
 
 -- Lifting surface expressions
@@ -1041,12 +1041,21 @@ intersect = Exp $$ Intersect
 -- Conditional expressions
 -- -----------------------
 
--- |Conditional expression. If the predicate evaluates to 'True', the first
+-- | A scalar-level if-then-else construct.
+--
+cond :: Elt t
+     => Exp Bool                -- ^ condition
+     -> Exp t                   -- ^ then-expression
+     -> Exp t                   -- ^ else-expression
+     -> Exp t
+cond = Exp $$$ Cond
+
+-- | An infix version of 'cond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
 --
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
-c ? (t, e) = Exp $ Cond c t e
+c ? (t, e) = cond c t e
 
 
 -- Array operations with a scalar result
