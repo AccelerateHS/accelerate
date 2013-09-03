@@ -251,34 +251,31 @@ void BodySystemAcc::update(float deltaTime)
     float* v[] = { m_deviceData.dVel };
     int shb[] = { m_numBodies * 4};
 
-    //Prepare for result
-    ResultArray resP;
-    ResultArray resV;
+    InputArray in[] = { {sht, (void**) t}, {sht, (void**) s}, {shb, (void**) p}, {shb, (void**) v} };
+
+    ResultArray out[2];
 
     //Run the computation
-    printf("bodies %d, time %f, tsp: %p, bp0: %p, bp1: %p, vp: %p, sz: %d\n", m_numBodies, deltaTime, m_timestep, m_deviceData.dPos[0], m_deviceData.dPos[1], m_deviceData.dVel, sizeof(int));
-    stepBodies_run(m_program, t, sht, s, sht, p, shb, v, shb, &resP, &resV);
-    printf("Out of HS\n");
+    runProgram(m_hndl, m_program, in, out);
 
     float* ptrP;
     float* ptrV;
 
-    getDevicePtrs(m_hndl, resP, &ptrP);
-    getDevicePtrs(m_hndl, resV, &ptrV);
+    getDevicePtrs(m_hndl, out[0], &ptrP);
+    getDevicePtrs(m_hndl, out[1], &ptrV);
 
     checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], ptrP, 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
     checkCudaErrors(cudaMemcpy(m_deviceData.dVel, ptrV, 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
 
     //free old data
-    freeResult(resP);
-    freeResult(resV);
+    freeResult(out[0]);
+    freeResult(out[1]);
 
     if (m_bUsePBO)
     {
         checkCudaErrors(cudaGraphicsUnmapResources(2, m_pGRes, 0));
     }
 
-    printf("Freed results\n");
     std::swap(m_currentRead, m_currentWrite);
 }
 

@@ -56,7 +56,6 @@ splitBodies bodies = A.lift (ps', vs')
     ps'            = uncurry3 interleave4 (A.unzip3 ps) ms
     vs'            = uncurry3 interleave4 (A.unzip3 vs) (A.fill (index1 (A.size bodies)) 0.0)
 
-
 interleave4 :: Elt e => Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e)
 interleave4 a b c d = generate sh swizzle
   where
@@ -81,4 +80,4 @@ deinterleave4 arr = generate (index1 $ A.size arr `div` 4) swizzle
                  in  lift (arr A.!! i, arr A.!! (i+1), arr A.!! (i+2), arr A.!! (i+3))
 
 -- Generate the exported version of stepBodies
-exportAfun1 'stepBodies
+exportAfun 'stepBodies "stepBodies_compile"
