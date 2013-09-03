@@ -1113,12 +1113,12 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         Index a sh
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" $ Let sh b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" . cvtE $ Let sh b
           | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (cvtE i)
 
       where
