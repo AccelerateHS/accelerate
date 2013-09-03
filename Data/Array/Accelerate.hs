@@ -62,10 +62,10 @@ module Data.Array.Accelerate (
 
   -- ** Accessors
   -- *** Indexing
-  (L.!), (L.!!), L.the,
+  (L.!), (L.!!), P.the,
 
   -- *** Shape information
-  L.null, L.shape, L.size, L.shapeSize,
+  P.null, L.shape, L.size, L.shapeSize,
 
   -- *** Extracting sub-arrays
   L.slice,
@@ -86,7 +86,7 @@ module Data.Array.Accelerate (
 
   -- ** Composition
   -- *** Flow control
-  (L.?|), L.acond,
+  (P.?|), L.acond,
 
   -- *** Pipelining
   (L.>->),
@@ -199,7 +199,7 @@ module Data.Array.Accelerate (
   -- >     -> lift   -> Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
-  L.Lift(..), L.Unlift(..), L.lift1, L.lift2, L.ilift1, L.ilift2,
+  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
 
   -- ** Operations
   --
@@ -213,10 +213,10 @@ module Data.Array.Accelerate (
   L.constant,
 
   -- *** Tuples
-  L.fst, L.snd, L.curry, L.uncurry,
+  P.fst, P.snd, P.curry, P.uncurry,
 
-  -- *** Conditional
-  (L.?), L.cond,
+  -- *** Flow control
+  (P.?), L.cond,
 
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,
@@ -231,7 +231,7 @@ module Data.Array.Accelerate (
   L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
+  P.index0, P.index1, P.unindex1, P.index2, P.unindex2,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
   L.intersect,

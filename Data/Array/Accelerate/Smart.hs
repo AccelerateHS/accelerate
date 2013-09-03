@@ -115,7 +115,7 @@ data PreAcc acc exp as where
                 -> acc arrs
                 -> PreAcc acc exp a
 
-  Acond         :: (Arrays as)
+  Acond         :: Arrays as
                 => exp Bool
                 -> acc as
                 -> acc as
