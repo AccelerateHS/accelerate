@@ -237,17 +237,18 @@ simplifyOpenExp env = first getAny . cvtE
               -> (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
     intersect (c1, sh1) (c2, sh2)
-      | getAny changed  = Stats.ruleFired "intersect" result
-      | otherwise       = result
+      | Nothing <- match sh sh' = Stats.ruleFired "intersect" (yes sh')
+      | otherwise               = (c1 <> c2, sh')
       where
-        sh              = leaves sh1 ++ leaves sh2
-        sh'             = nubBy (\x y -> isJust (match x y)) sh
-        changed         = Any (length sh /= length sh') <> c1 <> c2
-        result          = (changed, foldl1 Intersect sh')
+        sh      = Intersect sh1 sh2
+        sh'     = foldl1 Intersect
+                $ nubBy (\x y -> isJust (match x y))
+                $ leaves sh1 ++ leaves sh2
 
         leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
         leaves (Intersect x y)  = leaves x ++ leaves y
         leaves rest             = [rest]
+
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
