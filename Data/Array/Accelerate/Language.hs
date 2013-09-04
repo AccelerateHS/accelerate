@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
+{-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS -fno-warn-missing-methods #-}
 {-# OPTIONS -fno-warn-orphans         #-}
 -- |
