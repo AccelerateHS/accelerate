@@ -77,6 +77,7 @@ GCC             ?= g++
 EXTRA_NVCCFLAGS ?=
 EXTRA_LDFLAGS   ?=
 EXTRA_CCFLAGS   ?=
+EXTRA_GHCFLAGS  ?=
 
 # CUDA code generation flags
 GENCODE_SM10    := -gencode arch=compute_10,code=sm_10
@@ -126,8 +127,12 @@ endif
 
 
 # Common includes and paths for CUDA
-INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc -I '/usr/local/lib/ghc-7.6.2/include'
+INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc -I '/usr/lib/ghc/include'
 LDFLAGS       += $(LIBPATH_OPENGL)
+
+ifneq ($(DARWIN),)
+    LDFLAGS += -lSystem
+endif
 
 # Target rules
 all: build
@@ -144,10 +149,10 @@ render_particles.o: render_particles.cpp
 	$(GCC) $(CCFLAGS) $(EXTRA_CCFLAGS) $(INCLUDES) -o $@ -c $<
 
 Visualize.o: Visualize.hs
-	ghc -i.. $+ -Wall
+	ghc -i.. $+ -Wall $(EXTRA_GHCFLAGS)
 
 nbody: nbody.o bodysystemcuda.o render_particles.o Visualize.o
-	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lSystem -lgcc -package accelerate-cuda -threaded
+	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lgcc -package accelerate-cuda $(EXTRA_GHCFLAGS) -threaded
 
 run: build
 	./nbody
