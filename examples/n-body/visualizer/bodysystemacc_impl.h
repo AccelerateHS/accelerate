@@ -22,10 +22,6 @@
 
 #include <cuda_gl_interop.h>
 
-#include "HsFFI.h"
-
-#include "Visualize_stub.h"
-
 BodySystemAcc::BodySystemAcc(unsigned int numBodies, unsigned int p, unsigned int q, bool usePBO, bool useSysMem)
     : m_numBodies(numBodies),
       m_bInitialized(false),
@@ -247,29 +243,25 @@ void BodySystemAcc::update(float deltaTime)
     float* t[] = { m_timestep };
     float* s[] = { m_softening };
     int sht[] = { 0 }; //The timestep and softening factor is contained within a rank zero array
-    float* p[] = { m_deviceData.dPos[m_currentRead] };
-    float* v[] = { m_deviceData.dVel };
+    float* pv[] = { m_deviceData.dPos[m_currentRead], m_deviceData.dVel };
     int shb[] = { m_numBodies * 4};
 
-    InputArray in[] = { {sht, (void**) t}, {sht, (void**) s}, {shb, (void**) p}, {shb, (void**) v} };
+    InputArray in[] = { {sht, (void**) t}, {sht, (void**) s}, {shb, (void**) pv} };
 
-    ResultArray out[2];
+    ResultArray out;
 
     //Run the computation
-    runProgram(m_hndl, m_program, in, out);
+    runProgram(m_hndl, m_program, in, &out);
 
-    float* ptrP;
-    float* ptrV;
+    float* out_ptrs[] = { NULL, NULL};
 
-    getDevicePtrs(m_hndl, out[0], &ptrP);
-    getDevicePtrs(m_hndl, out[1], &ptrV);
+    getDevicePtrs(m_hndl, out, out_ptrs);
 
-    checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], ptrP, 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
-    checkCudaErrors(cudaMemcpy(m_deviceData.dVel, ptrV, 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+    checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+    checkCudaErrors(cudaMemcpy(m_deviceData.dVel, out_ptrs[1], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
 
     //free old data
-    freeResult(out[0]);
-    freeResult(out[1]);
+    freeResult(out);
 
     if (m_bUsePBO)
     {

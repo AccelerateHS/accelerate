@@ -16,68 +16,59 @@ import Data.Array.Accelerate.CUDA.Foreign.Export
 foreignAccModule
 
 -- The cuda sample's representation of data.
--- ------------------------------------------
-
--- |An array of float4s with the actual position stored in the first 3 components,
---   and the mass in the last.
-type Positions  = Vector Float
--- |An array of float4s with the last component undefined.
-type Velocities = Vector Float
+--
+-- Elements alternate between x, y, z and w with the left value being position and the right
+-- velocity. For the left w is the mass. For the right it is undefined.
+type ForeignBodies = Vector (Float, Float)
 
 -- |One iteration of the algorithm.
-stepBodies :: Acc (Scalar Time, Scalar R, Positions, Velocities) -> Acc (Positions, Velocities)
-stepBodies ts = splitBodies (stepBodies' dt eps bodies)
+stepBodies :: Acc (Scalar Time, Scalar R, ForeignBodies) -> Acc ForeignBodies
+stepBodies ts = toForeign (stepBodies' dt eps bodies)
   where
-    (dt, eps, ps, vs) = A.unlift ts :: (Acc (Scalar Time), Acc (Scalar R), Acc Positions, Acc Velocities)
+    (dt, eps, fs) = A.unlift ts :: (Acc (Scalar Time), Acc (Scalar R), Acc ForeignBodies)
 
     bodies :: Acc (Vector Body)
-    bodies = generateBodies $ lift (ps,vs)
+    bodies = generateBodies fs
 
     stepBodies' :: Acc (Scalar Time) -> Acc (Scalar R) -> Acc (Vector Body) -> Acc (Vector Body)
     stepBodies' dt epsilon = advanceBodies (Naive.calcAccels $ the epsilon) dt
 
-generateBodies :: Acc (Positions, Velocities) -> Acc (Vector Body)
-generateBodies ts = A.zip3 pms vs' as'
+generateBodies :: Acc ForeignBodies -> Acc (Vector Body)
+generateBodies fs = A.generate (A.index1 (A.size fs `div` 4)) swizzle
   where
-    (ps, vs)           = A.unlift ts
-    (xs, ys, zs, ms)   = A.unzip4 $ deinterleave4 ps
-    pms                = A.zip (A.zip3 xs ys zs) ms
-    (vxs, vys, vzs, _) = A.unzip4 $ deinterleave4 vs
-    vs'                = A.zip3 vxs vys vzs
-    as'                = A.fill (A.shape vs') (lift ((0,0,0) :: (Float, Float, Float)))
+    swizzle :: Exp DIM1 -> Exp Body
+    swizzle ix =
+      let i  = indexHead ix * 4
+          (p_x, v_x) = unlift (fs A.!! i) :: (Exp Float, Exp Float)
+          (p_y, v_y) = unlift (fs A.!! (i + 1)) :: (Exp Float, Exp Float)
+          (p_z, v_z) = unlift (fs A.!! (i + 2)) :: (Exp Float, Exp Float)
+          (m  , _)   = unlift (fs A.!! (i + 3)) :: (Exp Float, Exp Float)
+          p          = lift (p_x, p_y, p_z) :: Exp Position
+          v          = lift (v_x, v_y, v_z) :: Exp Velocity
+          pm         = lift (p, m) :: Exp PointMass
+          a          = lift (constant 0.0, constant 0.0, constant 0.0) :: Exp (Float, Float, Float)
+      in lift (pm, v, a)
 
-splitBodies :: Acc (Vector Body) -> Acc (Positions, Velocities)
-splitBodies bodies = A.lift (ps', vs')
+toForeign :: Acc (Vector Body) -> Acc ForeignBodies
+toForeign bodies = fs
   where
-    uncurry3 f (a,b,c) = f a b c
-
-    (pms, vs, _)   = A.unzip3 bodies
-    (ps, ms)       = A.unzip pms
-    ps'            = uncurry3 interleave4 (A.unzip3 ps) ms
-    vs'            = uncurry3 interleave4 (A.unzip3 vs) (A.fill (index1 (A.size bodies)) 0.0)
-
-interleave4 :: Elt e => Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e)
-interleave4 a b c d = generate sh swizzle
-  where
-    sh          = index1 (4 * A.size a)
-    swizzle ix  =
-      let i = indexHead ix
-          x = a A.!! (i `div` 4)
-          y = b A.!! (i `div` 4)
-          z = c A.!! (i `div` 4)
-          w = d A.!! (i `div` 4)
-          r = i `mod` 4
-      in
-      r ==* 0 ? (x,
-      r ==* 1 ? (y,
-      r ==* 2 ? (z,
-                 w)))
-
-deinterleave4 :: Elt e => Acc (Vector e) -> Acc (Vector (e,e,e,e))
-deinterleave4 arr = generate (index1 $ A.size arr `div` 4) swizzle
-  where
-    swizzle ix = let i = indexHead ix * 4
-                 in  lift (arr A.!! i, arr A.!! (i+1), arr A.!! (i+2), arr A.!! (i+3))
+    sh = A.index1 (4 * A.size bodies)
+    fs = A.generate sh swizzle
+      where
+        swizzle :: Exp DIM1 -> Exp (Float, Float)
+        swizzle ix =
+          let k = indexHead ix
+              i = k `div` 4
+              (pm, v, _) = unlift (bodies A.!! i) :: (Exp PointMass, Exp Velocity, Exp Accel)
+              (p, m)     = unlift pm :: (Exp Position, Exp Mass)
+              (p_x,p_y,p_z) = unlift p :: (Exp Float, Exp Float, Exp Float)
+              (v_x,v_y,v_z) = unlift v :: (Exp Float, Exp Float, Exp Float)
+              r = k `mod` 4
+          in
+          r ==* 0 ? (lift (p_x,v_x),
+          r ==* 1 ? (lift (p_y,v_y),
+          r ==* 2 ? (lift (p_z,v_z),
+                     lift (m,A.constant 0.0))))
 
 -- Generate the exported version of stepBodies
 exportAfun 'stepBodies "stepBodies_compile"
