@@ -65,6 +65,8 @@ class BodySystemAcc : public BodySystem<float>
         AccHandle m_hndl;
         AccProgram m_program;
 
+        ResultArray m_prevResult;
+
         float* m_timestep;
 
         bool m_bUsePBO;

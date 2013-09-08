@@ -1385,6 +1385,9 @@ main(int argc, char **argv)
         activeParams.m_velocityScale = 11.f;
     }
 
+    // Initialize Haskell runtime
+    hs_init(&argc, &argv);
+
     // Create the demo -- either double (fp64) or float (fp32, default) implementation
     NBodyDemo<float>::Create();
 

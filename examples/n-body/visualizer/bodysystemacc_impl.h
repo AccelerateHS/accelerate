@@ -115,13 +115,6 @@ void BodySystemAcc::_initialize(int numBodies)
         checkCudaErrors(cudaMalloc((void **)&m_deviceData.dVel, memSize));
     }
 
-    int argc = 0;
-    char *argv[] = {  NULL };
-    char **pargv = argv;
-
-    // Initialize Haskell runtime
-    hs_init(&argc, &pargv);
-
     m_ctx = NULL;
     cuCtxGetCurrent(&m_ctx);
 
@@ -140,6 +133,8 @@ void BodySystemAcc::_initialize(int numBodies)
     //Allocate space for timestep and softening factor
     checkCudaErrors(cudaMalloc((void **)&m_timestep, sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&m_softening, sizeof(float)));
+
+    m_prevResult = NULL;
     m_bInitialized = true;
 }
 
@@ -176,6 +171,7 @@ void BodySystemAcc::_finalize()
         }
     }
 
+    freeResult(m_prevResult);
     freeProgram(m_program);
     accelerateDestroy(m_hndl);
 
@@ -253,15 +249,24 @@ void BodySystemAcc::update(float deltaTime)
     //Run the computation
     runProgram(m_hndl, m_program, in, &out);
 
-    float* out_ptrs[] = { NULL, NULL};
+    float* out_ptrs[] = { NULL, NULL };
 
     getDevicePtrs(m_hndl, out, out_ptrs);
 
-    checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
-    checkCudaErrors(cudaMemcpy(m_deviceData.dVel, out_ptrs[1], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+    if (m_bUsePBO) {
+        //TODO: cudaMemcpy is _very_ slow here. Try to fix.
+        checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy(m_deviceData.dVel, out_ptrs[1], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+    } else {
+        m_deviceData.dPos[m_currentWrite] = out_ptrs[0];
+        m_deviceData.dVel = out_ptrs[1];
+    }
 
     //free old data
-    freeResult(out);
+    if (m_prevResult != NULL)
+        freeResult(m_prevResult);
+
+    m_prevResult = out;
 
     if (m_bUsePBO)
     {
