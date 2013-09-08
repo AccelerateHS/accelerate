@@ -444,6 +444,33 @@ Executable accelerate-hashcat
                         fclabels                >= 1.0,
                         mwc-random              >= 0.8
 
+-- FFT examples
+-- ------------
+
+Executable accelerate-fft
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/fft/src-acc lib
+  other-modules:        Config
+                        ParseArgs
+                        HighPass
+                        FFT
+
+  ghc-options:          -O2 -Wall -threaded
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.14
+
+  Build-depends:        accelerate              >= 0.14,
+                        accelerate-io           >= 0.14,
+                        accelerate-fft          >= 0.14,
+                        base                    == 4.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        filepath                >= 1.0
+
 
 source-repository head
   type:                 git
