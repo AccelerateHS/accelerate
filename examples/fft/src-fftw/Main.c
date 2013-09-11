@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <fftw3.h>
 #include "Timing.h"
 #include "BMP.h"
 
@@ -23,6 +24,9 @@ int main(int argc, char** argv)
 	char* algName		= argv[1];
 	char* fileNameIn	= argv[2];
 	char* fileNameOut	= argv[3];
+
+	fftw_init_threads();
+	fftw_plan_with_nthreads(5);
 
 	// Decide what algorithm to use.
 	void (*highpass2d)(int, int, u_int8_t*)	= 0;

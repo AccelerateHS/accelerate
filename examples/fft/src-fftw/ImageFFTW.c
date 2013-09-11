@@ -1,8 +1,10 @@
 
-#include <fftw3.h>
 #include <sys/types.h>
 #include <math.h>
+#include <fftw3.h>
 #include "BMP.h"
+
+#define PI 3.141592653589793238462643383
 
 // Perform FFT on a 2d image.
 void image_fftw(ImageRGB *image, double clipMag, u_int8_t *phase)
@@ -43,7 +45,7 @@ void image_fftw(ImageRGB *image, double clipMag, u_int8_t *phase)
 		image->blue[i]  = v;
 
 		double p        = atan(im/re);
-		double scale    = (p + M_PI) / (2*M_PI);
+		double scale    = (p + PI) / (2 * PI);
 		phase[i]        = round(scale*255);
 	}
 
