@@ -91,6 +91,11 @@ withSimplStats x = x
 --       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
 --       delayed nodes.
 --
+-- TLM: Note that there really is no ambiguity as to which state an array will
+--      be in following this process: an array will be either delayed or
+--      manifest, and the two helper functions are even named as such! We should
+--      encode this property in the type somehow...
+--
 convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
 convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
   where
@@ -256,7 +261,7 @@ convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 -- number of combinations that need to be considered.
 --
 type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
-type ElimAcc acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
+type ElimAcc  acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Bool
 
 embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
 embedOpenAcc fuseAcc (OpenAcc pacc) =
@@ -267,8 +272,22 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
     -- into the use site, but it is likely advantageous to be far more
     -- aggressive here. SEE: [Sharing vs. Fusion]
     --
-    elimOpenAcc :: Idx aenv s -> OpenAcc aenv t -> Bool
-    elimOpenAcc v acc = count False v acc <= lIMIT
+    -- As a special case, look for the definition of 'unzip' applied to manifest
+    -- data, which is defined in the prelude as a map projecting out the
+    -- appropriate element.
+    --
+    elimOpenAcc :: ElimAcc OpenAcc
+    elimOpenAcc bnd body
+      | Map f a                 <- extract bnd
+      , Avar _                  <- extract a
+      , Lam (Body (Prj _ _))    <- f
+      = Stats.ruleFired "unzipD" True
+
+      | count False ZeroIdx body <= lIMIT
+      = True
+
+      | otherwise
+      = False
       where
         lIMIT = 1
 
@@ -968,7 +987,7 @@ zipWithD f cc1 cc0
 --     in <bound term>
 --   in <body term>
 --
-aletD :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+aletD :: (Kit acc, Arrays arrs, Arrays brrs)
       => EmbedAcc acc
       -> ElimAcc  acc
       ->          acc aenv        arrs
@@ -984,9 +1003,23 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subTop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
+
+  -- Ensure we only call 'embedAcc' once on the body expression
+  --
+  | otherwise
+  = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
+
+
+aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+       => EmbedAcc acc
+       -> ElimAcc  acc
+       -> Embed    acc aenv         arrs
+       -> Embed    acc (aenv, arrs) brrs
+       -> Embed    acc aenv         brrs
+aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
   -- let-binding
   -- -----------
@@ -996,10 +1029,10 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- embedAcc. If we don't we can be left with dead terms that don't get
   -- eliminated. This problem occurred in the canny program.
   --
-  | Embed env0 cc0      <- embedAcc acc0
-  , False               <- elimAcc ZeroIdx (computeAcc (Embed env0 cc0))
-  , acc1                <- compute (Embed env1 cc1)
-  = Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
+  | acc1                <- compute (Embed env1 cc1)
+  , False               <- elimAcc (inject acc1) acc0
+  = Stats.ruleFired "aletD/bind"
+  $ Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
 
   -- let-elimination
   -- ---------------
@@ -1014,9 +1047,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
       Yield{}   -> eliminate env1 cc1 acc0'
 
   where
-    subTop :: forall aenv s t. Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
+    acc0 = computeAcc (Embed env0 cc0)
 
     -- The second part of let-elimination. Splitting into two steps exposes the
     -- extra type variables, and ensures we don't do extra work manipulating the
@@ -1039,7 +1070,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         elim sh1 f1
           | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
           , f1'                 <- weakenFA rebuildAcc SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
@@ -1085,12 +1116,12 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
 
         Index a sh
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" $ Let sh b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" . cvtE $ Let sh b
           | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (cvtE i)
 
       where

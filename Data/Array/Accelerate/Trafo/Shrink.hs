@@ -40,7 +40,6 @@ module Data.Array.Accelerate.Trafo.Shrink (
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Array.Sugar                ( Arrays )
 import Data.Array.Accelerate.Trafo.Substitution
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -243,8 +242,8 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subTop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subTop bnd) pbody
+  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
+  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
   | otherwise           = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -258,10 +257,6 @@ basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
     msg   = case uses of
       0 -> "dead acc"
       _ -> "inline acc"         -- forced inlining when lIMIT > 1
-
-    subTop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv,s) t -> PreOpenAcc acc aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
 
 
 -- Occurrence Counting

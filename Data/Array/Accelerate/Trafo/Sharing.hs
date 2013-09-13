@@ -471,6 +471,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           LinearIndex a i       -> AST.LinearIndex (cvtA a) (cvt i)
           Shape a               -> AST.Shape (cvtA a)
           ShapeSize e           -> AST.ShapeSize (cvt e)
+          Intersect sh1 sh2     -> AST.Intersect (cvt sh1) (cvt sh2)
           Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
 
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
@@ -1313,6 +1314,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             LinearIndex a i     -> reconstruct $ travAE LinearIndex a i
             Shape a             -> reconstruct $ travA Shape a
             ShapeSize e         -> reconstruct $ travE1 ShapeSize e
+            Intersect sh1 sh2   -> reconstruct $ travE2 Intersect sh1 sh2
             Foreign ff f e      -> reconstruct $ do
                                       (e', h) <- travE lvl e
                                       return  (Foreign ff f e', h+1)
@@ -1905,32 +1907,33 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
     scopesExp (UnscopedExp _ (ExpSharing sn pexp))
       = case pexp of
-          Tag i           -> reconstruct (Tag i) noNodeCounts
-          Const c         -> reconstruct (Const c) noNodeCounts
-          Tuple tup       -> let (tup', accCount) = travTup tup
-                             in
-                             reconstruct (Tuple tup') accCount
-          Prj i e         -> travE1 (Prj i) e
-          IndexNil        -> reconstruct IndexNil noNodeCounts
-          IndexCons ix i  -> travE2 IndexCons ix i
-          IndexHead i     -> travE1 IndexHead i
-          IndexTail ix    -> travE1 IndexTail ix
-          IndexAny        -> reconstruct IndexAny noNodeCounts
-          ToIndex sh ix   -> travE2 ToIndex sh ix
-          FromIndex sh e  -> travE2 FromIndex sh e
-          Cond e1 e2 e3   -> travE3 Cond e1 e2 e3
-          While p it i    -> let
-                               (p' , accCount1) = scopesFun1 p
-                               (it', accCount2) = scopesFun1 it
-                               (i' , accCount3) = scopesExp i
-                             in reconstruct (While p' it' i') (accCount1 +++ accCount2 +++ accCount3)
-          PrimConst c     -> reconstruct (PrimConst c) noNodeCounts
-          PrimApp p e     -> travE1 (PrimApp p) e
-          Index a e       -> travAE Index a e
-          LinearIndex a e -> travAE LinearIndex a e
-          Shape a         -> travA Shape a
-          ShapeSize e     -> travE1 ShapeSize e
-          Foreign ff f e  -> travE1 (Foreign ff f) e
+          Tag i                 -> reconstruct (Tag i) noNodeCounts
+          Const c               -> reconstruct (Const c) noNodeCounts
+          Tuple tup             -> let (tup', accCount) = travTup tup
+                                   in
+                                   reconstruct (Tuple tup') accCount
+          Prj i e               -> travE1 (Prj i) e
+          IndexNil              -> reconstruct IndexNil noNodeCounts
+          IndexCons ix i        -> travE2 IndexCons ix i
+          IndexHead i           -> travE1 IndexHead i
+          IndexTail ix          -> travE1 IndexTail ix
+          IndexAny              -> reconstruct IndexAny noNodeCounts
+          ToIndex sh ix         -> travE2 ToIndex sh ix
+          FromIndex sh e        -> travE2 FromIndex sh e
+          Cond e1 e2 e3         -> travE3 Cond e1 e2 e3
+          While p it i          -> let
+                                     (p' , accCount1) = scopesFun1 p
+                                     (it', accCount2) = scopesFun1 it
+                                     (i' , accCount3) = scopesExp i
+                                   in reconstruct (While p' it' i') (accCount1 +++ accCount2 +++ accCount3)
+          PrimConst c           -> reconstruct (PrimConst c) noNodeCounts
+          PrimApp p e           -> travE1 (PrimApp p) e
+          Index a e             -> travAE Index a e
+          LinearIndex a e       -> travAE LinearIndex a e
+          Shape a               -> travA Shape a
+          ShapeSize e           -> travE1 ShapeSize e
+          Intersect sh1 sh2     -> travE2 Intersect sh1 sh2
+          Foreign ff f e        -> travE1 (Foreign ff f) e
       where
         travTup :: Tuple.Tuple UnscopedExp tup -> (Tuple.Tuple ScopedExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)

@@ -115,7 +115,7 @@ data PreAcc acc exp as where
                 -> acc arrs
                 -> PreAcc acc exp a
 
-  Acond         :: (Arrays as)
+  Acond         :: Arrays as
                 => exp Bool
                 -> acc as
                 -> acc as
@@ -372,6 +372,11 @@ data PreExp acc exp t where
   ShapeSize     :: Shape sh
                 => exp sh
                 -> PreExp acc exp Int
+
+  Intersect     :: Shape sh
+                => exp sh
+                -> exp sh
+                -> PreExp acc exp sh
 
   Foreign       :: (Elt x, Elt y, Foreign f)
                 => f x y
@@ -1107,5 +1112,6 @@ showPreExpOp Index{}            = "Index"
 showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
+showPreExpOp Intersect{}        = "Intersect"
 showPreExpOp Foreign{}          = "Foreign"
 

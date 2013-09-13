@@ -62,10 +62,10 @@ module Data.Array.Accelerate (
 
   -- ** Accessors
   -- *** Indexing
-  (L.!), (L.!!), L.the,
+  (L.!), (L.!!), P.the,
 
   -- *** Shape information
-  L.null, L.shape, L.size, L.shapeSize,
+  P.null, L.shape, L.size, L.shapeSize,
 
   -- *** Extracting sub-arrays
   L.slice,
@@ -81,9 +81,12 @@ module Data.Array.Accelerate (
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
 
+  -- *** Concatenation
+  (P.++),
+
   -- ** Composition
   -- *** Flow control
-  (L.?|), L.cond, L.awhile,
+  (P.?|), L.acond, L.awhile,
 
   -- *** Pipelining
   (L.>->),
@@ -103,11 +106,11 @@ module Data.Array.Accelerate (
   L.map,
 
   -- *** Zipping
-  L.zipWith, P.zipWith3, P.zipWith4,
-  P.zip, P.zip3, P.zip4,
+  L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,
+  P.zip, P.zip3, P.zip4, P.zip5, P.zip6, P.zip7, P.zip8, P.zip9,
 
   -- *** Unzipping
-  P.unzip, P.unzip3, P.unzip4,
+  P.unzip, P.unzip3, P.unzip4, P.unzip5, P.unzip6, P.unzip7, P.unzip8, P.unzip9,
 
   -- ** Working with predicates
   -- *** Filtering
@@ -196,7 +199,7 @@ module Data.Array.Accelerate (
   -- >     -> lift   -> Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
-  L.Lift(..), L.Unlift(..), L.lift1, L.lift2, L.ilift1, L.ilift2,
+  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
 
   -- ** Operations
   --
@@ -210,10 +213,10 @@ module Data.Array.Accelerate (
   L.constant,
 
   -- *** Tuples
-  L.fst, L.snd, L.curry, L.uncurry,
+  P.fst, P.snd, P.curry, P.uncurry,
 
-  -- *** Flow-control
-  (L.?), L.while,
+  -- *** Flow control
+  (P.?), L.cond, L.while,
 
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,
@@ -228,9 +231,10 @@ module Data.Array.Accelerate (
   L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
+  P.index0, P.index1, P.unindex1, P.index2, P.unindex2,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
+  L.intersect,
 
   -- *** Conversions
   L.boolToInt, L.fromIntegral,

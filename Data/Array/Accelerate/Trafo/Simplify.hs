@@ -24,6 +24,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 
 -- standard library
 import Prelude                                          hiding ( exp, iterate )
+import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
@@ -234,16 +235,27 @@ simplifyOpenExp env = first getAny . cvtE
     cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
     cvtF env' = first Any . simplifyOpenFun env'
 
-    -- If the head terms of a shape intersection match, avoid the intersection
-    -- test and return the shape.
+    -- Return the minimal set of unique shapes to intersect. This is a bit
+    -- inefficient, but the number of shapes is expected to be small so should
+    -- be fine in practice.
     --
     intersect :: Shape t
               => (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
-    intersect sh1@(_,sh1') sh2@(_,sh2')
-      | Just REFL <- match sh1' sh2' = Stats.ruleFired "intersect" (yes sh1')
-      | otherwise                    = Intersect <$> sh1 <*> sh2
+    intersect (c1, sh1) (c2, sh2)
+      | Nothing <- match sh sh' = Stats.ruleFired "intersect" (yes sh')
+      | otherwise               = (c1 <> c2, sh')
+      where
+        sh      = Intersect sh1 sh2
+        sh'     = foldl1 Intersect
+                $ nubBy (\x y -> isJust (match x y))
+                $ leaves sh1 ++ leaves sh2
+
+        leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
+        leaves (Intersect x y)  = leaves x ++ leaves y
+        leaves rest             = [rest]
+
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
