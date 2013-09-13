@@ -67,10 +67,11 @@ module Data.Array.Accelerate.Prelude (
   -- * Array-level flow control
   (?|),
 
-  -- ---------------------------------------------------------------------------
-
-  -- * Flow-control
+  -- * Expression-level flow control
   (?),
+
+  -- * Scalar reduction
+  sfoldl, -- sfoldr,
 
   -- * Lifting and unlifting
   Lift(..), Unlift(..),
@@ -1132,6 +1133,26 @@ c ?| (t, e) = acond c t e
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
+
+
+-- Scalar bulk operations
+-- ----------------------
+
+-- | Reduce along an innermost slice of an array /sequentially/, by applying a
+-- binary operator to a starting value and the array from left to right.
+--
+sfoldl :: forall sh a b. (Shape sh, Slice sh, Elt a, Elt b)
+       => (Exp a -> Exp b -> Exp a)
+       -> Exp a
+       -> Exp sh
+       -> Acc (Array (sh :. Int) b)
+       -> Exp a
+sfoldl f z ix xs
+  = let (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
+        offset          = shapeSize ix
+        step (i, acc)   = ( i+1, acc `f` (xs !! (offset + i)) )
+    in
+    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
 
 
 -- Lifting surface expressions

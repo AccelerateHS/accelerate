@@ -218,6 +218,9 @@ module Data.Array.Accelerate (
   -- *** Flow control
   (P.?), L.cond, L.while,
 
+  -- *** Scalar reduction
+  P.sfoldl,
+
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,
   (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*),
