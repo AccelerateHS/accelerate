@@ -30,6 +30,7 @@ test_sharing _ =
     , sharing "no let at top"           noLetAtTop2
     , sharing "pipe"                    pipe
     , sharing "bound variables"         varUse
+    , sharing "big tuple"               bigTuple
     ]
     where
       sharing :: Show a => TestName -> a -> Test
@@ -206,6 +207,11 @@ varUse = (first, both, second)
       where
         centre :: Stencil3x3 Float -> Stencil3x3 Int -> Exp Float
         centre (_,(_,x,_),_) _  = x
+
+-- Test for 8 and 9 tuples
+--
+bigTuple :: (Exp (Int,Int,Int,Int,Int,Int,Int,Int), Exp (Int,Int,Int,Int,Int,Int,Int,Int,Int))
+bigTuple = (A.constant (0,0,0,0,0,0,0,0), A.constant (0,0,0,0,0,0,0,0,0))
 
 ----------------------------------------------------------------------
 
