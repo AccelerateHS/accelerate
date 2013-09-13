@@ -13,7 +13,7 @@ import Gloss.Event
 import Gloss.Simulate
 import Random.Array
 import Random.Position
-import qualified Solver.Naive                   as Naive
+import qualified Solver.Naive1                  as Naive1
 import qualified Solver.BarnsHut                as BarnsHut
 
 import Data.Array.Accelerate                    as A hiding ( size )
@@ -33,7 +33,7 @@ main
         (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let solver      = case get configSolver conf of
-                            Naive       -> Naive.calcAccels
+                            Naive1      -> Naive1.calcAccels
                             BarnsHut    -> BarnsHut.calcAccels
 
             n           = get configBodyCount conf

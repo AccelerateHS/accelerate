@@ -10,7 +10,7 @@ import Data.List
 import Data.Label
 
 
-data Solver = Naive | BarnsHut
+data Solver = Naive1 | Naive2 | BarnsHut
   deriving (Enum, Bounded, Show)
 
 
@@ -53,7 +53,7 @@ defaults :: Config
 defaults = Config
   {
     _configBackend              = maxBound
-  , _configSolver               = Naive         -- no barns-hut yet!
+  , _configSolver               = Naive1        -- no barns-hut yet!
 
   , _configWindowSize           = 1000
   , _configShouldDrawTree       = False         -- no barns-hut yet!
@@ -137,7 +137,8 @@ options =
   ]
   where
     solver algorithm
-      | a `elem` ["n",  "naive"]                        = Naive
+      | a `elem` ["n1", "naive1"]                       = Naive1
+      | a `elem` ["n2", "naive2"]                       = Naive2
       | a `elem` ["bh", "barnshut", "barns-hut"]        = BarnsHut
       | otherwise                                       = error $ "Unknown solver method: " ++ algorithm
       where

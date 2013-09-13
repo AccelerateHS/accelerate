@@ -341,7 +341,7 @@ Executable accelerate-nbody
                         Random.Array
                         Random.Position
                         Solver.BarnsHut
-                        Solver.Naive
+                        Solver.Naive1
 
   ghc-options:          -O2 -Wall -threaded
   ghc-prof-options:     -auto-all
