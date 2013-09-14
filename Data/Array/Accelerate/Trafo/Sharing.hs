@@ -1811,7 +1811,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         body@(UnscopedAcc fvs _) = f undefined
         ((ScopedAcc [] body'), counts) = scopesAcc body
         ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = span isBoundHere counts
+        (freeCounts, counts') = partition isBoundHere counts
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
@@ -1892,7 +1892,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         body@(UnscopedExp fvs _) = f undefined
         ((ScopedExp [] body'), counts) = scopesExp body
         ssa     = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
-        (freeCounts, counts') = span isBoundHere counts
+        (freeCounts, counts') = partition isBoundHere counts
 
         isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag i))) _) = i `elem` fvs
         isBoundHere _                                                            = False
