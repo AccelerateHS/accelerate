@@ -31,6 +31,7 @@ test_sharing _ =
     , sharing "pipe"                    pipe
     , sharing "bound variables"         varUse
     , sharing "big tuple"               bigTuple
+    , iteration
     ]
     where
       sharing :: Show a => TestName -> a -> Test
@@ -212,6 +213,45 @@ varUse = (first, both, second)
 --
 bigTuple :: (Exp (Int,Int,Int,Int,Int,Int,Int,Int), Exp (Int,Int,Int,Int,Int,Int,Int,Int,Int))
 bigTuple = (A.constant (0,0,0,0,0,0,0,0), A.constant (0,0,0,0,0,0,0,0,0))
+
+-- Tests for sharing recovery of iteration
+--
+iteration :: Test
+iteration = testGroup "iteration"
+  [
+    iter "simple"             test1
+  , iter "outside"            test2
+  , iter "body and condition" test3
+  , iter "awhile"             awhile_test
+  , iter "iterate"            iterate_test
+  ]
+  where
+    iter :: Show a => TestName -> a -> Test
+    iter name acc = testCase name (length (show acc) `seq` return ())
+
+    vec :: Acc (Vector Float)
+    vec = use $ fromList (Z:.10) [0..]
+
+    test1 :: Acc (Vector Float)
+    test1 = flip A.map vec
+      $ \x -> A.while (<* x) (+1) 0
+
+    test2 :: Acc (Vector Float)
+    test2 = flip A.map vec
+      $ \x -> let y = 2*pi
+              in  y + A.while (<* 10) (+y) x
+
+    test3 :: Acc (Vector Float)
+    test3 = flip A.map vec
+      $ \x -> A.while (<* x) (+x) 0
+
+    awhile_test :: Acc (Vector Float)
+    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) <* 200)) (A.map (+1)) vec
+
+    iterate_test :: Acc (Vector Float)
+    iterate_test = flip A.map vec
+        $ \x -> let y = 2*x
+                in  y + A.iterate (constant 10) (\x' -> y + x' + 10) x
 
 ----------------------------------------------------------------------
 
