@@ -1151,7 +1151,8 @@ iterate :: forall a. Elt a
 iterate n f z
   = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
         step (i, acc)   = ( i+1, f acc )
-    in  snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
+    in
+    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
 
 
 -- Scalar bulk operations
@@ -1167,9 +1168,9 @@ sfoldl :: forall sh a b. (Shape sh, Slice sh, Elt a, Elt b)
        -> Acc (Array (sh :. Int) b)
        -> Exp a
 sfoldl f z ix xs
-  = let (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
-        offset          = shapeSize ix
-        step (i, acc)   = ( i+1, acc `f` (xs !! (offset + i)) )
+  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
+        step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
+        (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
     in
     snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
 
