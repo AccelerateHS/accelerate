@@ -7,7 +7,7 @@ import Common.World
 import Common.Body
 import Common.Type
 
-import qualified Solver.Naive                   as Naive
+import qualified Solver.Naive2                  as Naive
 
 import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.CUDA.Foreign.Export
@@ -72,3 +72,4 @@ toForeign bodies = fs
 
 -- Generate the exported version of stepBodies
 exportAfun 'stepBodies "stepBodies_compile"
+

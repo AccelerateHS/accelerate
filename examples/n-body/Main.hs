@@ -14,6 +14,7 @@ import Gloss.Simulate
 import Random.Array
 import Random.Position
 import qualified Solver.Naive1                  as Naive1
+import qualified Solver.Naive2                  as Naive2
 import qualified Solver.BarnsHut                as BarnsHut
 
 import Data.Array.Accelerate                    as A hiding ( size )
@@ -34,6 +35,7 @@ main
 
         let solver      = case get configSolver conf of
                             Naive1      -> Naive1.calcAccels
+                            Naive2      -> Naive2.calcAccels
                             BarnsHut    -> BarnsHut.calcAccels
 
             n           = get configBodyCount conf
