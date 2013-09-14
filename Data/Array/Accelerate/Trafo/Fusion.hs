@@ -131,6 +131,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Unit e                  -> Unit (cvtE e)
         Alet bnd body           -> alet (manifest bnd) (manifest body)
         Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest a)
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (manifest tup)
         Apply f a               -> Apply (cvtAF f) (manifest a)
@@ -234,7 +235,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
         Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
-        Iterate n f x           -> Iterate (cvtE n) (cvtE f) (cvtE x)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE x)
         Index a sh              -> Index (manifest a) (cvtE sh)
@@ -317,6 +318,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Alet bnd body       -> aletD embedAcc elimAcc bnd body
     Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Aprj ix tup         -> aprjD embedAcc ix tup
+    Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
@@ -412,7 +414,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     cvtF :: PreFun acc aenv t -> PreFun acc aenv t
     cvtF = cvtF' . simplify
 
-    cvtE :: PreExp acc aenv t -> PreExp acc aenv t
+    cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
     cvtE = cvtE' . simplify
 
     -- Conversions for scalar functions and expressions without
@@ -440,7 +442,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         ToIndex sh ix           -> ToIndex (cvtE' sh) (cvtE' ix)
         FromIndex sh ix         -> FromIndex (cvtE' sh) (cvtE' ix)
         Cond p t e              -> Cond (cvtE' p) (cvtE' t) (cvtE' e)
-        Iterate n f x           -> Iterate (cvtE' n) (cvtE' f) (cvtE' x)
+        While p f x             -> While (cvtF' p) (cvtF' f) (cvtE' x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE' x)
         Index a sh              -> Index a (cvtE' sh)
@@ -1102,11 +1104,12 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
-        Iterate n f x                   -> Iterate (cvtE n) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f) (cvtE x)
         PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize sh                    -> ShapeSize (cvtE sh)
         Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
+        While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
+
         Shape a
           | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
           | otherwise                   -> exp
@@ -1161,8 +1164,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Atuple tup              -> Atuple (cvtAT tup)
-        Apply f a               -> Apply f (cvtA a)            -- no sharing between f and a
-        Aforeign ff f a         -> Aforeign ff f (cvtA a)      -- no sharing between f and a
+        Awhile p f a            -> Awhile p f (cvtA a)          -- no sharing between p or f and a
+        Apply f a               -> Apply f (cvtA a)             -- no sharing between f and a
+        Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Map f a                 -> Map (cvtF f) (cvtA a)
         ZipWith f a b           -> ZipWith (cvtF f) (cvtA a) (cvtA b)

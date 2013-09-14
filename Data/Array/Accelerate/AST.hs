@@ -246,11 +246,19 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc   acc aenv a
 
   -- If-then-else for array-level computations
-  Acond       :: (Arrays arrs)
+  Acond       :: Arrays arrs
               => PreExp     acc aenv Bool
               -> acc            aenv arrs
               -> acc            aenv arrs
               -> PreOpenAcc acc aenv arrs
+
+  -- Value-recursion for array-level computations
+  Awhile      :: Arrays arrs
+              => PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
+              -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
+              -> acc             aenv arrs                      -- initial value
+              -> PreOpenAcc  acc aenv arrs
+
 
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Arrays arrs
@@ -773,10 +781,10 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
                 -> PreOpenExp acc env aenv t
 
-  -- Value recursion with static loop count
-  Iterate       :: Elt a
-                => PreOpenExp acc env aenv Int          -- number of times to repeat
-                -> PreOpenExp acc (env, a) aenv a       -- function to iterate
+  -- Value recursion
+  While         :: Elt a
+                => PreOpenFun acc env aenv (a -> Bool)  -- continue while true
+                -> PreOpenFun acc env aenv (a -> a)     -- function to iterate
                 -> PreOpenExp acc env aenv a            -- initial value
                 -> PreOpenExp acc env aenv a
 
@@ -936,6 +944,7 @@ showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
 showPreAccOp Apply{}            = "Apply"
 showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp Acond{}            = "Acond"
+showPreAccOp Awhile{}           = "Awhile"
 showPreAccOp Atuple{}           = "Atuple"
 showPreAccOp Aprj{}             = "Aprj"
 showPreAccOp Unit{}             = "Unit"
@@ -999,7 +1008,7 @@ showPreExpOp IndexFull{}        = "IndexFull"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
 showPreExpOp Cond{}             = "Cond"
-showPreExpOp Iterate{}          = "Iterate"
+showPreExpOp While{}            = "While"
 showPreExpOp PrimConst{}        = "PrimConst"
 showPreExpOp PrimApp{}          = "PrimApp"
 showPreExpOp Index{}            = "Index"

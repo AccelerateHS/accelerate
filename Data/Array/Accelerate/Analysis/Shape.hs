@@ -66,6 +66,7 @@ preAccDim k pacc =
                               _            -> error "inconceivable!"
 
     Acond _ acc _        -> k acc
+    Awhile _ _ acc       -> k acc
     Use ((),(Array _ _)) -> ndim (eltType (undefined::sh))
     Unit _               -> 0
     Generate _ _         -> ndim (eltType (undefined::sh))

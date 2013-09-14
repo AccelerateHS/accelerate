@@ -69,14 +69,14 @@ module Data.Array.Accelerate.Language (
   (>->),
 
   -- * Array-level flow-control
-  acond,
+  acond, awhile,
 
   -- * Index construction and destruction
   indexHead, indexTail, toIndex, fromIndex,
   intersect,
 
   -- * Flow-control
-  cond,
+  cond, while,
 
   -- * Array operations with a scalar result
   (!), (!!), shape, size, shapeSize,
@@ -535,6 +535,15 @@ acond :: Arrays a
       -> Acc a
 acond = Acc $$$ Acond
 
+-- | An array-level while construct
+--
+awhile :: (Arrays a)
+       => (Acc a -> Acc (Scalar Bool))
+       -> (Acc a -> Acc a)
+       -> Acc a
+       -> Acc a
+awhile = Acc $$$ Awhile
+
 
 -- Shapes and indices
 -- ------------------
@@ -577,6 +586,16 @@ cond :: Elt t
      -> Exp t                   -- ^ else-expression
      -> Exp t
 cond = Exp $$$ Cond
+
+-- | While construct. Continue to apply the given function, starting with the
+-- initial value, until the test function evaluates to true.
+--
+while :: Elt e
+      => (Exp e -> Exp Bool)
+      -> (Exp e -> Exp e)
+      -> Exp e
+      -> Exp e
+while = Exp $$$ While
 
 
 -- Array operations with a scalar result

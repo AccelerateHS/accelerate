@@ -121,6 +121,12 @@ data PreAcc acc exp as where
                 -> acc as
                 -> PreAcc acc exp as
 
+  Awhile        :: Arrays arrs
+                => (Acc arrs -> acc (Scalar Bool))
+                -> (Acc arrs -> acc arrs)
+                -> acc arrs
+                -> PreAcc acc exp arrs
+
   Atuple        :: (Arrays arrs, IsTuple arrs)
                 => Tuple.Atuple acc (TupleRepr arrs)
                 -> PreAcc acc exp arrs
@@ -331,6 +337,12 @@ data PreExp acc exp t where
   Cond          :: Elt t
                 => exp Bool
                 -> exp t
+                -> exp t
+                -> PreExp acc exp t
+
+  While         :: Elt t
+                => (Exp t -> exp Bool)
+                -> (Exp t -> exp t)
                 -> exp t
                 -> PreExp acc exp t
 
@@ -1033,6 +1045,7 @@ showPreAccOp (Atag i)           = "Atag " ++ show i
 showPreAccOp (Use a)            = "Use "  ++ showArrays a
 showPreAccOp Pipe{}             = "Pipe"
 showPreAccOp Acond{}            = "Acond"
+showPreAccOp Awhile{}           = "Awhile"
 showPreAccOp Atuple{}           = "Atuple"
 showPreAccOp Aprj{}             = "Aprj"
 showPreAccOp Unit{}             = "Unit"
@@ -1092,6 +1105,7 @@ showPreExpOp IndexAny           = "IndexAny"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
 showPreExpOp Cond{}             = "Cond"
+showPreExpOp While{}            = "While"
 showPreExpOp PrimConst{}        = "PrimConst"
 showPreExpOp PrimApp{}          = "PrimApp"
 showPreExpOp Index{}            = "Index"

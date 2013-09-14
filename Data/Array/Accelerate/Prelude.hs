@@ -67,10 +67,14 @@ module Data.Array.Accelerate.Prelude (
   -- * Array-level flow control
   (?|),
 
-  -- ---------------------------------------------------------------------------
-
-  -- * Flow-control
+  -- * Expression-level flow control
   (?),
+
+  -- * Scalar iteration
+  iterate,
+
+  -- * Scalar reduction
+  sfoldl, -- sfoldr,
 
   -- * Lifting and unlifting
   Lift(..), Unlift(..),
@@ -1132,6 +1136,43 @@ c ?| (t, e) = acond c t e
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
+
+
+-- Scalar iteration
+-- ----------------
+
+-- | Repeatedly apply a function a fixed number of times
+--
+iterate :: forall a. Elt a
+        => Exp Int
+        -> (Exp a -> Exp a)
+        -> Exp a
+        -> Exp a
+iterate n f z
+  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
+        step (i, acc)   = ( i+1, f acc )
+    in
+    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
+
+
+-- Scalar bulk operations
+-- ----------------------
+
+-- | Reduce along an innermost slice of an array /sequentially/, by applying a
+-- binary operator to a starting value and the array from left to right.
+--
+sfoldl :: forall sh a b. (Shape sh, Slice sh, Elt a, Elt b)
+       => (Exp a -> Exp b -> Exp a)
+       -> Exp a
+       -> Exp sh
+       -> Acc (Array (sh :. Int) b)
+       -> Exp a
+sfoldl f z ix xs
+  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
+        step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
+        (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
+    in
+    snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
 
 
 -- Lifting surface expressions

@@ -224,7 +224,7 @@ rebuildE v exp =
     ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
     FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
     Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
-    Iterate n f x       -> Iterate (rebuildE v n) (rebuildE (shiftE v) f) (rebuildE v x)
+    While p f x         -> While (rebuildFE v p) (rebuildFE v f) (rebuildE v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildE v x)
     Index a sh          -> Index a (rebuildE v sh)
@@ -314,6 +314,7 @@ rebuildA rebuild v acc =
     Apply f a           -> Apply (rebuildAfun rebuild v f) (rebuild v a)
     Aforeign ff afun as -> Aforeign ff afun (rebuild v as)
     Acond p t e         -> Acond (rebuildEA rebuild v p) (rebuild v t) (rebuild v e)
+    Awhile p f a        -> Awhile (rebuildAfun rebuild v p) (rebuildAfun rebuild v f) (rebuild v a)
     Use a               -> Use a
     Unit e              -> Unit (rebuildEA rebuild v e)
     Reshape e a         -> Reshape (rebuildEA rebuild v e) (rebuild v a)
@@ -392,7 +393,7 @@ rebuildEA k v exp =
     ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
     FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
     Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)
-    Iterate n f x       -> Iterate (rebuildEA k v n) (rebuildEA k v f) (rebuildEA k v x)
+    While p f x         -> While (rebuildFA k v p) (rebuildFA k v f) (rebuildEA k v x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildEA k v x)
     Index a sh          -> Index (k v a) (rebuildEA k v sh)
