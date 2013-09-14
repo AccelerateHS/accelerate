@@ -1169,10 +1169,19 @@ sfoldl :: forall sh a b. (Shape sh, Slice sh, Elt a, Elt b)
        -> Exp a
 sfoldl f z ix xs
   = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
-        step (i, acc)   = ( i+1, acc `f` (xs ! lift (ix :. i)) )
+        step (i, acc)   = ( i+1, acc `f` sfoldl_get ix i xs )
         (_ :. n)        = unlift (shape xs)     :: Exp sh :. Exp Int
     in
     snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
+
+
+{-# RULES "sfoldl/vector" sfoldl_get = sfoldl_get' #-}
+sfoldl_get :: (Slice sh, Shape sh, Elt b)
+           => Exp sh -> Exp Int -> Acc (Array (sh :. Int) b) -> Exp b
+sfoldl_get ix i acc = acc ! lift (ix :. i)
+
+sfoldl_get' :: Elt b => Exp Z -> Exp Int -> Acc (Vector b) -> Exp b
+sfoldl_get' _ i acc = acc !! i
 
 
 -- Lifting surface expressions
