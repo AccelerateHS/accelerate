@@ -70,6 +70,9 @@ module Data.Array.Accelerate.Prelude (
   -- * Expression-level flow control
   (?),
 
+  -- * Scalar iteration
+  iterate,
+
   -- * Scalar reduction
   sfoldl, -- sfoldr,
 
@@ -1133,6 +1136,22 @@ c ?| (t, e) = acond c t e
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
+
+
+-- Scalar iteration
+-- ----------------
+
+-- | Repeatedly apply a function a fixed number of times
+--
+iterate :: forall a. Elt a
+        => Exp Int
+        -> (Exp a -> Exp a)
+        -> Exp a
+        -> Exp a
+iterate n f z
+  = let step :: (Exp Int, Exp a) -> (Exp Int, Exp a)
+        step (i, acc)   = ( i+1, f acc )
+    in  snd $ while (\v -> fst v <* n) (lift1 step) (lift (constant 0, z))
 
 
 -- Scalar bulk operations
