@@ -53,7 +53,7 @@ defaults :: Config
 defaults = Config
   {
     _configBackend              = maxBound
-  , _configSolver               = Naive1        -- no barns-hut yet!
+  , _configSolver               = Naive2        -- no barns-hut yet!
 
   , _configWindowSize           = 1000
   , _configShouldDrawTree       = False         -- no barns-hut yet!
