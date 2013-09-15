@@ -22,16 +22,22 @@ foreignAccModule
 type ForeignBodies = Vector (Float, Float)
 
 -- |One iteration of the algorithm.
-stepBodies :: Acc (Scalar Time, Scalar R, ForeignBodies) -> Acc ForeignBodies
-stepBodies ts = toForeign (stepBodies' dt eps bodies)
+stepBodies :: Acc (Scalar Time, ForeignBodies) -> Acc ForeignBodies
+stepBodies ts = toForeign bodies'
   where
-    (dt, eps, fs) = A.unlift ts :: (Acc (Scalar Time), Acc (Scalar R), Acc ForeignBodies)
+    (dt, fs) = A.unlift ts :: (Acc (Scalar Time), Acc ForeignBodies)
 
     bodies :: Acc (Vector Body)
     bodies = generateBodies fs
 
-    stepBodies' :: Acc (Scalar Time) -> Acc (Scalar R) -> Acc (Vector Body) -> Acc (Vector Body)
-    stepBodies' dt epsilon = advanceBodies (Naive.calcAccels $ the epsilon) dt
+    bodies' :: Acc (Vector Body)
+    bodies' = advanceBodies (Naive.calcAccels $ A.constant epsilon) dt bodies
+
+    -- FIXME: Currently epsilon is constant because, due to constant folding, it gets better
+    -- results. We should actually be recompiling the whole function everytime setSoftening() is
+    -- called.
+    epsilon :: Float
+    epsilon = 0.1
 
 generateBodies :: Acc ForeignBodies -> Acc (Vector Body)
 generateBodies fs = A.generate (A.index1 (A.size fs `div` 4)) swizzle

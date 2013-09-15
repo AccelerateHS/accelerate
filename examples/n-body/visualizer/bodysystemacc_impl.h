@@ -237,12 +237,11 @@ void BodySystemAcc::update(float deltaTime)
 
     //Marshal the input
     float* t[] = { m_timestep };
-    float* s[] = { m_softening };
     int sht[] = { 0 }; //The timestep and softening factor is contained within a rank zero array
     float* pv[] = { m_deviceData.dPos[m_currentRead], m_deviceData.dVel };
     int shb[] = { m_numBodies * 4};
 
-    InputArray in[] = { {sht, (void**) t}, {sht, (void**) s}, {shb, (void**) pv} };
+    InputArray in[] = { {sht, (void**) t}, {shb, (void**) pv} };
 
     ResultArray out;
 
