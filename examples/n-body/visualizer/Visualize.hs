@@ -49,26 +49,36 @@ generateBodies fs = A.generate (A.index1 (A.size fs `div` 4)) swizzle
           a          = lift (constant 0.0, constant 0.0, constant 0.0) :: Exp (Float, Float, Float)
       in lift (pm, v, a)
 
+-- Convert bodies to the foreign representation
+--
+-- NB: This is written in this way such that its argument will not fuse into it and duplicate work.
+-- See issue <https://github.com/AccelerateHS/accelerate/issues/116> for further details.
 toForeign :: Acc (Vector Body) -> Acc ForeignBodies
-toForeign bodies = fs
+toForeign bodies = A.zip ps' vs'
   where
-    sh = A.index1 (4 * A.size bodies)
-    fs = A.generate sh swizzle
-      where
-        swizzle :: Exp DIM1 -> Exp (Float, Float)
-        swizzle ix =
-          let k = indexHead ix
-              i = k `div` 4
-              (pm, v, _) = unlift (bodies A.!! i) :: (Exp PointMass, Exp Velocity, Exp Accel)
-              (p, m)     = unlift pm :: (Exp Position, Exp Mass)
-              (p_x,p_y,p_z) = unlift p :: (Exp Float, Exp Float, Exp Float)
-              (v_x,v_y,v_z) = unlift v :: (Exp Float, Exp Float, Exp Float)
-              r = k `mod` 4
-          in
-          r ==* 0 ? (lift (p_x,v_x),
-          r ==* 1 ? (lift (p_y,v_y),
-          r ==* 2 ? (lift (p_z,v_z),
-                     lift (m,A.constant 0.0))))
+    uncurry3 f (a,b,c) = f a b c
+
+    (pms, vs, _)   = A.unzip3 bodies
+    (ps, ms)       = A.unzip pms
+    ps'            = uncurry3 interleave4 (A.unzip3 ps) ms
+    vs'            = uncurry3 interleave4 (A.unzip3 vs) (A.fill (index1 (A.size bodies)) 0.0)
+
+interleave4 :: Elt e => Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e) -> Acc (Vector e)
+interleave4 a b c d = generate sh swizzle
+  where
+    sh          = index1 (4 * A.size a)
+    swizzle ix  =
+      let i = indexHead ix
+          x = a A.!! (i `div` 4)
+          y = b A.!! (i `div` 4)
+          z = c A.!! (i `div` 4)
+          w = d A.!! (i `div` 4)
+          r = i `mod` 4
+      in
+      r ==* 0 ? (x,
+      r ==* 1 ? (y,
+      r ==* 2 ? (z,
+                 w)))
 
 -- Generate the exported version of stepBodies
 exportAfun 'stepBodies "stepBodies_compile"
