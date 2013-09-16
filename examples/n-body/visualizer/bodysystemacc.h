@@ -36,7 +36,7 @@ class BodySystemAcc : public BodySystem<float>
 
         virtual unsigned int getCurrentReadBuffer() const
         {
-            return m_pbo[m_currentRead];
+            return m_pbo;
         }
 
         virtual unsigned int getNumBodies() const
@@ -76,8 +76,8 @@ class BodySystemAcc : public BodySystem<float>
         float m_damping;
         float* m_softening;
 
-        unsigned int m_pbo[2];
-        cudaGraphicsResource *m_pGRes[2];
+        unsigned int m_pbo;
+        cudaGraphicsResource *m_pGRes;
         unsigned int m_currentRead;
         unsigned int m_currentWrite;
 

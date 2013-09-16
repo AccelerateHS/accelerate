@@ -85,33 +85,29 @@ void BodySystemAcc::_initialize(int numBodies)
         {
             // create the position pixel buffer objects for rendering
             // we will actually compute directly from this memory in CUDA too
-            glGenBuffers(2, (GLuint *)m_pbo);
+            glGenBuffers(1, (GLuint *)&m_pbo);
 
-            for (int i = 0; i < 2; ++i)
+            glBindBuffer(GL_ARRAY_BUFFER, m_pbo);
+            glBufferData(GL_ARRAY_BUFFER, memSize, m_hPos[0], GL_DYNAMIC_DRAW);
+
+            int size = 0;
+            glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, (GLint *)&size);
+
+            if ((unsigned)size != memSize)
             {
-                glBindBuffer(GL_ARRAY_BUFFER, m_pbo[i]);
-                glBufferData(GL_ARRAY_BUFFER, memSize, m_hPos[0], GL_DYNAMIC_DRAW);
-
-                int size = 0;
-                glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, (GLint *)&size);
-
-                if ((unsigned)size != memSize)
-                {
-                    fprintf(stderr, "WARNING: Pixel Buffer Object allocation failed!n");
-                }
-
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
-                checkCudaErrors(cudaGraphicsGLRegisterBuffer(&m_pGRes[i],
-                                                             m_pbo[i],
-                                                             cudaGraphicsMapFlagsNone));
+                fprintf(stderr, "WARNING: Pixel Buffer Object allocation failed!n");
             }
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            checkCudaErrors(cudaGraphicsGLRegisterBuffer(&m_pGRes,
+                                                         m_pbo,
+                                                         cudaGraphicsMapFlagsNone));
         }
         else
         {
-            checkCudaErrors(cudaMalloc((void **)&m_deviceData.dPos[0], memSize));
             checkCudaErrors(cudaMalloc((void **)&m_deviceData.dPos[1], memSize));
         }
-
+        checkCudaErrors(cudaMalloc((void **)&m_deviceData.dPos[0], memSize));
         checkCudaErrors(cudaMalloc((void **)&m_deviceData.dVel, memSize));
     }
 
@@ -160,9 +156,8 @@ void BodySystemAcc::_finalize()
 
         if (m_bUsePBO)
         {
-            checkCudaErrors(cudaGraphicsUnregisterResource(m_pGRes[0]));
-            checkCudaErrors(cudaGraphicsUnregisterResource(m_pGRes[1]));
-            glDeleteBuffers(2, (const GLuint *)m_pbo);
+            checkCudaErrors(cudaGraphicsUnregisterResource(m_pGRes));
+            glDeleteBuffers(1, (const GLuint *)&m_pbo);
         }
         else
         {
@@ -222,14 +217,14 @@ void BodySystemAcc::update(float deltaTime)
 {
     assert(m_bInitialized);
 
+    float* pbo_ptr;
+
     if (m_bUsePBO)
     {
-        checkCudaErrors(cudaGraphicsResourceSetMapFlags(m_pGRes[m_currentRead], cudaGraphicsMapFlagsReadOnly));
-        checkCudaErrors(cudaGraphicsResourceSetMapFlags(m_pGRes[1-m_currentRead], cudaGraphicsMapFlagsWriteDiscard));
-        checkCudaErrors(cudaGraphicsMapResources(2, m_pGRes, 0));
+        checkCudaErrors(cudaGraphicsResourceSetMapFlags(m_pGRes, cudaGraphicsMapFlagsWriteDiscard));
+        checkCudaErrors(cudaGraphicsMapResources(1, &m_pGRes, 0));
         size_t bytes;
-        checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&(m_deviceData.dPos[m_currentRead]), &bytes, m_pGRes[m_currentRead]));
-        checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&(m_deviceData.dPos[1-m_currentRead]), &bytes, m_pGRes[1-m_currentRead]));
+        checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&pbo_ptr, &bytes, m_pGRes));
     }
 
     //Copy timestep to device.
@@ -253,13 +248,11 @@ void BodySystemAcc::update(float deltaTime)
     getDevicePtrs(m_hndl, out, out_ptrs);
 
     if (m_bUsePBO) {
-        //TODO: cudaMemcpy is _very_ slow here. Try to fix.
-        checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentWrite], out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
-        checkCudaErrors(cudaMemcpy(m_deviceData.dVel, out_ptrs[1], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
-    } else {
-        m_deviceData.dPos[m_currentWrite] = out_ptrs[0];
-        m_deviceData.dVel = out_ptrs[1];
+        checkCudaErrors(cudaMemcpy(pbo_ptr, out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
     }
+
+    m_deviceData.dPos[m_currentWrite] = out_ptrs[0];
+    m_deviceData.dVel = out_ptrs[1];
 
     //free old data
     if (m_prevResult != NULL)
@@ -269,7 +262,7 @@ void BodySystemAcc::update(float deltaTime)
 
     if (m_bUsePBO)
     {
-        checkCudaErrors(cudaGraphicsUnmapResources(2, m_pGRes, 0));
+        checkCudaErrors(cudaGraphicsUnmapResources(1, &m_pGRes, 0));
     }
 
     std::swap(m_currentRead, m_currentWrite);
@@ -292,12 +285,6 @@ float *BodySystemAcc::getArray(BodyArray array)
         case BODYSYSTEM_POSITION:
             hdata = m_hPos[currentReadHost];
             ddata = m_deviceData.dPos[m_currentRead];
-
-            if (m_bUsePBO)
-            {
-                pgres = m_pGRes[m_currentRead];
-            }
-
             break;
 
         case BODYSYSTEM_VELOCITY:
@@ -308,21 +295,8 @@ float *BodySystemAcc::getArray(BodyArray array)
 
     if (!m_bUseSysMem)
     {
-        if (pgres)
-        {
-            checkCudaErrors(cudaGraphicsResourceSetMapFlags(pgres, cudaGraphicsMapFlagsReadOnly));
-            checkCudaErrors(cudaGraphicsMapResources(1, &pgres, 0));
-            size_t bytes;
-            checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&ddata, &bytes, pgres));
-        }
-
         checkCudaErrors(cudaMemcpy(hdata, ddata,
                                    m_numBodies*4*sizeof(float), cudaMemcpyDeviceToHost));
-
-        if (pgres)
-        {
-            checkCudaErrors(cudaGraphicsUnmapResources(1, &pgres, 0));
-        }
     }
 
     return hdata;
@@ -340,32 +314,14 @@ void BodySystemAcc::setArray(BodyArray array, const float *data)
         default:
         case BODYSYSTEM_POSITION:
             {
-                if (m_bUsePBO)
+                if (m_bUseSysMem)
                 {
-                    glBindBuffer(GL_ARRAY_BUFFER, m_pbo[m_currentRead]);
-                    glBufferSubData(GL_ARRAY_BUFFER, 0, 4 * sizeof(float) * m_numBodies, data);
-
-                    int size = 0;
-                    glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_BUFFER_SIZE, (GLint *)&size);
-
-                    if ((unsigned)size != 4 * (sizeof(float) * m_numBodies))
-                    {
-                        fprintf(stderr, "WARNING: Pixel Buffer Object download failed!n");
-                    }
-
-                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+                    memcpy(m_hPos[m_currentRead], data, m_numBodies * 4 * sizeof(float));
                 }
                 else
-                {
-                    if (m_bUseSysMem)
-                    {
-                        memcpy(m_hPos[m_currentRead], data, m_numBodies * 4 * sizeof(float));
-                    }
-                    else
-                        checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentRead], data,
-                                                   m_numBodies * 4 * sizeof(float),
-                                                   cudaMemcpyHostToDevice));
-                }
+                    checkCudaErrors(cudaMemcpy(m_deviceData.dPos[m_currentRead], data,
+                                               m_numBodies * 4 * sizeof(float),
+                                               cudaMemcpyHostToDevice));
             }
             break;
 
