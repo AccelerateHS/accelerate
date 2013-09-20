@@ -7,6 +7,8 @@ module Test.Prelude.Mapping (
 
   test_map,
   test_zipWith,
+  mapRef,
+  zipWithRef,
 
 ) where
 
