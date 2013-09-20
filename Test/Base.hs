@@ -50,8 +50,12 @@ relTol :: (Fractional a, Ord a) => a -> a -> a -> Bool
 relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 {-# INLINE absRelTol #-}
-absRelTol :: (Fractional a, Ord a) => a -> a -> Bool
+absRelTol :: (RealFloat a, Ord a) => a -> a -> Bool
 absRelTol u v
+  |  isInfinite u
+  && isInfinite v          = True
+  |  isNaN u
+  && isNaN v               = True
   | abs (u-v) < epsilonAbs = True
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
   | otherwise              = abs ((v-u) / v) < epsilonRel
