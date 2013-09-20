@@ -1,4 +1,4 @@
-
+{-# LANGUAGE CPP #-}
 module Main where
 
 import Test.Framework
@@ -13,6 +13,9 @@ import Test.Prelude
 import Test.Sharing
 import Test.Imaginary
 import Test.Spectral
+#ifdef ACCELERATE_CUDA_BACKEND
+import Test.Foreign
+#endif
 
 
 main :: IO ()
@@ -38,6 +41,9 @@ main = do
     , test_io conf
     , test_imaginary conf
     , test_spectral conf
+#ifdef ACCELERATE_CUDA_BACKEND
+    , test_foreign conf
+#endif
     ]
     tfconf
     -- test-framework wants to have a nap on success; don't let it.
