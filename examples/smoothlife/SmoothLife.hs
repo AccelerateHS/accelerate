@@ -145,7 +145,7 @@ getSigmoidFunction f x a ea
       -- __expf is CUDA's faster but less precise version of exp.
       cexp =
 #ifdef ACCELERATE_CUDA_BACKEND
-        foreignExp (cudaExp "math_functions.h __expf") exp
+        foreignExp (CUDAForeignExp [] "__expf") exp
 #else
         exp
 #endif
