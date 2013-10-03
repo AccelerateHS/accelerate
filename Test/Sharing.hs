@@ -224,6 +224,8 @@ iteration = testGroup "iteration"
   , iter "body and condition" test3
   , iter "awhile"             awhile_test
   , iter "iterate"            iterate_test
+  , iter "nested"             nested
+  , iter "unused"             unused
   ]
   where
     iter :: Show a => TestName -> a -> Test
@@ -252,6 +254,21 @@ iteration = testGroup "iteration"
     iterate_test = flip A.map vec
         $ \x -> let y = 2*x
                 in  y + A.iterate (constant 10) (\x' -> y + x' + 10) x
+
+    for :: Elt a => Exp Int -> (Exp Int -> Exp a -> Exp a) -> Exp a -> Exp a
+    for n f seed
+      = A.snd
+      $ A.iterate n (\v -> let (i, x) = unlift v
+                           in  lift (i+1, f i x))
+                    (lift (constant 0, seed))
+
+    nested :: Exp Int
+    nested
+      = for 64 (\i _ ->
+          for 64 (\j acc' -> i + j + acc') 0) 0
+
+    unused :: Exp Int
+      = A.while (==* 10) (const 10) 5
 
 ----------------------------------------------------------------------
 
