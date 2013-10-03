@@ -36,9 +36,10 @@ import Data.List
 import Data.Maybe
 import Data.Hashable
 import Data.Typeable
-import qualified Data.IntSet                            as IntSet
 import qualified Data.HashTable.IO                      as Hash
 import qualified Data.IntMap                            as IntMap
+import qualified Data.HashMap.Strict                    as Map
+import qualified Data.HashSet                           as Set
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 
@@ -1416,7 +1417,20 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 -- To ensure the list invariant and the graph properties are preserved over merging node counts from
 -- sibling subterms, the function '(+++)' must be used.
 --
-type NodeCounts = ([NodeCount], (IntMap.IntMap (IntSet.IntSet)))
+type NodeCounts = ([NodeCount], Map.HashMap NodeName (Set.HashSet NodeName))
+
+data NodeName where
+  NodeName :: Typeable a => StableName a -> NodeName
+
+instance Eq NodeName where
+  (NodeName sn1) == (NodeName sn2) | Just sn2' <- gcast sn2 = sn1 == sn2'
+                                   | otherwise              = False
+
+instance Hashable NodeName where
+  hashWithSalt hash (NodeName sn1) = hash + hashStableName sn1
+
+instance Show NodeName where
+  show (NodeName sn) = show (hashStableName sn)
 
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
@@ -1425,45 +1439,43 @@ data NodeCount = AccNodeCount StableSharingAcc Int
 -- Empty node counts
 --
 noNodeCounts :: NodeCounts
-noNodeCounts = ([], IntMap.empty)
+noNodeCounts = ([], Map.empty)
 
 -- Insert an Acc node into the node counts, assuming that it is a superterm of the all the existing
 -- nodes.
 --
 -- TODO: Perform cycle detection here.
 insertAccNode :: StableSharingAcc -> NodeCounts -> NodeCounts
-insertAccNode ssa@(StableSharingAcc sn _) (subterms,g)
+insertAccNode ssa@(StableSharingAcc (StableNameHeight sn _) _) (subterms,g)
   = ([AccNodeCount ssa 1], g') +++ (subterms,g)
   where
-    k  = hashStableNameHeight sn
-    hs = map hashNodeCount subterms
-    g' = IntMap.fromList $ (k, IntSet.empty) : [(h, IntSet.singleton k) | h <- hs]
+    k  = NodeName sn
+    hs = map nodeName subterms
+    g' = Map.fromList $ (k, Set.empty) : [(h, Set.singleton k) | h <- hs]
 
 -- Insert an Exp node into the node counts, assuming that it is a superterm of the all the existing
 -- nodes.
 --
 -- TODO: Perform cycle detection here.
 insertExpNode :: StableSharingExp -> NodeCounts -> NodeCounts
-insertExpNode ssa@(StableSharingExp sn _) (subterms,g)
+insertExpNode ssa@(StableSharingExp (StableNameHeight sn _) _) (subterms,g)
   = ([ExpNodeCount ssa 1], g') +++ (subterms,g)
   where
-    k  = hashStableNameHeight sn
-    hs = map hashNodeCount subterms
-    g' = IntMap.fromList $ (k, IntSet.empty) : [(h, IntSet.singleton k) | h <- hs]
+    k  = NodeName sn
+    hs = map nodeName subterms
+    g' = Map.fromList $ (k, Set.empty) : [(h, Set.singleton k) | h <- hs]
 
 -- Remove nodes that aren't in the list from the graph.
 --
 -- RCE: This is no longer necessary when NDP is supported.
 cleanCounts :: NodeCounts -> NodeCounts
-cleanCounts (ns, g) = (ns, IntMap.fromList $ [(h, IntSet.filter (flip elem hs) (g IntMap.! h)) | h <- hs ])
+cleanCounts (ns, g) = (ns, Map.fromList $ [(h, Set.filter (flip elem hs) (g Map.! h)) | h <- hs ])
   where
-    hs = (map hashNodeCount ns)
+    hs = (map nodeName ns)
 
--- Hash a `NodeCount` based in the hash of the stable name
---
-hashNodeCount :: NodeCount -> Int
-hashNodeCount (AccNodeCount (StableSharingAcc sn _) _) = hashStableNameHeight sn
-hashNodeCount (ExpNodeCount (StableSharingExp sn _) _) = hashStableNameHeight sn
+nodeName :: NodeCount -> NodeName
+nodeName (AccNodeCount (StableSharingAcc (StableNameHeight sn _) _) _) = NodeName sn
+nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeName sn
 
 -- Combine node counts that belong to the same node.
 --
@@ -1475,7 +1487,7 @@ hashNodeCount (ExpNodeCount (StableSharingExp sn _) _) = hashStableNameHeight sn
 -- RCE: The list combination should be able to be performed as a more efficient merge.
 --
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
-(ns1,g1) +++ (ns2,g2) = (foldr insert ns1 ns2, IntMap.unionWith IntSet.union g1 g2)
+(ns1,g1) +++ (ns2,g2) = (foldr insert ns1 ns2, Map.unionWith Set.union g1 g2)
   where
     insert x               []                         = [x]
     insert x@(AccNodeCount sa1 count1) ys@(y@(AccNodeCount sa2 count2) : ys')
@@ -1830,7 +1842,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         --
         filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingAcc])
         filterCompleted (ns, graph)
-          = let bindable     = map (isBindable bindable (map hashNodeCount ns)) ns
+          = let bindable     = map (isBindable bindable (map nodeName ns)) ns
                 (bind, rest) = partition fst $ zip bindable ns
             in ((map snd rest, graph), [sa | AccNodeCount sa _ <- map snd bind])
           where
@@ -1840,9 +1852,9 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             isCompleted nc@(AccNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingAcc accOccMap sa == n
             isCompleted _                                             = False
 
-            isBindable :: [Bool] -> [Int] -> NodeCount -> Bool
-            isBindable bindable nodes nc@(AccNodeCount (StableSharingAcc sn _) _) =
-              let superTerms = IntSet.toList $ graph IntMap.! hashStableNameHeight sn
+            isBindable :: [Bool] -> [NodeName] -> NodeCount -> Bool
+            isBindable bindable nodes nc@(AccNodeCount _ _) =
+              let superTerms = Set.toList $ graph Map.! nodeName nc
                   unbound    = mapMaybe (`elemIndex` nodes) superTerms
               in    isCompleted nc
                  && all (bindable !!) unbound
@@ -2111,7 +2123,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         --
         filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingExp])
         filterCompleted (ns,graph)
-          = let bindable       = map (isBindable bindable (map hashNodeCount ns)) ns
+          = let bindable       = map (isBindable bindable (map nodeName ns)) ns
                 (bind, unbind) = partition fst $ zip bindable ns
             in ((map snd unbind, graph), [se | ExpNodeCount se _ <- map snd bind])
           where
@@ -2121,9 +2133,9 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             isCompleted nc@(ExpNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingExp expOccMap sa == n
             isCompleted _                                             = False
 
-            isBindable :: [Bool] -> [Int] -> NodeCount -> Bool
-            isBindable bindable nodes nc@(ExpNodeCount (StableSharingExp sn _) _) =
-              let superTerms = IntSet.toList $ graph IntMap.! hashStableNameHeight sn
+            isBindable :: [Bool] -> [NodeName] -> NodeCount -> Bool
+            isBindable bindable nodes nc@(ExpNodeCount _ _) =
+              let superTerms = Set.toList $ graph Map.! nodeName nc
                   unbound    = mapMaybe (`elemIndex` nodes) superTerms
               in    isCompleted nc
                  && all (bindable !!) unbound
