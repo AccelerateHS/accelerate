@@ -36,6 +36,7 @@ import Data.List
 import Data.Maybe
 import Data.Hashable
 import Data.Typeable
+import qualified Data.IntSet                            as IntSet
 import qualified Data.HashTable.IO                      as Hash
 import qualified Data.IntMap                            as IntMap
 import System.IO.Unsafe                                 ( unsafePerformIO )
@@ -484,7 +485,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtFun1 f = Lam (Body (convertSharingExp config lyt' alyt env' aenv body))
       where
         lyt' = incLayout lyt `PushLayout` ZeroIdx
-        body  = f undefined
+        body = f undefined
 
     -- Push primitive function applications down through let bindings so that
     -- they are adjacent to their arguments. It looks a bit nicer this way.
@@ -1331,7 +1332,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           = do
               let x = Exp (Tag lvl)
               (UnscopedExp [] body, height) <- travE (lvl+1) (f x)
-              return (const (UnscopedExp [lvl] body), height)
+              return (const (UnscopedExp [lvl] body), height + 1)
 
 
         travE1 :: Typeable b => (UnscopedExp b -> PreExp UnscopedAcc UnscopedExp a) -> Exp b
@@ -1387,11 +1388,13 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                                     return (SnocTup tup' e', h1 `max` h2 + 1)
 
 
--- Type used to maintain how often each shared subterm, so far, occurred during a bottom-up sweep.
+-- Type used to maintain how often each shared subterm, so far, occurred during a bottom-up sweep,
+-- as well as the relation between subterms. It is comprised of a list of terms and a graph giving
+-- their relation.
 --
---   Invariants:
+--   Invariants of the list:
 --   - If one shared term 's' is itself a subterm of another shared term 't', then 's' must occur
---     *after* 't' in the 'NodeCounts'.
+--     *after* 't' in the list.
 --   - No shared term occurs twice.
 --   - A term may have a final occurrence count of only 1 iff it is either a free variable ('Atag'
 --     or 'Tag') or an array computation lifted out of an expression.
@@ -1403,10 +1406,17 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 -- is 0, whereas other leaves have height 1.  This guarantees that all free variables are at the end
 -- of the 'NodeCounts' list.
 --
--- To ensure the invariant is preserved over merging node counts from sibling subterms, the
--- function '(+++)' must be used.
+-- The graph is represented as a map where a stable name 'a' is mapped to a set of stables names 'b'
+-- such that if there exists a edge from 'a' to 'c' that 'c' is contained within 'b'.
 --
-type NodeCounts = [NodeCount]
+--  Properties of the graph:
+--  - There exists an edge from 'a' to 'b' if the term 'a' names is a subterm of the term named by
+--    'b'.
+--
+-- To ensure the list invariant and the graph properties are preserved over merging node counts from
+-- sibling subterms, the function '(+++)' must be used.
+--
+type NodeCounts = ([NodeCount], (IntMap.IntMap (IntSet.IntSet)))
 
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
@@ -1415,27 +1425,57 @@ data NodeCount = AccNodeCount StableSharingAcc Int
 -- Empty node counts
 --
 noNodeCounts :: NodeCounts
-noNodeCounts = []
+noNodeCounts = ([], IntMap.empty)
 
--- Singleton node counts for 'Acc'
+-- Insert an Acc node into the node counts, assuming that it is a superterm of the all the existing
+-- nodes.
 --
-accNodeCount :: StableSharingAcc -> Int -> NodeCounts
-accNodeCount ssa n = [AccNodeCount ssa n]
+-- TODO: Perform cycle detection here.
+insertAccNode :: StableSharingAcc -> NodeCounts -> NodeCounts
+insertAccNode ssa@(StableSharingAcc sn _) (subterms,g)
+  = ([AccNodeCount ssa 1], g') +++ (subterms,g)
+  where
+    k  = hashStableNameHeight sn
+    hs = map hashNodeCount subterms
+    g' = IntMap.fromList $ (k, IntSet.empty) : [(h, IntSet.singleton k) | h <- hs]
 
--- Singleton node counts for 'Exp'
+-- Insert an Exp node into the node counts, assuming that it is a superterm of the all the existing
+-- nodes.
 --
-expNodeCount :: StableSharingExp -> Int -> NodeCounts
-expNodeCount sse n = [ExpNodeCount sse n]
+-- TODO: Perform cycle detection here.
+insertExpNode :: StableSharingExp -> NodeCounts -> NodeCounts
+insertExpNode ssa@(StableSharingExp sn _) (subterms,g)
+  = ([ExpNodeCount ssa 1], g') +++ (subterms,g)
+  where
+    k  = hashStableNameHeight sn
+    hs = map hashNodeCount subterms
+    g' = IntMap.fromList $ (k, IntSet.empty) : [(h, IntSet.singleton k) | h <- hs]
+
+-- Remove nodes that aren't in the list from the graph.
+--
+-- RCE: This is no longer necessary when NDP is supported.
+cleanCounts :: NodeCounts -> NodeCounts
+cleanCounts (ns, g) = (ns, IntMap.fromList $ [(h, IntSet.filter (flip elem hs) (g IntMap.! h)) | h <- hs ])
+  where
+    hs = (map hashNodeCount ns)
+
+-- Hash a `NodeCount` based in the hash of the stable name
+--
+hashNodeCount :: NodeCount -> Int
+hashNodeCount (AccNodeCount (StableSharingAcc sn _) _) = hashStableNameHeight sn
+hashNodeCount (ExpNodeCount (StableSharingExp sn _) _) = hashStableNameHeight sn
 
 -- Combine node counts that belong to the same node.
 --
--- * We assume that the node counts invariant —subterms follow their parents— holds for both
---   arguments and guarantee that it still holds for the result.
+-- * We assume that the list invariant —subterms follow their parents— holds for both arguments and
+--   guarantee that it still holds for the result.
 -- * In the same manner, we assume that all 'Exp' node counts precede 'Acc' node counts and
 --   guarantee that this also hold for the result.
 --
+-- RCE: The list combination should be able to be performed as a more efficient merge.
+--
 (+++) :: NodeCounts -> NodeCounts -> NodeCounts
-us +++ vs = foldr insert us vs
+(ns1,g1) +++ (ns2,g2) = (foldr insert ns1 ns2, IntMap.unionWith IntSet.union g1 g2)
   where
     insert x               []                         = [x]
     insert x@(AccNodeCount sa1 count1) ys@(y@(AccNodeCount sa2 count2) : ys')
@@ -1549,7 +1589,7 @@ determineScopesAcc
     -> UnscopedAcc a
     -> (ScopedAcc a, [StableSharingAcc])
 determineScopesAcc config fvs accOccMap rootAcc
-  = let (sharingAcc, counts) = determineScopesSharingAcc config accOccMap rootAcc
+  = let (sharingAcc, (counts, _)) = determineScopesSharingAcc config accOccMap rootAcc
         unboundTrees         = filter (not . isFreeVar) counts
     in
     if all isFreeVar counts
@@ -1569,7 +1609,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
       = INTERNAL_ERROR(error) "determineScopesSharingAcc: scopesAcc" "unexpected 'AletSharing'"
 
     scopesAcc (UnscopedAcc _ (AvarSharing sn))
-      = (ScopedAcc [] (AvarSharing sn), StableSharingAcc sn (AvarSharing sn) `accNodeCount` 1)
+      = (ScopedAcc [] (AvarSharing sn), StableSharingAcc sn (AvarSharing sn) `insertAccNode` noNodeCounts)
 
     scopesAcc (UnscopedAcc _ (AccSharing sn pacc))
       = case pacc of
@@ -1752,14 +1792,14 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         reconstruct newAcc@(Atag _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
               -- occurrences
-          = let thisCount = StableSharingAcc sn (AccSharing sn newAcc) `accNodeCount` 1
+          = let thisCount = StableSharingAcc sn (AccSharing sn newAcc) `insertAccNode` noNodeCounts
             in
             tracePure "FREE" (show thisCount)
             (ScopedAcc [] (AvarSharing sn), thisCount)
         reconstruct newAcc subCount
               -- shared subtree => replace by a sharing variable (if 'recoverAccSharing' enabled)
           | accOccCount > 1 && recoverAccSharing config
-          = let allCount = (StableSharingAcc sn sharingAcc `accNodeCount` 1) +++ newCount
+          = let allCount = (StableSharingAcc sn sharingAcc `insertAccNode` newCount)
             in
             tracePure ("SHARED" ++ completed) (show allCount)
             (ScopedAcc [] (AvarSharing sn), allCount)
@@ -1789,15 +1829,24 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         --     scope errors.
         --
         filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingAcc])
-        filterCompleted counts
-          = let (completed, counts') = break notComplete counts
-            in (counts', [sa | AccNodeCount sa _ <- completed])
+        filterCompleted (ns, graph)
+          = let bindable     = map (isBindable bindable (map hashNodeCount ns)) ns
+                (bind, rest) = partition fst $ zip bindable ns
+            in ((map snd rest, graph), [sa | AccNodeCount sa _ <- map snd bind])
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
             -- of occurrences for that node in the whole program, with the exception that free
             -- variables are never complete
-            notComplete nc@(AccNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingAcc accOccMap sa > n
-            notComplete _                                             = True
+            isCompleted nc@(AccNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingAcc accOccMap sa == n
+            isCompleted _                                             = False
+
+            isBindable :: [Bool] -> [Int] -> NodeCount -> Bool
+            isBindable bindable nodes nc@(AccNodeCount (StableSharingAcc sn _) _) =
+              let superTerms = IntSet.toList $ graph IntMap.! hashStableNameHeight sn
+                  unbound    = mapMaybe (`elemIndex` nodes) superTerms
+              in    isCompleted nc
+                 && all (bindable !!) unbound
+            isBindable _ _ (ExpNodeCount _ _) = False
 
     scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
@@ -1806,10 +1855,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     -- Note [Traversing functions and side effects]
     --
     scopesAfun1 :: Arrays a1 => (Acc a1 -> UnscopedAcc a2) -> (Acc a1 -> ScopedAcc a2, NodeCounts)
-    scopesAfun1 f = (const (ScopedAcc ssa body'), counts')
+    scopesAfun1 f = (const (ScopedAcc ssa body'), (counts',graph))
       where
         body@(UnscopedAcc fvs _) = f undefined
-        ((ScopedAcc [] body'), counts) = scopesAcc body
+        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
         ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
         (freeCounts, counts') = partition isBoundHere counts
 
@@ -1866,13 +1915,13 @@ determineScopesExp
     -> (ScopedExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
 determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
   = let
-        ((ScopedExp [] expWithScopes), nodeCounts) = determineScopesSharingExp config accOccMap expOccMap exp
+        ((ScopedExp [] expWithScopes), (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
         (expCounts, accCounts)          = break isAccNodeCount nodeCounts
 
         isAccNodeCount AccNodeCount{}   = True
         isAccNodeCount _                = False
     in
-    (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, accCounts)
+    (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, cleanCounts (accCounts,graph))
 
 
 determineScopesSharingExp
@@ -1887,10 +1936,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
     scopesAcc = determineScopesSharingAcc config accOccMap
 
     scopesFun1 :: (Exp a -> UnscopedExp b) -> (Exp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = (const (ScopedExp ssa body'), counts')
+    scopesFun1 f = tracePure ("LAMBDA " ++ (show ssa)) (show counts) (const (ScopedExp ssa body'), (counts',graph))
       where
         body@(UnscopedExp fvs _) = f undefined
-        ((ScopedExp [] body'), counts) = scopesExp body
+        ((ScopedExp [] body'), (counts, graph)) = scopesExp body
         ssa     = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
         (freeCounts, counts') = partition isBoundHere counts
 
@@ -1903,7 +1952,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
       = INTERNAL_ERROR(error) "determineScopesSharingExp: scopesExp" "unexpected 'LetSharing'"
 
     scopesExp (UnscopedExp _ (VarSharing sn))
-      = (ScopedExp [] (VarSharing sn), StableSharingExp sn (VarSharing sn) `expNodeCount` 1)
+      = (ScopedExp [] (VarSharing sn), StableSharingExp sn (VarSharing sn) `insertExpNode` noNodeCounts)
 
     scopesExp (UnscopedExp _ (ExpSharing sn pexp))
       = case pexp of
@@ -1991,7 +2040,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         maybeFloatOutAcc c acc@(ScopedAcc _ (AvarSharing _)) accCount        -- nothing to float out
           = reconstruct (c acc) accCount
         maybeFloatOutAcc c acc                 accCount
-          | floatOutAcc config = reconstruct (c var) ((stableAcc `accNodeCount` 1) +++ accCount)
+          | floatOutAcc config = reconstruct (c var) ((stableAcc `insertAccNode` noNodeCounts) +++ accCount)
           | otherwise          = reconstruct (c acc) accCount
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
@@ -2024,14 +2073,14 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         reconstruct newExp@(Tag _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
               -- occurrences
-          = let thisCount = StableSharingExp sn (ExpSharing sn newExp) `expNodeCount` 1
+          = let thisCount = StableSharingExp sn (ExpSharing sn newExp) `insertExpNode` noNodeCounts
             in
             tracePure "FREE" (show thisCount)
             (ScopedExp [] (VarSharing sn), thisCount)
         reconstruct newExp subCount
               -- shared subtree => replace by a sharing variable (if 'recoverExpSharing' enabled)
           | expOccCount > 1 && recoverExpSharing config
-          = let allCount = (StableSharingExp sn sharingExp `expNodeCount` 1) +++ newCount
+          = let allCount = StableSharingExp sn sharingExp `insertExpNode` newCount
             in
             tracePure ("SHARED" ++ completed) (show allCount)
             (ScopedExp [] (VarSharing sn), allCount)
@@ -2061,15 +2110,24 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         --     scope errors.
         --
         filterCompleted :: NodeCounts -> (NodeCounts, [StableSharingExp])
-        filterCompleted counts
-          = let (completed, counts') = break notComplete counts
-            in (counts', [sa | ExpNodeCount sa _ <- completed])
+        filterCompleted (ns,graph)
+          = let bindable       = map (isBindable bindable (map hashNodeCount ns)) ns
+                (bind, unbind) = partition fst $ zip bindable ns
+            in ((map snd unbind, graph), [se | ExpNodeCount se _ <- map snd bind])
           where
             -- a node is not yet complete while the node count 'n' is below the overall number
             -- of occurrences for that node in the whole program, with the exception that free
             -- variables are never complete
-            notComplete nc@(ExpNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingExp expOccMap sa > n
-            notComplete _                                             = True
+            isCompleted nc@(ExpNodeCount sa n) | not . isFreeVar $ nc = lookupWithSharingExp expOccMap sa == n
+            isCompleted _                                             = False
+
+            isBindable :: [Bool] -> [Int] -> NodeCount -> Bool
+            isBindable bindable nodes nc@(ExpNodeCount (StableSharingExp sn _) _) =
+              let superTerms = IntSet.toList $ graph IntMap.! hashStableNameHeight sn
+                  unbound    = mapMaybe (`elemIndex` nodes) superTerms
+              in    isCompleted nc
+                 && all (bindable !!) unbound
+            isBindable _ _ (AccNodeCount _ _) = False
 
 
 -- |Recover sharing information and annotate the HOAS AST with variable and let binding
