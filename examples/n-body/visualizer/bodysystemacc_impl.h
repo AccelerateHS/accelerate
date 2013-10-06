@@ -130,7 +130,7 @@ void BodySystemAcc::_initialize(int numBodies)
     checkCudaErrors(cudaMalloc((void **)&m_timestep, sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&m_softening, sizeof(float)));
 
-    m_prevResult = NULL;
+    m_prevResult.adata = NULL;
     m_bInitialized = true;
 }
 
@@ -166,7 +166,7 @@ void BodySystemAcc::_finalize()
         }
     }
 
-    freeResult(m_prevResult);
+    freeOutput(&m_prevResult);
     freeProgram(m_program);
     accelerateDestroy(m_hndl);
 
@@ -238,25 +238,21 @@ void BodySystemAcc::update(float deltaTime)
 
     InputArray in[] = { {sht, (void**) t}, {shb, (void**) pv} };
 
-    ResultArray out;
+    OutputArray out;
 
     //Run the computation
     runProgram(m_hndl, m_program, in, &out);
 
-    float* out_ptrs[] = { NULL, NULL };
-
-    getDevicePtrs(m_hndl, out, out_ptrs);
-
     if (m_bUsePBO) {
-        checkCudaErrors(cudaMemcpy(pbo_ptr, out_ptrs[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
+        checkCudaErrors(cudaMemcpy(pbo_ptr, out.adata[0], 4 * m_numBodies * sizeof(float), cudaMemcpyDeviceToDevice));
     }
 
-    m_deviceData.dPos[m_currentWrite] = out_ptrs[0];
-    m_deviceData.dVel = out_ptrs[1];
+    m_deviceData.dPos[m_currentWrite] = (float*)out.adata[0];
+    m_deviceData.dVel = (float*)out.adata[1];
 
     //free old data
-    if (m_prevResult != NULL)
-        freeResult(m_prevResult);
+    if (m_prevResult.adata != NULL)
+        freeOutput(&m_prevResult);
 
     m_prevResult = out;
 

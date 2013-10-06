@@ -127,7 +127,7 @@ endif
 
 
 # Common includes and paths for CUDA
-INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc -I '/usr/lib/ghc/include'
+INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc -I/usr/lib/ghc/include -I../../../../accelerate-cuda/foreign
 LDFLAGS       += $(LIBPATH_OPENGL)
 
 ifneq ($(DARWIN),)

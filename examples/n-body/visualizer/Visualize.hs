@@ -12,9 +12,6 @@ import qualified Solver.Naive2                  as Naive
 import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.CUDA.Foreign.Export
 
--- Gives access to the utility functions from the C code.
-foreignAccModule
-
 -- The cuda sample's representation of data.
 --
 -- Elements alternate between x, y, z and w with the left value being position and the right
