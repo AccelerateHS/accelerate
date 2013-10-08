@@ -104,6 +104,7 @@ preAccType k pacc =
                              _            -> error "Who on earth wrote all these weird error messages?"
 
     Acond _ acc _       -> k acc
+    Awhile _ _ acc      -> k acc
     Use ((),a)          -> arrayType a
     Unit _              -> eltType (undefined::e)
     Generate _ _        -> eltType (undefined::e)
@@ -159,7 +160,7 @@ preExpType k e =
     ToIndex _ _       -> eltType (undefined::t)
     FromIndex _ _     -> eltType (undefined::t)
     Cond _ t _        -> preExpType k t
-    Iterate _ _ _     -> eltType (undefined::t)
+    While _ _ _       -> eltType (undefined::t)
     PrimConst _       -> eltType (undefined::t)
     PrimApp _ _       -> eltType (undefined::t)
     Index acc _       -> k acc

@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Renaming & Substitution
   inline, substitute,
+  subTop, subAtop,
 
   -- ** Weakening
   (:>),
@@ -86,10 +87,6 @@ inline :: Elt t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
 inline k f g = Stats.substitution "inline" $ rebuildE k (subTop g) f
-  where
-    subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
-    subTop s ZeroIdx      = s
-    subTop _ (SuccIdx ix) = Var ix
 
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
@@ -108,6 +105,16 @@ substitute k f g
     split :: Elt c => Idx (env,b) c -> PreOpenExp acc ((env,a),b) aenv c
     split ZeroIdx       = Var ZeroIdx
     split (SuccIdx ix)  = Var (SuccIdx (SuccIdx ix))
+
+
+subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
+subTop s ZeroIdx      = s
+subTop _ (SuccIdx ix) = Var ix
+
+subAtop :: Arrays t => PreOpenAcc acc env aenv s -> Idx (aenv, s) t -> PreOpenAcc acc env aenv t
+subAtop t ZeroIdx       = t
+subAtop _ (SuccIdx idx) = Avar idx
+
 
 -- NOTE: [Weakening]
 --
@@ -225,7 +232,7 @@ rebuildPreOpenExp k v av exp =
     ToIndex sh ix       -> ToIndex (rebuildPreOpenExp k v av sh) (rebuildPreOpenExp k v av ix)
     FromIndex sh ix     -> FromIndex (rebuildPreOpenExp k v av sh) (rebuildPreOpenExp k v av ix)
     Cond p t e          -> Cond (rebuildPreOpenExp k v av p) (rebuildPreOpenExp k v av t) (rebuildPreOpenExp k v av e)
-    Iterate n f x       -> Iterate (rebuildPreOpenExp k v av n) (rebuildPreOpenExp k (shiftE k v) (weakenAccExp k . av) f) (rebuildPreOpenExp k v av x)
+    While p f x         -> While (rebuildFun k v av p) (rebuildFun k v av f) (rebuildPreOpenExp k v av x)
     PrimConst c         -> PrimConst c
     PrimApp f x         -> PrimApp f (rebuildPreOpenExp k v av x)
     Index a sh          -> Index (k v av a) (rebuildPreOpenExp k v av sh)
@@ -315,6 +322,7 @@ rebuildPreOpenAcc k v av acc =
     Apply f a           -> Apply (rebuildAfun k v av f) (k v av a)
     Aforeign ff afun as -> Aforeign ff afun (k v av as)
     Acond p t e         -> Acond (rebuildPreOpenExp k v av p) (k v av t) (k v av e)
+    Awhile p f a        -> Awhile (rebuildAfun k v av p) (rebuildAfun k v av f) (k v av a)
     Use a               -> Use a
     Unit e              -> Unit (rebuildPreOpenExp k v av e)
     Reshape e a         -> Reshape (rebuildPreOpenExp k v av e) (k v av a)

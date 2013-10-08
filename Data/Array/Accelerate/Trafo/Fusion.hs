@@ -91,6 +91,11 @@ withSimplStats x = x
 --       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
 --       delayed nodes.
 --
+-- TLM: Note that there really is no ambiguity as to which state an array will
+--      be in following this process: an array will be either delayed or
+--      manifest, and the two helper functions are even named as such! We should
+--      encode this property in the type somehow...
+--
 convertOpenAcc :: Arrays arrs => Bool -> OpenAcc env aenv arrs -> DelayedOpenAcc env aenv arrs
 convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
   where
@@ -127,6 +132,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Alet bnd body           -> alet (manifest bnd) (manifest body)
         Elet bnd body           -> Elet (cvtE bnd) (manifest body)
         Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest a)
         Atuple tup              -> Atuple (cvtAT tup)
         Aprj ix tup             -> Aprj ix (manifest tup)
         Apply f a               -> Apply (cvtAF f) (manifest a)
@@ -230,7 +236,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
         Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
-        Iterate n f x           -> Iterate (cvtE n) (cvtE f) (cvtE x)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE x)
         Index a sh              -> Index (manifest a) (cvtE sh)
@@ -256,7 +262,7 @@ convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 -- number of combinations that need to be considered.
 --
 type EmbedAcc acc = forall env aenv arrs. Arrays arrs => acc env aenv arrs -> Embed acc env aenv arrs
-type ElimAcc acc = forall env aenv s t. Idx aenv s -> acc env aenv t -> Bool
+type ElimAcc  acc = forall env aenv s t. acc env aenv s -> acc env (aenv,s) t -> Bool
 
 embedOpenAcc :: Arrays arrs => Bool -> OpenAcc env aenv arrs -> Embed OpenAcc env aenv arrs
 embedOpenAcc fuseAcc (OpenAcc pacc) =
@@ -267,8 +273,22 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
     -- into the use site, but it is likely advantageous to be far more
     -- aggressive here. SEE: [Sharing vs. Fusion]
     --
-    elimOpenAcc :: Idx aenv s -> OpenAcc env aenv t -> Bool
-    elimOpenAcc v acc = count False v acc <= lIMIT
+    -- As a special case, look for the definition of 'unzip' applied to manifest
+    -- data, which is defined in the prelude as a map projecting out the
+    -- appropriate element.
+    --
+    elimOpenAcc :: ElimAcc OpenAcc
+    elimOpenAcc bnd body
+      | Map f a                 <- extract bnd
+      , Avar _                  <- extract a
+      , Lam (Body (Prj _ _))    <- f
+      = Stats.ruleFired "unzipD" True
+
+      | count False ZeroIdx body <= lIMIT
+      = True
+
+      | otherwise
+      = False
       where
         lIMIT = 1
 
@@ -300,6 +320,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Elet bnd body       -> done $ Elet (cvtE bnd) (cvtA body)
     Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Aprj ix tup         -> aprjD embedAcc ix tup
+    Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
@@ -423,12 +444,12 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         ToIndex sh ix           -> ToIndex (cvtE' sh) (cvtE' ix)
         FromIndex sh ix         -> FromIndex (cvtE' sh) (cvtE' ix)
         Cond p t e              -> Cond (cvtE' p) (cvtE' t) (cvtE' e)
-        Iterate n f x           -> Iterate (cvtE' n) (cvtE' f) (cvtE' x)
+        While p f x             -> While (cvtF' p) (cvtF' f) (cvtE' x)
         PrimConst c             -> PrimConst c
         PrimApp f x             -> PrimApp f (cvtE' x)
-        Index a sh              -> Index a (cvtE' sh)
-        LinearIndex a i         -> LinearIndex a (cvtE' i)
-        Shape a                 -> Shape a
+        Index a sh              -> Index (cvtA a) (cvtE' sh)
+        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE' i)
+        Shape a                 -> Shape (cvtA a)
         ShapeSize sh            -> ShapeSize (cvtE' sh)
         Intersect s t           -> Intersect (cvtE' s) (cvtE' t)
         Foreign ff f e          -> Foreign ff (cvtF' f) (cvtE' e)
@@ -967,7 +988,7 @@ zipWithD f cc1 cc0
 --     in <bound term>
 --   in <body term>
 --
-aletD :: forall acc env aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+aletD :: (Kit acc, Arrays arrs, Arrays brrs)
       => EmbedAcc acc
       -> ElimAcc  acc
       ->          acc env aenv        arrs
@@ -983,9 +1004,23 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Embed env0 cc0      <- embedAcc $ rebuildAcc Var (subTop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildAcc Var (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
+
+  -- Ensure we only call 'embedAcc' once on the body expression
+  --
+  | otherwise
+  = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
+
+
+aletD' :: forall acc env aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+       => EmbedAcc acc
+       -> ElimAcc  acc
+       -> Embed    acc env aenv         arrs
+       -> Embed    acc env (aenv, arrs) brrs
+       -> Embed    acc env aenv         brrs
+aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
   -- let-binding
   -- -----------
@@ -995,10 +1030,10 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- embedAcc. If we don't we can be left with dead terms that don't get
   -- eliminated. This problem occurred in the canny program.
   --
-  | Embed env0 cc0      <- embedAcc acc0
-  , False               <- elimAcc ZeroIdx (computeAcc (Embed env0 cc0))
-  , acc1                <- compute (Embed env1 cc1)
-  = Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
+  | acc1                <- compute (Embed env1 cc1)
+  , False               <- elimAcc (inject acc1) acc0
+  = Stats.ruleFired "aletD/bind"
+  $ Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
 
   -- let-elimination
   -- ---------------
@@ -1013,15 +1048,13 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
       Yield{}   -> eliminate env1 cc1 acc0'
 
   where
-    subTop :: forall aenv s t. Arrays t => PreOpenAcc acc env aenv s -> Idx (aenv,s) t -> PreOpenAcc acc env aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
+    acc0 = computeAcc (Embed env0 cc0)
 
     -- The second part of let-elimination. Splitting into two steps exposes the
     -- extra type variables, and ensures we don't do extra work manipulating the
     -- body when not necessary (which can lead to a complexity blowup).
     --
-    eliminate :: forall aenv aenv' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+    eliminate :: forall env aenv aenv' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
               => Extend     acc env aenv aenv'
               -> Cunctation acc env aenv'               (Array sh e)
               ->            acc env (aenv', Array sh e) brrs
@@ -1038,7 +1071,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         elim sh1 f1
           | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
           , f1'                 <- weakenFA rebuildAcc SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildAcc Var (subTop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          , Embed env0' cc0'    <- embedAcc $ rebuildAcc Var (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
@@ -1072,23 +1105,24 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
-        Iterate n f x                   -> Iterate (cvtE n) (replaceE (weakenE rebuildAcc SuccIdx sh') (weakenFE rebuildAcc SuccIdx f') avar f) (cvtE x)
         PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize sh                    -> ShapeSize (cvtE sh)
         Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
+        While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
+
         Shape a
           | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
           | otherwise                   -> exp
 
         Index a sh
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" $ Let sh b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" . cvtE $ Let sh b
           | otherwise                   -> Index a (cvtE sh)
 
         LinearIndex a i
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" $ Let (Let i (FromIndex (weakenE rebuildAcc SuccIdx sh') (Var ZeroIdx))) b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE rebuildAcc SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (cvtE i)
 
       where
@@ -1137,8 +1171,9 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Atuple tup              -> Atuple (cvtAT tup)
-        Apply f a               -> Apply f (cvtA a)            -- no sharing between f and a
-        Aforeign ff f a         -> Aforeign ff f (cvtA a)      -- no sharing between f and a
+        Awhile p f a            -> Awhile p f (cvtA a)          -- no sharing between p or f and a
+        Apply f a               -> Apply f (cvtA a)             -- no sharing between f and a
+        Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Map f a                 -> Map (cvtF f) (cvtA a)
         ZipWith f a b           -> ZipWith (cvtF f) (cvtA a) (cvtA b)

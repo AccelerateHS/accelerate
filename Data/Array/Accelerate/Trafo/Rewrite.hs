@@ -67,6 +67,7 @@ convertSegments = cvtA
       Apply f a                 -> Apply (cvtAfun f) (cvtA a)
       Aforeign ff afun acc      -> Aforeign ff (cvtAfun afun) (cvtA acc)
       Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
+      Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
       Use a                     -> Use a
       Unit e                    -> Unit (cvtE e)
       Reshape e a               -> Reshape (cvtE e) (cvtA a)

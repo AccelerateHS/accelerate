@@ -40,7 +40,6 @@ module Data.Array.Accelerate.Trafo.Shrink (
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Array.Sugar                ( Arrays )
 import Data.Array.Accelerate.Trafo.Substitution
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -109,7 +108,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       ToIndex sh ix             -> ToIndex <$> shrinkE sh <*> shrinkE ix
       FromIndex sh i            -> FromIndex <$> shrinkE sh <*> shrinkE i
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
-      Iterate n f x             -> Iterate <$> shrinkE n <*> shrinkE f <*> shrinkE x
+      While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
       PrimConst c               -> pure (PrimConst c)
       PrimApp f x               -> PrimApp f <$> shrinkE x
       Index a sh                -> Index a <$> shrinkE sh
@@ -166,6 +165,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Apply f a                 -> Apply (shrinkAF f) (shrinkAcc a)
       Aforeign ff af a          -> Aforeign ff af (shrinkAcc a)
       Acond p t e               -> Acond (shrinkE p) (shrinkAcc t) (shrinkAcc e)
+      Awhile p f a              -> Awhile (shrinkAF p) (shrinkAF f) (shrinkAcc a)
       Use a                     -> Use a
       Unit e                    -> Unit (shrinkE e)
       Reshape e a               -> Reshape (shrinkE e) (shrinkAcc a)
@@ -207,7 +207,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       ToIndex sh ix             -> ToIndex (shrinkE sh) (shrinkE ix)
       FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
       Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
-      Iterate n f x             -> Iterate (shrinkE n) (shrinkE f) (shrinkE x)
+      While p f x               -> While (shrinkF p) (shrinkF f) (shrinkE x)
       PrimConst c               -> PrimConst c
       PrimApp f x               -> PrimApp f (shrinkE x)
       Index a sh                -> Index (shrinkAcc a) (shrinkE sh)
@@ -243,8 +243,8 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subTop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subTop bnd) pbody
+  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
+  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
   | otherwise           = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -258,10 +258,6 @@ basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
     msg   = case uses of
       0 -> "dead acc"
       _ -> "inline acc"         -- forced inlining when lIMIT > 1
-
-    subTop :: Arrays t => PreOpenAcc acc env aenv s -> Idx (aenv,s) t -> PreOpenAcc acc env aenv t
-    subTop t ZeroIdx       = t
-    subTop _ (SuccIdx idx) = Avar idx
 
 
 -- Occurrence Counting
@@ -293,7 +289,7 @@ usesOfExp idx = countE
       ToIndex sh ix             -> countE sh + countE ix
       FromIndex sh i            -> countE sh + countE i
       Cond p t e                -> countE p  + countE t `max` countE e
-      Iterate n f x             -> countE n  + countE x + usesOfExp (SuccIdx idx) f
+      While p f x               -> countE x  + countF idx p + countF idx f
       PrimConst _               -> 0
       PrimApp _ x               -> countE x
       Index _ sh                -> countE sh
@@ -302,6 +298,10 @@ usesOfExp idx = countE
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
       Foreign _ _ e             -> countE e
+
+    countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
+    countF idx' (Lam  f) = countF (SuccIdx idx') f
+    countF idx' (Body b) = usesOfExp idx' b
 
     countT :: Tuple (PreOpenExp acc env aenv) e -> Int
     countT NilTup        = 0
@@ -336,6 +336,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Apply _ a                 -> countA a
       Aforeign _ _ a            -> countA a
       Acond p t e               -> countE p  + countA t `max` countA e
+      Awhile _ _ a              -> countA a
       Use _                     -> 0
       Unit e                    -> countE e
       Reshape e a               -> countE e  + countA a
@@ -380,7 +381,7 @@ usesOfPreAcc withShape countAcc idx = countP
       ToIndex sh ix             -> countE sh + countE ix
       FromIndex sh i            -> countE sh + countE i
       Cond p t e                -> countE p  + countE t + countE e
-      Iterate n f x             -> countE n  + countE x + countE f
+      While p f x               -> countF p  + countF f + countE x
       PrimConst _               -> 0
       PrimApp _ x               -> countE x
       Index a sh                -> countA a + countE sh

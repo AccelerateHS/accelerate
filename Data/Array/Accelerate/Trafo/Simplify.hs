@@ -24,6 +24,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 
 -- standard library
 import Prelude                                          hiding ( exp, iterate )
+import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
@@ -31,7 +32,7 @@ import Control.Applicative                              hiding ( Const )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
-import Data.Array.Accelerate.Type
+-- import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
@@ -126,6 +127,9 @@ recoverLoops
     -> PreOpenExp acc env     aenv a
     -> PreOpenExp acc (env,a) aenv b
     -> Maybe (PreOpenExp acc env aenv b)
+recoverLoops _ _ _
+  = Nothing
+{--
 recoverLoops _ bnd e3
   -- To introduce scaler loops, we look for expressions of the form:
   --
@@ -171,6 +175,7 @@ recoverLoops _ bnd e3
                 -> PreOpenExp acc (env,t) aenv g
                 -> Maybe (s :=: t)
     matchEnvTop _ _ = gcast REFL
+--}
 
 
 -- Walk a scalar expression applying simplifications to terms bottom-up.
@@ -212,7 +217,6 @@ simplifyOpenExp env = first getAny . cvtE
       ToIndex sh ix             -> ToIndex <$> cvtE sh <*> cvtE ix
       FromIndex sh ix           -> FromIndex <$> cvtE sh <*> cvtE ix
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
-      Iterate n f x             -> Iterate <$> cvtE n <*> cvtE' (incExp env `PushExp` Var ZeroIdx) f <*> cvtE x
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> evalPrimApp env f <$> cvtE x
       Index a sh                -> Index a <$> cvtE sh
@@ -221,6 +225,7 @@ simplifyOpenExp env = first getAny . cvtE
       ShapeSize sh              -> ShapeSize <$> cvtE sh
       Intersect s t             -> cvtE s `intersect` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
+      While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
 
     cvtT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     cvtT NilTup        = pure NilTup
@@ -229,16 +234,30 @@ simplifyOpenExp env = first getAny . cvtE
     cvtE' :: Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
 
-    -- If the head terms of a shape intersection match, avoid the intersection
-    -- test and return the shape.
+    cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
+    cvtF env' = first Any . simplifyOpenFun env'
+
+    -- Return the minimal set of unique shapes to intersect. This is a bit
+    -- inefficient, but the number of shapes is expected to be small so should
+    -- be fine in practice.
     --
     intersect :: Shape t
               => (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
               -> (Any, PreOpenExp acc env aenv t)
-    intersect sh1@(_,sh1') sh2@(_,sh2')
-      | Just REFL <- match sh1' sh2' = Stats.ruleFired "intersect" (yes sh1')
-      | otherwise                    = Intersect <$> sh1 <*> sh2
+    intersect (c1, sh1) (c2, sh2)
+      | Nothing <- match sh sh' = Stats.ruleFired "intersect" (yes sh')
+      | otherwise               = (c1 <> c2, sh')
+      where
+        sh      = Intersect sh1 sh2
+        sh'     = foldl1 Intersect
+                $ nubBy (\x y -> isJust (match x y))
+                $ leaves sh1 ++ leaves sh2
+
+        leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
+        leaves (Intersect x y)  = leaves x ++ leaves y
+        leaves rest             = [rest]
+
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.

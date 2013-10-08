@@ -198,24 +198,25 @@ Flag internal-checks
 
 Library
   Include-Dirs:         include
-  Build-depends:        array           >= 0.3,
-                        base            == 4.*,
-                        containers      >= 0.3,
-                        fclabels        >= 1.0,
-                        ghc-prim        >= 0.2,
-                        hashable        >= 1.1,
-                        hashtables      >= 1.0,
-                        pretty          >= 1.0
+  Build-depends:        array                >= 0.3,
+                        base                 == 4.*,
+                        containers           >= 0.3,
+                        unordered-containers >= 0.2,
+                        fclabels             >= 1.0,
+                        ghc-prim             >= 0.2,
+                        hashable             >= 1.1,
+                        hashtables           >= 1.0,
+                        pretty               >= 1.0
 
   if flag(more-pp)
-    Build-depends:      bytestring      >= 0.9,
-                        blaze-html      >= 0.5,
-                        blaze-markup    >= 0.5,
-                        directory       >= 1.0,
-                        filepath        >= 1.0,
-                        mtl             >= 2.0,
-                        text            >= 0.10,
-                        unix            >= 2.4
+    Build-depends:      bytestring           >= 0.9,
+                        blaze-html           >= 0.5,
+                        blaze-markup         >= 0.5,
+                        directory            >= 1.0,
+                        filepath             >= 1.0,
+                        mtl                  >= 2.0,
+                        text                 >= 0.10,
+                        unix                 >= 2.4
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
