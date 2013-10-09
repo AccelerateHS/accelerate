@@ -676,9 +676,7 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 class Typeable2 f => Foreign (f :: * -> * -> *) where
 
   -- Backends should be able to produce a string representation of the foreign
-  -- function for pretty printing. It should contain the backend name and
-  -- ideally a string uniquely identifying the foreign function being used.
-  --
+  -- function for pretty printing, typically the name of the function.
   strForeign :: f args results -> String
 
 
