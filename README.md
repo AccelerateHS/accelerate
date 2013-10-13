@@ -3,7 +3,7 @@ An Embedded Language for Accelerated Array Computations
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
-For more details, see our recent paper [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]. There are also some slightly outdated slides and a video of a talk at the [Haskell Implementors Workshop 2009][HIW'09] (in Edinburgh): [Haskell Arrays, Accelerated (Using GPUs).][Cha09]
+For more details, see our papers [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11] and [Optimising Purely Functional GPU Programs][MCKL13]. There are also some slides of a fairly recent presentation: [Embedded Languages for High-Performance Computing in Haskell.][Embedded]
 
 A simple example
 ----------------
@@ -76,8 +76,9 @@ Here is a list of features that are currently missing:
 
 
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:                  http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                http://hackage.haskell.org/package/accelerate
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
   [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
