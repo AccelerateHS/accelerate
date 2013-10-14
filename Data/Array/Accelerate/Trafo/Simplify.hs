@@ -54,10 +54,10 @@ class Simplify f where
 -- RCE: Simplifier has been turned off till vectorisations is implemented as
 -- it does not work for open expressions
 instance Kit acc => Simplify (PreOpenFun acc env aenv f) where
-  simplify = id --simplifyFun
+  simplify = simplifyFun
 
 instance Kit acc => Simplify (PreOpenExp acc env aenv e) where
-  simplify = id --simplifyExp
+  simplify = simplifyExp
 
 
 -- Scalar optimisations
