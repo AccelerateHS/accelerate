@@ -17,7 +17,7 @@
 module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Renaming & Substitution
-  inline, substitute,
+  inline, inlineAE, substitute,
   subTop, subAtop,
 
   -- ** Weakening
@@ -87,6 +87,13 @@ inline :: Elt t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
 inline k f g = Stats.substitution "inline" $ rebuildE k (subTop g) f
+
+inlineAE :: Arrays t
+         => RebuildAcc acc
+         -> acc            (env,s) aenv t
+         -> PreOpenExp acc env     aenv s
+         -> acc            env     aenv t
+inlineAE k f g = Stats.substitution "inlineAE" $ k (subTop g) Avar f
 
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
