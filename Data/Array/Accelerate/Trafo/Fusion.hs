@@ -148,9 +148,9 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Map f a                 -> Map (cvtF f) (delayed a)
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed a)
-        Backpermute sh p a      -> backpermute (cvtE sh) (cvtF p) (delayed a) a
+        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed a)
+        Reshape sl a            -> Reshape (cvtE sl) (delayed a)
 
-        Reshape{}               -> fusionError
         Replicate{}             -> fusionError
         Slice{}                 -> fusionError
         ZipWith{}               -> fusionError
@@ -176,21 +176,6 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Permute f d p a         -> Permute  (cvtF f) (manifest d) (cvtF p) (delayed a)
         Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
-
-    -- A backwards permutation at this stage might be further simplified as a
-    -- reshape operation, which can be executed in constant time without
-    -- actually executing any array operations.
-    --
-    -- This requires that the argument of reshape be a manifest array, which is
-    -- an exception to the rule of having all array inputs in delayed form.
-    --
-    backpermute sh p a x
-      | OpenAcc (Avar v)        <- x
-      , Just REFL               <- match p (simplify $ reindex (arrayShape v) sh)
-      = Reshape sh (Manifest (Avar v))
-
-      | otherwise
-      = Backpermute sh p a
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -350,7 +335,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Backpermute sl p a  -> fuse  (into2 backpermuteD      (cvtE sl) (cvtF p)) a
     Slice slix a sl     -> fuse  (into  (sliceD slix)     (cvtE sl)) a
     Replicate slix sh a -> fuse  (into  (replicateD slix) (cvtE sh)) a
-    Reshape sl a        -> fuse  (into  reshapeD          (cvtE sl)) a
+    Reshape sl a        -> reshapeD (embedAcc a) (cvtE sl)
 
     -- Consumers
     -- ---------
@@ -847,24 +832,26 @@ sliceD sliceIndex slix cc
 
 -- Reshape an array
 --
--- For delayed arrays this is implemented as an index space transformation.
--- However for manifest arrays this can be done in constant time. However, if
--- the reshaped array is later consumed, for example in foldAll, this won't be
--- fused into the consumer. At this point always convert into a delayed
--- representation, and attempt to recover the reshape operation in the final
--- quenching phase.
+-- For delayed arrays this is implemented as an index space transformation. For
+-- manifest arrays this can be done with the standard Reshape operation in
+-- constant time without executing any array operations. This does not affect
+-- the fusion process since the term is already manifest.
 --
 -- TLM: there was a runtime check to ensure the old and new shapes contained the
 --      same number of elements: this has been lost for the delayed cases!
 --
 reshapeD
-    :: (Kit acc, Shape sh, Shape sl)
-    => PreExp     acc aenv sl
-    -> Cunctation acc aenv (Array sh e)
-    -> Cunctation acc aenv (Array sl e)
-reshapeD sl cc
+    :: (Kit acc, Shape sh, Shape sl, Elt e)
+    => Embed  acc aenv (Array sh e)
+    -> PreExp acc aenv sl
+    -> Embed  acc aenv (Array sl e)
+reshapeD (Embed env cc) (sink env -> sl)
+  | Done v      <- cc
+  = Embed (env `PushEnv` Reshape sl (avarIn v)) (Done ZeroIdx)
+
+  | otherwise
   = Stats.ruleFired "reshapeD"
-  $ backpermuteD sl (reindex (shape cc) sl) cc
+  $ Embed env (backpermuteD sl (reindex (shape cc) sl) cc)
 
 
 -- Combine two arrays element-wise with a binary function to produce a delayed
