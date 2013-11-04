@@ -3,7 +3,13 @@ An Embedded Language for Accelerated Array Computations
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
-For more details, see our papers [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11] and [Optimising Purely Functional GPU Programs][MCKL13]. There are also some slides of a fairly recent presentation: [Embedded Languages for High-Performance Computing in Haskell.][Embedded]
+For more details, see our papers:
+ * [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]
+ * [Optimising Purely Functional GPU Programs][MCKL13]
+
+There are also slides from some fairly recent presentations:
+ * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
+ * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video])
 
 A simple example
 ----------------
@@ -14,8 +20,6 @@ As a simple example, consider the computation of a dot product of two vectors of
     dotp xs ys = fold (+) 0 (zipWith (*) xs ys)
 
 Except for the type, this code is almost the same as the corresponding Haskell code on lists of floats. The types indicate that the computation may be online-compiled for performance — for example, using `Data.Array.Accelerate.CUDA.run` it may be on-the-fly off-loaded to a GPU.
-
-For a complete introduction to Accelerate by example, see my talk _GPGPU Programming in Haskell with Accelerate_ from YOW! LambdaJam 2013 ([slides][yow13-slides]) ([video][yow13-video]).
 
 Availability
 ------------
@@ -97,6 +101,6 @@ Here is a list of features that are currently missing:
   [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
   [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
-  [yow13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
-  [yow13-video]:            http://youtu.be/ARqE4yT2Z0o
+  [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
+  [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
 
