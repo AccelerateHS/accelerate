@@ -56,6 +56,7 @@ import Data.Array.Accelerate.Array.Sugar (
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution
+import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Smart            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
@@ -69,7 +70,7 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sharing.convertAcc True True
+run = force . evalAcc . Vectorise.vectoriseAcc . Sharing.convertAcc True True
 
 
 -- | Prepare and run an embedded array program of one argument
@@ -83,7 +84,7 @@ run1 = run'
 --
 run' :: Sharing.Afunction f => f -> Sharing.AfunctionR f
 run' afun = let acc = Sharing.convertAfun True True afun
-            in  evalOpenAfun acc EmptyElt Empty
+            in  evalOpenAfun (Vectorise.vectoriseAfun acc) EmptyElt Empty
 
 
 -- | Stream a lazily read list of input arrays through the given program,
@@ -812,7 +813,7 @@ evalOpenExp (Foreign _ f e) env aenv
     wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
 
     e' = case f of
-           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE rebuildOpenAcc wExp b)
+           (Lam (Body b)) -> Let e $ weakenA undefined (weakenE wExp b)
            _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
 
 

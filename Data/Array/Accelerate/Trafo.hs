@@ -27,7 +27,6 @@ module Data.Array.Accelerate.Trafo (
   module Data.Array.Accelerate.Trafo.Fusion,
 
   -- * Substitution
-  rebuildAcc,
   module Data.Array.Accelerate.Trafo.Substitution,
 
 ) where
@@ -47,6 +46,7 @@ import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
+import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 
 -- Configuration
@@ -60,6 +60,8 @@ data Phase = Phase
     -- | Recover sharing of scalar expressions?
   , recoverExpSharing           :: Bool
 
+    -- | Vectorise computations to remove nested parallelism?
+  , enableVectorisation         :: Bool
     -- | Fuse array computations? This also implies simplifying scalar
     --   expressions. NOTE: currently always enabled.
   , enableAccFusion             :: Bool
@@ -76,6 +78,7 @@ phases :: Phase
 phases =  Phase
   { recoverAccSharing      = True
   , recoverExpSharing      = True
+  , enableVectorisation    = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
   }
@@ -97,6 +100,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = Fusion.convertAcc enableAccFusion
+  $ Vectorise.vectoriseAcc `when` enableVectorisation
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc recoverAccSharing recoverExpSharing
   $ acc
@@ -111,6 +115,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = Fusion.convertAfun enableAccFusion
+  $ Vectorise.vectoriseAfun `when` enableVectorisation
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ Sharing.convertAfun recoverAccSharing recoverExpSharing
   $ acc
