@@ -90,7 +90,7 @@ localCSE :: (Kit acc, Elt a, Elt b)
          -> PreOpenExp acc (env,a) aenv b
          -> Maybe (PreOpenExp acc env aenv b)
 localCSE env bnd body
-  | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline rebuildAcc body (Var ix)
+  | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inlineE body (Var ix)
   | otherwise                    = Nothing
 
 

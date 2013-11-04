@@ -77,13 +77,14 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
     -- into the body. In cases where it is not used at all, this is equivalent
     -- to dead-code elimination.
     --
+    lIMIT :: Int
     lIMIT = 1
 
     shrinkE :: Kit acc => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     shrinkE exp = case exp of
       Let bnd body
-        | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inline rebuildAcc body bnd)
-        | uses <= lIMIT -> Stats.betaReduce msg . yes $ shrinkE (inline rebuildAcc (snd body') (snd bnd'))
+        | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inlineE body bnd)
+        | uses <= lIMIT -> Stats.betaReduce msg . yes $ shrinkE (inlineE (snd body') (snd bnd'))
         | otherwise     -> Let <$> bnd' <*> body'
         where
           bnd'  = shrinkE bnd
@@ -243,8 +244,8 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
+  | Avar _ <- bnd       = Stats.inline "Avar"  $ rebuild (Just . Var) (Just . subAtop bnd) pbody
+  | uses <= lIMIT       = Stats.betaReduce msg $ rebuild (Just . Var) (Just . subAtop bnd) pbody
   | otherwise           = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined

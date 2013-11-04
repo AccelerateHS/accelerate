@@ -2,12 +2,14 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE IncoherentInstances  #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE DefaultSignatures    #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -22,7 +24,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn, kmap, compose,
+  avarIn, kmap, compose, subApply,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -31,12 +33,14 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
+  Extend(..), join, bind, sink, sink1
 
 ) where
 
 -- standard library
 import Prelude                                          hiding ( until )
 import Data.Hashable
+import Control.Applicative                              hiding ( Const )
 import Text.PrettyPrint
 
 -- friends
@@ -57,11 +61,10 @@ import qualified Data.Array.Accelerate.Debug    as Stats
 -- The bat utility belt of operations required to manipulate terms parameterised
 -- by the recursive closure.
 --
-class Kit acc where
+class RebuildableAcc acc => Kit acc where
   inject        :: PreOpenAcc acc env aenv a -> acc env aenv a
   extract       :: acc env aenv a -> PreOpenAcc acc env aenv a
   --
-  rebuildAcc    :: RebuildAcc acc
   matchAcc      :: MatchAcc acc
   hashAcc       :: HashAcc acc
   prettyAcc     :: PrettyAcc acc
@@ -70,7 +73,6 @@ instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
 
-  rebuildAcc    = rebuildOpenAcc
   matchAcc      = matchOpenAcc
   hashAcc       = hashOpenAcc
   prettyAcc     = prettyOpenAcc
@@ -85,12 +87,21 @@ infixr `compose`
 
 -- | Composition of unary functions.
 --
-compose :: (Kit acc, Elt c)
+compose :: (RebuildableAcc acc, Elt c)
         => PreOpenFun acc env aenv (b -> c)
         -> PreOpenFun acc env aenv (a -> b)
         -> PreOpenFun acc env aenv (a -> c)
-compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute rebuildAcc f g
+compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute f g
 compose _              _              = error "compose: impossible evaluation"
+
+-- | Apply an array level function via substitution
+--
+subApply :: (RebuildableAcc acc, Arrays a)
+         => PreOpenAfun acc env aenv (a -> b)
+         -> acc             env aenv a
+         -> PreOpenAcc  acc env aenv b
+subApply (Alam (Abody f)) a = Alet a f
+subApply _                _ = error "subApply: inconsistent evaluation"
 
 -- A class for testing the equality of terms homogeneously, returning a witness
 -- to the existentially quantified terms in the positive case.
@@ -112,7 +123,6 @@ instance Kit acc => Match (PreOpenAcc acc env aenv) where
 
 instance Kit acc => Match (acc env aenv) where      -- overlapping, undecidable, incoherent
   match = matchAcc
-
 
 -- Delayed Arrays
 -- ==============
@@ -139,11 +149,15 @@ data DelayedOpenAcc env aenv a where
     , linearIndexD      :: PreOpenFun DelayedOpenAcc env aenv (Int -> e)
     }                   -> DelayedOpenAcc env aenv (Array sh e)
 
+instance Rebuildable DelayedOpenAcc where
+  type AccClo DelayedOpenAcc = DelayedOpenAcc
+
+  rebuild = rebuildDelayed
+
 instance Kit DelayedOpenAcc where
   inject        = Manifest
   extract       = error "DelayedAcc.extract"
   --
-  rebuildAcc    = rebuildDelayed
   matchAcc      = matchDelayed
   hashAcc       = hashDelayed
   prettyAcc     = prettyDelayed
@@ -171,10 +185,10 @@ matchDelayed _ _
 
 rebuildDelayed :: RebuildAcc DelayedOpenAcc
 rebuildDelayed v av acc = case acc of
-  Manifest pacc -> Manifest (rebuildPreOpenAcc rebuildDelayed v av pacc)
-  Delayed{..}   -> Delayed (rebuildPreOpenExp rebuildDelayed v av extentD)
-                           (rebuildFun rebuildDelayed v av indexD)
-                           (rebuildFun rebuildDelayed v av linearIndexD)
+  Manifest pacc -> Manifest <$> (rebuildPreOpenAcc rebuildDelayed v av pacc)
+  Delayed{..}   -> Delayed <$> (rebuildPreOpenExp rebuildDelayed v av extentD)
+                           <*> (rebuildFun rebuildDelayed v av indexD)
+                           <*> (rebuildFun rebuildDelayed v av linearIndexD)
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
@@ -191,7 +205,7 @@ prettyDelayed alvl wrap acc = case acc of
   Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
   Delayed sh f _
     | Shape a           <- sh
-    , Just REFL         <- match f (Lam (Body (Index (rebuildDelayed (Var . SuccIdx) Avar a) (Var ZeroIdx))))
+    , Just REFL         <- match f (Lam (Body (Index (weakenE SuccIdx a) (Var ZeroIdx))))
     -> prettyDelayed alvl wrap a
 
     | otherwise
@@ -217,7 +231,7 @@ data Gamma acc env env' aenv where
 
 incExp :: (Kit acc) => Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
 incExp EmptyExp        = EmptyExp
-incExp (PushExp env e) = incExp env `PushExp` weakenE rebuildAcc SuccIdx e
+incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
 
 prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
 prjExp ZeroIdx      (PushExp _   v) = v
@@ -229,4 +243,57 @@ lookupExp EmptyExp        _       = Nothing
 lookupExp (PushExp env e) x
   | Just REFL <- match e x = Just ZeroIdx
   | otherwise              = SuccIdx `fmap` lookupExp env x
+
+-- As part of various transformation we often need to lift out array valued
+-- inputs to be let-bound at a higher point.
+--
+-- The Extend type is a heterogeneous snoc-list of array terms that witnesses
+-- how the array environment is extended by binding these additional terms.
+--
+data Extend acc env aenv aenv' where
+  BaseEnv :: Extend acc env aenv aenv
+
+  PushEnv :: Arrays a
+          => Extend acc env aenv aenv' -> PreOpenAcc acc env aenv' a -> Extend acc env aenv (aenv', a)
+
+-- Append two environment witnesses
+--
+join :: Extend acc env aenv aenv' -> Extend acc env aenv' aenv'' -> Extend acc env aenv aenv''
+join x BaseEnv        = x
+join x (PushEnv as a) = x `join` as `PushEnv` a
+
+-- Bring into scope all of the array terms in the Extend environment list. This
+-- converts a term in the inner environment (aenv') into the outer (aenv).
+--
+bind :: (Kit acc, Arrays a)
+     => Extend acc env aenv aenv'
+     -> PreOpenAcc acc env aenv' a
+     -> PreOpenAcc acc env aenv  a
+bind BaseEnv         = id
+bind (PushEnv env a) = bind env . Alet (inject a) . inject
+
+-- Sink a term from one array environment into another, where additional
+-- bindings have come into scope according to the witness and no old things have
+-- vanished.
+--
+-- NB: For this function, it is not required that the scalar environment of the 'Extend'
+-- matches that of the term. As it only weakens with respect to the array environment.
+--
+sink :: Sink f => Extend acc env aenv aenv' -> f env' aenv t -> f env' aenv' t
+sink env = weakenA (k env)
+  where
+    k :: Extend acc env aenv aenv' -> Idx aenv t -> Idx aenv' t
+    k BaseEnv       = Stats.substitution "sink" id
+    k (PushEnv e _) = SuccIdx . k e
+
+sink1 :: Sink f => Extend acc env aenv aenv' -> f env' (aenv,s) t -> f env' (aenv',s) t
+sink1 env = weakenA (k env)
+  where
+    k :: Extend acc env aenv aenv' -> Idx (aenv,s) t -> Idx (aenv',s) t
+    k BaseEnv       = Stats.substitution "sink1" id
+    k (PushEnv e _) = split . k e
+    --
+    split :: Idx (aenv,s) t -> Idx ((aenv,u),s) t
+    split ZeroIdx      = ZeroIdx
+    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
 

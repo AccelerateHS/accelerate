@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
+{-# LANGUAGE TypeFamilies         #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 -- |
@@ -46,9 +47,9 @@ import Prelude                                          hiding ( exp, until )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
-import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape )
 import Data.Array.Accelerate.Tuple
@@ -460,15 +461,15 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 
     -- Helpers to embed and fuse delayed terms
     --
-    into :: Sink f => (f aenv'' a -> b) -> f aenv' a -> Extend acc env aenv' aenv'' -> b
+    into :: Sink f => (f env aenv'' a -> b) -> f env aenv' a -> Extend acc env aenv' aenv'' -> b
     into op a env = op (sink env a)
 
     into2 :: (Sink f1, Sink f2)
-          => (f1 aenv'' a -> f2 aenv'' b -> c) -> f1 aenv' a -> f2 aenv' b -> Extend acc env aenv' aenv'' -> c
+          => (f1 env aenv'' a -> f2 env aenv'' b -> c) -> f1 env aenv' a -> f2 env aenv' b -> Extend acc env aenv' aenv'' -> c
     into2 op a b env = op (sink env a) (sink env b)
 
     into3 :: (Sink f1, Sink f2, Sink f3)
-          => (f1 aenv'' a -> f2 aenv'' b -> f3 aenv'' c -> d) -> f1 aenv' a -> f2 aenv' b -> f3 aenv' c -> Extend acc env aenv' aenv'' -> d
+          => (f1 env aenv'' a -> f2 env aenv'' b -> f3 env aenv'' c -> d) -> f1 env aenv' a -> f2 env aenv' b -> f3 env aenv' c -> Extend acc env aenv' aenv'' -> d
     into3 op a b c env = op (sink env a) (sink env b) (sink env c)
 
     fuse :: Arrays as
@@ -644,91 +645,21 @@ accType' _ = arrays' (undefined :: a)
 -- Environment manipulation
 -- ========================
 
--- NOTE: [Extend]
---
--- As part of the fusion transformation we often need to lift out array valued
--- inputs to be let-bound at a higher point. We can't add these directly to the
--- output array term because these would interfere with further fusion steps.
---
--- The Extend type is a heterogeneous snoc-list of array terms that witnesses
--- how the array environment is extend by binding these additional terms.
---
-data Extend acc env aenv aenv' where
-  BaseEnv :: Extend acc env aenv aenv
-
-  PushEnv :: Arrays a
-          => Extend acc env aenv aenv' -> PreOpenAcc acc env aenv' a -> Extend acc env aenv (aenv', a)
-
-
--- Append two environment witnesses
---
-join :: Extend acc env aenv aenv' -> Extend acc env aenv' aenv'' -> Extend acc env aenv aenv''
-join x BaseEnv        = x
-join x (PushEnv as a) = x `join` as `PushEnv` a
-
--- Bring into scope all of the array terms in the Extend environment list. This
--- converts a term in the inner environment (aenv') into the outer (aenv).
---
-bind :: (Kit acc, Arrays a)
-     => Extend acc env aenv aenv'
-     -> PreOpenAcc acc env aenv' a
-     -> PreOpenAcc acc env aenv  a
-bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (inject a) . inject
-
-
 -- prjExtend :: Kit acc => Extend acc env env env' -> Idx env' t -> PreOpenAcc acc env' t
 -- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
 -- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
 -- prjExtend _               _             = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
 
+instance Kit acc => Sink (Cunctation acc) where
+  weakenA k cc = case cc of
+    Done v              -> Done (k v)
+    Step sh p f v       -> Step (weakenA k sh) (weakenA k p) (weakenA k f) (k v)
+    Yield sh f          -> Yield (weakenA k sh) (weakenA k f)
 
--- Sink a term from one array environment into another, where additional
--- bindings have come into scope according to the witness and no old things have
--- vanished.
---
-sink :: Sink f => Extend acc env aenv aenv' -> f aenv t -> f aenv' t
-sink env = weaken (k env)
-  where
-    k :: Extend acc env aenv aenv' -> Idx aenv t -> Idx aenv' t
-    k BaseEnv       = Stats.substitution "sink" id
-    k (PushEnv e _) = SuccIdx . k e
-
-sink1 :: Sink f => Extend acc env aenv aenv' -> f (aenv,s) t -> f (aenv',s) t
-sink1 env = weaken (k env)
-  where
-    k :: Extend acc env aenv aenv' -> Idx (aenv,s) t -> Idx (aenv',s) t
-    k BaseEnv       = Stats.substitution "sink1" id
-    k (PushEnv e _) = split . k e
-    --
-    split :: Idx (aenv,s) t -> Idx ((aenv,u),s) t
-    split ZeroIdx      = ZeroIdx
-    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
-
-
-class Sink f where
-  weaken :: env :> env' -> f env t -> f env' t
-
-instance Sink Idx where
-  weaken k = k
-
-instance Kit acc => Sink (PreOpenExp acc env) where
-  weaken k = weakenEA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenFun acc env) where
-  weaken k = weakenFA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenAcc acc env) where
-  weaken k = weakenA rebuildAcc k
-
-instance Kit acc => Sink (acc env) where
-  weaken k = rebuildAcc Var (Avar . k)
-
-instance Kit acc => Sink (Cunctation acc env) where
-  weaken k cc = case cc of
-    Done v              -> Done (weaken k v)
-    Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
-    Yield sh f          -> Yield (weaken k sh) (weaken k f)
+  weakenE k cc = case cc of
+    Done v              -> Done v
+    Step sh p f v       -> Step (weakenE k sh) (weakenE k p) (weakenE k f) v
+    Yield sh f          -> Yield (weakenE k sh) (weakenE k f)
 
 
 -- Array fusion of a de Bruijn computation AST
@@ -902,10 +833,10 @@ zipWithD f cc1 cc0
             -> PreOpenFun acc env aenv (e -> b)
             -> PreOpenFun acc env aenv (e -> c)
     combine c ixa ixb
-      | Lam (Lam (Body c'))     <- weakenFE rebuildAcc SuccIdx c   :: PreOpenFun acc (env,e) aenv (a -> b -> c)
+      | Lam (Lam (Body c'))     <- weakenE SuccIdx c   :: PreOpenFun acc (env,e) aenv (a -> b -> c)
       , Lam (Body ixa')         <- ixa                          -- else the skolem 'e' will escape
       , Lam (Body ixb')         <- ixb
-      = Lam $ Body $ Let ixa' $ Let (weakenE rebuildAcc SuccIdx ixb') c'
+      = Lam $ Body $ Let ixa' $ Let (weakenE SuccIdx ixb') c'
 
 
 -- NOTE: [Sharing vs. Fusion]
@@ -1004,7 +935,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Embed env0 cc0      <- embedAcc $ rebuildAcc Var (subAtop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildPure Var (subAtop (Avar v1) . unIA . sinker env1 . IA) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `join` env0) cc0
 
@@ -1012,7 +943,9 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   --
   | otherwise
   = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
-
+  where
+    sinker :: Kit acc => Extend acc env aenv aenv' -> IdxA acc env (aenv,s) t -> IdxA acc env (aenv',s) t
+    sinker = sink1
 
 aletD' :: forall acc env aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
        => EmbedAcc acc
@@ -1069,9 +1002,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         elim :: PreOpenExp acc env aenv' sh -> PreOpenFun acc env aenv' (sh -> e) -> Embed acc env aenv brrs
         elim sh1 f1
-          | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
-          , f1'                 <- weakenFA rebuildAcc SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildAcc Var (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          | sh1'                <- weakenA SuccIdx sh1
+          , f1'                 <- weakenA SuccIdx f1
+          , Embed env0' cc0'    <- embedAcc $ flip inlineA bnd $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `join` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
@@ -1089,7 +1022,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
              -> PreOpenExp acc env aenv t
     replaceE sh' f' avar exp =
       case exp of
-        Let x y                         -> Let (cvtE x) (replaceE (weakenE rebuildAcc SuccIdx sh') (weakenFE rebuildAcc SuccIdx f') avar y)
+        Let x y                         -> Let (cvtE x) (replaceE (weakenE SuccIdx sh') (weakenE SuccIdx f') avar y)
         Var i                           -> Var i
         Foreign ff f e                  -> Foreign ff f (cvtE e)
         Const c                         -> Const c
@@ -1122,7 +1055,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         LinearIndex a i
           | Just REFL    <- match a a'
-          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE rebuildAcc SuccIdx sh') (Var ZeroIdx))) b
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
           | otherwise                   -> LinearIndex a (cvtE i)
 
       where
@@ -1142,7 +1075,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     replaceF sh' f' avar fun =
       case fun of
         Body e          -> Body (replaceE sh' f' avar e)
-        Lam f           -> Lam  (replaceF (weakenE rebuildAcc SuccIdx sh') (weakenFE rebuildAcc SuccIdx f') avar f)
+        Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenE SuccIdx f') avar f)
 
     replaceA :: forall env aenv sh e a. (Kit acc, Shape sh, Elt e)
              => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
@@ -1155,14 +1088,14 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           | otherwise                   -> Avar v
 
         Alet bnd body                   ->
-          let sh'' = weakenEA rebuildAcc SuccIdx sh'
-              f''  = weakenFA rebuildAcc SuccIdx f'
+          let sh'' = weakenA SuccIdx sh'
+              f''  = weakenA SuccIdx f'
           in
           Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
 
         Elet bnd body                ->
-          let sh'' = weakenE  rebuildAcc SuccIdx sh'
-              f''  = weakenFE rebuildAcc SuccIdx f'
+          let sh'' = weakenE SuccIdx sh'
+              f''  = weakenE SuccIdx f'
           in
           Elet (cvtE bnd) (kmap (replaceA sh'' f'' avar) body)
 
@@ -1267,10 +1200,10 @@ identity :: Elt a => PreOpenFun acc env aenv (a -> a)
 identity = Lam (Body (Var ZeroIdx))
 
 toIndex :: (Kit acc, Shape sh) => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> Int)
-toIndex sh = Lam (Body (ToIndex (weakenE rebuildAcc SuccIdx sh) (Var ZeroIdx)))
+toIndex sh = Lam (Body (ToIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
 
 fromIndex :: (Kit acc, Shape sh) => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (Int -> sh)
-fromIndex sh = Lam (Body (FromIndex (weakenE rebuildAcc SuccIdx sh) (Var ZeroIdx)))
+fromIndex sh = Lam (Body (FromIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
 
 reindex :: (Kit acc, Shape sh, Shape sh')
         => PreOpenExp acc env aenv sh'
@@ -1284,13 +1217,13 @@ extend :: (Kit acc, Shape sh, Shape sl, Elt slix)
        => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
        -> PreOpenExp acc env aenv slix
        -> PreOpenFun acc env aenv (sh -> sl)
-extend sliceIndex slix = Lam (Body (IndexSlice sliceIndex (weakenE rebuildAcc SuccIdx slix) (Var ZeroIdx)))
+extend sliceIndex slix = Lam (Body (IndexSlice sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
 
 restrict :: (Kit acc, Shape sh, Shape sl, Elt slix)
          => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
          -> PreOpenExp acc env aenv slix
          -> PreOpenFun acc env aenv (sl -> sh)
-restrict sliceIndex slix = Lam (Body (IndexFull sliceIndex (weakenE rebuildAcc SuccIdx slix) (Var ZeroIdx)))
+restrict sliceIndex slix = Lam (Body (IndexFull sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
 
 arrayShape :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreOpenExp acc env aenv sh
 arrayShape = Shape . avarIn
