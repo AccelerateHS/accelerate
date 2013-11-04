@@ -15,7 +15,7 @@ As a simple example, consider the computation of a dot product of two vectors of
 
 Except for the type, this code is almost the same as the corresponding Haskell code on lists of floats. The types indicate that the computation may be online-compiled for performance — for example, using `Data.Array.Accelerate.CUDA.run` it may be on-the-fly off-loaded to a GPU.
 
-For a complete introduction to Accelerate by example, see my talk _GPGPU Programming in Haskell with Accelerate_ from YOW! LambdaJam 2013 ([slides][yow-slides]) ([video][yow-video]).
+For a complete introduction to Accelerate by example, see my talk _GPGPU Programming in Haskell with Accelerate_ from YOW! LambdaJam 2013 ([slides][yow13-slides]) ([video][yow13-video]).
 
 Availability
 ------------
