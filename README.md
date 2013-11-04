@@ -15,6 +15,8 @@ As a simple example, consider the computation of a dot product of two vectors of
 
 Except for the type, this code is almost the same as the corresponding Haskell code on lists of floats. The types indicate that the computation may be online-compiled for performance — for example, using `Data.Array.Accelerate.CUDA.run` it may be on-the-fly off-loaded to a GPU.
 
+For a complete introduction to Accelerate by example, see my talk _GPGPU Programming in Haskell with Accelerate_ from YOW! LambdaJam 2013 ([slides][yow-slides]) ([video][yow-video]).
+
 Availability
 ------------
 
@@ -90,8 +92,11 @@ Here is a list of features that are currently missing:
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
-  [Google-Group]:          http://groups.google.com/group/accelerate-haskell
+  [Google-Group]:           http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
-  [wiki-cc]: http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [yow13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
+  [yow13-video]:            http://youtu.be/ARqE4yT2Z0o
+
