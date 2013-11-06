@@ -284,8 +284,7 @@ type ElimAcc  acc = forall aenv s t. Idx aenv s -> acc aenv t -> Bool
                   => DelayAcc   OpenAcc
                   -> ElimAcc    OpenAcc
                   -> PreOpenAcc OpenAcc aenv a
-                  -> Delayed    OpenAcc aenv a
- #-}
+                  -> Delayed    OpenAcc aenv a #-}
 
 delayPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
