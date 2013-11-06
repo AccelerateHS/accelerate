@@ -149,7 +149,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed a)
         Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed a)
-        Reshape sl a            -> Reshape (cvtE sl) (delayed a)
+        Reshape sl a            -> Reshape (cvtE sl) (manifest a)
 
         Replicate{}             -> fusionError
         Slice{}                 -> fusionError
