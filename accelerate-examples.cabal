@@ -45,6 +45,20 @@ Flag opencl
   Default:              False
 
 
+-- Flags to specify which programs to build (all true by default)
+--
+Flag nofib
+Flag smvm
+Flag crystal
+Flag canny
+Flag mandelbrot
+Flag fluid
+Flag nbody
+Flag smoothlife
+Flag hashcat
+Flag fft
+
+
 -- The main test program. This includes randomised quickcheck testing for array
 -- primitives, unit tests, imaginary/spectral/real programs, and benchmarks.
 --
@@ -110,7 +124,10 @@ Executable accelerate-nofib
     build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  build-depends:        accelerate                      >= 0.14,
+  if !flag(nofib)
+    buildable:          False
+  else
+    build-depends:      accelerate                      >= 0.14,
                         accelerate-io                   >= 0.14,
                         base                            == 4.*,
                         array                           >= 0.3,
@@ -159,7 +176,10 @@ Executable accelerate-smvm
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  build-depends:        accelerate              >= 0.14,
+  if !flag(smvm)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         base                    == 4.*,
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
@@ -202,7 +222,10 @@ Executable accelerate-crystal
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  build-depends:        accelerate              >= 0.14,
+  if !flag(crystal)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -236,7 +259,10 @@ Executable accelerate-canny
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  build-depends:        accelerate              >= 0.14,
+  if !flag(canny)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
@@ -276,7 +302,10 @@ Executable accelerate-mandelbrot
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  build-depends:        accelerate              >= 0.14,
+  if !flag(mandelbrot)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -314,7 +343,10 @@ Executable accelerate-fluid
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  Build-depends:        accelerate              >= 0.14,
+  if !flag(fluid)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
                         base                    == 4.*,
                         bmp                     >= 1.2,
@@ -363,7 +395,10 @@ Executable accelerate-nbody
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  Build-depends:        accelerate              >= 0.14,
+  if !flag(nbody)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -403,7 +438,10 @@ Executable accelerate-smoothlife
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  Build-depends:        accelerate              >= 0.14,
+  if !flag(smoothlife)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         accelerate-fft          >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
@@ -438,7 +476,10 @@ Executable accelerate-hashcat
     build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
-  Build-depends:        accelerate              >= 0.14,
+  if !flag(hashcat)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         base                    == 4.*,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -466,7 +507,10 @@ Executable accelerate-fft
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         >= 0.14
 
-  Build-depends:        accelerate              >= 0.14,
+  if !flag(fft)
+    buildable:          False
+  else
+    build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
                         accelerate-fft          >= 0.14,
                         base                    == 4.*,
