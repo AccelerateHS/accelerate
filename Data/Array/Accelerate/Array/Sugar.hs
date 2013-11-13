@@ -1083,8 +1083,38 @@ toList (Array sh adata) = go 0
 -- Convert an array to a string
 --
 instance Show (Array sh e) where
-  show arr@(Array sh _adata)
-    = "Array (" ++ showShape (toElt sh :: sh) ++ ") " ++ show (toList arr)
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+{--
+-- Specialised Show instances for dimensions zero, one, and two. Requires
+-- overlapping instances.
+--
+-- TODO:
+--   * Formatting of the matrix should be better, such as aligning the columns?
+--   * Make matrix formatting optional? It is more difficult to copy/paste the
+--     result, for example.
+--
+instance Show (Scalar e) where
+  show arr@Array{}
+    = "Scalar Z " ++ show (toList arr)
+
+instance Show (Vector e) where
+  show arr@Array{}
+    = "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Show (Array DIM2 e) where
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") \n " ++ showMat (toMatrix (toList arr))
+    where
+      showRow xs        = intercalate "," (map show xs)
+      showMat mat       = "[" ++ intercalate "\n ," (map showRow mat) ++ "]"
+
+      Z :. _ :. cols    = shape arr
+      toMatrix []       = []
+      toMatrix xs       = let (r,rs) = splitAt cols xs
+                          in  r : toMatrix rs
+--}
 
 -- | Nicely format a shape as a string
 --
