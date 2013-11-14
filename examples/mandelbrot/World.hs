@@ -15,6 +15,7 @@ import Mandel
 import Config
 import ParseArgs
 
+import Prelude                                  as P
 import Data.Char
 import Data.Label
 import Data.Array.Accelerate                    as A
@@ -65,7 +66,7 @@ setPrecisionOfWorld f config (World p _ z h v)
 
         render :: (Elt a, IsFloating a) => Render a
         render  = run1 backend
-                $ A.map (prettyRGBA (constant limit))
+                $ A.map (prettyRGBA (constant (P.fromIntegral limit)))
                 . mandelbrot width height limit
 
     in case f of
