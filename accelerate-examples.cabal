@@ -307,6 +307,7 @@ Executable accelerate-mandelbrot
   else
     build-depends:      accelerate              >= 0.14,
                         accelerate-fft          >= 0.14,
+                        accelerate-io           >= 0.14,
                         base                    == 4.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
