@@ -127,8 +127,12 @@ endif
 
 
 # Common includes and paths for CUDA
-INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc -I/usr/lib/ghc/include -I../../../../accelerate-cuda/foreign
+INCLUDES      := -I$(CUDA_INC_PATH) -I. -I$(CUDA_PATH)/samples/common/inc
 LDFLAGS       += $(LIBPATH_OPENGL)
+
+# includes for GHC (you will probably need to edit this)
+INCLUDES       += -I"$(HOME)/.cabal/share/ghc-7.6.2-x86_64/accelerate-cuda-0.14.0.0/include"
+INCLUDES       += -I"/Library/Frameworks/GHC.framework/Versions/Current/usr/lib/ghc-7.6.2/include"
 
 ifneq ($(DARWIN),)
     LDFLAGS += -lSystem
@@ -142,20 +146,23 @@ build: nbody
 bodysystemcuda.o: bodysystemcuda.cu
 	$(NVCC) $(NVCCFLAGS) $(EXTRA_NVCCFLAGS) $(GENCODE_FLAGS) $(INCLUDES) -o $@ -c $<
 
-nbody.o: nbody.cpp Visualize.o
+nbody.o: nbody.cpp dist/Visualize.o
 	$(GCC) $(CCFLAGS) $(EXTRA_CCFLAGS) $(INCLUDES) -o $@ -c $<
 
 render_particles.o: render_particles.cpp
 	$(GCC) $(CCFLAGS) $(EXTRA_CCFLAGS) $(INCLUDES) -o $@ -c $<
 
-Visualize.o: Visualize.hs
-	ghc -i.. $+ -Wall $(EXTRA_GHCFLAGS)
+dist/Visualize.o: Visualize.hs
+	mkdir -p dist
+	ghc -i.. -odir dist -hidir dist $+ -Wall $(EXTRA_GHCFLAGS)
 
-nbody: nbody.o bodysystemcuda.o render_particles.o Visualize.o
-	ghc -o $@ $+ $(wildcard ../*.o) $(wildcard ../Common/*.o) $(wildcard ../Solver/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lgcc -package accelerate-cuda $(EXTRA_GHCFLAGS) -threaded
+nbody: nbody.o bodysystemcuda.o render_particles.o dist/Visualize.o
+	ghc -o $@ $+ $(wildcard dist/*/*.o) $(LDFLAGS) $(EXTRA_LDFLAGS) -no-hs-main -lstdc++ -lgcc -package accelerate-cuda $(EXTRA_GHCFLAGS) -threaded
 
 run: build
 	./nbody
 
 clean:
-	rm -f nbody nbody.o render_particles.o bodysystemcuda.o Visualize.o Visualize_stub.h
+	rm -f nbody nbody.o render_particles.o bodysystemcuda.o Visualize_stub.h
+	rm -rf dist
+

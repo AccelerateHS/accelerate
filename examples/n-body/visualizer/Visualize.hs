@@ -10,7 +10,7 @@ import Common.Type
 import qualified Solver.Naive2                  as Naive
 
 import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.CUDA.Foreign.Export
+import Data.Array.Accelerate.CUDA.Foreign
 
 -- The cuda sample's representation of data.
 --
