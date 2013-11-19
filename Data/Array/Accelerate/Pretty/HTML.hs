@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,12 +19,7 @@ module Data.Array.Accelerate.Pretty.HTML  (
 ) where
 
 -- standard libraries
-#if !MIN_VERSION_base(4,6,0)
-import Prelude                                                  hiding ( catch )
-import System.IO.Error                                          hiding ( catch )
-#else
 import System.IO.Error
-#endif
 import Control.Exception
 import Data.String
 import Data.Monoid

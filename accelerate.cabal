@@ -1,7 +1,7 @@
 Name:                   accelerate
 Version:                0.14.0.0
 Cabal-version:          >= 1.6
-Tested-with:            GHC >= 7.4.2
+Tested-with:            GHC == 7.6.*
 Build-type:             Custom
 
 Synopsis:               An embedded language for accelerated array processing
@@ -199,7 +199,7 @@ Flag internal-checks
 Library
   Include-Dirs:         include
   Build-depends:        array                >= 0.3,
-                        base                 == 4.*,
+                        base                 == 4.6.*,
                         containers           >= 0.3,
                         unordered-containers >= 0.2,
                         fclabels             >= 1.0,
