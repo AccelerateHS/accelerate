@@ -13,7 +13,7 @@ import Config
 import Monitoring
 import ParseArgs
 
-import Data.Label
+import Data.Label                                       ( get )
 import Criterion.Main                                   ( defaultMainWith, bench, whnf )
 import System.Environment
 
