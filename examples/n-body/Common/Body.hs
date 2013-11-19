@@ -63,14 +63,12 @@ import Data.Array.Accelerate            as A
 --   computes the component of the Sum for two bodies i and j.
 --
 accel   :: Exp R                -- ^ Smoothing parameter
-        -> Exp Body             -- ^ The point being accelerated
-        -> Exp Body             -- ^ Neighbouring point
+        -> Exp PointMass        -- ^ The point being accelerated
+        -> Exp PointMass        -- ^ Neighbouring point
         -> Exp Accel
 
-accel epsilon bodyi bodyj = s *. r
+accel epsilon pmi pmj = s *. r
   where
-    pmi         = pointMassOfBody bodyi
-    pmj         = pointMassOfBody bodyj
     mj          = massOfPointMass pmj
 
     r           = positionOfPointMass pmj .-. positionOfPointMass pmi

@@ -18,7 +18,7 @@ import Data.Array.Accelerate                    as A
 --   This relies on array fusion to combine the replicates into the body of the
 --   reduction, otherwise we quickly exhaust the device memory.
 --
-calcAccels :: Exp R -> Acc (Vector Body) -> Acc (Vector Accel)
+calcAccels :: Exp R -> Acc (Vector PointMass) -> Acc (Vector Accel)
 calcAccels epsilon bodies
   = let n       = A.size bodies
 

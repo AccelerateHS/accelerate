@@ -14,7 +14,7 @@ import Data.Array.Accelerate                    as A
 --   This maps a _sequential_ reduction to get the total contribution for this
 --   body from all other bodies in the system.
 --
-calcAccels :: Exp R -> Acc (Vector Body) -> Acc (Vector Accel)
+calcAccels :: Exp R -> Acc (Vector PointMass) -> Acc (Vector Accel)
 calcAccels epsilon bodies
   = let move body       = A.sfoldl (\acc next -> acc .+. accel epsilon body next)
                                    (vec 0)

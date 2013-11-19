@@ -24,14 +24,15 @@ data World
 -- | Move bodies under the influence of acceleration
 --
 advanceBodies
-    :: (Acc (Vector Body) -> Acc (Vector Accel))        -- ^ Function to compute accelerations at each point
+    :: (Acc (Vector PointMass) -> Acc (Vector Accel))   -- ^ Function to compute accelerations at each point
     -> Acc (Scalar Time)                                -- ^ Time step
     -> Acc (Vector Body)                                -- ^ Bodies
     -> Acc (Vector Body)
 advanceBodies calcAccels timeStep bodies
   = let
         -- Calculate the accelerations on each body.
-        accels          = calcAccels bodies
+        accels          = calcAccels
+                        $ A.map pointMassOfBody bodies
 
         -- Apply the accelerations to the bodies and advance them
         advance b a     = let m         = massOfPointMass (pointMassOfBody b)
