@@ -1,7 +1,7 @@
 Name:                   accelerate-examples
 Version:                0.14.0.0
 Cabal-version:          >=1.6
-Tested-with:            GHC >= 7.4
+Tested-with:            GHC == 7.6.*
 Build-type:             Simple
 
 Synopsis:               Examples using the Accelerate library
@@ -129,7 +129,7 @@ Executable accelerate-nofib
   else
     build-depends:      accelerate                      >= 0.14,
                         accelerate-io                   >= 0.14,
-                        base                            == 4.*,
+                        base                            == 4.6.*,
                         array                           >= 0.3,
                         containers                      >= 0.5,
                         criterion                       >= 0.5,
@@ -180,7 +180,7 @@ Executable accelerate-smvm
     buildable:          False
   else
     build-depends:      accelerate              >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -226,7 +226,7 @@ Executable accelerate-crystal
     buildable:          False
   else
     build-depends:      accelerate              >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         gloss-raster-accelerate >= 1.7
@@ -264,7 +264,7 @@ Executable accelerate-canny
   else
     build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         repa                    >= 3.1,
@@ -308,7 +308,7 @@ Executable accelerate-mandelbrot
     build-depends:      accelerate              >= 0.14,
                         accelerate-fft          >= 0.14,
                         accelerate-io           >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         gloss                   >= 1.7,
@@ -350,7 +350,7 @@ Executable accelerate-fluid
   else
     build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
@@ -401,7 +401,7 @@ Executable accelerate-nbody
     buildable:          False
   else
     build-depends:      accelerate              >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         gloss                   >= 1.7,
@@ -445,7 +445,7 @@ Executable accelerate-smoothlife
   else
     build-depends:      accelerate              >= 0.14,
                         accelerate-fft          >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         gloss                   >= 1.7,
@@ -482,7 +482,7 @@ Executable accelerate-hashcat
     buildable:          False
   else
     build-depends:      accelerate              >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
@@ -515,7 +515,7 @@ Executable accelerate-fft
     build-depends:      accelerate              >= 0.14,
                         accelerate-io           >= 0.14,
                         accelerate-fft          >= 0.14,
-                        base                    == 4.*,
+                        base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 1.0,
                         filepath                >= 1.0
