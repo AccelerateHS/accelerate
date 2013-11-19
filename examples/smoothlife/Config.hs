@@ -209,8 +209,8 @@ options =
     describe f msg
       = msg ++ " (" ++ show (get f defaults) ++ ")"
 
-    fst = lens P.fst (\a (_,b) -> (a,b))
-    snd = lens P.snd (\b (a,_) -> (a,b))
+    fst = lens P.fst (\f (a,b) -> (f a,b))
+    snd = lens P.snd (\f (a,b) -> (a,f b))
 
 header :: [String]
 header =
