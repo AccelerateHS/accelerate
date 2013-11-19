@@ -99,7 +99,8 @@ Description:
   [/Release notes/]
   .
     * /0.14.0.0:/ New iteration constructs. Additional Prelude-like functions.
-      Improved code generation and fusion optimisation. Bug fixes.
+      Improved code generation and fusion optimisation. Concurrent kernel
+      execution. Bug fixes.
   .
     * /0.13.0.0:/ New array fusion optimisation. New foreign function
       interface for array and scalar expressions. Additional Prelude-like
