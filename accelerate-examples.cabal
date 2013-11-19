@@ -1,5 +1,5 @@
 Name:                   accelerate-examples
-Version:                0.14.0.0
+Version:                0.15.0.0
 Cabal-version:          >=1.6
 Tested-with:            GHC == 7.6.*
 Build-type:             Simple
@@ -112,7 +112,7 @@ Executable accelerate-nofib
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 >= 0.14
+    build-depends:      accelerate-cuda                 == 0.15.*
     other-modules:      Test.Foreign
 
   if flag(opencl)
@@ -127,8 +127,8 @@ Executable accelerate-nofib
   if !flag(nofib)
     buildable:          False
   else
-    build-depends:      accelerate                      >= 0.14,
-                        accelerate-io                   >= 0.14,
+    build-depends:      accelerate                      == 0.15.*,
+                        accelerate-io                   == 0.15.*,
                         base                            == 4.6.*,
                         array                           >= 0.3,
                         containers                      >= 0.5,
@@ -165,7 +165,7 @@ Executable accelerate-smvm
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -179,7 +179,7 @@ Executable accelerate-smvm
   if !flag(smvm)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
                         base                    == 4.6.*,
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
@@ -211,7 +211,7 @@ Executable accelerate-crystal
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -225,7 +225,7 @@ Executable accelerate-crystal
   if !flag(crystal)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -248,7 +248,7 @@ Executable accelerate-canny
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -262,8 +262,8 @@ Executable accelerate-canny
   if !flag(canny)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
-                        accelerate-io           >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-io           == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -291,7 +291,7 @@ Executable accelerate-mandelbrot
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(opencl)
     CPP-options:        -DACCELERATE_OPENCL_BACKEND
@@ -305,9 +305,9 @@ Executable accelerate-mandelbrot
   if !flag(mandelbrot)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
-                        accelerate-fft          >= 0.14,
-                        accelerate-io           >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-fft          == 0.15.*,
+                        accelerate-io           == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -338,7 +338,7 @@ Executable accelerate-fluid
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -348,8 +348,8 @@ Executable accelerate-fluid
   if !flag(fluid)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
-                        accelerate-io           >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-io           == 0.15.*,
                         base                    == 4.6.*,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
@@ -390,7 +390,7 @@ Executable accelerate-nbody
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -400,7 +400,7 @@ Executable accelerate-nbody
   if !flag(nbody)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -433,7 +433,7 @@ Executable accelerate-smoothlife
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -443,9 +443,9 @@ Executable accelerate-smoothlife
   if !flag(smoothlife)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
-                        accelerate-fft          >= 0.14,
-                        accelerate-io           >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-fft          == 0.15.*,
+                        accelerate-io           == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -473,7 +473,7 @@ Executable accelerate-hashcat
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -483,7 +483,7 @@ Executable accelerate-hashcat
   if !flag(hashcat)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
                         base                    == 4.6.*,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -509,14 +509,14 @@ Executable accelerate-fft
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda         >= 0.14
+    build-depends:      accelerate-cuda         == 0.15.*
 
   if !flag(fft)
     buildable:          False
   else
-    build-depends:      accelerate              >= 0.14,
-                        accelerate-io           >= 0.14,
-                        accelerate-fft          >= 0.14,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-io           == 0.15.*,
+                        accelerate-fft          == 0.15.*,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
