@@ -162,13 +162,13 @@ react opt event world
 -- -------------
 
 zooming :: World :-> Maybe Zoom
-zooming = lens (\(World _ _ z _ _)   -> z) (\z (World p r _ h v) -> World p r z h v)
+zooming = lens (\(World _ _ z _ _) -> z) (\f (World p r z h v) -> World p r (f z) h v)
 
 horizontal :: World :-> Maybe Move
-horizontal = lens (\(World _ _ _ h _)   -> h) (\h (World p r z _ v) -> World p r z h v)
+horizontal = lens (\(World _ _ _ h _) -> h) (\f (World p r z h v) -> World p r z (f h) v)
 
 vertical :: World :-> Maybe Move
-vertical = lens (\(World _ _ _ _ v)   -> v) (\v (World p r z h _) -> World p r z h v)
+vertical = lens (\(World _ _ _ _ v) -> v) (\f (World p r z h v) -> World p r z h (f v))
 
 convertView :: (Real a, Fractional b) => View a -> View b
 convertView (x,y,x',y') = (realToFrac x, realToFrac y, realToFrac x', realToFrac y')

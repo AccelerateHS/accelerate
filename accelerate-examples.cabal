@@ -133,7 +133,7 @@ Executable accelerate-nofib
                         array                           >= 0.3,
                         containers                      >= 0.5,
                         criterion                       >= 0.5,
-                        fclabels                        >= 1.0,
+                        fclabels                        >= 2.0,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.0,
                         test-framework                  >= 0.5,
@@ -185,7 +185,7 @@ Executable accelerate-smvm
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         primitive               >= 0.5,
                         mwc-random              >= 0.8,
                         vector                  >= 0.7,
@@ -228,7 +228,7 @@ Executable accelerate-crystal
     build-depends:      accelerate              >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         gloss-raster-accelerate >= 1.7
 
 
@@ -266,7 +266,7 @@ Executable accelerate-canny
                         accelerate-io           >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         repa                    >= 3.1,
                         repa-io                 >= 3.1,
                         vector                  >= 0.7
@@ -310,7 +310,7 @@ Executable accelerate-mandelbrot
                         accelerate-io           >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         gloss-accelerate        >= 1.7
 
@@ -353,7 +353,7 @@ Executable accelerate-fluid
                         base                    == 4.6.*,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         gloss                   >= 1.7
 
 
@@ -403,7 +403,7 @@ Executable accelerate-nbody
     build-depends:      accelerate              >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         mwc-random              >= 0.8
 
@@ -448,7 +448,7 @@ Executable accelerate-smoothlife
                         accelerate-io           >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         gloss-accelerate        >= 1.7,
                         mwc-random              >= 0.8
@@ -489,7 +489,7 @@ Executable accelerate-hashcat
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         mwc-random              >= 0.8
 
 -- FFT examples
@@ -519,7 +519,7 @@ Executable accelerate-fft
                         accelerate-fft          >= 0.14,
                         base                    == 4.6.*,
                         criterion               >= 0.5,
-                        fclabels                >= 1.0,
+                        fclabels                >= 2.0,
                         filepath                >= 1.0
 
 
