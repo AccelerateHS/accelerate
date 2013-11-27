@@ -61,59 +61,59 @@ type TupleEnv aenv sh t = ExpandEnv aenv (ArraysOfTupleRepr sh (TupleRepr t))
 -- |Encodes the relationship between the old environments and the new environments during the
 -- lifting transform
 --
-data Delta env aenv env' aenv' where
+data Context env aenv env' aenv' where
   -- All environments are empty
-  EmptyD     :: Delta () () () ()
+  EmptyC     :: Context () () () ()
 
   -- An expression that has already been lifted
-  PushLExpD :: (Shape sh, Elt e)
-            => Delta env aenv env' aenv'
+  PushLExpC :: (Shape sh, Elt e)
+            => Context env aenv env' aenv'
             -> sh {- dummy -}
-            -> Delta (env, e) aenv env' (aenv', Array sh e)
+            -> Context (env, e) aenv env' (aenv', Array sh e)
 
   -- An unlifted expression
-  PushExpD  :: Elt e
-            => Delta env aenv env' aenv'
-            -> Delta (env, e) aenv (env',e) aenv'
+  PushExpC  :: Elt e
+            => Context env aenv env' aenv'
+            -> Context (env, e) aenv (env',e) aenv'
 
   -- An array expression
-  PushAccD  :: Arrays t
-            => Delta env aenv env' aenv'
-            -> Delta env (aenv, t) env' (aenv', t)
+  PushAccC  :: Arrays t
+            => Context env aenv env' aenv'
+            -> Context env (aenv, t) env' (aenv', t)
 
 type VectoriseAcc acc = forall env env' aenv aenv' t.
-                        Delta env aenv env' aenv'
+                        Context env aenv env' aenv'
                      -> acc env  aenv t
                      -> acc env' aenv' t
 
 vectoriseAcc :: Acc t
              -> Acc t
-vectoriseAcc = vectoriseOpenAcc EmptyD
+vectoriseAcc = vectoriseOpenAcc EmptyC
 
 vectoriseAfun :: Afun t
               -> Afun t
-vectoriseAfun = vectoriseOpenAfun EmptyD
+vectoriseAfun = vectoriseOpenAfun EmptyC
 
-vectoriseOpenAcc :: Delta env aenv env' aenv'
+vectoriseOpenAcc :: Context env aenv env' aenv'
                  -> OpenAcc env  aenv t
                  -> OpenAcc env' aenv' t
 vectoriseOpenAcc delta (OpenAcc a) = OpenAcc $ vectorisePreOpenAcc vectoriseOpenAcc delta a
 
-vectoriseOpenAfun :: Delta env aenv env' aenv'
+vectoriseOpenAfun :: Context env aenv env' aenv'
                   -> OpenAfun env  aenv  t
                   -> OpenAfun env' aenv' t
 vectoriseOpenAfun = vectorisePreOpenAfun vectoriseOpenAcc
 
 vectorisePreOpenAfun :: VectoriseAcc acc
-                     -> Delta env aenv env' aenv'
+                     -> Context env aenv env' aenv'
                      -> PreOpenAfun acc env  aenv  t
                      -> PreOpenAfun acc env' aenv' t
 vectorisePreOpenAfun k delta (Abody f) = Abody $ k delta f
-vectorisePreOpenAfun k delta (Alam f)  = Alam $ vectorisePreOpenAfun k (PushAccD delta) f
+vectorisePreOpenAfun k delta (Alam f)  = Alam $ vectorisePreOpenAfun k (PushAccC delta) f
 
 vectorisePreOpenAcc :: forall acc env env' aenv aenv' t. Kit acc
                     => VectoriseAcc acc
-                    -> Delta env aenv env' aenv'
+                    -> Context env aenv env' aenv'
                     -> PreOpenAcc acc env  aenv t
                     -> PreOpenAcc acc env' aenv' t
 vectorisePreOpenAcc vectAcc delta exp
@@ -186,7 +186,7 @@ vectorisePreOpenAcc vectAcc delta exp
           -> PreOpenAfun acc env' aenv' (Array sh a -> Array sh b)
     cvtF1 (Lam (Body f)) = Alam $ Abody (inlineE f' (Shape (inject $ Avar ZeroIdx)))
       where
-        f' = inject $ liftExp vectAcc (PushLExpD delta (undefined :: sh)) f
+        f' = inject $ liftExp vectAcc (PushLExpC delta (undefined :: sh)) f
     cvtF1 _              = error "Inconsistent valuation"
 
     zipWithV :: forall a b c sh. Shape sh
@@ -197,7 +197,7 @@ vectorisePreOpenAcc vectAcc delta exp
     zipWithV (Lam (Lam (Body f))) a b = (Alet a . inject . Alet b') (inlineE f' sh)
       where
         f' :: acc (env',sh) ((aenv', Array sh a), Array sh b) (Array sh c)
-        f' = inject $ liftExp vectAcc (PushLExpD (PushLExpD delta (undefined :: sh)) (undefined :: sh)) f
+        f' = inject $ liftExp vectAcc (PushLExpC (PushLExpC delta (undefined :: sh)) (undefined :: sh)) f
 
         sh :: PreOpenExp acc env' ((aenv', Array sh a), Array sh b) sh
         sh = Intersect (Shape (inject $ Avar ZeroIdx)) (Shape (inject $ Avar $ SuccIdx ZeroIdx))
@@ -207,10 +207,10 @@ vectorisePreOpenAcc vectAcc delta exp
     zipWithV _                    _ _ = error "Inconsistent valuation"
 
     aletV :: (Arrays bnd, Arrays t) => acc env aenv bnd -> acc env (aenv, bnd) t -> PreOpenAcc acc env' aenv' t
-    aletV bnd body = Alet (vectAcc delta bnd) (vectAcc (PushAccD delta) body)
+    aletV bnd body = Alet (vectAcc delta bnd) (vectAcc (PushAccC delta) body)
 
     eletV :: forall bnd body. (Elt bnd, Arrays body) => PreOpenExp acc env aenv bnd -> acc (env, bnd) aenv body -> PreOpenAcc acc env' aenv' body
-    eletV bnd body = Alet bnd' $ inject $ Elet (Index (inject $ Avar ZeroIdx) IndexNil) (weakenATop $ vectAcc (PushExpD delta) body)
+    eletV bnd body = Alet bnd' $ inject $ Elet (Index (inject $ Avar ZeroIdx) IndexNil) (weakenATop $ vectAcc (PushExpC delta) body)
       where
         bnd' :: acc env' aenv' (Array Z bnd)
         bnd' = inlineE (cvtE bnd) (Const ())
@@ -220,11 +220,11 @@ vectorisePreOpenAcc vectAcc delta exp
           -> PreOpenAcc acc env' aenv' t
     avarV = Avar . cvtIx delta
       where
-        cvtIx :: forall env aenv env' aenv'. Delta env aenv env' aenv' -> Idx aenv t -> Idx aenv' t
-        cvtIx (PushLExpD d _) ix           = SuccIdx (cvtIx d ix)
-        cvtIx (PushExpD d)    ix           = cvtIx d ix
-        cvtIx (PushAccD _)    ZeroIdx      = ZeroIdx
-        cvtIx (PushAccD d)    (SuccIdx ix) = SuccIdx (cvtIx d ix)
+        cvtIx :: forall env aenv env' aenv'. Context env aenv env' aenv' -> Idx aenv t -> Idx aenv' t
+        cvtIx (PushLExpC d _) ix           = SuccIdx (cvtIx d ix)
+        cvtIx (PushExpC d)    ix           = cvtIx d ix
+        cvtIx (PushAccC _)    ZeroIdx      = ZeroIdx
+        cvtIx (PushAccC d)    (SuccIdx ix) = SuccIdx (cvtIx d ix)
         cvtIx _               _            = INTERNAL_ERROR(error) "liftExp" "Inconsistent valuation"
 
     acondV :: Arrays t
@@ -351,7 +351,7 @@ vectorisePreOpenAcc vectAcc delta exp
 
     avoidF :: PreOpenFun acc env  aenv f
            -> AvoidFun acc env' aenv' f
-    avoidF (avoidFun -> Avoid (Just (env, f))) | ExtendDelta d <- extendDelta env delta
+    avoidF (avoidFun -> Avoid (Just (env, f))) | ExtendContext d <- extendContext env delta
                                                , Just f' <- rebuildToLift d f
                                                , env'    <- liftExtend vectAcc env delta d
                                                = Avoid $ Just (env', f')
@@ -360,7 +360,7 @@ vectorisePreOpenAcc vectAcc delta exp
 
 liftExp :: forall acc env env' aenv aenv' sh e. (Kit acc, Shape sh)
         => VectoriseAcc acc
-        -> Delta env aenv env' aenv'
+        -> Context env aenv env' aenv'
         -> PreOpenExp acc env       aenv  e
         -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
 liftExp vectAcc delta exp
@@ -401,7 +401,7 @@ liftExp vectAcc delta exp
 
     cvtF1 :: PreOpenFun acc env aenv (a -> b)
           -> PreOpenAfun acc (env',sh) aenv' (Array sh a -> Array sh b)
-    cvtF1 (Lam (Body f)) = (Alam . Abody) (inject $ liftExp vectAcc (PushLExpD delta (undefined::sh)) f)
+    cvtF1 (Lam (Body f)) = (Alam . Abody) (inject $ liftExp vectAcc (PushLExpC delta (undefined::sh)) f)
     cvtF1 _              = error "Inconsistent valuation"
 
     -- (a1, a2,..., aN) =>
@@ -473,19 +473,19 @@ liftExp vectAcc delta exp
     replicate c = Generate (Var ZeroIdx) (Lam (Body c))
 
     varL :: forall env aenv env'' aenv''. (Elt e, Shape sh)
-         => Delta env aenv env'' aenv''
+         => Context env aenv env'' aenv''
          -> Idx env e
          -> (forall e. Idx env''  e -> Idx env'  e)
          -> (forall a. Idx aenv'' a -> Idx aenv' a)
          -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
-    varL (PushLExpD _ (_::sh')) ZeroIdx _ cvtA
+    varL (PushLExpC _ (_::sh')) ZeroIdx _ cvtA
       = case matchShape (undefined :: sh) (undefined :: sh') of
           Just REFL -> Avar (cvtA ZeroIdx)
           _         -> INTERNAL_ERROR(error) "liftExp" "Unexpected incorrect shape"
-    varL (PushExpD _)    ZeroIdx      cvtE _    = replicate (weakenE (SuccIdx . SuccIdx) $ Var $ cvtE ZeroIdx)
-    varL (PushExpD d)    (SuccIdx ix) cvtE cvtA = varL d ix (cvtE . SuccIdx) cvtA
-    varL (PushLExpD d _) (SuccIdx ix) cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
-    varL (PushAccD d)    ix           cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
+    varL (PushExpC _)    ZeroIdx      cvtE _    = replicate (weakenE (SuccIdx . SuccIdx) $ Var $ cvtE ZeroIdx)
+    varL (PushExpC d)    (SuccIdx ix) cvtE cvtA = varL d ix (cvtE . SuccIdx) cvtA
+    varL (PushLExpC d _) (SuccIdx ix) cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
+    varL (PushAccC d)    ix           cvtE cvtA = varL d ix cvtE             (cvtA . SuccIdx)
     varL _               _            _    _    = INTERNAL_ERROR(error) "liftExp" "Inconsistent valuation"
 
     letL :: forall bnd_t. (Elt e, Elt bnd_t)
@@ -497,7 +497,7 @@ liftExp vectAcc delta exp
         bnd'  = cvtE bnd
 
         body' :: PreOpenAcc acc (env',sh) (aenv', Array sh bnd_t) (Array sh e)
-        body' = liftExp vectAcc (PushLExpD delta (undefined :: sh)) body
+        body' = liftExp vectAcc (PushLExpC delta (undefined :: sh)) body
 
     condL :: Elt e
           => PreOpenExp acc env     aenv  Bool
@@ -779,39 +779,39 @@ avoidFun (Body f) | Avoid (Just (env, f')) <- avoidExp f
                   = Avoid (Just (env, Body f'))
 avoidFun _        = Avoid Nothing
 
-data ExtendDelta env env' aenv where
-  ExtendDelta :: Delta env aenv env' aenv' -> ExtendDelta env env' aenv
+data ExtendContext env env' aenv where
+  ExtendContext :: Context env aenv env' aenv' -> ExtendContext env env' aenv
 
-extendDelta :: Extend acc env aenv0 aenv1
-            -> Delta env aenv0 env' aenv0'
-            -> ExtendDelta env env' aenv1
-extendDelta BaseEnv d         = ExtendDelta d
-extendDelta (PushEnv env _) d | ExtendDelta d' <- extendDelta env d
-                              = ExtendDelta (PushAccD d')
+extendContext :: Extend acc env aenv0 aenv1
+            -> Context env aenv0 env' aenv0'
+            -> ExtendContext env env' aenv1
+extendContext BaseEnv d         = ExtendContext d
+extendContext (PushEnv env _) d | ExtendContext d' <- extendContext env d
+                              = ExtendContext (PushAccC d')
 
 liftExtend :: Kit acc
            => VectoriseAcc acc
            -> Extend acc env aenv0 aenv1
-           -> Delta env aenv0 env' aenv0'
-           -> Delta env aenv1 env' aenv1'
+           -> Context env aenv0 env' aenv0'
+           -> Context env aenv1 env' aenv1'
            -> Extend acc env' aenv0' aenv1'
 liftExtend _ BaseEnv d0 d1 | REFL <- mD d0 d1
                            = BaseEnv
   where
-    mD :: Delta env aenv env' aenv'
-       -> Delta env aenv env' aenv''
+    mD :: Context env aenv env' aenv'
+       -> Context env aenv env' aenv''
        -> aenv' :=: aenv''
-    mD EmptyD EmptyD = REFL
-    mD (PushAccD d1) (PushAccD d2) | REFL <- mD d1 d2
+    mD EmptyC EmptyC = REFL
+    mD (PushAccC d1) (PushAccC d2) | REFL <- mD d1 d2
                                    = REFL
-    mD (PushExpD d1) (PushExpD d2) | REFL <- mD d1 d2
+    mD (PushExpC d1) (PushExpC d2) | REFL <- mD d1 d2
                                    = REFL
-    mD (PushLExpD d1 sh1) (PushLExpD d2 sh2) | REFL <- mD d1 d2
+    mD (PushLExpC d1 sh1) (PushLExpC d2 sh2) | REFL <- mD d1 d2
                                              , Just REFL <- matchShape sh1 sh2
                                              = REFL
-    mD _                  _                  = INTERNAL_ERROR(error) "liftExtend" "2nd Delta is not an extension of the first"
+    mD _                  _                  = INTERNAL_ERROR(error) "liftExtend" "2nd Context is not an extension of the first"
 
-liftExtend k (PushEnv env a) d0 (PushAccD d1) = PushEnv (liftExtend k env d0 d1) (extract $ k d1 $ inject a)
+liftExtend k (PushEnv env a) d0 (PushAccC d1) = PushEnv (liftExtend k env d0 d1) (extract $ k d1 $ inject a)
 liftExtend _ _               _  _             = INTERNAL_ERROR(error) "liftExtend" "Extended lifting context does not match environment extension"
 
 -- Utility functions
@@ -847,26 +847,26 @@ matchShape :: (Shape sh1, Shape sh2) => sh1 -> sh2 -> Maybe (sh1 :=: sh2)
 matchShape _ _ = gcast REFL -- TODO: Have a way to reify shapes
 
 unliftA :: forall env aenv env' aenv'.
-           Delta env aenv env' aenv'
+           Context env aenv env' aenv'
         -> (aenv :> aenv')
-unliftA (PushAccD _)    ZeroIdx      = ZeroIdx
-unliftA (PushAccD d)    (SuccIdx ix) = SuccIdx $ unliftA d ix
-unliftA (PushExpD d)    ix           = unliftA d ix
-unliftA (PushLExpD d _) ix           = SuccIdx $ unliftA d ix
+unliftA (PushAccC _)    ZeroIdx      = ZeroIdx
+unliftA (PushAccC d)    (SuccIdx ix) = SuccIdx $ unliftA d ix
+unliftA (PushExpC d)    ix           = unliftA d ix
+unliftA (PushLExpC d _) ix           = SuccIdx $ unliftA d ix
 unliftA _               _            = error "unliftA: Inconsistent evalution"
 
 unliftE :: forall env aenv env' aenv'.
-           Delta env aenv env' aenv'
+           Context env aenv env' aenv'
         -> (env :?> env')
-unliftE (PushAccD d)    ix           = unliftE d ix
-unliftE (PushExpD _)    ZeroIdx      = Just ZeroIdx
-unliftE (PushExpD d)    (SuccIdx ix) = SuccIdx <$> unliftE d ix
-unliftE (PushLExpD _ _) ZeroIdx      = Nothing
-unliftE (PushLExpD d _) (SuccIdx ix) = unliftE d ix
+unliftE (PushAccC d)    ix           = unliftE d ix
+unliftE (PushExpC _)    ZeroIdx      = Just ZeroIdx
+unliftE (PushExpC d)    (SuccIdx ix) = SuccIdx <$> unliftE d ix
+unliftE (PushLExpC _ _) ZeroIdx      = Nothing
+unliftE (PushLExpC d _) (SuccIdx ix) = unliftE d ix
 unliftE _               _            = error "unliftE: Inconsistent evalution"
 
 rebuildToLift :: Rebuildable f
-              => Delta env aenv env' aenv'
+              => Context env aenv env' aenv'
               -> f env  aenv  t
               -> Maybe (f env' aenv' t)
 rebuildToLift d = rebuild (liftA Var . unliftE d) (Just . Avar . unliftA d)
