@@ -55,11 +55,7 @@ import qualified Data.Array.Base    as MArray (readArray, writeArray)
 import qualified Data.Array.Base    as MArray (unsafeRead, unsafeWrite)
 import qualified Data.Array.Base    as IArray (unsafeAt)
 #endif
-#if __GLASGOW_HASKELL__ >= 700 && __GLASGOW_HASKELL__ < 703
-import qualified Data.Array.MArray  as Unsafe
-#else
 import qualified Data.Array.Unsafe  as Unsafe
-#endif
 import Data.Array.ST      (STUArray)
 import Data.Array.Unboxed (UArray)
 import Data.Array.MArray  (MArray)

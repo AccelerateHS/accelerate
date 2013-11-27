@@ -3,7 +3,13 @@ An Embedded Language for Accelerated Array Computations
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
-For more details, see our recent paper [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]. There are also some slightly outdated slides and a video of a talk at the [Haskell Implementors Workshop 2009][HIW'09] (in Edinburgh): [Haskell Arrays, Accelerated (Using GPUs).][Cha09]
+For more details, see our papers:
+ * [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]
+ * [Optimising Purely Functional GPU Programs][MCKL13]
+
+There are also slides from some fairly recent presentations:
+ * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
+ * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video])
 
 A simple example
 ----------------
@@ -76,8 +82,9 @@ Here is a list of features that are currently missing:
 
 
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:                  http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                http://hackage.haskell.org/package/accelerate
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
   [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
@@ -89,8 +96,11 @@ Here is a list of features that are currently missing:
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
-  [Google-Group]:          http://groups.google.com/group/accelerate-haskell
+  [Google-Group]:           http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
-  [wiki-cc]: http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
+  [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
+

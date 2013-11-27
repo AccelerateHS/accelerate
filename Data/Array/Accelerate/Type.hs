@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE TypeFamilies      #-}
@@ -52,11 +51,7 @@ import Foreign.C.Types (
 -- ------------------------------------------
 
 myMkTyCon :: String -> TyCon
-#if __GLASGOW_HASKELL__ == 700
-myMkTyCon = mkTyCon
-#else
 myMkTyCon = mkTyCon3 "accelerate" "Data.Array.Accelerate.Type"
-#endif
 
 class Typeable8 t where
   typeOf8 :: t a b c d e f g h -> TypeRep
