@@ -181,22 +181,22 @@ module Data.Array.Accelerate (
   --
   -- In general an @Exp Int@ cannot be unlifted into an `Int`, because the
   -- actual number will not be available until a later stage of execution (e.g.
-  -- GPU execution, when `run` is called). Similarly an @Acc array@ can not be
-  -- unlifted to a vanilla `array`; should instead `run` the expression with a
-  -- specific backend to evaluate it.
+  -- during GPU execution, when `run` is called). Similarly an @Acc array@ can
+  -- not be unlifted to a vanilla `array`; you should instead `run` the
+  -- expression with a specific backend to evaluate it.
   --
-  -- Lifting and unlift are also used to pack and unpack an expression into and
-  -- out of constructors such as tuples, respectively. Those expressions, at
+  -- Lifting and unlifting are also used to pack and unpack an expression into
+  -- and out of constructors such as tuples, respectively. Those expressions, at
   -- runtime, will become tuple dereferences. For example:
   --
   -- > Exp (Z :. Int :. Int)
-  -- >     -> unlift -> (Z :. Exp Int :. Exp Int)
-  -- >     -> lift   -> Exp (Z :. Int :. Int)
+  -- >     -> unlift    :: (Z :. Exp Int :. Exp Int)
+  -- >     -> lift      :: Exp (Z :. Int :. Int)
   -- >     -> ...
   --
   -- > Acc (Scalar Int, Vector Float)
-  -- >     -> unlift -> (Acc (Scalar Int), Acc (Vector Float))
-  -- >     -> lift   -> Acc (Scalar Int, Vector Float)
+  -- >     -> unlift    :: (Acc (Scalar Int), Acc (Vector Float))
+  -- >     -> lift      :: Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
   P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
