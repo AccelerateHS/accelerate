@@ -53,8 +53,8 @@ Requirements
 ------------
 
   * Glasgow Haskell Compiler (GHC), 7.6 or later
-  * Haskell libraries as specified in [`accelerate.cabal`][Cabal-file]
-  * For the CUDA backend, CUDA version 3.0 or later
+  * For the CUDA backend, CUDA version 5.0 or later
+  * Haskell libraries as specified in the [`accelerate.cabal`][accelerate-cabal] and optionally [`accelerate-cuda.cabal`][accelerate-cuda-cabal] files.
 
 Examples and documentation
 --------------------------
@@ -96,12 +96,13 @@ Here is a list of features that are currently missing:
   [accelerate-buildbot]:    https://github.com/AccelerateHS/accelerate-buildbot
   [accelerate-repa]:        https://github.com/blambo/accelerate-repa
   [accelerate-opencl]:      https://github.com/hiPERFIT/accelerate-opencl
+  [accelerate-cabal]:       https://github.com/AccelerateHS/accelerate/accelerate.cabal
+  [accelerate-cuda-cabal]:  https://github.com/AccelerateHS/accelerate-cuda/accelerate-cuda.cabal
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
   [Google-Group]:           http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
-  [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
   [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
   [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
