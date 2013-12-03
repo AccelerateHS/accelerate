@@ -48,16 +48,6 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 
 #include "accelerate.h"
 
-type family ArraysOfTupleRepr sh t
-type instance ArraysOfTupleRepr sh ()    = ()
-type instance ArraysOfTupleRepr sh (t,e) = (ArraysOfTupleRepr sh t, Array sh e)
-
-type family ExpandEnv env env'
-type instance ExpandEnv env ()        = env
-type instance ExpandEnv env (env', t) = ExpandEnv (env, t) env'
-
-type TupleEnv aenv sh t = ExpandEnv aenv (ArraysOfTupleRepr sh (TupleRepr t))
-
 -- |Encodes the relationship between the old environments and the new environments during the
 -- lifting transform
 --
@@ -86,19 +76,24 @@ type VectoriseAcc acc = forall env env' aenv aenv' t.
                      -> acc env  aenv t
                      -> acc env' aenv' t
 
+-- |Vectorise a closed array expression.
+--
 vectoriseAcc :: Acc t
              -> Acc t
 vectoriseAcc = vectoriseOpenAcc EmptyC
 
+-- |Vectorise a closed array function
 vectoriseAfun :: Afun t
               -> Afun t
 vectoriseAfun = vectoriseOpenAfun EmptyC
 
+-- |Given a lifting context for the free variables, vectorise an open array expression.
 vectoriseOpenAcc :: Context env aenv env' aenv'
                  -> OpenAcc env  aenv t
                  -> OpenAcc env' aenv' t
-vectoriseOpenAcc delta (OpenAcc a) = OpenAcc $ vectorisePreOpenAcc vectoriseOpenAcc delta a
+vectoriseOpenAcc ctx (OpenAcc a) = OpenAcc $ vectorisePreOpenAcc vectoriseOpenAcc ctx a
 
+-- |Given a lifting context for the free variables, vectorise an open array expression.
 vectoriseOpenAfun :: Context env aenv env' aenv'
                   -> OpenAfun env  aenv  t
                   -> OpenAfun env' aenv' t
@@ -108,15 +103,15 @@ vectorisePreOpenAfun :: VectoriseAcc acc
                      -> Context env aenv env' aenv'
                      -> PreOpenAfun acc env  aenv  t
                      -> PreOpenAfun acc env' aenv' t
-vectorisePreOpenAfun k delta (Abody f) = Abody $ k delta f
-vectorisePreOpenAfun k delta (Alam f)  = Alam $ vectorisePreOpenAfun k (PushAccC delta) f
+vectorisePreOpenAfun k ctx (Abody f) = Abody $ k ctx f
+vectorisePreOpenAfun k ctx (Alam f)  = Alam $ vectorisePreOpenAfun k (PushAccC ctx) f
 
 vectorisePreOpenAcc :: forall acc env env' aenv aenv' t. Kit acc
                     => VectoriseAcc acc
                     -> Context env aenv env' aenv'
                     -> PreOpenAcc acc env  aenv t
                     -> PreOpenAcc acc env' aenv' t
-vectorisePreOpenAcc vectAcc delta exp
+vectorisePreOpenAcc vectAcc ctx exp
   = case exp of
     Alet a b            -> aletV a b
     Elet e a            -> eletV e a
@@ -158,12 +153,12 @@ vectorisePreOpenAcc vectAcc delta exp
     nestedError ctx = "Unexpect nested parallelism " ++ ctx
 
     cvtA :: forall t. acc env aenv t -> acc env' aenv' t
-    cvtA = vectAcc delta
+    cvtA = vectAcc ctx
 
     cvtE :: forall e sh. Shape sh
          => PreOpenExp acc env aenv e
          -> acc (env',sh) aenv' (Array sh e)
-    cvtE = inject . liftExp vectAcc delta
+    cvtE = inject . liftExp vectAcc ctx
 
     cvtE' :: forall e. Elt e
           => PreOpenExp acc env aenv e
@@ -179,15 +174,18 @@ vectorisePreOpenAcc vectAcc delta exp
     cvtAfun :: forall f.
                PreOpenAfun acc env aenv f
             -> PreOpenAfun acc env' aenv' f
-    cvtAfun = vectorisePreOpenAfun vectAcc delta
+    cvtAfun = vectorisePreOpenAfun vectAcc ctx
 
     cvtF1 :: forall a b sh. Shape sh
           => PreOpenFun  acc env  aenv  (a -> b)
           -> PreOpenAfun acc env' aenv' (Array sh a -> Array sh b)
     cvtF1 (Lam (Body f)) = Alam $ Abody (inlineE f' (Shape (inject $ Avar ZeroIdx)))
       where
-        f' = inject $ liftExp vectAcc (PushLExpC delta (undefined :: sh)) f
+        f' = inject $ liftExp vectAcc (PushLExpC ctx (undefined :: sh)) f
     cvtF1 _              = error "Inconsistent valuation"
+
+    -- Vectorised versions of combinators.
+    -- ===================================
 
     zipWithV :: forall a b c sh. Shape sh
              => PreOpenFun acc env aenv  (a -> b -> c)
@@ -197,7 +195,7 @@ vectorisePreOpenAcc vectAcc delta exp
     zipWithV (Lam (Lam (Body f))) a b = (Alet a . inject . Alet b') (inlineE f' sh)
       where
         f' :: acc (env',sh) ((aenv', Array sh a), Array sh b) (Array sh c)
-        f' = inject $ liftExp vectAcc (PushLExpC (PushLExpC delta (undefined :: sh)) (undefined :: sh)) f
+        f' = inject $ liftExp vectAcc (PushLExpC (PushLExpC ctx (undefined :: sh)) (undefined :: sh)) f
 
         sh :: PreOpenExp acc env' ((aenv', Array sh a), Array sh b) sh
         sh = Intersect (Shape (inject $ Avar ZeroIdx)) (Shape (inject $ Avar $ SuccIdx ZeroIdx))
@@ -207,10 +205,10 @@ vectorisePreOpenAcc vectAcc delta exp
     zipWithV _                    _ _ = error "Inconsistent valuation"
 
     aletV :: (Arrays bnd, Arrays t) => acc env aenv bnd -> acc env (aenv, bnd) t -> PreOpenAcc acc env' aenv' t
-    aletV bnd body = Alet (vectAcc delta bnd) (vectAcc (PushAccC delta) body)
+    aletV bnd body = Alet (vectAcc ctx bnd) (vectAcc (PushAccC ctx) body)
 
     eletV :: forall bnd body. (Elt bnd, Arrays body) => PreOpenExp acc env aenv bnd -> acc (env, bnd) aenv body -> PreOpenAcc acc env' aenv' body
-    eletV bnd body = Alet bnd' $ inject $ Elet (Index (inject $ Avar ZeroIdx) IndexNil) (weakenATop $ vectAcc (PushExpC delta) body)
+    eletV bnd body = Alet bnd' $ inject $ Elet (Index (inject $ Avar ZeroIdx) IndexNil) (weakenATop $ vectAcc (PushExpC ctx) body)
       where
         bnd' :: acc env' aenv' (Array Z bnd)
         bnd' = inlineE (cvtE bnd) (Const ())
@@ -218,7 +216,7 @@ vectorisePreOpenAcc vectAcc delta exp
     avarV :: Arrays t
           => Idx aenv t
           -> PreOpenAcc acc env' aenv' t
-    avarV = Avar . cvtIx delta
+    avarV = Avar . cvtIx ctx
       where
         cvtIx :: forall env aenv env' aenv'. Context env aenv env' aenv' -> Idx aenv t -> Idx aenv' t
         cvtIx (PushLExpC d _) ix           = SuccIdx (cvtIx d ix)
@@ -262,7 +260,7 @@ vectorisePreOpenAcc vectAcc delta exp
              -> PreOpenAfun acc env' aenv' (Array sh sh -> Array sh sh')
              -> acc env' aenv' (Array sh e)
              -> PreOpenAcc acc env' aenv' (Array sh' e)
-    permuteV f1 a1 f2 a2 | Avoid (Just (env, f1')) <- avoidF f1
+    permuteV f1 a1 f2 a2 | Avoided (env, f1') <- avoidF f1
                          = bind env
                          $ Alet (sink env a2)
                          $ inject
@@ -283,7 +281,7 @@ vectorisePreOpenAcc vectAcc delta exp
               -> Boundary                (EltRepr e2)
               -> acc            env aenv (Array sh e2)
               -> PreOpenAcc acc env' aenv' (Array sh e')
-    stencil2V (avoidF -> Avoid (Just (env, f))) b1 a1 b2 a2
+    stencil2V (avoidF -> Avoided (env, f)) b1 a1 b2 a2
       = bind env $ Stencil2 f b1 (sink env $ cvtA a1) b2 (sink env $ cvtA a2)
     stencil2V _                                 _  _  _  _
       = INTERNAL_ERROR(error) "vectorisePreOpenAcc" (nestedError "in first argument to Stencil")
@@ -295,7 +293,7 @@ vectorisePreOpenAcc vectAcc delta exp
            -> acc            env  aenv  a1
            -> PreOpenAcc acc env' aenv' a2
     cvtFEA wrap
-           (avoidF -> Avoid (Just (env, f)))
+           (avoidF -> Avoided (env, f))
            (cvtE'  -> z)
            (cvtA   -> a)
       = bind env $ Alet (sink env z) $ inject $ wrap (weakenATop f) topEA (weakenATop $ sink env a)
@@ -310,7 +308,7 @@ vectorisePreOpenAcc vectAcc delta exp
             -> acc            env  aenv  a2
             -> PreOpenAcc acc env' aenv' a3
     cvtFEAA wrap
-            (avoidF -> Avoid (Just (env, f)))
+            (avoidF -> Avoided (env, f))
             (cvtE'  -> z)
             (cvtA   -> a)
             (cvtA   -> b)
@@ -324,7 +322,7 @@ vectorisePreOpenAcc vectAcc delta exp
           -> acc            env  aenv  a1
           -> PreOpenAcc acc env' aenv' a2
     cvtFA wrap
-           (avoidF -> Avoid (Just (env, f)))
+           (avoidF -> Avoided (env, f))
            (cvtA  -> a)
       = bind env $ wrap f (sink env a)
     cvtFA wrap _ _ = INTERNAL_ERROR(error) "vectorisePreOpenAcc"
@@ -337,7 +335,7 @@ vectorisePreOpenAcc vectAcc delta exp
            -> acc            env  aenv  a2
            -> PreOpenAcc acc env' aenv' a3
     cvtFAA wrap
-           (avoidF -> Avoid (Just (env, f)))
+           (avoidF -> Avoided (env, f))
            (cvtA   -> a)
            (cvtA   -> b)
       = bind env $ wrap f (sink env a) (sink env b)
@@ -351,24 +349,27 @@ vectorisePreOpenAcc vectAcc delta exp
 
     avoidF :: PreOpenFun acc env  aenv f
            -> AvoidFun acc env' aenv' f
-    avoidF (avoidFun -> Avoid (Just (env, f))) | ExtendContext d <- extendContext env delta
+    avoidF (avoidFun -> Avoided (env, f)) | ExtendContext d <- extendContext env ctx
                                                , Just f' <- rebuildToLift d f
-                                               , env'    <- liftExtend vectAcc env delta d
-                                               = Avoid $ Just (env', f')
-    avoidF _                                   = Avoid Nothing
+                                               , env'    <- liftExtend vectAcc env ctx d
+                                               = Avoided (env', f')
+    avoidF _                                   = Unavoided
 
-
+-- |Performs the lifting transform on a given scalar expression.
+--
+-- Because lifting is performed in the presence of higher dimensional arrays, the output of the
+-- transform has an extra element in the environment, the shape of the output array.
 liftExp :: forall acc env env' aenv aenv' sh e. (Kit acc, Shape sh)
         => VectoriseAcc acc
         -> Context env aenv env' aenv'
         -> PreOpenExp acc env       aenv  e
         -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
-liftExp vectAcc delta exp
+liftExp vectAcc ctx exp
   = case exp of
       Let bnd body              -> letL bnd body
-      Var ix                    -> varL delta ix id id
+      Var ix                    -> varL ctx ix id id
       Const c                   -> replicate (Const c)
-      Tuple tup                 -> cvtT tup
+      Tuple tup                 -> liftTuple vectAcc ctx tup
       Prj ix t                  -> Map (fun1 (Prj ix)) (cvtE t)
       IndexNil                  -> replicate IndexNil
       IndexAny                  -> replicate IndexAny
@@ -393,84 +394,22 @@ liftExp vectAcc delta exp
     cvtE :: forall sh e. Shape sh
          => PreOpenExp acc env aenv e
          -> acc (env',sh) aenv' (Array sh e)
-    cvtE exp' = inject $ liftExp vectAcc delta exp'
+    cvtE exp' = inject $ liftExp vectAcc ctx exp'
 
     cvtA :: forall sh' e'. acc env aenv (Array sh' e')
          -> acc (env',sh) aenv' (Array sh' e')
-    cvtA = weakenE SuccIdx . vectAcc delta
+    cvtA = weakenE SuccIdx . vectAcc ctx
 
     cvtF1 :: PreOpenFun acc env aenv (a -> b)
           -> PreOpenAfun acc (env',sh) aenv' (Array sh a -> Array sh b)
-    cvtF1 (Lam (Body f)) = (Alam . Abody) (inject $ liftExp vectAcc (PushLExpC delta (undefined::sh)) f)
+    cvtF1 (Lam (Body f)) = (Alam . Abody) (inject $ liftExp vectAcc (PushLExpC ctx (undefined::sh)) f)
     cvtF1 _              = error "Inconsistent valuation"
-
-    -- (a1, a2,..., aN) =>
-    --   let a1' = a1^
-    --       a2' = a2^
-    --       ...
-    --       aN' = aN^
-    --   in generate (\ix -> (a1' ! ix, a2' ! ix,..., aN' ! ix))
-    --
-    -- RCE: Ideally we would like to do this by lifting the tuple into a tuple of arrays.
-    -- Unfortunately this can't be done because the type system us unable to recognise that the
-    -- lifted tuple is an instance of IsTuple.
-    cvtT :: (Elt e, IsTuple e)
-         => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
-         -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
-    cvtT t = cvtT' t cvtE gen
-      where
-        cvtT' :: forall t aenv'.
-                 Tuple (PreOpenExp acc env aenv) t
-              -> (forall e. PreOpenExp acc env aenv e -> acc (env',sh) aenv' (Array sh e))
-              -> PreOpenAcc acc (env',sh) (ExpandEnv aenv' (ArraysOfTupleRepr sh t)) (Array sh e)
-              -> PreOpenAcc acc (env',sh) aenv'                                      (Array sh e)
-        cvtT' NilTup        _    arr = arr
-        cvtT'(SnocTup t' e) lift arr = Alet (lift e) (inject $ cvtT' t' lift' arr)
-          where
-            lift' :: forall e e'. PreOpenExp acc env aenv e -> acc (env',sh) (aenv', Array sh e') (Array sh e)
-            lift' = weakenATop . lift
-
-        gen :: PreOpenAcc acc (env',sh) (TupleEnv aenv' sh e) (Array sh e)
-        gen = Generate (Var ZeroIdx) (Lam (Body (Tuple t')))
-          where
-            t' :: Tuple (PreOpenExp acc ((env',sh),sh) (TupleEnv aenv' sh e)) (TupleRepr e)
-            t' = weakenTup (ixt (undefined :: aenv') t) (mkTup t)
-              where
-                mkTup :: forall e c. Tuple c e
-                      -> Tuple (PreOpenExp acc ((env',sh),sh) (ArraysOfTupleRepr sh e)) e
-                mkTup NilTup          = NilTup
-                mkTup (SnocTup t'' _) = SnocTup (weakenTup SuccIdx (mkTup t'')) e'
-                  where
-                    e' :: forall s e'. e ~ (s,e') => PreOpenExp acc ((env',sh),sh) (ArraysOfTupleRepr sh e) e'
-                    e' = Index (inject (Avar ZeroIdx)) (Var ZeroIdx)
-
-        weakenTup :: forall env aenv aenv' e. aenv :> aenv'
-                  -> Tuple (PreOpenExp acc env aenv) e
-                  -> Tuple (PreOpenExp acc env aenv') e
-        weakenTup v = unRTup . weakenA v . RebuildTup
-
-        tix :: forall t c env e. Tuple c t -> Idx env e -> Idx (ExpandEnv env (ArraysOfTupleRepr sh t)) e
-        tix NilTup ix        = ix
-        tix (SnocTup t (_:: c t')) ix = tix t ix'
-          where
-            ix' :: Idx (env, Array sh t') e
-            ix' = SuccIdx ix
-
-        ixt :: forall t c env e.
-               env {- dummy -}
-            -> Tuple c t
-            -> Idx (ArraysOfTupleRepr sh t) e
-            -> Idx (ExpandEnv env (ArraysOfTupleRepr sh t)) e
-        ixt _   (SnocTup NilTup _) ZeroIdx      = ZeroIdx
-        ixt _   (SnocTup t      _) ZeroIdx      = tix t (ZeroIdx :: Idx (env, e) e)
-        ixt _   (SnocTup t      _) (SuccIdx ix) = ixt env' t ix
-          where
-            env' :: forall s e'. t ~ (s,e') => (env, Array sh e')
-            env' = undefined -- dummy argument
-        ixt _   _                  _            = error "Inconsistent valuation"
 
     replicate :: forall e. Elt e => PreOpenExp acc ((env', sh), sh) aenv' e -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
     replicate c = Generate (Var ZeroIdx) (Lam (Body c))
+
+    -- Lifted versions of operations
+    -- ==============================
 
     varL :: forall env aenv env'' aenv''. (Elt e, Shape sh)
          => Context env aenv env'' aenv''
@@ -497,7 +436,7 @@ liftExp vectAcc delta exp
         bnd'  = cvtE bnd
 
         body' :: PreOpenAcc acc (env',sh) (aenv', Array sh bnd_t) (Array sh e)
-        body' = liftExp vectAcc (PushLExpC delta (undefined :: sh)) body
+        body' = liftExp vectAcc (PushLExpC ctx (undefined :: sh)) body
 
     condL :: Elt e
           => PreOpenExp acc env     aenv  Bool
@@ -593,6 +532,9 @@ liftExp vectAcc delta exp
            -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
     shapeL a = Alet (cvtA a) (inject $ Generate (Var ZeroIdx) (Lam (Body (Shape (inject (Avar ZeroIdx))))))
 
+    -- Utilities
+    -- =========
+
     tup :: forall env aenv a b. (Elt a,Elt b)
         => PreOpenExp acc env aenv a
         -> PreOpenExp acc env aenv b
@@ -635,8 +577,88 @@ liftExp vectAcc delta exp
          -> PreOpenFun acc env aenv (a -> b -> c)
     fun2 f = Lam (Lam (Body (f (Var (SuccIdx ZeroIdx)) (Var ZeroIdx))))
 
+
+type family ArraysOfTupleRepr sh t
+type instance ArraysOfTupleRepr sh ()    = ()
+type instance ArraysOfTupleRepr sh (t,e) = (ArraysOfTupleRepr sh t, Array sh e)
+
+type family ExpandEnv env env'
+type instance ExpandEnv env ()        = env
+type instance ExpandEnv env (env', t) = ExpandEnv (env, t) env'
+
+type TupleEnv aenv sh t = ExpandEnv aenv (ArraysOfTupleRepr sh (TupleRepr t))
+
+-- (a1, a2,..., aN) =>
+--   let a1' = a1^
+--       a2' = a2^
+--       ...
+--       aN' = aN^
+--   in generate (\ix -> (a1' ! ix, a2' ! ix,..., aN' ! ix))
+--
+-- RCE: Ideally we would like to do this by lifting the tuple into a tuple of arrays.
+-- Unfortunately this can't be done because the type system us unable to recognise that the
+-- lifted tuple is an instance of IsTuple.
+liftTuple :: forall acc env aenv env' aenv' sh e.
+             (Elt e, Kit acc, Shape sh, IsTuple e)
+          => VectoriseAcc acc
+          -> Context env aenv env' aenv'
+          -> Tuple (PreOpenExp acc env aenv) (TupleRepr e)
+          -> PreOpenAcc acc (env',sh) aenv' (Array sh e)
+liftTuple vectAcc ctx t = cvtT' t (inject . liftExp vectAcc ctx) gen
+  where
+    cvtT' :: forall t aenv'.
+             Tuple (PreOpenExp acc env aenv) t
+          -> (forall e. PreOpenExp acc env aenv e -> acc (env',sh) aenv' (Array sh e))
+          -> PreOpenAcc acc (env',sh) (ExpandEnv aenv' (ArraysOfTupleRepr sh t)) (Array sh e)
+          -> PreOpenAcc acc (env',sh) aenv'                                      (Array sh e)
+    cvtT' NilTup        _    arr = arr
+    cvtT'(SnocTup t' e) lift arr = Alet (lift e) (inject $ cvtT' t' lift' arr)
+      where
+        lift' :: forall e e'. PreOpenExp acc env aenv e -> acc (env',sh) (aenv', Array sh e') (Array sh e)
+        lift' = weakenATop . lift
+
+    gen :: PreOpenAcc acc (env',sh) (TupleEnv aenv' sh e) (Array sh e)
+    gen = Generate (Var ZeroIdx) (Lam (Body (Tuple t')))
+      where
+        t' :: Tuple (PreOpenExp acc ((env',sh),sh) (TupleEnv aenv' sh e)) (TupleRepr e)
+        t' = weakenTup (ixt (undefined :: aenv') t) (mkTup t)
+          where
+            mkTup :: forall e c. Tuple c e
+                  -> Tuple (PreOpenExp acc ((env',sh),sh) (ArraysOfTupleRepr sh e)) e
+            mkTup NilTup          = NilTup
+            mkTup (SnocTup t'' _) = SnocTup (weakenTup SuccIdx (mkTup t'')) e'
+              where
+                e' :: forall s e'. e ~ (s,e') => PreOpenExp acc ((env',sh),sh) (ArraysOfTupleRepr sh e) e'
+                e' = Index (inject (Avar ZeroIdx)) (Var ZeroIdx)
+
+    weakenTup :: forall env aenv aenv' e. aenv :> aenv'
+              -> Tuple (PreOpenExp acc env aenv) e
+              -> Tuple (PreOpenExp acc env aenv') e
+    weakenTup v = unRTup . weakenA v . RebuildTup
+
+    tix :: forall t c env e. Tuple c t -> Idx env e -> Idx (ExpandEnv env (ArraysOfTupleRepr sh t)) e
+    tix NilTup ix        = ix
+    tix (SnocTup t (_:: c t')) ix = tix t ix'
+      where
+        ix' :: Idx (env, Array sh t') e
+        ix' = SuccIdx ix
+
+    ixt :: forall t c env e.
+           env {- dummy -}
+        -> Tuple c t
+        -> Idx (ArraysOfTupleRepr sh t) e
+        -> Idx (ExpandEnv env (ArraysOfTupleRepr sh t)) e
+    ixt _   (SnocTup NilTup _) ZeroIdx      = ZeroIdx
+    ixt _   (SnocTup t      _) ZeroIdx      = tix t (ZeroIdx :: Idx (env, e) e)
+    ixt _   (SnocTup t      _) (SuccIdx ix) = ixt env' t ix
+      where
+        env' :: forall s e'. t ~ (s,e') => (env, Array sh e')
+        env' = undefined -- dummy argument
+    ixt _   _                  _            = error "Inconsistent valuation"
+
 data Avoid f acc env aenv e where
-  Avoid :: Maybe (Extend acc env aenv aenv', f acc env aenv' e) -> Avoid f acc env aenv e
+  Avoided :: (Extend acc env aenv aenv', f acc env aenv' e) -> Avoid f acc env aenv e
+  Unavoided :: Avoid f acc env aenv e
 
 type AvoidExp = Avoid PreOpenExp
 type AvoidFun = Avoid PreOpenFun
@@ -680,12 +702,12 @@ avoidExp = cvtE
          => PreOpenExp acc env          aenv bnd_t
          -> PreOpenExp acc (env, bnd_t) aenv e
          -> AvoidExp acc env          aenv e
-    letA bnd body | Avoid (Just (env , bnd' )) <- cvtE bnd
-                  , Avoid (Just (env', body')) <- cvtE (sink env body)
+    letA bnd body | Avoided (env , bnd' ) <- cvtE bnd
+                  , Avoided (env', body') <- cvtE (sink env body)
                   , Just env''                 <- strengthenExtendE (noTop Just) env'
-                  = Avoid $ Just (join env env'', Let (sink env' bnd') body')
+                  = Avoided (join env env'', Let (sink env' bnd') body')
                   | otherwise
-                  = Avoid Nothing
+                  = Unavoided
 
     whileA :: forall e env aenv. Elt e
            => PreOpenFun acc env aenv (e -> Bool)
@@ -693,38 +715,38 @@ avoidExp = cvtE
            -> PreOpenExp acc env aenv e
            -> AvoidExp acc env aenv e
     whileA (Lam (Body p)) (Lam (Body it)) i
-      | Avoid (Just (env0,  p')) <- cvtE p
-      , Avoid (Just (env1, it')) <- cvtE (sink env0 it)
-      , Avoid (Just (env2,  i')) <- cvtE (sink env1 $ sink env0 i)
-      , Just env0'               <- strengthenExtendE (noTop Just) env0
-      , Just env1'               <- strengthenExtendE (noTop Just) env1
+      | Avoided (env0,  p') <- cvtE p
+      , Avoided (env1, it') <- cvtE (sink env0 it)
+      , Avoided (env2,  i') <- cvtE (sink env1 $ sink env0 i)
+      , Just env0'          <- strengthenExtendE (noTop Just) env0
+      , Just env1'          <- strengthenExtendE (noTop Just) env1
       = let
           p''  = (sink env2 . sink env1) p'
           it'' = sink env2 it'
-        in Avoid $ Just (env0' `join` env1' `join` env2, While (Lam $ Body p'') (Lam $ Body it'') i')
-    whileA _               _              _ = Avoid Nothing
+        in Avoided (env0' `join` env1' `join` env2, While (Lam $ Body p'') (Lam $ Body it'') i')
+    whileA _               _              _ = Unavoided
 
 
     simple :: forall e env aenv.
               PreOpenExp acc env aenv e
            -> AvoidExp      acc env aenv e
-    simple e = Avoid $ Just (BaseEnv, e)
+    simple e = Avoided (BaseEnv, e)
 
     cvtE1 :: forall e a env aenv. (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv e)
           -> PreOpenExp acc env aenv a
           -> AvoidExp acc env aenv e
-    cvtE1 f (cvtE -> Avoid (Just (env, a))) = Avoid $ Just (env, f a)
-    cvtE1 _ _                               = Avoid Nothing
+    cvtE1 f (cvtE -> Avoided (env, a)) = Avoided (env, f a)
+    cvtE1 _ _                          = Unavoided
 
     cvtE2 :: forall e a b env aenv.
              (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv e)
           -> PreOpenExp acc env aenv a
           -> PreOpenExp acc env aenv b
           -> AvoidExp acc env aenv e
-    cvtE2 f (cvtE -> Avoid (Just (env, a))) (cvtE . sink env -> Avoid (Just (env', b)))
-      = Avoid $ Just (env `join` env', f (sink env' a) b)
+    cvtE2 f (cvtE -> Avoided (env, a)) (cvtE . sink env -> Avoided (env', b))
+      = Avoided (env `join` env', f (sink env' a) b)
     cvtE2 _ _                               _
-      = Avoid Nothing
+      = Unavoided
 
     cvtE3 :: forall e a b c env aenv.
              (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c -> PreOpenExp acc env aenv e)
@@ -732,52 +754,52 @@ avoidExp = cvtE
           -> PreOpenExp acc env aenv b
           -> PreOpenExp acc env aenv c
           -> AvoidExp acc env aenv e
-    cvtE3 f (cvtE                        -> Avoid (Just (env, a)))
-            (cvtE . sink env             -> Avoid (Just (env', b)))
-            (cvtE . sink env' . sink env -> Avoid (Just (env'', c)))
-      = Avoid $ Just (env `join` env' `join` env'', f (sink env'' $ sink env' a) (sink env'' b) c)
-    cvtE3 _ _ _ _ = Avoid Nothing
+    cvtE3 f (cvtE                        -> Avoided (env, a))
+            (cvtE . sink env             -> Avoided (env', b))
+            (cvtE . sink env' . sink env -> Avoided (env'', c))
+      = Avoided (env `join` env' `join` env'', f (sink env'' $ sink env' a) (sink env'' b) c)
+    cvtE3 _ _ _ _ = Unavoided
 
     cvtT :: forall e env aenv. (IsTuple e, Elt e)
          => Tuple (PreOpenExp acc env aenv) (TupleRepr e)
          -> AvoidExp acc env aenv e
-    cvtT t | Avoid (Just (env, RebuildTup t)) <- cvtT' t = Avoid $ Just (env, Tuple t)
+    cvtT t | Avoided (env, RebuildTup t) <- cvtT' t = Avoided (env, Tuple t)
       where
         cvtT' :: forall e.
                  Tuple (PreOpenExp acc env aenv) e
               -> Avoid RebuildTup acc env aenv e
-        cvtT' NilTup        = Avoid $ Just (BaseEnv, (RebuildTup NilTup))
-        cvtT' (SnocTup t e) | Avoid (Just (env, (RebuildTup t'))) <- cvtT' t
-                            , Avoid (Just (env', e')) <- cvtE . sink env $ e
-                            = Avoid (Just (env `join` env', RebuildTup (SnocTup (unRTup $ sink env' $ RebuildTup t') e')))
-        cvtT' _             = Avoid Nothing
-    cvtT _ = Avoid Nothing
+        cvtT' NilTup        = Avoided (BaseEnv, (RebuildTup NilTup))
+        cvtT' (SnocTup t e) | Avoided (env, RebuildTup t') <- cvtT' t
+                            , Avoided (env', e') <- cvtE . sink env $ e
+                            = Avoided (env `join` env', RebuildTup (SnocTup (unRTup $ sink env' $ RebuildTup t') e'))
+        cvtT' _             = Unavoided
+    cvtT _ = Unavoided
 
     cvtA1 :: forall a e env aenv. Arrays a
           => (forall env aenv. acc env aenv a -> PreOpenExp acc env aenv e)
           -> acc env aenv a
           -> AvoidExp acc env aenv e
-    cvtA1 f a = Avoid $ Just (BaseEnv `PushEnv` extract a, f (inject $ Avar ZeroIdx))
+    cvtA1 f a = Avoided (BaseEnv `PushEnv` extract a, f (inject $ Avar ZeroIdx))
 
     cvtA1E1 :: forall a b e env aenv. Arrays a
           => (forall env aenv. acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv e)
           -> acc env aenv a
           -> PreOpenExp acc env aenv b
           -> AvoidExp acc env aenv e
-    cvtA1E1 f a (cvtE -> Avoid (Just (env, b)))
-      = Avoid $ Just (env `PushEnv` sink env (extract a), f (inject $ Avar ZeroIdx) (weakenATop b))
+    cvtA1E1 f a (cvtE -> Avoided (env, b))
+      = Avoided (env `PushEnv` sink env (extract a), f (inject $ Avar ZeroIdx) (weakenATop b))
     cvtA1E1 _ _ _
-      = Avoid Nothing
+      = Unavoided
 
 avoidFun :: Kit acc
          => PreOpenFun acc env aenv f
          -> AvoidFun acc env aenv f
-avoidFun (Lam f)  | Avoid (Just (env, f')) <- avoidFun f
+avoidFun (Lam f)  | Avoided (env, f') <- avoidFun f
                   , Just env'              <- strengthenExtendE (noTop Just) env
-                  = Avoid (Just (env', Lam f'))
-avoidFun (Body f) | Avoid (Just (env, f')) <- avoidExp f
-                  = Avoid (Just (env, Body f'))
-avoidFun _        = Avoid Nothing
+                  = Avoided (env', Lam f')
+avoidFun (Body f) | Avoided (env, f') <- avoidExp f
+                  = Avoided (env, Body f')
+avoidFun _        = Unavoided
 
 data ExtendContext env env' aenv where
   ExtendContext :: Context env aenv env' aenv' -> ExtendContext env env' aenv
