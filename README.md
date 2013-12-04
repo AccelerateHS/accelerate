@@ -52,7 +52,7 @@ The following additional components are experimental and incomplete:
 Requirements
 ------------
 
-  * Glasgow Haskell Compiler (GHC), 7.0.3 or later
+  * Glasgow Haskell Compiler (GHC), 7.6 or later
   * Haskell libraries as specified in [`accelerate.cabal`][Cabal-file]
   * For the CUDA backend, CUDA version 3.0 or later
 
@@ -72,7 +72,7 @@ Mailing list and contacts
   * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
   * Bug reports and issues tracking: [GitHub project page][Issues].
 
-The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> (aka TacticalGrace on #haskell and related channels).
+The maintainers of Accelerate are Manuel M T Chakravarty <chak@cse.unsw.edu.au> and Trevor L McDonell <tmcdonell@cse.unsw.edu.au>.
 
 What's missing?
 ---------------
