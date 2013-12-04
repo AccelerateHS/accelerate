@@ -11,6 +11,8 @@ There are also slides from some fairly recent presentations:
  * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
  * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video])
 
+Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell][Mar13] contains a tutorial introduction to Accelerate.
+
 A simple example
 ----------------
 
@@ -84,6 +86,7 @@ Here is a list of features that are currently missing:
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
   [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
+  [Mar13]:                  http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                http://hackage.haskell.org/package/accelerate
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
