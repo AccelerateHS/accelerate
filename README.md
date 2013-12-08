@@ -9,7 +9,7 @@ For more details, see our papers:
 
 There are also slides from some fairly recent presentations:
  * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
- * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video])
+ * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video]) ([workshop][YLJ13-workshop])
 
 Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell][Mar13] contains a tutorial introduction to Accelerate.
 
@@ -105,6 +105,7 @@ Here is a list of features that are currently missing:
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [repa]:                   http://hackage.haskell.org/package/repa
   [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
-  [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
   [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
+  [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
+  [YLJ13-workshop]:         https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate-workshop
 
