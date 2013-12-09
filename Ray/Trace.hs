@@ -38,7 +38,7 @@ castViewRays sizeX sizeY fov eyePos
     in
     A.generate (constant (Z :. sizeY :. sizeX))
                (\ix -> let (x, y) = xyOfPoint $ pointOfIndex sizeX sizeY ix
-                       in  normalise $ makeVec3 (x * fovX) (-y * fovY) 0 - eyePos)
+                       in  normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos)
 
 
 -- | Cast rays into the scene

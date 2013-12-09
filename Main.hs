@@ -28,6 +28,7 @@ main = do
 
   let width     = get optWidth conf
       height    = get optHeight conf
+      zoom      = get optZoom conf
       fov       = get optFieldOfView conf
       bounces   = get optBounces conf
       backend   = get optBackend conf

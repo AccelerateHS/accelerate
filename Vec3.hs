@@ -21,6 +21,7 @@ import Data.Array.Accelerate.Array.Sugar
 --
 type Position   = Vec3
 type Direction  = Vec3
+type Normal     = (Position, Direction)
 
 -- | A parameterised point in XYZ space.
 --
