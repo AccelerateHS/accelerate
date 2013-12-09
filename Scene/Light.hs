@@ -10,6 +10,7 @@ module Scene.Light
 -- friends
 import Vec3
 import Ray.Intersect
+import Scene.Color
 import Scene.Object
 
 -- frenemies
@@ -17,7 +18,6 @@ import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
-import Graphics.Gloss.Accelerate.Data.Color
 
 -- standard library
 import Data.Typeable
@@ -44,7 +44,7 @@ colorOfLight
     -> Exp Color
 colorOfLight light point normal
   = let
-        (r,g,b,a)       = rgbaOfColor $ lightColor light
+        (r,g,b)         = rgbOfColor $ lightColor light
         lpoint          = lightPos light
 
         lp_l    = lpoint - point
@@ -52,7 +52,7 @@ colorOfLight light point normal
         dist    = magnitude lp_l                        -- distance from light to surface
         mag     = (normal `dot` dir) / (dist * dist)    -- magnitude of the reflection
     in
-    rawColor (r * mag) (g * mag) (b * mag) a
+    rawColor (r * mag) (g * mag) (b * mag)
 
 
 -- | Get the colour at each position as a function of all lights acting on the

@@ -9,13 +9,13 @@ module Scene.Object
 
 -- friends
 import Vec3
+import Scene.Color
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
-import Graphics.Gloss.Accelerate.Data.Color
 
 -- standard library
 import Prelude                                                  as P
@@ -117,8 +117,8 @@ checkers pos
         v4      = A.fromIntegral . boolToInt $ z <* 0.0
     in
     v1 `xor` v2 `xor` v3 `xor` v4 ==* 1 {- True -}
-      ? ( rawColor 1.0 1.0 1.0 1.0
-        , rawColor 0.4 0.4 0.4 1.0 )
+      ? ( rawColor 1.0 1.0 1.0
+        , rawColor 0.4 0.4 0.4 )
 
 
 -- Get Objects into Accelerate -------------------------------------------------

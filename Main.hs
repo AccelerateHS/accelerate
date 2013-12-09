@@ -6,13 +6,13 @@ import Vec3
 import Config
 import ParseArgs
 import Monitoring
+import Scene.Color
 import Scene.World
 import Ray.Trace
 
 -- frenemies
 import Data.Label
 import Data.Array.Accelerate                    as A
-import Graphics.Gloss.Accelerate.Data.Color
 import Graphics.Gloss.Accelerate.Data.Picture
 
 -- library
@@ -33,7 +33,7 @@ main = do
       bounces   = get optBounces conf
       backend   = get optBackend conf
 
-      ambient   = rawColor 0.3 0.3 0.3 1.0
+      ambient   = rawColor 0.3 0.3 0.3
 
       eye       = makeVec3 50 (-100) (-700)
       eyePos    = A.fill (constant (Z :. height :. width)) eye
