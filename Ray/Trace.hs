@@ -5,13 +5,13 @@ module Ray.Trace
 
 -- friends
 import Vec3
-import Scene.Color
 import Scene.Object
 import Scene.Light
 import Ray.Intersect
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
+import Graphics.Gloss.Accelerate.Data.Color.RGB
 import Graphics.Gloss.Accelerate.Data.Point
 
 -- standard library

@@ -3,12 +3,12 @@ module Scene.World where
 
 -- friends
 import Vec3
-import Scene.Color
 import Scene.Light
 import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
+import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 
 makeLights :: Float -> Lights

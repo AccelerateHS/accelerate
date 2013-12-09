@@ -6,18 +6,18 @@ import Vec3
 import Config
 import ParseArgs
 import Monitoring
-import Scene.Color
 import Scene.World
 import Ray.Trace
 
 -- frenemies
 import Data.Label
-import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate                                    as A
+import Graphics.Gloss.Accelerate.Data.Color.RGB
 import Graphics.Gloss.Accelerate.Data.Picture
 
 -- library
-import System.Environment                       ( getArgs )
-import qualified Graphics.Gloss                 as G
+import System.Environment                                       ( getArgs )
+import qualified Graphics.Gloss                                 as G
 
 
 main :: IO ()

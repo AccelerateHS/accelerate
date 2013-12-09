@@ -9,13 +9,13 @@ module Scene.Object
 
 -- friends
 import Vec3
-import Scene.Color
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
+import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 -- standard library
 import Prelude                                                  as P
