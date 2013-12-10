@@ -6,6 +6,7 @@ module Ray.Intersect
 
 -- friends
 import Vec3
+import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
@@ -14,24 +15,13 @@ import Data.Array.Accelerate                                    as A
 import Prelude                                                  as P
 
 
--- | Of two intersection tests, take the nearest
+-- | Of two intersection tests, take the nearest.
 --
-nearest :: Exp (Bool, Float) -> Exp (Bool, Float) -> Exp (Bool, Float)
+nearest :: forall a. Elt a
+        => Exp (Bool, Float, a)
+        -> Exp (Bool, Float, a)
+        -> Exp (Bool, Float, a)
 nearest x y
-  = let
-        -- hit test and distance for each object
-        (h1, d1)        = unlift x
-        (h2, d2)        = unlift y      :: (Exp Bool, Exp Float)
-    in
-    h1 &&* h2 ? ( lift (h1, min d1 d2), -- both hit, select the closest
-    h1        ? ( x, y ) )              -- just the one that intersects
-
-
-nearest' :: forall a. Elt a
-         => Exp (Bool, Float, a)
-         -> Exp (Bool, Float, a)
-         -> Exp (Bool, Float, a)
-nearest' x y
   = let
         (h1, d1, _ :: Exp a) = unlift x
         (h2, d2, _ :: Exp a) = unlift y
@@ -40,7 +30,9 @@ nearest' x y
                 , h1 ?       (x, y) )   -- only one object intersects
 
 
--- Determine the closest intersection point (if any) for a gang of rays.
+-- | Find the nearest point of intersection for a ray. If there is a hit, then
+-- return the origin and normal of the new reflected ray, as well as the colour
+-- and shine of the surface that was hit.
 --
 -- This tests all objects for each ray and just takes the minimum. To scale to
 -- larger scenes, this should use a spatial decomposition technique like a
@@ -50,34 +42,39 @@ nearest' x y
 --
 -- https://developer.nvidia.com/content/thinking-parallel-part-iii-tree-construction-gpu
 --
-intersectRays
+castRay
+    :: forall object. Elt object
+    => (Exp object -> Exp Position -> Exp Direction -> Exp (Bool, Float))
+    -> Exp object                       -- dummy object (because we have no Maybe types)
+    -> Acc (Vector object)              -- objects to test
+    -> Exp Position                     -- ray origin
+    -> Exp Direction                    -- ray direction
+    -> Exp (Bool, Float, object)
+castRay distanceTo  dummy objects orig dir
+  = sfoldl (\s o -> let (_,   dist, _)  = unlift s      :: (Exp Bool, Exp Float, Exp object)
+                        (hit, dist')    = unlift $ distanceTo o orig dir
+                    in
+                    hit &&* dist' <* dist ? (lift (hit, dist', o), s))
+           (lift (False, infinity, dummy))
+           (constant Z)
+           objects
+
+
+-- | Check where there is some object closer than a given minimum distance. We
+--   stop as soon as there is an intersection.
+--
+checkRay
     :: Elt object
     => (Exp object -> Exp Position -> Exp Direction -> Exp (Bool, Float))
-    -> Acc (Array DIM1 object)          -- objects to test
-    -> Acc (Array DIM2 Position)        -- source of each ray
-    -> Acc (Array DIM2 Direction)       -- direction of each ray
-    -> Acc (Array DIM2 ( Bool           -- was there was an intersection?
-                       , Float          -- distance to object from the point in the direction of the normal
-                       , Int))          -- array index of the nearest intersected object
-intersectRays distanceToObject objects points normals
-  = let
-        sh              = shape points
-        n_obj           = unindex1 (shape objects)
-        miss            = constant (False, 0, 0)
-
-        intersects
-          = let objs    = A.replicate (lift (sh  :. All))   objects
-                pts     = A.replicate (lift (Any :. n_obj)) points
-                dirs    = A.replicate (lift (Any :. n_obj)) normals
-            in
-            A.generate (lift (sh :. n_obj))
-                       (\ix -> let _ :. i       = unlift ix :: Exp DIM2 :. Exp Int
-                                   obj          = objs ! ix
-                                   pt           = pts  ! ix
-                                   dir          = dirs ! ix
-                                   (hit, dist)  = unlift $ distanceToObject obj pt dir :: (Exp Bool, Exp Float)
-                               in
-                               lift (hit, dist, i))
-     in
-     A.fold nearest' miss intersects
+    -> Acc (Vector object)              -- objects to test
+    -> Exp Position                     -- ray origin
+    -> Exp Direction                    -- ray direction
+    -> Exp Float                        -- minimum distance
+    -> Exp Bool
+checkRay distanceTo objs orig dir dist
+  = A.fst $ A.while (\s -> let (hit, i) = unlift s in A.not hit &&* i <* unindex1 (shape objs))
+                    (\s -> let i            = A.snd s
+                               (hit, dist') = unlift $ distanceTo (objs ! index1 i) orig dir
+                           in  hit &&* dist' <* dist ? (lift (True, i), lift (False, i+1)))
+                    (constant (False, 0))
 

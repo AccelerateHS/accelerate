@@ -35,28 +35,8 @@ lightPos   :: Exp Light -> Exp Position
 lightColor :: Exp Light -> Exp Color
 
 
--- | Compute the direct lighting at a particular point for a single light
---
-colorOfLight
-    :: Exp Light
-    -> Exp Position
-    -> Exp Direction
-    -> Exp Color
-colorOfLight light point normal
-  = let
-        (r,g,b)         = rgbOfColor $ lightColor light
-        lpoint          = lightPos light
-
-        lp_l    = lpoint - point
-        dir     = normalise lp_l                        -- vector from the light to the surface point
-        dist    = magnitude lp_l                        -- distance from light to surface
-        mag     = (normal `dot` dir) / (dist * dist)    -- magnitude of the reflection
-    in
-    rawColor (r * mag) (g * mag) (b * mag)
-
-
--- | Get the colour at each position as a function of all lights acting on the
---   point on a surface at a given normal direction.
+-- | Compute the direct lighting contribution of all lights acting on a point on
+-- a surface at a given normal direction.
 --
 --    normal
 --         ^           x light
@@ -66,65 +46,45 @@ colorOfLight light point normal
 --   ______x______ surface
 --       point
 --
-applyLighting
+applyLights
     :: Acc Objects
     -> Acc Lights
-    -> Acc (Array DIM2 Position)
-    -> Acc (Array DIM2 Direction)
-    -> Acc (Array DIM2 Color)
-applyLighting objects lights points normals
+    -> Exp Position
+    -> Exp Direction
+    -> Exp Color
+applyLights objects lights point normal
+  = sfoldl (\c l -> c + applyLight objects point normal l) black (constant Z) lights
+
+
+-- | Compute the direct lighting at a particular point for a single light
+--
+applyLight
+    :: Acc Objects              -- possible occluding objects, used for shadows
+    -> Exp Position             -- point which is being lit
+    -> Exp Direction            -- surface normal at this point
+    -> Exp Light                -- does this light contribute colour to this point?
+    -> Exp Color
+applyLight objects point normal light
   = let
         (spheres, planes)       = unlift objects
-        sh                      = shape points
-        n_l                     = unindex1 (shape lights)
-        n_sph                   = unindex1 (shape spheres)
-        n_pln                   = unindex1 (shape planes)
-        miss                    = constant (False, 0)
 
-        -- For all lights, what is the direction and distance from the light
-        -- source to the point on the surface?
+        -- What is the direction and distance from the light source to the point
+        -- on the surface?
         --
-        -- TLM: we have multiple uses of the 'dirLights' term, which means this
-        --      replicated array will be created as a manifest array in memory.
+        lp_p                    = lightPos light - point
+        dist                    = magnitude lp_p
+        dir                     = (1.0 / dist) .* lp_p
+
+        -- Calculate the magnitude of the reflected light, if there are no
+        -- occluding objects between the light and the surface point.
         --
-        (dirLights, distLights)
-          = A.unzip
-          $ A.zipWith (\light point -> let lp_p = lightPos light - point
-                                       in  lift (normalise lp_p, magnitude lp_p))
-                      (A.replicate (lift (sh  :. All)) lights)
-                      (A.replicate (lift (Any :. n_l)) points)
-
-        -- For all lights, find the closest object to that light in the
-        -- direction of the vector from the light to the surface point.
-        obstructions
-          = let dist_sph = A.zipWith3 distanceToSphere
-                              (A.replicate (lift (sh  :. n_l :. All))   spheres)
-                              (A.replicate (lift (Any :. n_l :. n_sph)) points)
-                              (A.replicate (lift (Any        :. n_sph)) dirLights)
-
-                dist_pln = A.zipWith3 distanceToPlane
-                              (A.replicate (lift (sh  :. n_l :. All))   planes)
-                              (A.replicate (lift (Any :. n_l :. n_pln)) points)
-                              (A.replicate (lift (Any        :. n_pln)) dirLights)
-            in
-            A.fold nearest miss (dist_sph A.++ dist_pln)
-
-        -- Check if there are any occluding objects between the light and the
-        -- surface. If so that light does not contribute, otherwise calculate
-        -- the magnitude of the reflected light.
-        illumination
-          = A.zipWith5 (\distLight obj light point normal ->
-                          let (hits, distObj)   = unlift obj
-                              occluded          = hits &&* distObj <* distLight
-                          in
-                          occluded ? ( black, colorOfLight light point normal ))
-                       distLights
-                       obstructions
-                       (A.replicate (lift (sh  :. All)) lights)
-                       (A.replicate (lift (Any :. n_l)) points)
-                       (A.replicate (lift (Any :. n_l)) normals)
+        mag                     = (normal `dot` dir) / (dist * dist)
+        (r, g, b)               = rgbOfColor (lightColor light)
+        refl                    = rawColor (r * mag) (g * mag) (b * mag)
     in
-    A.fold addColors black illumination
+    checkRay distanceToSphere spheres point dir dist ||* checkRay distanceToPlane planes point dir dist
+      ? ( black, refl )
+
 
 
 -- Get Lights into Accelerate --------------------------------------------------
@@ -152,5 +112,4 @@ instance IsTuple Light where
 instance Lift Exp Light where
   type Plain Light = Light
   lift (Light p c) = Exp . Tuple $ NilTup `SnocTup` lift p `SnocTup` lift c
-
 

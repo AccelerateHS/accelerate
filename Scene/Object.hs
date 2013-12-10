@@ -73,7 +73,7 @@ distanceToSphere sphere origin direction
         sep     = p - origin
         miss    = d_cp >=* radius ||* sep `dot` direction <=* 0
     in
-    miss ? ( lift (False, constant 0)
+    miss ? ( lift (False, infinity)
            , lift (True,  magnitude sep - sqrt (radius * radius - d_cp * d_cp)) )
 
 
@@ -90,8 +90,21 @@ distanceToPlane plane origin direction
         normal          = planeNormal plane
         theta           = direction `dot` normal        -- TLM: name?
     in
-    theta >=* 0 ? ( lift (False, constant 0)
+    theta >=* 0 ? ( lift (False, infinity)
                   , lift (True,  ((pos - origin) `dot` normal) / theta) )
+
+
+-- | The maximum representable floating point value
+--
+infinity :: Exp Float
+infinity = constant (encodeFloat m n)
+  where
+    a           = undefined :: Float
+    b           = floatRadix a
+    e           = floatDigits a
+    (_, e')     = floatRange a
+    m           = b ^ e - 1
+    n           = e' - e
 
 
 -- | Compute the surface normal of a sphere at a point

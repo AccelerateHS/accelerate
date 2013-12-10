@@ -14,7 +14,7 @@ import Graphics.Gloss.Accelerate.Data.Color.RGB
 makeLights :: Float -> Lights
 makeLights _time
   = A.fromList (Z :. 1) [ Light (XYZ 300 (-300) (-100))
-                                (RGB 1 1 1)
+                                (RGB 150000 150000 150000)
                         ]
 
 makeObjects :: Float -> Objects

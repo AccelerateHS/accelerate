@@ -41,8 +41,6 @@ castViewRays sizeX sizeY fov eyePos
                        in  normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos)
 
 
--- | Cast rays into the scene
---
 traceRays
     :: Int                              -- ^ maximum reflection count
     -> Exp Color                        -- ^ ambient light in the scene
@@ -51,82 +49,87 @@ traceRays
     -> Acc (Array DIM2 Position)        -- ^ positions in the scene under consideration
     -> Acc (Array DIM2 Direction)       -- ^ surface normal at each point under consideration
     -> Acc (Array DIM2 Color)           -- ^ resultant colour at each point
-traceRays lIMIT ambient objects lights = go 0
+traceRays limit ambient objects lights
+  = A.zipWith (traceRay limit objects lights ambient)
+
+
+-- | Cast a single ray into the scene
+--
+traceRay
+    :: Int                              -- ^ Maximum reflection count
+    -> Acc Objects                      -- ^ Objects in the scene
+    -> Acc Lights                       -- ^ Direct lighting in the scene
+    -> Exp Color                        -- ^ Ambient light in the scene
+    -> Exp Position                     -- ^ Origin of the ray
+    -> Exp Direction                    -- ^ Direction of the ray
+    -> Exp Color
+traceRay limit objects lights ambient = go limit
   where
     (spheres, planes)   = unlift objects
 
-    -- The maximum number of reflections that we consider. Don't go overboard
-    -- because (a) no (fine-grained) iteration, and (b) give up in case we've
-    -- found two parallel mirrors.
-    --
-    go bounces points _ | bounces >= lIMIT
-      = A.fill (shape points) black
+    dummySphere         = constant (Sphere (XYZ 0 0 0) 0           (RGB 0 0 0) 0)
+    dummyPlane          = constant (Plane  (XYZ 0 0 0) (XYZ 0 0 1) (RGB 0 0 0) 0)
 
-    -- See if this bounce intersects any objects. If so, add the contribution to
-    -- colour of that object and continue in the new direction, otherwise this
-    -- ray contributes black.
+    -- Stop once there are too many reflections, in case we've found two
+    -- parallel mirrors.
     --
-    go bounces points directions
+    go 0 _ _
+      = black
+
+    go bounces orig dir
       = let
-            isect_sph   = intersectRays distanceToSphere spheres points directions
-            isect_pln   = intersectRays distanceToPlane  planes  points directions
-
-            -- If the ray hits an object, get the new surface normal, point of
-            -- intersection, colour and shine of the object. If we did not get a
-            -- hit, return the old values.
+            -- See which objects the ray intersects. Since we have no sum
+            -- types, we need to do this separately for each object type,
+            -- and determine the closest separately.
             --
-            (hits, normals, colors, shines, points', directions')
-              = A.unzip6
-              $ A.zipWith4 (\orig dir sph pln ->
-                    let (h1, d1, i1)            = unlift sph
-                        (h2, d2, i2)            = unlift pln
-
-                        defaults                = lift (dir, black, constant 0)
-                        hit_sph                 = h1 ? (hitSphere     (spheres ! index1 i1) d1 orig dir, defaults)
-                        hit_pln                 = h2 ? (hitPlaneCheck (planes  ! index1 i2) d2 orig dir, defaults)
-
-                        (hit, dist, x)          = unlift $ nearest' (lift (h1, d1, hit_sph)) (lift (h2, d2, hit_pln))
-                        (normal, color, shine)  = unlift x
-
-                        dir'                    = hit ? ( dir - (2.0 * normal `dot` dir) .* normal , dir )
-                        point'                  = orig + dist .* dir
-
-                        -- help the type checker...
-                        x     :: Exp (Direction, Color, Float)
-                        shine :: Exp Float
-                        color :: Exp Color
-                    in
-                    lift ( hit, normal, color, shine, point', dir' ))
-                  points directions isect_sph isect_pln
-
-            -- Determine the direct lighting at this point
-            directs     = applyLighting objects lights points' normals
-
-            -- See if the ray hits anything else
-            refls       = go (bounces + 1) points' directions'
-
-            -- The outgoing light is the incoming light modified by surface
-            -- color. This is also clipped in case the sum of all incoming
-            -- lights is too bright to display.
-            light_outs  = mask hits (A.fill (shape points) black)
-                        $ A.zipWith4 (\direct refl color shine ->
-                                         let lighting    = direct + ambient
-                                             light_in    = mixColors shine (1 - shine) refl lighting
-                                         in  clampColor (light_in * color))
-                            directs refls colors shines
+            (hit_s, dist_s, s)  = unlift $ castRay distanceToSphere dummySphere spheres orig dir
+            (hit_p, dist_p, p)  = unlift $ castRay distanceToPlane  dummyPlane  planes  orig dir
         in
-        light_outs
+        A.not (hit_s ||* hit_p) ?
+          -- ray didn't intersect any objects
+        ( black
+
+          -- ray hit an object
+        , let
+              -- Determine the intersection point, and surface properties that
+              -- will contribute to the colour
+              next_s      = hitSphere     s dist_s orig dir
+              next_p      = hitPlaneCheck p dist_p orig dir
+
+              (point, normal, color, shine)
+                          = unlift (dist_s <* dist_p ? ( next_s, next_p ))
+
+              -- result angle of ray after reflection
+              newdir      = dir - (2.0 * (normal `dot` dir)) .* normal
+
+              -- determine the direct lighting at this point
+              direct      = applyLights objects lights point normal
+
+              -- see if the ray hits anything else
+              refl        = go (bounces - 1) point newdir
+
+              -- total lighting is the direct lighting plus ambient
+              lighting    = direct + ambient
+
+              -- total incoming light is direct lighting plus reflections
+              light_in    = scaleColour shine         refl
+                          + scaleColour (1.0 - shine) lighting
+
+              -- outgoing light is incoming light modified by surface color.
+              -- We also need to clip it in case the sum of all incoming
+              -- lights is too bright to display.
+              light_out   = clampColor (light_in * color)
+          in
+          light_out
+        )
 
 
-mask :: Elt a
-     => Acc (Array DIM2 Bool)
-     -> Acc (Array DIM2 a)              -- default values
-     -> Acc (Array DIM2 a)              -- values if there was a hit
-     -> Acc (Array DIM2 a)
-mask = A.zipWith3 (\hit y x -> hit ? (x, y))
+scaleColour :: Exp Float -> Exp Color -> Exp Color
+scaleColour s c
+  = let (r,g,b) = rgbOfColor c
+    in  rawColor (r * s) (g * s) (b * s)
 
-
-hitSphere :: Exp Sphere -> Exp Float -> Exp Position -> Exp Direction -> Exp (Direction, Color, Float)
+hitSphere :: Exp Sphere -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
 hitSphere sph dist orig dir
   = let
         point   = orig + dist .* dir
@@ -134,19 +137,19 @@ hitSphere sph dist orig dir
         color   = sphereColor sph
         shine   = sphereShine sph
     in
-    lift (normal, color, shine)
+    lift (point, normal, color, shine)
 
-hitPlane :: Exp Plane -> Exp Float -> Exp Position -> Exp Direction -> Exp (Direction, Color, Float)
+hitPlane :: Exp Plane -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
 hitPlane pln dist orig dir
   = let
-        _point  = orig + dist .* dir
+        point   = orig + dist .* dir
         normal  = planeNormal pln
         color   = planeColor pln
         shine   = planeShine pln
     in
-    lift (normal, color, shine)
+    lift (point, normal, color, shine)
 
-hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Direction, Color, Float)
+hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
 hitPlaneCheck pln dist orig dir
   = let
         point   = orig + dist .* dir
@@ -154,7 +157,5 @@ hitPlaneCheck pln dist orig dir
         color   = checkers point
         shine   = planeCheckShine pln
     in
-    lift (normal, color, shine)
-
-
+    lift (point, normal, color, shine)
 
