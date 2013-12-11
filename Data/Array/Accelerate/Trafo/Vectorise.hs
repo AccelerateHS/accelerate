@@ -359,6 +359,7 @@ vectorisePreOpenAcc vectAcc ctx exp
 --
 -- Because lifting is performed in the presence of higher dimensional arrays, the output of the
 -- transform has an extra element in the environment, the shape of the output array.
+--
 liftExp :: forall acc env env' aenv aenv' sh e. (Kit acc, Shape sh)
         => VectoriseAcc acc
         -> Context env aenv env' aenv'
@@ -447,16 +448,20 @@ liftExp vectAcc ctx exp
       where
         decide p' ab = Cond p' (Prj (SuccTupIdx ZeroTupIdx) ab) (Prj ZeroTupIdx ab)
 
-    -- while p it i
-    --   => fst $ awhile (\(_,flags) -> any flags)
-    --                   (\(values, flags) ->
+    -- The lifted while is non-trivial. Here is an overview. We use '^' to denote lifting.
+    --
+    -- @
+    -- (while p it i)^
+    --   = fst $ awhile (\(_,flags) -> any flags)
+    --                  (\(values, flags) ->
     --                     let
     --                       values'  = zip (it^ values) flags
     --                       values'' = zipWith (\(v', f) v -> if f then v' else v) values' values
     --                       flags'   = p^ values''
     --                     in (values'', flags')
-    --                   )
-    --                   (i^, replicate sh False)
+    --                  )
+    --                  (i^, replicate sh False)
+    -- @
     --
     whileL :: Elt e
            => PreOpenFun acc env     aenv  (e -> Bool)
@@ -588,12 +593,16 @@ type instance ExpandEnv env (env', t) = ExpandEnv (env, t) env'
 
 type TupleEnv aenv sh t = ExpandEnv aenv (ArraysOfTupleRepr sh (TupleRepr t))
 
--- (a1, a2,..., aN) =>
+-- |Perform the lifting transform over a scalar tuple. We lift it as so:
+--
+-- @
+-- (a1, a2,..., aN)^ =
 --   let a1' = a1^
 --       a2' = a2^
 --       ...
 --       aN' = aN^
 --   in generate (\ix -> (a1' ! ix, a2' ! ix,..., aN' ! ix))
+-- @
 --
 -- RCE: Ideally we would like to do this by lifting the tuple into a tuple of arrays.
 -- Unfortunately this can't be done because the type system us unable to recognise that the
@@ -663,7 +672,7 @@ data Avoid f acc env aenv e where
 type AvoidExp = Avoid PreOpenExp
 type AvoidFun = Avoid PreOpenFun
 
--- Avoid vectorisation in the cases where it's not necessary, or impossible.
+-- |Avoid vectorisation in the cases where it's not necessary, or impossible.
 --
 avoidExp :: forall acc aenv env e. Kit acc
          => PreOpenExp acc env aenv e
@@ -704,7 +713,7 @@ avoidExp = cvtE
          -> AvoidExp acc env          aenv e
     letA bnd body | Avoided (env , bnd' ) <- cvtE bnd
                   , Avoided (env', body') <- cvtE (sink env body)
-                  , Just env''                 <- strengthenExtendE (noTop Just) env'
+                  , Just env''            <- strengthenExtendE (noTop Just) env'
                   = Avoided (join env env'', Let (sink env' bnd') body')
                   | otherwise
                   = Unavoided
