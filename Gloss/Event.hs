@@ -16,26 +16,23 @@ handleEvent :: Event -> State -> State
 handleEvent event state
   = case event of
       EventKey (Char c) s _ _           -> char (toLower c) s state
-      EventKey (MouseButton b) s _ l    -> click b s l state
+      EventKey (MouseButton b) s _ l    -> click b l s state
       EventMotion p                     -> motion p
       _                                 -> state
   where
-    toggle f Up         = set f False
-    toggle f Down       = set f True
+    toggle f x Down     = set f (Just x)
+    toggle f _ Up       = set f Nothing
 
-    toggle' f Down x    = set f (Just x)
-    toggle' f Up   _    = set f Nothing
-
-    char 'w'            = toggle stateMovingForward
-    char ','            = toggle stateMovingForward
-    char 's'            = toggle stateMovingBackward
-    char 'o'            = toggle stateMovingBackward
-    char 'a'            = toggle stateMovingLeft
-    char 'd'            = toggle stateMovingRight
-    char 'e'            = toggle stateMovingRight
+    char 'w'            = toggle stateEyeVert Fwd
+    char ','            = toggle stateEyeVert Fwd
+    char 's'            = toggle stateEyeVert Rev
+    char 'o'            = toggle stateEyeVert Rev
+    char 'a'            = toggle stateEyeHoriz Rev
+    char 'd'            = toggle stateEyeHoriz Fwd
+    char 'e'            = toggle stateEyeHoriz Fwd
     char _              = const id
 
-    click LeftButton    = toggle' stateLeftClick
+    click LeftButton    = toggle stateLeftClick
     click _             = const (const id)
 
     motion (x,y)

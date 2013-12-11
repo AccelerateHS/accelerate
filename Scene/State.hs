@@ -19,6 +19,9 @@ import Control.Category
 import qualified Graphics.Gloss                                 as G
 
 
+data Move  = Fwd | Rev
+  deriving Show
+
 data State = State
   { _stateTime                  :: !Float
   , _stateEyePos                :: !Position
@@ -27,10 +30,8 @@ data State = State
   , _stateLeftClick             :: !(Maybe G.Point)
 
   , _stateMoveSpeed             :: !Float
-  , _stateMovingForward         :: !Bool
-  , _stateMovingBackward        :: !Bool
-  , _stateMovingLeft            :: !Bool
-  , _stateMovingRight           :: !Bool
+  , _stateEyeHoriz              :: !(Maybe Move)
+  , _stateEyeVert               :: !(Maybe Move)
 
   , _stateObjects               :: !Objects
   , _stateLights                :: !Lights
@@ -52,10 +53,8 @@ initState time
       , _stateLeftClick         = Nothing
 
       , _stateMoveSpeed         = 400
-      , _stateMovingForward     = False
-      , _stateMovingBackward    = False
-      , _stateMovingLeft        = False
-      , _stateMovingRight       = False
+      , _stateEyeHoriz          = Nothing
+      , _stateEyeVert           = Nothing
 
       , _stateObjects           = makeObjects time
       , _stateLights            = makeLights  time
@@ -66,14 +65,18 @@ initState time
 --
 advanceState :: Float -> State -> State
 advanceState dt state
-  = move stateMovingForward  (XYZ 0 0 ( speed * dt))
-  $ move stateMovingBackward (XYZ 0 0 (-speed * dt))
-  $ move stateMovingLeft     (XYZ (-speed * dt) 0 0)
-  $ move stateMovingRight    (XYZ ( speed * dt) 0 0)
+  = move stateEyeVert  zz
+  $ move stateEyeHoriz xx
   $ setTime (get stateTime state + dt) state
   where
     speed       = get stateMoveSpeed state
-    move f x    = if get f state then moveEyeLoc x else id
+    move f d    = case get f state of
+                    Nothing     -> id
+                    Just Fwd    -> moveEyeLoc (set d ( speed * dt) (XYZ 0 0 0))
+                    Just Rev    -> moveEyeLoc (set d (-speed * dt) (XYZ 0 0 0))
+
+    zz          = lens (\(XYZ _ _ z) -> z) (\f (XYZ x y z) -> XYZ x y (f z))
+    xx          = lens (\(XYZ x _ _) -> x) (\f (XYZ x y z) -> XYZ (f x) y z)
 
 
 -- | Set the location of the eye
