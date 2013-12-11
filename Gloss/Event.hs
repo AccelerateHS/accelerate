@@ -3,62 +3,52 @@ module Gloss.Event
   where
 
 -- friends
+import Vec3
 import Scene.State
 
 -- library
-import Graphics.Gloss                                           as G
+import Data.Char
+import Data.Label
 import Graphics.Gloss.Interface.Pure.Game                       as G
 
 
 handleEvent :: Event -> State -> State
 handleEvent event state
-  -- Start translation
-  | EventKey (MouseButton LeftButton) Down _ (x, y)     <- event
-  = state { stateLeftClick = Just (x, y)}
+  = case event of
+      EventKey (Char c) s _ _           -> char (toLower c) s state
+      EventKey (MouseButton b) s _ l    -> click b s l state
+      EventMotion p                     -> motion p
+      _                                 -> state
+  where
+    toggle f Up         = set f False
+    toggle f Down       = set f True
 
-  -- End transation
-  | EventKey (MouseButton LeftButton) Up _ _            <- event
-  = state { stateLeftClick = Nothing }
+    toggle' f Down x    = set f (Just x)
+    toggle' f Up   _    = set f Nothing
 
-  -- Moving forward
-  | EventKey (Char 'w') Down _ _                        <- event
-  = state { stateMovingForward  = True }
+    char 'w'            = toggle stateMovingForward
+    char ','            = toggle stateMovingForward
+    char 's'            = toggle stateMovingBackward
+    char 'o'            = toggle stateMovingBackward
+    char 'a'            = toggle stateMovingLeft
+    char 'd'            = toggle stateMovingRight
+    char 'e'            = toggle stateMovingRight
+    char _              = const id
 
-  | EventKey (Char 'w') Up   _ _                        <- event
-  = state { stateMovingForward  = False }
+    click LeftButton    = toggle' stateLeftClick
+    click _             = const (const id)
 
-  -- Moving backward
-  | EventKey (Char 's') Down _ _                        <- event
-  = state { stateMovingBackward = True }
+    motion (x,y)
+      | Just (oX, oY)           <- get stateLeftClick state
+      , XYZ eyeX eyeY eyeZ      <- get stateEyeLoc    state
+      = let eyeX'       = eyeX + (x - oX)
+            eyeY'       = eyeY
+            eyeZ'       = eyeZ + (y - oY)
+        in
+        set stateEyeLoc (XYZ eyeX' eyeY' eyeZ')
+          $ set stateLeftClick  (Just (x, y))
+          $ state
 
-  | EventKey (Char 's') Up   _ _                        <- event
-  = state { stateMovingBackward = False }
-
-  -- Moving left
-  | EventKey (Char 'a') Down _ _                        <- event
-  = state { stateMovingLeft = True }
-
-  | EventKey (Char 'a') Up   _ _                        <- event
-  = state { stateMovingLeft = False }
-
-  -- Moving right
-  | EventKey (Char 'd') Down _ _                        <- event
-  = state { stateMovingRight = True }
-
-  | EventKey (Char 'd') Up   _ _                        <- event
-  = state { stateMovingRight = False }
-
-  -- Translate the world
---  | EventMotion (x, y)  <- event
---  , Just (oX, oY)         <- stateLeftClick state
---  , XYZ eyeX eyeY eyeZ   <- stateEyeLoc    state
---  = let   eyeX'   = eyeX + (x - oX)
---          eyeY'   = eyeY
---          eyeZ'   = eyeZ + (y - oY)
---
---    in    setEyeLoc (XYZ eyeX' eyeY' eyeZ')
---           $ state { stateLeftClick  = Just (x, y) }
---
-  | otherwise
-  = state
+    motion _
+      = state
 

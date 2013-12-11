@@ -16,6 +16,7 @@ import qualified Graphics.Gloss.Accelerate.Raster.Field         as G
 
 --library
 import Prelude                                                  as P
+import Data.Label                                               ( get )
 
 
 -- | Prepare the state for rendering
@@ -23,9 +24,9 @@ import Prelude                                                  as P
 prepareState :: State -> (Objects, Lights, Scalar Position)
 prepareState state
   = let
-        objects         = stateObjectsView state
-        lights          = stateLightsView  state
-        eyePos          = fromList Z [stateEyePos state]
+        objects         = get stateObjectsView state
+        lights          = get stateLightsView  state
+        eyePos          = fromList Z [get stateEyePos state]
     in
     (objects, lights, eyePos)
 

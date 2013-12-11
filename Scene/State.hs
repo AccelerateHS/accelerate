@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 
 module Scene.State
   where
@@ -12,29 +13,34 @@ import Scene.World
 import Data.Array.Accelerate                                    as A
 
 -- library
+import Prelude                                                  hiding ( (.), id )
+import Data.Label
+import Control.Category
 import qualified Graphics.Gloss                                 as G
 
 
 data State = State
-  { stateTime                   :: !Float
-  , stateEyePos                 :: !Position
-  , stateEyeLoc                 :: !Position
+  { _stateTime                  :: !Float
+  , _stateEyePos                :: !Position
+  , _stateEyeLoc                :: !Position
 
-  , stateLeftClick              :: !(Maybe G.Point)
+  , _stateLeftClick             :: !(Maybe G.Point)
 
-  , stateMoveSpeed              :: !Float
-  , stateMovingForward          :: !Bool
-  , stateMovingBackward         :: !Bool
-  , stateMovingLeft             :: !Bool
-  , stateMovingRight            :: !Bool
+  , _stateMoveSpeed             :: !Float
+  , _stateMovingForward         :: !Bool
+  , _stateMovingBackward        :: !Bool
+  , _stateMovingLeft            :: !Bool
+  , _stateMovingRight           :: !Bool
 
-  , stateObjects                :: !Objects
-  , stateObjectsView            :: !Objects
+  , _stateObjects               :: !Objects
+  , _stateObjectsView           :: !Objects
 
-  , stateLights                 :: !Lights
-  , stateLightsView             :: !Lights
+  , _stateLights                :: !Lights
+  , _stateLightsView            :: !Lights
   }
   deriving Show
+
+mkLabels [''State]
 
 
 -- | Initialise the world and interface state
@@ -42,23 +48,23 @@ data State = State
 initState :: Float -> State
 initState time
   = State
-      { stateTime               = time
-      , stateEyePos             = XYZ 50    (-100) (-700)
-      , stateEyeLoc             = XYZ (-50) 200   1296
+      { _stateTime              = time
+      , _stateEyePos            = XYZ 50    (-100) (-700)
+      , _stateEyeLoc            = XYZ (-50) 200   1296
 
-      , stateLeftClick          = Nothing
+      , _stateLeftClick         = Nothing
 
-      , stateMoveSpeed          = 400
-      , stateMovingForward      = False
-      , stateMovingBackward     = False
-      , stateMovingLeft         = False
-      , stateMovingRight        = False
+      , _stateMoveSpeed         = 400
+      , _stateMovingForward     = False
+      , _stateMovingBackward    = False
+      , _stateMovingLeft        = False
+      , _stateMovingRight       = False
 
-      , stateObjects            = makeObjects time
-      , stateObjectsView        = makeObjects time
+      , _stateObjects           = makeObjects time
+      , _stateObjectsView       = makeObjects time
 
-      , stateLights             = makeLights time
-      , stateLightsView         = makeLights time
+      , _stateLights            = makeLights time
+      , _stateLightsView        = makeLights time
       }
 
 
@@ -67,29 +73,24 @@ initState time
 advanceState :: Float -> State -> State
 advanceState dt state
   = let
-        time'   = stateTime state + dt
-
-        speed   = stateMoveSpeed state
-        move    = (if stateMovingForward state
-                        then moveEyeLoc (XYZ 0 0 (-speed * dt))
-                        else id)
-                . (if stateMovingBackward state
-                        then moveEyeLoc (XYZ 0 0 (speed * dt))
-                        else id)
-                . (if stateMovingLeft state
-                        then moveEyeLoc (XYZ (speed * dt) 0 0)
-                        else id)
-                . (if stateMovingRight state
-                        then moveEyeLoc (XYZ (-speed * dt) 0 0)
-                        else id)
+        time'           = get stateTime state + dt
+        speed           = get stateMoveSpeed state
+        move f x        = if get f state then moveEyeLoc x
+                                         else id
     in
-    setTime time' $ move state
+    setTime time'
+      $ move stateMovingForward  (XYZ 0 0 (-speed * dt))
+      $ move stateMovingBackward (XYZ 0 0 ( speed * dt))
+      $ move stateMovingLeft     (XYZ ( speed * dt) 0 0)
+      $ move stateMovingRight    (XYZ (-speed * dt) 0 0)
+      $ state
 
 
 -- | Set the location of the eye
 --
 moveEyeLoc :: Position -> State -> State
-moveEyeLoc v state = state { stateEyeLoc = stateEyeLoc state + v }
+moveEyeLoc v state
+  = modify stateEyeLoc (+ v) state
 
 -- | Set the time of the world
 --
@@ -98,12 +99,12 @@ setTime time state
   = let
         objects = makeObjects time
         lights  = makeLights  time
-        eyeLoc  = stateEyeLoc state
+        eyeLoc  = get stateEyeLoc state
     in
-    state { stateTime             = time
-          , stateObjectsView      = translateObjects eyeLoc objects
-          , stateLightsView       = translateLights  eyeLoc lights
-          }
+    set stateTime time
+      $ set stateObjectsView (translateObjects eyeLoc objects)
+      $ set stateLightsView  (translateLights  eyeLoc lights)
+      $ state
 
 
 translateObjects :: Position -> Objects -> Objects
