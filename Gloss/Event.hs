@@ -16,6 +16,7 @@ handleEvent :: Event -> State -> State
 handleEvent event state
   = case event of
       EventKey (Char c) s _ _           -> char (toLower c) s state
+      EventKey (SpecialKey c) s _ _     -> special c s state
       EventKey (MouseButton b) s _ l    -> click b l s state
       EventMotion p                     -> motion p
       _                                 -> state
@@ -35,14 +36,20 @@ handleEvent event state
     click LeftButton    = toggle stateLeftClick
     click _             = const (const id)
 
+    special KeyUp       = toggle stateLightVert Fwd
+    special KeyDown     = toggle stateLightVert Rev
+    special KeyRight    = toggle stateLightHoriz Fwd
+    special KeyLeft     = toggle stateLightHoriz Rev
+    special _           = const id
+
     motion (x,y)
       | Just (oX, oY)           <- get stateLeftClick state
-      , XYZ eyeX eyeY eyeZ      <- get stateEyeLoc    state
+      , XYZ eyeX eyeY eyeZ      <- get stateEyeDelta  state
       = let eyeX'       = eyeX + (x - oX)
             eyeY'       = eyeY
             eyeZ'       = eyeZ + (y - oY)
         in
-        set stateEyeLoc (XYZ eyeX' eyeY' eyeZ')
+        set stateEyeDelta (XYZ eyeX' eyeY' eyeZ')
           $ set stateLeftClick  (Just (x, y))
           $ state
 
