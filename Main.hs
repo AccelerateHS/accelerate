@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 
 module Main where
 
@@ -8,14 +9,17 @@ import Monitoring
 import Scene.State
 import Gloss.Draw
 import Gloss.Event
+import Ray.Trace
 
 -- frenemies
 import Data.Label
 import Data.Array.Accelerate                                    as A
+import Graphics.Gloss.Accelerate.Data.Color.RGB
 import qualified Graphics.Gloss.Accelerate.Raster.Field         as G
 
 -- library
-import System.Environment                                       ( getArgs )
+import Criterion.Main                                           ( defaultMainWith, bench, whnf )
+import System.Environment                                       ( getArgs, withArgs )
 
 
 main :: IO ()
@@ -31,15 +35,36 @@ main = do
       bounces   = get optBounces conf
       backend   = get optBackend conf
       fps       = get optFramerate conf
+      state     = initState 0
+      ambient   = rawColor 0.3 0.3 0.3
 
-  G.playFieldWith
-      (run1 backend)
-      (G.InWindow "Ray" (width, height) (10, 10))
-      (zoom, zoom)
-      fps
-      (initState 0)
-      prepareState
-      (tracePixel width height fov bounces)
-      handleEvent
-      advanceState
+      scene st
+        = let eye               = constant (get stateEyePos state)
+              eyeDir            = castViewRays width height fov eye
+              eyePos            = fill (constant (Z :. height :. width)) eye
+              (objects, lights) = unlift st
+          in
+          A.zipWith (traceRay bounces objects lights ambient) eyePos eyeDir
+
+  if get optBench conf
+     then withArgs rest
+        $ defaultMainWith cconf (return ())
+        [ bench "ray" $ whnf (run1 backend scene)
+                             (get stateObjectsView state, get stateLightsView state)
+        ]
+
+#ifndef ACCELERATE_ENABLE_GUI
+     else return ()
+#else
+     else G.playFieldWith
+            (run1 backend)
+            (G.InWindow "Ray" (width, height) (10, 10))
+            (zoom, zoom)
+            fps
+            state
+            prepareState
+            (tracePixel width height fov bounces ambient)
+            handleEvent
+            advanceState
+#endif
 

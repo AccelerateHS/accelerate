@@ -38,10 +38,11 @@ tracePixel
     -> Int
     -> Int
     -> Int
+    -> Exp Color
     -> Acc (Objects, Lights, Scalar Position)
     -> Exp G.Point
     -> Exp G.Color
-tracePixel sizeX sizeY fov bounces state point
+tracePixel sizeX sizeY fov bounces ambient state point
   = let
         sizeX'          = P.fromIntegral sizeX
         sizeY'          = P.fromIntegral sizeY
@@ -51,8 +52,6 @@ tracePixel sizeX sizeY fov bounces state point
         fovY            = fov'
 
         (x,y)           = G.xyOfPoint point
-
-        ambient         = rawColor 0.3 0.3 0.3
 
         eyeDir          = normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos
         eyePos          = the eyePos'

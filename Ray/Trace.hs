@@ -41,18 +41,6 @@ castViewRays sizeX sizeY fov eyePos
                        in  normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos)
 
 
-traceRays
-    :: Int                              -- ^ maximum reflection count
-    -> Exp Color                        -- ^ ambient light in the scene
-    -> Acc Objects                      -- ^ objects in scene
-    -> Acc Lights                       -- ^ lights in scene
-    -> Acc (Array DIM2 Position)        -- ^ positions in the scene under consideration
-    -> Acc (Array DIM2 Direction)       -- ^ surface normal at each point under consideration
-    -> Acc (Array DIM2 Color)           -- ^ resultant colour at each point
-traceRays limit ambient objects lights
-  = A.zipWith (traceRay limit objects lights ambient)
-
-
 -- | Cast a single ray into the scene
 --
 traceRay

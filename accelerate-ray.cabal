@@ -49,6 +49,9 @@ Executable accelerate-ray
     build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
+
   ghc-options:
         -Wall -O2 -threaded
 
