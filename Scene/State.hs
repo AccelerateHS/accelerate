@@ -33,10 +33,7 @@ data State = State
   , _stateMovingRight           :: !Bool
 
   , _stateObjects               :: !Objects
-  , _stateObjectsView           :: !Objects
-
   , _stateLights                :: !Lights
-  , _stateLightsView            :: !Lights
   }
   deriving Show
 
@@ -61,10 +58,7 @@ initState time
       , _stateMovingRight       = False
 
       , _stateObjects           = makeObjects time
-      , _stateObjectsView       = makeObjects time
-
-      , _stateLights            = makeLights time
-      , _stateLightsView        = makeLights time
+      , _stateLights            = makeLights  time
       }
 
 
@@ -72,18 +66,14 @@ initState time
 --
 advanceState :: Float -> State -> State
 advanceState dt state
-  = let
-        time'           = get stateTime state + dt
-        speed           = get stateMoveSpeed state
-        move f x        = if get f state then moveEyeLoc x
-                                         else id
-    in
-    setTime time'
-      $ move stateMovingForward  (XYZ 0 0 (-speed * dt))
-      $ move stateMovingBackward (XYZ 0 0 ( speed * dt))
-      $ move stateMovingLeft     (XYZ ( speed * dt) 0 0)
-      $ move stateMovingRight    (XYZ (-speed * dt) 0 0)
-      $ state
+  = move stateMovingForward  (XYZ 0 0 ( speed * dt))
+  $ move stateMovingBackward (XYZ 0 0 (-speed * dt))
+  $ move stateMovingLeft     (XYZ (-speed * dt) 0 0)
+  $ move stateMovingRight    (XYZ ( speed * dt) 0 0)
+  $ setTime (get stateTime state + dt) state
+  where
+    speed       = get stateMoveSpeed state
+    move f x    = if get f state then moveEyeLoc x else id
 
 
 -- | Set the location of the eye
@@ -102,8 +92,8 @@ setTime time state
         eyeLoc  = get stateEyeLoc state
     in
     set stateTime time
-      $ set stateObjectsView (translateObjects eyeLoc objects)
-      $ set stateLightsView  (translateLights  eyeLoc lights)
+      $ set stateObjects (translateObjects eyeLoc objects)
+      $ set stateLights  (translateLights  eyeLoc lights)
       $ state
 
 

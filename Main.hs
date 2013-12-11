@@ -50,7 +50,7 @@ main = do
      then withArgs rest
         $ defaultMainWith cconf (return ())
         [ bench "ray" $ whnf (run1 backend scene)
-                             (get stateObjectsView state, get stateLightsView state)
+                             (get stateObjects state, get stateLights state)
         ]
 
 #ifndef ACCELERATE_ENABLE_GUI

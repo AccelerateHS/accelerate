@@ -24,8 +24,8 @@ import Data.Label                                               ( get )
 prepareState :: State -> (Objects, Lights, Scalar Position)
 prepareState state
   = let
-        objects         = get stateObjectsView state
-        lights          = get stateLightsView  state
+        objects         = get stateObjects state
+        lights          = get stateLights  state
         eyePos          = fromList Z [get stateEyePos state]
     in
     (objects, lights, eyePos)
