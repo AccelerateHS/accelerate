@@ -346,7 +346,7 @@ simplifyExp :: Kit acc => PreOpenExp acc env aenv t -> PreOpenExp acc env aenv t
 simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
-simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyExp)
+simplifyFun = iterate (show . prettyPreFun prettyAcc 0 0) (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]

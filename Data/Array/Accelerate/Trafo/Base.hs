@@ -201,17 +201,17 @@ rebuildDelayed v av acc = case acc of
 -- > let a0 = <...> in map f a0
 --
 prettyDelayed :: PrettyAcc DelayedOpenAcc
-prettyDelayed alvl wrap acc = case acc of
-  Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
+prettyDelayed lvl alvl wrap acc = case acc of
+  Manifest pacc         -> prettyPreAcc prettyDelayed lvl alvl wrap pacc
   Delayed sh f _
     | Shape a           <- sh
     , Just REFL         <- match f (Lam (Body (Index (weakenE SuccIdx a) (Var ZeroIdx))))
-    -> prettyDelayed alvl wrap a
+    -> prettyDelayed lvl alvl wrap a
 
     | otherwise
     -> wrap $ hang (text "Delayed") 2
-            $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
-                  , parens (prettyPreFun prettyDelayed alvl f)
+            $ sep [ prettyPreExp prettyDelayed lvl alvl parens sh
+                  , parens (prettyPreFun prettyDelayed lvl alvl f)
                   ]
 
 

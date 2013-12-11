@@ -48,18 +48,18 @@ wide = style { lineLength = 150 }
 -- interacting with other packages. See Issue #108.
 --
 instance Show (OpenAcc env aenv a) where
-  show c = renderStyle wide $ prettyAcc 0 noParens c
+  show c = renderStyle wide $ prettyAcc 0 0 noParens c
 
 instance Show (DelayedOpenAcc env aenv a) where
-  show c = renderStyle wide $ prettyAcc 0 noParens c
+  show c = renderStyle wide $ prettyAcc 0 0 noParens c
 
 -- These parameterised instances are fine because there is a concrete kind
 --
 instance Kit acc => Show (PreOpenAfun acc env aenv f) where
-  show f = renderStyle wide $ prettyPreAfun prettyAcc 0 f
+  show f = renderStyle wide $ prettyPreAfun prettyAcc 0 0 f
 
 instance Kit acc => Show (PreOpenFun acc env aenv f) where
-  show f = renderStyle wide $ prettyPreFun prettyAcc 0 f
+  show f = renderStyle wide $ prettyPreFun prettyAcc 0 0 f
 
 instance Kit acc => Show (PreOpenExp acc env aenv t) where
   show e = renderStyle wide $ prettyPreExp prettyAcc 0 0 noParens e
