@@ -14,6 +14,7 @@ data Options = Options
   , _optZoom            :: Int
   , _optFieldOfView     :: Int
   , _optBounces         :: Int
+  , _optFramerate       :: Int
   , _optBench           :: Bool
   , _optHelp            :: Bool
   }
@@ -27,8 +28,9 @@ defaults = Options
   , _optWidth           = 800
   , _optHeight          = 600
   , _optFieldOfView     = 100
-  , _optZoom            = 4
+  , _optZoom            = 1
   , _optBounces         = 4
+  , _optFramerate       = 30
 #ifdef ACCELERATE_ENABLE_GUI
   , _optBench           = False
 #else
@@ -45,6 +47,7 @@ options =
   , Option []   ["zoom"]        (ReqArg (set optZoom . read) "INT")             (describe optZoom "pixel replication factor")
   , Option []   ["fov"]         (ReqArg (set optFieldOfView . read) "INT")      (describe optFieldOfView "field of view")
   , Option []   ["bounces"]     (ReqArg (set optBounces . read) "INT")          (describe optBounces "ray bounce limit")
+  , Option []   ["fps"]         (ReqArg (set optFramerate . read) "INT")        (describe optFramerate "frames per second")
   , Option []   ["benchmark"]   (NoArg  (set optBench True))                    "benchmark instead of displaying animation"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))                     "show help message"
   ]

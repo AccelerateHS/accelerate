@@ -37,7 +37,8 @@ Executable accelerate-ray
         criterion               >= 0.5,
         fclabels                >= 1.0,
         gloss                   == 1.8.*,
-        gloss-accelerate        == 1.8.*
+        gloss-accelerate        == 1.8.*,
+        gloss-raster-accelerate == 1.8.*
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND

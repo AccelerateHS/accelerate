@@ -26,12 +26,12 @@ makeObjects time
                    (RGB 1.0 0.3 1.0)
                    0.4
 
-          , Sphere (XYZ (200 * sin time) ((-40) * sin (time + pi/2)) (200 * cos time))
+          , Sphere (XYZ (200 * sin time) (-40 * sin (time + pi/2)) (200 * cos time))
                    100.0
                    (RGB 0.4 0.4 1.0)
                    0.8
 
-          , Sphere (XYZ (-200.0 * sin time) ((-40) * sin (time - pi/2)) (-200 * cos time))
+          , Sphere (XYZ (-200.0 * sin time) (-40 * sin (time - pi/2)) (-200 * cos time))
                    100.0
                    (RGB 0.4 0.4 1.0)
                    0.5
