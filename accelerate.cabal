@@ -237,6 +237,7 @@ Library
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Trafo.Sharing
+                        Data.Array.Accelerate.Trafo.Vectorise
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
@@ -253,7 +254,6 @@ Library
                         Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
-                        Data.Array.Accelerate.Trafo.Vectorise
 
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
