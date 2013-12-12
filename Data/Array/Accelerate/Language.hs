@@ -167,6 +167,16 @@ replicate = Acc $$ Replicate
 -- >          let (Z :. i) = unlift ix
 -- >          in fromIntegral i
 --
+-- [/NOTE:/]
+--
+-- Using 'generate', it is possible to introduce nested data parallelism, which
+-- will cause the program to fail.
+--
+-- If the index given by the scalar function is then used to dispatch further
+-- parallel work, whose result is returned into 'Exp' terms by array indexing
+-- operations such as (`!`) or `the`, the program will fail with the error:
+-- '.\/Data\/Array\/Accelerate\/Trafo\/Sharing.hs:447 (convertSharingExp): inconsistent valuation \@ shared \'Exp\' tree ...'.
+--
 generate :: (Shape ix, Elt a)
          => Exp ix
          -> (Exp ix -> Exp a)
