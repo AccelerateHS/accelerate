@@ -63,5 +63,10 @@ header =
   ]
 
 footer :: [String]
-footer = []
+footer =
+  [ ""
+  , "Runtime usage:"
+  , "     WASD         move the eye position"
+  , "     arrows       move the light source"
+  ]
 
