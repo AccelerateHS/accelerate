@@ -58,6 +58,7 @@ Flag smoothlife
 Flag hashcat
 Flag fft
 Flag pagerank
+Flag ray
 
 
 -- The main test program. This includes randomised quickcheck testing for array
@@ -554,6 +555,51 @@ Executable accelerate-pagerank
                         vector-algorithms       >= 0.5.4,
                         accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*
+
+
+-- Ray tracer
+-- ----------
+
+Executable accelerate-ray
+  hs-source-dirs:       examples/ray lib
+  Main-is:              Main.hs
+  Other-modules:        ParseArgs Monitoring
+                        Config
+                        Vec3
+                        Gloss.Draw
+                        Gloss.Event
+                        Ray.Intersect
+                        Ray.Trace
+                        Scene.Light
+                        Scene.Object
+                        Scene.State
+                        Scene.World
+
+  Build-depends:        base                            == 4.6.*,
+                        accelerate                      == 0.15.*,
+                        criterion                       >= 0.5,
+                        fclabels                        >= 1.0,
+                        gloss                           == 1.8.*,
+                        gloss-accelerate                == 1.8.*,
+                        gloss-raster-accelerate         == 1.8.*
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda                 >= 0.15
+
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                             >= 0.3
+    ghc-options:        -with-rtsopts=-T
+
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
+
+  ghc-options:
+        -Wall -O2 -threaded
+
+  if impl(ghc >= 7.0)
+    ghc-options:        -rtsopts
 
 
 source-repository head
