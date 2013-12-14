@@ -56,14 +56,30 @@ Requirements
   * For the CUDA backend, CUDA version 5.0 or later
   * Haskell libraries as specified in the [`accelerate.cabal`][accelerate-cabal] and optionally [`accelerate-cuda.cabal`][accelerate-cuda-cabal] files.
 
-Examples and documentation
---------------------------
-
-The GitHub repository contains a submodule [accelerate-examples][accelerate-examples], which provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`.
+Documentation
+-------------
 
   * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
   * Online documentation is on the [GitHub wiki][Wiki].
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
+
+Examples
+--------
+
+The GitHub repository contains a submodule [accelerate-examples][accelerate-examples], which provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`. The examples include:
+
+  * An implementation of [canny edge detection][wiki-canny]
+  * An interactive [mandelbrot set][wiki-mandelbrot] generator
+  * An [N-body simulation][wiki-nbody] of gravitational attraction between solid particles
+  * An implementation of the [PageRank][wiki-pagerank] algorithm
+  * A simple [ray-tracer][wiki-raytracing]
+  * A particle based simulation of stable fluid flows
+  * A cellular automata simulation
+  * A "password recovery" tool, for dictionary lookup of MD5 hashes
+
+![alt text](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")
+![alt text](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")
+
 
 Mailing list and contacts
 -------------------------
@@ -108,4 +124,9 @@ Here is a list of features that are currently missing:
   [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
   [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
   [YLJ13-workshop]:         https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate-workshop
+  [wiki-canny]:             http://en.wikipedia.org/wiki/Canny_edge_detector
+  [wiki-mandelbrot]:        http://en.wikipedia.org/wiki/Mandelbrot_set
+  [wiki-nbody]:             http://en.wikipedia.org/wiki/N-body
+  [wiki-raytracing]:        http://en.wikipedia.org/wiki/Ray_tracing
+  [wiki-pagerank]:          http://en.wikipedia.org/wiki/Pagerank
 
