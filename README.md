@@ -77,8 +77,8 @@ The GitHub repository contains a submodule [accelerate-examples][accelerate-exam
   * A cellular automata simulation
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
 
-![alt text](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")
-![alt text](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")
+[![Mandelbrot](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot.jpg)
+[![Raytracer](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")](http://www.cse.unsw.edu.au/~tmcdonell/images/ray.jpg)
 
 
 Mailing list and contacts
