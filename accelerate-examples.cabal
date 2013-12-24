@@ -561,9 +561,9 @@ Executable accelerate-pagerank
 -- ----------
 
 Executable accelerate-ray
-  hs-source-dirs:       examples/ray lib
   Main-is:              Main.hs
-  Other-modules:        ParseArgs Monitoring
+  hs-source-dirs:       examples/ray lib
+  other-modules:        ParseArgs Monitoring
                         Config
                         Vec3
                         Gloss.Draw
@@ -575,7 +575,10 @@ Executable accelerate-ray
                         Scene.State
                         Scene.World
 
-  Build-depends:        base                            == 4.6.*,
+  if !flag(ray)
+    buildable:          False
+  else
+    build-depends:      base                            == 4.6.*,
                         accelerate                      == 0.15.*,
                         criterion                       >= 0.5,
                         fclabels                        >= 1.0,
@@ -584,11 +587,11 @@ Executable accelerate-ray
                         gloss-raster-accelerate         == 1.8.*
 
   if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 >= 0.15
 
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
+    cpp-options:        -DACCELERATE_ENABLE_EKG
     build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
