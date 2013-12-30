@@ -548,13 +548,16 @@ Executable accelerate-pagerank
   if !flag(pagerank)
     buildable:          False
   else
-    build-depends:      directory               >= 1.1,
+    build-depends:      accelerate              == 0.15.*,
+                        accelerate-io           == 0.15.*,
+                        base                    == 4.6.*,
                         bytestring              >= 0.9.2,
                         containers              >= 0.4.2,
+                        criterion               >= 0.5,
+                        directory               >= 1.1,
+                        fclabels                >= 1.0,
                         vector                  >= 0.9,
-                        vector-algorithms       >= 0.5.4,
-                        accelerate              == 0.15.*,
-                        accelerate-io           == 0.15.*
+                        vector-algorithms       >= 0.5.4
 
 
 -- Ray tracer
