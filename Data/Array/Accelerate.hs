@@ -216,7 +216,7 @@ module Data.Array.Accelerate (
   P.fst, P.snd, P.curry, P.uncurry,
 
   -- *** Flow control
-  (P.?), L.cond, L.while, P.iterate,
+  (P.?), P.caseof, L.cond, L.while, P.iterate,
 
   -- *** Scalar reduction
   P.sfoldl,

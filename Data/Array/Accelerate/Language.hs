@@ -547,7 +547,7 @@ acond = Acc $$$ Acond
 
 -- | An array-level while construct
 --
-awhile :: (Arrays a)
+awhile :: Arrays a
        => (Acc a -> Acc (Scalar Bool))
        -> (Acc a -> Acc a)
        -> Acc a

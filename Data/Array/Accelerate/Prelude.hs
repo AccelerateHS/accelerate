@@ -68,7 +68,7 @@ module Data.Array.Accelerate.Prelude (
   (?|),
 
   -- * Expression-level flow control
-  (?),
+  (?), caseof,
 
   -- * Scalar iteration
   iterate,
@@ -1136,6 +1136,16 @@ c ?| (t, e) = acond c t e
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
 c ? (t, e) = cond c t e
+
+-- | A case-like control structure
+--
+caseof :: (Elt a, Elt b)
+       => Exp a                         -- ^ case subject
+       -> [(Exp a -> Exp Bool, Exp b)]  -- ^ list of cases to attempt
+       -> Exp b                         -- ^ default value
+       -> Exp b
+caseof _ []        e = e
+caseof x ((p,b):l) e = cond (p x) b (caseof x l e)
 
 
 -- Scalar iteration
