@@ -15,3 +15,6 @@
 [submodule "accelerate-backend-kit"]
 	path = accelerate-backend-kit
 	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
+[submodule "accelerate-multidev"]
+	path = accelerate-multidev
+	url = https://github.com/iu-parfunc/accelerate-multidev.git
