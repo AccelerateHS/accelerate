@@ -8,7 +8,7 @@ AC_ARG_WITH([gcc],      [C compiler],       [CC=$withval])
 AC_DEFUN([AC_HTYPE], [
     AC_MSG_CHECKING(size of [$1])
 
-    sizeof_hs_[$1]=`$GHC -w -ignore-dot-ghci -e "import Foreign" -e "import Foreign.C" -e "putStr . show $ sizeOf (undefined::$1)"`
+    sizeof_hs_[$1]=`$GHC -w -ignore-dot-ghci -e "putStr . show $ Foreign.sizeOf (undefined::Foreign.C.$1)"`
     AC_MSG_RESULT($sizeof_hs_[$1])
 
     case $sizeof_hs_[$1] in

@@ -44,7 +44,6 @@ import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
                            unsafeFreezeByteArray#, Int#, (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
-import Data.Typeable
 import Data.Functor       ((<$>))
 import Control.Monad
 import Control.Monad.ST
@@ -111,10 +110,6 @@ data instance GArrayData ba CSChar  = AD_CSChar  (ba Int8)
 data instance GArrayData ba CUChar  = AD_CUChar  (ba Word8)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
-
-instance (Typeable1 ba, Typeable e) => Typeable (GArrayData ba e) where
-  typeOf _ = myMkTyCon "Data.Array.Accelerate.Array.Data.GArrayData"
-            `mkTyConApp` [typeOf (undefined::ba e), typeOf (undefined::e)]
 
 
 -- | GADT to reify the 'ArrayElt' class.

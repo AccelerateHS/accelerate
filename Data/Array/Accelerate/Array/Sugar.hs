@@ -673,7 +673,7 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 -- By default it has no instances. If a backend wishes to have an FFI it must
 -- provide an instance.
 --
-class Typeable2 f => Foreign (f :: * -> * -> *) where
+class Typeable f => Foreign (f :: * -> * -> *) where
 
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
@@ -835,7 +835,7 @@ data Array sh e where
         -> ArrayData (EltRepr e)      -- array payload
         -> Array sh e
 
-deriving instance Typeable2 Array
+deriving instance Typeable Array
 
 -- |Scalars arrays hold a single element
 --

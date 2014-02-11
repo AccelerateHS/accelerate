@@ -81,7 +81,7 @@ module Data.Array.Accelerate.Prelude (
   lift1, lift2, ilift1, ilift2,
 
   -- ** Tuple construction and destruction
-  fst, snd, curry, uncurry,
+  fst, afst, snd, asnd, curry, uncurry,
 
   -- ** Index construction and destruction
   index0, index1, unindex1, index2, unindex2,
@@ -1587,15 +1587,23 @@ ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
 -- Tuples
 -- ------
 
--- |Extract the first component of a pair.
+-- |Extract the first component of a scalar pair.
 --
-fst :: forall f a b. Unlift f (f a, f b) => f (Plain (f a), Plain (f b)) -> f a
-fst e = let (x, _:: f b) = unlift e in x
+fst :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp a
+fst e = let (x, _::Exp b) = unlift e in x
 
--- |Extract the second component of a pair.
+-- |Extract the first component of an array pair.
+afst :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc a
+afst a = let (x, _::Acc b) = unlift a in x
+
+-- |Extract the second component of a scalar pair.
 --
-snd :: forall f a b. Unlift f (f a, f b) => f (Plain (f a), Plain (f b)) -> f b
-snd e = let (_::f a, y) = unlift e in y
+snd :: forall a b. (Elt a, Elt b) => Exp (a, b) -> Exp b
+snd e = let (_:: Exp a, y) = unlift e in y
+
+-- | Extract the second component of an array pair
+asnd :: forall a b. (Arrays a, Arrays b) => Acc (a, b) -> Acc b
+asnd a = let (_::Acc a, y) = unlift a in y
 
 -- |Converts an uncurried function to a curried function.
 --

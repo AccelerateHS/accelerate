@@ -1,6 +1,6 @@
 Name:                   accelerate
 Version:                0.15.0.0
-Cabal-version:          >= 1.6
+Cabal-version:          >= 1.8
 Tested-with:            GHC == 7.6.*
 Build-type:             Custom
 
@@ -203,7 +203,7 @@ Flag internal-checks
 Library
   Include-Dirs:         include
   Build-depends:        array                >= 0.3,
-                        base                 == 4.6.*,
+                        base                 == 4.7.*,
                         containers           >= 0.3,
                         unordered-containers >= 0.2,
                         fclabels             >= 2.0,

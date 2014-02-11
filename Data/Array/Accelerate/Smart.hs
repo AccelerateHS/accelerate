@@ -271,7 +271,7 @@ data PreAcc acc exp as where
 --
 newtype Acc a = Acc (PreAcc Acc Exp a)
 
-deriving instance Typeable1 Acc
+deriving instance Typeable Acc
 
 
 -- Embedded expressions of the surface language
@@ -388,7 +388,7 @@ data PreExp acc exp t where
 --
 newtype Exp t = Exp (PreExp Acc Exp t)
 
-deriving instance Typeable1 Exp
+deriving instance Typeable Exp
 
 
 -- Smart constructors and destructors for array tuples

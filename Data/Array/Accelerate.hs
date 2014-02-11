@@ -273,7 +273,6 @@ import qualified Data.Array.Accelerate.Type         as T
 
 -- system
 import Prelude (Float, Double, Bool, Char)
-import qualified Prelude
 
 
 -- Renamings
