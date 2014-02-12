@@ -7,7 +7,7 @@ cabal --version
 cabal sandbox init
 
 # First, let's make sure everything installs:
-cabal install --enable-tests \ 
+cabal install --enable-tests \
    ./ ./accelerate-multidev/ \
    ./accelerate-backend-kit/backend-kit \
    ./accelerate-backend-kit/icc-opencl $*
