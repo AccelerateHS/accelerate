@@ -3,7 +3,13 @@
 set -x 
 set -e
 
-cabal install ./ ./accelerate-multidev/ \
+cabal --version
+cabal sandbox init
+
+# First, let's make sure everything installs:
+cabal install --enable-tests \ 
+   ./ ./accelerate-multidev/ \
    ./accelerate-backend-kit/backend-kit \
-   ./accelerate-backend-kit/icc-opencl
+   ./accelerate-backend-kit/icc-opencl $*
 # ./accelerate-cuda/
+
