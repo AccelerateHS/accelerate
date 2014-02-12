@@ -7,3 +7,6 @@
 /accelerate-cuda/config.status
 /accelerate-cuda/cubits/accelerate_cuda_shape.h
 /accelerate-io/dist/
+.genC_*
+.cabal-sandbox
+cabal.sandbox.config
