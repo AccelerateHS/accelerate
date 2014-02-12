@@ -18,5 +18,5 @@
 [submodule "accelerate-multidev"]
 	path = accelerate-multidev
 #	url = https://github.com/iu-parfunc/accelerate-multidev.git
-        url = git@github.com:iu-parfunc/accelerate-multidev.git
+	url = git@github.com:iu-parfunc/accelerate-multidev.git
 
