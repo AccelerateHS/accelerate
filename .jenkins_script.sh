@@ -12,12 +12,16 @@ PKGS=" ./accelerate-backend-kit/backend-kit \
 # ./accelerate-cuda/
 
 # First, let's make sure everything installs:
-cabal install --disable-documentation ./  $PKGS $*
+cabal install --only-dependencies --enable-tests --disable-library-profiling  --disable-documentation ./  $PKGS $*
+cabal install --disable-library-profiling --disable-documentation ./  $PKGS $*
 
-TOP=`pwd`
-for dir in accelerate-backend-kit/icc-opencl/ ; 
-do
+function test_dir() {
+  dir=$1
   cd $dir
   cabal sandbox init --sandbox=$TOP/.cabal-sandbox/
   cabal test --show-details=always
-done
+}
+
+TOP=`pwd`
+test_dir ./accelerate-backend-kit/icc-opencl/
+test_dir ./accelerate-multidev/ || echo "acclerate-multidev failed tests!  But that's allowed for now."
