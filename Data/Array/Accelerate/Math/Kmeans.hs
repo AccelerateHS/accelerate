@@ -99,43 +99,39 @@ makeNewClusters
     -> Acc (Vector (Cluster a))
 makeNewClusters nclusters points clusters
   = pointSumToCluster
-  $ makePointSum
+  . makePointSum
+  . findClosestCluster clusters
+  $ points
+
+-- TLM: This setup might be quicker, because it forces the result of
+--      findClosestCluster to be evaluated, which overall reduces memory
+--      traffic. However, this is hitting a sharing recovery bug in Accelerate
+--      so can't be used right now ):
+--
+--  = findClosestCluster clusters >-> pointSumToCluster . makePointSum $ points
   where
     npts        = size points
-    nearest     = findClosestCluster clusters points
 
     -- Turn the PointSum intermediate structure into the clusters, by averaging
     -- the cumulative (x,y) positions.
     --
     pointSumToCluster :: Acc (Vector (PointSum a)) -> Acc (Vector (Cluster a))
-    pointSumToCluster ps = A.generate (A.shape ps)
-                                      (\ix -> lift (A.fromIntegral (unindex1 ix), average (ps ! ix)))
+    pointSumToCluster ps =
+      A.generate (A.shape ps)
+                 (\ix -> lift (A.fromIntegral (unindex1 ix), average (ps ! ix)))
 
     average :: Exp (PointSum a) -> Exp (Point a)
     average ps =
       let (n, xy) = unlift ps   :: (Exp Word32, Exp (Point a))
           (x, y)  = unlift xy
       in
-      lift (x / A.fromIntegral n, y / A.fromIntegral n) -- what if there are no points in the cluster??
+      lift (x / A.fromIntegral n, y / A.fromIntegral n) -- TLM: what if there are no points in the cluster??
 
-{--
-    -- Make the PointSum structure. This method uses a forward permutation with
-    -- atomic instructions to create the array directly. This reduces memory
-    -- bandwidth at the cost of contention
-    --
-    makePointSum :: Acc (Vector (PointSum a))
-    makePointSum = A.permute addPointSum zeros near input
-      where
-        zeros   = A.fill (constant (Z:.nclusters)) (constant (0,(0,0)))
-        input   = A.zip (A.fill (A.shape points) (constant 1)) points
-        near ix = index1 (A.fromIntegral (nearest ! ix))
---}
-{--}
     -- Reduce along the rows of 'pointSum' to get the cumulative (x,y) position
     -- and number of points assigned to each centroid.
     --
-    makePointSum :: Acc (Vector (PointSum a))
-    makePointSum = A.fold1 addPointSum pointSum
+    makePointSum :: Acc (Vector Id) -> Acc (Vector (PointSum a))
+    makePointSum = A.fold1 addPointSum . pointSum
 
     -- The point sum is an intermediate 2D array (it gets fused away, so does
     -- not exist in memory). The points are laid out along the innermost
@@ -145,16 +141,16 @@ makeNewClusters nclusters points clusters
     -- to whichever cluster it is closest to, and zeros in each of the other
     -- rows.
     --
-    pointSum :: Acc (Array DIM2 (PointSum a))
-    pointSum    = A.generate (lift (Z:.constant nclusters:.npts))
-                             (\ix -> let Z:.i:.j = unlift ix    :: Z :. Exp Int :. Exp Int
-                                         near    = nearest ! index1 j
+    pointSum :: Acc (Vector Id) -> Acc (Array DIM2 (PointSum a))
+    pointSum nearest =
+      A.generate (lift (Z:.constant nclusters:.npts))
+                 (\ix -> let Z:.i:.j = unlift ix    :: Z :. Exp Int :. Exp Int
+                             near    = nearest ! index1 j
 
-                                         yes     = lift (constant 1, points ! index1 j)
-                                         no      = constant (0, (0,0))
-                                     in
-                                     near ==* A.fromIntegral i ? ( yes, no ))
---}
+                             yes     = lift (constant 1, points ! index1 j)
+                             no      = constant (0, (0,0))
+                         in
+                         near ==* A.fromIntegral i ? ( yes, no ))
 
     addPointSum :: Exp (PointSum a) -> Exp (PointSum a) -> Exp (PointSum a)
     addPointSum x y =
@@ -164,6 +160,24 @@ makeNewClusters nclusters points clusters
           (x2,y2) = unlift v    :: (Exp a, Exp a)
       in
       lift (c1+c2, lift (x1+x2, y1+y2) :: Exp (Point a))
+
+{--
+    -- Alternative to computing the PointSum structure.
+    --
+    -- This method uses a forward permutation with atomic instructions to create
+    -- the array directly (this method is closer to what one might write
+    -- sequentially). This avoids a parallel reduction, but has very high
+    -- contention. Overall performance much lower, as:
+    --
+    --   number of clusters << number of points
+    --
+    makePointSum :: Acc (Vector (PointSum a))
+    makePointSum = A.permute addPointSum zeros near input
+      where
+        zeros   = A.fill (constant (Z:.nclusters)) (constant (0,(0,0)))
+        input   = A.zip (A.fill (A.shape points) (constant 1)) points
+        near ix = index1 (A.fromIntegral (nearest ! ix))
+--}
 
 
 -- To complete the k-means algorithm, we loop repeatedly generating new clusters
