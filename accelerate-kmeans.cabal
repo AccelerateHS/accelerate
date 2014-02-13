@@ -21,3 +21,18 @@ library
   ghc-options:          -Wall -O2 -dcore-lint
 
   default-language:     Haskell2010
+
+
+executable generate-samples
+  Main-is:              GenSamples.hs
+  other-modules:        TestCore
+  hs-source-dirs:       test
+  ghc-options:          -Wall -O2 -dcore-lint
+  default-language:     Haskell2010
+
+  build-depends:        base            >= 4.6 && <4.7,
+                        array,
+                        binary,
+                        normaldistribution,
+                        random
+
