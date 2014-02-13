@@ -15,8 +15,8 @@ cabal-version:          >=1.10
 library
   exposed-modules:      Data.Array.Accelerate.Math.Kmeans
 
-  build-depends:        base            >= 4.6 && <4.7,
-                        accelerate      == 0.15.*
+  build-depends:        base                    >= 4.6 && <4.7,
+                        accelerate              == 0.15.*
 
   ghc-options:          -Wall -O2 -dcore-lint
 
@@ -35,4 +35,18 @@ executable generate-samples
                         binary,
                         normaldistribution,
                         random
+
+executable kmeans
+  Main-is:              kmeans.hs
+  hs-source-dirs:       test
+  ghc-options:          -Wall -O2 -dcore-lint -threaded -rtsopts
+  default-language:     Haskell2010
+
+  build-depends:        base                    >= 4.6 && <4.7,
+                        accelerate              == 0.15.*,
+                        accelerate-cuda         == 0.15.*,
+                        accelerate-kmeans,
+                        array,
+                        binary,
+                        criterion
 

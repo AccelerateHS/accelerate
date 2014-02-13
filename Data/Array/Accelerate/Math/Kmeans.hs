@@ -74,14 +74,14 @@ distance u v =
 -- closest to, and the distance to that cluster.
 --
 findClosestCluster
-    :: forall a. (Elt a, IsFloating a)
+    :: forall a. (Elt a, IsFloating a, RealFloat a)
     => Acc (Vector (Cluster a))
     -> Acc (Vector (Point a))
     -> Acc (Vector (Id, a))
 findClosestCluster clusters points =
   A.map (\p -> A.sfoldl (nearest p) z (constant Z) clusters) points
   where
-    z = constant (-1, 1/0)
+    z = constant (-1, inf)
 
     nearest :: Exp (Point a) -> Exp (Id, a) -> Exp (Cluster a) -> Exp (Id, a)
     nearest p st c =
@@ -97,7 +97,7 @@ findClosestCluster clusters points =
 -- locations.
 --
 makeNewClusters
-    :: forall a. (Elt a, IsFloating a)
+    :: forall a. (Elt a, IsFloating a, RealFloat a)
     => Int
     -> Acc (Vector (Point a))
     -> Acc (Vector (Cluster a))
@@ -161,7 +161,7 @@ makeNewClusters nclusters points clusters
 -- positions, until the positions converge (or some maximum iteration limit is
 -- reached?)
 --
-kmeans :: forall a. (Elt a, IsFloating a)
+kmeans :: forall a. (Elt a, IsFloating a, RealFloat a)
        => Int                           -- number of clusters to generate
        -> Acc (Vector (Point a))        -- the points to cluster
        -> Acc (Vector (Cluster a))      -- initial cluster positions (guess)
