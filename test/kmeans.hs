@@ -5,9 +5,8 @@
 --
 
 import Prelude                                          as P
-import TestCore
-import Data.Binary (decodeFile)
 import Criterion.Main
+import Data.Binary                                      (decodeFile)
 import System.Mem
 
 import Data.Array.Accelerate                            as A
@@ -17,12 +16,15 @@ import Data.Array.Accelerate.Math.Kmeans
 
 main :: IO ()
 main = do
-  points'   <- decodeFile "points.bin"          :: IO [Point]
-  clusters' <- read `fmap` readFile "clusters"  :: IO [Cluster]
+  points'   <- decodeFile "points.bin"
+  clusters' <- read `fmap` readFile "clusters"
   let nclusters = length clusters'
       npoints   = length points'
 
+      clusters :: Vector (Cluster Float)
       clusters  = A.fromList (Z:.nclusters) clusters'
+
+      points :: Vector (Point Float)
       points    = A.fromList (Z:.npoints)   points'
 
       step      = CUDA.run1 (kmeans nclusters (use points))

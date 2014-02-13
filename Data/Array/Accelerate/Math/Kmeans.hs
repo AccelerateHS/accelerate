@@ -25,7 +25,7 @@
 --   limit is reached).
 --
 
-module Data.Array.Accelerate.Math.Kmeans ( kmeans )
+module Data.Array.Accelerate.Math.Kmeans ( Point, Cluster, Id, kmeans )
   where
 
 import Prelude                                          as P
@@ -54,11 +54,6 @@ centroidOfCluster = A.snd
 type PointSum a = (Word32, (a, a))
 
 
--- A zero point
---
-zero :: (Elt a, IsNum a) => Exp (Point a)
-zero = lift (constant 0, constant 0)
-
 -- Get the distance (squared) between two points. Since we only compare this
 -- value, we elide the square root.
 --
@@ -71,15 +66,15 @@ distance u v =
 
 
 -- For each of the given points, return the cluster Id that that that point is
--- closest to, and the distance to that cluster.
+-- closest to.
 --
 findClosestCluster
     :: forall a. (Elt a, IsFloating a, RealFloat a)
     => Acc (Vector (Cluster a))
     -> Acc (Vector (Point a))
-    -> Acc (Vector (Id, a))
+    -> Acc (Vector Id)
 findClosestCluster clusters points =
-  A.map (\p -> A.sfoldl (nearest p) z (constant Z) clusters) points
+  A.map (\p -> A.fst $ A.sfoldl (nearest p) z (constant Z) clusters) points
   where
     z = constant (-1, inf)
 
@@ -123,6 +118,19 @@ makeNewClusters nclusters points clusters
       in
       lift (x / A.fromIntegral n, y / A.fromIntegral n) -- what if there are no points in the cluster??
 
+{--
+    -- Make the PointSum structure. This method uses a forward permutation with
+    -- atomic instructions to create the array directly. This reduces memory
+    -- bandwidth at the cost of contention
+    --
+    makePointSum :: Acc (Vector (PointSum a))
+    makePointSum = A.permute addPointSum zeros near input
+      where
+        zeros   = A.fill (constant (Z:.nclusters)) (constant (0,(0,0)))
+        input   = A.zip (A.fill (A.shape points) (constant 1)) points
+        near ix = index1 (A.fromIntegral (nearest ! ix))
+--}
+{--}
     -- Reduce along the rows of 'pointSum' to get the cumulative (x,y) position
     -- and number of points assigned to each centroid.
     --
@@ -145,7 +153,8 @@ makeNewClusters nclusters points clusters
                                          yes     = lift (constant 1, points ! index1 j)
                                          no      = constant (0, (0,0))
                                      in
-                                     A.fst near ==* A.fromIntegral i ? ( yes, no ))
+                                     near ==* A.fromIntegral i ? ( yes, no ))
+--}
 
     addPointSum :: Exp (PointSum a) -> Exp (PointSum a) -> Exp (PointSum a)
     addPointSum x y =
