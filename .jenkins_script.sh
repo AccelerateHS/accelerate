@@ -3,9 +3,6 @@
 set -x 
 set -e
 
-cabal --version
-cabal sandbox init
-
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
        ./accelerate-backend-kit/icc-opencl \
        ./accelerate-multidev/ "
@@ -13,18 +10,34 @@ PKGS=" ./ ./accelerate-backend-kit/backend-kit \
 
 CBLARGS="--disable-library-profiling  --disable-documentation $*"
 
+#------------------------------------------------------------
+# Init sandbox and link it
+
+cabal --version
+cabal sandbox init
+
+TOP=`pwd`
+for dir in $PKGS; do
+  cd $dir
+  cabal sandbox init --sandbox=$TOP/.cabal-sandbox/
+  cd $TOP
+done
+
+#------------------------------------------------------------
+# Begin installation
+
 # First, let's make sure everything installs:
 cabal install $CBLARGS $PKGS --only-dependencies --enable-tests 
 cabal install $CBLARGS $PKGS 
 
-TOP=`pwd`
+#------------------------------------------------------------
+# Begin testing
 
 function test_dir() {
   dir=$1
   shift
   args=$*
   cd $dir
-  cabal sandbox init --sandbox=$TOP/.cabal-sandbox/
   time cabal test --show-details=always $args
   cd $TOP
 }
