@@ -20,3 +20,6 @@
 #	url = https://github.com/iu-parfunc/accelerate-multidev.git
 	url = git@github.com:iu-parfunc/accelerate-multidev.git
 
+[submodule "array-dsl-benchmarks"]
+	path = array-dsl-benchmarks
+	url = https://github.com/iu-parfunc/array-dsl-benchmarks.git
