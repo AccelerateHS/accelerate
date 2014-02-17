@@ -42,6 +42,9 @@ function test_dir() {
   cd $TOP
 }
 
+# Test the interpreters:
+test_dir $TOP/accelerate-backend-kit/backend-kit --test-option="--threads=8"
+
 # Split these out to run with specific arguments:
 test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-sequential --test-option="--threads=8" 
 
