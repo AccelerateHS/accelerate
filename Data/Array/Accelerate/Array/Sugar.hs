@@ -25,7 +25,7 @@
 module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
-  Array(..), Scalar, Vector, Segments,
+  Array(..), Scalar, Vector, Segments, -- [],  
   Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
@@ -689,6 +689,7 @@ class Typeable2 f => Foreign (f :: * -> * -> *) where
 --
 type family ArrRepr a :: *
 type instance ArrRepr () = ()
+type instance ArrRepr [a] = [ArrRepr a]
 type instance ArrRepr (Array sh e) = ((), Array sh e)
 type instance ArrRepr (b, a) = (ArrRepr b, ArrRepr' a)
 type instance ArrRepr (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
@@ -701,6 +702,7 @@ type instance ArrRepr (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, 
 
 type family ArrRepr' a :: *
 type instance ArrRepr' () = ()
+type instance ArrRepr' [a] = [ArrRepr' a]
 type instance ArrRepr' (Array sh e) = Array sh e
 type instance ArrRepr' (b, a) = (ArrRepr b, ArrRepr' a)
 type instance ArrRepr' (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
@@ -717,6 +719,7 @@ data ArraysR arrs where
   ArraysRunit  ::                                   ArraysR ()
   ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
+  ArraysRstream :: ArraysR arrs -> ArraysR [arrs]
 
 class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
@@ -737,6 +740,15 @@ instance Arrays () where
   fromArr   = id
   fromArr'  = id
 
+instance Arrays a => Arrays [a] where
+  arrays _ = ArraysRstream (arrays (undefined :: a))
+  arrays' _ = ArraysRstream (arrays' (undefined :: a))
+  --
+  toArr = map toArr
+  toArr' = map toArr'
+  fromArr = map fromArr
+  fromArr' = map fromArr'
+  
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  _       = ArraysRpair ArraysRunit ArraysRarray
   arrays' _       = ArraysRarray

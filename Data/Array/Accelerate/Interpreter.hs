@@ -160,6 +160,14 @@ evalPreOpenAcc (Slice sliceIndex acc slix) aenv
 
 evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
+evalPreOpenAcc (MapStream f acc) aenv = mapStreamOp (evalFun f aenv) (evalOpenAcc acc aenv)
+
+evalPreOpenAcc (ToStream acc) aenv = toStreamOp (evalOpenAcc acc aenv)
+
+evalPreOpenAcc (FromStream acc) aenv = fromStreamOp (evalOpenAcc acc aenv)
+
+evalPreOpenAcc (FoldStream f acc1 acc2) aenv = foldStreamOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+
 evalPreOpenAcc (ZipWith f acc1 acc2) aenv
   = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
@@ -327,6 +335,38 @@ mapOp :: Sugar.Elt e'
 mapOp f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = DelayedRpair DelayedRunit
   $ DelayedRarray sh (Sugar.sinkFromElt f . rf)
+
+
+mapStreamOp :: (Sugar.Elt e', Sugar.Shape sh')
+            => (Array sh e -> Array sh' e')
+            -> Delayed [Array sh e]
+            -> Delayed [Array sh' e']
+mapStreamOp f (DelayedRstream ds)
+  = let g darr@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = (delay . f . force) darr
+    in DelayedRstream (map g ds)
+                      
+toStreamOp :: (Sugar.Shape sh)
+           => Delayed (Array (sh:.Int) e)
+           -> Delayed [Array sh e]
+toStreamOp (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
+  = DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (\ sh' -> rf (sh', i))) | i <- [0..n-1]]
+
+
+fromStreamOp :: (Sugar.Elt e)
+             => Delayed [Array Z e]
+             -> Delayed (Array (Z:.Int) e)   
+fromStreamOp (DelayedRstream ds)
+  = let f (DelayedRpair DelayedRunit (DelayedRarray () rf)) sh' = rf sh'
+    in DelayedRpair DelayedRunit (DelayedRarray ((), length ds) (\ (sh', n) -> f (ds !! n) sh'))
+
+foldStreamOp :: ()
+             => (Array sh e -> Array sh e -> Array sh e)
+             -> Delayed (Array sh e)
+             -> Delayed [Array sh e]
+             -> Delayed (Array sh e)
+foldStreamOp f darr@(DelayedRpair DelayedRunit (DelayedRarray _ _)) (DelayedRstream ds)
+  = let g darr1@(DelayedRpair DelayedRunit (DelayedRarray _ _)) darr2@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = delay (f (force darr1) (force darr2))
+    in Prelude.foldr g darr ds
 
 zipWithOp :: Sugar.Elt e3
           => (e1 -> e2 -> e3)

@@ -173,6 +173,10 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Replicate sl slix a       -> Replicate sl (shrinkE slix) (shrinkAcc a)
       Slice sl a slix           -> Slice sl (shrinkAcc a) (shrinkE slix)
       Map f a                   -> Map (shrinkF f) (shrinkAcc a)
+      MapStream f a             -> MapStream (shrinkF f) (shrinkAcc a)
+      ToStream a                -> ToStream (shrinkAcc a)
+      FromStream a              -> FromStream (shrinkAcc a)
+      FoldStream f a1 a2        -> FoldStream (shrinkF f) (shrinkAcc a1) (shrinkAcc a2)
       ZipWith f a1 a2           -> ZipWith (shrinkF f) (shrinkAcc a1) (shrinkAcc a2)
       Fold f z a                -> Fold (shrinkF f) (shrinkE z) (shrinkAcc a)
       Fold1 f a                 -> Fold1 (shrinkF f) (shrinkAcc a)
@@ -343,6 +347,10 @@ usesOfPreAcc withShape countAcc idx = countP
       Replicate _ sh a          -> countE sh + countA a
       Slice _ a sl              -> countE sl + countA a
       Map f a                   -> countF f  + countA a
+      MapStream f a             -> countF f  + countA a
+      ToStream a                -> countA a
+      FromStream a              -> countA a
+      FoldStream f a1 a2        -> countF f  + countA a1 + countA a2
       ZipWith f a1 a2           -> countF f  + countA a1 + countA a2
       Fold f z a                -> countF f  + countE z  + countA a
       Fold1 f a                 -> countF f  + countA a

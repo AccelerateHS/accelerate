@@ -75,6 +75,8 @@ preAccDim k pacc =
     Replicate _ _ _      -> ndim (eltType (undefined::sh))
     Slice _ _ _          -> ndim (eltType (undefined::sh))
     Map _ acc            -> k acc
+    FromStream _         -> ndim (eltType (undefined::sh)) -- + 1 ??
+    FoldStream _ _ _     -> ndim (eltType (undefined::sh))
     ZipWith _ _ acc      -> k acc
     Fold _ _ acc         -> k acc - 1
     Fold1 _ acc          -> k acc - 1

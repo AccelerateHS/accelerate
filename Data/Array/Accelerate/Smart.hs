@@ -1078,6 +1078,7 @@ showArrays = display . collect (arrays (undefined::arrs)) . fromArr
     collect ArraysRunit         _        = []
     collect ArraysRarray        arr      = [showShortendArr arr]
     collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    collect (ArraysRstream r) as = concatMap (collect r) as
     --
     display []  = []
     display [x] = x

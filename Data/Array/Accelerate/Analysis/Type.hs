@@ -111,6 +111,8 @@ preAccType k pacc =
     Replicate _ _ acc   -> k acc
     Slice _ acc _       -> k acc
     Map _ _             -> eltType (undefined::e)
+    FromStream _        -> eltType (undefined::e)
+    FoldStream _ _ _    -> eltType (undefined::e)
     ZipWith _ _ _       -> eltType (undefined::e)
     Fold _ _ acc        -> k acc
     FoldSeg _ _ acc _   -> k acc

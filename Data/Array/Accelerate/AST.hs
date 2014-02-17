@@ -319,7 +319,30 @@ data PreOpenAcc acc aenv a where
               => PreFun     acc aenv (e -> e')
               -> acc            aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e')
+                 
+  -- Apply the given the given function to all elements of the given stream.
+  MapStream   :: (Shape sh, Elt e, Shape sh', Elt e')
+              => PreFun     acc aenv (Array sh e -> Array sh' e')
+              -> acc            aenv [Array sh e]   
+              -> PreOpenAcc acc aenv [Array sh' e']
 
+  -- Convert the given array to a stream.
+  ToStream :: (Shape sh, Elt e)
+         => acc            aenv (Array (sh:.Int) e)
+         -> PreOpenAcc acc aenv [Array sh e]
+            
+  -- Convert the given stream to an array.
+  FromStream :: (Elt e)
+           => acc            aenv [Array Z e]
+           -> PreOpenAcc acc aenv (Array (Z:.Int) e)
+              
+  -- Fold a stream by combining each element using the given binary function.
+  FoldStream :: (Shape sh, Elt e)
+             => PreFun         acc aenv (Array sh e -> Array sh e -> Array sh e)
+             -> acc                aenv (Array sh e)
+             -> acc                aenv [Array sh e]
+             -> PreOpenAcc     acc aenv (Array sh e)
+                
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
@@ -954,6 +977,10 @@ showPreAccOp Reshape{}          = "Reshape"
 showPreAccOp Replicate{}        = "Replicate"
 showPreAccOp Slice{}            = "Slice"
 showPreAccOp Map{}              = "Map"
+showPreAccOp MapStream{}        = "MapStream"
+showPreAccOp FromStream{}       = "FromStream"
+showPreAccOp ToStream{}         = "ToStream"
+showPreAccOp FoldStream{}       = "FoldStream"
 showPreAccOp ZipWith{}          = "ZipWith"
 showPreAccOp Fold{}             = "Fold"
 showPreAccOp Fold1{}            = "Fold1"
@@ -977,6 +1004,7 @@ showArrays = display . collect (arrays (undefined::arrs)) . fromArr
     collect ArraysRunit         _        = []
     collect ArraysRarray        arr      = [showShortendArr arr]
     collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    collect (ArraysRstream r) as = concatMap (collect r) as
     --
     display []  = []
     display [x] = x
