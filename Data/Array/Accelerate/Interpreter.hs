@@ -35,7 +35,8 @@ module Data.Array.Accelerate.Interpreter (
   Arrays, run, stream,
 
   -- Internal (hidden)
-  evalPrim, evalPrimConst, evalPrj
+  evalPrim, evalPrimConst, evalPrj,
+  evalAcc, force
 
 ) where
 
