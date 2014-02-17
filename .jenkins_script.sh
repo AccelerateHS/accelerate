@@ -5,8 +5,8 @@ set -e
 
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
        ./accelerate-backend-kit/icc-opencl \
-       ./accelerate-multidev/ "
-# ./accelerate-cuda/
+       ./accelerate-multidev/ ./accelerate-cuda/ "
+# 
 
 CBLARGS="--disable-library-profiling  --disable-documentation $*"
 
@@ -52,3 +52,5 @@ test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-sequentia
 (test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-cilk  --test-option="--threads=1" 2>1 | tee /tmp/out)
 
 test_dir $TOP/accelerate-multidev/ || echo "acclerate-multidev failed tests!  But that's allowed for now."
+
+test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
