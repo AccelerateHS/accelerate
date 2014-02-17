@@ -27,7 +27,7 @@ done
 # Begin installation
 
 # First, let's make sure everything installs:
-cabal install $CBLARGS $PKGS 
+cabal install $CBLARGS $PKGS --force-reinstalls
 cabal install $CBLARGS $PKGS --only-dependencies --enable-tests 
 
 #------------------------------------------------------------
