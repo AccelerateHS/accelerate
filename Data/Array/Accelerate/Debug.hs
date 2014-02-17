@@ -82,6 +82,7 @@ data Flags = Flags
   , _fusion                     :: !(Maybe Bool)        -- fuse array expressions
   , _simplify                   :: !(Maybe Bool)        -- simplify scalar expressions
   }
+ deriving Show
 
 $(mkLabels [''Flags])
 

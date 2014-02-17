@@ -1,5 +1,5 @@
 Name:                   accelerate
-Version:                0.13.0.0
+Version:                0.13.0.99
 Cabal-version:          >= 1.6
 Tested-with:            GHC >= 7.0.3
 Build-type:             Simple
@@ -139,12 +139,12 @@ Library
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
--- Temp:
+-- Temporarily exposing:
                         Data.Array.Accelerate.Trafo.Sharing
+                        Data.Array.Accelerate.Debug
 
   Other-modules:        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Array.Delayed
-                        Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
