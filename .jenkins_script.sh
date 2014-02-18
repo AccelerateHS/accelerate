@@ -42,15 +42,16 @@ function test_dir() {
   cd $TOP
 }
 
-test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
+# (1) Test the interpreters:
+test_dir $TOP/accelerate-backend-kit/backend-kit --test-option="--threads=8"
 
+# (2) Test the C/Cilk backends
 # Split these out to run with specific arguments:
 test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-sequential --test-option="--threads=8" 
 
-# Currentl [2014.02.13] running Cilk from multiple dynamic libs causes errors (backend-kit issue #4)
+# Currently [2014.02.13] running Cilk from multiple dynamic libs causes errors (backend-kit issue #4)
 (test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-cilk  --test-option="--threads=1" 2>1 | tee /tmp/out)
 
 test_dir $TOP/accelerate-multidev/ || echo "acclerate-multidev failed tests!  But that's allowed for now."
 
-# Test the interpreters:
-test_dir $TOP/accelerate-backend-kit/backend-kit --test-option="--threads=8"
+test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
