@@ -160,13 +160,13 @@ evalPreOpenAcc (Slice sliceIndex acc slix) aenv
 
 evalPreOpenAcc (Map f acc) aenv = mapOp (evalFun f aenv) (evalOpenAcc acc aenv)
 
-evalPreOpenAcc (MapStream f acc) aenv = mapStreamOp (evalFun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (MapStream f acc) aenv = mapStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (ToStream acc) aenv = toStreamOp (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (FromStream acc) aenv = fromStreamOp (evalOpenAcc acc aenv)
 
-evalPreOpenAcc (FoldStream f acc1 acc2) aenv = foldStreamOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+evalPreOpenAcc (FoldStream f acc1 acc2) aenv = foldStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
 
 evalPreOpenAcc (ZipWith f acc1 acc2) aenv
   = zipWithOp (evalFun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)

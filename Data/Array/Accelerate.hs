@@ -104,6 +104,9 @@ module Data.Array.Accelerate (
   -- ** Element-wise operations
   -- *** Mapping
   L.map,
+  
+  -- ** Stream operations
+  L.mapStream, L.toStream, L.fromStream, L.foldStream, 
 
   -- *** Zipping
   L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,

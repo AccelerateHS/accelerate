@@ -322,9 +322,9 @@ data PreOpenAcc acc aenv a where
                  
   -- Apply the given the given function to all elements of the given stream.
   MapStream   :: (Shape sh, Elt e, Shape sh', Elt e')
-              => PreFun     acc aenv (Array sh e -> Array sh' e')
-              -> acc            aenv [Array sh e]   
-              -> PreOpenAcc acc aenv [Array sh' e']
+              => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
+              -> acc             aenv [Array sh e]   
+              -> PreOpenAcc  acc aenv [Array sh' e']
 
   -- Convert the given array to a stream.
   ToStream :: (Shape sh, Elt e)
@@ -338,7 +338,7 @@ data PreOpenAcc acc aenv a where
               
   -- Fold a stream by combining each element using the given binary function.
   FoldStream :: (Shape sh, Elt e)
-             => PreFun         acc aenv (Array sh e -> Array sh e -> Array sh e)
+             => PreOpenAfun    acc aenv (Array sh e -> Array sh e -> Array sh e)
              -> acc                aenv (Array sh e)
              -> acc                aenv [Array sh e]
              -> PreOpenAcc     acc aenv (Array sh e)

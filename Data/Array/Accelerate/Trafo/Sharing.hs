@@ -248,6 +248,15 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
           where
             alyt' = incLayout alyt `PushLayout` ZeroIdx
             body  = f undefined
+            
+        cvtAfun2 :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> AST.OpenAfun aenv (a -> b -> c)
+        cvtAfun2 f = Alam (Alam (Abody (convertSharingAcc config alyt' aenv' body)))
+          where
+            alyt'' = incLayout alyt `PushLayout` ZeroIdx
+            alyt'  = incLayout alyt'' `PushLayout` ZeroIdx
+            body   = f undefined undefined
+
+
     in
     case preAcc of
 
@@ -279,6 +288,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Replicate ix acc            -> mkReplicate (cvtE ix) (cvtA acc)
       Slice acc ix                -> mkIndex (cvtA acc) (cvtE ix)
       Map f acc                   -> AST.Map (cvtF1 f) (cvtA acc)
+      MapStream f acc             -> AST.MapStream (cvtAfun1 f) (cvtA acc)
+      ToStream acc                -> AST.ToStream (cvtA acc)
+      FromStream acc              -> AST.FromStream (cvtA acc)
+      FoldStream f acc1 acc2      -> AST.FoldStream (cvtAfun2 f) (cvtA acc1) (cvtA acc2)
       ZipWith f acc1 acc2         -> AST.ZipWith (cvtF2 f) (cvtA acc1) (cvtA acc2)
       Fold f e acc                -> AST.Fold (cvtF2 f) (cvtE e) (cvtA acc)
       Fold1 f acc                 -> AST.Fold1 (cvtF2 f) (cvtA acc)
@@ -964,6 +977,10 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     traverseAfun1 :: (Arrays a, Typeable b) => Level -> (Acc a -> Acc b) -> IO (Acc a -> UnscopedAcc b, Int)
     traverseAfun1 = makeOccMapAfun1 config accOccMap
 
+    traverseAfun2 :: (Arrays a, Arrays b, Typeable c) => Level -> (Acc a -> Acc b -> Acc c) -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
+    traverseAfun2 = makeOccMapAfun2 config accOccMap
+
+
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
@@ -1035,6 +1052,21 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (f'  , h1) <- traverseFun1 lvl f
                                              (acc', h2) <- traverseAcc lvl acc
                                              return (Map f' acc', h1 `max` h2 + 1)
+            MapStream f acc             -> reconstruct $ do
+                                             (f',   h1) <- traverseAfun1 lvl f
+                                             (acc', h2) <- traverseAcc lvl acc
+                                             return (MapStream f' acc', h1 `max` h2 + 1)
+            ToStream acc                -> reconstruct $ do
+                                              (acc', h) <- traverseAcc lvl acc
+                                              return (ToStream acc', h + 1)
+            FromStream acc              -> reconstruct $ do
+                                              (acc', h) <- traverseAcc lvl acc
+                                              return (FromStream acc', h + 1)
+            FoldStream f acc1 acc2      -> reconstruct $ do
+                                              (f',    h1) <- traverseAfun2 lvl f
+                                              (acc1', h2) <- traverseAcc lvl acc1
+                                              (acc2', h3) <- traverseAcc lvl acc2
+                                              return (FoldStream f' acc1' acc2', h1 + h2 + h3 + 1)
             ZipWith f acc1 acc2         -> reconstruct $ travF2A2 ZipWith f acc1 acc2
             Fold f e acc                -> reconstruct $ travF2EA Fold f e acc
             Fold1 f acc                 -> reconstruct $ travF2A Fold1 f acc
@@ -1146,6 +1178,19 @@ makeOccMapAfun1 config accOccMap lvl f = do
   --
   (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) (f x)
   return (const (UnscopedAcc [lvl] body), height)
+
+makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
+                => Config
+                -> OccMapHash Acc
+                -> Level
+                -> (Acc a -> Acc b -> Acc c)
+                -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
+makeOccMapAfun2 config accOccMap lvl f = do
+  let x = Acc (Atag (lvl + 1))
+      y = Acc (Atag lvl)
+  --
+  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+2) (f x y)
+  return (\_ _ -> UnscopedAcc [lvl, lvl+1] body, height)
 
 
 -- Generate occupancy information for scalar functions and expressions. Helper
@@ -1670,6 +1715,26 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (acc', accCount2) = scopesAcc  acc
                                      in
                                      reconstruct (Map f' acc') (accCount1 +++ accCount2)
+          MapStream f acc         -> let
+                                       (f'  , accCount1) = scopesAfun1 f
+                                       (acc', accCount2) = scopesAcc  acc
+                                     in
+                                     reconstruct (MapStream f' acc') (accCount1 +++ accCount2)
+          ToStream acc            -> let
+                                       (acc', accCount1) = scopesAcc  acc
+                                     in
+                                     reconstruct (ToStream acc') (accCount1)
+          FromStream acc          -> let
+                                       (acc', accCount1) = scopesAcc  acc
+                                     in
+                                     reconstruct (FromStream acc') (accCount1)
+          FoldStream f acc1 acc2  ->  let
+                                       (f', accCount1)    = scopesAfun2 f
+                                       (acc1', accCount2) = scopesAcc acc1
+                                       (acc2', accCount3) = scopesAcc acc2
+                                     in
+                                     reconstruct (FoldStream f' acc1' acc2')
+                                                 (accCount1 +++ accCount2 +++ accCount3)
           ZipWith f acc1 acc2     -> travF2A2 ZipWith f acc1 acc2
           Fold f z acc            -> travF2EA Fold f z acc
           Fold1 f acc             -> travF2A Fold1 f acc
@@ -1876,6 +1941,19 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
+
+
+    scopesAfun2 :: (Arrays a1, Arrays a2) => (Acc a1 -> Acc a2 -> UnscopedAcc a3) -> (Acc a1 -> Acc a2 -> ScopedAcc a3, NodeCounts)
+    scopesAfun2 f = (\_ _ -> ScopedAcc ssa body', (counts',graph))
+      where
+        body@(UnscopedAcc fvs _) = f undefined undefined
+        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
+        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        (freeCounts, counts') = partition isBoundHere counts
+
+        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
+        isBoundHere _                                                             = False
+
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
