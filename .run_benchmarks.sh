@@ -6,7 +6,7 @@
 set -x 
 set -e
 
-cd $0
+cd `dirname $0`
 
 TOP=`pwd`
 HSBENCHER_SANDBOX=$TOP/.cabal-sandbox/
