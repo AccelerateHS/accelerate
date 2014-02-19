@@ -38,5 +38,19 @@ cd $TOP/
 ./.jenkins_script.sh
 
 # (2) Then we run the actual benchmarks
+# ----------------------------------------
+
+# Parfunc account, registered app in api console:
+CID=905767673358.apps.googleusercontent.com
+SEC=2a2H57dBggubW1_rqglC7jtK
+
+# Accelerate/multidev table docID:
+TABID=1E17ssTkVafPYjzPjO9m1uOqlq8Cz2T9D48PQo7s
+# https://www.google.com/fusiontables/DataSource?docid=1E17ssTkVafPYjzPjO9m1uOqlq8Cz2T9D48PQo7s
+
+TRIALS=7
+
 cd $TOP/array-dsl-benchmarks/
-./run_array_dsl_benchmarks.exe
+
+# Enable upload of benchmarking data to a Google Fusion Table:
+./run_array_dsl_benchmarks.exe --keepgoing --trials=$TRIALS --fusion-upload=$TABID --clientid=$CID --clientsecret=$SEC $*
