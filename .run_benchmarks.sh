@@ -39,4 +39,4 @@ cd $TOP/
 
 # (2) Then we run the actual benchmarks
 cd $TOP/array-dsl-benchmarks/
-./run_array_dsl_benchmarks
+./run_array_dsl_benchmarks.exe
