@@ -14,10 +14,6 @@ HSBENCHER_SANDBOX=$TOP/.cabal-sandbox/
 which cabal
 cabal --version
 
-# First we depend on the jenkins script to install the basic packages
-# and run tests:
-# ./.jenkins_script.sh
-
 
 # Now we link the sandbox so that the benchmarks happen in the same environment.
 # cd array-dsl-benchmarks/
@@ -32,6 +28,15 @@ for dir in $DIRS; do
   cd $TOP
 done
 
-cd array-dsl-benchmarks/
+# (0) Build benchmark runner:
+cd $TOP/array-dsl-benchmarks/
 make
+
+# (1) First we depend on the jenkins script to install the basic packages
+# and run tests:
+cd $TOP/
+./.jenkins_script.sh
+
+# (2) Then we run the actual benchmarks
+cd $TOP/array-dsl-benchmarks/
 ./run_array_dsl_benchmarks
