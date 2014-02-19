@@ -11,6 +11,9 @@ cd `dirname $0`
 TOP=`pwd`
 HSBENCHER_SANDBOX=$TOP/.cabal-sandbox/
 
+which cabal
+cabal --version
+
 # First we depend on the jenkins script to install the basic packages
 # and run tests:
 # ./.jenkins_script.sh
