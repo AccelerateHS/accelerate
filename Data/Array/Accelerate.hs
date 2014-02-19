@@ -213,7 +213,7 @@ module Data.Array.Accelerate (
   L.constant,
 
   -- *** Tuples
-  P.fst, P.snd, P.curry, P.uncurry,
+  P.fst, P.afst, P.snd, P.asnd, P.curry, P.uncurry,
 
   -- *** Flow control
   (P.?), P.caseof, L.cond, L.while, P.iterate,
