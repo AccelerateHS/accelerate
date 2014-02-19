@@ -1,20 +1,25 @@
 [submodule "accelerate-io"]
 	path = accelerate-io
-	url = https://github.com/AccelerateHS/accelerate-io.git
+#	url = https://github.com/AccelerateHS/accelerate-io.git
+	url = git@github.com:AccelerateHS/accelerate-io.git
 [submodule "accelerate-buildbot"]
 	path = accelerate-buildbot
-	url = https://github.com/AccelerateHS/accelerate-buildbot.git
+#	url = https://github.com/AccelerateHS/accelerate-buildbot.git
+	url = git@github.com:AccelerateHS/accelerate-buildbot.git
 [submodule "accelerate-examples"]
 	path = accelerate-examples
-	url = https://github.com/AccelerateHS/accelerate-examples.git
+#	url = https://github.com/AccelerateHS/accelerate-examples.git
+	url = git@github.com:AccelerateHS/accelerate-examples.git
 [submodule "accelerate-cuda"]
 	path = accelerate-cuda
 #	url = https://github.com/AccelerateHS/accelerate-cuda.git
-	url = https://github.com/iu-parfunc/accelerate-cuda.git
+#	url = https://github.com/iu-parfunc/accelerate-cuda.git
+	url = git@github.com:iu-parfunc/accelerate-cuda.git
 
 [submodule "accelerate-backend-kit"]
 	path = accelerate-backend-kit
-	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
+#	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
+	url = git@github.com:AccelerateHS/accelerate-backend-kit.git
 [submodule "accelerate-multidev"]
 	path = accelerate-multidev
 #	url = https://github.com/iu-parfunc/accelerate-multidev.git
@@ -22,4 +27,5 @@
 
 [submodule "array-dsl-benchmarks"]
 	path = array-dsl-benchmarks
-	url = https://github.com/iu-parfunc/array-dsl-benchmarks.git
+#	url = https://github.com/iu-parfunc/array-dsl-benchmarks.git
+	url = git@github.com:iu-parfunc/array-dsl-benchmarks.git
