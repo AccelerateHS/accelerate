@@ -35,7 +35,7 @@ make
 # (1) First we depend on the jenkins script to install the basic packages
 # and run tests:
 cd $TOP/
-./.jenkins_script.sh
+ACCELERATE_INSTALL_ONLY=1 ./.jenkins_script.sh
 
 # (2) Then we run the actual benchmarks
 # ----------------------------------------
