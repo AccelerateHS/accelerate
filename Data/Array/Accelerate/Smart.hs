@@ -55,7 +55,7 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot,
 
   -- * Smart constructors for type coercion functions
-  mkBoolToInt, mkFromIntegral,
+  mkOrd, mkChr, mkBoolToInt, mkFromIntegral,
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -1004,14 +1004,20 @@ mkLOr x y = Exp $ PrimLOr `PrimApp` tup2 (x, y)
 mkLNot :: Exp Bool -> Exp Bool
 mkLNot x = Exp $ PrimLNot `PrimApp` x
 
--- FIXME: Character conversions
+-- Character conversions
 
--- FIXME: Numeric conversions
+mkOrd :: Exp Char -> Exp Int
+mkOrd x = Exp $ PrimOrd `PrimApp` x
+
+mkChr :: Exp Int -> Exp Char
+mkChr x = Exp $ PrimChr `PrimApp` x
+
+-- Numeric conversions
 
 mkFromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
 mkFromIntegral x = Exp $ PrimFromIntegral integralType numType `PrimApp` x
 
--- FIXME: Other conversions
+-- Other conversions
 
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b

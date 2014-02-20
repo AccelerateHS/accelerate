@@ -93,7 +93,7 @@ module Data.Array.Accelerate.Language (
   (&&*), (||*), not,
 
   -- * Conversions
-  boolToInt, fromIntegral,
+  ord, chr, boolToInt, fromIntegral,
 
   -- * Constants
   ignore
@@ -891,6 +891,16 @@ not = mkLNot
 
 -- Conversions
 -- -----------
+
+-- |Convert a character to an 'Int'.
+--
+ord :: Exp Char -> Exp Int
+ord = mkOrd
+
+-- |Convert an 'Int' into a character.
+--
+chr :: Exp Int -> Exp Char
+chr = mkChr
 
 -- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
 -- into '1'.
