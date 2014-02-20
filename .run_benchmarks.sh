@@ -20,7 +20,16 @@ cabal --version
 # ln -s -f ../.cabal-sandbox 
 #ln -s -f ../cabal.sandbox.config
 
-DIRS="$TOP/array-dsl-benchmarks/ $TOP/array-dsl-benchmarks/accelerate/nbody/seq_c $TOP/array-dsl-benchmarks/accelerate/nbody/cilk $TOP/array-dsl-benchmarks/accelerate/nbody/cuda  "
+DIRS="$TOP/array-dsl-benchmarks/ \
+   $TOP/array-dsl-benchmarks/accelerate/nbody/seq_c \
+   $TOP/array-dsl-benchmarks/accelerate/nbody/cilk  \
+   $TOP/array-dsl-benchmarks/accelerate/nbody/cuda  \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
+  "
+
+# $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda
 
 for dir in $DIRS; do 
   cd $dir
