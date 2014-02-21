@@ -114,10 +114,6 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Reshape sh acc)         = "reshape"     .$ [ ppE sh, ppA acc ]
     pp (Replicate _ty ix acc)   = "replicate"   .$ [ prettyPreExp prettyAcc 0 alvl noParens ix, ppA acc ]
     pp (Map f acc)              = "map"         .$ [ ppF f, ppA acc ]
-    pp (MapStream f acc)        = "mapS"        .$ [ ppAF f, ppA acc ]
-    pp (FromStream acc)         = "fromStream"  .$ [ ppA acc ]
-    pp (ToStream acc)           = "toStream"    .$ [ ppA acc ]
-    pp (FoldStream f acc1 acc2) = "foldS"       .$ [ ppAF f, ppA acc1, ppA acc2 ]
     pp (ZipWith f acc1 acc2)    = "zipWith"     .$ [ ppF f, ppA acc1, ppA acc2 ]
     pp (Fold f e acc)           = "fold"        .$ [ ppF f, ppE e, ppA acc ]
     pp (Fold1 f acc)            = "fold1"       .$ [ ppF f, ppA acc ]
@@ -136,6 +132,10 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
+    pp (MapStream f acc)        = "mapS"        .$ [ ppAF f, ppA acc ]
+    pp (FromStream acc)         = "fromStream"  .$ [ ppA acc ]
+    pp (ToStream acc)           = "toStream"    .$ [ ppA acc ]
+    pp (FoldStream f acc1 acc2) = "foldS"       .$ [ ppAF f, ppA acc1, ppA acc2 ]
 
 
 -- Pretty print a function over array computations.

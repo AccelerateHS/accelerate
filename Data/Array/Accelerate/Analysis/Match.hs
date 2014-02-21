@@ -893,10 +893,6 @@ hashPreOpenAcc hashAcc pacc =
     Replicate spec ix a         -> hash "Replicate"     `hashE` ix `hashA` a  `hashWithSalt` show spec
     Slice spec a ix             -> hash "Slice"         `hashE` ix `hashA` a  `hashWithSalt` show spec
     Map f a                     -> hash "Map"           `hashF` f  `hashA` a
-    MapStream f a               -> hash "MapStream"     `hashWithSalt` hashAfun hashAcc f `hashA` a
-    FromStream a                -> hash "FromStream"    `hashA` a
-    ToStream a                  -> hash "ToStream"      `hashA` a
-    FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
     ZipWith f a1 a2             -> hash "ZipWith"       `hashF` f  `hashA` a1 `hashA` a2
     Fold f e a                  -> hash "Fold"          `hashF` f  `hashE` e  `hashA` a
     Fold1 f a                   -> hash "Fold1"         `hashF` f  `hashA` a
@@ -912,7 +908,10 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-
+    MapStream f a               -> hash "MapStream"     `hashWithSalt` hashAfun hashAcc f `hashA` a
+    ToStream a                  -> hash "ToStream"      `hashA` a
+    FromStream a                -> hash "FromStream"    `hashA` a
+    FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()

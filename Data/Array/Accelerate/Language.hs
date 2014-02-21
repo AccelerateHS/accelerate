@@ -233,37 +233,6 @@ map :: (Shape ix, Elt a, Elt b)
     -> Acc (Array ix b)
 map = Acc $$ Map
 
--- | Apply the given array function element-wise to the given stream.
---
-mapStream :: (Shape ix, Elt a, Shape ix', Elt b)
-          => (Acc (Array ix a) -> Acc (Array ix' b))
-          -> Acc [Array ix  a]   
-          -> Acc [Array ix' b]   
-mapStream = Acc $$ MapStream
-
--- | Convert the given array to a stream by streaming the outer
--- dimension.
---
-toStream :: (Shape ix, Elt a)
-         => Acc (Array (ix:.Int) a)
-         -> Acc [Array ix a]
-toStream = Acc . ToStream
-
--- | Convert the given scalar stream to vector.
-fromStream :: (Elt a)
-         => Acc [Scalar a]
-         -> Acc (Vector a)
-fromStream = Acc . FromStream
-
--- | Fold a stream by combining all the elements with the given binary
--- array function.
-foldStream :: (Shape ix, Elt a)
-           => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
-           -> Acc (Array ix a)
-           -> Acc [Array ix a]
-           -> Acc (Array ix a)
-foldStream = Acc $$$ FoldStream
-
 -- | Apply the given binary function element-wise to the two arrays.  The extent of the resulting
 -- array is the intersection of the extents of the two source arrays.
 --
@@ -484,6 +453,45 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
         -> Acc (Array ix b)                   -- ^source array #2
         -> Acc (Array ix c)                   -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
+
+
+-- Stream operations
+-- ------------------
+
+-- Common stream types
+--
+
+-- | Apply the given array function element-wise to the given stream.
+--
+mapStream :: (Shape ix, Elt a, Shape ix', Elt b)
+          => (Acc (Array ix a) -> Acc (Array ix' b))
+          -> Acc [Array ix  a]   
+          -> Acc [Array ix' b]   
+mapStream = Acc $$ MapStream
+
+-- | Convert the given array to a stream by streaming the outer
+-- dimension.
+--
+toStream :: (Shape ix, Elt a)
+         => Acc (Array (ix:.Int) a)
+         -> Acc [Array  ix       a]
+toStream = Acc . ToStream
+
+-- | Convert the given scalar stream to vector.
+fromStream :: (Elt a)
+         => Acc [Scalar a]
+         -> Acc (Vector a)
+fromStream = Acc . FromStream
+
+-- | Fold a stream by combining all the elements with the given binary
+-- array function.
+foldStream :: (Shape ix, Elt a)
+           => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
+           -> Acc (Array ix a)
+           -> Acc [Array ix a]
+           -> Acc (Array ix a)
+foldStream = Acc $$$ FoldStream
+
 
 -- Foreign function calling
 -- ------------------------

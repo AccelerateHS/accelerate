@@ -54,10 +54,6 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Replicate _ ix acc)                  = combine "Replicate" [ travExp f c l  ix, travAcc f c l acc ]
     travAcc' (Slice _ acc ix)                      = combine "Slice" [ travAcc f c l acc, travExp f c l  ix ]
     travAcc' (Map fun acc)                         = combine "Map" [ travFun f c l fun, travAcc f c l acc ]
-    travAcc' (MapStream afun acc)                  = combine "MapStream" [ travAfun f c l afun, travAcc f c l acc ]
-    travAcc' (ToStream acc)                        = combine "ToStream" [ travAcc f c l acc ]
-    travAcc' (FromStream acc)                      = combine "FromStream" [ travAcc f c l acc ]
-    travAcc' (FoldStream fun acc1 acc2)            = combine "MapStream" [ travAfun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (ZipWith fun acc1 acc2)               = combine "ZipWith" [ travFun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (Fold fun e acc)                      = combine "Fold" [ travFun f c l fun, travExp f c l  e, travAcc f c l acc]
     travAcc' (Fold1 fun acc)                       = combine "Fold1" [ travFun f c l fun, travAcc f c l acc]
@@ -78,6 +74,10 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
+    travAcc' (MapStream afun acc)                  = combine "MapStream" [ travAfun f c l afun, travAcc f c l acc ]
+    travAcc' (ToStream acc)                        = combine "ToStream" [ travAcc f c l acc ]
+    travAcc' (FromStream acc)                      = combine "FromStream" [ travAcc f c l acc ]
+    travAcc' (FoldStream fun acc1 acc2)            = combine "MapStream" [ travAfun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

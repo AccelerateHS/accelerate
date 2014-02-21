@@ -319,30 +319,7 @@ data PreOpenAcc acc aenv a where
               => PreFun     acc aenv (e -> e')
               -> acc            aenv (Array sh e)
               -> PreOpenAcc acc aenv (Array sh e')
-                 
-  -- Apply the given the given function to all elements of the given stream.
-  MapStream   :: (Shape sh, Elt e, Shape sh', Elt e')
-              => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
-              -> acc             aenv [Array sh e]   
-              -> PreOpenAcc  acc aenv [Array sh' e']
 
-  -- Convert the given array to a stream.
-  ToStream :: (Shape sh, Elt e)
-         => acc            aenv (Array (sh:.Int) e)
-         -> PreOpenAcc acc aenv [Array sh e]
-            
-  -- Convert the given stream to an array.
-  FromStream :: (Elt e)
-           => acc            aenv [Array Z e]
-           -> PreOpenAcc acc aenv (Array (Z:.Int) e)
-              
-  -- Fold a stream by combining each element using the given binary function.
-  FoldStream :: (Shape sh, Elt e)
-             => PreOpenAfun    acc aenv (Array sh e -> Array sh e -> Array sh e)
-             -> acc                aenv (Array sh e)
-             -> acc                aenv [Array sh e]
-             -> PreOpenAcc     acc aenv (Array sh e)
-                
   -- Apply a given binary function pairwise to all elements of the given arrays.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
@@ -478,6 +455,29 @@ data PreOpenAcc acc aenv a where
               -> Boundary            (EltRepr e2)               -- boundary condition #2
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
+
+  -- Apply the given the given function to all elements of the given stream.
+  MapStream   :: (Shape sh, Elt e, Shape sh', Elt e')
+              => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
+              -> acc             aenv [Array sh e]   
+              -> PreOpenAcc  acc aenv [Array sh' e']
+
+  -- Convert the given array to a stream.
+  ToStream :: (Shape sh, Elt e)
+         => acc            aenv (Array (sh:.Int) e)
+         -> PreOpenAcc acc aenv [Array sh e]
+
+  -- Convert the given stream to an array.
+  FromStream :: (Elt e)
+           => acc            aenv [Array Z e]
+           -> PreOpenAcc acc aenv (Array (Z:.Int) e)
+
+  -- Fold a stream by combining each element using the given binary function.
+  FoldStream :: (Shape sh, Elt e)
+             => PreOpenAfun    acc aenv (Array sh e -> Array sh e -> Array sh e)
+             -> acc                aenv (Array sh e)
+             -> acc                aenv [Array sh e]
+             -> PreOpenAcc     acc aenv (Array sh e)
 
 
 -- Vanilla open array computations
@@ -977,10 +977,6 @@ showPreAccOp Reshape{}          = "Reshape"
 showPreAccOp Replicate{}        = "Replicate"
 showPreAccOp Slice{}            = "Slice"
 showPreAccOp Map{}              = "Map"
-showPreAccOp MapStream{}        = "MapStream"
-showPreAccOp FromStream{}       = "FromStream"
-showPreAccOp ToStream{}         = "ToStream"
-showPreAccOp FoldStream{}       = "FoldStream"
 showPreAccOp ZipWith{}          = "ZipWith"
 showPreAccOp Fold{}             = "Fold"
 showPreAccOp Fold1{}            = "Fold1"
@@ -996,6 +992,10 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
+showPreAccOp MapStream{}        = "MapStream"
+showPreAccOp ToStream{}         = "ToStream"
+showPreAccOp FromStream{}       = "FromStream"
+showPreAccOp FoldStream{}       = "FoldStream"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

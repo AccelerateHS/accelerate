@@ -38,7 +38,6 @@ delay arr = go (arrays arr) (fromArr arr)
     go (ArraysRpair r1 r2) (a1, a2) = DelayedRpair (go r1 a1) (go r2 a2)
     go (ArraysRstream r) as = DelayedRstream (map (go r) as)
 
-
 force :: forall a. Arrays a => Delayed a -> a
 force arr = toArr $ go (arrays (undefined::a)) arr
   where

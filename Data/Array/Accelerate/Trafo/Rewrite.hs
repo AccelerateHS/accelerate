@@ -75,10 +75,6 @@ convertSegments = cvtA
       Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
       Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
       Map f a                   -> Map (cvtF f) (cvtA a)
-      MapStream f a             -> MapStream (cvtAfun f) (cvtA a)
-      ToStream a                -> ToStream (cvtA a)
-      FromStream a              -> FromStream (cvtA a)
-      FoldStream f a1 a2        -> FoldStream (cvtAfun f) (cvtA a1) (cvtA a2)
       ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
       Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
       Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
@@ -92,6 +88,10 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+      MapStream f a             -> MapStream (cvtAfun f) (cvtA a)
+      ToStream a                -> ToStream (cvtA a)
+      FromStream a              -> FromStream (cvtA a)
+      FoldStream f a1 a2        -> FoldStream (cvtAfun f) (cvtA a1) (cvtA a2)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))

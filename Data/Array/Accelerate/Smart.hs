@@ -174,25 +174,6 @@ data PreAcc acc exp as where
                 => (Exp e -> exp e')
                 -> acc (Array sh e)
                 -> PreAcc acc exp (Array sh e')
-                   
-  MapStream     :: (Shape sh, Elt e, Shape sh', Elt e')
-                => (Acc (Array sh e) -> acc (Array sh' e'))
-                -> acc [Array sh e]   
-                -> PreAcc acc exp [Array sh' e']   
-
-  ToStream      :: (Shape sh, Elt e)
-                => acc (Array (sh:.Int) e)
-                -> PreAcc acc exp [Array sh e]   
-
-  FromStream    :: (Elt e)
-                => acc [Array Z e]   
-                -> PreAcc acc exp (Array (Z:.Int) e)
-
-  FoldStream    :: (Shape sh, Elt e)
-                => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
-                -> acc (Array sh e)
-                -> acc [Array sh e]
-                -> PreAcc acc exp (Array sh e)
 
   ZipWith       :: (Shape sh, Elt e1, Elt e2, Elt e3)
                 => (Exp e1 -> Exp e2 -> exp e3)
@@ -285,6 +266,25 @@ data PreAcc acc exp as where
                 -> Boundary b
                 -> acc (Array sh b)
                 -> PreAcc acc exp (Array sh c)
+
+  MapStream     :: (Shape sh, Elt e, Shape sh', Elt e')
+                => (Acc (Array sh e) -> acc (Array sh' e'))
+                -> acc [Array sh e]   
+                -> PreAcc acc exp [Array sh' e']   
+
+  ToStream      :: (Shape sh, Elt e)
+                => acc (Array (sh:.Int) e)
+                -> PreAcc acc exp [Array sh e]   
+
+  FromStream    :: (Elt e)
+                => acc [Array Z e]   
+                -> PreAcc acc exp (Array (Z:.Int) e)
+
+  FoldStream    :: (Shape sh, Elt e)
+                => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
+                -> acc (Array sh e)
+                -> acc [Array sh e]
+                -> PreAcc acc exp (Array sh e)
 
 -- |Array-valued collective computations
 --
@@ -1073,10 +1073,6 @@ showPreAccOp Reshape{}          = "Reshape"
 showPreAccOp Replicate{}        = "Replicate"
 showPreAccOp Slice{}            = "Slice"
 showPreAccOp Map{}              = "Map"
-showPreAccOp MapStream{}        = "MapStream"
-showPreAccOp ToStream{}         = "ToStream"
-showPreAccOp FromStream{}       = "FromStream"
-showPreAccOp FoldStream{}       = "FoldStream"
 showPreAccOp ZipWith{}          = "ZipWith"
 showPreAccOp Fold{}             = "Fold"
 showPreAccOp Fold1{}            = "Fold1"
@@ -1093,6 +1089,10 @@ showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp Aforeign{}         = "Aforeign"
+showPreAccOp MapStream{}        = "MapStream"
+showPreAccOp ToStream{}         = "ToStream"
+showPreAccOp FromStream{}       = "FromStream"
+showPreAccOp FoldStream{}       = "FoldStream"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

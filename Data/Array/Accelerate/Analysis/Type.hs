@@ -111,8 +111,6 @@ preAccType k pacc =
     Replicate _ _ acc   -> k acc
     Slice _ acc _       -> k acc
     Map _ _             -> eltType (undefined::e)
-    FromStream _        -> eltType (undefined::e)
-    FoldStream _ _ _    -> eltType (undefined::e)
     ZipWith _ _ _       -> eltType (undefined::e)
     Fold _ _ acc        -> k acc
     FoldSeg _ _ acc _   -> k acc
@@ -126,7 +124,8 @@ preAccType k pacc =
     Backpermute _ _ acc -> k acc
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
-
+    FromStream _        -> eltType (undefined::e)
+    FoldStream _ _ _    -> eltType (undefined::e)
 
 -- |Reify the result type of a scalar expression.
 --

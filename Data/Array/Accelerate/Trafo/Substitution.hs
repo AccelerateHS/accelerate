@@ -323,10 +323,6 @@ rebuildA rebuild v acc =
     Replicate sl slix a -> Replicate sl (rebuildEA rebuild v slix) (rebuild v a)
     Slice sl a slix     -> Slice sl (rebuild v a) (rebuildEA rebuild v slix)
     Map f a             -> Map (rebuildFA rebuild v f) (rebuild v a)
-    MapStream f a       -> MapStream (rebuildAfun rebuild v f) (rebuild v a)
-    FromStream a        -> FromStream (rebuild v a)
-    ToStream a          -> ToStream (rebuild v a)
-    FoldStream f a1 a2  -> FoldStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
     ZipWith f a1 a2     -> ZipWith (rebuildFA rebuild v f) (rebuild v a1) (rebuild v a2)
     Fold f z a          -> Fold (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
     Fold1 f a           -> Fold1 (rebuildFA rebuild v f) (rebuild v a)
@@ -343,7 +339,10 @@ rebuildA rebuild v acc =
     Stencil f b a       -> Stencil (rebuildFA rebuild v f) b (rebuild v a)
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
-
+    MapStream f a       -> MapStream (rebuildAfun rebuild v f) (rebuild v a)
+    FromStream a        -> FromStream (rebuild v a)
+    ToStream a          -> ToStream (rebuild v a)
+    FoldStream f a1 a2  -> FoldStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
 
 -- Rebuilding array computations
 --

@@ -173,10 +173,6 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Replicate sl slix a       -> Replicate sl (shrinkE slix) (shrinkAcc a)
       Slice sl a slix           -> Slice sl (shrinkAcc a) (shrinkE slix)
       Map f a                   -> Map (shrinkF f) (shrinkAcc a)
-      MapStream f a             -> MapStream (shrinkAF f) (shrinkAcc a)
-      ToStream a                -> ToStream (shrinkAcc a)
-      FromStream a              -> FromStream (shrinkAcc a)
-      FoldStream f a1 a2        -> FoldStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
       ZipWith f a1 a2           -> ZipWith (shrinkF f) (shrinkAcc a1) (shrinkAcc a2)
       Fold f z a                -> Fold (shrinkF f) (shrinkE z) (shrinkAcc a)
       Fold1 f a                 -> Fold1 (shrinkF f) (shrinkAcc a)
@@ -192,6 +188,10 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
+      MapStream f a             -> MapStream (shrinkAF f) (shrinkAcc a)
+      ToStream a                -> ToStream (shrinkAcc a)
+      FromStream a              -> FromStream (shrinkAcc a)
+      FoldStream f a1 a2        -> FoldStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -347,10 +347,6 @@ usesOfPreAcc withShape countAcc idx = countP
       Replicate _ sh a          -> countE sh + countA a
       Slice _ a sl              -> countE sl + countA a
       Map f a                   -> countF f  + countA a
-      MapStream _ a             -> countA a
-      ToStream a                -> countA a
-      FromStream a              -> countA a
-      FoldStream _ a1 a2        -> countA a1 + countA a2
       ZipWith f a1 a2           -> countF f  + countA a1 + countA a2
       Fold f z a                -> countF f  + countE z  + countA a
       Fold1 f a                 -> countF f  + countA a
@@ -366,7 +362,11 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-
+      MapStream _ a             -> countA a
+      ToStream a                -> countA a
+      FromStream a              -> countA a
+      FoldStream _ a1 a2        -> countA a1 + countA a2
+      
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
 
