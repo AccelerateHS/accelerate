@@ -117,9 +117,6 @@ Executable accelerate-nofib
     build-depends:      accelerate-cuda                 == 0.15.*
     other-modules:      Test.Foreign
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl               == 0.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -169,9 +166,6 @@ Executable accelerate-smvm
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -215,9 +209,6 @@ Executable accelerate-crystal
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -252,9 +243,6 @@ Executable accelerate-canny
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -295,9 +283,6 @@ Executable accelerate-mandelbrot
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
