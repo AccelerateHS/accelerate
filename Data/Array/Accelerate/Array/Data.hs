@@ -1,10 +1,12 @@
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
@@ -45,6 +47,7 @@ import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
 import Data.Functor       ((<$>))
+import Data.Typeable      (Typeable)
 import Control.Monad
 import Control.Monad.ST
 import qualified Data.Array.IArray  as IArray
@@ -110,6 +113,8 @@ data instance GArrayData ba CSChar  = AD_CSChar  (ba Int8)
 data instance GArrayData ba CUChar  = AD_CUChar  (ba Word8)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
                                               (GArrayData ba b)
+
+deriving instance Typeable GArrayData
 
 
 -- | GADT to reify the 'ArrayElt' class.
