@@ -106,15 +106,14 @@ Executable accelerate-nofib
                         -fpedantic-bottoms
                         -fno-full-laziness
                         -fno-excess-precision
+                        -eventlog
+                        -rtsopts
 
   ghc-prof-options:     -auto-all
 
   extra-libraries:      stdc++
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
                         examples/nofib/Test/Spectral/BlackScholes.cpp
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
@@ -160,11 +159,8 @@ Executable accelerate-smvm
                         MatrixMarket
                         SMVM
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -206,11 +202,8 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Monitoring
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -246,11 +239,15 @@ Executable accelerate-canny
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Canny Wildfire Monitoring
 
-  ghc-options:          -Wall -threaded -Odph -fllvm -optlo-O3
-  ghc-prof-options:     -auto-all
+  ghc-options:          -Wall
+                        -threaded
+                        -Odph
+                        -fllvm
+                        -optlo-O3
+                        -eventlog
+                        -rtsopts
 
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-prof-options:     -auto-all
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
@@ -286,11 +283,8 @@ Executable accelerate-mandelbrot
   Main-is:              Main.hs
   other-modules:        Config World Mandel ParseArgs Monitoring
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -333,11 +327,8 @@ Executable accelerate-fluid
                         Type
                         World
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -389,11 +380,8 @@ Executable accelerate-nbody
                         Solver.Naive1
                         Solver.Naive2
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     cpp-options:        -DACCELERATE_ENABLE_GUI
@@ -436,11 +424,8 @@ Executable accelerate-smoothlife
                         Random.Array
                         Random.Splat
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     cpp-options:        -DACCELERATE_ENABLE_GUI
@@ -483,11 +468,8 @@ Executable accelerate-hashcat
                         MD5
                         Util
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
@@ -525,9 +507,8 @@ Executable accelerate-fft
                         HighPass
                         FFT
 
-  ghc-options:          -O2 -Wall -threaded
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
+  ghc-prof-options:     -auto-all
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
@@ -633,11 +614,8 @@ Executable accelerate-ray
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
 
-  ghc-options:
-        -Wall -O2 -threaded
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
+  ghc-prof-options:     -auto-all
 
 
 source-repository head
