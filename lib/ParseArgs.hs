@@ -24,6 +24,9 @@ import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
+#ifdef ACCELERATE_LLVM_BACKEND
+import qualified Data.Array.Accelerate.LLVM.Native      as LLVM
+#endif
 
 
 -- | Execute Accelerate expressions
@@ -33,12 +36,18 @@ run Interpreter = Interp.run
 #ifdef ACCELERATE_CUDA_BACKEND
 run CUDA        = CUDA.run
 #endif
+#ifdef ACCELERATE_LLVM_BACKEND
+run LLVM        = LLVM.run
+#endif
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
 run1 Interpreter f = Interp.run1 f
 #ifdef ACCELERATE_CUDA_BACKEND
 run1 CUDA        f = CUDA.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_BACKEND
+run1 LLVM        f = LLVM.run1 f
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -53,6 +62,9 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
+#ifdef ACCELERATE_LLVM_BACKEND
+             | LLVM
+#endif
   deriving (Eq, Bounded, Show)
 
 availableBackends :: (f :-> Backend) -> [OptDescr (f -> f)]
@@ -65,6 +77,11 @@ availableBackends backend =
   , Option  [] ["cuda"]
             (NoArg (set backend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_LLVM_BACKEND
+  , Option  [] ["llvm"]
+            (NoArg (set backend LLVM))
+            "implementation based on LLVM (parallel)"
 #endif
   ]
 

@@ -44,6 +44,10 @@ Flag opencl
   Description:          Enable the OpenCL parallel backend
   Default:              False
 
+Flag llvm
+  Description:          Enable the LLVM parallel CPU and GPU backend
+  Default:              True
+
 
 -- Flags to specify which programs to build (all true by default)
 --
@@ -117,6 +121,9 @@ Executable accelerate-nofib
     build-depends:      accelerate-cuda                 == 0.15.*
     other-modules:      Test.Foreign
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm                 == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -166,6 +173,9 @@ Executable accelerate-smvm
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -209,6 +219,9 @@ Executable accelerate-crystal
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -243,6 +256,9 @@ Executable accelerate-canny
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -283,6 +299,9 @@ Executable accelerate-mandelbrot
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -326,6 +345,10 @@ Executable accelerate-fluid
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -379,6 +402,10 @@ Executable accelerate-nbody
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
+
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
     build-depends:      ekg                     >= 0.3
@@ -422,6 +449,10 @@ Executable accelerate-smoothlife
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
+
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
     build-depends:      ekg                     >= 0.3
@@ -462,6 +493,10 @@ Executable accelerate-hashcat
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
+
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
     build-depends:      ekg                     >= 0.3
@@ -498,6 +533,10 @@ Executable accelerate-fft
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
+
   if !flag(fft)
     buildable:          False
   else
@@ -529,6 +568,10 @@ Executable accelerate-pagerank
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if !flag(pagerank)
     buildable:          False
@@ -577,6 +620,10 @@ Executable accelerate-ray
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 >= 0.15
+
+  if flag(llvm)
+    CPP-options:        -DACCELERATE_LLVM_BACKEND
+    build-depends:      accelerate-llvm         == 0.15.*
 
   if flag(ekg)
     cpp-options:        -DACCELERATE_ENABLE_EKG
