@@ -146,11 +146,14 @@ convertFun2 fun
 -- Pretty printing
 -- ---------------
 
+-- [RRN] Turn fusion off for default printing: 
+showCfg = phases { enableAccFusion = False }
+
 instance Arrays arrs => Show (Acc arrs) where
-  show = show . convertAcc
+  show = show . convertAccWith showCfg
 
 instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
-  show = show . convertAccFun1
+  show = show . convertAccFun1With showCfg
 
 instance Elt e => Show (Exp e) where
   show = show . convertExp
