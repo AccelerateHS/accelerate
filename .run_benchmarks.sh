@@ -27,10 +27,13 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/nbody/fission1  \
    $TOP/array-dsl-benchmarks/accelerate/nbody/spmd1  \
    $TOP/array-dsl-benchmarks/accelerate/nbody/spmd2  \
-   $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
-   $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
-   $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
   "
+
+# Disabling:  This first scale_flops benchmark didn't do the trick:
+   # $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
+   # $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
+   # $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
+
 
 # $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda
 
