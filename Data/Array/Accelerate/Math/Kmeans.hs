@@ -2,8 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Math.Kmeans
--- Copyright   :
--- License     :
+-- Copyright   : [2013] Trevor L. McDonell, Vinod Grover, Sean Lee
+-- License     : BSD3
 --
 -- Maintainer  : Trevor L. McDonell <tmcdonell@nvidia.com>
 -- Stability   : experimental

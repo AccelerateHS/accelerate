@@ -1,15 +1,13 @@
 name:                   accelerate-kmeans
 version:                0.1.0.0
 synopsis:               An implementation of k-means clustering in Accelerate
--- description:
--- license:
--- license-file:
+description:            An implementation of k-means clustering in Accelerate
+license:                BSD3
+license-file:           LICENSE
 author:                 Trevor L. McDonell
-maintainer:             tmcdonell@nvidia.com
--- copyright:
+maintainer:             Trevor L. McDonell <tmcdonell@nvidia.com>
 category:               Math
 build-type:             Simple
--- extra-source-files:
 cabal-version:          >=1.10
 
 library
