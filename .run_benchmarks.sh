@@ -25,6 +25,8 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/nbody/cilk  \
    $TOP/array-dsl-benchmarks/accelerate/nbody/cuda  \
    $TOP/array-dsl-benchmarks/accelerate/nbody/fission1  \
+   $TOP/array-dsl-benchmarks/accelerate/nbody/spmd1  \
+   $TOP/array-dsl-benchmarks/accelerate/nbody/spmd2  \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
