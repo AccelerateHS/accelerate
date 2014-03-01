@@ -73,7 +73,7 @@ SEC=2a2H57dBggubW1_rqglC7jtK
 # https://www.google.com/fusiontables/DataSource?docid=1E17ssTkVafPYjzPjO9m1uOqlq8Cz2T9D48PQo7s
 TABLENAME=Array-DSL-bench-results
 
-TRIALS=7
+TRIALS=1
 
 cd $TOP/array-dsl-benchmarks/
 
