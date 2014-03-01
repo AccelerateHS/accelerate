@@ -30,6 +30,9 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops2/seq_c \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cilk \
+   $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cuda \
   "
 
 # $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda
