@@ -28,6 +28,12 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/nbody/spmd1  \
    $TOP/array-dsl-benchmarks/accelerate/nbody/spmd2  \
    $TOP/array-dsl-benchmarks/accelerate/nbody_temp/cpugpu \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/seq_c \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/cilk  \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/cuda  \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/fission1  \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/spmd1  \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes/spmd2  \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
