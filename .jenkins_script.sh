@@ -16,6 +16,8 @@ CBLARGS="--disable-library-profiling  --disable-documentation $*"
 cabal --version
 cabal sandbox init
 
+cabal sandbox hc-pkg list
+
 TOP=`pwd`
 for dir in $PKGS; do
   cd $dir
@@ -27,7 +29,7 @@ done
 # Begin installation
 
 # First, let's make sure everything installs:
-cabal install $CBLARGS $PKGS --force-reinstalls -j
+cabal install $CBLARGS $PKGS --force-reinstalls -j 
 cabal install $CBLARGS $PKGS --only-dependencies --enable-tests -j
 
 #------------------------------------------------------------
