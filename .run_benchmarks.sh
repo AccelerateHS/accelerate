@@ -34,6 +34,7 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/blackscholes/fission1  \
    $TOP/array-dsl-benchmarks/accelerate/blackscholes/spmd1  \
    $TOP/array-dsl-benchmarks/accelerate/blackscholes/spmd2  \
+   $TOP/array-dsl-benchmarks/accelerate/blackscholes_temp/cpugpu \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/seq_c \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops/cuda \
@@ -41,6 +42,14 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cuda \
   "
+
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/seq_c \
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/cilk  \
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/cuda  \
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/fission1  \
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/spmd1  \
+   # $TOP/array-dsl-benchmarks/accelerate/smvm/spmd2  \
+
 
 #   $TOP/array-dsl-benchmarks/accelerate/nbody_temp/2gpu \
 
