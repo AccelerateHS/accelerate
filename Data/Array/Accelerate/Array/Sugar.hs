@@ -663,7 +663,10 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 {-# RULES
 
 "fromElt/toElt" forall e.
-  fromElt (toElt e) = e #-}
+  fromElt (toElt e) = e
+
+"toElt/fromElt" forall e.
+  toElt (fromElt e) = e #-}
 
 
 -- Foreign functions
@@ -821,6 +824,14 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   toArr'   (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
   fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
+
+{-# RULES
+
+"fromArr/toArr" forall a.
+  fromArr (toArr a) = a
+
+"toArr/fromArr" forall a.
+  toArr (fromArr a) = a #-}
 
 
 -- |Multi-dimensional arrays for array processing.
