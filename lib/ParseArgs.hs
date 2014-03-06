@@ -10,7 +10,6 @@ module ParseArgs (
 
 ) where
 
-import Data.Char
 import Data.List
 import Data.Label
 import System.Exit
@@ -25,7 +24,8 @@ import qualified Data.Array.Accelerate.Interpreter      as Interp
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
 #ifdef ACCELERATE_LLVM_BACKEND
-import qualified Data.Array.Accelerate.LLVM.Native      as LLVM
+import qualified Data.Array.Accelerate.LLVM.Native      as Native
+import qualified Data.Array.Accelerate.LLVM.NVVM        as NVVM
 #endif
 
 
@@ -37,7 +37,8 @@ run Interpreter = Interp.run
 run CUDA        = CUDA.run
 #endif
 #ifdef ACCELERATE_LLVM_BACKEND
-run LLVM        = LLVM.run
+run LLVM        = Native.run
+run NVVM        = NVVM.run
 #endif
 
 
@@ -47,7 +48,8 @@ run1 Interpreter f = Interp.run1 f
 run1 CUDA        f = CUDA.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_BACKEND
-run1 LLVM        f = LLVM.run1 f
+run1 LLVM        f = Native.run1 f
+run1 NVVM        f = NVVM.run1 f
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -64,24 +66,41 @@ data Backend = Interpreter
 #endif
 #ifdef ACCELERATE_LLVM_BACKEND
              | LLVM
+             | NVVM
 #endif
-  deriving (Eq, Bounded, Show)
+  deriving (Eq, Bounded)
+
+
+instance Show Backend where
+  show Interpreter      = "interpreter"
+#ifdef ACCELERATE_CUDA_BACKEND
+  show CUDA             = "cuda"
+#endif
+#ifdef ACCELERATE_LLVM_BACKEND
+  show LLVM             = "llvm-cpu"
+  show NVVM             = "llvm-gpu"
+#endif
+
 
 availableBackends :: (f :-> Backend) -> [OptDescr (f -> f)]
 availableBackends backend =
-  [ Option  [] ["interpreter"]
+  [ Option  [] [show Interpreter]
             (NoArg (set backend Interpreter))
             "reference implementation (sequential)"
 
 #ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] ["cuda"]
+  , Option  [] [show CUDA]
             (NoArg (set backend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_BACKEND
-  , Option  [] ["llvm"]
+  , Option  [] [show LLVM]
             (NoArg (set backend LLVM))
-            "implementation based on LLVM (parallel)"
+            "LLVM based implementation for multicore CPUs (parallel)"
+
+  , Option  [] [show NVVM]
+            (NoArg (set backend NVVM))
+            "LLVM based implementation for NVIDIA GPUs (parallel)"
 #endif
   ]
 
@@ -99,7 +118,7 @@ withBackends backend xs = availableBackends backend ++ xs
 fancyHeader :: (config :-> Backend) -> config -> [String] -> [String] -> String
 fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
   where
-    active this         = if this == map toLower (show (get backend opts)) then "*" else ""
+    active this         = if this == show (get backend opts) then "*" else ""
     (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract (availableBackends backend)
     table               = zipWith3 paste (sameLen ss) (sameLen bs) ds
     paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
