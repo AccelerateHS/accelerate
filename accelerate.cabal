@@ -232,6 +232,7 @@ Library
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Debug
+                        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
@@ -241,7 +242,6 @@ Library
                         Data.Array.Accelerate.Type
 
   Other-modules:        Data.Array.Accelerate.Array.Delayed
-                        Data.Array.Accelerate.Internal.Check
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print

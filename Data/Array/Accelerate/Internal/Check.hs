@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Internal.Check
 -- Copyright   : [2009..2011] Roman Lechinskiy, Trevor L. McDonell
