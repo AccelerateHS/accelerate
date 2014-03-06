@@ -73,13 +73,11 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Tuple              hiding ( Tuple )
+import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.AST                hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
-import qualified Data.Array.Accelerate.Tuple    as Tuple
-
 
 -- Array computations
 -- ------------------
@@ -127,11 +125,11 @@ data PreAcc acc exp as where
                 -> acc arrs
                 -> PreAcc acc exp arrs
 
-  Atuple        :: (Arrays arrs, IsTuple arrs)
-                => Tuple.Atuple acc (TupleRepr arrs)
+  Atuple        :: (Arrays arrs, IsAtuple arrs)
+                => Atuple acc (TupleRepr arrs)
                 -> PreAcc acc exp arrs
 
-  Aprj          :: (Arrays arrs, IsTuple arrs, Arrays a)
+  Aprj          :: (Arrays arrs, IsAtuple arrs, Arrays a)
                 => TupleIdx (TupleRepr arrs) a
                 ->        acc     arrs
                 -> PreAcc acc exp a
@@ -298,7 +296,7 @@ data PreExp acc exp t where
                 -> PreExp acc exp t
 
   Tuple         :: (Elt t, IsTuple t)
-                => Tuple.Tuple exp (TupleRepr t)
+                => Tuple exp (TupleRepr t)
                 -> PreExp acc exp t
 
   Prj           :: (Elt t, IsTuple t, Elt e)

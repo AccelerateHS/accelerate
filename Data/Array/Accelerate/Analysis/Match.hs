@@ -51,8 +51,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
-import qualified Data.Array.Accelerate.Tuple            as Tuple
+import Data.Array.Accelerate.Tuple
 
 
 -- Witness equality between types. A value of a :=: b is a proof that types a
@@ -550,8 +549,8 @@ matchTupleIdx _              _              = Nothing
 matchTuple
     :: MatchAcc acc
     -> HashAcc  acc
-    -> Tuple.Tuple (PreOpenExp acc env aenv) s
-    -> Tuple.Tuple (PreOpenExp acc env aenv) t
+    -> Tuple (PreOpenExp acc env aenv) s
+    -> Tuple (PreOpenExp acc env aenv) t
     -> Maybe (s :=: t)
 matchTuple _ _ NilTup          NilTup           = Just REFL
 matchTuple m h (SnocTup t1 e1) (SnocTup t2 e2)
@@ -921,7 +920,7 @@ hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
 
-hashAtuple :: HashAcc acc -> Tuple.Atuple (acc env aenv) a -> Int
+hashAtuple :: HashAcc acc -> Atuple (acc env aenv) a -> Int
 hashAtuple _ NilAtup            = hash "NilAtup"
 hashAtuple h (SnocAtup t a)     = hash "SnocAtup"       `hashWithSalt` hashAtuple h t `hashWithSalt` h a
 
@@ -982,7 +981,7 @@ hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int
 hashPreOpenFun h (Body e)       = hash "Body"           `hashWithSalt` hashPreOpenExp h e
 hashPreOpenFun h (Lam f)        = hash "Lam"            `hashWithSalt` hashPreOpenFun h f
 
-hashTuple :: HashAcc acc -> Tuple.Tuple (PreOpenExp acc env aenv) e -> Int
+hashTuple :: HashAcc acc -> Tuple (PreOpenExp acc env aenv) e -> Int
 hashTuple _ NilTup              = hash "NilTup"
 hashTuple h (SnocTup t e)       = hash "SnocTup"        `hashWithSalt` hashTuple h t `hashWithSalt` hashPreOpenExp h e
 

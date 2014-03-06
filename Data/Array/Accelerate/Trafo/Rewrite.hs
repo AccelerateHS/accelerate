@@ -16,7 +16,6 @@ module Data.Array.Accelerate.Trafo.Rewrite
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt )
 

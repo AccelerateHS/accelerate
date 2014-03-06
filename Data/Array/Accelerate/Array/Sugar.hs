@@ -9,6 +9,11 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ImpredicativeTypes  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -26,7 +31,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Segments,
-  Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
+  Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr, EltRepr',
@@ -43,6 +48,9 @@ module Data.Array.Accelerate.Array.Sugar (
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
+  -- * Tuples
+  Tuple(..), Atuple(..), IsTuple, IsAtuple,
+
   -- * Miscellaneous
   showShape, Foreign(..)
 
@@ -56,6 +64,7 @@ import qualified Data.Array.IArray                              as IArray
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Tuple
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
@@ -202,6 +211,9 @@ type instance EltRepr' (a, b, c, d, e, f, g) = (EltRepr (a, b, c, d, e, f), EltR
 type instance EltRepr' (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr' h)
 type instance EltRepr' (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
+
+-- Scalar tuples
+type IsTuple = IsConstrainedTuple Elt
 
 
 -- Array elements (tuples of scalars)
@@ -711,6 +723,8 @@ type instance ArrRepr' (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrR
 type instance ArrRepr' (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
 type instance ArrRepr' (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
 
+type IsAtuple = IsConstrainedTuple Arrays
+
 -- Array type reification
 --
 data ArraysR arrs where
@@ -718,9 +732,14 @@ data ArraysR arrs where
   ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
-class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
+data ArraysFlavour arrs where
+  ArraysFarray :: (Shape sh, Elt e) => ArraysFlavour (Array sh e)
+  ArraysFtuple :: IsAtuple arrs     => ArraysFlavour arrs
+
+class ( Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
   arrays'  :: a {- dummy -} -> ArraysR (ArrRepr' a)
+  flavour  :: a {- dummy -} -> ArraysFlavour a
   --
   toArr    :: ArrRepr  a -> a
   toArr'   :: ArrRepr' a -> a
@@ -731,6 +750,7 @@ class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a wher
 instance Arrays () where
   arrays  _ = ArraysRunit
   arrays' _ = ArraysRunit
+  flavour _ = ArraysFtuple
   --
   toArr     = id
   toArr'    = id
@@ -740,6 +760,7 @@ instance Arrays () where
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  _       = ArraysRpair ArraysRunit ArraysRarray
   arrays' _       = ArraysRarray
+  flavour _       = ArraysFarray
   --
   toArr ((), arr) = arr
   toArr'          = id
@@ -749,7 +770,8 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
 instance (Arrays b, Arrays a) => Arrays (b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
-  --
+  flavour _ = ArraysFtuple
+
   toArr    (b, a) = (toArr b, toArr' a)
   toArr'   (b, a) = (toArr b, toArr' a)
   fromArr  (b, a) = (fromArr b, fromArr' a)
@@ -758,6 +780,7 @@ instance (Arrays b, Arrays a) => Arrays (b, a) where
 instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
   toArr'   (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
@@ -767,6 +790,7 @@ instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
 instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
   toArr'   (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
@@ -776,6 +800,7 @@ instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
 instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
   toArr'   (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
@@ -786,6 +811,7 @@ instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
   toArr'   (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
@@ -796,6 +822,7 @@ instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
   toArr'   (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
@@ -806,6 +833,7 @@ instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, 
   => Arrays (h, g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
   toArr'   (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
@@ -816,11 +844,31 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   => Arrays (i, h, g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
   toArr'   (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
   fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
+
+
+-- Tuple representation
+-- --------------------
+
+-- |We represent tuples as heterogenous lists, typed by a type list.
+--
+data Tuple c t where
+  NilTup  ::                              Tuple c ()
+  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
+
+-- TLM: It is irritating that we need a separate data type for tuples of scalars
+--   vs. arrays, purely to carry the class constraint.
+--
+-- | Tuples of Arrays.  Note that this carries the `Arrays` class
+--   constraint rather than `Elt` in the case of tuples of scalars.
+data Atuple c t where
+  NilAtup  ::                                  Atuple c ()
+  SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
 
 
 -- |Multi-dimensional arrays for array processing.

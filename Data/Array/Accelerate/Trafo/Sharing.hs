@@ -46,12 +46,10 @@ import System.Mem.StableName
 -- friends
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
-import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import Data.Array.Accelerate.AST                        hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
-import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Debug            as Debug
 
 #include "accelerate.h"
@@ -336,11 +334,11 @@ convertScopedAtuple
     -> Layout aenv aenv
     -> [StableSharingExp]
     -> [StableSharingAcc]
-    -> Tuple.Atuple ScopedAcc a
-    -> Tuple.Atuple (AST.OpenAcc env aenv) a
+    -> Atuple ScopedAcc a
+    -> Atuple (AST.OpenAcc env aenv) a
 convertScopedAtuple config lyt alyt env aenv = cvt
   where
-    cvt :: Tuple.Atuple ScopedAcc a' -> Tuple.Atuple (AST.OpenAcc env aenv) a'
+    cvt :: Atuple ScopedAcc a' -> Atuple (AST.OpenAcc env aenv) a'
     cvt NilAtup         = NilAtup
     cvt (SnocAtup t a)  = cvt t `SnocAtup` convertScopedAcc config lyt alyt env aenv a
 
@@ -518,7 +516,7 @@ convertSharingExp config lyt alyt env aenv exp = cvt exp
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc env aenv a
     cvtA = convertScopedAcc config lyt alyt env aenv
 
-    cvtT :: Tuple.Tuple ScopedExp tup -> Tuple.Tuple (AST.OpenExp env aenv) tup
+    cvtT :: Tuple ScopedExp tup -> Tuple (AST.OpenExp env aenv) tup
     cvtT = convertScopedTuple config lyt alyt env aenv
 
     cvtFun1 :: (Elt a, Elt b) => (Exp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
@@ -544,8 +542,8 @@ convertScopedTuple
     -> Layout aenv aenv
     -> [StableSharingExp]                 -- currently bound scalar sharing-variables
     -> [StableSharingAcc]                 -- currently bound array sharing-variables
-    -> Tuple.Tuple ScopedExp t
-    -> Tuple.Tuple (AST.OpenExp env aenv) t
+    -> Tuple ScopedExp t
+    -> Tuple (AST.OpenExp env aenv) t
 convertScopedTuple config lyt alyt env aenv tup =
   case tup of
     NilTup      -> NilTup
@@ -1157,8 +1155,8 @@ makeOccMapSharingAcc config accOccMap expOccMap = traverseAcc
               (acc2', h3) <- traverseAcc lvl acc2
               return (c fun' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
-        travAtup :: Tuple.Atuple Acc a
-                 -> IO (Tuple.Atuple UnscopedAcc a, Int)
+        travAtup :: Atuple Acc a
+                 -> IO (Atuple UnscopedAcc a, Int)
         travAtup NilAtup          = return (NilAtup, 1)
         travAtup (SnocAtup tup a) = do
           (tup', h1) <- travAtup tup
@@ -1384,7 +1382,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e'  , h2) <- travE lvl e
               return (c acc' e', h1 `max` h2 + 1)
 
-        travTup :: Tuple.Tuple Exp tup -> IO (Tuple.Tuple UnscopedExp tup, Int)
+        travTup :: Tuple Exp tup -> IO (Tuple UnscopedExp tup, Int)
         travTup NilTup          = return (NilTup, 1)
         travTup (SnocTup tup e) = do
                                     (tup', h1) <- travTup tup
@@ -1774,8 +1772,8 @@ determineScopesSharingAcc config accOccMap expOccMap = scopesAcc
             (acc1', accCount2) = scopesAcc  acc1
             (acc2', accCount3) = scopesAcc  acc2
 
-        travAtup ::  Tuple.Atuple UnscopedAcc a
-                 -> (Tuple.Atuple ScopedAcc a, NodeCounts)
+        travAtup ::  Atuple UnscopedAcc a
+                 -> (Atuple ScopedAcc a, NodeCounts)
         travAtup NilAtup          = (NilAtup, noNodeCounts)
         travAtup (SnocAtup tup a) = let (tup', accCountT) = travAtup tup
                                         (a',   accCountA) = scopesAcc a
@@ -2011,7 +2009,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Intersect sh1 sh2     -> travE2 Intersect sh1 sh2
           Foreign ff f e        -> travE1 (Foreign ff f) e
       where
-        travTup :: Tuple.Tuple UnscopedExp tup -> (Tuple.Tuple ScopedExp tup, NodeCounts)
+        travTup :: Tuple UnscopedExp tup -> (Tuple ScopedExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)
         travTup (SnocTup tup e) = let
                                     (tup', accCountT) = travTup tup

@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Substitution
@@ -45,8 +46,7 @@ import Control.Applicative                      hiding ( Const )
 import Data.Functor.Identity
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays )
+import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple(..) )
 
 import qualified Data.Array.Accelerate.Debug    as Stats
 
@@ -130,13 +130,13 @@ class Rebuildable f where
   strengthenA :: aenv :?> aenv' -> f env aenv t -> Maybe (f env  aenv' t)
   strengthenA k = Stats.substitution "strengthenA" . rebuild (Just . Var) (liftA Avar . k)
 
-  -- | Replace the first variable with the given expression. The environment
+  -- | Replace all occurences of the first variable with the given expression. The environment
   -- shrinks.
   --
   inlineE :: f (env,s) aenv t -> PreOpenExp (AccClo f) env aenv s -> f env aenv t
   inlineE f g = Stats.substitution "inlineE" $ rebuildPure (subTop g) Avar f
 
-  -- | Replace the first variable with the given array expression. The environment
+  -- | Replace all occurences of the first variable with the given array expression. The environment
   -- shrinks.
   --
   inlineA :: f env (aenv,s) t -> PreOpenAcc (AccClo f) env aenv s -> f env aenv t
@@ -144,11 +144,7 @@ class Rebuildable f where
 
 -- Terms that are rebuildable and also recursive closures
 --
--- RCE: Perhaps this should just be replaced with a constraint kind?
---
-class (Rebuildable acc, AccClo acc ~ acc) => RebuildableAcc acc where
-
-instance (Rebuildable acc, AccClo acc ~ acc) => RebuildableAcc acc
+type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
 
 -- We can use the same plumbing to rebuild all the things we want to rebuild.
 --

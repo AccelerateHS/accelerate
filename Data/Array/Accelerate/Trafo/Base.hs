@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE DefaultSignatures    #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -24,7 +25,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn, kmap, compose, subApply,
+  avarIn, kmap, fromOpenAfun, compose, subApply,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -64,6 +65,7 @@ import qualified Data.Array.Accelerate.Debug    as Stats
 class RebuildableAcc acc => Kit acc where
   inject        :: PreOpenAcc acc env aenv a -> acc env aenv a
   extract       :: acc env aenv a -> PreOpenAcc acc env aenv a
+  fromOpenAcc   :: OpenAcc env aenv a -> acc env aenv a
   --
   matchAcc      :: MatchAcc acc
   hashAcc       :: HashAcc acc
@@ -72,6 +74,7 @@ class RebuildableAcc acc => Kit acc where
 instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
+  fromOpenAcc            = id
 
   matchAcc      = matchOpenAcc
   hashAcc       = hashOpenAcc
@@ -82,6 +85,10 @@ avarIn = inject  . Avar
 
 kmap :: Kit acc => (PreOpenAcc acc env aenv a -> PreOpenAcc acc env aenv b) -> acc env aenv a -> acc env aenv b
 kmap f = inject . f . extract
+
+fromOpenAfun :: Kit acc => OpenAfun env aenv f -> PreOpenAfun acc env aenv f
+fromOpenAfun (Abody b) = Abody (fromOpenAcc b)
+fromOpenAfun (Alam  f) = Alam (fromOpenAfun f)
 
 infixr `compose`
 
@@ -157,6 +164,7 @@ instance Rebuildable DelayedOpenAcc where
 instance Kit DelayedOpenAcc where
   inject        = Manifest
   extract       = error "DelayedAcc.extract"
+  fromOpenAcc   = error "DelayedAcc.fromOpenAcc"
   --
   matchAcc      = matchDelayed
   hashAcc       = hashDelayed
