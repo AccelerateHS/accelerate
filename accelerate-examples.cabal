@@ -122,7 +122,8 @@ Executable accelerate-nofib
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm                 == 0.15.*
+    build-depends:      accelerate-llvm-native          == 0.15.*,
+                        accelerate-llvm-nvvm            == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -171,7 +172,8 @@ Executable accelerate-smvm
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -214,7 +216,8 @@ Executable accelerate-crystal
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -255,7 +258,8 @@ Executable accelerate-canny
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -295,7 +299,8 @@ Executable accelerate-mandelbrot
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -339,7 +344,8 @@ Executable accelerate-fluid
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -392,7 +398,8 @@ Executable accelerate-nbody
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -436,7 +443,8 @@ Executable accelerate-smoothlife
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -477,7 +485,8 @@ Executable accelerate-hashcat
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -516,7 +525,8 @@ Executable accelerate-fft
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if !flag(fft)
     buildable:          False
@@ -552,7 +562,8 @@ Executable accelerate-pagerank
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if !flag(pagerank)
     buildable:          False
@@ -604,7 +615,8 @@ Executable accelerate-ray
 
   if flag(llvm)
     CPP-options:        -DACCELERATE_LLVM_BACKEND
-    build-depends:      accelerate-llvm         == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm-nvvm    == 0.15.*
 
   if flag(ekg)
     cpp-options:        -DACCELERATE_ENABLE_EKG
