@@ -23,8 +23,10 @@ import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 import qualified Data.Array.Accelerate.LLVM.Native      as Native
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
 import qualified Data.Array.Accelerate.LLVM.NVVM        as NVVM
 #endif
 
@@ -36,8 +38,10 @@ run Interpreter = Interp.run
 #ifdef ACCELERATE_CUDA_BACKEND
 run CUDA        = CUDA.run
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run LLVM        = Native.run
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
 run NVVM        = NVVM.run
 #endif
 
@@ -47,8 +51,10 @@ run1 Interpreter f = Interp.run1 f
 #ifdef ACCELERATE_CUDA_BACKEND
 run1 CUDA        f = CUDA.run1 f
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run1 LLVM        f = Native.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
 run1 NVVM        f = NVVM.run1 f
 #endif
 
@@ -64,8 +70,10 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
              | LLVM
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
              | NVVM
 #endif
   deriving (Eq, Bounded)
@@ -76,8 +84,10 @@ instance Show Backend where
 #ifdef ACCELERATE_CUDA_BACKEND
   show CUDA             = "cuda"
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   show LLVM             = "llvm-cpu"
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
   show NVVM             = "llvm-gpu"
 #endif
 
@@ -93,11 +103,12 @@ availableBackends backend =
             (NoArg (set backend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
 #endif
-#ifdef ACCELERATE_LLVM_BACKEND
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show LLVM]
             (NoArg (set backend LLVM))
             "LLVM based implementation for multicore CPUs (parallel)"
-
+#endif
+#ifdef ACCELERATE_LLVM_NVVM_BACKEND
   , Option  [] [show NVVM]
             (NoArg (set backend NVVM))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
