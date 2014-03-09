@@ -108,7 +108,10 @@ makeNewClusters nclusters points clusters
 --      traffic. However, this is hitting a sharing recovery bug in Accelerate
 --      so can't be used right now ):
 --
---  = findClosestCluster clusters >-> pointSumToCluster . makePointSum $ points
+--      As per tip in issue #148, we can get around the bug by making the first
+--      argument to pipe closed. It turns out that the first version is quicker!
+--
+--  = A.uncurry findClosestCluster >-> pointSumToCluster . makePointSum $ A.lift (clusters, points)
   where
     npts        = size points
 
