@@ -38,7 +38,7 @@ module Data.Array.Accelerate.Array.Data (
   fstArrayData, sndArrayData, pairArrayData,
 
   -- * Type macros
-  HTYPE_LONG, HTYPE_UNSIGNED_LONG,
+  HTYPE_INT, HTYPE_WORD, HTYPE_LONG, HTYPE_UNSIGNED_LONG,
 
 ) where
 
@@ -76,6 +76,18 @@ import Data.Array.Accelerate.Type
 
 -- Determine the underlying type of a Haskell CLong or CULong.
 --
+$( runQ [d| type HTYPE_INT = $(
+              case finiteBitSize (undefined::Int) of
+                32 -> [t| Int32 |]
+                64 -> [t| Int64 |]
+                _  -> error "I don't know what architecture I am" ) |] )
+
+$( runQ [d| type HTYPE_WORD = $(
+              case finiteBitSize (undefined::Word) of
+                32 -> [t| Word32 |]
+                64 -> [t| Word64 |]
+                _  -> error "I don't know what architecture I am" ) |] )
+
 $( runQ [d| type HTYPE_LONG = $(
               case finiteBitSize (undefined::CLong) of
                 32 -> [t| Int32 |]
