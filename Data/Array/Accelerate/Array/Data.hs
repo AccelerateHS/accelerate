@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
@@ -34,7 +35,10 @@ module Data.Array.Accelerate.Array.Data (
   ArrayEltR(..), GArrayData(..),
 
   -- * Array tuple operations
-  fstArrayData, sndArrayData, pairArrayData
+  fstArrayData, sndArrayData, pairArrayData,
+
+  -- * Type macros
+  HTYPE_LONG, HTYPE_UNSIGNED_LONG,
 
 ) where
 
@@ -46,6 +50,7 @@ import GHC.Prim           (newPinnedByteArray#, byteArrayContents#,
                            unsafeFreezeByteArray#, Int#, (*#))
 import GHC.Ptr            (Ptr(Ptr))
 import GHC.ST             (ST(ST))
+import Data.Bits
 import Data.Functor       ((<$>))
 import Data.Typeable      (Typeable)
 import Control.Monad
@@ -63,9 +68,25 @@ import Data.Array.Unboxed (UArray)
 import Data.Array.MArray  (MArray)
 import Data.Array.Base    (UArray(UArray), STUArray(STUArray),
                            wORD_SCALE, fLOAT_SCALE, dOUBLE_SCALE)
+import Language.Haskell.TH
 
 -- friends
 import Data.Array.Accelerate.Type
+
+
+-- Determine the underlying type of a Haskell CLong or CULong.
+--
+$( runQ [d| type HTYPE_LONG = $(
+              case finiteBitSize (undefined::CLong) of
+                32 -> [t| Int32 |]
+                64 -> [t| Int64 |]
+                _  -> error "I don't know what architecture I am" ) |] )
+
+$( runQ [d| type HTYPE_UNSIGNED_LONG = $(
+              case finiteBitSize (undefined::CULong) of
+                32 -> [t| Word32 |]
+                64 -> [t| Word64 |]
+                _  -> error "I don't know what architecture I am" ) |] )
 
 
 -- Array representation

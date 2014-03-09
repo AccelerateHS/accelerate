@@ -1,3 +1,0 @@
-ghc-options: @ghc_flags@
-cc-options: @cpp_flags@
-

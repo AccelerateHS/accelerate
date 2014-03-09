@@ -2,7 +2,7 @@ Name:                   accelerate
 Version:                0.15.0.0
 Cabal-version:          >= 1.8
 Tested-with:            GHC == 7.6.*
-Build-type:             Custom
+Build-type:             Simple
 
 Synopsis:               An embedded language for accelerated array processing
 
@@ -159,14 +159,7 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-tmp-files:        config.status
-                        config.log
-                        autom4te.cache
-                        accelerate.buildinfo
-
 Extra-source-files:     INSTALL
-                        configure
-                        accelerate.buildinfo.in
                         include/accelerate.h
 
 Flag debug
@@ -202,25 +195,26 @@ Flag internal-checks
 
 Library
   Include-Dirs:         include
-  Build-depends:        array                >= 0.3,
-                        base                 == 4.7.*,
-                        containers           >= 0.3,
-                        unordered-containers >= 0.2,
-                        fclabels             >= 2.0,
-                        ghc-prim             >= 0.2,
-                        hashable             >= 1.1,
-                        hashtables           >= 1.0,
-                        pretty               >= 1.0
+  Build-depends:        array                   >= 0.3,
+                        base                    == 4.7.*,
+                        containers              >= 0.3,
+                        unordered-containers    >= 0.2,
+                        fclabels                >= 2.0,
+                        ghc-prim                >= 0.2,
+                        hashable                >= 1.1,
+                        hashtables              >= 1.0,
+                        pretty                  >= 1.0,
+                        template-haskell        == 2.9.*
 
   if flag(more-pp)
-    Build-depends:      bytestring           >= 0.9,
-                        blaze-html           >= 0.5,
-                        blaze-markup         >= 0.5,
-                        directory            >= 1.0,
-                        filepath             >= 1.0,
-                        mtl                  >= 2.0,
-                        text                 >= 0.10,
-                        unix                 >= 2.4
+    Build-depends:      bytestring              >= 0.9,
+                        blaze-html              >= 0.5,
+                        blaze-markup            >= 0.5,
+                        directory               >= 1.0,
+                        filepath                >= 1.0,
+                        mtl                     >= 2.0,
+                        text                    >= 0.10,
+                        unix                    >= 2.4
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
