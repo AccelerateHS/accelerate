@@ -244,10 +244,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtF2 = convertSharingFun2 config alyt aenv'
 
         cvtAfun1 :: (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
-        cvtAfun1 f = Alam (Abody (convertSharingAcc config alyt' aenv' body))
-          where
-            alyt' = incLayout alyt `PushLayout` ZeroIdx
-            body  = f undefined
+        cvtAfun1 = convertSharingAfun1 config alyt aenv'
     in
     case preAcc of
 
@@ -255,9 +252,12 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
 
       Pipe afun1 afun2 acc
-        -> let alyt'    = incLayout alyt `PushLayout` ZeroIdx
-               boundAcc = aconvert config alyt  afun1 `AST.Apply` convertSharingAcc config alyt aenv' acc
-               bodyAcc  = aconvert config alyt' afun2 `AST.Apply` AST.OpenAcc (AST.Avar AST.ZeroIdx)
+        -> let noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
+               alyt'    = incLayout alyt `PushLayout` ZeroIdx
+               boundAcc = cvtAfun1 afun1 `AST.Apply` cvtA acc
+               bodyAcc  = convertSharingAfun1 config alyt' (noStableSharing : aenv') afun2
+                          `AST.Apply`
+                          AST.OpenAcc (AST.Avar AST.ZeroIdx)
            in
            AST.Alet (AST.OpenAcc boundAcc) (AST.OpenAcc bodyAcc)
 
@@ -302,6 +302,19 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
+
+convertSharingAfun1
+    :: forall aenv a b. (Arrays a, Arrays b)
+    => Config
+    -> Layout aenv aenv
+    -> [StableSharingAcc]
+    -> (Acc a -> ScopedAcc b)
+    -> OpenAfun aenv (a -> b)
+convertSharingAfun1 config alyt aenv f
+  = Alam (Abody (convertSharingAcc config alyt' aenv body))
+      where
+        alyt' = incLayout alyt `PushLayout` ZeroIdx
+        body  = f undefined
 
 convertSharingAtuple
     :: forall aenv a.
@@ -1001,7 +1014,12 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 
           case pacc of
             Atag i                      -> reconstruct $ return (Atag i, 0)           -- height is 0!
-            Pipe afun1 afun2 acc        -> reconstruct $ travA (Pipe afun1 afun2) acc
+            Pipe afun1 afun2 acc        -> reconstruct $ do
+                                             (afun1', h1) <- traverseAfun1 lvl afun1
+                                             (afun2', h2) <- traverseAfun1 lvl afun2
+                                             (acc', h3)   <- traverseAcc lvl acc
+                                             return (Pipe afun1' afun2' acc'
+                                                    , h1 `max` h2 `max` h3 + 1)
             Aforeign ff afun acc        -> reconstruct $ travA (Aforeign ff afun) acc
             Acond e acc1 acc2           -> reconstruct $ do
                                              (e'   , h1) <- traverseExp lvl e
@@ -1626,8 +1644,14 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     scopesAcc (UnscopedAcc _ (AccSharing sn pacc))
       = case pacc of
           Atag i                  -> reconstruct (Atag i) noNodeCounts
-          Pipe afun1 afun2 acc    -> travA (Pipe afun1 afun2) acc
-            -- we are not traversing 'afun1' & 'afun2' — see Note [Pipe and sharing recovery]
+          Pipe afun1 afun2 acc    -> let
+                                       (afun1', accCount1) = scopesAfun1 afun1
+                                       (afun2', accCount2) = scopesAfun1 afun2
+                                       (acc', accCount3)   = scopesAcc acc
+                                     in
+                                     reconstruct (Pipe afun1' afun2' acc')
+                                                 (accCount1 +++ accCount2 +++ accCount3)
+
           Aforeign ff afun acc    -> let
                                        (acc', accCount) = scopesAcc acc
                                      in

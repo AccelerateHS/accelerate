@@ -524,10 +524,6 @@ foreignExp3 ff1 ff2 = Exp $$$ Foreign ff1 $$ Exp $$$ Foreign ff2 $$ Exp $$$ Fore
 --
 -- > (acc1 >-> acc2) arrs = let tmp = acc1 arrs in acc2 tmp
 --
--- Operationally, the array computations 'acc1' and 'acc2' will not share any sub-computations,
--- neither between each other nor with the environment.  This makes them truly independent stages
--- that only communicate by way of the result of 'acc1' which is being fed as an argument to 'acc2'.
---
 infixl 1 >->
 (>->) :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b) -> (Acc b -> Acc c) -> (Acc a -> Acc c)
 (>->) = Acc $$$ Pipe

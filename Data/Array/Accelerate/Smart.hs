@@ -91,12 +91,6 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
--- Note [Pipe and sharing recovery]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- The 'Pipe' constructor is special.  It is the only form that contains functions over array
--- computations and these functions are fixed to be over vanilla 'Acc' types.  This enables us to
--- perform sharing recovery independently from the context for them.
---
 data PreAcc acc exp as where
     -- Needed for conversion to de Bruijn form
   Atag          :: Arrays as
@@ -104,8 +98,8 @@ data PreAcc acc exp as where
                 -> PreAcc acc exp as
 
   Pipe          :: (Arrays as, Arrays bs, Arrays cs)
-                => (Acc as -> Acc bs)           -- see comment above on why 'Acc' and not 'acc'
-                -> (Acc bs -> Acc cs)
+                => (Acc as -> acc bs)
+                -> (Acc bs -> acc cs)
                 -> acc as
                 -> PreAcc acc exp cs
 
