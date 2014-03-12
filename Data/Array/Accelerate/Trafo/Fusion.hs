@@ -50,7 +50,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape, (:.) )
 import Data.Array.Accelerate.Tuple
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -176,6 +176,13 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Permute f d p a         -> Permute  (cvtF f) (manifest d) (cvtF p) (delayed a)
         Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
+
+        -- Stream operations
+
+        MapStream f a       -> MapStream (cvtAF f) (manifest a)
+        ToStream a          -> ToStream (delayed a)
+        FromStream a        -> FromStream (manifest a)
+        FoldStream f a1 a2  -> FoldStream (cvtAF f) (manifest a1) (manifest a2)
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -367,6 +374,14 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
     Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
 
+    -- Stream operations
+    --
+    
+    MapStream f a       -> done $ MapStream (cvtAF f) (cvtA a)
+    ToStream a          -> done $ ToStream (cvtA a)
+    FromStream a        -> done $ FromStream (cvtA a)
+    FoldStream f a1 a2  -> done $ FoldStream (cvtAF f) (cvtA a1) (cvtA a2)
+    
   where
     -- If fusion is not enabled, force terms to the manifest representation
     --
@@ -1175,7 +1190,11 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-
+	MapStream f a           -> MapStream f (cvtA a)
+	ToStream a              -> ToStream (cvtA a)
+	FromStream a            -> FromStream (cvtA a)
+	FoldStream f a1 a2      -> FoldStream f (cvtA a1) (cvtA a2)
+	
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
@@ -1233,7 +1252,6 @@ aprjD embedAcc ix a
     aprjAT :: TupleIdx atup a -> Atuple (acc aenv) atup -> acc aenv a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
     aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
-
 
 -- Scalar expressions
 -- ------------------

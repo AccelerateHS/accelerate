@@ -740,15 +740,6 @@ instance Arrays () where
   fromArr   = id
   fromArr'  = id
 
-instance Arrays a => Arrays [a] where
-  arrays _ = ArraysRstream (arrays (undefined :: a))
-  arrays' _ = ArraysRstream (arrays' (undefined :: a))
-  --
-  toArr = map toArr
-  toArr' = map toArr'
-  fromArr = map fromArr
-  fromArr' = map fromArr'
-  
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  _       = ArraysRpair ArraysRunit ArraysRarray
   arrays' _       = ArraysRarray
@@ -834,6 +825,14 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
 
+instance (Arrays a) => Arrays [a] where
+  arrays _ = ArraysRstream (arrays (undefined :: a))
+  arrays' _ = ArraysRstream (arrays' (undefined :: a))
+  --
+  toArr = map toArr
+  toArr' = map toArr'
+  fromArr = map fromArr
+  fromArr' = map fromArr'
 
 -- |Multi-dimensional arrays for array processing.
 --

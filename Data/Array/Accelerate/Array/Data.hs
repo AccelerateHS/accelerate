@@ -576,7 +576,7 @@ pairArrayData = AD_Pair
 {-# INLINE unsafeIndexArray #-}
 unsafeIndexArray :: IArray.IArray UArray e => UArray Int e -> Int -> e
 #ifdef ACCELERATE_UNSAFE_CHECKS
-unsafeIndexArray = IArray.!
+unsafeIndexArray = (IArray.!)
 #else
 unsafeIndexArray = IArray.unsafeAt
 #endif
