@@ -50,7 +50,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape, (:.) )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape )
 import Data.Array.Accelerate.Tuple
 
 import qualified Data.Array.Accelerate.Debug            as Stats

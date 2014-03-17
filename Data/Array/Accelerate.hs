@@ -243,7 +243,7 @@ module Data.Array.Accelerate (
   L.intersect,
 
   -- *** Conversions
-  L.boolToInt, L.fromIntegral,
+  L.ord, L.chr, L.boolToInt, L.fromIntegral,
 
   -- ---------------------------------------------------------------------------
 

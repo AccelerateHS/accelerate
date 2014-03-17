@@ -55,7 +55,7 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot,
 
   -- * Smart constructors for type coercion functions
-  mkBoolToInt, mkFromIntegral,
+  mkOrd, mkChr, mkBoolToInt, mkFromIntegral,
 
   -- * Auxiliary functions
   ($$), ($$$), ($$$$), ($$$$$),
@@ -91,12 +91,6 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
--- Note [Pipe and sharing recovery]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- The 'Pipe' constructor is special.  It is the only form that contains functions over array
--- computations and these functions are fixed to be over vanilla 'Acc' types.  This enables us to
--- perform sharing recovery independently from the context for them.
---
 data PreAcc acc exp as where
     -- Needed for conversion to de Bruijn form
   Atag          :: Arrays as
@@ -104,8 +98,8 @@ data PreAcc acc exp as where
                 -> PreAcc acc exp as
 
   Pipe          :: (Arrays as, Arrays bs, Arrays cs)
-                => (Acc as -> Acc bs)           -- see comment above on why 'Acc' and not 'acc'
-                -> (Acc bs -> Acc cs)
+                => (Acc as -> acc bs)
+                -> (Acc bs -> acc cs)
                 -> acc as
                 -> PreAcc acc exp cs
 
@@ -1023,14 +1017,20 @@ mkLOr x y = Exp $ PrimLOr `PrimApp` tup2 (x, y)
 mkLNot :: Exp Bool -> Exp Bool
 mkLNot x = Exp $ PrimLNot `PrimApp` x
 
--- FIXME: Character conversions
+-- Character conversions
 
--- FIXME: Numeric conversions
+mkOrd :: Exp Char -> Exp Int
+mkOrd x = Exp $ PrimOrd `PrimApp` x
+
+mkChr :: Exp Int -> Exp Char
+mkChr x = Exp $ PrimChr `PrimApp` x
+
+-- Numeric conversions
 
 mkFromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
 mkFromIntegral x = Exp $ PrimFromIntegral integralType numType `PrimApp` x
 
--- FIXME: Other conversions
+-- Other conversions
 
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b

@@ -147,7 +147,7 @@ prettyPreAfun :: forall acc aenv fun. PrettyAcc acc -> Int -> PreOpenAfun acc ae
 prettyPreAfun pp alvl fun =
   let (n, bodyDoc) = count n fun
   in
-  char '\\' <> hsep [text $ 'a' : show idx | idx <- [0..n]] <+>
+  char '\\' <> hsep [text $ 'a' : show idx | idx <- [alvl..alvl + n]] <+>
   text "->" <+> bodyDoc
   where
      count :: Int -> PreOpenAfun acc aenv' fun' -> (Int, Doc)
