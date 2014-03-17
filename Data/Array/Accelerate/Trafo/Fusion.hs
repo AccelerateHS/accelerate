@@ -1253,6 +1253,7 @@ aprjD embedAcc ix a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
     aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
 
+
 -- Scalar expressions
 -- ------------------
 

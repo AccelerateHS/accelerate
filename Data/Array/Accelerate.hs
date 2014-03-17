@@ -313,3 +313,4 @@ arraySize = S.size
 {-# INLINE fromFunction #-}
 fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
 fromFunction = S.newArray
+

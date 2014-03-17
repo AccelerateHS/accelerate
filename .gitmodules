@@ -6,10 +6,10 @@
 	url = https://github.com/AccelerateHS/accelerate-buildbot.git
 [submodule "accelerate-examples"]
 	path = accelerate-examples
-	url = https://github.com/fmma/accelerate-examples.git
+	url = https://github.com/AccelerateHS/accelerate-examples.git
 [submodule "accelerate-cuda"]
 	path = accelerate-cuda
-	url = https://github.com/fmma/accelerate-cuda.git
+	url = https://github.com/AccelerateHS/accelerate-cuda.git
 [submodule "accelerate-backend-kit"]
 	path = accelerate-backend-kit
 	url = https://github.com/AccelerateHS/accelerate-backend-kit.git

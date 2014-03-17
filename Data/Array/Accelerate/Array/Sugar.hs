@@ -25,7 +25,7 @@
 module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
-  Array(..), Scalar, Vector, Segments, -- [],  
+  Array(..), Scalar, Vector, Segments,
   Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
