@@ -41,6 +41,7 @@ DIRS="$TOP/array-dsl-benchmarks/ \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops2/seq_c \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cilk \
    $TOP/array-dsl-benchmarks/accelerate/scale_flops2/cuda \
+   $TOP/array-dsl-benchmarks/accelerate/reduce/cuda \
   "
 
    # $TOP/array-dsl-benchmarks/accelerate/smvm/seq_c \
