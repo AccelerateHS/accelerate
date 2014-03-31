@@ -24,10 +24,10 @@ import qualified Data.Array.Accelerate.Interpreter      as Interp
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-import qualified Data.Array.Accelerate.LLVM.Native      as Native
+import qualified Data.Array.Accelerate.LLVM.Native      as CPU
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-import qualified Data.Array.Accelerate.LLVM.NVVM        as NVVM
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
 #endif
 
 
@@ -39,10 +39,10 @@ run Interpreter = Interp.run
 run CUDA        = CUDA.run
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run LLVM        = Native.run
+run CPU         = CPU.run
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-run NVVM        = NVVM.run
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+run PTX         = PTX.run
 #endif
 
 
@@ -52,10 +52,10 @@ run1 Interpreter f = Interp.run1 f
 run1 CUDA        f = CUDA.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run1 LLVM        f = Native.run1 f
+run1 CPU         f = CPU.run1 f
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-run1 NVVM        f = NVVM.run1 f
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+run1 PTX         f = PTX.run1 f
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -71,10 +71,10 @@ data Backend = Interpreter
              | CUDA
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-             | LLVM
+             | CPU
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-             | NVVM
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+             | PTX
 #endif
   deriving (Eq, Bounded)
 
@@ -85,10 +85,10 @@ instance Show Backend where
   show CUDA             = "cuda"
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-  show LLVM             = "llvm-cpu"
+  show CPU              = "llvm-cpu"
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-  show NVVM             = "llvm-gpu"
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+  show PTX              = "llvm-gpu"
 #endif
 
 
@@ -104,13 +104,13 @@ availableBackends backend =
             "implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-  , Option  [] [show LLVM]
-            (NoArg (set backend LLVM))
+  , Option  [] [show CPU]
+            (NoArg (set backend CPU))
             "LLVM based implementation for multicore CPUs (parallel)"
 #endif
-#ifdef ACCELERATE_LLVM_NVVM_BACKEND
-  , Option  [] [show NVVM]
-            (NoArg (set backend NVVM))
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+  , Option  [] [show PTX]
+            (NoArg (set backend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
 #endif
   ]
