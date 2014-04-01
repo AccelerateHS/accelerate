@@ -690,14 +690,31 @@ toStreamOp :: (Sugar.Shape sh)
            => Delayed (Array (sh:.Int) e)
            -> Delayed [Array sh e]
 toStreamOp (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
-  = DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (\ sh' -> rf (sh', i))) | i <- [0..n-1]]
+  = let rf' i sh' =
+          let j = toIndex sh sh'
+              k = j + i * size sh
+          in rf (fromIndex (sh, n) k)
+    in  DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (rf' i)) | i <- [0..n-1]]
 
-fromStreamOp :: (Sugar.Elt e)
-             => Delayed [Array Z e]
-             -> Delayed (Array (Z:.Int) e)   
+--DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (\ sh' -> rf (sh', i))) | i <- [0..n-1]]
+
+fromStreamOp :: (Sugar.Shape sh, Sugar.Elt e)
+             => Delayed [Array sh e]
+             -> Delayed (Array (Z:.Int) sh, Array (Z:.Int) e)   
 fromStreamOp (DelayedRstream ds)
-  = let f (DelayedRpair DelayedRunit (DelayedRarray () rf)) sh' = rf sh'
-    in DelayedRpair DelayedRunit (DelayedRarray ((), length ds) (\ (sh', n) -> f (ds !! n) sh'))
+  = let f (DelayedRpair DelayedRunit (DelayedRarray sh _)) = sh
+        g _ [] = error "index out of bounds"
+        g i (DelayedRpair DelayedRunit (DelayedRarray sh rf):ds) 
+          | i < size sh = rf (fromIndex sh i)
+          | otherwise   = g (i - size sh) ds
+        n = foldl (+) 0 [size sh | (DelayedRpair DelayedRunit (DelayedRarray sh _)) <- ds]
+        shapevec = DelayedRarray 
+                     ((), length ds) 
+                     (\ ((), i) -> f (ds !! i))
+        elvec    = DelayedRarray 
+                     ((), n) 
+                     (\ ((), i) -> g i ds)
+    in DelayedRpair (DelayedRpair DelayedRunit shapevec) elvec
 
 foldStreamOp :: ()
              => (Array sh e -> Array sh e -> Array sh e)

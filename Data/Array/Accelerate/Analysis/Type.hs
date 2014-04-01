@@ -124,7 +124,6 @@ preAccType k pacc =
     Backpermute _ _ acc -> k acc
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
-    FromStream _        -> eltType (undefined::e)
     FoldStream _ _ _    -> eltType (undefined::e)
 
 -- |Reify the result type of a scalar expression.

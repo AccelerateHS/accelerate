@@ -468,9 +468,9 @@ data PreOpenAcc acc aenv a where
          -> PreOpenAcc acc aenv [Array sh e]
 
   -- Convert the given stream to an array.
-  FromStream :: (Elt e)
-           => acc            aenv [Array Z e]
-           -> PreOpenAcc acc aenv (Array (Z:.Int) e)
+  FromStream :: (Shape sh, Elt e)
+           => acc            aenv [Array sh e]
+           -> PreOpenAcc acc aenv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
   -- Fold a stream by combining each element using the given binary function.
   FoldStream :: (Shape sh, Elt e)

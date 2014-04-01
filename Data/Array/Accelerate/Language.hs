@@ -478,9 +478,9 @@ toStream :: (Shape ix, Elt a)
 toStream = Acc . ToStream
 
 -- | Convert the given scalar stream to vector.
-fromStream :: (Elt a)
-         => Acc [Scalar a]
-         -> Acc (Vector a)
+fromStream :: (Shape ix, Elt a)
+         => Acc [Array ix a]
+         -> Acc (Vector ix, Vector a)
 fromStream = Acc . FromStream
 
 -- | Fold a stream by combining all the elements with the given binary

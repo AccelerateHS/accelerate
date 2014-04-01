@@ -270,9 +270,9 @@ data PreAcc acc exp as where
                 => acc (Array (sh:.Int) e)
                 -> PreAcc acc exp [Array sh e]   
 
-  FromStream    :: (Elt e)
-                => acc [Array Z e]   
-                -> PreAcc acc exp (Array (Z:.Int) e)
+  FromStream    :: (Shape sh, Elt e)
+                => acc [Array sh e]   
+                -> PreAcc acc exp (Array (Z:.Int) sh, Array (Z:.Int) e)
 
   FoldStream    :: (Shape sh, Elt e)
                 => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))

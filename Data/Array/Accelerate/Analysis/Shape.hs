@@ -88,7 +88,6 @@ preAccDim k pacc =
     Backpermute _ _ _    -> ndim (eltType (undefined::sh))
     Stencil _ _ acc      -> k acc
     Stencil2 _ _ acc _ _ -> k acc
-    FromStream _         -> ndim (eltType (undefined::sh)) -- + 1 ??
     FoldStream _ _ _     -> ndim (eltType (undefined::sh))
 
 -- |Reify dimensionality of a scalar expression yielding a shape
