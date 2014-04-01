@@ -93,11 +93,10 @@ findClosestCluster clusters points =
 --
 makeNewClusters
     :: forall a. (Elt a, IsFloating a, RealFloat a)
-    => Int
-    -> Acc (Vector (Point a))
+    => Acc (Vector (Point a))
     -> Acc (Vector (Cluster a))
     -> Acc (Vector (Cluster a))
-makeNewClusters nclusters points clusters
+makeNewClusters points clusters
   = pointSumToCluster
   . makePointSum
   . findClosestCluster clusters
@@ -114,6 +113,7 @@ makeNewClusters nclusters points clusters
 --  = A.uncurry findClosestCluster >-> pointSumToCluster . makePointSum $ A.lift (clusters, points)
   where
     npts        = size points
+    nclusters   = size clusters
 
     -- Turn the PointSum intermediate structure into the clusters, by averaging
     -- the cumulative (x,y) positions.
@@ -146,7 +146,7 @@ makeNewClusters nclusters points clusters
     --
     pointSum :: Acc (Vector Id) -> Acc (Array DIM2 (PointSum a))
     pointSum nearest =
-      A.generate (lift (Z:.constant nclusters:.npts))
+      A.generate (lift (Z:.nclusters:.npts))
                  (\ix -> let Z:.i:.j = unlift ix    :: Z :. Exp Int :. Exp Int
                              near    = nearest ! index1 j
 
@@ -188,18 +188,17 @@ makeNewClusters nclusters points clusters
 -- reached?)
 --
 kmeans :: forall a. (Elt a, IsFloating a, RealFloat a)
-       => Int                           -- number of clusters to generate
-       -> Acc (Vector (Point a))        -- the points to cluster
+       => Acc (Vector (Point a))        -- the points to cluster
        -> Acc (Vector (Cluster a))      -- initial cluster positions (guess)
        -> Acc (Vector (Cluster a))
-kmeans nclusters points clusters
-  = A.snd
+kmeans points clusters
+  = A.asnd
   $ A.awhile (A.uncurry keepGoing)
             (\cs -> let (_, old) = unlift cs    :: (Acc (Vector (Cluster a)), Acc (Vector (Cluster a)))
-                        new      = makeNewClusters nclusters points old
+                        new      = makeNewClusters points old
                     in
                     lift (old,new))
-            (lift (clusters, makeNewClusters nclusters points clusters))
+            (lift (clusters, makeNewClusters points clusters))
   where
     keepGoing :: Acc (Vector (Cluster a)) -> Acc (Vector (Cluster a)) -> Acc (Scalar Bool)
     keepGoing xs ys

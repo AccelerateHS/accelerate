@@ -33,8 +33,7 @@ main = do
 
       points :: Vector (Point Float)
       points    = A.fromList (Z:.npoints)   points'
-
-      step      = CUDA.run1 (kmeans nclusters (use points))
+      step      = kmeans (use points)
 
   clusters `seq` points `seq` performGC
 
