@@ -91,6 +91,7 @@ Executable accelerate-nofib
                         Test.Prelude.Reduction
                         Test.Prelude.Replicate
                         Test.Prelude.Stencil
+                        Test.Prelude.Streaming
                         Test.Sharing
                         Test.Spectral
                         Test.Spectral.BlackScholes
