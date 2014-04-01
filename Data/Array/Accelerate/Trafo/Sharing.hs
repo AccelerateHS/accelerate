@@ -244,7 +244,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtF2 = convertSharingFun2 config alyt aenv'
 
         cvtAfun1 :: (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
-        cvtAfun1 = convertSharingAfun1 config alyt aenv'            
+        cvtAfun1 = convertSharingAfun1 config alyt aenv'
 
         cvtAfun2 :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> AST.OpenAfun aenv (a -> b -> c)
         cvtAfun2 f = Alam (Alam (Abody (convertSharingAcc config alyt' aenv' body)))
