@@ -38,6 +38,7 @@ delay arr = go (arrays arr) (fromArr arr)
     go (ArraysRpair r1 r2) (a1, a2) = DelayedRpair (go r1 a1) (go r2 a2)
     go (ArraysRstream r) as = DelayedRstream (map (go r) as)
 
+
 force :: forall a. Arrays a => Delayed a -> a
 force arr = toArr $ go (arrays (undefined::a)) arr
   where
@@ -46,6 +47,7 @@ force arr = toArr $ go (arrays (undefined::a)) arr
     go ArraysRarray        a                    = forceR a
     go (ArraysRpair r1 r2) (DelayedRpair d1 d2) = (go r1 d1, go r2 d2)
     go (ArraysRstream r) (DelayedRstream ds) = map (go r) ds
+
 
 -- Delayed arrays are characterised by the domain of an array and its functional
 -- representation

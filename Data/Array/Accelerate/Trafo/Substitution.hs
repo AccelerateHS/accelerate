@@ -344,6 +344,7 @@ rebuildA rebuild v acc =
     ToStream a          -> ToStream (rebuild v a)
     FoldStream f a1 a2  -> FoldStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
 
+
 -- Rebuilding array computations
 --
 

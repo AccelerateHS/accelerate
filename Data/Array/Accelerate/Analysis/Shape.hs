@@ -90,6 +90,7 @@ preAccDim k pacc =
     Stencil2 _ _ acc _ _ -> k acc
     FoldStream _ _ _     -> ndim (eltType (undefined::sh))
 
+
 -- |Reify dimensionality of a scalar expression yielding a shape
 --
 expDim :: forall acc env aenv sh. Elt sh => PreOpenExp acc env aenv sh -> Int

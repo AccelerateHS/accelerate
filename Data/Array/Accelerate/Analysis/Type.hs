@@ -126,6 +126,7 @@ preAccType k pacc =
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
     FoldStream _ _ _    -> eltType (undefined::e)
 
+
 -- |Reify the result type of a scalar expression.
 --
 expType :: OpenExp env aenv t -> TupleType (EltRepr t)

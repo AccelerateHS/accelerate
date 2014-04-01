@@ -1194,7 +1194,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 	ToStream a              -> ToStream (cvtA a)
 	FromStream a            -> FromStream (cvtA a)
 	FoldStream f a1 a2      -> FoldStream f (cvtA a1) (cvtA a2)
-	
+
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)

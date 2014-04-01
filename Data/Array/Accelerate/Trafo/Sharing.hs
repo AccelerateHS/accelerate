@@ -1124,6 +1124,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                               (acc1', h2) <- traverseAcc lvl acc1
                                               (acc2', h3) <- traverseAcc lvl acc2
                                               return (FoldStream f' acc1' acc2', h1 + h2 + h3 + 1)
+
       where
         travA :: Arrays arrs'
               => (UnscopedAcc arrs' -> PreAcc UnscopedAcc RootExp arrs)

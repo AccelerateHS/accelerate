@@ -913,6 +913,7 @@ hashPreOpenAcc hashAcc pacc =
     FromStream a                -> hash "FromStream"    `hashA` a
     FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
 
+
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)

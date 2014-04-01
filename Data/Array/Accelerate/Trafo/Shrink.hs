@@ -366,7 +366,7 @@ usesOfPreAcc withShape countAcc idx = countP
       ToStream a                -> countA a
       FromStream a              -> countA a
       FoldStream _ a1 a2        -> countA a1 + countA a2
-      
+
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
 
