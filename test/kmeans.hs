@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 --
 -- K-Means sample. This uses the CUDA backend to execute the program.
 --
@@ -12,6 +13,12 @@ import System.Mem
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.CUDA                       as CUDA
 import Data.Array.Accelerate.Math.Kmeans
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+import Data.Array.Accelerate.LLVM.Native                as CPU
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+import Data.Array.Accelerate.LLVM.PTX                   as GPU
+#endif
 
 
 main :: IO ()
@@ -28,12 +35,31 @@ main = do
       points    = A.fromList (Z:.npoints)   points'
 
       step      = CUDA.run1 (kmeans nclusters (use points))
-      final     = step clusters
 
   clusters `seq` points `seq` performGC
 
   putStrLn $ "number of points: " P.++ show npoints
-  putStrLn $ "final clusters:\n" P.++ unlines (P.map show (A.toList final))
 
-  defaultMain [ bench "kmeans/cuda" $ whnf step clusters ]
+  putStrLn $ "final clusters (CUDA):\n" P.++
+    unlines (P.map show . A.toList $ CUDA.run1 step clusters)
+
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+  putStrLn $ "final clusters (LLVM-CPU):\n" P.++
+    unlines (P.map show . A.toList $ CPU.run1 step clusters)
+#endif
+
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+  putStrLn $ "final clusters (LLVM-GPU):\n" P.++
+    unlines (P.map show . A.toList $ GPU.run1 step clusters)
+#endif
+
+  defaultMain
+    [ bench "kmeans/CUDA"       $ whnf (CUDA.run1   step) clusters
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+    , bench "kmeans/llvm-cpu"   $ whnf (CPU.run1 step) clusters
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+    , bench "kmeans/llvm-gpu"   $ whnf (GPU.run1 step) clusters
+#endif
+    ]
 
