@@ -170,6 +170,7 @@ Extra-source-files:     INSTALL
                         include/accelerate.h
 
 Flag debug
+  Default:              False
   Description:
     Enable tracing message flags. These are read from the command-line
     arguments, which is convenient but may cause problems interacting with the
