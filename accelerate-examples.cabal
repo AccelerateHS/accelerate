@@ -52,6 +52,10 @@ Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
   Default:              True
 
+Flag llvm-multi
+  Description:          Enable the multi-device LLVM backend
+  Default:              True
+
 
 -- Flags to specify which programs to build (all true by default)
 --
@@ -142,7 +146,7 @@ Executable accelerate-nofib
   else
     build-depends:      accelerate                      == 0.15.*,
                         accelerate-io                   == 0.15.*,
-                        base                            == 4.7.*,
+                        base                            >= 4.6 && <4.8,
                         array                           >= 0.3,
                         containers                      >= 0.5,
                         criterion                       >= 0.5,
@@ -179,11 +183,11 @@ Executable accelerate-smvm
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -194,7 +198,7 @@ Executable accelerate-smvm
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -226,11 +230,11 @@ Executable accelerate-crystal
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -241,7 +245,7 @@ Executable accelerate-crystal
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss-raster-accelerate >= 1.7
@@ -271,11 +275,11 @@ Executable accelerate-canny
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -287,7 +291,7 @@ Executable accelerate-canny
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         repa                    >= 3.1,
@@ -315,11 +319,16 @@ Executable accelerate-mandelbrot
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
+  if flag(llvm-cpu) && flag(llvm-gpu) && flag(llvm-multi)
+    CPP-options:        -DACCELERATE_LLVM_MULTIDEV_BACKEND
+    build-depends:      accelerate-llvm-multidev== 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -332,7 +341,7 @@ Executable accelerate-mandelbrot
     build-depends:      accelerate              == 0.15.*,
                         accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -363,11 +372,11 @@ Executable accelerate-fluid
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -379,7 +388,7 @@ Executable accelerate-fluid
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -420,11 +429,11 @@ Executable accelerate-nbody
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -435,7 +444,7 @@ Executable accelerate-nbody
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -468,11 +477,11 @@ Executable accelerate-smoothlife
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -485,7 +494,7 @@ Executable accelerate-smoothlife
     build-depends:      accelerate              == 0.15.*,
                         accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -513,11 +522,11 @@ Executable accelerate-hashcat
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -528,7 +537,7 @@ Executable accelerate-hashcat
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
@@ -556,11 +565,11 @@ Executable accelerate-fft
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if !flag(fft)
     buildable:          False
@@ -568,7 +577,7 @@ Executable accelerate-fft
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         accelerate-fft          == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         filepath                >= 1.0
@@ -596,18 +605,18 @@ Executable accelerate-pagerank
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if !flag(pagerank)
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.7.*,
+                        base                    >= 4.6 && <4.8,
                         bytestring              >= 0.9.2,
                         containers              >= 0.4.2,
                         criterion               >= 0.5,
@@ -638,7 +647,7 @@ Executable accelerate-ray
   if !flag(ray)
     buildable:          False
   else
-    build-depends:      base                    == 4.7.*,
+    build-depends:      base                    >= 4.6 && <4.8,
                         accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         criterion               >= 0.5,
@@ -653,11 +662,15 @@ Executable accelerate-ray
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.15.*
+    build-depends:      accelerate-llvm-native  == 0.15.*
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.15.*
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
+  if flag(llvm-cpu) && flag(llvm-gpu) && flag(llvm-multi)
+    CPP-options:        -DACCELERATE_LLVM_MULTIDEV_BACKEND
+    build-depends:      accelerate-llvm-multidev== 0.15.*
 
   if flag(ekg)
     cpp-options:        -DACCELERATE_ENABLE_EKG

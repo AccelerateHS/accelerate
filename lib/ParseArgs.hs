@@ -29,6 +29,9 @@ import qualified Data.Array.Accelerate.LLVM.Native      as CPU
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
 #endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+import qualified Data.Array.Accelerate.LLVM.Multi       as Multi
+#endif
 
 
 -- | Execute Accelerate expressions
@@ -44,6 +47,9 @@ run CPU         = CPU.run
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run PTX         = PTX.run
 #endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+run Multi       = Multi.run
+#endif
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
@@ -56,6 +62,9 @@ run1 CPU         f = CPU.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run1 PTX         f = PTX.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+run1 Multi       f = Multi.run1 f
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -76,6 +85,9 @@ data Backend = Interpreter
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
              | PTX
 #endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+             | Multi
+#endif
   deriving (Eq, Bounded)
 
 
@@ -89,6 +101,9 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
   show PTX              = "llvm-gpu"
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+  show Multi            = "llvm-multi"
 #endif
 
 
@@ -112,6 +127,11 @@ availableBackends backend =
   , Option  [] [show PTX]
             (NoArg (set backend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+  , Option  [] [show Multi]
+            (NoArg (set backend Multi))
+            "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
 #endif
   ]
 
