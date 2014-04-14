@@ -75,9 +75,10 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
     travAcc' (MapStream afun acc)                  = combine "MapStream" [ travAfun f c l afun, travAcc f c l acc ]
+    travAcc' (ZipWithStream afun acc1 acc2)        = combine "ZipWithStream" [ travAfun f c l afun, travAcc f c l acc1, travAcc f c l acc2 ]
     travAcc' (ToStream acc)                        = combine "ToStream" [ travAcc f c l acc ]
     travAcc' (FromStream acc)                      = combine "FromStream" [ travAcc f c l acc ]
-    travAcc' (FoldStream fun acc1 acc2)            = combine "MapStream" [ travAfun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
+    travAcc' (FoldStream fun acc1 acc2)            = combine "FoldStream" [ travAfun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

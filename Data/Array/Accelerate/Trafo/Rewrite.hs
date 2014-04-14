@@ -89,6 +89,7 @@ convertSegments = cvtA
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
       MapStream f a             -> MapStream (cvtAfun f) (cvtA a)
+      ZipWithStream f a1 a2     -> ZipWithStream (cvtAfun f) (cvtA a1) (cvtA a2)
       ToStream a                -> ToStream (cvtA a)
       FromStream a              -> FromStream (cvtA a)
       FoldStream f a1 a2        -> FoldStream (cvtAfun f) (cvtA a1) (cvtA a2)

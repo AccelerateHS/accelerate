@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Language (
   map, zipWith,
 
   -- * Stream functions
-  mapStream, toStream, fromStream, foldStream, 
+  mapStream, zipWithStream, toStream, fromStream, foldStream, 
   
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -465,9 +465,19 @@ stencil2 = Acc $$$$$ Stencil2
 --
 mapStream :: (Shape ix, Elt a, Shape ix', Elt b)
           => (Acc (Array ix a) -> Acc (Array ix' b))
-          -> Acc [Array ix  a]   
-          -> Acc [Array ix' b]   
+          -> Acc [Array ix  a]
+          -> Acc [Array ix' b]
 mapStream = Acc $$ MapStream
+
+-- | Apply the given binary function element-wise to the two streams.  The length of the resulting
+-- stream is the minumum of the lengths of the two source streams.
+--
+zipWithStream :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c)
+          => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
+          -> Acc [Array ix   a]
+          -> Acc [Array ix'' b]
+          -> Acc [Array ix'  c]   
+zipWithStream = Acc $$$ ZipWithStream
 
 -- | Convert the given array to a stream by streaming the outer
 -- dimension.

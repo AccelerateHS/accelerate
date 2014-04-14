@@ -211,6 +211,8 @@ evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
 
 evalPreOpenAcc (MapStream f acc) aenv = mapStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc aenv)
 
+evalPreOpenAcc (ZipWithStream f acc1 acc2) aenv = zipWithStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+
 evalPreOpenAcc (ToStream acc) aenv = toStreamOp (evalOpenAcc acc aenv)
 
 evalPreOpenAcc (FromStream acc) aenv = fromStreamOp (evalOpenAcc acc aenv)
@@ -685,6 +687,15 @@ mapStreamOp :: (Sugar.Elt e', Sugar.Shape sh')
 mapStreamOp f (DelayedRstream ds)
   = let g darr@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = (delay . f . force) darr
     in DelayedRstream (map g ds)
+
+zipWithStreamOp :: (Sugar.Elt e3, Sugar.Shape sh3)
+            => (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
+            -> Delayed [Array sh1 e1]
+            -> Delayed [Array sh2 e2]
+            -> Delayed [Array sh3 e3]
+zipWithStreamOp f (DelayedRstream ds1) (DelayedRstream ds2)
+  = let g darr1@(DelayedRpair DelayedRunit (DelayedRarray _ _)) darr2@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = delay (f (force darr1) (force darr2))
+    in DelayedRstream (zipWith g ds1 ds2)
 
 toStreamOp :: (Sugar.Shape sh)
            => Delayed (Array (sh:.Int) e)

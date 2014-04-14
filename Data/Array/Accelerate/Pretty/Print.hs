@@ -133,6 +133,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
     pp (MapStream f acc)        = "mapS"        .$ [ ppAF f, ppA acc ]
+    pp (ZipWithStream f acc1 acc2) = "zipWithS" .$ [ ppAF f, ppA acc1, ppA acc2 ]
     pp (FromStream acc)         = "fromStream"  .$ [ ppA acc ]
     pp (ToStream acc)           = "toStream"    .$ [ ppA acc ]
     pp (FoldStream f acc1 acc2) = "foldS"       .$ [ ppAF f, ppA acc1, ppA acc2 ]

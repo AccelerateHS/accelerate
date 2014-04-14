@@ -311,6 +311,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (convertBoundary bndy2)
                         (cvtA acc2)
       MapStream f acc             -> AST.MapStream (cvtAfun1 f) (cvtA acc)
+      ZipWithStream f acc1 acc2   -> AST.ZipWithStream (cvtAfun2 f) (cvtA acc1) (cvtA acc2)
       ToStream acc                -> AST.ToStream (cvtA acc)
       FromStream acc              -> AST.FromStream (cvtA acc)
       FoldStream f acc1 acc2      -> AST.FoldStream (cvtAfun2 f) (cvtA acc1) (cvtA acc2)
@@ -1113,6 +1114,11 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (f',   h1) <- traverseAfun1 lvl f
                                              (acc', h2) <- traverseAcc lvl acc
                                              return (MapStream f' acc', h1 `max` h2 + 1)
+            ZipWithStream f acc1 acc2   -> reconstruct $ do
+                                             (f',   h1) <- traverseAfun2 lvl f
+                                             (acc1', h2) <- traverseAcc lvl acc1
+                                             (acc2', h3) <- traverseAcc lvl acc2
+                                             return (ZipWithStream f' acc1' acc2', h1 `max` h2 `max` h3 + 1)
             ToStream acc                -> reconstruct $ do
                                               (acc', h) <- traverseAcc lvl acc
                                               return (ToStream acc', h + 1)
@@ -1123,7 +1129,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                               (f',    h1) <- traverseAfun2 lvl f
                                               (acc1', h2) <- traverseAcc lvl acc1
                                               (acc2', h3) <- traverseAcc lvl acc2
-                                              return (FoldStream f' acc1' acc2', h1 + h2 + h3 + 1)
+                                              return (FoldStream f' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
       where
         travA :: Arrays arrs'
@@ -1786,9 +1792,15 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (accCount1 +++ accCount2 +++ accCount3)
           MapStream f acc         -> let
                                        (f'  , accCount1) = scopesAfun1 f
-                                       (acc', accCount2) = scopesAcc  acc
+                                       (acc', accCount2) = scopesAcc acc
                                      in
                                      reconstruct (MapStream f' acc') (accCount1 +++ accCount2)
+          ZipWithStream f acc1 acc2  -> let
+                                       (f'  , accCount1)  = scopesAfun2 f
+                                       (acc1', accCount2) = scopesAcc acc1
+                                       (acc2', accCount3) = scopesAcc acc2
+                                     in
+                                     reconstruct (ZipWithStream f' acc1' acc2') (accCount1 +++ accCount2 +++ accCount3)
           ToStream acc            -> let
                                        (acc', accCount1) = scopesAcc  acc
                                      in

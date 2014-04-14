@@ -179,10 +179,11 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
 
         -- Stream operations
 
-        MapStream f a       -> MapStream (cvtAF f) (manifest a)
-        ToStream a          -> ToStream (delayed a)
-        FromStream a        -> FromStream (manifest a)
-        FoldStream f a1 a2  -> FoldStream (cvtAF f) (manifest a1) (manifest a2)
+        MapStream f a           -> MapStream (cvtAF f) (manifest a)
+        ZipWithStream f a1 a2   -> ZipWithStream (cvtAF f) (manifest a1) (manifest a2)
+        ToStream a              -> ToStream (delayed a)
+        FromStream a            -> FromStream (manifest a)
+        FoldStream f a1 a2      -> FoldStream (cvtAF f) (manifest a1) (manifest a2)
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -376,11 +377,11 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 
     -- Stream operations
     --
-    
-    MapStream f a       -> done $ MapStream (cvtAF f) (cvtA a)
-    ToStream a          -> done $ ToStream (cvtA a)
-    FromStream a        -> done $ FromStream (cvtA a)
-    FoldStream f a1 a2  -> done $ FoldStream (cvtAF f) (cvtA a1) (cvtA a2)
+    MapStream f a         -> done $ MapStream (cvtAF f) (cvtA a)
+    ZipWithStream f a1 a2 -> done $ ZipWithStream (cvtAF f) (cvtA a1) (cvtA a2)
+    ToStream a            -> done $ ToStream (cvtA a)
+    FromStream a          -> done $ FromStream (cvtA a)
+    FoldStream f a1 a2    -> done $ FoldStream (cvtAF f) (cvtA a1) (cvtA a2)
     
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -1191,6 +1192,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
 	MapStream f a           -> MapStream f (cvtA a)
+	ZipWithStream f a1 a2   -> ZipWithStream f (cvtA a1) (cvtA a2)
 	ToStream a              -> ToStream (cvtA a)
 	FromStream a            -> FromStream (cvtA a)
 	FoldStream f a1 a2      -> FoldStream f (cvtA a1) (cvtA a2)

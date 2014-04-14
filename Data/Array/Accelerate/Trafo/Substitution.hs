@@ -340,6 +340,7 @@ rebuildA rebuild v acc =
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
     MapStream f a       -> MapStream (rebuildAfun rebuild v f) (rebuild v a)
+    ZipWithStream f a1 a2 -> ZipWithStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
     FromStream a        -> FromStream (rebuild v a)
     ToStream a          -> ToStream (rebuild v a)
     FoldStream f a1 a2  -> FoldStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)

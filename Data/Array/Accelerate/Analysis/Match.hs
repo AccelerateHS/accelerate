@@ -909,6 +909,7 @@ hashPreOpenAcc hashAcc pacc =
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
     MapStream f a               -> hash "MapStream"     `hashWithSalt` hashAfun hashAcc f `hashA` a
+    ZipWithStream f a1 a2       -> hash "ZipWithStream" `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
     ToStream a                  -> hash "ToStream"      `hashA` a
     FromStream a                -> hash "FromStream"    `hashA` a
     FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2

@@ -266,6 +266,12 @@ data PreAcc acc exp as where
                 -> acc [Array sh e]   
                 -> PreAcc acc exp [Array sh' e']   
 
+  ZipWithStream :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
+                => (Acc (Array sh1 e1) -> Acc (Array sh2 e2) -> acc (Array sh3 e3))
+                -> acc [Array sh1 e1]
+                -> acc [Array sh2 e2]
+                -> PreAcc acc exp [Array sh3 e3]   
+
   ToStream      :: (Shape sh, Elt e)
                 => acc (Array (sh:.Int) e)
                 -> PreAcc acc exp [Array sh e]   
@@ -1090,6 +1096,7 @@ showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp MapStream{}        = "MapStream"
+showPreAccOp ZipWithStream{}    = "ZipWithStream"
 showPreAccOp ToStream{}         = "ToStream"
 showPreAccOp FromStream{}       = "FromStream"
 showPreAccOp FoldStream{}       = "FoldStream"

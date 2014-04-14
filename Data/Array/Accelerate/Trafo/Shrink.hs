@@ -189,6 +189,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
       MapStream f a             -> MapStream (shrinkAF f) (shrinkAcc a)
+      ZipWithStream f a1 a2     -> ZipWithStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
       ToStream a                -> ToStream (shrinkAcc a)
       FromStream a              -> FromStream (shrinkAcc a)
       FoldStream f a1 a2        -> FoldStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
@@ -363,6 +364,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
       MapStream _ a             -> countA a
+      ZipWithStream _ a1 a2     -> countA a1 + countA a2
       ToStream a                -> countA a
       FromStream a              -> countA a
       FoldStream _ a1 a2        -> countA a1 + countA a2

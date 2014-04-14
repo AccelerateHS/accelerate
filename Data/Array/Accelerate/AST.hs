@@ -462,6 +462,16 @@ data PreOpenAcc acc aenv a where
               -> acc             aenv [Array sh e]   
               -> PreOpenAcc  acc aenv [Array sh' e']
 
+  -- Apply a given binary function pairwise to all elements of the given streams.
+  -- The length of the result is the length of the shorter of the two argument
+  -- arrays.
+  ZipWithStream     :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
+              => PreOpenAfun acc aenv (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
+              -> acc            aenv [Array sh1 e1]
+              -> acc            aenv [Array sh2 e2]
+              -> PreOpenAcc acc aenv [Array sh3 e3]
+
+
   -- Convert the given array to a stream.
   ToStream :: (Shape sh, Elt e)
          => acc            aenv (Array (sh:.Int) e)
@@ -993,6 +1003,7 @@ showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp MapStream{}        = "MapStream"
+showPreAccOp ZipWithStream{}    = "ZipWithStream"
 showPreAccOp ToStream{}         = "ToStream"
 showPreAccOp FromStream{}       = "FromStream"
 showPreAccOp FoldStream{}       = "FoldStream"
