@@ -138,7 +138,7 @@ data Val env where
   Empty :: Val ()
   Push  :: Val env -> t -> Val (env, t)
 
-deriving instance Typeable1 Val
+deriving instance Typeable Val
 
 -- Valuation for an environment of array elements
 --
@@ -461,8 +461,8 @@ data PreOpenAcc acc aenv a where
 --
 newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 
--- deriving instance Typeable3 PreOpenAcc
-deriving instance Typeable2 OpenAcc
+-- deriving instance Typeable PreOpenAcc
+deriving instance Typeable OpenAcc
 
 -- |Closed array expression aka an array program
 --

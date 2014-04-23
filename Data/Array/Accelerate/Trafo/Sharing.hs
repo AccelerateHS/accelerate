@@ -681,7 +681,7 @@ convertSharingStencilFun2 config _ _ alyt aenv stencilFun = Lam (Lam (Body openS
 -- Opaque stable name for AST nodes — used to key the occurrence map.
 --
 data StableASTName c where
-  StableASTName :: (Typeable1 c, Typeable t) => StableName (c t) -> StableASTName c
+  StableASTName :: (Typeable c, Typeable t) => StableName (c t) -> StableASTName c
 
 instance Show (StableASTName c) where
   show (StableASTName sn) = show $ hashStableName sn
