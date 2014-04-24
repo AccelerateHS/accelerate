@@ -53,6 +53,9 @@ import Data.Typeable
 import Data.Array.IArray                                        ( IArray )
 import qualified Data.Array.IArray                              as IArray
 
+import GHC.Exts                                                 ( IsList )
+import qualified GHC.Exts                                       as GHC
+
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
@@ -1096,6 +1099,12 @@ toList (Array sh adata) = go 0
 instance Show (Array sh e) where
   show arr@Array{}
     = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Elt e => IsList (Vector e) where
+  type Item (Vector e) = e
+  toList         = toList
+  fromListN n xs = fromList (Z:.n) xs
+  fromList xs    = GHC.fromListN (length xs) xs
 
 {--
 -- Specialised Show instances for dimensions zero, one, and two. Requires
