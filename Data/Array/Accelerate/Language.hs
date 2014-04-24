@@ -105,7 +105,7 @@ module Data.Array.Accelerate.Language (
 
 -- standard libraries
 import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, (.), ($), error )
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, (.), ($), error )
 import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
 
