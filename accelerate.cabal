@@ -160,7 +160,6 @@ Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 Extra-source-files:     INSTALL
-                        include/accelerate.h
 
 Flag debug
   Default:              False
@@ -195,7 +194,6 @@ Flag internal-checks
   Default:              False
 
 Library
-  Include-Dirs:         include
   Build-depends:        array                   >= 0.3,
                         base                    == 4.7.*,
                         containers              >= 0.3,
@@ -227,7 +225,7 @@ Library
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Debug
-                        Data.Array.Accelerate.Internal.Check
+                        Data.Array.Accelerate.Error
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart

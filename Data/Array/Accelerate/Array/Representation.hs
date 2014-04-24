@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -25,12 +25,11 @@ module Data.Array.Accelerate.Array.Representation (
 ) where
 
 -- friends
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 -- standard library
 import GHC.Base                                         ( quotInt, remInt )
-
-#include "accelerate.h"
 
 
 -- |Index representation
@@ -88,7 +87,7 @@ instance Shape () where
 
   shapeToList () = []
   listToShape [] = ()
-  listToShape _  = INTERNAL_ERROR(error) "listToShape" "non-empty list when converting to unit"
+  listToShape _  = $internalError "listToShape" "non-empty list when converting to unit"
 
 instance Shape sh => Shape (sh, Int) where
   dim _                             = dim (undefined :: sh) + 1
@@ -96,7 +95,7 @@ instance Shape sh => Shape (sh, Int) where
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   ignore                            = (ignore, -1)
-  toIndex (sh, sz) (ix, i)          = BOUNDS_CHECK(checkIndex) "toIndex" i sz
+  toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i
 
   fromIndex (sh, sz) i              = (fromIndex sh (i `quotInt` sz), r)
@@ -104,7 +103,7 @@ instance Shape sh => Shape (sh, Int) where
     -- the remainder for the highest dimension since i < sz must hold.
     --
     where
-      r | dim sh == 0   = BOUNDS_CHECK(checkIndex) "fromIndex" i sz i
+      r | dim sh == 0   = $indexCheck "fromIndex" i sz i
         | otherwise     = i `remInt` sz
 
   bound (sh, sz) (ix, i) bndy
@@ -128,7 +127,7 @@ instance Shape sh => Shape (sh, Int) where
       iter' (ix,i) | i >= sz   = r
                    | otherwise = f (ix,i) `c` iter' (ix,i+1)
 
-  iter1 (_,  0)  _ _ = BOUNDS_ERROR(error) "iter1" "empty iteration space"
+  iter1 (_,  0)  _ _ = $boundsError "iter1" "empty iteration space"
   iter1 (sh, sz) f c = iter1 sh (\ix -> iter1' (ix,0)) c
     where
       iter1' (ix,i) | i == sz-1 = f (ix,i)
@@ -142,7 +141,7 @@ instance Shape sh => Shape (sh, Int) where
       ((low, 0), (high, sz - 1))
 
   shapeToList (sh,sz) = sz : shapeToList sh
-  listToShape []      = INTERNAL_ERROR(error) "listToShape" "empty list when converting to Ix"
+  listToShape []      = $internalError "listToShape" "empty list when converting to Ix"
   listToShape (x:xs)  = (listToShape xs,x)
 
 

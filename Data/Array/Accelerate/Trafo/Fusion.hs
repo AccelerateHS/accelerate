@@ -5,6 +5,7 @@
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
@@ -45,6 +46,7 @@ import Prelude                                          hiding ( exp, until )
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
@@ -57,8 +59,6 @@ import qualified Data.Array.Accelerate.Debug            as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
 #endif
-
-#include "accelerate.h"
 
 
 -- Delayed Array Fusion
@@ -121,7 +121,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
     --
     manifest :: OpenAcc aenv a -> DelayedOpenAcc aenv a
     manifest (OpenAcc pacc) =
-      let fusionError = INTERNAL_ERROR(error) "manifest" "unexpected fusible materials"
+      let fusionError = $internalError "manifest" "unexpected fusible materials"
       in
       Manifest $ case pacc of
         -- Non-fusible terms
@@ -664,7 +664,7 @@ bind (PushEnv env a) = bind env . Alet (inject a) . inject
 -- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
 -- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
 -- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
--- prjExtend _               _             = INTERNAL_ERROR(error) "prjExtend" "inconsistent valuation"
+-- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
 
 
 -- Sink a term from one array environment into another, where additional

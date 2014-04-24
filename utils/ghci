@@ -17,7 +17,7 @@ GHC_FLAGS="$GHC_FLAGS
     -DACCELERATE_BOUNDS_CHECKS
     -DACCELERATE_INTERNAL_CHECKS
     -DACCELERATE_DEBUG
-    -Iinclude"
+    -package-db ../.cabal-sandbox/x86_64-osx-ghc-$VER-packages.conf.d"
 
      # -iutils -optP-include -optPdist/build/autogen/cabal_macros.h"
 

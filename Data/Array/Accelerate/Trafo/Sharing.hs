@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -44,6 +44,7 @@ import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
 
 -- friends
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
@@ -53,8 +54,6 @@ import Data.Array.Accelerate.AST                        hiding (
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Debug            as Debug
-
-#include "accelerate.h"
 
 
 -- Configuration
@@ -213,7 +212,7 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa))
   = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++
             show (hashStableNameHeight sa) ++ ")"
   | otherwise
-  = INTERNAL_ERROR(error) "convertSharingAcc" err
+  = $internalError "convertSharingAcc" err
   where
     aenv' = lams ++ aenv
     ctxt = "shared 'Acc' tree with stable name " ++ show (hashStableNameHeight sa)
@@ -457,7 +456,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | null env'
       = error $ "Cyclic definition of a value of type 'Exp' (sa = " ++ show (hashStableNameHeight se) ++ ")"
       | otherwise
-      = INTERNAL_ERROR(error) "convertSharingExp" err
+      = $internalError "convertSharingExp" err
       where
         ctxt = "shared 'Exp' tree with stable name " ++ show (hashStableNameHeight se)
         err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  env' = " ++ show env'
@@ -1542,12 +1541,12 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
       = case filter hasTag sas of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
-          sas2 -> INTERNAL_ERROR(error) "buildInitialEnvAcc"
+          sas2 -> $internalError "buildInitialEnvAcc"
                 $ "Encountered duplicate 'ATag's\n  " ++ intercalate ", " (map showSA sas2)
       where
         hasTag (StableSharingAcc _ (AccSharing _ (Atag tag2))) = tag1 == tag2
         hasTag sa
-          = INTERNAL_ERROR(error) "buildInitialEnvAcc"
+          = $internalError "buildInitialEnvAcc"
           $ "Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa
 
         noStableSharing :: StableSharingAcc
@@ -1573,12 +1572,12 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
       = case filter hasTag ses of
           []   -> noStableSharing    -- tag is not used in the analysed expression
           [se] -> se                 -- tag has a unique occurrence
-          ses2 -> INTERNAL_ERROR(error) "buildInitialEnvExp"
+          ses2 -> $internalError "buildInitialEnvExp"
                     ("Encountered a duplicate 'Tag'\n  " ++ intercalate ", " (map showSE ses2))
       where
         hasTag (StableSharingExp _ (ExpSharing _ (Tag tag2))) = tag1 == tag2
         hasTag se
-          = INTERNAL_ERROR(error) "buildInitialEnvExp"
+          = $internalError "buildInitialEnvExp"
               ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
 
         noStableSharing :: StableSharingExp
@@ -1624,7 +1623,7 @@ determineScopesAcc config fvs accOccMap rootAcc
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
-       else INTERNAL_ERROR(error) "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
+       else $internalError "determineScopesAcc" ("unbound shared subtrees" ++ show unboundTrees)
 
 
 determineScopesSharingAcc
@@ -1636,7 +1635,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
   where
     scopesAcc :: forall arrs. UnscopedAcc arrs -> (ScopedAcc arrs, NodeCounts)
     scopesAcc (UnscopedAcc _ (AletSharing _ _))
-      = INTERNAL_ERROR(error) "determineScopesSharingAcc: scopesAcc" "unexpected 'AletSharing'"
+      = $internalError "determineScopesSharingAcc: scopesAcc" "unexpected 'AletSharing'"
 
     scopesAcc (UnscopedAcc _ (AvarSharing sn))
       = (ScopedAcc [] (AvarSharing sn), StableSharingAcc sn (AvarSharing sn) `insertAccNode` noNodeCounts)
@@ -1985,7 +1984,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
     scopesExp :: forall t. UnscopedExp t -> (ScopedExp t, NodeCounts)
     scopesExp (UnscopedExp _ (LetSharing _ _))
-      = INTERNAL_ERROR(error) "determineScopesSharingExp: scopesExp" "unexpected 'LetSharing'"
+      = $internalError "determineScopesSharingExp: scopesExp" "unexpected 'LetSharing'"
 
     scopesExp (UnscopedExp _ (VarSharing sn))
       = (ScopedExp [] (VarSharing sn), StableSharingExp sn (VarSharing sn) `insertExpNode` noNodeCounts)
@@ -2083,7 +2082,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
 
         abstract :: ScopedAcc a -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedExp a)
                  -> (ScopedAcc a, StableSharingAcc)
-        abstract (ScopedAcc _ (AvarSharing _))       _      = INTERNAL_ERROR(error) "sharingAccToVar" "AvarSharing"
+        abstract (ScopedAcc _ (AvarSharing _))       _      = $internalError "sharingAccToVar" "AvarSharing"
         abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . (\x -> ScopedAcc ssa (AletSharing sa x)))
         abstract acc@(ScopedAcc ssa (AccSharing sn _)) lets = (ScopedAcc ssa (AvarSharing sn), StableSharingAcc sn (lets acc))
 

@@ -1,9 +1,9 @@
 {-# LANGUAGE BangPatterns         #-}
-{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 -- |
@@ -32,7 +32,7 @@ import Control.Applicative                              hiding ( Const )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
--- import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
@@ -44,8 +44,6 @@ import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toE
 
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
-
-#include "accelerate.h"
 
 
 class Simplify f where
@@ -385,7 +383,7 @@ iterate ppr f = fix 0 . setup . simplify'
 
     fix :: Int -> f a -> f a
     fix !i !x0
-      | i >= lIMIT      = INTERNAL_CHECK(warning) "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+      | i >= lIMIT      = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
