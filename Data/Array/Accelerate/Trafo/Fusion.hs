@@ -468,7 +468,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     fuse2 op a1 a0
       | Embed env1 cc1  <- embedAcc a1
       , Embed env0 cc0  <- embedAcc (sink env1 a0)
-      , env             <- env1 `join` env0
+      , env             <- env1 `append` env0
       = Embed env (op env (sink env0 cc1) cc0)
 
     embed :: (Arrays as, Arrays bs)
@@ -484,7 +484,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
            ->       acc aenv bs
            -> Embed acc aenv cs
     embed2 op (embedAcc -> Embed env1 cc1) (embedAcc . sink env1 -> Embed env0 cc0)
-      | env     <- env1 `join` env0
+      | env     <- env1 `append` env0
       , acc1    <- inject . compute' $ sink env0 cc1
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` op env acc1 acc0) (Done ZeroIdx)
@@ -507,7 +507,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 -- are defined with respect to this existentially quantified type, and there is
 -- no way to directly combine these two environments:
 --
---   join :: Extend env env1 -> Extend env env2 -> Extend env ???
+--   append :: Extend env env1 -> Extend env env2 -> Extend env ???
 --
 -- And hence, no way to combine the terms of the delayed representation.
 --
@@ -646,9 +646,9 @@ data Extend acc aenv aenv' where
 
 -- Append two environment witnesses
 --
-join :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
-join x BaseEnv        = x
-join x (PushEnv as a) = x `join` as `PushEnv` a
+append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
+append x BaseEnv        = x
+append x (PushEnv as a) = x `append` as `PushEnv` a
 
 -- Bring into scope all of the array terms in the Extend environment list. This
 -- converts a term in the inner environment (aenv') into the outer (aenv).
@@ -992,7 +992,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   | Done v1             <- cc1
   , Embed env0 cc0      <- embedAcc $ rebuildAcc (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
-  $ Embed (env1 `join` env0) cc0
+  $ Embed (env1 `append` env0) cc0
 
   -- Ensure we only call 'embedAcc' once on the body expression
   --
@@ -1019,7 +1019,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
   | acc1                <- compute (Embed env1 cc1)
   , False               <- elimAcc (inject acc1) acc0
   = Stats.ruleFired "aletD/bind"
-  $ Embed (BaseEnv `PushEnv` acc1 `join` env0) cc0
+  $ Embed (BaseEnv `PushEnv` acc1 `append` env0) cc0
 
   -- let-elimination
   -- ---------------
@@ -1058,7 +1058,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
           , f1'                 <- weakenFA rebuildAcc SuccIdx f1
           , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
-          = Embed (env1 `join` env0') cc0'
+          = Embed (env1 `append` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
     -- scalar expressions with an equivalent expression that generates the
