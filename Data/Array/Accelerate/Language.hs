@@ -139,7 +139,7 @@ unit = Acc . Unit
 --
 -- For example, assuming 'arr' is a vector (one-dimensional array),
 --
--- > replicate (Z :.2 :.All :.3) arr
+-- > replicate (lift (Z :. (2::Int) :. All :. (3::Int))) arr
 --
 -- yields a three dimensional array, where 'arr' is replicated twice across the
 -- first and three times across the third dimension.
@@ -209,10 +209,11 @@ reshape = Acc $$ Reshape
 -- following will select a specific row and yield a one dimensional
 -- result:
 --
--- > slice mat (constant (Z :. (2::Int) :. All))
+-- > slice mat (lift (Z :. (2::Int) :. All))
 --
--- A fully specified index (with no `All`s) would return a single
--- element (zero dimensional array).
+-- A fully specified index (with no `All`s) would return a single element (zero
+-- dimensional array).
+--
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix

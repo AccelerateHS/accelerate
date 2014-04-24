@@ -82,10 +82,10 @@ data tail :. head = tail :. head
 
 -- | Marker for entire dimensions in slice descriptors.
 --
--- For example, when used in slices passed to `replicate`, the
--- occurrences of `All` indicate the dimensions into which the array's
--- existing extent will be placed, rather than the new dimensions
--- introduced by replication.
+-- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
+-- the occurrences of `All` indicate the dimensions into which the array's
+-- existing extent will be placed, rather than the new dimensions introduced by
+-- replication.
 --
 data All = All
   deriving (Typeable, Show, Eq)
