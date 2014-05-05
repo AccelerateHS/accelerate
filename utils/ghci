@@ -11,6 +11,7 @@ DIR=`dirname $0`
 # backend to work properly within GHCi.
 #
 GHC_FLAGS="$GHC_FLAGS
+    --interactive
     -optP -include -optP $DIR/dist/build/autogen/cabal_macros.h
     -optP -include -optP $DIR/../accelerate-cuda/dist/build/autogen/cabal_macros.h
     -i$DIR/utils
