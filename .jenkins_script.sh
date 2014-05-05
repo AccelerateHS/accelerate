@@ -8,7 +8,7 @@ PKGS=" ./ ./accelerate-backend-kit/backend-kit \
        ./accelerate-multidev/ ./accelerate-cuda/ "
 # 
 
-CBLARGS="--disable-library-profiling  --disable-documentation --constraint='cuda<0.6' $*"
+CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<0.6 $*"
 
 #------------------------------------------------------------
 # Init sandbox and link it
