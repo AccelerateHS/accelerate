@@ -1,8 +1,10 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
 -- |
--- Module      : Data.Array.Accelerate
+-- Module      : Data.Array.Accelerate.Array.Delayed
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+--               [2009..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -16,7 +18,7 @@
 module Data.Array.Accelerate.Array.Delayed (
 
   -- * Delayed array interface
-  Delayable(delay, force), Delayed(..)
+  Delayed, DelayedR(..), delay, force,
 
 ) where
 
@@ -24,31 +26,51 @@ module Data.Array.Accelerate.Array.Delayed (
 import Data.Array.Accelerate.Array.Sugar
 
 
+type Delayed a = DelayedR (ArrRepr a)
+
+
+delay :: Arrays a => a -> Delayed a
+delay arr = go (arrays arr) (fromArr arr)
+  where
+    go :: ArraysR a -> a -> DelayedR a
+    go ArraysRunit         ()       = DelayedRunit
+    go ArraysRarray        a        = delayR a
+    go (ArraysRpair r1 r2) (a1, a2) = DelayedRpair (go r1 a1) (go r2 a2)
+
+
+force :: forall a. Arrays a => Delayed a -> a
+force arr = toArr $ go (arrays (undefined::a)) arr
+  where
+    go :: ArraysR a' -> DelayedR a' -> a'
+    go ArraysRunit         DelayedRunit         = ()
+    go ArraysRarray        a                    = forceR a
+    go (ArraysRpair r1 r2) (DelayedRpair d1 d2) = (go r1 d1, go r2 d2)
+
+
 -- Delayed arrays are characterised by the domain of an array and its functional
 -- representation
--- 
-
+--
 class Delayable a where
-  data Delayed a
-  delay :: a -> Delayed a
-  force :: Delayed a -> a
-  
+  data DelayedR a
+  delayR :: a -> DelayedR a
+  forceR :: DelayedR a -> a
+
 instance Delayable () where
-  data Delayed () = DelayedUnit
-  delay ()          = DelayedUnit
-  force DelayedUnit = ()
+  data DelayedR () = DelayedRunit
+  delayR ()           = DelayedRunit
+  forceR DelayedRunit = ()
 
 instance Delayable (Array sh e) where
-  data Delayed (Array sh e) 
-    = (Shape sh, Elt e) => 
-      DelayedArray { shapeDA :: EltRepr sh
-                   , repfDA  :: EltRepr sh -> EltRepr e
-                   }
-  delay arr@(Array sh _)    = DelayedArray sh (fromElt . (arr!) . toElt)
-  force (DelayedArray sh f) = newArray (toElt sh) (toElt . f . fromElt)
-  
+  data DelayedR (Array sh e)
+    = (Shape sh, Elt e) =>
+      DelayedRarray { shapeDA :: EltRepr sh
+                    , repfDA  :: EltRepr sh -> EltRepr e
+                    }
+  delayR arr@(Array sh _)    = DelayedRarray sh (fromElt . (arr!) . toElt)
+  forceR (DelayedRarray sh f) = newArray (toElt sh) (toElt . f . fromElt)
+
 instance (Delayable a1, Delayable a2) => Delayable (a1, a2) where
-  data Delayed (a1, a2) = DelayedPair (Delayed a1) (Delayed a2)
-  delay (a1, a2) = DelayedPair (delay a1) (delay a2)
-  force (DelayedPair a1 a2) = (force a1, force a2)
+  data DelayedR (a1, a2) = DelayedRpair (DelayedR a1) (DelayedR a2)
+  delayR (a1, a2) = DelayedRpair (delayR a1) (delayR a2)
+  forceR (DelayedRpair a1 a2) = (forceR a1, forceR a2)
 

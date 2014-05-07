@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators   #-}
 {-# OPTIONS -fno-warn-unused-imports #-}
 {-# OPTIONS -fno-warn-unused-binds   #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
@@ -29,7 +30,7 @@ module Data.Array.Accelerate.Debug (
 
   -- * Statistics
   inline, ruleFired, knownBranch, betaReduce, substitution, simplifierDone, fusionDone,
-  resetSimplCount,
+  resetSimplCount, simplCount,
 
 ) where
 
@@ -44,22 +45,9 @@ import Text.PrettyPrint
 import System.CPUTime
 import System.Environment
 import System.IO.Unsafe                         ( unsafePerformIO )
-import qualified Data.Map.Strict                as Map
+import qualified Data.Map                       as Map
 
--- friends
-import Data.Array.Accelerate.Pretty ()
-
-#if __GLASGOW_HASKELL__ >= 704
 import Debug.Trace                              ( traceIO, traceEventIO )
-#else
-import Debug.Trace                              ( putTraceMsg )
-
-traceIO :: String -> IO ()
-traceIO = putTraceMsg
-
-traceEventIO :: String -> IO ()
-traceEventIO = traceIO
-#endif
 
 
 -- -----------------------------------------------------------------------------
@@ -114,6 +102,7 @@ fflags =
   , Option "exp-sharing"                (set' exp_sharing)              -- sharing of scalar expressions
   , Option "fusion"                     (set' fusion)                   -- fusion of array computations
   , Option "simplify"                   (set' simplify)                 -- scalar expression simplification
+--  , Option "unfolding-use-threshold"                                  -- the magic cut-off figure for inlining
   ]
   where
     set' f v = set f (Just v)
@@ -214,7 +203,11 @@ fusionDone      = tick FusionDone
 -- Add an entry to the statistics counters
 --
 tick :: Tick -> a -> a
+#ifdef ACCELERATE_DEBUG
 tick t next = unsafePerformIO (modifyIORef' statistics (simplTick t)) `seq` next
+#else
+tick _ next = next
+#endif
 
 -- Add an entry to the statistics counters with an annotation
 --
@@ -261,7 +254,11 @@ initSimplCount = return $! Simple 0
 -- Bruijn conversion + optimisation pass.
 --
 resetSimplCount :: IO ()
+#ifdef ACCELERATE_DEBUG
 resetSimplCount = writeIORef statistics =<< initSimplCount
+#else
+resetSimplCount = return ()
+#endif
 
 -- Tick a counter
 --
@@ -278,6 +275,9 @@ pprSimplCount (Detail n dts)
          , text ""
          , pprTickCount dts
          ]
+
+simplCount :: IO Doc
+simplCount = pprSimplCount `fmap` readIORef statistics
 
 
 -- Ticks

@@ -1,4 +1,8 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -16,28 +20,27 @@ module Data.Array.Accelerate.Trafo (
   -- * HOAS -> de Bruijn conversion
   Phase(..), phases,
 
-  convertAcc,     convertAccWith,
-  convertAccFun1, convertAccFun1With,
+  convertAcc,  convertAccWith,
+  convertAfun, convertAfunWith,
 
   -- * Fusion
-  Fusion.embedOpenAcc, Fusion.Embedded(..),
+  module Data.Array.Accelerate.Trafo.Fusion,
 
-  -- * Substitution and weakening
-  inline, substitute, compose,
-
-  weakenA, weakenEA, weakenFA,
-  weakenE, weakenFE,
-
-  weakenByA, weakenByEA, weakenByFA,
-  weakenByE, weakenByFE,
+  -- * Substitution
+  rebuildAcc,
+  module Data.Array.Accelerate.Trafo.Substitution,
 
 ) where
 
-import Prelude                                          hiding ( exp )
+import System.IO.Unsafe
 
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Debug
+import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
-import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
+import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
@@ -62,7 +65,7 @@ data Phase = Phase
   , floatOutAccFromExp          :: Bool
 
     -- | Fuse array computations? This also implies simplifying scalar
-    --   expressions.
+    --   expressions. NOTE: currently always enabled.
   , enableAccFusion             :: Bool
 
     -- | Convert segment length arrays into segment offset arrays?
@@ -82,6 +85,10 @@ phases =  Phase
   , convertOffsetOfSegment = False
   }
 
+when :: (a -> a) -> Bool -> a -> a
+when f True  = f
+when _ False = id
+
 
 -- HOAS -> de Bruijn conversion
 -- ----------------------------
@@ -89,78 +96,87 @@ phases =  Phase
 -- | Convert a closed array expression to de Bruijn form while also
 --   incorporating sharing observation and array fusion.
 --
-convertAcc :: Arrays arrs => Acc arrs -> AST.Acc arrs
+convertAcc :: Arrays arrs => Acc arrs -> DelayedAcc arrs
 convertAcc = convertAccWith phases
 
-convertAccWith :: Arrays arrs => Phase -> Acc arrs -> AST.Acc arrs
-convertAccWith ok acc
-  = Fusion.fuseAcc          `when` enableAccFusion
+convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
+convertAccWith Phase{..} acc
+  = Fusion.convertAcc enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
-  where
-    when f phase
-      | phase ok        = f
-      | otherwise       = id
+  $ Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ acc
 
 
 -- | Convert a unary function over array computations, incorporating sharing
 --   observation and array fusion
 --
-convertAccFun1 :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1 = convertAccFun1With phases
+convertAfun :: Afunction f => f -> DelayedAfun (AfunctionR f)
+convertAfun = convertAfunWith phases
 
-convertAccFun1With :: (Arrays a, Arrays b) => Phase -> (Acc a -> Acc b) -> AST.Afun (a -> b)
-convertAccFun1With ok acc
-  = Fusion.fuseAfun             `when` enableAccFusion
+convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
+convertAfunWith Phase{..} acc
+  = Fusion.convertAfun enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAccFun1 (recoverAccSharing ok) (recoverExpSharing ok) (floatOutAccFromExp ok) acc
-  where
-    when f phase
-      | phase ok        = f
-      | otherwise       = id
+  $ Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ acc
 
 
 -- | Convert a closed scalar expression, incorporating sharing observation and
 --   optimisation.
 --
 convertExp :: Elt e => Exp e -> AST.Exp () e
-convertExp exp
-  = Rewrite.simplifyExp EmptyAcc
-  $ Sharing.convertExp (recoverExpSharing phases) exp
+convertExp
+  = Rewrite.simplify
+  . Sharing.convertExp (recoverExpSharing phases)
 
 
 -- | Convert closed scalar functions, incorporating sharing observation and
 --   optimisation.
 --
-convertFun1 :: (Elt a, Elt b) => (Exp a -> Exp b) -> AST.Fun () (a -> b)
-convertFun1 fun
-  = Rewrite.simplifyFun EmptyAcc
-  $ Sharing.convertFun1 (recoverExpSharing phases) fun
-
-convertFun2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> AST.Fun () (a -> b -> c)
-convertFun2 fun
-  = Rewrite.simplifyFun EmptyAcc
-  $ Sharing.convertFun2 (recoverExpSharing phases) fun
+convertFun :: Function f => f -> AST.Fun () (FunctionR f)
+convertFun
+  = Rewrite.simplify
+  . Sharing.convertFun (recoverExpSharing phases)
 
 
 -- Pretty printing
 -- ---------------
 
--- [RRN] Turn fusion off for default printing: 
-showCfg = phases { enableAccFusion = False }
-
 instance Arrays arrs => Show (Acc arrs) where
-  show = show . convertAccWith showCfg
+  show = withSimplStats . show . convertAcc
 
-instance (Arrays a, Arrays b) => Show (Acc a -> Acc b) where
-  show = show . convertAccFun1With showCfg
+instance Afunction (Acc a -> f) => Show (Acc a -> f) where
+  show = withSimplStats . show . convertAfun
 
 instance Elt e => Show (Exp e) where
-  show = show . convertExp
+  show = withSimplStats . show . convertExp
 
-instance (Elt a, Elt b) => Show (Exp a -> Exp b) where
-  show = show . convertFun1
+instance Function (Exp a -> f) => Show (Exp a -> f) where
+  show = withSimplStats . show . convertFun
 
-instance (Elt a, Elt b, Elt c) => Show (Exp a -> Exp b -> Exp c) where
-  show = show . convertFun2
+
+-- Debugging
+-- ---------
+
+-- Attach simplifier statistics to the tail of the given string. Since the
+-- statistics rely on fully evaluating the expression this is difficult to do
+-- generally (without an additional deepseq), but easy enough for our show
+-- instances.
+--
+-- For now, we just reset the statistics at the beginning of a conversion, and
+-- leave it to a backend to choose an appropriate moment to dump the summary.
+--
+withSimplStats :: String -> String
+#ifdef ACCELERATE_DEBUG
+withSimplStats x = unsafePerformIO $ do
+  enabled <- queryFlag dump_simpl_stats
+  if not enabled
+     then return x
+     else do resetSimplCount
+             stats <- length x `seq` simplCount
+             traceMessage dump_simpl_stats (show stats)
+             return x
+#else
+withSimplStats x = x
+#endif
 

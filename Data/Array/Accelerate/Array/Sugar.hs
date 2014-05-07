@@ -1,11 +1,20 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE GADTs, ScopedTypeVariables, StandaloneDeriving, TupleSections #-}
-{-# LANGUAGE TypeOperators, TypeFamilies, BangPatterns #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
 -- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+--               [2009..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+--               [2013] Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -37,30 +46,22 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Miscellaneous
-  showShape, ForeignFun(..)
+  showShape, Foreign(..)
 
 ) where
 
 -- standard library
 import Data.Typeable
-import Data.Array.IArray                ( IArray )
-import qualified Data.Array.IArray      as IArray
+import Data.Array.IArray                                        ( IArray )
+import qualified Data.Array.IArray                              as IArray
+
+import GHC.Exts                                                 ( IsList )
+import qualified GHC.Exts                                       as GHC
 
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import qualified Data.Array.Accelerate.Array.Representation as Repr
-
--- Class for backends to choose their own representation of foreign functions.
--- By default it has no instances. If a backend wishes to have an FFI it must provide
--- an instance.
--- --------------------------------------------------------------------------------
---
-class (Typeable2 f) => ForeignFun (f :: * -> * -> *) where
-  -- Backends should be able to produce a string representation of the foreign function
-  -- for pretty printing. It should contain the backend name and ideally a string uniquely
-  -- identifying the foreign function being used.
-  strForeign :: f args results -> String
+import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
 -- Surface types representing array indices and slices
@@ -86,10 +87,10 @@ data tail :. head = tail :. head
 
 -- | Marker for entire dimensions in slice descriptors.
 --
--- For example, when used in slices passed to `replicate`, the
--- occurrences of `All` indicate the dimensions into which the array's
--- existing extent will be placed, rather than the new dimensions
--- introduced by replication.
+-- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
+-- the occurrences of `All` indicate the dimensions into which the array's
+-- existing extent will be placed, rather than the new dimensions introduced by
+-- replication.
 --
 data All = All
   deriving (Typeable, Show, Eq)
@@ -412,81 +413,80 @@ instance Elt Word64 where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
   reifyTupTree _ = (TupKind, TupLeaf)
-  
-{-
+
 instance Elt CShort where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUShort where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CInt where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUInt where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CULong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CLLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CULLong where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
 
 instance Elt Float where
   eltType       = singletonScalarType
@@ -506,27 +506,27 @@ instance Elt Double where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
   reifyTupTree _ = (TupKind, TupLeaf)
-  
-{-
+
 instance Elt CFloat where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CDouble where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
+
 
 instance Elt Bool where
   eltType       = singletonScalarType
@@ -546,36 +546,35 @@ instance Elt Char where
   eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
+
   reifyTupTree _ = (TupKind, TupLeaf)
   
-{-
 instance Elt CChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CSChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
 
 instance Elt CUChar where
-  --eltType       = singletonScalarType
+  eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
 
-  --eltType' _    = SingleTuple scalarType
+  eltType' _    = SingleTuple scalarType
   fromElt'      = id
   toElt'        = id
--}
 
 instance (Elt a, Elt b) => Elt (a, b) where
   eltType (_::(a, b))
@@ -787,7 +786,23 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 "fromElt/toElt" forall e.
   fromElt (toElt e) = e
 
-  #-}
+"toElt/fromElt" forall e.
+  toElt (fromElt e) = e #-}
+
+
+-- Foreign functions
+-- -----------------
+
+-- Class for backends to choose their own representation of foreign functions.
+-- By default it has no instances. If a backend wishes to have an FFI it must
+-- provide an instance.
+--
+class Typeable f => Foreign (f :: * -> * -> *) where
+
+  -- Backends should be able to produce a string representation of the foreign
+  -- function for pretty printing, typically the name of the function.
+  strForeign :: f args results -> String
+
 
 -- Surface arrays
 -- --------------
@@ -1004,6 +1019,15 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
         ti = reifyArrTupTree (undefined::i)        
     in (TupTree [ti,th,tg,tf,te,td,tc,tb,ta])
 
+{-# RULES
+
+"fromArr/toArr" forall a.
+  fromArr (toArr a) = a
+
+"toArr/fromArr" forall a.
+  toArr (fromArr a) = a #-}
+
+
 -- |Multi-dimensional arrays for array processing.
 --
 -- If device and host memory are separate, arrays will be transferred to the
@@ -1016,7 +1040,7 @@ data Array sh e where
         -> ArrayData (EltRepr e)      -- array payload
         -> Array sh e
 
-deriving instance Typeable2 Array
+deriving instance Typeable Array
 
 -- |Scalars arrays hold a single element
 --
@@ -1235,9 +1259,12 @@ fromList :: (Shape sh, Elt e) => sh -> [e] -> Array sh e
 {-# INLINE fromList #-}
 fromList sh xs = adata `seq` Array (fromElt sh) adata
   where
+    -- Assume the array is in dense row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
     !n          = size sh
     (adata, _)  = runArrayData $ do
-                    arr <- newArrayData (size sh)
+                    arr <- newArrayData n
                     let go !i _ | i >= n = return ()
                         go !i (v:vs)     = unsafeWriteArrayData arr i (fromElt v) >> go (i+1) vs
                         go _  []         = error "Data.Array.Accelerate.fromList: not enough input data"
@@ -1248,16 +1275,57 @@ fromList sh xs = adata `seq` Array (fromElt sh) adata
 -- | Convert an accelerated array to a list in row-major order.
 --
 toList :: forall sh e. Array sh e -> [e]
-toList (Array sh adata) = iter sh' idx (.) id []
+{-# INLINE toList #-}
+toList (Array sh adata) = go 0
   where
-    sh'    = toElt sh :: sh
-    idx ix = \l -> toElt (adata `unsafeIndexArrayData` toIndex sh' ix) : l
+    -- Assume underling array is in row-major order. This is safe because
+    -- otherwise backends would not be able to directly memcpy.
+    --
+    !n                  = Repr.size sh
+    go !i | i >= n      = []
+          | otherwise   = toElt (adata `unsafeIndexArrayData` i) : go (i+1)
 
 -- Convert an array to a string
 --
 instance Show (Array sh e) where
-  show arr@(Array sh _adata)
-    = "Array (" ++ showShape (toElt sh :: sh) ++ ") " ++ show (toList arr)
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Elt e => IsList (Vector e) where
+  type Item (Vector e) = e
+  toList         = toList
+  fromListN n xs = fromList (Z:.n) xs
+  fromList xs    = GHC.fromListN (length xs) xs
+
+{--
+-- Specialised Show instances for dimensions zero, one, and two. Requires
+-- overlapping instances.
+--
+-- TODO:
+--   * Formatting of the matrix should be better, such as aligning the columns?
+--   * Make matrix formatting optional? It is more difficult to copy/paste the
+--     result, for example.
+--
+instance Show (Scalar e) where
+  show arr@Array{}
+    = "Scalar Z " ++ show (toList arr)
+
+instance Show (Vector e) where
+  show arr@Array{}
+    = "Vector (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Show (Array DIM2 e) where
+  show arr@Array{}
+    = "Array (" ++ showShape (shape arr) ++ ") \n " ++ showMat (toMatrix (toList arr))
+    where
+      showRow xs        = intercalate "," (map show xs)
+      showMat mat       = "[" ++ intercalate "\n ," (map showRow mat) ++ "]"
+
+      Z :. _ :. cols    = shape arr
+      toMatrix []       = []
+      toMatrix xs       = let (r,rs) = splitAt cols xs
+                          in  r : toMatrix rs
+--}
 
 -- | Nicely format a shape as a string
 --

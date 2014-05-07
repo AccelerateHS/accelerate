@@ -9,28 +9,37 @@
 -- Portability : non-portable (GHC extensions)
 --
 -- This module defines an embedded language of array computations for
--- high-performance computing.  Computations on multi-dimensional, regular
+-- high-performance computing. Computations on multi-dimensional, regular
 -- arrays are expressed in the form of parameterised collective operations
--- (such as maps, reductions, and permutations).  These computations are online
+-- (such as maps, reductions, and permutations). These computations are online
 -- compiled and executed on a range of architectures.
 --
--- /Abstract interface/
+-- [/Abstract interface:/]
 --
 -- The types representing array computations are only exported abstractly —
 -- i.e., client code can generate array computations and submit them for
--- for execution, but it cannot inspect these computations.  This is to allow
--- for more flexibility for future extensions of this library.
+-- execution, but it cannot inspect these computations. This is to allow for
+-- more flexibility for future extensions of this library.
 --
--- /Code execution/
+-- [/Code execution:/]
 --
--- Access to the various backends is via a 'run' function in
--- backend-specific toplevel modules.  Currently, we have the following:
+-- Access to the various backends is via a 'run' function in backend-specific
+-- top level modules. Currently, we have the following:
 --
 -- * "Data.Array.Accelerate.Interpreter": simple interpreter in Haskell as a
 --   reference implementation defining the semantics of the Accelerate language
 --
 -- * "Data.Array.Accelerate.CUDA": an implementation supporting parallel
---    execution on CUDA-capable NVIDIA GPUs
+--   execution on CUDA-capable NVIDIA GPUs
+--
+-- [/Examples and documentation:/]
+--
+-- * A (draft) tutorial is available on the GitHub wiki:
+--   <https://github.com/AccelerateHS/accelerate/wiki>
+--
+-- * The @accelerate-examples@ package demonstrates a range of computational
+--   kernels and several complete applications:
+--   <http://hackage.haskell.org/package/accelerate-examples>
 --
 
 module Data.Array.Accelerate (
@@ -53,10 +62,10 @@ module Data.Array.Accelerate (
 
   -- ** Accessors
   -- *** Indexing
-  (L.!), (L.!!), L.the,
+  (L.!), (L.!!), P.the,
 
   -- *** Shape information
-  L.null, L.shape, L.size, L.shapeSize,
+  P.null, L.shape, L.size, L.shapeSize,
 
   -- *** Extracting sub-arrays
   L.slice,
@@ -72,9 +81,12 @@ module Data.Array.Accelerate (
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
 
+  -- *** Concatenation
+  (P.++),
+
   -- ** Composition
   -- *** Flow control
-  (L.?|), L.cond,
+  (P.?|), L.acond, L.awhile,
 
   -- *** Pipelining
   (L.>->),
@@ -94,11 +106,11 @@ module Data.Array.Accelerate (
   L.map,
 
   -- *** Zipping
-  L.zipWith, P.zipWith3, P.zipWith4,
-  P.zip, P.zip3, P.zip4,
+  L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,
+  P.zip, P.zip3, P.zip4, P.zip5, P.zip6, P.zip7, P.zip8, P.zip9,
 
   -- *** Unzipping
-  P.unzip, P.unzip3, P.unzip4,
+  P.unzip, P.unzip3, P.unzip4, P.unzip5, P.unzip6, P.unzip7, P.unzip8, P.unzip9,
 
   -- ** Working with predicates
   -- *** Filtering
@@ -162,17 +174,32 @@ module Data.Array.Accelerate (
 
   -- | A value of type `Int` is a plain Haskell value (unlifted), whereas an
   -- @Exp Int@ is a /lifted/ value, that is, an integer lifted into the domain
-  -- of expressions (an abstract syntax tree in disguise).  Both `Acc` and `Exp`
-  -- are /surface types/ into which values may be lifted.
+  -- of expressions (an abstract syntax tree in disguise). Both `Acc` and `Exp`
+  -- are /surface types/ into which values may be lifted. Lifting plain array
+  -- and scalar surface types is equivalent to 'use' and 'constant'
+  -- respectively.
   --
   -- In general an @Exp Int@ cannot be unlifted into an `Int`, because the
   -- actual number will not be available until a later stage of execution (e.g.
-  -- GPU execution, when `run` is called).  However, in some cases unlifting
-  -- makes sense.  For example, unlifting can convert, or unpack, an expression
-  -- of tuple type into a tuple of expressions; those expressions, at runtime,
-  -- will become tuple dereferences.
+  -- during GPU execution, when `run` is called). Similarly an @Acc array@ can
+  -- not be unlifted to a vanilla `array`; you should instead `run` the
+  -- expression with a specific backend to evaluate it.
   --
-  L.Lift(..), L.Unlift(..), L.lift1, L.lift2, L.ilift1, L.ilift2,
+  -- Lifting and unlifting are also used to pack and unpack an expression into
+  -- and out of constructors such as tuples, respectively. Those expressions, at
+  -- runtime, will become tuple dereferences. For example:
+  --
+  -- > Exp (Z :. Int :. Int)
+  -- >     -> unlift    :: (Z :. Exp Int :. Exp Int)
+  -- >     -> lift      :: Exp (Z :. Int :. Int)
+  -- >     -> ...
+  --
+  -- > Acc (Scalar Int, Vector Float)
+  -- >     -> unlift    :: (Acc (Scalar Int), Acc (Vector Float))
+  -- >     -> lift      :: Acc (Scalar Int, Vector Float)
+  -- >     -> ...
+  --
+  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
 
   -- ** Operations
   --
@@ -186,17 +213,20 @@ module Data.Array.Accelerate (
   L.constant,
 
   -- *** Tuples
-  L.fst, L.snd, L.curry, L.uncurry,
+  P.fst, P.afst, P.snd, P.asnd, P.curry, P.uncurry,
 
-  -- *** Conditional
-  (L.?),
+  -- *** Flow control
+  (P.?), P.caseof, L.cond, L.while, P.iterate,
+
+  -- *** Scalar reduction
+  P.sfoldl,
 
   -- *** Basic operations
   (L.&&*), (L.||*), L.not,
-  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*), L.max, L.min,
+  (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*),
 
   -- *** Numeric functions
-  L.truncate, L.round, L.floor, L.ceiling,
+  L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,
 
   -- *** Bitwise functions
   L.bit, L.setBit, L.clearBit, L.complementBit, L.testBit,
@@ -204,12 +234,13 @@ module Data.Array.Accelerate (
   L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  L.index0, L.index1, L.unindex1, L.index2, L.unindex2,
+  P.index0, P.index1, P.unindex1, P.index2, P.unindex2,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
+  L.intersect,
 
   -- *** Conversions
-  L.boolToInt, L.fromIntegral,
+  L.ord, L.chr, L.boolToInt, L.fromIntegral,
 
   -- ---------------------------------------------------------------------------
 
@@ -221,6 +252,9 @@ module Data.Array.Accelerate (
   --
   -- | For additional conversion routines, see the accelerate-io package:
   -- <http://hackage.haskell.org/package/accelerate-io>
+
+  -- *** Function
+  fromFunction,
 
   -- *** Lists
   S.fromList, S.toList,
@@ -239,7 +273,6 @@ import qualified Data.Array.Accelerate.Type         as T
 
 -- system
 import Prelude (Float, Double, Bool, Char)
-import qualified Prelude
 
 
 -- Renamings
@@ -249,25 +282,31 @@ import qualified Prelude
 
 -- rename as '(!)' is already used by the EDSL for indexing
 
--- |Array indexing in plain Haskell code
+-- |Array indexing in plain Haskell code.
 --
 indexArray :: S.Array sh e -> sh -> e
 indexArray = (S.!)
 
--- | Rank of an array
+-- | Rank of an array.
 --
 arrayDim :: S.Shape sh => sh -> T.Int
 arrayDim = S.dim
 -- FIXME: Rename to rank
 
--- |Array shape in plain Haskell code
+-- |Array shape in plain Haskell code.
 --
 arrayShape :: S.Shape sh => S.Array sh e -> sh
 arrayShape = S.shape
 -- rename as 'shape' is already used by the EDSL to query an array's shape
 
--- | Total number of elements in an array of the given 'Shape'
+-- | Total number of elements in an array of the given 'Shape'.
 --
 arraySize :: S.Shape sh => sh -> T.Int
 arraySize = S.size
+
+-- | Create an array from its representation function.
+--
+{-# INLINE fromFunction #-}
+fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
+fromFunction = S.newArray
 

@@ -1,8 +1,8 @@
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK prune #-}
 -- |
@@ -32,7 +32,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, stream,
+  Arrays, run, run1, stream,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj,
@@ -48,20 +48,19 @@ import Data.Char                                        ( chr, ord )
 import Prelude                                          hiding ( sum )
 
 -- friends
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), ArraysR(..), Arrays, Scalar, Vector, Segments )
+  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Delayed              hiding ( force, delay, Delayed )
+import Data.Array.Accelerate.Trafo.Substitution
+import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Smart            as Sugar
-import qualified Data.Array.Accelerate.Trafo            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
-
-#include "accelerate.h"
 
 
 -- Program execution
@@ -70,22 +69,21 @@ import qualified Data.Array.Accelerate.Array.Delayed    as Sugar
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sugar.convertAccWith config
-  where
-    config      = Sugar.phases { Sugar.enableAccFusion = False }
+run = force . evalAcc . Sharing.convertAcc True True True
 
 
 -- | Prepare and run an embedded array program of one argument
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 afun = \a -> exec acc a
-  where
-    config      = Sugar.phases { Sugar.enableAccFusion = False }
-    acc         = Sugar.convertAccFun1With config afun
+run1 = run'
 
-    exec :: Afun (a -> b) -> a -> b
-    exec (Alam (Abody f)) a = force $ evalOpenAcc f (Empty `Push` a)
-    exec _                _ = error "Hey type checker! We can not get here!"
+
+-- | Prepare an n-ary embedded array program for execution, returning an n-ary
+-- closure to do so.
+--
+run' :: Sharing.Afunction f => f -> Sharing.AfunctionR f
+run' afun = let acc = Sharing.convertAfun True True True afun
+            in  evalOpenAfun acc Empty
 
 
 -- | Stream a lazily read list of input arrays through the given program,
@@ -96,29 +94,15 @@ stream afun arrs = let go = run1 afun
                    in  map go arrs
 
 
--- Delayed arrays
---
-type Delayed a = Sugar.Delayed (Sugar.ArrRepr a)
-
-delay :: Arrays a => a -> Delayed a
-delay arr = go (Sugar.arrays arr) (Sugar.fromArr arr)
-  where
-    go :: ArraysR a -> a -> Sugar.Delayed a
-    go ArraysRunit         ()       = DelayedUnit
-    go ArraysRarray        a        = Sugar.delay a
-    go (ArraysRpair r1 r2) (a1, a2) = DelayedPair (go r1 a1) (go r2 a2)
-
-force :: forall a. Arrays a => Delayed a -> a
-force arr = Sugar.toArr $ go (Sugar.arrays (undefined::a)) arr
-  where
-    go :: ArraysR a' -> Sugar.Delayed a' -> a'
-    go ArraysRunit         DelayedUnit         = ()
-    go ArraysRarray        a                   = Sugar.force a
-    go (ArraysRpair r1 r2) (DelayedPair d1 d2) = (go r1 d1, go r2 d2)
-
-
 -- Array expression evaluation
 -- ---------------------------
+
+-- Evaluate an open array function
+--
+evalOpenAfun :: OpenAfun aenv f -> Val aenv -> f
+evalOpenAfun (Alam  f) aenv = \a -> evalOpenAfun f (aenv `Push` a)
+evalOpenAfun (Abody b) aenv = force $ evalOpenAcc b aenv
+
 
 -- Evaluate an open array expression
 --
@@ -139,14 +123,21 @@ evalPreOpenAcc (Aprj ix (tup :: OpenAcc aenv arrs)) aenv =
   let tup'  = force $ evalOpenAcc tup aenv :: arrs
   in  delay $ evalPrj ix (fromTuple tup')
 
-evalPreOpenAcc (Apply (Alam (Abody funAcc)) acc) aenv
-  = let !arr = force $ evalOpenAcc acc aenv
-    in evalOpenAcc funAcc (Empty `Push` arr)
-evalPreOpenAcc (Apply _afun _acc) _aenv
-  = error "GHC's pattern match checker is too dumb to figure that this case is impossible"
+evalPreOpenAcc (Apply f acc) aenv =
+  let !arr  = force $ evalOpenAcc acc aenv
+  in  delay $ evalOpenAfun f aenv arr
 
 evalPreOpenAcc (Acond cond acc1 acc2) aenv
   = if (evalExp cond aenv) then evalOpenAcc acc1 aenv else evalOpenAcc acc2 aenv
+
+evalPreOpenAcc (Awhile cond body acc) aenv
+  = let f       = evalOpenAfun body aenv
+        p       = evalOpenAfun cond aenv
+        go !x
+          | (p x) Sugar.! Z = go (f x)
+          | otherwise       = delay x
+    in
+    go . force $ evalOpenAcc acc aenv
 
 evalPreOpenAcc (Use arr) _aenv = delay (Sugar.toArr arr :: a)
 
@@ -219,10 +210,10 @@ evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
 -- The interpreter does not handle foreign functions so use the pure accelerate version
-evalPreOpenAcc (Foreign _ (Alam (Abody funAcc)) acc) aenv
+evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv
     in evalOpenAcc funAcc (Empty `Push` arr)
-evalPreOpenAcc (Foreign _ _ _) _
+evalPreOpenAcc (Aforeign _ _ _) _
   = error "This case is not possible"
 
 -- Evaluate a closed array expressions
@@ -243,16 +234,16 @@ evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, force $ evalOpenAcc a aenv)
 
 unitOp :: Sugar.Elt e => e -> Delayed (Scalar e)
 unitOp e
-  = DelayedPair DelayedUnit
-  $ DelayedArray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray {shapeDA = (), repfDA = const (Sugar.fromElt e)}
 
 generateOp :: (Sugar.Shape dim, Sugar.Elt e)
       => dim
       -> (dim -> e)
       -> Delayed (Array dim e)
 generateOp sh rf
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh) (Sugar.sinkFromElt rf)
 
 transformOp
       :: (Sugar.Shape sh', Sugar.Elt b)
@@ -261,18 +252,18 @@ transformOp
       -> (a -> b)
       -> Delayed (Array sh  a)
       -> Delayed (Array sh' b)
-transformOp sh' ix f (DelayedPair DelayedUnit (DelayedArray _sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh')
+transformOp sh' ix f (DelayedRpair DelayedRunit (DelayedRarray _sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh')
                  (Sugar.sinkFromElt f . rf . Sugar.sinkFromElt ix)
 
 
 reshapeOp :: Sugar.Shape dim
           => dim -> Delayed (Array dim' e) -> Delayed (Array dim e)
-reshapeOp newShape darr@(DelayedPair DelayedUnit (DelayedArray {shapeDA = oldShape}))
+reshapeOp newShape darr@(DelayedRpair DelayedRunit (DelayedRarray {shapeDA = oldShape}))
   = let Array _ adata = force darr
     in
-    BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
+    $boundsCheck "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
     $ delay $ Array (Sugar.fromElt newShape) adata
 
 replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
@@ -283,8 +274,8 @@ replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
             -> slix
             -> Delayed (Array sl e)
             -> Delayed (Array dim e)
-replicateOp sliceIndex slix (DelayedPair DelayedUnit (DelayedArray sh pf))
-  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
+replicateOp sliceIndex slix (DelayedRpair DelayedRunit (DelayedRarray sh pf))
+  = DelayedRpair DelayedRunit (DelayedRarray sh' (pf . pf'))
   where
     (sh', pf') = extend sliceIndex (Sugar.fromElt slix) sh
 
@@ -310,8 +301,8 @@ sliceOp :: (Sugar.Shape sl, Sugar.Elt slix)
         -> Delayed (Array dim e)
         -> slix
         -> Delayed (Array sl e)
-sliceOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
-  = DelayedPair DelayedUnit (DelayedArray sh' (pf . pf'))
+sliceOp sliceIndex (DelayedRpair DelayedRunit (DelayedRarray sh pf)) slix
+  = DelayedRpair DelayedRunit (DelayedRarray sh' (pf . pf'))
   where
     (sh', pf') = restrict sliceIndex (Sugar.fromElt slix) sh
 
@@ -327,24 +318,24 @@ sliceOp sliceIndex (DelayedPair DelayedUnit (DelayedArray sh pf)) slix
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
         in
-        BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
+        $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
 
-mapOp :: Sugar.Elt e' 
-      => (e -> e') 
-      -> Delayed (Array dim e) 
+mapOp :: Sugar.Elt e'
+      => (e -> e')
+      -> Delayed (Array dim e)
       -> Delayed (Array dim e')
-mapOp f (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh (Sugar.sinkFromElt f . rf)
+mapOp f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh (Sugar.sinkFromElt f . rf)
 
 zipWithOp :: Sugar.Elt e3
-          => (e1 -> e2 -> e3) 
-          -> Delayed (Array dim e1) 
-          -> Delayed (Array dim e2) 
+          => (e1 -> e2 -> e3)
+          -> Delayed (Array dim e1)
+          -> Delayed (Array dim e2)
           -> Delayed (Array dim e3)
-zipWithOp f (DelayedPair DelayedUnit (DelayedArray sh1 rf1)) (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (sh1 `intersect` sh2) 
+zipWithOp f (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1)) (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (sh1 `intersect` sh2)
                  (\ix -> (Sugar.sinkFromElt2 f) (rf1 ix) (rf2 ix))
 
 foldOp :: Sugar.Shape dim
@@ -352,24 +343,24 @@ foldOp :: Sugar.Shape dim
        -> e
        -> Delayed (Array (dim:.Int) e)
        -> Delayed (Array dim e)
-foldOp f e (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
+foldOp f e (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
   | size sh == 0
-  = DelayedPair DelayedUnit
-  $ DelayedArray (listToShape . map (max 1) . shapeToList $ sh)
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (listToShape . map (max 1) . shapeToList $ sh)
       (\_ -> Sugar.fromElt e)
   --
   | otherwise
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh
       (\ix -> iter ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f) (Sugar.fromElt e))
 
 fold1Op :: Sugar.Shape dim
         => (e -> e -> e)
         -> Delayed (Array (dim:.Int) e)
         -> Delayed (Array dim e)
-fold1Op f (DelayedPair DelayedUnit (DelayedArray (sh, n) rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
+fold1Op f (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh (\ix -> iter1 ((), n) (\((), i) -> rf (ix, i)) (Sugar.sinkFromElt2 f))
 
 foldSegOp :: IntegralType i
           -> (e -> e -> e)
@@ -386,10 +377,10 @@ foldSegOp' :: forall i e dim. Integral i
            -> Delayed (Array (dim:.Int) e)
            -> Delayed (Segments i)
            -> Delayed (Array (dim:.Int) e)
-foldSegOp' f e (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
+foldSegOp' f e (DelayedRpair DelayedRunit (DelayedRarray (sh, _n) rf)) seg@(DelayedRpair DelayedRunit (DelayedRarray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair (DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts)) _ = scanl'Op (+) 0 seg
+    DelayedRpair (DelayedRpair DelayedRunit (DelayedRarray _shSeg rfStarts)) _ = scanl'Op (+) 0 seg
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
@@ -420,24 +411,23 @@ fold1SegOp' :: forall i e dim. Integral i
             -> Delayed (Array (dim:.Int) e)
             -> Delayed (Segments i)
             -> Delayed (Array (dim:.Int) e)
-fold1SegOp' f (DelayedPair DelayedUnit (DelayedArray (sh, _n) rf)) seg@(DelayedPair DelayedUnit (DelayedArray shSeg rfSeg))
+fold1SegOp' f (DelayedRpair DelayedRunit (DelayedRarray (sh, _n) rf)) seg@(DelayedRpair DelayedRunit (DelayedRarray shSeg rfSeg))
   = delay arr
   where
-    DelayedPair prefix _sum                                = scanl'Op (+) 0 seg
-    DelayedPair DelayedUnit (DelayedArray _shSeg rfStarts) = prefix
+    DelayedRpair prefix _sum                                  = scanl'Op (+) 0 seg
+    DelayedRpair DelayedRunit (DelayedRarray _shSeg rfStarts) = prefix
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
-    foldOne ix = let
-                   (ix', i) = Sugar.fromElt ix
-                   start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
-                   len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
-                 in
-                 if len == 0
-                   then
-                     BOUNDS_ERROR(error) "fold1Seg" "empty iteration space"
-                   else
-                     fold ix' (Sugar.toElt . rf $ (ix', start)) (start + 1) (start + len)
+    foldOne ix =
+      let
+          (ix', i) = Sugar.fromElt ix
+          start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
+          len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
+      in
+      if len == 0
+         then $boundsError "fold1Seg" "empty iteration space"
+         else fold ix' (Sugar.toElt . rf $ (ix', start)) (start + 1) (start + len)
 
     fold :: Sugar.EltRepr dim -> e -> Int -> Int -> e
     fold ix' !v j end
@@ -449,7 +439,7 @@ scanlOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanlOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanlOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -472,13 +462,13 @@ scanl'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair (delay $ adata `seq` Array sh adata) final
+scanl'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+    DelayedRpair DelayedRunit final = unitOp (Sugar.toElt asum)
 
     (adata, asum) = runArrayData $ do
                       arr <- newArrayData n
@@ -495,7 +485,7 @@ scanl'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
 scanl1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanl1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanl1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -522,7 +512,7 @@ scanrOp :: forall e. (e -> e -> e)
         -> e
         -> Delayed (Vector e)
         -> Delayed (Vector e)
-scanrOp f e (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanrOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array ((), n + 1) adata
   where
     n  = size sh
@@ -545,13 +535,13 @@ scanr'Op :: forall e. (e -> e -> e)
          -> e
          -> Delayed (Vector e)
          -> Delayed (Vector e, Scalar e)
-scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair (delay $ adata `seq` Array sh adata) final
+scanr'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair (delay $ adata `seq` Array sh adata) final
   where
     n  = size sh
     f' = Sugar.sinkFromElt2 f
     --
-    DelayedPair DelayedUnit final = unitOp (Sugar.toElt asum)
+    DelayedRpair DelayedRunit final = unitOp (Sugar.toElt asum)
 
     (adata, asum) = runArrayData $ do
                       arr <- newArrayData n
@@ -568,7 +558,7 @@ scanr'Op f e (DelayedPair DelayedUnit (DelayedArray sh rf))
 scanr1Op :: forall e. (e -> e -> e)
          -> Delayed (Vector e)
          -> Delayed (Vector e)
-scanr1Op f (DelayedPair DelayedUnit (DelayedArray sh rf))
+scanr1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
   = delay $ adata `seq` Array sh adata
   where
     n  = size sh
@@ -596,8 +586,8 @@ permuteOp :: (e -> e -> e)
           -> (dim -> dim')
           -> Delayed (Array dim e)
           -> Delayed (Array dim' e)
-permuteOp f (DelayedPair DelayedUnit (DelayedArray dftsSh dftsPf))
-          p (DelayedPair DelayedUnit (DelayedArray sh pf))
+permuteOp f (DelayedRpair DelayedRunit (DelayedRarray dftsSh dftsPf))
+          p (DelayedRpair DelayedRunit (DelayedRarray sh pf))
   = delay $ adata `seq` Array dftsSh adata
   where
     f' = Sugar.sinkFromElt2 f
@@ -631,18 +621,18 @@ backpermuteOp :: Sugar.Shape dim'
               -> (dim' -> dim)
               -> Delayed (Array dim e)
               -> Delayed (Array dim' e)
-backpermuteOp sh' p (DelayedPair DelayedUnit (DelayedArray _sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
+backpermuteOp sh' p (DelayedRpair DelayedRunit (DelayedRarray _sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray (Sugar.fromElt sh') (rf . Sugar.sinkFromElt p)
 
 stencilOp :: forall dim e e' stencil. (Sugar.Elt e, Sugar.Elt e', Stencil dim e stencil)
           => (stencil -> e')
           -> Boundary (Sugar.EltRepr e)
           -> Delayed (Array dim e)
           -> Delayed (Array dim e')
-stencilOp sten bndy (DelayedPair DelayedUnit (DelayedArray sh rf))
-  = DelayedPair DelayedUnit
-  $ DelayedArray sh rf'
+stencilOp sten bndy (DelayedRpair DelayedRunit (DelayedRarray sh rf))
+  = DelayedRpair DelayedRunit
+  $ DelayedRarray sh rf'
   where
     rf' = Sugar.sinkFromElt (sten . stencilAccess rfBounded)
 
@@ -652,8 +642,8 @@ stencilOp sten bndy (DelayedPair DelayedUnit (DelayedArray sh rf))
                                     Left v    -> v
                                     Right ix' -> rf (Sugar.fromElt ix')
 
-stencil2Op :: forall dim e1 e2 e' stencil1 stencil2. 
-              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e', 
+stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
+              (Sugar.Elt e1, Sugar.Elt e2, Sugar.Elt e',
                Stencil dim e1 stencil1, Stencil dim e2 stencil2)
            => (stencil1 -> stencil2 -> e')
            -> Boundary (Sugar.EltRepr e1)
@@ -661,9 +651,9 @@ stencil2Op :: forall dim e1 e2 e' stencil1 stencil2.
            -> Boundary (Sugar.EltRepr e2)
            -> Delayed (Array dim e2)
            -> Delayed (Array dim e')
-stencil2Op sten bndy1 (DelayedPair DelayedUnit (DelayedArray sh1 rf1))
-                bndy2 (DelayedPair DelayedUnit (DelayedArray sh2 rf2))
-  = DelayedPair DelayedUnit (DelayedArray (sh1 `intersect` sh2) rf')
+stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
+                bndy2 (DelayedRpair DelayedRunit (DelayedRarray sh2 rf2))
+  = DelayedRpair DelayedRunit (DelayedRarray (sh1 `intersect` sh2) rf')
   where
     rf' = Sugar.sinkFromElt (\ix -> sten (stencilAccess rf1Bounded ix)
                                          (stencilAccess rf2Bounded ix))
@@ -687,7 +677,7 @@ stencil2Op sten bndy1 (DelayedPair DelayedUnit (DelayedArray sh1 rf1))
 --
 evalOpenFun :: OpenFun env aenv t -> ValElt env -> Val aenv -> t
 evalOpenFun (Body e) env aenv = evalOpenExp e env aenv
-evalOpenFun (Lam f)  env aenv 
+evalOpenFun (Lam f)  env aenv
   = \x -> evalOpenFun f (env `PushElt` Sugar.fromElt x) aenv
 
 -- Evaluate a closed function
@@ -702,7 +692,7 @@ evalFun f aenv = evalOpenFun f EmptyElt aenv
 --     execution.  If these operations are in the body of a function that
 --     gets mapped over an array, the array argument would be forced many times
 --     leading to a large amount of wasteful recomputation.
---  
+--
 evalOpenExp :: OpenExp env aenv a -> ValElt env -> Val aenv -> a
 
 evalOpenExp (Let exp1 exp2) env aenv
@@ -715,22 +705,22 @@ evalOpenExp (Var idx) env _
 evalOpenExp (Const c) _ _
   = Sugar.toElt c
 
-evalOpenExp (Tuple tup) env aenv 
+evalOpenExp (Tuple tup) env aenv
   = toTuple $ evalTuple tup env aenv
 
-evalOpenExp (Prj idx e) env aenv 
+evalOpenExp (Prj idx e) env aenv
   = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
 
-evalOpenExp IndexNil _env _aenv 
+evalOpenExp IndexNil _env _aenv
   = Z
 
-evalOpenExp (IndexCons sh i) env aenv 
+evalOpenExp (IndexCons sh i) env aenv
   = evalOpenExp sh env aenv :. evalOpenExp i env aenv
 
-evalOpenExp (IndexHead ix) env aenv 
+evalOpenExp (IndexHead ix) env aenv
   = case evalOpenExp ix env aenv of _:.h -> h
 
-evalOpenExp (IndexTail ix) env aenv 
+evalOpenExp (IndexTail ix) env aenv
   = case evalOpenExp ix env aenv of t:._ -> t
 
 evalOpenExp (IndexAny) _ _
@@ -774,14 +764,14 @@ evalOpenExp (Cond c t e) env aenv
     then evalOpenExp t env aenv
     else evalOpenExp e env aenv
 
-evalOpenExp (Iterate limit loop seed) env aenv
-  = let f = evalOpenFun (Lam (Body loop)) env aenv
-        x = evalOpenExp seed  env aenv
-        n = evalOpenExp limit env aenv
-        --
-        go !i !acc | i >= n     = acc
-                   | otherwise  = go (i+1) (f acc)
-    in go 0 x
+evalOpenExp (While cond body seed) env aenv
+  = let f       = evalOpenFun body env aenv
+        p       = evalOpenFun cond env aenv
+        go !x
+          | p x         = go (f x)
+          | otherwise   = x
+    in
+    go (evalOpenExp seed env aenv)
 
 evalOpenExp (PrimConst c) _ _ = evalPrimConst c
 
@@ -790,7 +780,7 @@ evalOpenExp (PrimApp p arg) env aenv
 
 evalOpenExp (Index acc ix) env aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+      DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let ix' = Sugar.fromElt $ evalOpenExp ix env aenv
         in
         toIndex sh ix' `seq` (Sugar.toElt $ pf ix')
@@ -799,14 +789,14 @@ evalOpenExp (Index acc ix) env aenv
 
 evalOpenExp (LinearIndex acc i) env aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh pf) ->
+      DelayedRpair DelayedRunit (DelayedRarray sh pf) ->
         let i' = evalOpenExp i env aenv
             v  = pf (fromIndex sh i')
         in Sugar.toElt v
 
 evalOpenExp (Shape acc) _ aenv
   = case evalOpenAcc acc aenv of
-      DelayedPair DelayedUnit (DelayedArray sh _) -> Sugar.toElt sh
+      DelayedRpair DelayedRunit (DelayedRarray sh _) -> Sugar.toElt sh
 
 evalOpenExp (ShapeSize sh) env aenv
   = Sugar.size (evalOpenExp sh env aenv)
@@ -814,16 +804,16 @@ evalOpenExp (ShapeSize sh) env aenv
 evalOpenExp (Intersect sh1 sh2) env aenv
   = Sugar.intersect (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
 
-evalOpenExp (ForeignExp _ f e) env aenv
+evalOpenExp (Foreign _ f e) env aenv
   = evalOpenExp e' env aenv
   where
     wExp :: Idx ((),a) t -> Idx (env,a) t
     wExp ZeroIdx = ZeroIdx
-    wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
-                                        
+    wExp _       = $internalError "wExp" "unreachable case"
+
     e' = case f of
-           (Lam (Body b)) -> Let e $ Sugar.weakenByEA undefined (Sugar.weakenByE wExp b) 
-           _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
+           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE wExp b)
+           _              -> $internalError "travE" "unreachable case"
 
 -- Evaluate a closed expression
 --
@@ -942,25 +932,25 @@ evalFromIntegral ta (FloatingNumType tb)
 
 
 -- Extract methods from reified dictionaries
--- 
+--
 
 -- Constant methods of Bounded
--- 
+--
 
 evalMinBound :: BoundedType a -> a
-evalMinBound (IntegralBoundedType ty) 
+evalMinBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = minBound
-evalMinBound (NonNumBoundedType   ty) 
+evalMinBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = minBound
 
 evalMaxBound :: BoundedType a -> a
-evalMaxBound (IntegralBoundedType ty) 
+evalMaxBound (IntegralBoundedType ty)
   | IntegralDict <- integralDict ty = maxBound
-evalMaxBound (NonNumBoundedType   ty) 
+evalMaxBound (NonNumBoundedType   ty)
   | NonNumDict   <- nonNumDict ty   = maxBound
 
 -- Constant method of floating
--- 
+--
 
 evalPi :: FloatingType a -> a
 evalPi ty | FloatingDict <- floatingDict ty = pi
@@ -1032,7 +1022,7 @@ evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
 
 
 -- Methods of Num
--- 
+--
 
 evalAdd :: NumType a -> ((a, a) -> a)
 evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
@@ -1103,66 +1093,66 @@ evalRecip ty | FloatingDict <- floatingDict ty = recip
 
 
 evalLt :: ScalarType a -> ((a, a) -> Bool)
-evalLt (NumScalarType (IntegralNumType ty)) 
+evalLt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<)
-evalLt (NumScalarType (FloatingNumType ty)) 
+evalLt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<)
-evalLt (NonNumScalarType ty) 
+evalLt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<)
 
 evalGt :: ScalarType a -> ((a, a) -> Bool)
-evalGt (NumScalarType (IntegralNumType ty)) 
+evalGt (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>)
-evalGt (NumScalarType (FloatingNumType ty)) 
+evalGt (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>)
-evalGt (NonNumScalarType ty) 
+evalGt (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>)
 
 evalLtEq :: ScalarType a -> ((a, a) -> Bool)
-evalLtEq (NumScalarType (IntegralNumType ty)) 
+evalLtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (<=)
-evalLtEq (NumScalarType (FloatingNumType ty)) 
+evalLtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (<=)
-evalLtEq (NonNumScalarType ty) 
+evalLtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (<=)
 
 evalGtEq :: ScalarType a -> ((a, a) -> Bool)
-evalGtEq (NumScalarType (IntegralNumType ty)) 
+evalGtEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (>=)
-evalGtEq (NumScalarType (FloatingNumType ty)) 
+evalGtEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (>=)
-evalGtEq (NonNumScalarType ty) 
+evalGtEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (>=)
 
 evalEq :: ScalarType a -> ((a, a) -> Bool)
-evalEq (NumScalarType (IntegralNumType ty)) 
+evalEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (==)
-evalEq (NumScalarType (FloatingNumType ty)) 
+evalEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (==)
-evalEq (NonNumScalarType ty) 
+evalEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (==)
 
 evalNEq :: ScalarType a -> ((a, a) -> Bool)
-evalNEq (NumScalarType (IntegralNumType ty)) 
+evalNEq (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry (/=)
-evalNEq (NumScalarType (FloatingNumType ty)) 
+evalNEq (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry (/=)
-evalNEq (NonNumScalarType ty) 
+evalNEq (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry (/=)
 
 evalMax :: ScalarType a -> ((a, a) -> a)
-evalMax (NumScalarType (IntegralNumType ty)) 
+evalMax (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry max
-evalMax (NumScalarType (FloatingNumType ty)) 
+evalMax (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry max
-evalMax (NonNumScalarType ty) 
+evalMax (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry max
 
 evalMin :: ScalarType a -> ((a, a) -> a)
-evalMin (NumScalarType (IntegralNumType ty)) 
+evalMin (NumScalarType (IntegralNumType ty))
   | IntegralDict <- integralDict ty = uncurry min
-evalMin (NumScalarType (FloatingNumType ty)) 
+evalMin (NumScalarType (FloatingNumType ty))
   | FloatingDict <- floatingDict ty = uncurry min
-evalMin (NonNumScalarType ty) 
+evalMin (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry min
 

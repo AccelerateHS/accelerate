@@ -18,23 +18,22 @@ module Data.Array.Accelerate.Pretty.HTML  (
 
 ) where
 
-
 -- standard libraries
+import System.IO.Error
+import Control.Exception
 import Data.String
 import Data.Monoid
 import Text.Blaze.Html.Renderer.Utf8
 import Text.Blaze.Html4.Transitional                            ( (!) )
 import qualified Data.Text                                      as T
+import qualified Data.ByteString.Lazy                           as BS
 import qualified Text.Blaze.Html4.Transitional                  as H
 import qualified Text.Blaze.Html4.Transitional.Attributes       as A
-
-import System.IO.Error
-import Control.Exception
-import qualified Data.ByteString.Lazy                           as BS
 
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Pretty.Traverse
+
 
 combineHtml :: String -> String -> [H.Html] -> H.Html
 combineHtml cssClass label nodes = do

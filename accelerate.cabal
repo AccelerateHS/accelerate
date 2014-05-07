@@ -1,57 +1,151 @@
 Name:                   accelerate
-Version:                0.13.0.99
-Cabal-version:          >= 1.6
-Tested-with:            GHC >= 7.0.3
+Version:                0.15.0.1
+Cabal-version:          >= 1.8
+Tested-with:            GHC == 7.8.*
 Build-type:             Simple
 
 Synopsis:               An embedded language for accelerated array processing
-Description:            This library defines an embedded language for
-                        regular, multi-dimensional array computations with
-                        multiple backends to facilitate high-performance
-                        implementations.  Currently, there are two backends:
-                        (1) an interpreter that serves as a reference
-                        implementation of the intended semantics of the
-                        language and (2) a CUDA backend generating code for
-                        CUDA-capable NVIDIA GPUs.
-                        .
-                        To use the CUDA backend, you need to have the CUDA SDK version 3.x
-                        installed and have hardware supporting compute capability 1.2 or higher.
-                        .
-                        An experimental OpenCL backend is available at <https://github.com/HIPERFIT/accelerate-opencl>
-                        and an experimental multicore CPU backend building on the Repa array library
-                        is available at <https://github.com/blambo/accelerate-repa>.
-                        .
-                        Known bugs: <https://github.com/AccelerateHS/accelerate/issues>
-                        .
-                        * New in 0.12.0.0: Full sharing recovery in scalar expressions and array
-                            computations. Two new example applications in package accelerate-examples:
-                            Real-time Canny edge detection and fluid flow simulator (both including a
-                            graphical frontend). Bug fixes.
-                        .
-                        * New in 0.11.0.0: New functions zip3, zip4, unzip3, unzip4, fill,
-                            enumFromN, enumFromStepN, tail, init, drop, take, slit, gather,
-                            gatherIf, scatter, scatterIf, and shapeSize.  New simplified AST
-                            (in package accelerate-backend-kit) for backend writers who want to
-                            avoid the complexities of the type-safe AST.
 
-                        * New in 0.10.0.0: Complete sharing recovery for scalar expressions (but
-                            currently disabled by default). Also bug fixes in array sharing recovery
-                            and a few new convenience functions.
-                        .
-                        * New in 0.9.0.0: Streaming, precompilation, Repa-style indices, stencils, 
-                            more scans, rank-polymorphic fold, generate, block I/O & many bug fixes
-                        .
-                        * New in 0.8.1.0: Bug fixes and some performance tweaks
-                        .
-                        * New in 0.8.0.0: 'replicate', 'slice' and 'foldSeg' supported in the
-                            CUDA backend; frontend and interpreter support for 'stencil'; bug fixes
-                        .
-                        * New in 0.7.1.0: the CUDA backend and a number of scalar functions
-                        .
-                        For documentation, see the homepage and <https://github.com/AccelerateHS/accelerate/wiki>.
+Description:
+  @Data.Array.Accelerate@ defines an embedded array language for computations
+  for high-performance computing in Haskell. Computations on multi-dimensional,
+  regular arrays are expressed in the form of parameterised collective
+  operations, such as maps, reductions, and permutations. These computations may
+  then be online compiled and executed on a range of architectures.
+  .
+  [/A simple example/]
+  .
+  As a simple example, consider the computation of a dot product of two vectors
+  of floating point numbers:
+  .
+  > dotp :: Acc (Vector Float) -> Acc (Vector Float) -> Acc (Scalar Float)
+  > dotp xs ys = fold (+) 0 (zipWith (*) xs ys)
+  .
+  Except for the type, this code is almost the same as the corresponding Haskell
+  code on lists of floats. The types indicate that the computation may be
+  online-compiled for performance - for example, using
+  @Data.Array.Accelerate.CUDA@ it may be on-the-fly off-loaded to the GPU.
+  .
+  [/Available backends/]
+  .
+  Currently, there are two backends:
+  .
+    1. An interpreter that serves as a reference implementation of the intended
+       semantics of the language, which is included in this package.
+  .
+    2. A CUDA backend generating code for CUDA-capable NVIDIA GPUs:
+       <http://hackage.haskell.org/package/accelerate-cuda>
+  .
+  Several experimental and/or incomplete backends also exist. If you are
+  interested in helping finish these, please contact us.
+  .
+    1. Cilk\/ICC and OpenCL: <https://github.com/AccelerateHS/accelerate-backend-kit>
+  .
+    2. Another OpenCL backend: <https://github.com/HIPERFIT/accelerate-opencl>
+  .
+    3. A backend to the Repa array library: <https://github.com/blambo/accelerate-repa>
+  .
+  [/Additional components/]
+  .
+  The following support packages are available:
+  .
+    1. @accelerate-cuda@: A high-performance parallel backend targeting
+       CUDA-enabled NVIDIA GPUs. Requires the NVIDIA CUDA SDK and, for full
+       functionality, hardware with compute capability 1.2 or greater. See the
+       table on Wikipedia for supported GPUs:
+       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
+  .
+    2. @accelerate-examples@: Computational kernels and applications showcasing
+       /Accelerate/, as well as performance and regression tests.
+  .
+    3. @accelerate-io@: Fast conversion between /Accelerate/ arrays and other
+       formats, including Repa arrays.
+  .
+    4. @accelerate-fft@: Computation of Discrete Fourier Transforms.
+  .
+  Install them from Hackage with @cabal install PACKAGE@
+  .
+  [/Examples and documentation/]
+  .
+  Haddock documentation is included in the package, and a tutorial is available
+  on the GitHub wiki: <https://github.com/AccelerateHS/accelerate/wiki>
+  .
+  The @accelerate-examples@ package demonstrates a range of computational
+  kernels and several complete applications, including:
+  .
+    * An implementation of the Canny edge detection algorithm
+  .
+    * An interactive Mandelbrot set generator
+  .
+    * A particle-based simulation of stable fluid flows
+  .
+    * An /n/-body simulation of gravitational attraction between solid particles
+  .
+    * A cellular automata simulation
+  .
+    * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
+  .
+  [/Mailing list and contacts/]
+  .
+    * Mailing list: <accelerate-haskell@googlegroups.com> (discussion of both
+      use and development welcome).
+  .
+    * Sign up for the mailing list here:
+      <http://groups.google.com/group/accelerate-haskell>
+  .
+    * Bug reports and issue tracking:
+      <https://github.com/AccelerateHS/accelerate/issues>
+  .
+  [/Release notes/]
+  .
+    * /0.14.0.0:/ New iteration constructs. Additional Prelude-like functions.
+      Improved code generation and fusion optimisation. Concurrent kernel
+      execution. Bug fixes.
+  .
+    * /0.13.0.0:/ New array fusion optimisation. New foreign function
+      interface for array and scalar expressions. Additional Prelude-like
+      functions. New example programs. Bug fixes and performance improvements.
+  .
+    * /0.12.0.0:/ Full sharing recovery in scalar expressions and array
+      computations. Two new example applications in package
+      @accelerate-examples@: Real-time Canny edge detection and fluid flow
+      simulator (both including a graphical frontend). Bug fixes.
+  .
+    * /0.11.0.0:/ New Prelude-like functions @zip*@, @unzip*@,
+      @fill@, @enumFrom*@, @tail@, @init@, @drop@, @take@, @slit@, @gather*@,
+      @scatter*@, and @shapeSize@. New simplified AST (in package
+      @accelerate-backend-kit@) for backend writers who want to avoid the
+      complexities of the type-safe AST.
+  .
+    * /0.10.0.0:/ Complete sharing recovery for scalar expressions (but
+      currently disabled by default). Also bug fixes in array sharing recovery
+      and a few new convenience functions.
+  .
+    * /0.9.0.0:/ Streaming, precompilation, Repa-style indices,
+      @stencil@s, more @scan@s, rank-polymorphic @fold@, @generate@, block I/O &
+      many bug fixes.
+  .
+    * /0.8.1.0:/ Bug fixes and some performance tweaks.
+  .
+    * /0.8.0.0:/ @replicate@, @slice@ and @foldSeg@ supported in the
+      CUDA backend; frontend and interpreter support for @stencil@. Bug fixes.
+  .
+    * /0.7.1.0:/ The CUDA backend and a number of scalar functions.
+  .
+  [/Hackage note/]
+  .
+  The module documentation list generated by Hackage is incorrect. The only
+  exposed modules should be:
+  .
+    * "Data.Array.Accelerate"
+  .
+    * "Data.Array.Accelerate.Interpreter"
+  .
+
 License:                BSD3
 License-file:           LICENSE
 Author:                 Manuel M T Chakravarty,
+                        Robert Clifton-Everest,
                         Gabriele Keller,
                         Sean Lee,
                         Ben Lever,
@@ -66,9 +160,9 @@ Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
 Extra-source-files:     INSTALL
-                        include/accelerate.h
 
 Flag debug
+  Default:              False
   Description:
     Enable tracing message flags. These are read from the command-line
     arguments, which is convenient but may cause problems interacting with the
@@ -82,10 +176,6 @@ Flag debug
     .
     * -dverbose: other, uncategorised messages
     .
-
-Flag llvm
-  Description:          Enable the LLVM backend (sequential)
-  Default:              False
 
 Flag more-pp
   Description:          Enable HTML and Graphviz pretty printing.
@@ -104,25 +194,26 @@ Flag internal-checks
   Default:              False
 
 Library
-  Include-Dirs:         include
-  Build-depends:        array           >= 0.3,
-                        base            == 4.*,
-                        containers      >= 0.3,
-                        fclabels        >= 1.0,
-                        ghc-prim        >= 0.2,
-                        hashable        >= 1.1,
-                        hashtables      >= 1.0,
-                        pretty          >= 1.0
+  Build-depends:        array                   >= 0.3,
+                        base                    == 4.7.*,
+                        containers              >= 0.3,
+                        unordered-containers    >= 0.2,
+                        fclabels                >= 2.0,
+                        ghc-prim                >= 0.2,
+                        hashable                >= 1.1,
+                        hashtables              >= 1.0,
+                        pretty                  >= 1.0,
+                        template-haskell        == 2.9.*
 
   if flag(more-pp)
-    Build-depends:      bytestring      >= 0.9,
-                        blaze-html      >= 0.5,
-                        blaze-markup    >= 0.5,
-                        directory       >= 1.0,
-                        filepath        >= 1.0,
-                        mtl             >= 2.0,
-                        text            >= 0.10,
-                        unix            >= 2.4
+    Build-depends:      bytestring              >= 0.9,
+                        blaze-html              >= 0.5,
+                        blaze-markup            >= 0.5,
+                        directory               >= 1.0,
+                        filepath                >= 1.0,
+                        mtl                     >= 2.0,
+                        text                    >= 0.10,
+                        unix                    >= 2.4
 
   Exposed-modules:      Data.Array.Accelerate
                         Data.Array.Accelerate.AST
@@ -133,10 +224,13 @@ Library
                         Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Debug
+                        Data.Array.Accelerate.Error
                         Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
+                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 -- Temporarily exposing:
@@ -150,9 +244,10 @@ Library
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Trafo.Algebra
-                        Data.Array.Accelerate.Trafo.Common
+                        Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
+                        Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
 
@@ -178,12 +273,11 @@ Library
   if impl(ghc >= 7.0)
     ghc-options:        -fspec-constr-count=25
 
-  Extensions:           BangPatterns, CPP, DeriveDataTypeable, EmptyDataDecls,
-                        FlexibleContexts, FlexibleInstances, GADTs, MagicHash,
-                        MultiParamTypeClasses, PatternGuards, RankNTypes,
-                        ScopedTypeVariables, StandaloneDeriving,
-                        TemplateHaskell, TupleSections, TypeFamilies,
-                        TypeOperators, TypeSynonymInstances, UnboxedTuples
+  -- Don't add the extensions list here. Instead, place individual LANGUAGE
+  -- pragmas in the files that require a specific extension. This means the
+  -- project loads in GHCi, and avoids extension clashes.
+  --
+  -- Extensions:
 
 Source-repository head
   Type:                 git

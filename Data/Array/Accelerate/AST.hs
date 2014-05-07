@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -6,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
@@ -88,20 +88,23 @@ module Data.Array.Accelerate.AST (
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
-  PrimFun(..)
+  PrimFun(..),
+
+  -- debugging
+  showPreAccOp, showPreExpOp,
 
 ) where
 
 --standard library
+import Data.List
 import Data.Typeable
 
 -- friends
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
-
-#include "accelerate.h"
 
 
 -- Typed de Bruijn indices
@@ -134,7 +137,7 @@ data Val env where
   Empty :: Val ()
   Push  :: Val env -> t -> Val (env, t)
 
-deriving instance Typeable1 Val
+deriving instance Typeable Val
 
 -- Valuation for an environment of array elements
 --
@@ -148,14 +151,14 @@ data ValElt env where
 prj :: Idx env t -> Val env -> t
 prj ZeroIdx       (Push _   v) = v
 prj (SuccIdx idx) (Push val _) = prj idx val
-prj _             _            = INTERNAL_ERROR(error) "prj" "inconsistent valuation"
+prj _             _            = $internalError "prj" "inconsistent valuation"
 
 -- Projection of a value from a valuation of array elements using a de Bruijn index
 --
 prjElt :: Idx env t -> ValElt env -> t
 prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
-prjElt _             _               = INTERNAL_ERROR(error) "prjElt" "inconsistent valuation"
+prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
 
 
 -- Array expressions
@@ -222,18 +225,39 @@ data PreOpenAcc acc aenv a where
               ->            acc aenv arrs
               -> PreOpenAcc acc aenv a
 
-  -- Array-function application (to keep things simple for the moment, the function must be closed)
+  -- Array-function application.
+  --
+  -- The array function is not closed at the core level because we need access
+  -- to free variables introduced by 'run1' style evaluators. See Issue#95.
+  --
   Apply       :: (Arrays arrs1, Arrays arrs2)
-              => PreAfun    acc      (arrs1 -> arrs2)
-              -> acc            aenv arrs1
-              -> PreOpenAcc acc aenv arrs2
+              => PreOpenAfun acc aenv (arrs1 -> arrs2)
+              -> acc             aenv arrs1
+              -> PreOpenAcc  acc aenv arrs2
+
+  -- Apply a backend-specific foreign function to an array, with a pure
+  -- Accelerate version for use with other backends. The functions must be
+  -- closed.
+  Aforeign    :: (Arrays arrs, Arrays a, Foreign f)
+              => f arrs a                                       -- The foreign function for a given backend
+              -> PreAfun      acc      (arrs -> a)              -- A pure accelerate version
+              -> acc              aenv arrs                     -- Arguments to the function
+              -> PreOpenAcc   acc aenv a
 
   -- If-then-else for array-level computations
-  Acond       :: (Arrays arrs)
+  Acond       :: Arrays arrs
               => PreExp     acc aenv Bool
               -> acc            aenv arrs
               -> acc            aenv arrs
               -> PreOpenAcc acc aenv arrs
+
+  -- Value-recursion for array-level computations
+  Awhile      :: Arrays arrs
+              => PreOpenAfun acc aenv (arrs -> Scalar Bool)     -- continue iteration while true
+              -> PreOpenAfun acc aenv (arrs -> arrs)            -- function to iterate
+              -> acc             aenv arrs                      -- initial value
+              -> PreOpenAcc  acc aenv arrs
+
 
   -- Array inlet (triggers async host->device transfer if necessary)
   Use         :: Arrays arrs
@@ -376,18 +400,26 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Vector e)                 -- linear array
               -> PreOpenAcc acc aenv (Vector e)
 
-  -- Generalised forward permutation is characterised by a permutation
-  -- function that determines for each element of the source array where it
-  -- should go in the target; the permutation can be between arrays of varying
-  -- shape; the permutation function must be total.
+  -- Generalised forward permutation is characterised by a permutation function
+  -- that determines for each element of the source array where it should go in
+  -- the output. The permutation can be between arrays of varying shape and
+  -- dimensionality.
   --
-  -- The target array is initialised from an array of default values (in case
-  -- some positions in the target array are never picked by the permutation
-  -- functions).  Moreover, we have a combination function (in case some
-  -- positions on the target array are picked multiple times by the
-  -- permutation functions).  The combination function needs to be
-  -- /associative/ and /commutative/ .  We drop every element for which the
-  -- permutation function yields -1 (i.e., a tuple of -1 values).
+  -- Other characteristics of the permutation function 'f':
+  --
+  --   1. 'f' is a partial function: if it evaluates to the magic value 'ignore'
+  --      (i.e. a tuple of -1 values) then those elements of the domain are
+  --      dropped.
+  --
+  --   2. 'f' is not surjective: positions in the target array need not be
+  --      picked up by the permutation function, so the target array must first
+  --      be initialised from an array of default values.
+  --
+  --   3. 'f' is not injective: distinct elements of the domain may map to the
+  --      same position in the target array. In this case the combination
+  --      function is used to combine elements, which needs to be /associative/
+  --      and /commutative/.
+  --
   Permute     :: (Shape sh, Shape sh', Elt e)
               => PreFun     acc aenv (e -> e -> e)              -- combination function
               -> acc            aenv (Array sh' e)              -- default values
@@ -423,21 +455,13 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
 
-  -- Call a backend specific foreign function.
-  Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
-              => ff arrs results                                -- The foreign function
-              -> PreAfun      acc      (arrs -> results)        -- A pure accelerate version for backends that don't support 
-                                                                -- the given foreign function. Must be a closed function.
-              -> acc              aenv arrs                     -- Arguments to the function
-              -> PreOpenAcc   acc aenv results
-
 
 -- Vanilla open array computations
 --
 newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 
--- deriving instance Typeable3 PreOpenAcc
-deriving instance Typeable2 OpenAcc
+-- deriving instance Typeable PreOpenAcc
+deriving instance Typeable OpenAcc
 
 -- |Closed array expression aka an array program
 --
@@ -685,6 +709,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => Idx env t
                 -> PreOpenExp acc env aenv t
 
+  -- Apply a backend-specific foreign function
+  Foreign       :: (Foreign f, Elt x, Elt y)
+                => f x y
+                -> PreFun acc () (x -> y)
+                -> PreOpenExp acc env aenv x
+                -> PreOpenExp acc env aenv y
+
   -- Constant values
   Const         :: Elt t
                 => EltRepr t
@@ -749,10 +780,10 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv t
                 -> PreOpenExp acc env aenv t
 
-  -- Value recursion with static loop count
-  Iterate       :: Elt a
-                => PreOpenExp acc env aenv Int          -- number of times to repeat
-                -> PreOpenExp acc (env, a) aenv a       -- function to iterate
+  -- Value recursion
+  While         :: Elt a
+                => PreOpenFun acc env aenv (a -> Bool)  -- continue while true
+                -> PreOpenFun acc env aenv (a -> a)     -- function to iterate
                 -> PreOpenExp acc env aenv a            -- initial value
                 -> PreOpenExp acc env aenv a
 
@@ -795,12 +826,6 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
-
-  ForeignExp    :: (ForeignFun ff, Elt args, Elt results)
-                => ff args results
-                -> PreFun acc () (args -> results)
-                -> PreOpenExp acc env aenv args
-                -> PreOpenExp acc env aenv results
 
 
 -- |Vanilla open expression
@@ -906,4 +931,88 @@ data PrimFun sig where
   -- FIXME: what do we want to do about Enum?  succ and pred are only
   --   moderatly useful without user-defined enumerations, but we want
   --   the range constructs for arrays (but that's not scalar primitives)
+
+
+-- Debugging
+-- ---------
+
+showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
+showPreAccOp Alet{}             = "Alet"
+showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
+showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
+showPreAccOp Apply{}            = "Apply"
+showPreAccOp Aforeign{}         = "Aforeign"
+showPreAccOp Acond{}            = "Acond"
+showPreAccOp Awhile{}           = "Awhile"
+showPreAccOp Atuple{}           = "Atuple"
+showPreAccOp Aprj{}             = "Aprj"
+showPreAccOp Unit{}             = "Unit"
+showPreAccOp Generate{}         = "Generate"
+showPreAccOp Transform{}        = "Transform"
+showPreAccOp Reshape{}          = "Reshape"
+showPreAccOp Replicate{}        = "Replicate"
+showPreAccOp Slice{}            = "Slice"
+showPreAccOp Map{}              = "Map"
+showPreAccOp ZipWith{}          = "ZipWith"
+showPreAccOp Fold{}             = "Fold"
+showPreAccOp Fold1{}            = "Fold1"
+showPreAccOp FoldSeg{}          = "FoldSeg"
+showPreAccOp Fold1Seg{}         = "Fold1Seg"
+showPreAccOp Scanl{}            = "Scanl"
+showPreAccOp Scanl'{}           = "Scanl'"
+showPreAccOp Scanl1{}           = "Scanl1"
+showPreAccOp Scanr{}            = "Scanr"
+showPreAccOp Scanr'{}           = "Scanr'"
+showPreAccOp Scanr1{}           = "Scanr1"
+showPreAccOp Permute{}          = "Permute"
+showPreAccOp Backpermute{}      = "Backpermute"
+showPreAccOp Stencil{}          = "Stencil"
+showPreAccOp Stencil2{}         = "Stencil2"
+
+showArrays :: forall arrs. Arrays arrs => arrs -> String
+showArrays = display . collect (arrays (undefined::arrs)) . fromArr
+  where
+    collect :: ArraysR a -> a -> [String]
+    collect ArraysRunit         _        = []
+    collect ArraysRarray        arr      = [showShortendArr arr]
+    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    --
+    display []  = []
+    display [x] = x
+    display xs  = "(" ++ intercalate ", " xs ++ ")"
+
+
+showShortendArr :: Elt e => Array sh e -> String
+showShortendArr arr
+  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
+  where
+    l      = Sugar.toList arr
+    cutoff = 5
+
+
+showPreExpOp :: forall acc env aenv t. PreOpenExp acc env aenv t -> String
+showPreExpOp Let{}              = "Let"
+showPreExpOp (Var ix)           = "Var x" ++ show (idxToInt ix)
+showPreExpOp (Const c)          = "Const " ++ show (toElt c :: t)
+showPreExpOp Foreign{}          = "Foreign"
+showPreExpOp Tuple{}            = "Tuple"
+showPreExpOp Prj{}              = "Prj"
+showPreExpOp IndexNil           = "IndexNil"
+showPreExpOp IndexCons{}        = "IndexCons"
+showPreExpOp IndexHead{}        = "IndexHead"
+showPreExpOp IndexTail{}        = "IndexTail"
+showPreExpOp IndexAny           = "IndexAny"
+showPreExpOp IndexSlice{}       = "IndexSlice"
+showPreExpOp IndexFull{}        = "IndexFull"
+showPreExpOp ToIndex{}          = "ToIndex"
+showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp Cond{}             = "Cond"
+showPreExpOp While{}            = "While"
+showPreExpOp PrimConst{}        = "PrimConst"
+showPreExpOp PrimApp{}          = "PrimApp"
+showPreExpOp Index{}            = "Index"
+showPreExpOp LinearIndex{}      = "LinearIndex"
+showPreExpOp Shape{}            = "Shape"
+showPreExpOp ShapeSize{}        = "ShapeSize"
+showPreExpOp Intersect{}        = "Intersect"
 

@@ -1,21 +1,33 @@
 #!/bin/bash
 
-# Adjust to the installed location of ghci, if this script can not find it.
+# Get cabal to load up ghci for us. This will set the environment appropriately
+# if we have a local sandbox installation.
 #
-GHC=`which -a ghci | grep -v "\./ghci"`
-VER=`$GHC --numeric-version`
+GHC="cabal exec ghc --"
 
-# We assume that the dependent packages are install with 'cabal'. If you have
-# installed them with another tool such as 'cabal-dev', add the following to the
-# command.
-#
-#    -package-conf cabal-dev/packages-$VER.conf
+GHC_FLAGS="$GHC_FLAGS
+    --interactive
+    -DACCELERATE_BOUNDS_CHECKS
+    -DACCELERATE_INTERNAL_CHECKS
+    -DACCELERATE_DEBUG"
 
-# And go...
+     # -iutils -optP-include -optPdist/build/autogen/cabal_macros.h"
+
+# If we have specified one command line argument, but that file doesn't exist,
+# search the source files for something with that name prefix.
 #
-$GHC -DACCELERATE_BOUNDS_CHECKS \
-     -DACCELERATE_INTERNAL_CHECKS \
-     -DACCELERATE_DEBUG \
-     -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h \
-     $@
+# > ghci shar
+#
+# should result in:
+#
+# > ghci Data/Array/Accelerate/Trafo/Sharing.hs
+#
+FILES=`find Data -iname "$1*" -name "*.hs"`
+COUNT=`echo $FILES | wc -w`
+
+if [ $COUNT -eq 1 ]; then
+    $GHC $GHC_FLAGS $FILES
+else
+    $GHC $GHC_FLAGS $@
+fi
 

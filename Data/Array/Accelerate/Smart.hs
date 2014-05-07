@@ -55,15 +55,19 @@ module Data.Array.Accelerate.Smart (
   mkLAnd, mkLOr, mkLNot,
 
   -- * Smart constructors for type coercion functions
-  mkBoolToInt, mkFromIntegral,
+  mkOrd, mkChr, mkBoolToInt, mkFromIntegral,
 
   -- * Auxiliary functions
-  ($$), ($$$), ($$$$), ($$$$$)
+  ($$), ($$$), ($$$$), ($$$$$),
+
+  -- Debugging
+  showPreAccOp, showPreExpOp,
 
 ) where
 
 -- standard library
 import Prelude                                  hiding ( exp )
+import Data.List
 import Data.Typeable
 
 -- friends
@@ -71,7 +75,8 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple              hiding ( Tuple )
 import Data.Array.Accelerate.AST                hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp )
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
+  showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
 import qualified Data.Array.Accelerate.Tuple    as Tuple
 
@@ -86,181 +91,181 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
--- Note [Pipe and sharing recovery]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- The 'Pipe' constructor is special.  It is the only form that contains functions over array
--- computations and these functions are fixed to be over vanilla 'Acc' types.  This enables us to
--- perform sharing recovery independently from the context for them.
---
 data PreAcc acc exp as where
     -- Needed for conversion to de Bruijn form
-  Atag        :: Arrays as
-              => Level                      -- environment size at defining occurrence
-              -> PreAcc acc exp as
+  Atag          :: Arrays as
+                => Level                        -- environment size at defining occurrence
+                -> PreAcc acc exp as
 
-  Pipe        :: (Arrays as, Arrays bs, Arrays cs)
-              => (Acc as -> Acc bs)         -- see comment above on why 'Acc' and not 'acc'
-              -> (Acc bs -> Acc cs)
-              -> acc as
-              -> PreAcc acc exp cs
+  Pipe          :: (Arrays as, Arrays bs, Arrays cs)
+                => (Acc as -> acc bs)
+                -> (Acc bs -> acc cs)
+                -> acc as
+                -> PreAcc acc exp cs
 
-  Acond       :: (Arrays as)
-              => exp Bool
-              -> acc as
-              -> acc as
-              -> PreAcc acc exp as
+  Aforeign      :: (Arrays arrs, Arrays a, Foreign f)
+                => f arrs a
+                -> (Acc arrs -> Acc a)
+                -> acc arrs
+                -> PreAcc acc exp a
 
-  Atuple      :: (Arrays arrs, IsTuple arrs)
-              => Tuple.Atuple acc (TupleRepr arrs)
-              -> PreAcc acc exp arrs
+  Acond         :: Arrays as
+                => exp Bool
+                -> acc as
+                -> acc as
+                -> PreAcc acc exp as
 
-  Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
-              => TupleIdx (TupleRepr arrs) a
-              ->        acc     arrs
-              -> PreAcc acc exp a
+  Awhile        :: Arrays arrs
+                => (Acc arrs -> acc (Scalar Bool))
+                -> (Acc arrs -> acc arrs)
+                -> acc arrs
+                -> PreAcc acc exp arrs
 
-  Use         :: Arrays arrs
-              => arrs
-              -> PreAcc acc exp arrs
+  Atuple        :: (Arrays arrs, IsTuple arrs)
+                => Tuple.Atuple acc (TupleRepr arrs)
+                -> PreAcc acc exp arrs
 
-  Unit        :: Elt e
-              => exp e
-              -> PreAcc acc exp (Scalar e)
+  Aprj          :: (Arrays arrs, IsTuple arrs, Arrays a)
+                => TupleIdx (TupleRepr arrs) a
+                ->        acc     arrs
+                -> PreAcc acc exp a
 
-  Generate    :: (Shape sh, Elt e)
-              => exp sh
-              -> (Exp sh -> exp e)
-              -> PreAcc acc exp (Array sh e)
+  Use           :: Arrays arrs
+                => arrs
+                -> PreAcc acc exp arrs
 
-  Reshape     :: (Shape sh, Shape sh', Elt e)
-              => exp sh
-              -> acc (Array sh' e)
-              -> PreAcc acc exp (Array sh e)
+  Unit          :: Elt e
+                => exp e
+                -> PreAcc acc exp (Scalar e)
 
-  Replicate   :: (Slice slix, Elt e,
-                  Typeable (SliceShape slix), Typeable (FullShape slix))
-                  -- the Typeable constraints shouldn't be necessary as they are implied by
-                  -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
-              => exp slix
-              -> acc            (Array (SliceShape slix) e)
-              -> PreAcc acc exp (Array (FullShape  slix) e)
+  Generate      :: (Shape sh, Elt e)
+                => exp sh
+                -> (Exp sh -> exp e)
+                -> PreAcc acc exp (Array sh e)
 
-  Slice       :: (Slice slix, Elt e,
-                  Typeable (SliceShape slix), Typeable (FullShape slix))
-                  -- the Typeable constraints shouldn't be necessary as they are implied by
-                  -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
-              => acc            (Array (FullShape  slix) e)
-              -> exp slix
-              -> PreAcc acc exp (Array (SliceShape slix) e)
+  Reshape       :: (Shape sh, Shape sh', Elt e)
+                => exp sh
+                -> acc (Array sh' e)
+                -> PreAcc acc exp (Array sh e)
 
-  Map         :: (Shape sh, Elt e, Elt e')
-              => (Exp e -> exp e')
-              -> acc (Array sh e)
-              -> PreAcc acc exp (Array sh e')
+  Replicate     :: (Slice slix, Elt e,
+                    Typeable (SliceShape slix), Typeable (FullShape slix))
+                    -- the Typeable constraints shouldn't be necessary as they are implied by
+                    -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
+                => exp slix
+                -> acc            (Array (SliceShape slix) e)
+                -> PreAcc acc exp (Array (FullShape  slix) e)
 
-  ZipWith     :: (Shape sh, Elt e1, Elt e2, Elt e3)
-              => (Exp e1 -> Exp e2 -> exp e3)
-              -> acc (Array sh e1)
-              -> acc (Array sh e2)
-              -> PreAcc acc exp (Array sh e3)
+  Slice         :: (Slice slix, Elt e,
+                    Typeable (SliceShape slix), Typeable (FullShape slix))
+                    -- the Typeable constraints shouldn't be necessary as they are implied by
+                    -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
+                => acc            (Array (FullShape  slix) e)
+                -> exp slix
+                -> PreAcc acc exp (Array (SliceShape slix) e)
 
-  Fold        :: (Shape sh, Elt e)
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Array (sh:.Int) e)
-              -> PreAcc acc exp (Array sh e)
+  Map           :: (Shape sh, Elt e, Elt e')
+                => (Exp e -> exp e')
+                -> acc (Array sh e)
+                -> PreAcc acc exp (Array sh e')
 
-  Fold1       :: (Shape sh, Elt e)
-              => (Exp e -> Exp e -> exp e)
-              -> acc (Array (sh:.Int) e)
-              -> PreAcc acc exp (Array sh e)
+  ZipWith       :: (Shape sh, Elt e1, Elt e2, Elt e3)
+                => (Exp e1 -> Exp e2 -> exp e3)
+                -> acc (Array sh e1)
+                -> acc (Array sh e2)
+                -> PreAcc acc exp (Array sh e3)
 
-  FoldSeg     :: (Shape sh, Elt e, Elt i, IsIntegral i)
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Array (sh:.Int) e)
-              -> acc (Segments i)
-              -> PreAcc acc exp (Array (sh:.Int) e)
+  Fold          :: (Shape sh, Elt e)
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Array (sh:.Int) e)
+                -> PreAcc acc exp (Array sh e)
 
-  Fold1Seg    :: (Shape sh, Elt e, Elt i, IsIntegral i)
-              => (Exp e -> Exp e -> exp e)
-              -> acc (Array (sh:.Int) e)
-              -> acc (Segments i)
-              -> PreAcc acc exp (Array (sh:.Int) e)
+  Fold1         :: (Shape sh, Elt e)
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Array (sh:.Int) e)
+                -> PreAcc acc exp (Array sh e)
 
-  Scanl       :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e)
+  FoldSeg       :: (Shape sh, Elt e, Elt i, IsIntegral i)
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Array (sh:.Int) e)
+                -> acc (Segments i)
+                -> PreAcc acc exp (Array (sh:.Int) e)
 
-  Scanl'      :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e, Scalar e)
+  Fold1Seg      :: (Shape sh, Elt e, Elt i, IsIntegral i)
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Array (sh:.Int) e)
+                -> acc (Segments i)
+                -> PreAcc acc exp (Array (sh:.Int) e)
 
-  Scanl1      :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e)
+  Scanl         :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e)
 
-  Scanr       :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e)
+  Scanl'        :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e, Scalar e)
 
-  Scanr'      :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> exp e
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e, Scalar e)
+  Scanl1        :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e)
 
-  Scanr1      :: Elt e
-              => (Exp e -> Exp e -> exp e)
-              -> acc (Vector e)
-              -> PreAcc acc exp (Vector e)
+  Scanr         :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e)
 
-  Permute     :: (Shape sh, Shape sh', Elt e)
-              => (Exp e -> Exp e -> exp e)
-              -> acc (Array sh' e)
-              -> (Exp sh -> exp sh')
-              -> acc (Array sh e)
-              -> PreAcc acc exp (Array sh' e)
+  Scanr'        :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> exp e
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e, Scalar e)
 
-  Backpermute :: (Shape sh, Shape sh', Elt e)
-              => exp sh'
-              -> (Exp sh' -> exp sh)
-              -> acc (Array sh e)
-              -> PreAcc acc exp (Array sh' e)
+  Scanr1        :: Elt e
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Vector e)
+                -> PreAcc acc exp (Vector e)
 
-  Stencil     :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
-              => (stencil -> exp b)
-              -> Boundary a
-              -> acc (Array sh a)
-              -> PreAcc acc exp (Array sh b)
+  Permute       :: (Shape sh, Shape sh', Elt e)
+                => (Exp e -> Exp e -> exp e)
+                -> acc (Array sh' e)
+                -> (Exp sh -> exp sh')
+                -> acc (Array sh e)
+                -> PreAcc acc exp (Array sh' e)
 
-  Stencil2    :: (Shape sh, Elt a, Elt b, Elt c,
-                 Stencil sh a stencil1, Stencil sh b stencil2)
-              => (stencil1 -> stencil2 -> exp c)
-              -> Boundary a
-              -> acc (Array sh a)
-              -> Boundary b
-              -> acc (Array sh b)
-              -> PreAcc acc exp (Array sh c)
+  Backpermute   :: (Shape sh, Shape sh', Elt e)
+                => exp sh'
+                -> (Exp sh' -> exp sh)
+                -> acc (Array sh e)
+                -> PreAcc acc exp (Array sh' e)
 
-  Foreign     :: (Arrays arrs, Arrays results, ForeignFun ff)
-              => ff arrs results
-              -> (Acc arrs -> Acc results)
-              -> acc arrs
-              -> PreAcc acc exp results
+  Stencil       :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
+                => (stencil -> exp b)
+                -> Boundary a
+                -> acc (Array sh a)
+                -> PreAcc acc exp (Array sh b)
+
+  Stencil2      :: (Shape sh, Elt a, Elt b, Elt c,
+                   Stencil sh a stencil1, Stencil sh b stencil2)
+                => (stencil1 -> stencil2 -> exp c)
+                -> Boundary a
+                -> acc (Array sh a)
+                -> Boundary b
+                -> acc (Array sh b)
+                -> PreAcc acc exp (Array sh c)
 
 -- |Array-valued collective computations
 --
 newtype Acc a = Acc (PreAcc Acc Exp a)
 
-deriving instance Typeable1 Acc
+deriving instance Typeable Acc
 
 
 -- Embedded expressions of the surface language
@@ -277,56 +282,107 @@ deriving instance Typeable1 Acc
 --
 data PreExp acc exp t where
     -- Needed for conversion to de Bruijn form
-  Tag         :: Elt t
-              => Level                          -> PreExp acc exp t
-                 -- environment size at defining occurrence
+  Tag           :: Elt t
+                => Level                        -- environment size at defining occurrence
+                -> PreExp acc exp t
 
-    -- All the same constructors as 'AST.Exp'
-  Const       :: Elt t
-              => t                              -> PreExp acc exp t
+  -- All the same constructors as 'AST.Exp'
+  Const         :: Elt t
+                => t
+                -> PreExp acc exp t
 
-  Tuple       :: (Elt t, IsTuple t)
-              => Tuple.Tuple exp (TupleRepr t)  -> PreExp acc exp t
-  Prj         :: (Elt t, IsTuple t, Elt e)
-              => TupleIdx (TupleRepr t) e
-              -> exp t                          -> PreExp acc exp e
-  IndexNil    ::                                   PreExp acc exp Z
-  IndexCons   :: (Slice sl, Elt a)
-              => exp sl -> exp a                -> PreExp acc exp (sl:.a)
-  IndexHead   :: (Slice sl, Elt a)
-              => exp (sl:.a)                    -> PreExp acc exp a
-  IndexTail   :: (Slice sl, Elt a)
-              => exp (sl:.a)                    -> PreExp acc exp sl
-  IndexAny    :: Shape sh
-              =>                                   PreExp acc exp (Any sh)
-  ToIndex     :: Shape sh
-              => exp sh -> exp sh               -> PreExp acc exp Int
-  FromIndex   :: Shape sh
-              => exp sh -> exp Int              -> PreExp acc exp sh
-  Cond        :: Elt t
-              => exp Bool -> exp t -> exp t     -> PreExp acc exp t
-  PrimConst   :: Elt t
-              => PrimConst t                    -> PreExp acc exp t
-  PrimApp     :: (Elt a, Elt r)
-              => PrimFun (a -> r) -> exp a      -> PreExp acc exp r
-  Index       :: (Shape sh, Elt t)
-              => acc (Array sh t) -> exp sh     -> PreExp acc exp t
-  LinearIndex :: (Shape sh, Elt t)
-              => acc (Array sh t) -> exp Int    -> PreExp acc exp t
-  Shape       :: (Shape sh, Elt e)
-              => acc (Array sh e)               -> PreExp acc exp sh
-  ShapeSize   :: Shape sh
-              => exp sh                         -> PreExp acc exp Int
-  ForeignExp  :: (Elt args, Elt results, ForeignFun ff)
-              => ff args results
-              -> (Exp args -> Exp results) -- Using Exp instead of exp to aid in sharing recovery.
-              -> exp args                       -> PreExp acc exp results
+  Tuple         :: (Elt t, IsTuple t)
+                => Tuple.Tuple exp (TupleRepr t)
+                -> PreExp acc exp t
+
+  Prj           :: (Elt t, IsTuple t, Elt e)
+                => TupleIdx (TupleRepr t) e
+                -> exp t
+                -> PreExp acc exp e
+
+  IndexNil      :: PreExp acc exp Z
+
+  IndexCons     :: (Slice sl, Elt a)
+                => exp sl
+                -> exp a
+                -> PreExp acc exp (sl:.a)
+
+  IndexHead     :: (Slice sl, Elt a)
+                => exp (sl:.a)
+                -> PreExp acc exp a
+
+  IndexTail     :: (Slice sl, Elt a)
+                => exp (sl:.a)
+                -> PreExp acc exp sl
+
+  IndexAny      :: Shape sh
+                => PreExp acc exp (Any sh)
+
+  ToIndex       :: Shape sh
+                => exp sh
+                -> exp sh
+                -> PreExp acc exp Int
+
+  FromIndex     :: Shape sh
+                => exp sh
+                -> exp Int
+                -> PreExp acc exp sh
+
+  Cond          :: Elt t
+                => exp Bool
+                -> exp t
+                -> exp t
+                -> PreExp acc exp t
+
+  While         :: Elt t
+                => (Exp t -> exp Bool)
+                -> (Exp t -> exp t)
+                -> exp t
+                -> PreExp acc exp t
+
+  PrimConst     :: Elt t
+                => PrimConst t
+                -> PreExp acc exp t
+
+  PrimApp       :: (Elt a, Elt r)
+                => PrimFun (a -> r)
+                -> exp a
+                -> PreExp acc exp r
+
+  Index         :: (Shape sh, Elt t)
+                => acc (Array sh t)
+                -> exp sh
+                -> PreExp acc exp t
+
+  LinearIndex   :: (Shape sh, Elt t)
+                => acc (Array sh t)
+                -> exp Int
+                -> PreExp acc exp t
+
+  Shape         :: (Shape sh, Elt e)
+                => acc (Array sh e)
+                -> PreExp acc exp sh
+
+  ShapeSize     :: Shape sh
+                => exp sh
+                -> PreExp acc exp Int
+
+  Intersect     :: Shape sh
+                => exp sh
+                -> exp sh
+                -> PreExp acc exp sh
+
+  Foreign       :: (Elt x, Elt y, Foreign f)
+                => f x y
+                -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
+                -> exp x
+                -> PreExp acc exp y
 
 -- | Scalar expressions for plain array computations.
 --
 newtype Exp t = Exp (PreExp Acc Exp t)
 
-deriving instance Typeable1 Exp
+deriving instance Typeable Exp
 
 
 -- Smart constructors and destructors for array tuples
@@ -603,7 +659,17 @@ tix8 = SuccTupIdx tix7
 -- Smart constructor for literals
 --
 
--- | Scalar expression inlet.
+-- | Scalar expression inlet: make a Haskell value available for processing in
+-- an Accelerate scalar expression.
+--
+-- Note that this embeds the value directly into the expression. Depending on
+-- the backend used to execute the computation, this might not always be
+-- desirable. For example, a backend that does external code generation may
+-- embed this constant directly into the generated code, which means new code
+-- will need to be generated and compiled every time the value changes. In such
+-- cases, consider instead lifting scalar values into (singleton) arrays so that
+-- they can be passed as an input to the computation and thus the value can
+-- change without the need to generate fresh code.
 --
 constant :: Elt t => t -> Exp t
 constant = Exp . Const
@@ -932,14 +998,20 @@ mkLOr x y = Exp $ PrimLOr `PrimApp` tup2 (x, y)
 mkLNot :: Exp Bool -> Exp Bool
 mkLNot x = Exp $ PrimLNot `PrimApp` x
 
--- FIXME: Character conversions
+-- Character conversions
 
--- FIXME: Numeric conversions
+mkOrd :: Exp Char -> Exp Int
+mkOrd x = Exp $ PrimOrd `PrimApp` x
+
+mkChr :: Exp Int -> Exp Char
+mkChr x = Exp $ PrimChr `PrimApp` x
+
+-- Numeric conversions
 
 mkFromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
 mkFromIntegral x = Exp $ PrimFromIntegral integralType numType `PrimApp` x
 
--- FIXME: Other conversions
+-- Other conversions
 
 mkBoolToInt :: Exp Bool -> Exp Int
 mkBoolToInt b = Exp $ PrimBoolToInt `PrimApp` b
@@ -963,3 +1035,83 @@ infixr 0 $$$$
 infixr 0 $$$$$
 ($$$$$) :: (b -> a) -> (c -> d -> e -> f -> g -> b) -> c -> d -> e -> f -> g-> a
 (f $$$$$ g) x y z u v = f (g x y z u v)
+
+
+-- Debugging
+-- ---------
+
+showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
+showPreAccOp (Atag i)           = "Atag " ++ show i
+showPreAccOp (Use a)            = "Use "  ++ showArrays a
+showPreAccOp Pipe{}             = "Pipe"
+showPreAccOp Acond{}            = "Acond"
+showPreAccOp Awhile{}           = "Awhile"
+showPreAccOp Atuple{}           = "Atuple"
+showPreAccOp Aprj{}             = "Aprj"
+showPreAccOp Unit{}             = "Unit"
+showPreAccOp Generate{}         = "Generate"
+showPreAccOp Reshape{}          = "Reshape"
+showPreAccOp Replicate{}        = "Replicate"
+showPreAccOp Slice{}            = "Slice"
+showPreAccOp Map{}              = "Map"
+showPreAccOp ZipWith{}          = "ZipWith"
+showPreAccOp Fold{}             = "Fold"
+showPreAccOp Fold1{}            = "Fold1"
+showPreAccOp FoldSeg{}          = "FoldSeg"
+showPreAccOp Fold1Seg{}         = "Fold1Seg"
+showPreAccOp Scanl{}            = "Scanl"
+showPreAccOp Scanl'{}           = "Scanl'"
+showPreAccOp Scanl1{}           = "Scanl1"
+showPreAccOp Scanr{}            = "Scanr"
+showPreAccOp Scanr'{}           = "Scanr'"
+showPreAccOp Scanr1{}           = "Scanr1"
+showPreAccOp Permute{}          = "Permute"
+showPreAccOp Backpermute{}      = "Backpermute"
+showPreAccOp Stencil{}          = "Stencil"
+showPreAccOp Stencil2{}         = "Stencil2"
+showPreAccOp Aforeign{}         = "Aforeign"
+
+showArrays :: forall arrs. Arrays arrs => arrs -> String
+showArrays = display . collect (arrays (undefined::arrs)) . fromArr
+  where
+    collect :: ArraysR a -> a -> [String]
+    collect ArraysRunit         _        = []
+    collect ArraysRarray        arr      = [showShortendArr arr]
+    collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
+    --
+    display []  = []
+    display [x] = x
+    display xs  = "(" ++ intercalate ", " xs ++ ")"
+
+
+showShortendArr :: Elt e => Array sh e -> String
+showShortendArr arr
+  = show (take cutoff l) ++ if length l > cutoff then ".." else ""
+  where
+    l      = toList arr
+    cutoff = 5
+
+
+showPreExpOp :: PreExp acc exp t -> String
+showPreExpOp (Const c)          = "Const " ++ show c
+showPreExpOp (Tag i)            = "Tag" ++ show i
+showPreExpOp Tuple{}            = "Tuple"
+showPreExpOp Prj{}              = "Prj"
+showPreExpOp IndexNil           = "IndexNil"
+showPreExpOp IndexCons{}        = "IndexCons"
+showPreExpOp IndexHead{}        = "IndexHead"
+showPreExpOp IndexTail{}        = "IndexTail"
+showPreExpOp IndexAny           = "IndexAny"
+showPreExpOp ToIndex{}          = "ToIndex"
+showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp Cond{}             = "Cond"
+showPreExpOp While{}            = "While"
+showPreExpOp PrimConst{}        = "PrimConst"
+showPreExpOp PrimApp{}          = "PrimApp"
+showPreExpOp Index{}            = "Index"
+showPreExpOp LinearIndex{}      = "LinearIndex"
+showPreExpOp Shape{}            = "Shape"
+showPreExpOp ShapeSize{}        = "ShapeSize"
+showPreExpOp Intersect{}        = "Intersect"
+showPreExpOp Foreign{}          = "Foreign"
+

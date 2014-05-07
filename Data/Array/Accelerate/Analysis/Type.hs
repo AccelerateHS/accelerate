@@ -1,5 +1,8 @@
-{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
-{-# LANGUAGE GADTs, TypeFamilies, PatternGuards #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Analysis.Type
@@ -21,8 +24,8 @@
 module Data.Array.Accelerate.Analysis.Type (
 
   -- * Query AST types
-  AccType,
-  arrayType, accType, expType, sizeOf,
+  AccType, arrayType, sizeOf,
+  accType, expType, delayedAccType, delayedExpType,
   preAccType, preExpType
 
 ) where
@@ -34,6 +37,7 @@ import qualified Foreign.Storable as F
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Trafo
 
 
 
@@ -55,6 +59,13 @@ type AccType  acc = forall aenv sh e. acc aenv (Array sh e) -> TupleType (EltRep
 --
 accType :: AccType OpenAcc
 accType (OpenAcc acc) = preAccType accType acc
+
+delayedAccType :: AccType DelayedOpenAcc
+delayedAccType (Manifest acc) = preAccType delayedAccType acc
+delayedAccType (Delayed _ f _)
+  | Lam (Body e) <- f   = delayedExpType e
+  | otherwise           = error "my favourite place in the world is wherever you happen to be"
+
 
 -- |Reify the element type of the result of an array computation using the array computation AST
 -- before tying the knot.
@@ -86,7 +97,12 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Hey look! even the leaves are falling for you."
 
+    Aforeign _ _ _      -> case arrays' (undefined :: Array sh e) of
+                             ArraysRarray -> eltType (undefined::e)
+                             _            -> error "Who on earth wrote all these weird error messages?"
+
     Acond _ acc _       -> k acc
+    Awhile _ _ acc      -> k acc
     Use ((),a)          -> arrayType a
     Unit _              -> eltType (undefined::e)
     Generate _ _        -> eltType (undefined::e)
@@ -108,15 +124,15 @@ preAccType k pacc =
     Backpermute _ _ acc -> k acc
     Stencil _ _ _       -> eltType (undefined::e)
     Stencil2 _ _ _ _ _  -> eltType (undefined::e)
-    Foreign _ _ _       -> case arrays' (undefined :: Array sh e) of
-                             ArraysRarray -> eltType (undefined::e)
-                             _            -> error "Who on earth wrote all these weird error messages?"
 
 
 -- |Reify the result type of a scalar expression.
 --
-expType :: OpenExp aenv env t -> TupleType (EltRepr t)
+expType :: OpenExp env aenv t -> TupleType (EltRepr t)
 expType = preExpType accType
+
+delayedExpType :: DelayedOpenExp env aenv t -> TupleType (EltRepr t)
+delayedExpType = preExpType delayedAccType
 
 -- |Reify the result types of of a scalar expression using the expression AST before tying the
 -- knot.
@@ -142,7 +158,7 @@ preExpType k e =
     ToIndex _ _       -> eltType (undefined::t)
     FromIndex _ _     -> eltType (undefined::t)
     Cond _ t _        -> preExpType k t
-    Iterate _ _ _     -> eltType (undefined::t)
+    While _ _ _       -> eltType (undefined::t)
     PrimConst _       -> eltType (undefined::t)
     PrimApp _ _       -> eltType (undefined::t)
     Index acc _       -> k acc
@@ -150,7 +166,7 @@ preExpType k e =
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)
-    ForeignExp _ _ _  -> eltType (undefined::t)
+    Foreign _ _ _     -> eltType (undefined::t)
 
 
 -- |Size of a tuple type, in bytes

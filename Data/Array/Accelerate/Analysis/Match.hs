@@ -34,6 +34,7 @@ module Data.Array.Accelerate.Analysis.Match (
   HashAcc,
   hashPreOpenAcc, hashOpenAcc,
   hashPreOpenExp, hashOpenExp,
+  hashPreOpenFun,
 
 ) where
 
@@ -86,10 +87,10 @@ matchPreOpenAcc
     -> Maybe (s :=: t)
 matchPreOpenAcc matchAcc hashAcc = match
   where
-    matchFun :: PreOpenFun acc env aenv u -> PreOpenFun acc env aenv v -> Maybe (u :=: v)
+    matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :=: v)
     matchFun = matchPreOpenFun matchAcc hashAcc
 
-    matchExp :: PreOpenExp acc env aenv u -> PreOpenExp acc env aenv v -> Maybe (u :=: v)
+    matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp matchAcc hashAcc
 
     match :: PreOpenAcc acc aenv s -> PreOpenAcc acc aenv t -> Maybe (s :=: t)
@@ -115,10 +116,24 @@ matchPreOpenAcc matchAcc hashAcc = match
       , Just REFL <- matchAcc                  a1 a2
       = Just REFL
 
+    match (Aforeign ff1 _ a1) (Aforeign ff2 _ a2)
+      | Just REFL <- matchAcc a1 a2
+      , unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+
     match (Acond p1 t1 e1) (Acond p2 t2 e2)
       | Just REFL <- matchExp p1 p2
       , Just REFL <- matchAcc t1 t2
       , Just REFL <- matchAcc e1 e2
+      = Just REFL
+
+    match (Awhile p1 f1 a1) (Awhile p2 f2 a2)
+      | Just REFL <- matchAcc a1 a2
+      , Just REFL <- matchPreOpenAfun matchAcc p1 p2
+      , Just REFL <- matchPreOpenAfun matchAcc f1 f2
       = Just REFL
 
     match (Use a1) (Use a2)
@@ -254,12 +269,6 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Foreign _ f1 a1) (Foreign _ f2 a2)
-      | Just REFL <- matchAcc a1 a2
-      , Just REFL <- matchPreOpenAfun matchAcc f1 f2 -- If the pure accelerate versions of the function match, 
-                                                     -- then we assume the foreign ones do as well.
-      = Just REFL
-
     match _ _
       = Nothing
 
@@ -364,6 +373,14 @@ matchPreOpenExp matchAcc hashAcc = match
     match (Var v1) (Var v2)
       = matchIdx v1 v2
 
+    match (Foreign ff1 _ e1) (Foreign ff2 _ e2)
+      | Just REFL <- match e1 e2
+      , unsafePerformIO $ do
+          sn1 <- makeStableName ff1
+          sn2 <- makeStableName ff2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+
     match (Const c1) (Const c2)
       | Just REFL <- matchTupleType (eltType (undefined::s')) (eltType (undefined::t'))
       , matchConst (eltType (undefined::s')) c1 c2
@@ -425,10 +442,10 @@ matchPreOpenExp matchAcc hashAcc = match
       , Just REFL <- match e1 e2
       = Just REFL
 
-    match (Iterate n1 f1 x1) (Iterate n2 f2 x2)
-      | Just REFL <- match n1 n2
-      , Just REFL <- match x1 x2
-      , Just REFL <- match f1 f2
+    match (While p1 f1 x1) (While p2 f2 x2)
+      | Just REFL <- match x1 x2
+      , Just REFL <- matchPreOpenFun matchAcc hashAcc p1 p2
+      , Just REFL <- matchPreOpenFun matchAcc hashAcc f1 f2
       = Just REFL
 
     match (PrimConst c1) (PrimConst c2)
@@ -865,7 +882,9 @@ hashPreOpenAcc hashAcc pacc =
     Atuple t                    -> hash "Atuple"        `hashWithSalt` hashAtuple hashAcc t
     Aprj ix a                   -> hash "Aprj"          `hashWithSalt` hashTupleIdx ix    `hashA` a
     Apply f a                   -> hash "Apply"         `hashWithSalt` hashAfun hashAcc f `hashA` a
+    Aforeign _ f a              -> hash "Aforeign"      `hashWithSalt` hashAfun hashAcc f `hashA` a
     Use a                       -> hash "Use"           `hashWithSalt` hashArrays (arrays (undefined::arrs)) a
+    Awhile p f a                -> hash "Awhile"        `hashWithSalt` hashAfun hashAcc f `hashWithSalt` hashAfun hashAcc p `hashA` a
     Unit e                      -> hash "Unit"          `hashE` e
     Generate e f                -> hash "Generate"      `hashE` e  `hashF` f
     Acond e a1 a2               -> hash "Acond"         `hashE` e  `hashA` a1 `hashA` a2
@@ -889,7 +908,6 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Foreign _ f a               -> hash "Foreign"       `hashWithSalt` hashAfun hashAcc f `hashA` a
 
 
 hashArrays :: ArraysR a -> a -> Int
@@ -943,7 +961,7 @@ hashPreOpenExp hashAcc exp =
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
     FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
     Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
-    Iterate n f x               -> hash "Iterate"       `hashE` n  `hashE` f  `hashE` x
+    While p f x                 -> hash "While"         `hashWithSalt` hashPreOpenFun hashAcc p  `hashWithSalt` hashPreOpenFun hashAcc f  `hashE` x
     PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
     PrimConst c                 -> hash "PrimConst"     `hashWithSalt` hashPrimConst c
     Index a ix                  -> hash "Index"         `hashA` a  `hashE` ix
@@ -951,7 +969,7 @@ hashPreOpenExp hashAcc exp =
     Shape a                     -> hash "Shape"         `hashA` a
     ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
     Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
-    ForeignExp _ f e            -> hash "ForeignExp"    `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
+    Foreign _ f e               -> hash "Foreign"       `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
 
 
 hashPreOpenFun :: HashAcc acc -> PreOpenFun acc env aenv f -> Int

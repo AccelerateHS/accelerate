@@ -6,7 +6,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Algebra
--- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -27,40 +27,48 @@ import Prelude                                          hiding ( exp )
 import Data.Maybe                                       ( fromMaybe )
 import Data.Bits
 import Data.Char
+import Text.PrettyPrint
 import qualified Prelude                                as P
 
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
 import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt )
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Trafo.Base
+
+import qualified Data.Array.Accelerate.Debug            as Stats
 
 
 -- Propagate constant expressions, which are either constant valued expressions
 -- or constant let bindings. Be careful not to follow self-cycles.
 --
-propagate :: forall env aenv exp. Gamma env env aenv -> OpenExp env aenv exp -> Maybe exp
+propagate
+    :: forall acc env aenv exp. Kit acc
+    => Gamma acc env env aenv
+    -> PreOpenExp acc env aenv exp
+    -> Maybe exp
 propagate env = cvtE
   where
-    cvtE :: OpenExp env aenv e -> Maybe e
+    cvtE :: PreOpenExp acc env aenv e -> Maybe e
     cvtE exp = case exp of
       Const c                                   -> Just (toElt c)
       PrimConst c                               -> Just (evalPrimConst c)
       Prj ix (Var v) | Tuple t <- prjExp v env  -> cvtT ix t
       Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple c)
       Var ix
-        | e         <- prjExp ix env
-        , Nothing   <- matchOpenExp exp e       -> cvtE e
+        | e             <- prjExp ix env
+        , Nothing       <- match exp e  -> cvtE e
       --
-      _                                         -> Nothing
+      _                                 -> Nothing
 
     cvtP :: TupleIdx t e -> t -> Maybe e
     cvtP ZeroTupIdx       (_, v)   = Just v
     cvtP (SuccTupIdx idx) (tup, _) = cvtP idx tup
 
-    cvtT :: TupleIdx t e -> Tuple (OpenExp env aenv) t -> Maybe e
+    cvtT :: TupleIdx t e -> Tuple (PreOpenExp acc env aenv) t -> Maybe e
     cvtT ZeroTupIdx       (SnocTup _   e) = cvtE e
     cvtT (SuccTupIdx idx) (SnocTup tup _) = cvtT idx tup
     cvtT _                _               = error "hey what's the head angle on that thing?"
@@ -69,15 +77,15 @@ propagate env = cvtE
 -- Attempt to evaluate primitive function applications
 --
 evalPrimApp
-    :: forall env aenv a r. (Elt a, Elt r)
-    => Gamma env env aenv
+    :: forall acc env aenv a r. (Kit acc, Elt a, Elt r)
+    => Gamma acc env env aenv
     -> PrimFun (a -> r)
-    -> OpenExp env aenv a
-    -> OpenExp env aenv r
+    -> PreOpenExp acc env aenv a
+    -> PreOpenExp acc env aenv r
 evalPrimApp env f x
   -- First attempt to move constant values towards the left
   | Just r      <- commutes f x env     = evalPrimApp env f r
-  | Just r      <- associates f x       = r
+--  | Just r      <- associates f x       = r
 
   -- Now attempt to evaluate any expressions
   | otherwise
@@ -144,11 +152,11 @@ evalPrimApp env f x
 -- to the left of the operator. Returning Nothing indicates no change is made.
 --
 commutes
-    :: forall env aenv a r. (Elt a, Elt r)
+    :: forall acc env aenv a r. (Kit acc, Elt a, Elt r)
     => PrimFun (a -> r)
-    -> OpenExp env aenv a
-    -> Gamma env env aenv
-    -> Maybe (OpenExp env aenv a)
+    -> PreOpenExp acc env aenv a
+    -> Gamma acc env env aenv
+    -> Maybe (PreOpenExp acc env aenv a)
 commutes f x env = case f of
   PrimAdd _     -> swizzle x
   PrimMul _     -> swizzle x
@@ -163,11 +171,12 @@ commutes f x env = case f of
   PrimLOr       -> swizzle x
   _             -> Nothing
   where
-    swizzle :: OpenExp env aenv (b,b) -> Maybe (OpenExp env aenv (b,b))
+    swizzle :: PreOpenExp acc env aenv (b,b) -> Maybe (PreOpenExp acc env aenv (b,b))
     swizzle (Tuple (NilTup `SnocTup` a `SnocTup` b))
       | Nothing         <- propagate env a
       , Just _          <- propagate env b
-      = Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
+      = Stats.ruleFired (pprFun "commutes" f)
+      $ Just $ Tuple (NilTup `SnocTup` b `SnocTup` a)
 
 --    TLM: changing the ordering here when neither term can be reduced can be
 --         disadvantageous: for example in (x &&* y), the user might have put a
@@ -182,6 +191,7 @@ commutes f x env = case f of
       = Nothing
 
 
+{--
 -- Determine if successive applications of a binary operator will associate, and
 -- if so move them to the left. That is:
 --
@@ -192,11 +202,14 @@ commutes f x env = case f of
 -- TLM: we might get into trouble here, as we've lost track of where the user
 --      has explicitly put parenthesis.
 --
+-- TLM: BROKEN!! does not correctly change the sign of expressions when flipping
+--      (-x+y) or (-y+x).
+--
 associates
     :: (Elt a, Elt r)
     => PrimFun (a -> r)
-    -> OpenExp env aenv a
-    -> Maybe (OpenExp env aenv r)
+    -> PreOpenExp acc env aenv a
+    -> Maybe (PreOpenExp acc env aenv r)
 associates fun exp = case fun of
   PrimAdd _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
   PrimSub _     -> swizzle fun exp [PrimAdd ty, PrimSub ty]
@@ -208,14 +221,15 @@ associates fun exp = case fun of
     ty  = undefined
     ops = [ PrimMul ty, PrimFDiv ty, PrimAdd ty, PrimSub ty, PrimBAnd ty, PrimBOr ty, PrimBXor ty ]
 
-    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> OpenExp env aenv a -> [PrimFun (a -> r)] -> Maybe (OpenExp env aenv r)
+    swizzle :: (Elt a, Elt r) => PrimFun (a -> r) -> PreOpenExp acc env aenv a -> [PrimFun (a -> r)] -> Maybe (PreOpenExp acc env aenv r)
     swizzle f x lvl
-      | Just REFL   <- matches f ops
-      , Just (a,bc) <- untup2 x
-      , PrimApp g y <- bc
-      , Just REFL   <- matches g lvl
-      , Just (b,c)  <- untup2 y
-      = Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
+      | Just REFL       <- matches f ops
+      , Just (a,bc)     <- untup2 x
+      , PrimApp g y     <- bc
+      , Just REFL       <- matches g lvl
+      , Just (b,c)      <- untup2 y
+      = Stats.ruleFired (pprFun "associates" f)
+      $ Just $ PrimApp g (tup2 (PrimApp f (tup2 (a,b)), c))
 
     swizzle _ _ _
       = Nothing
@@ -223,39 +237,45 @@ associates fun exp = case fun of
     matches :: (Elt s, Elt t) => PrimFun (s -> a) -> [PrimFun (t -> a)] -> Maybe (s :=: t)
     matches _ []        = Nothing
     matches f (x:xs)
-      | Just REFL <- matchPrimFun' f x
+      | Just REFL       <- matchPrimFun' f x
       = Just REFL
 
       | otherwise
       = matches f xs
+--}
 
 
 -- Helper functions
 -- ----------------
 
-type a :-> b = forall env aenv. OpenExp env aenv a -> Gamma env env aenv -> Maybe (OpenExp env aenv b)
+type a :-> b = forall acc env aenv. Kit acc => PreOpenExp acc env aenv a -> Gamma acc env env aenv -> Maybe (PreOpenExp acc env aenv b)
 
 eval1 :: Elt b => (a -> b) -> a :-> b
 eval1 f x env
-  | Just a <- propagate env x   = Just $ Const (fromElt (f a))
+  | Just a <- propagate env x   = Stats.substitution "constant fold" . Just $ Const (fromElt (f a))
   | otherwise                   = Nothing
 
 eval2 :: Elt c => (a -> b -> c) -> (a,b) :-> c
 eval2 f (untup2 -> Just (x,y)) env
   | Just a <- propagate env x
   , Just b <- propagate env y
-  = Just $ Const (fromElt (f a b))
+  = Stats.substitution "constant fold"
+  $ Just $ Const (fromElt (f a b))
 
 eval2 _ _ _
   = Nothing
 
-tup2 :: (Elt a, Elt b) => (OpenExp env aenv a, OpenExp env aenv b) -> OpenExp env aenv (a, b)
-tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
+-- tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
+-- tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
 
-untup2 :: OpenExp env aenv (a, b) -> Maybe (OpenExp env aenv a, OpenExp env aenv b)
+untup2 :: PreOpenExp acc env aenv (a, b) -> Maybe (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b)
 untup2 exp
   | Tuple (NilTup `SnocTup` a `SnocTup` b) <- exp   = Just (a, b)
   | otherwise                                       = Nothing
+
+
+pprFun :: String -> PrimFun f -> String
+pprFun rule f = show $ text rule <+> snd (prettyPrim f)
 
 
 -- Methods of Num
@@ -269,7 +289,7 @@ evalAdd' :: (Elt a, Eq a, Num a) => (a,a) :-> a
 evalAdd' (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , a == 0
-  = Just y
+  = Stats.ruleFired "x+0" $ Just y
 
 evalAdd' arg env
   = eval2 (+) arg env
@@ -283,14 +303,16 @@ evalSub' :: forall a. (Elt a, Eq a, Num a) => NumType a -> (a,a) :-> a
 evalSub' ty (untup2 -> Just (x,y)) env
   | Just b      <- propagate env y
   , b == 0
-  = Just x
+  = Stats.ruleFired "x-0" $ Just x
 
   | Nothing     <- propagate env x
   , Just b      <- propagate env y
-  = Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
+  = Stats.ruleFired "-y+x"
+  $ Just $ evalPrimApp env (PrimAdd ty) (Tuple $ NilTup `SnocTup` Const (fromElt (-b)) `SnocTup` x)
 
-  | Just REFL   <- matchOpenExp x y
-  = Just $ Const (fromElt (0::a))       -- TLM: definitely the purview of rewrite rules
+  | Just REFL   <- match x y
+  = Stats.ruleFired "x-x"
+  $ Just $ Const (fromElt (0::a))
 
 evalSub' _ arg env
   = eval2 (-) arg env
@@ -305,8 +327,8 @@ evalMul' (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
   , Nothing     <- propagate env y
   = case a of
-      0         -> Just x
-      1         -> Just y
+      0         -> Stats.ruleFired "x*0" $ Just x
+      1         -> Stats.ruleFired "x*1" $ Just y
       _         -> Nothing
 
 evalMul' arg env
@@ -340,7 +362,7 @@ evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
 evalIDiv' :: (Elt a, Integral a, Eq a) => (a,a) :-> a
 evalIDiv' (untup2 -> Just (x,y)) env
   | Just 1      <- propagate env y
-  = Just x
+  = Stats.ruleFired "x`div`1" $ Just x
 
 evalIDiv' arg env
   = eval2 div arg env
@@ -361,16 +383,34 @@ evalBNot :: Elt a => IntegralType a -> a :-> a
 evalBNot ty | IntegralDict <- integralDict ty = eval1 complement
 
 evalBShiftL :: Elt a => IntegralType a -> (a,Int) :-> a
-evalBShiftL ty | IntegralDict <- integralDict ty = eval2 shiftL
+evalBShiftL _ (untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `shiftL` 0" $ Just x
+
+evalBShiftL ty arg env
+  | IntegralDict <- integralDict ty = eval2 shiftL arg env
 
 evalBShiftR :: Elt a => IntegralType a -> (a,Int) :-> a
-evalBShiftR ty | IntegralDict <- integralDict ty = eval2 shiftR
+evalBShiftR _ (untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `shiftR` 0" $ Just x
+
+evalBShiftR ty arg env
+  | IntegralDict <- integralDict ty = eval2 shiftR arg env
 
 evalBRotateL :: Elt a => IntegralType a -> (a,Int) :-> a
-evalBRotateL ty | IntegralDict <- integralDict ty = eval2 rotateL
+evalBRotateL _ (untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `rotateL` 0" $ Just x
+evalBRotateL ty arg env
+  | IntegralDict <- integralDict ty = eval2 rotateL arg env
 
 evalBRotateR :: Elt a => IntegralType a -> (a,Int) :-> a
-evalBRotateR ty | IntegralDict <- integralDict ty = eval2 rotateR
+evalBRotateR _ (untup2 -> Just (x,i)) env
+  | Just 0 <- propagate env i
+  = Stats.ruleFired "x `rotateR` 0" $ Just x
+evalBRotateR ty arg env
+  | IntegralDict <- integralDict ty = eval2 rotateR arg env
 
 
 -- Methods of Fractional & Floating
@@ -382,7 +422,7 @@ evalFDiv ty | FloatingDict <- floatingDict ty = evalFDiv'
 evalFDiv' :: (Elt a, Fractional a, Eq a) => (a,a) :-> a
 evalFDiv' (untup2 -> Just (x,y)) env
   | Just 1      <- propagate env y
-  = Just x
+  = Stats.ruleFired "x/1" $ Just x
 
 evalFDiv' arg env
   = eval2 (/) arg env
@@ -507,8 +547,8 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 evalLAnd :: (Bool,Bool) :-> Bool
 evalLAnd (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then y
-                else Const (fromElt False)
+  = Just $ if a then Stats.ruleFired "True &&" y
+                else Stats.ruleFired "False &&" $ Const (fromElt False)
 
 evalLAnd _ _
   = Nothing
@@ -516,8 +556,8 @@ evalLAnd _ _
 evalLOr  :: (Bool,Bool) :-> Bool
 evalLOr (untup2 -> Just (x,y)) env
   | Just a      <- propagate env x
-  = Just $ if a then Const (fromElt True)
-                else y
+  = Just $ if a then Stats.ruleFired "True ||" $ Const (fromElt True)
+                else Stats.ruleFired "False ||" y
 
 evalLOr _ _
   = Nothing

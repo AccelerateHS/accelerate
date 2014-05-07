@@ -3,7 +3,15 @@ An Embedded Language for Accelerated Array Computations
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
-For more details, see our recent paper [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]. There are also some slightly outdated slides and a video of a talk at the [Haskell Implementors Workshop 2009][HIW'09] (in Edinburgh): [Haskell Arrays, Accelerated (Using GPUs).][Cha09]
+For more details, see our papers:
+ * [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]
+ * [Optimising Purely Functional GPU Programs][MCKL13]
+
+There are also slides from some fairly recent presentations:
+ * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
+ * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video]) ([workshop][YLJ13-workshop])
+
+Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell][Mar13] contains a tutorial introduction to Accelerate.
 
 A simple example
 ----------------
@@ -44,18 +52,34 @@ The following additional components are experimental and incomplete:
 Requirements
 ------------
 
-  * Glasgow Haskell Compiler (GHC), 7.0.3 or later
-  * Haskell libraries as specified in [`accelerate.cabal`][Cabal-file]
-  * For the CUDA backend, CUDA version 3.0 or later
+  * Glasgow Haskell Compiler (GHC), 7.6 or later
+  * For the CUDA backend, CUDA version 5.0 or later
+  * Haskell libraries as specified in the [`accelerate.cabal`][accelerate-cabal] and optionally [`accelerate-cuda.cabal`][accelerate-cuda-cabal] files.
 
-Examples and documentation
---------------------------
-
-The GitHub repository contains a submodule [accelerate-examples][accelerate-examples], which provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`.
+Documentation
+-------------
 
   * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
   * Online documentation is on the [GitHub wiki][Wiki].
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
+
+Examples
+--------
+
+The GitHub repository contains a submodule [accelerate-examples][accelerate-examples], which provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`. The examples include:
+
+  * An implementation of [canny edge detection][wiki-canny]
+  * An interactive [mandelbrot set][wiki-mandelbrot] generator
+  * An [N-body simulation][wiki-nbody] of gravitational attraction between solid particles
+  * An implementation of the [PageRank][wiki-pagerank] algorithm
+  * A simple [ray-tracer][wiki-raytracing]
+  * A particle based simulation of stable fluid flows
+  * A cellular automata simulation
+  * A "password recovery" tool, for dictionary lookup of MD5 hashes
+
+[![Mandelbrot](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot.jpg)
+[![Raytracer](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")](http://www.cse.unsw.edu.au/~tmcdonell/images/ray.jpg)
+
 
 Mailing list and contacts
 -------------------------
@@ -64,7 +88,7 @@ Mailing list and contacts
   * Sign up for the mailing list at the [Accelerate Google Groups page][Google-Group].
   * Bug reports and issues tracking: [GitHub project page][Issues].
 
-The maintainer of this package is Manuel M T Chakravarty <chak@cse.unsw.edu.au> (aka TacticalGrace on #haskell and related channels).
+The maintainers of Accelerate are Manuel M T Chakravarty <chak@cse.unsw.edu.au> and Trevor L McDonell <tmcdonell@cse.unsw.edu.au>.
 
 What's missing?
 ---------------
@@ -76,8 +100,10 @@ Here is a list of features that are currently missing:
 
 
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
+  [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
-  [Cha09]:                  http://justtesting.posterous.com/running-haskell-array-computations-on-a-gpu
+  [Mar13]:                  http://chimera.labs.oreilly.com/books/1230000000929
+  [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                http://hackage.haskell.org/package/accelerate
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
   [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
@@ -86,11 +112,21 @@ Here is a list of features that are currently missing:
   [accelerate-buildbot]:    https://github.com/AccelerateHS/accelerate-buildbot
   [accelerate-repa]:        https://github.com/blambo/accelerate-repa
   [accelerate-opencl]:      https://github.com/hiPERFIT/accelerate-opencl
+  [accelerate-cabal]:       https://github.com/AccelerateHS/accelerate/accelerate.cabal
+  [accelerate-cuda-cabal]:  https://github.com/AccelerateHS/accelerate-cuda/accelerate-cuda.cabal
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
-  [Google-Group]:          http://groups.google.com/group/accelerate-haskell
+  [Google-Group]:           http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
-  [Cabal-file]:             https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [repa]:                   http://hackage.haskell.org/package/repa
-  [wiki-cc]: http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
+  [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
+  [YLJ13-workshop]:         https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate-workshop
+  [wiki-canny]:             http://en.wikipedia.org/wiki/Canny_edge_detector
+  [wiki-mandelbrot]:        http://en.wikipedia.org/wiki/Mandelbrot_set
+  [wiki-nbody]:             http://en.wikipedia.org/wiki/N-body
+  [wiki-raytracing]:        http://en.wikipedia.org/wiki/Ray_tracing
+  [wiki-pagerank]:          http://en.wikipedia.org/wiki/Pagerank
+

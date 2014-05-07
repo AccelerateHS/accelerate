@@ -20,6 +20,7 @@
 	path = accelerate-backend-kit
 #	url = https://github.com/AccelerateHS/accelerate-backend-kit.git
 	url = git@github.com:AccelerateHS/accelerate-backend-kit.git
+
 [submodule "accelerate-multidev"]
 	path = accelerate-multidev
 #	url = https://github.com/iu-parfunc/accelerate-multidev.git
@@ -29,3 +30,7 @@
 	path = array-dsl-benchmarks
 #	url = https://github.com/iu-parfunc/array-dsl-benchmarks.git
 	url = git@github.com:iu-parfunc/array-dsl-benchmarks.git
+
+[submodule "accelerate-fft"]
+	path = accelerate-fft
+	url = https://github.com/AccelerateHS/accelerate-fft.git

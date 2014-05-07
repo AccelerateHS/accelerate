@@ -1,87 +1,718 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE PatternGuards       #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE IncoherentInstances  #-}
+{-# LANGUAGE PatternGuards        #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns         #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fusion
--- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- This module implements producer/producer and consumer/producer fusion as a
+-- term rewriting of the Accelerate AST.
+--
+-- The function 'quench' perform the source-to-source fusion transformation,
+-- while 'anneal' additionally makes the representation of embedded producers
+-- explicit by representing the AST as a 'DelayedAcc' of manifest and delayed
+-- nodes.
+--
 
 module Data.Array.Accelerate.Trafo.Fusion (
 
-  -- * Fuse array computations
-  fuseAcc, fuseAfun,
-  Embedded(..), embedOpenAcc,
+  -- ** Types
+  DelayedAcc, DelayedOpenAcc(..),
+  DelayedAfun, DelayedOpenAfun,
+  DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
+
+  -- ** Conversion
+  convertAcc, convertAfun,
 
 ) where
 
 -- standard library
 import Prelude                                          hiding ( exp, until )
-import Data.Maybe
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Trafo.Common
+import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Array, Elt, EltRepr, Shape )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr', Elt, EltRepr, Shape )
 import Data.Array.Accelerate.Tuple
 
+import qualified Data.Array.Accelerate.Debug            as Stats
+#ifdef ACCELERATE_DEBUG
+import System.IO.Unsafe -- for debugging
+#endif
 
--- | Apply the array fusion transformation to a de Bruijn AST
+
+-- Delayed Array Fusion
+-- ====================
+
+-- | Apply the fusion transformation to a closed de Bruijn AST
 --
-fuseAcc :: Arrays arrs => Acc arrs -> Acc arrs
-fuseAcc = until matchOpenAcc fuseOpenAcc
+convertAcc :: Arrays arrs => Bool -> Acc arrs -> DelayedAcc arrs
+convertAcc fuseAcc = withSimplStats . convertOpenAcc fuseAcc
 
--- | Fuse a unary function over array computations
+-- | Apply the fusion transformation to a function of array arguments
 --
-fuseAfun :: Afun f -> Afun f
-fuseAfun = until matchOpenAfun fuseOpenAfun
+convertAfun :: Bool -> Afun f -> DelayedAfun f
+convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
+
+withSimplStats :: a -> a
+#ifdef ACCELERATE_DEBUG
+withSimplStats x = unsafePerformIO Stats.resetSimplCount `seq` x
+#else
+withSimplStats x = x
+#endif
 
 
--- | Convert an array computation into an embeddable delayed representation.
---   TLM: make this nicer-er.
+-- | Apply the fusion transformation to an AST. This consists of two phases:
 --
-data Embedded aenv sh e
-  = (Shape sh, Elt e) =>
-    DelayedArray { extent      :: Exp aenv sh
-                 , index       :: Fun aenv (sh  -> e)
-                 , linearIndex :: Fun aenv (Int -> e)
-                 }
+--    1. A bottom-up traversal that converts nodes into the internal delayed
+--       representation, merging adjacent producer/producer pairs.
+--
+--    2. A top-down traversal that makes the representation of fused
+--       consumer/producer pairs explicit as a 'DelayedAcc' of manifest and
+--       delayed nodes.
+--
+-- TLM: Note that there really is no ambiguity as to which state an array will
+--      be in following this process: an array will be either delayed or
+--      manifest, and the two helper functions are even named as such! We should
+--      encode this property in the type somehow...
+--
+convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
+convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
+  where
+    -- Convert array computations into an embeddable delayed representation.
+    -- Reapply the embedding function from the first pass and unpack the
+    -- representation. It is safe to match on BaseEnv because the first pass
+    -- will put producers adjacent to the term consuming it.
+    --
+    delayed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
+    delayed (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
+      case cc of
+        Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
+        Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
+        Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
+          | Just REFL <- match sh (arrayShape v)
+          , Just REFL <- isIdentity p
+          -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
 
-embedOpenAcc :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> Maybe (Embedded aenv sh e)
-embedOpenAcc (OpenAcc pacc)
-  | Generate sh f       <- pacc
-  = Just $ DelayedArray sh f (f `compose` fromIndex sh)
+          | f'        <- f `compose` indexArray v `compose` p
+          -> Delayed sh f' (f' `compose` fromIndex sh)
 
-  | Avar v              <- pacc
-  = Just $ DelayedArray (arrayShape v) (indexArray v) (linearIndexArray v)
+    -- Convert array programs as manifest terms.
+    --
+    manifest :: OpenAcc aenv a -> DelayedOpenAcc aenv a
+    manifest (OpenAcc pacc) =
+      let fusionError = $internalError "manifest" "unexpected fusible materials"
+      in
+      Manifest $ case pacc of
+        -- Non-fusible terms
+        -- -----------------
+        Avar ix                 -> Avar ix
+        Use arr                 -> Use arr
+        Unit e                  -> Unit (cvtE e)
+        Alet bnd body           -> alet (manifest bnd) (manifest body)
+        Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest a)
+        Atuple tup              -> Atuple (cvtAT tup)
+        Aprj ix tup             -> Aprj ix (manifest tup)
+        Apply f a               -> Apply (cvtAF f) (manifest a)
+        Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest a)
 
-  | Map f a             <- pacc
-  , OpenAcc (Avar v)    <- a
-  = Just $ DelayedArray (arrayShape v)
-                        (f `compose` indexArray v)
-                        (f `compose` linearIndexArray v)
+        -- Producers
+        -- ---------
+        --
+        -- Some producers might still exist as a manifest array. Typically
+        -- this is because they are the last stage of the computation, or the
+        -- result of a let-binding to be used multiple times. The input array
+        -- here should be an array variable, else something went wrong.
+        --
+        Map f a                 -> Map (cvtF f) (delayed a)
+        Generate sh f           -> Generate (cvtE sh) (cvtF f)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed a)
+        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed a)
+        Reshape sl a            -> Reshape (cvtE sl) (manifest a)
 
-  | Backpermute sh ix a <- pacc
-  , OpenAcc (Avar v)    <- a
-  = Just $ DelayedArray sh (indexArray v `compose` ix)
-                           (indexArray v `compose` ix `compose` fromIndex sh)
+        Replicate{}             -> fusionError
+        Slice{}                 -> fusionError
+        ZipWith{}               -> fusionError
 
-  | Transform sh ix f a <- pacc
-  , OpenAcc (Avar v)    <- a
-  = Just $ DelayedArray sh (f `compose` indexArray v `compose` ix)
-                           (f `compose` indexArray v `compose` ix `compose` fromIndex sh)
+        -- Consumers
+        -- ---------
+        --
+        -- Embed producers directly into the representation. For stencils we
+        -- make an exception. Since these consumers access elements of the
+        -- argument array multiple times, we are careful not to duplicate work
+        -- and instead force the argument to be a manifest array.
+        --
+        Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed a)
+        Fold1 f a               -> Fold1    (cvtF f) (delayed a)
+        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed a) (delayed s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed a) (delayed s)
+        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed a)
+        Scanl1 f a              -> Scanl1   (cvtF f) (delayed a)
+        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed a)
+        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed a)
+        Scanr1 f a              -> Scanr1   (cvtF f) (delayed a)
+        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed a)
+        Permute f d p a         -> Permute  (cvtF f) (manifest d) (cvtF p) (delayed a)
+        Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
-  | otherwise
-  = Nothing
+    -- Flatten needless let-binds, which can be introduced by the conversion to
+    -- the internal embeddable representation.
+    --
+    alet bnd body
+      | Manifest (Avar ZeroIdx) <- body
+      , Manifest x              <- bnd
+      = x
+
+      | otherwise
+      = Alet bnd body
+
+    cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
+    cvtAT NilAtup        = NilAtup
+    cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest a
+
+    cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
+    cvtAF (Alam f)  = Alam  (cvtAF f)
+    cvtAF (Abody b) = Abody (manifest b)
+
+    -- Conversions for closed scalar functions and expressions
+    --
+    cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
+    cvtF (Lam f)  = Lam (cvtF f)
+    cvtF (Body b) = Body (cvtE b)
+
+    cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
+    cvtE exp =
+      case exp of
+        Let bnd body            -> Let (cvtE bnd) (cvtE body)
+        Var ix                  -> Var ix
+        Const c                 -> Const c
+        Tuple tup               -> Tuple (cvtT tup)
+        Prj ix t                -> Prj ix (cvtE t)
+        IndexNil                -> IndexNil
+        IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
+        IndexHead sh            -> IndexHead (cvtE sh)
+        IndexTail sh            -> IndexTail (cvtE sh)
+        IndexAny                -> IndexAny
+        IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
+        ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
+        FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
+        Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
+        PrimConst c             -> PrimConst c
+        PrimApp f x             -> PrimApp f (cvtE x)
+        Index a sh              -> Index (manifest a) (cvtE sh)
+        LinearIndex a i         -> LinearIndex (manifest a) (cvtE i)
+        Shape a                 -> Shape (manifest a)
+        ShapeSize sh            -> ShapeSize (cvtE sh)
+        Intersect s t           -> Intersect (cvtE s) (cvtE t)
+        Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
+
+    cvtT :: Tuple (OpenExp env aenv) t -> Tuple (DelayedOpenExp env aenv) t
+    cvtT NilTup        = NilTup
+    cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
+
+
+convertOpenAfun :: Bool -> OpenAfun aenv f -> DelayedOpenAfun aenv f
+convertOpenAfun c (Alam  f) = Alam  (convertOpenAfun c f)
+convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
+
+
+-- | Apply the fusion transformation to the AST to combine and simplify terms.
+-- This converts terms into the internal delayed array representation and merges
+-- adjacent producer/producer terms. Using the reduced internal form limits the
+-- number of combinations that need to be considered.
+--
+type EmbedAcc acc = forall aenv arrs. Arrays arrs => acc aenv arrs -> Embed acc aenv arrs
+type ElimAcc  acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Bool
+
+embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv arrs
+embedOpenAcc fuseAcc (OpenAcc pacc) =
+  embedPreAcc fuseAcc (embedOpenAcc fuseAcc) elimOpenAcc pacc
+  where
+    -- When does the cost of re-computation outweigh that of memory access? For
+    -- the moment only do the substitution on a single use of the bound array
+    -- into the use site, but it is likely advantageous to be far more
+    -- aggressive here. SEE: [Sharing vs. Fusion]
+    --
+    -- As a special case, look for the definition of 'unzip' applied to manifest
+    -- data, which is defined in the prelude as a map projecting out the
+    -- appropriate element.
+    --
+    elimOpenAcc :: ElimAcc OpenAcc
+    elimOpenAcc bnd body
+      | Map f a                 <- extract bnd
+      , Avar _                  <- extract a
+      , Lam (Body (Prj _ _))    <- f
+      = Stats.ruleFired "unzipD" True
+
+      | count False ZeroIdx body <= lIMIT
+      = True
+
+      | otherwise
+      = False
+      where
+        lIMIT = 1
+
+        count :: UsesOfAcc OpenAcc
+        count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
+
+
+embedPreAcc
+    :: forall acc aenv arrs. (Kit acc, Arrays arrs)
+    => Bool
+    -> EmbedAcc   acc
+    -> ElimAcc    acc
+    -> PreOpenAcc acc aenv arrs
+    -> Embed      acc aenv arrs
+embedPreAcc fuseAcc embedAcc elimAcc pacc
+  = unembed
+  $ case pacc of
+
+    -- Non-fusible terms
+    -- -----------------
+    --
+    -- Solid and semi-solid terms that we generally do not which to fuse, such
+    -- as control flow (|?), array introduction (use, unit), array tupling and
+    -- projection, and foreign function operations. Generally we also do not
+    -- want to fuse past array let bindings, as this would imply work
+    -- duplication. SEE: [Sharing vs. Fusion]
+    --
+    Alet bnd body       -> aletD embedAcc elimAcc bnd body
+    Acond p at ae       -> acondD embedAcc (cvtE p) at ae
+    Aprj ix tup         -> aprjD embedAcc ix tup
+    Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
+    Atuple tup          -> done $ Atuple (cvtAT tup)
+    Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
+    Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
+
+    -- Array injection
+    Avar v              -> done $ Avar v
+    Use arrs            -> done $ Use arrs
+    Unit e              -> done $ Unit (cvtE e)
+
+    -- Producers
+    -- ---------
+    --
+    -- The class of operations that given a set of zero or more input arrays,
+    -- produce a _single_ element for the output array by manipulating a
+    -- _single_ element from each input array. These can be further classified
+    -- as value (map, zipWith) or index space (backpermute, slice, replicate)
+    -- transformations.
+    --
+    -- The critical feature is that each element of the output is produced
+    -- independently of all others, and so we can aggressively fuse arbitrary
+    -- sequences of these operations.
+    --
+    Generate sh f       -> generateD (cvtE sh) (cvtF f)
+
+    Map f a             -> fuse  (into  mapD              (cvtF f)) a
+    ZipWith f a b       -> fuse2 (into  zipWithD          (cvtF f)) a b
+    Transform sh p f a  -> fuse  (into3 transformD        (cvtE sh) (cvtF p) (cvtF f)) a
+
+    Backpermute sl p a  -> fuse  (into2 backpermuteD      (cvtE sl) (cvtF p)) a
+    Slice slix a sl     -> fuse  (into  (sliceD slix)     (cvtE sl)) a
+    Replicate slix sh a -> fuse  (into  (replicateD slix) (cvtE sh)) a
+    Reshape sl a        -> reshapeD (embedAcc a) (cvtE sl)
+
+    -- Consumers
+    -- ---------
+    --
+    -- Operations where each element of the output array depends on multiple
+    -- elements of the input array. To implement these operations efficiently in
+    -- parallel, we need to know how elements of the array depend on each other:
+    -- a parallel scan is implemented very differently from a parallel fold, for
+    -- example.
+    --
+    -- In order to avoid obfuscating this crucial information required for
+    -- parallel implementation, fusion is separated into to phases:
+    -- producer/producer, implemented above, and consumer/producer, which is
+    -- implemented below. This will place producers adjacent to the consumer
+    -- node, so that the producer can be directly embedded into the consumer
+    -- during the code generation phase.
+    --
+    Fold f z a          -> embed  (into2 Fold          (cvtF f) (cvtE z)) a
+    Fold1 f a           -> embed  (into  Fold1         (cvtF f)) a
+    FoldSeg f z a s     -> embed2 (into2 FoldSeg       (cvtF f) (cvtE z)) a s
+    Fold1Seg f a s      -> embed2 (into  Fold1Seg      (cvtF f)) a s
+    Scanl f z a         -> embed  (into2 Scanl         (cvtF f) (cvtE z)) a
+    Scanl1 f a          -> embed  (into  Scanl1        (cvtF f)) a
+    Scanl' f z a        -> embed  (into2 Scanl'        (cvtF f) (cvtE z)) a
+    Scanr f z a         -> embed  (into2 Scanr         (cvtF f) (cvtE z)) a
+    Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
+    Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
+    Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
+    Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
+    Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
+
+  where
+    -- If fusion is not enabled, force terms to the manifest representation
+    --
+    unembed :: Embed acc aenv arrs -> Embed acc aenv arrs
+    unembed x
+      | fuseAcc         = x
+      | otherwise       = done (compute x)
+
+    cvtA :: Arrays a => acc aenv' a -> acc aenv' a
+    cvtA = computeAcc . embedAcc
+
+    cvtAT :: Atuple (acc aenv') a -> Atuple (acc aenv') a
+    cvtAT NilAtup          = NilAtup
+    cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+
+    cvtAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
+    cvtAF (Alam  f) = Alam  (cvtAF f)
+    cvtAF (Abody a) = Abody (cvtA a)
+
+    -- Helpers to shuffle the order of arguments to a constructor
+    --
+    permute f p d a     = Permute f d p a
+    stencil x f a       = Stencil f x a
+    stencil2 x y f a b  = Stencil2 f x a y b
+
+    -- Conversions for closed scalar functions and expressions, with
+    -- pre-simplification. We don't bother traversing array-valued terms in
+    -- scalar expressions, as these are guaranteed to only be array variables.
+    --
+    cvtF :: PreFun acc aenv t -> PreFun acc aenv t
+    cvtF = cvtF' . simplify
+
+    cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
+    cvtE = cvtE' . simplify
+
+    -- Conversions for scalar functions and expressions without
+    -- pre-simplification. Hence we can operate on open expressions.
+    --
+    cvtF' :: PreOpenFun acc env aenv' t -> PreOpenFun acc env aenv' t
+    cvtF' (Lam f)  = Lam  (cvtF' f)
+    cvtF' (Body b) = Body (cvtE' b)
+
+    cvtE' :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
+    cvtE' exp =
+      case exp of
+        Let bnd body            -> Let (cvtE' bnd) (cvtE' body)
+        Var ix                  -> Var ix
+        Const c                 -> Const c
+        Tuple tup               -> Tuple (cvtT tup)
+        Prj tup ix              -> Prj tup (cvtE' ix)
+        IndexNil                -> IndexNil
+        IndexCons sh sz         -> IndexCons (cvtE' sh) (cvtE' sz)
+        IndexHead sh            -> IndexHead (cvtE' sh)
+        IndexTail sh            -> IndexTail (cvtE' sh)
+        IndexAny                -> IndexAny
+        IndexSlice x ix sh      -> IndexSlice x (cvtE' ix) (cvtE' sh)
+        IndexFull x ix sl       -> IndexFull x (cvtE' ix) (cvtE' sl)
+        ToIndex sh ix           -> ToIndex (cvtE' sh) (cvtE' ix)
+        FromIndex sh ix         -> FromIndex (cvtE' sh) (cvtE' ix)
+        Cond p t e              -> Cond (cvtE' p) (cvtE' t) (cvtE' e)
+        While p f x             -> While (cvtF' p) (cvtF' f) (cvtE' x)
+        PrimConst c             -> PrimConst c
+        PrimApp f x             -> PrimApp f (cvtE' x)
+        Index a sh              -> Index a (cvtE' sh)
+        LinearIndex a i         -> LinearIndex a (cvtE' i)
+        Shape a                 -> Shape a
+        ShapeSize sh            -> ShapeSize (cvtE' sh)
+        Intersect s t           -> Intersect (cvtE' s) (cvtE' t)
+        Foreign ff f e          -> Foreign ff (cvtF' f) (cvtE' e)
+
+    cvtT :: Tuple (PreOpenExp acc env aenv') t -> Tuple (PreOpenExp acc env aenv') t
+    cvtT NilTup          = NilTup
+    cvtT (SnocTup tup e) = cvtT tup `SnocTup` cvtE' e
+
+    -- Helpers to embed and fuse delayed terms
+    --
+    into :: Sink f => (f env' a -> b) -> f env a -> Extend acc env env' -> b
+    into op a env = op (sink env a)
+
+    into2 :: (Sink f1, Sink f2)
+          => (f1 env' a -> f2 env' b -> c) -> f1 env a -> f2 env b -> Extend acc env env' -> c
+    into2 op a b env = op (sink env a) (sink env b)
+
+    into3 :: (Sink f1, Sink f2, Sink f3)
+          => (f1 env' a -> f2 env' b -> f3 env' c -> d) -> f1 env a -> f2 env b -> f3 env c -> Extend acc env env' -> d
+    into3 op a b c env = op (sink env a) (sink env b) (sink env c)
+
+    fuse :: Arrays as
+         => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs)
+         ->       acc aenv as
+         -> Embed acc aenv bs
+    fuse op (embedAcc -> Embed env cc) = Embed env (op env cc)
+
+    fuse2 :: (Arrays as, Arrays bs)
+          => (forall aenv'. Extend acc aenv aenv' -> Cunctation acc aenv' as -> Cunctation acc aenv' bs -> Cunctation acc aenv' cs)
+          ->       acc aenv as
+          ->       acc aenv bs
+          -> Embed acc aenv cs
+    fuse2 op a1 a0
+      | Embed env1 cc1  <- embedAcc a1
+      , Embed env0 cc0  <- embedAcc (sink env1 a0)
+      , env             <- env1 `append` env0
+      = Embed env (op env (sink env0 cc1) cc0)
+
+    embed :: (Arrays as, Arrays bs)
+          => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
+          ->       acc aenv as
+          -> Embed acc aenv bs
+    embed op (embedAcc -> Embed env cc)
+      = Embed (env `PushEnv` op env (inject (compute' cc))) (Done ZeroIdx)
+
+    embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
+           => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+           ->       acc aenv as
+           ->       acc aenv bs
+           -> Embed acc aenv cs
+    embed2 op (embedAcc -> Embed env1 cc1) (embedAcc . sink env1 -> Embed env0 cc0)
+      | env     <- env1 `append` env0
+      , acc1    <- inject . compute' $ sink env0 cc1
+      , acc0    <- inject . compute' $ cc0
+      = Embed (env `PushEnv` op env acc1 acc0) (Done ZeroIdx)
+
+
+-- Internal representation
+-- =======================
+
+-- Note: [Representing delayed array]
+--
+-- During the fusion transformation we represent terms as a pair consisting of
+-- a collection of supplementary environment bindings and a description of how
+-- to construct the array.
+--
+-- It is critical to separate these two. To create a real AST node we need both
+-- the environment and array term, but analysis of how to fuse terms requires
+-- only the array description. If the additional bindings are bundled as part of
+-- the representation, the existentially quantified extended environment type
+-- will be untouchable. This is problematic because the terms of the two arrays
+-- are defined with respect to this existentially quantified type, and there is
+-- no way to directly combine these two environments:
+--
+--   append :: Extend env env1 -> Extend env env2 -> Extend env ???
+--
+-- And hence, no way to combine the terms of the delayed representation.
+--
+-- The only way to bring terms into the same scope is to operate via the
+-- manifest terms. This entails a great deal of conversion between delayed and
+-- AST terms, but is certainly possible.
+--
+-- However, because of the limited scope into which this existential type is
+-- available, we ultimately perform this process many times. In fact, complexity
+-- of the fusion algorithm for an AST of N terms becomes O(r^n), where r is the
+-- number of different rules we have for combining terms.
+--
+data Embed acc aenv a where
+  Embed :: Extend     acc aenv aenv'
+        -> Cunctation acc      aenv' a
+        -> Embed      acc aenv       a
+
+
+-- Cunctation (n): the action or an instance of delaying; a tardy action.
+--
+-- This describes the ways in which the fusion transformation represents
+-- intermediate arrays. The fusion process operates by recasting producer array
+-- computations in terms of a set of scalar functions used to construct an
+-- element at each index, and fusing successive producers by combining these
+-- scalar functions.
+--
+data Cunctation acc aenv a where
+
+  -- The base case is just a real (manifest) array term. No fusion happens here.
+  -- Note that the array is referenced by an index into the extended
+  -- environment, ensuring that the array is manifest and making the term
+  -- non-recursive in 'acc'. Also note that the return type is a general
+  -- instance of Arrays and not restricted to a single Array.
+  --
+  Done  :: Arrays a
+        => Idx            aenv a
+        -> Cunctation acc aenv a
+
+  -- We can represent an array by its shape and a function to compute an element
+  -- at each index.
+  --
+  Yield :: (Shape sh, Elt e)
+        => PreExp     acc aenv sh
+        -> PreFun     acc aenv (sh -> e)
+        -> Cunctation acc aenv (Array sh e)
+
+  -- A more restrictive form than 'Yield' may afford greater opportunities for
+  -- optimisation by a backend. This more structured form applies an index and
+  -- value transform to an input array. Note that the transform is applied to an
+  -- array stored as an environment index, so that the term is non-recursive and
+  -- it is always possible to embed into a collective operation.
+  --
+  Step  :: (Shape sh, Shape sh', Elt a, Elt b)
+        => PreExp     acc aenv sh'
+        -> PreFun     acc aenv (sh' -> sh)
+        -> PreFun     acc aenv (a   -> b)
+        -> Idx            aenv (Array sh  a)
+        -> Cunctation acc aenv (Array sh' b)
+
+
+instance Kit acc => Simplify (Cunctation acc aenv a) where
+  simplify (Done v)        = Done v
+  simplify (Yield sh f)    = Yield (simplify sh) (simplify f)
+  simplify (Step sh p f v) = Step (simplify sh) (simplify p) (simplify f) v
+
+
+-- Convert a real AST node into the internal representation
+--
+done :: Arrays a => PreOpenAcc acc aenv a -> Embed acc aenv a
+done pacc
+  | Avar v <- pacc      = Embed BaseEnv                  (Done v)
+  | otherwise           = Embed (BaseEnv `PushEnv` pacc) (Done ZeroIdx)
+
+
+-- Recast a cunctation into a mapping from indices to elements.
+--
+yield :: Kit acc
+      => Cunctation acc aenv (Array sh e)
+      -> Cunctation acc aenv (Array sh e)
+yield cc =
+  case cc of
+    Yield{}                             -> cc
+    Step sh p f v                       -> Yield sh (f `compose` indexArray v `compose` p)
+    Done v
+      | ArraysRarray <- accType' cc     -> Yield (arrayShape v) (indexArray v)
+      | otherwise                       -> error "yield: impossible case"
+
+
+-- Recast a cunctation into transformation step form. Not possible if the source
+-- was in the Yield formulation.
+--
+step :: Kit acc
+     => Cunctation acc aenv (Array sh e)
+     -> Maybe (Cunctation acc aenv (Array sh e))
+step cc =
+  case cc of
+    Yield{}                             -> Nothing
+    Step{}                              -> Just cc
+    Done v
+      | ArraysRarray <- accType' cc     -> Just $ Step (arrayShape v) identity identity v
+      | otherwise                       -> error "step: impossible case"
+
+
+-- Get the shape of a delayed array
+--
+shape :: Kit acc => Cunctation acc aenv (Array sh e) -> PreExp acc aenv sh
+shape cc
+  | Just (Step sh _ _ _) <- step cc     = sh
+  | Yield sh _           <- yield cc    = sh
+
+
+-- Reified type of a delayed array representation.
+--
+accType' :: forall acc aenv a. Arrays a => Cunctation acc aenv a -> ArraysR (ArrRepr' a)
+accType' _ = arrays' (undefined :: a)
+
+
+-- Environment manipulation
+-- ========================
+
+-- NOTE: [Extend]
+--
+-- As part of the fusion transformation we often need to lift out array valued
+-- inputs to be let-bound at a higher point. We can't add these directly to the
+-- output array term because these would interfere with further fusion steps.
+--
+-- The Extend type is a heterogeneous snoc-list of array terms that witnesses
+-- how the array environment is extend by binding these additional terms.
+--
+data Extend acc aenv aenv' where
+  BaseEnv :: Extend acc aenv aenv
+
+  PushEnv :: Arrays a
+          => Extend acc aenv aenv' -> PreOpenAcc acc aenv' a -> Extend acc aenv (aenv', a)
+
+
+-- Append two environment witnesses
+--
+append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
+append x BaseEnv        = x
+append x (PushEnv as a) = x `append` as `PushEnv` a
+
+-- Bring into scope all of the array terms in the Extend environment list. This
+-- converts a term in the inner environment (aenv') into the outer (aenv).
+--
+bind :: (Kit acc, Arrays a)
+     => Extend acc aenv aenv'
+     -> PreOpenAcc acc aenv' a
+     -> PreOpenAcc acc aenv  a
+bind BaseEnv         = id
+bind (PushEnv env a) = bind env . Alet (inject a) . inject
+
+
+-- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
+-- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
+-- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
+-- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
+
+
+-- Sink a term from one array environment into another, where additional
+-- bindings have come into scope according to the witness and no old things have
+-- vanished.
+--
+sink :: Sink f => Extend acc env env' -> f env t -> f env' t
+sink env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx env t -> Idx env' t
+    k BaseEnv       = Stats.substitution "sink" id
+    k (PushEnv e _) = SuccIdx . k e
+
+sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
+sink1 env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx (env,s) t -> Idx (env',s) t
+    k BaseEnv       = Stats.substitution "sink1" id
+    k (PushEnv e _) = split . k e
+    --
+    split :: Idx (env,s) t -> Idx ((env,u),s) t
+    split ZeroIdx      = ZeroIdx
+    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
+
+class Sink f where
+  weaken :: env :> env' -> f env t -> f env' t
+
+instance Sink Idx where
+  weaken k = k
+
+instance Kit acc => Sink (PreOpenExp acc env) where
+  weaken k = weakenEA rebuildAcc k
+
+instance Kit acc => Sink (PreOpenFun acc env) where
+  weaken k = weakenFA rebuildAcc k
+
+instance Kit acc => Sink (PreOpenAcc acc) where
+  weaken k = weakenA rebuildAcc k
+
+instance Kit acc => Sink acc where
+  weaken k = rebuildAcc (Avar . k)
+
+instance Kit acc => Sink (Cunctation acc) where
+  weaken k cc = case cc of
+    Done v              -> Done (weaken k v)
+    Step sh p f v       -> Step (weaken k sh) (weaken k p) (weaken k f) (weaken k v)
+    Yield sh f          -> Yield (weaken k sh) (weaken k f)
 
 
 -- Array fusion of a de Bruijn computation AST
@@ -90,849 +721,563 @@ embedOpenAcc (OpenAcc pacc)
 -- Array computations
 -- ------------------
 
-fuseOpenAfun :: OpenAfun aenv t -> OpenAfun aenv t
-fuseOpenAfun (Alam  f) = Alam  (fuseOpenAfun f)
-fuseOpenAfun (Abody a) = Abody (fuseOpenAcc a)
+-- Recast the internal representation of delayed arrays into a real AST node.
+-- Use the most specific version of a combinator whenever possible.
+--
+compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute (Embed env cc) = bind env (compute' cc)
+
+compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute' cc = case simplify cc of
+  Done v                                        -> Avar v
+  Yield sh f                                    -> Generate sh f
+  Step sh p f v
+    | Just REFL <- match sh (arrayShape v)
+    , Just REFL <- isIdentity p
+    , Just REFL <- isIdentity f                 -> Avar v
+    | Just REFL <- match sh (arrayShape v)
+    , Just REFL <- isIdentity p                 -> Map f (avarIn v)
+    | Just REFL <- isIdentity f                 -> Backpermute sh p (avarIn v)
+    | otherwise                                 -> Transform sh p f (avarIn v)
 
 
-fuseOpenAcc :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
-fuseOpenAcc = force . delayOpenAcc
+-- Evaluate a delayed computation and tie the recursive knot
+--
+computeAcc :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> acc aenv arrs
+computeAcc = inject . compute
 
 
-delayOpenAcc
-    :: Arrays arrs
-    => OpenAcc    aenv arrs
-    -> DelayedAcc aenv arrs
-delayOpenAcc (OpenAcc pacc) =
-  let cvtA :: Arrays a => OpenAcc aenv a -> DelayedAcc aenv a
-      cvtA = delayOpenAcc
-
-      cvtE :: OpenExp env aenv t -> OpenExp env aenv t
-      cvtE = fuseOpenExp
-
-      cvtF :: OpenFun env aenv t -> OpenFun env aenv t
-      cvtF = fuseOpenFun
-
-      delayA :: Arrays a => OpenAcc aenv a -> DelayedAcc aenv a
-      delayA = delayOpenAcc . until matchOpenAcc fuseOpenAcc
-
-      a0 :: Arrays a => OpenAcc (aenv, a) a
-      a0 = OpenAcc (Avar ZeroIdx)
-
-      -- Move bindings around so that consumers are next to producers. We need
-      -- to run (delay . fuse) so that the producer Acc is optimised in the
-      -- presence of its let bindings before being integrated (cf. aletD)
-      --
-      consumeFA
-          :: (Arrays arrs, Arrays arrs')
-          => (forall aenv'. Fun aenv' c -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
-          -> Fun        aenv c
-          -> OpenAcc    aenv arrs
-          -> DelayedAcc aenv arrs'
-      consumeFA op c arr =
-        case delayA arr of
-          Yield env sh f        -> Done env (op (sinkF env c) (force $ Yield BaseEnv sh f))
-          Step env sh ix f v    -> Done env (op (sinkF env c) (force $ Step  BaseEnv sh ix f v))
-          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) a0)
-
-      consumeFEA
-          :: (Arrays arrs, Arrays arrs')
-          => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' arrs -> PreOpenAcc OpenAcc aenv' arrs')
-          -> Fun        aenv c
-          -> Exp        aenv z
-          -> OpenAcc    aenv arrs
-          -> DelayedAcc aenv arrs'
-      consumeFEA op c z arr =
-        case delayA arr of
-          Yield env sh f        -> Done env (op (sinkF env c) (sinkE env z) (force $ Yield BaseEnv sh f))
-          Step env sh ix f v    -> Done env (op (sinkF env c) (sinkE env z) (force $ Step  BaseEnv sh ix f v))
-          Done env a            -> let env' = env `PushEnv` a in Done env' (op (sinkF env' c) (sinkE env' z) a0)
-
-      consumeFA2
-          :: forall arrs' aenv c as bs. (Arrays as, Arrays bs, Arrays arrs')
-          => (forall aenv'. Fun aenv' c -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
-          -> Fun        aenv c
-          -> OpenAcc    aenv as
-          -> OpenAcc    aenv bs
-          -> DelayedAcc aenv arrs'
-      consumeFA2 op c arr1 arr2 =
-        case delayA arr1 of
-          Done env a1           -> inner (env `PushEnv` a1) a0
-          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
-          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
-        where
-          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
-          inner env1 a1 =
-            case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkA (env2 `PushEnv` a2) a1) a0)
-
-      consumeFEA2
-          :: forall arrs' aenv c z as bs. (Arrays as, Arrays bs, Arrays arrs')
-          => (forall aenv'. Fun aenv' c -> Exp aenv' z -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
-          -> Fun        aenv c
-          -> Exp        aenv z
-          -> OpenAcc    aenv as
-          -> OpenAcc    aenv bs
-          -> DelayedAcc aenv arrs'
-      consumeFEA2 op c z arr1 arr2 =
-        case delayA arr1 of
-          Done env a1           -> inner (env `PushEnv` a1) a0
-          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
-          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
-        where
-          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
-          inner env1 a1 =
-            case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkE env' z) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkE env' z) (sinkA (env2 `PushEnv` a2) a1) a0)
-
-      consumeF2A2
-          :: forall arrs' aenv c p as bs. (Arrays as, Arrays bs, Arrays arrs')
-          => (forall aenv'. Fun aenv' c -> Fun aenv' p -> OpenAcc aenv' as -> OpenAcc aenv' bs -> PreOpenAcc OpenAcc aenv' arrs')
-          -> Fun        aenv c
-          -> Fun        aenv p
-          -> OpenAcc    aenv as
-          -> OpenAcc    aenv bs
-          -> DelayedAcc aenv arrs'
-      consumeF2A2 op c p arr1 arr2 =
-        case delayA arr1 of
-          Done env a1           -> inner (env `PushEnv` a1) a0
-          Step env sh ix f v    -> inner env (force $ Step  BaseEnv sh ix f v)
-          Yield env sh f        -> inner env (force $ Yield BaseEnv sh f)
-        where
-          inner :: Extend aenv aenv' -> OpenAcc aenv' as -> DelayedAcc aenv arrs'
-          inner env1 a1 =
-            case delayA (sinkA env1 arr2) of
-              Yield env2 sh f           -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Yield BaseEnv sh f))
-              Step env2 sh ix f v       -> let env' = join env1 env2 in Done env' (op (sinkF env' c) (sinkF env' p) (sinkA env2 a1) (force $ Step  BaseEnv sh ix f v))
-              Done env2 a2              -> let env' = join env1 env2 `PushEnv` a2
-                                           in  Done env' (op (sinkF env' c) (sinkF env' p) (sinkA (env2 `PushEnv` a2) a1) a0)
-  --
-  in case pacc of
-    -- Forms that introduce environment manipulations and control flow. We
-    -- generally don't want to fuse past these points in the expression.
-    --
-    Alet bnd body       -> aletD bnd body
-    Avar ix             -> done $ Avar ix
-    Atuple arrs         -> done $ Atuple (fuseAtuple arrs)
-    Aprj ix arrs        -> done $ Aprj ix (fuseOpenAcc arrs)
-    Apply f a           -> done $ Apply (fuseOpenAfun f) (fuseOpenAcc a)
-    Acond p acc1 acc2   -> done $ Acond (cvtE p) (fuseOpenAcc acc1) (fuseOpenAcc acc2)
-    Foreign ff afun acc -> done $ Foreign ff (fuseOpenAfun afun) (fuseOpenAcc acc)
-
-    -- Array injection
-    --
-    Use arrs            -> done $ Use arrs
-    Unit e              -> done $ Unit e
-
-    -- Index space transforms
-    --
-    Reshape sl acc      -> reshapeD (cvtE sl) (cvtA acc)
-    Replicate slix sh a -> replicateD slix (cvtE sh) (cvtA a)
-    Slice slix a sh     -> sliceD slix (cvtA a) (cvtE sh)
-    Backpermute sl p a  -> backpermuteD (cvtE sl) (cvtF p) (cvtA a)
-
-    -- Producers
-    --
-    Generate sh f       -> Yield BaseEnv (cvtE sh) (cvtF f)
-    Map f a             -> mapD (cvtF f) (cvtA a)
-    ZipWith f a1 a2     -> zipWithD (cvtF f) a1 a2
-    Transform sl p f a  -> backpermuteD (cvtE sl) (cvtF p) $ mapD (cvtF f) (cvtA a)
-
-    -- Consumers
-    --
-    Fold f z a          -> consumeFEA Fold (cvtF f) (cvtE z) a
-    Fold1 f a           -> consumeFA Fold1 (cvtF f) a
-    FoldSeg f z a s     -> consumeFEA2 FoldSeg (cvtF f) (cvtE z) a s
-    Fold1Seg f a s      -> consumeFA2 Fold1Seg (cvtF f) a s
-    Scanl1 f a          -> consumeFA Scanl1 (cvtF f) a
-    Scanl f z a         -> consumeFEA Scanl (cvtF f) (cvtE z) a
-    Scanl' f z a        -> consumeFEA Scanl' (cvtF f) (cvtE z) a
-    Scanr1 f a          -> consumeFA Scanr1 (cvtF f) a
-    Scanr f z a         -> consumeFEA Scanr (cvtF f) (cvtE z) a
-    Scanr' f z a        -> consumeFEA Scanr' (cvtF f) (cvtE z) a
-    Permute f d p a     -> consumeF2A2 (\f' p' d' a' -> Permute f' d' p' a') (cvtF f) (cvtF p) d a
-    Stencil f x a       -> consumeFA (\f' a' -> Stencil f' x a') (cvtF f) a
-    Stencil2 f x a y b  -> consumeFA2 (\f' a' b' -> Stencil2 f' x a' y b') (cvtF f) a b
+-- Representation of a generator as a delayed array
+--
+generateD :: (Shape sh, Elt e)
+          => PreExp acc aenv sh
+          -> PreFun acc aenv (sh -> e)
+          -> Embed  acc aenv (Array sh e)
+generateD sh f
+  = Stats.ruleFired "generateD"
+  $ Embed BaseEnv (Yield sh f)
 
 
-fuseAtuple
-    :: Atuple (OpenAcc aenv) a
-    -> Atuple (OpenAcc aenv) a
-fuseAtuple NilAtup          = NilAtup
-fuseAtuple (SnocAtup tup a) = fuseAtuple tup `SnocAtup` fuseOpenAcc a
-
-
--- Scalar expressions
--- ------------------
-
-fuseOpenExp
-    :: OpenExp env aenv t
-    -> OpenExp env aenv t
-fuseOpenExp = cvt
+-- Fuse a unary function into a delayed array.
+--
+mapD :: (Kit acc, Elt b)
+     => PreFun     acc aenv (a -> b)
+     -> Cunctation acc aenv (Array sh a)
+     -> Cunctation acc aenv (Array sh b)
+mapD f = Stats.ruleFired "mapD" . go
   where
-    cvtA :: Arrays a => OpenAcc aenv a -> OpenAcc aenv a
-    cvtA = fuseOpenAcc
-
-    cvt :: OpenExp env aenv t -> OpenExp env aenv t
-    cvt exp = case exp of
-      Let bnd body              -> Let (cvt bnd) (cvt body)
-      Var ix                    -> Var ix
-      Const c                   -> Const c
-      Tuple tup                 -> Tuple (fuseTuple tup)
-      Prj tup ix                -> Prj tup (cvt ix)
-      IndexNil                  -> IndexNil
-      IndexCons sh sz           -> IndexCons (cvt sh) (cvt sz)
-      IndexHead sh              -> IndexHead (cvt sh)
-      IndexTail sh              -> IndexTail (cvt sh)
-      IndexAny                  -> IndexAny
-      IndexSlice x ix sh        -> IndexSlice x (cvt ix) (cvt sh)
-      IndexFull x ix sl         -> IndexFull x (cvt ix) (cvt sl)
-      ToIndex sh ix             -> ToIndex (cvt sh) (cvt ix)
-      FromIndex sh ix           -> FromIndex (cvt sh) (cvt ix)
-      Cond p t e                -> Cond (cvt p) (cvt t) (cvt e)
-      Iterate n f x             -> Iterate (cvt n) (cvt f) (cvt x)
-      PrimConst c               -> PrimConst c
-      PrimApp f x               -> PrimApp f (cvt x)
-      Index a sh                -> Index (cvtA a) (cvt sh)
-      LinearIndex a i           -> LinearIndex (cvtA a) (cvt i)
-      Shape a                   -> Shape (cvtA a)
-      ShapeSize sh              -> ShapeSize (cvt sh)
-      Intersect s t             -> Intersect (cvt s) (cvt t)
-      ForeignExp ff f e         -> ForeignExp ff (fuseOpenFun f) (cvt e)
+    go (step  -> Just (Step sh ix g v)) = Step sh ix (f `compose` g) v
+    go (yield -> Yield sh g)            = Yield sh (f `compose` g)
 
 
-fuseOpenFun
-    :: OpenFun env aenv t
-    -> OpenFun env aenv t
-fuseOpenFun (Lam f)  = Lam  (fuseOpenFun f)
-fuseOpenFun (Body b) = Body (fuseOpenExp b)
-
-
-fuseTuple
-    :: Tuple (OpenExp env aenv) t
-    -> Tuple (OpenExp env aenv) t
-fuseTuple NilTup          = NilTup
-fuseTuple (SnocTup tup e) = fuseTuple tup `SnocTup` fuseOpenExp e
-
-
-
--- Array Fusion
--- ============
-
-data DelayedAcc aenv a where
-  Done  :: Arrays a
-        => Extend aenv aenv'
-        -> PreOpenAcc OpenAcc aenv' a   -- a sub-term
-        -> DelayedAcc         aenv  a
-
-  Step  :: (Elt a, Elt b, Shape sh, Shape sh')
-        => Extend aenv aenv'
-        -> PreExp OpenAcc aenv' sh'
-        -> PreFun OpenAcc aenv' (sh' -> sh)
-        -> PreFun OpenAcc aenv' (a   -> b)
-        -> Idx            aenv' (Array sh  a)
-        -> DelayedAcc     aenv  (Array sh' b)
-
-  Yield :: (Shape sh, Elt a)
-        => Extend aenv aenv'
-        -> PreExp OpenAcc aenv' sh
-        -> PreFun OpenAcc aenv' (sh -> a)
-        -> DelayedAcc     aenv  (Array sh a)
-
-
--- Fusion combinators
--- ------------------
-
-done :: Arrays a => PreOpenAcc OpenAcc aenv a -> DelayedAcc aenv a
-done a = Done (BaseEnv `PushEnv` a) (Avar ZeroIdx)
-
-identity :: Elt a => OpenFun env aenv (a -> a)
-identity = Lam . Body $ Var ZeroIdx
-
-toIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
-toIndex sh = Lam . Body $ ToIndex (weakenE sh) (Var ZeroIdx)
-
-fromIndex :: Shape sh => OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
-fromIndex sh = Lam . Body $ FromIndex (weakenE sh) (Var ZeroIdx)
-
-arrayShape :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Exp aenv sh
-arrayShape = Shape . OpenAcc . Avar
-
-indexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (sh -> e)
-indexArray v = Lam . Body $ Index (OpenAcc (Avar v)) (Var ZeroIdx)
-
-linearIndexArray :: (Shape sh, Elt e) => Idx aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndexArray v = Lam . Body $ LinearIndex (OpenAcc (Avar v)) (Var ZeroIdx)
-
-reindex :: (Shape sh, Shape sh')
-        => OpenExp env aenv sh'
-        -> OpenExp env aenv sh
-        -> OpenFun env aenv (sh -> sh')
-reindex sh' sh
-  | Just REFL <- matchOpenExp sh sh'    = identity
-  | otherwise                           = fromIndex sh' `compose` toIndex sh
-
-
--- "force" a delayed array representation to produce a real AST node.
---
-force :: Arrays a => DelayedAcc aenv a -> OpenAcc aenv a
-force delayed
-  = simplifyOpenAcc EmptyAcc . OpenAcc  -- TLM: hax
-  $ case delayed of
-      Done env a                                -> bind env a
-      Yield env sh f                            -> bind env $ Generate sh f
-      Step env sh ix f v
-        | Just REFL <- s
-        , Lam (Body (Var ZeroIdx)) <- ix
-        , Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Avar v
-        | Just REFL <- s
-        , Lam (Body (Var ZeroIdx)) <- ix        -> bind env $ Map f a
-        | Lam (Body (Var ZeroIdx)) <- f         -> bind env $ Backpermute sh ix a
-        | otherwise                             -> bind env $ Transform sh ix f a
-        where
-          a = OpenAcc (Avar v)
-          s = matchOpenExp sh (Shape a)
-
-
--- Reshape a delayed array.
---
--- TLM: there was a runtime check to ensure the old and new shapes contained the
---      same number of elements: this has been lost!
---
-reshapeD
-    :: (Shape sh, Shape sh', Elt e)
-    => Exp        aenv sh'
-    -> DelayedAcc aenv (Array sh  e)
-    -> DelayedAcc aenv (Array sh' e)
-reshapeD sl acc = case acc of
-  Step env sh ix f v    -> let sl' = sinkE env sl in Step env sl' (ix `compose` reindex sh sl') f v
-  Yield env sh f        -> let sl' = sinkE env sl in Yield env sl' (f `compose` reindex sh sl')
-  Done env a            ->
-    let env'    = env `PushEnv` a
-        sl'     = sinkE env' sl
-        ix      = reindex (Shape (OpenAcc (Avar ZeroIdx))) sl'
-    in  Step env' sl' ix identity ZeroIdx
-
-
--- Apply an index space transform that specifies where elements in the
--- destination array read their data from in the source array.
+-- Fuse an index space transformation function that specifies where elements in
+-- the destination array read there data from in the source array.
 --
 backpermuteD
-    :: (Shape sh, Shape sh', Elt e)
-    => Exp        aenv sh'
-    -> Fun        aenv (sh' -> sh)
-    -> DelayedAcc aenv (Array sh  e)
-    -> DelayedAcc aenv (Array sh' e)
-backpermuteD sh' p acc = case acc of
-  Step env _ ix f a     -> Step env (sinkE env sh') (ix `compose` sinkF env p) f a
-  Yield env _ f         -> Yield env (sinkE env sh') (f `compose` sinkF env p)
-  Done env a            ->
-    let env' = env `PushEnv` a
-    in  Step env' (sinkE env' sh') (sinkF env' p) identity ZeroIdx
+    :: (Kit acc, Shape sh')
+    => PreExp     acc aenv sh'
+    -> PreFun     acc aenv (sh' -> sh)
+    -> Cunctation acc aenv (Array sh  e)
+    -> Cunctation acc aenv (Array sh' e)
+backpermuteD sh' p = Stats.ruleFired "backpermuteD" . go
+  where
+    go (step  -> Just (Step _ q f v))   = Step sh' (q `compose` p) f v
+    go (yield -> Yield _ g)             = Yield sh' (g `compose` p)
+
+
+-- Transform as a combined map and backwards permutation
+--
+transformD
+    :: (Kit acc, Shape sh', Elt b)
+    => PreExp     acc aenv sh'
+    -> PreFun     acc aenv (sh' -> sh)
+    -> PreFun     acc aenv (a   -> b)
+    -> Cunctation acc aenv (Array sh  a)
+    -> Cunctation acc aenv (Array sh' b)
+transformD sh' p f
+  = Stats.ruleFired "transformD"
+  . backpermuteD sh' p
+  . mapD f
 
 
 -- Replicate as a backwards permutation
 --
+-- TODO: If we have a pattern such as `replicate sh (map f xs)` then in some
+--       cases it might be beneficial to not fuse these terms, if `f` is
+--       expensive and/or `sh` is large.
+--
 replicateD
-    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-    -> Exp        aenv slix
-    -> DelayedAcc aenv (Array sl e)
-    -> DelayedAcc aenv (Array sh e)
-replicateD sliceIndex slix acc = case acc of
-  Step env sl pf f a    -> Step env (fullshape env sl) (pf `compose` extend env) f a
-  Yield env sl f        -> Yield env (fullshape env sl) (f `compose` extend env)
-  Done env a            ->
-    let env' = env `PushEnv` a
-        a0   = OpenAcc (Avar ZeroIdx)
-    in  Step env' (fullshape env' (Shape a0)) (extend env') identity ZeroIdx
-  --
-  where
-    fullshape :: Extend aenv aenv' -> Exp aenv' sl -> Exp aenv' sh
-    fullshape env = IndexFull sliceIndex (sinkE env slix)
-
-    extend :: Extend aenv aenv' -> Fun aenv' (sh -> sl)
-    extend env = Lam (Body (IndexSlice sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))
+    -> PreExp     acc aenv slix
+    -> Cunctation acc aenv (Array sl e)
+    -> Cunctation acc aenv (Array sh e)
+replicateD sliceIndex slix cc
+  = Stats.ruleFired "replicateD"
+  $ backpermuteD (IndexFull sliceIndex slix (shape cc)) (extend sliceIndex slix) cc
 
 
 -- Dimensional slice as a backwards permutation
 --
 sliceD
-    :: forall slix sl co sh aenv e. (Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-    -> DelayedAcc aenv (Array sh e)
-    -> Exp        aenv slix
-    -> DelayedAcc aenv (Array sl e)
-sliceD sliceIndex acc slix = case acc of
-  Step env sl pf f a    -> Step env (sliceshape env sl) (pf `compose` restrict env) f a
-  Yield env sl f        -> Yield env (sliceshape env sl) (f `compose` restrict env)
-  Done env a            ->
-    let env' = env `PushEnv` a
-        a0   = OpenAcc (Avar ZeroIdx)
-    in  Step env' (sliceshape env' (Shape a0)) (restrict env') identity ZeroIdx
+    -> PreExp     acc aenv slix
+    -> Cunctation acc aenv (Array sh e)
+    -> Cunctation acc aenv (Array sl e)
+sliceD sliceIndex slix cc
+  = Stats.ruleFired "sliceD"
+  $ backpermuteD (IndexSlice sliceIndex slix (shape cc)) (restrict sliceIndex slix) cc
+
+
+-- Reshape an array
+--
+-- For delayed arrays this is implemented as an index space transformation. For
+-- manifest arrays this can be done with the standard Reshape operation in
+-- constant time without executing any array operations. This does not affect
+-- the fusion process since the term is already manifest.
+--
+-- TLM: there was a runtime check to ensure the old and new shapes contained the
+--      same number of elements: this has been lost for the delayed cases!
+--
+reshapeD
+    :: (Kit acc, Shape sh, Shape sl, Elt e)
+    => Embed  acc aenv (Array sh e)
+    -> PreExp acc aenv sl
+    -> Embed  acc aenv (Array sl e)
+reshapeD (Embed env cc) (sink env -> sl)
+  | Done v      <- cc
+  = Embed (env `PushEnv` Reshape sl (avarIn v)) (Done ZeroIdx)
+
+  | otherwise
+  = Stats.ruleFired "reshapeD"
+  $ Embed env (backpermuteD sl (reindex (shape cc) sl) cc)
+
+
+-- Combine two arrays element-wise with a binary function to produce a delayed
+-- array.
+--
+zipWithD :: (Kit acc, Shape sh, Elt a, Elt b, Elt c)
+         => PreFun     acc aenv (a -> b -> c)
+         -> Cunctation acc aenv (Array sh a)
+         -> Cunctation acc aenv (Array sh b)
+         -> Cunctation acc aenv (Array sh c)
+zipWithD f cc1 cc0
+  -- Two stepper functions identically accessing the same array can be kept in
+  -- stepping form. This might yield a simpler final term.
   --
-  where
-    sliceshape :: Extend aenv aenv' -> Exp aenv' sh -> Exp aenv' sl
-    sliceshape env = IndexSlice sliceIndex (sinkE env slix)
+  | Just (Step sh1 p1 f1 v1)    <- step cc1
+  , Just (Step sh0 p0 f0 v0)    <- step cc0
+  , Just REFL                   <- match v1 v0
+  , Just REFL                   <- match p1 p0
+  = Stats.ruleFired "zipWithD/step"
+  $ Step (sh1 `Intersect` sh0) p0 (combine f f1 f0) v0
 
-    restrict :: Extend aenv aenv' -> Fun aenv' (sl -> sh)
-    restrict env = Lam (Body (IndexFull sliceIndex (weakenE (sinkE env slix)) (Var ZeroIdx)))
-
-
--- Combine a unary value function to a delayed array to produce another delayed
--- array. There is some extraneous work to not introduce extra array variables
--- for things already let-bound.
---
-mapD :: (Shape sh, Elt a, Elt b)
-     => Fun        aenv (a -> b)
-     -> DelayedAcc aenv (Array sh a)
-     -> DelayedAcc     aenv (Array sh b)
-mapD f acc = case acc of
-  Step env sh ix g a    -> Step env sh ix (sinkF env f `compose` g) a
-  Yield env sh g        -> Yield env sh (sinkF env f `compose` g)
-  Done env a            -> Step (env `PushEnv` a)
-                                (arrayShape ZeroIdx)
-                                identity
-                                (weakenFA (sinkF env f))
-                                ZeroIdx
-
-
--- Combine a binary value function and two arrays to produce a delayed array.
--- The trick is that we need to delay one array and then the other, so that the
--- extended environments are built atop each other.
---
-zipWithD
-    :: forall sh a b c aenv. (Shape sh, Elt a, Elt b, Elt c)
-    => Fun        aenv (a -> b -> c)
-    -> OpenAcc    aenv (Array sh a)
-    -> OpenAcc    aenv (Array sh b)
-    -> DelayedAcc aenv (Array sh c)
-zipWithD f acc1 acc2 = case delayOpenAcc acc1 of
-  Done env a1                   -> inner (env `PushEnv` a1) (arrayShape ZeroIdx) (indexArray ZeroIdx)
-  Step env1 sh1 ix1 g1 a1       -> inner env1 sh1 (g1 `compose` indexArray a1 `compose` ix1)
-  Yield env1 sh1 g1             -> inner env1 sh1 g1
-  where
-    inner :: Extend aenv aenv'
-          -> Exp        aenv' sh
-          -> Fun        aenv' (sh -> a)
-          -> DelayedAcc aenv  (Array sh c)
-    inner env1 sh1 g1 = case delayOpenAcc (sinkA env1 acc2) of
-      Done env2 a2 -> let env = join env1 env2 `PushEnv` a2
-                      in  Yield env (weakenEA (sinkE env2 sh1) `Intersect` arrayShape ZeroIdx)
-                                    (generate (sinkF env f)
-                                              (weakenFA (sinkF env2 g1))
-                                              (indexArray ZeroIdx))
-
-      Step env2 sh2 ix2 g2 a2
-        -> let env = join env1 env2
-           in  Yield env (sinkE env2 sh1 `Intersect` sh2)
-                         (generate (sinkF env f) (sinkF env2 g1) (g2 `compose` indexArray a2 `compose` ix2))
-
-      Yield env2 sh2 g2
-        -> let env = join env1 env2
-           in  Yield env (sinkE env2 sh1 `Intersect` sh2)
-                         (generate (sinkF env f) (sinkF env2 g1) g2)
-
-    substitute2
-        :: OpenExp ((env, a), b) aenv' c
-        -> OpenExp (env, dim)    aenv' a
-        -> OpenExp (env, dim)    aenv' b
-        -> OpenExp (env, dim)    aenv' c
-    substitute2 gen a b
-      = Let a
-      $ Let (weakenE b)             -- as 'b' has been pushed under a binder
-      $ rebuildE split2 gen         -- add space for the index environment variable
-      where
-        split2 :: Elt t => Idx ((env,a),b) t -> PreOpenExp acc (((env,dim),a),b) aenv' t
-        split2 ZeroIdx                = Var ZeroIdx
-        split2 (SuccIdx ZeroIdx)      = Var (SuccIdx ZeroIdx)
-        split2 (SuccIdx (SuccIdx ix)) = Var (SuccIdx (SuccIdx (SuccIdx ix)))
-
-    generate
-        :: OpenFun env aenv' (a -> b -> c)
-        -> OpenFun env aenv' (dim -> a)
-        -> OpenFun env aenv' (dim -> b)
-        -> OpenFun env aenv' (dim -> c)
-    generate (Lam (Lam (Body e))) (Lam (Body a)) (Lam (Body b)) = Lam . Body $ substitute2 e a b
-    generate _                    _              _              = error "generate: impossible evaluation"
-
-
-
--- Sometimes it is necessary to fuse past array bindings. See comments below.
---
-aletD :: (Arrays a, Arrays b)
-      => OpenAcc    aenv      a
-      -> OpenAcc    (aenv, a) b
-      -> DelayedAcc aenv      b
-aletD bndAcc bodyAcc =
-  case delayOpenAcc bndAcc of
-    -- If the binding is marked as "done" (i.e. needs to be computed now), add
-    -- it to the extended environment of the delayed body and continue. Since
-    -- manifest arrays also fall into this category, this elegantly handles
-    -- let-floating.
-    --
-    Done env1 a
-     -> case delayOpenAcc (sinkA1 env1 bodyAcc) of
-          Done env2 b                   -> Done  (env1 `join` a `cons` env2) b
-          Step env2 sh2 ix2 f2 b        -> Step  (env1 `join` a `cons` env2) sh2 ix2 f2 b
-          Yield env2 sh2 f2             -> Yield (env1 `join` a `cons` env2) sh2 f2
-
-    -- If instead the binding is still in a delayed state, we might be able to
-    -- fuse it directly into the body. For example, functions such as reverse
-    -- and transpose:
-    --
-    --   reverse xs = backpermute (shape xs) (\i -> length xs - i - 1) xs
-    --
-    -- These generate a let binding for the input array because it is required
-    -- for both its data and shape information. However, if the data is only
-    -- used once within the body, we can still fuse the two together because we
-    -- can generate the shape directly.
-    --
-    Step env1 sh1 ix1 f1 a1
-     -> let OpenAcc bnd = force $ Step BaseEnv sh1 ix1 f1 a1
-        in case delayOpenAcc (sinkA1 env1 bodyAcc) of
-          Done env2 b
-           -> into (env1 `join` bnd `cons` env2) env2 sh1 (f1 `compose` indexArray a1 `compose` ix1) b
-
-          Step env2 sh2 ix2 f2 a2
-           -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
-                        (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1)
-                                                 (f2 `compose` indexArray a2 `compose` ix2))
-
-          Yield env2 sh2 f2
-           -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
-                        (yield env1 env2 sh1 sh2 (f1 `compose` indexArray a1 `compose` ix1) f2)
-
-    Yield env1 sh1 f1
-     -> let OpenAcc bnd = force $ Yield BaseEnv sh1 f1
-        in case delayOpenAcc (sinkA1 env1 bodyAcc) of
-          Done env2 b
-           -> into (env1 `join` bnd `cons` env2) env2 sh1 f1 b
-
-          Step env2 sh2 ix2 f2 a2
-           -> fromMaybe (Step (env1 `join` bnd `cons` env2) sh2 ix2 f2 a2)
-                        (yield env1 env2 sh1 sh2 f1 (f2 `compose` indexArray a2 `compose` ix2))
-
-          Yield env2 sh2 f2
-           -> fromMaybe (Yield (env1 `join` bnd `cons` env2) sh2 f2)
-                        (yield env1 env2 sh1 sh2 f1 f2)
+  -- Otherwise transform both delayed terms into (index -> value) mappings and
+  -- combine the two indexing functions that way.
+  --
+  | Yield sh1 f1                <- yield cc1
+  , Yield sh0 f0                <- yield cc0
+  = Stats.ruleFired "zipWithD"
+  $ Yield (sh1 `Intersect` sh0) (combine f f1 f0)
 
   where
-    -- When does the cost of re-computation out weight global memory access? For
-    -- the moment only do the substitution on a single use of the bound array,
-    -- but it is likely advantageous to be far more aggressive here.
-    --
-    lIMIT = 1
+    combine :: forall acc aenv a b c e. (Elt a, Elt b, Elt c)
+            => PreFun acc aenv (a -> b -> c)
+            -> PreFun acc aenv (e -> a)
+            -> PreFun acc aenv (e -> b)
+            -> PreFun acc aenv (e -> c)
+    combine c ixa ixb
+      | Lam (Lam (Body c'))     <- weakenFE SuccIdx c   :: PreOpenFun acc ((),e) aenv (a -> b -> c)
+      , Lam (Body ixa')         <- ixa                          -- else the skolem 'e' will escape
+      , Lam (Body ixb')         <- ixb
+      = Lam $ Body $ Let ixa' $ Let (weakenE SuccIdx ixb') c'
 
-    -- Eliminating a let binding pushes the binding subject into the body as a
-    -- scalar shape and generator function, producing a delayed Yield node.
-    --
-    yield :: (Shape sh, Shape sh', Elt e, Elt e')
-          => Extend aenv                aenv'
-          -> Extend (aenv', Array sh e) aenv''
-          -> Exp aenv'  sh
-          -> Exp aenv'' sh'
-          -> Fun aenv'  (sh -> e)
-          -> Fun aenv'' (sh' -> e')
-          -> Maybe (DelayedAcc aenv (Array sh' e'))
-    yield env1 env2 sh1 sh2 f1 f2
-      | usesOfEA a0 sh2 + usesOfFA a0 f2 + usesOfAX a0 env2 <= lIMIT
-      = Just $ Yield (env1 `join` env2') (replaceE sh1' f1' a0 sh2) (replaceF sh1' f1' a0 f2)
 
-      | otherwise
-      = Nothing
+-- NOTE: [Sharing vs. Fusion]
+--
+-- The approach to array fusion is similar to that the first generation of Repa.
+-- It was discovered that the most immediately pressing problem with delayed
+-- arrays in Repa-1 was that it did not preserve sharing of collective
+-- operations, leading to excessive recomputation and severe repercussions on
+-- performance if the user did not explicitly intervene.
+--
+-- However, as we have explicit sharing information in the term tree, so it is
+-- straightforward to respect sharing by not fusing let-bindings, as that
+-- introduces work duplication. However, sometimes we can be cleverer.
+--
+-- let-floating:
+-- -------------
+--
+-- If the binding is of manifest data, we can instead move the let-binding to a
+-- different point in the program and then continue to fuse into the body. This
+-- is done by adding the bound term to the Extend environment. In essence this
+-- is covering a different occurrence of the same problem Extend was introduced
+-- to handle: let bindings of manifest data unnecessarily get in the way of the
+-- fusion process. For example:
+--
+--   map f (zipWith g xs (map h xs))
+--
+-- after sharing recovery results in:
+--
+--   map f (let a0 = xs in zipWith g a0 (map h a0))
+--
+-- Without allowing the binding for a0 to float outwards, `map f` will not be
+-- fused into the rest of the program.
+--
+-- let-elimination:
+-- ----------------
+--
+-- Array binding points appear in the program because the array data _or_ shape
+-- was accessed multiple times in the source program. In general we want to fuse
+-- arbitrary sequences of array _data_, irrespective of how the shape component
+-- is used. For example, reverse is defined in the prelude as:
+--
+--   reverse xs = let len   = unindex1 (shape xs)
+--                    pf i  = len - i - 1
+--                in
+--                backpermute (shape xs) (ilift1 pf) xs
+--
+-- Sharing recovery introduces a let-binding for the input `xs` since it is used
+-- thrice in the definition, which impedes subsequent fusion. However the actual
+-- array data is only accessed once, with the remaining two uses querying the
+-- array shape. Since the delayed terms contain the shape of the array they
+-- represent as a scalar term, if the data component otherwise satisfies the
+-- rules for fusing terms, as it does in this example, we can eliminate the
+-- let-binding by pushing the scalar shape and value generation terms directly
+-- into the body.
+--
+-- Let-elimination can also be used to _introduce_ work duplication, which may
+-- be beneficial if we can estimate that the cost of recomputation is less than
+-- the cost of completely evaluating the array and subsequently retrieving the
+-- data from memory.
+--
+-- let-binding:
+-- ------------
+--
+-- Ultimately, we might not want to eliminate the binding. If so, evaluate it
+-- and add it to a _clean_ Extend environment for the body. If not, the Extend
+-- list effectively _flattens_ all bindings, so any terms required for the bound
+-- term get lifted out to the same scope as the body. This increases their
+-- lifetime and hence raises the maximum memory used. If we don't do this, we
+-- get terms such as:
+--
+--   let a0  = <terms for binding> in
+--   let bnd = <bound term> in
+--   <body term>
+--
+-- rather than the following, where the scope of a0 is clearly only availably
+-- when evaluating the bound term, as it should be:
+--
+--   let bnd =
+--     let a0 = <terms for binding>
+--     in <bound term>
+--   in <body term>
+--
+aletD :: (Kit acc, Arrays arrs, Arrays brrs)
+      => EmbedAcc acc
+      -> ElimAcc  acc
+      ->          acc aenv        arrs
+      ->          acc (aenv,arrs) brrs
+      -> Embed    acc aenv        brrs
+aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
+
+  -- let-floating
+  -- ------------
+  --
+  -- Immediately inline the variable referring to the bound expression into the
+  -- body, instead of adding to the environments and creating an indirection
+  -- that must be later eliminated by shrinking.
+  --
+  | Done v1             <- cc1
+  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subAtop (Avar v1) . sink1 env1) acc0
+  = Stats.ruleFired "aletD/float"
+  $ Embed (env1 `append` env0) cc0
+
+  -- Ensure we only call 'embedAcc' once on the body expression
+  --
+  | otherwise
+  = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
+
+
+aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
+       => EmbedAcc acc
+       -> ElimAcc  acc
+       -> Embed    acc aenv         arrs
+       -> Embed    acc (aenv, arrs) brrs
+       -> Embed    acc aenv         brrs
+aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
+
+  -- let-binding
+  -- -----------
+  --
+  -- Check whether we can eliminate the let-binding. Note that we must inspect
+  -- the entire term, not just the Cunctation that would be produced by
+  -- embedAcc. If we don't we can be left with dead terms that don't get
+  -- eliminated. This problem occurred in the canny program.
+  --
+  | acc1                <- compute (Embed env1 cc1)
+  , False               <- elimAcc (inject acc1) acc0
+  = Stats.ruleFired "aletD/bind"
+  $ Embed (BaseEnv `PushEnv` acc1 `append` env0) cc0
+
+  -- let-elimination
+  -- ---------------
+  --
+  -- Handle the remaining cases in a separate function. It turns out that this
+  -- is important so we aren't excessively sinking/delaying terms.
+  --
+  | acc0'               <- sink1 env1 acc0
+  = Stats.ruleFired "aletD/eliminate"
+  $ case cc1 of
+      Step{}    -> eliminate env1 cc1 acc0'
+      Yield{}   -> eliminate env1 cc1 acc0'
+
+  where
+    acc0 = computeAcc (Embed env0 cc0)
+
+    -- The second part of let-elimination. Splitting into two steps exposes the
+    -- extra type variables, and ensures we don't do extra work manipulating the
+    -- body when not necessary (which can lead to a complexity blowup).
+    --
+    eliminate :: forall aenv aenv' sh e brrs. (Kit acc, Shape sh, Elt e, Arrays brrs)
+              => Extend     acc aenv aenv'
+              -> Cunctation acc      aenv' (Array sh e)
+              ->            acc     (aenv', Array sh e) brrs
+              -> Embed      acc aenv                    brrs
+    eliminate env1 cc1 body
+      | Done v1           <- cc1 = elim (arrayShape v1) (indexArray v1)
+      | Step sh1 p1 f1 v1 <- cc1 = elim sh1 (f1 `compose` indexArray v1 `compose` p1)
+      | Yield sh1 f1      <- cc1 = elim sh1 f1
       where
-        -- If we do the merge, 'bnd' becomes dead code and will be later
-        -- eliminated by the shrinking step.
-        --
-        OpenAcc bnd     = force $ Yield BaseEnv sh1 f1
-        a0              = sink env2 ZeroIdx
-        env2'           = bnd `cons` env2
-        sh1'            = sinkE env2' sh1
-        f1'             = sinkF env2' f1
+        bnd :: PreOpenAcc acc aenv' (Array sh e)
+        bnd = compute' cc1
 
-    -- If the body is forward permutation, we might be able to fuse into the
-    -- shape and index transformation. See radix sort for an example.
+        elim :: PreExp acc aenv' sh -> PreFun acc aenv' (sh -> e) -> Embed acc aenv brrs
+        elim sh1 f1
+          | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
+          , f1'                 <- weakenFA rebuildAcc SuccIdx f1
+          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          = Embed (env1 `append` env0') cc0'
+
+    -- As part of let-elimination, we need to replace uses of array variables in
+    -- scalar expressions with an equivalent expression that generates the
+    -- result directly
     --
-    into :: (Shape sh, Elt e, Arrays a)
-         => Extend aenv                aenv''
-         -> Extend (aenv', Array sh e) aenv''
-         -> Exp aenv' sh
-         -> Fun aenv' (sh -> e)
-         -> PreOpenAcc OpenAcc aenv'' a
-         -> DelayedAcc         aenv   a
-    into env env2 sh1 f1 body
-      | Permute c2 d2 ix2 s2 <- body
-      , usesOfFA a0 c2 + usesOfFA a0 ix2 + usesOfAX a0 env2 + usesOf a0 d2 + usesOf a0 s2 <= lIMIT
-      = Done env $ Permute (replaceF sh1' f1' a0 c2) d2 (replaceF sh1' f1' a0 ix2) s2
-
-      | otherwise
-      = Done env body
-      where
-        a0      = sink  env2 ZeroIdx
-        sh1'    = sinkE env2 $ weakenEA sh1
-        f1'     = sinkF env2 $ weakenFA f1
-
-    -- Count the number of uses of an array variable. This is specialised from
-    -- the procedure for shrinking in that we ignore uses that occur as part of
-    -- a Shape.
+    -- TODO: when we inline bindings we ought to let bind at the first
+    --       occurrence and use a variable at all subsequent locations. At the
+    --       moment we are just hoping CSE in the simplifier phase does good
+    --       things, but that is limited in what it looks for.
     --
-    usesOfAX :: Idx aenv' a -> Extend (aenv, a) aenv' -> Int
-    usesOfAX _             BaseEnv         = 0
-    usesOfAX (SuccIdx idx) (PushEnv env a) = usesOfPA idx a + usesOfAX idx env
-    usesOfAX _             _               = error "usesOfAExt: inconsistent valuation"
-
-    usesOf :: Idx aenv s -> OpenAcc aenv t -> Int
-    usesOf idx (OpenAcc acc) = usesOfPA idx acc
-
-    usesOfPA :: Idx aenv s -> PreOpenAcc OpenAcc aenv t -> Int
-    usesOfPA idx acc =
-      case acc of
-        Alet bnd body       -> usesOf idx bnd + usesOf (SuccIdx idx) body
-        Avar idx'
-          | Just REFL <- matchIdx idx idx'  -> 1
-          | otherwise                       -> 0
-        Atuple tup          -> usesOfATA idx tup
-        Aprj _ a            -> usesOf idx a
-        Apply _ a           -> usesOf idx a
-        Acond p t e         -> usesOfEA idx p + usesOf idx t + usesOf idx e
-        Use _               -> 0
-        Unit e              -> usesOfEA idx e
-        Reshape e a         -> usesOfEA idx e + usesOf idx a
-        Generate e f        -> usesOfEA idx e + usesOfFA idx f
-        Transform sh ix f a -> usesOfEA idx sh + usesOfFA idx ix + usesOfFA idx f + usesOf idx a
-        Replicate _ slix a  -> usesOfEA idx slix + usesOf idx a
-        Slice _ a slix      -> usesOfEA idx slix + usesOf idx a
-        Map f a             -> usesOfFA idx f + usesOf idx a
-        ZipWith f a1 a2     -> usesOfFA idx f + usesOf idx a1 + usesOf idx a2
-        Fold f z a          -> usesOfFA idx f + usesOfEA idx z + usesOf idx a
-        Fold1 f a           -> usesOfFA idx f + usesOf idx a
-        FoldSeg f z a s     -> usesOfFA idx f + usesOfEA idx z + usesOf idx a + usesOf idx s
-        Fold1Seg f a s      -> usesOfFA idx f + usesOf idx a + usesOf idx s
-        Scanl f z a         -> usesOfFA idx f + usesOfEA idx z + usesOf idx a
-        Scanl' f z a        -> usesOfFA idx f + usesOfEA idx z + usesOf idx a
-        Scanl1 f a          -> usesOfFA idx f + usesOf idx a
-        Scanr f z a         -> usesOfFA idx f + usesOfEA idx z + usesOf idx a
-        Scanr' f z a        -> usesOfFA idx f + usesOfEA idx z + usesOf idx a
-        Scanr1 f a          -> usesOfFA idx f + usesOf idx a
-        Permute f1 a1 f2 a2 -> usesOfFA idx f1 + usesOf idx a1 + usesOfFA idx f2 + usesOf idx a2
-        Backpermute sh f a  -> usesOfEA idx sh + usesOfFA idx f + usesOf idx a
-        Stencil f _ a       -> usesOfFA idx f + usesOf idx a
-        Stencil2 f _ a1 _ a2-> usesOfFA idx f + usesOf idx a1 + usesOf idx a2
-        Foreign _ _ a       -> usesOf idx a
-
-    usesOfATA :: Idx aenv s -> Atuple (OpenAcc aenv) t -> Int
-    usesOfATA idx atup =
-      case atup of
-        NilAtup      -> 0
-        SnocAtup t a -> usesOfATA idx t + usesOf idx a
-
-    usesOfEA :: Idx aenv a -> OpenExp env aenv t -> Int
-    usesOfEA idx exp =
+    replaceE :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
+             => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
+             -> PreOpenExp acc env aenv t
+             -> PreOpenExp acc env aenv t
+    replaceE sh' f' avar exp =
       case exp of
-        Let bnd body        -> usesOfEA idx bnd + usesOfEA idx body
-        Var _               -> 0
-        Const _             -> 0
-        Tuple t             -> usesOfTA idx t
-        Prj _ e             -> usesOfEA idx e
-        IndexNil            -> 0
-        IndexCons sl sz     -> usesOfEA idx sl + usesOfEA idx sz
-        IndexHead sh        -> usesOfEA idx sh
-        IndexTail sh        -> usesOfEA idx sh
-        IndexSlice _ ix sh  -> usesOfEA idx ix + usesOfEA idx sh
-        IndexFull _ ix sl   -> usesOfEA idx ix + usesOfEA idx sl
-        IndexAny            -> 0
-        ToIndex sh ix       -> usesOfEA idx sh + usesOfEA idx ix
-        FromIndex sh i      -> usesOfEA idx sh + usesOfEA idx i
-        Cond p t e          -> usesOfEA idx p  + usesOfEA idx t  + usesOfEA idx e
-        Iterate n f x       -> usesOfEA idx n  + usesOfEA idx f  + usesOfEA idx x
-        PrimConst _         -> 0
-        PrimApp _ x         -> usesOfEA idx x
-        ShapeSize sh        -> usesOfEA idx sh
-        Intersect sh sz     -> usesOfEA idx sh + usesOfEA idx sz
-        --
-        -- Special case: Because we are looking to fuse two array computations
-        -- together, it is not necessary to consider the contribution of Shape since
-        -- this would be replaced with a simple scalar expression.
-        --
-        Index a sh          -> usesOf idx a + usesOfEA idx sh
-        LinearIndex a i     -> usesOf idx a + usesOfEA idx i
-        Shape _             -> 0
-        ForeignExp _ _ e    -> usesOfEA idx e
+        Let x y                         -> Let (cvtE x) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar y)
+        Var i                           -> Var i
+        Foreign ff f e                  -> Foreign ff f (cvtE e)
+        Const c                         -> Const c
+        Tuple t                         -> Tuple (cvtT t)
+        Prj ix e                        -> Prj ix (cvtE e)
+        IndexNil                        -> IndexNil
+        IndexCons sl sz                 -> IndexCons (cvtE sl) (cvtE sz)
+        IndexHead sh                    -> IndexHead (cvtE sh)
+        IndexTail sz                    -> IndexTail (cvtE sz)
+        IndexAny                        -> IndexAny
+        IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
+        ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
+        FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
+        Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
+        PrimConst c                     -> PrimConst c
+        PrimApp g x                     -> PrimApp g (cvtE x)
+        ShapeSize sh                    -> ShapeSize (cvtE sh)
+        Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
+        While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
 
-    usesOfTA :: Idx aenv a -> Tuple (OpenExp env aenv) t -> Int
-    usesOfTA idx tup =
-      case tup of
-        NilTup      -> 0
-        SnocTup t e -> usesOfTA idx t + usesOfEA idx e
+        Shape a
+          | Just REFL <- match a a'     -> Stats.substitution "replaceE/shape" sh'
+          | otherwise                   -> exp
 
-    usesOfFA :: Idx aenv a -> OpenFun env aenv f -> Int
-    usesOfFA idx fun =
+        Index a sh
+          | Just REFL    <- match a a'
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!" . cvtE $ Let sh b
+          | otherwise                   -> Index a (cvtE sh)
+
+        LinearIndex a i
+          | Just REFL    <- match a a'
+          , Lam (Body b) <- f'          -> Stats.substitution "replaceE/!!" . cvtE $ Let (Let i (FromIndex (weakenE SuccIdx sh') (Var ZeroIdx))) b
+          | otherwise                   -> LinearIndex a (cvtE i)
+
+      where
+        a' = avarIn avar
+
+        cvtE :: PreOpenExp acc env aenv s -> PreOpenExp acc env aenv s
+        cvtE = replaceE sh' f' avar
+
+        cvtT :: Tuple (PreOpenExp acc env aenv) s -> Tuple (PreOpenExp acc env aenv) s
+        cvtT NilTup        = NilTup
+        cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
+
+    replaceF :: forall env aenv sh e t. (Kit acc, Shape sh, Elt e)
+             => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> e) -> Idx aenv (Array sh e)
+             -> PreOpenFun acc env aenv t
+             -> PreOpenFun acc env aenv t
+    replaceF sh' f' avar fun =
       case fun of
-        Body e      -> usesOfEA idx e
-        Lam f       -> usesOfFA idx f
+        Body e          -> Body (replaceE sh' f' avar e)
+        Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f)
 
-    -- Substitute shape and array indexing with scalar functions at the given
-    -- array index.
-    --
-    replaceF :: (Shape sh, Elt e)
-             => OpenExp env' aenv sh
-             -> OpenFun env' aenv (sh -> e)
-             -> Idx          aenv (Array sh e)
-             -> OpenFun env' aenv f
-             -> OpenFun env' aenv f
-    replaceF sh ix idx fun =
-      case fun of
-        Body e      -> Body (replaceE sh ix idx e)
-        Lam f       -> Lam  (replaceF (weakenE sh) (weakenFE ix) idx f)
+    replaceA :: forall aenv sh e a. (Kit acc, Shape sh, Elt e)
+             => PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
+             -> PreOpenAcc acc aenv a
+             -> PreOpenAcc acc aenv a
+    replaceA sh' f' avar pacc =
+      case pacc of
+        Avar v
+          | Just REFL <- match v avar   -> Avar avar
+          | otherwise                   -> Avar v
 
-    replaceE
-        :: forall sh e t env aenv. (Shape sh, Elt e)
-        => OpenExp env aenv sh
-        -> OpenFun env aenv (sh -> e)
-        -> Idx         aenv (Array sh e)
-        -> OpenExp env aenv t
-        -> OpenExp env aenv t
-    replaceE sh_ ix_ idx exp =
-      let travE :: OpenExp env aenv t' -> OpenExp env aenv t'
-          travE = replaceE sh_ ix_ idx
+        Alet bnd body                   ->
+          let sh'' = weakenEA rebuildAcc SuccIdx sh'
+              f''  = weakenFA rebuildAcc SuccIdx f'
+          in
+          Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
 
-          travT :: Tuple (OpenExp env aenv) t' -> Tuple (OpenExp env aenv) t'
-          travT NilTup        = NilTup
-          travT (SnocTup t e) = travT t `SnocTup` travE e
+        Use arrs                -> Use arrs
+        Unit e                  -> Unit (cvtE e)
+        Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
+        Aprj ix tup             -> Aprj ix (cvtA tup)
+        Atuple tup              -> Atuple (cvtAT tup)
+        Awhile p f a            -> Awhile p f (cvtA a)          -- no sharing between p or f and a
+        Apply f a               -> Apply f (cvtA a)             -- no sharing between f and a
+        Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
+        Generate sh f           -> Generate (cvtE sh) (cvtF f)
+        Map f a                 -> Map (cvtF f) (cvtA a)
+        ZipWith f a b           -> ZipWith (cvtF f) (cvtA a) (cvtA b)
+        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (cvtA a)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (cvtA a)
+        Slice slix a sl         -> Slice slix (cvtA a) (cvtE sl)
+        Replicate slix sh a     -> Replicate slix (cvtE sh) (cvtA a)
+        Reshape sl a            -> Reshape (cvtE sl) (cvtA a)
+        Fold f z a              -> Fold (cvtF f) (cvtE z) (cvtA a)
+        Fold1 f a               -> Fold1 (cvtF f) (cvtA a)
+        FoldSeg f z a s         -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
+        Scanl f z a             -> Scanl (cvtF f) (cvtE z) (cvtA a)
+        Scanl1 f a              -> Scanl1 (cvtF f) (cvtA a)
+        Scanl' f z a            -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+        Scanr f z a             -> Scanr (cvtF f) (cvtE z) (cvtA a)
+        Scanr1 f a              -> Scanr1 (cvtF f) (cvtA a)
+        Scanr' f z a            -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+        Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
+        Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
 
-      in case exp of
-        Let bnd body        -> Let (travE bnd) (replaceE (weakenE sh_) (weakenFE ix_) idx body)
-        Var i               -> Var i
-        Const c             -> Const c
-        Tuple t             -> Tuple (travT t)
-        Prj ix e            -> Prj ix (travE e)
-        IndexNil            -> IndexNil
-        IndexCons sl sz     -> IndexCons (travE sl) (travE sz)
-        IndexHead sh        -> IndexHead (travE sh)
-        IndexTail sz        -> IndexTail (travE sz)
-        IndexAny            -> IndexAny
-        IndexSlice x ix sh  -> IndexSlice x (travE ix) (travE sh)
-        IndexFull x ix sl   -> IndexFull x (travE ix) (travE sl)
-        ToIndex sh ix       -> ToIndex (travE sh) (travE ix)
-        FromIndex sh i      -> FromIndex (travE sh) (travE i)
-        Cond p t e          -> Cond (travE p) (travE t) (travE e)
-        Iterate n f x       -> Iterate (travE n) (replaceE (weakenE sh_) (weakenFE ix_) idx f) (travE x)
-        PrimConst c         -> PrimConst c
-        PrimApp g x         -> PrimApp g (travE x)
-        ShapeSize sh        -> ShapeSize (travE sh)
-        Intersect sh sl     -> Intersect (travE sh) (travE sl)
-        Shape (OpenAcc a)
-          | Avar idx'       <- a
-          , Just REFL       <- matchIdx idx idx'
-          -> sh_
+      where
+        cvtA :: acc aenv s -> acc aenv s
+        cvtA = kmap (replaceA sh' f' avar)
 
-          | otherwise
-          -> exp
-        --
-        Index (OpenAcc a) sh
-          | Avar idx'       <- a
-          , Just REFL       <- matchIdx idx idx'
-          , Lam (Body f)    <- ix_
-          -> Let sh f
+        cvtE :: PreExp acc aenv s -> PreExp acc aenv s
+        cvtE = replaceE sh' f' avar
 
-          | otherwise
-          -> Index (OpenAcc a) (travE sh)
-        --
-        LinearIndex (OpenAcc a) i
-          | Avar idx'       <- a
-          , Just REFL       <- matchIdx idx idx'
-          , Lam (Body f)    <- ix_
-          -> Let (Let i (FromIndex (weakenE sh_) (Var ZeroIdx))) f
+        cvtF :: PreFun acc aenv s -> PreFun acc aenv s
+        cvtF = replaceF sh' f' avar
 
-          | otherwise
-          -> LinearIndex (OpenAcc a) (travE i)
-        --
-        ForeignExp ff f e   -> ForeignExp ff f (travE e)
+        cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
+        cvtAT NilAtup          = NilAtup
+        cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
 
 
--- Environment manipulation
--- ------------------------
-
--- NOTE: [Extend]
+-- Array conditionals, in particular eliminate branches when the predicate
+-- reduces to a known constant.
 --
--- As part of the fusion transformation we often need to lift out array valued
--- inputs to be let-bound at a higher point. This is used by the delayed
--- representations to witness how the array environment is extended in the
--- presence of fused operators.
+-- Note that we take the raw unprocessed terms as input. If instead we had the
+-- terms for each branch in the delayed representation, this would require that
+-- each term has been sunk into a common environment, which implies the
+-- conditional has been pushed underneath the intersection of bound terms for
+-- both branches. This would result in redundant work processing the bindings
+-- for the branch not taken.
 --
-data Extend aenv aenv' where
-  BaseEnv ::                                                    Extend aenv aenv
-  PushEnv :: Arrays a
-          => Extend aenv aenv' -> PreOpenAcc OpenAcc aenv' a -> Extend aenv (aenv', a)
+acondD :: (Kit acc, Arrays arrs)
+       => EmbedAcc acc
+       -> PreExp   acc aenv Bool
+       ->          acc aenv arrs
+       ->          acc aenv arrs
+       -> Embed    acc aenv arrs
+acondD embedAcc p t e
+  | Const ((),True)  <- p   = Stats.knownBranch "True"      $ embedAcc t
+  | Const ((),False) <- p   = Stats.knownBranch "False"     $ embedAcc e
+  | Just REFL <- match t e  = Stats.knownBranch "redundant" $ embedAcc e
+  | otherwise               = done $ Acond p (computeAcc (embedAcc t))
+                                             (computeAcc (embedAcc e))
 
 
--- Bind the extended environment so that the fused operators in the inner
--- environment (aenv') can be applied in the outer (aenv).
+-- Array tuple projection. Whenever possible we want to peek underneath the
+-- tuple structure and continue the fusion process.
 --
-bind :: Arrays a
-     => Extend aenv aenv'
-     -> PreOpenAcc OpenAcc aenv' a
-     -> PreOpenAcc OpenAcc aenv  a
-bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (OpenAcc a) . OpenAcc
-
-
--- Extend array environments
---
-sink :: Extend env env'
-     -> Idx env  t
-     -> Idx env' t
-sink BaseEnv       = id
-sink (PushEnv e _) = SuccIdx . sink e
-
-sinkA :: Extend aenv aenv'
-      -> OpenAcc aenv  a
-      -> OpenAcc aenv' a
-sinkA env = weakenByA (sink env)
-
-sinkE :: Extend aenv aenv'
-      -> OpenExp env aenv  e
-      -> OpenExp env aenv' e
-sinkE env = weakenByEA (sink env)
-
-sinkF :: Extend aenv aenv'
-      -> OpenFun env aenv  f
-      -> OpenFun env aenv' f
-sinkF env = weakenByFA (sink env)
-
-
-sink1 :: Extend env env'
-      -> Idx (env, a) t
-      -> Idx (env',a) t
-sink1 BaseEnv       = id
-sink1 (PushEnv e _) = split1 . sink1 e
+aprjD :: forall acc aenv arrs a. (Kit acc, IsTuple arrs, Arrays arrs, Arrays a)
+      => EmbedAcc acc
+      -> TupleIdx (TupleRepr arrs) a
+      ->       acc aenv arrs
+      -> Embed acc aenv a
+aprjD embedAcc ix a
+  | Atuple tup <- extract a = Stats.ruleFired "aprj/Atuple" . embedAcc $ aprjAT ix tup
+  | otherwise               = done $ Aprj ix (cvtA a)
   where
-    split1 :: Idx (env, a) t -> Idx ((env, s), a) t
-    split1 ZeroIdx       = ZeroIdx
-    split1 (SuccIdx idx) = SuccIdx (SuccIdx idx)
+    cvtA :: acc aenv arrs -> acc aenv arrs
+    cvtA = computeAcc . embedAcc
 
-sinkA1 :: Extend aenv aenv'
-       -> OpenAcc (aenv,  a) b
-       -> OpenAcc (aenv', a) b
-sinkA1 env = weakenByA (sink1 env)
+    aprjAT :: TupleIdx atup a -> Atuple (acc aenv) atup -> acc aenv a
+    aprjAT ZeroTupIdx      (SnocAtup _ a) = a
+    aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
 
 
--- Manipulating environments
---
-infixr `cons`
-infixr `join`
+-- Scalar expressions
+-- ------------------
 
-cons :: Arrays a => PreOpenAcc OpenAcc aenv a -> Extend (aenv,a) aenv' -> Extend aenv aenv'
-cons a = join (BaseEnv `PushEnv` a)
+isIdentity :: PreFun acc aenv (a -> b) -> Maybe (a :=: b)
+isIdentity f
+  | Lam (Body (Var ZeroIdx)) <- f       = Just REFL
+  | otherwise                           = Nothing
 
-join :: Extend env env' -> Extend env' env'' -> Extend env env''
-join x BaseEnv        = x
-join x (PushEnv xs a) = join x xs `PushEnv` a
+identity :: Elt a => PreOpenFun acc env aenv (a -> a)
+identity = Lam (Body (Var ZeroIdx))
+
+toIndex :: Shape sh => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> Int)
+toIndex sh = Lam (Body (ToIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
+
+fromIndex :: Shape sh => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (Int -> sh)
+fromIndex sh = Lam (Body (FromIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
+
+reindex :: (Kit acc, Shape sh, Shape sh')
+        => PreOpenExp acc env aenv sh'
+        -> PreOpenExp acc env aenv sh
+        -> PreOpenFun acc env aenv (sh -> sh')
+reindex sh' sh
+  | Just REFL <- match sh sh'   = identity
+  | otherwise                   = fromIndex sh' `compose` toIndex sh
+
+extend :: (Shape sh, Shape sl, Elt slix)
+       => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+       -> PreExp acc aenv slix
+       -> PreFun acc aenv (sh -> sl)
+extend sliceIndex slix = Lam (Body (IndexSlice sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
+
+restrict :: (Shape sh, Shape sl, Elt slix)
+         => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+         -> PreExp acc aenv slix
+         -> PreFun acc aenv (sl -> sh)
+restrict sliceIndex slix = Lam (Body (IndexFull sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
+
+arrayShape :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreExp acc aenv sh
+arrayShape = Shape . avarIn
+
+indexArray :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (sh -> e)
+indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
+
+linearIndex :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (Int -> e)
+linearIndex v = Lam (Body (LinearIndex (avarIn v) (Var ZeroIdx)))
 

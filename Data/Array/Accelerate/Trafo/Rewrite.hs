@@ -64,7 +64,9 @@ convertSegments = cvtA
       Atuple tup                -> Atuple (cvtT tup)
       Aprj tup a                -> Aprj tup (cvtA a)
       Apply f a                 -> Apply (cvtAfun f) (cvtA a)
+      Aforeign ff afun acc      -> Aforeign ff (cvtAfun afun) (cvtA acc)
       Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
+      Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
       Use a                     -> Use a
       Unit e                    -> Unit (cvtE e)
       Reshape e a               -> Reshape (cvtE e) (cvtA a)
@@ -86,17 +88,16 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Foreign ff afun acc       -> Foreign ff (cvtAfun afun) (cvtA acc)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
-        where f' = weakenFA f
-              z' = weakenEA z
-              a' = weakenA a
+        where f' = weakenFA rebuildOpenAcc SuccIdx f
+              z' = weakenEA rebuildOpenAcc SuccIdx z
+              a' = rebuildOpenAcc (Avar . SuccIdx) a
 
       Fold1Seg f a s            -> Alet (segments s) (OpenAcc (Fold1Seg (cvtF f') (cvtA a') a0))
-        where f' = weakenFA f
-              a' = weakenA a
+        where f' = weakenFA rebuildOpenAcc SuccIdx f
+              a' = rebuildOpenAcc (Avar . SuccIdx) a
 
 
 convertSegmentsAfun :: OpenAfun aenv t -> OpenAfun aenv t
