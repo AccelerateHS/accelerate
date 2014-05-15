@@ -9,7 +9,6 @@ module Random.Array (
 
 ) where
 
-import Control.Monad.ST
 import System.Random.MWC                        hiding ( uniform, uniformR )
 import qualified System.Random.MWC              as R
 
@@ -20,7 +19,7 @@ import Data.Array.Accelerate.Array.Sugar        as Sugar
 
 -- | A PNRG from indices to variates
 --
-type sh :~> e = forall s. sh -> GenST s -> ST s e
+type sh :~> e = sh -> GenIO -> IO e
 
 
 -- | Uniformly distributed random variates.
@@ -76,7 +75,7 @@ randomArrayWithSystemRandom f sh
 
 -- Common function to create a mutable array and fill it with random values
 --
-runRandomArray :: (Shape sh, Elt e) => sh :~> e -> sh -> GenST s -> ST s (MutableArrayData s (EltRepr e))
+runRandomArray :: (Shape sh, Elt e) => sh :~> e -> sh -> GenIO -> IO (MutableArrayData (EltRepr e))
 runRandomArray f sh gen
   = let
         n = Sugar.size sh
