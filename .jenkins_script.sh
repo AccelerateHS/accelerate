@@ -4,12 +4,12 @@ set -x
 set -e
 
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
-       ./accelerate-backend-kit/icc-opencl \ "
+       ./accelerate-backend-kit/icc-opencl "
 
 # Temporarily removing these. 
 # multidev is a bit outdated (Iterate) 
 #       ./accelerate-multidev/ " 
-# ./accelerate-cuda/ "
+#       ./accelerate-cuda/ "
 # 
 
 CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<0.6 $*"
