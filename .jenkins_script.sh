@@ -5,7 +5,8 @@ set -e
 
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
        ./accelerate-backend-kit/icc-opencl \
-       ./accelerate-multidev/ ./accelerate-cuda/ "
+       ./accelerate-multidev/ "
+# ./accelerate-cuda/ "
 # 
 
 CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<0.6 $*"
