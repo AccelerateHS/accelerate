@@ -13,6 +13,9 @@ CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<
 #------------------------------------------------------------
 # Init sandbox and link it
 
+#temporarily added by js
+cabal update
+
 cabal --version
 cabal sandbox init
 
