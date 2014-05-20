@@ -105,9 +105,10 @@ module Data.Array.Accelerate.Language (
 
 -- standard libraries
 import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, (.), ($), error )
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
 import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
+import Text.Printf
 
 -- friends
 import Data.Array.Accelerate.Type
@@ -639,6 +640,9 @@ shapeSize = Exp . ShapeSize
 -- Instances of all relevant H98 classes
 -- -------------------------------------
 
+preludeError :: String -> String -> a
+preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
+
 instance (Elt t, IsBounded t) => Bounded (Exp t) where
   minBound = mkMinBound
   maxBound = mkMaxBound
@@ -650,13 +654,19 @@ instance (Elt t, IsScalar t) => Enum (Exp t)
 
 instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
-  (==)        = error "Prelude.Eq.== applied to EDSL types"
+  (==)  = preludeError "Eq.==" "(==*)"
+  (/=)  = preludeError "Eq./=" "(/=*)"
 
 instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
-  compare       = error "Prelude.Ord.compare applied to EDSL types"
   min           = mkMin
   max           = mkMax
+  --
+  compare       = error "Prelude.Ord.compare applied to EDSL types"
+  (<)           = preludeError "Ord.<"  "(<*)"
+  (<=)          = preludeError "Ord.<=" "(<=*)"
+  (>)           = preludeError "Ord.>"  "(>*)"
+  (>=)          = preludeError "Ord.>=" "(>=*)"
 
 instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd
