@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_GHC -fno-warn-orphans         #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
@@ -49,7 +50,6 @@ import Data.Bits
 import Data.Functor       ((<$>))
 import Data.Typeable      (Typeable)
 import Control.Monad
-import Control.Monad.ST
 #ifdef ACCELERATE_UNSAFE_CHECKS
 import qualified Data.Array.Base    as MArray (readArray, writeArray)
 #else
