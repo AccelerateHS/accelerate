@@ -851,9 +851,6 @@ commutes h f x = case f of
 hashIdx :: Idx env t -> Int
 hashIdx = hash . idxToInt
 
-hashIdxWithSalt :: Int -> Idx env t -> Int
-hashIdxWithSalt salt = hashWithSalt salt . idxToInt
-
 hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
 
@@ -880,7 +877,7 @@ hashPreOpenLoop hashAcc l =
     hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
     
     hashV :: Int -> Idx lenv a -> Int
-    hashV = hashIdxWithSalt
+    hashV = hashWithSalt salt . idxToInt
     
     hashP :: Int -> Producer acc aenv a -> Int
     hashP salt p =
@@ -955,19 +952,11 @@ hashPreOpenAcc hashAcc pacc =
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
     Loop l                      -> hash "Loop"          `hashL` l
-{-
-    MapStream f a               -> hash "MapStream"     `hashWithSalt` hashAfun hashAcc f `hashA` a
-    ZipWithStream f a1 a2       -> hash "ZipWithStream" `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
-    ToStream a                  -> hash "ToStream"      `hashA` a
-    FromStream a                -> hash "FromStream"    `hashA` a
-    FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
--}
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
 hashArrays (ArraysRpair r1 r2) (a1, a2) = hash ( hashArrays r1 a1, hashArrays r2 a2)
 hashArrays ArraysRarray        ad       = unsafePerformIO $! hashStableName `fmap` makeStableName ad
-hashArrays (ArraysRstream r) as = hash (map (hashArrays r) as)
 
 hashAtuple :: HashAcc acc -> Tuple.Atuple (acc aenv) a -> Int
 hashAtuple _ NilAtup            = hash "NilAtup"

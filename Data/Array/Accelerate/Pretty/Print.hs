@@ -62,7 +62,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
   where
     ppE :: PreOpenExp acc env aenv e -> Doc
     ppE = prettyPreExp prettyAcc 0 alvl parens
-    
+
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc alvl
 
@@ -145,7 +145,7 @@ prettyLoop
     -> [Doc]
 prettyLoop prettyAcc alvl llvl wrap l =
   case l of
-    EmptyLoop -> [text ";"]
+    EmptyLoop -> [text "endloop"]
     Producer p l' -> 
       (case p of
         ToStream a -> "tostream" .$ [ prettyAcc alvl wrap a ])
@@ -395,7 +395,6 @@ prettyArrays arrs = tuple . collect arrs
     collect ArraysRunit         _        = []
     collect ArraysRarray        arr      = [prettyArray arr]
     collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    collect (ArraysRstream r) as = concatMap (collect r) as
 
 prettyArray :: forall dim e. Array dim e -> Doc
 prettyArray arr@(Array sh _)

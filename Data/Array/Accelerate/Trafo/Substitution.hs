@@ -299,8 +299,6 @@ shiftA
 shiftA _ _ ZeroIdx      = avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k (v ix)
 
-
-
 rebuildP :: SyntacticAcc f
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
@@ -308,8 +306,7 @@ rebuildP :: SyntacticAcc f
          -> Producer acc aenv' a
 rebuildP rebuild v p =
   case p of
-    ToStream acc -> ToStream (rebuild v acc) 
-
+    ToStream acc -> ToStream (rebuild v acc)
 
 rebuildT :: SyntacticAcc f
          => RebuildAcc acc
@@ -385,20 +382,7 @@ rebuildA rebuild v acc =
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
     Loop l              -> Loop (rebuildL rebuild v l)
-{-      
-    MapStream f x       -> MapStream f (( \(Avar ix) -> ix) (accOut (v x)))
-    ZipWithStream f x y -> ZipWithStream f (( \(Avar ix) -> ix) (accOut (v x))) (( \(Avar ix) -> ix) (accOut (v y)))
-    FromStream x        -> FromStream (( \(Avar ix) -> ix) (accOut (v x)))
-    ToStream a          -> ToStream (rebuild v a)
-    FoldStream f a x    -> FoldStream f (rebuild v a) (( \(Avar ix) -> ix) (accOut (v x)))
-  -}  
-{-
-    MapStream f a       -> MapStream f (rebuild v a)
-    ZipWithStream f a1 a2 -> ZipWithStream f (rebuild v a1) (rebuild v a2)
-    FromStream a        -> FromStream (rebuild v a)
-    ToStream a          -> ToStream (rebuild v a)
-    FoldStream f a1 a2  -> FoldStream f (rebuild v a1) (rebuild v a2)
--}
+
 
 -- Rebuilding array computations
 --

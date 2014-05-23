@@ -89,7 +89,7 @@ module Data.Array.Accelerate.AST (
   -- * Accelerated loops
   PreOpenLoop(..),
   Producer(..), Transducer(..), Consumer(..),
-  
+
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
@@ -460,7 +460,7 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e')
 
   Loop :: Arrays arrs => PreOpenLoop acc aenv () arrs -> PreOpenAcc acc aenv arrs
-  
+
 -- Vanilla open array computations
 --
 newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
@@ -1025,7 +1025,6 @@ showArrays = display . collect (arrays (undefined::arrs)) . fromArr
     collect ArraysRunit         _        = []
     collect ArraysRarray        arr      = [showShortendArr arr]
     collect (ArraysRpair r1 r2) (a1, a2) = collect r1 a1 ++ collect r2 a2
-    collect (ArraysRstream r) as = concatMap (collect r) as
     --
     display []  = []
     display [x] = x
@@ -1065,3 +1064,4 @@ showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
+

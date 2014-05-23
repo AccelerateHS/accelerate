@@ -695,7 +695,6 @@ class Typeable f => Foreign (f :: * -> * -> *) where
 --
 type family ArrRepr a :: *
 type instance ArrRepr () = ()
-type instance ArrRepr [a] = [ArrRepr a]
 type instance ArrRepr (Array sh e) = ((), Array sh e)
 type instance ArrRepr (b, a) = (ArrRepr b, ArrRepr' a)
 type instance ArrRepr (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
@@ -708,7 +707,6 @@ type instance ArrRepr (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, 
 
 type family ArrRepr' a :: *
 type instance ArrRepr' () = ()
-type instance ArrRepr' [a] = [ArrRepr' a]
 type instance ArrRepr' (Array sh e) = Array sh e
 type instance ArrRepr' (b, a) = (ArrRepr b, ArrRepr' a)
 type instance ArrRepr' (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
@@ -725,7 +723,6 @@ data ArraysR arrs where
   ArraysRunit  ::                                   ArraysR ()
   ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
-  ArraysRstream :: ArraysR arrs -> ArraysR [arrs]
 
 class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
@@ -838,6 +835,7 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
 
 "toArr/fromArr" forall a.
   toArr (fromArr a) = a #-}
+
 
 -- |Multi-dimensional arrays for array processing.
 --

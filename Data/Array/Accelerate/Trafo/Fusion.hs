@@ -178,22 +178,8 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
         -- Stream operations
-
         Loop l                  -> Loop (cvtL l)
-{-       THIS IS THE ONE
-        MapStream f x           -> MapStream (cvtAF f) x
-        ZipWithStream f x y     -> ZipWithStream (cvtAF f) x y
-        ToStream a              -> ToStream (delayed a)
-        FromStream x            -> FromStream x
-        FoldStream f a1 y       -> FoldStream (cvtAF f) (manifest a1) y
 
-         NOT THIS ONE
-        MapStream f a           -> MapStream (cvtAF f) (manifest a)
-        ZipWithStream f a1 a2   -> ZipWithStream (cvtAF f) (manifest a1) (manifest a2)
-        ToStream a              -> ToStream (delayed a)
-        FromStream a            -> FromStream (manifest a)
-        FoldStream f a1 a2      -> FoldStream (cvtAF f) (manifest a1) (manifest a2)
--}
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
     --
@@ -319,6 +305,7 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
         count :: UsesOfAcc OpenAcc
         count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
 
+
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
     => Bool
@@ -346,7 +333,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Loop l              -> {- loopD embedAcc elimAcc l -} done $ Loop (cvtL l)
+    Loop l              -> done $ Loop (cvtL l)
+
     -- Array injection
     Avar v              -> done $ Avar v
     Use arrs            -> done $ Use arrs
@@ -406,22 +394,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
     Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
 
-   {-
-    -- Stream operations
-    -- THIS ONE
-    MapStream f x         -> done $ MapStream (cvtAF f) x
-    ZipWithStream f x y   -> done $ ZipWithStream (cvtAF f) x y
-    ToStream a            -> embed (const ToStream) a
-    FromStream x          -> done $ FromStream x
-    FoldStream f a1 x    -> done $ FoldStream (cvtAF f) (cvtA a1) x
- 
-     NO
-    MapStream f a         -> done $ MapStream (cvtAF f) (cvtA a)
-    ZipWithStream f a1 a2 -> done $ ZipWithStream (cvtAF f) (cvtA a1) (cvtA a2)
-    ToStream a            -> embed (const ToStream) a
-    FromStream a          -> done $ FromStream (cvtA a)
-    FoldStream f a1 a2    -> done $ FoldStream (cvtAF f) (cvtA a1) (cvtA a2)
--}
   where
     -- If fusion is not enabled, force terms to the manifest representation
     --
@@ -430,7 +402,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | fuseAcc         = x
       | otherwise       = done (compute x)
 
-    -- zxc
     cvtL :: PreOpenLoop acc aenv' lenv a -> PreOpenLoop acc aenv' lenv a
     cvtL l =
       case l of
@@ -973,32 +944,6 @@ zipWithD f cc1 cc0
       = Lam $ Body $ Let ixa' $ Let (weakenE SuccIdx ixb') c'
 
 
-type EmbedLoop acc lenv arrs = forall aenv aenv'. (PreOpenLoop acc aenv lenv arrs, Extend acc aenv aenv')
-  
-
--- Float producer let-bindings outside loop.
-{-
-loopD :: (Kit acc, Arrays arrs)
-      => EmbedAcc    acc
-      -> ElimAcc     acc
-      -> PreOpenLoop acc aenv () arrs
-      -> Embed       acc aenv    arrs
-loopD embedAcc elimAcc l = Embed (env `PushEnv` (Loop l')) (Done ZeroIdx)
-  where 
-    (env, l') = go embedAcc BaseEnv l
-    go :: forall acc arrs aenv aenv' aenv'' lenv. (Kit acc, Arrays arrs)
-       => EmbedAcc    acc
-       -> Extend acc aenv aenv' 
-       -> PreOpenLoop acc aenv' lenv arrs
-       -> (Extend acc aenv aenv'', PreOpenLoop acc aenv'' lenv arrs)
-    go embedAcc env l = 
-      case l of
-        Producer (ToStream a) l' ->
-          case embedAcc a of
-            Embed env' cc ->
-              case go embedAcc env' (sink env' l') of
-                (env'', l'') -> undefined
--}
 -- NOTE: [Sharing vs. Fusion]
 --
 -- The approach to array fusion is similar to that the first generation of Repa.
@@ -1281,21 +1226,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
         Loop l                  -> Loop (cvtL l) 
-      
 
-{-         YES
-	MapStream f x           -> MapStream f x
-	ZipWithStream f x y     -> ZipWithStream f x y
-	ToStream a              -> ToStream (cvtA a)
-	FromStream x            -> FromStream x
-	FoldStream f a1 x       -> FoldStream f (cvtA a1) x
-         NO
-	MapStream f a           -> MapStream f (cvtA a)
-	ZipWithStream f a1 a2   -> ZipWithStream f (cvtA a1) (cvtA a2)
-	ToStream a              -> ToStream (cvtA a)
-	FromStream a            -> FromStream (cvtA a)
-	FoldStream f a1 a2      -> FoldStream f (cvtA a1) (cvtA a2)
--}
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)

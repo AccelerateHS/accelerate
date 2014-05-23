@@ -74,9 +74,8 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    
     travAcc' (Loop loop)                           = travLoop f c l loop
-    
+
 travLoop :: forall m b aenv lenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
          -> (String -> String -> m b) -> PreOpenLoop OpenAcc aenv lenv a -> m b
 travLoop f c l loop =
@@ -159,7 +158,6 @@ travArrays f c l = trav
     trav ArraysRunit         ()       = leaf    "ArraysRunit"
     trav ArraysRarray        a        = combine "ArraysRarray" [ travArray f l a ]
     trav (ArraysRpair r1 r2) (a1, a2) = combine "ArraysRpair"  [trav r1 a1, trav r2 a2]
-    trav (ArraysRstream r) as = combine "ArraysRstream" (map (trav r) as)
 
 travArray :: forall dim a m b. Monad m => Labels -> (String -> String -> m b) -> Array dim a -> m b
 travArray f l (Array sh _) = l (arrayFormat f) ("Array" `cat` (toElt sh :: dim))

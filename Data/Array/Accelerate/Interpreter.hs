@@ -213,17 +213,6 @@ evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
 
 evalPreOpenAcc (Loop l) aenv = delay $ evalLoop l aenv
 
-{-
-evalPreOpenAcc (MapStream f x) aenv = mapStreamOp (evalOpenAfun f Empty) (delay $ prj x aenv)
-
-evalPreOpenAcc (ZipWithStream f x y) aenv = zipWithStreamOp (evalOpenAfun f Empty) (delay $ prj x aenv) (delay $ prj y aenv)
-
-evalPreOpenAcc (ToStream acc) aenv = toStreamOp (evalOpenAcc acc aenv)
-
-evalPreOpenAcc (FromStream x) aenv = fromStreamOp (delay $ prj x aenv)
-
-evalPreOpenAcc (FoldStream f acc1 x) aenv = foldStreamOp (evalOpenAfun f Empty) (evalOpenAcc acc1 aenv) (delay $ prj x aenv)
--}
 -- The interpreter does not handle foreign functions so use the pure accelerate version
 evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv

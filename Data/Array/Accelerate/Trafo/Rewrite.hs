@@ -114,7 +114,7 @@ convertSegments = cvtA
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
       Loop l                    -> Loop (cvtL l)
-      
+
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
         where f' = weakenFA rebuildOpenAcc SuccIdx f
