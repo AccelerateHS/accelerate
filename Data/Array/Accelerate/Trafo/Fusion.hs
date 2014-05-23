@@ -212,7 +212,6 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
                FromStream x -> FromStream x
                FoldStream f a x -> FoldStream (cvtAF f) (manifest a) x)
             (cvtL l')
-           
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup

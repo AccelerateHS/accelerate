@@ -64,18 +64,18 @@ convertSegments = cvtA
         Producer   p l -> Producer (cvtP p) (cvtL l)
         Transducer t l -> Transducer (cvtTr t) (cvtL l)
         Consumer   c l -> Consumer (cvtC c) (cvtL l)
-        
+
     cvtP :: Producer OpenAcc aenv a -> Producer OpenAcc aenv a
     cvtP p =
       case p of
         ToStream a -> ToStream (cvtA a)
-    
+
     cvtTr :: Transducer OpenAcc aenv lenv a -> Transducer OpenAcc aenv lenv a
     cvtTr t =
       case t of
         MapStream f x -> MapStream (cvtAfun f) x
         ZipWithStream f x y -> ZipWithStream (cvtAfun f) x y
-    
+
     cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
     cvtC c =
       case c of

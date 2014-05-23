@@ -872,18 +872,18 @@ hashPreOpenLoop hashAcc l =
 
     hashF :: Int -> PreOpenAfun acc aenv f -> Int
     hashF salt = hashWithSalt salt . hashAfun hashAcc
-    
+
     hashL :: Int -> PreOpenLoop acc aenv lenv' arrs' -> Int
     hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
-    
+
     hashV :: Int -> Idx lenv a -> Int
     hashV = hashWithSalt salt . idxToInt
-    
+
     hashP :: Int -> Producer acc aenv a -> Int
     hashP salt p =
       case p of
         ToStream acc -> hashWithSalt salt "ToStream" `hashA` acc
-        
+
     hashT :: Int -> Transducer acc aenv lenv a -> Int
     hashT salt t =
       case t of
@@ -901,8 +901,7 @@ hashPreOpenLoop hashAcc l =
     Producer   p l -> hash "Producer"   `hashP` p `hashL` l
     Transducer t l -> hash "Transducer" `hashT` t `hashL` l
     Consumer   c l -> hash "Consumer"   `hashC` c `hashL` l
-    
-    
+
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
 hashPreOpenAcc hashAcc pacc =
@@ -915,7 +914,7 @@ hashPreOpenAcc hashAcc pacc =
 
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
-    
+
     hashL :: Int -> PreOpenLoop acc aenv lenv arrs -> Int
     hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
 
@@ -952,6 +951,7 @@ hashPreOpenAcc hashAcc pacc =
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
     Loop l                      -> hash "Loop"          `hashL` l
+
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()

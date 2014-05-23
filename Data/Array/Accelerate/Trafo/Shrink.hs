@@ -352,7 +352,7 @@ usesOfPreAcc withShape countAcc idx = countP
     countIdx this    
         | Just REFL <- match this idx   = 1
         | otherwise                     = 0
-    
+
     countP :: PreOpenAcc acc aenv a -> Int
     countP pacc = case pacc of
       Avar this                 -> countIdx this

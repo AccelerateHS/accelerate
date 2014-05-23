@@ -100,7 +100,7 @@ preAccType k pacc =
     Aforeign _ _ _      -> case arrays' (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
-                             
+
     Loop _              -> case arrays' (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Something funny"

@@ -73,3 +73,4 @@ instance (Delayable a1, Delayable a2) => Delayable (a1, a2) where
   data DelayedR (a1, a2) = DelayedRpair (DelayedR a1) (DelayedR a2)
   delayR (a1, a2) = DelayedRpair (delayR a1) (delayR a2)
   forceR (DelayedRpair a1 a2) = (forceR a1, forceR a2)
+
