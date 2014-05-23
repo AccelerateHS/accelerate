@@ -877,7 +877,7 @@ hashPreOpenLoop hashAcc l =
     hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
 
     hashV :: Int -> Idx lenv a -> Int
-    hashV = hashWithSalt salt . idxToInt
+    hashV salt = hashWithSalt salt . idxToInt
 
     hashP :: Int -> Producer acc aenv a -> Int
     hashP salt p =
