@@ -57,6 +57,31 @@ convertSegments = cvtA
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
 
+    cvtL :: PreOpenLoop OpenAcc aenv lenv a -> PreOpenLoop OpenAcc aenv lenv a
+    cvtL l =
+      case l of
+        EmptyLoop -> EmptyLoop
+        Producer   p l -> Producer (cvtP p) (cvtL l)
+        Transducer t l -> Transducer (cvtTr t) (cvtL l)
+        Consumer   c l -> Consumer (cvtC c) (cvtL l)
+        
+    cvtP :: Producer OpenAcc aenv a -> Producer OpenAcc aenv a
+    cvtP p =
+      case p of
+        ToStream a -> ToStream (cvtA a)
+    
+    cvtTr :: Transducer OpenAcc aenv lenv a -> Transducer OpenAcc aenv lenv a
+    cvtTr t =
+      case t of
+        MapStream f x -> MapStream (cvtAfun f) x
+        ZipWithStream f x y -> ZipWithStream (cvtAfun f) x y
+    
+    cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
+    cvtC c =
+      case c of
+        FromStream x -> FromStream x
+        FoldStream f a x -> FoldStream (cvtAfun f) (cvtA a) x
+
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
       Alet bnd body             -> Alet (cvtA bnd) (cvtA body)
@@ -88,12 +113,8 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      MapStream f a             -> MapStream (cvtAfun f) (cvtA a)
-      ZipWithStream f a1 a2     -> ZipWithStream (cvtAfun f) (cvtA a1) (cvtA a2)
-      ToStream a                -> ToStream (cvtA a)
-      FromStream a              -> FromStream (cvtA a)
-      FoldStream f a1 a2        -> FoldStream (cvtAfun f) (cvtA a1) (cvtA a2)
-
+      Loop l                    -> Loop (cvtL l)
+      
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
         where f' = weakenFA rebuildOpenAcc SuccIdx f

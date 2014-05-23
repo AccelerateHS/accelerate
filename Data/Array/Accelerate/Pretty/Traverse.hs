@@ -74,12 +74,29 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (MapStream afun acc)                  = combine "MapStream" [ travAfun f c l afun, travAcc f c l acc ]
-    travAcc' (ZipWithStream afun acc1 acc2)        = combine "ZipWithStream" [ travAfun f c l afun, travAcc f c l acc1, travAcc f c l acc2 ]
-    travAcc' (ToStream acc)                        = combine "ToStream" [ travAcc f c l acc ]
-    travAcc' (FromStream acc)                      = combine "FromStream" [ travAcc f c l acc ]
-    travAcc' (FoldStream fun acc1 acc2)            = combine "FoldStream" [ travAfun f c l fun, travAcc f c l acc1, travAcc f c l acc2 ]
-
+    
+    travAcc' (Loop loop)                           = travLoop f c l loop
+    
+travLoop :: forall m b aenv lenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+         -> (String -> String -> m b) -> PreOpenLoop OpenAcc aenv lenv a -> m b
+travLoop f c l loop =
+  case loop of
+    EmptyLoop -> leaf "EmptyLoop"
+    Producer   p l' -> 
+      case p of
+        ToStream a -> combine "ToStream" [ travAcc f c l a, travLoop f c l l' ]
+    Transducer t l' ->  
+      case t of
+        MapStream afun x -> combine "MapStream" [ travAfun f c l afun, leaf (show (idxToInt x)), travLoop f c l l' ]
+        ZipWithStream afun x y -> combine "ZipWithStream" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travLoop f c l l' ]
+    Consumer  co l' ->
+      case co of
+        FromStream x -> combine "FromStream" [ leaf (show (idxToInt x)), travLoop f c l l' ]
+        FoldStream afun a x -> combine "FoldStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+  where
+    combine = c (accFormat f)
+    leaf    = l (accFormat f)
+      
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
        -> (String -> String -> m b)

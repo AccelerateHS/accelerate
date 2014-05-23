@@ -41,6 +41,9 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
+import Control.Monad.Identity                           ( Identity, runIdentity )
+import Control.Monad.Trans                              ( lift )
+import Control.Monad.Trans.Maybe                        ( MaybeT, runMaybeT )
 import Control.Monad.ST                                 ( ST )
 import Data.Bits
 import Data.Char                                        ( chr, ord )
@@ -209,22 +212,122 @@ evalPreOpenAcc (Stencil sten bndy acc) aenv
 evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
-evalPreOpenAcc (MapStream f acc) aenv = mapStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc aenv)
+evalPreOpenAcc (Loop l) aenv = delay $ evalLoop l aenv
 
-evalPreOpenAcc (ZipWithStream f acc1 acc2) aenv = zipWithStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
+{-
+evalPreOpenAcc (MapStream f x) aenv = mapStreamOp (evalOpenAfun f Empty) (delay $ prj x aenv)
+
+evalPreOpenAcc (ZipWithStream f x y) aenv = zipWithStreamOp (evalOpenAfun f Empty) (delay $ prj x aenv) (delay $ prj y aenv)
 
 evalPreOpenAcc (ToStream acc) aenv = toStreamOp (evalOpenAcc acc aenv)
 
-evalPreOpenAcc (FromStream acc) aenv = fromStreamOp (evalOpenAcc acc aenv)
+evalPreOpenAcc (FromStream x) aenv = fromStreamOp (delay $ prj x aenv)
 
-evalPreOpenAcc (FoldStream f acc1 acc2) aenv = foldStreamOp (evalOpenAfun f aenv) (evalOpenAcc acc1 aenv) (evalOpenAcc acc2 aenv)
-
+evalPreOpenAcc (FoldStream f acc1 x) aenv = foldStreamOp (evalOpenAfun f Empty) (evalOpenAcc acc1 aenv) (delay $ prj x aenv)
+-}
 -- The interpreter does not handle foreign functions so use the pure accelerate version
 evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
   = let !arr = force $ evalOpenAcc acc aenv
     in evalOpenAcc funAcc (Empty `Push` arr)
 evalPreOpenAcc (Aforeign _ _ _) _
   = error "This case is not possible"
+
+data ExecLoop aenv lenv arrs where
+  ExecEmpty :: ExecLoop aenv lenv ()
+  ExecP :: (Arrays a, Arrays arrs) => ExecP aenv      a -> ExecLoop aenv (lenv, a) arrs -> ExecLoop aenv lenv  arrs
+  ExecT :: (Arrays a, Arrays arrs) => ExecT aenv lenv a -> ExecLoop aenv (lenv, a) arrs -> ExecLoop aenv lenv  arrs
+  ExecC :: (Arrays a, Arrays arrs) => ExecC aenv lenv a -> ExecLoop aenv  lenv     arrs -> ExecLoop aenv lenv (arrs, a)
+  
+data ExecP aenv a where
+  ExecToStream :: [Array sh e] -> ExecP aenv (Array sh e)
+
+data ExecT aenv lenv a where
+  ExecMap :: (a -> b) -> Idx lenv a -> ExecT aenv lenv b
+  ExecZipWith :: (a -> b -> c) -> Idx lenv a -> Idx lenv b -> ExecT aenv lenv c
+  
+data ExecC aenv lenv a where
+  ExecFromStream :: (Sugar.Elt a, Sugar.Shape sh) => Idx lenv (Array sh a) -> [Array sh a] -> ExecC aenv lenv (Vector sh, Vector a)
+  ExecFoldStream :: Idx lenv (Array sh a) -> (Array sh a -> Array sh a -> Array sh a) -> Array sh a -> ExecC aenv lenv (Array sh a)
+  
+evalLoop :: PreOpenLoop OpenAcc aenv () arrs -> Val aenv -> arrs
+evalLoop l aenv | degenerate l = runIdentity $ initLoop aenv l >>= returnOut
+                | otherwise    = runIdentity $ initLoop aenv l >>= loop >>= returnOut
+  where
+    -- A loop with no producers is degenerate since there is no
+    -- halting condition, and should therefore not be iterated.
+    -- Notice that the only degenerate closed loop is the empty loop.
+    degenerate :: PreOpenLoop OpenAcc aenv lenv arrs -> Bool
+    degenerate l = 
+      case l of
+        EmptyLoop    -> True
+        Producer _ _ -> False
+        Transducer _ l' -> degenerate l'
+        Consumer   _ l' -> degenerate l'
+
+    -- Initialize the producers and the accumulators of the consumers
+    -- with the given array enviroment.
+    initLoop :: Val aenv -> PreOpenLoop OpenAcc aenv lenv arrs -> Identity (ExecLoop aenv lenv arrs)
+    initLoop aenv l =
+      case l of
+        EmptyLoop      -> return ExecEmpty
+        Producer   p l -> initProducer aenv p   >>= \ p' -> initLoop aenv l >>= \ l' -> return (ExecP p' l')
+        Transducer t l -> initTransducer aenv t >>= \ t' -> initLoop aenv l >>= \ l' -> return (ExecT t' l')
+        Consumer   c l -> initConsumer aenv c   >>= \ c' -> initLoop aenv l >>= \ l' -> return (ExecC c' l')
+
+    -- Iterate the given loop until it terminates.
+    -- A loop only terminates when one of the producers are exhausted.
+    loop :: ExecLoop aenv () arrs -> Identity (ExecLoop aenv () arrs)
+    loop l = do
+      ml <- runMaybeT (go l Empty)
+      case ml of
+        Nothing -> return l
+        Just l' -> loop l'
+
+    -- One iteration of a loop.
+    go :: ExecLoop aenv lenv arrs -> Val lenv -> MaybeT Identity (ExecLoop aenv lenv arrs)
+    go l lenv =
+      case l of
+        ExecEmpty -> return ExecEmpty
+        ExecP p l ->       produce   p       >>= \ (a, p') -> go l (lenv `Push` a) >>= \ l' -> return (ExecP p' l')
+        ExecT t l -> lift (transduce t lenv) >>= \  a      -> go l (lenv `Push` a) >>= \ l' -> return (ExecT t  l')
+        ExecC c l -> lift (consume   c lenv) >>= \     c'  -> go l  lenv           >>= \ l' -> return (ExecC c' l')
+
+    -- Finalize and return the accumulators in the consumers of the loop.
+    returnOut :: ExecLoop aenv lenv arrs -> Identity arrs
+    returnOut l =
+      case l of
+        ExecEmpty -> return ()
+        ExecP _ l -> returnOut l
+        ExecT _ l -> returnOut l
+        ExecC c l -> readConsumer c >>= \ a -> returnOut l >>= \ arrs -> return $ (arrs, a)
+
+
+produce :: ExecP aenv a -> MaybeT Identity (a, ExecP aenv a)
+produce (ExecToStream (x:xs)) = lift (return x) >>= (\ a -> return (a, ExecToStream xs))
+produce (ExecToStream []) = mzero
+
+initProducer :: Val aenv -> Producer OpenAcc aenv a -> Identity (ExecP aenv a)
+initProducer aenv (ToStream acc) = return $ ExecToStream (map force (toStreamOp (evalOpenAcc acc aenv)))
+
+transduce :: ExecT aenv lenv a -> Val lenv -> Identity a
+transduce (ExecMap f x) lenv = return $ f (prj x lenv)
+transduce (ExecZipWith f x y) lenv = return $ f (prj x lenv) (prj y lenv)
+
+initTransducer :: Val aenv -> Transducer OpenAcc aenv lenv a -> Identity (ExecT aenv lenv a)
+initTransducer aenv (MapStream f x) = return $ ExecMap (evalOpenAfun f aenv) x
+initTransducer aenv (ZipWithStream f x y) = return $ ExecZipWith (evalOpenAfun f aenv) x y
+
+consume :: ExecC aenv lenv a -> Val lenv -> Identity (ExecC aenv lenv a)
+consume (ExecFromStream x as) lenv = return (ExecFromStream x (prj x lenv:as))
+consume (ExecFoldStream x f acc) lenv = return (f acc (prj x lenv)) >>= \ acc' -> return (ExecFoldStream x f acc')
+
+initConsumer :: Val aenv -> Consumer OpenAcc aenv lenv a -> Identity (ExecC aenv lenv a)
+initConsumer _ (FromStream x) = return (ExecFromStream x [])
+initConsumer aenv (FoldStream f acc x) = return (ExecFoldStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv))
+
+readConsumer :: ExecC aenv lenv a -> Identity a
+readConsumer (ExecFromStream _ as) = return $ force $ (fromStreamOp (map delay as))
+readConsumer (ExecFoldStream _ _ acc) = return acc
 
 -- Evaluate a closed array expressions
 --
@@ -680,39 +783,22 @@ stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
                                      Left v    -> v
                                      Right ix' -> rf2 (Sugar.fromElt ix')
 
-mapStreamOp :: (Sugar.Elt e', Sugar.Shape sh')
-            => (Array sh e -> Array sh' e')
-            -> Delayed [Array sh e]
-            -> Delayed [Array sh' e']
-mapStreamOp f (DelayedRstream ds)
-  = let g darr@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = (delay . f . force) darr
-    in DelayedRstream (map g ds)
-
-zipWithStreamOp :: (Sugar.Elt e3, Sugar.Shape sh3)
-            => (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
-            -> Delayed [Array sh1 e1]
-            -> Delayed [Array sh2 e2]
-            -> Delayed [Array sh3 e3]
-zipWithStreamOp f (DelayedRstream ds1) (DelayedRstream ds2)
-  = let g darr1@(DelayedRpair DelayedRunit (DelayedRarray _ _)) darr2@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = delay (f (force darr1) (force darr2))
-    in DelayedRstream (zipWith g ds1 ds2)
-
 toStreamOp :: (Sugar.Shape sh)
            => Delayed (Array (sh:.Int) e)
-           -> Delayed [Array sh e]
+           -> [Delayed (Array sh e)]
 toStreamOp (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
   = let rf' i sh' =
           let j = toIndex sh sh'
               k = j + i * size sh
           in rf (fromIndex (sh, n) k)
-    in  DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (rf' i)) | i <- [0..n-1]]
+    in  [DelayedRpair DelayedRunit (DelayedRarray sh (rf' i)) | i <- [0..n-1]]
 
 --DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (\ sh' -> rf (sh', i))) | i <- [0..n-1]]
 
 fromStreamOp :: (Sugar.Shape sh, Sugar.Elt e)
-             => Delayed [Array sh e]
+             => [Delayed (Array sh e)]
              -> Delayed (Array (Z:.Int) sh, Array (Z:.Int) e)   
-fromStreamOp (DelayedRstream ds)
+fromStreamOp ds
   = let f (DelayedRpair DelayedRunit (DelayedRarray sh _)) = sh
         g _ [] = error "index out of bounds"
         g i (DelayedRpair DelayedRunit (DelayedRarray sh rf):ds) 
@@ -726,18 +812,6 @@ fromStreamOp (DelayedRstream ds)
                      ((), n) 
                      (\ ((), i) -> g i ds)
     in DelayedRpair (DelayedRpair DelayedRunit shapevec) elvec
-
-foldStreamOp :: ()
-             => (Array sh e -> Array sh e -> Array sh e)
-             -> Delayed (Array sh e)
-             -> Delayed [Array sh e]
-             -> Delayed (Array sh e)
-foldStreamOp f darr@(DelayedRpair DelayedRunit (DelayedRarray _ _)) (DelayedRstream ds)
-  = let k darr1@(DelayedRpair DelayedRunit (DelayedRarray _ _)) darr2@(DelayedRpair DelayedRunit (DelayedRarray _ _)) = delay (f (force darr1) (force darr2))
-        red a [] = a
-        red a (d:ds) = let a' = k a d
-                       in seq a' $ red a' ds 
-    in red darr ds
 
 -- Expression evaluation
 -- ---------------------

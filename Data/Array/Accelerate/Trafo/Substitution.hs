@@ -299,6 +299,51 @@ shiftA
 shiftA _ _ ZeroIdx      = avarIn ZeroIdx
 shiftA k v (SuccIdx ix) = weakenAcc k (v ix)
 
+
+
+rebuildP :: SyntacticAcc f
+         => RebuildAcc acc
+         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> Producer acc aenv a
+         -> Producer acc aenv' a
+rebuildP rebuild v p =
+  case p of
+    ToStream acc -> ToStream (rebuild v acc) 
+
+
+rebuildT :: SyntacticAcc f
+         => RebuildAcc acc
+         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> Transducer acc aenv lenv a
+         -> Transducer acc aenv' lenv a
+rebuildT rebuild v t =
+  case t of
+    MapStream f x -> MapStream (rebuildAfun rebuild v f)  x
+    ZipWithStream f x y -> ZipWithStream (rebuildAfun rebuild v f)  x y
+
+rebuildC :: SyntacticAcc f
+         => RebuildAcc acc
+         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> Consumer acc aenv lenv a
+         -> Consumer acc aenv' lenv a
+rebuildC rebuild v c =
+  case c of
+    FromStream x -> FromStream x
+    FoldStream f acc x -> FoldStream (rebuildAfun rebuild v f) (rebuild v acc) x
+
+rebuildL
+    :: SyntacticAcc f
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+    -> PreOpenLoop acc aenv  lenv t
+    -> PreOpenLoop acc aenv' lenv t
+rebuildL rebuild v l =
+  case l of
+    EmptyLoop -> EmptyLoop
+    Producer p l -> Producer (rebuildP rebuild v p) (rebuildL rebuild v l)
+    Transducer t l -> Transducer (rebuildT rebuild v t) (rebuildL rebuild v l)
+    Consumer c l -> Consumer (rebuildC rebuild v c) (rebuildL rebuild v l)
+
 rebuildA
     :: SyntacticAcc f
     => RebuildAcc acc
@@ -339,12 +384,21 @@ rebuildA rebuild v acc =
     Stencil f b a       -> Stencil (rebuildFA rebuild v f) b (rebuild v a)
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
-    MapStream f a       -> MapStream (rebuildAfun rebuild v f) (rebuild v a)
-    ZipWithStream f a1 a2 -> ZipWithStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
+    Loop l              -> Loop (rebuildL rebuild v l)
+{-      
+    MapStream f x       -> MapStream f (( \(Avar ix) -> ix) (accOut (v x)))
+    ZipWithStream f x y -> ZipWithStream f (( \(Avar ix) -> ix) (accOut (v x))) (( \(Avar ix) -> ix) (accOut (v y)))
+    FromStream x        -> FromStream (( \(Avar ix) -> ix) (accOut (v x)))
+    ToStream a          -> ToStream (rebuild v a)
+    FoldStream f a x    -> FoldStream f (rebuild v a) (( \(Avar ix) -> ix) (accOut (v x)))
+  -}  
+{-
+    MapStream f a       -> MapStream f (rebuild v a)
+    ZipWithStream f a1 a2 -> ZipWithStream f (rebuild v a1) (rebuild v a2)
     FromStream a        -> FromStream (rebuild v a)
     ToStream a          -> ToStream (rebuild v a)
-    FoldStream f a1 a2  -> FoldStream (rebuildAfun rebuild v f) (rebuild v a1) (rebuild v a2)
-
+    FoldStream f a1 a2  -> FoldStream f (rebuild v a1) (rebuild v a2)
+-}
 
 -- Rebuilding array computations
 --

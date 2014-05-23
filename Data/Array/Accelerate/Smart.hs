@@ -26,7 +26,7 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), Stencil(..), Level,
+  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), Stencil(..), Level, PreLoop(..), AccLoop(..), Producer(..), Transducer(..), Consumer(..),
 
   -- * Smart constructors for literals
   constant,
@@ -75,7 +75,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Tuple              hiding ( Tuple )
 import Data.Array.Accelerate.AST                hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenLoop(..), Producer(..), Transducer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
 import qualified Data.Array.Accelerate.Tuple    as Tuple
@@ -232,7 +232,7 @@ data PreAcc acc exp as where
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Vector e)
                 -> PreAcc acc exp (Vector e)
-
+  
   Permute       :: (Shape sh, Shape sh', Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array sh' e)
@@ -261,30 +261,55 @@ data PreAcc acc exp as where
                 -> acc (Array sh b)
                 -> PreAcc acc exp (Array sh c)
 
-  MapStream     :: (Shape sh, Elt e, Shape sh', Elt e')
-                => (Acc (Array sh e) -> acc (Array sh' e'))
-                -> acc [Array sh e]   
-                -> PreAcc acc exp [Array sh' e']   
+  Loop          :: Arrays arrs 
+                => PreLoop acc () arrs 
+                -> PreAcc acc exp arrs
 
+data PreLoop acc lenv arrs where
+  EmptyLoop  :: PreLoop acc lenv ()
+  Producer   :: (Arrays a, Arrays arrs) => Producer   acc      a -> PreLoop acc (lenv, a) arrs -> PreLoop acc lenv arrs
+  Transducer :: (Arrays a, Arrays arrs) => Transducer acc lenv a -> PreLoop acc (lenv, a) arrs -> PreLoop acc lenv arrs
+  Consumer   :: (Arrays a, Arrays arrs) => Consumer   acc lenv a -> PreLoop acc  lenv     arrs -> PreLoop acc lenv (arrs, a)
+
+newtype AccLoop lenv a = AccLoop (PreLoop Acc lenv a)
+
+data Producer acc a where
+  -- Convert the given array to a stream.
+  ToStream :: (Shape sh, Elt e)
+           => acc (Array (sh:.Int) e)
+           -> Producer acc (Array sh e)
+
+data Transducer acc lenv a where
+
+  -- Apply the given the given function to all elements of the given stream.
+  MapStream :: (Shape sh, Elt e, Shape sh', Elt e')
+            => (Acc (Array sh e) -> acc (Array sh' e'))
+            -> Idx lenv (Array sh e)
+            -> Transducer acc lenv (Array sh' e')
+
+  -- Apply a given binary function pairwise to all elements of the given streams.
+  -- The length of the result is the length of the shorter of the two argument
+  -- arrays.
   ZipWithStream :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
                 => (Acc (Array sh1 e1) -> Acc (Array sh2 e2) -> acc (Array sh3 e3))
-                -> acc [Array sh1 e1]
-                -> acc [Array sh2 e2]
-                -> PreAcc acc exp [Array sh3 e3]   
+                -> Idx lenv (Array sh1 e1)
+                -> Idx lenv (Array sh2 e2)
+                -> Transducer acc lenv (Array sh3 e3)
 
-  ToStream      :: (Shape sh, Elt e)
-                => acc (Array (sh:.Int) e)
-                -> PreAcc acc exp [Array sh e]   
+data Consumer acc lenv a where
 
-  FromStream    :: (Shape sh, Elt e)
-                => acc [Array sh e]   
-                -> PreAcc acc exp (Array (Z:.Int) sh, Array (Z:.Int) e)
+  -- Convert the given stream to an array.
+  FromStream :: (Shape sh, Elt e)
+             => Idx lenv (Array sh e)
+             -> Consumer acc lenv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
-  FoldStream    :: (Shape sh, Elt e)
-                => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
-                -> acc (Array sh e)
-                -> acc [Array sh e]
-                -> PreAcc acc exp (Array sh e)
+  -- Fold a stream by combining each element using the given binary function.
+  FoldStream :: (Shape sh, Elt e)
+             => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
+             -> acc (Array sh e)
+             -> Idx lenv (Array sh e)
+             -> Consumer acc lenv (Array sh e)
+
 
 -- |Array-valued collective computations
 --
@@ -1095,11 +1120,15 @@ showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp Aforeign{}         = "Aforeign"
-showPreAccOp MapStream{}        = "MapStream"
-showPreAccOp ZipWithStream{}    = "ZipWithStream"
-showPreAccOp ToStream{}         = "ToStream"
-showPreAccOp FromStream{}       = "FromStream"
-showPreAccOp FoldStream{}       = "FoldStream"
+showPreAccOp (Loop l)           = showLoop l
+
+showLoop :: PreLoop acc lenv arrs -> String
+showLoop EmptyLoop = "EmptyLoop"
+showLoop (Producer   (ToStream{})      _) = "FromStream"
+showLoop (Transducer (MapStream{})     _) = "MapStream"
+showLoop (Transducer (ZipWithStream{}) _) = "ZipWithStream"
+showLoop (Consumer   (FromStream{})    _) = "FromStream"
+showLoop (Consumer   (FoldStream{})    _) = "FoldStream"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

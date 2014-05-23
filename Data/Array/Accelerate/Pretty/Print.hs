@@ -62,7 +62,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
   where
     ppE :: PreOpenExp acc env aenv e -> Doc
     ppE = prettyPreExp prettyAcc 0 alvl parens
-
+    
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc alvl
 
@@ -132,12 +132,38 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
-    pp (MapStream f acc)        = "mapS"        .$ [ ppAF f, ppA acc ]
-    pp (ZipWithStream f acc1 acc2) = "zipWithS" .$ [ ppAF f, ppA acc1, ppA acc2 ]
-    pp (FromStream acc)         = "fromStream"  .$ [ ppA acc ]
-    pp (ToStream acc)           = "toStream"    .$ [ ppA acc ]
-    pp (FoldStream f acc1 acc2) = "foldS"       .$ [ ppAF f, ppA acc1, ppA acc2 ]
+    pp (Loop l)                 = sep $ punctuate (text ";") (prettyLoop prettyAcc alvl 0 wrap l)
 
+
+prettyLoop
+    :: forall acc aenv lenv arrs.
+       PrettyAcc acc
+    -> Int                                      -- level of array variables
+    -> Int                                      -- level of loop variables
+    -> (Doc -> Doc)                             -- apply to compound expressions
+    -> PreOpenLoop acc aenv lenv arrs
+    -> [Doc]
+prettyLoop prettyAcc alvl llvl wrap l =
+  case l of
+    EmptyLoop -> [text ";"]
+    Producer p l' -> 
+      (case p of
+        ToStream a -> "tostream" .$ [ prettyAcc alvl wrap a ])
+      : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
+    Transducer t l' ->
+      (case t of
+         MapStream f x -> "mapStream" .$ [ prettyPreAfun prettyAcc alvl f, var (idxToInt x) ]
+         ZipWithStream f x y -> "zipWithStream" .$ [ prettyPreAfun prettyAcc alvl f, var (idxToInt x), var (idxToInt y) ])
+      : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
+    Consumer c l' ->
+      (case c of
+         FromStream x -> "fromStream" ..$ [ var (idxToInt x) ]
+         FoldStream f a x -> "foldStream" ..$ [ prettyPreAfun prettyAcc alvl f, prettyAcc alvl wrap a, var (idxToInt x) ])
+      : (prettyLoop prettyAcc alvl llvl wrap l')
+  where
+    var n          = char 's' <> int n
+    name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
+    name ..$ docs = wrap $ hang (text name) 2 (sep docs)
 
 -- Pretty print a function over array computations.
 --

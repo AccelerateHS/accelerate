@@ -188,12 +188,41 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      MapStream f a             -> MapStream (shrinkAF f) (shrinkAcc a)
-      ZipWithStream f a1 a2     -> ZipWithStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
+      
+      Loop l                    -> Loop (shrinkL l)
+      {-
+      MapStream f x             -> MapStream (shrinkAF f) x
+      ZipWithStream f x y       -> ZipWithStream (shrinkAF f) x y
       ToStream a                -> ToStream (shrinkAcc a)
-      FromStream a              -> FromStream (shrinkAcc a)
-      FoldStream f a1 a2        -> FoldStream (shrinkAF f) (shrinkAcc a1) (shrinkAcc a2)
-
+      FromStream x              -> FromStream x
+      FoldStream f a1 x         -> FoldStream (shrinkAF f) (shrinkAcc a1) x
+      -}
+      
+    shrinkL :: PreOpenLoop acc aenv' lenv a -> PreOpenLoop acc aenv' lenv a
+    shrinkL l =
+      case l of
+        EmptyLoop -> EmptyLoop
+        Producer   p l -> Producer   (shrinkP p)  (shrinkL l)
+        Transducer t l -> Transducer (shrinkTr t) (shrinkL l)
+        Consumer   c l -> Consumer   (shrinkC c)  (shrinkL l)
+    
+    shrinkP :: Producer acc aenv' a -> Producer acc aenv' a
+    shrinkP p =
+      case p of
+        ToStream a -> ToStream (shrinkAcc a)
+    
+    shrinkTr :: Transducer acc aenv' lenv a -> Transducer acc aenv' lenv a
+    shrinkTr t =
+      case t of
+        MapStream f x -> MapStream (shrinkAF f) x
+        ZipWithStream f x y -> ZipWithStream (shrinkAF f) x y
+        
+    shrinkC :: Consumer acc aenv' lenv a -> Consumer acc aenv' lenv a
+    shrinkC c =
+      case c of
+        FromStream x -> FromStream x
+        FoldStream f a x -> FoldStream (shrinkAF f) (shrinkAcc a) x
+    
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
       Let bnd body              -> Let (shrinkE bnd) (shrinkE body)
@@ -327,11 +356,14 @@ usesOfPreAcc
     -> Int
 usesOfPreAcc withShape countAcc idx = countP
   where
+    countIdx :: Idx aenv a -> Int
+    countIdx this    
+        | Just REFL <- match this idx   = 1
+        | otherwise                     = 0
+    
     countP :: PreOpenAcc acc aenv a -> Int
     countP pacc = case pacc of
-      Avar this
-        | Just REFL <- match this idx   -> 1
-        | otherwise                     -> 0
+      Avar this                 -> countIdx this
       --
       Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
       Atuple tup                -> countAT tup
@@ -363,12 +395,39 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      MapStream _ a             -> countA a
-      ZipWithStream _ a1 a2     -> countA a1 + countA a2
+      Loop l                    -> countL l
+      {-
+      MapStream _ x             -> countIdx x
+      ZipWithStream _ x y       -> countIdx x + countIdx y
       ToStream a                -> countA a
-      FromStream a              -> countA a
-      FoldStream _ a1 a2        -> countA a1 + countA a2
-
+      FromStream x              -> countIdx x
+      FoldStream _ a1 x         -> countA a1 + countIdx x
+      -}
+    countL :: PreOpenLoop acc aenv lenv arrs -> Int
+    countL l =
+      case l of
+        EmptyLoop -> 0
+        Producer   p l -> countPr p + countL l
+        Transducer t l -> countTr t + countL l
+        Consumer   c l -> countC  c + countL l
+        
+    countPr :: Producer acc aenv arrs -> Int
+    countPr p =
+      case p of
+        ToStream a -> countA a
+        
+    countTr :: Transducer acc aenv lenv arrs -> Int
+    countTr t =
+      case t of
+        MapStream f _ -> countAF f idx
+        ZipWithStream f _ _ -> countAF f idx
+        
+    countC :: Consumer acc aenv lenv arrs -> Int
+    countC c =
+      case c of
+        FromStream _ -> 0
+        FoldStream f a _ -> countAF f idx + countA a
+    
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
 
@@ -400,6 +459,13 @@ usesOfPreAcc withShape countAcc idx = countP
         | withShape             -> countA a
         | otherwise             -> 0
       Foreign _ _ e             -> countE e
+
+    countAF :: Kit acc
+            => PreOpenAfun acc aenv' f
+            -> Idx aenv' s
+            -> Int
+    countAF (Alam f) idx  = countAF f (SuccIdx idx)
+    countAF (Abody a) idx = countAcc withShape idx a
 
     countF :: PreOpenFun acc env aenv f -> Int
     countF (Lam  f) = countF f

@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Language (
   map, zipWith,
 
   -- * Stream functions
-  mapStream, zipWithStream, toStream, fromStream, foldStream, 
+  mapStream, zipWithStream, toStream, fromStream, foldStream, loop, emptyLoop,
   
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -113,6 +113,7 @@ import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
 
 -- friends
+import Data.Array.Accelerate.AST ( Idx(..) )
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect)
@@ -463,45 +464,55 @@ stencil2 = Acc $$$$$ Stencil2
 
 -- | Apply the given array function element-wise to the given stream.
 --
-mapStream :: (Shape ix, Elt a, Shape ix', Elt b)
+mapStream :: (Shape ix, Elt a, Shape ix', Elt b, Arrays arrs)
           => (Acc (Array ix a) -> Acc (Array ix' b))
-          -> Acc [Array ix  a]
-          -> Acc [Array ix' b]
-mapStream = Acc $$ MapStream
+          -> Idx lenv (Array ix a)
+          -> AccLoop (lenv, Array ix' b) arrs
+          -> AccLoop lenv arrs
+mapStream f x (AccLoop l) = AccLoop (Transducer (MapStream f x) l)
 
 -- | Apply the given binary function element-wise to the two streams.  The length of the resulting
 -- stream is the minumum of the lengths of the two source streams.
 --
-zipWithStream :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c)
-          => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
-          -> Acc [Array ix   a]
-          -> Acc [Array ix'' b]
-          -> Acc [Array ix'  c]   
-zipWithStream = Acc $$$ ZipWithStream
+zipWithStream :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c, Arrays arrs)
+              => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
+              -> Idx lenv (Array ix   a)
+              -> Idx lenv (Array ix'' b)
+              -> AccLoop (lenv, Array ix' c) arrs
+              -> AccLoop lenv arrs
+zipWithStream f x y (AccLoop l) = AccLoop (Transducer (ZipWithStream f x y) l)
 
 -- | Convert the given array to a stream by streaming the outer
 -- dimension.
 --
-toStream :: (Shape ix, Elt a)
+toStream :: (Shape ix, Elt a, Arrays arrs)
          => Acc (Array (ix:.Int) a)
-         -> Acc [Array  ix       a]
-toStream = Acc . ToStream
+         -> AccLoop (lenv, Array ix a) arrs
+         -> AccLoop lenv arrs
+toStream acc (AccLoop l) = AccLoop (Producer (ToStream acc) l)
 
 -- | Convert the given scalar stream to vector.
-fromStream :: (Shape ix, Elt a)
-         => Acc [Array ix a]
-         -> Acc (Vector ix, Vector a)
-fromStream = Acc . FromStream
+fromStream :: (Shape ix, Elt a, Arrays arrs)
+         => Idx lenv (Array ix a)
+         -> AccLoop lenv arrs 
+         -> AccLoop lenv (arrs, (Vector ix, Vector a))
+fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
 
 -- | Fold a stream by combining all the elements with the given binary
 -- array function.
-foldStream :: (Shape ix, Elt a)
+foldStream :: (Shape ix, Elt a, Arrays arrs)
            => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
            -> Acc (Array ix a)
-           -> Acc [Array ix a]
-           -> Acc (Array ix a)
-foldStream = Acc $$$ FoldStream
+           -> Idx lenv (Array ix a)
+           -> AccLoop lenv arrs
+           -> AccLoop lenv (arrs, Array ix a)
+foldStream f acc x (AccLoop l) = AccLoop (Consumer (FoldStream f acc x) l)
 
+loop :: Arrays arrs => AccLoop () arrs -> Acc arrs
+loop (AccLoop l) = Acc (Loop l)
+
+emptyLoop :: AccLoop lenv ()
+emptyLoop = AccLoop EmptyLoop
 
 -- Foreign function calling
 -- ------------------------

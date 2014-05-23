@@ -210,7 +210,9 @@ Library
                         ghc-prim             >= 0.2,
                         hashable             >= 1.1,
                         hashtables           >= 1.0,
-                        pretty               >= 1.0
+                        pretty               >= 1.0,
+                        mtl                  >= 2.0,
+                        transformers         >= 0.3
 
   if flag(more-pp)
     Build-depends:      bytestring           >= 0.9,

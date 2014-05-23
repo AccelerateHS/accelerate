@@ -48,7 +48,7 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp,
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenLoop(..), Producer(..), Transducer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Tuple            as Tuple
@@ -246,13 +246,6 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         cvtAfun1 :: (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> AST.OpenAfun aenv (a -> b)
         cvtAfun1 = convertSharingAfun1 config alyt aenv'
 
-        cvtAfun2 :: (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> AST.OpenAfun aenv (a -> b -> c)
-        cvtAfun2 f = Alam (Alam (Abody (convertSharingAcc config alyt' aenv' body)))
-          where
-            alyt'' = incLayout alyt `PushLayout` ZeroIdx
-            alyt'  = incLayout alyt'' `PushLayout` ZeroIdx
-            body   = f undefined undefined
-
     in
     case preAcc of
 
@@ -310,12 +303,87 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      MapStream f acc             -> AST.MapStream (cvtAfun1 f) (cvtA acc)
-      ZipWithStream f acc1 acc2   -> AST.ZipWithStream (cvtAfun2 f) (cvtA acc1) (cvtA acc2)
+      Loop l -> AST.Loop (convertSharingLoop config alyt aenv l)
+{-           
+      MapStream afun acc          -> 
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+        in  AST.Alet (cvtA acc) (AST.OpenAcc (AST.MapStream (convertAfun a e f afun) ZeroIdx))
+      ZipWithStream afun acc1 acc2 -> 
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+            alyt' = incLayout alyt `PushLayout` ZeroIdx
+        in AST.Alet (cvtA acc1) $
+           AST.OpenAcc $ AST.Alet (convertSharingAcc config alyt' aenv' acc2) $ 
+           AST.OpenAcc $ AST.ZipWithStream (convertAfun a e f afun) (SuccIdx ZeroIdx) ZeroIdx
+      ToStream acc                -> AST.ToStream (cvtA acc)
+      FromStream acc              -> AST.Alet (cvtA acc) (AST.OpenAcc (AST.FromStream ZeroIdx))
+      FoldStream afun acc1 acc2   ->
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+            alyt' = incLayout alyt `PushLayout` ZeroIdx
+        in AST.Alet (cvtA acc2) (AST.OpenAcc (AST.FoldStream (convertAfun a e f afun) (convertSharingAcc config alyt' aenv' acc1) ZeroIdx))
+
+{-
+      MapStream afun acc          -> 
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+        in  AST.MapStream (convertAfun a e f afun) (cvtA acc)
+      ZipWithStream afun acc1 acc2 -> 
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+        in AST.ZipWithStream (convertAfun a e f afun) (cvtA acc1) (cvtA acc2)
       ToStream acc                -> AST.ToStream (cvtA acc)
       FromStream acc              -> AST.FromStream (cvtA acc)
-      FoldStream f acc1 acc2      -> AST.FoldStream (cvtAfun2 f) (cvtA acc1) (cvtA acc2)
+      FoldStream afun acc1 acc2   -> 
+        let a = recoverAccSharing config
+            e = recoverExpSharing config
+            f = floatOutAcc config
+        in AST.FoldStream (convertAfun a e f afun) (cvtA acc1) (cvtA acc2)
+-}
+-}
 
+
+convertSharingLoop
+    :: forall aenv lenv arrs. Arrays arrs
+    => Config
+    -> Layout aenv aenv
+    -> [StableSharingAcc]
+    -> PreLoop ScopedAcc lenv arrs
+    -> AST.PreOpenLoop AST.OpenAcc aenv lenv arrs
+convertSharingLoop config alyt aenv l = 
+  case l of
+    EmptyLoop -> AST.EmptyLoop
+    Producer   p l' -> AST.Producer (travP p) (travL l')
+    Transducer t l' -> AST.Transducer (travT t) (travL l')
+    Consumer   c l' -> AST.Consumer (travC c) (travL l')
+    
+  where
+    travL :: forall lenv' arrs'. Arrays arrs' => PreLoop ScopedAcc lenv' arrs' -> AST.PreOpenLoop AST.OpenAcc aenv lenv' arrs'
+    travL l' = convertSharingLoop config alyt aenv l'
+    
+    travP :: Producer ScopedAcc a -> AST.Producer AST.OpenAcc aenv a
+    travP p = 
+      case p of
+        ToStream acc -> AST.ToStream (convertSharingAcc config alyt aenv acc)
+    
+    travT :: Transducer ScopedAcc lenv a -> AST.Transducer AST.OpenAcc aenv lenv a
+    travT t = 
+      case t of
+        (MapStream afun x) -> AST.MapStream (convertSharingAfun1 config alyt aenv afun) x
+        (ZipWithStream afun x y) -> AST.ZipWithStream (convertSharingAfun2 config alyt aenv afun) x y
+    
+    travC :: Consumer ScopedAcc lenv a -> AST.Consumer AST.OpenAcc aenv lenv a
+    travC c = 
+      case c of
+        FromStream x -> AST.FromStream x
+        FoldStream afun acc x -> AST.FoldStream (convertSharingAfun2 config alyt aenv afun) (convertSharingAcc config alyt aenv acc) x
+    
 convertSharingAfun1
     :: forall aenv a b. (Arrays a, Arrays b)
     => Config
@@ -328,6 +396,19 @@ convertSharingAfun1 config alyt aenv f
       where
         alyt' = incLayout alyt `PushLayout` ZeroIdx
         body  = f undefined
+
+convertSharingAfun2
+    :: forall aenv a b c. (Arrays a, Arrays b, Arrays c)
+    => Config
+    -> Layout aenv aenv
+    -> [StableSharingAcc]
+    -> (Acc a -> Acc b -> ScopedAcc c)
+    -> OpenAfun aenv (a -> b -> c)
+convertSharingAfun2 config alyt aenv f
+  = Alam (Alam (Abody (convertSharingAcc config alyt' aenv body)))
+      where
+        alyt' = incLayout (incLayout alyt `PushLayout` ZeroIdx) `PushLayout` ZeroIdx
+        body  = f undefined undefined
 
 convertSharingAtuple
     :: forall aenv a.
@@ -997,6 +1078,52 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
+    traverseLoop :: forall lenv arrs. Typeable arrs 
+                 => Level -> PreLoop Acc lenv arrs
+                 -> IO (PreLoop UnscopedAcc lenv arrs, Int)
+    traverseLoop lvl l =
+      case l of
+        EmptyLoop -> return (EmptyLoop, 1)
+        Producer   p l' -> do
+          (p', h1)  <- travP p
+          (l'', h2) <- traverseLoop lvl l'
+          return (Producer p' l'', h1 `max` h2)
+        Transducer t l' -> do
+          (t', h1)  <- travT t
+          (l'', h2) <- traverseLoop lvl l'
+          return (Transducer t' l'', h1 `max` h2)
+        Consumer   c l' -> do
+          (c', h1)  <- travC c
+          (l'', h2) <- traverseLoop lvl l'
+          return (Consumer c' l'', h1 `max` h2)
+        
+      where
+        travP :: forall arrs. Producer Acc arrs -> IO (Producer UnscopedAcc arrs, Int)
+        travP p =
+          case p of
+            (ToStream acc) -> do
+              (acc', h1) <- traverseAcc lvl acc
+              return (ToStream acc', h1)
+           
+        travT :: forall arrs. Transducer Acc lenv arrs -> IO (Transducer UnscopedAcc lenv arrs, Int)         
+        travT t = 
+          case t of
+            (MapStream afun x) -> do
+              (afun', h1) <- traverseAfun1 lvl afun
+              return (MapStream afun' x, h1)
+            (ZipWithStream afun x y) -> do
+              (afun', h1) <- traverseAfun2 lvl afun
+              return (ZipWithStream afun' x y, h1)
+        travC :: forall arrs. Consumer Acc lenv arrs -> IO (Consumer UnscopedAcc lenv arrs, Int)         
+        travC c =
+          case c of
+            FromStream x -> 
+              return (FromStream x, 1)
+            FoldStream afun acc x -> do
+              (afun', h1) <- traverseAfun2 lvl afun
+              (acc',  h2) <- traverseAcc lvl acc 
+              return (FoldStream afun' acc' x, h1 `max` h2)
+
     traverseAcc :: forall arrs. Typeable arrs => Level -> Acc arrs -> IO (UnscopedAcc arrs, Int)
     traverseAcc lvl acc@(Acc pacc)
       = mfix $ \ ~(_, height) -> do
@@ -1110,15 +1237,17 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc2', h3) <- traverseAcc lvl acc2
                                              return (Stencil2 s' bnd1 acc1' bnd2 acc2',
                                                      h1 `max` h2 `max` h3 + 1)
+                                               
+            Loop l                   -> reconstruct $ (travL Loop) l
+                                               
+{-                                               
             MapStream f acc             -> reconstruct $ do
-                                             (f',   h1) <- traverseAfun1 lvl f
-                                             (acc', h2) <- traverseAcc lvl acc
-                                             return (MapStream f' acc', h1 `max` h2 + 1)
+                                             (acc', h1) <- traverseAcc lvl acc
+                                             return (MapStream f acc', h1 + 1)
             ZipWithStream f acc1 acc2   -> reconstruct $ do
-                                             (f',   h1) <- traverseAfun2 lvl f
-                                             (acc1', h2) <- traverseAcc lvl acc1
-                                             (acc2', h3) <- traverseAcc lvl acc2
-                                             return (ZipWithStream f' acc1' acc2', h1 `max` h2 `max` h3 + 1)
+                                             (acc1', h1) <- traverseAcc lvl acc1
+                                             (acc2', h2) <- traverseAcc lvl acc2
+                                             return (ZipWithStream f acc1' acc2', h1 `max` h2 + 1)
             ToStream acc                -> reconstruct $ do
                                               (acc', h) <- traverseAcc lvl acc
                                               return (ToStream acc', h + 1)
@@ -1126,12 +1255,21 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                               (acc', h) <- traverseAcc lvl acc
                                               return (FromStream acc', h + 1)
             FoldStream f acc1 acc2      -> reconstruct $ do
-                                              (f',    h1) <- traverseAfun2 lvl f
-                                              (acc1', h2) <- traverseAcc lvl acc1
-                                              (acc2', h3) <- traverseAcc lvl acc2
-                                              return (FoldStream f' acc1' acc2', h1 `max` h2 `max` h3 + 1)
-
+                                              (acc1', h1) <- traverseAcc lvl acc1
+                                              (acc2', h2) <- traverseAcc lvl acc2
+                                              return (FoldStream f acc1' acc2', h1 `max` h2 + 1)
+-}
       where
+        
+        travL :: Arrays arrs'
+              => (PreLoop UnscopedAcc lenv arrs' -> PreAcc UnscopedAcc RootExp arrs)
+              -> PreLoop Acc lenv arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+        travL c l 
+          = do
+              (l', h) <- traverseLoop lvl l
+              return (c l', h + 1)
+            
+        
         travA :: Arrays arrs'
               => (UnscopedAcc arrs' -> PreAcc UnscopedAcc RootExp arrs)
               -> Acc arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
@@ -1209,11 +1347,11 @@ makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
                 -> (Acc a -> Acc b -> Acc c)
                 -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
 makeOccMapAfun2 config accOccMap lvl f = do
-  let x = Acc (Atag (lvl + 1))
-      y = Acc (Atag lvl)
+  let x = Acc (Atag lvl)
+      y = Acc (Atag (lvl + 1))
   --
   (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+2) (f x y)
-  return (\_ _ -> UnscopedAcc [lvl, lvl+1] body, height)
+  return (\ _ _ -> (UnscopedAcc [lvl, lvl+1] body), height)
 
 
 -- Generate occupancy information for scalar functions and expressions. Helper
@@ -1790,17 +1928,21 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
                                        (accCount1 +++ accCount2 +++ accCount3)
+                                     
+          Loop l -> let 
+                      (l', accCount1) = scopesLoop l
+                    in
+                    reconstruct (Loop l') accCount1
+{-                                     
           MapStream f acc         -> let
-                                       (f'  , accCount1) = scopesAfun1 f
-                                       (acc', accCount2) = scopesAcc acc
+                                       (acc', accCount1) = scopesAcc acc
                                      in
-                                     reconstruct (MapStream f' acc') (accCount1 +++ accCount2)
+                                     reconstruct (MapStream f acc') (accCount1)
           ZipWithStream f acc1 acc2  -> let
-                                       (f'  , accCount1)  = scopesAfun2 f
-                                       (acc1', accCount2) = scopesAcc acc1
-                                       (acc2', accCount3) = scopesAcc acc2
+                                       (acc1', accCount1) = scopesAcc acc1
+                                       (acc2', accCount2) = scopesAcc acc2
                                      in
-                                     reconstruct (ZipWithStream f' acc1' acc2') (accCount1 +++ accCount2 +++ accCount3)
+                                     reconstruct (ZipWithStream f acc1' acc2') (accCount1 +++ accCount2)
           ToStream acc            -> let
                                        (acc', accCount1) = scopesAcc  acc
                                      in
@@ -1810,12 +1952,12 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (FromStream acc') (accCount1)
           FoldStream f acc1 acc2  ->  let
-                                       (f', accCount1)    = scopesAfun2 f
-                                       (acc1', accCount2) = scopesAcc acc1
-                                       (acc2', accCount3) = scopesAcc acc2
+                                       (acc1', accCount1) = scopesAcc acc1
+                                       (acc2', accCount2) = scopesAcc acc2
                                      in
-                                     reconstruct (FoldStream f' acc1' acc2')
-                                                 (accCount1 +++ accCount2 +++ accCount3)
+                                     reconstruct (FoldStream f acc1' acc2')
+                                                 (accCount1 +++ accCount2)
+-}
       where
         travEA :: Arrays arrs
                => (ScopedExp e -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedExp arrs)
@@ -1960,6 +2102,49 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                  && all (bindable !!) unbound
             isBindable _ _ (ExpNodeCount _ _) = False
 
+    scopesLoop :: forall lenv arrs. PreLoop UnscopedAcc lenv arrs -> (PreLoop ScopedAcc lenv arrs, NodeCounts)
+    scopesLoop l =
+      case l of
+        EmptyLoop -> (EmptyLoop, noNodeCounts)
+        Producer p l'   -> let
+                             (p',  accCount1) = scopesP p
+                             (l'', accCount2) = scopesLoop l'
+                           in (Producer p' l'', accCount1 +++ accCount2)
+        Transducer t l' -> let
+                             (t',  accCount1) = scopesT t
+                             (l'', accCount2) = scopesLoop l'
+                           in (Transducer t' l'', accCount1 +++ accCount2)
+        Consumer c l'   -> let
+                             (c',  accCount1) = scopesC c
+                             (l'', accCount2) = scopesLoop l'
+                           in (Consumer c' l'', accCount1 +++ accCount2)
+        
+    scopesP :: Producer UnscopedAcc a -> (Producer ScopedAcc a, NodeCounts)
+    scopesP p =
+      case p of
+        ToStream acc -> let
+                          (acc', accCount1) = scopesAcc acc
+                        in (ToStream acc', accCount1)
+    
+    scopesT :: Transducer UnscopedAcc lenv a -> (Transducer ScopedAcc lenv a, NodeCounts)
+    scopesT t =
+      case t of
+        MapStream     afun x   -> let
+                                    (afun', accCount1) = scopesAfun1 afun
+                                  in (MapStream afun' x, accCount1)
+        ZipWithStream afun x y -> let
+                                    (afun', accCount1) = scopesAfun2 afun
+                                  in (ZipWithStream afun' x y, accCount1)
+                                     
+    scopesC :: Consumer UnscopedAcc lenv a -> (Consumer ScopedAcc lenv a, NodeCounts)
+    scopesC c =
+      case c of
+        FromStream x -> (FromStream x, noNodeCounts)
+        FoldStream afun acc x -> let
+                                   (afun', accCount1) = scopesAfun2 afun
+                                   (acc' , accCount2) = scopesAcc acc
+                                 in (FoldStream afun' acc' x, accCount1 +++ accCount2)
+      
     scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
 
@@ -1976,10 +2161,9 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
-
-
+        
     scopesAfun2 :: (Arrays a1, Arrays a2) => (Acc a1 -> Acc a2 -> UnscopedAcc a3) -> (Acc a1 -> Acc a2 -> ScopedAcc a3, NodeCounts)
-    scopesAfun2 f = (\_ _ -> ScopedAcc ssa body', (counts',graph))
+    scopesAfun2 f = (\ _ _ -> (ScopedAcc ssa body'), (counts',graph))
       where
         body@(UnscopedAcc fvs _) = f undefined undefined
         ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
@@ -1988,7 +2172,6 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
-
 
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]

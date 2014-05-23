@@ -143,7 +143,7 @@ module Data.Array.Accelerate (
   L.stencil, L.stencil2,
 
     -- ** Stream operations
-  L.mapStream, L.toStream, L.fromStream, L.foldStream,
+  L.mapStream, L.zipWithStream, L.toStream, L.fromStream, L.foldStream, L.loop, L.emptyLoop,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),

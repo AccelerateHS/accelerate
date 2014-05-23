@@ -851,6 +851,9 @@ commutes h f x = case f of
 hashIdx :: Idx env t -> Int
 hashIdx = hash . idxToInt
 
+hashIdxWithSalt :: Int -> Idx env t -> Int
+hashIdxWithSalt salt = hashWithSalt salt . idxToInt
+
 hashTupleIdx :: TupleIdx tup e -> Int
 hashTupleIdx = hash . tupleIdxToInt
 
@@ -864,6 +867,46 @@ type HashAcc acc = forall aenv a. acc aenv a -> Int
 hashOpenAcc :: OpenAcc aenv arrs -> Int
 hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
+hashPreOpenLoop :: forall acc aenv lenv arrs. HashAcc acc -> PreOpenLoop acc aenv lenv arrs -> Int
+hashPreOpenLoop hashAcc l =
+  let 
+    hashA :: Int -> acc aenv a -> Int
+    hashA salt = hashWithSalt salt . hashAcc
+
+    hashF :: Int -> PreOpenAfun acc aenv f -> Int
+    hashF salt = hashWithSalt salt . hashAfun hashAcc
+    
+    hashL :: Int -> PreOpenLoop acc aenv lenv' arrs' -> Int
+    hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
+    
+    hashV :: Int -> Idx lenv a -> Int
+    hashV = hashIdxWithSalt
+    
+    hashP :: Int -> Producer acc aenv a -> Int
+    hashP salt p =
+      case p of
+        ToStream acc -> hashWithSalt salt "ToStream" `hashA` acc
+        
+    hashT :: Int -> Transducer acc aenv lenv a -> Int
+    hashT salt t =
+      case t of
+        MapStream f x -> hashWithSalt salt "MapStream" `hashF` f `hashV` x
+        ZipWithStream f x y -> hashWithSalt salt "ZipWithStream" `hashF` f `hashV` x `hashV` y
+
+    hashC :: Int -> Consumer acc aenv lenv a -> Int
+    hashC salt c =
+      case c of
+        FromStream x-> hashWithSalt salt "FromStream" `hashV` x
+        FoldStream f acc x -> hashWithSalt salt "FoldStream" `hashF` f `hashA` acc `hashV` x
+
+  in case l of
+    EmptyLoop      -> hash "Empty"
+    Producer   p l -> hash "Producer"   `hashP` p `hashL` l
+    Transducer t l -> hash "Transducer" `hashT` t `hashL` l
+    Consumer   c l -> hash "Consumer"   `hashC` c `hashL` l
+    
+    
+
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
 hashPreOpenAcc hashAcc pacc =
   let
@@ -875,6 +918,9 @@ hashPreOpenAcc hashAcc pacc =
 
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
+    
+    hashL :: Int -> PreOpenLoop acc aenv lenv arrs -> Int
+    hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
@@ -908,12 +954,14 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
+    Loop l                      -> hash "Loop"          `hashL` l
+{-
     MapStream f a               -> hash "MapStream"     `hashWithSalt` hashAfun hashAcc f `hashA` a
     ZipWithStream f a1 a2       -> hash "ZipWithStream" `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
     ToStream a                  -> hash "ToStream"      `hashA` a
     FromStream a                -> hash "FromStream"    `hashA` a
     FoldStream f a1 a2          -> hash "FoldStream"    `hashWithSalt` hashAfun hashAcc f `hashA` a1 `hashA` a2
-
+-}
 
 hashArrays :: ArraysR a -> a -> Int
 hashArrays ArraysRunit         ()       = hash ()
