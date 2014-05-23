@@ -34,4 +34,5 @@
 
 [submodule "accelerate-fft"]
 	path = accelerate-fft
-	url = https://github.com/AccelerateHS/accelerate-fft.git
+#	url = https://github.com/AccelerateHS/accelerate-fft.git
+	url = git@github.com:AccelerateHS/accelerate-fft.git
