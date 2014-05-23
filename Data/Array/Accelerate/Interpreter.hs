@@ -1,8 +1,8 @@
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK prune #-}
 -- |
@@ -50,6 +50,7 @@ import Data.Char                                        ( chr, ord )
 import Prelude                                          hiding ( sum )
 
 -- friends
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Delayed
@@ -62,8 +63,6 @@ import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 import qualified Data.Array.Accelerate.Smart            as Sugar
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
-
-#include "accelerate.h"
 
 
 -- Program execution
@@ -376,7 +375,7 @@ reshapeOp :: Sugar.Shape dim
 reshapeOp newShape darr@(DelayedRpair DelayedRunit (DelayedRarray {shapeDA = oldShape}))
   = let Array _ adata = force darr
     in
-    BOUNDS_CHECK(check) "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
+    $boundsCheck "reshape" "shape mismatch" (Sugar.size newShape == size oldShape)
     $ delay $ Array (Sugar.fromElt newShape) adata
 
 replicateOp :: (Sugar.Shape dim, Sugar.Elt slix)
@@ -431,7 +430,7 @@ sliceOp sliceIndex (DelayedRpair DelayedRunit (DelayedRarray sh pf)) slix
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let (sl', f') = restrict sliceIdx slx sl
         in
-        BOUNDS_CHECK(checkIndex) "slice" i sz $ (sl', \ix -> (f' ix, i))
+        $indexCheck "slice" i sz $ (sl', \ix -> (f' ix, i))
 
 mapOp :: Sugar.Elt e'
       => (e -> e')
@@ -527,21 +526,20 @@ fold1SegOp' :: forall i e dim. Integral i
 fold1SegOp' f (DelayedRpair DelayedRunit (DelayedRarray (sh, _n) rf)) seg@(DelayedRpair DelayedRunit (DelayedRarray shSeg rfSeg))
   = delay arr
   where
-    DelayedRpair prefix _sum                                = scanl'Op (+) 0 seg
+    DelayedRpair prefix _sum                                  = scanl'Op (+) 0 seg
     DelayedRpair DelayedRunit (DelayedRarray _shSeg rfStarts) = prefix
     arr = Sugar.newArray (Sugar.toElt (sh, Sugar.toElt shSeg)) foldOne
     --
     foldOne :: dim:.Int -> e
-    foldOne ix = let
-                   (ix', i) = Sugar.fromElt ix
-                   start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
-                   len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
-                 in
-                 if len == 0
-                   then
-                     BOUNDS_ERROR(error) "fold1Seg" "empty iteration space"
-                   else
-                     fold ix' (Sugar.toElt . rf $ (ix', start)) (start + 1) (start + len)
+    foldOne ix =
+      let
+          (ix', i) = Sugar.fromElt ix
+          start    = fromIntegral ((Sugar.liftToElt rfStarts) i :: i)
+          len      = fromIntegral ((Sugar.liftToElt rfSeg)    i :: i)
+      in
+      if len == 0
+         then $boundsError "fold1Seg" "empty iteration space"
+         else fold ix' (Sugar.toElt . rf $ (ix', start)) (start + 1) (start + len)
 
     fold :: Sugar.EltRepr dim -> e -> Int -> Int -> e
     fold ix' !v j end
@@ -565,7 +563,7 @@ scanlOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                    unsafeWriteArrayData arr n final
                    return (arr, undefined)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO (Sugar.EltRepr e)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
@@ -589,7 +587,7 @@ scanl'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                       sum <- traverse arr 0 (Sugar.fromElt e)
                       return (arr, sum)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO (Sugar.EltRepr e)
     traverse arr i v
       | i >= n    = return v
       | otherwise = do
@@ -610,7 +608,7 @@ scanl1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                    traverse arr 0 undefined
                    return (arr, undefined)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s ()
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO ()
     traverse arr i v
       | i >= n    = return ()
       | i == 0    = do
@@ -638,7 +636,7 @@ scanrOp f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                    unsafeWriteArrayData arr 0 final
                    return (arr, undefined)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO (Sugar.EltRepr e)
     traverse arr i v
       | i == 0    = return v
       | otherwise = do
@@ -662,7 +660,7 @@ scanr'Op f e (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                       sum <- traverse arr (n-1) (Sugar.fromElt e)
                       return (arr, sum)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s (Sugar.EltRepr e)
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO (Sugar.EltRepr e)
     traverse arr i v
       | i < 0     = return v
       | otherwise = do
@@ -683,7 +681,7 @@ scanr1Op f (DelayedRpair DelayedRunit (DelayedRarray sh rf))
                    traverse arr (n - 1) undefined
                    return (arr, undefined)
 
-    traverse :: MutableArrayData s (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> ST s ()
+    traverse :: MutableArrayData (Sugar.EltRepr e) -> Int -> (Sugar.EltRepr e) -> IO ()
     traverse arr i v
       | i < 0        = return ()
       | i == (n - 1) = do
@@ -952,11 +950,11 @@ evalOpenExp (Foreign _ f e) env aenv
   where
     wExp :: Idx ((),a) t -> Idx (env,a) t
     wExp ZeroIdx = ZeroIdx
-    wExp _       = INTERNAL_ERROR(error) "wExp" "unreachable case"
+    wExp _       = $internalError "wExp" "unreachable case"
 
     e' = case f of
            (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE wExp b)
-           _              -> INTERNAL_ERROR(error) "travE" "unreachable case"
+           _              -> $internalError "travE" "unreachable case"
 
 -- Evaluate a closed expression
 --

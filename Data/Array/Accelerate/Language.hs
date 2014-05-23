@@ -108,9 +108,10 @@ module Data.Array.Accelerate.Language (
 
 -- standard libraries
 import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, Float, Double, (.), ($), id, error )
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
 import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
+import Text.Printf
 
 -- friends
 import Data.Array.Accelerate.AST ( Idx(..) )
@@ -143,7 +144,7 @@ unit = Acc . Unit
 --
 -- For example, assuming 'arr' is a vector (one-dimensional array),
 --
--- > replicate (Z :.2 :.All :.3) arr
+-- > replicate (lift (Z :. (2::Int) :. All :. (3::Int))) arr
 --
 -- yields a three dimensional array, where 'arr' is replicated twice across the
 -- first and three times across the third dimension.
@@ -213,10 +214,11 @@ reshape = Acc $$ Reshape
 -- following will select a specific row and yield a one dimensional
 -- result:
 --
--- > slice mat (constant (Z :. (2::Int) :. All))
+-- > slice mat (lift (Z :. (2::Int) :. All))
 --
--- A fully specified index (with no `All`s) would return a single
--- element (zero dimensional array).
+-- A fully specified index (with no `All`s) would return a single element (zero
+-- dimensional array).
+--
 slice :: (Slice slix, Elt e)
       => Acc (Array (FullShape slix) e)
       -> Exp slix
@@ -701,6 +703,9 @@ shapeSize = Exp . ShapeSize
 -- Instances of all relevant H98 classes
 -- -------------------------------------
 
+preludeError :: String -> String -> a
+preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
+
 instance (Elt t, IsBounded t) => Bounded (Exp t) where
   minBound = mkMinBound
   maxBound = mkMaxBound
@@ -712,13 +717,19 @@ instance (Elt t, IsScalar t) => Enum (Exp t)
 
 instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
-  (==)        = error "Prelude.Eq.== applied to EDSL types"
+  (==)  = preludeError "Eq.==" "(==*)"
+  (/=)  = preludeError "Eq./=" "(/=*)"
 
 instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
-  compare       = error "Prelude.Ord.compare applied to EDSL types"
   min           = mkMin
   max           = mkMax
+  --
+  compare       = error "Prelude.Ord.compare applied to EDSL types"
+  (<)           = preludeError "Ord.<"  "(<*)"
+  (<=)          = preludeError "Ord.<=" "(<=*)"
+  (>)           = preludeError "Ord.>"  "(>*)"
+  (>=)          = preludeError "Ord.>=" "(>=*)"
 
 instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
   (.&.)      = mkBAnd

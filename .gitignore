@@ -7,8 +7,3 @@
 /accelerate-cuda/config.status
 /accelerate-cuda/cubits/accelerate_cuda_shape.h
 /accelerate-io/dist/
-/config.status
-/config.log
-/autom4te.cache/
-/configure
-/accelerate.buildinfo

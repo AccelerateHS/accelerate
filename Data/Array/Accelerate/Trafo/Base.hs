@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE IncoherentInstances  #-}
@@ -7,6 +6,7 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
@@ -41,12 +41,11 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Print
-
-#include "accelerate.h"
+import Data.Array.Accelerate.Trafo.Substitution
 
 
 -- Toolkit
@@ -210,7 +209,7 @@ incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
 prjExp :: Idx env' t -> Gamma acc env env' aenv -> PreOpenExp acc env aenv t
 prjExp ZeroIdx      (PushExp _   v) = v
 prjExp (SuccIdx ix) (PushExp env _) = prjExp ix env
-prjExp _            _               = INTERNAL_ERROR(error) "prjExp" "inconsistent valuation"
+prjExp _            _               = $internalError "prjExp" "inconsistent valuation"
 
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
 lookupExp EmptyExp        _       = Nothing

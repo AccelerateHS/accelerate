@@ -53,6 +53,9 @@ import Data.Typeable
 import Data.Array.IArray                                        ( IArray )
 import qualified Data.Array.IArray                              as IArray
 
+import GHC.Exts                                                 ( IsList )
+import qualified GHC.Exts                                       as GHC
+
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
@@ -82,10 +85,10 @@ data tail :. head = tail :. head
 
 -- | Marker for entire dimensions in slice descriptors.
 --
--- For example, when used in slices passed to `replicate`, the
--- occurrences of `All` indicate the dimensions into which the array's
--- existing extent will be placed, rather than the new dimensions
--- introduced by replication.
+-- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
+-- the occurrences of `All` indicate the dimensions into which the array's
+-- existing extent will be placed, rather than the new dimensions introduced by
+-- replication.
 --
 data All = All
   deriving (Typeable, Show, Eq)
@@ -663,7 +666,10 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 {-# RULES
 
 "fromElt/toElt" forall e.
-  fromElt (toElt e) = e #-}
+  fromElt (toElt e) = e
+
+"toElt/fromElt" forall e.
+  toElt (fromElt e) = e #-}
 
 
 -- Foreign functions
@@ -673,7 +679,7 @@ sinkFromElt2 f = \x y -> fromElt $ f (toElt x) (toElt y)
 -- By default it has no instances. If a backend wishes to have an FFI it must
 -- provide an instance.
 --
-class Typeable2 f => Foreign (f :: * -> * -> *) where
+class Typeable f => Foreign (f :: * -> * -> *) where
 
   -- Backends should be able to produce a string representation of the foreign
   -- function for pretty printing, typically the name of the function.
@@ -825,14 +831,13 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
   fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
 
-instance (Arrays a) => Arrays [a] where
-  arrays _ = ArraysRstream (arrays (undefined :: a))
-  arrays' _ = ArraysRstream (arrays' (undefined :: a))
-  --
-  toArr = map toArr
-  toArr' = map toArr'
-  fromArr = map fromArr
-  fromArr' = map fromArr'
+{-# RULES
+
+"fromArr/toArr" forall a.
+  fromArr (toArr a) = a
+
+"toArr/fromArr" forall a.
+  toArr (fromArr a) = a #-}
 
 -- |Multi-dimensional arrays for array processing.
 --
@@ -846,7 +851,7 @@ data Array sh e where
         -> ArrayData (EltRepr e)      -- array payload
         -> Array sh e
 
-deriving instance Typeable2 Array
+deriving instance Typeable Array
 
 -- |Scalars arrays hold a single element
 --
@@ -1096,6 +1101,12 @@ toList (Array sh adata) = go 0
 instance Show (Array sh e) where
   show arr@Array{}
     = "Array (" ++ showShape (shape arr) ++ ") " ++ show (toList arr)
+
+instance Elt e => IsList (Vector e) where
+  type Item (Vector e) = e
+  toList         = toList
+  fromListN n xs = fromList (Z:.n) xs
+  fromList xs    = GHC.fromListN (length xs) xs
 
 {--
 -- Specialised Show instances for dimensions zero, one, and two. Requires
