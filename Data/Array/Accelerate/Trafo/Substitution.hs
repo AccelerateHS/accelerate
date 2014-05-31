@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
   -- ** Weakening
   (:>),
   weakenA, weakenEA, weakenFA,
-  weakenE, weakenFE,
+  weakenE, weakenFE, weakenAfun,
 
   -- ** Rebuilding terms
   RebuildAcc,
@@ -136,12 +136,14 @@ type env :> env' = forall t'. Idx env t' -> Idx env' t'
 weakenA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' a
 weakenA k v = Stats.substitution "weakenA" . rebuildA k (Avar . v)
 
+weakenAfun :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAfun acc aenv a -> PreOpenAfun acc aenv' a
+weakenAfun k v = Stats.substitution "weakenAfun" . rebuildAfun k (Avar . v)
+
 weakenEA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv' t
 weakenEA k v = Stats.substitution "weakenEA" . rebuildEA k (Avar . v)
 
 weakenFA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenFun acc env aenv f -> PreOpenFun acc env aenv' f
 weakenFA k v = Stats.substitution "weakenFA" . rebuildFA k (Avar . v)
-
 
 weakenE :: env :> env' -> PreOpenExp acc env aenv t -> PreOpenExp acc env' aenv t
 weakenE v = Stats.substitution "weakenE" . rebuildE (Var . v)
@@ -382,7 +384,6 @@ rebuildA rebuild v acc =
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
     Loop l              -> Loop (rebuildL rebuild v l)
-
 
 -- Rebuilding array computations
 --

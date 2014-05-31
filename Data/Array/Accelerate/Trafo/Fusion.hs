@@ -198,7 +198,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Producer   p l' ->
           Producer
             (case p of
-               ToStream a -> ToStream (manifest a)) -- ToStream (delayed a))
+               ToStream a -> ToStream (delayed a))
             (cvtL l')
         Transducer t l' ->
           Transducer 
@@ -332,7 +332,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Loop l              -> done $ Loop (cvtL l)
+    Loop l              -> loopD embedAcc elimAcc l --done $ Loop (cvtL l)
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -408,7 +408,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         Producer p l' ->
           Producer
             (case p of
-               ToStream a -> ToStream a)
+               ToStream a -> ToStream (cvtA a)) -- TODO embed (const ToStream) a
             (cvtL l')
         Transducer t l' ->
           Transducer
@@ -726,7 +726,7 @@ sink env = weaken (k env)
     k :: Extend acc env env' -> Idx env t -> Idx env' t
     k BaseEnv       = Stats.substitution "sink" id
     k (PushEnv e _) = SuccIdx . k e
-
+    
 sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
 sink1 env = weaken (k env)
   where
@@ -738,6 +738,12 @@ sink1 env = weaken (k env)
     split ZeroIdx      = ZeroIdx
     split (SuccIdx ix) = SuccIdx (SuccIdx ix)
 
+-- Rearrange type arguments to fit with Sink type class.
+newtype SinkLoop acc lenv aenv a = SinkLoop { unSinkLoop :: PreOpenLoop acc aenv lenv a }
+
+-- sink for loops.
+sinkLoop :: Kit acc => Extend acc aenv aenv' -> PreOpenLoop acc aenv lenv a -> PreOpenLoop acc aenv' lenv a
+sinkLoop env l = unSinkLoop $ sink env (SinkLoop l)
 
 class Sink f where
   weaken :: env :> env' -> f env t -> f env' t
@@ -751,8 +757,21 @@ instance Kit acc => Sink (PreOpenExp acc env) where
 instance Kit acc => Sink (PreOpenFun acc env) where
   weaken k = weakenFA rebuildAcc k
 
+instance Kit acc => Sink (PreOpenAfun acc) where
+  weaken k = weakenAfun rebuildAcc k
+
 instance Kit acc => Sink (PreOpenAcc acc) where
   weaken k = weakenA rebuildAcc k
+
+instance Kit acc => Sink (SinkLoop acc lenv) where
+  weaken k (SinkLoop l) = SinkLoop $
+    case l of
+      EmptyLoop -> EmptyLoop
+      Producer (ToStream a) l' -> Producer (ToStream (weaken k a)) (unSinkLoop (weaken k (SinkLoop l')))
+      Transducer (MapStream f x) l' -> Transducer (MapStream (weaken k f) x) (unSinkLoop (weaken k (SinkLoop l')))
+      Transducer (ZipWithStream f x y) l' -> Transducer (ZipWithStream (weaken k f) x y) (unSinkLoop (weaken k (SinkLoop l')))
+      Consumer (FromStream x) l' -> Consumer (FromStream x) (unSinkLoop (weaken k (SinkLoop l')))
+      Consumer (FoldStream f a x) l' -> Consumer (FoldStream (weaken k f) (weaken k a) x) (unSinkLoop (weaken k (SinkLoop l')))
 
 instance Kit acc => Sink acc where
   weaken k = rebuildAcc (Avar . k)
@@ -1305,6 +1324,84 @@ aprjD embedAcc ix a
     aprjAT :: TupleIdx atup a -> Atuple (acc aenv) atup -> acc aenv a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
     aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
+
+-- A loop with additional bindings
+data ExtendLoop acc aenv lenv arrs where
+  ExtendLoop :: forall acc aenv aenv' lenv arrs. 
+                Extend acc aenv aenv' 
+             -> PreOpenLoop acc aenv' lenv arrs 
+             -> ExtendLoop acc aenv lenv arrs
+
+-- A producer with additional bindings
+data ExtendProducer acc aenv arrs where
+  ExtendProducer :: forall acc aenv aenv' arrs. 
+                    Extend acc aenv aenv' 
+                 -> Producer acc aenv' arrs 
+                 -> ExtendProducer acc aenv arrs
+
+-- Move additional bindings for producer outside of loop, so that
+-- producers may fuse with their arguments, resulting in actual
+-- streaming.
+loopD :: forall acc aenv arrs. (Kit acc, Arrays arrs)
+      => EmbedAcc acc
+      -> ElimAcc  acc
+      -> PreOpenLoop acc aenv () arrs
+      -> Embed       acc aenv    arrs
+loopD embedAcc elimAcc l
+  | ExtendLoop env l' <- travL l
+  = Embed (env `PushEnv` (Loop l')) (Done ZeroIdx)
+  where
+    travL :: forall lenv arrs'. 
+             PreOpenLoop acc aenv lenv arrs'
+          -> ExtendLoop acc aenv lenv arrs'
+    travL l =
+      case l of
+        EmptyLoop -> ExtendLoop BaseEnv EmptyLoop
+        Producer p l
+          | ExtendLoop env l' <- travL l
+          , ExtendProducer env' p' <- travP p env
+          -> ExtendLoop (env `append` env') (Producer p' (sinkLoop env' l'))
+        Transducer t l
+          | ExtendLoop env l' <- travL l
+          , t' <- travT t env
+          -> ExtendLoop env (Transducer t' l')
+        Consumer c l
+          | ExtendLoop env l' <- travL l
+          , c' <- travC c env
+          -> ExtendLoop env (Consumer c' l')
+ 
+    travP :: forall arrs' aenv'. 
+             Producer acc aenv arrs'
+          -> Extend acc aenv aenv'
+          -> ExtendProducer acc aenv' arrs'
+    travP (ToStream a) env
+      | Embed env' cc <- embedAcc (sink env a)
+      = ExtendProducer env' (ToStream (inject (compute' cc)))
+
+    travT :: forall arrs' aenv' lenv.
+             Transducer acc aenv lenv arrs'
+          -> Extend acc aenv aenv'
+          -> Transducer acc aenv' lenv arrs'
+    travT (MapStream f x) env = MapStream (cvtAF (sink env f)) x
+    travT (ZipWithStream f x y) env = ZipWithStream (cvtAF (sink env f)) x y
+
+    travC :: forall arrs' aenv' lenv.
+             Consumer acc aenv lenv arrs'
+          -> Extend acc aenv aenv'
+          -> Consumer acc aenv' lenv arrs'
+    travC (FromStream x) _ = FromStream x
+    travC (FoldStream f a x) env = FoldStream (cvtAF (sink env f)) (cvtA (sink env a)) x
+
+    cvtAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
+    cvtAF (Alam  f) = Alam  (cvtAF f)
+    cvtAF (Abody a) = Abody (cvtA a)
+
+    cvtA :: Arrays a => acc aenv' a -> acc aenv' a
+    cvtA = computeAcc . embedAcc
+
+
+
+        
 
 
 -- Scalar expressions
