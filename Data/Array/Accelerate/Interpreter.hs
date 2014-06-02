@@ -314,7 +314,7 @@ initConsumer _ (FromStream x) = return (ExecFromStream x [])
 initConsumer aenv (FoldStream f acc x) = return (ExecFoldStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv))
 
 readConsumer :: ExecC aenv lenv a -> Identity a
-readConsumer (ExecFromStream _ as) = return $ force $ (fromStreamOp (map delay as))
+readConsumer (ExecFromStream _ as) = return $ force $ (fromStreamOp (reverse (map delay as)))
 readConsumer (ExecFoldStream _ _ acc) = return acc
 
 -- Evaluate a closed array expressions

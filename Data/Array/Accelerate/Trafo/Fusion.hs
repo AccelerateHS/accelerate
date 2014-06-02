@@ -332,7 +332,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Loop l              -> loopD embedAcc elimAcc l --done $ Loop (cvtL l)
+    Loop l              -> loopD embedAcc l
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -400,29 +400,6 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     unembed x
       | fuseAcc         = x
       | otherwise       = done (compute x)
-
-    cvtL :: PreOpenLoop acc aenv' lenv a -> PreOpenLoop acc aenv' lenv a
-    cvtL l =
-      case l of
-        EmptyLoop -> EmptyLoop
-        Producer p l' ->
-          Producer
-            (case p of
-               ToStream a -> ToStream (cvtA a)) -- TODO embed (const ToStream) a
-            (cvtL l')
-        Transducer t l' ->
-          Transducer
-            (case t of
-               MapStream f x -> MapStream (cvtAF f) x
-               ZipWithStream f x y -> ZipWithStream (cvtAF f) x y)
-            (cvtL l')
-        Consumer c l' ->
-          Consumer
-            (case c of
-               FromStream x -> FromStream x 
-               FoldStream f a x -> FoldStream (cvtAF f) (cvtA a) x)
-            (cvtL l')
-
 
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc
@@ -1344,10 +1321,9 @@ data ExtendProducer acc aenv arrs where
 -- streaming.
 loopD :: forall acc aenv arrs. (Kit acc, Arrays arrs)
       => EmbedAcc acc
-      -> ElimAcc  acc
       -> PreOpenLoop acc aenv () arrs
       -> Embed       acc aenv    arrs
-loopD embedAcc elimAcc l
+loopD embedAcc l
   | ExtendLoop env l' <- travL l
   = Embed (env `PushEnv` (Loop l')) (Done ZeroIdx)
   where
