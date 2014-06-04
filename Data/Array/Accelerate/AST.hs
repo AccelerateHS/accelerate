@@ -470,9 +470,9 @@ deriving instance Typeable OpenAcc
 
 data PreOpenLoop acc aenv lenv arrs where
   EmptyLoop  :: PreOpenLoop acc aenv lenv ()
-  Producer   :: (Arrays a, Arrays arrs) => Producer   acc aenv      a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
-  Transducer :: (Arrays a, Arrays arrs) => Transducer acc aenv lenv a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
-  Consumer   :: (Arrays a, Arrays arrs) => Consumer   acc aenv lenv a -> PreOpenLoop acc aenv  lenv     arrs -> PreOpenLoop acc aenv lenv (arrs, a)
+  Producer   :: (Arrays a, Arrays arrs) => Producer    acc aenv      a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
+  Transducer :: (Arrays a, Arrays arrs) => Transducer  acc aenv lenv a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
+  Consumer   :: (Arrays a, Arrays arrs) => Consumer    acc aenv lenv a -> PreOpenLoop acc aenv  lenv     arrs -> PreOpenLoop acc aenv lenv (arrs, a)
 
 data Producer acc aenv a where
   -- Convert the given array to a stream.
@@ -483,20 +483,18 @@ data Producer acc aenv a where
 data Transducer acc aenv lenv a where
 
   -- Apply the given the given function to all elements of the given stream.
-  MapStream   :: (Shape sh, Elt e, Shape sh', Elt e')
-              => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
-              -> Idx lenv (Array sh e)
-              -> Transducer acc aenv lenv (Array sh' e')
+  MapStream :: (Shape sh, Elt e, Shape sh', Elt e')
+            => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
+            -> Idx lenv (Array sh e)
+            -> Transducer acc aenv lenv (Array sh' e')
 
   -- Apply a given binary function pairwise to all elements of the given streams.
-  -- The length of the result is the length of the shorter of the two argument
-  -- arrays.
-  ZipWithStream     :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
-              => PreOpenAfun acc aenv (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
-              -> Idx lenv (Array sh1 e1)
-              -> Idx lenv (Array sh2 e2)
-              -> Transducer acc aenv lenv (Array sh3 e3)
-
+  ZipWithStream :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
+                => PreOpenAfun acc aenv (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
+                -> Idx lenv (Array sh1 e1)
+                -> Idx lenv (Array sh2 e2)
+                -> Transducer acc aenv lenv (Array sh3 e3)
+  
 data Consumer acc aenv lenv a where
 
   -- Convert the given stream to an array.

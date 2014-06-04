@@ -1196,8 +1196,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Atuple tup              -> Atuple (cvtAT tup)
-        Awhile p f a            -> Awhile p f (cvtA a)          -- no sharing between p or f and a
-        Apply f a               -> Apply f (cvtA a)             -- no sharing between f and a
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
+        Apply f a               -> Apply (cvtAF f) (cvtA a)
         Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Map f a                 -> Map (cvtF f) (cvtA a)
@@ -1226,6 +1226,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
+<<<<<<< HEAD
         cvtL :: PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv s
         cvtL l = 
           case l of
@@ -1247,6 +1248,20 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                    FromStream x -> FromStream x
                    FoldStream f a x -> FoldStream f (cvtA a) x)
                 (cvtL l')
+=======
+        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
+        cvtAF = cvt sh' f' avar
+          where
+            cvt :: forall aenv a.
+                   PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
+                -> PreOpenAfun acc aenv a
+                -> PreOpenAfun acc aenv a
+            cvt sh'' f'' avar' (Abody a) = Abody $ kmap (replaceA sh'' f'' avar') a
+            cvt sh'' f'' avar' (Alam af) = Alam $ cvt (weakenEA rebuildAcc SuccIdx sh'')
+                                                      (weakenFA rebuildAcc SuccIdx f'')
+                                                      (SuccIdx avar')
+                                                      af
+>>>>>>> upstream/master
 
         cvtE :: PreExp acc aenv s -> PreExp acc aenv s
         cvtE = replaceE sh' f' avar
