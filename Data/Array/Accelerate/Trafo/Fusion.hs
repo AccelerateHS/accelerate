@@ -1226,7 +1226,6 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
-<<<<<<< HEAD
         cvtL :: PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv s
         cvtL l = 
           case l of
@@ -1239,16 +1238,16 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             Transducer t l' ->
               Transducer 
                 (case t of
-                   MapStream f x -> MapStream f x
-                   ZipWithStream f x y -> ZipWithStream f x y)
+                   MapStream f x -> MapStream (cvtAF f) x
+                   ZipWithStream f x y -> ZipWithStream (cvtAF f) x y)
                 (cvtL l')
             Consumer   c l' -> 
               Consumer
                 (case c of
                    FromStream x -> FromStream x
-                   FoldStream f a x -> FoldStream f (cvtA a) x)
+                   FoldStream f a x -> FoldStream (cvtAF f) (cvtA a) x)
                 (cvtL l')
-=======
+
         cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
         cvtAF = cvt sh' f' avar
           where
@@ -1261,7 +1260,6 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                                                       (weakenFA rebuildAcc SuccIdx f'')
                                                       (SuccIdx avar')
                                                       af
->>>>>>> upstream/master
 
         cvtE :: PreExp acc aenv s -> PreExp acc aenv s
         cvtE = replaceE sh' f' avar
