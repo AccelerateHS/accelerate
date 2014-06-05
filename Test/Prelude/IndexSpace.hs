@@ -97,13 +97,13 @@ test_permute opt = testGroup "permute" $ catMaybes
     -- building a histogram. Often tricky for parallel backends.
     --
     test_histogram f g xs =
-      sized $ \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
+      forAll (sized return) $ \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
 
     histogramAcc n f xs =
       let n'        = unit (constant n)
           xs'       = use xs
-          zeros     = generate (constant (Z :. n)) (const 0)
-          ones      = generate (shape xs')         (const 1)
+          zeros     = A.generate (constant (Z :. n)) (const 0)
+          ones      = A.generate (shape xs')         (const 1)
       in
       permute (+) zeros (\ix -> index1 $ f (xs' A.! ix) `mod` the n') ones
 
