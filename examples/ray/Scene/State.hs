@@ -48,7 +48,8 @@ mkLabels [''State]
 --
 initState :: Float -> State
 initState time
-  = State
+  = advanceState 0
+  $ State
       { _stateTime              = time
       , _stateEyePos            = XYZ 50    (-100) (-700)
 

@@ -56,8 +56,8 @@ test_blackscholes opt = testGroup "black-scholes" $ catMaybes
     run_blackscholes :: forall a. ( Elt a, IsFloating a, Similar a, Storable a, Random a, Arbitrary a
                                   , BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
                      => BlackScholes a -> Property
-    run_blackscholes cfun = sized $ \nmax ->
-      forAll (choose (0,nmax))                  $ \n ->
+    run_blackscholes cfun =
+      forAll (sized $ \nmax -> choose (0,nmax)) $ \n ->
       forAll (arbitraryArrayOf (Z:.n) opts)     $ \psy -> morallyDubiousIOProperty $ do
         let actual = run1 backend blackscholes psy
         expected  <- blackScholesRef cfun psy

@@ -1,53 +1,29 @@
 #!/bin/bash
 
-# Adjust to the installed location of ghci, if this script can not find it.
+# Get cabal to load up ghci for us. This will set the environment appropriately
+# if we have a local sandbox installation.
 #
-GHC=`which -a ghc`
-VER=`$GHC --numeric-version`
+GHC="cabal exec ghc --"
 DIR=`dirname $0`
-GHC_FLAGS="--interactive"
 
-# We assume that the dependent packages are install with 'cabal'. If you have
-# installed them with another tool such as 'cabal-dev', add the following to the
-# command.
+# Attempt to load all accelerate packages from source. Note that programs that
+# provide visualisations might require 'gloss' to be installed with the GLFW
+# backend to work properly within GHCi.
 #
-#    -package-conf cabal-dev/packages-$VER.conf
+GHC_FLAGS="$GHC_FLAGS
+    --interactive
+    -optP -include -optP $DIR/dist/build/autogen/cabal_macros.h
+    -optP -include -optP $DIR/../accelerate-cuda/dist/build/autogen/cabal_macros.h
+    -i$DIR/utils
+    -i$DIR/lib
+    -i$DIR/../accelerate
+    -i$DIR/../accelerate-cuda
+    -i$DIR/../accelerate-io
+    -i$DIR/../accelerate-fft
+    -DACCELERATE_DEBUG
+    -DACCELERATE_BOUNDS_CHECKS
+    -DACCELERATE_INTERNAL_CHECKS
+    -DACCELERATE_CUDA_BACKEND"
 
-# We need to figure out the size of some basic types. This is the same as what
-# the configure script does when we do a regular install.
-#
-function htype {
-
-  sizeof=`$GHC -w -ignore-dot-ghci -e "import Foreign" -e "import Foreign.C" -e "sizeOf (undefined::$1)"`
-  case $sizeof in
-    4) ty="$2"32 ;;
-    8) ty="$2"64 ;;
-  esac
-
-  GHC_FLAGS="$GHC_FLAGS -optP-DSIZEOF_$3=$sizeof -optP-D$3=$ty"
-}
-
-htype Int    Int  HTYPE_INT
-htype Word   Word HTYPE_WORD
-htype CLong  Int  HTYPE_LONG
-htype CULong Word HTYPE_UNSIGNED_LONG
-
-# This also attempts to load the CUDA backend. Note that programs that provide
-# visualisations might require 'gloss' to be installed with the GLFW backend to
-# work properly within GHCi.
-#
-$GHC $GHC_FLAGS \
-     -optP -include -optP $DIR/dist/build/autogen/cabal_macros.h \
-     -optP -include -optP $DIR/../accelerate-cuda/dist/build/autogen/cabal_macros.h \
-     -i$DIR/utils \
-     -i$DIR/lib \
-     -i$DIR/../accelerate \
-     -i$DIR/../accelerate-cuda -I$DIR/../accelerate-cuda/include \
-     -i$DIR/../accelerate-io \
-     -i$DIR/../accelerate-fft \
-     -DACCELERATE_DEBUG \
-     -DACCELERATE_BOUNDS_CHECKS \
-     -DACCELERATE_INTERNAL_CHECKS \
-     -DACCELERATE_CUDA_BACKEND \
-     $@
+$GHC $GHC_FLAGS $@
 

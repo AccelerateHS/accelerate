@@ -1,7 +1,7 @@
 Name:                   accelerate-examples
 Version:                0.15.0.0
 Cabal-version:          >=1.6
-Tested-with:            GHC == 7.6.*
+Tested-with:            GHC == 7.8.*
 Build-type:             Simple
 
 Synopsis:               Examples using the Accelerate library
@@ -43,6 +43,18 @@ Flag cuda
 Flag opencl
   Description:          Enable the OpenCL parallel backend
   Default:              False
+
+Flag llvm-cpu
+  Description:          Enable the LLVM backend for multicore CPUs
+  Default:              True
+
+Flag llvm-gpu
+  Description:          Enable the LLVM backend for NVIDIA CPUs
+  Default:              True
+
+Flag llvm-multi
+  Description:          Enable the multi-device LLVM backend
+  Default:              True
 
 
 -- Flags to specify which programs to build (all true by default)
@@ -103,6 +115,8 @@ Executable accelerate-nofib
                         -fpedantic-bottoms
                         -fno-full-laziness
                         -fno-excess-precision
+                        -eventlog
+                        -rtsopts
 
   ghc-prof-options:     -auto-all
 
@@ -110,17 +124,18 @@ Executable accelerate-nofib
   c-sources:            examples/nofib/Test/IO/fill_with_values.cpp
                         examples/nofib/Test/Spectral/BlackScholes.cpp
 
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
-
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 == 0.15.*
     other-modules:      Test.Foreign
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl               == 0.1.*
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native          == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx             == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -132,7 +147,7 @@ Executable accelerate-nofib
   else
     build-depends:      accelerate                      == 0.15.*,
                         accelerate-io                   == 0.15.*,
-                        base                            == 4.6.*,
+                        base                            >= 4.6 && <4.8,
                         array                           >= 0.3,
                         containers                      >= 0.5,
                         criterion                       >= 0.5,
@@ -157,11 +172,8 @@ Executable accelerate-smvm
                         MatrixMarket
                         SMVM
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
@@ -170,9 +182,13 @@ Executable accelerate-smvm
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -183,7 +199,7 @@ Executable accelerate-smvm
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
@@ -203,11 +219,8 @@ Executable accelerate-crystal
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Monitoring
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -216,9 +229,13 @@ Executable accelerate-crystal
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -229,7 +246,7 @@ Executable accelerate-crystal
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss-raster-accelerate >= 1.7
@@ -243,19 +260,27 @@ Executable accelerate-canny
   Main-is:              Main.hs
   other-modules:        Config ParseArgs Canny Wildfire Monitoring
 
-  ghc-options:          -Wall -threaded -Odph -fllvm -optlo-O3
-  ghc-prof-options:     -auto-all
+  ghc-options:          -Wall
+                        -threaded
+                        -Odph
+                        -fllvm
+                        -optlo-O3
+                        -eventlog
+                        -rtsopts
 
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-prof-options:     -auto-all
 
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -267,7 +292,7 @@ Executable accelerate-canny
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         repa                    >= 3.1,
@@ -283,11 +308,8 @@ Executable accelerate-mandelbrot
   Main-is:              Main.hs
   other-modules:        Config World Mandel ParseArgs Monitoring
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -296,9 +318,18 @@ Executable accelerate-mandelbrot
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
-  if flag(opencl)
-    CPP-options:        -DACCELERATE_OPENCL_BACKEND
-    build-depends:      accelerate-opencl       == 0.1.*
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*,
+                        accelerate-llvm
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
+  if flag(llvm-cpu) && flag(llvm-gpu) && flag(llvm-multi)
+    CPP-options:        -DACCELERATE_LLVM_MULTIDEV_BACKEND
+    build-depends:      accelerate-llvm-multidev== 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -311,7 +342,7 @@ Executable accelerate-mandelbrot
     build-depends:      accelerate              == 0.15.*,
                         accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -330,11 +361,8 @@ Executable accelerate-fluid
                         Type
                         World
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
@@ -342,6 +370,14 @@ Executable accelerate-fluid
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -353,7 +389,7 @@ Executable accelerate-fluid
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
@@ -382,11 +418,8 @@ Executable accelerate-nbody
                         Solver.Naive1
                         Solver.Naive2
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     cpp-options:        -DACCELERATE_ENABLE_GUI
@@ -394,6 +427,14 @@ Executable accelerate-nbody
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -404,7 +445,7 @@ Executable accelerate-nbody
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -425,11 +466,8 @@ Executable accelerate-smoothlife
                         Random.Array
                         Random.Splat
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(gui)
     cpp-options:        -DACCELERATE_ENABLE_GUI
@@ -437,6 +475,14 @@ Executable accelerate-smoothlife
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -449,7 +495,7 @@ Executable accelerate-smoothlife
     build-depends:      accelerate              == 0.15.*,
                         accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
@@ -468,15 +514,20 @@ Executable accelerate-hashcat
                         MD5
                         Util
 
-  ghc-options:          -O2 -Wall -threaded
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
@@ -487,7 +538,7 @@ Executable accelerate-hashcat
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
@@ -506,13 +557,20 @@ Executable accelerate-fft
                         HighPass
                         FFT
 
-  ghc-options:          -O2 -Wall -threaded
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
+  ghc-prof-options:     -auto-all
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
 
   if !flag(fft)
     buildable:          False
@@ -520,7 +578,7 @@ Executable accelerate-fft
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         accelerate-fft          == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         filepath                >= 1.0
@@ -546,12 +604,20 @@ Executable accelerate-pagerank
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda         == 0.15.*
 
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
   if !flag(pagerank)
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
-                        base                    == 4.6.*,
+                        base                    >= 4.6 && <4.8,
                         bytestring              >= 0.9.2,
                         containers              >= 0.4.2,
                         criterion               >= 0.5,
@@ -582,31 +648,41 @@ Executable accelerate-ray
   if !flag(ray)
     buildable:          False
   else
-    build-depends:      base                            == 4.6.*,
-                        accelerate                      == 0.15.*,
-                        criterion                       >= 0.5,
-                        fclabels                        >= 1.0,
-                        gloss                           == 1.8.*,
-                        gloss-accelerate                == 1.8.*,
-                        gloss-raster-accelerate         == 1.8.*
+    build-depends:      base                    >= 4.6 && <4.8,
+                        accelerate              == 0.15.*,
+                        accelerate-io           == 0.15.*,
+                        criterion               >= 0.5,
+                        fclabels                >= 1.0,
+                        gloss                   == 1.8.*,
+                        gloss-accelerate        == 1.8.*,
+                        gloss-raster-accelerate == 1.8.*
 
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 >= 0.15
+    build-depends:      accelerate-cuda         >= 0.15
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
+  if flag(llvm-cpu) && flag(llvm-gpu) && flag(llvm-multi)
+    CPP-options:        -DACCELERATE_LLVM_MULTIDEV_BACKEND
+    build-depends:      accelerate-llvm-multidev== 0.15.*
 
   if flag(ekg)
     cpp-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
+    build-depends:      ekg                     >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
 
-  ghc-options:
-        -Wall -O2 -threaded
-
-  if impl(ghc >= 7.0)
-    ghc-options:        -rtsopts
+  ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
+  ghc-prof-options:     -auto-all
 
 
 source-repository head

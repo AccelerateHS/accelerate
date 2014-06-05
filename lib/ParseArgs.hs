@@ -10,7 +10,6 @@ module ParseArgs (
 
 ) where
 
-import Data.Char
 import Data.List
 import Data.Label
 import System.Exit
@@ -24,6 +23,15 @@ import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
 #endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+import qualified Data.Array.Accelerate.LLVM.Native      as CPU
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+import qualified Data.Array.Accelerate.LLVM.Multi       as Multi
+#endif
 
 
 -- | Execute Accelerate expressions
@@ -33,12 +41,30 @@ run Interpreter = Interp.run
 #ifdef ACCELERATE_CUDA_BACKEND
 run CUDA        = CUDA.run
 #endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+run CPU         = CPU.run
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+run PTX         = PTX.run
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+run Multi       = Multi.run
+#endif
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
 run1 Interpreter f = Interp.run1 f
 #ifdef ACCELERATE_CUDA_BACKEND
 run1 CUDA        f = CUDA.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+run1 CPU         f = CPU.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+run1 PTX         f = PTX.run1 f
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+run1 Multi       f = Multi.run1 f
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -53,18 +79,59 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
-  deriving (Eq, Bounded, Show)
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+             | CPU
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+             | PTX
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+             | Multi
+#endif
+  deriving (Eq, Bounded)
+
+
+instance Show Backend where
+  show Interpreter      = "interpreter"
+#ifdef ACCELERATE_CUDA_BACKEND
+  show CUDA             = "cuda"
+#endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+  show CPU              = "llvm-cpu"
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+  show PTX              = "llvm-gpu"
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+  show Multi            = "llvm-multi"
+#endif
+
 
 availableBackends :: (f :-> Backend) -> [OptDescr (f -> f)]
 availableBackends backend =
-  [ Option  [] ["interpreter"]
+  [ Option  [] [show Interpreter]
             (NoArg (set backend Interpreter))
             "reference implementation (sequential)"
 
 #ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] ["cuda"]
+  , Option  [] [show CUDA]
             (NoArg (set backend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+  , Option  [] [show CPU]
+            (NoArg (set backend CPU))
+            "LLVM based implementation for multicore CPUs (parallel)"
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+  , Option  [] [show PTX]
+            (NoArg (set backend PTX))
+            "LLVM based implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
+  , Option  [] [show Multi]
+            (NoArg (set backend Multi))
+            "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
 #endif
   ]
 
@@ -82,7 +149,7 @@ withBackends backend xs = availableBackends backend ++ xs
 fancyHeader :: (config :-> Backend) -> config -> [String] -> [String] -> String
 fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
   where
-    active this         = if this == map toLower (show (get backend opts)) then "*" else ""
+    active this         = if this == show (get backend opts) then "*" else ""
     (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract (availableBackends backend)
     table               = zipWith3 paste (sameLen ss) (sameLen bs) ds
     paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
