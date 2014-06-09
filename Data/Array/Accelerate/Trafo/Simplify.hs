@@ -307,11 +307,13 @@ simplifyOpenExp env = first getAny . cvtE
     indexCons sl sz
       = IndexCons <$> sl <*> sz
 
-    indexHead :: (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
+    indexHead :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
+    indexHead (_, Const c)        = let _ :. sz = toElt c :: (sl :. sz) in yes (Const (fromElt sz))
     indexHead (_, IndexCons _ sz) = yes sz
     indexHead sh                  = IndexHead <$> sh
 
-    indexTail :: (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
+    indexTail :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
+    indexTail (_, Const c)        = let sl :. _ = toElt c :: (sl :. sz) in yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _) = yes sl
     indexTail sh                  = IndexTail <$> sh
 
