@@ -1034,6 +1034,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       Yield{}   -> eliminate env1 cc1 acc0'
 
   where
+    acc0 :: acc (aenv, arrs) brrs
     acc0 = computeAcc (Embed env0 cc0)
 
     -- The second part of let-elimination. Splitting into two steps exposes the
