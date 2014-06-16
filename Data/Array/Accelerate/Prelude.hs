@@ -61,7 +61,7 @@ module Data.Array.Accelerate.Prelude (
   -- * Permutations
   reverse, transpose,
 
-  --  Extracting sub-vectors
+  -- * Extracting sub-vectors
   init, tail, take, drop, slit,
 
   -- * Array-level flow control
@@ -87,7 +87,7 @@ module Data.Array.Accelerate.Prelude (
   index0, index1, unindex1, index2, unindex2,
 
   -- * Array operations with a scalar result
-  the, null,
+  the, null, length,
 
 ) where
 
@@ -1663,4 +1663,9 @@ the = (!index0)
 --
 null :: (Shape ix, Elt e) => Acc (Array ix e) -> Exp Bool
 null arr = size arr ==* 0
+
+-- |Get the length of a vector
+--
+length :: Elt e => Acc (Vector e) -> Exp Int
+length = unindex1 . shape
 
