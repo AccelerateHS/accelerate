@@ -14,7 +14,6 @@ module Data.Array.Accelerate.Pretty.Traverse
 -- friends
 import Data.Array.Accelerate.Array.Sugar hiding ((!))
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Type
 
 

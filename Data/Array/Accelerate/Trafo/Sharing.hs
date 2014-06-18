@@ -52,7 +52,6 @@ import Data.Array.Accelerate.AST                        hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenLoop(..), Producer(..), Transducer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
-import qualified Data.Array.Accelerate.Tuple            as Tuple
 import qualified Data.Array.Accelerate.Debug            as Debug
 
 
@@ -369,11 +368,11 @@ convertSharingAtuple
        Config
     -> Layout aenv aenv
     -> [StableSharingAcc]
-    -> Tuple.Atuple ScopedAcc a
-    -> Tuple.Atuple (AST.OpenAcc aenv) a
+    -> Atuple ScopedAcc a
+    -> Atuple (AST.OpenAcc aenv) a
 convertSharingAtuple config alyt aenv = cvt
   where
-    cvt :: Tuple.Atuple ScopedAcc a' -> Tuple.Atuple (AST.OpenAcc aenv) a'
+    cvt :: Atuple ScopedAcc a' -> Atuple (AST.OpenAcc aenv) a'
     cvt NilAtup         = NilAtup
     cvt (SnocAtup t a)  = cvt t `SnocAtup` convertSharingAcc config alyt aenv a
 
@@ -541,7 +540,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA = convertSharingAcc config alyt aenv
 
-    cvtT :: Tuple.Tuple ScopedExp tup -> Tuple.Tuple (AST.OpenExp env aenv) tup
+    cvtT :: Tuple ScopedExp tup -> Tuple (AST.OpenExp env aenv) tup
     cvtT = convertSharingTuple config lyt alyt env' aenv
 
     cvtFun1 :: (Elt a, Elt b) => (Exp a -> ScopedExp b) -> AST.OpenFun env aenv (a -> b)
@@ -567,8 +566,8 @@ convertSharingTuple
     -> Layout aenv aenv
     -> [StableSharingExp]                 -- currently bound scalar sharing-variables
     -> [StableSharingAcc]                 -- currently bound array sharing-variables
-    -> Tuple.Tuple ScopedExp t
-    -> Tuple.Tuple (AST.OpenExp env aenv) t
+    -> Tuple ScopedExp t
+    -> Tuple (AST.OpenExp env aenv) t
 convertSharingTuple config lyt alyt env aenv tup =
   case tup of
     NilTup      -> NilTup
@@ -1253,8 +1252,8 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc2', h3) <- traverseAcc lvl acc2
               return (c fun' acc1' acc2', h1 `max` h2 `max` h3 + 1)
 
-        travAtup :: Tuple.Atuple Acc a
-                 -> IO (Tuple.Atuple UnscopedAcc a, Int)
+        travAtup :: Atuple Acc a
+                 -> IO (Atuple UnscopedAcc a, Int)
         travAtup NilAtup          = return (NilAtup, 1)
         travAtup (SnocAtup tup a) = do
           (tup', h1) <- travAtup tup
@@ -1520,7 +1519,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e'  , h2) <- travE lvl e
               return (c acc' e', h1 `max` h2 + 1)
 
-        travTup :: Tuple.Tuple Exp tup -> IO (Tuple.Tuple UnscopedExp tup, Int)
+        travTup :: Tuple Exp tup -> IO (Tuple UnscopedExp tup, Int)
         travTup NilTup          = return (NilTup, 1)
         travTup (SnocTup tup e) = do
                                     (tup', h1) <- travTup tup
@@ -1915,8 +1914,8 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (acc1', accCount2) = scopesAcc  acc1
             (acc2', accCount3) = scopesAcc  acc2
 
-        travAtup ::  Tuple.Atuple UnscopedAcc a
-                 -> (Tuple.Atuple ScopedAcc a, NodeCounts)
+        travAtup ::  Atuple UnscopedAcc a
+                 -> (Atuple ScopedAcc a, NodeCounts)
         travAtup NilAtup          = (NilAtup, noNodeCounts)
         travAtup (SnocAtup tup a) = let (tup', accCountT) = travAtup tup
                                         (a',   accCountA) = scopesAcc a
@@ -2201,7 +2200,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Union sh1 sh2         -> travE2 Union sh1 sh2
           Foreign ff f e        -> travE1 (Foreign ff f) e
       where
-        travTup :: Tuple.Tuple UnscopedExp tup -> (Tuple.Tuple ScopedExp tup, NodeCounts)
+        travTup :: Tuple UnscopedExp tup -> (Tuple ScopedExp tup, NodeCounts)
         travTup NilTup          = (NilTup, noNodeCounts)
         travTup (SnocTup tup e) = let
                                     (tup', accCountT) = travTup tup

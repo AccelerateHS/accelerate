@@ -56,7 +56,7 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments )
+  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments, Tuple(..), Atuple(..) )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution

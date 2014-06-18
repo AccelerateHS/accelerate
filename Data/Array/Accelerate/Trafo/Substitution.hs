@@ -36,8 +36,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 import Prelude                                  hiding ( exp )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays )
+import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple(..) )
 
 import qualified Data.Array.Accelerate.Debug    as Stats
 

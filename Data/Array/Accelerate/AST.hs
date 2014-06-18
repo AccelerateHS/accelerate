@@ -220,11 +220,11 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv arrs
 
   -- Tuples of arrays
-  Atuple      :: (Arrays arrs, IsTuple arrs)
+  Atuple      :: (Arrays arrs, IsAtuple arrs)
               => Atuple    (acc aenv) (TupleRepr arrs)
               -> PreOpenAcc acc aenv  arrs
 
-  Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
+  Aprj        :: (Arrays arrs, IsAtuple arrs, Arrays a)
               => TupleIdx (TupleRepr arrs) a
               ->            acc aenv arrs
               -> PreOpenAcc acc aenv a
@@ -513,9 +513,10 @@ data Consumer acc aenv lenv a where
 --
 type Acc = OpenAcc ()
 
+
 -- |Operations on stencils.
 --
-class (Shape sh, Elt e, IsTuple stencil) => Stencil sh e stencil where
+class (Shape sh, Elt e, IsTuple stencil, Elt stencil) => Stencil sh e stencil where
   stencil       :: StencilR sh e stencil
   stencilAccess :: (sh -> e) -> sh -> stencil
 

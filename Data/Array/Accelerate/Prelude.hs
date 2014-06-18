@@ -103,7 +103,6 @@ import qualified Prelude as P
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Type
 
 
