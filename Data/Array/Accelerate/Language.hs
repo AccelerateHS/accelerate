@@ -76,7 +76,7 @@ module Data.Array.Accelerate.Language (
 
   -- * Index construction and destruction
   indexHead, indexTail, toIndex, fromIndex,
-  intersect,
+  intersect, union,
 
   -- * Flow-control
   cond, while,
@@ -117,7 +117,7 @@ import Text.Printf
 import Data.Array.Accelerate.AST ( Idx(..) )
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect)
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -644,6 +644,11 @@ fromIndex = Exp $$ FromIndex
 --
 intersect :: Shape sh => Exp sh -> Exp sh -> Exp sh
 intersect = Exp $$ Intersect
+
+-- | Union of two shapes
+--
+union :: Shape sh => Exp sh -> Exp sh -> Exp sh
+union = Exp $$ Union
 
 
 -- Flow-control

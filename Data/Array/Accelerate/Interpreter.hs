@@ -934,6 +934,9 @@ evalOpenExp (ShapeSize sh) env aenv
 evalOpenExp (Intersect sh1 sh2) env aenv
   = Sugar.intersect (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
 
+evalOpenExp (Union sh1 sh2) env aenv
+  = Sugar.union (evalOpenExp sh1 env aenv) (evalOpenExp sh2 env aenv)
+
 evalOpenExp (Foreign _ f e) env aenv
   = evalOpenExp e' env aenv
   where

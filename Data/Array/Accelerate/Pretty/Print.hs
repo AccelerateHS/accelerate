@@ -278,6 +278,7 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
     pp (ShapeSize idx)          = "shapeSize"  .$ [ parens (ppE idx) ]
     pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppE sh1, ppE sh2 ]
+    pp (Union sh1 sh2)          = "union"      .$ [ ppE sh1, ppE sh2 ]
     pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE i ]
     pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE i ]
 

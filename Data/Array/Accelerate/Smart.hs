@@ -422,6 +422,11 @@ data PreExp acc exp t where
                 -> exp sh
                 -> PreExp acc exp sh
 
+  Union         :: Shape sh
+                => exp sh
+                -> exp sh
+                -> PreExp acc exp sh
+
   Foreign       :: (Elt x, Elt y, Foreign f)
                 => f x y
                 -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
@@ -1172,5 +1177,6 @@ showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
+showPreExpOp Union{}            = "Union"
 showPreExpOp Foreign{}          = "Foreign"
 

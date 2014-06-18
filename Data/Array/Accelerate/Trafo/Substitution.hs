@@ -234,6 +234,7 @@ rebuildE v exp =
     Shape a             -> Shape a
     ShapeSize sh        -> ShapeSize (rebuildE v sh)
     Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
+    Union s t           -> Union (rebuildE v s) (rebuildE v t)
     Foreign ff f e      -> Foreign ff f (rebuildE v e)
 
 rebuildTE
@@ -445,6 +446,7 @@ rebuildEA k v exp =
     Shape a             -> Shape (k v a)
     ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
     Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
+    Union s t           -> Union (rebuildEA k v s) (rebuildEA k v t)
     Foreign ff f e      -> Foreign ff f (rebuildEA k v e)
 
 rebuildTA

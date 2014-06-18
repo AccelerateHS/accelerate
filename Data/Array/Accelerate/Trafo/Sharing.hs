@@ -535,6 +535,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Shape a               -> AST.Shape (cvtA a)
           ShapeSize e           -> AST.ShapeSize (cvt e)
           Intersect sh1 sh2     -> AST.Intersect (cvt sh1) (cvt sh2)
+          Union sh1 sh2         -> AST.Union (cvt sh1) (cvt sh2)
           Foreign ff f e        -> AST.Foreign ff (convertFun (recoverExpSharing config) f) (cvt e)
 
     cvtA :: Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
@@ -1454,6 +1455,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Shape a             -> reconstruct $ travA Shape a
             ShapeSize e         -> reconstruct $ travE1 ShapeSize e
             Intersect sh1 sh2   -> reconstruct $ travE2 Intersect sh1 sh2
+            Union sh1 sh2       -> reconstruct $ travE2 Union sh1 sh2
             Foreign ff f e      -> reconstruct $ do
                                       (e', h) <- travE lvl e
                                       return  (Foreign ff f e', h+1)
@@ -2196,6 +2198,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Shape a               -> travA Shape a
           ShapeSize e           -> travE1 ShapeSize e
           Intersect sh1 sh2     -> travE2 Intersect sh1 sh2
+          Union sh1 sh2         -> travE2 Union sh1 sh2
           Foreign ff f e        -> travE1 (Foreign ff f) e
       where
         travTup :: Tuple.Tuple UnscopedExp tup -> (Tuple.Tuple ScopedExp tup, NodeCounts)

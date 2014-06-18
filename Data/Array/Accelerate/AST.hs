@@ -873,6 +873,12 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
 
+  -- Union of two shapes
+  Union         :: Shape dim
+                => PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
+
 
 -- |Vanilla open expression
 --
@@ -1062,4 +1068,5 @@ showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
+showPreExpOp Union{}            = "Union"
 

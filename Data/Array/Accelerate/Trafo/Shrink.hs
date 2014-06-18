@@ -116,6 +116,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       Shape a                   -> pure (Shape a)
       ShapeSize sh              -> ShapeSize <$> shrinkE sh
       Intersect sh sz           -> Intersect <$> shrinkE sh <*> shrinkE sz
+      Union sh sz               -> Union <$> shrinkE sh <*> shrinkE sz
       Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
 
     shrinkT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
@@ -240,6 +241,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Shape a                   -> Shape (shrinkAcc a)
       ShapeSize sh              -> ShapeSize (shrinkE sh)
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
+      Union sh sz               -> Union (shrinkE sh) (shrinkE sz)
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
 
     shrinkF :: PreOpenFun acc env aenv' f -> PreOpenFun acc env aenv' f
@@ -322,6 +324,7 @@ usesOfExp idx = countE
       Shape _                   -> 0
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
+      Union sh sz               -> countE sh + countE sz
       Foreign _ _ e             -> countE e
 
     countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
@@ -441,6 +444,7 @@ usesOfPreAcc withShape countAcc idx = countP
       LinearIndex a i           -> countA a + countE i
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
+      Union sh sz               -> countE sh + countE sz
       Shape a
         | withShape             -> countA a
         | otherwise             -> 0

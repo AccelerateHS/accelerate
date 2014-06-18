@@ -170,6 +170,7 @@ preExpType k e =
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)
+    Union _ _         -> eltType (undefined::t)
     Foreign _ _ _     -> eltType (undefined::t)
 
 

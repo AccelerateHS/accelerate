@@ -899,6 +899,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- |Yield the intersection of two shapes
   intersect :: sh -> sh -> sh
 
+  -- |Yield the union of two shapes
+  union :: sh -> sh -> sh
+
   -- |Map a multi-dimensional index into one in a linear, row-major
   -- representation of the array (first argument is the /shape/, second
   -- argument is the index).
@@ -930,6 +933,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- | The slice index for slice specifier 'Any sh'
   sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
+  -- | The slice index for specifying a slice with no projected component
+  sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh)  (EltRepr sh)
+
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
   -- (#) must be individually defined, as it holds for all instances *except*
@@ -937,6 +943,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   ignore                = toElt Repr.ignore
   intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
+  union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
 
@@ -958,9 +965,11 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
 instance Shape Z where
   sliceAnyIndex _ = Repr.SliceNil
+  sliceNoneIndex _ = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
+  sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions

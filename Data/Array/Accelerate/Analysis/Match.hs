@@ -485,6 +485,11 @@ matchPreOpenExp matchAcc hashAcc = match
       , Just REFL <- match sb1 sb2
       = Just REFL
 
+    match (Union sa1 sb1) (Union sa2 sb2)
+      | Just REFL <- match sa1 sa2
+      , Just REFL <- match sb1 sb2
+      = Just REFL
+
     match _ _
       = Nothing
 
@@ -1012,6 +1017,7 @@ hashPreOpenExp hashAcc exp =
     Shape a                     -> hash "Shape"         `hashA` a
     ShapeSize sh                -> hash "ShapeSize"     `hashE` sh
     Intersect sa sb             -> hash "Intersect"     `hashE` sa `hashE` sb
+    Union sa sb                 -> hash "Union"         `hashE` sa `hashE` sb
     Foreign _ f e               -> hash "Foreign"       `hashWithSalt` hashPreOpenFun hashAcc f `hashE` e
 
 
