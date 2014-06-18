@@ -56,7 +56,8 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Delayed
 import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments, Tuple(..), Atuple(..) )
+  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments, Tuple(..), Atuple(..),
+  CstProxy(..) )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution
@@ -119,11 +120,11 @@ evalPreOpenAcc (Alet acc1 acc2) aenv
 
 evalPreOpenAcc (Avar idx) aenv = delay $ prj idx aenv
 
-evalPreOpenAcc (Atuple tup) aenv = delay (toTuple $ evalAtuple tup aenv :: a)
+evalPreOpenAcc (Atuple tup) aenv = delay (toTuple ArraysProxy $ evalAtuple tup aenv :: a)
 
 evalPreOpenAcc (Aprj ix (tup :: OpenAcc aenv arrs)) aenv =
   let tup'  = force $ evalOpenAcc tup aenv :: arrs
-  in  delay $ evalPrj ix (fromTuple tup')
+  in  delay $ evalPrj ix (fromTuple ArraysProxy tup')
 
 evalPreOpenAcc (Apply f acc) aenv =
   let !arr  = force $ evalOpenAcc acc aenv
@@ -836,10 +837,10 @@ evalOpenExp (Const c) _ _
   = Sugar.toElt c
 
 evalOpenExp (Tuple tup) env aenv
-  = toTuple $ evalTuple tup env aenv
+  = toTuple EltProxy $ evalTuple tup env aenv
 
 evalOpenExp (Prj idx e) env aenv
-  = evalPrj idx (fromTuple $ evalOpenExp e env aenv)
+  = evalPrj idx (fromTuple EltProxy $ evalOpenExp e env aenv)
 
 evalOpenExp IndexNil _env _aenv
   = Z

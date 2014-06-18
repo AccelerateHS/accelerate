@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Trafo.Rewrite
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt, Tuple(..), Atuple(..) )
 
 
 -- Convert segment length arrays passed to segmented operations into offset

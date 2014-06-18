@@ -47,7 +47,6 @@ import System.Mem.StableName
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
-import Data.Array.Accelerate.Tuple                      hiding ( Tuple )
 import Data.Array.Accelerate.AST                        hiding (
   PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenLoop(..), Producer(..), Transducer(..), Consumer(..),
   showPreAccOp, showPreExpOp )

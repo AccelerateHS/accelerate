@@ -25,11 +25,9 @@
 module Data.Array.Accelerate.Tuple (
 
   -- * Tuple representation
-  TupleIdx(..), IsConstrainedTuple(..), TupleR(..), Base
+  TupleIdx(..), IsConstrainedTuple(..), TupleR(..)
 
 ) where
-
-import GHC.Prim           ( Constraint )
 
 -- |Type-safe projection indices for tuples.
 --
@@ -50,74 +48,69 @@ data TupleR cst t where
 -- We parameterise our tuples by a constraint on their elements (the 'cst' argument). Every element
 -- in the tuple must obey this constraint, but the tuples themselves do not have to.
 --
--- If one-tuples, tuples with only a single component, are needed then an instance of the `Base`
--- type family can be provided for that constraint. The `Base` constraint is a sub-constraint that is
--- undivisable -- i.e. it has no components that can be extracted out of it.
 class IsConstrainedTuple cst tup where
   type TupleRepr tup
-  fromTuple :: tup -> TupleRepr tup
-  toTuple   :: TupleRepr tup -> tup
-  tuple     :: {- dummy -} tup -> TupleR cst (TupleRepr tup)
+  fromTuple :: proxy cst -> tup -> TupleRepr tup
+  toTuple   :: proxy cst -> TupleRepr tup -> tup
+  tuple     :: proxy cst -> {- dummy -} tup -> TupleR cst (TupleRepr tup)
 
 instance IsConstrainedTuple cst () where
   type TupleRepr () = ()
-  fromTuple         = id
-  toTuple           = id
-  tuple _           = TupleRunit
+  fromTuple _         = id
+  toTuple _           = id
+  tuple _ _           = TupleRunit
 
 instance (cst a, cst b) => IsConstrainedTuple cst (a, b) where
   type TupleRepr (a, b) = (((), a), b)
-  fromTuple (x, y)      = (((), x), y)
-  toTuple (((), x), y)  = (x, y)
-  tuple _               = TupleRsnoc $ TupleRsnoc TupleRunit
+  fromTuple _ (x, y)      = (((), x), y)
+  toTuple _ (((), x), y)  = (x, y)
+  tuple _ _               = TupleRsnoc $ TupleRsnoc TupleRunit
 
 instance (cst a, cst b, cst c) => IsConstrainedTuple cst (a, b, c) where
   type TupleRepr (a, b, c)  = (TupleRepr (a, b), c)
-  fromTuple (x, y, z)       = ((((), x), y), z)
-  toTuple ((((), x), y), z) = (x, y, z)
-  tuple _                   = TupleRsnoc (tuple (undefined :: (a,b)))
+  fromTuple _ (x, y, z)       = ((((), x), y), z)
+  toTuple _ ((((), x), y), z) = (x, y, z)
+  tuple p _                   = TupleRsnoc (tuple p (undefined :: (a,b)))
 
 instance (cst a, cst b, cst c, cst d) => IsConstrainedTuple cst (a, b, c, d) where
   type TupleRepr (a, b, c, d)    = (TupleRepr (a, b, c), d)
-  fromTuple (x, y, z, v)         = (((((), x), y), z), v)
-  toTuple (((((), x), y), z), v) = (x, y, z, v)
-  tuple _                        = TupleRsnoc (tuple (undefined :: (a,b,c)))
+  fromTuple _ (x, y, z, v)         = (((((), x), y), z), v)
+  toTuple _ (((((), x), y), z), v) = (x, y, z, v)
+  tuple p _                        = TupleRsnoc (tuple p (undefined :: (a,b,c)))
 
 instance (cst a, cst b, cst c, cst d, cst e) => IsConstrainedTuple cst (a, b, c, d, e) where
   type TupleRepr (a, b, c, d, e)      = (TupleRepr (a, b, c, d), e)
-  fromTuple (x, y, z, v, w)           = ((((((), x), y), z), v), w)
-  toTuple ((((((), x), y), z), v), w) = (x, y, z, v, w)
-  tuple _                             = TupleRsnoc (tuple (undefined :: (a,b,c,d)))
+  fromTuple _ (x, y, z, v, w)           = ((((((), x), y), z), v), w)
+  toTuple _ ((((((), x), y), z), v), w) = (x, y, z, v, w)
+  tuple p _                             = TupleRsnoc (tuple p (undefined :: (a,b,c,d)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f) => IsConstrainedTuple cst (a, b, c, d, e, f) where
   type TupleRepr (a, b, c, d, e, f)        = (TupleRepr (a, b, c, d, e), f)
-  fromTuple (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
-  toTuple (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
-  tuple _                                  = TupleRsnoc (tuple (undefined :: (a,b,c,d,e)))
+  fromTuple _ (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
+  toTuple _ (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
+  tuple p _                                  = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g)
   => IsConstrainedTuple cst (a, b, c, d, e, f, g) where
   type TupleRepr (a, b, c, d, e, f, g)          = (TupleRepr (a, b, c, d, e, f), g)
-  fromTuple (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
-  toTuple ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
-  tuple _                                       = TupleRsnoc (tuple (undefined :: (a,b,c,d,e,f)))
+  fromTuple _ (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
+  toTuple _ ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
+  tuple p _                                       = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h)
   => IsConstrainedTuple cst (a, b, c, d, e, f, g, h) where
   type TupleRepr (a, b, c, d, e, f, g, h)            = (TupleRepr (a, b, c, d, e, f, g), h)
-  fromTuple (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
-  toTuple (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
-  tuple _                                            = TupleRsnoc (tuple (undefined :: (a,b,c,d,e,f,g)))
+  fromTuple _ (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
+  toTuple _ (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
+  tuple p _                                            = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f,g)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i)
   => IsConstrainedTuple cst (a, b, c, d, e, f, g, h, i) where
   type TupleRepr (a, b, c, d, e, f, g, h, i) = (TupleRepr (a, b, c, d, e, f, g, h), i)
-  fromTuple (x, y, z, v, w, r, s, t, u)
+  fromTuple _ (x, y, z, v, w, r, s, t, u)
     = ((((((((((), x), y), z), v), w), r), s), t), u)
-  toTuple ((((((((((), x), y), z), v), w), r), s), t), u)
+  toTuple _ ((((((((((), x), y), z), v), w), r), s), t), u)
     = (x, y, z, v, w, r, s, t, u)
-  tuple _
-    = TupleRsnoc (tuple (undefined :: (a,b,c,d,e,f,g,h)))
-
-type family Base (cst :: * -> Constraint) t :: Constraint
+  tuple p _
+    = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f,g,h)))
 

@@ -49,7 +49,7 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Tuples
-  Tuple(..), Atuple(..), IsTuple, IsAtuple,
+  Tuple(..), Atuple(..), IsTuple, IsAtuple, CstProxy(..),
 
   -- * Miscellaneous
   showShape, Foreign(..)
@@ -884,6 +884,11 @@ data Atuple c t where
   NilAtup  ::                                  Atuple c ()
   SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
 
+-- | Proxy values for the tuple constraints we need.
+--
+data CstProxy cst where
+  ArraysProxy:: CstProxy Arrays
+  EltProxy   :: CstProxy Elt
 
 -- |Multi-dimensional arrays for array processing.
 --

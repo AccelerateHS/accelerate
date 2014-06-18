@@ -38,6 +38,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Array.Sugar               hiding ( Any )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
 
