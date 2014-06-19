@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
 -- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -31,6 +32,9 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
+  Extend(..), append, bind, Sink(..), sink, sink1,
+  weakenGamma1, sinkGamma,
+  Supplement(..), bindExps
 
 ) where
 
@@ -46,6 +50,8 @@ import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, 
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Trafo.Substitution
+
+import Data.Array.Accelerate.Debug as Stats
 
 
 -- Toolkit
@@ -211,9 +217,109 @@ prjExp ZeroIdx      (PushExp _   v) = v
 prjExp (SuccIdx ix) (PushExp env _) = prjExp ix env
 prjExp _            _               = $internalError "prjExp" "inconsistent valuation"
 
+weakenGamma1 :: Kit acc => Gamma acc env env' aenv -> Gamma acc env env' (aenv,t)
+weakenGamma1 EmptyExp        = EmptyExp
+weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weakenEA rebuildAcc SuccIdx e)
+
+sinkGamma :: Kit acc => Extend acc aenv aenv' -> Gamma acc env env' aenv -> Gamma acc env env' aenv'
+sinkGamma _   EmptyExp        = EmptyExp
+sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
+
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
 lookupExp EmptyExp        _       = Nothing
 lookupExp (PushExp env e) x
   | Just REFL <- match e x = Just ZeroIdx
   | otherwise              = SuccIdx `fmap` lookupExp env x
+
+
+-- As part of various transformations we often need to lift out array valued
+-- inputs to be let-bound at a higher point.
+--
+-- The Extend type is a heterogeneous snoc-list of array terms that witnesses
+-- how the array environment is extended by binding these additional terms.
+--
+data Extend acc aenv aenv' where
+  BaseEnv :: Extend acc aenv aenv
+
+  PushEnv :: Arrays a
+          => Extend acc aenv aenv' -> PreOpenAcc acc aenv' a -> Extend acc aenv (aenv', a)
+
+-- Append two environment witnesses
+--
+append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
+append x BaseEnv        = x
+append x (PushEnv as a) = x `append` as `PushEnv` a
+
+-- Bring into scope all of the array terms in the Extend environment list. This
+-- converts a term in the inner environment (aenv') into the outer (aenv).
+--
+bind :: (Kit acc, Arrays a)
+     => Extend acc aenv aenv'
+     -> PreOpenAcc acc aenv' a
+     -> PreOpenAcc acc aenv  a
+bind BaseEnv         = id
+bind (PushEnv env a) = bind env . Alet (inject a) . inject
+
+-- Sink a term from one array environment into another, where additional
+-- bindings have come into scope according to the witness and no old things have
+-- vanished.
+--
+sink :: Sink f => Extend acc env env' -> f env t -> f env' t
+sink env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx env t -> Idx env' t
+    k BaseEnv       = Stats.substitution "sink" id
+    k (PushEnv e _) = SuccIdx . k e
+
+sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
+sink1 env = weaken (k env)
+  where
+    k :: Extend acc env env' -> Idx (env,s) t -> Idx (env',s) t
+    k BaseEnv       = Stats.substitution "sink1" id
+    k (PushEnv e _) = split . k e
+    --
+    split :: Idx (env,s) t -> Idx ((env,u),s) t
+    split ZeroIdx      = ZeroIdx
+    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
+class Sink f where
+  weaken :: env :> env' -> f env t -> f env' t
+
+instance Sink Idx where
+  weaken k = k
+
+instance Kit acc => Sink (PreOpenExp acc env) where
+  weaken k = weakenEA rebuildAcc k
+
+instance Kit acc => Sink (PreOpenFun acc env) where
+  weaken k = weakenFA rebuildAcc k
+
+instance Kit acc => Sink (PreOpenAfun acc) where
+  weaken k = weakenAfun rebuildAcc k
+
+instance Kit acc => Sink (PreOpenAcc acc) where
+  weaken k = weakenA rebuildAcc k
+
+instance Kit acc => Sink acc where
+  weaken k = rebuildAcc (Avar . k)
+
+-- This is the same as above, however for the scalar environment.
+--
+-- RCE: This is much the same as `Gamma` above. The main difference being that the expressions
+-- stored in a `Gamma` can not depend on each other, whereas in `Supplement` they can. We should
+-- perhaps look at using `Supplement` wherever possible.
+--
+data Supplement acc env env' aenv where
+  BaseSup :: Supplement acc env env aenv
+  PushSup :: Elt e
+          => Supplement acc env env' aenv
+          -> PreOpenExp acc env' aenv e
+          -> Supplement acc env (env', e) aenv
+
+bindExps :: (Kit acc, Elt e)
+         => Supplement acc env env' aenv
+         -> PreOpenExp acc env' aenv e
+         -> PreOpenExp acc env aenv e
+bindExps BaseSup       = id
+bindExps (PushSup g b) = bindExps g . Let b
 

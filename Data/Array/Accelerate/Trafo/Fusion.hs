@@ -657,66 +657,10 @@ accType' _ = arrays' (undefined :: a)
 -- Environment manipulation
 -- ========================
 
--- NOTE: [Extend]
---
--- As part of the fusion transformation we often need to lift out array valued
--- inputs to be let-bound at a higher point. We can't add these directly to the
--- output array term because these would interfere with further fusion steps.
---
--- The Extend type is a heterogeneous snoc-list of array terms that witnesses
--- how the array environment is extend by binding these additional terms.
---
-data Extend acc aenv aenv' where
-  BaseEnv :: Extend acc aenv aenv
-
-  PushEnv :: Arrays a
-          => Extend acc aenv aenv' -> PreOpenAcc acc aenv' a -> Extend acc aenv (aenv', a)
-
-
--- Append two environment witnesses
---
-append :: Extend acc env env' -> Extend acc env' env'' -> Extend acc env env''
-append x BaseEnv        = x
-append x (PushEnv as a) = x `append` as `PushEnv` a
-
--- Bring into scope all of the array terms in the Extend environment list. This
--- converts a term in the inner environment (aenv') into the outer (aenv).
---
-bind :: (Kit acc, Arrays a)
-     => Extend acc aenv aenv'
-     -> PreOpenAcc acc aenv' a
-     -> PreOpenAcc acc aenv  a
-bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (inject a) . inject
-
-
 -- prjExtend :: Kit acc => Extend acc env env' -> Idx env' t -> PreOpenAcc acc env' t
 -- prjExtend (PushEnv _   v) ZeroIdx       = weakenA rebuildAcc SuccIdx v
 -- prjExtend (PushEnv env _) (SuccIdx idx) = weakenA rebuildAcc SuccIdx $ prjExtend env idx
 -- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
-
-
--- Sink a term from one array environment into another, where additional
--- bindings have come into scope according to the witness and no old things have
--- vanished.
---
-sink :: Sink f => Extend acc env env' -> f env t -> f env' t
-sink env = weaken (k env)
-  where
-    k :: Extend acc env env' -> Idx env t -> Idx env' t
-    k BaseEnv       = Stats.substitution "sink" id
-    k (PushEnv e _) = SuccIdx . k e
-    
-sink1 :: Sink f => Extend acc env env' -> f (env,s) t -> f (env',s) t
-sink1 env = weaken (k env)
-  where
-    k :: Extend acc env env' -> Idx (env,s) t -> Idx (env',s) t
-    k BaseEnv       = Stats.substitution "sink1" id
-    k (PushEnv e _) = split . k e
-    --
-    split :: Idx (env,s) t -> Idx ((env,u),s) t
-    split ZeroIdx      = ZeroIdx
-    split (SuccIdx ix) = SuccIdx (SuccIdx ix)
 
 -- Rearrange type arguments to fit with Sink type class.
 newtype SinkLoop acc lenv aenv a = SinkLoop { unSinkLoop :: PreOpenLoop acc aenv lenv a }
@@ -724,24 +668,6 @@ newtype SinkLoop acc lenv aenv a = SinkLoop { unSinkLoop :: PreOpenLoop acc aenv
 -- sink for loops.
 sinkLoop :: Kit acc => Extend acc aenv aenv' -> PreOpenLoop acc aenv lenv a -> PreOpenLoop acc aenv' lenv a
 sinkLoop env l = unSinkLoop $ sink env (SinkLoop l)
-
-class Sink f where
-  weaken :: env :> env' -> f env t -> f env' t
-
-instance Sink Idx where
-  weaken k = k
-
-instance Kit acc => Sink (PreOpenExp acc env) where
-  weaken k = weakenEA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenFun acc env) where
-  weaken k = weakenFA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenAfun acc) where
-  weaken k = weakenAfun rebuildAcc k
-
-instance Kit acc => Sink (PreOpenAcc acc) where
-  weaken k = weakenA rebuildAcc k
 
 instance Kit acc => Sink (SinkLoop acc lenv) where
   weaken k (SinkLoop l) = SinkLoop $
@@ -752,9 +678,6 @@ instance Kit acc => Sink (SinkLoop acc lenv) where
       Transducer (ZipWithStream f x y) l' -> Transducer (ZipWithStream (weaken k f) x y) (unSinkLoop (weaken k (SinkLoop l')))
       Consumer (FromStream x) l' -> Consumer (FromStream x) (unSinkLoop (weaken k (SinkLoop l')))
       Consumer (FoldStream f a x) l' -> Consumer (FoldStream (weaken k f) (weaken k a) x) (unSinkLoop (weaken k (SinkLoop l')))
-
-instance Kit acc => Sink acc where
-  weaken k = rebuildAcc (Avar . k)
 
 instance Kit acc => Sink (Cunctation acc) where
   weaken k cc = case cc of
