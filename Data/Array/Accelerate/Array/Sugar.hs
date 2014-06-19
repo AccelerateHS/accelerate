@@ -739,8 +739,9 @@ data ArraysR arrs where
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
 data ArraysFlavour arrs where
-  ArraysFarray :: (Shape sh, Elt e) => ArraysFlavour (Array sh e)
-  ArraysFtuple :: IsAtuple arrs     => ArraysFlavour arrs
+  ArraysFunit  ::                                            ArraysFlavour ()
+  ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
+  ArraysFtuple :: (IsAtuple arrs, ArrRepr' arrs ~ (l,r))  => ArraysFlavour arrs
 
 class ( Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
@@ -756,7 +757,7 @@ class ( Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a whe
 instance Arrays () where
   arrays  _ = ArraysRunit
   arrays' _ = ArraysRunit
-  flavour _ = ArraysFtuple
+  flavour _ = ArraysFunit
   --
   toArr     = id
   toArr'    = id
