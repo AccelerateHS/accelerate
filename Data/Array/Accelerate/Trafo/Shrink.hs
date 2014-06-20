@@ -287,7 +287,7 @@ usesOfExp idx = countE
       IndexAny                  -> 0
       ToIndex sh ix             -> countE sh + countE ix
       FromIndex sh i            -> countE sh + countE i
-      Cond p t e                -> countE p  + countE t `max` countE e
+      Cond p t e                -> countE p  + countE t + countE e
       While p f x               -> countE x  + countF idx p + countF idx f
       PrimConst _               -> 0
       PrimApp _ x               -> countE x
@@ -333,7 +333,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Aprj _ a                  -> countA a     -- special case discount?
       Apply _ a                 -> countA a
       Aforeign _ _ a            -> countA a
-      Acond p t e               -> countE p  + countA t `max` countA e
+      Acond p t e               -> countE p  + countA t + countA e
       Awhile _ _ a              -> countA a
       Use _                     -> 0
       Unit e                    -> countE e
