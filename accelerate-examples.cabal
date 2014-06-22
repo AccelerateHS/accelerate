@@ -152,7 +152,7 @@ Executable accelerate-nofib
                         criterion                       >= 0.5,
                         fclabels                        >= 2.0,
                         HUnit                           >= 1.2,
-                        QuickCheck                      >= 2.0,
+                        QuickCheck                      >= 2.7,
                         test-framework                  >= 0.5,
                         test-framework-hunit            >= 0.3,
                         test-framework-quickcheck2      >= 0.2,
