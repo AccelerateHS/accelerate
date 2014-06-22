@@ -1,4 +1,5 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns  #-}
 
 --
 -- Generators for various distributions of particle positions
@@ -8,14 +9,14 @@ module Random.Position
 
 import Common.Type
 
-import Control.Monad.ST                         ( ST )
-import System.Random.MWC                        ( GenST, uniformR )
+import Random.Array                             ( (:~>) )
+import System.Random.MWC                        ( uniformR )
 import Data.Array.Accelerate.Array.Sugar        as A
 
 
 -- | Points distributed as a disc
 --
-disc :: Position -> R -> sh -> GenST s -> ST s Position
+disc :: Position -> R -> sh :~> Position
 disc (originX, originY, originZ) radiusMax _ix gen
   = do  radius          <- uniformR (0,radiusMax) gen
         theta           <- uniformR (0, pi)       gen
@@ -28,7 +29,7 @@ disc (originX, originY, originZ) radiusMax _ix gen
 
 -- | A point cloud with areas of high and low density
 --
-cloud :: Shape sh => (Int,Int) -> R -> sh -> GenST s -> ST s Position
+cloud :: Shape sh => (Int,Int) -> R -> sh :~> Position
 cloud (fromIntegral -> sizeX, fromIntegral -> sizeY) radiusMax ix gen
   = let
         blob (sx,sy,sz) r

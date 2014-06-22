@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 
 module Random.Splat
   where
@@ -5,15 +6,15 @@ module Random.Splat
 import Config
 
 import Control.Monad
-import Control.Monad.ST
 import System.Random.MWC
+import Random.Array                             ( (:~>) )
 import Data.Array.Accelerate                    ( DIM2, Z(..), (:.)(..) )
 
 
 
 -- Generate a random point on the grid by checking which circles it overlaps.
 --
-splat :: [(DIM2, R, Bool)] -> DIM2 -> GenST s -> ST s R
+splat :: [(DIM2, R, Bool)] -> DIM2 :~> R
 splat circles ix _ =
   let overlaps          = filter (inside ix) circles
       negative (_,_,s)  = s
