@@ -141,7 +141,7 @@ showMD5 :: MD5 -> String
 showMD5 (a,b,c,d) =
   let bs                = S.runPutLazy $ S.putWord32be d >> S.putWord32be c >> S.putWord32be b >> S.putWord32be a
       showsHex str w    = let x = showHex w str
-                          in if length x < length str + 2
+                          in if P.length x < P.length str + 2
                                 then '0':x
                                 else x
   in

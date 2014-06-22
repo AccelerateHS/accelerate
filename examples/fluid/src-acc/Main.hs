@@ -44,7 +44,7 @@ main = do
       -- Prepare user-input density and velocity sources
       --
       sources s = let (ix, ss)  = P.unzip s
-                      sh        = Z :. length ix
+                      sh        = Z :. P.length ix
                   in  ( A.fromList sh ix, A.fromList sh ss )
 
       -- for benchmarking
