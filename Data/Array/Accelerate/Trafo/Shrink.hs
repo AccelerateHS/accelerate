@@ -56,10 +56,10 @@ class Shrink f where
 
   shrink = snd . shrink'
 
-instance Shrink (PreOpenExp acc env aenv e) where
+instance Kit acc => Shrink (PreOpenExp acc env aenv e) where
   shrink' = shrinkExp
 
-instance Shrink (PreOpenFun acc env aenv f) where
+instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
   shrink' = shrinkFun
 
 
@@ -70,16 +70,17 @@ instance Shrink (PreOpenFun acc env aenv f) where
 -- instance of beta-reduction to cases where the bound variable is used zero
 -- (dead-code elimination) or one (linear inlining) times.
 --
-shrinkExp :: PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
+shrinkExp :: Kit acc => PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
 shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. In cases where it is not used at all, this is equivalent
     -- to dead-code elimination.
     --
+    lIMIT :: Int
     lIMIT = 1
 
-    shrinkE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    shrinkE :: Kit acc => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     shrinkE exp = case exp of
       Let bnd body
         | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
@@ -119,11 +120,11 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       Union sh sz               -> Union <$> shrinkE sh <*> shrinkE sz
       Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
 
-    shrinkT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
+    shrinkT :: Kit acc => Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     shrinkT NilTup        = pure NilTup
     shrinkT (SnocTup t e) = SnocTup <$> shrinkT t <*> shrinkE e
 
-    shrinkF :: PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
+    shrinkF :: Kit acc => PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
     shrinkF = first Any . shrinkFun
 
     first :: (a -> a') -> (a,b) -> (a',b)
@@ -132,7 +133,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
     yes :: (Any, x) -> (Any, x)
     yes (_, x) = (Any True, x)
 
-shrinkFun :: PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
+shrinkFun :: Kit acc => PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
 shrinkFun (Lam f)  = Lam  <$> shrinkFun f
 shrinkFun (Body b) = Body <$> shrinkExp b
 
@@ -270,8 +271,8 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
+  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
+  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
   | otherwise           = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -352,7 +353,7 @@ usesOfPreAcc
 usesOfPreAcc withShape countAcc idx = countP
   where
     countIdx :: Idx aenv a -> Int
-    countIdx this    
+    countIdx this
         | Just REFL <- match this idx   = 1
         | otherwise                     = 0
 

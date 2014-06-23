@@ -946,7 +946,7 @@ evalOpenExp (Foreign _ f e) env aenv
     wExp _       = $internalError "wExp" "unreachable case"
 
     e' = case f of
-           (Lam (Body b)) -> Let e $ weakenEA rebuildOpenAcc undefined (weakenE wExp b)
+           (Lam (Body b)) -> Let e $ weaken undefined (weakenE wExp b)
            _              -> $internalError "travE" "unreachable case"
 
 -- Evaluate a closed expression

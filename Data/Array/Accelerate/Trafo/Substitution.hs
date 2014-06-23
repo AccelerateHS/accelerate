@@ -1,7 +1,12 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PatternGuards  #-}
 {-# LANGUAGE RankNTypes     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies   #-}
 {-# LANGUAGE TypeOperators  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -21,15 +26,14 @@ module Data.Array.Accelerate.Trafo.Substitution (
   subTop, subAtop,
 
   -- ** Weakening
-  (:>),
-  weakenA, weakenEA, weakenFA,
-  weakenE, weakenFE, weakenAfun,
+  (:>), Sink(..), SinkExp(..),
+
+  -- ** Strengthening
+  (:?>), strengthen, strengthenE,
 
   -- ** Rebuilding terms
-  RebuildAcc,
-  rebuildA, rebuildAfun, rebuildOpenAcc,
-  rebuildE, rebuildEA,
-  rebuildFA, rebuildFE,
+  RebuildAcc, Rebuildable(..), RebuildableAcc,
+  RebuildableExp(..),
 
 ) where
 
@@ -40,6 +44,7 @@ import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple
 
 import qualified Data.Array.Accelerate.Debug    as Stats
 
+import Control.Applicative                      hiding ( Const )
 
 -- NOTE: [Renaming and Substitution]
 --
@@ -59,10 +64,10 @@ import qualified Data.Array.Accelerate.Debug    as Stats
 -- We then lift this to an operation which traverses terms and rebuild them
 -- after applying 'v' to the variables:
 --
---   rebuild v :: OpenExp env aenv t -> OpenExp env' aenv t
+--   rebuildPartial v :: OpenExp env aenv t -> OpenExp env' aenv t
 --
 -- The Syntactic class tells us what we need to know about 'f' if we want to be
--- able to rebuild terms. In essence, the crucial functionality is to propagate
+-- able to rebuildPartial terms. In essence, the crucial functionality is to propagate
 -- a class of operations on variables that is closed under shifting.
 --
 infixr `compose`
@@ -71,7 +76,7 @@ infixr `substitute`
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
 --
-inline :: Elt t
+inline :: (RebuildableAcc acc, Elt t)
        => PreOpenExp acc (env, s) aenv t
        -> PreOpenExp acc env      aenv s
        -> PreOpenExp acc env      aenv t
@@ -80,7 +85,7 @@ inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
 -- | Replace an expression that uses the top environment variable with another.
 -- The result of the first is let bound into the second.
 --
-substitute :: (Elt b, Elt c)
+substitute :: (RebuildableAcc acc, Elt b, Elt c)
            => PreOpenExp acc (env, b) aenv c
            -> PreOpenExp acc (env, a) aenv b
            -> PreOpenExp acc (env, a) aenv c
@@ -97,7 +102,7 @@ substitute f g
 
 -- | Composition of unary functions.
 --
-compose :: Elt c
+compose :: (RebuildableAcc acc, Elt c)
         => PreOpenFun acc env aenv (b -> c)
         -> PreOpenFun acc env aenv (a -> b)
         -> PreOpenFun acc env aenv (a -> c)
@@ -113,6 +118,82 @@ subAtop :: Arrays t => PreOpenAcc acc aenv s -> Idx (aenv, s) t -> PreOpenAcc ac
 subAtop t ZeroIdx       = t
 subAtop _ (SuccIdx idx) = Avar idx
 
+data Identity a = Identity { runIdentity :: a }
+
+instance Functor Identity where
+  fmap f (Identity a) = Identity (f a)
+
+instance Applicative Identity where
+  (Identity f) <*> (Identity a) = Identity (f a)
+  pure a = Identity a
+
+-- A class for rebuilding terms.
+--
+-- Minimal complete definition is 'AccClo' and rebuild'.
+--
+class Rebuildable f where
+
+  type AccClo f :: (* -> * -> *)
+
+  rebuildPartial :: (Applicative f', SyntacticAcc fa)
+                 => (forall a'. Arrays a' => Idx aenv a' -> f' (fa (AccClo f) aenv' a'))
+                 -> f aenv  a
+                 -> f' (f aenv' a)
+
+  rebuildA :: (SyntacticAcc fa)
+              => (forall a'. Arrays a' => Idx aenv a' -> fa (AccClo f) aenv' a')
+              -> f aenv  a
+              -> f aenv' a
+  rebuildA av = runIdentity . rebuildPartial (Identity . av)
+
+-- A class for rebuilding scalar terms.
+--
+-- Minimal complete definition is 'AccClo' and rebuild'.
+--
+class RebuildableExp f where
+
+  rebuildPartialE :: (Applicative f', SyntacticExp fe)
+                  => (forall e'. Elt e' => Idx env e' -> f' (fe (AccClo (f env)) env' aenv e'))
+                  -> f env aenv  e
+                  -> f' (f env' aenv e)
+
+  rebuildE :: SyntacticExp fe
+           => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
+           -> f env aenv  e
+           -> f env' aenv e
+  rebuildE v = runIdentity . rebuildPartialE (Identity . v)
+
+-- Terms that are rebuildable and also recursive closures
+--
+type RebuildableAcc acc = (Rebuildable acc, AccClo acc ~ acc)
+
+-- We can use the same plumbing to rebuildPartial all the things we want to rebuild.
+--
+instance RebuildableAcc acc => Rebuildable (PreOpenExp acc env) where
+  type AccClo (PreOpenExp acc env) = acc
+  rebuildPartial = rebuildPreOpenExp rebuildPartial (pure . IE)
+
+instance RebuildableAcc acc => Rebuildable (PreOpenFun acc env) where
+  type AccClo (PreOpenFun acc env) = acc
+  rebuildPartial = rebuildFun rebuildPartial (pure . IE)
+
+instance RebuildableAcc acc => Rebuildable (PreOpenAcc acc) where
+  type AccClo (PreOpenAcc acc) = acc
+  rebuildPartial = rebuildPreOpenAcc rebuildPartial
+
+instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
+  type AccClo (PreOpenAfun acc) = acc
+  rebuildPartial = rebuildAfun rebuildPartial
+
+instance Rebuildable OpenAcc where
+  type AccClo OpenAcc = OpenAcc
+  rebuildPartial = rebuildOpenAcc
+
+instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
+  rebuildPartialE v = rebuildPreOpenExp rebuildPartial v (pure . IA)
+
+instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
+  rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
 
 -- NOTE: [Weakening]
 --
@@ -132,46 +213,62 @@ subAtop _ (SuccIdx idx) = Avar idx
 --
 type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
-weakenA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' a
-weakenA k v = Stats.substitution "weakenA" . rebuildA k (Avar . v)
+class Sink f where
+  weaken :: env :> env' -> f env t -> f env' t
+  default weaken :: Rebuildable f => env :> env' -> f env t -> f env' t
+  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-weakenAfun :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAfun acc aenv a -> PreOpenAfun acc aenv' a
-weakenAfun k v = Stats.substitution "weakenAfun" . rebuildAfun k (Avar . v)
+instance Sink Idx where
+  weaken k = k
 
-weakenEA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv' t
-weakenEA k v = Stats.substitution "weakenEA" . rebuildEA k (Avar . v)
+--instance Rebuildable f => Sink f where -- undecidable, incoherent
+--  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-weakenFA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenFun acc env aenv f -> PreOpenFun acc env aenv' f
-weakenFA k v = Stats.substitution "weakenFA" . rebuildFA k (Avar . v)
-
-weakenE :: env :> env' -> PreOpenExp acc env aenv t -> PreOpenExp acc env' aenv t
-weakenE v = Stats.substitution "weakenE" . rebuildE (Var . v)
-
-weakenFE :: env :> env' -> PreOpenFun acc env aenv f -> PreOpenFun acc env' aenv f
-weakenFE v = Stats.substitution "weakenFE" . rebuildFE (Var . v)
-
+instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
+instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
+instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
+instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
+instance Sink OpenAcc where
 
 {-# RULES
-"weakenA/weakenA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenA k v1 (weakenA k v2 a) = weakenA k (v1 . v2) a
-
-"weakenEA/weakenEA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenEA k v1 (weakenEA k v2 a) = weakenEA k (v1 . v2) a
-
-"weakenFA/weakenFA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenFA k v1 (weakenFA k v2 a) = weakenFA k (v1 . v2) a
-
-"weakenE/weakenE" forall e (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenE v1 (weakenE v2 e) = weakenE (v1 . v2) e
-
-"weakenFE/weakenFE" forall e (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenFE v1 (weakenFE v2 e) = weakenFE (v1 . v2) e
+"weaken/weaken" forall a (v1 :: env' :> env'') (v2 :: env :> env').
+    weaken v1 (weaken v2 a) = weaken (v1 . v2) a
  #-}
+
+class SinkExp f where
+  weakenE :: env :> env' -> f env aenv t -> f env' aenv t
+  default weakenE :: RebuildableExp f => env :> env' -> f env aenv t -> f env' aenv t
+  weakenE v = Stats.substitution "weakenE" . rebuildE (IE . v)
+
+instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
+instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
+
+{-# RULES
+"weakenE/weakenE" forall a (v1 :: env' :> env'') (v2 :: env :> env').
+    weakenE v1 (weakenE v2 a) = weakenE (v1 . v2) a
+ #-}
+
+-- NOTE: [Strengthening]
+--
+-- Strengthening is the dual of weakening. Shifting terms from one scope to a
+-- smaller scope. Of course this is not always possible. If the term contains
+-- any variables not in the new environment, then it cannot be strengthened.
+-- This partial behaviour is captured with 'Maybe'.
+--
+
+-- The type of partially shifting terms from one context into another.
+type env :?> env' = forall t'. Idx env t' -> Maybe (Idx env' t')
+
+strengthen :: Rebuildable f => env :?> env' -> f env t -> Maybe (f env' t)
+strengthen k = rebuildPartial (fmap IA . k)
+
+strengthenE :: RebuildableExp f => env :?> env' -> f env aenv t -> Maybe (f env' aenv t)
+strengthenE k = rebuildPartialE (fmap IE . k)
 
 -- Simultaneous Substitution ===================================================
 --
 
--- Scalar expressions
+-- The scalar environment
 -- ------------------
 
 -- SEE: [Renaming and Substitution]
@@ -180,91 +277,99 @@ weakenFE v = Stats.substitution "weakenFE" . rebuildFE (Var . v)
 class SyntacticExp f where
   varIn         :: Elt t => Idx env t        -> f acc env aenv t
   expOut        :: Elt t => f acc env aenv t -> PreOpenExp acc env aenv t
-  weakenExp     :: Elt t => f acc env aenv t -> f acc (env, s) aenv t
+  weakenExp     :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc (env, s) aenv t
+  weakenExpAcc  :: Elt t => RebuildAcc acc -> f acc env aenv t -> f acc env (aenv, s) t
 
 newtype IdxE (acc :: * -> * -> *) env aenv t = IE { unIE :: Idx env t }
 
 instance SyntacticExp IdxE where
   varIn         = IE
   expOut        = Var . unIE
-  weakenExp     = IE . SuccIdx . unIE
+  weakenExp _   = IE . SuccIdx . unIE
+  weakenExpAcc _ = IE . unIE
 
 instance SyntacticExp PreOpenExp where
   varIn         = Var
   expOut        = id
-  weakenExp     = rebuildE (weakenExp . IE)
-
+  weakenExp k   = runIdentity . rebuildPreOpenExp k (Identity . weakenExp k . IE) (Identity . IA)
+  weakenExpAcc k = runIdentity . rebuildPreOpenExp k (Identity . IE) (Identity . weakenAcc k . IA)
 
 shiftE
-    :: (SyntacticExp f, Elt t)
-    => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
+    :: (Applicative f, SyntacticExp fe, Elt t)
+    => RebuildAcc acc
+    -> (forall t'. Elt t' => Idx env t' -> f (fe acc env' aenv t'))
     -> Idx     (env,  s)      t
-    -> f   acc (env', s) aenv t
-shiftE _ ZeroIdx      = varIn ZeroIdx
-shiftE v (SuccIdx ix) = weakenExp (v ix)
+    -> f (fe  acc (env', s) aenv t)
+shiftE _ _ ZeroIdx      = pure $ varIn ZeroIdx
+shiftE k v (SuccIdx ix) = weakenExp k <$> (v ix)
 
-rebuildE
-    :: SyntacticExp f
-    => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
+rebuildPreOpenExp
+    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
     -> PreOpenExp acc env  aenv t
-    -> PreOpenExp acc env' aenv t
-rebuildE v exp =
+    -> f (PreOpenExp acc env' aenv' t)
+rebuildPreOpenExp k v av exp =
   case exp of
-    Let a b             -> Let (rebuildE v a) (rebuildE (shiftE v) b)
-    Var ix              -> expOut (v ix)
-    Const c             -> Const c
-    Tuple tup           -> Tuple (rebuildTE v tup)
-    Prj tup e           -> Prj tup (rebuildE v e)
-    IndexNil            -> IndexNil
-    IndexCons sh sz     -> IndexCons (rebuildE v sh) (rebuildE v sz)
-    IndexHead sh        -> IndexHead (rebuildE v sh)
-    IndexTail sh        -> IndexTail (rebuildE v sh)
-    IndexAny            -> IndexAny
-    IndexSlice x ix sh  -> IndexSlice x (rebuildE v ix) (rebuildE v sh)
-    IndexFull x ix sl   -> IndexFull x (rebuildE v ix) (rebuildE v sl)
-    ToIndex sh ix       -> ToIndex (rebuildE v sh) (rebuildE v ix)
-    FromIndex sh ix     -> FromIndex (rebuildE v sh) (rebuildE v ix)
-    Cond p t e          -> Cond (rebuildE v p) (rebuildE v t) (rebuildE v e)
-    While p f x         -> While (rebuildFE v p) (rebuildFE v f) (rebuildE v x)
-    PrimConst c         -> PrimConst c
-    PrimApp f x         -> PrimApp f (rebuildE v x)
-    Index a sh          -> Index a (rebuildE v sh)
-    LinearIndex a i     -> LinearIndex a (rebuildE v i)
-    Shape a             -> Shape a
-    ShapeSize sh        -> ShapeSize (rebuildE v sh)
-    Intersect s t       -> Intersect (rebuildE v s) (rebuildE v t)
-    Union s t           -> Union (rebuildE v s) (rebuildE v t)
-    Foreign ff f e      -> Foreign ff f (rebuildE v e)
+    Let a b             -> Let <$> rebuildPreOpenExp k v av a <*> rebuildPreOpenExp k (shiftE k v) av b
+    Var ix              -> expOut <$> v ix
+    Const c             -> pure $ Const c
+    Tuple tup           -> Tuple <$> rebuildTup k v av tup
+    Prj tup e           -> Prj tup <$> rebuildPreOpenExp k v av e
+    IndexNil            -> pure IndexNil
+    IndexCons sh sz     -> IndexCons <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av sz
+    IndexHead sh        -> IndexHead <$> rebuildPreOpenExp k v av sh
+    IndexTail sh        -> IndexTail <$> rebuildPreOpenExp k v av sh
+    IndexAny            -> pure IndexAny
+    IndexSlice x ix sh  -> IndexSlice x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
+    IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
+    ToIndex sh ix       -> ToIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    FromIndex sh ix     -> FromIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    Cond p t e          -> Cond <$> rebuildPreOpenExp k v av p <*> rebuildPreOpenExp k v av t <*> rebuildPreOpenExp k v av e
+    While p f x         -> While <$> rebuildFun k v av p <*> rebuildFun k v av f <*> rebuildPreOpenExp k v av x
+    PrimConst c         -> pure $ PrimConst c
+    PrimApp f x         -> PrimApp f <$> rebuildPreOpenExp k v av x
+    Index a sh          -> Index <$> k av a <*> rebuildPreOpenExp k v av sh
+    LinearIndex a i     -> LinearIndex <$> k av a <*> rebuildPreOpenExp k v av i
+    Shape a             -> Shape <$> k av a
+    ShapeSize sh        -> ShapeSize <$> rebuildPreOpenExp k v av sh
+    Intersect s t       -> Intersect <$> rebuildPreOpenExp k v av s <*> rebuildPreOpenExp k v av t
+    Union s t           -> Union <$> rebuildPreOpenExp k v av s <*> rebuildPreOpenExp k v av t
+    Foreign ff f e      -> Foreign ff f <$> rebuildPreOpenExp k v av e
 
-rebuildTE
-    :: SyntacticExp f
-    => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
-    -> Tuple (PreOpenExp acc env  aenv) t
-    -> Tuple (PreOpenExp acc env' aenv) t
-rebuildTE v tup =
+rebuildTup
+    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> Tuple (PreOpenExp acc env  aenv)  t
+    -> f (Tuple (PreOpenExp acc env' aenv') t)
+rebuildTup k v av tup =
   case tup of
-    NilTup      -> NilTup
-    SnocTup t e -> rebuildTE v t `SnocTup` rebuildE v e
+    NilTup      -> pure NilTup
+    SnocTup t e -> SnocTup <$> rebuildTup k v av t <*> rebuildPreOpenExp k v av e
 
-rebuildFE
-    :: SyntacticExp f
-    => (forall t'. Elt t' => Idx env t' -> f acc env' aenv t')
-    -> PreOpenFun acc env  aenv t
-    -> PreOpenFun acc env' aenv t
-rebuildFE v fun =
+rebuildFun
+    :: (Applicative f, SyntacticExp fe, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Elt t'    => Idx env t'  -> f (fe acc env' aenv' t'))
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> PreOpenFun acc env  aenv  t
+    -> f (PreOpenFun acc env' aenv' t)
+rebuildFun k v av fun =
   case fun of
-    Body e      -> Body (rebuildE v e)
-    Lam f       -> Lam (rebuildFE (shiftE v) f)
+    Body e      -> Body <$> rebuildPreOpenExp k v av e
+    Lam f       -> Lam  <$> rebuildFun k (shiftE k v) av f
 
-
--- Array expressions
+-- The array environment
 -- -----------------
 
 type RebuildAcc acc =
-  forall aenv aenv' f a. SyntacticAcc f
-    => (forall a'. Arrays a' => Idx aenv a' -> f acc aenv' a')
+  forall aenv aenv' f fa a. (Applicative f, SyntacticAcc fa)
+    => (forall a'. Arrays a' => Idx aenv a' -> f (fa acc aenv' a'))
     -> acc aenv  a
-    -> acc aenv' a
+    -> f (acc aenv' a)
 
 class SyntacticAcc f where
   avarIn        :: Arrays t => Idx aenv t     -> f acc aenv t
@@ -274,199 +379,134 @@ class SyntacticAcc f where
 newtype IdxA (acc :: * -> * -> *) aenv t = IA { unIA :: Idx aenv t }
 
 instance SyntacticAcc IdxA where
-  avarIn        = IA
-  accOut        = Avar . unIA
-  weakenAcc _   = IA . SuccIdx . unIA
+  avarIn         = IA
+  accOut         = Avar . unIA
+  weakenAcc _    = IA . SuccIdx . unIA
 
 instance SyntacticAcc PreOpenAcc where
   avarIn        = Avar
   accOut        = id
-  weakenAcc k   = rebuildA k (weakenAcc k . IA)
-
-
-rebuildOpenAcc
-    :: SyntacticAcc f
-    => (forall t'. Arrays t' => Idx aenv t' -> f OpenAcc aenv' t')
-    -> OpenAcc aenv  t
-    -> OpenAcc aenv' t
-rebuildOpenAcc v (OpenAcc acc) = OpenAcc (rebuildA rebuildOpenAcc v acc)
-
+  weakenAcc k   = runIdentity . rebuildPreOpenAcc k (Identity . weakenAcc k . IA)
 
 shiftA
-    :: (SyntacticAcc f, Arrays t)
+    :: (Applicative f, SyntacticAcc fa, Arrays t)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> Idx     (aenv,  s) t
-    -> f   acc (aenv', s) t
-shiftA _ _ ZeroIdx      = avarIn ZeroIdx
-shiftA k v (SuccIdx ix) = weakenAcc k (v ix)
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> Idx         (aenv,  s) t
+    -> f (fa   acc (aenv', s) t)
+shiftA _ _ ZeroIdx      = pure $ avarIn ZeroIdx
+shiftA k v (SuccIdx ix) = weakenAcc k <$> v ix
 
-rebuildP :: SyntacticAcc f
+rebuildPreOpenAcc
+    :: (Applicative f, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> PreOpenAcc acc aenv  t
+    -> f (PreOpenAcc acc aenv' t)
+rebuildPreOpenAcc k av acc =
+  case acc of
+    Alet a b            -> Alet <$> k av a <*> k (shiftA k av) b
+    Avar ix             -> accOut <$> av ix
+    Atuple tup          -> Atuple <$> rebuildAtup k av tup
+    Aprj tup a          -> Aprj tup <$> k av a
+    Apply f a           -> Apply <$> rebuildAfun k av f <*> k av a
+    Aforeign ff afun as -> Aforeign ff afun <$> k av as
+    Acond p t e         -> Acond <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
+    Awhile p f a        -> Awhile <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
+    Use a               -> pure $ Use a
+    Unit e              -> Unit <$> rebuildPreOpenExp k (pure . IE) av e
+    Reshape e a         -> Reshape <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
+    Generate e f        -> Generate <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
+    Transform sh ix f a -> Transform <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av ix <*> rebuildFun k (pure . IE) av f <*> k av a
+    Replicate sl slix a -> Replicate sl <$> rebuildPreOpenExp k (pure . IE) av slix <*> k av a
+    Slice sl a slix     -> Slice sl <$> k av a <*> rebuildPreOpenExp k (pure . IE) av slix
+    Map f a             -> Map <$> rebuildFun k (pure . IE) av f <*> k av a
+    ZipWith f a1 a2     -> ZipWith <$> rebuildFun k (pure . IE) av f <*> k av a1 <*> k av a2
+    Fold f z a          -> Fold <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Fold1 f a           -> Fold1 <$> rebuildFun k (pure . IE) av f <*> k av a
+    FoldSeg f z a s     -> FoldSeg <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a <*> k av s
+    Fold1Seg f a s      -> Fold1Seg <$> rebuildFun k (pure . IE) av f <*> k av a <*> k av s
+    Scanl f z a         -> Scanl <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl' f z a        -> Scanl' <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanl1 f a          -> Scanl1 <$> rebuildFun k (pure . IE) av f <*> k av a
+    Scanr f z a         -> Scanr <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr' f z a        -> Scanr' <$> rebuildFun k (pure . IE) av f <*> rebuildPreOpenExp k (pure . IE) av z <*> k av a
+    Scanr1 f a          -> Scanr1 <$> rebuildFun k (pure . IE) av f <*> k av a
+    Permute f1 a1 f2 a2 -> Permute <$> rebuildFun k (pure . IE) av f1 <*> k av a1 <*> rebuildFun k (pure . IE) av f2 <*> k av a2
+    Backpermute sh f a  -> Backpermute <$> rebuildPreOpenExp k (pure . IE) av sh <*> rebuildFun k (pure . IE) av f <*> k av a
+    Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
+    Stencil2 f b1 a1 b2 a2
+                        -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
+    Loop l              -> Loop <$> rebuildL k av l
+rebuildAfun
+    :: (Applicative f, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> PreOpenAfun acc aenv  t
+    -> f (PreOpenAfun acc aenv' t)
+rebuildAfun k av afun =
+  case afun of
+    Abody b     -> Abody <$> k av b
+    Alam f      -> Alam  <$> rebuildAfun k (shiftA k av) f
+
+rebuildAtup
+    :: (Applicative f, SyntacticAcc fa)
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> Atuple (acc aenv)  t
+    -> f (Atuple (acc aenv') t)
+rebuildAtup k av atup =
+  case atup of
+    NilAtup      -> pure NilAtup
+    SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
+
+rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
          -> Producer acc aenv a
-         -> Producer acc aenv' a
-rebuildP rebuild v p =
+         -> f (Producer acc aenv' a)
+rebuildP k v p =
   case p of
-    ToStream acc -> ToStream (rebuild v acc)
+    ToStream acc -> ToStream <$> (k v acc)
 
-rebuildT :: SyntacticAcc f
+rebuildT :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
          -> Transducer acc aenv lenv a
-         -> Transducer acc aenv' lenv a
-rebuildT rebuild v t =
+         -> f (Transducer acc aenv' lenv a)
+rebuildT k v t =
   case t of
-    MapStream f x -> MapStream (rebuildAfun rebuild v f)  x
-    ZipWithStream f x y -> ZipWithStream (rebuildAfun rebuild v f)  x y
+    MapStream f x -> MapStream <$> (rebuildAfun k v f) <*> pure x
+    ZipWithStream f x y -> ZipWithStream <$> (rebuildAfun k v f) <*> pure x <*> pure y
 
-rebuildC :: SyntacticAcc f
+rebuildC :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
          -> Consumer acc aenv lenv a
-         -> Consumer acc aenv' lenv a
-rebuildC rebuild v c =
+         -> f (Consumer acc aenv' lenv a)
+rebuildC k v c =
   case c of
-    FromStream x -> FromStream x
-    FoldStream f acc x -> FoldStream (rebuildAfun rebuild v f) (rebuild v acc) x
+    FromStream x -> FromStream <$> pure x
+    FoldStream f acc x -> FoldStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
 
 rebuildL
-    :: SyntacticAcc f
+    :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
     -> PreOpenLoop acc aenv  lenv t
-    -> PreOpenLoop acc aenv' lenv t
-rebuildL rebuild v l =
+    -> f (PreOpenLoop acc aenv' lenv t)
+rebuildL k v l =
   case l of
-    EmptyLoop -> EmptyLoop
-    Producer p l -> Producer (rebuildP rebuild v p) (rebuildL rebuild v l)
-    Transducer t l -> Transducer (rebuildT rebuild v t) (rebuildL rebuild v l)
-    Consumer c l -> Consumer (rebuildC rebuild v c) (rebuildL rebuild v l)
+    EmptyLoop -> pure EmptyLoop
+    Producer p l -> Producer <$> (rebuildP k v p) <*> (rebuildL k v l)
+    Transducer t l -> Transducer <$> (rebuildT k v t) <*> (rebuildL k v l)
+    Consumer c l -> Consumer <$> (rebuildC k v c) <*> (rebuildL k v l)
 
-rebuildA
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> PreOpenAcc acc aenv  t
-    -> PreOpenAcc acc aenv' t
-rebuildA rebuild v acc =
-  case acc of
-    Alet a b            -> Alet (rebuild v a) (rebuild (shiftA rebuild v) b)
-    Avar ix             -> accOut (v ix)
-    Atuple tup          -> Atuple (rebuildATA rebuild v tup)
-    Aprj tup a          -> Aprj tup (rebuild v a)
-    Apply f a           -> Apply (rebuildAfun rebuild v f) (rebuild v a)
-    Aforeign ff afun as -> Aforeign ff afun (rebuild v as)
-    Acond p t e         -> Acond (rebuildEA rebuild v p) (rebuild v t) (rebuild v e)
-    Awhile p f a        -> Awhile (rebuildAfun rebuild v p) (rebuildAfun rebuild v f) (rebuild v a)
-    Use a               -> Use a
-    Unit e              -> Unit (rebuildEA rebuild v e)
-    Reshape e a         -> Reshape (rebuildEA rebuild v e) (rebuild v a)
-    Generate e f        -> Generate (rebuildEA rebuild v e) (rebuildFA rebuild v f)
-    Transform sh ix f a -> Transform (rebuildEA rebuild v sh) (rebuildFA rebuild v ix) (rebuildFA rebuild v f) (rebuild v a)
-    Replicate sl slix a -> Replicate sl (rebuildEA rebuild v slix) (rebuild v a)
-    Slice sl a slix     -> Slice sl (rebuild v a) (rebuildEA rebuild v slix)
-    Map f a             -> Map (rebuildFA rebuild v f) (rebuild v a)
-    ZipWith f a1 a2     -> ZipWith (rebuildFA rebuild v f) (rebuild v a1) (rebuild v a2)
-    Fold f z a          -> Fold (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
-    Fold1 f a           -> Fold1 (rebuildFA rebuild v f) (rebuild v a)
-    FoldSeg f z a s     -> FoldSeg (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a) (rebuild v s)
-    Fold1Seg f a s      -> Fold1Seg (rebuildFA rebuild v f) (rebuild v a) (rebuild v s)
-    Scanl f z a         -> Scanl (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
-    Scanl' f z a        -> Scanl' (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
-    Scanl1 f a          -> Scanl1 (rebuildFA rebuild v f) (rebuild v a)
-    Scanr f z a         -> Scanr (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
-    Scanr' f z a        -> Scanr' (rebuildFA rebuild v f) (rebuildEA rebuild v z) (rebuild v a)
-    Scanr1 f a          -> Scanr1 (rebuildFA rebuild v f) (rebuild v a)
-    Permute f1 a1 f2 a2 -> Permute (rebuildFA rebuild v f1) (rebuild v a1) (rebuildFA rebuild v f2) (rebuild v a2)
-    Backpermute sh f a  -> Backpermute (rebuildEA rebuild v sh) (rebuildFA rebuild v f) (rebuild v a)
-    Stencil f b a       -> Stencil (rebuildFA rebuild v f) b (rebuild v a)
-    Stencil2 f b1 a1 b2 a2
-                        -> Stencil2 (rebuildFA rebuild v f) b1 (rebuild v a1) b2 (rebuild v a2)
-    Loop l              -> Loop (rebuildL rebuild v l)
+-- For OpenAcc
 
--- Rebuilding array computations
---
-
-rebuildAfun
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> PreOpenAfun acc aenv  t
-    -> PreOpenAfun acc aenv' t
-rebuildAfun k v afun =
-  case afun of
-    Abody b     -> Abody (k v b)
-    Alam f      -> Alam (rebuildAfun k (shiftA k v) f)
-
-rebuildATA
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> Atuple (acc aenv)  t
-    -> Atuple (acc aenv') t
-rebuildATA k v atup =
-  case atup of
-    NilAtup      -> NilAtup
-    SnocAtup t a -> rebuildATA k v t `SnocAtup` k v a
-
-
--- Rebuilding scalar expressions
---
-
-rebuildEA
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> PreOpenExp acc env aenv  t
-    -> PreOpenExp acc env aenv' t
-rebuildEA k v exp =
-  case exp of
-    Let a b             -> Let (rebuildEA k v a) (rebuildEA k v b)
-    Var ix              -> Var ix
-    Const c             -> Const c
-    Tuple tup           -> Tuple (rebuildTA k v tup)
-    Prj tup e           -> Prj tup (rebuildEA k v e)
-    IndexNil            -> IndexNil
-    IndexCons sh sz     -> IndexCons (rebuildEA k v sh) (rebuildEA k v sz)
-    IndexHead sh        -> IndexHead (rebuildEA k v sh)
-    IndexTail sh        -> IndexTail (rebuildEA k v sh)
-    IndexAny            -> IndexAny
-    IndexSlice x ix sh  -> IndexSlice x (rebuildEA k v ix) (rebuildEA k v sh)
-    IndexFull x ix sl   -> IndexFull x (rebuildEA k v ix) (rebuildEA k v sl)
-    ToIndex sh ix       -> ToIndex (rebuildEA k v sh) (rebuildEA k v ix)
-    FromIndex sh ix     -> FromIndex (rebuildEA k v sh) (rebuildEA k v ix)
-    Cond p t e          -> Cond (rebuildEA k v p) (rebuildEA k v t) (rebuildEA k v e)
-    While p f x         -> While (rebuildFA k v p) (rebuildFA k v f) (rebuildEA k v x)
-    PrimConst c         -> PrimConst c
-    PrimApp f x         -> PrimApp f (rebuildEA k v x)
-    Index a sh          -> Index (k v a) (rebuildEA k v sh)
-    LinearIndex a i     -> LinearIndex (k v a) (rebuildEA k v i)
-    Shape a             -> Shape (k v a)
-    ShapeSize sh        -> ShapeSize (rebuildEA k v sh)
-    Intersect s t       -> Intersect (rebuildEA k v s) (rebuildEA k v t)
-    Union s t           -> Union (rebuildEA k v s) (rebuildEA k v t)
-    Foreign ff f e      -> Foreign ff f (rebuildEA k v e)
-
-rebuildTA
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> Tuple (PreOpenExp acc env aenv)  t
-    -> Tuple (PreOpenExp acc env aenv') t
-rebuildTA k v tup =
-  case tup of
-    NilTup      -> NilTup
-    SnocTup t e -> rebuildTA k v t `SnocTup` rebuildEA k v e
-
-rebuildFA
-    :: SyntacticAcc f
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f acc aenv' t')
-    -> PreOpenFun acc env aenv  t
-    -> PreOpenFun acc env aenv' t
-rebuildFA k v fun =
-  case fun of
-    Body e      -> Body (rebuildEA k v e)
-    Lam f       -> Lam  (rebuildFA k v f)
-
+rebuildOpenAcc
+    :: (Applicative f, SyntacticAcc fa)
+    => (forall t'. Arrays t' => Idx aenv t' -> f (fa OpenAcc aenv' t'))
+    -> OpenAcc aenv  t
+    -> f (OpenAcc aenv' t)
+rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc

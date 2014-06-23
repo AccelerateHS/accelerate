@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE IncoherentInstances  #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 -- |
@@ -40,6 +42,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
 -- standard library
 import Prelude                                          hiding ( until )
+import Control.Applicative
 import Data.Hashable
 import Text.PrettyPrint
 
@@ -60,11 +63,10 @@ import Data.Array.Accelerate.Debug as Stats
 -- The bat utility belt of operations required to manipulate terms parameterised
 -- by the recursive closure.
 --
-class Kit acc where
+class (RebuildableAcc acc, Sink acc) => Kit acc where
   inject        :: PreOpenAcc acc aenv a -> acc aenv a
   extract       :: acc aenv a -> PreOpenAcc acc aenv a
   --
-  rebuildAcc    :: RebuildAcc acc
   matchAcc      :: MatchAcc acc
   hashAcc       :: HashAcc acc
   prettyAcc     :: PrettyAcc acc
@@ -73,7 +75,6 @@ instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
 
-  rebuildAcc    = rebuildOpenAcc
   matchAcc      = matchOpenAcc
   hashAcc       = hashOpenAcc
   prettyAcc     = prettyOpenAcc
@@ -132,11 +133,20 @@ data DelayedOpenAcc aenv a where
     , linearIndexD      :: PreFun DelayedOpenAcc aenv (Int -> e)
     }                   -> DelayedOpenAcc aenv (Array sh e)
 
+instance Rebuildable DelayedOpenAcc where
+  type AccClo DelayedOpenAcc = DelayedOpenAcc
+  rebuildPartial v acc = case acc of
+    Manifest pacc -> Manifest <$> (rebuildPartial v pacc)
+    Delayed{..}   -> Delayed <$> (rebuildPartial v extentD)
+                             <*> (rebuildPartial v indexD)
+                             <*> (rebuildPartial v linearIndexD)
+
+instance Sink DelayedOpenAcc where
+
 instance Kit DelayedOpenAcc where
   inject        = Manifest
   extract       = error "DelayedAcc.extract"
   --
-  rebuildAcc    = rebuildDelayed
   matchAcc      = matchDelayed
   hashAcc       = hashDelayed
   prettyAcc     = prettyDelayed
@@ -161,13 +171,6 @@ matchDelayed (Delayed sh1 ix1 lx1) (Delayed sh2 ix2 lx2)
 
 matchDelayed _ _
   = Nothing
-
-rebuildDelayed :: RebuildAcc DelayedOpenAcc
-rebuildDelayed v acc = case acc of
-  Manifest pacc -> Manifest (rebuildA rebuildDelayed v pacc)
-  Delayed{..}   -> Delayed (rebuildEA rebuildDelayed v extentD)
-                           (rebuildFA rebuildDelayed v indexD)
-                           (rebuildFA rebuildDelayed v linearIndexD)
 
 
 -- Note: If we detect that the delayed array is simply accessing an array
@@ -208,7 +211,7 @@ data Gamma acc env env' aenv where
            -> PreOpenExp acc env           aenv t
            -> Gamma      acc env (env', t) aenv
 
-incExp :: Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
+incExp :: RebuildableAcc acc => Gamma acc env env' aenv -> Gamma acc (env, s) env' aenv
 incExp EmptyExp        = EmptyExp
 incExp (PushExp env e) = incExp env `PushExp` weakenE SuccIdx e
 
@@ -219,7 +222,7 @@ prjExp _            _               = $internalError "prjExp" "inconsistent valu
 
 weakenGamma1 :: Kit acc => Gamma acc env env' aenv -> Gamma acc env env' (aenv,t)
 weakenGamma1 EmptyExp        = EmptyExp
-weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weakenEA rebuildAcc SuccIdx e)
+weakenGamma1 (PushExp env e) = PushExp (weakenGamma1 env) (weaken SuccIdx e)
 
 sinkGamma :: Kit acc => Extend acc aenv aenv' -> Gamma acc env env' aenv -> Gamma acc env env' aenv'
 sinkGamma _   EmptyExp        = EmptyExp
@@ -281,27 +284,6 @@ sink1 env = weaken (k env)
     split :: Idx (env,s) t -> Idx ((env,u),s) t
     split ZeroIdx      = ZeroIdx
     split (SuccIdx ix) = SuccIdx (SuccIdx ix)
-
-class Sink f where
-  weaken :: env :> env' -> f env t -> f env' t
-
-instance Sink Idx where
-  weaken k = k
-
-instance Kit acc => Sink (PreOpenExp acc env) where
-  weaken k = weakenEA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenFun acc env) where
-  weaken k = weakenFA rebuildAcc k
-
-instance Kit acc => Sink (PreOpenAfun acc) where
-  weaken k = weakenAfun rebuildAcc k
-
-instance Kit acc => Sink (PreOpenAcc acc) where
-  weaken k = weakenA rebuildAcc k
-
-instance Kit acc => Sink acc where
-  weaken k = rebuildAcc (Avar . k)
 
 -- This is the same as above, however for the scalar environment.
 --

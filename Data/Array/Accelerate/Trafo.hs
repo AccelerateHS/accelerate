@@ -27,7 +27,6 @@ module Data.Array.Accelerate.Trafo (
   module Data.Array.Accelerate.Trafo.Fusion,
 
   -- * Substitution
-  rebuildAcc,
   module Data.Array.Accelerate.Trafo.Substitution,
 
 ) where

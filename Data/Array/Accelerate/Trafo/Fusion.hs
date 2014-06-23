@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
@@ -853,13 +854,13 @@ zipWithD f cc1 cc0
   $ Yield (sh1 `Intersect` sh0) (combine f f1 f0)
 
   where
-    combine :: forall acc aenv a b c e. (Elt a, Elt b, Elt c)
+    combine :: forall acc aenv a b c e. (Kit acc, Elt a, Elt b, Elt c)
             => PreFun acc aenv (a -> b -> c)
             -> PreFun acc aenv (e -> a)
             -> PreFun acc aenv (e -> b)
             -> PreFun acc aenv (e -> c)
     combine c ixa ixb
-      | Lam (Lam (Body c'))     <- weakenFE SuccIdx c   :: PreOpenFun acc ((),e) aenv (a -> b -> c)
+      | Lam (Lam (Body c'))     <- weakenE SuccIdx c   :: PreOpenFun acc ((),e) aenv (a -> b -> c)
       , Lam (Body ixa')         <- ixa                          -- else the skolem 'e' will escape
       , Lam (Body ixb')         <- ixb
       = Lam $ Body $ Let ixa' $ Let (weakenE SuccIdx ixb') c'
@@ -961,7 +962,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- that must be later eliminated by shrinking.
   --
   | Done v1             <- cc1
-  , Embed env0 cc0      <- embedAcc $ rebuildAcc (subAtop (Avar v1) . sink1 env1) acc0
+  , Embed env0 cc0      <- embedAcc $ rebuildA (subAtop (Avar v1) . sink1 env1) acc0
   = Stats.ruleFired "aletD/float"
   $ Embed (env1 `append` env0) cc0
 
@@ -1026,9 +1027,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         elim :: PreExp acc aenv' sh -> PreFun acc aenv' (sh -> e) -> Embed acc aenv brrs
         elim sh1 f1
-          | sh1'                <- weakenEA rebuildAcc SuccIdx sh1
-          , f1'                 <- weakenFA rebuildAcc SuccIdx f1
-          , Embed env0' cc0'    <- embedAcc $ rebuildAcc (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
+          | sh1'                <- weaken SuccIdx sh1
+          , f1'                 <- weaken SuccIdx f1
+          , Embed env0' cc0'    <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA sh1' f1' ZeroIdx) body
           = Embed (env1 `append` env0') cc0'
 
     -- As part of let-elimination, we need to replace uses of array variables in
@@ -1046,7 +1047,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
              -> PreOpenExp acc env aenv t
     replaceE sh' f' avar exp =
       case exp of
-        Let x y                         -> Let (cvtE x) (replaceE (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar y)
+        Let x y                         -> Let (cvtE x) (replaceE (weakenE SuccIdx sh') (weakenE SuccIdx f') avar y)
         Var i                           -> Var i
         Foreign ff f e                  -> Foreign ff f (cvtE e)
         Const c                         -> Const c
@@ -1099,7 +1100,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     replaceF sh' f' avar fun =
       case fun of
         Body e          -> Body (replaceE sh' f' avar e)
-        Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenFE SuccIdx f') avar f)
+        Lam f           -> Lam  (replaceF (weakenE SuccIdx sh') (weakenE SuccIdx f') avar f)
 
     replaceA :: forall aenv sh e a. (Kit acc, Shape sh, Elt e)
              => PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
@@ -1112,8 +1113,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           | otherwise                   -> Avar v
 
         Alet bnd body                   ->
-          let sh'' = weakenEA rebuildAcc SuccIdx sh'
-              f''  = weakenFA rebuildAcc SuccIdx f'
+          let sh'' = weaken SuccIdx sh'
+              f''  = weaken SuccIdx f'
           in
           Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
 
@@ -1182,8 +1183,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                 -> PreOpenAfun acc aenv a
                 -> PreOpenAfun acc aenv a
             cvt sh'' f'' avar' (Abody a) = Abody $ kmap (replaceA sh'' f'' avar') a
-            cvt sh'' f'' avar' (Alam af) = Alam $ cvt (weakenEA rebuildAcc SuccIdx sh'')
-                                                      (weakenFA rebuildAcc SuccIdx f'')
+            cvt sh'' f'' avar' (Alam af) = Alam $ cvt (weaken SuccIdx sh'')
+                                                      (weaken SuccIdx f'')
                                                       (SuccIdx avar')
                                                       af
 
@@ -1330,10 +1331,10 @@ isIdentity f
 identity :: Elt a => PreOpenFun acc env aenv (a -> a)
 identity = Lam (Body (Var ZeroIdx))
 
-toIndex :: Shape sh => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> Int)
+toIndex :: (Kit acc, Shape sh) => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (sh -> Int)
 toIndex sh = Lam (Body (ToIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
 
-fromIndex :: Shape sh => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (Int -> sh)
+fromIndex :: (Kit acc, Shape sh) => PreOpenExp acc env aenv sh -> PreOpenFun acc env aenv (Int -> sh)
 fromIndex sh = Lam (Body (FromIndex (weakenE SuccIdx sh) (Var ZeroIdx)))
 
 reindex :: (Kit acc, Shape sh, Shape sh')
@@ -1344,13 +1345,13 @@ reindex sh' sh
   | Just REFL <- match sh sh'   = identity
   | otherwise                   = fromIndex sh' `compose` toIndex sh
 
-extend :: (Shape sh, Shape sl, Elt slix)
+extend :: (Kit acc, Shape sh, Shape sl, Elt slix)
        => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
        -> PreExp acc aenv slix
        -> PreFun acc aenv (sh -> sl)
 extend sliceIndex slix = Lam (Body (IndexSlice sliceIndex (weakenE SuccIdx slix) (Var ZeroIdx)))
 
-restrict :: (Shape sh, Shape sl, Elt slix)
+restrict :: (Kit acc, Shape sh, Shape sl, Elt slix)
          => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
          -> PreExp acc aenv slix
          -> PreFun acc aenv (sl -> sh)

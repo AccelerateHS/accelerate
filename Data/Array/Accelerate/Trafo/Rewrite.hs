@@ -116,13 +116,13 @@ convertSegments = cvtA
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
-        where f' = weakenFA rebuildOpenAcc SuccIdx f
-              z' = weakenEA rebuildOpenAcc SuccIdx z
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+        where f' = weaken SuccIdx f
+              z' = weaken SuccIdx z
+              a' = weaken SuccIdx a
 
       Fold1Seg f a s            -> Alet (segments s) (OpenAcc (Fold1Seg (cvtF f') (cvtA a') a0))
-        where f' = weakenFA rebuildOpenAcc SuccIdx f
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+        where f' = weaken SuccIdx f
+              a' = weaken SuccIdx a
 
 
 convertSegmentsAfun :: OpenAfun aenv t -> OpenAfun aenv t
