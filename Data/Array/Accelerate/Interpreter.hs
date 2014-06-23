@@ -39,6 +39,9 @@ module Data.Array.Accelerate.Interpreter (
 
 ) where
 
+-- TODO: remove
+import Debug.Trace ( trace )
+
 -- standard libraries
 import Control.Monad
 import Data.Bits
@@ -353,10 +356,10 @@ initProducer aenv p =
       let arr = force $ evalOpenAcc acc aenv
           sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
       in ExecToStream (map force (toStreamOp sliceIndex sl' (delay arr)))
-    UseLazy sliceIndex sl arr -> 
+    UseLazy sliceIndex sl arr ->
       let sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
           sls = enumSlices sliceIndex sl'
-      in ExecUseLazy sliceIndex sls arr
+      in trace (show sls) $ ExecUseLazy sliceIndex sls arr
 
 transduce :: ExecT lenv a -> Val lenv -> (a, ExecT lenv a)
 transduce t lenv =

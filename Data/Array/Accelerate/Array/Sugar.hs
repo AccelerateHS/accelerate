@@ -1152,10 +1152,10 @@ sliceShape slix = toElt . Repr.sliceShape slix . fromElt
 -- dimension changes most rapid.
 --
 -- E.g. enumSlices slix (Z :. 2 :. 3 :. All) = [ Z :. 0 :. 0 :. All
---                                             , Z :. 1 :. 0 :. All
 --                                             , Z :. 0 :. 1 :. All
---                                             , Z :. 1 :. 1 :. All
 --                                             , Z :. 0 :. 2 :. All
+--                                             , Z :. 1 :. 0 :. All
+--                                             , Z :. 1 :. 1 :. All
 --                                             , Z :. 1 :. 2 :. All ]
 --
 enumSlices :: forall slix co sl dim. (Elt slix)

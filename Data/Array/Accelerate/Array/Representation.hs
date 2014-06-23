@@ -203,14 +203,14 @@ sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 
--- | Enumerate all slices within a given bound. The innermost
+-- | Enumerate all slices within a given bound. The outermost
 -- dimension changes most rapid.
 --
 -- E.g. enumSlices slix ((((), 2), 3), ()) = [ ((((), 0), 0), ())
---                                           , ((((), 1), 0), ())
 --                                           , ((((), 0), 1), ())
---                                           , ((((), 1), 1), ())
 --                                           , ((((), 0), 2), ())
+--                                           , ((((), 1), 0), ())
+--                                           , ((((), 1), 1), ())
 --                                           , ((((), 1), 2), ()) ]
 --
 enumSlices :: forall slix co sl dim.
@@ -219,8 +219,8 @@ enumSlices :: forall slix co sl dim.
            -> [slix]
 enumSlices SliceNil () = [()]
 enumSlices (SliceAll   sl) (sh, ()) = [ (sh', ()) | sh' <- enumSlices sl sh]
-enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | i   <- [0..n-1]
-                                                  , sh' <- enumSlices sl sh]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
+                                                  , i   <- [0..n-1]]
 
 -- | Stepped version of enumSlices.
 nextSlice :: forall slix co sl dim.
@@ -234,20 +234,12 @@ nextSlice (SliceAll sl)   (sh, ()) (sh', ()) = do
     Nothing -> Nothing
     Just sh'' -> Just (sh'', ())
 nextSlice (SliceFixed sl) (sh, n) (sh', i) =
-  case nextSlice sl sh sh' of
-    Just (sh'') -> Just (sh'', i)
-    Nothing -> 
-      if i < n - 1
-         then Just (zeroes sl sh', i + 1)
-         else Nothing
-  where
-    zeroes :: forall slix co sl dim.
-               SliceIndex slix sl co dim
-           -> slix
-           -> slix
-    zeroes SliceNil () = ()
-    zeroes (SliceAll sl) (sh, ()) = (zeroes sl sh, ())
-    zeroes (SliceFixed sl) (sh, _) = (zeroes sl sh, 0)
+  if (i < n - 1)
+    then Just (sh', i + 1)
+    else 
+      case nextSlice sl sh sh' of
+       Just (sh'') -> Just (sh'', 0)
+       Nothing -> Nothing
 
 -- | Restrict a slice to be within the bounds (inclusive) of the given
 -- full shape.
