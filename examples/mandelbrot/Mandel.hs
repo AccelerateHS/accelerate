@@ -63,7 +63,7 @@ mandelbrot screenX screenY depth view =
     -- initial conditions for a given pixel in the window, translated to the
     -- corresponding point in the complex plane
     initial :: Exp DIM2 -> Exp (Complex a)
-    initial ix                = lift ( (xmin + (x * sizex) / viewx) :+ (ymin + (y * sizey) / viewy) )
+    initial ix = lift ( (xmin + (x * sizex) / viewx) :+ (ymin + (y * sizey) / viewy) )
       where
         pr = unindex2 ix
         x  = A.fromIntegral (A.snd pr :: Exp Int)
@@ -76,7 +76,7 @@ mandelbrot screenX screenY depth view =
     dot c = let r :+ i = unlift c
             in  r*r + i*i
 
-    lIMIT = constant (P.fromIntegral depth)
+    lIMIT = P.fromIntegral depth
 
 
 -- Rendering -------------------------------------------------------------------
