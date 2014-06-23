@@ -21,6 +21,9 @@ module Data.Array.Accelerate.Array.Representation (
 
   -- * Array shapes, indices, and slices
   Shape(..), Slice(..), SliceIndex(..),
+  
+  -- * Slice shape functions
+  sliceShape, enumSlices, nextSlice, restrictSlice
 
 ) where
 
@@ -193,3 +196,61 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
   show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 
+-- | Project the shape of a slice from the full shape.
+sliceShape :: forall slix co sl dim.
+              SliceIndex slix sl co dim
+           -> dim
+           -> sl
+sliceShape SliceNil () = ()
+sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
+sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
+
+
+-- | Enumerate all slices within a given bound. The outermost
+-- dimension changes most rapid.
+--
+-- E.g. enumSlices slix ((((), 2), 3), ()) = [ ((((), 0), 0), ())
+--                                           , ((((), 0), 1), ())
+--                                           , ((((), 0), 2), ())
+--                                           , ((((), 1), 0), ())
+--                                           , ((((), 1), 1), ())
+--                                           , ((((), 1), 2), ()) ]
+--
+enumSlices :: forall slix co sl dim.
+              SliceIndex slix sl co dim
+           -> slix
+           -> [slix]
+enumSlices SliceNil () = [()]
+enumSlices (SliceAll   sl) (sh, ()) = [ (sh', ()) | sh' <- enumSlices sl sh]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
+                                                  , i   <- [0..n-1]]
+
+-- | Stepped version of enumSlices.
+nextSlice :: forall slix co sl dim.
+            SliceIndex slix sl co dim
+         -> slix
+         -> slix
+         -> Maybe slix
+nextSlice SliceNil () () = Nothing
+nextSlice (SliceAll sl)   (sh, ()) (sh', ()) = do
+  case nextSlice sl sh sh' of
+    Nothing -> Nothing
+    Just sh'' -> Just (sh'', ())
+nextSlice (SliceFixed sl) (sh, n) (sh', i) =
+  if (i < n - 1)
+    then Just (sh', i + 1)
+    else 
+      case nextSlice sl sh sh' of
+       Just (sh'') -> Just (sh'', 0)
+       Nothing -> Nothing
+
+-- | Restrict a slice to be within the bounds (inclusive) of the given
+-- full shape.
+restrictSlice :: forall slix co sl dim.
+                 SliceIndex slix sl co dim
+              -> dim                 
+              -> slix
+              -> slix
+restrictSlice SliceNil () () = ()
+restrictSlice (SliceAll   sl) (sh, _) (sh', ()) = (restrictSlice sl sh sh', ())
+restrictSlice (SliceFixed sl) (sh, n) (sh', m)  = (restrictSlice sl sh sh', min n m)

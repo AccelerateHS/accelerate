@@ -467,7 +467,8 @@ rebuildP :: (SyntacticAcc fa, Applicative f)
          -> f (Producer acc aenv' a)
 rebuildP k v p =
   case p of
-    ToStream acc -> ToStream <$> (k v acc)
+    ToStream sl slix acc -> ToStream sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> (k v acc)
+    UseLazy  sl slix arr -> UseLazy  sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> pure arr
 
 rebuildT :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -476,8 +477,10 @@ rebuildT :: (SyntacticAcc fa, Applicative f)
          -> f (Transducer acc aenv' lenv a)
 rebuildT k v t =
   case t of
-    MapStream f x -> MapStream <$> (rebuildAfun k v f) <*> pure x
-    ZipWithStream f x y -> ZipWithStream <$> (rebuildAfun k v f) <*> pure x <*> pure y
+    MapStream f x             -> MapStream <$> (rebuildAfun k v f)  <*> pure x
+    ZipWithStream f x y       -> ZipWithStream <$> (rebuildAfun k v f)  <*> pure x <*> pure y
+    ScanStream f acc x        -> ScanStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    ScanStreamAct f g acc x   -> ScanStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc) <*> pure x
 
 rebuildC :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -486,8 +489,11 @@ rebuildC :: (SyntacticAcc fa, Applicative f)
          -> f (Consumer acc aenv' lenv a)
 rebuildC k v c =
   case c of
-    FromStream x -> FromStream <$> pure x
-    FoldStream f acc x -> FoldStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    FromStream x              -> FromStream <$> pure x
+    FoldStream f acc x        -> FoldStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    FoldStreamAct f g acc x   -> FoldStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc) <*> pure x
+    FoldStreamFlatten f acc x -> FoldStreamFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    CollectStream f x         -> pure $ CollectStream f x
 
 rebuildL
     :: (SyntacticAcc fa, Applicative f)

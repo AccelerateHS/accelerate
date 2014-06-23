@@ -67,19 +67,25 @@ convertSegments = cvtA
     cvtP :: Producer OpenAcc aenv a -> Producer OpenAcc aenv a
     cvtP p =
       case p of
-        ToStream a -> ToStream (cvtA a)
+        ToStream sl slix a   -> ToStream sl (cvtE slix) (cvtA a)
+        UseLazy  sl slix arr -> UseLazy  sl (cvtE slix) arr
 
     cvtTr :: Transducer OpenAcc aenv lenv a -> Transducer OpenAcc aenv lenv a
     cvtTr t =
       case t of
-        MapStream f x -> MapStream (cvtAfun f) x
-        ZipWithStream f x y -> ZipWithStream (cvtAfun f) x y
-
+        MapStream f x         -> MapStream (cvtAfun f) x
+        ZipWithStream f x y   -> ZipWithStream (cvtAfun f) x y
+        ScanStream f a x      -> ScanStream (cvtAfun f) (cvtA a) x
+        ScanStreamAct f g a x -> ScanStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) x
+        
     cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
     cvtC c =
       case c of
-        FromStream x -> FromStream x
-        FoldStream f a x -> FoldStream (cvtAfun f) (cvtA a) x
+        FromStream x            -> FromStream x
+        FoldStream f a x        -> FoldStream (cvtAfun f) (cvtA a) x
+        FoldStreamAct f g a x   -> FoldStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) x
+        FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAfun f) (cvtA a) x
+        CollectStream f x       -> CollectStream f x
 
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of

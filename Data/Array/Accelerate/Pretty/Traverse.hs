@@ -80,20 +80,29 @@ travLoop :: forall m b aenv lenv a. Monad m => Labels -> (String -> String -> [m
 travLoop f c l loop =
   case loop of
     EmptyLoop -> leaf "EmptyLoop"
-    Producer   p l' -> 
-      case p of
-        ToStream a -> combine "ToStream" [ travAcc f c l a, travLoop f c l l' ]
+    Producer   p l' -> travP p l'
     Transducer t l' ->  
       case t of
         MapStream afun x -> combine "MapStream" [ travAfun f c l afun, leaf (show (idxToInt x)), travLoop f c l l' ]
         ZipWithStream afun x y -> combine "ZipWithStream" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travLoop f c l l' ]
+        ScanStream afun a x -> combine "ScanStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        ScanStreamAct afun1 afun2 a x -> combine "ScanStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
     Consumer  co l' ->
       case co of
         FromStream x -> combine "FromStream" [ leaf (show (idxToInt x)), travLoop f c l l' ]
         FoldStream afun a x -> combine "FoldStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        FoldStreamAct afun1 afun2 a x -> combine "FoldStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        FoldStreamFlatten afun a x -> combine "FoldStreamFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        CollectStream _ x -> combine "CollectStream" [ leaf "<function>", leaf (show (idxToInt x)), travLoop f c l l']
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
+    
+    travP :: forall arr. Producer OpenAcc aenv arr -> PreOpenLoop OpenAcc aenv (lenv, arr) a -> m b
+    travP p l' =
+      case p of
+        ToStream _ ix a   -> combine "ToStream" [ travExp f c l  ix, travAcc f c l a, travLoop f c l l' ]
+        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travLoop f c l l' ]
       
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

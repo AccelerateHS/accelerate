@@ -874,31 +874,40 @@ hashPreOpenLoop hashAcc l =
     hashA :: Int -> acc aenv a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
+    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
+
     hashF :: Int -> PreOpenAfun acc aenv f -> Int
     hashF salt = hashWithSalt salt . hashAfun hashAcc
 
     hashL :: Int -> PreOpenLoop acc aenv lenv' arrs' -> Int
     hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
 
-    hashV :: Int -> Idx lenv a -> Int
-    hashV salt = hashWithSalt salt . idxToInt
+    hashVar :: Int -> Idx lenv a -> Int
+    hashVar salt = hashWithSalt salt . idxToInt
 
     hashP :: Int -> Producer acc aenv a -> Int
     hashP salt p =
       case p of
-        ToStream acc -> hashWithSalt salt "ToStream" `hashA` acc
-
+        ToStream spec ix acc -> hashWithSalt salt "ToStream" `hashA` acc `hashE` ix `hashWithSalt` show spec
+        UseLazy  spec ix arr -> hashWithSalt salt "UseLazy" `hashWithSalt` hashArrays ArraysRarray arr `hashE` ix `hashWithSalt` show spec
+                        
     hashT :: Int -> Transducer acc aenv lenv a -> Int
     hashT salt t =
       case t of
-        MapStream f x -> hashWithSalt salt "MapStream" `hashF` f `hashV` x
-        ZipWithStream f x y -> hashWithSalt salt "ZipWithStream" `hashF` f `hashV` x `hashV` y
-
+        MapStream f x           -> hashWithSalt salt "MapStream" `hashF` f `hashVar` x
+        ZipWithStream f x y     -> hashWithSalt salt "ZipWithStream" `hashF` f `hashVar` x `hashVar` y
+        ScanStream f acc x      -> hashWithSalt salt "ScanStream" `hashF` f `hashA` acc `hashVar` x
+        ScanStreamAct f g acc x -> hashWithSalt salt "ScanStreamAct" `hashF` f `hashF` g `hashA` acc `hashVar` x
+        
     hashC :: Int -> Consumer acc aenv lenv a -> Int
     hashC salt c =
       case c of
-        FromStream x-> hashWithSalt salt "FromStream" `hashV` x
-        FoldStream f acc x -> hashWithSalt salt "FoldStream" `hashF` f `hashA` acc `hashV` x
+        FromStream x              -> hashWithSalt salt "FromStream" `hashVar` x
+        FoldStream f acc x        -> hashWithSalt salt "FoldStream" `hashF` f `hashA` acc `hashVar` x
+        FoldStreamAct f g acc x   -> hashWithSalt salt "FoldStreamAct" `hashF` f `hashF` g `hashA` acc `hashVar` x
+        FoldStreamFlatten f acc x -> hashWithSalt salt "FoldStreamFlatten" `hashF` f `hashA` acc `hashVar` x
+        CollectStream _ x         -> hashWithSalt salt "CollectStream" `hashVar` x
 
   in case l of
     EmptyLoop      -> hash "Empty"

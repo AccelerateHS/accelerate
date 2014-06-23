@@ -260,22 +260,40 @@ data PreAcc acc exp as where
                 -> PreAcc acc exp (Array sh c)
 
   Loop          :: Arrays arrs 
-                => PreLoop acc () arrs 
+                => PreLoop acc exp () arrs 
                 -> PreAcc acc exp arrs
 
-data PreLoop acc lenv arrs where
-  EmptyLoop  :: PreLoop acc lenv ()
-  Producer   :: (Arrays a, Arrays arrs) => Producer   acc      a -> PreLoop acc (lenv, a) arrs -> PreLoop acc lenv arrs
-  Transducer :: (Arrays a, Arrays arrs) => Transducer acc lenv a -> PreLoop acc (lenv, a) arrs -> PreLoop acc lenv arrs
-  Consumer   :: (Arrays a, Arrays arrs) => Consumer   acc lenv a -> PreLoop acc  lenv     arrs -> PreLoop acc lenv (arrs, a)
+data PreLoop acc exp lenv arrs where
+  EmptyLoop  :: PreLoop acc exp lenv ()
+  Producer   :: (Arrays a, Arrays arrs) => Producer   acc exp      a -> PreLoop acc exp (lenv, a) arrs -> PreLoop acc exp lenv arrs
+  Transducer :: (Arrays a, Arrays arrs) => Transducer acc     lenv a -> PreLoop acc exp (lenv, a) arrs -> PreLoop acc exp lenv arrs
+  Consumer   :: (Arrays a, Arrays arrs) => Consumer   acc     lenv a -> PreLoop acc exp  lenv     arrs -> PreLoop acc exp lenv (arrs, a)
 
-newtype AccLoop lenv a = AccLoop (PreLoop Acc lenv a)
+newtype AccLoop lenv a = AccLoop (PreLoop Acc Exp lenv a)
 
-data Producer acc a where
+data Producer acc exp a where
   -- Convert the given array to a stream.
-  ToStream :: (Shape sh, Elt e)
-           => acc (Array (sh:.Int) e)
-           -> Producer acc (Array sh e)
+  -- Example:
+  -- slix = Z :. All :. Int :. All :. All :. Int
+  --              ^      ^      ^      ^      ^
+  --              |       \    /      /       |
+  --              |        \__/______/_______ Iteration space.
+  --              |          /      /
+  --           Element______/______/
+  --            shape.
+  --
+  ToStream :: (Slice slix, Elt e,
+               Typeable (FullShape slix), Typeable (SliceShape slix))
+           => exp slix
+           -> acc (Array (FullShape slix) e)
+           -> Producer acc exp (Array (SliceShape slix) e)
+
+  -- Use main memory vector as a stream.
+  UseLazy :: (Slice slix, Elt e, 
+               Typeable (FullShape slix), Typeable (SliceShape slix))
+           => exp slix
+           -> Array (FullShape slix) e
+           -> Producer acc exp (Array (SliceShape slix) e)
 
 data Transducer acc lenv a where
 
@@ -294,6 +312,36 @@ data Transducer acc lenv a where
                 -> Idx lenv (Array sh2 e2)
                 -> Transducer acc lenv (Array sh3 e3)
 
+  -- ScanStream (+) a0 x. Scan a stream x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   a0 + a = a = a + a0.
+  --
+  ScanStream :: (Shape sh, Elt e)
+             => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
+             -> acc (Array sh e)
+             -> Idx lenv (Array sh e)
+             -> Transducer acc lenv (Array sh e)
+  
+  -- ScanStreamAct (+) (*) a0 x. Scan a stream x by the given binary
+  -- operation (+). (+) must be semi-associative, where (*) is the
+  -- companion operator:
+  --
+  --   (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- Note on the name: Act is short for "semigroup action".
+  --
+  ScanStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
+                => (Acc (Array sh e) -> Acc (Array sh' e') -> acc (Array sh e))
+                -> (Acc (Array sh' e') -> Acc (Array sh' e') -> acc (Array sh' e'))
+                -> acc (Array sh e)
+                -> Idx lenv (Array sh' e')
+                -> Transducer acc lenv (Array sh e)
+
 data Consumer acc lenv a where
 
   -- Convert the given stream to an array.
@@ -301,12 +349,63 @@ data Consumer acc lenv a where
              => Idx lenv (Array sh e)
              -> Consumer acc lenv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
-  -- Fold a stream by combining each element using the given binary function.
+  -- FoldStream (+) a0 x. Fold a stream x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   a0 + a = a = a + a0.
+  --
   FoldStream :: (Shape sh, Elt e)
              => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
              -> acc (Array sh e)
              -> Idx lenv (Array sh e)
              -> Consumer acc lenv (Array sh e)
+  
+  -- FoldStreamAct (+) (*) a0 x. Fold a stream x by the given binary
+  -- operation (+). (+) must be semi-associative, where (*) is the
+  -- companion operator:
+  --
+  --   (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- Note on the name: Act is short for "semigroup action".
+  --
+  FoldStreamAct :: (Shape sh, Elt a, Shape sh', Elt b)
+                => (Acc (Array sh a) -> Acc (Array sh' b) -> acc (Array sh a))
+                -> (Acc (Array sh' b) -> Acc (Array sh' b) -> acc (Array sh' b))
+                -> acc (Array sh a)
+                -> Idx lenv (Array sh' b)
+                -> Consumer acc lenv (Array sh a)
+
+  -- FoldStreamFlatten f a0 x. A specialized version of FoldStreamAct
+  -- where reduction with the companion operator corresponds to
+  -- flattening. f must be semi-associative, with vecotor append (++)
+  -- as the companion operator:
+  --
+  --   f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --
+  -- It is common to ignore the shape vectors, yielding the usual
+  -- semi-associativity law:
+  --
+  --   f b a _ = b + a, 
+  --
+  -- for some (+) satisfying:
+  --
+  --   (b + a1) + a2 = b + (a1 ++ a2).
+  --
+  FoldStreamFlatten :: (Shape sh, Elt a, Shape sh', Elt b)
+                    => (Acc (Array sh a) -> Acc (Vector sh') -> Acc (Vector b) -> acc (Array sh a))
+                    -> acc (Array sh a)
+                    -> Idx lenv (Array sh' b)
+                    -> Consumer acc lenv (Array sh a)
+
+  -- Collect a stream by applying a function to each element.
+  CollectStream :: (Shape sh, Elt e)
+                => (Array sh e -> IO ())
+                -> Idx lenv (Array sh e)
+                -> Consumer acc lenv ()
 
 
 -- |Array-valued collective computations
@@ -1125,13 +1224,19 @@ showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp (Loop l)           = showLoop l
 
-showLoop :: PreLoop acc lenv arrs -> String
+showLoop :: PreLoop acc exp lenv arrs -> String
 showLoop EmptyLoop = "EmptyLoop"
-showLoop (Producer   (ToStream{})      _) = "FromStream"
-showLoop (Transducer (MapStream{})     _) = "MapStream"
-showLoop (Transducer (ZipWithStream{}) _) = "ZipWithStream"
-showLoop (Consumer   (FromStream{})    _) = "FromStream"
-showLoop (Consumer   (FoldStream{})    _) = "FoldStream"
+showLoop (Producer   (ToStream{})          _) = "FromStream"
+showLoop (Producer   (UseLazy{})           _) = "UseLazy"
+showLoop (Transducer (MapStream{})         _) = "MapStream"
+showLoop (Transducer (ZipWithStream{})     _) = "ZipWithStream"
+showLoop (Transducer (ScanStream{})        _) = "ScanStream"
+showLoop (Transducer (ScanStreamAct{})     _) = "ScanStreamAct"
+showLoop (Consumer   (FromStream{})        _) = "FromStream"
+showLoop (Consumer   (FoldStream{})        _) = "FoldStream"
+showLoop (Consumer   (FoldStreamAct{})     _) = "FoldStreamAct"
+showLoop (Consumer   (FoldStreamFlatten{}) _) = "FoldStreamFlatten"
+showLoop (Consumer   (CollectStream{})     _) = "CollectStream"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

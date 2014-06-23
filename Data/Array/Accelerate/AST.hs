@@ -476,9 +476,24 @@ data PreOpenLoop acc aenv lenv arrs where
 
 data Producer acc aenv a where
   -- Convert the given array to a stream.
-  ToStream :: (Shape sh, Elt e)
-           => acc aenv (Array (sh:.Int) e)
-           -> Producer acc aenv (Array sh e)
+  ToStream :: (Elt slix, Shape sl, Shape sh, Elt e)
+           => SliceIndex (EltRepr slix)
+                         (EltRepr sl)
+                         co
+                         (EltRepr sh)
+           -> PreExp acc aenv slix
+           -> acc aenv (Array sh e)
+           -> Producer acc aenv (Array sl e)
+
+  -- Lazy version of Use.
+  UseLazy :: (Elt slix, Shape sl, Shape sh, Elt e)
+           => SliceIndex (EltRepr slix)
+                         (EltRepr sl)
+                         co
+                         (EltRepr sh)
+           -> PreExp acc aenv slix
+           -> Array sh e
+           -> Producer acc aenv (Array sl e)
 
 data Transducer acc aenv lenv a where
 
@@ -495,6 +510,36 @@ data Transducer acc aenv lenv a where
                 -> Idx lenv (Array sh2 e2)
                 -> Transducer acc aenv lenv (Array sh3 e3)
   
+  -- ScanStream (+) a0 x. Scan a stream x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   a0 + a = a = a + a0.
+  --
+  ScanStream :: (Shape sh, Elt e)
+             => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
+             -> acc aenv (Array sh e)
+             -> Idx lenv (Array sh e)
+             -> Transducer acc aenv lenv (Array sh e)
+  
+  -- ScanStreamAct (+) (*) a0 x. Scan a stream x by the given binary
+  -- operation (+). (+) must be semi-associative, where (*) is the
+  -- companion operator:
+  --
+  --   (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- Note on the name: Act is short for "semigroup action".
+  -- 
+  ScanStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
+                => PreOpenAfun acc aenv (Array sh e -> Array sh' e' -> Array sh e)
+                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
+                -> acc aenv (Array sh e)
+                -> Idx lenv (Array sh' e')
+                -> Transducer acc aenv lenv (Array sh e)
+
 data Consumer acc aenv lenv a where
 
   -- Convert the given stream to an array.
@@ -502,12 +547,63 @@ data Consumer acc aenv lenv a where
              => Idx lenv (Array sh e)
              -> Consumer acc aenv lenv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
-  -- Fold a stream by combining each element using the given binary function.
+  -- FoldStream (+) a0 x. Fold a stream x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   a0 + a = a = a + a0.
+  --
   FoldStream :: (Shape sh, Elt e)
              => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
              -> acc aenv (Array sh e)
              -> Idx lenv (Array sh e)
              -> Consumer acc aenv lenv (Array sh e)
+
+  -- FoldStreamAct (+) (*) a0 x. Fold a stream x by the given binary
+  -- operation (+). (+) must be semi-associative, where (*) is the
+  -- companion operator:
+  --
+  --   (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- Note on the name: Act is short for "semigroup action".
+  --
+  FoldStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
+                => PreOpenAfun acc aenv (Array sh e -> Array sh' e' -> Array sh e)
+                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
+                -> acc aenv (Array sh e)
+                -> Idx lenv (Array sh' e')
+                -> Consumer acc aenv lenv (Array sh e)
+
+  -- FoldStreamFlatten f a0 x. A specialized version of FoldStreamAct
+  -- where reduction with the companion operator corresponds to
+  -- flattening. f must be semi-associative, with vecotor append (++)
+  -- as the companion operator:
+  --
+  --   f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --
+  -- It is common to ignore the shape vectors, yielding the usual
+  -- semi-associativity law:
+  --
+  --   f b a _ = b + a, 
+  --
+  -- for some (+) satisfying:
+  --
+  --   (b + a1) + a2 = b + (a1 ++ a2).
+  --
+  FoldStreamFlatten :: (Shape sh, Elt e, Shape sh', Elt e')
+             => PreOpenAfun acc aenv (Array sh e -> Vector sh' -> Vector e' -> Array sh e)
+             -> acc aenv (Array sh e)
+             -> Idx lenv (Array sh' e')
+             -> Consumer acc aenv lenv (Array sh e)
+
+  -- Collect a stream by applying a function to each element.
+  CollectStream :: (Shape sh, Elt e)
+                => (Array sh e -> IO ())
+                -> Idx lenv (Array sh e)
+                -> Consumer acc aenv lenv ()
 
 -- |Closed array expression aka an array program
 --

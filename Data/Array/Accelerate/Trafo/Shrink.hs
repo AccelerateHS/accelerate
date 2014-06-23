@@ -203,19 +203,25 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkP :: Producer acc aenv' a -> Producer acc aenv' a
     shrinkP p =
       case p of
-        ToStream a -> ToStream (shrinkAcc a)
+        ToStream sl slix a   -> ToStream sl (shrinkE slix) (shrinkAcc a)
+        UseLazy  sl slix arr -> UseLazy  sl (shrinkE slix) arr
 
     shrinkTr :: Transducer acc aenv' lenv a -> Transducer acc aenv' lenv a
     shrinkTr t =
       case t of
         MapStream f x -> MapStream (shrinkAF f) x
         ZipWithStream f x y -> ZipWithStream (shrinkAF f) x y
+        ScanStream f a x -> ScanStream (shrinkAF f) (shrinkAcc a) x
+        ScanStreamAct f g a x -> ScanStreamAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) x
 
     shrinkC :: Consumer acc aenv' lenv a -> Consumer acc aenv' lenv a
     shrinkC c =
       case c of
         FromStream x -> FromStream x
         FoldStream f a x -> FoldStream (shrinkAF f) (shrinkAcc a) x
+        FoldStreamAct f g a x -> FoldStreamAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) x
+        FoldStreamFlatten f a x -> FoldStreamFlatten (shrinkAF f) (shrinkAcc a) x
+        CollectStream f x -> CollectStream f x
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -404,19 +410,25 @@ usesOfPreAcc withShape countAcc idx = countP
     countPr :: Producer acc aenv arrs -> Int
     countPr p =
       case p of
-        ToStream a -> countA a
+        ToStream _ sh a -> countE sh + countA a
+        UseLazy  _ sh _ -> countE sh
 
     countTr :: Transducer acc aenv lenv arrs -> Int
     countTr t =
       case t of
         MapStream f _ -> countAF f idx
         ZipWithStream f _ _ -> countAF f idx
+        ScanStream f a _ -> countAF f idx + countA a
+        ScanStreamAct f g a _ -> countAF f idx + countAF g idx + countA a
 
     countC :: Consumer acc aenv lenv arrs -> Int
     countC c =
       case c of
         FromStream _ -> 0
         FoldStream f a _ -> countAF f idx + countA a
+        FoldStreamAct f g a _ -> countAF f idx + countAF g idx + countA a
+        FoldStreamFlatten f a _ -> countAF f idx + countA a
+        CollectStream _ _ -> 0
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
