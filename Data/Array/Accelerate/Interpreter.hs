@@ -41,22 +41,19 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
-import Control.Monad.Identity                           ( Identity, runIdentity )
-import Control.Monad.Trans                              ( lift )
-import Control.Monad.Trans.Maybe                        ( MaybeT, runMaybeT )
-import Control.Monad.ST                                 ( ST )
 import Data.Bits
 import Data.Char                                        ( chr, ord )
 import Prelude                                          hiding ( sum )
+import System.IO.Unsafe                                 ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Delayed
-import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex )
+import Data.Array.Accelerate.Array.Representation       hiding ( sliceIndex, enumSlices, restrictSlice )
 import Data.Array.Accelerate.Array.Sugar (
-  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments )
+  Z(..), (:.)(..), Array(..), Arrays, Scalar, Vector, Segments, enumSlices, restrictSlice )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution
@@ -220,26 +217,78 @@ evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
 evalPreOpenAcc (Aforeign _ _ _) _
   = error "This case is not possible"
 
-data ExecLoop aenv lenv arrs where
-  ExecEmpty :: ExecLoop aenv lenv ()
-  ExecP :: (Arrays a, Arrays arrs) => ExecP aenv      a -> ExecLoop aenv (lenv, a) arrs -> ExecLoop aenv lenv  arrs
-  ExecT :: (Arrays a, Arrays arrs) => ExecT aenv lenv a -> ExecLoop aenv (lenv, a) arrs -> ExecLoop aenv lenv  arrs
-  ExecC :: (Arrays a, Arrays arrs) => ExecC aenv lenv a -> ExecLoop aenv  lenv     arrs -> ExecLoop aenv lenv (arrs, a)
+data ExecLoop lenv arrs where
+  ExecEmpty :: ExecLoop lenv ()
+  ExecP :: (Arrays a, Arrays arrs) => ExecP      a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
+  ExecT :: (Arrays a, Arrays arrs) => ExecT lenv a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
+  ExecC :: (Arrays a, Arrays arrs) => ExecC lenv a -> ExecLoop  lenv     arrs -> ExecLoop lenv (arrs, a)
   
-data ExecP aenv a where
-  ExecToStream :: [Array sh e] -> ExecP aenv (Array sh e)
+data ExecP a where
+  ExecToStream :: [Array sh e] 
+               -> ExecP (Array sh e)
 
-data ExecT aenv lenv a where
-  ExecMap :: (a -> b) -> Idx lenv a -> ExecT aenv lenv b
-  ExecZipWith :: (a -> b -> c) -> Idx lenv a -> Idx lenv b -> ExecT aenv lenv c
-  
-data ExecC aenv lenv a where
-  ExecFromStream :: (Sugar.Elt a, Sugar.Shape sh) => Idx lenv (Array sh a) -> [Array sh a] -> ExecC aenv lenv (Vector sh, Vector a)
-  ExecFoldStream :: Idx lenv (Array sh a) -> (Array sh a -> Array sh a -> Array sh a) -> Array sh a -> ExecC aenv lenv (Array sh a)
-  
+  ExecUseLazy :: (Sugar.Elt slix, Sugar.Shape sl,
+                  Sugar.Shape dim, Sugar.Elt e)
+              => SliceIndex (Sugar.EltRepr slix)
+                            (Sugar.EltRepr sl)
+                            co
+                            (Sugar.EltRepr dim)
+              -> [slix]
+              -> Array dim e
+              -> ExecP (Array sl e)
+
+data ExecT lenv a where
+  ExecMap :: (a -> b)
+          -> Idx lenv a
+          -> ExecT lenv b
+
+  ExecZipWith :: (a -> b -> c)
+              -> Idx lenv a
+              -> Idx lenv b
+              -> ExecT lenv c
+
+  ExecScanStream :: Idx lenv (Array sh a)
+                 -> (Array sh a -> Array sh a -> Array sh a)
+                 -> Array sh a
+                 -> ExecT lenv (Array sh a)
+
+  ExecScanStreamAct :: Idx lenv (Array sh' b)
+                    -> (Array sh a -> Array sh' b -> Array sh a)
+                    -> (Array sh' b -> Array sh' b -> Array sh' b)
+                    -> Array sh a
+                    -> ExecT lenv (Array sh a)
+
+data ExecC lenv a where
+  ExecFromStream :: (Sugar.Elt a, Sugar.Shape sh)
+                 => Idx lenv (Array sh a)
+                 -> [Array sh a]
+                 -> ExecC lenv (Vector sh, Vector a)
+
+  ExecFoldStream :: Idx lenv (Array sh a)
+                 -> (Array sh a -> Array sh a -> Array sh a)
+                 -> Array sh a
+                 -> ExecC lenv (Array sh a)
+
+  ExecFoldStreamAct :: Idx lenv (Array sh' b)
+                    -> (Array sh a -> Array sh' b -> Array sh a)
+                    -> (Array sh' b -> Array sh' b -> Array sh' b)
+                    -> Array sh a
+                    -> ExecC lenv (Array sh a)
+
+  ExecFoldStreamFlatten :: (Sugar.Elt b, Sugar.Shape sh')
+                        => Idx lenv (Array sh' b)
+                        -> (Array sh a -> Vector sh' -> Vector b -> Array sh a)
+                        -> Array sh a
+                        -> ExecC lenv (Array sh a)
+
+  ExecCollectStream :: (Array sh a -> IO ())
+                    -> Idx lenv (Array sh a)
+                    -> ()
+                    -> ExecC lenv ()
+
 evalLoop :: PreOpenLoop OpenAcc aenv () arrs -> Val aenv -> arrs
-evalLoop l aenv | degenerate l = runIdentity $ initLoop aenv l >>= returnOut
-                | otherwise    = runIdentity $ initLoop aenv l >>= loop >>= returnOut
+evalLoop l aenv | degenerate l = returnOut .        initLoop aenv $ l
+                | otherwise    = returnOut . loop . initLoop aenv $ l
   where
     -- A loop with no producers is degenerate since there is no
     -- halting condition, and should therefore not be iterated.
@@ -254,68 +303,109 @@ evalLoop l aenv | degenerate l = runIdentity $ initLoop aenv l >>= returnOut
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
-    initLoop :: Val aenv -> PreOpenLoop OpenAcc aenv lenv arrs -> Identity (ExecLoop aenv lenv arrs)
+    initLoop :: Val aenv -> PreOpenLoop OpenAcc aenv lenv arrs -> ExecLoop lenv arrs
     initLoop aenv l =
       case l of
-        EmptyLoop      -> return ExecEmpty
-        Producer   p l -> initProducer aenv p   >>= \ p' -> initLoop aenv l >>= \ l' -> return (ExecP p' l')
-        Transducer t l -> initTransducer aenv t >>= \ t' -> initLoop aenv l >>= \ l' -> return (ExecT t' l')
-        Consumer   c l -> initConsumer aenv c   >>= \ c' -> initLoop aenv l >>= \ l' -> return (ExecC c' l')
+        EmptyLoop       -> ExecEmpty
+        Producer   p l' -> ExecP (initProducer   aenv p) (initLoop aenv l')
+        Transducer t l' -> ExecT (initTransducer aenv t) (initLoop aenv l')
+        Consumer   c l' -> ExecC (initConsumer   aenv c) (initLoop aenv l')
 
     -- Iterate the given loop until it terminates.
     -- A loop only terminates when one of the producers are exhausted.
-    loop :: ExecLoop aenv () arrs -> Identity (ExecLoop aenv () arrs)
-    loop l = do
-      ml <- runMaybeT (go l Empty)
-      case ml of
-        Nothing -> return l
+    loop :: ExecLoop () arrs -> ExecLoop () arrs
+    loop l =
+      case go l Empty of
+        Nothing -> l
         Just l' -> loop l'
 
     -- One iteration of a loop.
-    go :: ExecLoop aenv lenv arrs -> Val lenv -> MaybeT Identity (ExecLoop aenv lenv arrs)
+    go :: ExecLoop lenv arrs -> Val lenv -> Maybe (ExecLoop lenv arrs)
     go l lenv =
       case l of
         ExecEmpty -> return ExecEmpty
         ExecP p l ->       produce   p       >>= \ (a, p') -> go l (lenv `Push` a) >>= \ l' -> return (ExecP p' l')
-        ExecT t l -> lift (transduce t lenv) >>= \  a      -> go l (lenv `Push` a) >>= \ l' -> return (ExecT t  l')
-        ExecC c l -> lift (consume   c lenv) >>= \     c'  -> go l  lenv           >>= \ l' -> return (ExecC c' l')
+        ExecT t l -> Just (transduce t lenv) >>= \ (a, t') -> go l (lenv `Push` a) >>= \ l' -> return (ExecT t' l')
+        ExecC c l -> Just (consume   c lenv) >>= \     c'  -> go l  lenv           >>= \ l' -> return (ExecC c' l')
 
     -- Finalize and return the accumulators in the consumers of the loop.
-    returnOut :: ExecLoop aenv lenv arrs -> Identity arrs
+    returnOut :: ExecLoop lenv arrs -> arrs
     returnOut l =
       case l of
-        ExecEmpty -> return ()
+        ExecEmpty -> ()
         ExecP _ l -> returnOut l
         ExecT _ l -> returnOut l
-        ExecC c l -> readConsumer c >>= \ a -> returnOut l >>= \ arrs -> return $ (arrs, a)
+        ExecC c l -> (returnOut l, readConsumer c)
 
+produce :: ExecP a -> Maybe (a, ExecP a)
+produce p =
+  case p of
+    ExecToStream (x:xs) -> Just (x, ExecToStream xs)
+    ExecToStream []     -> Nothing
+    ExecUseLazy sliceIndex (slix:slixs) arr -> 
+      Just (force $ sliceOp sliceIndex (delay arr) slix, ExecUseLazy sliceIndex slixs arr)
+    ExecUseLazy _ [] _  -> Nothing
 
-produce :: ExecP aenv a -> MaybeT Identity (a, ExecP aenv a)
-produce (ExecToStream (x:xs)) = lift (return x) >>= (\ a -> return (a, ExecToStream xs))
-produce (ExecToStream []) = mzero
+initProducer :: Val aenv -> Producer OpenAcc aenv a -> ExecP a
+initProducer aenv p =
+  case p of
+    ToStream sliceIndex sl acc -> 
+      let arr = force $ evalOpenAcc acc aenv
+          sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
+      in ExecToStream (map force (toStreamOp sliceIndex sl' (delay arr)))
+    UseLazy sliceIndex sl arr -> 
+      let sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
+          sls = enumSlices sliceIndex sl'
+      in ExecUseLazy sliceIndex sls arr
 
-initProducer :: Val aenv -> Producer OpenAcc aenv a -> Identity (ExecP aenv a)
-initProducer aenv (ToStream acc) = return $ ExecToStream (map force (toStreamOp (evalOpenAcc acc aenv)))
+transduce :: ExecT lenv a -> Val lenv -> (a, ExecT lenv a)
+transduce t lenv =
+  case t of
+    ExecMap     f x   -> (f (prj x lenv), t)
+    ExecZipWith f x y -> (f (prj x lenv) (prj y lenv), t)
+    ExecScanStream x f acc        -> (acc, ExecScanStream x f (f acc (prj x lenv)))
+    ExecScanStreamAct x f g acc   -> (acc, ExecScanStreamAct x f g (f acc (prj x lenv)))
 
-transduce :: ExecT aenv lenv a -> Val lenv -> Identity a
-transduce (ExecMap f x) lenv = return $ f (prj x lenv)
-transduce (ExecZipWith f x y) lenv = return $ f (prj x lenv) (prj y lenv)
+initTransducer :: Val aenv -> Transducer OpenAcc aenv lenv a -> ExecT lenv a
+initTransducer aenv t =
+  case t of
+    MapStream     f x       -> ExecMap     (evalOpenAfun f aenv) x
+    ZipWithStream f x y     -> ExecZipWith (evalOpenAfun f aenv) x y
+    ScanStream    f acc x   -> ExecScanStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
+    ScanStreamAct f g acc x -> ExecScanStreamAct x (evalOpenAfun f aenv) (evalOpenAfun g aenv) (force $ evalOpenAcc acc aenv)
 
-initTransducer :: Val aenv -> Transducer OpenAcc aenv lenv a -> Identity (ExecT aenv lenv a)
-initTransducer aenv (MapStream f x) = return $ ExecMap (evalOpenAfun f aenv) x
-initTransducer aenv (ZipWithStream f x y) = return $ ExecZipWith (evalOpenAfun f aenv) x y
+consume :: ExecC lenv a -> Val lenv -> ExecC lenv a
+consume c lenv =
+  case c of
+    ExecFromStream x as           -> ExecFromStream x (prj x lenv:as)
+    ExecFoldStream x f acc        -> ExecFoldStream x f (f acc (prj x lenv))
+    ExecFoldStreamAct x f g acc   -> ExecFoldStreamAct x f g (f acc (prj x lenv))
+    ExecFoldStreamFlatten x f acc -> 
+      ExecFoldStreamFlatten x f (f acc shapes elts)
+      where
+        arr = prj x lenv
+        shapes = Sugar.fromList (Z :. 1) [Sugar.shape arr]
+        eltlist = Sugar.toList arr
+        elts = Sugar.fromList (Z :. (length eltlist)) eltlist
+    ExecCollectStream f x () -> let !r = unsafePerformIO $ f (prj x lenv) in ExecCollectStream f x r
 
-consume :: ExecC aenv lenv a -> Val lenv -> Identity (ExecC aenv lenv a)
-consume (ExecFromStream x as) lenv = return (ExecFromStream x (prj x lenv:as))
-consume (ExecFoldStream x f acc) lenv = return (f acc (prj x lenv)) >>= \ acc' -> return (ExecFoldStream x f acc')
+initConsumer :: Val aenv -> Consumer OpenAcc aenv lenv a -> ExecC lenv a
+initConsumer aenv c =
+  case c of
+    FromStream x              -> ExecFromStream x []
+    FoldStream f acc x        -> ExecFoldStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
+    FoldStreamAct f g acc x   -> ExecFoldStreamAct x (evalOpenAfun f aenv) (evalOpenAfun g aenv) (force $ evalOpenAcc acc aenv)
+    FoldStreamFlatten f acc x -> ExecFoldStreamFlatten x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
+    CollectStream f x         -> ExecCollectStream f x ()
 
-initConsumer :: Val aenv -> Consumer OpenAcc aenv lenv a -> Identity (ExecC aenv lenv a)
-initConsumer _ (FromStream x) = return (ExecFromStream x [])
-initConsumer aenv (FoldStream f acc x) = return (ExecFoldStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv))
-
-readConsumer :: ExecC aenv lenv a -> Identity a
-readConsumer (ExecFromStream _ as) = return $ force $ (fromStreamOp (reverse (map delay as)))
-readConsumer (ExecFoldStream _ _ acc) = return acc
+readConsumer :: ExecC lenv a -> a
+readConsumer c =
+  case c of
+    ExecFromStream _ as           -> force $ (fromStreamOp (reverse (map delay as)))
+    ExecFoldStream _ _ acc        -> acc
+    ExecFoldStreamAct _ _ _ acc   -> acc
+    ExecFoldStreamFlatten _ _ acc -> acc
+    ExecCollectStream _ _ r       -> r
 
 -- Evaluate a closed array expressions
 --
@@ -770,17 +860,15 @@ stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
                                      Left v    -> v
                                      Right ix' -> rf2 (Sugar.fromElt ix')
 
-toStreamOp :: (Sugar.Shape sh)
-           => Delayed (Array (sh:.Int) e)
-           -> [Delayed (Array sh e)]
-toStreamOp (DelayedRpair DelayedRunit (DelayedRarray (sh, n) rf))
-  = let rf' i sh' =
-          let j = toIndex sh sh'
-              k = j + i * size sh
-          in rf (fromIndex (sh, n) k)
-    in  [DelayedRpair DelayedRunit (DelayedRarray sh (rf' i)) | i <- [0..n-1]]
-
---DelayedRstream [DelayedRpair DelayedRunit (DelayedRarray sh (\ sh' -> rf (sh', i))) | i <- [0..n-1]]
+toStreamOp :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Shape dim, Sugar.Elt e)
+           => SliceIndex (Sugar.EltRepr slix)
+                         (Sugar.EltRepr sl)
+                         co
+                         (Sugar.EltRepr dim)
+           -> slix 
+           -> Delayed (Array dim e)
+           -> [Delayed (Array sl e)]
+toStreamOp sliceIndex slix arr = map (sliceOp sliceIndex arr) (Sugar.enumSlices sliceIndex slix)
 
 fromStreamOp :: (Sugar.Shape sh, Sugar.Elt e)
              => [Delayed (Array sh e)]

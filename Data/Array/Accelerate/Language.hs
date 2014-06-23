@@ -23,7 +23,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, Exp,                                 -- re-exporting from 'Smart'
+  Acc, AccLoop, Exp,                        -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -40,9 +40,18 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- * Stream functions
-  mapStream, zipWithStream, toStream, fromStream, foldStream, loop, emptyLoop,
-  
+  -- * Stream introduction and elimination
+  loop, emptyLoop,
+
+  -- * Stream producers
+  toStream, useLazy,
+
+  -- * Stream transudcers
+  mapStream, zipWithStream, scanStream, scanStreamAct, 
+
+  -- * Stream consumers
+  fromStream, foldStream, foldStreamAct, foldStreamFlatten, collectStream,
+
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
 
@@ -108,7 +117,7 @@ module Data.Array.Accelerate.Language (
 
 -- standard libraries
 import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error, IO )
 import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
 import Text.Printf
@@ -484,14 +493,59 @@ zipWithStream :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c, Arrays a
               -> AccLoop lenv arrs
 zipWithStream f x y (AccLoop l) = AccLoop (Transducer (ZipWithStream f x y) l)
 
+-- | scanStream (+) a0 x loop. Scan a stream x by combining each
+-- element using the given binary operation (+). (+) must be
+-- associative:
+--
+--   (a + b) + c = a + (b + c),
+--
+-- and a0 must be the identity element for (+):
+--
+--   a0 + a = a = a + a0.
+--
+scanStream :: (Shape ix, Elt a, Arrays arrs)
+           => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
+           -> Acc (Array ix a)
+           -> Idx lenv (Array ix a)
+           -> AccLoop (lenv, Array ix a) arrs
+           -> AccLoop lenv arrs
+scanStream f acc x (AccLoop l) = AccLoop (Transducer (ScanStream f acc x) l)
+
+-- | ScanStreamAct (+) (*) a0 x loop. Scan a stream x by the given
+-- binary operation (+). (+) must be semi-associative, where (*) is
+-- the companion operator:
+--
+--   (a + b1) + b2 = a + (b1 * b2).
+--
+-- Note on the name: Act is short for "semigroup action".
+--
+scanStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+              => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
+              -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
+              -> Acc (Array ix a)
+              -> Idx lenv (Array jx b)
+              -> AccLoop (lenv, Array ix a) arrs
+              -> AccLoop lenv arrs
+scanStreamAct f g acc x (AccLoop l) = AccLoop (Transducer (ScanStreamAct f g acc x) l)
+
 -- | Convert the given array to a stream by streaming the outer
 -- dimension.
 --
-toStream :: (Shape ix, Elt a, Arrays arrs)
-         => Acc (Array (ix:.Int) a)
-         -> AccLoop (lenv, Array ix a) arrs
+toStream :: (Slice slix, Elt a, Arrays arrs)
+         => Exp slix
+         -> Acc (Array (FullShape slix) a)
+         -> AccLoop (lenv, Array (SliceShape slix) a) arrs
          -> AccLoop lenv arrs
-toStream acc (AccLoop l) = AccLoop (Producer (ToStream acc) l)
+toStream spec (Acc (Use arr)) (AccLoop l) = AccLoop (Producer (UseLazy spec arr) l) -- Let's not be silly.
+toStream spec acc (AccLoop l) = AccLoop (Producer (ToStream spec acc) l)
+
+useLazy :: (Slice slix, Elt a, Arrays arrs)
+        => Exp slix
+        -> Array (FullShape slix) a
+        -> AccLoop (lenv, Array (SliceShape slix) a) arrs
+        -> AccLoop lenv arrs
+useLazy spec arr (AccLoop l) = AccLoop (Producer (UseLazy spec arr) l)
+
 
 -- | Convert the given scalar stream to vector.
 fromStream :: (Shape ix, Elt a, Arrays arrs)
@@ -500,8 +554,16 @@ fromStream :: (Shape ix, Elt a, Arrays arrs)
          -> AccLoop lenv (arrs, (Vector ix, Vector a))
 fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
 
--- | Fold a stream by combining all the elements with the given binary
--- array function.
+-- | foldStream (+) a0 x loop. Fold a stream x by combining each
+-- element using the given binary operation (+). (+) must be
+-- associative:
+--
+--   (a + b) + c = a + (b + c),
+--
+-- and a0 must be the identity element for (+):
+--
+--   a0 + a = a = a + a0.
+--
 foldStream :: (Shape ix, Elt a, Arrays arrs)
            => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
            -> Acc (Array ix a)
@@ -509,6 +571,55 @@ foldStream :: (Shape ix, Elt a, Arrays arrs)
            -> AccLoop lenv arrs
            -> AccLoop lenv (arrs, Array ix a)
 foldStream f acc x (AccLoop l) = AccLoop (Consumer (FoldStream f acc x) l)
+
+-- | foldStreamAct (+) (*) a0 x loop. Fold a stream x by the given
+-- binary operation (+). (+) must be semi-associative, where (*) is
+-- the companion operator:
+--
+--   (a + b1) + b2 = a + (b1 * b2).
+--
+-- Note on the name: Act is short for "semigroup action".
+--
+foldStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+              => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
+              -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
+              -> Acc (Array ix a)
+              -> Idx lenv (Array jx b)
+              -> AccLoop lenv arrs
+              -> AccLoop lenv (arrs, Array ix a)
+foldStreamAct f g acc x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc x) l)
+
+-- | foldStreamFlatten f a0 x loop. A specialized version of
+-- FoldStreamAct where reduction with the companion operator
+-- corresponds to flattening. f must be semi-associative, with vecotor
+-- append (++) as the companion operator:
+--
+--   f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+--
+-- It is common to ignore the shape vectors, yielding the usual
+-- semi-associativity law:
+--
+--   f b a _ = b + a, 
+--
+-- for some (+) satisfying:
+--
+--   (b + a1) + a2 = b + (a1 ++ a2).
+--
+foldStreamFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+                  => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))
+                  -> Acc (Array ix a)
+                  -> Idx lenv (Array jx b)
+                  -> AccLoop lenv arrs
+                  -> AccLoop lenv (arrs, Array ix a)
+foldStreamFlatten f acc x (AccLoop l) = AccLoop (Consumer (FoldStreamFlatten f acc x) l)
+
+-- | Collect a stream by applying a function to each element.
+collectStream :: (Shape ix, Elt a, Arrays arrs)
+              => (Array ix a -> IO ())
+              -> Idx lenv (Array ix a)
+              -> AccLoop lenv arrs
+              -> AccLoop lenv (arrs, ())
+collectStream f x (AccLoop l) = AccLoop (Consumer (CollectStream f x) l)
 
 loop :: Arrays arrs => AccLoop () arrs -> Acc arrs
 loop (AccLoop l) = Acc (Loop l)

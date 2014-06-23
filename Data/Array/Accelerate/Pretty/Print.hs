@@ -147,23 +147,61 @@ prettyLoop prettyAcc alvl llvl wrap l =
   case l of
     EmptyLoop -> [text "endloop"]
     Producer p l' -> 
-      (case p of
-        ToStream a -> "tostream" .$ [ prettyAcc alvl wrap a ])
-      : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
+      (prettyP p) : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
     Transducer t l' ->
-      (case t of
-         MapStream f x -> "mapStream" .$ [ prettyPreAfun prettyAcc alvl f, var (idxToInt x) ]
-         ZipWithStream f x y -> "zipWithStream" .$ [ prettyPreAfun prettyAcc alvl f, var (idxToInt x), var (idxToInt y) ])
-      : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
+      (prettyT t) : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
     Consumer c l' ->
-      (case c of
-         FromStream x -> "fromStream" ..$ [ var (idxToInt x) ]
-         FoldStream f a x -> "foldStream" ..$ [ prettyPreAfun prettyAcc alvl f, prettyAcc alvl wrap a, var (idxToInt x) ])
-      : (prettyLoop prettyAcc alvl llvl wrap l')
+      (prettyC c) : (prettyLoop prettyAcc alvl llvl wrap l')
   where
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
     name ..$ docs = wrap $ hang (text name) 2 (sep docs)
+
+    prettyP :: forall a. Producer acc aenv a -> Doc
+    prettyP p =
+      case p of
+        ToStream _ ix a   -> "tostream" .$ [ prettyPreExp prettyAcc 0 alvl noParens ix, prettyAcc alvl wrap a ]
+        UseLazy  _ ix arr -> "useLazy" .$  [ prettyPreExp prettyAcc 0 alvl noParens ix, prettyArrays ArraysRarray arr ]
+
+    prettyT :: forall a. Transducer acc aenv lenv a -> Doc
+    prettyT t =
+      case t of
+        MapStream f x           -> "mapStream"     .$ [ prettyPreAfun prettyAcc alvl f
+                                                      , var (idxToInt x) ]
+        
+        ZipWithStream f x y     -> "zipWithStream" .$ [ prettyPreAfun prettyAcc alvl f
+                                                      , var (idxToInt x)
+                                                      , var (idxToInt y) ]
+        
+        ScanStream f a x        -> "foldStream"    .$ [ prettyPreAfun prettyAcc alvl f
+                                                      , prettyAcc alvl wrap a
+                                                      , var (idxToInt x) ]
+
+        ScanStreamAct f g a x   -> "foldStreamAct" .$ [ prettyPreAfun prettyAcc alvl f
+                                                      , prettyPreAfun prettyAcc alvl g
+                                                      , prettyAcc alvl wrap a
+                                                      , var (idxToInt x) ]
+
+    prettyC :: forall a. Consumer acc aenv lenv a -> Doc
+    prettyC c =
+      case c of
+        FromStream x            -> "fromStream"        ..$ [ var (idxToInt x) ]
+
+        FoldStream f a x        -> "foldStream"        ..$ [ prettyPreAfun prettyAcc alvl f
+                                                           , prettyAcc alvl wrap a
+                                                           , var (idxToInt x) ]
+
+        FoldStreamAct f g a x   -> "foldStreamAct"     ..$ [ prettyPreAfun prettyAcc alvl f
+                                                           , prettyPreAfun prettyAcc alvl g
+                                                           , prettyAcc alvl wrap a
+                                                           , var (idxToInt x) ]
+
+        FoldStreamFlatten f a x -> "foldStreamFlatten" ..$ [ prettyPreAfun prettyAcc alvl f
+                                                           , prettyAcc alvl wrap a
+                                                           , var (idxToInt x) ]
+
+        CollectStream _ x       -> "collectStream"     ..$ [ text "<io function>"
+                                                           , var (idxToInt x) ]
 
 -- Pretty print a function over array computations.
 --

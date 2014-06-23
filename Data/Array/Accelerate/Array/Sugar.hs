@@ -44,7 +44,7 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Miscellaneous
-  showShape, Foreign(..)
+  showShape, Foreign(..), sliceShape, enumSlices, nextSlice, restrictSlice
 
 ) where
 
@@ -1141,3 +1141,42 @@ instance Show (Array DIM2 e) where
 showShape :: Shape sh => sh -> String
 showShape = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList
 
+-- | Project the shape of a slice from the full shape.
+sliceShape :: forall slix co sl dim. (Shape sl, Shape dim)
+           => Repr.SliceIndex slix (EltRepr sl) co (EltRepr dim)
+           -> dim
+           -> sl
+sliceShape slix = toElt . Repr.sliceShape slix . fromElt
+
+-- | Enumerate all slices within a given bound. The innermost
+-- dimension changes most rapid.
+--
+-- E.g. enumSlices slix (Z :. 2 :. 3 :. All) = [ Z :. 0 :. 0 :. All
+--                                             , Z :. 1 :. 0 :. All
+--                                             , Z :. 0 :. 1 :. All
+--                                             , Z :. 1 :. 1 :. All
+--                                             , Z :. 0 :. 2 :. All
+--                                             , Z :. 1 :. 2 :. All ]
+--
+enumSlices :: forall slix co sl dim. (Elt slix)
+           => Repr.SliceIndex (EltRepr slix) sl co dim
+           -> slix   -- Bounds
+           -> [slix] -- All slices within bounds.
+enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
+
+-- | Stepped version of enumSlices.
+nextSlice :: forall slix co sl dim. (Elt slix)
+          => Repr.SliceIndex (EltRepr slix) sl co dim
+          -> slix       -- Slice bounds
+          -> slix       -- Slice of current iteration.
+          -> Maybe slix -- Slice of next iteration.
+nextSlice slix sh = fmap toElt . Repr.nextSlice slix (fromElt sh) . fromElt
+
+-- | Restrict a slice to be within the bounds (inclusive) of the given
+-- full shape.
+restrictSlice :: forall slix co sl dim. (Elt slix, Shape dim)
+              => Repr.SliceIndex (EltRepr slix) sl co (EltRepr dim)
+              -> dim
+              -> slix
+              -> slix -- Slice restricted to full shape.
+restrictSlice slix dim = toElt . Repr.restrictSlice slix (fromElt dim) . fromElt

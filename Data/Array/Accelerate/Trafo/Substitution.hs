@@ -308,7 +308,8 @@ rebuildP :: SyntacticAcc f
          -> Producer acc aenv' a
 rebuildP rebuild v p =
   case p of
-    ToStream acc -> ToStream (rebuild v acc)
+    ToStream sl slix acc -> ToStream sl (rebuildEA rebuild v slix) (rebuild v acc)
+    UseLazy  sl slix arr -> UseLazy  sl (rebuildEA rebuild v slix) arr
 
 rebuildT :: SyntacticAcc f
          => RebuildAcc acc
@@ -319,6 +320,8 @@ rebuildT rebuild v t =
   case t of
     MapStream f x -> MapStream (rebuildAfun rebuild v f)  x
     ZipWithStream f x y -> ZipWithStream (rebuildAfun rebuild v f)  x y
+    ScanStream f acc x        -> ScanStream (rebuildAfun rebuild v f) (rebuild v acc) x
+    ScanStreamAct f g acc x   -> ScanStreamAct (rebuildAfun rebuild v f) (rebuildAfun rebuild v g) (rebuild v acc) x
 
 rebuildC :: SyntacticAcc f
          => RebuildAcc acc
@@ -327,8 +330,11 @@ rebuildC :: SyntacticAcc f
          -> Consumer acc aenv' lenv a
 rebuildC rebuild v c =
   case c of
-    FromStream x -> FromStream x
-    FoldStream f acc x -> FoldStream (rebuildAfun rebuild v f) (rebuild v acc) x
+    FromStream x              -> FromStream x
+    FoldStream f acc x        -> FoldStream (rebuildAfun rebuild v f) (rebuild v acc) x
+    FoldStreamAct f g acc x   -> FoldStreamAct (rebuildAfun rebuild v f) (rebuildAfun rebuild v g) (rebuild v acc) x
+    FoldStreamFlatten f acc x -> FoldStreamFlatten (rebuildAfun rebuild v f) (rebuild v acc) x
+    CollectStream f x         -> CollectStream f x
 
 rebuildL
     :: SyntacticAcc f
