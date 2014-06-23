@@ -225,11 +225,11 @@ enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | i   <- [0..n-1]
 -- | Stepped version of enumSlices.
 nextSlice :: forall slix co sl dim.
             SliceIndex slix sl co dim
-          -> slix
-          -> slix
-          -> Maybe slix
+         -> slix
+         -> slix
+         -> Maybe slix
 nextSlice SliceNil () () = Nothing
-nextSlice (SliceAll sl) (sh, ()) (sh', ()) = do
+nextSlice (SliceAll sl)   (sh, ()) (sh', ()) = do
   case nextSlice sl sh sh' of
     Nothing -> Nothing
     Just sh'' -> Just (sh'', ())
@@ -238,8 +238,16 @@ nextSlice (SliceFixed sl) (sh, n) (sh', i) =
     Just (sh'') -> Just (sh'', i)
     Nothing -> 
       if i < n - 1
-         then Just (sh', i + 1)
+         then Just (zeroes sl sh', i + 1)
          else Nothing
+  where
+    zeroes :: forall slix co sl dim.
+               SliceIndex slix sl co dim
+           -> slix
+           -> slix
+    zeroes SliceNil () = ()
+    zeroes (SliceAll sl) (sh, ()) = (zeroes sl sh, ())
+    zeroes (SliceFixed sl) (sh, _) = (zeroes sl sh, 0)
 
 -- | Restrict a slice to be within the bounds (inclusive) of the given
 -- full shape.
