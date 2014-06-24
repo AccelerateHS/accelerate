@@ -268,6 +268,9 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
+    match (Loop l1) (Loop l2)
+      = matchLoop matchAcc hashAcc l1 l2
+
     match _ _
       = Nothing
 
@@ -315,6 +318,95 @@ matchBoundary _  Wrap         Wrap         = True
 matchBoundary _  Clamp        Clamp        = True
 matchBoundary _  Mirror       Mirror       = True
 matchBoundary _  _            _            = False
+
+
+-- Match loops
+--
+matchLoop :: forall acc aenv lenv s t. MatchAcc acc -> HashAcc acc -> PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv t -> Maybe (s :=: t)
+matchLoop m h = match
+  where
+    matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
+    matchExp = matchPreOpenExp m h
+
+    match :: forall lenv s t. PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv t -> Maybe (s :=: t)
+    match EmptyLoop EmptyLoop
+      = Just REFL
+    match (Producer p1 l1)   (Producer p2 l2)
+      | Just REFL <- matchP p1 p2
+      , Just REFL <- match l1 l2
+      = Just REFL
+    match (Transducer t1 l1) (Transducer t2 l2)
+      | Just REFL <- matchT t1 t2
+      , Just REFL <- match l1 l2
+      = Just REFL
+    match (Consumer c1 l1)   (Consumer c2 l2)
+      | Just REFL <- matchC c1 c2
+      , Just REFL <- match l1 l2
+      = Just REFL
+    match _ _
+      = Nothing
+
+    matchP :: forall s t. Producer acc aenv s -> Producer acc aenv t -> Maybe (s :=: t)
+    matchP (ToStream _ slix1 a1) (ToStream _ slix2 a2)
+      | Just REFL <- matchExp slix1 slix2
+      , Just REFL <- m a1 a2
+      = gcast REFL
+    matchP (UseLazy _ slix1 (a1 :: Array sh1 e1)) (UseLazy _ slix2 (a2 :: Array sh2 e2))
+      | Just REFL <- matchExp slix1 slix2
+      , Just REFL <- matchPreOpenAcc m h (Use (fromArr a1)) (Use (fromArr a2)) :: Maybe (Array sh1 e1 :=: Array sh2 e2)
+      = gcast REFL
+    matchP _ _
+      = Nothing
+
+    matchT :: forall lenv s t. Transducer acc aenv lenv s -> Transducer acc aenv lenv t -> Maybe (s :=: t)
+    matchT (MapStream f1 x1) (MapStream f2 x2)
+      | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchIdx x1 x2
+      = Just REFL
+    matchT (ZipWithStream f1 x1 y1) (ZipWithStream f2 x2 y2)
+      | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchIdx x1 x2
+      , Just REFL <- matchIdx y1 y2
+      = Just REFL
+    matchT (ScanStream f1 acc1 x1) (ScanStream f2 acc2 x2)
+      | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchIdx x1 x2
+      , Just REFL <- m acc1 acc2
+      = Just REFL
+    matchT (ScanStreamAct f1 g1 acc1 x1) (ScanStreamAct f2 g2 acc2 x2)
+      | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchIdx x1 x2
+      , Just REFL <- m acc1 acc2
+      , Just REFL <- matchPreOpenAfun m g1 g2
+      = Just REFL
+    matchT _ _
+      = Nothing
+
+    matchC :: forall lenv s t. Consumer acc aenv lenv s -> Consumer acc aenv lenv t -> Maybe (s :=: t)
+    matchC (FromStream x1) (FromStream x2)
+      | Just REFL <- matchIdx x1 x2
+      = Just REFL
+    matchC (FoldStream f1 acc1 x1) (FoldStream f2 acc2 x2)
+      | Just REFL <- matchIdx x1 x2
+      , Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- m acc1 acc2
+      = Just REFL
+    matchC (FoldStreamAct f1 g1 acc1 x1) (FoldStreamAct f2 g2 acc2 x2)
+      | Just REFL <- matchIdx x1 x2
+      , Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchPreOpenAfun m g1 g2
+      , Just REFL <- m acc1 acc2
+      = Just REFL
+    matchC (FoldStreamFlatten f1 acc1 x1) (FoldStreamFlatten f2 acc2 x2)
+      | Just REFL <- matchIdx x1 x2
+      , Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- m acc1 acc2
+      = Just REFL
+    matchC (CollectStream _ x1) (CollectStream _ x2)
+      | Just REFL <- matchIdx x1 x2
+      = Just REFL
+    matchC _ _
+      = Nothing
 
 
 -- Match arrays
