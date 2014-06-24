@@ -28,8 +28,5 @@ test_prelude conf =
     , test_stencil conf
     , test_replicate conf
     , test_filter conf
-    , test_fromS conf
-    , test_toS conf
-    , test_mapS conf
-    , test_foldS conf
+    , test_loops conf
     ]
