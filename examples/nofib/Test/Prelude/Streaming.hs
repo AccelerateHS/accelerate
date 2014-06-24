@@ -3,279 +3,295 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 module Test.Prelude.Streaming (
-
-  test_fromS,
-  test_toS,
-  test_mapS,
-  test_foldS,
---  toSRef,
---  fromSRef,
-  mapSRef,
---  foldSRef,
+  
+  test_loops
 
 ) where
 
--- TODO remov --------------
-import Debug.Trace ( trace )
-----------------------------
-
-import Prelude                                                  as P
+import Prelude hiding ( zip, zipWith, fst, snd, map, fromIntegral, sum, replicate )
+import qualified Prelude                                        as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.QuickCheck
+import Test.QuickCheck hiding ( generate )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
-import Test.Prelude.Mapping ( mapRef, zipWithRef )
 
 import Config
 import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
-import Data.Array.Accelerate                                    as A hiding (indexHead, indexTail)
+import Data.Array.Accelerate                                    as Acc
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate.AST ( Idx(..) )
 
-instance Similar DIM0
-instance Similar DIM1
-instance Similar DIM2
+toStream' :: (Shape sh, Elt a, Arrays arrs)
+          => Acc (Array (sh :. Int) a)
+          -> AccLoop (lenv, Array sh a) arrs
+          -> AccLoop lenv arrs
+toStream' acc l = toStream (constant (Any :. stream)) acc l
+  where 
+    stream :: Int
+    stream = maxBound
 
-test_fromS :: Config -> Test
-test_fromS opt = testGroup "fromStream" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
+take2 :: (Arrays a, Arrays b, Arrays c) => Acc ((a,b),c) -> Acc (b,c)
+take2 x = lift (asnd (afst x), asnd x)
+
+iota :: Int -> Acc (Vector Int)
+iota n = generate (index1 (constant n)) unindex1
+
+iota' :: Acc (Scalar Int) -> Acc (Vector Int)
+iota' n = generate (index1 (the n)) unindex1
+
+rep :: (Shape sh, Elt a) => sh -> a -> Acc (Array sh a)
+rep sh a = fill (constant sh) (constant a)
+
+iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
+iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
+
+idLoop :: (sh ~ FullShape sh, Slice sh, Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Acc (Array (sh :. Int) a)
+idLoop xs = reshape (Acc.shape xs) $ asnd . asnd $ loop
+  $ toStream (Acc.shape xs) xs
+  $ fromStream ZeroIdx
+  $ emptyLoop
+  where
+
+idLoopRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> (Array (sh :. Int) a)
+idLoopRef = id
+
+sumMaxLoop :: (Elt a, IsBounded a, IsNum a) => Acc (Vector a) -> Acc (Scalar a, Scalar a)
+sumMaxLoop xs = take2 $ loop 
+  $ toStream' xs
+  $ foldStream (zipWith max) (unit minBound) ZeroIdx
+  $ foldStream (zipWith (+)) (unit 0) ZeroIdx
+  $ emptyLoop
+  
+sumMaxLoopRef :: (Elt a, Ord a, Bounded a, Num a) => Vector a -> (Scalar a, Scalar a)
+sumMaxLoopRef xs = ( fromList Z . (:[]) . P.sum     . toList $ xs
+                   , fromList Z . (:[]) . P.foldl (P.max) minBound . toList $ xs)
+
+scatterLoop :: (Elt a, IsNum a) => Acc (Vector a) -> Acc (Vector (Int, a)) -> Acc (Vector a)
+scatterLoop xs updates = asnd $ loop
+  $ toStream' updates
+  $ foldStreamFlatten f xs ZeroIdx
+  $ emptyLoop
+  where
+    f xs' _ upd = 
+      let (to, ys) = Acc.unzip upd
+      in permute (+) xs' (index1 . (`mod` Acc.size xs) . (to Acc.!)) ys
+
+scatterLoopRef :: (Elt a, IsNum a) => Vector a -> Vector (Int, a) -> Vector a
+scatterLoopRef vec vec_upd =
+  let xs = toList vec
+      n = P.length xs
+      updates = toList vec_upd
+      f xs' (i, x) = [ if j == i `P.mod` n then x P.+ y else y | (j, y) <- P.zip [0..] xs']
+      ys = P.foldl f xs updates
+  in fromList (Z :. n) ys
+
+logsum :: (Elt a, IsFloating a) => Int -> Acc (Scalar a)
+logsum n = asnd $ loop
+  $ toStream' (iota n)
+  $ mapStream (map (log . fromIntegral . (+1))) ZeroIdx
+  $ foldStream (zipWith (+)) (unit 0.0) ZeroIdx
+  $ emptyLoop
+
+logsumRef :: (Elt a, IsFloating a) => Int -> Scalar a
+logsumRef n = fromList Z [P.sum [log (P.fromIntegral i) | i <- [1..n]]]
+
+logsumChunk :: (Elt a, IsFloating a) => Int -> Int -> Acc (Scalar a)
+logsumChunk n b = sum $ asnd  $ loop
+  $ toStream' (iotaChunk n b)
+  $ mapStream (map (log . fromIntegral . (+1))) ZeroIdx
+  $ foldStream (zipWith (+)) (rep (Z :. b) 0.0) ZeroIdx
+  $ emptyLoop
+
+logsumChunkRef :: (Elt a, IsFloating a) => Int -> Int -> Scalar a
+logsumChunkRef n b = logsumRef (n * b)
+
+nestedLoop :: Int -> Int -> Acc (Vector Int)
+nestedLoop n m = asnd . asnd $ loop
+  $ toStream' (iota n)
+  $ mapStream
+  (\ i -> asnd $ loop 
+          $ toStream' (iota m)
+          $ mapStream (zipWith (+) i) ZeroIdx
+          $ foldStream (zipWith (+)) (rep Z 0) ZeroIdx
+          $ emptyLoop
+  ) ZeroIdx
+  $ fromStream ZeroIdx
+  $ emptyLoop
+
+nestedLoopRef :: Int -> Int -> Vector Int
+nestedLoopRef n m = fromList (Z :. n) [P.sum [i + j | j <- [0..m-1]] | i <- [0..n-1]]
+
+nestedIrregularLoop :: Int -> Acc (Vector Int)
+nestedIrregularLoop n = asnd . asnd $ loop
+  $ toStream' (iota n)
+  $ mapStream
+  (\ i -> asnd $ loop 
+        $ toStream' (iota' i)
+        $ mapStream (zipWith (+) i) ZeroIdx
+        $ foldStream (zipWith (+)) (rep Z 0) ZeroIdx
+        $ emptyLoop
+  ) ZeroIdx
+  $ fromStream ZeroIdx
+  $ emptyLoop
+  
+nestedIrregularLoopRef :: Int -> Vector Int
+nestedIrregularLoopRef n = fromList (Z :. n) [P.sum [i + j | j <- [0..i-1]] | i <- [0..n-1]]
+
+deepNestedLoop :: Int -> Acc (Vector Int)
+deepNestedLoop n = asnd . asnd $ loop
+  $ toStream' (iota n)
+  $ mapStream
+  (\ i -> asnd . asnd $ loop 
+        $ toStream' (iota' i)
+        $ mapStream 
+        (\ j -> asnd $ loop
+              $ toStream' (iota' j)
+              $ mapStream
+              (\ k -> asnd $ loop
+                    $ toStream' (iota' k)
+                    $ foldStream (zipWith (+)) (rep Z 0) ZeroIdx
+                    $ emptyLoop
+              ) ZeroIdx
+              $ foldStream (zipWith (+)) (rep Z 0) ZeroIdx
+              $ emptyLoop
+        ) ZeroIdx
+        $ fromStream ZeroIdx
+        $ emptyLoop
+  ) ZeroIdx
+  $ fromStream ZeroIdx
+  $ emptyLoop
+  
+deepNestedLoopRef :: Int -> Vector Int
+deepNestedLoopRef n = fromList (Z :. P.length xs) xs
+  where xs = [P.sum [x | k <- [0..j-1], x <- [0..k-1]] | i <- [0..n-1], j <- [0..i-1]]
+
+test_loops :: Config -> Test
+test_loops opt = testGroup "loops"
+  [ testGroup "id" $ catMaybes 
+    [ testIdLoop configInt8   (undefined :: Int8)
+    , testIdLoop configInt16  (undefined :: Int16)
+    , testIdLoop configInt32  (undefined :: Int32)
+    , testIdLoop configInt64  (undefined :: Int64)
+    , testIdLoop configWord8  (undefined :: Word8)
+    , testIdLoop configWord16 (undefined :: Word16)
+    , testIdLoop configWord32 (undefined :: Word32)
+    , testIdLoop configWord64 (undefined :: Word64)
+    , testIdLoop configFloat  (undefined :: Float)
+    , testIdLoop configDouble (undefined :: Double)
+    ]  
+  , testGroup "sum_max" $ catMaybes
+    [ testSumMaxLoop configInt8   (undefined :: Int8)
+    , testSumMaxLoop configInt16  (undefined :: Int16)
+    , testSumMaxLoop configInt32  (undefined :: Int32)
+    , testSumMaxLoop configInt64  (undefined :: Int64)
+    , testSumMaxLoop configWord8  (undefined :: Word8)
+    , testSumMaxLoop configWord16 (undefined :: Word16)
+    , testSumMaxLoop configWord32 (undefined :: Word32)
+    , testSumMaxLoop configWord64 (undefined :: Word64)
+    ]
+  , testGroup "scatter" $ catMaybes 
+    [ testScatterLoop configInt8   (undefined :: Int8)
+    , testScatterLoop configInt16  (undefined :: Int16)
+    , testScatterLoop configInt32  (undefined :: Int32)
+    , testScatterLoop configInt64  (undefined :: Int64)
+    , testScatterLoop configWord8  (undefined :: Word8)
+    , testScatterLoop configWord16 (undefined :: Word16)
+    , testScatterLoop configWord32 (undefined :: Word32)
+    , testScatterLoop configWord64 (undefined :: Word64)
+    , testScatterLoop configFloat  (undefined :: Float)
+    , testScatterLoop configDouble (undefined :: Double)
+    ]
+  , testGroup "logsum" $ catMaybes
+    [ testLogsum configFloat  (undefined :: Float)
+    , testLogsum configDouble (undefined :: Double)
+    ]
+  , testGroup "logsum_chunked" $ catMaybes
+    [ testLogsumChunked configFloat  (undefined :: Float)
+    , testLogsumChunked configDouble (undefined :: Double)
+    ]
+  , testGroup "nested"
+    [ testNestedLoop
+    , testNestedIrregularLoop
+    , testDeepNestedLoop
+    ]
   ]
-  where    
-    backend         = get configBackend opt
-    test_from  xs = run1 backend (A.fromStream) xs ~?= fromStreamRef xs
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
+  where
+    backend = get configBackend opt
+
+    testIdLoop :: forall a. (Elt a, Similar a, IsNum a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
-    testElt ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
-      where
-        testDim :: forall sh. (Similar sh, Shape sh, Eq sh, Arbitrary sh, Arbitrary [Array sh a]) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
-          [ testProperty "fromStream" (  test_from   :: [Array sh a] -> Property)
-          ]
-
-
-test_toS :: Config -> Test
-test_toS opt = testGroup "toStream" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  ]
-  where    
-    backend         = get configBackend opt
-    test_to  xs = run1 backend (A.toStream) xs ~?= toStreamRef xs
-    test_iso  xs = run1 backend (A.reshape (constant (arrayShape xs)) . A.snd . A.fromStream . A.toStream) xs ~?= xs
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt ok _
+    testIdLoop ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
           [ testDim dim1
           , testDim dim2
+          , testDim dim3
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh :. Int) a)) => (sh :. Int) -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
-          [ testProperty "toStream" (   test_to    :: (Array (sh :. Int) a) -> Property)
-          , testProperty "to- fromStream iso" (   test_iso    :: (Array (sh :. Int) a) -> Property)
-          ]
+        testDim :: forall sh. (sh ~ FullShape sh, Slice sh, Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh :. Int) a)) => (sh :. Int) -> Test
+        testDim sh = testProperty ("DIM" P.++ show (dim sh))
+          ((\ xs -> run1 backend idLoop xs ~?= idLoopRef xs) :: Array (sh :. Int) a -> Property)
+          
 
-
-test_mapS :: Config -> Test
-test_mapS opt = testGroup "mapStream" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  , testElt' configInt8   (undefined :: Int8)
-  , testElt' configInt16  (undefined :: Int16)
-  , testElt' configInt32  (undefined :: Int32)
-  , testElt' configInt64  (undefined :: Int64)
-  , testElt' configWord8  (undefined :: Word8)
-  , testElt' configWord16 (undefined :: Word16)
-  , testElt' configWord32 (undefined :: Word32)
-  , testElt' configWord64 (undefined :: Word64)
-  , testElt' configFloat  (undefined :: Float)
-  , testElt' configDouble (undefined :: Double)
-  ]
-  where
-    backend         = get configBackend opt
-    test_square  xs = run1 backend (A.mapStream (A.map (\x -> x*x))) xs ~?= mapSRef (mapRef (\x -> x*x)) xs
-    test_foldAll xs = run1 backend (A.mapStream (A.foldAll (+) 0))   xs ~?= mapSRef (foldAllRef (+) 0) xs
-    test_fold1   xs = run1 backend (A.mapStream (A.fold1 (+)))       xs ~?= mapSRef (fold1Ref (+)) xs
-    test_scanl   xs = run1 backend (A.mapStream (A.scanl (+) 0))     xs ~?= mapSRef (scanlRef (+) 0) xs
-    test_repl    xs sl = run1 backend (A.mapStream (A.replicate (constant sl))) xs ~?= mapSRef (replRef sl) xs
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
+    testSumMaxLoop :: forall a. (Elt a, Similar a, IsNum a, IsBounded a, Bounded a, Ord a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
-    testElt ok _
+    testSumMaxLoop ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
-      where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary [Array sh a]) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
-          [ testProperty "square" (  test_square   :: [Array sh a] -> Property), 
-            testProperty "foldAll" ( test_foldAll  :: [Array sh a] -> Property),
-            testProperty "scanl" (   test_scanl    :: [Vector a] -> Property)
-          ]
-    testElt' :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
+      | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
+          ((\xs -> run1 backend sumMaxLoop xs ~?= sumMaxLoopRef xs) :: Vector a -> Property)
+
+
+    testScatterLoop :: forall a. (Elt a, Similar a, IsNum a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
-    testElt' ok _
+    testScatterLoop ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim' dim1
-          , testDim' dim2
-          ]
-      where
-        testDim' :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary [Array (sh :. Int) a]) => (sh :. Int) -> Test
-        testDim' sh = testGroup ("DIM" P.++ show (dim sh))
-          [ testProperty "fold1" (   test_fold1    :: [Array (sh :. Int) a] -> Property)
-          ]
+      | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
+          ((\xs updates -> run backend (scatterLoop (use xs) (use updates)) ~?= scatterLoopRef xs updates) :: Vector a -> Vector (Int, a) -> Property)
 
-test_foldS :: Config -> Test
-test_foldS opt = testGroup "foldStream" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
-  , testElt' configInt8   (undefined :: Int8)
-  , testElt' configInt16  (undefined :: Int16)
-  , testElt' configInt32  (undefined :: Int32)
-  , testElt' configInt64  (undefined :: Int64)
-  , testElt' configWord8  (undefined :: Word8)
-  , testElt' configWord16 (undefined :: Word16)
-  , testElt' configWord32 (undefined :: Word32)
-  , testElt' configWord64 (undefined :: Word64)
-  , testElt' configFloat  (undefined :: Float)
-  , testElt' configDouble (undefined :: Double)
-  ]
-  where
-    backend         = get configBackend opt
-    test_sum  xs z  = run1 backend (A.foldStream (A.zipWith (+)) (use z)) xs ~?= foldSRef (zipWithRef (+)) z xs
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt ok _
+
+    testLogsum :: forall a. (Elt a, Similar a, IsFloating a, Arbitrary a)
+               => (Config :-> Bool)
+               -> a
+               -> Maybe Test
+    testLogsum ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim dim0
-          , testDim dim1
-          , testDim dim2
-          ]
-      where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
-          [ testProperty "sum" (  test_sum   :: [Array sh a] -> Array sh a -> Property)
-          ]
-    testElt' :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, Ord a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt' ok _
+      | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
+          (\ (NonNegative n) -> (run backend (logsum n) :: Scalar a) ~?= logsumRef n)
+
+    testLogsumChunked :: forall a. (Elt a, Similar a, IsFloating a, Arbitrary a)
+               => (Config :-> Bool)
+               -> a
+               -> Maybe Test
+    testLogsumChunked ok _
       | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testDim' dim1
-          , testDim' dim2
-          ]
-      where
-        testDim' :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary [Array (sh :. Int) a]) => (sh :. Int) -> Test
-        testDim' sh = testGroup ("DIM" P.++ show (dim sh))
-          [ 
-          ]
+      | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
+          (\ (NonNegative n) (NonZero b) -> (run backend (logsumChunk n b) :: Scalar a) ~?= logsumChunkRef n b)
 
-
--- Reference Implementation
--- ------------------------
-
-mapSRef :: (Shape sh, Shape sh', Elt a, Elt b) => (Array sh a -> Array sh' b) -> [Array sh a] -> [Array sh' b]
-mapSRef = P.map
-
-foldSRef :: (Shape sh, Elt a) => (Array sh a -> Array sh a -> Array sh a) -> Array sh a -> [Array sh a] -> Array sh a
-foldSRef = P.foldl
-
-fromStreamRef :: (Shape sh, Elt a) => [Array sh a] -> (Vector sh, Vector a)
-fromStreamRef st = 
-  let shapes = P.map arrayShape st 
-      elems  = concatMap toList st
-      sh     = (Z :. length shapes)
-      sh'    = (Z :. length elems)
-  in (fromList sh shapes, fromList sh' elems)
+    testNestedLoop :: Test
+    testNestedLoop =
+      testProperty "regular"
+        (\ (NonNegative n) (NonNegative m) -> (run backend (nestedLoop n m) ~?= nestedLoopRef n m))
       
-
-
-toStreamRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> [Array sh a]
-toStreamRef arr = 
-  let (sh :. n) = arrayShape arr
-      m        = Sugar.size sh
-      elems     = toList arr
-      starts    = P.replicate n m
-  in [ fromList sh sub | sub <- splitPlaces starts elems ]
+    testNestedIrregularLoop :: Test
+    testNestedIrregularLoop =
+      testProperty "irregular"
+        (\ (NonNegative n) -> (run backend (nestedIrregularLoop n) ~?= nestedIrregularLoopRef n))
       
-
-foldAllRef :: Elt e => (e -> e -> e) -> e -> Array sh e -> Array Z e
-foldAllRef f z
-  = A.fromList Z
-  . return
-  . foldl f z
-  . A.toList
-
-fold1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh :. Int) e -> Array sh e
-fold1Ref f arr =
-  let (sh :. n) = arrayShape arr
-  in  fromList sh [ foldl1 f sub | sub <- splitEvery n (toList arr) ]
-
-scanlRef :: Elt e => (e -> e -> e) -> e -> Vector e -> Vector e
-scanlRef f z vec =
-  let (Z :. n)  = arrayShape vec
-  in  A.fromList (Z :. n+1) . P.scanl f z . A.toList $ vec
-
-replRef = undefined
+    testDeepNestedLoop :: Test
+    testDeepNestedLoop =
+      testProperty "deep"
+        (\ (NonNegative n) -> (run backend (deepNestedLoop n) ~?= deepNestedLoopRef n))
+      

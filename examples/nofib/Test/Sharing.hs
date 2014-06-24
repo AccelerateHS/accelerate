@@ -36,7 +36,7 @@ test_sharing _ =
     where
       sharing :: Show a => TestName -> a -> Test
       sharing name acc =
-        testCase name (length (show acc) `seq` return ())
+        testCase name (P.length (show acc) `seq` return ())
 
 
 
@@ -229,7 +229,7 @@ iteration = testGroup "iteration"
   ]
   where
     iter :: Show a => TestName -> a -> Test
-    iter name acc = testCase name (length (show acc) `seq` return ())
+    iter name acc = testCase name (P.length (show acc) `seq` return ())
 
     vec :: Acc (Vector Float)
     vec = use $ fromList (Z:.10) [0..]

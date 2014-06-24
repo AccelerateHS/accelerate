@@ -133,6 +133,12 @@ dim1 = mkDim 1
 dim2 :: DIM2
 dim2 = mkDim 2
 
+dim3 :: DIM3
+dim3 = mkDim 3
+
+dim4 :: DIM4
+dim4 = mkDim 4
+
 splitEvery :: Int -> [a] -> [[a]]
 splitEvery _ [] = cycle [[]]
 splitEvery n xs =
