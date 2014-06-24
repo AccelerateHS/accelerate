@@ -47,7 +47,7 @@ module Data.Array.Accelerate.Language (
   toStream, useLazy,
 
   -- * Stream transudcers
-  mapStream, zipWithStream, scanStream, scanStreamAct, 
+  mapStream, zipWithStream, scanStream, scanStreamAct,
 
   -- * Stream consumers
   fromStream, foldStream, foldStreamAct, foldStreamFlatten, collectStream,
@@ -550,7 +550,7 @@ useLazy spec arr (AccLoop l) = AccLoop (Producer (UseLazy spec arr) l)
 -- | Convert the given scalar stream to vector.
 fromStream :: (Shape ix, Elt a, Arrays arrs)
          => Idx lenv (Array ix a)
-         -> AccLoop lenv arrs 
+         -> AccLoop lenv arrs
          -> AccLoop lenv (arrs, (Vector ix, Vector a))
 fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
 
@@ -599,7 +599,7 @@ foldStreamAct f g acc x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc x
 -- It is common to ignore the shape vectors, yielding the usual
 -- semi-associativity law:
 --
---   f b a _ = b + a, 
+--   f b a _ = b + a,
 --
 -- for some (+) satisfying:
 --

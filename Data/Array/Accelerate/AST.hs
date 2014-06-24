@@ -509,7 +509,7 @@ data Transducer acc aenv lenv a where
                 -> Idx lenv (Array sh1 e1)
                 -> Idx lenv (Array sh2 e2)
                 -> Transducer acc aenv lenv (Array sh3 e3)
-  
+
   -- ScanStream (+) a0 x. Scan a stream x by combining each element
   -- using the given binary operation (+). (+) must be associative:
   --
@@ -524,7 +524,7 @@ data Transducer acc aenv lenv a where
              -> acc aenv (Array sh e)
              -> Idx lenv (Array sh e)
              -> Transducer acc aenv lenv (Array sh e)
-  
+
   -- ScanStreamAct (+) (*) a0 x. Scan a stream x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
   -- companion operator:
@@ -532,7 +532,7 @@ data Transducer acc aenv lenv a where
   --   (a + b1) + b2 = a + (b1 * b2).
   --
   -- Note on the name: Act is short for "semigroup action".
-  -- 
+  --
   ScanStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
                 => PreOpenAfun acc aenv (Array sh e -> Array sh' e' -> Array sh e)
                 -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
@@ -587,7 +587,7 @@ data Consumer acc aenv lenv a where
   -- It is common to ignore the shape vectors, yielding the usual
   -- semi-associativity law:
   --
-  --   f b a _ = b + a, 
+  --   f b a _ = b + a,
   --
   -- for some (+) satisfying:
   --

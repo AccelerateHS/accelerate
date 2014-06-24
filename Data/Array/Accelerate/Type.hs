@@ -60,7 +60,7 @@ deriving instance Typeable (,,,,,,,,)
 -- ------------
 
 -- Reified dictionaries
--- 
+--
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
@@ -78,7 +78,7 @@ data NonNumDict a where
              => NonNumDict a
 
 -- Scalar type representation
--- 
+--
 
 -- |Integral types supported in array computations.
 --
@@ -138,7 +138,7 @@ data ScalarType a where
   NonNumScalarType :: NonNumType a -> ScalarType a
 
 -- Showing type names
--- 
+--
 
 instance Show (IntegralType a) where
   show (TypeInt _)     = "Int"
@@ -185,13 +185,13 @@ instance Show (ScalarType a) where
   show (NumScalarType ty)    = show ty
   show (NonNumScalarType ty) = show ty
 
-instance Show (TupleType a) where 
+instance Show (TupleType a) where
   show UnitTuple = "()"
   show (SingleTuple scalarTy) = show scalarTy
   show (PairTuple a b) = "("++show a++", "++show b++")"
 
 -- Querying scalar type representations
--- 
+--
 
 -- |Integral types
 --
@@ -521,7 +521,7 @@ instance IsScalar CUChar where
   scalarType = NonNumScalarType nonNumType
 
 -- Extract reified dictionaries
--- 
+--
 
 integralDict :: IntegralType a -> IntegralDict a
 integralDict (TypeInt     dict) = dict
@@ -573,7 +573,7 @@ data TupleType a where
 data Boundary a = Clamp               -- ^clamp coordinates to the extent of the array
                 | Mirror              -- ^mirror coordinates beyond the array extent
                 | Wrap                -- ^wrap coordinates around on each dimension
-                | Constant a          -- ^use a constant value for outlying coordinates 
+                | Constant a          -- ^use a constant value for outlying coordinates
                 deriving (Show, Read)
 
 {-

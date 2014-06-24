@@ -259,8 +259,8 @@ data PreAcc acc exp as where
                 -> acc (Array sh b)
                 -> PreAcc acc exp (Array sh c)
 
-  Loop          :: Arrays arrs 
-                => PreLoop acc exp () arrs 
+  Loop          :: Arrays arrs
+                => PreLoop acc exp () arrs
                 -> PreAcc acc exp arrs
 
 data PreLoop acc exp lenv arrs where
@@ -289,7 +289,7 @@ data Producer acc exp a where
            -> Producer acc exp (Array (SliceShape slix) e)
 
   -- Use main memory vector as a stream.
-  UseLazy :: (Slice slix, Elt e, 
+  UseLazy :: (Slice slix, Elt e,
                Typeable (FullShape slix), Typeable (SliceShape slix))
            => exp slix
            -> Array (FullShape slix) e
@@ -326,7 +326,7 @@ data Transducer acc lenv a where
              -> acc (Array sh e)
              -> Idx lenv (Array sh e)
              -> Transducer acc lenv (Array sh e)
-  
+
   -- ScanStreamAct (+) (*) a0 x. Scan a stream x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
   -- companion operator:
@@ -363,7 +363,7 @@ data Consumer acc lenv a where
              -> acc (Array sh e)
              -> Idx lenv (Array sh e)
              -> Consumer acc lenv (Array sh e)
-  
+
   -- FoldStreamAct (+) (*) a0 x. Fold a stream x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
   -- companion operator:
@@ -389,7 +389,7 @@ data Consumer acc lenv a where
   -- It is common to ignore the shape vectors, yielding the usual
   -- semi-associativity law:
   --
-  --   f b a _ = b + a, 
+  --   f b a _ = b + a,
   --
   -- for some (+) satisfying:
   --

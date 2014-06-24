@@ -207,14 +207,14 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
                UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr)
             (cvtL l')
         Transducer t l' ->
-          Transducer 
+          Transducer
             (case t of
                MapStream f x         -> MapStream (cvtAF f) x
                ZipWithStream f x y   -> ZipWithStream (cvtAF f) x y
                ScanStream f a x      -> ScanStream (cvtAF f) (manifest a) x
                ScanStreamAct f g a x -> ScanStreamAct (cvtAF f) (cvtAF g) (manifest a) x)
             (cvtL l')
-        Consumer   c l' -> 
+        Consumer   c l' ->
           Consumer
             (case c of
                FromStream x            -> FromStream x
@@ -537,7 +537,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | ExtendLoop env l' <- travL l
       = Embed (env `PushEnv` (Loop l')) (Done ZeroIdx)
       where
-        travL :: forall lenv arrs'. 
+        travL :: forall lenv arrs'.
                  PreOpenLoop acc aenv lenv arrs'
               -> ExtendLoop acc aenv lenv arrs'
         travL l =
@@ -555,8 +555,8 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
               | ExtendLoop env l' <- travL l
               , c' <- travC c env
               -> ExtendLoop env (Consumer c' l')
- 
-        travP :: forall arrs' aenv'. 
+
+        travP :: forall arrs' aenv'.
                  Producer acc aenv arrs'
               -> Extend acc aenv aenv'
               -> ExtendProducer acc aenv' arrs'
@@ -747,7 +747,7 @@ instance Kit acc => Sink (SinkLoop acc lenv) where
     where
       weakenL :: forall lenv' arrs'. PreOpenLoop acc aenv lenv' arrs' -> PreOpenLoop acc aenv' lenv' arrs'
       weakenL l' = unSinkLoop (weaken k (SinkLoop l'))
-      
+
       weakenP :: forall a. Producer acc aenv a -> Producer acc aenv' a
       weakenP p =
         case p of
@@ -1238,14 +1238,14 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Loop l                  -> Loop (cvtL l) 
+        Loop l                  -> Loop (cvtL l)
 
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
         cvtL :: PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv s
-        cvtL l = 
+        cvtL l =
           case l of
             EmptyLoop -> EmptyLoop
             Producer p l' ->
@@ -1255,14 +1255,14 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                    UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr)
                 (cvtL l')
             Transducer t l' ->
-              Transducer 
+              Transducer
                 (case t of
                    MapStream f x         -> MapStream (cvtAF f) x
                    ZipWithStream f x y   -> ZipWithStream (cvtAF f) x y
                    ScanStream f a x      -> ScanStream (cvtAF f) (cvtA a) x
                    ScanStreamAct f g a x -> ScanStreamAct (cvtAF f) (cvtAF g) (cvtA a) x)
                 (cvtL l')
-            Consumer   c l' -> 
+            Consumer   c l' ->
               Consumer
                 (case c of
                    FromStream x            -> FromStream x

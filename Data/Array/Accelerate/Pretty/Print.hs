@@ -146,7 +146,7 @@ prettyLoop
 prettyLoop prettyAcc alvl llvl wrap l =
   case l of
     EmptyLoop -> [text "endloop"]
-    Producer p l' -> 
+    Producer p l' ->
       (prettyP p) : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
     Transducer t l' ->
       (prettyT t) : (prettyLoop prettyAcc alvl (llvl+1) wrap l')
@@ -168,11 +168,11 @@ prettyLoop prettyAcc alvl llvl wrap l =
       case t of
         MapStream f x           -> "mapStream"     .$ [ prettyPreAfun prettyAcc alvl f
                                                       , var (idxToInt x) ]
-        
+
         ZipWithStream f x y     -> "zipWithStream" .$ [ prettyPreAfun prettyAcc alvl f
                                                       , var (idxToInt x)
                                                       , var (idxToInt y) ]
-        
+
         ScanStream f a x        -> "foldStream"    .$ [ prettyPreAfun prettyAcc alvl f
                                                       , prettyAcc alvl wrap a
                                                       , var (idxToInt x) ]

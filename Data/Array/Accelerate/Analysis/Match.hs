@@ -870,7 +870,7 @@ hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
 hashPreOpenLoop :: forall acc aenv lenv arrs. HashAcc acc -> PreOpenLoop acc aenv lenv arrs -> Int
 hashPreOpenLoop hashAcc l =
-  let 
+  let
     hashA :: Int -> acc aenv a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
@@ -891,7 +891,7 @@ hashPreOpenLoop hashAcc l =
       case p of
         ToStream spec ix acc -> hashWithSalt salt "ToStream" `hashA` acc `hashE` ix `hashWithSalt` show spec
         UseLazy  spec ix arr -> hashWithSalt salt "UseLazy" `hashWithSalt` hashArrays ArraysRarray arr `hashE` ix `hashWithSalt` show spec
-                        
+
     hashT :: Int -> Transducer acc aenv lenv a -> Int
     hashT salt t =
       case t of
@@ -899,7 +899,7 @@ hashPreOpenLoop hashAcc l =
         ZipWithStream f x y     -> hashWithSalt salt "ZipWithStream" `hashF` f `hashVar` x `hashVar` y
         ScanStream f acc x      -> hashWithSalt salt "ScanStream" `hashF` f `hashA` acc `hashVar` x
         ScanStreamAct f g acc x -> hashWithSalt salt "ScanStreamAct" `hashF` f `hashF` g `hashA` acc `hashVar` x
-        
+
     hashC :: Int -> Consumer acc aenv lenv a -> Int
     hashC salt c =
       case c of

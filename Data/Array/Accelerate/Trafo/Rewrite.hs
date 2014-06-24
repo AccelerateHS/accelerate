@@ -77,7 +77,7 @@ convertSegments = cvtA
         ZipWithStream f x y   -> ZipWithStream (cvtAfun f) x y
         ScanStream f a x      -> ScanStream (cvtAfun f) (cvtA a) x
         ScanStreamAct f g a x -> ScanStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) x
-        
+
     cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
     cvtC c =
       case c of

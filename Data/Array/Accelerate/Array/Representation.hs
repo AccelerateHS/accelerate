@@ -21,7 +21,7 @@ module Data.Array.Accelerate.Array.Representation (
 
   -- * Array shapes, indices, and slices
   Shape(..), Slice(..), SliceIndex(..),
-  
+
   -- * Slice shape functions
   sliceShape, enumSlices, nextSlice, restrictSlice
 
@@ -239,7 +239,7 @@ nextSlice (SliceAll sl)   (sh, ()) (sh', ()) = do
 nextSlice (SliceFixed sl) (sh, n) (sh', i) =
   if (i < n - 1)
     then Just (sh', i + 1)
-    else 
+    else
       case nextSlice sl sh sh' of
        Just (sh'') -> Just (sh'', 0)
        Nothing -> Nothing
@@ -248,7 +248,7 @@ nextSlice (SliceFixed sl) (sh, n) (sh', i) =
 -- full shape.
 restrictSlice :: forall slix co sl dim.
                  SliceIndex slix sl co dim
-              -> dim                 
+              -> dim
               -> slix
               -> slix
 restrictSlice SliceNil () () = ()

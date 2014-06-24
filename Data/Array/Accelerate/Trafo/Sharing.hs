@@ -308,7 +308,7 @@ convertSharingLoop
     -> [StableSharingAcc]
     -> PreLoop ScopedAcc ScopedExp lenv arrs
     -> AST.PreOpenLoop AST.OpenAcc aenv lenv arrs
-convertSharingLoop config alyt aenv l = 
+convertSharingLoop config alyt aenv l =
   case l of
     EmptyLoop -> AST.EmptyLoop
     Producer   p l' -> AST.Producer (cvtP p) (cvtL l')
@@ -344,7 +344,7 @@ convertSharingLoop config alyt aenv l =
 
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
-        
+
     cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
     cvtE = convertSharingExp config EmptyLayout alyt [] aenv
 
@@ -1083,7 +1083,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
-    traverseLoop :: forall lenv arrs. Typeable arrs 
+    traverseLoop :: forall lenv arrs. Typeable arrs
                  => Level -> PreLoop Acc Exp lenv arrs
                  -> IO (PreLoop UnscopedAcc RootExp lenv arrs, Int)
     traverseLoop lvl l =
@@ -1274,7 +1274,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         travL :: Arrays arrs'
               => (PreLoop UnscopedAcc RootExp lenv arrs' -> PreAcc UnscopedAcc RootExp arrs)
               -> PreLoop Acc Exp lenv arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
-        travL c l 
+        travL c l
           = do
               (l', h) <- traverseLoop lvl l
               return (c l', h + 1)
@@ -1951,7 +1951,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
                                        (accCount1 +++ accCount2 +++ accCount3)
-          Loop l                  -> let 
+          Loop l                  -> let
                                        (l', accCount1) = scopesLoop l
                                      in
                                      reconstruct (Loop l') accCount1

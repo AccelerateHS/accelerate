@@ -81,7 +81,7 @@ travLoop f c l loop =
   case loop of
     EmptyLoop -> leaf "EmptyLoop"
     Producer   p l' -> travP p l'
-    Transducer t l' ->  
+    Transducer t l' ->
       case t of
         MapStream afun x -> combine "MapStream" [ travAfun f c l afun, leaf (show (idxToInt x)), travLoop f c l l' ]
         ZipWithStream afun x y -> combine "ZipWithStream" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travLoop f c l l' ]
@@ -97,13 +97,13 @@ travLoop f c l loop =
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
-    
+
     travP :: forall arr. Producer OpenAcc aenv arr -> PreOpenLoop OpenAcc aenv (lenv, arr) a -> m b
     travP p l' =
       case p of
         ToStream _ ix a   -> combine "ToStream" [ travExp f c l  ix, travAcc f c l a, travLoop f c l l' ]
         UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travLoop f c l l' ]
-      
+
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
        -> (String -> String -> m b)
