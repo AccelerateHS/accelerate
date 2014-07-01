@@ -45,6 +45,7 @@ if [ "$NOSANDBOX" == "" ] || [ "$NOSANDBOX" == "0" ]; then
   $CABAL --version
   $CABAL sandbox init
   $CABAL sandbox hc-pkg list
+  $GHCPKG list || echo ok
 else 
   $CABAL sandbox delete || echo ok 
   # rm -rf .cabal-sandbox cabal.sandbox.config
@@ -69,6 +70,8 @@ done
 # Begin installation
 
 # First, let's make sure everything installs:
+# I'm having various problems, so this first one is just at test:
+$CABAL install $CBLARGS test-framework test-framework-hunit HUnit
 $CABAL install $CBLARGS $PKGS --force-reinstalls -j 
 $CABAL install $CBLARGS $PKGS --only-dependencies --enable-tests -j
 
