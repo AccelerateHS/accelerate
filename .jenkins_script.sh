@@ -87,9 +87,8 @@ done
 #------------------------------------------------------------
 # Begin installation
 
-# First, let's make sure everything installs:
 # I'm having various problems, so this first one is just at test:
-$CABAL install $CBLARGS test-framework test-framework-hunit HUnit
+# $CABAL install $CBLARGS test-framework test-framework-hunit HUnit -j
 $CABAL install $CBLARGS $PKGS --force-reinstalls -j 
 $CABAL install $CBLARGS $PKGS --only-dependencies --enable-tests -j
 
