@@ -45,7 +45,7 @@ if [ "$NOSANDBOX" == "" ] || [ "$NOSANDBOX" == "0" ]; then
   $CABAL --version
   $CABAL sandbox init
   $CABAL sandbox hc-pkg list
-  $GHCPKG list || echo ok
+  $GHCPKG list -v || echo ok
 else 
   $CABAL sandbox delete || echo ok 
   # rm -rf .cabal-sandbox cabal.sandbox.config
