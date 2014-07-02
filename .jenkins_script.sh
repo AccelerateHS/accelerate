@@ -4,9 +4,10 @@ set -x
 set -e
 
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
-       ./accelerate-backend-kit/icc-opencl "
+          ./accelerate-backend-kit/icc-opencl \
+          ./accelerate-backend-kit/simple-cuda "
 
-PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl "
+PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl simple-cuda "
 
 # Temporarily removing these. 
 # multidev is a bit outdated (Iterate) 
