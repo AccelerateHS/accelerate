@@ -1,4 +1,20 @@
 #!/bin/bash
+# -------------------------------------------------------------
+# Regression testing script.
+# -------------------------------------------------------------
+#
+# This is used for continuous integration.  It may contain bits
+# that are specific to our Jenkins installation.  However, we 
+# try to keep it so you can run this by hand.  For example, with
+# a command like this:
+#
+#    ./.jenkins_script.sh
+#
+# Or perhaps like this:
+#
+#    CABAL=cabal NOSANDBOX=1 JENKINS_GHC=7.8.2 ./.jenkins_script.sh
+# 
+# ------------------------------------------------------------- 
 
 set -x 
 set -e
