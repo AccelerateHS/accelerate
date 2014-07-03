@@ -22,8 +22,9 @@ set -e
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
           ./accelerate-backend-kit/icc-opencl \
           "
-# ./accelerate-backend-kit/simple-cuda 
-
+if [ "$USECUDA" == "1" ]; then 
+  PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ "
+fi
 PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl simple-cuda "
 
 # Temporarily removing these. 
