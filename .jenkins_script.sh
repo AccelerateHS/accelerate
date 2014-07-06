@@ -97,7 +97,7 @@ done
 # $CABAL install $CBLARGS $PKGS --only-dependencies --enable-tests -j
 
 # $CABAL install $CBLARGS $PKGS --only-dependencies -j
-$CABAL install $CBLARGS $PKGS -j -enable-tests
+$CABAL install $CBLARGS $PKGS -j --enable-tests
 
 # Next build tests one at a time.
 # for dir in $PKGS; do
