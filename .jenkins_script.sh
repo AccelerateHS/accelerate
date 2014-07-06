@@ -122,4 +122,8 @@ if [ "$ACCELERATE_INSTALL_ONLY" != "1" ] && [ "$NOTEST" != "1" ]; then
 
   # test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
 
+  if [ "$USECUDA" == "1" ]; then 
+    (test_dir $TOP/accelerate-cuda/ test-accelerate-cuda  --test-option="--threads=1" 2>1 | tee /tmp/out)
+  fi
+
 fi
