@@ -24,6 +24,9 @@ PKGS=" ./ ./accelerate-backend-kit/backend-kit \
           "
 if [ "$USECUDA" == "1" ]; then 
   PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ "
+  if [ -f $HOME/rn_jenkins_scripts/acquire_ghc.sh ]; then
+    source $HOME/rn_jenkins_scripts/acquire_ghc.sh
+  fi
   which nvcc
   nvcc --version
 fi
@@ -54,6 +57,7 @@ else
   GHCPKG=ghc-pkg-$JENKINS_GHC
 fi
 
+# Right now we're using CUDA 5.5 and Haskell cuda 0.5.1.1
 CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<0.6 --with-ghc=$GHC $*"
 
 #------------------------------------------------------------
