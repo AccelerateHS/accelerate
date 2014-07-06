@@ -109,7 +109,9 @@ function test_dir() {
 if [ "$ACCELERATE_INSTALL_ONLY" != "1" ] && [ "$NOTEST" != "1" ]; then 
 
   # (1) Test the interpreters:
-  test_dir $TOP/accelerate-backend-kit/backend-kit --test-option="--threads=8"
+  for TRGT in " test-accelerate-backend-kit-unittests test-accelerate-backend-kit-simple-interp  test-accelerate-main-interp"; do
+    test_dir $TOP/accelerate-backend-kit/backend-kit $TRGT --test-option="--threads=8"
+  done
 
   # (2) Test the C/Cilk backends
   # Split these out to run with specific arguments:
