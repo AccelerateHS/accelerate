@@ -114,18 +114,24 @@ if [ "$ACCELERATE_INSTALL_ONLY" != "1" ] && [ "$NOTEST" != "1" ]; then
   done
 
   # (2) Test the C/Cilk backends
+  # ----------------------------------------
   # Split these out to run with specific arguments:
   test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-sequential --test-option="--threads=8" 
-
   # Currently [2014.02.13] running Cilk from multiple dynamic libs causes errors (backend-kit issue #4)
-  (test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-cilk  --test-option="--threads=1" 2>1 | tee /tmp/out)
+  (test_dir $TOP/accelerate-backend-kit/icc-opencl/  test-accelerate-cpu-cilk  --test-option="--threads=1" 2>1 | tee /tmp/out)
+  test_dir $TOP/accelerate-backend-kit/icc-opencl/   test-accelerate-cpu-unit-tests
+  # SKIPPING: test-accelerate-liftdrop-cpu-sequential  
+  # SKIPPING: test-accelerate-cpu-opencl
 
-#  test_dir $TOP/accelerate-multidev/ || echo "acclerate-multidev failed tests!  But that's allowed for now."
-
-  # test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
-
+  # (3) Test the CUDA backend
+  # ----------------------------------------
   if [ "$USECUDA" == "1" ]; then 
     (test_dir $TOP/accelerate-cuda/ test-accelerate-cuda  --test-option="--threads=1" 2>1 | tee /tmp/out)
   fi
+
+  # (4) Multi-device
+  # ----------------------------------------
+  # test_dir $TOP/accelerate-multidev/ || echo "acclerate-multidev failed tests!  But that's allowed for now."
+  # test_dir $TOP/accelerate-cuda/ || echo "acclerate-cuda failed tests!  But that's allowed for now."
 
 fi
