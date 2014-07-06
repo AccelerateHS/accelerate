@@ -27,7 +27,7 @@ if [ "$USECUDA" == "1" ]; then
   if [ -f $HOME/rn_jenkins_scripts/acquire_cuda.sh ]; then
     source $HOME/rn_jenkins_scripts/acquire_cuda.sh
   fi
-  which nvcc
+  which -a nvcc
   nvcc --version
 fi
 PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl simple-cuda "
