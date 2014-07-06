@@ -24,6 +24,8 @@ PKGS=" ./ ./accelerate-backend-kit/backend-kit \
           "
 if [ "$USECUDA" == "1" ]; then 
   PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ "
+  which nvcc
+  nvcc --version
 fi
 PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl simple-cuda "
 
