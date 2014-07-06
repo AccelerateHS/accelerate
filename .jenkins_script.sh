@@ -77,7 +77,7 @@ else
   # Very aggressively delete sandboxes:
   find . -name cabal.sandbox.config | xargs rm -f 
   find . -name .cabal-sandbox       | xargs rm -rf
-  for $name in $PKGNAMES; do
+  for name in $PKGNAMES; do
     $GHCPKG unregister $name --force || echo ok
   done
 fi
@@ -87,6 +87,9 @@ for dir in $PKGS; do
   cd $dir
   if [ "$NOSANDBOX" == "" ] || [ "$NOSANDBOX" == "0" ]; then
     $CABAL sandbox init --sandbox=$TOP/.cabal-sandbox/
+  fi
+  if [ "$NOCLEAN" == "" ] || [ "$NOCLEAN" == "0" ]; then
+    $CABAL clean
   fi
   cd $TOP
 done
