@@ -24,8 +24,8 @@ PKGS=" ./ ./accelerate-backend-kit/backend-kit \
           "
 if [ "$USECUDA" == "1" ]; then 
   PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ "
-  if [ -f $HOME/rn_jenkins_scripts/acquire_ghc.sh ]; then
-    source $HOME/rn_jenkins_scripts/acquire_ghc.sh
+  if [ -f $HOME/rn_jenkins_scripts/acquire_cuda.sh ]; then
+    source $HOME/rn_jenkins_scripts/acquire_cuda.sh
   fi
   which nvcc
   nvcc --version
