@@ -19,11 +19,11 @@
 set -x 
 set -e
 
+# These are topologically-sorted (install order):
 PKGS=" ./ ./accelerate-backend-kit/backend-kit \
-          ./accelerate-backend-kit/icc-opencl \
-          "
+          ./accelerate-backend-kit/icc-opencl "
 if [ "$USECUDA" == "1" ]; then 
-  PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ "
+  PKGS=" $PKGS ./accelerate-backend-kit/simple-cuda ./accelerate-cuda/ ./accelerate-multidev"
   if [ -f $HOME/rn_jenkins_scripts/acquire_cuda.sh ]; then
     source $HOME/rn_jenkins_scripts/acquire_cuda.sh
   fi
@@ -31,12 +31,6 @@ if [ "$USECUDA" == "1" ]; then
   nvcc --version
 fi
 PKGNAMES=" accelerate accelerate-cuda accelerate-backend-kit accelerate-icc-opencl simple-cuda "
-
-# Temporarily removing these. 
-# multidev is a bit outdated (Iterate) 
-#       ./accelerate-multidev/ " 
-#       ./accelerate-cuda/ "
-# 
 
 #------------------------------------------------------------
 # Choose commands 
@@ -58,7 +52,7 @@ else
 fi
 
 # Right now we're using CUDA 5.5 and Haskell cuda 0.5.1.1
-CBLARGS="--disable-library-profiling  --disable-documentation --constraint=cuda<0.6 --with-ghc=$GHC $*"
+CBLARGS="--disable-library-profiling  --constraint=cuda<0.6 --with-ghc=$GHC $*"
 
 #------------------------------------------------------------
 # Init sandbox and link it
@@ -99,8 +93,20 @@ done
 
 # I'm having various problems, so this first one is just at test:
 # $CABAL install $CBLARGS test-framework test-framework-hunit HUnit -j
-$CABAL install $CBLARGS $PKGS --force-reinstalls -j 
-$CABAL install $CBLARGS $PKGS --only-dependencies --enable-tests -j
+# $CABAL install $CBLARGS $PKGS --force-reinstalls -j 
+# $CABAL install $CBLARGS $PKGS --only-dependencies --enable-tests -j
+
+# $CABAL install $CBLARGS $PKGS --only-dependencies -j
+$CABAL install $CBLARGS $PKGS -j -enable-tests
+
+# Next build tests one at a time.
+# for dir in $PKGS; do
+#   cd $dir
+#   $CABAL configure --enable-tests $CBLARGS
+#   $CABAL build 
+# #  $CABAL install --disable-documentation
+#   cd $TOP
+# done
 
 #------------------------------------------------------------
 # Begin testing
