@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Representation
@@ -29,7 +30,9 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 -- standard library
+import Data.Dynamic (Typeable)
 import GHC.Base                                         ( quotInt, remInt )
+
 
 
 -- |Index representation
@@ -184,9 +187,11 @@ data SliceIndex ix slice coSlice sliceDim where
    SliceIndex ix slice co dim -> SliceIndex (ix, ()) (slice, Int) co (dim, Int)
   SliceFixed ::
    SliceIndex ix slice co dim -> SliceIndex (ix, Int) slice (co, Int) (dim, Int)
+ deriving (Typeable)
 
 instance Show (SliceIndex ix slice coSlice sliceDim) where
   show SliceNil          = "SliceNil"
   show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
+ 
 
