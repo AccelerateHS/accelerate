@@ -88,6 +88,8 @@ for dir in $PKGS; do
   cd $TOP
 done
 
+find -name ".genC_*" | xargs rm -f 
+
 #------------------------------------------------------------
 # Begin installation
 
