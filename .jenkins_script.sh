@@ -52,7 +52,7 @@ else
 fi
 
 # Right now we're using CUDA 5.5 and Haskell cuda 0.5.1.1
-CBLARGS="--disable-library-profiling  --constraint=cuda<0.6 --with-ghc=$GHC $*"
+CBLARGS="--disable-library-profiling --force-reinstalls --constraint=cuda<0.6 --with-ghc=$GHC $*"
 
 #------------------------------------------------------------
 # Init sandbox and link it
