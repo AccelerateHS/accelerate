@@ -73,18 +73,18 @@ sumMaxLoopRef :: (Elt a, Ord a, Bounded a, Num a) => Vector a -> (Scalar a, Scal
 sumMaxLoopRef xs = ( fromList Z . (:[]) . P.sum     . toList $ xs
                    , fromList Z . (:[]) . P.foldl (P.max) minBound . toList $ xs)
 
-scatterLoop :: (Elt a, IsNum a) => Acc (Vector a) -> Acc (Vector (Int, a)) -> Acc (Vector a)
-scatterLoop xs updates = asnd $ loop
-  $ toStream' updates
-  $ foldStreamFlatten f xs ZeroIdx
+scatterLoop :: (Elt a, IsNum a) => Acc (Vector a, Vector (Int, a)) -> Acc (Vector a)
+scatterLoop input = asnd $ loop
+  $ toStream' (asnd input)
+  $ foldStreamFlatten f (afst input) ZeroIdx
   $ emptyLoop
   where
     f xs' _ upd = 
       let (to, ys) = Acc.unzip upd
-      in permute (+) xs' (index1 . (`mod` Acc.size xs) . (to Acc.!)) ys
+      in permute (+) xs' (index1 . (`mod` Acc.size (afst input)) . (to Acc.!)) ys
 
-scatterLoopRef :: (Elt a, IsNum a) => Vector a -> Vector (Int, a) -> Vector a
-scatterLoopRef vec vec_upd =
+scatterLoopRef :: (Elt a, IsNum a) => (Vector a, Vector (Int, a)) -> Vector a
+scatterLoopRef (vec, vec_upd) =
   let xs = toList vec
       n = P.length xs
       updates = toList vec_upd
@@ -219,7 +219,7 @@ test_loops opt = testGroup "loops"
   , testGroup "nested"
     [ testNestedLoop
     , testNestedIrregularLoop
-    , testDeepNestedLoop
+--    , testDeepNestedLoop
     ]
   ]
   where
@@ -234,7 +234,6 @@ test_loops opt = testGroup "loops"
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
           [ testDim dim1
           , testDim dim2
-          , testDim dim3
           ]
       where
         testDim :: forall sh. (sh ~ FullShape sh, Slice sh, Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh :. Int) a)) => (sh :. Int) -> Test
@@ -259,7 +258,7 @@ test_loops opt = testGroup "loops"
     testScatterLoop ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
-          ((\xs updates -> run backend (scatterLoop (use xs) (use updates)) ~?= scatterLoopRef xs updates) :: Vector a -> Vector (Int, a) -> Property)
+          ((\input -> run1 backend scatterLoop input ~?= scatterLoopRef input) :: (Vector a, Vector (Int, a)) -> Property)
 
 
     testLogsum :: forall a. (Elt a, Similar a, IsFloating a, Arbitrary a)
@@ -278,7 +277,7 @@ test_loops opt = testGroup "loops"
     testLogsumChunked ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
-          (\ (NonNegative n) (NonZero b) -> (run backend (logsumChunk n b) :: Scalar a) ~?= logsumChunkRef n b)
+          (\ (NonNegative n) (Positive b) -> (run backend (logsumChunk n b) :: Scalar a) ~?= logsumChunkRef n b)
 
     testNestedLoop :: Test
     testNestedLoop =
