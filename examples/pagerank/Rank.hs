@@ -80,7 +80,7 @@ pageRank backend maxIters chunkSize pageCount from to sizes titlesFile ranks0
 
                 -- Run a step of the algorithm.
                 let ranks1 = stepInLoop ranks
-                let ranks2 = addDangles (ranks, sizes)
+                let ranks2 = addDangles (ranks1, sizes)
 
                 -- Sum up the ranks for all the pages,
                 -- this should be very close to 1, minus some some round-off error.

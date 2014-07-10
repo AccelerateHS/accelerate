@@ -1,6 +1,7 @@
 module Step
         (stepRank, Update)
 where
+  
 import Page
 import Progress
 import Control.Monad
@@ -42,12 +43,13 @@ stepRank from to sizes ranks
       zeroes :: Acc (Vector Rank)
       zeroes = A.fill (shape ranks) 0.0
 
+      -- Ignore shape vector.
       addUpdates' :: Acc (Vector Rank) -> Acc (Vector Z) -> Acc (Vector Update) -> Acc (Vector Rank)
       addUpdates' = const . addUpdates
 
     in A.asnd $ A.loop
-              $ A.toStream (A.constant (Z :. stream)) (A.use from)
-              $ A.toStream (A.constant (Z :. stream)) (A.use to)
+              $ A.useLazy (A.constant (Z :. stream)) from
+              $ A.useLazy (A.constant (Z :. stream)) to
               $ A.zipWithStream (contribution sizes ranks) (SuccIdx ZeroIdx) ZeroIdx
               $ A.foldStreamFlatten addUpdates' zeroes ZeroIdx
               $ A.emptyLoop
