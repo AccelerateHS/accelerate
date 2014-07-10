@@ -11,7 +11,7 @@ import Test.Prelude.PrefixSum
 import Test.Prelude.Reduction
 import Test.Prelude.Replicate
 import Test.Prelude.Stencil
-import Test.Prelude.Streaming
+import Test.Prelude.Sequencing
 
 
 test_prelude :: Config -> Test
@@ -28,5 +28,5 @@ test_prelude conf =
     , test_stencil conf
     , test_replicate conf
     , test_filter conf
-    , test_loops conf
+    , test_sequences conf
     ]

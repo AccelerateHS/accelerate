@@ -47,11 +47,11 @@ stepRank from to sizes ranks
       addUpdates' :: Acc (Vector Rank) -> Acc (Vector Z) -> Acc (Vector Update) -> Acc (Vector Rank)
       addUpdates' = const . addUpdates
 
-    in A.asnd $ A.loop
+    in A.asnd $ A.runSequence
               $ A.useLazy (A.constant (Z :. stream)) from
               $ A.useLazy (A.constant (Z :. stream)) to
-              $ A.zipWithStream (contribution sizes ranks) (SuccIdx ZeroIdx) ZeroIdx
-              $ A.foldStreamFlatten addUpdates' zeroes ZeroIdx
-              $ A.emptyLoop
+              $ A.zipWithSeq (contribution sizes ranks) (SuccIdx ZeroIdx) ZeroIdx
+              $ A.foldSeqFlatten addUpdates' zeroes ZeroIdx
+              $ A.emptySeq
   where
     stream = maxBound :: Int

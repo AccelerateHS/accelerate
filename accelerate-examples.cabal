@@ -103,7 +103,7 @@ Executable accelerate-nofib
                         Test.Prelude.Reduction
                         Test.Prelude.Replicate
                         Test.Prelude.Stencil
-                        Test.Prelude.Streaming
+                        Test.Prelude.Sequencing
                         Test.Sharing
                         Test.Spectral
                         Test.Spectral.BlackScholes
@@ -393,7 +393,8 @@ Executable accelerate-fluid
                         bmp                     >= 1.2,
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
-                        gloss                   >= 1.7
+                        gloss                   >= 1.7,
+                        gloss-accelerate        >= 1.7
 
 
 -- Simulation of gravitational attraction between solid particles
@@ -449,6 +450,7 @@ Executable accelerate-nbody
                         criterion               >= 0.5,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
+                        gloss-accelerate        >= 1.7,
                         mwc-random              >= 0.8
 
 
