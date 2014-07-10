@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Language (
   map, zipWith,
 
   -- * Sequence introduction and elimination
-  seq, emptySeq,
+  runSequence, emptySeq,
 
   -- * Sequence producers
   toSeq, useLazy,
@@ -624,8 +624,8 @@ foldSeqFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
                -> AccSequence senv (arrs, Array ix a)
 foldSeqFlatten f acc x (AccSequence s) = AccSequence (Consumer (FoldSeqFlatten f acc x) s)
 
-seq :: Arrays arrs => AccSequence () arrs -> Acc arrs
-seq (AccSequence s) = Acc (Sequence s)
+runSequence :: Arrays arrs => AccSequence () arrs -> Acc arrs
+runSequence (AccSequence s) = Acc (Sequence s)
 
 emptySeq :: AccSequence senv ()
 emptySeq = AccSequence EmptySeq

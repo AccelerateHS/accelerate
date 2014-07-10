@@ -143,7 +143,7 @@ module Data.Array.Accelerate (
   L.stencil, L.stencil2,
 
   -- ** Sequence introduction and elimination
-  L.seq, L.emptySeq,
+  L.runSequence, L.emptySeq,
 
   -- ** Sequence producers
   L.toSeq, L.useLazy,
