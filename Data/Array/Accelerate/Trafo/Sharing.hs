@@ -331,14 +331,14 @@ convertSharingLoop config alyt aenv l =
         MapStream afun x -> AST.MapStream (cvtAF1 afun) x
         ZipWithStream afun x y -> AST.ZipWithStream (cvtAF2 afun) x y
         ScanStream afun acc x -> AST.ScanStream (cvtAF2 afun) (cvtA acc) x
-        ScanStreamAct afun1 afun2 acc x -> AST.ScanStreamAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc) x
+        ScanStreamAct afun1 afun2 acc1 acc2 x -> AST.ScanStreamAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) x
 
     cvtC :: forall a. Consumer ScopedAcc lenv a -> AST.Consumer AST.OpenAcc aenv lenv a
     cvtC c =
       case c of
         FromStream x -> AST.FromStream x
         FoldStream afun acc x -> AST.FoldStream (cvtAF2 afun) (cvtA acc) x
-        FoldStreamAct afun1 afun2 acc x -> AST.FoldStreamAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc) x
+        FoldStreamAct afun1 afun2 acc1 acc2 x -> AST.FoldStreamAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) x
         FoldStreamFlatten afun acc x -> AST.FoldStreamFlatten (cvtAF3 afun) (cvtA acc) x
         CollectStream f x -> AST.CollectStream f x
 
@@ -1127,11 +1127,12 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (afun', h1) <- traverseAfun2 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
               return (ScanStream afun' acc' x, h1 `max` h2)
-            ScanStreamAct afun1 afun2 acc x -> do
+            ScanStreamAct afun1 afun2 acc1 acc2 x -> do
               (afun1', h1) <- traverseAfun2 lvl afun1
               (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc',   h3) <- traverseAcc lvl acc
-              return (ScanStreamAct afun1' afun2' acc' x, h1 `max` h2 `max` h3)
+              (acc1',  h3) <- traverseAcc lvl acc1
+              (acc2',  h4) <- traverseAcc lvl acc2
+              return (ScanStreamAct afun1' afun2' acc1' acc2' x, h1 `max` h2 `max` h3 `max` h4)
 
         travC :: forall arrs. Consumer Acc lenv arrs -> IO (Consumer UnscopedAcc lenv arrs, Int)
         travC c =
@@ -1142,11 +1143,12 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (afun', h1) <- traverseAfun2 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
               return (FoldStream afun' acc' x, h1 `max` h2)
-            FoldStreamAct afun1 afun2 acc x -> do
+            FoldStreamAct afun1 afun2 acc1 acc2 x -> do
               (afun1', h1) <- traverseAfun2 lvl afun1
               (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc',   h3) <- traverseAcc lvl acc
-              return (FoldStreamAct afun1' afun2' acc' x, h1 `max` h2 `max` h3)
+              (acc1',  h3) <- traverseAcc lvl acc1
+              (acc2',  h4) <- traverseAcc lvl acc2
+              return (FoldStreamAct afun1' afun2' acc1' acc2' x, h1 `max` h2 `max` h3 `max` h4)
             FoldStreamFlatten afun acc x -> do
               (afun', h1) <- traverseAfun3 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
@@ -2141,11 +2143,12 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                    (afun', accCount1) = scopesAfun2 afun
                                    (acc' , accCount2) = scopesAcc acc
                                  in (ScanStream afun' acc' x, accCount1 +++ accCount2)
-        ScanStreamAct afun1 afun2 acc x -> let
+        ScanStreamAct afun1 afun2 acc1 acc2 x -> let
                                    (afun1', accCount1) = scopesAfun2 afun1
                                    (afun2', accCount2) = scopesAfun2 afun2
-                                   (acc' ,  accCount3) = scopesAcc acc
-                                 in (ScanStreamAct afun1' afun2' acc' x, accCount1 +++ accCount2 +++ accCount3)
+                                   (acc1' , accCount3) = scopesAcc acc1
+                                   (acc2' , accCount4) = scopesAcc acc2
+                                 in (ScanStreamAct afun1' afun2' acc1' acc2' x, accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
 
     scopesC :: Consumer UnscopedAcc lenv a -> (Consumer ScopedAcc lenv a, NodeCounts)
     scopesC c =
@@ -2155,11 +2158,12 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                    (afun', accCount1) = scopesAfun2 afun
                                    (acc' , accCount2) = scopesAcc acc
                                  in (FoldStream afun' acc' x, accCount1 +++ accCount2)
-        FoldStreamAct afun1 afun2 acc x -> let
+        FoldStreamAct afun1 afun2 acc1 acc2 x -> let
                                    (afun1', accCount1) = scopesAfun2 afun1
                                    (afun2', accCount2) = scopesAfun2 afun2
-                                   (acc' ,  accCount3) = scopesAcc acc
-                                 in (FoldStreamAct afun1' afun2' acc' x, accCount1 +++ accCount2 +++ accCount3)
+                                   (acc1' , accCount3) = scopesAcc acc1
+                                   (acc2' , accCount4) = scopesAcc acc2
+                                 in (FoldStreamAct afun1' afun2' acc1' acc2' x, accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
         FoldStreamFlatten afun acc x -> let
                                    (afun', accCount1) = scopesAfun3 afun
                                    (acc' , accCount2) = scopesAcc acc

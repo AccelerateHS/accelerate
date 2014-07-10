@@ -86,12 +86,12 @@ travLoop f c l loop =
         MapStream afun x -> combine "MapStream" [ travAfun f c l afun, leaf (show (idxToInt x)), travLoop f c l l' ]
         ZipWithStream afun x y -> combine "ZipWithStream" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travLoop f c l l' ]
         ScanStream afun a x -> combine "ScanStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
-        ScanStreamAct afun1 afun2 a x -> combine "ScanStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        ScanStreamAct afun1 afun2 a b x -> combine "ScanStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travLoop f c l l' ]
     Consumer  co l' ->
       case co of
         FromStream x -> combine "FromStream" [ leaf (show (idxToInt x)), travLoop f c l l' ]
         FoldStream afun a x -> combine "FoldStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
-        FoldStreamAct afun1 afun2 a x -> combine "FoldStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
+        FoldStreamAct afun1 afun2 a b x -> combine "FoldStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travLoop f c l l' ]
         FoldStreamFlatten afun a x -> combine "FoldStreamFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
         CollectStream _ x -> combine "CollectStream" [ leaf "<function>", leaf (show (idxToInt x)), travLoop f c l l']
   where

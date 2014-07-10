@@ -373,10 +373,11 @@ matchLoop m h = match
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- m acc1 acc2
       = Just REFL
-    matchT (ScanStreamAct f1 g1 acc1 x1) (ScanStreamAct f2 g2 acc2 x2)
+    matchT (ScanStreamAct f1 g1 acc1 acc1' x1) (ScanStreamAct f2 g2 acc2 acc2' x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- m acc1 acc2
+      , Just REFL <- m acc1' acc2'
       , Just REFL <- matchPreOpenAfun m g1 g2
       = Just REFL
     matchT _ _
@@ -391,11 +392,12 @@ matchLoop m h = match
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
       = Just REFL
-    matchC (FoldStreamAct f1 g1 acc1 x1) (FoldStreamAct f2 g2 acc2 x2)
+    matchC (FoldStreamAct f1 g1 acc1 acc1' x1) (FoldStreamAct f2 g2 acc2 acc2' x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchPreOpenAfun m g1 g2
       , Just REFL <- m acc1 acc2
+      , Just REFL <- m acc1' acc2'
       = Just REFL
     matchC (FoldStreamFlatten f1 acc1 x1) (FoldStreamFlatten f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
@@ -990,14 +992,16 @@ hashPreOpenLoop hashAcc l =
         MapStream f x           -> hashWithSalt salt "MapStream" `hashF` f `hashVar` x
         ZipWithStream f x y     -> hashWithSalt salt "ZipWithStream" `hashF` f `hashVar` x `hashVar` y
         ScanStream f acc x      -> hashWithSalt salt "ScanStream" `hashF` f `hashA` acc `hashVar` x
-        ScanStreamAct f g acc x -> hashWithSalt salt "ScanStreamAct" `hashF` f `hashF` g `hashA` acc `hashVar` x
+        ScanStreamAct f g acc1 acc2 x -> 
+          hashWithSalt salt "ScanStreamAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
 
     hashC :: Int -> Consumer acc aenv lenv a -> Int
     hashC salt c =
       case c of
         FromStream x              -> hashWithSalt salt "FromStream" `hashVar` x
         FoldStream f acc x        -> hashWithSalt salt "FoldStream" `hashF` f `hashA` acc `hashVar` x
-        FoldStreamAct f g acc x   -> hashWithSalt salt "FoldStreamAct" `hashF` f `hashF` g `hashA` acc `hashVar` x
+        FoldStreamAct f g acc1 acc2 x -> 
+          hashWithSalt salt "FoldStreamAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
         FoldStreamFlatten f acc x -> hashWithSalt salt "FoldStreamFlatten" `hashF` f `hashA` acc `hashVar` x
         CollectStream _ x         -> hashWithSalt salt "CollectStream" `hashVar` x
 

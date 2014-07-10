@@ -315,11 +315,11 @@ data Transducer acc lenv a where
   -- ScanStream (+) a0 x. Scan a stream x by combining each element
   -- using the given binary operation (+). (+) must be associative:
   --
-  --   (a + b) + c = a + (b + c),
+  --   Forall a b c. (a + b) + c = a + (b + c),
   --
   -- and a0 must be the identity element for (+):
   --
-  --   a0 + a = a = a + a0.
+  --   Forall a. a0 + a = a = a + a0.
   --
   ScanStream :: (Shape sh, Elt e)
              => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
@@ -327,18 +327,23 @@ data Transducer acc lenv a where
              -> Idx lenv (Array sh e)
              -> Transducer acc lenv (Array sh e)
 
-  -- ScanStreamAct (+) (*) a0 x. Scan a stream x by the given binary
-  -- operation (+). (+) must be semi-associative, where (*) is the
-  -- companion operator:
+  -- ScanStreamAct (+) (*) a0 b0 x. Scan a stream x by the given
+  -- binary operation (+). (+) must be semi-associative, where (*) is
+  -- the companion operator:
   --
-  --   (a + b1) + b2 = a + (b1 * b2).
+  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- and b0 must be the identity element for (*).
+  --
+  --   Forall b. b0 * b = b = b * b0.
   --
   -- Note on the name: Act is short for "semigroup action".
   --
   ScanStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
-                => (Acc (Array sh e) -> Acc (Array sh' e') -> acc (Array sh e))
+                => (Acc (Array sh  e ) -> Acc (Array sh' e') -> acc (Array sh  e ))
                 -> (Acc (Array sh' e') -> Acc (Array sh' e') -> acc (Array sh' e'))
-                -> acc (Array sh e)
+                -> acc (Array sh  e )
+                -> acc (Array sh' e')
                 -> Idx lenv (Array sh' e')
                 -> Transducer acc lenv (Array sh e)
 
@@ -352,11 +357,11 @@ data Consumer acc lenv a where
   -- FoldStream (+) a0 x. Fold a stream x by combining each element
   -- using the given binary operation (+). (+) must be associative:
   --
-  --   (a + b) + c = a + (b + c),
+  --   Forall a b c. (a + b) + c = a + (b + c),
   --
   -- and a0 must be the identity element for (+):
   --
-  --   a0 + a = a = a + a0.
+  --   Forall a. a0 + a = a = a + a0.
   --
   FoldStream :: (Shape sh, Elt e)
              => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
@@ -364,18 +369,23 @@ data Consumer acc lenv a where
              -> Idx lenv (Array sh e)
              -> Consumer acc lenv (Array sh e)
 
-  -- FoldStreamAct (+) (*) a0 x. Fold a stream x by the given binary
-  -- operation (+). (+) must be semi-associative, where (*) is the
-  -- companion operator:
+  -- FoldStreamAct (+) (*) a0 b0 x. Fold a stream x by the given
+  -- binary operation (+). (+) must be semi-associative, where (*) is
+  -- the companion operator:
   --
-  --   (a + b1) + b2 = a + (b1 * b2).
+  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- and b0 must be the identity element for (*).
+  --
+  --   Forall b. b0 * b = b = b * b0.
   --
   -- Note on the name: Act is short for "semigroup action".
   --
   FoldStreamAct :: (Shape sh, Elt a, Shape sh', Elt b)
-                => (Acc (Array sh a) -> Acc (Array sh' b) -> acc (Array sh a))
+                => (Acc (Array sh  a) -> Acc (Array sh' b) -> acc (Array sh  a))
                 -> (Acc (Array sh' b) -> Acc (Array sh' b) -> acc (Array sh' b))
-                -> acc (Array sh a)
+                -> acc (Array sh  a)
+                -> acc (Array sh' b)
                 -> Idx lenv (Array sh' b)
                 -> Consumer acc lenv (Array sh a)
 
@@ -384,7 +394,8 @@ data Consumer acc lenv a where
   -- flattening. f must be semi-associative, with vecotor append (++)
   -- as the companion operator:
   --
-  --   f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --   Forall b s1 a2 sh2 a2.
+  --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
   --
   -- It is common to ignore the shape vectors, yielding the usual
   -- semi-associativity law:
@@ -393,7 +404,7 @@ data Consumer acc lenv a where
   --
   -- for some (+) satisfying:
   --
-  --   (b + a1) + a2 = b + (a1 ++ a2).
+  --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
   FoldStreamFlatten :: (Shape sh, Elt a, Shape sh', Elt b)
                     => (Acc (Array sh a) -> Acc (Vector sh') -> Acc (Vector b) -> acc (Array sh a))

@@ -480,7 +480,8 @@ rebuildT k v t =
     MapStream f x             -> MapStream <$> (rebuildAfun k v f)  <*> pure x
     ZipWithStream f x y       -> ZipWithStream <$> (rebuildAfun k v f)  <*> pure x <*> pure y
     ScanStream f acc x        -> ScanStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    ScanStreamAct f g acc x   -> ScanStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc) <*> pure x
+    ScanStreamAct f g acc1 acc2 x -> 
+      ScanStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
 
 rebuildC :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -491,7 +492,8 @@ rebuildC k v c =
   case c of
     FromStream x              -> FromStream <$> pure x
     FoldStream f acc x        -> FoldStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    FoldStreamAct f g acc x   -> FoldStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc) <*> pure x
+    FoldStreamAct f g acc1 acc2 x -> 
+      FoldStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
     FoldStreamFlatten f acc x -> FoldStreamFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
     CollectStream f x         -> pure $ CollectStream f x
 

@@ -73,17 +73,17 @@ convertSegments = cvtA
     cvtTr :: Transducer OpenAcc aenv lenv a -> Transducer OpenAcc aenv lenv a
     cvtTr t =
       case t of
-        MapStream f x         -> MapStream (cvtAfun f) x
-        ZipWithStream f x y   -> ZipWithStream (cvtAfun f) x y
-        ScanStream f a x      -> ScanStream (cvtAfun f) (cvtA a) x
-        ScanStreamAct f g a x -> ScanStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) x
+        MapStream f x           -> MapStream (cvtAfun f) x
+        ZipWithStream f x y     -> ZipWithStream (cvtAfun f) x y
+        ScanStream f a x        -> ScanStream (cvtAfun f) (cvtA a) x
+        ScanStreamAct f g a b x -> ScanStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
 
     cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
     cvtC c =
       case c of
         FromStream x            -> FromStream x
         FoldStream f a x        -> FoldStream (cvtAfun f) (cvtA a) x
-        FoldStreamAct f g a x   -> FoldStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) x
+        FoldStreamAct f g a b x -> FoldStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
         FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAfun f) (cvtA a) x
         CollectStream f x       -> CollectStream f x
 

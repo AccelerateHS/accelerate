@@ -497,11 +497,11 @@ zipWithStream f x y (AccLoop l) = AccLoop (Transducer (ZipWithStream f x y) l)
 -- element using the given binary operation (+). (+) must be
 -- associative:
 --
---   (a + b) + c = a + (b + c),
+--   Forall a b c. (a + b) + c = a + (b + c),
 --
 -- and a0 must be the identity element for (+):
 --
---   a0 + a = a = a + a0.
+--   Forall a. a0 + a = a = a + a0.
 --
 scanStream :: (Shape ix, Elt a, Arrays arrs)
            => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
@@ -515,7 +515,11 @@ scanStream f acc x (AccLoop l) = AccLoop (Transducer (ScanStream f acc x) l)
 -- binary operation (+). (+) must be semi-associative, where (*) is
 -- the companion operator:
 --
---   (a + b1) + b2 = a + (b1 * b2).
+--   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
+--
+-- and b0 must be the identity element for (*).
+--
+--   Forall b. b0 * b = b = b * b0.
 --
 -- Note on the name: Act is short for "semigroup action".
 --
@@ -523,10 +527,11 @@ scanStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
               => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
               -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
               -> Acc (Array ix a)
+              -> Acc (Array jx b)
               -> Idx lenv (Array jx b)
               -> AccLoop (lenv, Array ix a) arrs
               -> AccLoop lenv arrs
-scanStreamAct f g acc x (AccLoop l) = AccLoop (Transducer (ScanStreamAct f g acc x) l)
+scanStreamAct f g acc1 acc2 x (AccLoop l) = AccLoop (Transducer (ScanStreamAct f g acc1 acc2 x) l)
 
 -- | Convert the given array to a stream by streaming the outer
 -- dimension.
@@ -558,11 +563,11 @@ fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
 -- element using the given binary operation (+). (+) must be
 -- associative:
 --
---   (a + b) + c = a + (b + c),
+--   Forall a b c. (a + b) + c = a + (b + c),
 --
 -- and a0 must be the identity element for (+):
 --
---   a0 + a = a = a + a0.
+--   Forall a. a0 + a = a = a + a0.
 --
 foldStream :: (Shape ix, Elt a, Arrays arrs)
            => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
@@ -576,7 +581,11 @@ foldStream f acc x (AccLoop l) = AccLoop (Consumer (FoldStream f acc x) l)
 -- binary operation (+). (+) must be semi-associative, where (*) is
 -- the companion operator:
 --
---   (a + b1) + b2 = a + (b1 * b2).
+--   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
+--
+-- and b0 must be the identity element for (*).
+--
+--   Forall b. b0 * b = b = b * b0.
 --
 -- Note on the name: Act is short for "semigroup action".
 --
@@ -584,17 +593,19 @@ foldStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
               => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
               -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
               -> Acc (Array ix a)
+              -> Acc (Array jx b)
               -> Idx lenv (Array jx b)
               -> AccLoop lenv arrs
               -> AccLoop lenv (arrs, Array ix a)
-foldStreamAct f g acc x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc x) l)
+foldStreamAct f g acc1 acc2 x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc1 acc2 x) l)
 
 -- | foldStreamFlatten f a0 x loop. A specialized version of
 -- FoldStreamAct where reduction with the companion operator
 -- corresponds to flattening. f must be semi-associative, with vecotor
 -- append (++) as the companion operator:
 --
---   f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+--   Forall b sh1 a1 sh2 a2.
+--     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
 --
 -- It is common to ignore the shape vectors, yielding the usual
 -- semi-associativity law:
@@ -603,7 +614,7 @@ foldStreamAct f g acc x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc x
 --
 -- for some (+) satisfying:
 --
---   (b + a1) + a2 = b + (a1 ++ a2).
+--   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
 --
 foldStreamFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
                   => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))

@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK prune #-}
 -- |
@@ -38,9 +39,6 @@ module Data.Array.Accelerate.Interpreter (
   evalPrim, evalPrimConst, evalPrj
 
 ) where
-
--- TODO: remove
-import Debug.Trace ( trace )
 
 -- standard libraries
 import Control.Monad
@@ -211,7 +209,7 @@ evalPreOpenAcc (Stencil sten bndy acc) aenv
 evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
-evalPreOpenAcc (Loop l) aenv = delay $ evalLoop l aenv
+evalPreOpenAcc (Loop l) aenv = delay $ evalLoop defaultStreamConfig l aenv
 
 -- The interpreter does not handle foreign functions so use the pure accelerate version
 evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
@@ -219,196 +217,6 @@ evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
     in evalOpenAcc funAcc (Empty `Push` arr)
 evalPreOpenAcc (Aforeign _ _ _) _
   = error "This case is not possible"
-
-data ExecLoop lenv arrs where
-  ExecEmpty :: ExecLoop lenv ()
-  ExecP :: (Arrays a, Arrays arrs) => ExecP      a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
-  ExecT :: (Arrays a, Arrays arrs) => ExecT lenv a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
-  ExecC :: (Arrays a, Arrays arrs) => ExecC lenv a -> ExecLoop  lenv     arrs -> ExecLoop lenv (arrs, a)
-
-data ExecP a where
-  ExecToStream :: [Array sh e]
-               -> ExecP (Array sh e)
-
-  ExecUseLazy :: (Sugar.Elt slix, Sugar.Shape sl,
-                  Sugar.Shape dim, Sugar.Elt e)
-              => SliceIndex (Sugar.EltRepr slix)
-                            (Sugar.EltRepr sl)
-                            co
-                            (Sugar.EltRepr dim)
-              -> [slix]
-              -> Array dim e
-              -> ExecP (Array sl e)
-
-data ExecT lenv a where
-  ExecMap :: (a -> b)
-          -> Idx lenv a
-          -> ExecT lenv b
-
-  ExecZipWith :: (a -> b -> c)
-              -> Idx lenv a
-              -> Idx lenv b
-              -> ExecT lenv c
-
-  ExecScanStream :: Idx lenv (Array sh a)
-                 -> (Array sh a -> Array sh a -> Array sh a)
-                 -> Array sh a
-                 -> ExecT lenv (Array sh a)
-
-  ExecScanStreamAct :: Idx lenv (Array sh' b)
-                    -> (Array sh a -> Array sh' b -> Array sh a)
-                    -> (Array sh' b -> Array sh' b -> Array sh' b)
-                    -> Array sh a
-                    -> ExecT lenv (Array sh a)
-
-data ExecC lenv a where
-  ExecFromStream :: (Sugar.Elt a, Sugar.Shape sh)
-                 => Idx lenv (Array sh a)
-                 -> [Array sh a]
-                 -> ExecC lenv (Vector sh, Vector a)
-
-  ExecFoldStream :: Idx lenv (Array sh a)
-                 -> (Array sh a -> Array sh a -> Array sh a)
-                 -> Array sh a
-                 -> ExecC lenv (Array sh a)
-
-  ExecFoldStreamAct :: Idx lenv (Array sh' b)
-                    -> (Array sh a -> Array sh' b -> Array sh a)
-                    -> (Array sh' b -> Array sh' b -> Array sh' b)
-                    -> Array sh a
-                    -> ExecC lenv (Array sh a)
-
-  ExecFoldStreamFlatten :: (Sugar.Elt b, Sugar.Shape sh')
-                        => Idx lenv (Array sh' b)
-                        -> (Array sh a -> Vector sh' -> Vector b -> Array sh a)
-                        -> Array sh a
-                        -> ExecC lenv (Array sh a)
-
-  ExecCollectStream :: (Array sh a -> IO ())
-                    -> Idx lenv (Array sh a)
-                    -> ()
-                    -> ExecC lenv ()
-
-evalLoop :: PreOpenLoop OpenAcc aenv () arrs -> Val aenv -> arrs
-evalLoop l aenv | degenerate l = returnOut .        initLoop aenv $ l
-                | otherwise    = returnOut . loop . initLoop aenv $ l
-  where
-    -- A loop with no producers is degenerate since there is no
-    -- halting condition, and should therefore not be iterated.
-    -- Notice that the only degenerate closed loop is the empty loop.
-    degenerate :: PreOpenLoop OpenAcc aenv lenv arrs -> Bool
-    degenerate l =
-      case l of
-        EmptyLoop    -> True
-        Producer _ _ -> False
-        Transducer _ l' -> degenerate l'
-        Consumer   _ l' -> degenerate l'
-
-    -- Initialize the producers and the accumulators of the consumers
-    -- with the given array enviroment.
-    initLoop :: Val aenv -> PreOpenLoop OpenAcc aenv lenv arrs -> ExecLoop lenv arrs
-    initLoop aenv l =
-      case l of
-        EmptyLoop       -> ExecEmpty
-        Producer   p l' -> ExecP (initProducer   aenv p) (initLoop aenv l')
-        Transducer t l' -> ExecT (initTransducer aenv t) (initLoop aenv l')
-        Consumer   c l' -> ExecC (initConsumer   aenv c) (initLoop aenv l')
-
-    -- Iterate the given loop until it terminates.
-    -- A loop only terminates when one of the producers are exhausted.
-    loop :: ExecLoop () arrs -> ExecLoop () arrs
-    loop l =
-      case go l Empty of
-        Nothing -> l
-        Just l' -> loop l'
-
-    -- One iteration of a loop.
-    go :: ExecLoop lenv arrs -> Val lenv -> Maybe (ExecLoop lenv arrs)
-    go l lenv =
-      case l of
-        ExecEmpty -> return ExecEmpty
-        ExecP p l ->       produce   p       >>= \ (a, p') -> go l (lenv `Push` a) >>= \ l' -> return (ExecP p' l')
-        ExecT t l -> Just (transduce t lenv) >>= \ (a, t') -> go l (lenv `Push` a) >>= \ l' -> return (ExecT t' l')
-        ExecC c l -> Just (consume   c lenv) >>= \     c'  -> go l  lenv           >>= \ l' -> return (ExecC c' l')
-
-    -- Finalize and return the accumulators in the consumers of the loop.
-    returnOut :: ExecLoop lenv arrs -> arrs
-    returnOut l =
-      case l of
-        ExecEmpty -> ()
-        ExecP _ l -> returnOut l
-        ExecT _ l -> returnOut l
-        ExecC c l -> (returnOut l, readConsumer c)
-
-produce :: ExecP a -> Maybe (a, ExecP a)
-produce p =
-  case p of
-    ExecToStream (x:xs) -> Just (x, ExecToStream xs)
-    ExecToStream []     -> Nothing
-    ExecUseLazy sliceIndex (slix:slixs) arr ->
-      Just (force $ sliceOp sliceIndex (delay arr) slix, ExecUseLazy sliceIndex slixs arr)
-    ExecUseLazy _ [] _  -> Nothing
-
-initProducer :: Val aenv -> Producer OpenAcc aenv a -> ExecP a
-initProducer aenv p =
-  case p of
-    ToStream sliceIndex sl acc ->
-      let arr = force $ evalOpenAcc acc aenv
-          sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
-      in ExecToStream (map force (toStreamOp sliceIndex sl' (delay arr)))
-    UseLazy sliceIndex sl arr ->
-      let sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
-          sls = enumSlices sliceIndex sl'
-      in trace (show sls) $ ExecUseLazy sliceIndex sls arr
-
-transduce :: ExecT lenv a -> Val lenv -> (a, ExecT lenv a)
-transduce t lenv =
-  case t of
-    ExecMap     f x   -> (f (prj x lenv), t)
-    ExecZipWith f x y -> (f (prj x lenv) (prj y lenv), t)
-    ExecScanStream x f acc        -> (acc, ExecScanStream x f (f acc (prj x lenv)))
-    ExecScanStreamAct x f g acc   -> (acc, ExecScanStreamAct x f g (f acc (prj x lenv)))
-
-initTransducer :: Val aenv -> Transducer OpenAcc aenv lenv a -> ExecT lenv a
-initTransducer aenv t =
-  case t of
-    MapStream     f x       -> ExecMap     (evalOpenAfun f aenv) x
-    ZipWithStream f x y     -> ExecZipWith (evalOpenAfun f aenv) x y
-    ScanStream    f acc x   -> ExecScanStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
-    ScanStreamAct f g acc x -> ExecScanStreamAct x (evalOpenAfun f aenv) (evalOpenAfun g aenv) (force $ evalOpenAcc acc aenv)
-
-consume :: ExecC lenv a -> Val lenv -> ExecC lenv a
-consume c lenv =
-  case c of
-    ExecFromStream x as           -> ExecFromStream x (prj x lenv:as)
-    ExecFoldStream x f acc        -> ExecFoldStream x f (f acc (prj x lenv))
-    ExecFoldStreamAct x f g acc   -> ExecFoldStreamAct x f g (f acc (prj x lenv))
-    ExecFoldStreamFlatten x f acc ->
-      ExecFoldStreamFlatten x f (f acc shapes elts)
-      where
-        arr = prj x lenv
-        shapes = Sugar.fromList (Z :. 1) [Sugar.shape arr]
-        eltlist = Sugar.toList arr
-        elts = Sugar.fromList (Z :. (length eltlist)) eltlist
-    ExecCollectStream f x () -> let !r = unsafePerformIO $ f (prj x lenv) in ExecCollectStream f x r
-
-initConsumer :: Val aenv -> Consumer OpenAcc aenv lenv a -> ExecC lenv a
-initConsumer aenv c =
-  case c of
-    FromStream x              -> ExecFromStream x []
-    FoldStream f acc x        -> ExecFoldStream x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
-    FoldStreamAct f g acc x   -> ExecFoldStreamAct x (evalOpenAfun f aenv) (evalOpenAfun g aenv) (force $ evalOpenAcc acc aenv)
-    FoldStreamFlatten f acc x -> ExecFoldStreamFlatten x (evalOpenAfun f aenv) (force $ evalOpenAcc acc aenv)
-    CollectStream f x         -> ExecCollectStream f x ()
-
-readConsumer :: ExecC lenv a -> a
-readConsumer c =
-  case c of
-    ExecFromStream _ as           -> force $ (fromStreamOp (reverse (map delay as)))
-    ExecFoldStream _ _ acc        -> acc
-    ExecFoldStreamAct _ _ _ acc   -> acc
-    ExecFoldStreamFlatten _ _ acc -> acc
-    ExecCollectStream _ _ r       -> r
 
 -- Evaluate a closed array expressions
 --
@@ -872,24 +680,6 @@ toStreamOp :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Shape dim, Sugar.Elt e)
            -> Delayed (Array dim e)
            -> [Delayed (Array sl e)]
 toStreamOp sliceIndex slix arr = map (sliceOp sliceIndex arr) (Sugar.enumSlices sliceIndex slix)
-
-fromStreamOp :: (Sugar.Shape sh, Sugar.Elt e)
-             => [Delayed (Array sh e)]
-             -> Delayed (Array (Z:.Int) sh, Array (Z:.Int) e)
-fromStreamOp ds
-  = let f (DelayedRpair DelayedRunit (DelayedRarray sh _)) = sh
-        g _ [] = error "index out of bounds"
-        g i (DelayedRpair DelayedRunit (DelayedRarray sh rf):ds)
-          | i < size sh = rf (fromIndex sh i)
-          | otherwise   = g (i - size sh) ds
-        n = foldl (+) 0 [size sh | (DelayedRpair DelayedRunit (DelayedRarray sh _)) <- ds]
-        shapevec = DelayedRarray
-                     ((), length ds)
-                     (\ ((), i) -> f (ds !! i))
-        elvec    = DelayedRarray
-                     ((), n)
-                     (\ ((), i) -> g i ds)
-    in DelayedRpair (DelayedRpair DelayedRunit shapevec) elvec
 
 -- Expression evaluation
 -- ---------------------
@@ -1380,3 +1170,492 @@ evalMin (NumScalarType (FloatingNumType ty))
 evalMin (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = uncurry min
 
+
+
+-- Loop evaluation 
+-- ---------------
+
+-- Position in stream.
+--
+type StreamPos = Int
+
+-- Configuration for stream evaluation.
+--
+data StreamConfig = StreamConfig 
+  { chunkSize :: Int -- Allocation limit for a stream in words. Actaul
+                     -- runtime allocation should be the maximum of
+                     -- this size and the size of the largest element
+                     -- in the stream.
+  }
+
+-- Default stream evaluation configuration for testing purposes.
+--
+defaultStreamConfig :: StreamConfig
+defaultStreamConfig = StreamConfig { chunkSize = 2 }
+
+-- A chunk of allocated elements. TODO: Change to use LiftedAcc.
+--
+data Chunk a = Chunk 
+  { elems :: [a]  -- Elements.
+  }
+
+-- The empty chunk. O(1).
+emptyChunk :: forall a. Chunk a
+emptyChunk = Chunk { elems = [] }
+
+-- The singleton chunk. O(1).
+singletonChunk :: forall a. a -> Chunk a
+singletonChunk a = Chunk { elems = [a] }
+
+-- Number of arrays in chunk. O(1).
+--
+clen :: forall a. Chunk a -> Int
+clen = length . elems
+
+elemsPerChunk :: StreamConfig -> Int -> Int
+elemsPerChunk conf n
+  | n < 1 = chunkSize conf
+  | otherwise =
+    let (a,b) = chunkSize conf `quotRem` n
+    in a + signum b
+
+-- Chunk append. O(n+m).
+--
+appendChunk :: forall a. Chunk a -> Chunk a -> Chunk a -- (Chunk a, Chunk a) leftovers c2
+appendChunk c1 c2 = Chunk { elems = elems c1 ++ elems c2 }
+
+-- Drop a number of arrays from a chunk. O(1). Note: Require keeping a
+-- scan of element sizes.
+--
+cdrop :: forall a. Int -> Chunk a -> Chunk a
+cdrop n c = c { elems = drop n (elems c) }
+
+-- Take a number of arrays from a chunk. O(1). Note: Require keeping a
+-- scan of element sizes.
+--
+ctake :: forall a. Int -> Chunk a -> Chunk a
+ctake n c = c { elems = take n (elems c) }
+
+-- Get all the shapes of a chunk of arrays. O(1).
+--
+chunkShapes :: forall sh a. Sugar.Shape sh => Chunk (Array sh a) -> Vector sh
+chunkShapes c = Sugar.fromList (Z :. clen c) (map Sugar.shape (elems c))
+
+-- Get all the elements of a chunk of arrays. O(1).
+--
+chunkElems :: forall sh a. Sugar.Elt a => Chunk (Array sh a) -> Vector a
+chunkElems c = 
+  let xs = concatMap Sugar.toList (elems c)
+  in Sugar.fromList (Z :. length xs) xs
+
+-- fmap for Chunk. O(n).
+--
+mapChunk :: forall a b. (a -> b) -> Chunk a -> Chunk b -- (Chunk a, Chunk b) leftovers c
+mapChunk f c = c { elems = map f (elems c) }
+
+-- zipWith for Chunk. O(n).
+--
+zipWithChunk :: forall a b c. (a -> b -> c) -> Chunk a -> Chunk b -> Chunk c -- (Chunk a, Chunk b, Chunk c) leftovers c1 c2
+zipWithChunk f c1 c2 = Chunk 
+  { elems = zipWith f (elems c1) (elems c2)
+  }
+
+-- A version of zipWith that keeps the trailing elements of the
+-- longest argument. O(n).
+zipWithChunk' :: forall a. (a -> a -> a) -> Chunk a -> Chunk a -> Chunk a
+zipWithChunk' f c1 c2 = 
+  zipWithChunk f c1 c2 `appendChunk` cdrop (clen c2) c1 `appendChunk` cdrop (clen c1) c2
+
+-- Pre-scan and reduce a Chunk. O(nlogn). TODO: Can work in-place for
+-- fixed element-size streams.
+--
+scanReduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> (Chunk a, a) -- (Chunk a, Chunk a, a) leftovers c
+scanReduceChunk f a0 c = go c
+  where
+    go :: Chunk a -> (Chunk a, a)
+    go c = 
+      case elems c of
+        []  -> (c, a0)
+        [a] -> (singletonChunk a0, a)
+        _ -> 
+          let k = clen c `div` 2
+              (c', a') = go (ctake k c)
+              (c'', a'') = go (cdrop k c)
+          in (c' `appendChunk` mapChunk (f a') c'', f a' a'')
+
+-- Reduce a Chunk. O(nlogn). TODO: Can work in-place for fixed
+-- element-size streams.
+--
+reduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> a
+reduceChunk f a0 c = go c
+  where
+    go :: Chunk a -> a
+    go c =
+      case elems c of
+        [] -> a0
+        [a] -> a
+        _ ->
+          let k = clen c `div` 2
+              c' = zipWithChunk' f (cdrop k c) (ctake k c)
+          in go c'
+
+-- Replicate for Chunk. O(n). TODO Leftovers?
+--
+replicateChunk :: forall a. Int -> a -> Chunk a
+replicateChunk k a = Chunk 
+  { elems = replicate k a
+  }
+
+-- A window on a stream.
+--
+data Window a = Window 
+  { chunk :: Chunk a   -- Current allocated chunk.
+  , wpos  :: StreamPos -- Position of the window on the stream, given
+                       -- in number of elements.
+  }
+
+-- The initial empty window.
+--
+window0 :: forall a. Window a
+window0 = Window { chunk = emptyChunk, wpos = 0 }
+
+-- Index the given window by the given index on the stream.
+--
+(!#) :: forall a. Window a -> StreamPos -> Chunk a
+w !# i
+  | j <- i - wpos w
+  , j >= 0
+  = cdrop j (chunk w)
+  | otherwise = error "Window indexed before position."
+
+-- Move the give window by supplying the next chunk.
+--
+moveWin :: forall a. Window a -> Chunk a -> Window a
+moveWin w c = w { chunk = c
+                , wpos = wpos w + clen (chunk w)
+                }
+
+-- A cursor on a stream.
+--
+data Cursor lenv a = Cursor 
+  { ref  :: Idx lenv a -- Reference to the stream.
+  , cpos :: StreamPos  -- Position of the cursor on the stream, given
+                       -- in number of elements.
+  }
+  
+-- Initial cursor.
+--
+cursor0 :: forall lenv a. Idx lenv a -> Cursor lenv a
+cursor0 x = Cursor { ref = x, cpos = 0 }
+
+-- Advance cursor by a relative amount.
+--
+moveCursor :: forall lenv a. Int -> Cursor lenv a -> Cursor lenv a
+moveCursor k c = c { cpos = cpos c + k }
+
+-- Valuation for an environment of stream windows.
+--
+data Val' lenv where
+  Empty' :: Val' ()
+  Push'  :: Val' lenv -> Window t -> Val' (lenv, t)  
+
+-- Projection of a window from a window valuation using a de Bruijn
+-- index.
+--
+prj' :: forall lenv t. Idx lenv t -> Val' lenv -> Window t
+prj' ZeroIdx       (Push' _   v) = v
+prj' (SuccIdx idx) (Push' val _) = prj' idx val
+prj' _             _             = $internalError "prj" "inconsistent valuation"
+
+-- Projection of a chunk from a window valuation using a stream
+-- cursor.
+--
+prjChunk :: forall lenv a. Cursor lenv a -> Val' lenv -> Chunk a
+prjChunk c lenv = prj' (ref c) lenv !# cpos c
+
+-- An executable loop.
+--
+data ExecLoop lenv arrs where
+  ExecEmpty :: ExecLoop lenv ()
+  ExecP :: (Arrays a, Arrays arrs) => Window a -> ExecP      a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
+  ExecT :: (Arrays a, Arrays arrs) => Window a -> ExecT lenv a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
+  ExecC :: (Arrays a, Arrays arrs) =>             ExecC lenv a -> ExecLoop  lenv     arrs -> ExecLoop lenv (arrs, a)
+
+-- An executable producer.
+--
+data ExecP a where
+  ExecToStream :: Int -- Elements per chunk
+               -> [Array sh e]
+               -> ExecP (Array sh e)
+
+  ExecUseLazy :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Elt e)
+              => SliceIndex (Sugar.EltRepr slix)
+                            (Sugar.EltRepr sl)
+                            co
+                            dim
+              -> Int -- Elements per chunk
+              -> [slix]
+              -> (slix -> Array sl e)
+              -> ExecP (Array sl e)
+
+-- An executable transducer.
+--
+data ExecT lenv a where
+  ExecMap :: (Chunk a -> Chunk b)
+          -> Cursor lenv a
+          -> ExecT lenv b
+
+  ExecZipWith :: (Chunk a -> Chunk b -> Chunk c)
+              -> Cursor lenv a
+              -> Cursor lenv b
+              -> ExecT lenv c
+
+  ExecScanStream :: (a -> Chunk b -> (Chunk a, a))
+                 -> Cursor lenv b
+                 -> a
+                 -> ExecT lenv a
+
+-- An executable consumer.
+--
+data ExecC lenv a where
+  ExecFoldStream' :: (acc -> Chunk b -> acc)
+                  -> (acc -> res)
+                  -> Cursor lenv b
+                  -> acc
+                  -> ExecC lenv res
+
+minCursor :: ExecLoop lenv a -> StreamPos
+minCursor l = travL l 0
+  where
+    travL :: ExecLoop lenv a -> Int -> StreamPos
+    travL l i = 
+      case l of
+        ExecEmpty    -> maxBound
+        ExecP _ _ l' -> travL l' (i+1)
+        ExecT _ t l' -> travT t i `min` travL l' (i+1)
+        ExecC   c l' -> travC c i `min` travL l' i
+
+    k :: Cursor lenv a -> Int -> StreamPos
+    k c i
+      | i == idxToInt (ref c) = cpos c
+      | otherwise             = maxBound
+
+    travT :: ExecT lenv a -> Int -> StreamPos
+    travT t i =
+      case t of
+        ExecMap _ c -> k c i
+        ExecZipWith _ c1 c2 -> k c1 i `min` k c2 i
+        ExecScanStream _ c _ -> k c i
+
+    travC :: ExecC lenv a -> Int -> StreamPos
+    travC c i =
+      case c of
+        ExecFoldStream' _ _ c _ -> k c i
+
+evalLoop :: forall aenv arrs. 
+            StreamConfig 
+         -> PreOpenLoop OpenAcc aenv () arrs 
+         -> Val aenv -> arrs
+evalLoop conf l aenv | degenerate l = returnOut .        initLoop aenv $ l
+                     | otherwise    = returnOut . loop . initLoop aenv $ l
+  where
+    -- A loop with no producers is degenerate since there is no
+    -- halting condition, and should therefore not be iterated.
+    -- Notice that the only degenerate closed loop is the empty loop.
+    degenerate :: forall lenv arrs'. 
+                  PreOpenLoop OpenAcc aenv lenv arrs'
+               -> Bool
+    degenerate l =
+      case l of
+        EmptyLoop    -> True
+        Producer _ _ -> False
+        Transducer _ l' -> degenerate l'
+        Consumer   _ l' -> degenerate l'
+
+    -- Initialize the producers and the accumulators of the consumers
+    -- with the given array enviroment.
+    initLoop :: forall lenv arrs'.
+                Val aenv
+             -> PreOpenLoop OpenAcc aenv lenv arrs'
+             -> ExecLoop lenv arrs'
+    initLoop aenv l =
+      case l of
+        EmptyLoop       -> ExecEmpty
+        Producer   p l' -> ExecP window0 (initProducer   aenv p) (initLoop aenv l')
+        Transducer t l' -> ExecT window0 (initTransducer aenv t) (initLoop aenv l')
+        Consumer   c l' -> ExecC         (initConsumer   aenv c) (initLoop aenv l')
+
+    -- Iterate the given loop until it terminates.
+    -- A loop only terminates when one of the producers are exhausted.
+    loop :: ExecLoop () arrs 
+         -> ExecLoop () arrs
+    loop l = 
+      case step' l of
+        Nothing -> l
+        Just l' -> loop l'
+      
+      where 
+        step' :: ExecLoop () arrs -> Maybe (ExecLoop () arrs)
+        step' l = step l Empty'
+
+    -- One iteration of a loop.
+    step :: forall lenv arrs'.
+            ExecLoop lenv arrs'
+         -> Val' lenv
+         -> Maybe (ExecLoop lenv arrs')
+    step l lenv =
+      case l of
+        ExecEmpty -> return ExecEmpty
+        ExecP w p l' -> checkWin w l' (ExecP w p) $       produce   p       >>= \ (a, p') -> step l' (lenv `Push'` moveWin w a) >>= \ l'' -> return (ExecP (moveWin w a) p' l'')
+        ExecT w t l' -> checkWin w l' (ExecT w t) $ Just (transduce t lenv) >>= \ (a, t') -> step l' (lenv `Push'` moveWin w a) >>= \ l'' -> return (ExecT (moveWin w a) t' l'')
+        ExecC   c l' ->                             Just (consume   c lenv) >>= \     c'  -> step l'  lenv                      >>= \ l'' -> return (ExecC c' l'')
+      where
+        checkWin :: forall a. -- TODO: Find a more elegant solution without using checkWin.
+                    Window a
+                 -> ExecLoop (lenv, a) arrs'
+                 -> (ExecLoop (lenv, a) arrs' -> ExecLoop lenv arrs')
+                 -> Maybe (ExecLoop lenv arrs')
+                 -> Maybe (ExecLoop lenv arrs')
+        checkWin w l' exec ml
+          | null (elems (w !# minCursor l')) = ml
+          | otherwise                        = step l' (lenv `Push'` w) >>= \ l'' -> Just (exec l'')
+
+    -- Finalize and return the accumulators in the consumers of the loop.
+    returnOut :: forall lenv arrs'. 
+                 ExecLoop lenv arrs' -> arrs'
+    returnOut l =
+      case l of
+        ExecEmpty -> ()
+        ExecP _ _ l ->  returnOut l
+        ExecT _ _ l ->  returnOut l
+        ExecC   c l -> (returnOut l, readConsumer c)
+
+
+    initProducer :: forall a.
+                    Val aenv
+                 -> Producer OpenAcc aenv a
+                 -> ExecP a
+    initProducer aenv p =
+      case p of
+        ToStream sliceIndex sl acc ->
+          let arr = force $ evalOpenAcc acc aenv
+              sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
+              n   = size (sliceShape sliceIndex (Sugar.fromElt (Sugar.shape arr)))
+              k   = elemsPerChunk conf n
+          in ExecToStream k (map force (toStreamOp sliceIndex sl' (delay arr)))
+        UseLazy sliceIndex sl arr ->
+          let sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
+              sls = enumSlices sliceIndex sl'
+              n   = size (sliceShape sliceIndex (Sugar.fromElt (Sugar.shape arr)))
+              k   = elemsPerChunk conf n
+              f slix = force $ sliceOp sliceIndex (delay arr) slix
+          in ExecUseLazy sliceIndex k sls f
+
+    initTransducer :: forall a lenv.
+                      Val aenv
+                   -> Transducer OpenAcc aenv lenv a
+                   -> ExecT lenv a
+    initTransducer aenv t =
+      case t of
+        MapStream     f x       -> ExecMap     (mapChunk (evalOpenAfun f aenv)) (cursor0 x)
+        ZipWithStream f x y     -> ExecZipWith (zipWithChunk (evalOpenAfun f aenv)) (cursor0 x) (cursor0 y)
+        ScanStream    f acc x   -> initTransducer aenv (ScanStreamAct f f acc acc x)
+        ScanStreamAct f g acc0 acc1 x -> ExecScanStream h (cursor0 x) a0
+          where
+            f' = evalOpenAfun f aenv
+            g' = evalOpenAfun g aenv
+            a0 = force (evalOpenAcc acc0 aenv)
+            b0 = force (evalOpenAcc acc1 aenv)
+            h a bs =
+              let (bs', b) = scanReduceChunk g' b0 bs -- Scan and reduce chunk.
+                  as = mapChunk (f' a) bs'            -- Add accumulator.
+                  a' = f' a b                         -- Find new accumulator.
+              in (as, a')
+
+    initConsumer :: forall a lenv.
+                    Val aenv
+                 -> Consumer OpenAcc aenv lenv a
+                 -> ExecC lenv a
+    initConsumer aenv c =
+      case c of
+        FromStream x -> 
+          ExecFoldStream' 
+            appendChunk 
+            (\ c -> (chunkShapes c, chunkElems c)) 
+            (cursor0 x) 
+            emptyChunk
+        FoldStream f acc x ->
+          let f' = evalOpenAfun f aenv
+              a0 = force $ evalOpenAcc acc aenv
+              k = elemsPerChunk conf (Sugar.size (Sugar.shape a0))
+          in ExecFoldStream'
+               (zipWithChunk' f')
+               (reduceChunk f' a0)
+               (cursor0 x)
+               (replicateChunk k a0)
+        FoldStreamAct f g acc1 acc2 x ->
+          let f' = evalOpenAfun f aenv
+              g' = evalOpenAfun g aenv
+              a0 = force $ evalOpenAcc acc1 aenv
+              b0 = force $ evalOpenAcc acc2 aenv
+          in ExecFoldStream'
+               (\ a bs -> f' a (reduceChunk g' b0 bs))
+               id
+               (cursor0 x)
+               a0
+        FoldStreamFlatten f acc x ->
+          let f' = evalOpenAfun f aenv
+              a0 = force $ evalOpenAcc acc aenv
+          in ExecFoldStream' 
+               (\ a bs -> f' a (chunkShapes bs) (chunkElems bs))
+               id
+               (cursor0 x)
+               a0
+        CollectStream f x -> 
+          ExecFoldStream' (\ () xs -> unsafePerformIO $ mapM_ f (elems xs)) id (cursor0 x) ()
+
+produce :: ExecP a -> Maybe (Chunk a, ExecP a)
+produce p =
+  case p of
+    ExecToStream k xs ->
+      if null xs
+        then Nothing
+        else 
+          let (xs', xs'') = (take k xs, drop k xs)
+          in Just ( Chunk { elems = xs' }
+                  , ExecToStream k xs'')
+    ExecUseLazy sliceIndex k slixs f ->
+      if null slixs
+        then Nothing
+        else
+          let (slixs', slixs'') = (take k slixs, drop k slixs)
+          in Just ( Chunk { elems = map f slixs' }
+                  , ExecUseLazy sliceIndex k slixs'' f)
+
+transduce :: ExecT lenv a -> Val' lenv -> (Chunk a, ExecT lenv a)
+transduce t lenv =
+  case t of
+    ExecMap f x -> 
+      let c = prjChunk x lenv
+      in (f c, ExecMap f (moveCursor (clen c) x))
+    ExecZipWith f x y -> 
+      let c1 = prjChunk x lenv
+          c2 = prjChunk y lenv
+          k = clen c1 `min` clen c2
+      in (f c1 c2, ExecZipWith f (moveCursor k x) (moveCursor k y))
+    ExecScanStream f x a   -> 
+      let c = prjChunk x lenv
+          (as, a') = f a c
+      in  (as, ExecScanStream f (moveCursor (clen c) x) a')
+
+consume :: ExecC lenv a -> Val' lenv -> ExecC lenv a
+consume c lenv =
+  case c of
+    ExecFoldStream' f g x acc  ->
+      let c = prjChunk x lenv
+      in ExecFoldStream' f g (moveCursor (clen c) x) (f acc c)
+
+readConsumer :: ExecC lenv a -> a
+readConsumer c =
+  case c of
+    ExecFoldStream'   _ g _ acc -> g acc

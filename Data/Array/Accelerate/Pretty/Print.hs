@@ -177,9 +177,10 @@ prettyLoop prettyAcc alvl llvl wrap l =
                                                       , prettyAcc alvl wrap a
                                                       , var (idxToInt x) ]
 
-        ScanStreamAct f g a x   -> "foldStreamAct" .$ [ prettyPreAfun prettyAcc alvl f
+        ScanStreamAct f g a b x -> "foldStreamAct" .$ [ prettyPreAfun prettyAcc alvl f
                                                       , prettyPreAfun prettyAcc alvl g
                                                       , prettyAcc alvl wrap a
+                                                      , prettyAcc alvl wrap b
                                                       , var (idxToInt x) ]
 
     prettyC :: forall a. Consumer acc aenv lenv a -> Doc
@@ -191,9 +192,10 @@ prettyLoop prettyAcc alvl llvl wrap l =
                                                            , prettyAcc alvl wrap a
                                                            , var (idxToInt x) ]
 
-        FoldStreamAct f g a x   -> "foldStreamAct"     ..$ [ prettyPreAfun prettyAcc alvl f
+        FoldStreamAct f g a b x -> "foldStreamAct"     ..$ [ prettyPreAfun prettyAcc alvl f
                                                            , prettyPreAfun prettyAcc alvl g
                                                            , prettyAcc alvl wrap a
+                                                           , prettyAcc alvl wrap b
                                                            , var (idxToInt x) ]
 
         FoldStreamFlatten f a x -> "foldStreamFlatten" ..$ [ prettyPreAfun prettyAcc alvl f

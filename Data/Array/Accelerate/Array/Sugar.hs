@@ -52,7 +52,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Tuple(..), Atuple(..), IsTuple, IsAtuple, CstProxy(..),
 
   -- * Miscellaneous
-  showShape, Foreign(..), sliceShape, enumSlices, nextSlice, restrictSlice
+  showShape, Foreign(..), sliceShape, enumSlices, nextSlice, restrictSlice,
 
 ) where
 
@@ -1243,3 +1243,4 @@ restrictSlice :: forall slix co sl dim. (Elt slix, Shape dim)
               -> slix
               -> slix -- Slice restricted to full shape.
 restrictSlice slix dim = toElt . Repr.restrictSlice slix (fromElt dim) . fromElt
+

@@ -209,17 +209,17 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Transducer t l' ->
           Transducer
             (case t of
-               MapStream f x         -> MapStream (cvtAF f) x
-               ZipWithStream f x y   -> ZipWithStream (cvtAF f) x y
-               ScanStream f a x      -> ScanStream (cvtAF f) (manifest a) x
-               ScanStreamAct f g a x -> ScanStreamAct (cvtAF f) (cvtAF g) (manifest a) x)
+               MapStream f x           -> MapStream (cvtAF f) x
+               ZipWithStream f x y     -> ZipWithStream (cvtAF f) x y
+               ScanStream f a x        -> ScanStream (cvtAF f) (manifest a) x
+               ScanStreamAct f g a b x -> ScanStreamAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x)
             (cvtL l')
         Consumer   c l' ->
           Consumer
             (case c of
                FromStream x            -> FromStream x
                FoldStream f a x        -> FoldStream (cvtAF f) (manifest a) x
-               FoldStreamAct f g a x   -> FoldStreamAct (cvtAF f) (cvtAF g) (manifest a) x
+               FoldStreamAct f g a b x -> FoldStreamAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
                FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAF f) (manifest a) x
                CollectStream f x       -> CollectStream f x)
             (cvtL l')
@@ -572,7 +572,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         travT (MapStream f x) env = MapStream (cvtAF (sink env f)) x
         travT (ZipWithStream f x y) env = ZipWithStream (cvtAF (sink env f)) x y
         travT (ScanStream f a x) env = ScanStream (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travT (ScanStreamAct f g a x) env = ScanStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) x
+        travT (ScanStreamAct f g a b x) env = ScanStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
 
         travC :: forall arrs' aenv' lenv.
                  Consumer acc aenv lenv arrs'
@@ -580,7 +580,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
               -> Consumer acc aenv' lenv arrs'
         travC (FromStream x) _ = FromStream x
         travC (FoldStream f a x) env = FoldStream (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travC (FoldStreamAct f g a x) env = FoldStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) x
+        travC (FoldStreamAct f g a b x) env = FoldStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
         travC (FoldStreamFlatten f a x) env = FoldStreamFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
         travC (CollectStream f x) _ = CollectStream f x
 
@@ -757,17 +757,17 @@ instance Kit acc => Sink (SinkLoop acc lenv) where
       weakenT :: forall a. Transducer acc aenv lenv a -> Transducer acc aenv' lenv a
       weakenT t =
         case t of
-          MapStream     f x     -> MapStream     (weaken k f) x
-          ZipWithStream f x y   -> ZipWithStream (weaken k f) x y
-          ScanStream f a x      -> ScanStream (weaken k f) (weaken k a) x
-          ScanStreamAct f g a x -> ScanStreamAct (weaken k f) (weaken k g) (weaken k a) x
+          MapStream     f x       -> MapStream     (weaken k f) x
+          ZipWithStream f x y     -> ZipWithStream (weaken k f) x y
+          ScanStream f a x        -> ScanStream (weaken k f) (weaken k a) x
+          ScanStreamAct f g a b x -> ScanStreamAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
 
       weakenC :: forall a. Consumer acc aenv lenv a -> Consumer acc aenv' lenv a
       weakenC c =
         case c of
           FromStream x            -> FromStream x
           FoldStream f a x        -> FoldStream (weaken k f) (weaken k a) x
-          FoldStreamAct f g a x   -> FoldStreamAct (weaken k f) (weaken k g) (weaken k a) x
+          FoldStreamAct f g a b x -> FoldStreamAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
           FoldStreamFlatten f a x -> FoldStreamFlatten (weaken k f) (weaken k a) x
           CollectStream f x       -> CollectStream f x
 
@@ -1257,17 +1257,17 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             Transducer t l' ->
               Transducer
                 (case t of
-                   MapStream f x         -> MapStream (cvtAF f) x
-                   ZipWithStream f x y   -> ZipWithStream (cvtAF f) x y
-                   ScanStream f a x      -> ScanStream (cvtAF f) (cvtA a) x
-                   ScanStreamAct f g a x -> ScanStreamAct (cvtAF f) (cvtAF g) (cvtA a) x)
+                   MapStream f x           -> MapStream (cvtAF f) x
+                   ZipWithStream f x y     -> ZipWithStream (cvtAF f) x y
+                   ScanStream f a x        -> ScanStream (cvtAF f) (cvtA a) x
+                   ScanStreamAct f g a b x -> ScanStreamAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x)
                 (cvtL l')
             Consumer   c l' ->
               Consumer
                 (case c of
                    FromStream x            -> FromStream x
                    FoldStream f a x        -> FoldStream (cvtAF f) (cvtA a) x
-                   FoldStreamAct f g a x   -> FoldStreamAct (cvtAF f) (cvtAF g) (cvtA a) x
+                   FoldStreamAct f g a b x -> FoldStreamAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
                    FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAF f) (cvtA a) x
                    CollectStream f x       -> CollectStream f x)
                 (cvtL l')
