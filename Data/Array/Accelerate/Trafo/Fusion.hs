@@ -182,8 +182,8 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
-        -- Stream operations
-        Loop l                  -> Loop (cvtL l)
+        -- Sequence operations
+        Sequence seq            -> Sequence (cvtSeq seq)
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -196,33 +196,28 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
       | otherwise
       = Alet bnd body
 
-    cvtL :: PreOpenLoop OpenAcc aenv lenv a -> PreOpenLoop DelayedOpenAcc aenv lenv a
-    cvtL l =
-      case l of
-        EmptyLoop -> EmptyLoop
-        Producer   p l' ->
+    cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence DelayedOpenAcc aenv senv a
+    cvtSeq s =
+      case s of
+        EmptySeq -> EmptySeq
+        Producer p s' ->
           Producer
             (case p of
-               ToStream slix sh a   -> ToStream slix (cvtE sh) (delayed a)
-               UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr)
-            (cvtL l')
-        Transducer t l' ->
-          Transducer
-            (case t of
-               MapStream f x           -> MapStream (cvtAF f) x
-               ZipWithStream f x y     -> ZipWithStream (cvtAF f) x y
-               ScanStream f a x        -> ScanStream (cvtAF f) (manifest a) x
-               ScanStreamAct f g a b x -> ScanStreamAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x)
-            (cvtL l')
-        Consumer   c l' ->
+               ToSeq slix sh a      -> ToSeq slix (cvtE sh) (delayed a)
+               UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
+               MapSeq f x           -> MapSeq (cvtAF f) x
+               ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
+               ScanSeq f a x        -> ScanSeq (cvtAF f) (manifest a) x
+               ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x)
+            (cvtSeq s')
+        Consumer c s' ->
           Consumer
             (case c of
-               FromStream x            -> FromStream x
-               FoldStream f a x        -> FoldStream (cvtAF f) (manifest a) x
-               FoldStreamAct f g a b x -> FoldStreamAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
-               FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAF f) (manifest a) x
-               CollectStream f x       -> CollectStream f x)
-            (cvtL l')
+               FromSeq x            -> FromSeq x
+               FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest a) x
+               FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
+               FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest a) x)
+            (cvtSeq s')
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup
@@ -343,7 +338,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Loop l              -> loopD embedAcc l
+    Sequence l          -> sequenceD embedAcc l
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -526,63 +521,53 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` op env acc1 acc0) (Done ZeroIdx)
 
-    -- Move additional bindings for producer outside of loop, so that
-    -- producers may fuse with their arguments, resulting in actual
-    -- streaming.
-    loopD :: forall aenv arrs. (Kit acc, Arrays arrs)
+    -- Move additional bindings for producer outside of sequence, so
+    -- that producers may fuse with their arguments, resulting in
+    -- actual sequencing.
+    sequenceD :: forall aenv arrs. (Kit acc, Arrays arrs)
           => EmbedAcc acc
-          -> PreOpenLoop acc aenv () arrs
+          -> PreOpenSequence acc aenv () arrs
           -> Embed       acc aenv    arrs
-    loopD embedAcc l
-      | ExtendLoop env l' <- travL l
-      = Embed (env `PushEnv` (Loop l')) (Done ZeroIdx)
+    sequenceD embedAcc s
+      | ExtendSeq env s' <- travS s
+      = Embed (env `PushEnv` (Sequence s')) (Done ZeroIdx)
       where
-        travL :: forall lenv arrs'.
-                 PreOpenLoop acc aenv lenv arrs'
-              -> ExtendLoop acc aenv lenv arrs'
-        travL l =
-          case l of
-            EmptyLoop -> ExtendLoop BaseEnv EmptyLoop
-            Producer p l
-              | ExtendLoop env l' <- travL l
+        travS :: forall senv arrs'.
+                 PreOpenSequence acc aenv senv arrs'
+              -> ExtendSeq acc aenv senv arrs'
+        travS s =
+          case s of
+            EmptySeq -> ExtendSeq BaseEnv EmptySeq
+            Producer p s
+              | ExtendSeq env s' <- travS s
               , ExtendProducer env' p' <- travP p env
-              -> ExtendLoop (env `append` env') (Producer p' (sinkLoop env' l'))
-            Transducer t l
-              | ExtendLoop env l' <- travL l
-              , t' <- travT t env
-              -> ExtendLoop env (Transducer t' l')
-            Consumer c l
-              | ExtendLoop env l' <- travL l
+              -> ExtendSeq (env `append` env') (Producer p' (sinkSequence env' s'))
+            Consumer c s
+              | ExtendSeq env s' <- travS s
               , c' <- travC c env
-              -> ExtendLoop env (Consumer c' l')
+              -> ExtendSeq env (Consumer c' s')
 
-        travP :: forall arrs' aenv'.
-                 Producer acc aenv arrs'
+        travP :: forall arrs' aenv' senv.
+                 Producer acc aenv senv arrs'
               -> Extend acc aenv aenv'
-              -> ExtendProducer acc aenv' arrs'
-        travP (ToStream slix sh a) env
+              -> ExtendProducer acc aenv' senv arrs'
+        travP (ToSeq slix sh a) env
           | Embed env' cc <- embedAcc (sink env a)
-          = ExtendProducer env' (ToStream slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
-        travP (UseLazy slix sh a) env = ExtendProducer BaseEnv (UseLazy slix (cvtE (sink env sh)) a)
+          = ExtendProducer env' (ToSeq slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
+        travP (UseLazy slix sh a) env    = ExtendProducer BaseEnv (UseLazy slix (cvtE (sink env sh)) a)
+        travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
+        travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
+        travP (ScanSeq f a x) env        = ExtendProducer BaseEnv (ScanSeq (cvtAF (sink env f)) (cvtA (sink env a)) x)
+        travP (ScanSeqAct f g a b x) env = ExtendProducer BaseEnv (ScanSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x)
 
-        travT :: forall arrs' aenv' lenv.
-                 Transducer acc aenv lenv arrs'
+        travC :: forall arrs' aenv' senv.
+                 Consumer acc aenv senv arrs'
               -> Extend acc aenv aenv'
-              -> Transducer acc aenv' lenv arrs'
-        travT (MapStream f x) env = MapStream (cvtAF (sink env f)) x
-        travT (ZipWithStream f x y) env = ZipWithStream (cvtAF (sink env f)) x y
-        travT (ScanStream f a x) env = ScanStream (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travT (ScanStreamAct f g a b x) env = ScanStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
-
-        travC :: forall arrs' aenv' lenv.
-                 Consumer acc aenv lenv arrs'
-              -> Extend acc aenv aenv'
-              -> Consumer acc aenv' lenv arrs'
-        travC (FromStream x) _ = FromStream x
-        travC (FoldStream f a x) env = FoldStream (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travC (FoldStreamAct f g a b x) env = FoldStreamAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
-        travC (FoldStreamFlatten f a x) env = FoldStreamFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travC (CollectStream f x) _ = CollectStream f x
+              -> Consumer acc aenv' senv arrs'
+        travC (FromSeq x) _ = FromSeq x
+        travC (FoldSeq f a x) env = FoldSeq (cvtAF (sink env f)) (cvtA (sink env a)) x
+        travC (FoldSeqAct f g a b x) env = FoldSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
+        travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
 
 
 -- Internal representation
@@ -729,47 +714,41 @@ accType' _ = arrays' (undefined :: a)
 -- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
 
 -- Rearrange type arguments to fit with Sink type class.
-newtype SinkLoop acc lenv aenv a = SinkLoop { unSinkLoop :: PreOpenLoop acc aenv lenv a }
+newtype SinkSequence acc senv aenv a = SinkSequence { unSinkSequence :: PreOpenSequence acc aenv senv a }
 
--- sink for loops.
-sinkLoop :: Kit acc => Extend acc aenv aenv' -> PreOpenLoop acc aenv lenv a -> PreOpenLoop acc aenv' lenv a
-sinkLoop env l = unSinkLoop $ sink env (SinkLoop l)
+-- sink for sequences.
+sinkSequence :: Kit acc => Extend acc aenv aenv' -> PreOpenSequence acc aenv senv a -> PreOpenSequence acc aenv' senv a
+sinkSequence env s = unSinkSequence $ sink env (SinkSequence s)
 
-instance Kit acc => Sink (SinkLoop acc lenv) where
-  weaken :: forall aenv aenv' arrs. aenv :> aenv' -> SinkLoop acc lenv aenv arrs -> SinkLoop acc lenv aenv' arrs
-  weaken k (SinkLoop l) = SinkLoop $
-    case l of
-      EmptyLoop       -> EmptyLoop
-      Producer   p l' -> Producer   (weakenP p) (weakenL l')
-      Transducer t l' -> Transducer (weakenT t) (weakenL l')
-      Consumer   c l' -> Consumer   (weakenC c) (weakenL l')
+instance Kit acc => Sink (SinkSequence acc senv) where
+  weaken :: forall aenv aenv' arrs. aenv :> aenv' -> SinkSequence acc senv aenv arrs -> SinkSequence acc senv aenv' arrs
+  weaken k (SinkSequence s) = SinkSequence $
+    case s of
+      EmptySeq      -> EmptySeq
+      Producer p s' -> Producer   (weakenP p) (weakenL s')
+      Consumer c s' -> Consumer   (weakenC c) (weakenL s')
 
     where
-      weakenL :: forall lenv' arrs'. PreOpenLoop acc aenv lenv' arrs' -> PreOpenLoop acc aenv' lenv' arrs'
-      weakenL l' = unSinkLoop (weaken k (SinkLoop l'))
+      weakenL :: forall senv' arrs'. PreOpenSequence acc aenv senv' arrs' -> PreOpenSequence acc aenv' senv' arrs'
+      weakenL s' = unSinkSequence (weaken k (SinkSequence s'))
 
-      weakenP :: forall a. Producer acc aenv a -> Producer acc aenv' a
+      weakenP :: forall a. Producer acc aenv senv a -> Producer acc aenv' senv a
       weakenP p =
         case p of
-          ToStream slix sh a   -> ToStream slix (weaken k sh) (weaken k a)
-          UseLazy  slix sh arr -> UseLazy  slix (weaken k sh) arr
+          ToSeq slix sh a      -> ToSeq   slix (weaken k sh) (weaken k a)
+          UseLazy slix sh arr  -> UseLazy slix (weaken k sh) arr
+          MapSeq     f x       -> MapSeq     (weaken k f) x
+          ZipWithSeq f x y     -> ZipWithSeq (weaken k f) x y
+          ScanSeq f a x        -> ScanSeq    (weaken k f) (weaken k a) x
+          ScanSeqAct f g a b x -> ScanSeqAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
 
-      weakenT :: forall a. Transducer acc aenv lenv a -> Transducer acc aenv' lenv a
-      weakenT t =
-        case t of
-          MapStream     f x       -> MapStream     (weaken k f) x
-          ZipWithStream f x y     -> ZipWithStream (weaken k f) x y
-          ScanStream f a x        -> ScanStream (weaken k f) (weaken k a) x
-          ScanStreamAct f g a b x -> ScanStreamAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
-
-      weakenC :: forall a. Consumer acc aenv lenv a -> Consumer acc aenv' lenv a
+      weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
         case c of
-          FromStream x            -> FromStream x
-          FoldStream f a x        -> FoldStream (weaken k f) (weaken k a) x
-          FoldStreamAct f g a b x -> FoldStreamAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
-          FoldStreamFlatten f a x -> FoldStreamFlatten (weaken k f) (weaken k a) x
-          CollectStream f x       -> CollectStream f x
+          FromSeq x            -> FromSeq x
+          FoldSeq f a x        -> FoldSeq (weaken k f) (weaken k a) x
+          FoldSeqAct f g a b x -> FoldSeqAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
+          FoldSeqFlatten f a x -> FoldSeqFlatten (weaken k f) (weaken k a) x
 
 instance Kit acc => Sink (Cunctation acc) where
   weaken k cc = case cc of
@@ -1238,39 +1217,34 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Loop l                  -> Loop (cvtL l)
+        Sequence seq            -> Sequence (cvtSeq seq)
 
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
-        cvtL :: PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv s
-        cvtL l =
-          case l of
-            EmptyLoop -> EmptyLoop
-            Producer p l' ->
+        cvtSeq :: PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv s
+        cvtSeq s =
+          case s of
+            EmptySeq -> EmptySeq
+            Producer p s' ->
               Producer
                 (case p of
-                   ToStream slix sh a   -> ToStream slix (cvtE sh) (cvtA a)
-                   UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr)
-                (cvtL l')
-            Transducer t l' ->
-              Transducer
-                (case t of
-                   MapStream f x           -> MapStream (cvtAF f) x
-                   ZipWithStream f x y     -> ZipWithStream (cvtAF f) x y
-                   ScanStream f a x        -> ScanStream (cvtAF f) (cvtA a) x
-                   ScanStreamAct f g a b x -> ScanStreamAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x)
-                (cvtL l')
-            Consumer   c l' ->
+                   ToSeq slix sh a      -> ToSeq slix (cvtE sh) (cvtA a)
+                   UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
+                   MapSeq f x           -> MapSeq (cvtAF f) x
+                   ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
+                   ScanSeq f a x        -> ScanSeq (cvtAF f) (cvtA a) x
+                   ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x)
+                (cvtSeq s')
+            Consumer c s' ->
               Consumer
                 (case c of
-                   FromStream x            -> FromStream x
-                   FoldStream f a x        -> FoldStream (cvtAF f) (cvtA a) x
-                   FoldStreamAct f g a b x -> FoldStreamAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
-                   FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAF f) (cvtA a) x
-                   CollectStream f x       -> CollectStream f x)
-                (cvtL l')
+                   FromSeq x            -> FromSeq x
+                   FoldSeq f a x        -> FoldSeq (cvtAF f) (cvtA a) x
+                   FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
+                   FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x)
+                (cvtSeq s')
 
         cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
         cvtAF = cvt sh' f' avar
@@ -1339,28 +1313,19 @@ aprjD embedAcc ix a
     aprjAT ZeroTupIdx      (SnocAtup _ a) = a
     aprjAT (SuccTupIdx ix) (SnocAtup t _) = aprjAT ix t
 
--- A loop with additional bindings
-data ExtendLoop acc aenv lenv arrs where
-  ExtendLoop :: forall acc aenv aenv' lenv arrs.
+-- A sequence with additional bindings
+data ExtendSeq acc aenv senv arrs where
+  ExtendSeq :: forall acc aenv aenv' senv arrs.
                 Extend acc aenv aenv'
-             -> PreOpenLoop acc aenv' lenv arrs
-             -> ExtendLoop acc aenv lenv arrs
+             -> PreOpenSequence acc aenv' senv arrs
+             -> ExtendSeq acc aenv senv arrs
 
 -- A producer with additional bindings
-data ExtendProducer acc aenv arrs where
-  ExtendProducer :: forall acc aenv aenv' arrs.
+data ExtendProducer acc aenv senv arrs where
+  ExtendProducer :: forall acc aenv aenv' senv arrs.
                     Extend acc aenv aenv'
-                 -> Producer acc aenv' arrs
-                 -> ExtendProducer acc aenv arrs
-{-
-    cvtAF :: forall aenv' f. PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
-    cvtAF (Alam  f) = Alam  (cvtAF f)
-    cvtAF (Abody a) = Abody (cvtA a)
-
-    cvtA :: forall aenv' a. Arrays a => acc aenv' a -> acc aenv' a
-    cvtA = computeAcc . embedAcc
--}
-
+                 -> Producer acc aenv' senv arrs
+                 -> ExtendProducer acc aenv senv arrs
 
 -- Scalar expressions
 -- ------------------

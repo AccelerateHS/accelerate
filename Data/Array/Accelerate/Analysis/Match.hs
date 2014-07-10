@@ -268,8 +268,8 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Loop l1) (Loop l2)
-      = matchLoop matchAcc hashAcc l1 l2
+    match (Sequence l1) (Sequence l2)
+      = matchSequence matchAcc hashAcc l1 l2
 
     match _ _
       = Nothing
@@ -320,34 +320,30 @@ matchBoundary _  Mirror       Mirror       = True
 matchBoundary _  _            _            = False
 
 
--- Match loops
+-- Match sequences
 --
-matchLoop :: forall acc aenv lenv s t. MatchAcc acc -> HashAcc acc -> PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv t -> Maybe (s :=: t)
-matchLoop m h = match
+matchSequence :: forall acc aenv senv s t. MatchAcc acc -> HashAcc acc -> PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv t -> Maybe (s :=: t)
+matchSequence m h = match
   where
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp m h
 
-    match :: forall lenv s t. PreOpenLoop acc aenv lenv s -> PreOpenLoop acc aenv lenv t -> Maybe (s :=: t)
-    match EmptyLoop EmptyLoop
+    match :: forall senv s t. PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv t -> Maybe (s :=: t)
+    match EmptySeq EmptySeq
       = Just REFL
-    match (Producer p1 l1)   (Producer p2 l2)
+    match (Producer p1 s1)   (Producer p2 s2)
       | Just REFL <- matchP p1 p2
-      , Just REFL <- match l1 l2
+      , Just REFL <- match s1 s2
       = Just REFL
-    match (Transducer t1 l1) (Transducer t2 l2)
-      | Just REFL <- matchT t1 t2
-      , Just REFL <- match l1 l2
-      = Just REFL
-    match (Consumer c1 l1)   (Consumer c2 l2)
+    match (Consumer c1 s1)   (Consumer c2 s2)
       | Just REFL <- matchC c1 c2
-      , Just REFL <- match l1 l2
+      , Just REFL <- match s1 s2
       = Just REFL
     match _ _
       = Nothing
 
-    matchP :: forall s t. Producer acc aenv s -> Producer acc aenv t -> Maybe (s :=: t)
-    matchP (ToStream _ slix1 a1) (ToStream _ slix2 a2)
+    matchP :: forall senv s t. Producer acc aenv senv s -> Producer acc aenv senv t -> Maybe (s :=: t)
+    matchP (ToSeq _ slix1 a1) (ToSeq _ slix2 a2)
       | Just REFL <- matchExp slix1 slix2
       , Just REFL <- m a1 a2
       = gcast REFL
@@ -355,61 +351,53 @@ matchLoop m h = match
       | Just REFL <- matchExp slix1 slix2
       , Just REFL <- matchPreOpenAcc m h (Use (fromArr a1)) (Use (fromArr a2)) :: Maybe (Array sh1 e1 :=: Array sh2 e2)
       = gcast REFL
-    matchP _ _
-      = Nothing
-
-    matchT :: forall lenv s t. Transducer acc aenv lenv s -> Transducer acc aenv lenv t -> Maybe (s :=: t)
-    matchT (MapStream f1 x1) (MapStream f2 x2)
+    matchP (MapSeq f1 x1) (MapSeq f2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       = Just REFL
-    matchT (ZipWithStream f1 x1 y1) (ZipWithStream f2 x2 y2)
+    matchP (ZipWithSeq f1 x1 y1) (ZipWithSeq f2 x2 y2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- matchIdx y1 y2
       = Just REFL
-    matchT (ScanStream f1 acc1 x1) (ScanStream f2 acc2 x2)
+    matchP (ScanSeq f1 acc1 x1) (ScanSeq f2 acc2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- m acc1 acc2
       = Just REFL
-    matchT (ScanStreamAct f1 g1 acc1 acc1' x1) (ScanStreamAct f2 g2 acc2 acc2' x2)
+    matchP (ScanSeqAct f1 g1 acc1 acc1' x1) (ScanSeqAct f2 g2 acc2 acc2' x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- m acc1 acc2
       , Just REFL <- m acc1' acc2'
       , Just REFL <- matchPreOpenAfun m g1 g2
       = Just REFL
-    matchT _ _
+    matchP _ _
       = Nothing
 
-    matchC :: forall lenv s t. Consumer acc aenv lenv s -> Consumer acc aenv lenv t -> Maybe (s :=: t)
-    matchC (FromStream x1) (FromStream x2)
+    matchC :: forall senv s t. Consumer acc aenv senv s -> Consumer acc aenv senv t -> Maybe (s :=: t)
+    matchC (FromSeq x1) (FromSeq x2)
       | Just REFL <- matchIdx x1 x2
       = Just REFL
-    matchC (FoldStream f1 acc1 x1) (FoldStream f2 acc2 x2)
+    matchC (FoldSeq f1 acc1 x1) (FoldSeq f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
       = Just REFL
-    matchC (FoldStreamAct f1 g1 acc1 acc1' x1) (FoldStreamAct f2 g2 acc2 acc2' x2)
+    matchC (FoldSeqAct f1 g1 acc1 acc1' x1) (FoldSeqAct f2 g2 acc2 acc2' x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchPreOpenAfun m g1 g2
       , Just REFL <- m acc1 acc2
       , Just REFL <- m acc1' acc2'
       = Just REFL
-    matchC (FoldStreamFlatten f1 acc1 x1) (FoldStreamFlatten f2 acc2 x2)
+    matchC (FoldSeqFlatten f1 acc1 x1) (FoldSeqFlatten f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
-      = Just REFL
-    matchC (CollectStream _ x1) (CollectStream _ x2)
-      | Just REFL <- matchIdx x1 x2
       = Just REFL
     matchC _ _
       = Nothing
-
 
 -- Match arrays
 --
@@ -962,8 +950,8 @@ type HashAcc acc = forall aenv a. acc aenv a -> Int
 hashOpenAcc :: OpenAcc aenv arrs -> Int
 hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
-hashPreOpenLoop :: forall acc aenv lenv arrs. HashAcc acc -> PreOpenLoop acc aenv lenv arrs -> Int
-hashPreOpenLoop hashAcc l =
+hashPreOpenSequence :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSequence acc aenv senv arrs -> Int
+hashPreOpenSequence hashAcc s =
   let
     hashA :: Int -> acc aenv a -> Int
     hashA salt = hashWithSalt salt . hashAcc
@@ -974,42 +962,36 @@ hashPreOpenLoop hashAcc l =
     hashF :: Int -> PreOpenAfun acc aenv f -> Int
     hashF salt = hashWithSalt salt . hashAfun hashAcc
 
-    hashL :: Int -> PreOpenLoop acc aenv lenv' arrs' -> Int
-    hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
+    hashSeq :: Int -> PreOpenSequence acc aenv senv' arrs' -> Int
+    hashSeq salt = hashWithSalt salt . hashPreOpenSequence hashAcc
 
-    hashVar :: Int -> Idx lenv a -> Int
+    hashVar :: Int -> Idx senv a -> Int
     hashVar salt = hashWithSalt salt . idxToInt
 
-    hashP :: Int -> Producer acc aenv a -> Int
+    hashP :: Int -> Producer acc aenv senv a -> Int
     hashP salt p =
       case p of
-        ToStream spec ix acc -> hashWithSalt salt "ToStream" `hashA` acc `hashE` ix `hashWithSalt` show spec
-        UseLazy  spec ix arr -> hashWithSalt salt "UseLazy" `hashWithSalt` hashArrays ArraysRarray arr `hashE` ix `hashWithSalt` show spec
+        ToSeq spec ix acc   -> hashWithSalt salt "ToSeq" `hashA` acc `hashE` ix `hashWithSalt` show spec
+        UseLazy spec ix arr -> hashWithSalt salt "UseLazy" `hashWithSalt` hashArrays ArraysRarray arr `hashE` ix `hashWithSalt` show spec
+        MapSeq f x          -> hashWithSalt salt "MapSeq" `hashF` f `hashVar` x
+        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashF` f `hashVar` x `hashVar` y
+        ScanSeq f acc x     -> hashWithSalt salt "ScanSeq" `hashF` f `hashA` acc `hashVar` x
+        ScanSeqAct f g acc1 acc2 x -> 
+          hashWithSalt salt "ScanSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
 
-    hashT :: Int -> Transducer acc aenv lenv a -> Int
-    hashT salt t =
-      case t of
-        MapStream f x           -> hashWithSalt salt "MapStream" `hashF` f `hashVar` x
-        ZipWithStream f x y     -> hashWithSalt salt "ZipWithStream" `hashF` f `hashVar` x `hashVar` y
-        ScanStream f acc x      -> hashWithSalt salt "ScanStream" `hashF` f `hashA` acc `hashVar` x
-        ScanStreamAct f g acc1 acc2 x -> 
-          hashWithSalt salt "ScanStreamAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
-
-    hashC :: Int -> Consumer acc aenv lenv a -> Int
+    hashC :: Int -> Consumer acc aenv senv a -> Int
     hashC salt c =
       case c of
-        FromStream x              -> hashWithSalt salt "FromStream" `hashVar` x
-        FoldStream f acc x        -> hashWithSalt salt "FoldStream" `hashF` f `hashA` acc `hashVar` x
-        FoldStreamAct f g acc1 acc2 x -> 
-          hashWithSalt salt "FoldStreamAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
-        FoldStreamFlatten f acc x -> hashWithSalt salt "FoldStreamFlatten" `hashF` f `hashA` acc `hashVar` x
-        CollectStream _ x         -> hashWithSalt salt "CollectStream" `hashVar` x
+        FromSeq x              -> hashWithSalt salt "FromSeq" `hashVar` x
+        FoldSeq f acc x        -> hashWithSalt salt "FoldSeq" `hashF` f `hashA` acc `hashVar` x
+        FoldSeqAct f g acc1 acc2 x -> 
+          hashWithSalt salt "FoldSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
+        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashF` f `hashA` acc `hashVar` x
 
-  in case l of
-    EmptyLoop      -> hash "Empty"
-    Producer   p l -> hash "Producer"   `hashP` p `hashL` l
-    Transducer t l -> hash "Transducer" `hashT` t `hashL` l
-    Consumer   c l -> hash "Consumer"   `hashC` c `hashL` l
+  in case s of
+    EmptySeq        -> hash "EmptySeq"
+    Producer   p s' -> hash "Producer"   `hashP` p `hashSeq` s'
+    Consumer   c s' -> hash "Consumer"   `hashC` c `hashSeq` s'
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
@@ -1024,8 +1006,8 @@ hashPreOpenAcc hashAcc pacc =
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-    hashL :: Int -> PreOpenLoop acc aenv lenv arrs -> Int
-    hashL salt = hashWithSalt salt . hashPreOpenLoop hashAcc
+    hashSeq :: Int -> PreOpenSequence acc aenv senv arrs -> Int
+    hashSeq salt = hashWithSalt salt . hashPreOpenSequence hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
@@ -1059,7 +1041,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Loop l                      -> hash "Loop"          `hashL` l
+    Sequence seq                -> hash "Sequence"      `hashSeq` seq
 
 
 hashArrays :: ArraysR a -> a -> Int

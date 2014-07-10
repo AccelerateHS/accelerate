@@ -86,9 +86,9 @@ module Data.Array.Accelerate.AST (
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   Stencil(..), StencilR(..),
 
-  -- * Accelerated loops
-  PreOpenLoop(..),
-  Producer(..), Transducer(..), Consumer(..),
+  -- * Accelerated sequences
+  PreOpenSequence(..),
+  Producer(..), Consumer(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
@@ -458,7 +458,10 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
 
-  Loop :: Arrays arrs => PreOpenLoop acc aenv () arrs -> PreOpenAcc acc aenv arrs
+  -- A sequence of operations.
+  Sequence    :: Arrays arrs
+              => PreOpenSequence acc aenv () arrs
+              -> PreOpenAcc acc aenv arrs
 
 -- Vanilla open array computations
 --
@@ -467,22 +470,21 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
-data PreOpenLoop acc aenv lenv arrs where
-  EmptyLoop  :: PreOpenLoop acc aenv lenv ()
-  Producer   :: (Arrays a, Arrays arrs) => Producer    acc aenv      a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
-  Transducer :: (Arrays a, Arrays arrs) => Transducer  acc aenv lenv a -> PreOpenLoop acc aenv (lenv, a) arrs -> PreOpenLoop acc aenv lenv  arrs
-  Consumer   :: (Arrays a, Arrays arrs) => Consumer    acc aenv lenv a -> PreOpenLoop acc aenv  lenv     arrs -> PreOpenLoop acc aenv lenv (arrs, a)
+data PreOpenSequence acc aenv senv arrs where
+  EmptySeq :: PreOpenSequence acc aenv senv ()
+  Producer :: (Arrays a, Arrays arrs) => Producer acc aenv senv a -> PreOpenSequence acc aenv (senv, a) arrs -> PreOpenSequence acc aenv senv  arrs
+  Consumer :: (Arrays a, Arrays arrs) => Consumer acc aenv senv a -> PreOpenSequence acc aenv  senv     arrs -> PreOpenSequence acc aenv senv (arrs, a)
 
-data Producer acc aenv a where
-  -- Convert the given array to a stream.
-  ToStream :: (Elt slix, Shape sl, Shape sh, Elt e)
+data Producer acc aenv senv a where
+  -- Convert the given array to a sequence.
+  ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
            => SliceIndex (EltRepr slix)
                          (EltRepr sl)
                          co
                          (EltRepr sh)
            -> PreExp acc aenv slix
            -> acc aenv (Array sh e)
-           -> Producer acc aenv (Array sl e)
+           -> Producer acc aenv senv (Array sl e)
 
   -- Lazy version of Use.
   UseLazy :: (Elt slix, Shape sl, Shape sh, Elt e)
@@ -492,24 +494,24 @@ data Producer acc aenv a where
                          (EltRepr sh)
            -> PreExp acc aenv slix
            -> Array sh e
-           -> Producer acc aenv (Array sl e)
+           -> Producer acc aenv senv (Array sl e)
 
-data Transducer acc aenv lenv a where
-
-  -- Apply the given the given function to all elements of the given stream.
-  MapStream :: (Shape sh, Elt e, Shape sh', Elt e')
+  -- Apply the given the given function to all elements of the given
+  -- sequence.
+  MapSeq :: (Shape sh, Elt e, Shape sh', Elt e')
             => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
-            -> Idx lenv (Array sh e)
-            -> Transducer acc aenv lenv (Array sh' e')
+            -> Idx senv (Array sh e)
+            -> Producer acc aenv senv (Array sh' e')
 
-  -- Apply a given binary function pairwise to all elements of the given streams.
-  ZipWithStream :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
+  -- Apply a given binary function pairwise to all elements of the
+  -- given sequences.
+  ZipWithSeq :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
                 => PreOpenAfun acc aenv (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
-                -> Idx lenv (Array sh1 e1)
-                -> Idx lenv (Array sh2 e2)
-                -> Transducer acc aenv lenv (Array sh3 e3)
+                -> Idx senv (Array sh1 e1)
+                -> Idx senv (Array sh2 e2)
+                -> Producer acc aenv senv (Array sh3 e3)
 
-  -- ScanStream (+) a0 x. Scan a stream x by combining each element
+  -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
   --
   --   Forall a b c. (a + b) + c = a + (b + c),
@@ -518,55 +520,13 @@ data Transducer acc aenv lenv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanStream :: (Shape sh, Elt e)
+  ScanSeq :: (Shape sh, Elt e)
              => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
              -> acc aenv (Array sh e)
-             -> Idx lenv (Array sh e)
-             -> Transducer acc aenv lenv (Array sh e)
+             -> Idx senv (Array sh e)
+             -> Producer acc aenv senv (Array sh e)
 
-  -- ScanStreamAct (+) (*) a0 b0 x. Scan a stream x by the given
-  -- binary operation (+). (+) must be semi-associative, where (*) is
-  -- the companion operator:
-  --
-  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
-  --
-  -- and b0 must be the identity element for (*).
-  --
-  --   Forall b. b0 * b = b = b * b0.
-  --
-  -- Note on the name: Act is short for "semigroup action".
-  --
-  ScanStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
-                => PreOpenAfun acc aenv (Array sh  e  -> Array sh' e' -> Array sh  e )
-                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
-                -> acc aenv (Array sh  e )
-                -> acc aenv (Array sh' e')
-                -> Idx lenv (Array sh' e')
-                -> Transducer acc aenv lenv (Array sh e)
-
-data Consumer acc aenv lenv a where
-
-  -- Convert the given stream to an array.
-  FromStream :: (Shape sh, Elt e)
-             => Idx lenv (Array sh e)
-             -> Consumer acc aenv lenv (Array (Z:.Int) sh, Array (Z:.Int) e)
-
-  -- FoldStream (+) a0 x. Fold a stream x by combining each element
-  -- using the given binary operation (+). (+) must be associative:
-  --
-  --   Forall a b c. (a + b) + c = a + (b + c),
-  --
-  -- and a0 must be the identity element for (+):
-  --
-  --   Forall a. a0 + a = a = a + a0.
-  --
-  FoldStream :: (Shape sh, Elt e)
-             => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
-             -> acc aenv (Array sh e)
-             -> Idx lenv (Array sh e)
-             -> Consumer acc aenv lenv (Array sh e)
-
-  -- FoldStreamAct (+) (*) a0 x. Fold a stream x by the given binary
+  -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
   -- companion operator:
   --
@@ -578,16 +538,58 @@ data Consumer acc aenv lenv a where
   --
   -- Note on the name: Act is short for "semigroup action".
   --
-  FoldStreamAct :: (Shape sh, Elt e, Shape sh', Elt e')
+  ScanSeqAct :: (Shape sh, Elt e, Shape sh', Elt e')
                 => PreOpenAfun acc aenv (Array sh  e  -> Array sh' e' -> Array sh  e )
                 -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
                 -> acc aenv (Array sh  e )
                 -> acc aenv (Array sh' e')
-                -> Idx lenv (Array sh' e')
-                -> Consumer acc aenv lenv (Array sh e)
+                -> Idx senv (Array sh' e')
+                -> Producer acc aenv senv (Array sh e)
 
-  -- FoldStreamFlatten f a0 x. A specialized version of FoldStreamAct
-  -- where reduction with the companion operator corresponds to
+data Consumer acc aenv senv a where
+
+  -- Convert the given sequence to an array.
+  FromSeq :: (Shape sh, Elt e)
+             => Idx senv (Array sh e)
+             -> Consumer acc aenv senv (Array (Z:.Int) sh, Array (Z:.Int) e)
+
+  -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   Forall a b c. (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   Forall a. a0 + a = a = a + a0.
+  --
+  FoldSeq :: (Shape sh, Elt e)
+             => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
+             -> acc aenv (Array sh e)
+             -> Idx senv (Array sh e)
+             -> Consumer acc aenv senv (Array sh e)
+
+  -- FoldSeqAct (+) (*) a0 x. Fold a sequence x by the given binary
+  -- operation (+). (+) must be semi-associative, where (*) is the
+  -- companion operator:
+  --
+  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
+  --
+  -- and b0 must be the identity element for (*).
+  --
+  --   Forall b. b0 * b = b = b * b0.
+  --
+  -- Note on the name: Act is short for "semigroup action".
+  --
+  FoldSeqAct :: (Shape sh, Elt e, Shape sh', Elt e')
+                => PreOpenAfun acc aenv (Array sh  e  -> Array sh' e' -> Array sh  e )
+                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
+                -> acc aenv (Array sh  e )
+                -> acc aenv (Array sh' e')
+                -> Idx senv (Array sh' e')
+                -> Consumer acc aenv senv (Array sh e)
+
+  -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct where
+  -- reduction with the companion operator corresponds to
   -- flattening. f must be semi-associative, with vecotor append (++)
   -- as the companion operator:
   --
@@ -603,17 +605,11 @@ data Consumer acc aenv lenv a where
   --
   --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
-  FoldStreamFlatten :: (Shape sh, Elt e, Shape sh', Elt e')
+  FoldSeqFlatten :: (Shape sh, Elt e, Shape sh', Elt e')
              => PreOpenAfun acc aenv (Array sh e -> Vector sh' -> Vector e' -> Array sh e)
              -> acc aenv (Array sh e)
-             -> Idx lenv (Array sh' e')
-             -> Consumer acc aenv lenv (Array sh e)
-
-  -- Collect a stream by applying a function to each element.
-  CollectStream :: (Shape sh, Elt e)
-                => (Array sh e -> IO ())
-                -> Idx lenv (Array sh e)
-                -> Consumer acc aenv lenv ()
+             -> Idx senv (Array sh' e')
+             -> Consumer acc aenv senv (Array sh e)
 
 -- |Closed array expression aka an array program
 --
@@ -1127,7 +1123,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Loop{}             = "Loop"
+showPreAccOp Sequence{}         = "Sequence"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

@@ -437,7 +437,7 @@ rebuildPreOpenAcc k av acc =
     Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Loop l              -> Loop <$> rebuildL k av l
+    Sequence seq        -> Sequence <$> rebuildSeq k av seq
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -460,55 +460,45 @@ rebuildAtup k av atup =
     NilAtup      -> pure NilAtup
     SnocAtup t a -> SnocAtup <$> rebuildAtup k av t <*> k av a
 
+rebuildSeq
+    :: (SyntacticAcc fa, Applicative f)
+    => RebuildAcc acc
+    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
+    -> PreOpenSequence acc aenv senv t
+    -> f (PreOpenSequence acc aenv' senv t)
+rebuildSeq k v s =
+  case s of
+    EmptySeq -> pure EmptySeq
+    Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
+    Consumer c s -> Consumer <$> (rebuildC k v c) <*> (rebuildSeq k v s)
+
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-         -> Producer acc aenv a
-         -> f (Producer acc aenv' a)
+         -> Producer acc aenv senv a
+         -> f (Producer acc aenv' senv a)
 rebuildP k v p =
   case p of
-    ToStream sl slix acc -> ToStream sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> (k v acc)
+    ToSeq sl slix acc    -> ToSeq sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> (k v acc)
     UseLazy  sl slix arr -> UseLazy  sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> pure arr
-
-rebuildT :: (SyntacticAcc fa, Applicative f)
-         => RebuildAcc acc
-         -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-         -> Transducer acc aenv lenv a
-         -> f (Transducer acc aenv' lenv a)
-rebuildT k v t =
-  case t of
-    MapStream f x             -> MapStream <$> (rebuildAfun k v f)  <*> pure x
-    ZipWithStream f x y       -> ZipWithStream <$> (rebuildAfun k v f)  <*> pure x <*> pure y
-    ScanStream f acc x        -> ScanStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    ScanStreamAct f g acc1 acc2 x -> 
-      ScanStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
+    MapSeq f x           -> MapSeq <$> (rebuildAfun k v f)  <*> pure x
+    ZipWithSeq f x y     -> ZipWithSeq <$> (rebuildAfun k v f)  <*> pure x <*> pure y
+    ScanSeq f acc x      -> ScanSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    ScanSeqAct f g acc1 acc2 x -> 
+      ScanSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
 
 rebuildC :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-         -> Consumer acc aenv lenv a
-         -> f (Consumer acc aenv' lenv a)
+         -> Consumer acc aenv senv a
+         -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
   case c of
-    FromStream x              -> FromStream <$> pure x
-    FoldStream f acc x        -> FoldStream <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    FoldStreamAct f g acc1 acc2 x -> 
-      FoldStreamAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
-    FoldStreamFlatten f acc x -> FoldStreamFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    CollectStream f x         -> pure $ CollectStream f x
-
-rebuildL
-    :: (SyntacticAcc fa, Applicative f)
-    => RebuildAcc acc
-    -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-    -> PreOpenLoop acc aenv  lenv t
-    -> f (PreOpenLoop acc aenv' lenv t)
-rebuildL k v l =
-  case l of
-    EmptyLoop -> pure EmptyLoop
-    Producer p l -> Producer <$> (rebuildP k v p) <*> (rebuildL k v l)
-    Transducer t l -> Transducer <$> (rebuildT k v t) <*> (rebuildL k v l)
-    Consumer c l -> Consumer <$> (rebuildC k v c) <*> (rebuildL k v l)
+    FromSeq x              -> FromSeq <$> pure x
+    FoldSeq f acc x        -> FoldSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    FoldSeqAct f g acc1 acc2 x -> 
+      FoldSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
+    FoldSeqFlatten f acc x -> FoldSeqFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
 
 -- For OpenAcc
 

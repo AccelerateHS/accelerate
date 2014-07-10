@@ -46,7 +46,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  L.Acc, L.AccLoop, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
+  L.Acc, L.AccSequence, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
 
   -- ** Array element types
   S.Elt,
@@ -142,17 +142,17 @@ module Data.Array.Accelerate (
   -- ** Stencil
   L.stencil, L.stencil2,
 
-  -- ** Stream introduction and elimination
-  L.loop, L.emptyLoop,
+  -- ** Sequence introduction and elimination
+  L.seq, L.emptySeq,
 
-  -- ** Stream producers
-  L.toStream, L.useLazy,
+  -- ** Sequence producers
+  L.toSeq, L.useLazy,
 
-  -- ** Stream transducers
-  L.mapStream, L.zipWithStream, L.scanStream, L.scanStreamAct,
+  -- ** Sequence transducers
+  L.mapSeq, L.zipWithSeq, L.scanSeq, L.scanSeqAct,
 
-  -- ** Stream consumers
-  L.fromStream, L.foldStream, L.foldStreamAct, L.foldStreamFlatten, L.collectStream,
+  -- ** Sequence consumers
+  L.fromSeq, L.foldSeq, L.foldSeqAct, L.foldSeqFlatten,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),

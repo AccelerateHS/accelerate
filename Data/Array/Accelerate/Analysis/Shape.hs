@@ -88,7 +88,7 @@ preAccDim k pacc =
     Backpermute _ _ _    -> ndim (eltType (undefined::sh))
     Stencil _ _ acc      -> k acc
     Stencil2 _ _ acc _ _ -> k acc
-    Loop _ ->  case arrays' (undefined :: Array sh e) of
+    Sequence _ ->  case arrays' (undefined :: Array sh e) of
       ArraysRarray -> ndim (eltType (undefined::sh))
       _            -> error "halt, fiend!"
 

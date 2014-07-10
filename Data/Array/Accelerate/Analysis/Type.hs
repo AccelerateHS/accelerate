@@ -101,7 +101,7 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
 
-    Loop _              -> case arrays' (undefined :: Array sh e) of
+    Sequence _          -> case arrays' (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Something funny"
 

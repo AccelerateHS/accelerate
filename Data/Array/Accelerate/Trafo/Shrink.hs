@@ -190,38 +190,32 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Loop l                    -> Loop (shrinkL l)
+      Sequence seq              -> Sequence (shrinkSeq seq)
 
-    shrinkL :: PreOpenLoop acc aenv' lenv a -> PreOpenLoop acc aenv' lenv a
-    shrinkL l =
-      case l of
-        EmptyLoop -> EmptyLoop
-        Producer   p l -> Producer   (shrinkP p)  (shrinkL l)
-        Transducer t l -> Transducer (shrinkTr t) (shrinkL l)
-        Consumer   c l -> Consumer   (shrinkC c)  (shrinkL l)
+    shrinkSeq :: PreOpenSequence acc aenv' senv a -> PreOpenSequence acc aenv' senv a
+    shrinkSeq s =
+      case s of
+        EmptySeq      -> EmptySeq
+        Producer p s -> Producer   (shrinkP p)  (shrinkSeq s)
+        Consumer c s -> Consumer   (shrinkC c)  (shrinkSeq s)
 
-    shrinkP :: Producer acc aenv' a -> Producer acc aenv' a
+    shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
     shrinkP p =
       case p of
-        ToStream sl slix a   -> ToStream sl (shrinkE slix) (shrinkAcc a)
+        ToSeq sl slix a      -> ToSeq sl (shrinkE slix) (shrinkAcc a)
         UseLazy  sl slix arr -> UseLazy  sl (shrinkE slix) arr
+        MapSeq f x           -> MapSeq (shrinkAF f) x
+        ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
+        ScanSeq f a x        -> ScanSeq (shrinkAF f) (shrinkAcc a) x
+        ScanSeqAct f g a b x -> ScanSeqAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
 
-    shrinkTr :: Transducer acc aenv' lenv a -> Transducer acc aenv' lenv a
-    shrinkTr t =
-      case t of
-        MapStream f x           -> MapStream (shrinkAF f) x
-        ZipWithStream f x y     -> ZipWithStream (shrinkAF f) x y
-        ScanStream f a x        -> ScanStream (shrinkAF f) (shrinkAcc a) x
-        ScanStreamAct f g a b x -> ScanStreamAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
-
-    shrinkC :: Consumer acc aenv' lenv a -> Consumer acc aenv' lenv a
+    shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
     shrinkC c =
       case c of
-        FromStream x            -> FromStream x
-        FoldStream f a x        -> FoldStream (shrinkAF f) (shrinkAcc a) x
-        FoldStreamAct f g a b x -> FoldStreamAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
-        FoldStreamFlatten f a x -> FoldStreamFlatten (shrinkAF f) (shrinkAcc a) x
-        CollectStream f x       -> CollectStream f x
+        FromSeq x            -> FromSeq x
+        FoldSeq f a x        -> FoldSeq (shrinkAF f) (shrinkAcc a) x
+        FoldSeqAct f g a b x -> FoldSeqAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) x
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -397,38 +391,32 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Loop l                    -> countL l
+      Sequence l                -> countSeq l
 
-    countL :: PreOpenLoop acc aenv lenv arrs -> Int
-    countL l =
-      case l of
-        EmptyLoop -> 0
-        Producer   p l -> countPr p + countL l
-        Transducer t l -> countTr t + countL l
-        Consumer   c l -> countC  c + countL l
+    countSeq :: PreOpenSequence acc aenv senv arrs -> Int
+    countSeq s =
+      case s of
+        EmptySeq     -> 0
+        Producer p s -> countPr p + countSeq s
+        Consumer c s -> countC  c + countSeq s
 
-    countPr :: Producer acc aenv arrs -> Int
+    countPr :: Producer acc aenv senv arrs -> Int
     countPr p =
       case p of
-        ToStream _ sh a -> countE sh + countA a
+        ToSeq _ sh a    -> countE sh + countA a
         UseLazy  _ sh _ -> countE sh
+        MapSeq f _           -> countAF f idx
+        ZipWithSeq f _ _     -> countAF f idx
+        ScanSeq f a _        -> countAF f idx + countA a
+        ScanSeqAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
 
-    countTr :: Transducer acc aenv lenv arrs -> Int
-    countTr t =
-      case t of
-        MapStream f _           -> countAF f idx
-        ZipWithStream f _ _     -> countAF f idx
-        ScanStream f a _        -> countAF f idx + countA a
-        ScanStreamAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
-
-    countC :: Consumer acc aenv lenv arrs -> Int
+    countC :: Consumer acc aenv senv arrs -> Int
     countC c =
       case c of
-        FromStream _            -> 0
-        FoldStream f a _        -> countAF f idx + countA a
-        FoldStreamAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
-        FoldStreamFlatten f a _ -> countAF f idx + countA a
-        CollectStream _ _       -> 0
+        FromSeq _            -> 0
+        FoldSeq f a _        -> countAF f idx + countA a
+        FoldSeqAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
+        FoldSeqFlatten f a _ -> countAF f idx + countA a
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx

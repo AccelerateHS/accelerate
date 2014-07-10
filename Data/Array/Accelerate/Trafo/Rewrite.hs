@@ -56,36 +56,30 @@ convertSegments = cvtA
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
 
-    cvtL :: PreOpenLoop OpenAcc aenv lenv a -> PreOpenLoop OpenAcc aenv lenv a
-    cvtL l =
-      case l of
-        EmptyLoop -> EmptyLoop
-        Producer   p l -> Producer (cvtP p) (cvtL l)
-        Transducer t l -> Transducer (cvtTr t) (cvtL l)
-        Consumer   c l -> Consumer (cvtC c) (cvtL l)
+    cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence OpenAcc aenv senv a
+    cvtSeq s =
+      case s of
+        EmptySeq     -> EmptySeq
+        Producer p s -> Producer (cvtP p) (cvtSeq s)
+        Consumer c s -> Consumer (cvtC c) (cvtSeq s)
 
-    cvtP :: Producer OpenAcc aenv a -> Producer OpenAcc aenv a
+    cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
     cvtP p =
       case p of
-        ToStream sl slix a   -> ToStream sl (cvtE slix) (cvtA a)
+        ToSeq sl slix a      -> ToSeq sl (cvtE slix) (cvtA a)
         UseLazy  sl slix arr -> UseLazy  sl (cvtE slix) arr
+        MapSeq f x           -> MapSeq (cvtAfun f) x
+        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        ScanSeq f a x        -> ScanSeq (cvtAfun f) (cvtA a) x
+        ScanSeqAct f g a b x -> ScanSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
 
-    cvtTr :: Transducer OpenAcc aenv lenv a -> Transducer OpenAcc aenv lenv a
-    cvtTr t =
-      case t of
-        MapStream f x           -> MapStream (cvtAfun f) x
-        ZipWithStream f x y     -> ZipWithStream (cvtAfun f) x y
-        ScanStream f a x        -> ScanStream (cvtAfun f) (cvtA a) x
-        ScanStreamAct f g a b x -> ScanStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
-
-    cvtC :: Consumer OpenAcc aenv lenv a -> Consumer OpenAcc aenv lenv a
+    cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
     cvtC c =
       case c of
-        FromStream x            -> FromStream x
-        FoldStream f a x        -> FoldStream (cvtAfun f) (cvtA a) x
-        FoldStreamAct f g a b x -> FoldStreamAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
-        FoldStreamFlatten f a x -> FoldStreamFlatten (cvtAfun f) (cvtA a) x
-        CollectStream f x       -> CollectStream f x
+        FromSeq x            -> FromSeq x
+        FoldSeq f a x        -> FoldSeq (cvtAfun f) (cvtA a) x
+        FoldSeqAct f g a b x -> FoldSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
 
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
@@ -118,7 +112,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Loop l                    -> Loop (cvtL l)
+      Sequence seq              -> Sequence (cvtSeq seq)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))

@@ -209,7 +209,7 @@ evalPreOpenAcc (Stencil sten bndy acc) aenv
 evalPreOpenAcc (Stencil2 sten bndy1 acc1 bndy2 acc2) aenv
   = stencil2Op (evalFun sten aenv) bndy1 (evalOpenAcc acc1 aenv) bndy2 (evalOpenAcc acc2 aenv)
 
-evalPreOpenAcc (Loop l) aenv = delay $ evalLoop defaultStreamConfig l aenv
+evalPreOpenAcc (Sequence l) aenv = delay $ evalSeq defaultSeqConfig l aenv
 
 -- The interpreter does not handle foreign functions so use the pure accelerate version
 evalPreOpenAcc (Aforeign _ (Alam (Abody funAcc)) acc) aenv
@@ -671,7 +671,7 @@ stencil2Op sten bndy1 (DelayedRpair DelayedRunit (DelayedRarray sh1 rf1))
                                      Left v    -> v
                                      Right ix' -> rf2 (Sugar.fromElt ix')
 
-toStreamOp :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Shape dim, Sugar.Elt e)
+toSeqOp :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Shape dim, Sugar.Elt e)
            => SliceIndex (Sugar.EltRepr slix)
                          (Sugar.EltRepr sl)
                          co
@@ -679,7 +679,7 @@ toStreamOp :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Shape dim, Sugar.Elt e)
            -> slix
            -> Delayed (Array dim e)
            -> [Delayed (Array sl e)]
-toStreamOp sliceIndex slix arr = map (sliceOp sliceIndex arr) (Sugar.enumSlices sliceIndex slix)
+toSeqOp sliceIndex slix arr = map (sliceOp sliceIndex arr) (Sugar.enumSlices sliceIndex slix)
 
 -- Expression evaluation
 -- ---------------------
@@ -1172,26 +1172,26 @@ evalMin (NonNumScalarType ty)
 
 
 
--- Loop evaluation 
+-- Sequence evaluation 
 -- ---------------
 
--- Position in stream.
+-- Position in sequence.
 --
-type StreamPos = Int
+type SeqPos = Int
 
--- Configuration for stream evaluation.
+-- Configuration for sequence evaluation.
 --
-data StreamConfig = StreamConfig 
-  { chunkSize :: Int -- Allocation limit for a stream in words. Actaul
-                     -- runtime allocation should be the maximum of
-                     -- this size and the size of the largest element
-                     -- in the stream.
+data SeqConfig = SeqConfig 
+  { chunkSize :: Int -- Allocation limit for a sequence in
+                     -- words. Actual runtime allocation should be the
+                     -- maximum of this size and the size of the
+                     -- largest element in the sequence.
   }
 
--- Default stream evaluation configuration for testing purposes.
+-- Default sequence evaluation configuration for testing purposes.
 --
-defaultStreamConfig :: StreamConfig
-defaultStreamConfig = StreamConfig { chunkSize = 2 }
+defaultSeqConfig :: SeqConfig
+defaultSeqConfig = SeqConfig { chunkSize = 2 }
 
 -- A chunk of allocated elements. TODO: Change to use LiftedAcc.
 --
@@ -1212,7 +1212,7 @@ singletonChunk a = Chunk { elems = [a] }
 clen :: forall a. Chunk a -> Int
 clen = length . elems
 
-elemsPerChunk :: StreamConfig -> Int -> Int
+elemsPerChunk :: SeqConfig -> Int -> Int
 elemsPerChunk conf n
   | n < 1 = chunkSize conf
   | otherwise =
@@ -1267,7 +1267,7 @@ zipWithChunk' f c1 c2 =
   zipWithChunk f c1 c2 `appendChunk` cdrop (clen c2) c1 `appendChunk` cdrop (clen c1) c2
 
 -- Pre-scan and reduce a Chunk. O(nlogn). TODO: Can work in-place for
--- fixed element-size streams.
+-- fixed element-size sequences.
 --
 scanReduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> (Chunk a, a) -- (Chunk a, Chunk a, a) leftovers c
 scanReduceChunk f a0 c = go c
@@ -1284,7 +1284,7 @@ scanReduceChunk f a0 c = go c
           in (c' `appendChunk` mapChunk (f a') c'', f a' a'')
 
 -- Reduce a Chunk. O(nlogn). TODO: Can work in-place for fixed
--- element-size streams.
+-- element-size sequences.
 --
 reduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> a
 reduceChunk f a0 c = go c
@@ -1306,11 +1306,11 @@ replicateChunk k a = Chunk
   { elems = replicate k a
   }
 
--- A window on a stream.
+-- A window on a sequence.
 --
 data Window a = Window 
   { chunk :: Chunk a   -- Current allocated chunk.
-  , wpos  :: StreamPos -- Position of the window on the stream, given
+  , wpos  :: SeqPos    -- Position of the window on the sequence, given
                        -- in number of elements.
   }
 
@@ -1319,9 +1319,9 @@ data Window a = Window
 window0 :: forall a. Window a
 window0 = Window { chunk = emptyChunk, wpos = 0 }
 
--- Index the given window by the given index on the stream.
+-- Index the given window by the given index on the sequence.
 --
-(!#) :: forall a. Window a -> StreamPos -> Chunk a
+(!#) :: forall a. Window a -> SeqPos -> Chunk a
 w !# i
   | j <- i - wpos w
   , j >= 0
@@ -1335,58 +1335,57 @@ moveWin w c = w { chunk = c
                 , wpos = wpos w + clen (chunk w)
                 }
 
--- A cursor on a stream.
+-- A cursor on a sequence.
 --
-data Cursor lenv a = Cursor 
-  { ref  :: Idx lenv a -- Reference to the stream.
-  , cpos :: StreamPos  -- Position of the cursor on the stream, given
-                       -- in number of elements.
+data Cursor senv a = Cursor 
+  { ref  :: Idx senv a -- Reference to the sequence.
+  , cpos :: SeqPos     -- Position of the cursor on the sequence,
+                       -- given in number of elements.
   }
   
 -- Initial cursor.
 --
-cursor0 :: forall lenv a. Idx lenv a -> Cursor lenv a
+cursor0 :: forall senv a. Idx senv a -> Cursor senv a
 cursor0 x = Cursor { ref = x, cpos = 0 }
 
 -- Advance cursor by a relative amount.
 --
-moveCursor :: forall lenv a. Int -> Cursor lenv a -> Cursor lenv a
+moveCursor :: forall senv a. Int -> Cursor senv a -> Cursor senv a
 moveCursor k c = c { cpos = cpos c + k }
 
--- Valuation for an environment of stream windows.
+-- Valuation for an environment of sequence windows.
 --
-data Val' lenv where
+data Val' senv where
   Empty' :: Val' ()
-  Push'  :: Val' lenv -> Window t -> Val' (lenv, t)  
+  Push'  :: Val' senv -> Window t -> Val' (senv, t)  
 
 -- Projection of a window from a window valuation using a de Bruijn
 -- index.
 --
-prj' :: forall lenv t. Idx lenv t -> Val' lenv -> Window t
+prj' :: forall senv t. Idx senv t -> Val' senv -> Window t
 prj' ZeroIdx       (Push' _   v) = v
 prj' (SuccIdx idx) (Push' val _) = prj' idx val
 prj' _             _             = $internalError "prj" "inconsistent valuation"
 
--- Projection of a chunk from a window valuation using a stream
+-- Projection of a chunk from a window valuation using a sequence
 -- cursor.
 --
-prjChunk :: forall lenv a. Cursor lenv a -> Val' lenv -> Chunk a
-prjChunk c lenv = prj' (ref c) lenv !# cpos c
+prjChunk :: forall senv a. Cursor senv a -> Val' senv -> Chunk a
+prjChunk c senv = prj' (ref c) senv !# cpos c
 
--- An executable loop.
+-- An executable sequence.
 --
-data ExecLoop lenv arrs where
-  ExecEmpty :: ExecLoop lenv ()
-  ExecP :: (Arrays a, Arrays arrs) => Window a -> ExecP      a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
-  ExecT :: (Arrays a, Arrays arrs) => Window a -> ExecT lenv a -> ExecLoop (lenv, a) arrs -> ExecLoop lenv  arrs
-  ExecC :: (Arrays a, Arrays arrs) =>             ExecC lenv a -> ExecLoop  lenv     arrs -> ExecLoop lenv (arrs, a)
+data ExecSeq senv arrs where
+  ExecEmpty :: ExecSeq senv ()
+  ExecP :: (Arrays a, Arrays arrs) => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
+  ExecC :: (Arrays a, Arrays arrs) =>             ExecC senv a -> ExecSeq  senv     arrs -> ExecSeq senv (arrs, a)
 
 -- An executable producer.
 --
-data ExecP a where
-  ExecToStream :: Int -- Elements per chunk
+data ExecP senv a where
+  ExecToSeq :: Int -- Elements per chunk
                -> [Array sh e]
-               -> ExecP (Array sh e)
+               -> ExecP senv (Array sh e)
 
   ExecUseLazy :: (Sugar.Elt slix, Sugar.Shape sl, Sugar.Elt e)
               => SliceIndex (Sugar.EltRepr slix)
@@ -1396,153 +1395,146 @@ data ExecP a where
               -> Int -- Elements per chunk
               -> [slix]
               -> (slix -> Array sl e)
-              -> ExecP (Array sl e)
+              -> ExecP senv (Array sl e)
 
--- An executable transducer.
---
-data ExecT lenv a where
   ExecMap :: (Chunk a -> Chunk b)
-          -> Cursor lenv a
-          -> ExecT lenv b
+          -> Cursor senv a
+          -> ExecP senv b
 
   ExecZipWith :: (Chunk a -> Chunk b -> Chunk c)
-              -> Cursor lenv a
-              -> Cursor lenv b
-              -> ExecT lenv c
+              -> Cursor senv a
+              -> Cursor senv b
+              -> ExecP senv c
 
-  ExecScanStream :: (a -> Chunk b -> (Chunk a, a))
-                 -> Cursor lenv b
-                 -> a
-                 -> ExecT lenv a
+  ExecScanSeq :: (a -> Chunk b -> (Chunk a, a))
+              -> Cursor senv b
+              -> a
+              -> ExecP senv a
 
 -- An executable consumer.
 --
-data ExecC lenv a where
-  ExecFoldStream' :: (acc -> Chunk b -> acc)
+data ExecC senv a where
+  ExecFoldSeq' :: (acc -> Chunk b -> acc)
                   -> (acc -> res)
-                  -> Cursor lenv b
+                  -> Cursor senv b
                   -> acc
-                  -> ExecC lenv res
+                  -> ExecC senv res
 
-minCursor :: ExecLoop lenv a -> StreamPos
-minCursor l = travL l 0
+minCursor :: ExecSeq senv a -> SeqPos
+minCursor s = travS s 0
   where
-    travL :: ExecLoop lenv a -> Int -> StreamPos
-    travL l i = 
-      case l of
+    travS :: ExecSeq senv a -> Int -> SeqPos
+    travS s i = 
+      case s of
         ExecEmpty    -> maxBound
-        ExecP _ _ l' -> travL l' (i+1)
-        ExecT _ t l' -> travT t i `min` travL l' (i+1)
-        ExecC   c l' -> travC c i `min` travL l' i
+        ExecP _ p s' -> travP p i `min` travS s' (i+1)
+        ExecC   c s' -> travC c i `min` travS s' i
 
-    k :: Cursor lenv a -> Int -> StreamPos
+    k :: Cursor senv a -> Int -> SeqPos
     k c i
       | i == idxToInt (ref c) = cpos c
       | otherwise             = maxBound
 
-    travT :: ExecT lenv a -> Int -> StreamPos
-    travT t i =
-      case t of
+    travP :: ExecP senv a -> Int -> SeqPos
+    travP p i =
+      case p of
         ExecMap _ c -> k c i
         ExecZipWith _ c1 c2 -> k c1 i `min` k c2 i
-        ExecScanStream _ c _ -> k c i
+        ExecScanSeq _ c _ -> k c i
+        _ -> maxBound
 
-    travC :: ExecC lenv a -> Int -> StreamPos
+    travC :: ExecC senv a -> Int -> SeqPos
     travC c i =
       case c of
-        ExecFoldStream' _ _ c _ -> k c i
+        ExecFoldSeq' _ _ c _ -> k c i
 
-evalLoop :: forall aenv arrs. 
-            StreamConfig 
-         -> PreOpenLoop OpenAcc aenv () arrs 
+evalSeq :: forall aenv arrs. 
+            SeqConfig 
+         -> PreOpenSequence OpenAcc aenv () arrs 
          -> Val aenv -> arrs
-evalLoop conf l aenv | degenerate l = returnOut .        initLoop aenv $ l
-                     | otherwise    = returnOut . loop . initLoop aenv $ l
+evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
+                    | otherwise    = returnOut . loop . initSeq aenv $ s
   where
-    -- A loop with no producers is degenerate since there is no
+    -- A sequence with no producers is degenerate since there is no
     -- halting condition, and should therefore not be iterated.
-    -- Notice that the only degenerate closed loop is the empty loop.
-    degenerate :: forall lenv arrs'. 
-                  PreOpenLoop OpenAcc aenv lenv arrs'
+    -- Notice that the only degenerate closed sequence is the empty sequence.
+    degenerate :: forall senv arrs'. 
+                  PreOpenSequence OpenAcc aenv senv arrs'
                -> Bool
-    degenerate l =
-      case l of
-        EmptyLoop    -> True
+    degenerate s =
+      case s of
+        EmptySeq    -> True
         Producer _ _ -> False
-        Transducer _ l' -> degenerate l'
-        Consumer   _ l' -> degenerate l'
+        Consumer   _ s' -> degenerate s'
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
-    initLoop :: forall lenv arrs'.
+    initSeq :: forall senv arrs'.
                 Val aenv
-             -> PreOpenLoop OpenAcc aenv lenv arrs'
-             -> ExecLoop lenv arrs'
-    initLoop aenv l =
-      case l of
-        EmptyLoop       -> ExecEmpty
-        Producer   p l' -> ExecP window0 (initProducer   aenv p) (initLoop aenv l')
-        Transducer t l' -> ExecT window0 (initTransducer aenv t) (initLoop aenv l')
-        Consumer   c l' -> ExecC         (initConsumer   aenv c) (initLoop aenv l')
+             -> PreOpenSequence OpenAcc aenv senv arrs'
+             -> ExecSeq senv arrs'
+    initSeq aenv s =
+      case s of
+        EmptySeq       -> ExecEmpty
+        Producer   p s' -> ExecP window0 (initProducer   aenv p) (initSeq aenv s')
+        Consumer   c s' -> ExecC         (initConsumer   aenv c) (initSeq aenv s')
 
-    -- Iterate the given loop until it terminates.
-    -- A loop only terminates when one of the producers are exhausted.
-    loop :: ExecLoop () arrs 
-         -> ExecLoop () arrs
-    loop l = 
-      case step' l of
-        Nothing -> l
-        Just l' -> loop l'
+    -- Iterate the given sequence until it terminates.
+    -- A sequence only terminates when one of the producers are exhausted.
+    loop :: ExecSeq () arrs 
+         -> ExecSeq () arrs
+    loop s = 
+      case step' s of
+        Nothing -> s
+        Just s' -> loop s'
       
       where 
-        step' :: ExecLoop () arrs -> Maybe (ExecLoop () arrs)
-        step' l = step l Empty'
+        step' :: ExecSeq () arrs -> Maybe (ExecSeq () arrs)
+        step' s = step s Empty'
 
-    -- One iteration of a loop.
-    step :: forall lenv arrs'.
-            ExecLoop lenv arrs'
-         -> Val' lenv
-         -> Maybe (ExecLoop lenv arrs')
-    step l lenv =
-      case l of
+    -- One iteration of a sequence.
+    step :: forall senv arrs'.
+            ExecSeq senv arrs'
+         -> Val' senv
+         -> Maybe (ExecSeq senv arrs')
+    step s senv =
+      case s of
         ExecEmpty -> return ExecEmpty
-        ExecP w p l' -> checkWin w l' (ExecP w p) $       produce   p       >>= \ (a, p') -> step l' (lenv `Push'` moveWin w a) >>= \ l'' -> return (ExecP (moveWin w a) p' l'')
-        ExecT w t l' -> checkWin w l' (ExecT w t) $ Just (transduce t lenv) >>= \ (a, t') -> step l' (lenv `Push'` moveWin w a) >>= \ l'' -> return (ExecT (moveWin w a) t' l'')
-        ExecC   c l' ->                             Just (consume   c lenv) >>= \     c'  -> step l'  lenv                      >>= \ l'' -> return (ExecC c' l'')
+        ExecP w p s' -> checkWin w s' (ExecP w p) $       produce   p senv  >>= \ (a, p') -> step s' (senv `Push'` moveWin w a) >>= \ s'' -> return (ExecP (moveWin w a) p' s'')
+        ExecC   c s' ->                             Just (consume   c senv) >>= \     c'  -> step s'  senv                      >>= \ s'' -> return (ExecC c' s'')
       where
         checkWin :: forall a. -- TODO: Find a more elegant solution without using checkWin.
                     Window a
-                 -> ExecLoop (lenv, a) arrs'
-                 -> (ExecLoop (lenv, a) arrs' -> ExecLoop lenv arrs')
-                 -> Maybe (ExecLoop lenv arrs')
-                 -> Maybe (ExecLoop lenv arrs')
-        checkWin w l' exec ml
-          | null (elems (w !# minCursor l')) = ml
-          | otherwise                        = step l' (lenv `Push'` w) >>= \ l'' -> Just (exec l'')
+                 -> ExecSeq (senv, a) arrs'
+                 -> (ExecSeq (senv, a) arrs' -> ExecSeq senv arrs')
+                 -> Maybe (ExecSeq senv arrs')
+                 -> Maybe (ExecSeq senv arrs')
+        checkWin w s' exec ms
+          | null (elems (w !# minCursor s')) = ms
+          | otherwise                        = step s' (senv `Push'` w) >>= \ s'' -> Just (exec s'')
 
-    -- Finalize and return the accumulators in the consumers of the loop.
-    returnOut :: forall lenv arrs'. 
-                 ExecLoop lenv arrs' -> arrs'
-    returnOut l =
-      case l of
+    -- Finalize and return the accumulators in the consumers of the sequence.
+    returnOut :: forall senv arrs'. 
+                 ExecSeq senv arrs' -> arrs'
+    returnOut s =
+      case s of
         ExecEmpty -> ()
-        ExecP _ _ l ->  returnOut l
-        ExecT _ _ l ->  returnOut l
-        ExecC   c l -> (returnOut l, readConsumer c)
+        ExecP _ _ s' ->  returnOut s'
+        ExecC   c s' -> (returnOut s', readConsumer c)
 
 
-    initProducer :: forall a.
+    initProducer :: forall a senv.
                     Val aenv
-                 -> Producer OpenAcc aenv a
-                 -> ExecP a
+                 -> Producer OpenAcc aenv senv a
+                 -> ExecP senv a
     initProducer aenv p =
       case p of
-        ToStream sliceIndex sl acc ->
+        ToSeq sliceIndex sl acc ->
           let arr = force $ evalOpenAcc acc aenv
               sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
               n   = size (sliceShape sliceIndex (Sugar.fromElt (Sugar.shape arr)))
               k   = elemsPerChunk conf n
-          in ExecToStream k (map force (toStreamOp sliceIndex sl' (delay arr)))
+          in ExecToSeq k (map force (toSeqOp sliceIndex sl' (delay arr)))
         UseLazy sliceIndex sl arr ->
           let sl' = restrictSlice sliceIndex (Sugar.shape arr) (evalExp sl aenv)
               sls = enumSlices sliceIndex sl'
@@ -1550,17 +1542,10 @@ evalLoop conf l aenv | degenerate l = returnOut .        initLoop aenv $ l
               k   = elemsPerChunk conf n
               f slix = force $ sliceOp sliceIndex (delay arr) slix
           in ExecUseLazy sliceIndex k sls f
-
-    initTransducer :: forall a lenv.
-                      Val aenv
-                   -> Transducer OpenAcc aenv lenv a
-                   -> ExecT lenv a
-    initTransducer aenv t =
-      case t of
-        MapStream     f x       -> ExecMap     (mapChunk (evalOpenAfun f aenv)) (cursor0 x)
-        ZipWithStream f x y     -> ExecZipWith (zipWithChunk (evalOpenAfun f aenv)) (cursor0 x) (cursor0 y)
-        ScanStream    f acc x   -> initTransducer aenv (ScanStreamAct f f acc acc x)
-        ScanStreamAct f g acc0 acc1 x -> ExecScanStream h (cursor0 x) a0
+        MapSeq     f x       -> ExecMap     (mapChunk (evalOpenAfun f aenv)) (cursor0 x)
+        ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalOpenAfun f aenv)) (cursor0 x) (cursor0 y)
+        ScanSeq    f acc x   -> initProducer aenv (ScanSeqAct f f acc acc x)
+        ScanSeqAct f g acc0 acc1 x -> ExecScanSeq h (cursor0 x) a0
           where
             f' = evalOpenAfun f aenv
             g' = evalOpenAfun g aenv
@@ -1572,58 +1557,56 @@ evalLoop conf l aenv | degenerate l = returnOut .        initLoop aenv $ l
                   a' = f' a b                         -- Find new accumulator.
               in (as, a')
 
-    initConsumer :: forall a lenv.
+    initConsumer :: forall a senv.
                     Val aenv
-                 -> Consumer OpenAcc aenv lenv a
-                 -> ExecC lenv a
+                 -> Consumer OpenAcc aenv senv a
+                 -> ExecC senv a
     initConsumer aenv c =
       case c of
-        FromStream x -> 
-          ExecFoldStream' 
+        FromSeq x -> 
+          ExecFoldSeq' 
             appendChunk 
             (\ c -> (chunkShapes c, chunkElems c)) 
             (cursor0 x) 
             emptyChunk
-        FoldStream f acc x ->
+        FoldSeq f acc x ->
           let f' = evalOpenAfun f aenv
               a0 = force $ evalOpenAcc acc aenv
               k = elemsPerChunk conf (Sugar.size (Sugar.shape a0))
-          in ExecFoldStream'
+          in ExecFoldSeq'
                (zipWithChunk' f')
                (reduceChunk f' a0)
                (cursor0 x)
                (replicateChunk k a0)
-        FoldStreamAct f g acc1 acc2 x ->
+        FoldSeqAct f g acc1 acc2 x ->
           let f' = evalOpenAfun f aenv
               g' = evalOpenAfun g aenv
               a0 = force $ evalOpenAcc acc1 aenv
               b0 = force $ evalOpenAcc acc2 aenv
-          in ExecFoldStream'
+          in ExecFoldSeq'
                (\ a bs -> f' a (reduceChunk g' b0 bs))
                id
                (cursor0 x)
                a0
-        FoldStreamFlatten f acc x ->
+        FoldSeqFlatten f acc x ->
           let f' = evalOpenAfun f aenv
               a0 = force $ evalOpenAcc acc aenv
-          in ExecFoldStream' 
+          in ExecFoldSeq' 
                (\ a bs -> f' a (chunkShapes bs) (chunkElems bs))
                id
                (cursor0 x)
                a0
-        CollectStream f x -> 
-          ExecFoldStream' (\ () xs -> unsafePerformIO $ mapM_ f (elems xs)) id (cursor0 x) ()
 
-produce :: ExecP a -> Maybe (Chunk a, ExecP a)
-produce p =
+produce :: ExecP senv a -> Val' senv -> Maybe (Chunk a, ExecP senv a)
+produce p senv =
   case p of
-    ExecToStream k xs ->
+    ExecToSeq k xs ->
       if null xs
         then Nothing
         else 
           let (xs', xs'') = (take k xs, drop k xs)
           in Just ( Chunk { elems = xs' }
-                  , ExecToStream k xs'')
+                  , ExecToSeq k xs'')
     ExecUseLazy sliceIndex k slixs f ->
       if null slixs
         then Nothing
@@ -1631,31 +1614,27 @@ produce p =
           let (slixs', slixs'') = (take k slixs, drop k slixs)
           in Just ( Chunk { elems = map f slixs' }
                   , ExecUseLazy sliceIndex k slixs'' f)
-
-transduce :: ExecT lenv a -> Val' lenv -> (Chunk a, ExecT lenv a)
-transduce t lenv =
-  case t of
     ExecMap f x -> 
-      let c = prjChunk x lenv
-      in (f c, ExecMap f (moveCursor (clen c) x))
+      let c = prjChunk x senv
+      in Just (f c, ExecMap f (moveCursor (clen c) x))
     ExecZipWith f x y -> 
-      let c1 = prjChunk x lenv
-          c2 = prjChunk y lenv
+      let c1 = prjChunk x senv
+          c2 = prjChunk y senv
           k = clen c1 `min` clen c2
-      in (f c1 c2, ExecZipWith f (moveCursor k x) (moveCursor k y))
-    ExecScanStream f x a   -> 
-      let c = prjChunk x lenv
+      in Just (f c1 c2, ExecZipWith f (moveCursor k x) (moveCursor k y))
+    ExecScanSeq f x a   -> 
+      let c = prjChunk x senv
           (as, a') = f a c
-      in  (as, ExecScanStream f (moveCursor (clen c) x) a')
+      in Just (as, ExecScanSeq f (moveCursor (clen c) x) a')
 
-consume :: ExecC lenv a -> Val' lenv -> ExecC lenv a
-consume c lenv =
+consume :: ExecC senv a -> Val' senv -> ExecC senv a
+consume c senv =
   case c of
-    ExecFoldStream' f g x acc  ->
-      let c = prjChunk x lenv
-      in ExecFoldStream' f g (moveCursor (clen c) x) (f acc c)
+    ExecFoldSeq' f g x acc  ->
+      let c = prjChunk x senv
+      in ExecFoldSeq' f g (moveCursor (clen c) x) (f acc c)
 
-readConsumer :: ExecC lenv a -> a
+readConsumer :: ExecC senv a -> a
 readConsumer c =
   case c of
-    ExecFoldStream'   _ g _ acc -> g acc
+    ExecFoldSeq'   _ g _ acc -> g acc

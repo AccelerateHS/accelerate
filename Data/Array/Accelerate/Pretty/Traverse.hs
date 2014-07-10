@@ -73,36 +73,30 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (Loop loop)                           = travLoop f c l loop
+    travAcc' (Sequence seq)                        = travSequence f c l seq
 
-travLoop :: forall m b aenv lenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
-         -> (String -> String -> m b) -> PreOpenLoop OpenAcc aenv lenv a -> m b
-travLoop f c l loop =
-  case loop of
-    EmptyLoop -> leaf "EmptyLoop"
-    Producer   p l' -> travP p l'
-    Transducer t l' ->
-      case t of
-        MapStream afun x -> combine "MapStream" [ travAfun f c l afun, leaf (show (idxToInt x)), travLoop f c l l' ]
-        ZipWithStream afun x y -> combine "ZipWithStream" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travLoop f c l l' ]
-        ScanStream afun a x -> combine "ScanStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
-        ScanStreamAct afun1 afun2 a b x -> combine "ScanStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travLoop f c l l' ]
-    Consumer  co l' ->
+travSequence :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+         -> (String -> String -> m b) -> PreOpenSequence OpenAcc aenv senv a -> m b
+travSequence f c l seq =
+  case seq of
+    EmptySeq -> leaf "EmptySeq"
+    Producer p s' ->
+      case p of
+        ToSeq _ ix a   -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSequence f c l s' ]
+        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travSequence f c l s' ]
+        MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSequence f c l s' ]
+        ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSequence f c l s' ]
+        ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
+        ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSequence f c l s' ]
+    Consumer co s' ->
       case co of
-        FromStream x -> combine "FromStream" [ leaf (show (idxToInt x)), travLoop f c l l' ]
-        FoldStream afun a x -> combine "FoldStream" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
-        FoldStreamAct afun1 afun2 a b x -> combine "FoldStreamAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travLoop f c l l' ]
-        FoldStreamFlatten afun a x -> combine "FoldStreamFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travLoop f c l l' ]
-        CollectStream _ x -> combine "CollectStream" [ leaf "<function>", leaf (show (idxToInt x)), travLoop f c l l']
+        FromSeq x -> combine "FromSeq" [ leaf (show (idxToInt x)), travSequence f c l s' ]
+        FoldSeq afun a x -> combine "FoldSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
+        FoldSeqAct afun1 afun2 a b x -> combine "FoldSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSequence f c l s' ]
+        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
-
-    travP :: forall arr. Producer OpenAcc aenv arr -> PreOpenLoop OpenAcc aenv (lenv, arr) a -> m b
-    travP p l' =
-      case p of
-        ToStream _ ix a   -> combine "ToStream" [ travExp f c l  ix, travAcc f c l a, travLoop f c l l' ]
-        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travLoop f c l l' ]
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

@@ -23,7 +23,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, AccLoop, Exp,                        -- re-exporting from 'Smart'
+  Acc, AccSequence, Exp,                        -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -40,17 +40,17 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- * Stream introduction and elimination
-  loop, emptyLoop,
+  -- * Sequence introduction and elimination
+  seq, emptySeq,
 
-  -- * Stream producers
-  toStream, useLazy,
+  -- * Sequence producers
+  toSeq, useLazy,
 
-  -- * Stream transudcers
-  mapStream, zipWithStream, scanStream, scanStreamAct,
+  -- * Sequence transudcers
+  mapSeq, zipWithSeq, scanSeq, scanSeqAct,
 
-  -- * Stream consumers
-  fromStream, foldStream, foldStreamAct, foldStreamFlatten, collectStream,
+  -- * Sequence consumers
+  fromSeq, foldSeq, foldSeqAct, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -117,7 +117,7 @@ module Data.Array.Accelerate.Language (
 
 -- standard libraries
 import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error, IO )
+  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
 import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
 import qualified Prelude                                as P
 import Text.Printf
@@ -467,33 +467,33 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
 stencil2 = Acc $$$$$ Stencil2
 
 
--- Stream operations
+-- Sequence operations
 -- ------------------
 
--- Common stream types
+-- Common sequence types
 --
 
--- | Apply the given array function element-wise to the given stream.
+-- | Apply the given array function element-wise to the given sequence.
 --
-mapStream :: (Shape ix, Elt a, Shape ix', Elt b, Arrays arrs)
-          => (Acc (Array ix a) -> Acc (Array ix' b))
-          -> Idx lenv (Array ix a)
-          -> AccLoop (lenv, Array ix' b) arrs
-          -> AccLoop lenv arrs
-mapStream f x (AccLoop l) = AccLoop (Transducer (MapStream f x) l)
+mapSeq :: (Shape ix, Elt a, Shape ix', Elt b, Arrays arrs)
+       => (Acc (Array ix a) -> Acc (Array ix' b))
+       -> Idx senv (Array ix a)
+       -> AccSequence (senv, Array ix' b) arrs
+       -> AccSequence senv arrs
+mapSeq f x (AccSequence s) = AccSequence (Producer (MapSeq f x) s)
 
--- | Apply the given binary function element-wise to the two streams.  The length of the resulting
--- stream is the minumum of the lengths of the two source streams.
+-- | Apply the given binary function element-wise to the two sequences.  The length of the resulting
+-- sequence is the minumum of the lengths of the two source sequences.
 --
-zipWithStream :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c, Arrays arrs)
-              => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
-              -> Idx lenv (Array ix   a)
-              -> Idx lenv (Array ix'' b)
-              -> AccLoop (lenv, Array ix' c) arrs
-              -> AccLoop lenv arrs
-zipWithStream f x y (AccLoop l) = AccLoop (Transducer (ZipWithStream f x y) l)
+zipWithSeq :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c, Arrays arrs)
+           => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
+           -> Idx senv (Array ix   a)
+           -> Idx senv (Array ix'' b)
+           -> AccSequence (senv, Array ix' c) arrs
+           -> AccSequence senv arrs
+zipWithSeq f x y (AccSequence s) = AccSequence (Producer (ZipWithSeq f x y) s)
 
--- | scanStream (+) a0 x loop. Scan a stream x by combining each
+-- | scanSeq (+) a0 x seq. Scan a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
 -- associative:
 --
@@ -503,15 +503,15 @@ zipWithStream f x y (AccLoop l) = AccLoop (Transducer (ZipWithStream f x y) l)
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-scanStream :: (Shape ix, Elt a, Arrays arrs)
-           => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
-           -> Acc (Array ix a)
-           -> Idx lenv (Array ix a)
-           -> AccLoop (lenv, Array ix a) arrs
-           -> AccLoop lenv arrs
-scanStream f acc x (AccLoop l) = AccLoop (Transducer (ScanStream f acc x) l)
+scanSeq :: (Shape ix, Elt a, Arrays arrs)
+        => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
+        -> Acc (Array ix a)
+        -> Idx senv (Array ix a)
+        -> AccSequence (senv, Array ix a) arrs
+        -> AccSequence senv arrs
+scanSeq f acc x (AccSequence s) = AccSequence (Producer (ScanSeq f acc x) s)
 
--- | ScanStreamAct (+) (*) a0 x loop. Scan a stream x by the given
+-- | ScanSeqAct (+) (*) a0 x seq. Scan a sequence x by the given
 -- binary operation (+). (+) must be semi-associative, where (*) is
 -- the companion operator:
 --
@@ -523,43 +523,43 @@ scanStream f acc x (AccLoop l) = AccLoop (Transducer (ScanStream f acc x) l)
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-scanStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
-              => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
-              -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
-              -> Acc (Array ix a)
-              -> Acc (Array jx b)
-              -> Idx lenv (Array jx b)
-              -> AccLoop (lenv, Array ix a) arrs
-              -> AccLoop lenv arrs
-scanStreamAct f g acc1 acc2 x (AccLoop l) = AccLoop (Transducer (ScanStreamAct f g acc1 acc2 x) l)
+scanSeqAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+           => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
+           -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
+           -> Acc (Array ix a)
+           -> Acc (Array jx b)
+           -> Idx senv (Array jx b)
+           -> AccSequence (senv, Array ix a) arrs
+           -> AccSequence senv arrs
+scanSeqAct f g acc1 acc2 x (AccSequence s) = AccSequence (Producer (ScanSeqAct f g acc1 acc2 x) s)
 
--- | Convert the given array to a stream by streaming the outer
+-- | Convert the given array to a sequence by sequencing the outer
 -- dimension.
 --
-toStream :: (Slice slix, Elt a, Arrays arrs)
-         => Exp slix
-         -> Acc (Array (FullShape slix) a)
-         -> AccLoop (lenv, Array (SliceShape slix) a) arrs
-         -> AccLoop lenv arrs
-toStream spec (Acc (Use arr)) (AccLoop l) = AccLoop (Producer (UseLazy spec arr) l) -- Let's not be silly.
-toStream spec acc (AccLoop l) = AccLoop (Producer (ToStream spec acc) l)
+toSeq :: (Slice slix, Elt a, Arrays arrs)
+      => Exp slix
+      -> Acc (Array (FullShape slix) a)
+      -> AccSequence (senv, Array (SliceShape slix) a) arrs
+      -> AccSequence senv arrs
+toSeq spec (Acc (Use arr)) (AccSequence s) = AccSequence (Producer (UseLazy spec arr) s)
+toSeq spec acc (AccSequence s) = AccSequence (Producer (ToSeq spec acc) s)
 
 useLazy :: (Slice slix, Elt a, Arrays arrs)
         => Exp slix
         -> Array (FullShape slix) a
-        -> AccLoop (lenv, Array (SliceShape slix) a) arrs
-        -> AccLoop lenv arrs
-useLazy spec arr (AccLoop l) = AccLoop (Producer (UseLazy spec arr) l)
+        -> AccSequence (senv, Array (SliceShape slix) a) arrs
+        -> AccSequence senv arrs
+useLazy spec arr (AccSequence s) = AccSequence (Producer (UseLazy spec arr) s)
 
 
--- | Convert the given scalar stream to vector.
-fromStream :: (Shape ix, Elt a, Arrays arrs)
-         => Idx lenv (Array ix a)
-         -> AccLoop lenv arrs
-         -> AccLoop lenv (arrs, (Vector ix, Vector a))
-fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
+-- | Convert the given scalar sequence to vector.
+fromSeq :: (Shape ix, Elt a, Arrays arrs)
+        => Idx senv (Array ix a)
+        -> AccSequence senv arrs
+        -> AccSequence senv (arrs, (Vector ix, Vector a))
+fromSeq x (AccSequence s) = AccSequence (Consumer (FromSeq x) s)
 
--- | foldStream (+) a0 x loop. Fold a stream x by combining each
+-- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
 -- associative:
 --
@@ -569,15 +569,15 @@ fromStream x (AccLoop l) = AccLoop (Consumer (FromStream x) l)
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-foldStream :: (Shape ix, Elt a, Arrays arrs)
-           => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
-           -> Acc (Array ix a)
-           -> Idx lenv (Array ix a)
-           -> AccLoop lenv arrs
-           -> AccLoop lenv (arrs, Array ix a)
-foldStream f acc x (AccLoop l) = AccLoop (Consumer (FoldStream f acc x) l)
+foldSeq :: (Shape ix, Elt a, Arrays arrs)
+        => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
+        -> Acc (Array ix a)
+        -> Idx senv (Array ix a)
+        -> AccSequence senv arrs
+        -> AccSequence senv (arrs, Array ix a)
+foldSeq f acc x (AccSequence s) = AccSequence (Consumer (FoldSeq f acc x) s)
 
--- | foldStreamAct (+) (*) a0 x loop. Fold a stream x by the given
+-- | foldSeqAct (+) (*) a0 x seq. Fold a sequence x by the given
 -- binary operation (+). (+) must be semi-associative, where (*) is
 -- the companion operator:
 --
@@ -589,18 +589,18 @@ foldStream f acc x (AccLoop l) = AccLoop (Consumer (FoldStream f acc x) l)
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-foldStreamAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
-              => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
-              -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
-              -> Acc (Array ix a)
-              -> Acc (Array jx b)
-              -> Idx lenv (Array jx b)
-              -> AccLoop lenv arrs
-              -> AccLoop lenv (arrs, Array ix a)
-foldStreamAct f g acc1 acc2 x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g acc1 acc2 x) l)
+foldSeqAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+           => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
+           -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
+           -> Acc (Array ix a)
+           -> Acc (Array jx b)
+           -> Idx senv (Array jx b)
+           -> AccSequence senv arrs
+           -> AccSequence senv (arrs, Array ix a)
+foldSeqAct f g acc1 acc2 x (AccSequence s) = AccSequence (Consumer (FoldSeqAct f g acc1 acc2 x) s)
 
--- | foldStreamFlatten f a0 x loop. A specialized version of
--- FoldStreamAct where reduction with the companion operator
+-- | foldSeqFlatten f a0 x seq. A specialized version of
+-- FoldSeqAct where reduction with the companion operator
 -- corresponds to flattening. f must be semi-associative, with vecotor
 -- append (++) as the companion operator:
 --
@@ -616,27 +616,19 @@ foldStreamAct f g acc1 acc2 x (AccLoop l) = AccLoop (Consumer (FoldStreamAct f g
 --
 --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
 --
-foldStreamFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
-                  => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))
-                  -> Acc (Array ix a)
-                  -> Idx lenv (Array jx b)
-                  -> AccLoop lenv arrs
-                  -> AccLoop lenv (arrs, Array ix a)
-foldStreamFlatten f acc x (AccLoop l) = AccLoop (Consumer (FoldStreamFlatten f acc x) l)
+foldSeqFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+               => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))
+               -> Acc (Array ix a)
+               -> Idx senv (Array jx b)
+               -> AccSequence senv arrs
+               -> AccSequence senv (arrs, Array ix a)
+foldSeqFlatten f acc x (AccSequence s) = AccSequence (Consumer (FoldSeqFlatten f acc x) s)
 
--- | Collect a stream by applying a function to each element.
-collectStream :: (Shape ix, Elt a, Arrays arrs)
-              => (Array ix a -> IO ())
-              -> Idx lenv (Array ix a)
-              -> AccLoop lenv arrs
-              -> AccLoop lenv (arrs, ())
-collectStream f x (AccLoop l) = AccLoop (Consumer (CollectStream f x) l)
+seq :: Arrays arrs => AccSequence () arrs -> Acc arrs
+seq (AccSequence s) = Acc (Sequence s)
 
-loop :: Arrays arrs => AccLoop () arrs -> Acc arrs
-loop (AccLoop l) = Acc (Loop l)
-
-emptyLoop :: AccLoop lenv ()
-emptyLoop = AccLoop EmptyLoop
+emptySeq :: AccSequence senv ()
+emptySeq = AccSequence EmptySeq
 
 -- Foreign function calling
 -- ------------------------
