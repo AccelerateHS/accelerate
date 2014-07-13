@@ -248,6 +248,7 @@ Library
                         Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
+                        Data.Array.Accelerate.Trafo.Vectorise
 
   if flag(more-pp)
     Other-modules:      Data.Array.Accelerate.Pretty.HTML
