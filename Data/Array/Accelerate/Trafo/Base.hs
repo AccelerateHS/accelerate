@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Trafo.Base (
 
   -- Toolkit
   Kit(..), Match(..), (:=:)(REFL),
-  avarIn, kmap,
+  avarIn, kmap, fromOpenAfun,
 
   -- Delayed Arrays
   DelayedAcc,  DelayedOpenAcc(..),
@@ -36,7 +36,9 @@ module Data.Array.Accelerate.Trafo.Base (
   Gamma(..), incExp, prjExp, lookupExp,
   Extend(..), append, bind, Sink(..), sink, sink1,
   weakenGamma1, sinkGamma,
-  Supplement(..), bindExps
+  Supplement(..), bindExps,
+
+  subApply, inlineA
 
 ) where
 
@@ -66,6 +68,7 @@ import Data.Array.Accelerate.Debug as Stats
 class (RebuildableAcc acc, Sink acc) => Kit acc where
   inject        :: PreOpenAcc acc aenv a -> acc aenv a
   extract       :: acc aenv a -> PreOpenAcc acc aenv a
+  fromOpenAcc   :: OpenAcc aenv a -> acc aenv a
   --
   matchAcc      :: MatchAcc acc
   hashAcc       :: HashAcc acc
@@ -74,6 +77,7 @@ class (RebuildableAcc acc, Sink acc) => Kit acc where
 instance Kit OpenAcc where
   inject                 = OpenAcc
   extract (OpenAcc pacc) = pacc
+  fromOpenAcc            = id
 
   matchAcc      = matchOpenAcc
   hashAcc       = hashOpenAcc
@@ -85,6 +89,9 @@ avarIn = inject  . Avar
 kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
 kmap f = inject . f . extract
 
+fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
+fromOpenAfun (Abody a) = Abody $ fromOpenAcc a
+fromOpenAfun (Alam f)  = Alam  $ fromOpenAfun f
 
 -- A class for testing the equality of terms homogeneously, returning a witness
 -- to the existentially quantified terms in the positive case.
@@ -146,6 +153,7 @@ instance Sink DelayedOpenAcc where
 instance Kit DelayedOpenAcc where
   inject        = Manifest
   extract       = error "DelayedAcc.extract"
+  fromOpenAcc   = error "DelayedAcc.fromOpenAcc"
   --
   matchAcc      = matchDelayed
   hashAcc       = hashDelayed
@@ -305,3 +313,16 @@ bindExps :: (Kit acc, Elt e)
 bindExps BaseSup       = id
 bindExps (PushSup g b) = bindExps g . Let b
 
+-- Application via let binding.
+subApply :: (RebuildableAcc acc, Arrays a)
+         => PreOpenAfun acc aenv (a -> b)
+         -> acc             aenv a
+         -> PreOpenAcc  acc aenv b
+subApply (Alam (Abody f)) a = Alet a f
+subApply _                _ = error "subApply: inconsistent evaluation"
+
+-- | Replace all occurences of the first variable with the given array expression. The environment
+-- shrinks.
+--
+inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
+inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
