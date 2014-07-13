@@ -33,7 +33,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
-  RebuildableExp(..),
+  RebuildableExp(..), RebuildTup(..)
 
 ) where
 
@@ -108,7 +108,6 @@ compose :: (RebuildableAcc acc, Elt c)
         -> PreOpenFun acc env aenv (a -> c)
 compose (Lam (Body f)) (Lam (Body g)) = Stats.substitution "compose" . Lam . Body $ substitute f g
 compose _              _              = error "compose: impossible evaluation"
-
 
 subTop :: Elt t => PreOpenExp acc env aenv s -> Idx (env, s) t -> PreOpenExp acc env aenv t
 subTop s ZeroIdx      = s
@@ -185,6 +184,13 @@ instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
   rebuildPartial = rebuildAfun rebuildPartial
 
+-- Tuples have to be handled specially.
+newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc env aenv) t }
+
+instance RebuildableAcc acc => Rebuildable (RebuildTup acc env) where
+  type AccClo (RebuildTup acc env) = acc
+  rebuildPartial v t = RebuildTup <$> rebuildTup rebuildPartial (pure . IE) v (unRTup t)
+
 instance Rebuildable OpenAcc where
   type AccClo OpenAcc = OpenAcc
   rebuildPartial = rebuildOpenAcc
@@ -228,6 +234,7 @@ instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
 instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
 instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
 instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
+instance RebuildableAcc acc => Sink (RebuildTup acc env) where
 instance Sink OpenAcc where
 
 {-# RULES
