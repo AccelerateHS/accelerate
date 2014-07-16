@@ -59,6 +59,9 @@ data Phase = Phase
     -- | Recover sharing of scalar expressions?
   , recoverExpSharing           :: Bool
 
+    -- | Recover sharing of sequence computations?
+  , recoverSeqSharing           :: Bool
+
     -- | Are array computations floated out of expressions irrespective of
     --   whether they are shared or not? Requires 'recoverAccSharing'.
   , floatOutAccFromExp          :: Bool
@@ -79,6 +82,7 @@ phases :: Phase
 phases =  Phase
   { recoverAccSharing      = True
   , recoverExpSharing      = True
+  , recoverSeqSharing      = True
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
@@ -102,7 +106,7 @@ convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = Fusion.convertAcc enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
 
 
@@ -116,7 +120,7 @@ convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = Fusion.convertAfun enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
 
 

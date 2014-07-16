@@ -26,8 +26,8 @@
 module Data.Array.Accelerate.Smart (
 
   -- * HOAS AST
-  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), Stencil(..), Level, 
-  PreSequence(..), AccSequence(..), Producer(..), Consumer(..),
+  Acc(..), PreAcc(..), Exp(..), PreExp(..), Boundary(..), Stencil(..), Level,
+  PreSeq(..), Seq(..),
 
   -- * Smart constructors for literals
   constant,
@@ -38,6 +38,8 @@ module Data.Array.Accelerate.Smart (
 
   atup2, atup3, atup4, atup5, atup6, atup7, atup8, atup9,
   unatup2, unatup3, unatup4, unatup5, unatup6, unatup7, unatup8, unatup9,
+
+  stup2, stup3, stup4, stup5, stup6, stup7, stup8, stup9,
 
   -- * Smart constructors for constants
   mkMinBound, mkMaxBound, mkPi,
@@ -62,7 +64,7 @@ module Data.Array.Accelerate.Smart (
   ($$), ($$$), ($$$$), ($$$$$),
 
   -- Debugging
-  showPreAccOp, showPreExpOp,
+  showPreAccOp, showPreExpOp, showPreSeqOp
 
 ) where
 
@@ -90,62 +92,62 @@ type Level = Int
 
 -- | Array-valued collective computations without a recursive knot
 --
-data PreAcc acc exp as where
+data PreAcc acc seq exp as where
     -- Needed for conversion to de Bruijn form
   Atag          :: Arrays as
                 => Level                        -- environment size at defining occurrence
-                -> PreAcc acc exp as
+                -> PreAcc acc seq exp as
 
   Pipe          :: (Arrays as, Arrays bs, Arrays cs)
                 => (Acc as -> acc bs)
                 -> (Acc bs -> acc cs)
                 -> acc as
-                -> PreAcc acc exp cs
+                -> PreAcc acc seq exp cs
 
   Aforeign      :: (Arrays arrs, Arrays a, Foreign f)
                 => f arrs a
                 -> (Acc arrs -> Acc a)
                 -> acc arrs
-                -> PreAcc acc exp a
+                -> PreAcc acc seq exp a
 
   Acond         :: Arrays as
                 => exp Bool
                 -> acc as
                 -> acc as
-                -> PreAcc acc exp as
+                -> PreAcc acc seq exp as
 
   Awhile        :: Arrays arrs
                 => (Acc arrs -> acc (Scalar Bool))
                 -> (Acc arrs -> acc arrs)
                 -> acc arrs
-                -> PreAcc acc exp arrs
+                -> PreAcc acc seq exp arrs
 
   Atuple        :: (Arrays arrs, IsAtuple arrs)
                 => Atuple acc (TupleRepr arrs)
-                -> PreAcc acc exp arrs
+                -> PreAcc acc seq exp arrs
 
   Aprj          :: (Arrays arrs, IsAtuple arrs, Arrays a)
                 => TupleIdx (TupleRepr arrs) a
                 ->        acc     arrs
-                -> PreAcc acc exp a
+                -> PreAcc acc seq exp a
 
   Use           :: Arrays arrs
                 => arrs
-                -> PreAcc acc exp arrs
+                -> PreAcc acc seq exp arrs
 
   Unit          :: Elt e
                 => exp e
-                -> PreAcc acc exp (Scalar e)
+                -> PreAcc acc seq exp (Scalar e)
 
   Generate      :: (Shape sh, Elt e)
                 => exp sh
                 -> (Exp sh -> exp e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreAcc acc seq exp (Array sh e)
 
   Reshape       :: (Shape sh, Shape sh', Elt e)
                 => exp sh
                 -> acc (Array sh' e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreAcc acc seq exp (Array sh e)
 
   Replicate     :: (Slice slix, Elt e,
                     Typeable (SliceShape slix), Typeable (FullShape slix))
@@ -153,7 +155,7 @@ data PreAcc acc exp as where
                     -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
                 => exp slix
                 -> acc            (Array (SliceShape slix) e)
-                -> PreAcc acc exp (Array (FullShape  slix) e)
+                -> PreAcc acc seq exp (Array (FullShape  slix) e)
 
   Slice         :: (Slice slix, Elt e,
                     Typeable (SliceShape slix), Typeable (FullShape slix))
@@ -161,95 +163,95 @@ data PreAcc acc exp as where
                     -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
                 => acc            (Array (FullShape  slix) e)
                 -> exp slix
-                -> PreAcc acc exp (Array (SliceShape slix) e)
+                -> PreAcc acc seq exp (Array (SliceShape slix) e)
 
   Map           :: (Shape sh, Elt e, Elt e')
                 => (Exp e -> exp e')
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh e')
+                -> PreAcc acc seq exp (Array sh e')
 
   ZipWith       :: (Shape sh, Elt e1, Elt e2, Elt e3)
                 => (Exp e1 -> Exp e2 -> exp e3)
                 -> acc (Array sh e1)
                 -> acc (Array sh e2)
-                -> PreAcc acc exp (Array sh e3)
+                -> PreAcc acc seq exp (Array sh e3)
 
   Fold          :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreAcc acc seq exp (Array sh e)
 
   Fold1         :: (Shape sh, Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh:.Int) e)
-                -> PreAcc acc exp (Array sh e)
+                -> PreAcc acc seq exp (Array sh e)
 
   FoldSeg       :: (Shape sh, Elt e, Elt i, IsIntegral i)
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Array (sh:.Int) e)
                 -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+                -> PreAcc acc seq exp (Array (sh:.Int) e)
 
   Fold1Seg      :: (Shape sh, Elt e, Elt i, IsIntegral i)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array (sh:.Int) e)
                 -> acc (Segments i)
-                -> PreAcc acc exp (Array (sh:.Int) e)
+                -> PreAcc acc seq exp (Array (sh:.Int) e)
 
   Scanl         :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e)
+                -> PreAcc acc seq exp (Vector e)
 
   Scanl'        :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e, Scalar e)
+                -> PreAcc acc seq exp (Vector e, Scalar e)
 
   Scanl1        :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e)
+                -> PreAcc acc seq exp (Vector e)
 
   Scanr         :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e)
+                -> PreAcc acc seq exp (Vector e)
 
   Scanr'        :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> exp e
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e, Scalar e)
+                -> PreAcc acc seq exp (Vector e, Scalar e)
 
   Scanr1        :: Elt e
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Vector e)
-                -> PreAcc acc exp (Vector e)
+                -> PreAcc acc seq exp (Vector e)
 
   Permute       :: (Shape sh, Shape sh', Elt e)
                 => (Exp e -> Exp e -> exp e)
                 -> acc (Array sh' e)
                 -> (Exp sh -> exp sh')
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreAcc acc seq exp (Array sh' e)
 
   Backpermute   :: (Shape sh, Shape sh', Elt e)
                 => exp sh'
                 -> (Exp sh' -> exp sh)
                 -> acc (Array sh e)
-                -> PreAcc acc exp (Array sh' e)
+                -> PreAcc acc seq exp (Array sh' e)
 
   Stencil       :: (Shape sh, Elt a, Elt b, Stencil sh a stencil)
                 => (stencil -> exp b)
                 -> Boundary a
                 -> acc (Array sh a)
-                -> PreAcc acc exp (Array sh b)
+                -> PreAcc acc seq exp (Array sh b)
 
   Stencil2      :: (Shape sh, Elt a, Elt b, Elt c,
                    Stencil sh a stencil1, Stencil sh b stencil2)
@@ -258,20 +260,13 @@ data PreAcc acc exp as where
                 -> acc (Array sh a)
                 -> Boundary b
                 -> acc (Array sh b)
-                -> PreAcc acc exp (Array sh c)
+                -> PreAcc acc seq exp (Array sh c)
 
-  Sequence      :: Arrays arrs
-                => PreSequence acc exp () arrs
-                -> PreAcc acc exp arrs
+  Collect       :: Arrays arrs
+                => seq arrs
+                -> PreAcc acc seq exp arrs
 
-data PreSequence acc exp senv arrs where
-  EmptySeq   :: PreSequence acc exp senv ()
-  Producer   :: (Arrays a, Arrays arrs) => Producer   acc exp senv a -> PreSequence acc exp (senv, a) arrs -> PreSequence acc exp senv arrs
-  Consumer   :: (Arrays a, Arrays arrs) => Consumer   acc     senv a -> PreSequence acc exp  senv     arrs -> PreSequence acc exp senv (arrs, a)
-
-newtype AccSequence senv a = AccSequence (PreSequence Acc Exp senv a)
-
-data Producer acc exp senv a where
+data PreSeq acc seq exp arrs where
   -- Convert the given array to a sequence.
   -- Example:
   -- slix = Z :. All :. Int :. All :. All :. Int
@@ -286,29 +281,31 @@ data Producer acc exp senv a where
                Typeable (FullShape slix), Typeable (SliceShape slix))
         => exp slix
         -> acc (Array (FullShape slix) e)
-        -> Producer acc exp senv (Array (SliceShape slix) e)
+        -> PreSeq acc seq exp [Array (SliceShape slix) e]
 
   -- Use main memory vector as a sequence.
   UseLazy :: (Slice slix, Elt e,
                Typeable (FullShape slix), Typeable (SliceShape slix))
           => exp slix
           -> Array (FullShape slix) e
-          -> Producer acc exp senv (Array (SliceShape slix) e)
+          -> PreSeq acc seq exp [Array (SliceShape slix) e]
+
+  -- TODO: Add a function for using a list directly.
 
   -- Apply the given the given function to all elements of the given sequence.
   MapSeq :: (Shape sh, Elt e, Shape sh', Elt e')
          => (Acc (Array sh e) -> acc (Array sh' e'))
-         -> Idx senv (Array sh e)
-         -> Producer acc exp senv (Array sh' e')
+         -> seq [Array sh e]
+         -> PreSeq acc seq exp [Array sh' e']
 
   -- Apply a given binary function pairwise to all elements of the given sequences.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
   ZipWithSeq :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
              => (Acc (Array sh1 e1) -> Acc (Array sh2 e2) -> acc (Array sh3 e3))
-             -> Idx senv (Array sh1 e1)
-             -> Idx senv (Array sh2 e2)
-             -> Producer acc exp senv (Array sh3 e3)
+             -> seq [Array sh1 e1]
+             -> seq [Array sh2 e2]
+             -> PreSeq acc seq exp [Array sh3 e3]
 
   -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -322,8 +319,8 @@ data Producer acc exp senv a where
   ScanSeq :: (Shape sh, Elt e)
           => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
           -> acc (Array sh e)
-          -> Idx senv (Array sh e)
-          -> Producer acc exp senv (Array sh e)
+          -> seq [Array sh e]
+          -> PreSeq acc seq exp [Array sh e]
 
   -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given
   -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -342,15 +339,13 @@ data Producer acc exp senv a where
              -> (Acc (Array sh' e') -> Acc (Array sh' e') -> acc (Array sh' e'))
              -> acc (Array sh  e )
              -> acc (Array sh' e')
-             -> Idx senv (Array sh' e')
-             -> Producer acc exp senv (Array sh e)
-
-data Consumer acc senv a where
+             -> seq [Array sh' e']
+             -> PreSeq acc seq exp [Array sh e]
 
   -- Convert the given sequence to an array.
   FromSeq :: (Shape sh, Elt e)
-          => Idx senv (Array sh e)
-          -> Consumer acc senv (Array (Z:.Int) sh, Array (Z:.Int) e)
+          => seq [Array sh e]
+          -> PreSeq acc seq exp (Array (Z:.Int) sh, Array (Z:.Int) e)
 
   -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -364,8 +359,8 @@ data Consumer acc senv a where
   FoldSeq :: (Shape sh, Elt e)
           => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
           -> acc (Array sh e)
-          -> Idx senv (Array sh e)
-          -> Consumer acc senv (Array sh e)
+          -> seq [Array sh e]
+          -> PreSeq acc seq exp (Array sh e)
 
   -- FoldSeqAct (+) (*) a0 b0 x. Fold a sequence x by the given
   -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -384,8 +379,8 @@ data Consumer acc senv a where
              -> (Acc (Array sh' b) -> Acc (Array sh' b) -> acc (Array sh' b))
              -> acc (Array sh  a)
              -> acc (Array sh' b)
-             -> Idx senv (Array sh' b)
-             -> Consumer acc senv (Array sh a)
+             -> seq [Array sh' b]
+             -> PreSeq acc seq exp (Array sh a)
 
   -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct
   -- where reduction with the companion operator corresponds to
@@ -407,14 +402,26 @@ data Consumer acc senv a where
   FoldSeqFlatten :: (Shape sh, Elt a, Shape sh', Elt b)
                  => (Acc (Array sh a) -> Acc (Vector sh') -> Acc (Vector b) -> acc (Array sh a))
                  -> acc (Array sh a)
-                 -> Idx senv (Array sh' b)
-                 -> Consumer acc senv (Array sh a)
+                 -> seq [Array sh' b]
+                 -> PreSeq acc seq exp (Array sh a)
+
+  -- Tuple up the results of a sequence computation. Note that the Arrays
+  -- constraint requires that the elements of the tuple are Arrays, not
+  -- streams ([]).
+  Stuple :: (Arrays arrs, IsAtuple arrs)
+         => Atuple (seq) (TupleRepr arrs)
+         -> PreSeq acc seq exp arrs
 
 -- |Array-valued collective computations
 --
-newtype Acc a = Acc (PreAcc Acc Exp a)
+newtype Acc a = Acc (PreAcc Acc Seq Exp a)
+
+-- |Array-valued sequence computations
+--
+newtype Seq a = Seq (PreSeq Acc Seq Exp a)
 
 deriving instance Typeable Acc
+deriving instance Typeable Seq
 
 
 -- Embedded expressions of the surface language
@@ -429,112 +436,112 @@ deriving instance Typeable Acc
 -- | Scalar expressions to parametrise collective array operations, themselves parameterised over
 -- the type of collective array operations.
 --
-data PreExp acc exp t where
+data PreExp acc seq exp t where
     -- Needed for conversion to de Bruijn form
   Tag           :: Elt t
                 => Level                        -- environment size at defining occurrence
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   -- All the same constructors as 'AST.Exp'
   Const         :: Elt t
                 => t
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   Tuple         :: (Elt t, IsTuple t)
                 => Tuple exp (TupleRepr t)
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   Prj           :: (Elt t, IsTuple t, Elt e)
                 => TupleIdx (TupleRepr t) e
                 -> exp t
-                -> PreExp acc exp e
+                -> PreExp acc seq exp e
 
-  IndexNil      :: PreExp acc exp Z
+  IndexNil      :: PreExp acc seq exp Z
 
   IndexCons     :: (Slice sl, Elt a)
                 => exp sl
                 -> exp a
-                -> PreExp acc exp (sl:.a)
+                -> PreExp acc seq exp (sl:.a)
 
   IndexHead     :: (Slice sl, Elt a)
                 => exp (sl:.a)
-                -> PreExp acc exp a
+                -> PreExp acc seq exp a
 
   IndexTail     :: (Slice sl, Elt a)
                 => exp (sl:.a)
-                -> PreExp acc exp sl
+                -> PreExp acc seq exp sl
 
   IndexAny      :: Shape sh
-                => PreExp acc exp (Any sh)
+                => PreExp acc seq exp (Any sh)
 
   ToIndex       :: Shape sh
                 => exp sh
                 -> exp sh
-                -> PreExp acc exp Int
+                -> PreExp acc seq exp Int
 
   FromIndex     :: Shape sh
                 => exp sh
                 -> exp Int
-                -> PreExp acc exp sh
+                -> PreExp acc seq exp sh
 
   Cond          :: Elt t
                 => exp Bool
                 -> exp t
                 -> exp t
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   While         :: Elt t
                 => (Exp t -> exp Bool)
                 -> (Exp t -> exp t)
                 -> exp t
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   PrimConst     :: Elt t
                 => PrimConst t
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   PrimApp       :: (Elt a, Elt r)
                 => PrimFun (a -> r)
                 -> exp a
-                -> PreExp acc exp r
+                -> PreExp acc seq exp r
 
   Index         :: (Shape sh, Elt t)
                 => acc (Array sh t)
                 -> exp sh
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   LinearIndex   :: (Shape sh, Elt t)
                 => acc (Array sh t)
                 -> exp Int
-                -> PreExp acc exp t
+                -> PreExp acc seq exp t
 
   Shape         :: (Shape sh, Elt e)
                 => acc (Array sh e)
-                -> PreExp acc exp sh
+                -> PreExp acc seq exp sh
 
   ShapeSize     :: Shape sh
                 => exp sh
-                -> PreExp acc exp Int
+                -> PreExp acc seq exp Int
 
   Intersect     :: Shape sh
                 => exp sh
                 -> exp sh
-                -> PreExp acc exp sh
+                -> PreExp acc seq exp sh
 
   Union         :: Shape sh
                 => exp sh
                 -> exp sh
-                -> PreExp acc exp sh
+                -> PreExp acc seq exp sh
 
   Foreign       :: (Elt x, Elt y, Foreign f)
                 => f x y
                 -> (Exp x -> Exp y) -- RCE: Using Exp instead of exp to aid in sharing recovery.
                 -> exp x
-                -> PreExp acc exp y
+                -> PreExp acc seq exp y
 
 -- | Scalar expressions for plain array computations.
 --
-newtype Exp t = Exp (PreExp Acc Exp t)
+newtype Exp t = Exp (PreExp Acc Seq Exp t)
 
 deriving instance Typeable Exp
 
@@ -809,6 +816,56 @@ tix7 = SuccTupIdx tix6
 tix8 :: Elt s => TupleIdx (((((((((t, s), s1), s2), s3), s4), s5), s6), s7), s8) s
 tix8 = SuccTupIdx tix7
 
+-- Smart constructors for array tuples in sequence computations
+-- ---------------------------------------------------
+
+stup2 :: (Arrays a, Arrays b) => (Seq a, Seq b) -> Seq (a, b)
+stup2 (x1, x2) = Seq $ Stuple (NilAtup `SnocAtup` x1 `SnocAtup` x2)
+
+stup3 :: (Arrays a, Arrays b, Arrays c) => (Seq a, Seq b, Seq c) -> Seq (a, b, c)
+stup3 (x1, x2, x3) = Seq $ Stuple (NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3)
+
+stup4 :: (Arrays a, Arrays b, Arrays c, Arrays d)
+     => (Seq a, Seq b, Seq c, Seq d) -> Seq (a, b, c, d)
+stup4 (x1, x2, x3, x4)
+  = Seq $ Stuple (NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4)
+
+stup5 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e)
+     => (Seq a, Seq b, Seq c, Seq d, Seq e) -> Seq (a, b, c, d, e)
+stup5 (x1, x2, x3, x4, x5)
+  = Seq $ Stuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4 `SnocAtup` x5
+
+stup6 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+     => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f) -> Seq (a, b, c, d, e, f)
+stup6 (x1, x2, x3, x4, x5, x6)
+  = Seq $ Stuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3
+              `SnocAtup` x4 `SnocAtup` x5 `SnocAtup` x6
+
+stup7 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
+     => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g)
+     -> Seq (a, b, c, d, e, f, g)
+stup7 (x1, x2, x3, x4, x5, x6, x7)
+  = Seq $ Stuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3
+              `SnocAtup` x4 `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7
+
+stup8 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
+     => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h)
+     -> Seq (a, b, c, d, e, f, g, h)
+stup8 (x1, x2, x3, x4, x5, x6, x7, x8)
+  = Seq $ Stuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4
+              `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7 `SnocAtup` x8
+
+stup9 :: (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
+     => (Seq a, Seq b, Seq c, Seq d, Seq e, Seq f, Seq g, Seq h, Seq i)
+     -> Seq (a, b, c, d, e, f, g, h, i)
+stup9 (x1, x2, x3, x4, x5, x6, x7, x8, x9)
+  = Seq $ Stuple $
+      NilAtup `SnocAtup` x1 `SnocAtup` x2 `SnocAtup` x3 `SnocAtup` x4
+              `SnocAtup` x5 `SnocAtup` x6 `SnocAtup` x7 `SnocAtup` x8 `SnocAtup` x9
 
 -- Smart constructor for literals
 --
@@ -1194,7 +1251,7 @@ infixr 0 $$$$$
 -- Debugging
 -- ---------
 
-showPreAccOp :: forall acc exp arrs. PreAcc acc exp arrs -> String
+showPreAccOp :: forall acc seq exp arrs. PreAcc acc seq exp arrs -> String
 showPreAccOp (Atag i)           = "Atag " ++ show i
 showPreAccOp (Use a)            = "Use "  ++ showArrays a
 showPreAccOp Pipe{}             = "Pipe"
@@ -1224,20 +1281,20 @@ showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
 showPreAccOp Aforeign{}         = "Aforeign"
-showPreAccOp (Sequence l)       = showSequence l
+showPreAccOp Collect{}          = "Collect"
 
-showSequence :: PreSequence acc exp senv arrs -> String
-showSequence EmptySeq = "EmptySeq"
-showSequence (Producer (ToSeq{})          _) = "FromSeq"
-showSequence (Producer (UseLazy{})        _) = "UseLazy"
-showSequence (Producer (MapSeq{})         _) = "MapSeq"
-showSequence (Producer (ZipWithSeq{})     _) = "ZipWithSeq"
-showSequence (Producer (ScanSeq{})        _) = "ScanSeq"
-showSequence (Producer (ScanSeqAct{})     _) = "ScanSeqAct"
-showSequence (Consumer (FromSeq{})        _) = "FromSeq"
-showSequence (Consumer (FoldSeq{})        _) = "FoldSeq"
-showSequence (Consumer (FoldSeqAct{})     _) = "FoldSeqAct"
-showSequence (Consumer (FoldSeqFlatten{}) _) = "FoldSeqFlatten"
+showPreSeqOp :: PreSeq acc seq exp arrs -> String
+showPreSeqOp (ToSeq{})          = "ToSeq"
+showPreSeqOp (UseLazy{})        = "UseLazy"
+showPreSeqOp (MapSeq{})         = "MapSeq"
+showPreSeqOp (ZipWithSeq{})     = "ZipWithSeq"
+showPreSeqOp (ScanSeq{})        = "ScanSeq"
+showPreSeqOp (ScanSeqAct{})     = "ScanSeqAct"
+showPreSeqOp (FromSeq{})        = "FromSeq"
+showPreSeqOp (FoldSeq{})        = "FoldSeq"
+showPreSeqOp (FoldSeqAct{})     = "FoldSeqAct"
+showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
+showPreSeqOp (Stuple{})         = "Stuple"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr
@@ -1260,7 +1317,7 @@ showShortendArr arr
     cutoff = 5
 
 
-showPreExpOp :: PreExp acc exp t -> String
+showPreExpOp :: PreExp acc seq exp t -> String
 showPreExpOp (Const c)          = "Const " ++ show c
 showPreExpOp (Tag i)            = "Tag" ++ show i
 showPreExpOp Tuple{}            = "Tuple"

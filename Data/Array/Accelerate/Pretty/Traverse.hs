@@ -79,7 +79,6 @@ travSequence :: forall m b aenv senv a. Monad m => Labels -> (String -> String -
          -> (String -> String -> m b) -> PreOpenSequence OpenAcc aenv senv a -> m b
 travSequence f c l seq =
   case seq of
-    EmptySeq -> leaf "EmptySeq"
     Producer p s' ->
       case p of
         ToSeq _ ix a   -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSequence f c l s' ]
@@ -88,15 +87,23 @@ travSequence f c l seq =
         ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSequence f c l s' ]
         ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
         ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSequence f c l s' ]
-    Consumer co s' ->
-      case co of
-        FromSeq x -> combine "FromSeq" [ leaf (show (idxToInt x)), travSequence f c l s' ]
-        FoldSeq afun a x -> combine "FoldSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
-        FoldSeqAct afun1 afun2 a b x -> combine "FoldSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSequence f c l s' ]
-        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
+    Consumer co -> travC co
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
+    --
+    travT :: Atuple (Consumer OpenAcc aenv senv) t' -> m b
+    travT NilAtup          = l (tupleFormat f) "NilAtup"
+    travT (SnocAtup tup s) = c (tupleFormat f) "SnocAtup" [ travT tup, travC s ]
+
+    travC :: forall a. Consumer OpenAcc aenv senv a -> m b
+    travC co =
+      case co of
+        FromSeq x -> combine "FromSeq" [ leaf (show (idxToInt x)) ]
+        FoldSeq afun a x -> combine "FoldSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
+        FoldSeqAct afun1 afun2 a b x -> combine "FoldSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)) ]
+        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
+        Stuple t -> travT t
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

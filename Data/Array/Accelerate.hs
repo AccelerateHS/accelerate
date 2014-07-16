@@ -46,7 +46,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  L.Acc, L.AccSequence, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
+  L.Acc, L.Seq, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
 
   -- ** Array element types
   S.Elt,
@@ -142,8 +142,8 @@ module Data.Array.Accelerate (
   -- ** Stencil
   L.stencil, L.stencil2,
 
-  -- ** Sequence introduction and elimination
-  L.runSequence, L.emptySeq,
+  -- ** Sequence elimination
+  L.collect,
 
   -- ** Sequence producers
   L.toSeq, L.useLazy,

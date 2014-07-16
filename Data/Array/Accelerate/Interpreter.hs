@@ -1,10 +1,12 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK prune #-}
 -- |
 -- Module      : Data.Array.Accelerate.Interpreter
@@ -69,7 +71,7 @@ import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = force . evalAcc . Sharing.convertAcc True True True
+run = force . evalAcc . Sharing.convertAcc True True True True
 
 
 -- | Prepare and run an embedded array program of one argument
@@ -82,7 +84,7 @@ run1 = run'
 -- closure to do so.
 --
 run' :: Sharing.Afunction f => f -> Sharing.AfunctionR f
-run' afun = let acc = Sharing.convertAfun True True True afun
+run' afun = let acc = Sharing.convertAfun True True True True afun
             in  evalOpenAfun acc Empty
 
 
@@ -1172,7 +1174,7 @@ evalMin (NonNumScalarType ty)
 
 
 
--- Sequence evaluation 
+-- Sequence evaluation
 -- ---------------
 
 -- Position in sequence.
@@ -1181,7 +1183,7 @@ type SeqPos = Int
 
 -- Configuration for sequence evaluation.
 --
-data SeqConfig = SeqConfig 
+data SeqConfig = SeqConfig
   { chunkSize :: Int -- Allocation limit for a sequence in
                      -- words. Actual runtime allocation should be the
                      -- maximum of this size and the size of the
@@ -1195,7 +1197,7 @@ defaultSeqConfig = SeqConfig { chunkSize = 2 }
 
 -- A chunk of allocated elements. TODO: Change to use LiftedAcc.
 --
-data Chunk a = Chunk 
+data Chunk a = Chunk
   { elems :: [a]  -- Elements.
   }
 
@@ -1244,7 +1246,7 @@ chunkShapes c = Sugar.fromList (Z :. clen c) (map Sugar.shape (elems c))
 -- Get all the elements of a chunk of arrays. O(1).
 --
 chunkElems :: forall sh a. Sugar.Elt a => Chunk (Array sh a) -> Vector a
-chunkElems c = 
+chunkElems c =
   let xs = concatMap Sugar.toList (elems c)
   in Sugar.fromList (Z :. length xs) xs
 
@@ -1256,14 +1258,14 @@ mapChunk f c = c { elems = map f (elems c) }
 -- zipWith for Chunk. O(n).
 --
 zipWithChunk :: forall a b c. (a -> b -> c) -> Chunk a -> Chunk b -> Chunk c -- (Chunk a, Chunk b, Chunk c) leftovers c1 c2
-zipWithChunk f c1 c2 = Chunk 
+zipWithChunk f c1 c2 = Chunk
   { elems = zipWith f (elems c1) (elems c2)
   }
 
 -- A version of zipWith that keeps the trailing elements of the
 -- longest argument. O(n).
 zipWithChunk' :: forall a. (a -> a -> a) -> Chunk a -> Chunk a -> Chunk a
-zipWithChunk' f c1 c2 = 
+zipWithChunk' f c1 c2 =
   zipWithChunk f c1 c2 `appendChunk` cdrop (clen c2) c1 `appendChunk` cdrop (clen c1) c2
 
 -- Pre-scan and reduce a Chunk. O(nlogn). TODO: Can work in-place for
@@ -1273,11 +1275,11 @@ scanReduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> (Chunk a, a) -- (C
 scanReduceChunk f a0 c = go c
   where
     go :: Chunk a -> (Chunk a, a)
-    go c = 
+    go c =
       case elems c of
         []  -> (c, a0)
         [a] -> (singletonChunk a0, a)
-        _ -> 
+        _ ->
           let k = clen c `div` 2
               (c', a') = go (ctake k c)
               (c'', a'') = go (cdrop k c)
@@ -1302,13 +1304,13 @@ reduceChunk f a0 c = go c
 -- Replicate for Chunk. O(n). TODO Leftovers?
 --
 replicateChunk :: forall a. Int -> a -> Chunk a
-replicateChunk k a = Chunk 
+replicateChunk k a = Chunk
   { elems = replicate k a
   }
 
 -- A window on a sequence.
 --
-data Window a = Window 
+data Window a = Window
   { chunk :: Chunk a   -- Current allocated chunk.
   , wpos  :: SeqPos    -- Position of the window on the sequence, given
                        -- in number of elements.
@@ -1337,12 +1339,12 @@ moveWin w c = w { chunk = c
 
 -- A cursor on a sequence.
 --
-data Cursor senv a = Cursor 
+data Cursor senv a = Cursor
   { ref  :: Idx senv a -- Reference to the sequence.
   , cpos :: SeqPos     -- Position of the cursor on the sequence,
                        -- given in number of elements.
   }
-  
+
 -- Initial cursor.
 --
 cursor0 :: forall senv a. Idx senv a -> Cursor senv a
@@ -1357,7 +1359,7 @@ moveCursor k c = c { cpos = cpos c + k }
 --
 data Val' senv where
   Empty' :: Val' ()
-  Push'  :: Val' senv -> Window t -> Val' (senv, t)  
+  Push'  :: Val' senv -> Window t -> Val' (senv, t)
 
 -- Projection of a window from a window valuation using a de Bruijn
 -- index.
@@ -1376,9 +1378,8 @@ prjChunk c senv = prj' (ref c) senv !# cpos c
 -- An executable sequence.
 --
 data ExecSeq senv arrs where
-  ExecEmpty :: ExecSeq senv ()
   ExecP :: (Arrays a, Arrays arrs) => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
-  ExecC :: (Arrays a, Arrays arrs) =>             ExecC senv a -> ExecSeq  senv     arrs -> ExecSeq senv (arrs, a)
+  ExecC :: Arrays a                =>             ExecC senv a ->                           ExecSeq senv  a
 
 -- An executable producer.
 --
@@ -1419,16 +1420,18 @@ data ExecC senv a where
                   -> Cursor senv b
                   -> acc
                   -> ExecC senv res
+  ExecStuple   :: Sugar.IsAtuple a
+                  => Atuple (ExecC senv) (TupleRepr a)
+                  -> ExecC senv a
 
 minCursor :: ExecSeq senv a -> SeqPos
 minCursor s = travS s 0
   where
     travS :: ExecSeq senv a -> Int -> SeqPos
-    travS s i = 
+    travS s i =
       case s of
-        ExecEmpty    -> maxBound
         ExecP _ p s' -> travP p i `min` travS s' (i+1)
-        ExecC   c s' -> travC c i `min` travS s' i
+        ExecC   c    -> travC c i
 
     k :: Cursor senv a -> Int -> SeqPos
     k c i
@@ -1443,14 +1446,19 @@ minCursor s = travS s 0
         ExecScanSeq _ c _ -> k c i
         _ -> maxBound
 
+    travT :: Atuple (ExecC senv) t -> Int -> SeqPos
+    travT NilAtup        _ = maxBound
+    travT (SnocAtup t c) i = travT t i `min` travC c i
+
     travC :: ExecC senv a -> Int -> SeqPos
     travC c i =
       case c of
         ExecFoldSeq' _ _ c _ -> k c i
+        ExecStuple t         -> travT t i
 
-evalSeq :: forall aenv arrs. 
-            SeqConfig 
-         -> PreOpenSequence OpenAcc aenv () arrs 
+evalSeq :: forall aenv arrs.
+            SeqConfig
+         -> PreOpenSequence OpenAcc aenv () arrs
          -> Val aenv -> arrs
 evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
                     | otherwise    = returnOut . loop . initSeq aenv $ s
@@ -1458,14 +1466,13 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
     -- A sequence with no producers is degenerate since there is no
     -- halting condition, and should therefore not be iterated.
     -- Notice that the only degenerate closed sequence is the empty sequence.
-    degenerate :: forall senv arrs'. 
+    degenerate :: forall senv arrs'.
                   PreOpenSequence OpenAcc aenv senv arrs'
                -> Bool
     degenerate s =
       case s of
-        EmptySeq    -> True
         Producer _ _ -> False
-        Consumer   _ s' -> degenerate s'
+        Consumer _   -> True
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
@@ -1475,20 +1482,19 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
              -> ExecSeq senv arrs'
     initSeq aenv s =
       case s of
-        EmptySeq       -> ExecEmpty
         Producer   p s' -> ExecP window0 (initProducer   aenv p) (initSeq aenv s')
-        Consumer   c s' -> ExecC         (initConsumer   aenv c) (initSeq aenv s')
+        Consumer   c    -> ExecC         (initConsumer   aenv c)
 
     -- Iterate the given sequence until it terminates.
     -- A sequence only terminates when one of the producers are exhausted.
-    loop :: ExecSeq () arrs 
+    loop :: ExecSeq () arrs
          -> ExecSeq () arrs
-    loop s = 
+    loop s =
       case step' s of
         Nothing -> s
         Just s' -> loop s'
-      
-      where 
+
+      where
         step' :: ExecSeq () arrs -> Maybe (ExecSeq () arrs)
         step' s = step s Empty'
 
@@ -1499,9 +1505,8 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
          -> Maybe (ExecSeq senv arrs')
     step s senv =
       case s of
-        ExecEmpty -> return ExecEmpty
         ExecP w p s' -> checkWin w s' (ExecP w p) $       produce   p senv  >>= \ (a, p') -> step s' (senv `Push'` moveWin w a) >>= \ s'' -> return (ExecP (moveWin w a) p' s'')
-        ExecC   c s' ->                             Just (consume   c senv) >>= \     c'  -> step s'  senv                      >>= \ s'' -> return (ExecC c' s'')
+        ExecC   c    ->                             Just (consume   c senv) >>= \     c'  -> return (ExecC c')
       where
         checkWin :: forall a. -- TODO: Find a more elegant solution without using checkWin.
                     Window a
@@ -1514,13 +1519,12 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
           | otherwise                        = step s' (senv `Push'` w) >>= \ s'' -> Just (exec s'')
 
     -- Finalize and return the accumulators in the consumers of the sequence.
-    returnOut :: forall senv arrs'. 
+    returnOut :: forall senv arrs'.
                  ExecSeq senv arrs' -> arrs'
     returnOut s =
       case s of
-        ExecEmpty -> ()
-        ExecP _ _ s' ->  returnOut s'
-        ExecC   c s' -> (returnOut s', readConsumer c)
+        ExecP _ _ s' -> returnOut s'
+        ExecC   c    -> readConsumer c
 
 
     initProducer :: forall a senv.
@@ -1563,11 +1567,11 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
                  -> ExecC senv a
     initConsumer aenv c =
       case c of
-        FromSeq x -> 
-          ExecFoldSeq' 
-            appendChunk 
-            (\ c -> (chunkShapes c, chunkElems c)) 
-            (cursor0 x) 
+        FromSeq x ->
+          ExecFoldSeq'
+            appendChunk
+            (\ c -> (chunkShapes c, chunkElems c))
+            (cursor0 x)
             emptyChunk
         FoldSeq f acc x ->
           let f' = evalOpenAfun f aenv
@@ -1591,11 +1595,16 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
         FoldSeqFlatten f acc x ->
           let f' = evalOpenAfun f aenv
               a0 = force $ evalOpenAcc acc aenv
-          in ExecFoldSeq' 
+          in ExecFoldSeq'
                (\ a bs -> f' a (chunkShapes bs) (chunkElems bs))
                id
                (cursor0 x)
                a0
+        Stuple t ->
+          let initTup :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (ExecC senv) t
+              initTup NilAtup        = NilAtup
+              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer aenv c)
+          in ExecStuple (initTup t)
 
 produce :: ExecP senv a -> Val' senv -> Maybe (Chunk a, ExecP senv a)
 produce p senv =
@@ -1603,7 +1612,7 @@ produce p senv =
     ExecToSeq k xs ->
       if null xs
         then Nothing
-        else 
+        else
           let (xs', xs'') = (take k xs, drop k xs)
           in Just ( Chunk { elems = xs' }
                   , ExecToSeq k xs'')
@@ -1614,27 +1623,36 @@ produce p senv =
           let (slixs', slixs'') = (take k slixs, drop k slixs)
           in Just ( Chunk { elems = map f slixs' }
                   , ExecUseLazy sliceIndex k slixs'' f)
-    ExecMap f x -> 
+    ExecMap f x ->
       let c = prjChunk x senv
       in Just (f c, ExecMap f (moveCursor (clen c) x))
-    ExecZipWith f x y -> 
+    ExecZipWith f x y ->
       let c1 = prjChunk x senv
           c2 = prjChunk y senv
           k = clen c1 `min` clen c2
       in Just (f c1 c2, ExecZipWith f (moveCursor k x) (moveCursor k y))
-    ExecScanSeq f x a   -> 
+    ExecScanSeq f x a   ->
       let c = prjChunk x senv
           (as, a') = f a c
       in Just (as, ExecScanSeq f (moveCursor (clen c) x) a')
 
-consume :: ExecC senv a -> Val' senv -> ExecC senv a
+consume :: forall senv a. ExecC senv a -> Val' senv -> ExecC senv a
 consume c senv =
   case c of
     ExecFoldSeq' f g x acc  ->
       let c = prjChunk x senv
       in ExecFoldSeq' f g (moveCursor (clen c) x) (f acc c)
+    ExecStuple t ->
+      let consT :: Atuple (ExecC senv) t -> Atuple (ExecC senv) t
+          consT NilAtup        = NilAtup
+          consT (SnocAtup t c) = SnocAtup (consT t) (consume c senv)
+      in ExecStuple (consT t)
 
 readConsumer :: ExecC senv a -> a
 readConsumer c =
   case c of
     ExecFoldSeq'   _ g _ acc -> g acc
+    ExecStuple     t         -> toTuple ArraysProxy (readT t)
+  where
+    readT :: Atuple (ExecC senv) t -> t
+    readT = undefined

@@ -471,9 +471,8 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 deriving instance Typeable OpenAcc
 
 data PreOpenSequence acc aenv senv arrs where
-  EmptySeq :: PreOpenSequence acc aenv senv ()
   Producer :: (Arrays a, Arrays arrs) => Producer acc aenv senv a -> PreOpenSequence acc aenv (senv, a) arrs -> PreOpenSequence acc aenv senv  arrs
-  Consumer :: (Arrays a, Arrays arrs) => Consumer acc aenv senv a -> PreOpenSequence acc aenv  senv     arrs -> PreOpenSequence acc aenv senv (arrs, a)
+  Consumer :: Arrays arrs => Consumer acc aenv senv arrs -> PreOpenSequence acc aenv senv arrs
 
 data Producer acc aenv senv a where
   -- Convert the given array to a sequence.
@@ -593,7 +592,7 @@ data Consumer acc aenv senv a where
   -- flattening. f must be semi-associative, with vecotor append (++)
   -- as the companion operator:
   --
-  --   Forall b sh1 a1 sh2 a2. 
+  --   Forall b sh1 a1 sh2 a2.
 --       f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
   --
   -- It is common to ignore the shape vectors, yielding the usual
@@ -610,6 +609,10 @@ data Consumer acc aenv senv a where
              -> acc aenv (Array sh e)
              -> Idx senv (Array sh' e')
              -> Consumer acc aenv senv (Array sh e)
+
+  Stuple :: (Arrays a, IsAtuple a)
+         => Atuple (Consumer acc aenv senv) (TupleRepr a)
+         -> Consumer acc aenv senv a
 
 -- |Closed array expression aka an array program
 --

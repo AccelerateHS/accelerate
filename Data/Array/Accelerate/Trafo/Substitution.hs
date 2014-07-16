@@ -475,9 +475,8 @@ rebuildSeq
     -> f (PreOpenSequence acc aenv' senv t)
 rebuildSeq k v s =
   case s of
-    EmptySeq -> pure EmptySeq
     Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
-    Consumer c s -> Consumer <$> (rebuildC k v c) <*> (rebuildSeq k v s)
+    Consumer c   -> Consumer <$> (rebuildC k v c)
 
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -491,10 +490,10 @@ rebuildP k v p =
     MapSeq f x           -> MapSeq <$> (rebuildAfun k v f)  <*> pure x
     ZipWithSeq f x y     -> ZipWithSeq <$> (rebuildAfun k v f)  <*> pure x <*> pure y
     ScanSeq f acc x      -> ScanSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    ScanSeqAct f g acc1 acc2 x -> 
+    ScanSeqAct f g acc1 acc2 x ->
       ScanSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
 
-rebuildC :: (SyntacticAcc fa, Applicative f)
+rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
          -> Consumer acc aenv senv a
@@ -503,9 +502,14 @@ rebuildC k v c =
   case c of
     FromSeq x              -> FromSeq <$> pure x
     FoldSeq f acc x        -> FoldSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    FoldSeqAct f g acc1 acc2 x -> 
+    FoldSeqAct f g acc1 acc2 x ->
       FoldSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
     FoldSeqFlatten f acc x -> FoldSeqFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    Stuple t               -> Stuple <$> rebuildT t
+  where
+    rebuildT :: Atuple (Consumer acc aenv senv) t -> f (Atuple (Consumer acc aenv' senv) t)
+    rebuildT NilAtup        = pure NilAtup
+    rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
 
 -- For OpenAcc
 

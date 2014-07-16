@@ -145,11 +145,10 @@ prettySequence
     -> [Doc]
 prettySequence prettyAcc alvl llvl wrap s =
   case s of
-    EmptySeq -> [text "endseq"]
     Producer p s' ->
       (prettyP p) : (prettySequence prettyAcc alvl (llvl+1) wrap s')
-    Consumer c s' ->
-      (prettyC c) : (prettySequence prettyAcc alvl llvl wrap s')
+    Consumer c    ->
+      [prettyC c]
   where
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
@@ -195,6 +194,11 @@ prettySequence prettyAcc alvl llvl wrap s =
         FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ prettyPreAfun prettyAcc alvl f
                                                            , prettyAcc alvl wrap a
                                                            , var (idxToInt x) ]
+        Stuple t             -> tuple (prettyT t)
+
+    prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
+    prettyT NilAtup        = []
+    prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
 
 -- Pretty print a function over array computations.
 --

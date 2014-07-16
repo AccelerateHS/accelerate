@@ -329,15 +329,12 @@ matchSequence m h = match
     matchExp = matchPreOpenExp m h
 
     match :: forall senv s t. PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv t -> Maybe (s :=: t)
-    match EmptySeq EmptySeq
-      = Just REFL
     match (Producer p1 s1)   (Producer p2 s2)
       | Just REFL <- matchP p1 p2
       , Just REFL <- match s1 s2
       = Just REFL
-    match (Consumer c1 s1)   (Consumer c2 s2)
+    match (Consumer c1)   (Consumer c2)
       | Just REFL <- matchC c1 c2
-      , Just REFL <- match s1 s2
       = Just REFL
     match _ _
       = Nothing
@@ -396,6 +393,9 @@ matchSequence m h = match
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
       = Just REFL
+    matchC (Stuple s1) (Stuple s2)
+      | Just REFL <- matchAtuple matchC s1 s2
+      = gcast REFL
     matchC _ _
       = Nothing
 
@@ -953,19 +953,19 @@ hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 hashPreOpenSequence :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSequence acc aenv senv arrs -> Int
 hashPreOpenSequence hashAcc s =
   let
-    hashA :: Int -> acc aenv a -> Int
+    hashA :: forall aenv a. Int -> acc aenv a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
-    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE :: forall env' aenv' e. Int -> PreOpenExp acc env' aenv' e -> Int
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
 
-    hashF :: Int -> PreOpenAfun acc aenv f -> Int
+    hashF :: forall aenv f. Int -> PreOpenAfun acc aenv f -> Int
     hashF salt = hashWithSalt salt . hashAfun hashAcc
 
-    hashSeq :: Int -> PreOpenSequence acc aenv senv' arrs' -> Int
+    hashSeq :: forall aenv senv' arrs'. Int -> PreOpenSequence acc aenv senv' arrs' -> Int
     hashSeq salt = hashWithSalt salt . hashPreOpenSequence hashAcc
 
-    hashVar :: Int -> Idx senv a -> Int
+    hashVar :: forall senv a. Int -> Idx senv a -> Int
     hashVar salt = hashWithSalt salt . idxToInt
 
     hashP :: Int -> Producer acc aenv senv a -> Int
@@ -976,22 +976,22 @@ hashPreOpenSequence hashAcc s =
         MapSeq f x          -> hashWithSalt salt "MapSeq" `hashF` f `hashVar` x
         ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashF` f `hashVar` x `hashVar` y
         ScanSeq f acc x     -> hashWithSalt salt "ScanSeq" `hashF` f `hashA` acc `hashVar` x
-        ScanSeqAct f g acc1 acc2 x -> 
+        ScanSeqAct f g acc1 acc2 x ->
           hashWithSalt salt "ScanSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
 
-    hashC :: Int -> Consumer acc aenv senv a -> Int
+    hashC :: forall aenv senv a. Int -> Consumer acc aenv senv a -> Int
     hashC salt c =
       case c of
         FromSeq x              -> hashWithSalt salt "FromSeq" `hashVar` x
         FoldSeq f acc x        -> hashWithSalt salt "FoldSeq" `hashF` f `hashA` acc `hashVar` x
-        FoldSeqAct f g acc1 acc2 x -> 
+        FoldSeqAct f g acc1 acc2 x ->
           hashWithSalt salt "FoldSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
         FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashF` f `hashA` acc `hashVar` x
+        Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of
-    EmptySeq        -> hash "EmptySeq"
     Producer   p s' -> hash "Producer"   `hashP` p `hashSeq` s'
-    Consumer   c s' -> hash "Consumer"   `hashC` c `hashSeq` s'
+    Consumer   c    -> hash "Consumer"   `hashC` c
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int

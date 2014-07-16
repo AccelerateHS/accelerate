@@ -2575,7 +2575,7 @@ rebuildToLift :: Rebuildable f
 rebuildToLift d = rebuildPartial (liftA Avar . unliftA d)
 
 cvtS :: S.Afunction f => f -> OpenAfun aenv (S.AfunctionR f)
-cvtS = weaken undefined . S.convertAfun True True True
+cvtS = weaken undefined . S.convertAfun True True True True
 
 subApply2 :: (Kit acc, Arrays a)
          => PreOpenAfun acc aenv (a -> b -> c)

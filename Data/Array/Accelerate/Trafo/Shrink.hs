@@ -195,9 +195,8 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkSeq :: PreOpenSequence acc aenv' senv a -> PreOpenSequence acc aenv' senv a
     shrinkSeq s =
       case s of
-        EmptySeq      -> EmptySeq
-        Producer p s -> Producer   (shrinkP p)  (shrinkSeq s)
-        Consumer c s -> Consumer   (shrinkC c)  (shrinkSeq s)
+        Producer p s -> Producer (shrinkP p)  (shrinkSeq s)
+        Consumer c   -> Consumer (shrinkC c)
 
     shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
     shrinkP p =
@@ -216,6 +215,11 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
         FoldSeq f a x        -> FoldSeq (shrinkAF f) (shrinkAcc a) x
         FoldSeqAct f g a b x -> FoldSeqAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) x
+        Stuple t             -> Stuple (shrinkCT t)
+
+    shrinkCT :: Atuple (Consumer acc aenv' senv) t -> Atuple (Consumer acc aenv' senv) t
+    shrinkCT NilAtup        = NilAtup
+    shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkC c)
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -396,9 +400,8 @@ usesOfPreAcc withShape countAcc idx = countP
     countSeq :: PreOpenSequence acc aenv senv arrs -> Int
     countSeq s =
       case s of
-        EmptySeq     -> 0
         Producer p s -> countPr p + countSeq s
-        Consumer c s -> countC  c + countSeq s
+        Consumer c   -> countC  c
 
     countPr :: Producer acc aenv senv arrs -> Int
     countPr p =
@@ -417,6 +420,11 @@ usesOfPreAcc withShape countAcc idx = countP
         FoldSeq f a _        -> countAF f idx + countA a
         FoldSeqAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
         FoldSeqFlatten f a _ -> countAF f idx + countA a
+        Stuple t             -> countCT t
+
+    countCT :: Atuple (Consumer acc aenv senv) t' -> Int
+    countCT NilAtup        = 0
+    countCT (SnocAtup t c) = countCT t + countC c
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx

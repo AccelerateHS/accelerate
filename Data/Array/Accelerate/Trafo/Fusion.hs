@@ -199,7 +199,6 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
     cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence DelayedOpenAcc aenv senv a
     cvtSeq s =
       case s of
-        EmptySeq -> EmptySeq
         Producer p s' ->
           Producer
             (case p of
@@ -210,14 +209,21 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
                ScanSeq f a x        -> ScanSeq (cvtAF f) (manifest a) x
                ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x)
             (cvtSeq s')
-        Consumer c s' ->
-          Consumer
-            (case c of
-               FromSeq x            -> FromSeq x
-               FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest a) x
-               FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
-               FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest a) x)
-            (cvtSeq s')
+        Consumer c ->
+          Consumer (cvtC c)
+
+    cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
+    cvtC c =
+      case c of
+        FromSeq x            -> FromSeq x
+        FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest a) x
+        FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest a) x
+        Stuple t             -> Stuple (cvtCT t)
+
+    cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer DelayedOpenAcc aenv senv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
 
     cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
     cvtAT NilAtup        = NilAtup
@@ -529,23 +535,22 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
           -> PreOpenSequence acc aenv () arrs
           -> Embed       acc aenv    arrs
     sequenceD embedAcc s
-      | ExtendSeq env s' <- travS s
+      | ExtendSeq env s' <- travS s BaseEnv
       = Embed (env `PushEnv` (Sequence s')) (Done ZeroIdx)
       where
-        travS :: forall senv arrs'.
+        travS :: forall senv aenv' arrs'.
                  PreOpenSequence acc aenv senv arrs'
+              -> Extend acc aenv aenv'
               -> ExtendSeq acc aenv senv arrs'
-        travS s =
+        travS s env =
           case s of
-            EmptySeq -> ExtendSeq BaseEnv EmptySeq
             Producer p s
-              | ExtendSeq env s' <- travS s
-              , ExtendProducer env' p' <- travP p env
-              -> ExtendSeq (env `append` env') (Producer p' (sinkSequence env' s'))
-            Consumer c s
-              | ExtendSeq env s' <- travS s
-              , c' <- travC c env
-              -> ExtendSeq env (Consumer c' s')
+              | ExtendSeq env' s' <- travS s env
+              , ExtendProducer env'' p' <- travP p env'
+              -> ExtendSeq (env' `append` env'') (Producer p' (sinkSequence env'' s'))
+            Consumer c
+              | c' <- travC c env
+              -> ExtendSeq env (Consumer c')
 
         travP :: forall arrs' aenv' senv.
                  Producer acc aenv senv arrs'
@@ -568,6 +573,11 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
         travC (FoldSeq f a x) env = FoldSeq (cvtAF (sink env f)) (cvtA (sink env a)) x
         travC (FoldSeqAct f g a b x) env = FoldSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
         travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
+        travC (Stuple t) env = Stuple (cvtCT t)
+          where
+            cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
+            cvtCT NilAtup        = NilAtup
+            cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (travC c env)
 
 
 -- Internal representation
@@ -724,9 +734,8 @@ instance Kit acc => Sink (SinkSequence acc senv) where
   weaken :: forall aenv aenv' arrs. aenv :> aenv' -> SinkSequence acc senv aenv arrs -> SinkSequence acc senv aenv' arrs
   weaken k (SinkSequence s) = SinkSequence $
     case s of
-      EmptySeq      -> EmptySeq
       Producer p s' -> Producer   (weakenP p) (weakenL s')
-      Consumer c s' -> Consumer   (weakenC c) (weakenL s')
+      Consumer c    -> Consumer   (weakenC c)
 
     where
       weakenL :: forall senv' arrs'. PreOpenSequence acc aenv senv' arrs' -> PreOpenSequence acc aenv' senv' arrs'
@@ -749,6 +758,12 @@ instance Kit acc => Sink (SinkSequence acc senv) where
           FoldSeq f a x        -> FoldSeq (weaken k f) (weaken k a) x
           FoldSeqAct f g a b x -> FoldSeqAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
           FoldSeqFlatten f a x -> FoldSeqFlatten (weaken k f) (weaken k a) x
+          Stuple t             ->
+            let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
+                wk NilAtup        = NilAtup
+                wk (SnocAtup t c) = SnocAtup (wk t) (weakenC c)
+            in Stuple (wk t)
+
 
 instance Kit acc => Sink (Cunctation acc) where
   weaken k cc = case cc of
@@ -1226,7 +1241,6 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtSeq :: PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv s
         cvtSeq s =
           case s of
-            EmptySeq -> EmptySeq
             Producer p s' ->
               Producer
                 (case p of
@@ -1237,14 +1251,21 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                    ScanSeq f a x        -> ScanSeq (cvtAF f) (cvtA a) x
                    ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x)
                 (cvtSeq s')
-            Consumer c s' ->
-              Consumer
-                (case c of
-                   FromSeq x            -> FromSeq x
-                   FoldSeq f a x        -> FoldSeq (cvtAF f) (cvtA a) x
-                   FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
-                   FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x)
-                (cvtSeq s')
+            Consumer c ->
+              Consumer (cvtC c)
+
+        cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
+        cvtC c =
+          case c of
+            FromSeq x            -> FromSeq x
+            FoldSeq f a x        -> FoldSeq (cvtAF f) (cvtA a) x
+            FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
+            FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x
+            Stuple t             -> Stuple (cvtCT t)
+
+        cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv senv) t
+        cvtCT NilAtup        = NilAtup
+        cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
 
         cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
         cvtAF = cvt sh' f' avar

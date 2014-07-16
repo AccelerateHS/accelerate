@@ -23,7 +23,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, AccSequence, Exp,                        -- re-exporting from 'Smart'
+  Acc, Seq, Exp,                            -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -40,8 +40,8 @@ module Data.Array.Accelerate.Language (
   -- * Map-like functions
   map, zipWith,
 
-  -- * Sequence introduction and elimination
-  runSequence, emptySeq,
+  -- * Sequence collection
+  collect,
 
   -- * Sequence producers
   toSeq, useLazy,
@@ -123,7 +123,6 @@ import qualified Prelude                                as P
 import Text.Printf
 
 -- friends
-import Data.Array.Accelerate.AST ( Idx(..) )
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
@@ -475,23 +474,21 @@ stencil2 = Acc $$$$$ Stencil2
 
 -- | Apply the given array function element-wise to the given sequence.
 --
-mapSeq :: (Shape ix, Elt a, Shape ix', Elt b, Arrays arrs)
+mapSeq :: (Shape ix, Elt a, Shape ix', Elt b)
        => (Acc (Array ix a) -> Acc (Array ix' b))
-       -> Idx senv (Array ix a)
-       -> AccSequence (senv, Array ix' b) arrs
-       -> AccSequence senv arrs
-mapSeq f x (AccSequence s) = AccSequence (Producer (MapSeq f x) s)
+       -> Seq [Array ix a]
+       -> Seq [Array ix' b]
+mapSeq = Seq $$ MapSeq
 
 -- | Apply the given binary function element-wise to the two sequences.  The length of the resulting
 -- sequence is the minumum of the lengths of the two source sequences.
 --
-zipWithSeq :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c, Arrays arrs)
+zipWithSeq :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c)
            => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
-           -> Idx senv (Array ix   a)
-           -> Idx senv (Array ix'' b)
-           -> AccSequence (senv, Array ix' c) arrs
-           -> AccSequence senv arrs
-zipWithSeq f x y (AccSequence s) = AccSequence (Producer (ZipWithSeq f x y) s)
+           -> Seq [Array ix   a]
+           -> Seq [Array ix'' b]
+           -> Seq [Array ix' c]
+zipWithSeq = Seq $$$ ZipWithSeq
 
 -- | scanSeq (+) a0 x seq. Scan a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
@@ -503,13 +500,12 @@ zipWithSeq f x y (AccSequence s) = AccSequence (Producer (ZipWithSeq f x y) s)
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-scanSeq :: (Shape ix, Elt a, Arrays arrs)
+scanSeq :: (Shape ix, Elt a)
         => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
         -> Acc (Array ix a)
-        -> Idx senv (Array ix a)
-        -> AccSequence (senv, Array ix a) arrs
-        -> AccSequence senv arrs
-scanSeq f acc x (AccSequence s) = AccSequence (Producer (ScanSeq f acc x) s)
+        -> Seq [Array ix a]
+        -> Seq [Array ix a]
+scanSeq = Seq $$$ ScanSeq
 
 -- | ScanSeqAct (+) (*) a0 x seq. Scan a sequence x by the given
 -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -523,41 +519,37 @@ scanSeq f acc x (AccSequence s) = AccSequence (Producer (ScanSeq f acc x) s)
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-scanSeqAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+scanSeqAct :: (Shape ix, Elt a, Shape jx, Elt b)
            => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
            -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
            -> Acc (Array ix a)
            -> Acc (Array jx b)
-           -> Idx senv (Array jx b)
-           -> AccSequence (senv, Array ix a) arrs
-           -> AccSequence senv arrs
-scanSeqAct f g acc1 acc2 x (AccSequence s) = AccSequence (Producer (ScanSeqAct f g acc1 acc2 x) s)
+           -> Seq [Array jx b]
+           -> Seq [Array ix a]
+scanSeqAct = Seq $$$$$ ScanSeqAct
 
 -- | Convert the given array to a sequence by sequencing the outer
 -- dimension.
 --
-toSeq :: (Slice slix, Elt a, Arrays arrs)
+toSeq :: (Slice slix, Elt a)
       => Exp slix
       -> Acc (Array (FullShape slix) a)
-      -> AccSequence (senv, Array (SliceShape slix) a) arrs
-      -> AccSequence senv arrs
-toSeq spec (Acc (Use arr)) (AccSequence s) = AccSequence (Producer (UseLazy spec arr) s)
-toSeq spec acc (AccSequence s) = AccSequence (Producer (ToSeq spec acc) s)
+      -> Seq [Array (SliceShape slix) a]
+toSeq spec (Acc (Use arr)) = Seq (UseLazy spec arr)
+toSeq spec acc = Seq (ToSeq spec acc)
 
-useLazy :: (Slice slix, Elt a, Arrays arrs)
+useLazy :: (Slice slix, Elt a)
         => Exp slix
         -> Array (FullShape slix) a
-        -> AccSequence (senv, Array (SliceShape slix) a) arrs
-        -> AccSequence senv arrs
-useLazy spec arr (AccSequence s) = AccSequence (Producer (UseLazy spec arr) s)
+        -> Seq [Array (SliceShape slix) a]
+useLazy = Seq $$ UseLazy
 
 
 -- | Convert the given scalar sequence to vector.
-fromSeq :: (Shape ix, Elt a, Arrays arrs)
-        => Idx senv (Array ix a)
-        -> AccSequence senv arrs
-        -> AccSequence senv (arrs, (Vector ix, Vector a))
-fromSeq x (AccSequence s) = AccSequence (Consumer (FromSeq x) s)
+fromSeq :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector ix, Vector a)
+fromSeq = Seq . FromSeq
 
 -- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
@@ -569,13 +561,12 @@ fromSeq x (AccSequence s) = AccSequence (Consumer (FromSeq x) s)
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-foldSeq :: (Shape ix, Elt a, Arrays arrs)
+foldSeq :: (Shape ix, Elt a)
         => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
         -> Acc (Array ix a)
-        -> Idx senv (Array ix a)
-        -> AccSequence senv arrs
-        -> AccSequence senv (arrs, Array ix a)
-foldSeq f acc x (AccSequence s) = AccSequence (Consumer (FoldSeq f acc x) s)
+        -> Seq [Array ix a]
+        -> Seq (Array ix a)
+foldSeq = Seq $$$ FoldSeq
 
 -- | foldSeqAct (+) (*) a0 x seq. Fold a sequence x by the given
 -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -589,15 +580,14 @@ foldSeq f acc x (AccSequence s) = AccSequence (Consumer (FoldSeq f acc x) s)
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-foldSeqAct :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+foldSeqAct :: (Shape ix, Elt a, Shape jx, Elt b)
            => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
            -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
            -> Acc (Array ix a)
            -> Acc (Array jx b)
-           -> Idx senv (Array jx b)
-           -> AccSequence senv arrs
-           -> AccSequence senv (arrs, Array ix a)
-foldSeqAct f g acc1 acc2 x (AccSequence s) = AccSequence (Consumer (FoldSeqAct f g acc1 acc2 x) s)
+           -> Seq [Array jx b]
+           -> Seq (Array ix a)
+foldSeqAct = Seq $$$$$ FoldSeqAct
 
 -- | foldSeqFlatten f a0 x seq. A specialized version of
 -- FoldSeqAct where reduction with the companion operator
@@ -616,19 +606,15 @@ foldSeqAct f g acc1 acc2 x (AccSequence s) = AccSequence (Consumer (FoldSeqAct f
 --
 --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
 --
-foldSeqFlatten :: (Shape ix, Elt a, Shape jx, Elt b, Arrays arrs)
+foldSeqFlatten :: (Shape ix, Elt a, Shape jx, Elt b)
                => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))
                -> Acc (Array ix a)
-               -> Idx senv (Array jx b)
-               -> AccSequence senv arrs
-               -> AccSequence senv (arrs, Array ix a)
-foldSeqFlatten f acc x (AccSequence s) = AccSequence (Consumer (FoldSeqFlatten f acc x) s)
+               -> Seq [Array jx b]
+               -> Seq (Array ix a)
+foldSeqFlatten = Seq $$$ FoldSeqFlatten
 
-runSequence :: Arrays arrs => AccSequence () arrs -> Acc arrs
-runSequence (AccSequence s) = Acc (Sequence s)
-
-emptySeq :: AccSequence senv ()
-emptySeq = AccSequence EmptySeq
+collect :: Arrays arrs => Seq arrs -> Acc arrs
+collect = Acc . Collect
 
 -- Foreign function calling
 -- ------------------------

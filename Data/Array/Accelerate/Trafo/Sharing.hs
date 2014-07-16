@@ -1,7 +1,9 @@
+{-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
@@ -64,6 +66,7 @@ data Config = Config
   {
     recoverAccSharing   :: Bool         -- ^ Recover sharing of array computations ?
   , recoverExpSharing   :: Bool         -- ^ Recover sharing of scalar expressions ?
+  , recoverSeqSharing   :: Bool         -- ^ Recover sharing of sequence computations ?
   , floatOutAcc         :: Bool         -- ^ Always float array computations out of expressions ?
   }
 
@@ -125,11 +128,12 @@ convertAcc
     :: Arrays arrs
     => Bool             -- ^ recover sharing of array computations ?
     -> Bool             -- ^ recover sharing of scalar expressions ?
+    -> Bool             -- ^ recover sharing of sequence computations ?
     -> Bool             -- ^ always float array computations out of expressions?
     -> Acc arrs
     -> AST.Acc arrs
-convertAcc shareAcc shareExp floatAcc acc
-  = let config  = Config shareAcc shareExp (shareAcc && floatAcc)
+convertAcc shareAcc shareExp shareSeq floatAcc acc
+  = let config  = Config shareAcc shareExp shareSeq (shareAcc && floatAcc)
     in
     convertOpenAcc config 0 [] EmptyLayout acc
 
@@ -137,9 +141,9 @@ convertAcc shareAcc shareExp floatAcc acc
 -- | Convert a closed function over array computations, while incorporating
 -- sharing information.
 --
-convertAfun :: Afunction f => Bool -> Bool -> Bool -> f -> AST.Afun (AfunctionR f)
-convertAfun shareAcc shareExp floatAcc =
-  let config = Config shareAcc shareExp (shareAcc && floatAcc)
+convertAfun :: Afunction f => Bool -> Bool -> Bool -> Bool -> f -> AST.Afun (AfunctionR f)
+convertAfun shareAcc shareExp shareSeq floatAcc =
+  let config = Config shareAcc shareExp shareSeq (shareAcc && floatAcc)
   in  aconvert config EmptyLayout
 
 
@@ -249,7 +253,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
         -> AST.Avar (prjIdx ("de Bruijn conversion tag " ++ show i) i alyt)
 
       Pipe afun1 afun2 acc
-        -> let noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
+        -> let noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc seq exp ())
                alyt'    = incLayout alyt `PushLayout` ZeroIdx
                boundAcc = cvtAfun1 afun1 `AST.Apply` cvtA acc
                bodyAcc  = convertSharingAfun1 config alyt' (noStableSharing : aenv') afun2
@@ -261,9 +265,10 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Aforeign ff afun acc
         -> let a = recoverAccSharing config
                e = recoverExpSharing config
+               s = recoverSeqSharing config
                f = floatOutAcc config
            in
-           AST.Aforeign ff (convertAfun a e f afun) (cvtA acc)
+           AST.Aforeign ff (convertAfun a e s f afun) (cvtA acc)
 
       Acond b acc1 acc2           -> AST.Acond (cvtE b) (cvtA acc1) (cvtA acc2)
       Awhile pred iter init       -> AST.Awhile (cvtAfun1 pred) (cvtAfun1 iter) (cvtA init)
@@ -299,57 +304,118 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      Sequence seq -> AST.Sequence (convertSharingSequence config alyt aenv seq)
+      Collect seq -> AST.Sequence (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
 
-convertSharingSequence
+convertSharingSeq
     :: forall aenv senv arrs. Arrays arrs
     => Config
     -> Layout aenv aenv
+    -> Layout senv senv
     -> [StableSharingAcc]
-    -> PreSequence ScopedAcc ScopedExp senv arrs
+    -> [StableSharingSeq]
+    -> ScopedSeq arrs
     -> AST.PreOpenSequence AST.OpenAcc aenv senv arrs
-convertSharingSequence config alyt aenv s =
-  case s of
-    EmptySeq      -> AST.EmptySeq
-    Producer p s' -> AST.Producer (cvtP p) (cvtSeq s')
-    Consumer c s' -> AST.Consumer (cvtC c) (cvtSeq s')
-
+convertSharingSeq _ _ _ _ _ (ScopedSeq (SvarSharing _))
+  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
+convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
+  = convSeq boundSeq bodySeq
   where
-    cvtSeq :: forall senv' arrs'. Arrays arrs' => PreSequence ScopedAcc ScopedExp senv' arrs' -> AST.PreOpenSequence AST.OpenAcc aenv senv' arrs'
-    cvtSeq s' = convertSharingSequence config alyt aenv s'
+    convSeq :: forall bnd body. Arrays body
+            => PreSeq ScopedAcc ScopedSeq ScopedExp bnd
+            -> ScopedSeq body
+            -> AST.PreOpenSequence AST.OpenAcc aenv senv body
+    convSeq bnd body =
+      case bnd of
+        ToSeq slix acc                     -> producer $ mkToSeq (cvtE slix) (cvtA acc)
+        UseLazy  slix arr                  -> producer $ mkUseLazy  (cvtE slix) arr
+        MapSeq afun x                      -> producer $ AST.MapSeq (cvtAF1 afun) (asIdx x)
+        ZipWithSeq afun x y                -> producer $ AST.ZipWithSeq (cvtAF2 afun) (asIdx x) (asIdx y)
+        ScanSeq afun acc x                 -> producer $ AST.ScanSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
+        ScanSeqAct afun1 afun2 acc1 acc2 x -> producer $ AST.ScanSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
+        _                                  -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
+      where
+        producer :: (bnd ~ [a], Arrays a, Arrays body)
+                 => AST.Producer AST.OpenAcc aenv senv a
+                 -> AST.PreOpenSequence AST.OpenAcc aenv senv body
+        producer p = AST.Producer p $ convertSharingSeq config alyt slyt' aenv (sa:senv) body
+          where
+            slyt' = incLayout slyt `PushLayout` ZeroIdx
 
-    cvtP :: forall a. Producer ScopedAcc ScopedExp senv a -> AST.Producer AST.OpenAcc aenv senv a
-    cvtP p =
-      case p of
-        ToSeq slix acc -> mkToSeq (cvtE slix) (cvtA acc)
-        UseLazy  slix arr -> mkUseLazy  (cvtE slix) arr
-        MapSeq afun x -> AST.MapSeq (cvtAF1 afun) x
-        ZipWithSeq afun x y -> AST.ZipWithSeq (cvtAF2 afun) x y
-        ScanSeq afun acc x -> AST.ScanSeq (cvtAF2 afun) (cvtA acc) x
-        ScanSeqAct afun1 afun2 acc1 acc2 x -> AST.ScanSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) x
+        asIdx :: Arrays a
+              => ScopedSeq [a]
+              -> Idx senv a
+        asIdx (ScopedSeq (SvarSharing sn))
+          | Just i <- findIndex (matchStableSeq sn) senv
+          = prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+          | null senv
+          = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
+                    show (hashStableNameHeight sn) ++ ")"
+          | otherwise
+          = $internalError "convertSharingSeq" err
+          where
+            ctxt = "shared 'Seq' tree with stable name " ++ show (hashStableNameHeight sn)
+            err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  senv = " ++ show senv
+        asIdx _
+          = $internalError "convertSharingSeq:asIdx" "Sequence computation not in A-normal form"
 
-    cvtC :: forall a. Consumer ScopedAcc senv a -> AST.Consumer AST.OpenAcc aenv senv a
-    cvtC c =
-      case c of
-        FromSeq x -> AST.FromSeq x
-        FoldSeq afun acc x -> AST.FoldSeq (cvtAF2 afun) (cvtA acc) x
-        FoldSeqAct afun1 afun2 acc1 acc2 x -> AST.FoldSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) x
-        FoldSeqFlatten afun acc x -> AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) x
+        cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
+        cvtA acc = convertSharingAcc config alyt aenv acc
+
+        cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
+        cvtE = convertSharingExp config EmptyLayout alyt [] aenv
+
+        cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
+        cvtAF1 afun = convertSharingAfun1 config alyt aenv afun
+
+        cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
+        cvtAF2 afun = convertSharingAfun2 config alyt aenv afun
+
+convertSharingSeq _ _ _ _ _ (ScopedSeq (SletSharing _ _))
+ = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
+
+convertSharingSeq config alyt slyt aenv senv s
+  = AST.Consumer (cvtC s)
+  where
+    cvtC :: ScopedSeq a -> AST.Consumer AST.OpenAcc aenv senv a
+    cvtC (ScopedSeq (SeqSharing _ s)) =
+      case s of
+        FromSeq x                          -> AST.FromSeq (asIdx x)
+        FoldSeq afun acc x                 -> AST.FoldSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
+        FoldSeqAct afun1 afun2 acc1 acc2 x -> AST.FoldSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
+        FoldSeqFlatten afun acc x          -> AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
+        Stuple t                           -> AST.Stuple (cvtST t)
+        _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
+    cvtC _ = $internalError "convertSharingSeq" "Unreachable"
+
+    asIdx :: Arrays a
+          => ScopedSeq [a]
+          -> Idx senv a
+    asIdx (ScopedSeq (SvarSharing sn))
+      | Just i <- findIndex (matchStableSeq sn) senv
+      = prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+      | null senv
+      = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
+                show (hashStableNameHeight sn) ++ ")"
+      | otherwise
+      = $internalError "convertSharingSeq" err
+      where
+        ctxt = "shared 'Seq' tree with stable name " ++ show (hashStableNameHeight sn)
+        err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  senv = " ++ show senv
+    asIdx _
+      = $internalError "convertSharingSeq:asIdx" "Sequence computation not in A-normal form"
 
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
-
-    cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
-    cvtE = convertSharingExp config EmptyLayout alyt [] aenv
-
-    cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
-    cvtAF1 afun = convertSharingAfun1 config alyt aenv afun
 
     cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
     cvtAF2 afun = convertSharingAfun2 config alyt aenv afun
 
     cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
     cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
+
+    cvtST :: Atuple ScopedSeq t -> Atuple (AST.Consumer AST.OpenAcc aenv senv) t
+    cvtST NilAtup        = NilAtup
+    cvtST (SnocAtup t c) = SnocAtup (cvtST t) (cvtC c)
 
 convertSharingAfun1
     :: forall aenv a b. (Arrays a, Arrays b)
@@ -462,7 +528,7 @@ mkUseLazy = AST.UseLazy (sliceIndex slix)
 --
 convertFun :: Function f => Bool -> f -> AST.Fun () (FunctionR f)
 convertFun shareExp =
-  let config = Config False shareExp False
+  let config = Config False shareExp False False
   in  convert config EmptyLayout
 
 
@@ -501,7 +567,7 @@ convertExp
     -> Exp e            -- ^ expression to be converted
     -> AST.Exp () e
 convertExp shareExp exp
-  = let config = Config False shareExp False
+  = let config = Config False shareExp False False
     in
     convertOpenExp config 0 [] EmptyLayout exp
 
@@ -882,6 +948,7 @@ lookupWithSharingExp :: OccMap Exp -> StableSharingExp -> Int
 lookupWithSharingExp oc (StableSharingExp (StableNameHeight sn _) _)
   = lookupWithASTName oc (StableASTName sn)
 
+
 -- Stable 'Acc' nodes
 -- ------------------
 
@@ -893,28 +960,28 @@ type StableAccName arrs = StableNameHeight (Acc arrs)
 -- represented by variable (binding a shared subtree) using 'AvarSharing' and as being prefixed by
 -- a let binding (for a shared subtree) using 'AletSharing'.
 --
-data SharingAcc acc exp arrs where
+data SharingAcc acc seq exp arrs where
   AvarSharing :: Arrays arrs
-              => StableAccName arrs                        -> SharingAcc acc exp arrs
-  AletSharing :: StableSharingAcc -> acc arrs              -> SharingAcc acc exp arrs
+              => StableAccName arrs                        -> SharingAcc acc seq exp arrs
+  AletSharing :: StableSharingAcc -> acc arrs              -> SharingAcc acc seq exp arrs
   AccSharing  :: Arrays arrs
-              => StableAccName arrs -> PreAcc acc exp arrs -> SharingAcc acc exp arrs
+              => StableAccName arrs -> PreAcc acc seq exp arrs -> SharingAcc acc seq exp arrs
 
 -- Array expression with sharing but shared values have not been scoped; i.e. no let bindings. If
 -- the expression is rooted in a function, the list contains the tags of the variables bound by the
 -- immediate surrounding lambdas.
-data UnscopedAcc t = UnscopedAcc [Int] (SharingAcc UnscopedAcc RootExp t)
+data UnscopedAcc t = UnscopedAcc [Int] (SharingAcc UnscopedAcc RootSeq RootExp t)
 
 -- Array expression with sharing. For expressions rooted in functions the list holds a sorted
 -- environment corresponding to the variables bound in the immediate surounding lambdas.
-data ScopedAcc t = ScopedAcc [StableSharingAcc] (SharingAcc ScopedAcc ScopedExp t)
+data ScopedAcc t = ScopedAcc [StableSharingAcc] (SharingAcc ScopedAcc ScopedSeq ScopedExp t)
 
 -- Stable name for an array computation associated with its sharing-annotated version.
 --
 data StableSharingAcc where
   StableSharingAcc :: Arrays arrs
                    => StableAccName arrs
-                   -> SharingAcc ScopedAcc ScopedExp arrs
+                   -> SharingAcc ScopedAcc ScopedSeq ScopedExp arrs
                    -> StableSharingAcc
 
 instance Show StableSharingAcc where
@@ -950,22 +1017,22 @@ type StableExpName t = StableNameHeight (Exp t)
 -- Interleave sharing annotations into a scalar expressions AST in the same manner as 'SharingAcc'
 -- do for array computations.
 --
-data SharingExp (acc :: * -> *) exp t where
+data SharingExp (acc :: * -> *) seq exp t where
   VarSharing :: Elt t
-             => StableExpName t                            -> SharingExp acc exp t
-  LetSharing :: StableSharingExp -> exp t                  -> SharingExp acc exp t
+             => StableExpName t                            -> SharingExp acc seq exp t
+  LetSharing :: StableSharingExp -> exp t                  -> SharingExp acc seq exp t
   ExpSharing :: Elt t
-             => StableExpName t -> PreExp acc exp t -> SharingExp acc exp t
+             => StableExpName t -> PreExp acc seq exp t -> SharingExp acc seq exp t
 
 -- Specifies a scalar expression AST with sharing annotations but no scoping; i.e. no LetSharing
 -- constructors. If the expression is rooted in a function, the list contains the tags of the
 -- variables bound by the immediate surrounding lambdas.
-data UnscopedExp t = UnscopedExp [Int] (SharingExp UnscopedAcc UnscopedExp t)
+data UnscopedExp t = UnscopedExp [Int] (SharingExp UnscopedAcc UnscopedSeq UnscopedExp t)
 
 -- Specifies a scalar expression AST with sharing. For expressions rooted in functions the list
 -- holds a sorted environment corresponding to the variables bound in the immediate surounding
 -- lambdas.
-data ScopedExp t = ScopedExp [StableSharingExp] (SharingExp ScopedAcc ScopedExp t)
+data ScopedExp t = ScopedExp [StableSharingExp] (SharingExp ScopedAcc ScopedSeq ScopedExp t)
 
 -- Expressions rooted in 'Acc' computations.
 --
@@ -978,7 +1045,7 @@ data RootExp t = RootExp (OccMap Exp) (UnscopedExp t)
 -- Stable name for an expression associated with its sharing-annotated version.
 --
 data StableSharingExp where
-  StableSharingExp :: Elt t => StableExpName t -> SharingExp ScopedAcc ScopedExp t -> StableSharingExp
+  StableSharingExp :: Elt t => StableExpName t -> SharingExp ScopedAcc ScopedSeq ScopedExp t -> StableSharingExp
 
 instance Show StableSharingExp where
   show (StableSharingExp sn _) = show $ hashStableNameHeight sn
@@ -1003,11 +1070,71 @@ matchStableExp sn1 (StableSharingExp sn2 _)
 noStableExpName :: StableExpName t
 noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
 
+-- Stable 'Seq' nodes
+-- ------------------
+
+-- Stable name for 'Seq' nodes including the height of the AST.
+--
+type StableSeqName arrs = StableNameHeight (Seq arrs)
+
+-- Interleave sharing annotations into an sequence computation AST in the same manner as SharingAcc
+-- and SharingExp
+--
+data SharingSeq acc seq exp arrs where
+  SvarSharing :: Typeable arrs
+              => StableSeqName arrs                  -> SharingSeq acc seq exp arrs
+  SletSharing :: StableSharingSeq -> seq t                  -> SharingSeq acc seq exp t
+  SeqSharing  :: Typeable arrs
+              => StableSeqName arrs -> PreSeq acc seq exp arrs -> SharingSeq acc seq exp arrs
+
+-- Array expression with sharing but shared values have not been scoped; i.e. no let bindings. If
+-- the expression is rooted in a function, the list contains the tags of the variables bound by the
+-- immediate surrounding lambdas.
+data UnscopedSeq t = UnscopedSeq (SharingSeq UnscopedAcc UnscopedSeq RootExp t)
+
+-- Array expression with sharing. For expressions rooted in functions the list holds a sorted
+-- environment corresponding to the variables bound in the immediate surounding lambdas.
+data ScopedSeq t = ScopedSeq (SharingSeq ScopedAcc ScopedSeq ScopedExp t)
+
+-- Sequences rooted in 'Acc' computations.
+--
+-- * When counting occurrences, the root of every sequence embedded in an 'Acc' is annotated by
+--   an occurrence map for that one expression (excluding any subterms that are rooted in embedded
+--   'Acc's.)
+--
+data RootSeq t = RootSeq (OccMap Seq) (UnscopedSeq t)
+
+-- Stable name for an array computation associated with its sharing-annotated version.
+--
+data StableSharingSeq where
+  StableSharingSeq :: Typeable arrs
+                   => StableSeqName arrs
+                   -> SharingSeq ScopedAcc ScopedSeq ScopedExp arrs
+                   -> StableSharingSeq
+
+instance Show StableSharingSeq where
+  show (StableSharingSeq sn _) = show $ hashStableNameHeight sn
+
+instance Eq StableSharingSeq where
+  StableSharingSeq sn1 _ == StableSharingSeq sn2 _
+    | Just sn1' <- gcast sn1 = sn1' == sn2
+    | otherwise              = False
+
+higherSSS :: StableSharingSeq -> StableSharingSeq -> Bool
+StableSharingSeq sn1 _ `higherSSS` StableSharingSeq sn2 _ = sn1 `higherSNH` sn2
+
+-- Test whether the given stable names matches an array computation with sharing.
+--
+matchStableSeq :: Typeable arrs => StableSeqName arrs -> StableSharingSeq -> Bool
+matchStableSeq sn1 (StableSharingSeq sn2 _)
+  | Just sn1' <- gcast sn1 = sn1' == sn2
+  | otherwise              = False
+
 
 -- Occurrence counting
 -- ===================
 
--- Compute the 'Acc' occurrence map, marks all nodes (both 'Acc' and 'Exp' nodes) with stable names,
+-- Compute the 'Acc' occurrence map, marks all nodes (both 'Seq' and 'Exp' nodes) with stable names,
 -- and drop repeated occurrences of shared 'Acc' and 'Exp' subtrees (Phase One).
 --
 -- We compute a single 'Acc' occurrence map for the whole AST, but one 'Exp' occurrence map for each
@@ -1068,77 +1195,13 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
     traverseAfun1 :: (Arrays a, Typeable b) => Level -> (Acc a -> Acc b) -> IO (Acc a -> UnscopedAcc b, Int)
     traverseAfun1 = makeOccMapAfun1 config accOccMap
 
-    traverseAfun2 :: (Arrays a, Arrays b, Typeable c) => Level -> (Acc a -> Acc b -> Acc c) -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
-    traverseAfun2 = makeOccMapAfun2 config accOccMap
-
-    traverseAfun3 :: (Arrays a, Arrays b, Arrays c, Typeable d) => Level -> (Acc a -> Acc b -> Acc c -> Acc d) -> IO (Acc a -> Acc b -> Acc c -> UnscopedAcc d, Int)
-    traverseAfun3 = makeOccMapAfun3 config accOccMap
-
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
-    traverseSeq :: forall senv arrs. Typeable arrs
-                => Level -> PreSequence Acc Exp senv arrs
-                -> IO (PreSequence UnscopedAcc RootExp senv arrs, Int)
-    traverseSeq lvl s =
-      case s of
-        EmptySeq -> return (EmptySeq, 1)
-        Producer p s' -> do
-          (p', h1)  <- travP p
-          (s'', h2) <- traverseSeq lvl s'
-          return (Producer p' s'', h1 `max` h2)
-        Consumer c s' -> do
-          (c', h1)  <- travC c
-          (s'', h2) <- traverseSeq lvl s'
-          return (Consumer c' s'', h1 `max` h2)
-
-      where
-        travP :: forall arrs. Producer Acc Exp senv arrs -> IO (Producer UnscopedAcc RootExp senv arrs, Int)
-        travP p =
-          case p of
-            ToSeq sl acc -> do
-              (acc', h1) <- traverseAcc lvl acc
-              (sl' , h2) <- traverseExp lvl sl
-              return (ToSeq sl' acc', h1 `max` h2)
-            UseLazy  sl arr -> do
-              (sl', h1) <- traverseExp lvl sl
-              return (UseLazy sl' arr, h1)
-            MapSeq afun x -> do
-              (afun', h1) <- traverseAfun1 lvl afun
-              return (MapSeq afun' x, h1)
-            ZipWithSeq afun x y -> do
-              (afun', h1) <- traverseAfun2 lvl afun
-              return (ZipWithSeq afun' x y, h1)
-            ScanSeq afun acc x -> do
-              (afun', h1) <- traverseAfun2 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
-              return (ScanSeq afun' acc' x, h1 `max` h2)
-            ScanSeqAct afun1 afun2 acc1 acc2 x -> do
-              (afun1', h1) <- traverseAfun2 lvl afun1
-              (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc1',  h3) <- traverseAcc lvl acc1
-              (acc2',  h4) <- traverseAcc lvl acc2
-              return (ScanSeqAct afun1' afun2' acc1' acc2' x, h1 `max` h2 `max` h3 `max` h4)
-
-        travC :: forall arrs. Consumer Acc senv arrs -> IO (Consumer UnscopedAcc senv arrs, Int)
-        travC c =
-          case c of
-            FromSeq x ->
-              return (FromSeq x, 1)
-            FoldSeq afun acc x -> do
-              (afun', h1) <- traverseAfun2 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
-              return (FoldSeq afun' acc' x, h1 `max` h2)
-            FoldSeqAct afun1 afun2 acc1 acc2 x -> do
-              (afun1', h1) <- traverseAfun2 lvl afun1
-              (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc1',  h3) <- traverseAcc lvl acc1
-              (acc2',  h4) <- traverseAcc lvl acc2
-              return (FoldSeqAct afun1' afun2' acc1' acc2' x, h1 `max` h2 `max` h3 `max` h4)
-            FoldSeqFlatten afun acc x -> do
-              (afun', h1) <- traverseAfun3 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
-              return (FoldSeqFlatten afun' acc' x, h1 `max` h2)
+    traverseSeq :: forall arrs. Typeable arrs
+                => Level -> Seq arrs
+                -> IO (RootSeq arrs, Int)
+    traverseSeq = makeOccMapRootSeq config accOccMap
 
     traverseAcc :: forall arrs. Typeable arrs => Level -> Acc arrs -> IO (UnscopedAcc arrs, Int)
     traverseAcc lvl acc@(Acc pacc)
@@ -1163,7 +1226,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           --     case we cannot discharge the 'Arrays arrs' constraint.
           --
           let reconstruct :: Arrays arrs
-                          => IO (PreAcc UnscopedAcc RootExp arrs, Int)
+                          => IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
                           -> IO (UnscopedAcc arrs, Int)
               reconstruct newAcc
                 = case heightIfRepeatedOccurrence of
@@ -1253,29 +1316,23 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (acc2', h3) <- traverseAcc lvl acc2
                                              return (Stencil2 s' bnd1 acc1' bnd2 acc2',
                                                      h1 `max` h2 `max` h3 + 1)
-            Sequence l                  -> reconstruct $ (travL Sequence) l
+            Collect s                   -> reconstruct $ do
+                                             (s', h) <- traverseSeq lvl s
+                                             return (Collect s', h + 1)
+
 
       where
-
-        travL :: Arrays arrs'
-              => (PreSequence UnscopedAcc RootExp senv arrs' -> PreAcc UnscopedAcc RootExp arrs)
-              -> PreSequence Acc Exp senv arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
-        travL c s
-          = do
-              (s', h) <- traverseSeq lvl s
-              return (c s', h + 1)
-
         travA :: Arrays arrs'
-              => (UnscopedAcc arrs' -> PreAcc UnscopedAcc RootExp arrs)
-              -> Acc arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+              => (UnscopedAcc arrs' -> PreAcc UnscopedAcc RootSeq RootExp arrs)
+              -> Acc arrs' -> IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
               return (c acc', h + 1)
 
         travEA :: (Typeable b, Arrays arrs')
-               => (RootExp b -> UnscopedAcc arrs' -> PreAcc UnscopedAcc RootExp arrs)
-               -> Exp b -> Acc arrs' -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+               => (RootExp b -> UnscopedAcc arrs' -> PreAcc UnscopedAcc RootSeq RootExp arrs)
+               -> Exp b -> Acc arrs' -> IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
         travEA c exp acc
           = do
               (exp', h1) <- traverseExp lvl exp
@@ -1284,9 +1341,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 
         travF2A :: (Elt b, Elt c, Typeable d, Arrays arrs')
                 => ((Exp b -> Exp c -> RootExp d) -> UnscopedAcc arrs'
-                    -> PreAcc UnscopedAcc RootExp arrs)
+                    -> PreAcc UnscopedAcc RootSeq RootExp arrs)
                 -> (Exp b -> Exp c -> Exp d) -> Acc arrs'
-                -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+                -> IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
         travF2A c fun acc
           = do
               (fun', h1) <- traverseFun2 lvl fun
@@ -1294,9 +1351,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               return (c fun' acc', h1 `max` h2 + 1)
 
         travF2EA :: (Elt b, Elt c, Typeable d, Typeable e, Arrays arrs')
-                 => ((Exp b -> Exp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreAcc UnscopedAcc RootExp arrs)
+                 => ((Exp b -> Exp c -> RootExp d) -> RootExp e -> UnscopedAcc arrs' -> PreAcc UnscopedAcc RootSeq RootExp arrs)
                  -> (Exp b -> Exp c -> Exp d) -> Exp e -> Acc arrs'
-                 -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+                 -> IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
         travF2EA c fun exp acc
           = do
               (fun', h1) <- traverseFun2 lvl fun
@@ -1305,9 +1362,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
         travF2A2 :: (Elt b, Elt c, Typeable d, Arrays arrs1, Arrays arrs2)
-                 => ((Exp b -> Exp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreAcc UnscopedAcc RootExp arrs)
+                 => ((Exp b -> Exp c -> RootExp d) -> UnscopedAcc arrs1 -> UnscopedAcc arrs2 -> PreAcc UnscopedAcc RootSeq RootExp arrs)
                  -> (Exp b -> Exp c -> Exp d) -> Acc arrs1 -> Acc arrs2
-                 -> IO (PreAcc UnscopedAcc RootExp arrs, Int)
+                 -> IO (PreAcc UnscopedAcc RootSeq RootExp arrs, Int)
         travF2A2 c fun acc1 acc2
           = do
               (fun' , h1) <- traverseFun2 lvl fun
@@ -1495,7 +1552,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           --     case we cannot discharge the 'Elt a' constraint.
           --
           let reconstruct :: Elt a
-                          => IO (PreExp UnscopedAcc UnscopedExp a, Int)
+                          => IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
                           -> IO (UnscopedExp a, Int)
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
@@ -1551,17 +1608,17 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               return (const (UnscopedExp [lvl] body), height + 1)
 
 
-        travE1 :: Typeable b => (UnscopedExp b -> PreExp UnscopedAcc UnscopedExp a) -> Exp b
-               -> IO (PreExp UnscopedAcc UnscopedExp a, Int)
+        travE1 :: Typeable b => (UnscopedExp b -> PreExp UnscopedAcc UnscopedSeq UnscopedExp a) -> Exp b
+               -> IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
         travE1 c e
           = do
               (e', h) <- travE lvl e
               return (c e', h + 1)
 
         travE2 :: (Typeable b, Typeable c)
-               => (UnscopedExp b -> UnscopedExp c -> PreExp UnscopedAcc UnscopedExp a)
+               => (UnscopedExp b -> UnscopedExp c -> PreExp UnscopedAcc UnscopedSeq UnscopedExp a)
                -> Exp b -> Exp c
-               -> IO (PreExp UnscopedAcc UnscopedExp a, Int)
+               -> IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
         travE2 c e1 e2
           = do
               (e1', h1) <- travE lvl e1
@@ -1569,9 +1626,9 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               return (c e1' e2', h1 `max` h2 + 1)
 
         travE3 :: (Typeable b, Typeable c, Typeable d)
-               => (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> PreExp UnscopedAcc UnscopedExp a)
+               => (UnscopedExp b -> UnscopedExp c -> UnscopedExp d -> PreExp UnscopedAcc UnscopedSeq UnscopedExp a)
                -> Exp b -> Exp c -> Exp d
-               -> IO (PreExp UnscopedAcc UnscopedExp a, Int)
+               -> IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
         travE3 c e1 e2 e3
           = do
               (e1', h1) <- travE lvl e1
@@ -1579,17 +1636,17 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e3', h3) <- travE lvl e3
               return (c e1' e2' e3', h1 `max` h2 `max` h3 + 1)
 
-        travA :: Typeable b => (UnscopedAcc b -> PreExp UnscopedAcc UnscopedExp a) -> Acc b
-              -> IO (PreExp UnscopedAcc UnscopedExp a, Int)
+        travA :: Typeable b => (UnscopedAcc b -> PreExp UnscopedAcc UnscopedSeq UnscopedExp a) -> Acc b
+              -> IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
               return (c acc', h + 1)
 
         travAE :: (Typeable b, Typeable c)
-               => (UnscopedAcc b -> UnscopedExp c -> PreExp UnscopedAcc UnscopedExp a)
+               => (UnscopedAcc b -> UnscopedExp c -> PreExp UnscopedAcc UnscopedSeq UnscopedExp a)
                -> Acc b -> Exp c
-               -> IO (PreExp UnscopedAcc UnscopedExp a, Int)
+               -> IO (PreExp UnscopedAcc UnscopedSeq UnscopedExp a, Int)
         travAE c acc e
           = do
               (acc', h1) <- traverseAcc lvl acc
@@ -1604,6 +1661,141 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                                     return (SnocTup tup' e', h1 `max` h2 + 1)
 
 
+makeOccMapRootSeq
+    :: Typeable arrs
+    => Config
+    -> OccMapHash Acc
+    -> Level
+    -> Seq arrs
+    -> IO (RootSeq arrs, Int)
+makeOccMapRootSeq config accOccMap lvl seq = do
+  traceLine "makeOccMapRootSeq" "Enter"
+  seqOccMap       <- newASTHashTable
+  (seq', height)  <- makeOccMapSharingSeq config accOccMap seqOccMap lvl seq
+  frozenSeqOccMap <- freezeOccMap seqOccMap
+  traceLine "makeOccMapRootSeq" "Exit"
+  return (RootSeq frozenSeqOccMap seq', height)
+
+-- Generate sharing information for an open sequence expression.
+--
+makeOccMapSharingSeq
+    :: Typeable e
+    => Config
+    -> OccMapHash Acc
+    -> OccMapHash Seq
+    -> Level                            -- The level of currently bound variables
+    -> Seq e
+    -> IO (UnscopedSeq e, Int)
+makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
+  where
+    traverseAcc :: Typeable arrs => Level -> Acc arrs -> IO (UnscopedAcc arrs, Int)
+    traverseAcc = makeOccMapSharingAcc config accOccMap
+
+    traverseAfun1 :: (Arrays a, Typeable b) => Level -> (Acc a -> Acc b) -> IO (Acc a -> UnscopedAcc b, Int)
+    traverseAfun1 = makeOccMapAfun1 config accOccMap
+
+    traverseAfun2 :: (Arrays a, Arrays b, Typeable c) => Level -> (Acc a -> Acc b -> Acc c) -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
+    traverseAfun2 = makeOccMapAfun2 config accOccMap
+
+    traverseAfun3 :: (Arrays a, Arrays b, Arrays c, Typeable d) => Level -> (Acc a -> Acc b -> Acc c -> Acc d) -> IO (Acc a -> Acc b -> Acc c -> UnscopedAcc d, Int)
+    traverseAfun3 = makeOccMapAfun3 config accOccMap
+
+    traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
+    traverseExp = makeOccMapExp config accOccMap
+
+    traverseTup :: Level -> Atuple Seq tup -> IO (Atuple UnscopedSeq tup, Int)
+    traverseTup _   NilAtup          = return (NilAtup, 1)
+    traverseTup lvl (SnocAtup tup s) = do
+                                        (tup', h1) <- traverseTup lvl tup
+                                        (s'  , h2) <- traverseSeq lvl s
+                                        return (SnocAtup tup' s', h1 `max` h2 + 1)
+
+    traverseSeq :: forall arrs. Typeable arrs => Level -> Seq arrs -> IO (UnscopedSeq arrs, Int)
+    traverseSeq lvl acc@(Seq seq)
+      = mfix $ \ ~(_, height) -> do
+          -- Compute stable name and enter it into the occurrence map
+          --
+          sn                         <- makeStableAST acc
+          heightIfRepeatedOccurrence <- enterOcc seqOccMap (StableASTName sn) height
+
+          traceLine (showPreSeqOp seq) $ do
+            let hash = show (hashStableName sn)
+            case heightIfRepeatedOccurrence of
+              Just height -> "REPEATED occurrence (sn = " ++ hash ++ "; height = " ++ show height ++ ")"
+              Nothing     -> "first occurrence (sn = " ++ hash ++ ")"
+
+          -- Reconstruct the computation in shared form.
+          --
+          -- In case of a repeated occurrence, the height comes from the occurrence map; otherwise
+          -- it is computed by the traversal function passed in 'newAcc'. See also 'enterOcc'.
+          --
+          -- NB: This function can only be used in the case alternatives below; outside of the
+          --     case we cannot discharge the 'Arrays arrs' constraint.
+          --
+          let reconstruct :: Typeable arrs
+                          => IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
+                          -> IO (UnscopedSeq arrs, Int)
+              reconstruct newSeq
+                = case heightIfRepeatedOccurrence of
+                    Just height | recoverSeqSharing config
+                      -> return (UnscopedSeq (SvarSharing (StableNameHeight sn height)), height)
+                    _ -> do (seq, height) <- newSeq
+                            return (UnscopedSeq (SeqSharing (StableNameHeight sn height) seq), height)
+
+          case seq of
+            ToSeq sl acc -> reconstruct $ do
+              (acc', h1) <- traverseAcc lvl acc
+              (sl' , h2) <- traverseExp lvl sl
+              return (ToSeq sl' acc', h1 `max` h2 + 1)
+            UseLazy  sl arr -> reconstruct $ do
+              (sl', h1) <- traverseExp lvl sl
+              return (UseLazy sl' arr, h1 + 1)
+            MapSeq afun s -> reconstruct $ do
+              (afun', h1) <- traverseAfun1 lvl afun
+              (s'   , h2) <- traverseSeq lvl s
+              return (MapSeq afun' s', h1 `max` h2 + 1)
+            ZipWithSeq afun s1 s2 -> reconstruct $ do
+              (afun', h1) <- traverseAfun2 lvl afun
+              (s1'  , h2) <- traverseSeq lvl s1
+              (s2'  , h3) <- traverseSeq lvl s2
+              return (ZipWithSeq afun' s1' s2', h1 `max` h2 `max` h3 + 1)
+            ScanSeq afun acc s -> reconstruct $ do
+              (afun', h1) <- traverseAfun2 lvl afun
+              (acc',  h2) <- traverseAcc lvl acc
+              (s'   , h3) <- traverseSeq lvl s
+              return (ScanSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
+            ScanSeqAct afun1 afun2 acc1 acc2 s -> reconstruct $ do
+              (afun1', h1) <- traverseAfun2 lvl afun1
+              (afun2', h2) <- traverseAfun2 lvl afun2
+              (acc1',  h3) <- traverseAcc lvl acc1
+              (acc2',  h4) <- traverseAcc lvl acc2
+              (s'   ,  h5) <- traverseSeq lvl s
+              return (ScanSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
+            FromSeq s -> reconstruct $ do
+              (s'   , h1) <- traverseSeq lvl s
+              return (FromSeq s', h1 + 1)
+            FoldSeq afun acc s -> reconstruct $ do
+              (afun', h1) <- traverseAfun2 lvl afun
+              (acc',  h2) <- traverseAcc lvl acc
+              (s'   , h3) <- traverseSeq lvl s
+              return (FoldSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
+            FoldSeqAct afun1 afun2 acc1 acc2 s -> reconstruct $ do
+              (afun1', h1) <- traverseAfun2 lvl afun1
+              (afun2', h2) <- traverseAfun2 lvl afun2
+              (acc1',  h3) <- traverseAcc lvl acc1
+              (acc2',  h4) <- traverseAcc lvl acc2
+              (s'   , h5) <- traverseSeq lvl s
+              return (FoldSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
+            FoldSeqFlatten afun acc s -> reconstruct $ do
+              (afun', h1) <- traverseAfun3 lvl afun
+              (acc',  h2) <- traverseAcc lvl acc
+              (s'   , h3) <- traverseSeq lvl s
+              return (FoldSeqFlatten afun' acc' s', h1 `max` h2 `max` h3 + 1)
+            Stuple t -> reconstruct $ do
+              (t', h1) <- traverseTup lvl t
+              return (Stuple t', h1 + 1)
+
+
 -- Type used to maintain how often each shared subterm, so far, occurred during a bottom-up sweep,
 -- as well as the relation between subterms. It is comprised of a list of terms and a graph giving
 -- their relation.
@@ -1615,7 +1807,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
 --   - A term may have a final occurrence count of only 1 iff it is either a free variable ('Atag'
 --     or 'Tag') or an array computation lifted out of an expression.
 --   - All 'Exp' node counts precede all 'Acc' node counts as we don't share 'Exp' nodes across 'Acc'
---     nodes.
+--     nodes. Similarly, all 'Seq' nodes precede 'Acc' nodes and 'Exp' nodes precede 'Seq' nodes.
 --
 -- We determine the subterm property by using the tree height in 'StableNameHeight'.  Trees get
 -- smaller towards the end of a 'NodeCounts' list.  The height of free variables ('Atag' or 'Tag')
@@ -1649,6 +1841,7 @@ instance Show NodeName where
 
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
+               | SeqNodeCount StableSharingSeq Int
                deriving Show
 
 -- Empty node counts
@@ -1680,6 +1873,18 @@ insertExpNode ssa@(StableSharingExp (StableNameHeight sn _) _) (subterms,g)
     hs = map nodeName subterms
     g' = Map.fromList $ (k, Set.empty) : [(h, Set.singleton k) | h <- hs]
 
+-- Insert an Seq node into the node counts, assuming that it is a superterm of the all the existing
+-- nodes.
+--
+-- TODO: Perform cycle detection here.
+insertSeqNode :: StableSharingSeq -> NodeCounts -> NodeCounts
+insertSeqNode ssa@(StableSharingSeq (StableNameHeight sn _) _) (subterms,g)
+  = ([SeqNodeCount ssa 1], g') +++ (subterms,g)
+  where
+    k  = NodeName sn
+    hs = map nodeName subterms
+    g' = Map.fromList $ (k, Set.empty) : [(h, Set.singleton k) | h <- hs]
+
 -- Remove nodes that aren't in the list from the graph.
 --
 -- RCE: This is no longer necessary when NDP is supported.
@@ -1691,6 +1896,7 @@ cleanCounts (ns, g) = (ns, Map.fromList $ [(h, Set.filter (flip elem hs) (g Map.
 nodeName :: NodeCount -> NodeName
 nodeName (AccNodeCount (StableSharingAcc (StableNameHeight sn _) _) _) = NodeName sn
 nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeName sn
+nodeName (SeqNodeCount (StableSharingSeq (StableNameHeight sn _) _) _) = NodeName sn
 
 -- Combine node counts that belong to the same node.
 --
@@ -1713,9 +1919,21 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
       | se1 == se2          = ExpNodeCount (se1 `pickNoneVar` se2) (count1 + count2) : ys'
       | se1 `higherSSE` se2 = x : ys
       | otherwise           = y : insert x ys'
+    insert x@(SeqNodeCount se1 count1) ys@(y@(SeqNodeCount se2 count2) : ys')
+      | se1 == se2          = SeqNodeCount (se1 `pickNoneSvar` se2) (count1 + count2) : ys'
+      | se1 `higherSSS` se2 = x : ys
+      | otherwise           = y : insert x ys'
     insert x@(AccNodeCount _ _) (y@(ExpNodeCount _ _) : ys')
       = y : insert x ys'
     insert x@(ExpNodeCount _ _) (y@(AccNodeCount _ _) : ys')
+      = x : insert y ys'
+    insert x@(SeqNodeCount _ _) (y@(ExpNodeCount _ _) : ys')
+      = y : insert x ys'
+    insert x@(ExpNodeCount _ _) (y@(SeqNodeCount _ _) : ys')
+      = x : insert y ys'
+    insert x@(AccNodeCount _ _) (y@(SeqNodeCount _ _) : ys')
+      = y : insert x ys'
+    insert x@(SeqNodeCount _ _) (y@(AccNodeCount _ _) : ys')
       = x : insert y ys'
 
     (StableSharingAcc _ (AvarSharing _)) `pickNoneAvar` sa2  = sa2
@@ -1723,6 +1941,9 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
 
     (StableSharingExp _ (VarSharing _))  `pickNoneVar`  sa2  = sa2
     sa1                                  `pickNoneVar`  _sa2 = sa1
+
+    (StableSharingSeq _ (SvarSharing _)) `pickNoneSvar` sa2  = sa2
+    sa1                                  `pickNoneSvar` _sa2 = sa1
 
 -- Build an initial environment for the tag values given in the first argument for traversing an
 -- array expression.  The 'StableSharingAcc's for all tags /actually used/ in the expressions are
@@ -1748,7 +1969,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
           $ "Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa
 
         noStableSharing :: StableSharingAcc
-        noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
+        noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc seq exp ())
 
     showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++
                                                        showPreAccOp acc
@@ -1779,7 +2000,7 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
               ("Encountered a node that is not a plain 'Tag'\n  " ++ showSE se)
 
         noStableSharing :: StableSharingExp
-        noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
+        noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc seq exp ())
 
     showSE (StableSharingExp _ (ExpSharing sn exp)) = show (hashStableNameHeight sn) ++ ": " ++
                                                       showPreExpOp exp
@@ -1817,7 +2038,7 @@ determineScopesAcc
     -> (ScopedAcc a, [StableSharingAcc])
 determineScopesAcc config fvs accOccMap rootAcc
   = let (sharingAcc, (counts, _)) = determineScopesSharingAcc config accOccMap rootAcc
-        unboundTrees         = filter (not . isFreeVar) counts
+        unboundTrees              = filter (not . isFreeVar) counts
     in
     if all isFreeVar counts
        then (sharingAcc, buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- counts])
@@ -1937,14 +2158,14 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                      in
                                      reconstruct (Stencil2 st' bnd1 acc1' bnd2 acc2')
                                        (accCount1 +++ accCount2 +++ accCount3)
-          Sequence seq            -> let
-                                       (seq', accCount1) = scopesSequence seq
+          Collect seq             -> let
+                                       (seq', accCount1) = scopesSeq seq
                                      in
-                                     reconstruct (Sequence seq') accCount1
+                                     reconstruct (Collect seq') accCount1
 
       where
         travEA :: Arrays arrs
-               => (ScopedExp e -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedExp arrs)
+               => (ScopedExp e -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                -> RootExp e
                -> UnscopedAcc arrs'
                -> (ScopedAcc arrs, NodeCounts)
@@ -1955,7 +2176,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         travF2A :: (Elt a, Elt b, Arrays arrs)
                 => ((Exp a -> Exp b -> ScopedExp c) -> ScopedAcc arrs'
-                    -> PreAcc ScopedAcc ScopedExp arrs)
+                    -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                 -> (Exp a -> Exp b -> RootExp c)
                 -> UnscopedAcc arrs'
                 -> (ScopedAcc arrs, NodeCounts)
@@ -1966,7 +2187,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         travF2EA :: (Elt a, Elt b, Arrays arrs)
                  => ((Exp a -> Exp b -> ScopedExp c) -> ScopedExp e
-                     -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedExp arrs)
+                     -> ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                  -> (Exp a -> Exp b -> RootExp c)
                  -> RootExp e
                  -> UnscopedAcc arrs'
@@ -1979,7 +2200,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
 
         travF2A2 :: (Elt a, Elt b, Arrays arrs)
                  => ((Exp a -> Exp b -> ScopedExp c) -> ScopedAcc arrs1
-                     -> ScopedAcc arrs2 -> PreAcc ScopedAcc ScopedExp arrs)
+                     -> ScopedAcc arrs2 -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
                  -> (Exp a -> Exp b -> RootExp c)
                  -> UnscopedAcc arrs1
                  -> UnscopedAcc arrs2
@@ -2000,7 +2221,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                     (SnocAtup tup' a', accCountT +++ accCountA)
 
         travA :: Arrays arrs
-              => (ScopedAcc arrs' -> PreAcc ScopedAcc ScopedExp arrs)
+              => (ScopedAcc arrs' -> PreAcc ScopedAcc ScopedSeq ScopedExp arrs)
               -> UnscopedAcc arrs'
               -> (ScopedAcc arrs, NodeCounts)
         travA c acc = reconstruct (c acc') accCount
@@ -2025,7 +2246,7 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         -- node.
         --
         reconstruct :: Arrays arrs
-                    => PreAcc ScopedAcc ScopedExp arrs -> NodeCounts
+                    => PreAcc ScopedAcc ScopedSeq ScopedExp arrs -> NodeCounts
                     -> (ScopedAcc arrs, NodeCounts)
         reconstruct newAcc@(Atag _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
@@ -2085,68 +2306,10 @@ determineScopesSharingAcc config accOccMap = scopesAcc
               in    isCompleted nc
                  && all (bindable !!) unbound
             isBindable _ _ (ExpNodeCount _ _) = False
+            isBindable _ _ (SeqNodeCount _ _) = False
 
-    scopesSequence :: forall senv arrs. PreSequence UnscopedAcc RootExp senv arrs -> (PreSequence ScopedAcc ScopedExp senv arrs, NodeCounts)
-    scopesSequence s =
-      case s of
-        EmptySeq      -> (EmptySeq, noNodeCounts)
-        Producer p s' -> let
-                           (p',  accCount1) = scopesP p
-                           (s'', accCount2) = scopesSequence s'
-                         in (Producer p' s'', accCount1 +++ accCount2)
-        Consumer c s' -> let
-                           (c',  accCount1) = scopesC c
-                           (s'', accCount2) = scopesSequence s'
-                         in (Consumer c' s'', accCount1 +++ accCount2)
-
-    scopesP :: Producer UnscopedAcc RootExp senv a -> (Producer ScopedAcc ScopedExp senv a, NodeCounts)
-    scopesP p =
-      case p of
-        ToSeq sl acc   -> let
-                            (acc', accCount1) = scopesAcc acc
-                            (sl',  accCount2) = scopesExp sl
-                          in (ToSeq sl' acc', accCount1 +++ accCount2)
-        UseLazy sl arr -> let
-                            (sl',  accCount1) = scopesExp sl
-                          in (UseLazy sl' arr, accCount1)
-        MapSeq     afun x   -> let
-                                 (afun', accCount1) = scopesAfun1 afun
-                               in (MapSeq afun' x, accCount1)
-        ZipWithSeq afun x y -> let
-                                 (afun', accCount1) = scopesAfun2 afun
-                               in (ZipWithSeq afun' x y, accCount1)
-        ScanSeq afun acc x  -> let
-                                 (afun', accCount1) = scopesAfun2 afun
-                                 (acc' , accCount2) = scopesAcc acc
-                               in (ScanSeq afun' acc' x, accCount1 +++ accCount2)
-        ScanSeqAct afun1 afun2 acc1 acc2 x -> 
-                               let
-                                 (afun1', accCount1) = scopesAfun2 afun1
-                                 (afun2', accCount2) = scopesAfun2 afun2
-                                 (acc1' , accCount3) = scopesAcc acc1
-                                 (acc2' , accCount4) = scopesAcc acc2
-                               in (ScanSeqAct afun1' afun2' acc1' acc2' x, accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-
-    scopesC :: Consumer UnscopedAcc senv a -> (Consumer ScopedAcc senv a, NodeCounts)
-    scopesC c =
-      case c of
-        FromSeq x -> (FromSeq x, noNodeCounts)
-        FoldSeq afun acc x -> let
-                                (afun', accCount1) = scopesAfun2 afun
-                                (acc' , accCount2) = scopesAcc acc
-                              in (FoldSeq afun' acc' x, accCount1 +++ accCount2)
-        FoldSeqAct afun1 afun2 acc1 acc2 x -> 
-                              let
-                                (afun1', accCount1) = scopesAfun2 afun1
-                                (afun2', accCount2) = scopesAfun2 afun2
-                                (acc1' , accCount3) = scopesAcc acc1
-                                (acc2' , accCount4) = scopesAcc acc2
-                              in (FoldSeqAct afun1' afun2' acc1' acc2' x, accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-        FoldSeqFlatten afun acc x -> 
-                              let
-                                (afun', accCount1) = scopesAfun3 afun
-                                (acc' , accCount2) = scopesAcc acc
-                              in (FoldSeqFlatten afun' acc' x, accCount1 +++ accCount2)
+    scopesSeq :: forall arrs. RootSeq arrs -> (ScopedSeq arrs, NodeCounts)
+    scopesSeq = determineScopesSeq config accOccMap
 
     scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
@@ -2158,28 +2321,6 @@ determineScopesSharingAcc config accOccMap = scopesAcc
     scopesAfun1 f = (const (ScopedAcc ssa body'), (counts',graph))
       where
         body@(UnscopedAcc fvs _) = f undefined
-        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
-        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
-
-        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
-        isBoundHere _                                                             = False
-
-    scopesAfun2 :: (Arrays a1, Arrays a2) => (Acc a1 -> Acc a2 -> UnscopedAcc a3) -> (Acc a1 -> Acc a2 -> ScopedAcc a3, NodeCounts)
-    scopesAfun2 f = (\ _ _ -> (ScopedAcc ssa body'), (counts',graph))
-      where
-        body@(UnscopedAcc fvs _) = f undefined undefined
-        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
-        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
-
-        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
-        isBoundHere _                                                             = False
-
-    scopesAfun3 :: (Arrays a1, Arrays a2, Arrays a3) => (Acc a1 -> Acc a2 -> Acc a3 -> UnscopedAcc a4) -> (Acc a1 -> Acc a2 -> Acc a3 -> ScopedAcc a4, NodeCounts)
-    scopesAfun3 f = (\ _ _ _ -> (ScopedAcc ssa body'), (counts',graph))
-      where
-        body@(UnscopedAcc fvs _) = f undefined undefined undefined
         ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
         ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
         (freeCounts, counts') = partition isBoundHere counts
@@ -2238,10 +2379,10 @@ determineScopesExp
 determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
   = let
         ((ScopedExp [] expWithScopes), (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
-        (expCounts, accCounts)          = break isAccNodeCount nodeCounts
+        (expCounts, accCounts)          = partition isExpNodeCount nodeCounts
 
-        isAccNodeCount AccNodeCount{}   = True
-        isAccNodeCount _                = False
+        isExpNodeCount ExpNodeCount{}   = True
+        isExpNodeCount _                = False
     in
     (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, cleanCounts (accCounts,graph))
 
@@ -2315,13 +2456,13 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                                   in
                                   (SnocTup tup' e', accCountT +++ accCountE)
 
-        travE1 :: (ScopedExp a -> PreExp ScopedAcc ScopedExp t) -> UnscopedExp a
+        travE1 :: (ScopedExp a -> PreExp ScopedAcc ScopedSeq ScopedExp t) -> UnscopedExp a
                -> (ScopedExp t, NodeCounts)
         travE1 c e = reconstruct (c e') accCount
           where
             (e', accCount) = scopesExp e
 
-        travE2 :: (ScopedExp a -> ScopedExp b -> PreExp ScopedAcc ScopedExp t)
+        travE2 :: (ScopedExp a -> ScopedExp b -> PreExp ScopedAcc ScopedSeq ScopedExp t)
                -> UnscopedExp a
                -> UnscopedExp b
                -> (ScopedExp t, NodeCounts)
@@ -2330,7 +2471,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (e1', accCount1) = scopesExp e1
             (e2', accCount2) = scopesExp e2
 
-        travE3 :: (ScopedExp a -> ScopedExp b -> ScopedExp c -> PreExp ScopedAcc ScopedExp t)
+        travE3 :: (ScopedExp a -> ScopedExp b -> ScopedExp c -> PreExp ScopedAcc ScopedSeq ScopedExp t)
                -> UnscopedExp a
                -> UnscopedExp b
                -> UnscopedExp c
@@ -2341,13 +2482,13 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (e2', accCount2) = scopesExp e2
             (e3', accCount3) = scopesExp e3
 
-        travA :: (ScopedAcc a -> PreExp ScopedAcc ScopedExp t) -> UnscopedAcc a
+        travA :: (ScopedAcc a -> PreExp ScopedAcc ScopedSeq ScopedExp t) -> UnscopedAcc a
               -> (ScopedExp t, NodeCounts)
         travA c acc = maybeFloatOutAcc c acc' accCount
           where
             (acc', accCount)  = scopesAcc acc
 
-        travAE :: (ScopedAcc a -> ScopedExp b -> PreExp ScopedAcc ScopedExp t)
+        travAE :: (ScopedAcc a -> ScopedExp b -> PreExp ScopedAcc ScopedSeq ScopedExp t)
                -> UnscopedAcc a
                -> UnscopedExp b
                -> (ScopedExp t, NodeCounts)
@@ -2356,7 +2497,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
             (acc', accCountA) = scopesAcc acc
             (e'  , accCountE) = scopesExp e
 
-        maybeFloatOutAcc :: (ScopedAcc a -> PreExp ScopedAcc ScopedExp t)
+        maybeFloatOutAcc :: (ScopedAcc a -> PreExp ScopedAcc ScopedSeq ScopedExp t)
                          -> ScopedAcc a
                          -> NodeCounts
                          -> (ScopedExp t, NodeCounts)
@@ -2368,7 +2509,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           where
              (var, stableAcc) = abstract acc (\(ScopedAcc _ s) -> s)
 
-        abstract :: ScopedAcc a -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedExp a)
+        abstract :: ScopedAcc a -> (ScopedAcc a -> SharingAcc ScopedAcc ScopedSeq ScopedExp a)
                  -> (ScopedAcc a, StableSharingAcc)
         abstract (ScopedAcc _ (AvarSharing _))       _      = $internalError "sharingAccToVar" "AvarSharing"
         abstract (ScopedAcc ssa (AletSharing sa acc))  lets = abstract acc (lets . (\x -> ScopedAcc ssa (AletSharing sa x)))
@@ -2391,7 +2532,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         -- In either case, any completed 'NodeCounts' are injected as bindings using 'LetSharing'
         -- node.
         --
-        reconstruct :: PreExp ScopedAcc ScopedExp t -> NodeCounts
+        reconstruct :: PreExp ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
                     -> (ScopedExp t, NodeCounts)
         reconstruct newExp@(Tag _) _subCount
               -- free variable => replace by a sharing variable regardless of the number of
@@ -2451,7 +2592,163 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
               in    isCompleted nc
                  && all (bindable !!) unbound
             isBindable _ _ (AccNodeCount _ _) = False
+            isBindable _ _ (SeqNodeCount _ _) = False
 
+determineScopesSeq
+    :: Config
+    -> OccMap Acc
+    -> RootSeq t
+    -> (ScopedSeq t, NodeCounts)          -- Root (closed) expression plus Acc node counts
+determineScopesSeq config accOccMap (RootSeq seqOccMap seq)
+  = let
+        (ScopedSeq seqWithScopes, (nodeCounts,graph)) = determineScopesSharingSeq config accOccMap seqOccMap seq
+        binds      = [s | SeqNodeCount s _ <- nodeCounts]
+        lets       = foldl (flip (.)) id . map (\x y -> SletSharing x (ScopedSeq y)) $ binds
+        sharingSeq = lets seqWithScopes
+        newCounts  = filter (not . isSeqCount) nodeCounts
+        isSeqCount SeqNodeCount{} = True
+        isSeqCount _              = False
+    in
+    (ScopedSeq sharingSeq, cleanCounts (newCounts,graph))
+
+determineScopesSharingSeq
+  :: Config
+  -> OccMap Acc
+  -> OccMap Seq
+  -> UnscopedSeq t
+  -> (ScopedSeq t, NodeCounts)
+determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
+  where
+    scopesAcc :: UnscopedAcc a -> (ScopedAcc a, NodeCounts)
+    scopesAcc = determineScopesSharingAcc config accOccMap
+
+    scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
+    scopesExp = determineScopesExp config accOccMap
+
+    -- The lambda bound variable is at this point already irrelevant; for details, see
+    -- Note [Traversing functions and side effects]
+    --
+    scopesAfun1 :: Arrays a1 => (Acc a1 -> UnscopedAcc a2) -> (Acc a1 -> ScopedAcc a2, NodeCounts)
+    scopesAfun1 f = (const (ScopedAcc ssa body'), (counts',graph))
+      where
+        body@(UnscopedAcc fvs _) = f undefined
+        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
+        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        (freeCounts, counts') = partition isBoundHere counts
+
+        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
+        isBoundHere _                                                             = False
+
+    scopesAfun2 :: (Arrays a1, Arrays a2) => (Acc a1 -> Acc a2 -> UnscopedAcc a3) -> (Acc a1 -> Acc a2 -> ScopedAcc a3, NodeCounts)
+    scopesAfun2 f = (\ _ _ -> (ScopedAcc ssa body'), (counts',graph))
+      where
+        body@(UnscopedAcc fvs _) = f undefined undefined
+        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
+        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        (freeCounts, counts') = partition isBoundHere counts
+
+        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
+        isBoundHere _                                                             = False
+
+    scopesAfun3 :: (Arrays a1, Arrays a2, Arrays a3) => (Acc a1 -> Acc a2 -> Acc a3 -> UnscopedAcc a4) -> (Acc a1 -> Acc a2 -> Acc a3 -> ScopedAcc a4, NodeCounts)
+    scopesAfun3 f = (\ _ _ _ -> (ScopedAcc ssa body'), (counts',graph))
+      where
+        body@(UnscopedAcc fvs _) = f undefined undefined undefined
+        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
+        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        (freeCounts, counts') = partition isBoundHere counts
+
+        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
+        isBoundHere _                                                             = False
+
+    scopesTup :: Atuple UnscopedSeq tup -> (Atuple ScopedSeq tup, NodeCounts)
+    scopesTup NilAtup          = (NilAtup, noNodeCounts)
+    scopesTup (SnocAtup tup s) = let
+                                   (tup', accCountT) = scopesTup tup
+                                   (s'  , accCountS) = scopesSeq s
+                                 in
+                                 (SnocAtup tup' s', accCountT +++ accCountS)
+
+    scopesSeq :: forall t. UnscopedSeq t -> (ScopedSeq t, NodeCounts)
+    scopesSeq (UnscopedSeq (SletSharing _ _))
+      = $internalError "determineScopesSharingSeq: scopesSeq" "unexpected 'LetSharing'"
+    scopesSeq (UnscopedSeq (SvarSharing sn))
+      = (ScopedSeq (SvarSharing sn), StableSharingSeq sn (SvarSharing sn) `insertSeqNode` noNodeCounts)
+
+    scopesSeq (UnscopedSeq (SeqSharing sn s)) =
+      case s of
+        ToSeq sl acc   -> let
+                            (acc', accCount1) = scopesAcc acc
+                            (sl',  accCount2) = scopesExp sl
+                          in producer (ToSeq sl' acc') (accCount1 +++ accCount2)
+        UseLazy sl arr -> let
+                            (sl',  accCount1) = scopesExp sl
+                          in producer (UseLazy sl' arr) (accCount1)
+        MapSeq     afun s'  -> let
+                                 (afun', accCount1) = scopesAfun1 afun
+                                 (s''  , accCount2) = scopesSeq s'
+                               in producer (MapSeq afun' s'') (accCount1 +++ accCount2)
+        ZipWithSeq afun s1 s2 -> let
+                                 (afun', accCount1) = scopesAfun2 afun
+                                 (s1'  , accCount2) = scopesSeq s1
+                                 (s2'  , accCount3) = scopesSeq s2
+                               in producer (ZipWithSeq afun' s1' s2') (accCount1 +++ accCount2 +++ accCount3)
+        ScanSeq afun acc s' -> let
+                                 (afun', accCount1) = scopesAfun2 afun
+                                 (acc' , accCount2) = scopesAcc acc
+                                 (s''  , accCount3) = scopesSeq s'
+                               in producer (ScanSeq afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
+        ScanSeqAct afun1 afun2 acc1 acc2 s' ->
+                               let
+                                 (afun1', accCount1) = scopesAfun2 afun1
+                                 (afun2', accCount2) = scopesAfun2 afun2
+                                 (acc1' , accCount3) = scopesAcc acc1
+                                 (acc2' , accCount4) = scopesAcc acc2
+                                 (s''   , accCount5) = scopesSeq s'
+                               in producer (ScanSeqAct afun1' afun2' acc1' acc2' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
+        FromSeq s'          -> let
+                                 (s'', accCount1) = scopesSeq s'
+                               in consumer (FromSeq s'') (accCount1)
+        FoldSeq afun acc s' -> let
+                                 (afun', accCount1) = scopesAfun2 afun
+                                 (acc' , accCount2) = scopesAcc acc
+                                 (s''  , accCount3) = scopesSeq s'
+                               in consumer (FoldSeq afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
+        FoldSeqAct afun1 afun2 acc1 acc2 s' ->
+                               let
+                                 (afun1', accCount1) = scopesAfun2 afun1
+                                 (afun2', accCount2) = scopesAfun2 afun2
+                                 (acc1' , accCount3) = scopesAcc acc1
+                                 (acc2' , accCount4) = scopesAcc acc2
+                                 (s''   , accCount5) = scopesSeq s'
+                               in consumer (FoldSeqAct afun1' afun2' acc1' acc2' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
+        FoldSeqFlatten afun acc s' ->
+                               let
+                                 (afun', accCount1) = scopesAfun3 afun
+                                 (acc' , accCount2) = scopesAcc acc
+                                 (s''  , accCount3) = scopesSeq s'
+                               in consumer (FoldSeqFlatten afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
+        Stuple tup          -> let
+                                 (tup', accCount1) = scopesTup tup
+                               in consumer (Stuple tup') accCount1
+      where
+        -- All producers must be replaced by sharing variables
+        --
+        producer :: PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+                 -> (ScopedSeq t, NodeCounts)
+        producer newSeq subCount
+          = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount
+            in
+            tracePure "Producer" (show allCount)
+            (ScopedSeq (SvarSharing sn), allCount)
+
+        -- Consumers cannot be shared.
+        --
+        consumer :: PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+                 -> (ScopedSeq t, NodeCounts)
+        consumer newSeq subCount
+          = tracePure "Consumer" (show subCount)
+            (ScopedSeq (SeqSharing sn newSeq), subCount)
 
 -- |Recover sharing information and annotate the HOAS AST with variable and let binding
 -- annotations.  The first argument determines whether array computations are floated out of

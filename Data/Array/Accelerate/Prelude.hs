@@ -1460,6 +1460,12 @@ instance Lift Acc (Acc a) where
   type Plain (Acc a) = a
   lift = id
 
+-- Instance for Accelerate sequence computations
+
+instance Lift Seq (Seq a) where
+  type Plain (Seq a) = a
+  lift = id
+
 -- Instances for Arrays class
 
 --instance Lift Acc () where
@@ -1553,6 +1559,62 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
   unlift = unatup9
 
+
+-- Instances for Seq
+
+instance (Lift Seq a, Lift Seq b, Arrays (Plain a), Arrays (Plain b)) => Lift Seq (a, b) where
+  type Plain (a, b) = (Plain a, Plain b)
+  lift (x, y) = stup2 (lift x, lift y)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c))
+  => Lift Seq (a, b, c) where
+  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
+  lift (x, y, z) = stup3 (lift x, lift y, lift z)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d))
+  => Lift Seq (a, b, c, d) where
+  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
+  lift (x, y, z, u) = stup4 (lift x, lift y, lift z, lift u)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e))
+  => Lift Seq (a, b, c, d, e) where
+  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
+  lift (x, y, z, u, v) = stup5 (lift x, lift y, lift z, lift u, lift v)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f))
+  => Lift Seq (a, b, c, d, e, f) where
+  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
+  lift (x, y, z, u, v, w) = stup6 (lift x, lift y, lift z, lift u, lift v, lift w)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g))
+  => Lift Seq (a, b, c, d, e, f, g) where
+  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
+  lift (x, y, z, u, v, w, r) = stup7 (lift x, lift y, lift z, lift u, lift v, lift w, lift r)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g, Lift Seq h,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g), Arrays (Plain h))
+  => Lift Seq (a, b, c, d, e, f, g, h) where
+  type Plain (a, b, c, d, e, f, g, h)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
+  lift (x, y, z, u, v, w, r, s)
+    = stup8 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
+          Lift Seq f, Lift Seq g, Lift Seq h, Lift Seq i,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
+          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i))
+  => Lift Seq (a, b, c, d, e, f, g, h, i) where
+  type Plain (a, b, c, d, e, f, g, h, i)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
+  lift (x, y, z, u, v, w, r, s, t)
+    = stup9 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s, lift t)
 
 
 -- |Lift a unary function into 'Exp'.

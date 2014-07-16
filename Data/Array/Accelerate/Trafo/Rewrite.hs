@@ -41,6 +41,10 @@ convertSegments = cvtA
     cvtF :: Fun aenv t -> Fun aenv t
     cvtF = id
 
+    cvtCT :: Atuple (Consumer OpenAcc senv aenv) t -> Atuple (Consumer OpenAcc senv aenv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
     a0 :: Arrays a => OpenAcc (aenv, a) a
     a0 = OpenAcc (Avar ZeroIdx)
 
@@ -59,9 +63,8 @@ convertSegments = cvtA
     cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence OpenAcc aenv senv a
     cvtSeq s =
       case s of
-        EmptySeq     -> EmptySeq
         Producer p s -> Producer (cvtP p) (cvtSeq s)
-        Consumer c s -> Consumer (cvtC c) (cvtSeq s)
+        Consumer c   -> Consumer (cvtC c)
 
     cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
     cvtP p =
@@ -80,6 +83,7 @@ convertSegments = cvtA
         FoldSeq f a x        -> FoldSeq (cvtAfun f) (cvtA a) x
         FoldSeqAct f g a b x -> FoldSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
+        Stuple t             -> Stuple (cvtCT t)
 
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
