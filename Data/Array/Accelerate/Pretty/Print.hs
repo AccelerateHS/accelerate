@@ -23,7 +23,7 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreExp,  prettyExp,
   prettyPreAfun, prettyAfun,
   prettyPreFun,  prettyFun,
-  prettyPrim,
+  prettyPrim, prettySequence,
   noParens
 
 ) where

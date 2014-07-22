@@ -27,7 +27,8 @@ module Data.Array.Accelerate.Trafo.Sharing (
 
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAfun, Afunction, AfunctionR,
-  convertExp, convertFun,  Function,  FunctionR
+  convertExp, convertFun,  Function,  FunctionR,
+  convertSeq
 
 ) where
 
@@ -305,6 +306,23 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (convertBoundary bndy2)
                         (cvtA acc2)
       Collect seq -> AST.Sequence (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+
+-- Sequence expressions
+-- ------------------
+
+-- | Convert a closed sequence expression to de Bruijn form while incorporating
+-- sharing information.
+--
+convertSeq
+    :: Arrays s
+    => Bool             -- ^ recover sharing of sequence computations ?
+    -> Seq s            -- ^ computation to be converted
+    -> AST.Sequence s
+convertSeq shareSeq seq
+  = let config = Config True True shareSeq True
+        (sharingSeq, initialEnv) = recoverSharingSeq config seq
+    in
+    convertSharingSeq config EmptyLayout EmptyLayout [] initialEnv sharingSeq
 
 convertSharingSeq
     :: forall aenv senv arrs. Arrays arrs
@@ -2805,6 +2823,27 @@ recoverSharingExp config lvl fvar exp
           determineScopesExp config accOccMap rootExp
     in
     (ScopedExp [] sharingExp, sse)
+
+
+recoverSharingSeq
+    :: Typeable e
+    => Config
+    -> Seq e
+    -> (ScopedSeq e, [StableSharingSeq])
+{-# NOINLINE recoverSharingSeq #-}
+recoverSharingSeq config seq
+  = let
+        (rootSeq, accOccMap) = unsafePerformIO $ do
+          accOccMap       <- newASTHashTable
+          (seq', _)       <- makeOccMapRootSeq config accOccMap 0 seq
+          frozenAccOccMap <- freezeOccMap accOccMap
+
+          return (seq', frozenAccOccMap)
+
+        (ScopedSeq sharingSeq, (ns, _)) =
+          determineScopesSeq config accOccMap rootSeq
+    in
+    (ScopedSeq sharingSeq, [a | SeqNodeCount a _ <- ns])
 
 
 -- Debugging

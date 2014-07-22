@@ -141,6 +141,13 @@ convertFun
   = Rewrite.simplify
   . Sharing.convertFun (recoverExpSharing phases)
 
+-- | Convert a closed sequence computation, incorporating sharing observation and
+--   optimisation.
+--
+convertSeq :: Arrays s => Seq s -> AST.Sequence s
+convertSeq
+  = Sharing.convertSeq (recoverSeqSharing phases)
+
 
 -- Pretty printing
 -- ---------------
@@ -157,6 +164,8 @@ instance Elt e => Show (Exp e) where
 instance Function (Exp a -> f) => Show (Exp a -> f) where
   show = withSimplStats . show . convertFun
 
+instance Arrays a => Show (Seq a) where
+  show = withSimplStats . show . convertSeq
 
 -- Debugging
 -- ---------
