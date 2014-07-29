@@ -127,7 +127,7 @@ if [ "$ACCELERATE_INSTALL_ONLY" != "1" ] && [ "$NOTEST" != "1" ]; then
 
   # (1) Test the interpreters:
   for TRGT in " test-accelerate-backend-kit-unittests test-accelerate-backend-kit-simple-interp  test-accelerate-main-interp"; do
-    test_dir $TOP/accelerate-backend-kit/backend-kit $TRGT --test-option="--threads=8"
+    test_dir $TOP/accelerate-backend-kit/backend-kit $TRGT --test-option="--threads=8" --test-option="--jxml=testresults.xml"
   done
 
   # (2) Test the C/Cilk backends
