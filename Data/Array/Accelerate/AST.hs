@@ -87,7 +87,7 @@ module Data.Array.Accelerate.AST (
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSequence(..),
+  PreOpenSequence(..), Sequence,
   Producer(..), Consumer(..),
 
   -- * Scalar expressions
@@ -613,6 +613,10 @@ data Consumer acc aenv senv a where
   Stuple :: (Arrays a, IsAtuple a)
          => Atuple (Consumer acc aenv senv) (TupleRepr a)
          -> Consumer acc aenv senv a
+
+-- |Closed sequence computation
+--
+type Sequence = PreOpenSequence OpenAcc () ()
 
 -- |Closed array expression aka an array program
 --
