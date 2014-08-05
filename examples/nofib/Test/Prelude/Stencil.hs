@@ -14,8 +14,10 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
+import Test.HUnit                                       ((@?=))
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
+import Test.Framework.Providers.HUnit
 
 import Config
 import ParseArgs
@@ -49,6 +51,7 @@ test_stencil opt = testGroup "stencil" $ catMaybes
   , testElt configWord64 (undefined :: Word64)
   , testElt configFloat  (undefined :: Float)
   , testElt configDouble (undefined :: Double)
+  , testBoundary
   ]
   where
     backend = get configBackend opt
@@ -160,6 +163,15 @@ test_stencil opt = testGroup "stencil" $ catMaybes
           in
           stencil2DRef pattern' constant xs
 
+    -- If the constant boundary is not properly implemented,
+    -- then this will lead to a segmentation fault.
+    testBoundary :: Maybe Test
+    testBoundary = Just . testCase "boundary segfault" $ do
+      let f ((x,_,_,_,_),_,_,_,_) = x
+          b = Constant 0
+          s = stencil (f::Stencil5x5 Int -> Exp Int) b (A.fill (lift (Z:.1:.1000000 :: DIM2)) (0::Exp Int))
+          a = run backend s
+      indexArray a (Z:.0:.0) @?= 0
 
 --
 -- Reference implementation
