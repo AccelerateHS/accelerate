@@ -904,10 +904,10 @@ evalPrj (SuccTupIdx idx) (tup, !_) = evalPrj idx tup
 -- -----------------------------------
 
 evalLAnd :: (Bool, Bool) -> Bool
-evalLAnd (!x, !y) = x && y
+evalLAnd (x, y) = x && y
 
 evalLOr  :: (Bool, Bool) -> Bool
-evalLOr (!x, !y) = x || y
+evalLOr (x, y) = x || y
 
 evalLNot :: Bool -> Bool
 evalLNot = not
