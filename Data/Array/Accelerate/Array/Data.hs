@@ -39,7 +39,7 @@ module Data.Array.Accelerate.Array.Data (
   fstArrayData, sndArrayData, pairArrayData,
 
   -- * Type macros
-  HTYPE_INT, HTYPE_WORD, HTYPE_LONG, HTYPE_UNSIGNED_LONG,
+  HTYPE_INT, HTYPE_WORD, HTYPE_LONG, HTYPE_UNSIGNED_LONG, HTYPE_CCHAR,
 
 ) where
 
@@ -95,6 +95,11 @@ $( runQ [d| type HTYPE_UNSIGNED_LONG = $(
                 64 -> [t| Word64 |]
                 _  -> error "I don't know what architecture I am" ) |] )
 
+$( runQ [d| type HTYPE_CCHAR = $(
+              case isSigned (undefined::CChar) of
+                True  -> [t| Int8  |]
+                False -> [t| Word8 |] ) |] )
+
 
 -- Array representation
 -- --------------------
@@ -136,7 +141,7 @@ data instance GArrayData ba CFloat  = AD_CFloat  (ba Float)
 data instance GArrayData ba CDouble = AD_CDouble (ba Double)
 data instance GArrayData ba Bool    = AD_Bool    (ba Word8)
 data instance GArrayData ba Char    = AD_Char    (ba Char)
-data instance GArrayData ba CChar   = AD_CChar   (ba Int8)
+data instance GArrayData ba CChar   = AD_CChar   (ba HTYPE_CCHAR)
 data instance GArrayData ba CSChar  = AD_CSChar  (ba Int8)
 data instance GArrayData ba CUChar  = AD_CUChar  (ba Word8)
 data instance GArrayData ba (a, b)  = AD_Pair (GArrayData ba a)
@@ -455,7 +460,7 @@ instance ArrayElt Char where
   arrayElt                              = ArrayEltRchar
 
 instance ArrayElt CChar where
-  type ArrayPtrs CChar = Ptr Int8
+  type ArrayPtrs CChar = Ptr HTYPE_CCHAR
   unsafeIndexArrayData (AD_CChar ba) i   = CChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CChar ba)          = storableArrayPtr ba
   newArrayData size                      = liftM AD_CChar $ unsafeNewArray_ (0,size-1)
