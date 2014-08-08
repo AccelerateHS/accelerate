@@ -952,107 +952,114 @@ filter p arr
 --   For example:
 --
 --  > input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
---  > map    = [1, 3, 7, 2, 5, 3]
+--  > from   = [1, 3, 7, 2, 5, 3]
 --  >
 --  > output = [9, 4, 1, 6, 2, 4]
 --
-gather :: (Elt e)
-       => Acc (Vector Int)      -- ^map
+gather :: Elt e
+       => Acc (Vector Int)      -- ^index mapping
        -> Acc (Vector e)        -- ^input
        -> Acc (Vector e)        -- ^output
-gather mapV inputV = backpermute (shape mapV) bpF inputV
+gather from input = backpermute (shape from) bpF input
   where
-    bpF ix = lift (Z :. (mapV ! ix))
+    bpF ix      = index1 (from ! ix)
 
 
 -- | Conditionally copy elements from source array to destination array according
---   to a map. This is a backpermute operation where a 'map' vector encodes the
---   output to input index mapping. In addition, there is a 'mask' vector, and an
---   associated predication function, that specifies whether an element will be
---   copied. If not copied, the output array assumes the default vector's value.
+--   to an index mapping. This is a backpermute operation where a 'from' vector
+--   encodes the output to input index mapping. In addition, there is a 'mask'
+--   vector, and an associated predication function, that specifies whether an
+--   element will be copied. If not copied, the output array assumes the default
+--   vector's value.
 --
 --   For example:
 --
 --  > default = [6, 6, 6, 6, 6, 6]
---  > map     = [1, 3, 7, 2, 5, 3]
+--  > from    = [1, 3, 7, 2, 5, 3]
 --  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (> 4)
+--  > pred    = (>* 4)
 --  > input   = [1, 9, 6, 4, 4, 2, 0, 1, 2]
 --  >
 --  > output  = [6, 6, 1, 6, 2, 4]
 --
 gatherIf :: (Elt e, Elt e')
-         => Acc (Vector Int)    -- ^map
+         => Acc (Vector Int)    -- ^index mapping
          -> Acc (Vector e)      -- ^mask
          -> (Exp e -> Exp Bool) -- ^predicate
          -> Acc (Vector e')     -- ^default
          -> Acc (Vector e')     -- ^input
          -> Acc (Vector e')     -- ^output
-gatherIf mapV maskV pred defaultV inputV = zipWith zwF predV gatheredV
+gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
   where
-    zwF p g   = p ? (unlift g)
-    gatheredV = zip (gather mapV inputV) defaultV
-    predV     = map pred maskV
+    zf p g      = p ? (unlift g)
+    gatheredV   = zip (gather from input) defaults
+    pf          = map pred maskV
 
 
 -- Scatter operations
 -- ------------------
 
--- | Copy elements from source array to destination array according to a map. This
---   is a forward-permute operation where a 'map' vector encodes an input to output
---   index mapping. Output elements for indices that are not mapped assume the
---   default vector's value.
+-- | Copy elements from source array to destination array according to an index
+--   mapping. This is a forward-permute operation where a 'to' vector encodes an
+--   input to output index mapping. Output elements for indices that are not
+--   mapped assume the default vector's value.
 --
 --   For example:
 --
 --  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > map     = [1, 3, 7, 2, 5, 8]
+--  > to      = [1, 3, 7, 2, 5, 8]
 --  > input   = [1, 9, 6, 4, 4, 2, 5]
 --  >
 --  > output  = [0, 1, 4, 9, 0, 4, 0, 6, 2]
 --
---   Note if the same index appears in the map more than once, the result is
---   undefined. The map vector cannot be larger than the input vector.
+--   Note if the same index appears in the index mapping more than once, the
+--   result is undefined. It does not makes sense for the 'to' vector to be
+--   larger than the 'input' vector.
 --
-scatter :: (Elt e)
-        => Acc (Vector Int)      -- ^map
+scatter :: Elt e
+        => Acc (Vector Int)      -- ^index mapping
         -> Acc (Vector e)        -- ^default
         -> Acc (Vector e)        -- ^input
         -> Acc (Vector e)        -- ^output
-scatter mapV defaultV inputV = permute (const) defaultV pF inputV
+scatter to defaults input = permute const defaults pf input'
   where
-    pF ix = lift (Z :. (mapV ! ix))
+    pf ix       = index1 (to ! ix)
+    input'      = backpermute (shape to `intersect` shape input) id input
 
 
 -- | Conditionally copy elements from source array to destination array according
---   to a map. This is a forward-permute operation where a 'map' vector encodes an
---   input to output index mapping. In addition, there is a 'mask' vector, and an
---   associated predicate function, that specifies whether an elements will be
---   copied. If not copied, the output array assumes the default vector's value.
+--   to an index mapping. This is a forward-permute operation where a 'to'
+--   vector encodes an input to output index mapping. In addition, there is a
+--   'mask' vector, and an associated predicate function. The mapping will only
+--   occur if the predicate function applied to the mask at that position
+--   resolves to 'True'. If not copied, the output array assumes the default
+--   vector's value.
 --
 --   For example:
 --
 --  > default = [0, 0, 0, 0, 0, 0, 0, 0, 0]
---  > map     = [1, 3, 7, 2, 5, 8]
+--  > to      = [1, 3, 7, 2, 5, 8]
 --  > mask    = [3, 4, 9, 2, 7, 5]
---  > pred    = (> 4)
---  > input   = [1, 9, 6, 4, 4, 2]
+--  > pred    = (>* 4)
+--  > input   = [1, 9, 6, 4, 4, 2, 5]
 --  >
 --  > output  = [0, 0, 0, 0, 0, 4, 0, 6, 2]
 --
---   Note if the same index appears in the map more than once, the result is
---   undefined. The map and input vector must be of the same length.
+--   Note if the same index appears in the mapping more than once, the result is
+--   undefined. The 'to' and 'mask' vectors must be the same length. It does not
+--   make sense for these to be larger than the 'input' vector.
 --
 scatterIf :: (Elt e, Elt e')
-          => Acc (Vector Int)      -- ^map
+          => Acc (Vector Int)      -- ^index mapping
           -> Acc (Vector e)        -- ^mask
           -> (Exp e -> Exp Bool)   -- ^predicate
           -> Acc (Vector e')       -- ^default
           -> Acc (Vector e')       -- ^input
           -> Acc (Vector e')       -- ^output
-scatterIf mapV maskV pred defaultV inputV = permute const defaultV pF inputV
+scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
-    pF ix = (pred (maskV ! ix)) ? (lift (Z :. (mapV ! ix)), ignore)
+    pf ix       = pred (maskV ! ix) ? ( index1 (to ! ix), ignore )
+    input'      = backpermute (shape to `intersect` shape input) id input
 
 
 -- Permutations
