@@ -105,6 +105,11 @@ inject source field =
        ?| ( field, A.permute (.+.) field (is A.!) ps )
 
 
+-- The core of the fluid flow algorithm is a finite time step simulation on the
+-- grid, implemented as a matrix relaxation involving the discrete Laplace
+-- operator \nabla^2. This step, know as the linear solver, is used to diffuse
+-- the density and velocity fields throughout the grid.
+--
 diffuse
     :: FieldElt e
     => Int
