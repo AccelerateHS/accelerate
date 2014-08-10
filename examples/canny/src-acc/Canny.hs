@@ -82,12 +82,12 @@ toGreyscale = A.map (\rgba -> 255 * luminanceOfRGBA32 rgba)
 gaussianX :: Acc (Image Float) -> Acc (Image Float)
 gaussianX = stencil (convolve5x1 gaussian) Clamp
   where
-    gaussian = [ 1, 4, 6, 4, 1 ]
+    gaussian = P.map (/16) [ 1, 4, 6, 4, 1 ]
 
 gaussianY :: Acc (Image Float) -> Acc (Image Float)
 gaussianY = stencil (convolve1x5 gaussian) Clamp
   where
-    gaussian = P.map (/256) [ 1, 4, 6, 4, 1 ]
+    gaussian = P.map (/16) [ 1, 4, 6, 4, 1 ]
 
 
 -- Gradients in the x- and y- directions
