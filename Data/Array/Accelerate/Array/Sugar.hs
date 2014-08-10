@@ -916,6 +916,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- space; the index space is traversed in row-major order.
   iter  :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
 
+  -- |Variant of 'iter' without an initial value
+  iter1 :: sh -> (sh -> a) -> (a -> a -> a) -> a
+
   -- |Convert a minpoint-maxpoint index into a /shape/.
   rangeToShape ::  (sh, sh) -> sh
 
@@ -945,7 +948,8 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
                             Left v    -> Left v
                             Right ix' -> Right $ toElt ix'
 
-  iter sh f c r         = Repr.iter (fromElt sh) (f . toElt) c r
+  iter sh f c r         = Repr.iter  (fromElt sh) (f . toElt) c r
+  iter1 sh f r          = Repr.iter1 (fromElt sh) (f . toElt) r
 
   rangeToShape (low, high)
     = toElt (Repr.rangeToShape (fromElt low, fromElt high))

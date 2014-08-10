@@ -230,12 +230,10 @@ Library
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
-                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
-  Other-modules:        Data.Array.Accelerate.Array.Delayed
-                        Data.Array.Accelerate.Language
+  Other-modules:        Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse
@@ -243,6 +241,7 @@ Library
                         Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
                         Data.Array.Accelerate.Trafo.Rewrite
+                        Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Shrink
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
