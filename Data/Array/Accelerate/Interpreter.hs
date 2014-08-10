@@ -56,11 +56,11 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Trafo
+import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Trafo.Sharing            as Sharing
 import qualified Data.Array.Accelerate.Smart                    as Sugar
+import qualified Data.Array.Accelerate.Trafo                    as AST
 import qualified Data.Array.Accelerate.Array.Representation     as R
 
 
@@ -70,13 +70,17 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 -- | Run a complete embedded array program using the reference interpreter.
 --
 run :: Arrays a => Sugar.Acc a -> a
-run = runWith config
+run acc
+  = let a = convertAccWith config acc
+    in  evalOpenAcc a Empty
 
 
 -- | Prepare and run an embedded array program of one argument
 --
 run1 :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> a -> b
-run1 = run'With config
+run1 afun
+  = let f = convertAfunWith config afun
+    in  evalOpenAfun f Empty
 
 
 -- | Stream a lazily read list of input arrays through the given program,
@@ -87,32 +91,6 @@ stream afun arrs = let go = run1 afun
                    in  map go arrs
 
 
--- | Run an embedded array program using the reference interpreter, and selected
--- optimisations.
---
-runWith :: Arrays a => Phase -> Sugar.Acc a -> a
-runWith config@Phase{..} a
-  | enableAccFusion     = evalDelayedAcc dacc Empty
-  | otherwise           = evalOpenAcc acc Empty
-  where
-    acc  = Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp a
-    dacc = convertAccWith config a
-
-
--- | Prepare an n-ary embedded array program with selected optimisations for
--- execution, returning an n-ary closure that will perform the computation.
---
-run'With :: Sharing.Afunction f => Phase -> f -> Sharing.AfunctionR f
-run'With config@Phase{..} afun
-  | enableAccFusion     = evalPreOpenAfun evalDelayedAcc dacc Empty
-  | otherwise           = evalPreOpenAfun evalOpenAcc acc Empty
-  where
-    acc  = Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp afun
-    dacc = convertAfunWith config afun
-
-
--- Default configuration
---
 config :: Phase
 config =  Phase
   { recoverAccSharing      = True
@@ -123,101 +101,111 @@ config =  Phase
   }
 
 
+-- Delayed Arrays
+-- --------------
+
+-- Note that in contrast to the representation used in the optimised AST, the
+-- delayed array representation used here is _only_ for delayed arrays --- we do
+-- not require an optional Manifest|Delayed data type to evaluate the program.
+--
+data Delayed a where
+  Delayed :: (Shape sh, Elt e)
+          => sh
+          -> (sh -> e)
+          -> (Int -> e)
+          -> Delayed (Array sh e)
+
+
 -- Array expression evaluation
 -- ---------------------------
 
 type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> a
 
-
--- Evaluate an open array expression
---
-evalOpenAcc :: OpenAcc aenv a -> Val aenv -> a
-evalOpenAcc (OpenAcc pacc) = evalPreOpenAcc evalOpenAcc pacc
-
-evalDelayedAcc :: DelayedOpenAcc aenv a -> Val aenv -> a
-evalDelayedAcc (Manifest pacc) aenv = evalPreOpenAcc evalDelayedAcc pacc aenv
-evalDelayedAcc Delayed{..}     aenv = newArray sh f
-  where
-    sh  = evalPreExp evalDelayedAcc extentD aenv
-    f   = evalPreFun evalDelayedAcc indexD  aenv
-
-
 -- Evaluate an open array function
 --
-evalPreOpenAfun :: EvalAcc acc -> PreOpenAfun acc aenv f -> Val aenv -> f
-evalPreOpenAfun evalAcc (Alam  f) aenv = \a -> evalPreOpenAfun evalAcc f (aenv `Push` a)
-evalPreOpenAfun evalAcc (Abody b) aenv = evalAcc b aenv
+evalOpenAfun :: DelayedOpenAfun aenv f -> Val aenv -> f
+evalOpenAfun (Alam  f) aenv = \a -> evalOpenAfun f (aenv `Push` a)
+evalOpenAfun (Abody b) aenv = evalOpenAcc b aenv
 
--- The core interpreter for array programs
+
+-- The core interpreter for optimised array programs
 --
-evalPreOpenAcc
-    :: forall acc aenv a.
-       EvalAcc acc
-    -> PreOpenAcc acc aenv a
+evalOpenAcc
+    :: forall aenv a.
+       DelayedOpenAcc aenv a
     -> Val aenv
     -> a
-evalPreOpenAcc evalAcc pacc aenv =
+evalOpenAcc AST.Delayed{}       _    = $internalError "evalOpenAcc" "expected manifest array"
+evalOpenAcc (AST.Manifest pacc) aenv =
   let
-      evalA :: acc aenv a' -> a'
-      evalA acc = evalAcc acc aenv
+      manifest :: DelayedOpenAcc aenv a' -> a'
+      manifest acc = evalOpenAcc acc aenv
 
-      evalE :: PreExp acc aenv t -> t
-      evalE exp = evalPreExp evalAcc exp aenv
+      delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
+      delayed AST.Manifest{}  = $internalError "evalOpenAcc" "expected delayed array"
+      delayed AST.Delayed{..} = Delayed (evalE extentD) (evalF indexD) (evalF linearIndexD)
 
-      evalF :: PreFun acc aenv f -> f
-      evalF fun = evalPreFun evalAcc fun aenv
+      evalE :: DelayedExp aenv t -> t
+      evalE exp = evalPreExp evalOpenAcc exp aenv
+
+      evalF :: DelayedFun aenv f -> f
+      evalF fun = evalPreFun evalOpenAcc fun aenv
   in
   case pacc of
-    Alet acc1 acc2              -> let !arr1 = evalAcc acc1 aenv
-                                   in  evalAcc acc2 (aenv `Push` arr1)
-
     Avar ix                     -> prj ix aenv
-    Atuple atup                 -> toTuple $ evalAtuple evalAcc atup aenv
-    Aprj ix atup                -> evalPrj ix . fromTuple $ evalAcc atup aenv
-    Apply afun acc              -> evalPreOpenAfun evalAcc afun aenv  $ evalA acc
-    Aforeign _ afun acc         -> evalPreOpenAfun evalAcc afun Empty $ evalA acc
+    Alet acc1 acc2              -> evalOpenAcc acc2 (aenv `Push` manifest acc1)
+    Atuple atup                 -> toTuple $ evalAtuple atup aenv
+    Aprj ix atup                -> evalPrj ix . fromTuple  $ manifest atup
+    Apply afun acc              -> evalOpenAfun afun aenv  $ manifest acc
+    Aforeign _ afun acc         -> evalOpenAfun afun Empty $ manifest acc
     Acond p acc1 acc2
-      | evalE p                 -> evalA acc1
-      | otherwise               -> evalA acc2
+      | evalE p                 -> manifest acc1
+      | otherwise               -> manifest acc2
 
-    Awhile cond body acc        -> go (evalA acc)
+    Awhile cond body acc        -> go (manifest acc)
       where
-        p       = evalPreOpenAfun evalAcc cond aenv
-        f       = evalPreOpenAfun evalAcc body aenv
+        p       = evalOpenAfun cond aenv
+        f       = evalOpenAfun body aenv
         go !x
           | p x ! Z     = go (f x)
           | otherwise   = x
 
     Use arr                     -> toArr arr
     Unit e                      -> unitOp (evalE e)
-    Generate sh f               -> generateOp (evalE sh) (evalF f)
-    Transform sh p f acc        -> transformOp (evalE sh) (evalF p) (evalF f) (evalA acc)
-    Reshape sh acc              -> reshapeOp (evalE sh) (evalA acc)
-    Replicate slice slix acc    -> replicateOp slice (evalE slix) (evalA acc)
-    Slice slice acc slix        -> sliceOp slice (evalA acc) (evalE slix)
-    Map f acc                   -> mapOp (evalF f) (evalA acc)
-    ZipWith f acc1 acc2         -> zipWithOp (evalF f) (evalA acc1) (evalA acc2)
-    Fold f z acc                -> foldOp (evalF f) (evalE z) (evalA acc)
-    Fold1 f acc                 -> fold1Op (evalF f) (evalA acc)
-    FoldSeg f z acc seg         -> foldSegOp (evalF f) (evalE z) (evalA acc) (evalA seg)
-    Fold1Seg f acc seg          -> fold1SegOp (evalF f) (evalA acc) (evalA seg)
-    Scanl f z acc               -> scanlOp (evalF f) (evalE z) (evalA acc)
-    Scanl' f z acc              -> scanl'Op (evalF f) (evalE z) (evalA acc)
-    Scanl1 f acc                -> scanl1Op (evalF f) (evalA acc)
-    Scanr f z acc               -> scanrOp (evalF f) (evalE z) (evalA acc)
-    Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (evalA acc)
-    Scanr1 f acc                -> scanr1Op (evalF f) (evalA acc)
-    Permute f def p acc         -> permuteOp (evalF f) (evalA def) (evalF p) (evalA acc)
-    Backpermute sh p acc        -> backpermuteOp (evalE sh) (evalF p) (evalA acc)
-    Stencil sten b acc          -> stencilOp (evalF sten) b (evalA acc)
-    Stencil2 sten b1 acc1 b2 acc2-> stencil2Op (evalF sten) b1 (evalA acc1) b2 (evalA acc2)
 
+    -- Producers
+    -- ---------
+    Map f acc                   -> mapOp (evalF f) (delayed acc)
+    Generate sh f               -> generateOp (evalE sh) (evalF f)
+    Transform sh p f acc        -> transformOp (evalE sh) (evalF p) (evalF f) (delayed acc)
+    Backpermute sh p acc        -> backpermuteOp (evalE sh) (evalF p) (delayed acc)
+    Reshape sh acc              -> reshapeOp (evalE sh) (manifest acc)
+
+    ZipWith f acc1 acc2         -> zipWithOp (evalF f) (delayed acc1) (delayed acc2)
+    Replicate slice slix acc    -> replicateOp slice (evalE slix) (manifest acc)
+    Slice slice acc slix        -> sliceOp slice (manifest acc) (evalE slix)
+
+    -- Consumers
+    -- ---------
+    Fold f z acc                -> foldOp (evalF f) (evalE z) (delayed acc)
+    Fold1 f acc                 -> fold1Op (evalF f) (delayed acc)
+    FoldSeg f z acc seg         -> foldSegOp (evalF f) (evalE z) (delayed acc) (delayed seg)
+    Fold1Seg f acc seg          -> fold1SegOp (evalF f) (delayed acc) (delayed seg)
+    Scanl f z acc               -> scanlOp (evalF f) (evalE z) (delayed acc)
+    Scanl' f z acc              -> scanl'Op (evalF f) (evalE z) (delayed acc)
+    Scanl1 f acc                -> scanl1Op (evalF f) (delayed acc)
+    Scanr f z acc               -> scanrOp (evalF f) (evalE z) (delayed acc)
+    Scanr' f z acc              -> scanr'Op (evalF f) (evalE z) (delayed acc)
+    Scanr1 f acc                -> scanr1Op (evalF f) (delayed acc)
+    Permute f def p acc         -> permuteOp (evalF f) (manifest def) (evalF p) (delayed acc)
+    Stencil sten b acc          -> stencilOp (evalF sten) b (manifest acc)
+    Stencil2 sten b1 acc1 b2 acc2-> stencil2Op (evalF sten) b1 (manifest acc1) b2 (manifest acc2)
 
 -- Array tuple construction and projection
 --
-evalAtuple :: EvalAcc acc -> Atuple (acc aenv) t -> Val aenv -> t
-evalAtuple _       NilAtup        _    = ()
-evalAtuple evalAcc (SnocAtup t a) aenv = (evalAtuple evalAcc t aenv, evalAcc a aenv)
+evalAtuple :: Atuple (DelayedOpenAcc aenv) t -> Val aenv -> t
+evalAtuple NilAtup        _    = ()
+evalAtuple (SnocAtup t a) aenv = (evalAtuple t aenv, evalOpenAcc a aenv)
 
 
 -- Array primitives
@@ -240,10 +228,10 @@ transformOp
     => sh'
     -> (sh' -> sh)
     -> (a -> b)
-    -> Array sh  a
+    -> Delayed (Array sh a)
     -> Array sh' b
-transformOp sh' p f xs
-  = newArray sh' (\ix -> f (xs ! p ix))
+transformOp sh' p f (Delayed _ xs _)
+  = newArray sh' (\ix -> f (xs $ p ix))
 
 
 reshapeOp
@@ -306,117 +294,112 @@ sliceOp slice arr slix
 
 mapOp :: (Shape sh, Elt a, Elt b)
       => (a -> b)
-      -> Array sh a
+      -> Delayed (Array sh a)
       -> Array sh b
-mapOp f xs
-  = newArray (shape xs) (\ix -> f (xs ! ix))
+mapOp f (Delayed sh xs _)
+  = newArray sh (\ix -> f (xs ix))
 
 
 zipWithOp
     :: (Shape sh, Elt a, Elt b, Elt c)
     => (a -> b -> c)
-    -> Array sh a
-    -> Array sh b
+    -> Delayed (Array sh a)
+    -> Delayed (Array sh b)
     -> Array sh c
-zipWithOp f xs ys
-  = newArray (shape xs `intersect` shape ys) (\ix -> f (xs ! ix) (ys ! ix))
+zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
+  = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
 
 
 foldOp
     :: (Shape sh, Elt e)
     => (e -> e -> e)
     -> e
-    -> Array (sh :. Int) e
+    -> Delayed (Array (sh :. Int) e)
     -> Array sh e
-foldOp f z arr
+foldOp f z (Delayed (sh :. n) arr _)
   | size sh == 0
   = newArray (listToShape . map (max 1) . shapeToList $ sh) (const z)
 
   | otherwise
-  = newArray sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr ! (ix :. i)) f z)
-  where
-    sh :. n     = shape arr
+  = newArray sh (\ix -> iter (Z:.n) (\(Z:.i) -> arr (ix :. i)) f z)
 
 
 fold1Op
     :: (Shape sh, Elt e)
     => (e -> e -> e)
-    -> Array (sh :. Int) e
+    -> Delayed (Array (sh :. Int) e)
     -> Array sh e
-fold1Op f arr
-  = newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr ! (ix :. i)) f)
-  where
-    sh :. n     = shape arr
+fold1Op f (Delayed (sh :. n) arr _)
+  = newArray sh (\ix -> iter1 (Z:.n) (\(Z:.i) -> arr (ix :. i)) f)
 
 
 foldSegOp
     :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
     => (e -> e -> e)
     -> e
+    -> Delayed (Array (sh :. Int) e)
+    -> Delayed (Segments i)
     -> Array (sh :. Int) e
-    -> Segments i
-    -> Array (sh :. Int) e
-foldSegOp f z arr seg
+foldSegOp f z (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
   = newArray (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
-                   iter (Z :. end-start) (\(Z:.i) -> arr ! (sz :. start+i)) f z
+                   iter (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f z
   where
-    sh :. _     = shape arr
-    Z  :. n     = shape seg
     offset      = scanlOp (+) 0 seg
 
 
 fold1SegOp
     :: forall sh e i. (Shape sh, Elt e, Elt i, IsIntegral i)
     => (e -> e -> e)
+    -> Delayed (Array (sh :. Int) e)
+    -> Delayed (Segments i)
     -> Array (sh :. Int) e
-    -> Segments i
-    -> Array (sh :. Int) e
-fold1SegOp f arr seg
+fold1SegOp f (Delayed (sh :. _) arr _) seg@(Delayed (Z :. n) _ _)
   | IntegralDict <- integralDict (integralType :: IntegralType i)
   = newArray (sh :. n)
   $ \(sz :. ix) -> let start = fromIntegral $ offset ! (Z :. ix)
                        end   = fromIntegral $ offset ! (Z :. ix+1)
                    in
-                   iter1 (Z :. end-start) (\(Z:.i) -> arr ! (sz :. start+i)) f
+                   iter1 (Z :. end-start) (\(Z:.i) -> arr (sz :. start+i)) f
   where
-    sh :. _     = shape arr
-    Z  :. n     = shape seg
     offset      = scanlOp (+) 0 seg
 
 
-scanl1Op :: Elt e => (e -> e -> e) -> Vector e -> Vector e
-scanl1Op f arr@(Array _ ain)
+scanl1Op
+    :: Elt e
+    => (e -> e -> e)
+    -> Delayed (Vector e)
+    -> Vector e
+scanl1Op f (Delayed sh@(Z :. n) _ ain)
   = adata `seq` Array (fromElt sh) adata
   where
-    sh          = shape arr
-    n           = size sh
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
       aout <- newArrayData n
 
-      let write (Z:.0) = do
-            y <- unsafeReadArrayData ain 0
-            unsafeWriteArrayData aout 0 y
-          --
+      let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt $ ain 0)
           write (Z:.i) = do
             x <- unsafeReadArrayData aout (i-1)
-            y <- unsafeReadArrayData ain  i
+            y <- return . fromElt $  ain  i
             unsafeWriteArrayData aout i (f' x y)
 
       iter1 sh write (>>)
       return (aout, undefined)
 
 
-scanlOp :: Elt e => (e -> e -> e) -> e -> Vector e -> Vector e
-scanlOp f z arr@(Array _ ain)
+scanlOp
+    :: Elt e
+    => (e -> e -> e)
+    -> e
+    -> Delayed (Vector e)
+    -> Vector e
+scanlOp f z (Delayed (Z :. n) _ ain)
   = adata `seq` Array (fromElt sh') adata
   where
-    n           = size (shape arr)
     sh'         = Z :. n+1
     f'          = sinkFromElt2 f
     --
@@ -426,14 +409,19 @@ scanlOp f z arr@(Array _ ain)
       let write (Z:.0) = unsafeWriteArrayData aout 0 (fromElt z)
           write (Z:.i) = do
             x <- unsafeReadArrayData aout (i-1)
-            y <- unsafeReadArrayData ain  (i-1)
+            y <- return . fromElt $  ain  (i-1)
             unsafeWriteArrayData aout i (f' x y)
 
       iter sh' write (>>) (return ())
       return (aout, undefined)
 
 
-scanl'Op :: Elt e => (e -> e -> e) -> e -> Vector e -> (Vector e, Scalar e)
+scanl'Op
+    :: Elt e
+    => (e -> e -> e)
+    -> e
+    -> Delayed (Vector e)
+    -> (Vector e, Scalar e)
 scanl'Op f z (scanlOp f z -> arr)
   = let
         arr'    = case arr of Array _ adata -> Array ((), n-1) adata
@@ -447,12 +435,11 @@ scanrOp
     :: Elt e
     => (e -> e -> e)
     -> e
+    -> Delayed (Vector e)
     -> Vector e
-    -> Vector e
-scanrOp f z arr@(Array _ ain)
+scanrOp f z (Delayed (Z :. n) _ ain)
   = adata `seq` Array (fromElt sh') adata
   where
-    n           = size (shape arr)
     sh'         = Z :. n+1
     f'          = sinkFromElt2 f
     --
@@ -462,7 +449,7 @@ scanrOp f z arr@(Array _ ain)
       let write (Z:.0) = unsafeWriteArrayData aout n (fromElt z)
           write (Z:.i) = do
             x <- unsafeReadArrayData aout (n-i+1)
-            y <- unsafeReadArrayData ain  (n-i)
+            y <- return . fromElt $  ain  (n-i)
             unsafeWriteArrayData aout (n-i) (f' x y)
 
       iter sh' write (>>) (return ())
@@ -472,25 +459,20 @@ scanrOp f z arr@(Array _ ain)
 scanr1Op
     :: Elt e
     => (e -> e -> e)
+    -> Delayed (Vector e)
     -> Vector e
-    -> Vector e
-scanr1Op f arr@(Array _ ain)
+scanr1Op f (Delayed sh@(Z :. n) _ ain)
   = adata `seq` Array (fromElt sh) adata
   where
-    sh          = shape arr
-    n           = size sh
     f'          = sinkFromElt2 f
     --
     (adata, _)  = runArrayData $ do
       aout <- newArrayData n
 
-      let write (Z:.0) = do
-            y <- unsafeReadArrayData ain (n-1)
-            unsafeWriteArrayData aout (n-1) y
-
+      let write (Z:.0) = unsafeWriteArrayData aout (n-1) (fromElt $ ain (n-1))
           write (Z:.i) = do
             x <- unsafeReadArrayData aout (n-i)
-            y <- unsafeReadArrayData ain  (n-i-1)
+            y <- return . fromElt $  ain  (n-i-1)
             unsafeWriteArrayData aout (n-i-1) (f' x y)
 
       iter1 sh write (>>)
@@ -501,14 +483,12 @@ scanr'Op
     :: forall e. Elt e
     => (e -> e -> e)
     -> e
-    -> Vector e
+    -> Delayed (Vector e)
     -> (Vector e, Scalar e)
-scanr'Op f z arr@(Array _ ain)
+scanr'Op f z (Delayed (Z :. n) _ ain)
   = (Array ((),n) adata, unitOp (toElt asum))
   where
-    sh          = shape arr
-    n           = size sh
-    f'          = sinkFromElt2 f
+    f' x y      = sinkFromElt2 f (fromElt x) y
     --
     (adata, asum) = runArrayData $ do
       aout <- newArrayData n
@@ -516,8 +496,7 @@ scanr'Op f z arr@(Array _ ain)
       let trav i !y | i < 0     = return y
           trav i y              = do
             unsafeWriteArrayData aout i y
-            x <- unsafeReadArrayData ain i
-            trav (i-1) (f' x y)
+            trav (i-1) (f' (ain i) y)
 
       final <- trav (n-1) (fromElt z)
       return (aout, final)
@@ -528,12 +507,11 @@ permuteOp
     => (e -> e -> e)
     -> Array sh' e
     -> (sh -> sh')
-    -> Array sh  e
+    -> Delayed (Array sh  e)
     -> Array sh' e
-permuteOp f def@(Array _ adef) p arr@(Array _ ain)
+permuteOp f def@(Array _ adef) p (Delayed sh _ ain)
   = adata `seq` Array (fromElt sh') adata
   where
-    sh          = shape arr
     sh'         = shape def
     n'          = size sh'
     f'          = sinkFromElt2 f
@@ -552,11 +530,11 @@ permuteOp f def@(Array _ adef) p arr@(Array _ ain)
           -- project each element onto the destination array and update
           update src
             = let dst   = p src
-                  i     = toIndex (shape arr) src
-                  j     = toIndex (shape def) dst
+                  i     = toIndex sh  src
+                  j     = toIndex sh' dst
               in
               unless (fromElt dst == R.ignore) $ do
-                x <- unsafeReadArrayData ain  i
+                x <- return . fromElt $  ain  i
                 y <- unsafeReadArrayData aout j
                 unsafeWriteArrayData aout j (f' x y)
 
@@ -569,10 +547,10 @@ backpermuteOp
     :: (Shape sh, Shape sh', Elt e)
     => sh'
     -> (sh' -> sh)
-    -> Array sh  e
+    -> Delayed (Array sh e)
     -> Array sh' e
-backpermuteOp sh' p arr
-  = newArray sh' (\ix -> arr ! p ix)
+backpermuteOp sh' p (Delayed _ arr _)
+  = newArray sh' (\ix -> arr $ p ix)
 
 
 stencilOp
