@@ -91,21 +91,24 @@ stream afun arrs = let go = run1 afun
 -- optimisations.
 --
 runWith :: Arrays a => Phase -> Sugar.Acc a -> a
-runWith Phase{..} a =
-  let
-      acc       = Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp a
-  in
-  evalOpenAcc acc Empty
+runWith config@Phase{..} a
+  | enableAccFusion     = evalDelayedAcc dacc Empty
+  | otherwise           = evalOpenAcc acc Empty
+  where
+    acc  = Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp a
+    dacc = convertAccWith config a
+
 
 -- | Prepare an n-ary embedded array program with selected optimisations for
 -- execution, returning an n-ary closure that will perform the computation.
 --
 run'With :: Sharing.Afunction f => Phase -> f -> Sharing.AfunctionR f
-run'With Phase{..} afun =
-  let
-      acc       = Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp afun
-  in
-  evalPreOpenAfun evalOpenAcc acc Empty
+run'With config@Phase{..} afun
+  | enableAccFusion     = evalPreOpenAfun evalDelayedAcc dacc Empty
+  | otherwise           = evalPreOpenAfun evalOpenAcc acc Empty
+  where
+    acc  = Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp afun
+    dacc = convertAfunWith config afun
 
 
 -- Default configuration
@@ -115,7 +118,7 @@ config =  Phase
   { recoverAccSharing      = True
   , recoverExpSharing      = True
   , floatOutAccFromExp     = True
-  , enableAccFusion        = False
+  , enableAccFusion        = True
   , convertOffsetOfSegment = False
   }
 
@@ -130,6 +133,14 @@ type EvalAcc acc = forall aenv a. acc aenv a -> Val aenv -> a
 --
 evalOpenAcc :: OpenAcc aenv a -> Val aenv -> a
 evalOpenAcc (OpenAcc pacc) = evalPreOpenAcc evalOpenAcc pacc
+
+evalDelayedAcc :: DelayedOpenAcc aenv a -> Val aenv -> a
+evalDelayedAcc (Manifest pacc) aenv = evalPreOpenAcc evalDelayedAcc pacc aenv
+evalDelayedAcc Delayed{..}     aenv = newArray sh f
+  where
+    sh  = evalPreExp evalDelayedAcc extentD aenv
+    f   = evalPreFun evalDelayedAcc indexD  aenv
+
 
 -- Evaluate an open array function
 --
