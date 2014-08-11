@@ -1105,7 +1105,7 @@ drop n arr =
 --   empty.
 --
 init :: Elt e => Acc (Vector e) -> Acc (Vector e)
-init arr = take ((unindex1 $ shape arr) - 1) arr
+init arr = backpermute (ilift1 (subtract 1) (shape arr)) id arr
 
 
 -- | Yield all but the first element of the input vector. The vector must not be
