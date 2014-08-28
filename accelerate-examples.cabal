@@ -88,6 +88,7 @@ Executable accelerate-nofib
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
+                        Test.FFT
                         Test.IO
                         Test.IO.Ptr
                         Test.IO.Vector
@@ -145,6 +146,7 @@ Executable accelerate-nofib
     buildable:          False
   else
     build-depends:      accelerate                      == 0.15.*,
+                        accelerate-fft                  == 0.15.*,
                         accelerate-io                   == 0.15.*,
                         base                            >= 4.6 && <4.8,
                         array                           >= 0.3,
