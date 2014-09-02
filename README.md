@@ -13,6 +13,9 @@ There are also slides from some fairly recent presentations:
 
 Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell][Mar13] contains a tutorial introduction to Accelerate.
 
+[Trevor's PhD thesis][Trevor-thesis] details the design and implementation of frontend optimisations and CUDA backend.
+
+
 A simple example
 ----------------
 
@@ -39,12 +42,17 @@ The following supported addons are available as separate packages on Hackage and
   * [`accelerate-cuda`][accelerate-cuda] Backend targeting CUDA-enabled NVIDA GPUs — requires the NVIDIA CUDA SDK and hardware with compute capability 1.2 or greater (see the [table on Wikipedia][wiki-cc])
   * [`accelerate-examples`][accelerate-examples] Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * [`accelerate-io`][accelerate-io] Fast conversion between Accelerate arrays and other array formats (including Repa arrays)
+  * [`accelerate-fft`][accelerate-fft] Fast Fourier transform implementation, with optimised implementation for the CUDA backend
   * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
   * [`accelerate-buildbot`][accelerate-buildbot] Build bot for automatic performance & regression testing
 
 Install them from Hackage with `cabal install PACKAGENAME`.
 
-The following additional components are experimental and incomplete:
+The following components are experimental and incomplete incomplete:
+
+  * [`accelerate-llvm`][accelerate-llvm] A framework for constructing backends targeting LLVM IR, with concrete backends for multicore CPUs and NVIDIA GPUs.
+
+The following components are incomplete and not currently maintained. Please contact us if you are interested in working on them!
 
   * [`accelerate-opencl`][accelerate-opencl] Backend targeting GPUs via the OpenCL standard
   * [`accelerate-repa`][accelerate-repa] Backend targeting multicore CPUs via the [Repa][repa] parallel array library
@@ -52,7 +60,7 @@ The following additional components are experimental and incomplete:
 Requirements
 ------------
 
-  * Glasgow Haskell Compiler (GHC), 7.6 or later
+  * Glasgow Haskell Compiler (GHC), 7.8.3 or later
   * For the CUDA backend, CUDA version 5.0 or later
   * Haskell libraries as specified in the [`accelerate.cabal`][accelerate-cabal] and optionally [`accelerate-cuda.cabal`][accelerate-cuda-cabal] files.
 
@@ -108,12 +116,14 @@ Here is a list of features that are currently missing:
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
   [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
   [accelerate-io]:          https://github.com/AccelerateHS/accelerate-io
+  [accelerate-io]:          https://github.com/AccelerateHS/accelerate-fft
   [accelerate-backend-kit]: https://github.com/AccelerateHS/accelerate-backend-kit
   [accelerate-buildbot]:    https://github.com/AccelerateHS/accelerate-buildbot
   [accelerate-repa]:        https://github.com/blambo/accelerate-repa
   [accelerate-opencl]:      https://github.com/hiPERFIT/accelerate-opencl
   [accelerate-cabal]:       https://github.com/AccelerateHS/accelerate/accelerate.cabal
   [accelerate-cuda-cabal]:  https://github.com/AccelerateHS/accelerate-cuda/accelerate-cuda.cabal
+  [accelerate-llvm]:        https://github.com/AccelerateHS/accelerate-llvm
   [GitHub]:                 https://github.com/AccelerateHS/accelerate
   [Wiki]:                   https://github.com/AccelerateHS/accelerate/wiki
   [Issues]:                 https://github.com/AccelerateHS/accelerate/issues
@@ -129,4 +139,5 @@ Here is a list of features that are currently missing:
   [wiki-nbody]:             http://en.wikipedia.org/wiki/N-body
   [wiki-raytracing]:        http://en.wikipedia.org/wiki/Ray_tracing
   [wiki-pagerank]:          http://en.wikipedia.org/wiki/Pagerank
+  [Trevor-thesis]:          http://www.cse.unsw.edu.au/~tmcdonell/papers/TrevorMcDonell_PhD_submission.pdf
 
