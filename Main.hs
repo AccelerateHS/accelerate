@@ -14,6 +14,7 @@ import Test.Prelude
 import Test.Sharing
 import Test.Imaginary
 import Test.Spectral
+import Test.Issues
 #ifdef ACCELERATE_CUDA_BACKEND
 import Test.Foreign
 #endif
@@ -46,6 +47,7 @@ main = do
 #ifdef ACCELERATE_CUDA_BACKEND
     , test_foreign conf
 #endif
+    , test_issues conf
     ]
     tfconf
     -- test-framework wants to have a nap on success; don't let it.

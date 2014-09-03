@@ -6,6 +6,8 @@
 module Test.Base where
 
 import Prelude                                          as P
+import Control.Monad                                    ( unless )
+import Test.HUnit                                       ( Assertion, assertFailure )
 import Test.QuickCheck
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Array.Sugar                as Sugar
@@ -84,17 +86,17 @@ instance (Similar e, Eq sh, Shape sh) => Similar (Array sh e) where
 --
 assertEqual
     :: (Similar a, Show a)
-    => Bool     -- ^ Print the test case as well?
-    -> a        -- ^ The expected value
+    => a        -- ^ The expected value
     -> a        -- ^ The actual value
-    -> Property
-assertEqual v expected actual =
-  printTestCase message (expected ~= actual)
-  where
-    message
-      | P.not v         = []
-      | otherwise       = unlines [ "*** Expected:", show expected
-                                  , "*** Received:", show actual ]
+    -> Assertion
+assertEqual expected actual =
+  unless (expected ~= actual)
+         (assertFailure (failure expected actual))
+
+failure :: Show a => a -> a -> String
+failure expected actual =
+  unlines [ "*** Expected:", show expected
+          , "*** Received:", show actual ]
 
 infix 1 ~=?, ~?=
 
@@ -102,7 +104,7 @@ infix 1 ~=?, ~?=
 -- the right hand side and the expected value on the left.
 --
 (~=?) :: (Similar a, Show a) => a -> a -> Property
-(~=?) = assertEqual True
+expected ~=? actual = counterexample (failure expected actual) (expected ~= actual)
 
 -- Short hand for a test case that asserts similarity, with the actual value on
 -- the left hand side and the expected value on the right.
