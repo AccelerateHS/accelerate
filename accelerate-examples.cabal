@@ -96,6 +96,8 @@ Executable accelerate-nofib
                         Test.Imaginary.DotP
                         Test.Imaginary.SASUM
                         Test.Imaginary.SAXPY
+                        Test.Issues
+                        Test.Issues.Issue137
                         Test.Prelude
                         Test.Prelude.Filter
                         Test.Prelude.IndexSpace
