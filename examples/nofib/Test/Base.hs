@@ -30,7 +30,23 @@ instance Similar a => Similar [a] where
   _      ~= _           = False
 
 instance (Similar a, Similar b) => Similar (a, b) where
-  (x1, y1) ~= (x2, y2)  = x1 ~= x2 && y1 ~= y2
+  (x1, x2) ~= (y1, y2) = x1 ~= y1 && x2 ~= y2
+
+instance (Similar a, Similar b, Similar c) => Similar (a, b, c) where
+  (x1, x2, x3) ~= (y1, y2, y3) = x1 ~= y1 && x2 ~= y2 && x3 ~= y3
+
+instance (Similar a, Similar b, Similar c, Similar d) => Similar (a, b, c, d) where
+  (x1, x2, x3, x4) ~= (y1, y2, y3, y4) = x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4
+
+instance (Similar a, Similar b, Similar c, Similar d, Similar e)
+    => Similar (a, b, c, d, e) where
+  (x1, x2, x3, x4, x5) ~= (y1, y2, y3, y4, y5) =
+    x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5
+
+instance (Similar a, Similar b, Similar c, Similar d, Similar e, Similar f)
+    => Similar (a, b, c, d, e, f) where
+  (x1, x2, x3, x4, x5, x6) ~= (y1, y2, y3, y4, y5, y6) =
+    x1 ~= y1 && x2 ~= y2 && x3 ~= y3 && x4 ~= y4 && x5 ~= y5 && x6 ~= y6
 
 
 instance Similar Int
