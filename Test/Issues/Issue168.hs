@@ -1,5 +1,6 @@
 
-module Test.Issues.Issue168 where
+module Test.Issues.Issue168 (test_issue168)
+  where
 
 import Config
 import ParseArgs
