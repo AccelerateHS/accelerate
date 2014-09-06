@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Test.Issues.Issue137 where
+module Test.Issues.Issue137 (test_issue137)
+  where
 
 import Config
 import ParseArgs
