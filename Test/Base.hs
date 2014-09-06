@@ -59,6 +59,8 @@ instance Similar Word8
 instance Similar Word16
 instance Similar Word32
 instance Similar Word64
+instance Similar Char
+instance Similar Bool
 
 instance Similar DIM1
 instance Similar DIM2
