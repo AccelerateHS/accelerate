@@ -101,6 +101,7 @@ Executable accelerate-nofib
                         Test.Issues.Issue168
                         Test.Issues.Issue184
                         Test.Issues.Issue185
+                        Test.Issues.Issue187
                         Test.Prelude
                         Test.Prelude.Filter
                         Test.Prelude.IndexSpace
