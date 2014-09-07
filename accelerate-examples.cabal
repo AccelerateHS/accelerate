@@ -97,6 +97,7 @@ Executable accelerate-nofib
                         Test.Imaginary.SASUM
                         Test.Imaginary.SAXPY
                         Test.Issues
+                        Test.Issues.Issue114
                         Test.Issues.Issue137
                         Test.Issues.Issue168
                         Test.Issues.Issue184
