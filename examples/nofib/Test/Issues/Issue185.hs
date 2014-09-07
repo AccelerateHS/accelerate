@@ -14,40 +14,19 @@ import Test.Framework.Providers.HUnit
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
 import Data.Label
-import Data.Maybe
-import Data.Typeable
 
 
 test_issue185 :: Config -> Test
-test_issue185 conf = testGroup "168" $ catMaybes
-  [ testElt configInt8   (undefined :: Int8)
-  , testElt configInt16  (undefined :: Int16)
-  , testElt configInt32  (undefined :: Int32)
-  , testElt configInt64  (undefined :: Int64)
-  , testElt configWord8  (undefined :: Word8)
-  , testElt configWord16 (undefined :: Word16)
-  , testElt configWord32 (undefined :: Word32)
-  , testElt configWord64 (undefined :: Word64)
-  , testElt configFloat  (undefined :: Float)
-  , testElt configDouble (undefined :: Double)
+test_issue185 conf = testGroup "168"
+  [ testCase "A" (assertEqual ref1 (run backend acc1 :: Vector Int))
+  , testCase "B" (assertEqual ref2 (run backend acc2 :: Vector Int))
+  , testCase "C" (assertEqual ref3 (run backend acc3 :: Vector Int))
+  , testCase "D" (assertEqual ref4 (run backend acc4 :: Vector Int))
+  , testCase "E" (assertEqual ref5 (run backend acc5 :: Vector Int))
+  , testCase "F" (assertEqual ref6 (run backend acc6 :: Vector Int))
   ]
   where
     backend = get configBackend conf
-
-    testElt :: forall a. (Elt a, IsNum a, Similar a)
-            => (Config :-> Bool)
-            -> a
-            -> Maybe Test
-    testElt ok x
-      | P.not (get ok conf)     = Nothing
-      | otherwise               = Just $ testGroup (show (typeOf x))
-          [ testCase "A" (assertEqual ref1 (run backend acc1 :: Vector a))
-          , testCase "B" (assertEqual ref2 (run backend acc2 :: Vector a))
-          , testCase "C" (assertEqual ref3 (run backend acc3 :: Vector a))
-          , testCase "D" (assertEqual ref4 (run backend acc4 :: Vector a))
-          , testCase "E" (assertEqual ref5 (run backend acc5 :: Vector a))
-          , testCase "F" (assertEqual ref6 (run backend acc6 :: Vector a))
-          ]
 
 
 ref1 :: (Elt a, Num a) => Vector a
