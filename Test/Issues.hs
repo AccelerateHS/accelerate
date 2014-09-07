@@ -11,6 +11,7 @@ import Test.Framework
 import Test.Issues.Issue93
 import Test.Issues.Issue102
 import Test.Issues.Issue114
+import Test.Issues.Issue123
 import Test.Issues.Issue137
 import Test.Issues.Issue168
 import Test.Issues.Issue184
@@ -25,6 +26,7 @@ test_issues conf =
       test_issue93  conf
     , test_issue102 conf
     , test_issue114 conf
+    , test_issue123 conf
     , test_issue137 conf
     , test_issue168 conf
     , test_issue184 conf
