@@ -6,6 +6,7 @@
 module Test.Base where
 
 import Prelude                                          as P
+import Data.Complex
 import Control.Monad                                    ( unless )
 import Test.HUnit                                       ( Assertion, assertFailure )
 import Test.QuickCheck
@@ -66,16 +67,22 @@ instance Similar DIM1
 instance Similar DIM2
 instance Similar DIM3
 
-instance Similar Float  where (~=) = absRelTol 0.001
-instance Similar Double where (~=) = absRelTol 0.001
+instance Similar Float  where (~=) = absRelTol 0.00005 0.005
+instance Similar Double where (~=) = absRelTol 0.00005 0.005
+
+instance (Similar e, RealFloat e) => Similar (Complex e) where
+  -- CUFFT can actually give quite large errors, so we have to
+  -- increase the epsilon for the absolute relative value difference.
+  (r1 :+ i1) ~= (r2 :+ i2) = r1 ~= r2 && i1 ~= i2
+
 
 {-# INLINE relTol #-}
 relTol :: (Fractional a, Ord a) => a -> a -> a -> Bool
 relTol epsilon x y = abs ((x-y) / (x+y+epsilon)) < epsilon
 
 {-# INLINE absRelTol #-}
-absRelTol :: (RealFloat a, Ord a) => a -> a -> a -> Bool
-absRelTol epsilonRel u v
+absRelTol :: (RealFloat a, Ord a) => a -> a -> a -> a -> Bool
+absRelTol epsilonAbs epsilonRel u v
   |  isInfinite u
   && isInfinite v          = True
   |  isNaN u
@@ -83,8 +90,6 @@ absRelTol epsilonRel u v
   | abs (u-v) < epsilonAbs = True
   | abs u > abs v          = abs ((u-v) / u) < epsilonRel
   | otherwise              = abs ((v-u) / v) < epsilonRel
-  where
-    epsilonAbs = 0.00001
 
 instance (Eq e, Eq sh, Shape sh) => Eq (Array sh e) where
   a1 == a2      =  arrayShape a1 == arrayShape a2
@@ -129,7 +134,6 @@ expected ~=? actual = counterexample (failure expected actual) (expected ~= actu
 --
 (~?=) :: (Similar a, Show a) => a -> a -> Property
 (~?=) = flip (~=?)
-
 
 
 -- Miscellaneous
