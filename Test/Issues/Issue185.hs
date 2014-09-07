@@ -17,7 +17,7 @@ import Data.Label
 
 
 test_issue185 :: Config -> Test
-test_issue185 conf = testGroup "168"
+test_issue185 conf = testGroup "185"
   [ testCase "A" (assertEqual ref1 (run backend acc1 :: Vector Int))
   , testCase "B" (assertEqual ref2 (run backend acc2 :: Vector Int))
   , testCase "C" (assertEqual ref3 (run backend acc3 :: Vector Int))
