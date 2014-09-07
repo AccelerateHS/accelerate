@@ -29,11 +29,6 @@ import Data.Array.Accelerate                  as A hiding ( (!) )
 import Data.Array.Accelerate.Array.Sugar      ( (!) )
 import Data.Array.Accelerate.Math.Complex
 
-instance (Similar e, RealFloat e) => Similar (Complex e) where
-  -- CUFFT can actually give quite large errors, so we have to
-  -- increase the epsilon for the absolute relative value difference.
-  (r1 :+ i1) ~= (r2 :+ i2) = absRelTol 0.005 r1 r2 && absRelTol 0.005 i1 i2
-
 newtype PowerOf2Array a = PowerOf2Array (Array DIM2 a) deriving Show
 
 instance (Arbitrary a, Elt a) => Arbitrary (PowerOf2Array a) where
@@ -53,8 +48,9 @@ instance (Arbitrary a, Elt a) => Arbitrary (PowerOf2Array a) where
 
 test_fft :: Config -> Test
 test_fft opt =  testGroup "fft" $ catMaybes
-  [ testElt configFloat (undefined::Float)
-  , testElt configDouble (undefined::Double) ]
+  [ testElt configFloat  (undefined::Float)
+  , testElt configDouble (undefined::Double)
+  ]
   where
     backend = get configBackend opt
 
@@ -65,7 +61,7 @@ test_fft opt =  testGroup "fft" $ catMaybes
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise             = Just $ testGroup (show (typeOf (undefined :: a)))
-          [ testProperty "size"  (test_size :: PowerOf2Array (Complex a) -> Property)
+          [ testProperty "size"  (test_size  :: PowerOf2Array (Complex a) -> Property)
           , testProperty "trans" (test_trans :: PowerOf2Array (Complex a) -> Property) ]
 
     test_trans :: (Elt a, RealFloat a, IsFloating a, Similar a) => PowerOf2Array (Complex a) -> Property
@@ -79,3 +75,4 @@ test_fft opt =  testGroup "fft" $ catMaybes
       = let Z:.h:.w = arrayShape xs
         in     arrayShape xs
            ~?= arrayShape (run1 backend (fft2D' Forward w h) xs)
+
