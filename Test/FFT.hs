@@ -27,7 +27,7 @@ import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate.Math.FFT         as FFT
 import Data.Array.Accelerate                  as A hiding ( (!) )
 import Data.Array.Accelerate.Array.Sugar      ( (!) )
-import Data.Array.Accelerate.Math.Complex
+import Data.Array.Accelerate.Data.Complex
 
 newtype PowerOf2Array a = PowerOf2Array (Array DIM2 a) deriving Show
 
