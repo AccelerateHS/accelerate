@@ -352,7 +352,6 @@ Executable accelerate-mandelbrot
     buildable:          False
   else
     build-depends:      accelerate              == 0.15.*,
-                        accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
                         criterion               >= 0.5 && <1,

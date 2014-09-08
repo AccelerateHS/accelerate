@@ -19,7 +19,7 @@ import Data.Label
 import Data.Array.Accelerate                    as A hiding ( size )
 import Data.Array.Accelerate.Math.FFT
 import Data.Array.Accelerate.Math.DFT.Centre
-import Data.Array.Accelerate.Math.Complex
+import Data.Array.Accelerate.Data.Complex
 
 #ifdef ACCELERATE_CUDA_BACKEND
 import Data.Array.Accelerate.CUDA.Foreign
