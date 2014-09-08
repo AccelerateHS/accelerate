@@ -89,7 +89,7 @@ module Data.Array.Accelerate.AST (
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSequence(..), Sequence,
+  PreOpenSeq(..), Seq,
   Producer(..), Consumer(..),
 
   -- * Scalar expressions
@@ -461,8 +461,8 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e')
 
   -- A sequence of operations.
-  Sequence    :: Arrays arrs
-              => PreOpenSequence acc aenv () arrs
+  Seq         :: Arrays arrs
+              => PreOpenSeq acc aenv () arrs
               -> PreOpenAcc acc aenv arrs
 
 -- Vanilla open array computations
@@ -472,9 +472,9 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
-data PreOpenSequence acc aenv senv arrs where
-  Producer :: (Arrays a, Arrays arrs) => Producer acc aenv senv a -> PreOpenSequence acc aenv (senv, a) arrs -> PreOpenSequence acc aenv senv  arrs
-  Consumer :: Arrays arrs => Consumer acc aenv senv arrs -> PreOpenSequence acc aenv senv arrs
+data PreOpenSeq acc aenv senv arrs where
+  Producer :: (Arrays a, Arrays arrs) => Producer acc aenv senv a -> PreOpenSeq acc aenv (senv, a) arrs -> PreOpenSeq acc aenv senv  arrs
+  Consumer :: Arrays arrs => Consumer acc aenv senv arrs -> PreOpenSeq acc aenv senv arrs
 
 data Producer acc aenv senv a where
   -- Convert the given array to a sequence.
@@ -618,7 +618,7 @@ data Consumer acc aenv senv a where
 
 -- |Closed sequence computation
 --
-type Sequence = PreOpenSequence OpenAcc () ()
+type Seq = PreOpenSeq OpenAcc () ()
 
 -- |Closed array expression aka an array program
 --
@@ -1132,7 +1132,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Sequence{}         = "Sequence"
+showPreAccOp Seq{}              = "Seq"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

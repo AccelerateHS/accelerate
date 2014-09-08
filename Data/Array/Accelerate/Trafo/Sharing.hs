@@ -52,7 +52,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenSequence(..), Producer(..), Consumer(..),
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Debug            as Debug
@@ -306,7 +306,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      Collect seq -> AST.Sequence (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+      Collect seq -> AST.Seq (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
 
 -- Sequence expressions
 -- ------------------
@@ -318,7 +318,7 @@ convertSeq
     :: Arrays s
     => Bool             -- ^ recover sharing of sequence computations ?
     -> Seq s            -- ^ computation to be converted
-    -> AST.Sequence s
+    -> AST.Seq s
 convertSeq shareSeq seq
   = let config = Config True True shareSeq True
         (sharingSeq, initialEnv) = recoverSharingSeq config seq
@@ -333,7 +333,7 @@ convertSharingSeq
     -> [StableSharingAcc]
     -> [StableSharingSeq]
     -> ScopedSeq arrs
-    -> AST.PreOpenSequence AST.OpenAcc aenv senv arrs
+    -> AST.PreOpenSeq AST.OpenAcc aenv senv arrs
 convertSharingSeq _ _ _ _ _ (ScopedSeq (SvarSharing _))
   = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
 convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
@@ -342,7 +342,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
     convSeq :: forall bnd body. Arrays body
             => PreSeq ScopedAcc ScopedSeq ScopedExp bnd
             -> ScopedSeq body
-            -> AST.PreOpenSequence AST.OpenAcc aenv senv body
+            -> AST.PreOpenSeq AST.OpenAcc aenv senv body
     convSeq bnd body =
       case bnd of
         ToSeq slix acc                     -> producer $ mkToSeq (cvtE slix) (cvtA acc)
@@ -355,7 +355,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
       where
         producer :: (bnd ~ [a], Arrays a, Arrays body)
                  => AST.Producer AST.OpenAcc aenv senv a
-                 -> AST.PreOpenSequence AST.OpenAcc aenv senv body
+                 -> AST.PreOpenSeq AST.OpenAcc aenv senv body
         producer p = AST.Producer p $ convertSharingSeq config alyt slyt' aenv (sa:senv) body
           where
             slyt' = incLayout slyt `PushLayout` ZeroIdx

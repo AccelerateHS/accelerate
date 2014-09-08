@@ -183,7 +183,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
         -- Sequence operations
-        Sequence seq            -> Sequence (cvtSeq seq)
+        Seq seq            -> Seq (cvtSeq seq)
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -196,7 +196,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
       | otherwise
       = Alet bnd body
 
-    cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence DelayedOpenAcc aenv senv a
+    cvtSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
     cvtSeq s =
       case s of
         Producer p s' ->
@@ -344,7 +344,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Sequence l          -> sequenceD embedAcc l
+    Seq s               -> sequenceD embedAcc s
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -532,14 +532,14 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- actual sequencing.
     sequenceD :: forall aenv arrs. (Kit acc, Arrays arrs)
           => EmbedAcc acc
-          -> PreOpenSequence acc aenv () arrs
+          -> PreOpenSeq acc aenv () arrs
           -> Embed       acc aenv    arrs
     sequenceD embedAcc s
       | ExtendSeq env s' <- travS s BaseEnv
-      = Embed (env `PushEnv` (Sequence s')) (Done ZeroIdx)
+      = Embed (env `PushEnv` (Seq s')) (Done ZeroIdx)
       where
         travS :: forall senv aenv' arrs'.
-                 PreOpenSequence acc aenv senv arrs'
+                 PreOpenSeq acc aenv senv arrs'
               -> Extend acc aenv aenv'
               -> ExtendSeq acc aenv senv arrs'
         travS s env =
@@ -547,7 +547,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
             Producer p s
               | ExtendSeq env' s' <- travS s env
               , ExtendProducer env'' p' <- travP p env'
-              -> ExtendSeq (env' `append` env'') (Producer p' (sinkSequence env'' s'))
+              -> ExtendSeq (env' `append` env'') (Producer p' (sinkSeq env'' s'))
             Consumer c
               | c' <- travC c env
               -> ExtendSeq env (Consumer c')
@@ -724,22 +724,22 @@ accType' _ = arrays' (undefined :: a)
 -- prjExtend _               _             = $internalError "prjExtend" "inconsistent valuation"
 
 -- Rearrange type arguments to fit with Sink type class.
-newtype SinkSequence acc senv aenv a = SinkSequence { unSinkSequence :: PreOpenSequence acc aenv senv a }
+newtype SinkSeq acc senv aenv a = SinkSeq { unSinkSeq :: PreOpenSeq acc aenv senv a }
 
 -- sink for sequences.
-sinkSequence :: Kit acc => Extend acc aenv aenv' -> PreOpenSequence acc aenv senv a -> PreOpenSequence acc aenv' senv a
-sinkSequence env s = unSinkSequence $ sink env (SinkSequence s)
+sinkSeq :: Kit acc => Extend acc aenv aenv' -> PreOpenSeq acc aenv senv a -> PreOpenSeq acc aenv' senv a
+sinkSeq env s = unSinkSeq $ sink env (SinkSeq s)
 
-instance Kit acc => Sink (SinkSequence acc senv) where
-  weaken :: forall aenv aenv' arrs. aenv :> aenv' -> SinkSequence acc senv aenv arrs -> SinkSequence acc senv aenv' arrs
-  weaken k (SinkSequence s) = SinkSequence $
+instance Kit acc => Sink (SinkSeq acc senv) where
+  weaken :: forall aenv aenv' arrs. aenv :> aenv' -> SinkSeq acc senv aenv arrs -> SinkSeq acc senv aenv' arrs
+  weaken k (SinkSeq s) = SinkSeq $
     case s of
       Producer p s' -> Producer   (weakenP p) (weakenL s')
       Consumer c    -> Consumer   (weakenC c)
 
     where
-      weakenL :: forall senv' arrs'. PreOpenSequence acc aenv senv' arrs' -> PreOpenSequence acc aenv' senv' arrs'
-      weakenL s' = unSinkSequence (weaken k (SinkSequence s'))
+      weakenL :: forall senv' arrs'. PreOpenSeq acc aenv senv' arrs' -> PreOpenSeq acc aenv' senv' arrs'
+      weakenL s' = unSinkSeq (weaken k (SinkSeq s'))
 
       weakenP :: forall a. Producer acc aenv senv a -> Producer acc aenv' senv a
       weakenP p =
@@ -1233,13 +1233,13 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Sequence seq            -> Sequence (cvtSeq seq)
+        Seq seq                 -> Seq (cvtSeq seq)
 
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
 
-        cvtSeq :: PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv s
+        cvtSeq :: PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv s
         cvtSeq s =
           case s of
             Producer p s' ->
@@ -1339,7 +1339,7 @@ aprjD embedAcc ix a
 data ExtendSeq acc aenv senv arrs where
   ExtendSeq :: forall acc aenv aenv' senv arrs.
                 Extend acc aenv aenv'
-             -> PreOpenSequence acc aenv' senv arrs
+             -> PreOpenSeq acc aenv' senv arrs
              -> ExtendSeq acc aenv senv arrs
 
 -- A producer with additional bindings

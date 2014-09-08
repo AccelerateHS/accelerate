@@ -60,7 +60,7 @@ convertSegments = cvtA
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
 
-    cvtSeq :: PreOpenSequence OpenAcc aenv senv a -> PreOpenSequence OpenAcc aenv senv a
+    cvtSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
     cvtSeq s =
       case s of
         Producer p s -> Producer (cvtP p) (cvtSeq s)
@@ -116,7 +116,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Sequence seq              -> Sequence (cvtSeq seq)
+      Seq seq                   -> Seq (cvtSeq seq)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))

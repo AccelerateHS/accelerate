@@ -190,9 +190,9 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Sequence seq              -> Sequence (shrinkSeq seq)
+      Seq seq                   -> Seq (shrinkSeq seq)
 
-    shrinkSeq :: PreOpenSequence acc aenv' senv a -> PreOpenSequence acc aenv' senv a
+    shrinkSeq :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
     shrinkSeq s =
       case s of
         Producer p s -> Producer (shrinkP p)  (shrinkSeq s)
@@ -395,9 +395,9 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Sequence l                -> countSeq l
+      Seq l                     -> countSeq l
 
-    countSeq :: PreOpenSequence acc aenv senv arrs -> Int
+    countSeq :: PreOpenSeq acc aenv senv arrs -> Int
     countSeq s =
       case s of
         Producer p s -> countPr p + countSeq s

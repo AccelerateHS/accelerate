@@ -175,7 +175,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     Use arr                     -> toArr arr
     Unit e                      -> unitOp (evalE e)
-    Sequence s                  -> evalSeq defaultSeqConfig s aenv
+    Seq s                       -> evalSeq defaultSeqConfig s aenv
 
     -- Producers
     -- ---------
@@ -1332,7 +1332,7 @@ minCursor s = travS s 0
 
 evalSeq :: forall aenv arrs.
             SeqConfig
-         -> PreOpenSequence DelayedOpenAcc aenv () arrs
+         -> PreOpenSeq DelayedOpenAcc aenv () arrs
          -> Val aenv -> arrs
 evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
                     | otherwise    = returnOut . loop . initSeq aenv $ s
@@ -1341,7 +1341,7 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
     -- halting condition, and should therefore not be iterated.
     -- Notice that the only degenerate closed sequence is the empty sequence.
     degenerate :: forall senv arrs'.
-                  PreOpenSequence DelayedOpenAcc aenv senv arrs'
+                  PreOpenSeq DelayedOpenAcc aenv senv arrs'
                -> Bool
     degenerate s =
       case s of
@@ -1352,7 +1352,7 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
     -- with the given array enviroment.
     initSeq :: forall senv arrs'.
                 Val aenv
-             -> PreOpenSequence DelayedOpenAcc aenv senv arrs'
+             -> PreOpenSeq DelayedOpenAcc aenv senv arrs'
              -> ExecSeq senv arrs'
     initSeq aenv s =
       case s of

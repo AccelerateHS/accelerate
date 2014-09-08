@@ -144,7 +144,7 @@ convertFun
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
-convertSeq :: Arrays s => Seq s -> AST.Sequence s
+convertSeq :: Arrays s => Seq s -> AST.Seq s
 convertSeq
   = Sharing.convertSeq (recoverSeqSharing phases)
 

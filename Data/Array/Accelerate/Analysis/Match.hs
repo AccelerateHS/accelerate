@@ -268,8 +268,8 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Sequence l1) (Sequence l2)
-      = matchSequence matchAcc hashAcc l1 l2
+    match (Seq l1) (Seq l2)
+      = matchSeq matchAcc hashAcc l1 l2
 
     match _ _
       = Nothing
@@ -322,13 +322,13 @@ matchBoundary _  _            _            = False
 
 -- Match sequences
 --
-matchSequence :: forall acc aenv senv s t. MatchAcc acc -> HashAcc acc -> PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv t -> Maybe (s :=: t)
-matchSequence m h = match
+matchSeq :: forall acc aenv senv s t. MatchAcc acc -> HashAcc acc -> PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv t -> Maybe (s :=: t)
+matchSeq m h = match
   where
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp m h
 
-    match :: forall senv s t. PreOpenSequence acc aenv senv s -> PreOpenSequence acc aenv senv t -> Maybe (s :=: t)
+    match :: forall senv s t. PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv t -> Maybe (s :=: t)
     match (Producer p1 s1)   (Producer p2 s2)
       | Just REFL <- matchP p1 p2
       , Just REFL <- match s1 s2
@@ -950,8 +950,8 @@ type HashAcc acc = forall aenv a. acc aenv a -> Int
 hashOpenAcc :: OpenAcc aenv arrs -> Int
 hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 
-hashPreOpenSequence :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSequence acc aenv senv arrs -> Int
-hashPreOpenSequence hashAcc s =
+hashPreOpenSeq :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
+hashPreOpenSeq hashAcc s =
   let
     hashA :: forall aenv a. Int -> acc aenv a -> Int
     hashA salt = hashWithSalt salt . hashAcc
@@ -962,8 +962,8 @@ hashPreOpenSequence hashAcc s =
     hashF :: forall aenv f. Int -> PreOpenAfun acc aenv f -> Int
     hashF salt = hashWithSalt salt . hashAfun hashAcc
 
-    hashSeq :: forall aenv senv' arrs'. Int -> PreOpenSequence acc aenv senv' arrs' -> Int
-    hashSeq salt = hashWithSalt salt . hashPreOpenSequence hashAcc
+    hashSeq :: forall aenv senv' arrs'. Int -> PreOpenSeq acc aenv senv' arrs' -> Int
+    hashSeq salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
     hashVar :: forall senv a. Int -> Idx senv a -> Int
     hashVar salt = hashWithSalt salt . idxToInt
@@ -1006,8 +1006,8 @@ hashPreOpenAcc hashAcc pacc =
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-    hashSeq :: Int -> PreOpenSequence acc aenv senv arrs -> Int
-    hashSeq salt = hashWithSalt salt . hashPreOpenSequence hashAcc
+    hashSeq :: Int -> PreOpenSeq acc aenv senv arrs -> Int
+    hashSeq salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
@@ -1041,7 +1041,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Sequence seq                -> hash "Sequence"      `hashSeq` seq
+    Seq seq                     -> hash "Seq"           `hashSeq` seq
 
 
 hashArrays :: ArraysR a -> a -> Int

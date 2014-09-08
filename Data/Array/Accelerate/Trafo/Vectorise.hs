@@ -368,7 +368,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
     Stencil f b a       -> stencilL f b a
     Stencil2 f b1 a1 b2 a2
                         -> stencil2L f b1 a1 b2 a2
-    Sequence _          -> error "Nested sequence"
+    Seq _               -> error "Nested sequence"
 
   where
     nestedError :: String -> String -> String

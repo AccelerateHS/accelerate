@@ -444,7 +444,7 @@ rebuildPreOpenAcc k av acc =
     Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Sequence seq        -> Sequence <$> rebuildSeq k av seq
+    Seq seq             -> Seq <$> rebuildSeq k av seq
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc
@@ -471,8 +471,8 @@ rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
     -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-    -> PreOpenSequence acc aenv senv t
-    -> f (PreOpenSequence acc aenv' senv t)
+    -> PreOpenSeq acc aenv senv t
+    -> f (PreOpenSeq acc aenv' senv t)
 rebuildSeq k v s =
   case s of
     Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)

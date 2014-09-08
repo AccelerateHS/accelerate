@@ -73,20 +73,20 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (Sequence seq)                        = travSequence f c l seq
+    travAcc' (Seq seq)                             = travSeq f c l seq
 
-travSequence :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
-         -> (String -> String -> m b) -> PreOpenSequence OpenAcc aenv senv a -> m b
-travSequence f c l seq =
+travSeq :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+         -> (String -> String -> m b) -> PreOpenSeq OpenAcc aenv senv a -> m b
+travSeq f c l seq =
   case seq of
     Producer p s' ->
       case p of
-        ToSeq _ ix a   -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSequence f c l s' ]
-        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travSequence f c l s' ]
-        MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSequence f c l s' ]
-        ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSequence f c l s' ]
-        ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSequence f c l s' ]
-        ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSequence f c l s' ]
+        ToSeq _ ix a   -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSeq f c l s' ]
+        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travSeq f c l s' ]
+        MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
+        ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
+        ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSeq f c l s' ]
+        ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSeq f c l s' ]
     Consumer co -> travC co
   where
     combine = c (accFormat f)

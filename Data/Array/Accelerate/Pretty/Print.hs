@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreExp,  prettyExp,
   prettyPreAfun, prettyAfun,
   prettyPreFun,  prettyFun,
-  prettyPrim, prettySequence,
+  prettyPrim, prettySeq,
   noParens
 
 ) where
@@ -133,21 +133,21 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
-    pp (Sequence l)             = sep $ punctuate (text ";") (prettySequence prettyAcc alvl 0 wrap l)
+    pp (Seq l)                  = sep $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap l)
 
 
-prettySequence
+prettySeq
     :: forall acc aenv senv arrs.
        PrettyAcc acc
     -> Int                                      -- level of array variables
     -> Int                                      -- level of sequence variables
     -> (Doc -> Doc)                             -- apply to compound expressions
-    -> PreOpenSequence acc aenv senv arrs
+    -> PreOpenSeq acc aenv senv arrs
     -> [Doc]
-prettySequence prettyAcc alvl llvl wrap s =
+prettySeq prettyAcc alvl llvl wrap s =
   case s of
     Producer p s' ->
-      (prettyP p) : (prettySequence prettyAcc alvl (llvl+1) wrap s')
+      (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
     Consumer c    ->
       [prettyC c]
   where
