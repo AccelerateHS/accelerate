@@ -295,19 +295,19 @@ data PreSeq acc seq exp arrs where
   -- TODO: Add a function for using a list directly.
 
   -- Apply the given the given function to all elements of the given sequence.
-  MapSeq :: (Shape sh, Elt e, Shape sh', Elt e')
-         => (Acc (Array sh e) -> acc (Array sh' e'))
-         -> seq [Array sh e]
-         -> PreSeq acc seq exp [Array sh' e']
+  MapSeq :: (Arrays a, Arrays b)
+         => (Acc a -> acc b)
+         -> seq [a]
+         -> PreSeq acc seq exp [b]
 
   -- Apply a given binary function pairwise to all elements of the given sequences.
   -- The length of the result is the length of the shorter of the two argument
   -- arrays.
-  ZipWithSeq :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
-             => (Acc (Array sh1 e1) -> Acc (Array sh2 e2) -> acc (Array sh3 e3))
-             -> seq [Array sh1 e1]
-             -> seq [Array sh2 e2]
-             -> PreSeq acc seq exp [Array sh3 e3]
+  ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
+             => (Acc a -> Acc b -> acc c)
+             -> seq [a]
+             -> seq [b]
+             -> PreSeq acc seq exp [c]
 
   -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -318,11 +318,11 @@ data PreSeq acc seq exp arrs where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanSeq :: (Shape sh, Elt e)
-          => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
-          -> acc (Array sh e)
-          -> seq [Array sh e]
-          -> PreSeq acc seq exp [Array sh e]
+  ScanSeq :: Arrays a
+          => (Acc a -> Acc a -> acc a)
+          -> acc a
+          -> seq [a]
+          -> PreSeq acc seq exp [a]
 
   -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given
   -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -336,13 +336,13 @@ data PreSeq acc seq exp arrs where
   --
   -- Note on the name: Act is short for "semigroup action".
   --
-  ScanSeqAct :: (Shape sh, Elt e, Shape sh', Elt e')
-             => (Acc (Array sh  e ) -> Acc (Array sh' e') -> acc (Array sh  e ))
-             -> (Acc (Array sh' e') -> Acc (Array sh' e') -> acc (Array sh' e'))
-             -> acc (Array sh  e )
-             -> acc (Array sh' e')
-             -> seq [Array sh' e']
-             -> PreSeq acc seq exp [Array sh e]
+  ScanSeqAct :: (Arrays a, Arrays b)
+             => (Acc a -> Acc b -> acc a)
+             -> (Acc b -> Acc b -> acc b)
+             -> acc a
+             -> acc b
+             -> seq [b]
+             -> PreSeq acc seq exp [a]
 
   -- Convert the given sequence to an array.
   FromSeq :: (Shape sh, Elt e)
@@ -358,11 +358,11 @@ data PreSeq acc seq exp arrs where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  FoldSeq :: (Shape sh, Elt e)
-          => (Acc (Array sh e) -> Acc (Array sh e) -> acc (Array sh e))
-          -> acc (Array sh e)
-          -> seq [Array sh e]
-          -> PreSeq acc seq exp (Array sh e)
+  FoldSeq :: Arrays a
+          => (Acc a -> Acc a -> acc a)
+          -> acc a
+          -> seq [a]
+          -> PreSeq acc seq exp a
 
   -- FoldSeqAct (+) (*) a0 b0 x. Fold a sequence x by the given
   -- binary operation (+). (+) must be semi-associative, where (*) is
@@ -376,13 +376,13 @@ data PreSeq acc seq exp arrs where
   --
   -- Note on the name: Act is short for "semigroup action".
   --
-  FoldSeqAct :: (Shape sh, Elt a, Shape sh', Elt b)
-             => (Acc (Array sh  a) -> Acc (Array sh' b) -> acc (Array sh  a))
-             -> (Acc (Array sh' b) -> Acc (Array sh' b) -> acc (Array sh' b))
-             -> acc (Array sh  a)
-             -> acc (Array sh' b)
-             -> seq [Array sh' b]
-             -> PreSeq acc seq exp (Array sh a)
+  FoldSeqAct :: (Arrays a, Arrays b)
+             => (Acc a -> Acc b -> acc a)
+             -> (Acc b -> Acc b -> acc b)
+             -> acc a
+             -> acc b
+             -> seq [b]
+             -> PreSeq acc seq exp a
 
   -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct
   -- where reduction with the companion operator corresponds to
@@ -401,11 +401,11 @@ data PreSeq acc seq exp arrs where
   --
   --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
-  FoldSeqFlatten :: (Shape sh, Elt a, Shape sh', Elt b)
-                 => (Acc (Array sh a) -> Acc (Vector sh') -> Acc (Vector b) -> acc (Array sh a))
-                 -> acc (Array sh a)
-                 -> seq [Array sh' b]
-                 -> PreSeq acc seq exp (Array sh a)
+  FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
+                 => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> acc a)
+                 -> acc a
+                 -> seq [Array sh e]
+                 -> PreSeq acc seq exp a
 
   -- Tuple up the results of a sequence computation. Note that the Arrays
   -- constraint requires that the elements of the tuple are Arrays, not

@@ -1449,7 +1449,7 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
         FoldSeq f acc x ->
           let f' = evalOpenAfun f aenv
               a0 = evalOpenAcc acc aenv
-              k = elemsPerChunk conf (size (shape a0))
+              k = 1 -- TODO elemsPerChunk conf (size (shape a0))
           in ExecFoldSeq'
                (zipWithChunk' f')
                (reduceChunk f' a0)

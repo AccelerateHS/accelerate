@@ -499,18 +499,18 @@ data Producer acc aenv senv a where
 
   -- Apply the given the given function to all elements of the given
   -- sequence.
-  MapSeq :: (Shape sh, Elt e, Shape sh', Elt e')
-            => PreOpenAfun acc aenv (Array sh e -> Array sh' e')
-            -> Idx senv (Array sh e)
-            -> Producer acc aenv senv (Array sh' e')
+  MapSeq :: (Arrays a, Arrays b)
+         => PreOpenAfun acc aenv (a -> b)
+         -> Idx senv a
+         -> Producer acc aenv senv b
 
   -- Apply a given binary function pairwise to all elements of the
   -- given sequences.
-  ZipWithSeq :: (Shape sh1, Elt e1, Shape sh2, Elt e2, Shape sh3, Elt e3)
-                => PreOpenAfun acc aenv (Array sh1 e1 -> Array sh2 e2 -> Array sh3 e3)
-                -> Idx senv (Array sh1 e1)
-                -> Idx senv (Array sh2 e2)
-                -> Producer acc aenv senv (Array sh3 e3)
+  ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
+                => PreOpenAfun acc aenv (a -> b -> c)
+                -> Idx senv a
+                -> Idx senv b
+                -> Producer acc aenv senv c
 
   -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -521,11 +521,11 @@ data Producer acc aenv senv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanSeq :: (Shape sh, Elt e)
-             => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
-             -> acc aenv (Array sh e)
-             -> Idx senv (Array sh e)
-             -> Producer acc aenv senv (Array sh e)
+  ScanSeq :: Arrays a
+          => PreOpenAfun acc aenv (a -> a -> a)
+          -> acc aenv a
+          -> Idx senv a
+          -> Producer acc aenv senv a
 
   -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
@@ -539,20 +539,20 @@ data Producer acc aenv senv a where
   --
   -- Note on the name: Act is short for "semigroup action".
   --
-  ScanSeqAct :: (Shape sh, Elt e, Shape sh', Elt e')
-                => PreOpenAfun acc aenv (Array sh  e  -> Array sh' e' -> Array sh  e )
-                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
-                -> acc aenv (Array sh  e )
-                -> acc aenv (Array sh' e')
-                -> Idx senv (Array sh' e')
-                -> Producer acc aenv senv (Array sh e)
+  ScanSeqAct :: (Arrays a, Arrays b)
+                => PreOpenAfun acc aenv (a -> b -> a)
+                -> PreOpenAfun acc aenv (b -> b -> b)
+                -> acc aenv a
+                -> acc aenv b
+                -> Idx senv b
+                -> Producer acc aenv senv a
 
 data Consumer acc aenv senv a where
 
   -- Convert the given sequence to an array.
   FromSeq :: (Shape sh, Elt e)
-             => Idx senv (Array sh e)
-             -> Consumer acc aenv senv (Array (Z:.Int) sh, Array (Z:.Int) e)
+          => Idx senv (Array sh e)
+          -> Consumer acc aenv senv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
   -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -563,11 +563,11 @@ data Consumer acc aenv senv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  FoldSeq :: (Shape sh, Elt e)
-             => PreOpenAfun acc aenv (Array sh e -> Array sh e -> Array sh e)
-             -> acc aenv (Array sh e)
-             -> Idx senv (Array sh e)
-             -> Consumer acc aenv senv (Array sh e)
+  FoldSeq :: Arrays a
+          => PreOpenAfun acc aenv (a -> a -> a)
+          -> acc aenv a
+          -> Idx senv a
+          -> Consumer acc aenv senv a
 
   -- FoldSeqAct (+) (*) a0 x. Fold a sequence x by the given binary
   -- operation (+). (+) must be semi-associative, where (*) is the
@@ -581,13 +581,13 @@ data Consumer acc aenv senv a where
   --
   -- Note on the name: Act is short for "semigroup action".
   --
-  FoldSeqAct :: (Shape sh, Elt e, Shape sh', Elt e')
-                => PreOpenAfun acc aenv (Array sh  e  -> Array sh' e' -> Array sh  e )
-                -> PreOpenAfun acc aenv (Array sh' e' -> Array sh' e' -> Array sh' e')
-                -> acc aenv (Array sh  e )
-                -> acc aenv (Array sh' e')
-                -> Idx senv (Array sh' e')
-                -> Consumer acc aenv senv (Array sh e)
+  FoldSeqAct :: (Arrays a, Arrays b)
+             => PreOpenAfun acc aenv (a -> b -> a)
+             -> PreOpenAfun acc aenv (b -> b -> b)
+             -> acc aenv a
+             -> acc aenv b
+             -> Idx senv b
+             -> Consumer acc aenv senv a
 
   -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct where
   -- reduction with the companion operator corresponds to
@@ -606,11 +606,11 @@ data Consumer acc aenv senv a where
   --
   --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
-  FoldSeqFlatten :: (Shape sh, Elt e, Shape sh', Elt e')
-             => PreOpenAfun acc aenv (Array sh e -> Vector sh' -> Vector e' -> Array sh e)
-             -> acc aenv (Array sh e)
-             -> Idx senv (Array sh' e')
-             -> Consumer acc aenv senv (Array sh e)
+  FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
+                 => PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
+                 -> acc aenv a
+                 -> Idx senv (Array sh e)
+                 -> Consumer acc aenv senv a
 
   Stuple :: (Arrays a, IsAtuple a)
          => Atuple (Consumer acc aenv senv) (TupleRepr a)

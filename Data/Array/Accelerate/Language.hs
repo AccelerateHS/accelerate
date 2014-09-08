@@ -474,20 +474,20 @@ stencil2 = Acc $$$$$ Stencil2
 
 -- | Apply the given array function element-wise to the given sequence.
 --
-mapSeq :: (Shape ix, Elt a, Shape ix', Elt b)
-       => (Acc (Array ix a) -> Acc (Array ix' b))
-       -> Seq [Array ix a]
-       -> Seq [Array ix' b]
+mapSeq :: (Arrays a, Arrays b)
+       => (Acc a -> Acc b)
+       -> Seq [a]
+       -> Seq [b]
 mapSeq = Seq $$ MapSeq
 
 -- | Apply the given binary function element-wise to the two sequences.  The length of the resulting
 -- sequence is the minumum of the lengths of the two source sequences.
 --
-zipWithSeq :: (Shape ix, Elt a, Shape ix'', Elt b, Shape ix', Elt c)
-           => (Acc (Array ix a) -> Acc (Array ix'' b) -> Acc (Array ix' c))
-           -> Seq [Array ix   a]
-           -> Seq [Array ix'' b]
-           -> Seq [Array ix' c]
+zipWithSeq :: (Arrays a, Arrays b, Arrays c)
+           => (Acc a -> Acc b -> Acc c)
+           -> Seq [a]
+           -> Seq [b]
+           -> Seq [c]
 zipWithSeq = Seq $$$ ZipWithSeq
 
 -- | scanSeq (+) a0 x seq. Scan a sequence x by combining each
@@ -500,11 +500,11 @@ zipWithSeq = Seq $$$ ZipWithSeq
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-scanSeq :: (Shape ix, Elt a)
-        => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
-        -> Acc (Array ix a)
-        -> Seq [Array ix a]
-        -> Seq [Array ix a]
+scanSeq :: Arrays a
+        => (Acc a -> Acc a -> Acc a)
+        -> Acc a
+        -> Seq [a]
+        -> Seq [a]
 scanSeq = Seq $$$ ScanSeq
 
 -- | ScanSeqAct (+) (*) a0 x seq. Scan a sequence x by the given
@@ -519,13 +519,13 @@ scanSeq = Seq $$$ ScanSeq
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-scanSeqAct :: (Shape ix, Elt a, Shape jx, Elt b)
-           => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
-           -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
-           -> Acc (Array ix a)
-           -> Acc (Array jx b)
-           -> Seq [Array jx b]
-           -> Seq [Array ix a]
+scanSeqAct :: (Arrays a, Arrays b)
+           => (Acc a -> Acc b -> Acc a)
+           -> (Acc b -> Acc b -> Acc b)
+           -> Acc a
+           -> Acc b
+           -> Seq [b]
+           -> Seq [a]
 scanSeqAct = Seq $$$$$ ScanSeqAct
 
 -- | Convert the given array to a sequence by sequencing the outer
@@ -561,11 +561,11 @@ fromSeq = Seq . FromSeq
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-foldSeq :: (Shape ix, Elt a)
-        => (Acc (Array ix a) -> Acc (Array ix a) -> Acc (Array ix a))
-        -> Acc (Array ix a)
-        -> Seq [Array ix a]
-        -> Seq (Array ix a)
+foldSeq :: Arrays a
+        => (Acc a -> Acc a -> Acc a)
+        -> Acc a
+        -> Seq [a]
+        -> Seq a
 foldSeq = Seq $$$ FoldSeq
 
 -- | foldSeqAct (+) (*) a0 x seq. Fold a sequence x by the given
@@ -580,13 +580,13 @@ foldSeq = Seq $$$ FoldSeq
 --
 -- Note on the name: Act is short for "semigroup action".
 --
-foldSeqAct :: (Shape ix, Elt a, Shape jx, Elt b)
-           => (Acc (Array ix a) -> Acc (Array jx b) -> Acc (Array ix a))
-           -> (Acc (Array jx b) -> Acc (Array jx b) -> Acc (Array jx b))
-           -> Acc (Array ix a)
-           -> Acc (Array jx b)
-           -> Seq [Array jx b]
-           -> Seq (Array ix a)
+foldSeqAct :: (Arrays a, Arrays b)
+           => (Acc a -> Acc b -> Acc a)
+           -> (Acc b -> Acc b -> Acc b)
+           -> Acc a
+           -> Acc b
+           -> Seq [b]
+           -> Seq a
 foldSeqAct = Seq $$$$$ FoldSeqAct
 
 -- | foldSeqFlatten f a0 x seq. A specialized version of
@@ -606,11 +606,11 @@ foldSeqAct = Seq $$$$$ FoldSeqAct
 --
 --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
 --
-foldSeqFlatten :: (Shape ix, Elt a, Shape jx, Elt b)
-               => (Acc (Array ix a) -> Acc (Vector jx) -> Acc (Vector b) -> Acc (Array ix a))
-               -> Acc (Array ix a)
+foldSeqFlatten :: (Arrays a, Shape jx, Elt b)
+               => (Acc a -> Acc (Vector jx) -> Acc (Vector b) -> Acc a)
+               -> Acc a
                -> Seq [Array jx b]
-               -> Seq (Array ix a)
+               -> Seq a
 foldSeqFlatten = Seq $$$ FoldSeqFlatten
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
