@@ -97,7 +97,8 @@ test_permute opt = testGroup "permute" $ catMaybes
     -- building a histogram. Often tricky for parallel backends.
     --
     test_histogram f g xs =
-      forAll (sized return) $ \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
+      forAll (sized return) $
+        \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
 
     histogramAcc n f xs =
       let n'        = unit (constant n)

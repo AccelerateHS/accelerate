@@ -8,6 +8,7 @@ import System.Environment
 
 import Config
 import Monitoring
+import Test.FFT
 import Test.IO
 import Test.Prelude
 import Test.Sharing
@@ -38,6 +39,7 @@ main = do
   defaultMainWithOpts
     [ test_prelude conf
     , test_sharing conf
+    , test_fft conf
     , test_io conf
     , test_imaginary conf
     , test_spectral conf

@@ -15,7 +15,6 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
-import Test.QuickCheck.Property                                 ( morallyDubiousIOProperty )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Foreign.Ptr
@@ -55,10 +54,12 @@ test_blackscholes opt = testGroup "black-scholes" $ catMaybes
 
     run_blackscholes :: forall a. ( Elt a, IsFloating a, Similar a, Storable a, Random a, Arbitrary a
                                   , BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
-                     => BlackScholes a -> Property
+                     => BlackScholes a
+                     -> Property
     run_blackscholes cfun =
-      forAll (sized $ \nmax -> choose (0,nmax)) $ \n ->
-      forAll (arbitraryArrayOf (Z:.n) opts)     $ \psy -> morallyDubiousIOProperty $ do
+      forAll (sized return)                     $ \nmax ->
+      forAll (choose (0,nmax))                  $ \n ->
+      forAll (arbitraryArrayOf (Z:.n) opts)     $ \psy -> ioProperty $ do
         let actual = run1 backend blackscholes psy
         expected  <- blackScholesRef cfun psy
         return     $ expected ~?= actual

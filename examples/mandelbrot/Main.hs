@@ -39,7 +39,7 @@ main
             height      = get optHeight conf
 
             -- Centre coordinates: Re(c) = -0.7; Im(c) = 0
-            -- View width: 3.0769
+            -- View width: 3.067
             --
             view        = (-2.23, -1.15, 0.83, 1.15)
 

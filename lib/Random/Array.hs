@@ -66,7 +66,11 @@ randomArrayWithSeed seed f sh
 --
 --   TODO: find a way to do this directly, without going via save/restore.
 --
-randomArrayWithSystemRandom :: forall sh e. (Shape sh, Elt e) => sh :~> e -> sh -> IO (Array sh e)
+randomArrayWithSystemRandom
+    :: forall sh e. (Shape sh, Elt e)
+    => sh :~> e
+    -> sh
+    -> IO (Array sh e)
 randomArrayWithSystemRandom f sh
   = do
        seed   <- withSystemRandom (asGenIO save)
@@ -75,12 +79,15 @@ randomArrayWithSystemRandom f sh
 
 -- Common function to create a mutable array and fill it with random values
 --
-runRandomArray :: (Shape sh, Elt e) => sh :~> e -> sh -> GenIO -> IO (MutableArrayData (EltRepr e))
+runRandomArray
+    :: (Shape sh, Elt e)
+    => sh :~> e
+    -> sh
+    -> GenIO
+    -> IO (MutableArrayData (EltRepr e))
 runRandomArray f sh gen
-  = let
-        n = Sugar.size sh
-    in do
-      arr <- newArrayData n
+  = do
+      arr <- newArrayData $! Sugar.size sh
       let write ix = unsafeWriteArrayData arr (Sugar.toIndex sh ix)
                    . fromElt =<< f ix gen
 
