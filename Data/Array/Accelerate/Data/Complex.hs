@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE IncoherentInstances   #-}
@@ -5,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Array.Accelerate.Data.Complex (
@@ -46,10 +48,11 @@ instance Elt a => Elt (Complex a) where
   toElt' (a,b)                  = toElt a :+ toElt' b
   fromElt' (a :+ b)             = (fromElt a, fromElt' b)
 
-instance IsTuple (Complex a) where
+instance cst a => IsConstrainedTuple cst (Complex a) where
   type TupleRepr (Complex a) = (((), a), a)
-  fromTuple (x :+ y)    = (((), x), y)
-  toTuple (((), x), y)  = (x :+ y)
+  fromTuple _ (x :+ y)    = (((), x), y)
+  toTuple _ (((), x), y)  = (x :+ y)
+  tuple _ _               = TupleRsnoc $ TupleRsnoc TupleRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)
