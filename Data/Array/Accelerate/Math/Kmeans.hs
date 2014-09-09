@@ -73,8 +73,8 @@ findClosestCluster
     => Acc (Vector (Cluster a))
     -> Acc (Vector (Point a))
     -> Acc (Vector Id)
-findClosestCluster clusters points =
-  A.map (\p -> A.fst $ A.sfoldl (nearest p) z (constant Z) clusters) points
+findClosestCluster clusters =
+  A.map (\p -> A.fst $ A.sfoldl (nearest p) z (constant Z) clusters)
   where
     z = constant (-1, inf)
 
