@@ -16,7 +16,7 @@ module Mandel (
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.IO                 as A
-import Data.Array.Accelerate.Math.Complex
+import Data.Array.Accelerate.Data.Complex
 
 -- Types -----------------------------------------------------------------------
 

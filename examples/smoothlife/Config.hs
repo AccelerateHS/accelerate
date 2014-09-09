@@ -11,7 +11,7 @@ import Data.Label
 import Control.Category
 
 import Data.Array.Accelerate                            ( Array, DIM2 )
-import Data.Array.Accelerate.Math.Complex               ( Complex )
+import Data.Array.Accelerate.Data.Complex               ( Complex )
 
 
 -- | Types
