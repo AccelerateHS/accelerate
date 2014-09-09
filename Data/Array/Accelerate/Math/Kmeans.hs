@@ -2,10 +2,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- Module      : Data.Array.Accelerate.Math.Kmeans
--- Copyright   : [2013] Trevor L. McDonell, Vinod Grover, Sean Lee
+-- Copyright   : [2014] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@nvidia.com>
+-- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
