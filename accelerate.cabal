@@ -217,7 +217,15 @@ Library
                         text                    >= 0.10,
                         unix                    >= 2.4
 
-  Exposed-modules:      Data.Array.Accelerate
+  Exposed-modules:
+                        -- The core language and reference implementation
+                        Data.Array.Accelerate
+                        Data.Array.Accelerate.Interpreter
+
+                        -- Prelude-like
+                        Data.Array.Accelerate.Data.Complex
+
+                        -- For backend development
                         Data.Array.Accelerate.AST
                         Data.Array.Accelerate.Analysis.Match
                         Data.Array.Accelerate.Analysis.Shape
@@ -228,7 +236,6 @@ Library
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Error
-                        Data.Array.Accelerate.Interpreter
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
