@@ -78,12 +78,12 @@ class Elt e => Radix e where
 
 #define signed(ty)                                                             \
 instance Radix ty where ;                                                      \
-  passes = bitSize ;                                                           \
+  passes = finiteBitSize ;                                                     \
   radix  = radixOfSigned ;
 
 #define unsigned(ty)                                                           \
 instance Radix ty where ;                                                      \
-  passes = bitSize ;                                                           \
+  passes = finiteBitSize ;                                                     \
   radix  = radixOfUnsigned ;
 
 signed(Int)
