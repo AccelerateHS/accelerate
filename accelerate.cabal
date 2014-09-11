@@ -159,8 +159,6 @@ Bug-reports:            https://github.com/AccelerateHS/accelerate/issues
 Category:               Compilers/Interpreters, Concurrency, Data, Parallelism
 Stability:              Experimental
 
-Extra-source-files:     INSTALL
-
 Flag debug
   Default:              False
   Description:
