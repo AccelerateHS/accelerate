@@ -57,20 +57,55 @@ Flag llvm-multi
   Default:              True
 
 
--- Flags to specify which programs to build (all true by default)
+-- Flags to specify which programs to build
 --
 Flag nofib
+  Description:          Regression test suite
+  Default:              True
+
 Flag smvm
+  Description:          Sparse-matrix vector multiplication benchmark
+  Default:              True
+
 Flag crystal
+  Description:          A visualisation of a sum of waves in a plane
+  Default:              True
+
 Flag canny
+  Description:          Canny edge detection benchmark
+  Default:              True
+
 Flag mandelbrot
+  Description:          A Mandelbrot fractal benchmark
+  Default:              True
+
 Flag fluid
+  Description:          An interactive particle-based fluid simulation
+  Default:              True
+
 Flag nbody
+  Description:          Simulation of gravitational attraction between solid particles
+  Default:              True
+
 Flag smoothlife
+  Description:          A cellular automata simulation
+  Default:              True
+
 Flag hashcat
+  Description:          A "password recovery" application for MD5 cracking
+  Default:              True
+
 Flag fft
+  Description:          Simple FFT-based high/low-pass image filtering
+  Default:              True
+
 Flag pagerank
+  Description:          Implementation of the PageRank algorithm
+  Default:              True
+
 Flag ray
+  Description:          A simple real-time ray tracer
+  Default:              True
 
 
 -- The main test program. This includes randomised quickcheck testing for array
