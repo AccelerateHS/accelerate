@@ -73,8 +73,8 @@ findClosestCluster
     => Acc (Vector (Cluster a))
     -> Acc (Vector (Point a))
     -> Acc (Vector Id)
-findClosestCluster clusters =
-  A.map (\p -> A.fst $ A.sfoldl (nearest p) z (constant Z) clusters)
+findClosestCluster clusters points =
+  A.map (\p -> A.fst $ A.sfoldl (nearest p) z (constant Z) clusters) points
   where
     z = constant (-1, inf)
 
@@ -194,11 +194,11 @@ kmeans :: forall a. (Elt a, IsFloating a, RealFloat a)
 kmeans points clusters
   = A.asnd
   $ A.awhile (A.uncurry keepGoing)
-            (\cs -> let (_, old) = unlift cs    :: (Acc (Vector (Cluster a)), Acc (Vector (Cluster a)))
-                        new      = makeNewClusters points old
-                    in
-                    lift (old,new))
-            (lift (clusters, makeNewClusters points clusters))
+             (\cs -> let (_, old) = unlift cs   :: (Acc (Vector (Cluster a)), Acc (Vector (Cluster a)))
+                         new      = makeNewClusters points old
+                     in
+                     lift (old,new))
+             (lift (clusters, makeNewClusters points clusters))
   where
     keepGoing :: Acc (Vector (Cluster a)) -> Acc (Vector (Cluster a)) -> Acc (Scalar Bool)
     keepGoing xs ys
