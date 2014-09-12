@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Get cabal to load up ghci for us. This will set the environment appropriately
+# if we have a local sandbox installation.
+#
+GHC="cabal exec ghc --"
+
+GHC_FLAGS="$GHC_FLAGS
+    --interactive
+    -DACCELERATE_BOUNDS_CHECKS
+    -DACCELERATE_INTERNAL_CHECKS
+    -DACCELERATE_DEBUG
+    -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h"
+
+# If we have specified one command line argument, but that file doesn't exist,
+# search the source files for something with that name prefix.
+#
+# > ghci shar
+#
+# should result in:
+#
+# > ghci Data/Array/Accelerate/Trafo/Sharing.hs
+#
+FILES=`find Data -iname "$1*" -name "*.hs"`
+COUNT=`echo $FILES | wc -w`
+
+if [ $COUNT -eq 1 ]; then
+    $GHC $GHC_FLAGS $FILES
+else
+    $GHC $GHC_FLAGS $@
+fi
+
