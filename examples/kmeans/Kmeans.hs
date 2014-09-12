@@ -24,8 +24,11 @@
 --   3. Repeat until the centroid locations stabilise (or some maximum iteration
 --   limit is reached).
 --
+-- Adapted from K-Means sample from "Parallel and Concurrent Programming in
+-- Haskell", (c) Simon Marlow, 2013.
+--
 
-module Data.Array.Accelerate.Math.Kmeans ( Point, Cluster, Id, kmeans )
+module Kmeans ( Point, Cluster, Id, kmeans )
   where
 
 import Prelude                                          as P

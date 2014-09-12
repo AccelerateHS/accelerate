@@ -5,18 +5,47 @@
 -- ./generate-samples 5 50000 100000 1010
 --
 
-import TestCore
-
 import Control.Monad
 import Data.Array
 import Data.Binary
 import Data.List
+import Data.Word
 import Data.Random.Normal
 import System.Environment
 import System.IO
 import System.Random
 
-minX, maxX, minY, maxY, minSD, maxSD :: Double
+
+-- Points
+-- ------
+
+type Point = (Float, Float)
+
+zeroPoint :: Point
+zeroPoint = (0,0)
+
+
+-- Clusters
+-----------
+
+type Cluster = (Word32, Point)
+
+makeCluster :: Int -> [Point] -> Cluster
+makeCluster clid points
+  = ( fromIntegral clid
+    , (a / fromIntegral count, b / fromIntegral count))
+  where
+    (a,b) = foldl' addPoint zeroPoint points
+    count = length points
+
+    addPoint :: Point -> Point -> Point
+    addPoint (x,y) (u,v) = (x+u,y+v)
+
+
+-- Generate random points
+-- ----------------------
+
+minX, maxX, minY, maxY, minSD, maxSD :: Float
 minX = -10
 maxX = 10
 minY = -10
@@ -71,11 +100,11 @@ printPoint h (x,y) = do
   hPutStr h (show y)
   hPutChar h '\n'
 
-generate2DSamples :: Int                 -- number of samples to generate
-                  -> Double -> Double    -- X and Y of the mean
-                  -> Double -> Double    -- X and Y standard deviations
-                  -> IO [Point]
-
+generate2DSamples
+    :: Int                      -- number of samples to generate
+    -> Float -> Float           -- X and Y of the mean
+    -> Float -> Float           -- X and Y standard deviations
+    -> IO [Point]
 generate2DSamples n mx my sdx sdy = do
   gen <- newStdGen
   let (genx, geny) = split gen

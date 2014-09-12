@@ -107,6 +107,10 @@ Flag ray
   Description:          A simple real-time ray tracer
   Default:              True
 
+Flag kmeans
+  Description:          An implementation of k-means clustering in a plane
+  Default:              True
+
 
 -- The main test program. This includes randomised quickcheck testing for array
 -- primitives, unit tests, imaginary/spectral/real programs, and benchmarks.
@@ -197,7 +201,7 @@ Executable accelerate-nofib
                         base                            == 4.7.*,
                         array                           >= 0.3,
                         containers                      >= 0.5,
-                        criterion                       >= 0.5 && <1,
+                        criterion                       >= 0.5 && < 1.0,
                         fclabels                        >= 2.0,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.7,
@@ -250,7 +254,7 @@ Executable accelerate-smvm
                         attoparsec              >= 0.10,
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         primitive               >= 0.5,
                         mwc-random              >= 0.8,
@@ -294,7 +298,7 @@ Executable accelerate-crystal
   else
     build-depends:      accelerate              == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         gloss-raster-accelerate >= 1.7
 
@@ -340,7 +344,7 @@ Executable accelerate-canny
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         repa                    >= 3.1,
                         repa-io                 >= 3.1,
@@ -389,7 +393,7 @@ Executable accelerate-mandelbrot
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         gloss-accelerate        >= 1.7
@@ -437,7 +441,7 @@ Executable accelerate-fluid
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
                         bmp                     >= 1.2,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7
 
@@ -492,7 +496,7 @@ Executable accelerate-nbody
   else
     build-depends:      accelerate              == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         mwc-random              >= 0.8
@@ -542,7 +546,7 @@ Executable accelerate-smoothlife
                         accelerate-fft          == 0.15.*,
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         gloss                   >= 1.7,
                         gloss-accelerate        >= 1.7,
@@ -588,7 +592,7 @@ Executable accelerate-hashcat
                         bytestring              >= 0.9,
                         bytestring-lexing       >= 0.2,
                         cereal                  >= 0.3,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         mwc-random              >= 0.8
 
@@ -625,7 +629,7 @@ Executable accelerate-fft
                         accelerate-io           == 0.15.*,
                         accelerate-fft          == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 2.0,
                         filepath                >= 1.0
 
@@ -666,7 +670,7 @@ Executable accelerate-pagerank
                         base                    == 4.7.*,
                         bytestring              >= 0.9.2,
                         containers              >= 0.4.2,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         directory               >= 1.1,
                         fclabels                >= 1.0,
                         vector                  >= 0.9,
@@ -697,7 +701,7 @@ Executable accelerate-ray
     build-depends:      accelerate              == 0.15.*,
                         accelerate-io           == 0.15.*,
                         base                    == 4.7.*,
-                        criterion               >= 0.5 && <1,
+                        criterion               >= 0.5 && < 1.0,
                         fclabels                >= 1.0,
                         gloss                   == 1.8.*,
                         gloss-accelerate        == 1.8.*,
@@ -726,6 +730,48 @@ Executable accelerate-ray
 
   if flag(gui)
     CPP-options:        -DACCELERATE_ENABLE_GUI
+
+  ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
+  ghc-prof-options:     -auto-all
+
+
+-- K-means
+-- -------
+
+Executable accelerate-kmeans
+  Main-is:              Main.hs
+  hs-source-dirs:       examples/kmeans lib
+  other-modules:        ParseArgs Monitoring
+                        Config
+                        Main
+                        Kmeans
+
+  if !flag(kmeans)
+    buildable:          False
+  else
+    build-depends:      accelerate              == 0.15.*,
+                        base                    == 4.7.*,
+                        binary                  >= 0.7,
+                        criterion               >= 0.5 && < 1.0,
+                        normaldistribution,
+                        random
+
+  if flag(cuda)
+    cpp-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda         >= 0.15
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native  == 0.15.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx     == 0.15.*
+
+  if flag(ekg)
+    cpp-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                     >= 0.3
+    ghc-options:        -with-rtsopts=-T
 
   ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
