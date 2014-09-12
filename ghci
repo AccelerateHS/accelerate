@@ -1,40 +1,15 @@
 #!/bin/bash
 
-# Adjust to the installed location of ghci, if this script can not find it.
+# Get cabal to load up ghci for us. This will set the environment appropriately
+# if we have a local sandbox installation.
 #
-GHC=`which -a ghc`
-VER=`$GHC --numeric-version`
-GHC_FLAGS="--interactive"
-
-
-# We assume that the dependent packages are install with 'cabal'. If you have
-# installed them with another tool such as 'cabal-dev', add the following to the
-# command.
-#
-#    -package-conf cabal-dev/packages-$VER.conf
-
-# We need to figure out the size of some basic types. This is the same as what
-# the configure script does when we do a regular install.
-#
-function htype {
-
-  sizeof=`$GHC -w -ignore-dot-ghci -e "import Foreign" -e "import Foreign.C" -e "sizeOf (undefined::$1)"`
-  case $sizeof in
-    4) ty="$2"32 ;;
-    8) ty="$2"64 ;;
-  esac
-
-  GHC_FLAGS="$GHC_FLAGS -optP-DSIZEOF_$3=$sizeof -optP-D$3=$ty"
-}
-
-# htype CLong  Int  HTYPE_LONG
-# htype CULong Word HTYPE_UNSIGNED_LONG
+GHC="cabal exec ghc --"
 
 GHC_FLAGS="$GHC_FLAGS
+    --interactive
     -DACCELERATE_BOUNDS_CHECKS
     -DACCELERATE_INTERNAL_CHECKS
     -DACCELERATE_DEBUG
-    -package-db .cabal-sandbox/x86_64-osx-ghc-$VER-packages.conf.d
     -Iinclude -iutils -optP-include -optPdist/build/autogen/cabal_macros.h"
 
 # If we have specified one command line argument, but that file doesn't exist,
