@@ -589,3 +589,4 @@ unsafeWriteArray = MArray.unsafeWrite
 {-# INLINE storableArrayPtr #-}
 storableArrayPtr :: StorableArray i a -> Ptr a
 storableArrayPtr (StorableArray _ _ _ fp) = unsafeForeignPtrToPtr fp
+
