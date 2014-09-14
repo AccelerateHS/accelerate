@@ -63,7 +63,7 @@ Description:
        /Accelerate/, as well as performance and regression tests.
   .
     3. @accelerate-io@: Fast conversion between /Accelerate/ arrays and other
-       formats, including Repa arrays.
+       formats, including 'vector' and 'repa'.
   .
     4. @accelerate-fft@: Computation of Discrete Fourier Transforms.
   .
