@@ -89,6 +89,8 @@ Description:
   .
     * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
   .
+    * A simple interactive ray tracer
+  .
   [/Mailing list and contacts/]
   .
     * Mailing list: <accelerate-haskell@googlegroups.com> (discussion of both
