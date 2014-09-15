@@ -6,6 +6,7 @@
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2009..2014] Trevor L. McDonell
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>

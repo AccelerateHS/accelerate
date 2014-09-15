@@ -16,6 +16,7 @@
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
 --               [2010..2011] Ben Lever
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
