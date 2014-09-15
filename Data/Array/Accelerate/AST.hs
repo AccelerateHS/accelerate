@@ -462,7 +462,7 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv (Array sh e')
 
   -- A sequence of operations.
-  Seq         :: Arrays arrs
+  Collect     :: Arrays arrs
               => PreOpenSeq acc aenv () arrs
               -> PreOpenAcc acc aenv arrs
 
@@ -474,8 +474,14 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 deriving instance Typeable OpenAcc
 
 data PreOpenSeq acc aenv senv arrs where
-  Producer :: (Arrays a, Arrays arrs) => Producer acc aenv senv a -> PreOpenSeq acc aenv (senv, a) arrs -> PreOpenSeq acc aenv senv  arrs
-  Consumer :: Arrays arrs => Consumer acc aenv senv arrs -> PreOpenSeq acc aenv senv arrs
+  Producer :: (Arrays a, Arrays arrs) 
+           => Producer acc aenv senv a 
+           -> PreOpenSeq acc aenv (senv, a) arrs 
+           -> PreOpenSeq acc aenv senv arrs
+
+  Consumer :: Arrays arrs 
+           => Consumer acc aenv senv arrs 
+           -> PreOpenSeq acc aenv senv arrs
 
 data Producer acc aenv senv a where
   -- Convert the given array to a sequence.
@@ -1133,7 +1139,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
-showPreAccOp Seq{}              = "Seq"
+showPreAccOp Collect{}          = "Collect"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr

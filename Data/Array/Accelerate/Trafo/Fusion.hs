@@ -184,7 +184,7 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
 
         -- Sequence operations
-        Seq seq            -> Seq (cvtSeq seq)
+        Collect seq             -> Collect (cvtSeq seq)
 
     -- Flatten needless let-binds, which can be introduced by the conversion to
     -- the internal embeddable representation.
@@ -345,7 +345,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Seq s               -> sequenceD embedAcc s
+    Collect s           -> collectD embedAcc s
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -491,13 +491,13 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
     -- actual sequencing.
-    sequenceD :: forall aenv arrs. (Kit acc, Arrays arrs)
+    collectD :: forall aenv arrs. (Kit acc, Arrays arrs)
           => EmbedAcc acc
           -> PreOpenSeq acc aenv () arrs
           -> Embed       acc aenv    arrs
-    sequenceD embedAcc s
+    collectD embedAcc s
       | ExtendSeq env s' <- travS s BaseEnv
-      = Embed (env `PushEnv` (Seq s')) (Done ZeroIdx)
+      = Embed (env `PushEnv` (Collect s')) (Done ZeroIdx)
       where
         travS :: forall senv aenv' arrs'.
                  PreOpenSeq acc aenv senv arrs'
@@ -1194,7 +1194,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
         Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
         Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
-        Seq seq                 -> Seq (cvtSeq seq)
+        Collect seq             -> Collect (cvtSeq seq)
 
       where
         cvtA :: acc aenv s -> acc aenv s

@@ -176,7 +176,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     Use arr                     -> toArr arr
     Unit e                      -> unitOp (evalE e)
-    Seq s                       -> evalSeq defaultSeqConfig s aenv
+    Collect s                   -> evalSeq defaultSeqConfig s aenv
 
     -- Producers
     -- ---------

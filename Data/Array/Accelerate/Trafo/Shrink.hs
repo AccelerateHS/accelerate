@@ -190,7 +190,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Seq seq                   -> Seq (shrinkSeq seq)
+      Collect seq               -> Collect (shrinkSeq seq)
 
     shrinkSeq :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
     shrinkSeq s =
@@ -395,7 +395,7 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Seq l                     -> countSeq l
+      Collect s                 -> countSeq s
 
     countSeq :: PreOpenSeq acc aenv senv arrs -> Int
     countSeq s =

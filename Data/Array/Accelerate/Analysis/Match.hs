@@ -268,8 +268,8 @@ matchPreOpenAcc matchAcc hashAcc = match
       , matchBoundary (eltType (undefined::e2)) b2 b2'
       = Just REFL
 
-    match (Seq l1) (Seq l2)
-      = matchSeq matchAcc hashAcc l1 l2
+    match (Collect s1) (Collect s2)
+      = matchSeq matchAcc hashAcc s1 s2
 
     match _ _
       = Nothing
@@ -1041,7 +1041,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Seq seq                     -> hash "Seq"           `hashSeq` seq
+    Collect seq                 -> hash "Seq"           `hashSeq` seq
 
 
 hashArrays :: ArraysR a -> a -> Int

@@ -73,7 +73,7 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (Seq seq)                             = travSeq f c l seq
+    travAcc' (Collect seq)                         = travSeq f c l seq
 
 travSeq :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
          -> (String -> String -> m b) -> PreOpenSeq OpenAcc aenv senv a -> m b

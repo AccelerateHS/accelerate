@@ -133,7 +133,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
-    pp (Seq l)                  = sep $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap l)
+    pp (Collect s)              = sep $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap s)
 
 
 prettySeq

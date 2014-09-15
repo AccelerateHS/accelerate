@@ -444,7 +444,7 @@ rebuildPreOpenAcc k av acc =
     Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Seq seq             -> Seq <$> rebuildSeq k av seq
+    Collect seq         -> Collect <$> rebuildSeq k av seq
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
     => RebuildAcc acc

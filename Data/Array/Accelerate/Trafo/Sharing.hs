@@ -306,7 +306,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      Collect seq -> AST.Seq (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+      Collect seq -> AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
 
 -- Sequence expressions
 -- ------------------
