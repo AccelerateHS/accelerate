@@ -46,15 +46,15 @@ Flag opencl
 
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
-  Default:              True
+  Default:              False
 
 Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
-  Default:              True
+  Default:              False
 
 Flag llvm-multi
   Description:          Enable the multi-device LLVM backend
-  Default:              True
+  Default:              False
 
 
 -- Flags to specify which programs to build
