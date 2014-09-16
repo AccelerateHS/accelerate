@@ -88,6 +88,12 @@ The GitHub repository contains a submodule [accelerate-examples][accelerate-exam
 [![Mandelbrot](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot.jpg)
 [![Raytracer](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")](http://www.cse.unsw.edu.au/~tmcdonell/images/ray.jpg)
 
+Accelerate users have also built some substantial applications of their own.
+Please feel free to add your own examples!
+
+  * Henning Thielemann, [patch-image](http://hackage.haskell.org/package/patch-image): Combine a collage of overlapping images
+  * apunktbau, [bildpunkt](https://github.com/apunktbau/bildpunkt): A ray-marching distance field renderer
+
 
 Mailing list and contacts
 -------------------------
