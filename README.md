@@ -122,7 +122,7 @@ Here is a list of features that are currently missing:
   [accelerate-cuda]:        https://github.com/AccelerateHS/accelerate-cuda
   [accelerate-examples]:    https://github.com/AccelerateHS/accelerate-examples
   [accelerate-io]:          https://github.com/AccelerateHS/accelerate-io
-  [accelerate-fft]:          https://github.com/AccelerateHS/accelerate-fft
+  [accelerate-fft]:         https://github.com/AccelerateHS/accelerate-fft
   [accelerate-backend-kit]: https://github.com/AccelerateHS/accelerate-backend-kit
   [accelerate-buildbot]:    https://github.com/AccelerateHS/accelerate-buildbot
   [accelerate-repa]:        https://github.com/blambo/accelerate-repa
