@@ -514,10 +514,10 @@ data Producer acc aenv senv a where
   -- Apply a given binary function pairwise to all elements of the
   -- given sequences.
   ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
-                => PreOpenAfun acc aenv (a -> b -> c)
-                -> Idx senv a
-                -> Idx senv b
-                -> Producer acc aenv senv c
+             => PreOpenAfun acc aenv (a -> b -> c)
+             -> Idx senv a
+             -> Idx senv b
+             -> Producer acc aenv senv c
 
   -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -547,12 +547,12 @@ data Producer acc aenv senv a where
   -- Note on the name: Act is short for "semigroup action".
   --
   ScanSeqAct :: (Arrays a, Arrays b)
-                => PreOpenAfun acc aenv (a -> b -> a)
-                -> PreOpenAfun acc aenv (b -> b -> b)
-                -> acc aenv a
-                -> acc aenv b
-                -> Idx senv b
-                -> Producer acc aenv senv a
+             => PreOpenAfun acc aenv (a -> b -> a)
+             -> PreOpenAfun acc aenv (b -> b -> b)
+             -> acc aenv a
+             -> acc aenv b
+             -> Idx senv b
+             -> Producer acc aenv senv a
 
 data Consumer acc aenv senv a where
 
