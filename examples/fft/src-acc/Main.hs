@@ -5,6 +5,7 @@ import Config
 import FFT
 import HighPass
 import ParseArgs
+import Monitoring
 
 import Prelude                                          as P
 import Data.Label
@@ -20,9 +21,11 @@ import Data.Array.Accelerate.IO                         as A
 
 main :: IO ()
 main
-  = do  argv                    <- getArgs
-        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
-        (fileIn, fileOut)       <- case nops of
+  = do
+        beginMonitoring
+        argv                    <- getArgs
+        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (fileIn, fileOut)       <- case rest of
           (i:o:_) -> return (i,o)
           _       -> parseArgs configHelp configBackend options defaults header footer ("--help":argv)
                   >> exitSuccess
@@ -55,7 +58,7 @@ main
            else do
              -- Run the operations through criterion
              --
-             withArgs (P.drop 2 nops) $ defaultMainWith cconf (return ())
+             withArgs (P.drop 2 rest) $ defaultMainWith cconf
                [ bench "highpass" $ whnf (run1 backend (highpassFFT width height cutoff)) img
                , bench "fft"      $ whnf (run1 backend (imageFFT    width height clip))   img
                ]

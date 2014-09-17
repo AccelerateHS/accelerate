@@ -31,7 +31,7 @@ main :: IO ()
 main
   = do  beginMonitoring
         argv                    <- getArgs
-        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let solver      = case get configSolver conf of
                             Naive1      -> Naive1.calcAccels
@@ -77,7 +77,7 @@ main
         -- Forward unto dawn
         --
         if get configBenchmark conf
-           then withArgs nops $ defaultMainWith cconf (return ())
+           then withArgs rest $ defaultMainWith cconf
                   [ bench "n-body" $ whnf (advance 0.1) world ]
 
            else play

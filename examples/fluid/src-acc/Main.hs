@@ -27,8 +27,8 @@ main :: IO ()
 main = do
   beginMonitoring
   argv                  <- getArgs
-  (c,crit,noms)         <- parseArgs optHelp optBackend options defaults header footer argv
-  opt                   <- initialiseConfig c
+  (conf,crit,rest)      <- parseArgs optHelp optBackend options defaults header footer argv
+  opt                   <- initialiseConfig conf
 
   let -- configuration parameters
       --
@@ -78,7 +78,7 @@ main = do
   if get optBench opt
 #endif
      -- benchmark
-     then withArgs noms $ defaultMainWith crit (return ())
+     then withArgs rest $ defaultMainWith crit
               [ bench "fluid" $ whnf simulate initialWorld ]
 
      -- simulate

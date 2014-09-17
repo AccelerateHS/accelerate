@@ -20,8 +20,8 @@ main = withSystemRandom $ \gen -> do
   beginMonitoring
 
   argv                  <- getArgs
-  (conf, cconf, nops)   <- parseArgs configHelp configBackend options defaults header footer argv
-  fileIn                <- case nops of
+  (conf, cconf, rest)   <- parseArgs configHelp configBackend options defaults header footer argv
+  fileIn                <- case rest of
     (i:_)       -> return i
     _           -> parseArgs configHelp configBackend options defaults [] [] ("--help":argv)
                 >> exitSuccess
@@ -46,6 +46,6 @@ main = withSystemRandom $ \gen -> do
 
   -- Benchmark
   --
-  withArgs (P.tail nops) $ defaultMainWith cconf (return ())
+  withArgs (P.tail rest) $ defaultMainWith cconf
     [ bench "smvm" $ whnf (run1 backend (smvm smat)) vec ]
 

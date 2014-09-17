@@ -25,8 +25,8 @@ main
   = do
         beginMonitoring
         argv                    <- getArgs
-        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
-        (fileIn, fileOut)       <- case nops of
+        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (fileIn, fileOut)       <- case rest of
           (i:o:_) -> return (i,o)
           _       -> parseArgs configHelp configBackend options defaults header footer ("--help":argv)
                   >> exitSuccess
@@ -63,7 +63,7 @@ main
             -- Run each of the individual kernel stages through criterion, as
             -- well as the end-to-end step process.
             --
-            withArgs (P.drop 2 nops) $ defaultMainWith cconf (return ())
+            withArgs (P.drop 2 rest) $ defaultMainWith cconf
               [ bgroup "kernels"
                 [ bench "greyscale"   $ whnf (run1 backend toGreyscale) img
                 , bench "blur-x"      $ whnf (run1 backend gaussianX) grey'

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 
 module Main where
 
@@ -22,6 +23,7 @@ import qualified Data.ByteString.Lazy.Char8     as L
 
 main :: IO ()
 main = do
+  initializeTime
   beginMonitoring
   argv                  <- getArgs
   (conf, _cconf, files) <- parseArgs configHelp configBackend options defaults header footer argv
@@ -79,4 +81,12 @@ main = do
                       (showFFloatSIBase (Just 2) 1000 persec "Hash/sec")
 
   when (r == t) $ putStrLn "All hashes recovered (:"
+
+time :: IO a -> IO (Double, a)
+time action = do
+  start  <- getTime
+  result <- action
+  end    <- getTime
+  let !delta = end - start
+  return (delta, result)
 

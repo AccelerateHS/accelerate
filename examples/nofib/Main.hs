@@ -31,7 +31,7 @@ main = do
   -- process command line args, and print a brief usage message
   --
   argv                          <- getArgs
-  (conf, cconf, tfconf, nops)   <- parseArgs' configHelp configBackend options defaults header footer argv
+  (conf, cconf, tfconf, rest)   <- parseArgs' configHelp configBackend options defaults header footer argv
 
   -- Run tests, executing the simplest first. More complex operations, such as
   -- segmented operations, generally depend on simpler tests. We build up to the

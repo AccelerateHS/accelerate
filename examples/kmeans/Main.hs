@@ -26,7 +26,7 @@ main :: IO ()
 main
   = do  beginMonitoring
         argv                    <- getArgs
-        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         inputs                  <- (&&) <$> doesFileExist "points.bin"
                                         <*> doesFileExist "clusters"
@@ -56,6 +56,6 @@ main
 
         -- Now benchmark
         --
-        withArgs nops $ defaultMainWith cconf (return ())
+        withArgs rest $ defaultMainWith cconf
           [ bench "k-means" $ whnf solve initial ]
 
