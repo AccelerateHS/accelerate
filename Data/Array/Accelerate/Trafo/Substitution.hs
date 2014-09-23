@@ -237,10 +237,12 @@ instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
 instance RebuildableAcc acc => Sink (RebuildTup acc env) where
 instance Sink OpenAcc where
 
-{-# RULES
-"weaken/weaken" forall a (v1 :: env' :> env'') (v2 :: env :> env').
-    weaken v1 (weaken v2 a) = weaken (v1 . v2) a
- #-}
+-- This rewrite rule is disabled because 'weaken' is now part of a type class.
+-- As such, we cannot attach a NOINLINE pragma because it has many definitions.
+-- {-# RULES
+-- "weaken/weaken" forall a (v1 :: env' :> env'') (v2 :: env :> env').
+--     weaken v1 (weaken v2 a) = weaken (v1 . v2) a
+--  #-}
 
 class SinkExp f where
   weakenE :: env :> env' -> f env aenv t -> f env' aenv t
@@ -250,10 +252,11 @@ class SinkExp f where
 instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
 instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
 
-{-# RULES
-"weakenE/weakenE" forall a (v1 :: env' :> env'') (v2 :: env :> env').
-    weakenE v1 (weakenE v2 a) = weakenE (v1 . v2) a
- #-}
+-- See above for why this is disabled.
+-- {-# RULES
+-- "weakenE/weakenE" forall a (v1 :: env' :> env'') (v2 :: env :> env').
+--    weakenE v1 (weakenE v2 a) = weakenE (v1 . v2) a
+--  #-}
 
 -- NOTE: [Strengthening]
 --

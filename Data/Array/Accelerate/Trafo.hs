@@ -31,10 +31,7 @@ module Data.Array.Accelerate.Trafo (
 
 ) where
 
-import System.IO.Unsafe
-
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
@@ -46,6 +43,11 @@ import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
+
+#ifdef ACCELERATE_DEBUG
+import System.IO.Unsafe
+import Data.Array.Accelerate.Debug
+#endif
 
 
 -- Configuration
