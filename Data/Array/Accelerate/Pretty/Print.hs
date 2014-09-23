@@ -150,6 +150,7 @@ prettySeq prettyAcc alvl llvl wrap s =
       (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
     Consumer c    ->
       [prettyC c]
+    Reify ix      -> [var (idxToInt ix)]
   where
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
@@ -158,48 +159,51 @@ prettySeq prettyAcc alvl llvl wrap s =
     prettyP :: forall a. Producer acc aenv senv a -> Doc
     prettyP p =
       case p of
-        ToSeq _ ix a      -> "toSeq"      .$ [ prettyPreExp prettyAcc 0 alvl noParens ix, prettyAcc alvl wrap a ]
-        UseLazy  _ ix arr -> "useLazy"    .$  [ prettyPreExp prettyAcc 0 alvl noParens ix, prettyArrays ArraysRarray arr ]
-        MapSeq f x        -> "mapSeq"     .$ [ prettyPreAfun prettyAcc alvl f
-                                                      , var (idxToInt x) ]
+        ToSeq _ ix a      -> "toSeq"      .$ [ prettyPreExp prettyAcc 0 alvl parens ix, prettyAcc alvl wrap a ]
+        UseLazy  _ ix arr -> "useLazy"    .$  [ prettyPreExp prettyAcc 0 alvl parens ix, prettyArrays ArraysRarray arr ]
+        MapSeq f x        -> "mapSeq"     .$ [ ppAF f
+                                             , var (idxToInt x) ]
 
-        ZipWithSeq f x y  -> "zipWithSeq" .$ [ prettyPreAfun prettyAcc alvl f
-                                                      , var (idxToInt x)
-                                                      , var (idxToInt y) ]
+        ZipWithSeq f x y  -> "zipWithSeq" .$ [ ppAF f
+                                             , var (idxToInt x)
+                                             , var (idxToInt y) ]
 
-        ScanSeq f a x     -> "foldSeq"    .$ [ prettyPreAfun prettyAcc alvl f
-                                                      , prettyAcc alvl wrap a
-                                                      , var (idxToInt x) ]
+        ScanSeq f a x     -> "foldSeq"    .$ [ ppAF f
+                                             , prettyAcc alvl wrap a
+                                             , var (idxToInt x) ]
 
-        ScanSeqAct f g a b x -> "foldSeqAct" .$ [ prettyPreAfun prettyAcc alvl f
-                                                      , prettyPreAfun prettyAcc alvl g
-                                                      , prettyAcc alvl wrap a
-                                                      , prettyAcc alvl wrap b
-                                                      , var (idxToInt x) ]
+        ScanSeqAct f g a b x -> "foldSeqAct" .$ [ ppAF f
+                                                , ppAF g
+                                                , prettyAcc alvl wrap a
+                                                , prettyAcc alvl wrap b
+                                                , var (idxToInt x) ]
 
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
         FromSeq x            -> "fromSeq"        ..$ [ var (idxToInt x) ]
 
-        FoldSeq f a x        -> "foldSeq"        ..$ [ prettyPreAfun prettyAcc alvl f
-                                                           , prettyAcc alvl wrap a
-                                                           , var (idxToInt x) ]
+        FoldSeq f a x        -> "foldSeq"        ..$ [ ppAF f
+                                                     , prettyAcc alvl wrap a
+                                                     , var (idxToInt x) ]
 
-        FoldSeqAct f g a b x -> "foldSeqAct"     ..$ [ prettyPreAfun prettyAcc alvl f
-                                                           , prettyPreAfun prettyAcc alvl g
-                                                           , prettyAcc alvl wrap a
-                                                           , prettyAcc alvl wrap b
-                                                           , var (idxToInt x) ]
+        FoldSeqAct f g a b x -> "foldSeqAct"     ..$ [ ppAF f
+                                                     , ppAF g
+                                                     , prettyAcc alvl wrap a
+                                                     , prettyAcc alvl wrap b
+                                                     , var (idxToInt x) ]
 
-        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ prettyPreAfun prettyAcc alvl f
-                                                           , prettyAcc alvl wrap a
-                                                           , var (idxToInt x) ]
+        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f
+                                                     , prettyAcc alvl wrap a
+                                                     , var (idxToInt x) ]
         Stuple t             -> tuple (prettyT t)
 
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
     prettyT NilAtup        = []
     prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
+
+    ppAF :: PreOpenAfun acc aenv f -> Doc
+    ppAF = parens . prettyPreAfun prettyAcc alvl
 
 -- Pretty print a function over array computations.
 --

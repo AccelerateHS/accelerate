@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns         #-}
 {-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -71,7 +73,6 @@ data Config = Config
   , recoverSeqSharing   :: Bool         -- ^ Recover sharing of sequence computations ?
   , floatOutAcc         :: Bool         -- ^ Always float array computations out of expressions ?
   }
-
 
 -- Layouts
 -- -------
@@ -315,32 +316,44 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
 -- sharing information.
 --
 convertSeq
-    :: Arrays s
-    => Bool             -- ^ recover sharing of sequence computations ?
+    :: Typeable s
+    => Bool             -- ^ recover sharing of array computations ?
+    -> Bool             -- ^ recover sharing of scalar expressions ?
+    -> Bool             -- ^ recover sharing of sequence computations ?
+    -> Bool             -- ^ always float array computations out of expressions?
     -> Seq s            -- ^ computation to be converted
     -> AST.Seq s
-convertSeq shareSeq seq
-  = let config = Config True True shareSeq True
+convertSeq shareAcc shareExp shareSeq floatAcc seq
+  = let config = Config shareAcc shareExp shareSeq floatAcc
         (sharingSeq, initialEnv) = recoverSharingSeq config seq
     in
     convertSharingSeq config EmptyLayout EmptyLayout [] initialEnv sharingSeq
 
 convertSharingSeq
-    :: forall aenv senv arrs. Arrays arrs
-    => Config
+    :: forall aenv senv arrs.
+       Config
     -> Layout aenv aenv
     -> Layout senv senv
     -> [StableSharingAcc]
     -> [StableSharingSeq]
     -> ScopedSeq arrs
     -> AST.PreOpenSeq AST.OpenAcc aenv senv arrs
-convertSharingSeq _ _ _ _ _ (ScopedSeq (SvarSharing _))
-  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
+convertSharingSeq _ _ slyt _ senv (ScopedSeq (SvarSharing sn))
+  | Just i <- findIndex (matchStableSeq sn) senv
+  = AST.Reify $ prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+  | null senv
+  = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
+            show (hashStableNameHeight sn) ++ ")"
+  | otherwise
+  = $internalError "convertSharingSeq" err
+  where
+    ctxt = "shared 'Seq' tree with stable name " ++ show (hashStableNameHeight sn)
+    err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  senv = " ++ show senv
 convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
   = convSeq boundSeq bodySeq
   where
-    convSeq :: forall bnd body. Arrays body
-            => PreSeq ScopedAcc ScopedSeq ScopedExp bnd
+    convSeq :: forall bnd body.
+               PreSeq ScopedAcc ScopedSeq ScopedExp bnd
             -> ScopedSeq body
             -> AST.PreOpenSeq AST.OpenAcc aenv senv body
     convSeq bnd body =
@@ -353,7 +366,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
         ScanSeqAct afun1 afun2 acc1 acc2 x -> producer $ AST.ScanSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
         _                                  -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
-        producer :: (bnd ~ [a], Arrays a, Arrays body)
+        producer :: (bnd ~ [a], Arrays a)
                  => AST.Producer AST.OpenAcc aenv senv a
                  -> AST.PreOpenSeq AST.OpenAcc aenv senv body
         producer p = AST.Producer p $ convertSharingSeq config alyt slyt' aenv (sa:senv) body
@@ -393,16 +406,16 @@ convertSharingSeq _ _ _ _ _ (ScopedSeq (SletSharing _ _))
  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
 
 convertSharingSeq config alyt slyt aenv senv s
-  = AST.Consumer (cvtC s)
+  = cvtC s
   where
-    cvtC :: ScopedSeq a -> AST.Consumer AST.OpenAcc aenv senv a
+    cvtC :: ScopedSeq a -> AST.PreOpenSeq AST.OpenAcc aenv senv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FromSeq x                          -> AST.FromSeq (asIdx x)
-        FoldSeq afun acc x                 -> AST.FoldSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
-        FoldSeqAct afun1 afun2 acc1 acc2 x -> AST.FoldSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
-        FoldSeqFlatten afun acc x          -> AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
-        Stuple t                           -> AST.Stuple (cvtST t)
+        FromSeq x                          -> AST.Consumer $ AST.FromSeq (asIdx x)
+        FoldSeq afun acc x                 -> AST.Consumer $ AST.FoldSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
+        FoldSeqAct afun1 afun2 acc1 acc2 x -> AST.Consumer $ AST.FoldSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
+        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
+        Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"
 
@@ -434,7 +447,10 @@ convertSharingSeq config alyt slyt aenv senv s
 
     cvtST :: Atuple ScopedSeq t -> Atuple (AST.Consumer AST.OpenAcc aenv senv) t
     cvtST NilAtup        = NilAtup
-    cvtST (SnocAtup t c) = SnocAtup (cvtST t) (cvtC c)
+    cvtST (SnocAtup t c) | AST.Consumer c' <- cvtC c
+                         = SnocAtup (cvtST t) c'
+                         | otherwise
+                         = $internalError "convertSharingSeq" "Unreachable"
 
 convertSharingAfun1
     :: forall aenv a b. (Arrays a, Arrays b)
@@ -1101,7 +1117,7 @@ type StableSeqName arrs = StableNameHeight (Seq arrs)
 --
 data SharingSeq acc seq exp arrs where
   SvarSharing :: Typeable arrs
-              => StableSeqName arrs                  -> SharingSeq acc seq exp arrs
+              => StableSeqName [arrs]                       -> SharingSeq acc seq exp [arrs]
   SletSharing :: StableSharingSeq -> seq t                  -> SharingSeq acc seq exp t
   SeqSharing  :: Typeable arrs
               => StableSeqName arrs -> PreSeq acc seq exp arrs -> SharingSeq acc seq exp arrs
@@ -1148,6 +1164,10 @@ matchStableSeq :: Typeable arrs => StableSeqName arrs -> StableSharingSeq -> Boo
 matchStableSeq sn1 (StableSharingSeq sn2 _)
   | Just sn1' <- gcast sn1 = sn1' == sn2
   | otherwise              = False
+
+{-# NOINLINE atag #-}
+atag :: Arrays a => Int -> Acc a
+atag lvl = Acc (Atag lvl)
 
 
 -- Occurrence counting
@@ -1406,9 +1426,10 @@ makeOccMapAfun1 :: (Arrays a, Typeable b)
                 -> (Acc a -> Acc b)
                 -> IO (Acc a -> UnscopedAcc b, Int)
 makeOccMapAfun1 config accOccMap lvl f = do
-  let x = Acc (Atag lvl)
+  let x = atag lvl
+  let !fx = f x
   --
-  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) (f x)
+  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) fx
   return (const (UnscopedAcc [lvl] body), height)
 
 makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
@@ -1418,8 +1439,8 @@ makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
                 -> (Acc a -> Acc b -> Acc c)
                 -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
 makeOccMapAfun2 config accOccMap lvl f = do
-  let x = Acc (Atag (lvl + 1))
-      y = Acc (Atag (lvl + 0))
+  let x = atag (lvl + 1)
+      y = atag (lvl + 0)
   --
   (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+2) (f x y)
   return (\ _ _ -> (UnscopedAcc [lvl, lvl+1] body), height)
@@ -1751,66 +1772,72 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
           -- NB: This function can only be used in the case alternatives below; outside of the
           --     case we cannot discharge the 'Arrays arrs' constraint.
           --
-          let reconstruct :: Typeable arrs
-                          => IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
-                          -> IO (UnscopedSeq arrs, Int)
-              reconstruct newSeq
+          let producer :: (arrs ~ [a], Typeable a)
+                       => IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
+                       -> IO (UnscopedSeq arrs, Int)
+              producer newSeq
                 = case heightIfRepeatedOccurrence of
                     Just height | recoverSeqSharing config
                       -> return (UnscopedSeq (SvarSharing (StableNameHeight sn height)), height)
                     _ -> do (seq, height) <- newSeq
                             return (UnscopedSeq (SeqSharing (StableNameHeight sn height) seq), height)
 
+          let consumer :: IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
+                       -> IO (UnscopedSeq arrs, Int)
+              consumer newSeq
+                = do (seq, height) <- newSeq
+                     return (UnscopedSeq (SeqSharing (StableNameHeight sn height) seq), height)
+
           case seq of
-            ToSeq sl acc -> reconstruct $ do
+            ToSeq sl acc -> producer $ do
               (acc', h1) <- traverseAcc lvl acc
               (sl' , h2) <- traverseExp lvl sl
               return (ToSeq sl' acc', h1 `max` h2 + 1)
-            UseLazy  sl arr -> reconstruct $ do
+            UseLazy  sl arr -> producer $ do
               (sl', h1) <- traverseExp lvl sl
               return (UseLazy sl' arr, h1 + 1)
-            MapSeq afun s -> reconstruct $ do
+            MapSeq afun s -> producer $ do
               (afun', h1) <- traverseAfun1 lvl afun
               (s'   , h2) <- traverseSeq lvl s
               return (MapSeq afun' s', h1 `max` h2 + 1)
-            ZipWithSeq afun s1 s2 -> reconstruct $ do
+            ZipWithSeq afun s1 s2 -> producer $ do
               (afun', h1) <- traverseAfun2 lvl afun
               (s1'  , h2) <- traverseSeq lvl s1
               (s2'  , h3) <- traverseSeq lvl s2
               return (ZipWithSeq afun' s1' s2', h1 `max` h2 `max` h3 + 1)
-            ScanSeq afun acc s -> reconstruct $ do
+            ScanSeq afun acc s -> producer $ do
               (afun', h1) <- traverseAfun2 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
               (s'   , h3) <- traverseSeq lvl s
               return (ScanSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
-            ScanSeqAct afun1 afun2 acc1 acc2 s -> reconstruct $ do
+            ScanSeqAct afun1 afun2 acc1 acc2 s -> producer $ do
               (afun1', h1) <- traverseAfun2 lvl afun1
               (afun2', h2) <- traverseAfun2 lvl afun2
               (acc1',  h3) <- traverseAcc lvl acc1
               (acc2',  h4) <- traverseAcc lvl acc2
               (s'   ,  h5) <- traverseSeq lvl s
               return (ScanSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
-            FromSeq s -> reconstruct $ do
+            FromSeq s -> consumer $ do
               (s'   , h1) <- traverseSeq lvl s
               return (FromSeq s', h1 + 1)
-            FoldSeq afun acc s -> reconstruct $ do
+            FoldSeq afun acc s -> consumer $ do
               (afun', h1) <- traverseAfun2 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
               (s'   , h3) <- traverseSeq lvl s
               return (FoldSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
-            FoldSeqAct afun1 afun2 acc1 acc2 s -> reconstruct $ do
+            FoldSeqAct afun1 afun2 acc1 acc2 s -> consumer $ do
               (afun1', h1) <- traverseAfun2 lvl afun1
               (afun2', h2) <- traverseAfun2 lvl afun2
               (acc1',  h3) <- traverseAcc lvl acc1
               (acc2',  h4) <- traverseAcc lvl acc2
               (s'   , h5) <- traverseSeq lvl s
               return (FoldSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
-            FoldSeqFlatten afun acc s -> reconstruct $ do
+            FoldSeqFlatten afun acc s -> consumer $ do
               (afun', h1) <- traverseAfun3 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
               (s'   , h3) <- traverseSeq lvl s
               return (FoldSeqFlatten afun' acc' s', h1 `max` h2 `max` h3 + 1)
-            Stuple t -> reconstruct $ do
+            Stuple t -> consumer $ do
               (t', h1) <- traverseTup lvl t
               return (Stuple t', h1 + 1)
 
@@ -1961,6 +1988,7 @@ nodeName (SeqNodeCount (StableSharingSeq (StableNameHeight sn _) _) _) = NodeNam
     (StableSharingExp _ (VarSharing _))  `pickNoneVar`  sa2  = sa2
     sa1                                  `pickNoneVar`  _sa2 = sa1
 
+    pickNoneSvar :: StableSharingSeq -> StableSharingSeq -> StableSharingSeq
     (StableSharingSeq _ (SvarSharing _)) `pickNoneSvar` sa2  = sa2
     sa1                                  `pickNoneSvar` _sa2 = sa1
 
@@ -2753,7 +2781,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
       where
         -- All producers must be replaced by sharing variables
         --
-        producer :: PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+        producer :: (t ~ [a], Typeable a) => PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
                  -> (ScopedSeq t, NodeCounts)
         producer newSeq subCount
           = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount

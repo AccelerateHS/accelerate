@@ -474,7 +474,7 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 deriving instance Typeable OpenAcc
 
 data PreOpenSeq acc aenv senv arrs where
-  Producer :: (Arrays a, Arrays arrs)
+  Producer :: (Arrays a)
            => Producer acc aenv senv a
            -> PreOpenSeq acc aenv (senv, a) arrs
            -> PreOpenSeq acc aenv senv arrs
@@ -482,6 +482,9 @@ data PreOpenSeq acc aenv senv arrs where
   Consumer :: Arrays arrs
            => Consumer acc aenv senv arrs
            -> PreOpenSeq acc aenv senv arrs
+
+  Reify    :: Idx senv arrs
+           -> PreOpenSeq acc aenv senv [arrs]
 
 data Producer acc aenv senv a where
   -- Convert the given array to a sequence.

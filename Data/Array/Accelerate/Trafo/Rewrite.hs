@@ -41,10 +41,6 @@ convertSegments = cvtA
     cvtF :: Fun aenv t -> Fun aenv t
     cvtF = id
 
-    cvtCT :: Atuple (Consumer OpenAcc senv aenv) t -> Atuple (Consumer OpenAcc senv aenv) t
-    cvtCT NilAtup        = NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
-
     a0 :: Arrays a => OpenAcc (aenv, a) a
     a0 = OpenAcc (Avar ZeroIdx)
 
@@ -59,31 +55,6 @@ convertSegments = cvtA
                           `PrimApp`
                           Tuple (NilTup `SnocTup` Var (SuccIdx ZeroIdx)
                                         `SnocTup` Var ZeroIdx))))
-
-    cvtSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
-    cvtSeq s =
-      case s of
-        Producer p s -> Producer (cvtP p) (cvtSeq s)
-        Consumer c   -> Consumer (cvtC c)
-
-    cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
-    cvtP p =
-      case p of
-        ToSeq sl slix a      -> ToSeq sl (cvtE slix) (cvtA a)
-        UseLazy  sl slix arr -> UseLazy  sl (cvtE slix) arr
-        MapSeq f x           -> MapSeq (cvtAfun f) x
-        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
-        ScanSeq f a x        -> ScanSeq (cvtAfun f) (cvtA a) x
-        ScanSeqAct f g a b x -> ScanSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
-
-    cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
-    cvtC c =
-      case c of
-        FromSeq x            -> FromSeq x
-        FoldSeq f a x        -> FoldSeq (cvtAfun f) (cvtA a) x
-        FoldSeqAct f g a b x -> FoldSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
-        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
-        Stuple t             -> Stuple (cvtCT t)
 
     cvtA :: OpenAcc aenv a -> OpenAcc aenv a
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
@@ -116,7 +87,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect seq               -> Collect (cvtSeq seq)
+      Collect s               -> Collect (convertSegmentsSeq s)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
@@ -135,3 +106,41 @@ convertSegmentsAfun afun =
     Abody b     -> Abody (convertSegments b)
     Alam f      -> Alam (convertSegmentsAfun f)
 
+convertSegmentsSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
+convertSegmentsSeq s =
+  case s of
+    Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
+    Consumer c   -> Consumer (cvtC c)
+    Reify ix     -> Reify ix
+  where
+    cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
+    cvtP p =
+      case p of
+        ToSeq sl slix a      -> ToSeq sl (cvtE slix) (cvtA a)
+        UseLazy  sl slix arr -> UseLazy  sl (cvtE slix) arr
+        MapSeq f x           -> MapSeq (cvtAfun f) x
+        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        ScanSeq f a x        -> ScanSeq (cvtAfun f) (cvtA a) x
+        ScanSeqAct f g a b x -> ScanSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
+
+    cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
+    cvtC c =
+      case c of
+        FromSeq x            -> FromSeq x
+        FoldSeq f a x        -> FoldSeq (cvtAfun f) (cvtA a) x
+        FoldSeqAct f g a b x -> FoldSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
+        Stuple t             -> Stuple (cvtCT t)
+
+    cvtCT :: Atuple (Consumer OpenAcc senv aenv) t -> Atuple (Consumer OpenAcc senv aenv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
+    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE = id
+
+    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
+    cvtA = convertSegments
+
+    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
+    cvtAfun = convertSegmentsAfun

@@ -88,6 +88,7 @@ travSeq f c l seq =
         ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSeq f c l s' ]
         ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSeq f c l s' ]
     Consumer co -> travC co
+    Reify ix    -> leaf (show (idxToInt ix))
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)

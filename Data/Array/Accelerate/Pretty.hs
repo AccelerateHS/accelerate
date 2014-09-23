@@ -68,3 +68,5 @@ instance Kit acc => Show (PreOpenExp acc env aenv t) where
 instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
 
+instance Show (DelayedSeq a) where
+  show = renderStyle wide . prettyDelayedSeq noParens

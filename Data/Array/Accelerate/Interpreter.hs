@@ -40,7 +40,7 @@
 module Data.Array.Accelerate.Interpreter (
 
   -- * Interpret an array expression
-  Arrays, run, run1, stream,
+  Arrays, run, run1, streamOut,
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj
@@ -50,8 +50,8 @@ module Data.Array.Accelerate.Interpreter (
 -- standard libraries
 import Control.Monad
 import Data.Bits
-import Data.Char                                                ( chr, ord )
-import Prelude                                                  hiding ( sum )
+import Data.Char                                        ( chr, ord )
+import Prelude                                          hiding ( sum )
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -89,9 +89,9 @@ run1 afun
 -- | Stream a lazily read list of input arrays through the given program,
 -- collecting results as we go
 --
-stream :: (Arrays a, Arrays b) => (Sugar.Acc a -> Sugar.Acc b) -> [a] -> [b]
-stream afun arrs = let go = run1 afun
-                   in  map go arrs
+streamOut :: Arrays a => Sugar.Seq [a] -> [a]
+streamOut seq = let seq' = convertSeqWith config seq
+                in evalDelayedSeq defaultSeqConfig seq'
 
 
 config :: Phase
@@ -1203,7 +1203,7 @@ w !# i
   | j <- i - wpos w
   , j >= 0
   = cdrop j (chunk w)
-  | otherwise = error "Window indexed before position."
+  | otherwise = error $ "Window indexed before position. wpos = " ++ show (wpos w) ++ " i = " ++ show i
 
 -- Move the give window by supplying the next chunk.
 --
@@ -1253,8 +1253,9 @@ prjChunk c senv = prj' (ref c) senv !# cpos c
 -- An executable sequence.
 --
 data ExecSeq senv arrs where
-  ExecP :: (Arrays a, Arrays arrs) => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
-  ExecC :: Arrays a                =>             ExecC senv a ->                           ExecSeq senv  a
+  ExecP :: Arrays a => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
+  ExecC :: Arrays a =>             ExecC senv a ->                           ExecSeq senv  a
+  ExecR ::                         Cursor senv a ->                          ExecSeq senv  [a]
 
 -- An executable producer.
 --
@@ -1307,6 +1308,7 @@ minCursor s = travS s 0
       case s of
         ExecP _ p s' -> travP p i `min` travS s' (i+1)
         ExecC   c    -> travC c i
+        ExecR   _    -> maxBound
 
     k :: Cursor senv a -> Int -> SeqPos
     k c i
@@ -1331,23 +1333,22 @@ minCursor s = travS s 0
         ExecFoldSeq' _ _ c _ -> k c i
         ExecStuple t         -> travT t i
 
+evalDelayedSeq :: SeqConfig
+               -> DelayedSeq arrs
+               -> arrs
+evalDelayedSeq cfg (DelayedSeq aenv s) | aenv' <- evalExtend aenv Empty
+                                       = evalSeq cfg s aenv'
+
 evalSeq :: forall aenv arrs.
             SeqConfig
          -> PreOpenSeq DelayedOpenAcc aenv () arrs
          -> Val aenv -> arrs
-evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
-                    | otherwise    = returnOut . loop . initSeq aenv $ s
+evalSeq conf s aenv = evalSeq' s
   where
-    -- A sequence with no producers is degenerate since there is no
-    -- halting condition, and should therefore not be iterated.
-    -- Notice that the only degenerate closed sequence is the empty sequence.
-    degenerate :: forall senv arrs'.
-                  PreOpenSeq DelayedOpenAcc aenv senv arrs'
-               -> Bool
-    degenerate s =
-      case s of
-        Producer _ _ -> False
-        Consumer _   -> True
+    evalSeq' :: PreOpenSeq DelayedOpenAcc aenv senv arrs -> arrs
+    evalSeq' (Producer _ s) = evalSeq' s
+    evalSeq' (Consumer _)   = loop (initSeq aenv s)
+    evalSeq' (Reify _)      = reify (initSeq aenv s)
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
@@ -1359,48 +1360,53 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
       case s of
         Producer   p s' -> ExecP window0 (initProducer   aenv p) (initSeq aenv s')
         Consumer   c    -> ExecC         (initConsumer   aenv c)
+        Reify      ix   -> ExecR (cursor0 ix)
+
+    -- Generate a list from the sequence.
+    reify :: forall arrs. ExecSeq () [arrs]
+          -> [arrs]
+    reify s = case step s Empty' of
+                (Just s', a) -> a ++ reify s'
+                (Nothing, a) -> a
 
     -- Iterate the given sequence until it terminates.
     -- A sequence only terminates when one of the producers are exhausted.
-    loop :: ExecSeq () arrs
-         -> ExecSeq () arrs
+    loop :: Arrays arrs
+         => ExecSeq () arrs
+         -> arrs
     loop s =
       case step' s of
-        Nothing -> s
-        Just s' -> loop s'
+        (Nothing, arrs) -> arrs
+        (Just s', _)    -> loop s'
 
       where
-        step' :: ExecSeq () arrs -> Maybe (ExecSeq () arrs)
+        step' :: ExecSeq () arrs -> (Maybe (ExecSeq () arrs), arrs)
         step' s = step s Empty'
 
     -- One iteration of a sequence.
     step :: forall senv arrs'.
             ExecSeq senv arrs'
          -> Val' senv
-         -> Maybe (ExecSeq senv arrs')
+         -> (Maybe (ExecSeq senv arrs'), arrs')
     step s senv =
       case s of
-        ExecP w p s' -> checkWin w s' (ExecP w p) $       produce   p senv  >>= \ (a, p') -> step s' (senv `Push'` moveWin w a) >>= \ s'' -> return (ExecP (moveWin w a) p' s'')
-        ExecC   c    ->                             Just (consume   c senv) >>= \     c'  -> return (ExecC c')
-      where
-        checkWin :: forall a. -- TODO: Find a more elegant solution without using checkWin.
-                    Window a
-                 -> ExecSeq (senv, a) arrs'
-                 -> (ExecSeq (senv, a) arrs' -> ExecSeq senv arrs')
-                 -> Maybe (ExecSeq senv arrs')
-                 -> Maybe (ExecSeq senv arrs')
-        checkWin w s' exec ms
-          | null (elems (w !# minCursor s')) = ms
-          | otherwise                        = step s' (senv `Push'` w) >>= \ s'' -> Just (exec s'')
-
-    -- Finalize and return the accumulators in the consumers of the sequence.
-    returnOut :: forall senv arrs'.
-                 ExecSeq senv arrs' -> arrs'
-    returnOut s =
-      case s of
-        ExecP _ _ s' -> returnOut s'
-        ExecC   c    -> readConsumer c
-
+        ExecP w p s' ->
+          let (c, mp')  = produce p senv
+              finished  = null (elems (w !# minCursor s'))
+              w'        = if finished then moveWin w c else w
+              (ms'', a) = step s' (senv `Push'` w')
+          in case ms'' of
+            Nothing  -> (Nothing, a)
+            Just s'' | finished
+                     , Just p' <- mp'
+                     -> (Just (ExecP w' p' s''), a)
+                     | not finished
+                     -> (Just (ExecP w' p  s''), a)
+                     | otherwise
+                     -> (Nothing, a)
+        ExecC   c    -> let (c', acc) = consume c senv
+                        in (Just (ExecC c'), acc)
+        ExecR ix     -> let c = prjChunk ix senv in (Just (ExecR (moveCursor (clen c) ix)), elems c)
 
     initProducer :: forall a senv.
                     Val aenv
@@ -1486,53 +1492,53 @@ evalSeq conf s aenv | degenerate s = returnOut .        initSeq aenv $ s
                                       (evalPreFun evalOpenAcc indexD aenv)
                                       (evalPreFun evalOpenAcc linearIndexD aenv)
 
-produce :: ExecP senv a -> Val' senv -> Maybe (Chunk a, ExecP senv a)
+produce :: ExecP senv a -> Val' senv -> (Chunk a, Maybe (ExecP senv a))
 produce p senv =
   case p of
     ExecToSeq k xs ->
-      if null xs
-        then Nothing
-        else
-          let (xs', xs'') = (take k xs, drop k xs)
-          in Just ( Chunk { elems = xs' }
-                  , ExecToSeq k xs'')
+      let (xs', xs'') = (take k xs, drop k xs)
+          c           = Chunk xs'
+          mp          = if null xs''
+                        then Nothing
+                        else Just (ExecToSeq k xs'')
+      in (c, mp)
     ExecUseLazy sliceIndex k slixs f ->
-      if null slixs
-        then Nothing
-        else
-          let (slixs', slixs'') = (take k slixs, drop k slixs)
-          in Just ( Chunk { elems = map f slixs' }
-                  , ExecUseLazy sliceIndex k slixs'' f)
+      let (slixs', slixs'') = (take k slixs, drop k slixs)
+          c                 = Chunk { elems = map f slixs' }
+      in ( c
+         , if null slixs'' then Nothing else Just $ ExecUseLazy sliceIndex k slixs'' f)
     ExecMap f x ->
       let c = prjChunk x senv
-      in Just (f c, ExecMap f (moveCursor (clen c) x))
+      in (f c, Just $ ExecMap f (moveCursor (clen c) x))
     ExecZipWith f x y ->
       let c1 = prjChunk x senv
           c2 = prjChunk y senv
           k = clen c1 `min` clen c2
-      in Just (f c1 c2, ExecZipWith f (moveCursor k x) (moveCursor k y))
+      in (f c1 c2, Just $ ExecZipWith f (moveCursor k x) (moveCursor k y))
     ExecScanSeq f x a   ->
       let c = prjChunk x senv
           (as, a') = f a c
-      in Just (as, ExecScanSeq f (moveCursor (clen c) x) a')
+      in (as, Just $ ExecScanSeq f (moveCursor (clen c) x) a')
 
-consume :: forall senv a. ExecC senv a -> Val' senv -> ExecC senv a
+consume :: forall senv a. ExecC senv a -> Val' senv -> (ExecC senv a, a)
 consume c senv =
   case c of
     ExecFoldSeq' f g x acc  ->
-      let c = prjChunk x senv
-      in ExecFoldSeq' f g (moveCursor (clen c) x) (f acc c)
+      let c    = prjChunk x senv
+          acc' = f acc c
+      -- Even though we call g here, lazy evaluation should guarantee it is
+      -- only ever called once.
+      in (ExecFoldSeq' f g (moveCursor (clen c) x) acc', g acc')
     ExecStuple t ->
-      let consT :: Atuple (ExecC senv) t -> Atuple (ExecC senv) t
-          consT NilAtup        = NilAtup
-          consT (SnocAtup t c) = SnocAtup (consT t) (consume c senv)
-      in ExecStuple (consT t)
+      let consT :: Atuple (ExecC senv) t -> (Atuple (ExecC senv) t, t)
+          consT NilAtup        = (NilAtup, ())
+          consT (SnocAtup t c) | (c', acc) <- consume c senv
+                               , (t', acc') <- consT t
+                               = (SnocAtup t' c', (acc', acc))
+          (t', acc) = consT t
+      in (ExecStuple t', toTuple ArraysProxy acc)
 
-readConsumer :: ExecC senv a -> a
-readConsumer c =
-  case c of
-    ExecFoldSeq'   _ g _ acc -> g acc
-    ExecStuple     t         -> toTuple ArraysProxy (readT t)
-  where
-    readT :: Atuple (ExecC senv) t -> t
-    readT = undefined
+evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
+evalExtend BaseEnv aenv = aenv
+evalExtend (PushEnv ext1 ext2) aenv | aenv' <- (evalExtend ext1 aenv)
+                                    = Push aenv' (evalOpenAcc (Manifest ext2) aenv')

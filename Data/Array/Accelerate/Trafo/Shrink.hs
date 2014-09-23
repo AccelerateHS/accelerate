@@ -197,6 +197,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case s of
         Producer p s -> Producer (shrinkP p)  (shrinkSeq s)
         Consumer c   -> Consumer (shrinkC c)
+        Reify ix     -> Reify ix
 
     shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
     shrinkP p =
@@ -402,6 +403,7 @@ usesOfPreAcc withShape countAcc idx = countP
       case s of
         Producer p s -> countPr p + countSeq s
         Consumer c   -> countC  c
+        Reify _      -> 0
 
     countPr :: Producer acc aenv senv arrs -> Int
     countPr p =

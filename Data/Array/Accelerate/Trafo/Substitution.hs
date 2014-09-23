@@ -480,6 +480,7 @@ rebuildSeq k v s =
   case s of
     Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
     Consumer c   -> Consumer <$> (rebuildC k v c)
+    Reify ix     -> pure $ Reify ix
 
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc

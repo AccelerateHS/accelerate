@@ -12,8 +12,8 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fusion
 -- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun,
+  convertAcc, convertAfun, convertSeq,
 
 ) where
 
@@ -80,6 +80,17 @@ convertAcc fuseAcc = withSimplStats . convertOpenAcc fuseAcc
 convertAfun :: Bool -> Afun f -> DelayedAfun f
 convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 
+-- | Apply the fusion transformation to the array computations embedded
+--   in a sequence computation.
+convertSeq :: Bool -> Seq a -> DelayedSeq a
+convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
+  = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc s))
+  where
+    cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
+    cvtE BaseEnv         = BaseEnv
+    cvtE (PushEnv env a) | Manifest a' <- convertOpenAcc fuseAcc (OpenAcc a)
+                         = PushEnv (cvtE env) a'
+
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
 withSimplStats x = unsafePerformIO Stats.resetSimplCount `seq` x
@@ -103,136 +114,157 @@ withSimplStats x = x
 --      encode this property in the type somehow...
 --
 convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
+convertOpenAcc fuseAcc = manifest fuseAcc . computeAcc . embedOpenAcc fuseAcc
+
+-- Convert array computations into an embeddable delayed representation.
+-- Reapply the embedding function from the first pass and unpack the
+-- representation. It is safe to match on BaseEnv because the first pass
+-- will put producers adjacent to the term consuming it.
+--
+delayed :: (Shape sh, Elt e) => Bool -> OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
+delayed fuseAcc (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
+  case cc of
+    Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
+    Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
+    Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
+      | Just REFL <- match sh (arrayShape v)
+      , Just REFL <- isIdentity p
+      -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
+
+      | f'        <- f `compose` indexArray v `compose` p
+      -> Delayed sh f' (f' `compose` fromIndex sh)
   where
-    -- Convert array computations into an embeddable delayed representation.
-    -- Reapply the embedding function from the first pass and unpack the
-    -- representation. It is safe to match on BaseEnv because the first pass
-    -- will put producers adjacent to the term consuming it.
+    cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
+    cvtE = convertOpenExp fuseAcc
+
+    cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
+    cvtF (Lam f)  = Lam (cvtF f)
+    cvtF (Body b) = Body (cvtE b)
+
+-- Convert array programs as manifest terms.
+--
+manifest :: Bool -> OpenAcc aenv a -> DelayedOpenAcc aenv a
+manifest fuseAcc (OpenAcc pacc) =
+  let fusionError = $internalError "manifest" "unexpected fusible materials"
+  in
+  Manifest $ case pacc of
+    -- Non-fusible terms
+    -- -----------------
+    Avar ix                 -> Avar ix
+    Use arr                 -> Use arr
+    Unit e                  -> Unit (cvtE e)
+    Alet bnd body           -> alet (manifest fuseAcc bnd) (manifest fuseAcc body)
+    Acond p t e             -> Acond (cvtE p) (manifest fuseAcc t) (manifest fuseAcc e)
+    Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest fuseAcc a)
+    Atuple tup              -> Atuple (cvtAT tup)
+    Aprj ix tup             -> Aprj ix (manifest fuseAcc tup)
+    Apply f a               -> Apply (cvtAF f) (manifest fuseAcc a)
+    Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest fuseAcc a)
+
+    -- Producers
+    -- ---------
     --
-    delayed :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> DelayedOpenAcc aenv (Array sh e)
-    delayed (embedOpenAcc fuseAcc -> Embed BaseEnv cc) =
-      case cc of
-        Done v                                -> Delayed (arrayShape v) (indexArray v) (linearIndex v)
-        Yield (cvtE -> sh) (cvtF -> f)        -> Delayed sh f (f `compose` fromIndex sh)
-        Step  (cvtE -> sh) (cvtF -> p) (cvtF -> f) v
-          | Just REFL <- match sh (arrayShape v)
-          , Just REFL <- isIdentity p
-          -> Delayed sh (f `compose` indexArray v) (f `compose` linearIndex v)
-
-          | f'        <- f `compose` indexArray v `compose` p
-          -> Delayed sh f' (f' `compose` fromIndex sh)
-
-    -- Convert array programs as manifest terms.
+    -- Some producers might still exist as a manifest array. Typically
+    -- this is because they are the last stage of the computation, or the
+    -- result of a let-binding to be used multiple times. The input array
+    -- here should be an array variable, else something went wrong.
     --
-    manifest :: OpenAcc aenv a -> DelayedOpenAcc aenv a
-    manifest (OpenAcc pacc) =
-      let fusionError = $internalError "manifest" "unexpected fusible materials"
-      in
-      Manifest $ case pacc of
-        -- Non-fusible terms
-        -- -----------------
-        Avar ix                 -> Avar ix
-        Use arr                 -> Use arr
-        Unit e                  -> Unit (cvtE e)
-        Alet bnd body           -> alet (manifest bnd) (manifest body)
-        Acond p t e             -> Acond (cvtE p) (manifest t) (manifest e)
-        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (manifest a)
-        Atuple tup              -> Atuple (cvtAT tup)
-        Aprj ix tup             -> Aprj ix (manifest tup)
-        Apply f a               -> Apply (cvtAF f) (manifest a)
-        Aforeign ff f a         -> Aforeign ff (cvtAF f) (manifest a)
+    Map f a                 -> Map (cvtF f) (delayed fuseAcc a)
+    Generate sh f           -> Generate (cvtE sh) (cvtF f)
+    Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed fuseAcc a)
+    Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed fuseAcc a)
+    Reshape sl a            -> Reshape (cvtE sl) (manifest fuseAcc a)
 
-        -- Producers
-        -- ---------
-        --
-        -- Some producers might still exist as a manifest array. Typically
-        -- this is because they are the last stage of the computation, or the
-        -- result of a let-binding to be used multiple times. The input array
-        -- here should be an array variable, else something went wrong.
-        --
-        Map f a                 -> Map (cvtF f) (delayed a)
-        Generate sh f           -> Generate (cvtE sh) (cvtF f)
-        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (delayed a)
-        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (delayed a)
-        Reshape sl a            -> Reshape (cvtE sl) (manifest a)
+    Replicate{}             -> fusionError
+    Slice{}                 -> fusionError
+    ZipWith{}               -> fusionError
 
-        Replicate{}             -> fusionError
-        Slice{}                 -> fusionError
-        ZipWith{}               -> fusionError
-
-        -- Consumers
-        -- ---------
-        --
-        -- Embed producers directly into the representation. For stencils we
-        -- make an exception. Since these consumers access elements of the
-        -- argument array multiple times, we are careful not to duplicate work
-        -- and instead force the argument to be a manifest array.
-        --
-        Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed a)
-        Fold1 f a               -> Fold1    (cvtF f) (delayed a)
-        FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed a) (delayed s)
-        Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed a) (delayed s)
-        Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed a)
-        Scanl1 f a              -> Scanl1   (cvtF f) (delayed a)
-        Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed a)
-        Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed a)
-        Scanr1 f a              -> Scanr1   (cvtF f) (delayed a)
-        Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed a)
-        Permute f d p a         -> Permute  (cvtF f) (manifest d) (cvtF p) (delayed a)
-        Stencil f x a           -> Stencil  (cvtF f) x (manifest a)
-        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest a) y (manifest b)
-
-        -- Sequence operations
-        Collect seq             -> Collect (cvtSeq seq)
-
-    -- Flatten needless let-binds, which can be introduced by the conversion to
-    -- the internal embeddable representation.
+    -- Consumers
+    -- ---------
     --
-    alet bnd body
-      | Manifest (Avar ZeroIdx) <- body
-      , Manifest x              <- bnd
-      = x
+    -- Embed producers directly into the representation. For stencils we
+    -- make an exception. Since these consumers access elements of the
+    -- argument array multiple times, we are careful not to duplicate work
+    -- and instead force the argument to be a manifest array.
+    --
+    Fold f z a              -> Fold     (cvtF f) (cvtE z) (delayed fuseAcc a)
+    Fold1 f a               -> Fold1    (cvtF f) (delayed fuseAcc a)
+    FoldSeg f z a s         -> FoldSeg  (cvtF f) (cvtE z) (delayed fuseAcc a) (delayed fuseAcc s)
+    Fold1Seg f a s          -> Fold1Seg (cvtF f) (delayed fuseAcc a) (delayed fuseAcc s)
+    Scanl f z a             -> Scanl    (cvtF f) (cvtE z) (delayed fuseAcc a)
+    Scanl1 f a              -> Scanl1   (cvtF f) (delayed fuseAcc a)
+    Scanl' f z a            -> Scanl'   (cvtF f) (cvtE z) (delayed fuseAcc a)
+    Scanr f z a             -> Scanr    (cvtF f) (cvtE z) (delayed fuseAcc a)
+    Scanr1 f a              -> Scanr1   (cvtF f) (delayed fuseAcc a)
+    Scanr' f z a            -> Scanr'   (cvtF f) (cvtE z) (delayed fuseAcc a)
+    Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
+    Stencil f x a           -> Stencil  (cvtF f) x (manifest fuseAcc a)
+    Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
 
-      | otherwise
-      = Alet bnd body
+    -- Seq operations
+    Collect seq             -> Collect (convertOpenSeq fuseAcc seq)
 
-    cvtSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
-    cvtSeq s =
-      case s of
-        Producer p s' ->
-          Producer
-            (case p of
-               ToSeq slix sh a      -> ToSeq slix (cvtE sh) (delayed a)
-               UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
-               MapSeq f x           -> MapSeq (cvtAF f) x
-               ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
-               ScanSeq f a x        -> ScanSeq (cvtAF f) (manifest a) x
-               ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x)
-            (cvtSeq s')
-        Consumer c ->
-          Consumer (cvtC c)
+    where
+      -- Flatten needless let-binds, which can be introduced by the conversion to
+      -- the internal embeddable representation.
+      --
+      alet bnd body
+        | Manifest (Avar ZeroIdx) <- body
+        , Manifest x              <- bnd
+        = x
 
-    cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
-    cvtC c =
-      case c of
-        FromSeq x            -> FromSeq x
-        FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest a) x
-        FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest a) (manifest b) x
-        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest a) x
-        Stuple t             -> Stuple (cvtCT t)
+        | otherwise
+        = Alet bnd body
 
-    cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer DelayedOpenAcc aenv senv) t
-    cvtCT NilAtup        = NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+      cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
+      cvtAT NilAtup        = NilAtup
+      cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest fuseAcc a
 
-    cvtAT :: Atuple (OpenAcc aenv) a -> Atuple (DelayedOpenAcc aenv) a
-    cvtAT NilAtup        = NilAtup
-    cvtAT (SnocAtup t a) = cvtAT t `SnocAtup` manifest a
+      cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
+      cvtAF (Alam f)  = Alam  (cvtAF f)
+      cvtAF (Abody b) = Abody (manifest fuseAcc b)
 
-    cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
-    cvtAF (Alam f)  = Alam  (cvtAF f)
-    cvtAF (Abody b) = Abody (manifest b)
+      -- Conversions for closed scalar functions and expressions
+      --
+      cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
+      cvtF (Lam f)  = Lam (cvtF f)
+      cvtF (Body b) = Body (cvtE b)
+
+      cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
+      cvtE = convertOpenExp fuseAcc
+
+convertOpenExp :: Bool -> OpenExp env aenv t -> DelayedOpenExp env aenv t
+convertOpenExp fuseAcc exp =
+  case exp of
+    Let bnd body            -> Let (cvtE bnd) (cvtE body)
+    Var ix                  -> Var ix
+    Const c                 -> Const c
+    Tuple tup               -> Tuple (cvtT tup)
+    Prj ix t                -> Prj ix (cvtE t)
+    IndexNil                -> IndexNil
+    IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
+    IndexHead sh            -> IndexHead (cvtE sh)
+    IndexTail sh            -> IndexTail (cvtE sh)
+    IndexAny                -> IndexAny
+    IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
+    IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
+    ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
+    FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
+    Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
+    While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
+    PrimConst c             -> PrimConst c
+    PrimApp f x             -> PrimApp f (cvtE x)
+    Index a sh              -> Index (manifest fuseAcc a) (cvtE sh)
+    LinearIndex a i         -> LinearIndex (manifest fuseAcc a) (cvtE i)
+    Shape a                 -> Shape (manifest fuseAcc a)
+    ShapeSize sh            -> ShapeSize (cvtE sh)
+    Intersect s t           -> Intersect (cvtE s) (cvtE t)
+    Union s t               -> Union (cvtE s) (cvtE t)
+    Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
+  where
+    cvtT :: Tuple (OpenExp env aenv) t -> Tuple (DelayedOpenExp env aenv) t
+    cvtT NilTup        = NilTup
+    cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
 
     -- Conversions for closed scalar functions and expressions
     --
@@ -241,41 +273,49 @@ convertOpenAcc fuseAcc = manifest . computeAcc . embedOpenAcc fuseAcc
     cvtF (Body b) = Body (cvtE b)
 
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
-    cvtE exp =
-      case exp of
-        Let bnd body            -> Let (cvtE bnd) (cvtE body)
-        Var ix                  -> Var ix
-        Const c                 -> Const c
-        Tuple tup               -> Tuple (cvtT tup)
-        Prj ix t                -> Prj ix (cvtE t)
-        IndexNil                -> IndexNil
-        IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
-        IndexHead sh            -> IndexHead (cvtE sh)
-        IndexTail sh            -> IndexTail (cvtE sh)
-        IndexAny                -> IndexAny
-        IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
-        IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
-        ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
-        FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
-        Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
-        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
-        PrimConst c             -> PrimConst c
-        PrimApp f x             -> PrimApp f (cvtE x)
-        Index a sh              -> Index (manifest a) (cvtE sh)
-        LinearIndex a i         -> LinearIndex (manifest a) (cvtE i)
-        Shape a                 -> Shape (manifest a)
-        ShapeSize sh            -> ShapeSize (cvtE sh)
-        Intersect s t           -> Intersect (cvtE s) (cvtE t)
-        Foreign ff f e          -> Foreign ff (cvtF f) (cvtE e)
-
-    cvtT :: Tuple (OpenExp env aenv) t -> Tuple (DelayedOpenExp env aenv) t
-    cvtT NilTup        = NilTup
-    cvtT (SnocTup t e) = cvtT t `SnocTup` cvtE e
+    cvtE = convertOpenExp fuseAcc
 
 
 convertOpenAfun :: Bool -> OpenAfun aenv f -> DelayedOpenAfun aenv f
 convertOpenAfun c (Alam  f) = Alam  (convertOpenAfun c f)
 convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
+
+convertOpenSeq :: Bool -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
+convertOpenSeq fuseAcc s =
+  case s of
+    Producer p s' ->
+      Producer
+        (case p of
+           ToSeq slix sh a      -> ToSeq slix (cvtE sh) (delayed fuseAcc a)
+           UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
+           MapSeq f x           -> MapSeq (cvtAF f) x
+           ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
+           ScanSeq f a x        -> ScanSeq (cvtAF f) (manifest fuseAcc a) x
+           ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (manifest fuseAcc a) (manifest fuseAcc b) x)
+        (convertOpenSeq fuseAcc s')
+    Consumer c ->
+      Consumer (cvtC c)
+    Reify ix -> Reify ix
+  where
+    cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
+    cvtC c =
+      case c of
+        FromSeq x            -> FromSeq x
+        FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest fuseAcc a) x
+        FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest fuseAcc a) (manifest fuseAcc b) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest fuseAcc a) x
+        Stuple t             -> Stuple (cvtCT t)
+
+    cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer DelayedOpenAcc aenv senv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
+    cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
+    cvtAF (Alam f)  = Alam  (cvtAF f)
+    cvtAF (Abody b) = Abody (manifest fuseAcc b)
+
+    cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
+    cvtE = convertOpenExp fuseAcc
 
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
@@ -345,7 +385,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     Atuple tup          -> done $ Atuple (cvtAT tup)
     Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
-    Collect s           -> collectD embedAcc s
+    Collect s           -> collectD s
 
     -- Array injection
     Avar v              -> done $ Avar v
@@ -491,54 +531,73 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
     -- actual sequencing.
-    collectD :: forall aenv arrs. (Kit acc, Arrays arrs)
-          => EmbedAcc acc
-          -> PreOpenSeq acc aenv () arrs
-          -> Embed       acc aenv    arrs
-    collectD embedAcc s
-      | ExtendSeq env s' <- travS s BaseEnv
-      = Embed (env `PushEnv` (Collect s')) (Done ZeroIdx)
+    collectD :: PreOpenSeq acc aenv () arrs
+             -> Embed acc aenv arrs
+    collectD s | ExtendSeq env s' <- embedSeq embedAcc s
+               = Embed (env `PushEnv` (Collect s')) (Done ZeroIdx)
+
+-- Move additional bindings for producer outside of sequence, so
+-- that producers may fuse with their arguments, resulting in
+-- actual sequencing.
+embedSeq :: forall acc aenv arrs. Kit acc
+         => EmbedAcc acc
+         -> PreOpenSeq acc aenv () arrs
+         -> ExtendSeq       acc aenv () arrs
+embedSeq embedAcc s
+  = travS s BaseEnv
+  where
+    travS :: forall senv aenv' arrs'.
+             PreOpenSeq acc aenv senv arrs'
+          -> Extend acc aenv aenv'
+          -> ExtendSeq acc aenv senv arrs'
+    travS s env =
+      case s of
+        Producer p s
+          | ExtendSeq env' s' <- travS s env
+          , ExtendProducer env'' p' <- travP p env'
+          -> ExtendSeq (env' `append` env'') (Producer p' (sinkSeq env'' s'))
+        Consumer c
+          | c' <- travC c env
+          -> ExtendSeq env (Consumer c')
+        Reify ix
+          -> ExtendSeq env (Reify ix)
+
+    travP :: forall arrs' aenv' senv.
+             Producer acc aenv senv arrs'
+          -> Extend acc aenv aenv'
+          -> ExtendProducer acc aenv' senv arrs'
+    travP (ToSeq slix sh a) env
+      | Embed env' cc <- embedAcc (sink env a)
+      = ExtendProducer env' (ToSeq slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
+    travP (UseLazy slix sh a) env    = ExtendProducer BaseEnv (UseLazy slix (cvtE (sink env sh)) a)
+    travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
+    travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
+    travP (ScanSeq f a x) env        = ExtendProducer BaseEnv (ScanSeq (cvtAF (sink env f)) (cvtA (sink env a)) x)
+    travP (ScanSeqAct f g a b x) env = ExtendProducer BaseEnv (ScanSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x)
+
+    travC :: forall arrs' aenv' senv.
+             Consumer acc aenv senv arrs'
+          -> Extend acc aenv aenv'
+          -> Consumer acc aenv' senv arrs'
+    travC (FromSeq x) _ = FromSeq x
+    travC (FoldSeq f a x) env = FoldSeq (cvtAF (sink env f)) (cvtA (sink env a)) x
+    travC (FoldSeqAct f g a b x) env = FoldSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
+    travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
+    travC (Stuple t) env = Stuple (cvtCT t)
       where
-        travS :: forall senv aenv' arrs'.
-                 PreOpenSeq acc aenv senv arrs'
-              -> Extend acc aenv aenv'
-              -> ExtendSeq acc aenv senv arrs'
-        travS s env =
-          case s of
-            Producer p s
-              | ExtendSeq env' s' <- travS s env
-              , ExtendProducer env'' p' <- travP p env'
-              -> ExtendSeq (env' `append` env'') (Producer p' (sinkSeq env'' s'))
-            Consumer c
-              | c' <- travC c env
-              -> ExtendSeq env (Consumer c')
+        cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
+        cvtCT NilAtup        = NilAtup
+        cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (travC c env)
 
-        travP :: forall arrs' aenv' senv.
-                 Producer acc aenv senv arrs'
-              -> Extend acc aenv aenv'
-              -> ExtendProducer acc aenv' senv arrs'
-        travP (ToSeq slix sh a) env
-          | Embed env' cc <- embedAcc (sink env a)
-          = ExtendProducer env' (ToSeq slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
-        travP (UseLazy slix sh a) env    = ExtendProducer BaseEnv (UseLazy slix (cvtE (sink env sh)) a)
-        travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
-        travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
-        travP (ScanSeq f a x) env        = ExtendProducer BaseEnv (ScanSeq (cvtAF (sink env f)) (cvtA (sink env a)) x)
-        travP (ScanSeqAct f g a b x) env = ExtendProducer BaseEnv (ScanSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x)
+    cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
+    cvtE = simplify
 
-        travC :: forall arrs' aenv' senv.
-                 Consumer acc aenv senv arrs'
-              -> Extend acc aenv aenv'
-              -> Consumer acc aenv' senv arrs'
-        travC (FromSeq x) _ = FromSeq x
-        travC (FoldSeq f a x) env = FoldSeq (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travC (FoldSeqAct f g a b x) env = FoldSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
-        travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
-        travC (Stuple t) env = Stuple (cvtCT t)
-          where
-            cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
-            cvtCT NilAtup        = NilAtup
-            cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (travC c env)
+    cvtA :: Arrays a => acc aenv' a -> acc aenv' a
+    cvtA = computeAcc . embedAcc
+
+    cvtAF :: PreOpenAfun acc aenv' f -> PreOpenAfun acc aenv' f
+    cvtAF (Alam  f) = Alam  (cvtAF f)
+    cvtAF (Abody a) = Abody (cvtA a)
 
 
 -- Internal representation
@@ -697,6 +756,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
     case s of
       Producer p s' -> Producer   (weakenP p) (weakenL s')
       Consumer c    -> Consumer   (weakenC c)
+      Reify ix      -> Reify      ix
 
     where
       weakenL :: forall senv' arrs'. PreOpenSeq acc aenv senv' arrs' -> PreOpenSeq acc aenv' senv' arrs'
@@ -1114,6 +1174,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize sh                    -> ShapeSize (cvtE sh)
         Intersect sh sl                 -> Intersect (cvtE sh) (cvtE sl)
+        Union s t                       -> Union (cvtE s) (cvtE t)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
 
         Shape a
@@ -1215,6 +1276,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                 (cvtSeq s')
             Consumer c ->
               Consumer (cvtC c)
+            Reify ix -> Reify ix
 
         cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
         cvtC c =
@@ -1355,4 +1417,3 @@ indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
 
 linearIndex :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (Int -> e)
 linearIndex v = Lam (Body (LinearIndex (avarIn v) (Var ZeroIdx)))
-

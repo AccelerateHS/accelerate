@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
+  DelayedSeq(..), DelayedOpenSeq,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -38,7 +39,10 @@ module Data.Array.Accelerate.Trafo.Base (
   weakenGamma1, sinkGamma,
   Supplement(..), bindExps,
 
-  subApply, inlineA
+  subApply, inlineA,
+
+  -- Miscellaneous
+  prettyDelayedSeq
 
 ) where
 
@@ -127,9 +131,14 @@ type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
+
+data DelayedSeq t where
+ DelayedSeq :: Extend DelayedOpenAcc () aenv -> DelayedOpenSeq aenv () t -> DelayedSeq t
+
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
 type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
+type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -203,6 +212,21 @@ prettyDelayed alvl wrap acc = case acc of
             $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
                   , parens (prettyPreFun prettyDelayed alvl f)
                   ]
+
+prettyDelayedSeq
+    :: forall arrs.
+       (Doc -> Doc)                             -- apply to compound expressions
+    -> DelayedSeq arrs
+    -> Doc
+prettyDelayedSeq wrap (DelayedSeq env s)
+  | (d, lvl) <- pp env 0
+  =  wrap $   (hang (text "let") 2 $ sep $ punctuate (text ";") d)
+          <+> (hang (text "in") 2  $ sep $ punctuate (text ";") $ prettySeq prettyAcc lvl 0 wrap s)
+  where
+    pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
+    pp BaseEnv          lvl = ([],lvl)
+    pp (PushEnv env' a) lvl | (d', _) <- pp env' (lvl + 1)
+                            = (prettyPreAcc prettyAcc lvl wrap a : d', lvl)
 
 
 -- Environments
