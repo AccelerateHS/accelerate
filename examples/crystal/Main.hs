@@ -95,7 +95,7 @@ main = do
 
   beginMonitoring
   argv                  <- getArgs
-  (config, crit, nops)  <- parseArgs optHelp optBackend options defaults header footer argv
+  (config, crit, rest)  <- parseArgs optHelp optBackend options defaults header footer argv
 
   let size      = get optSize config
       zoom      = get optZoom config
@@ -109,7 +109,7 @@ main = do
                 $ makeField size size (\time -> quasicrystal scale degree (the time))
 
   if get optBench config
-     then withArgs nops $ defaultMainWith crit (return ())
+     then withArgs rest $ defaultMainWith crit
               [ bench "crystal" $ whnf (force . frame) (A.fromList Z [1.0]) ]
 
      else G.animateFieldWith

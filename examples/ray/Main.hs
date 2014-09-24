@@ -47,11 +47,10 @@ main = do
           A.zipWith (traceRay bounces objects lights ambient) eyePos eyeDir
 
   if get optBench conf
-     then withArgs rest
-        $ defaultMainWith cconf (return ())
-        [ bench "ray" $ whnf (run1 backend scene)
-                             (get stateObjects state, get stateLights state)
-        ]
+     then withArgs rest $ defaultMainWith cconf
+            [ bench "ray" $ whnf (run1 backend scene)
+                                 (get stateObjects state, get stateLights state)
+            ]
 
 #ifndef ACCELERATE_ENABLE_GUI
      else return ()

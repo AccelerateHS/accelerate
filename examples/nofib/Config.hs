@@ -6,15 +6,13 @@
 
 module Config where
 
-import ParseArgs
 import Data.Label
 import Data.Maybe
 import Data.Monoid
+import ParseArgs
 import System.Exit
-
 import qualified Test.Framework                         as TestFramework
-import qualified Criterion.Main                         as Criterion
-import qualified Criterion.Config                       as Criterion
+import qualified ParseArgs.Criterion                    as Criterion
 
 
 data Config
@@ -150,15 +148,17 @@ parseArgs' :: (config :-> Bool)                  -- ^ access a help flag from th
            -> [String]                           -- ^ footer text
            -> [String]                           -- ^ command line arguments
            -> IO (config, Criterion.Config, TestFramework.RunnerOptions, [String])
-parseArgs' help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
+parseArgs' help backend (withBackends backend -> options) config header footer args =
   let
+      (argv, rest)              = span (/= "--") args
       criterionOptions          = stripShortOpts Criterion.defaultOptions
       testframeworkOptions      = stripShortOpts TestFramework.optionsDescription
 
       helpMsg err = concat err
         ++ usageInfo (unlines header)                    options
-        ++ usageInfo "\nGeneric criterion options:"      criterionOptions
         ++ usageInfo "\nGeneric test-framework options:" testframeworkOptions
+        ++ usageInfo "\nGeneric criterion options:"      (criterionOptions ++ Criterion.extraOptions)
+        ++ Criterion.regressHelp
 
   in do
 
@@ -166,22 +166,24 @@ parseArgs' help backend (withBackends backend -> options) config header footer (
   -- will be split out here so we can ignore them later. Unrecognised options
   -- get passed to criterion and test-framework.
   --
-  (conf,non,u)  <- case getOpt' Permute options argv of
-    (opts,n,u,[]) -> case foldr id config opts of
-      conf | False <- get help conf
-        -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
-      _ -> putStrLn (helpMsg [])                             >> exitSuccess
-    --
-    (_,_,_,err) -> error (helpMsg err)
+  (conf,non,u1)  <- case getOpt' Permute options argv of
+      (opts,n,u,[]) -> case foldr id config opts of
+        conf | False <- get help conf
+          -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
+        _ -> putStrLn (helpMsg [])                             >> exitSuccess
+      --
+      (_,_,_,err) -> error (helpMsg err)
 
   -- Test Framework
-  (tfconf, u')  <- case getOpt' Permute testframeworkOptions u of
-    (oas,_,u',[]) | Just os <- sequence oas
-                -> return (mconcat os, u')
-    (_,_,_,err) -> error (helpMsg err)
+  (tconf,u2)    <- case getOpt' Permute testframeworkOptions u1 of
+      (oas,_,u,[]) | Just os <- sequence oas
+                  -> return (mconcat os, u)
+      (_,_,_,err) -> error (helpMsg err)
 
   -- Criterion
-  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig criterionOptions u'
+  (cconf,u3) <- case getOpt' Permute criterionOptions u2 of
+      (opts,_,u,[]) -> return (foldr id Criterion.defaultConfig opts, u)
+      (_,_,_,err)   -> error  (helpMsg err)
 
-  return (conf, cconf, tfconf, non)
+  return (conf, cconf, tconf, non ++ u3 ++ rest)
 

@@ -26,7 +26,7 @@ main :: IO ()
 main
   = do  beginMonitoring
         argv                    <- getArgs
-        (conf, cconf, nops)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
 
         let -- visualisation configuration
             n           = get configWindowSize conf
@@ -53,7 +53,7 @@ main
 
         -- Rise minions!
         if get configBenchmark conf
-           then withArgs nops $ defaultMainWith cconf (return ())
+           then withArgs rest $ defaultMainWith cconf
                   [ bench "smoothlife" $ whnf advance world ]
 
 #ifndef ACCELERATE_ENABLE_GUI

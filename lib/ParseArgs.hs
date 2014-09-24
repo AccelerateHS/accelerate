@@ -10,12 +10,12 @@ module ParseArgs (
 
 ) where
 
+import ParseArgs.Criterion                              as Criterion
+
 import Data.List
 import Data.Label
 import System.Exit
 import System.Console.GetOpt
-import qualified Criterion.Main                         as Criterion
-import qualified Criterion.Config                       as Criterion
 
 import Data.Array.Accelerate                            ( Arrays, Acc )
 import qualified Data.Array.Accelerate                  as A
@@ -191,20 +191,23 @@ parseArgs :: (config :-> Bool)                  -- ^ access a help flag from the
           -> [String]                           -- ^ footer text
           -> [String]                           -- ^ command line arguments
           -> IO (config, Criterion.Config, [String])
-parseArgs help backend (withBackends backend -> options) config header footer (takeWhile (/= "--") -> argv) =
+parseArgs help backend (withBackends backend -> options) config header footer args =
   let
-      criterionOptions = stripShortOpts Criterion.defaultOptions
+      (argv, rest)      = span (/= "--") args
+      criterionOptions  = stripShortOpts Criterion.defaultOptions
 
-      helpMsg err = concat err
+      helpMsg err
+        =  concat err
         ++ usageInfo (unlines header)               options
-        ++ usageInfo "\nGeneric criterion options:" criterionOptions
+        ++ usageInfo "\nGeneric criterion options:" (criterionOptions ++ Criterion.extraOptions)
+        ++ Criterion.regressHelp
 
   in do
 
   -- Process options for the main program. Any non-options will be split out
   -- here. Unrecognised options get passed to criterion.
   --
-  (conf,non,u)  <- case getOpt' Permute options argv of
+  (conf,non,u1) <- case getOpt' Permute options argv of
       (opts,n,u,[]) -> case foldr id config opts of
         conf | False <- get help conf
           -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
@@ -212,12 +215,11 @@ parseArgs help backend (withBackends backend -> options) config header footer (t
       --
       (_,_,_,err) -> error (helpMsg err)
 
-  -- Criterion
+  -- Criterion option processing
   --
-  -- TODO: don't bail on unrecognised options. Print to screen, or return for
-  --       further processing (e.g. test-framework).
-  --
-  (cconf, _)    <- Criterion.parseArgs Criterion.defaultConfig criterionOptions u
+  (cconf,_,u2) <- case getOpt' Permute criterionOptions u1 of
+      (opts,n,u,[]) -> return (foldr id Criterion.defaultConfig opts, n, u)
+      (_,_,_,err)   -> error  (helpMsg err)
 
-  return (conf, cconf, non)
+  return (conf, cconf, non ++ u2 ++ rest)
 

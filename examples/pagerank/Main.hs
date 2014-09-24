@@ -4,19 +4,23 @@
 --
 
 import Config
-import ParseArgs
 import Count
+import Monitoring
+import ParseArgs
 import Rank
+
+import Control.Monad
+import Data.Char
 import Data.Label                 ( get )
 import System.Environment
 import System.Exit
-import Data.Char
-import Control.Monad
 
 
 main :: IO ()
 main
- = do   argv    <- getArgs
+ = do
+        beginMonitoring
+        argv    <- getArgs
         (config, _, linksPath : titlesPath : _)  <- parseArgs optHelp optBackend options defaults header footer argv
 
         if get optCount config

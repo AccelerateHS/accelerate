@@ -47,7 +47,7 @@ main
 
             mandel
               | get optBench conf
-              = withArgs rest $ defaultMainWith cconf (return ())
+              = withArgs rest $ defaultMainWith cconf
                     [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
 #ifdef ACCELERATE_ENABLE_GUI
               | fps == 0
