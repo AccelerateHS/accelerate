@@ -226,7 +226,7 @@ prettyDelayedSeq wrap (DelayedSeq env s)
     pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
     pp BaseEnv          lvl = ([],lvl)
     pp (PushEnv env' a) lvl | (d', _) <- pp env' (lvl + 1)
-                            = (prettyPreAcc prettyAcc lvl wrap a : d', lvl)
+                            = (prettyAcc lvl wrap a : d', lvl)
 
 
 -- Environments
@@ -277,7 +277,7 @@ data Extend acc aenv aenv' where
   BaseEnv :: Extend acc aenv aenv
 
   PushEnv :: Arrays a
-          => Extend acc aenv aenv' -> PreOpenAcc acc aenv' a -> Extend acc aenv (aenv', a)
+          => Extend acc aenv aenv' -> acc aenv' a -> Extend acc aenv (aenv', a)
 
 -- Append two environment witnesses
 --
@@ -293,7 +293,7 @@ bind :: (Kit acc, Arrays a)
      -> PreOpenAcc acc aenv' a
      -> PreOpenAcc acc aenv  a
 bind BaseEnv         = id
-bind (PushEnv env a) = bind env . Alet (inject a) . inject
+bind (PushEnv env a) = bind env . Alet a . inject
 
 -- Sink a term from one array environment into another, where additional
 -- bindings have come into scope according to the witness and no old things have

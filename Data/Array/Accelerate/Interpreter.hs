@@ -1540,5 +1540,5 @@ consume c senv =
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv
-evalExtend (PushEnv ext1 ext2) aenv | aenv' <- (evalExtend ext1 aenv)
-                                    = Push aenv' (evalOpenAcc (Manifest ext2) aenv')
+evalExtend (PushEnv ext1 ext2) aenv | aenv' <- evalExtend ext1 aenv
+                                    = Push aenv' (evalOpenAcc ext2 aenv')

@@ -1766,7 +1766,7 @@ avoidExp = cvtE
           => (forall env aenv. acc aenv a -> PreOpenExp acc env aenv e)
           -> acc aenv a
           -> AvoidExp acc env aenv e
-    cvtA1 f a = Avoided (BaseEnv `PushEnv` extract a, f avar0)
+    cvtA1 f a = Avoided (BaseEnv `PushEnv` a, f avar0)
 
     cvtA1E1 :: forall a b e env aenv. Arrays a
           => (forall env aenv. acc aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv e)
@@ -1774,7 +1774,7 @@ avoidExp = cvtE
           -> PreOpenExp acc env aenv b
           -> AvoidExp acc env aenv e
     cvtA1E1 f a (cvtE -> Avoided (env, b))
-      = Avoided (env `PushEnv` sink env (extract a), f avar0 (weakenA1 b))
+      = Avoided (env `PushEnv` sink env a, f avar0 (weakenA1 b))
     cvtA1E1 f _ _
       = unavoided (showPreExpOp (f undefined undefined))
 
@@ -1803,10 +1803,10 @@ liftExtend _ _ BaseEnv ctx _
   = ExtendContext ctx BaseEnv
 liftExtend k strength (PushEnv env a) ctx size
   | ExtendContext ctx' env' <- liftExtend k strength env ctx size
-  = case k strength ctx' (sink env' size) (inject a) of
-      AvoidedAcc a' -> ExtendContext (PushAccC ctx')  (PushEnv env' (extract a'))
+  = case k strength ctx' (sink env' size) a of
+      AvoidedAcc a' -> ExtendContext (PushAccC ctx')  (PushEnv env' a')
       LiftedAcc  a' | IsC <- isArraysFlat (undefined :: aenv1 ~ (aenv1', a) => a)
-                    -> ExtendContext (PushLAccC ctx') (PushEnv env' (extract a'))
+                    -> ExtendContext (PushLAccC ctx') (PushEnv env' a')
 
 data EmbedContext aenv aenv' = forall aenv''. EmbedContext (Context () aenv'' () aenv') (aenv :> aenv'')
 
@@ -1820,6 +1820,7 @@ embedContext (PushAccC d)  | EmbedContext d wk <- embedContext d
                            = EmbedContext (PushAccC d) (newTop wk)
 embedContext (PushLAccC d) | EmbedContext d wk <- embedContext d
                            = EmbedContext (PushLAccC d) (newTop wk)
+
 -- Vector' operations.
 -- ------------------
 
