@@ -20,4 +20,3 @@ test_spectral conf =
     , test_smvm conf
     , test_radixsort conf
     ]
-

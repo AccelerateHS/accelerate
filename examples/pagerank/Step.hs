@@ -1,7 +1,7 @@
 module Step
         (stepRank, Update)
 where
-  
+
 import Page
 import Progress
 import Control.Monad
@@ -47,11 +47,10 @@ stepRank from to sizes ranks
       addUpdates' :: Acc (Vector Rank) -> Acc (Vector Z) -> Acc (Vector Update) -> Acc (Vector Rank)
       addUpdates' = const . addUpdates
 
-    in A.asnd $ A.runSequence
-              $ A.useLazy (A.constant (Z :. stream)) from
-              $ A.useLazy (A.constant (Z :. stream)) to
-              $ A.zipWithSeq (contribution sizes ranks) (SuccIdx ZeroIdx) ZeroIdx
-              $ A.foldSeqFlatten addUpdates' zeroes ZeroIdx
-              $ A.emptySeq
+    in A.collect
+     $ A.foldSeqFlatten addUpdates' zeroes
+     $ A.zipWithSeq (contribution sizes ranks)
+         (A.useLazy (A.constant (Z :. stream)) from)
+         (A.useLazy (A.constant (Z :. stream)) to)
   where
     stream = maxBound :: Int

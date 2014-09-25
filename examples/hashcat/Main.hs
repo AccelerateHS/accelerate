@@ -16,8 +16,7 @@ import Control.Applicative
 import Criterion.Measurement
 import System.IO
 import System.Environment
-import Data.Array.Accelerate                        ( Z(..), (:.)(..) )
-import Data.Array.Accelerate.AST                    ( Idx(..) )
+import Data.Array.Accelerate                        ( Z(..), (:.)(..), All(..) )
 import qualified Data.Array.Accelerate              as A
 import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
 import qualified Data.ByteString.Lazy.Char8         as L
@@ -51,13 +50,12 @@ main = do
       recover hash =
         let abcd = readMD5 hash
             idx  = run1 backend l (A.fromList Z [abcd])
-            l digest = A.asnd $ A.runSequence
-                     $ A.toSeq (A.constant (Z :. Sugar.All :. stream)) (A.use dict)
-                     $ A.toSeq (A.constant (Z :. stream)) (iota (Sugar.size (Sugar.shape dict)))
-                     $ A.zipWithSeq (hashcat digest) (SuccIdx ZeroIdx) ZeroIdx
-                     $ A.mapSeq (A.unit . md5Round) (SuccIdx (SuccIdx ZeroIdx))
-                     $ A.foldSeq (A.zipWith max) (A.unit (-1)) (SuccIdx ZeroIdx)
-                     $ A.emptySeq
+            l digest = A.collect
+                     $ A.foldSeq (A.zipWith max) (A.unit (-1))
+                     $ A.zipWithSeq (hashcat digest)
+                           (A.toSeq (A.constant (Z :. All :. stream)) (A.use dict))
+                           (A.toSeq (A.constant (Z :. stream)) (iota (Sugar.size (Sugar.shape dict))))
+
             iota n = A.generate (A.index1 (A.constant n)) A.unindex1
             stream = maxBound :: Int
         --
