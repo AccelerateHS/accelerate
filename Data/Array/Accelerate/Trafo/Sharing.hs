@@ -358,13 +358,12 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
             -> AST.PreOpenSeq AST.OpenAcc aenv senv body
     convSeq bnd body =
       case bnd of
-        ToSeq slix acc                     -> producer $ mkToSeq (cvtE slix) (cvtA acc)
-        UseLazy  slix arr                  -> producer $ mkUseLazy  (cvtE slix) arr
-        MapSeq afun x                      -> producer $ AST.MapSeq (cvtAF1 afun) (asIdx x)
-        ZipWithSeq afun x y                -> producer $ AST.ZipWithSeq (cvtAF2 afun) (asIdx x) (asIdx y)
-        ScanSeq afun acc x                 -> producer $ AST.ScanSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
-        ScanSeqAct afun1 afun2 acc1 acc2 x -> producer $ AST.ScanSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
-        _                                  -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
+        StreamIn arrs               -> producer $ AST.StreamIn arrs
+        ToSeq slix acc              -> producer $ mkToSeq (cvtE slix) (cvtA acc)
+        MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) (asIdx x)
+        ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) (asIdx x) (asIdx y)
+        ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
+        _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
         producer :: (bnd ~ [a], Arrays a)
                  => AST.Producer AST.OpenAcc aenv senv a
@@ -396,6 +395,9 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
         cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
         cvtE = convertSharingExp config EmptyLayout alyt [] aenv
 
+        cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
+        cvtF2 = convertSharingFun2 config alyt aenv
+
         cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
         cvtAF1 afun = convertSharingAfun1 config alyt aenv afun
 
@@ -411,9 +413,7 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenSeq AST.OpenAcc aenv senv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FromSeq x                          -> AST.Consumer $ AST.FromSeq (asIdx x)
-        FoldSeq afun acc x                 -> AST.Consumer $ AST.FoldSeq (cvtAF2 afun) (cvtA acc) (asIdx x)
-        FoldSeqAct afun1 afun2 acc1 acc2 x -> AST.Consumer $ AST.FoldSeqAct (cvtAF2 afun1) (cvtAF2 afun2) (cvtA acc1) (cvtA acc2) (asIdx x)
+        FoldSeq fun e x                    -> AST.Consumer $ AST.FoldSeq (cvtF2 fun) (cvtE e) (asIdx x)
         FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
@@ -439,8 +439,11 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
 
-    cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
-    cvtAF2 afun = convertSharingAfun2 config alyt aenv afun
+    cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
+    cvtE = convertSharingExp config EmptyLayout alyt [] aenv
+
+    cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
+    cvtF2 = convertSharingFun2 config alyt aenv
 
     cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
     cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
@@ -539,15 +542,6 @@ mkToSeq :: forall slix e aenv senv. (Slice slix, Elt e)
 mkToSeq = AST.ToSeq (sliceIndex slix)
   where
     slix = undefined :: slix
-
-mkUseLazy :: forall slix e aenv senv. (Slice slix, Elt e)
-          => AST.Exp                  aenv slix
-          -> Array (FullShape  slix) e
-          -> AST.Producer AST.OpenAcc aenv senv (Array (SliceShape slix) e)
-mkUseLazy = AST.UseLazy (sliceIndex slix)
-  where
-    slix = undefined :: slix
-
 
 
 -- Scalar functions
@@ -1742,6 +1736,12 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
 
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
+    
+    traverseFun2 :: (Elt a, Elt b, Typeable c)
+                 => Level
+                 -> (Exp a -> Exp b -> Exp c)
+                 -> IO (Exp a -> Exp b -> RootExp c, Int)
+    traverseFun2 = makeOccMapFun2 config accOccMap
 
     traverseTup :: Level -> Atuple Seq tup -> IO (Atuple UnscopedSeq tup, Int)
     traverseTup _   NilAtup          = return (NilAtup, 1)
@@ -1789,13 +1789,11 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
                      return (UnscopedSeq (SeqSharing (StableNameHeight sn height) seq), height)
 
           case seq of
+            StreamIn arrs -> producer $ return (StreamIn arrs, 1)
             ToSeq sl acc -> producer $ do
               (acc', h1) <- traverseAcc lvl acc
               (sl' , h2) <- traverseExp lvl sl
               return (ToSeq sl' acc', h1 `max` h2 + 1)
-            UseLazy  sl arr -> producer $ do
-              (sl', h1) <- traverseExp lvl sl
-              return (UseLazy sl' arr, h1 + 1)
             MapSeq afun s -> producer $ do
               (afun', h1) <- traverseAfun1 lvl afun
               (s'   , h2) <- traverseSeq lvl s
@@ -1805,33 +1803,16 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
               (s1'  , h2) <- traverseSeq lvl s1
               (s2'  , h3) <- traverseSeq lvl s2
               return (ZipWithSeq afun' s1' s2', h1 `max` h2 `max` h3 + 1)
-            ScanSeq afun acc s -> producer $ do
-              (afun', h1) <- traverseAfun2 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
+            ScanSeq fun e s -> producer $ do
+              (fun', h1) <- traverseFun2 lvl fun
+              (e',  h2) <- traverseExp lvl e
               (s'   , h3) <- traverseSeq lvl s
-              return (ScanSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
-            ScanSeqAct afun1 afun2 acc1 acc2 s -> producer $ do
-              (afun1', h1) <- traverseAfun2 lvl afun1
-              (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc1',  h3) <- traverseAcc lvl acc1
-              (acc2',  h4) <- traverseAcc lvl acc2
-              (s'   ,  h5) <- traverseSeq lvl s
-              return (ScanSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
-            FromSeq s -> consumer $ do
-              (s'   , h1) <- traverseSeq lvl s
-              return (FromSeq s', h1 + 1)
-            FoldSeq afun acc s -> consumer $ do
-              (afun', h1) <- traverseAfun2 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
-              (s'   , h3) <- traverseSeq lvl s
-              return (FoldSeq afun' acc' s', h1 `max` h2 `max` h3 + 1)
-            FoldSeqAct afun1 afun2 acc1 acc2 s -> consumer $ do
-              (afun1', h1) <- traverseAfun2 lvl afun1
-              (afun2', h2) <- traverseAfun2 lvl afun2
-              (acc1',  h3) <- traverseAcc lvl acc1
-              (acc2',  h4) <- traverseAcc lvl acc2
-              (s'   , h5) <- traverseSeq lvl s
-              return (FoldSeqAct afun1' afun2' acc1' acc2' s', h1 `max` h2 `max` h3 `max` h4 `max` h5 + 1)
+              return (ScanSeq fun' e' s', h1 `max` h2 `max` h3 + 1)
+            FoldSeq fun e s -> consumer $ do
+              (fun', h1) <- traverseFun2 lvl fun
+              (e'  , h2) <- traverseExp lvl e
+              (s'  , h3) <- traverseSeq lvl s
+              return (FoldSeq fun' e' s', h1 `max` h2 `max` h3 + 1)
             FoldSeqFlatten afun acc s -> consumer $ do
               (afun', h1) <- traverseAfun3 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
@@ -2672,6 +2653,13 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
     scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
 
+    scopesFun2 :: (Elt e1, Elt e2)
+               => (Exp e1 -> Exp e2 -> RootExp e3)
+               -> (Exp e1 -> Exp e2 -> ScopedExp e3, NodeCounts)
+    scopesFun2 f = (\_ _ -> body, counts)
+      where
+        (body, counts) = scopesExp (f undefined undefined)
+
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
@@ -2724,51 +2712,30 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 
     scopesSeq (UnscopedSeq (SeqSharing sn s)) =
       case s of
+        StreamIn arrs -> producer (StreamIn arrs) noNodeCounts
         ToSeq sl acc   -> let
                             (acc', accCount1) = scopesAcc acc
                             (sl',  accCount2) = scopesExp sl
                           in producer (ToSeq sl' acc') (accCount1 +++ accCount2)
-        UseLazy sl arr -> let
-                            (sl',  accCount1) = scopesExp sl
-                          in producer (UseLazy sl' arr) (accCount1)
         MapSeq     afun s'  -> let
                                  (afun', accCount1) = scopesAfun1 afun
                                  (s''  , accCount2) = scopesSeq s'
                                in producer (MapSeq afun' s'') (accCount1 +++ accCount2)
         ZipWithSeq afun s1 s2 -> let
-                                 (afun', accCount1) = scopesAfun2 afun
-                                 (s1'  , accCount2) = scopesSeq s1
-                                 (s2'  , accCount3) = scopesSeq s2
-                               in producer (ZipWithSeq afun' s1' s2') (accCount1 +++ accCount2 +++ accCount3)
-        ScanSeq afun acc s' -> let
-                                 (afun', accCount1) = scopesAfun2 afun
-                                 (acc' , accCount2) = scopesAcc acc
-                                 (s''  , accCount3) = scopesSeq s'
-                               in producer (ScanSeq afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
-        ScanSeqAct afun1 afun2 acc1 acc2 s' ->
-                               let
-                                 (afun1', accCount1) = scopesAfun2 afun1
-                                 (afun2', accCount2) = scopesAfun2 afun2
-                                 (acc1' , accCount3) = scopesAcc acc1
-                                 (acc2' , accCount4) = scopesAcc acc2
-                                 (s''   , accCount5) = scopesSeq s'
-                               in producer (ScanSeqAct afun1' afun2' acc1' acc2' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
-        FromSeq s'          -> let
-                                 (s'', accCount1) = scopesSeq s'
-                               in consumer (FromSeq s'') (accCount1)
-        FoldSeq afun acc s' -> let
-                                 (afun', accCount1) = scopesAfun2 afun
-                                 (acc' , accCount2) = scopesAcc acc
-                                 (s''  , accCount3) = scopesSeq s'
-                               in consumer (FoldSeq afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
-        FoldSeqAct afun1 afun2 acc1 acc2 s' ->
-                               let
-                                 (afun1', accCount1) = scopesAfun2 afun1
-                                 (afun2', accCount2) = scopesAfun2 afun2
-                                 (acc1' , accCount3) = scopesAcc acc1
-                                 (acc2' , accCount4) = scopesAcc acc2
-                                 (s''   , accCount5) = scopesSeq s'
-                               in consumer (FoldSeqAct afun1' afun2' acc1' acc2' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4 +++ accCount5)
+                                   (afun', accCount1) = scopesAfun2 afun
+                                   (s1'  , accCount2) = scopesSeq s1
+                                   (s2'  , accCount3) = scopesSeq s2
+                                 in producer (ZipWithSeq afun' s1' s2') (accCount1 +++ accCount2 +++ accCount3)
+        ScanSeq fun e s' -> let
+                              (fun', accCount1) = scopesFun2 fun
+                              (e'  , accCount2) = scopesExp e
+                              (s'' , accCount3) = scopesSeq s'
+                            in producer (ScanSeq fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
+        FoldSeq fun e s' -> let
+                              (fun', accCount1) = scopesFun2 fun
+                              (e'  , accCount2) = scopesExp e
+                              (s'' , accCount3) = scopesSeq s'
+                            in consumer (FoldSeq fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
         FoldSeqFlatten afun acc s' ->
                                let
                                  (afun', accCount1) = scopesAfun3 afun

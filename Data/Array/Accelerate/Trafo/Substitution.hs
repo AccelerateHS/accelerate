@@ -489,13 +489,11 @@ rebuildP :: (SyntacticAcc fa, Applicative f)
          -> f (Producer acc aenv' senv a)
 rebuildP k v p =
   case p of
-    ToSeq sl slix acc    -> ToSeq sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> (k v acc)
-    UseLazy  sl slix arr -> UseLazy  sl <$> (rebuildPreOpenExp k (pure . IE) v slix) <*> pure arr
-    MapSeq f x           -> MapSeq <$> (rebuildAfun k v f)  <*> pure x
-    ZipWithSeq f x y     -> ZipWithSeq <$> (rebuildAfun k v f)  <*> pure x <*> pure y
-    ScanSeq f acc x      -> ScanSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    ScanSeqAct f g acc1 acc2 x ->
-      ScanSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
+    StreamIn arrs        -> pure (StreamIn arrs)
+    ToSeq sl slix acc    -> ToSeq sl <$> rebuildPreOpenExp k (pure . IE) v slix <*> k v acc
+    MapSeq f x           -> MapSeq <$> rebuildAfun k v f <*> pure x
+    ZipWithSeq f x y     -> ZipWithSeq <$> rebuildAfun k v f <*> pure x <*> pure y
+    ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
 
 rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -504,11 +502,8 @@ rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
   case c of
-    FromSeq x              -> FromSeq <$> pure x
-    FoldSeq f acc x        -> FoldSeq <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
-    FoldSeqAct f g acc1 acc2 x ->
-      FoldSeqAct <$> (rebuildAfun k v f) <*> (rebuildAfun k v g) <*> (k v acc1) <*> (k v acc2) <*> pure x
-    FoldSeqFlatten f acc x -> FoldSeqFlatten <$> (rebuildAfun k v f) <*> (k v acc) <*> pure x
+    FoldSeq f e x          -> FoldSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
+    FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> pure x
     Stuple t               -> Stuple <$> rebuildT t
   where
     rebuildT :: Atuple (Consumer acc aenv senv) t -> f (Atuple (Consumer acc aenv' senv) t)

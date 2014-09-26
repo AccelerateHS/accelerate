@@ -202,19 +202,16 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
     shrinkP p =
       case p of
+        StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl (shrinkE slix) (shrinkAcc a)
-        UseLazy  sl slix arr -> UseLazy  sl (shrinkE slix) arr
         MapSeq f x           -> MapSeq (shrinkAF f) x
         ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
-        ScanSeq f a x        -> ScanSeq (shrinkAF f) (shrinkAcc a) x
-        ScanSeqAct f g a b x -> ScanSeqAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
+        ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
 
     shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
     shrinkC c =
       case c of
-        FromSeq x            -> FromSeq x
-        FoldSeq f a x        -> FoldSeq (shrinkAF f) (shrinkAcc a) x
-        FoldSeqAct f g a b x -> FoldSeqAct (shrinkAF f) (shrinkAF g) (shrinkAcc a) (shrinkAcc b) x
+        FoldSeq f e x        -> FoldSeq (shrinkF f) (shrinkE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) x
         Stuple t             -> Stuple (shrinkCT t)
 
@@ -408,19 +405,16 @@ usesOfPreAcc withShape countAcc idx = countP
     countPr :: Producer acc aenv senv arrs -> Int
     countPr p =
       case p of
+        StreamIn _      -> 0
         ToSeq _ sh a    -> countE sh + countA a
-        UseLazy  _ sh _ -> countE sh
         MapSeq f _           -> countAF f idx
         ZipWithSeq f _ _     -> countAF f idx
-        ScanSeq f a _        -> countAF f idx + countA a
-        ScanSeqAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
+        ScanSeq f e _        -> countF f + countE e
 
     countC :: Consumer acc aenv senv arrs -> Int
     countC c =
       case c of
-        FromSeq _            -> 0
-        FoldSeq f a _        -> countAF f idx + countA a
-        FoldSeqAct f g a b _ -> countAF f idx + countAF g idx + countA a + countA b
+        FoldSeq f e _        -> countF f + countE e
         FoldSeqFlatten f a _ -> countAF f idx + countA a
         Stuple t             -> countCT t
 

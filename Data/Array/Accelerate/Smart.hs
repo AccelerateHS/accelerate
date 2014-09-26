@@ -270,6 +270,11 @@ data PreAcc acc seq exp as where
                 -> PreAcc acc seq exp arrs
 
 data PreSeq acc seq exp arrs where
+  -- Convert the given Haskell-list of arrays to a sequence.
+  StreamIn :: Arrays a
+           => [a]
+           -> PreSeq acc seq exp [a]
+
   -- Convert the given array to a sequence.
   -- Example:
   -- slix = Z :. All :. Int :. All :. All :. Int
@@ -285,15 +290,6 @@ data PreSeq acc seq exp arrs where
         => exp slix
         -> acc (Array (FullShape slix) e)
         -> PreSeq acc seq exp [Array (SliceShape slix) e]
-
-  -- Use main memory vector as a sequence.
-  UseLazy :: (Slice slix, Elt e,
-               Typeable (FullShape slix), Typeable (SliceShape slix))
-          => exp slix
-          -> Array (FullShape slix) e
-          -> PreSeq acc seq exp [Array (SliceShape slix) e]
-
-  -- TODO: Add a function for using a list directly.
 
   -- Apply the given the given function to all elements of the given sequence.
   MapSeq :: (Arrays a, Arrays b)
@@ -319,36 +315,11 @@ data PreSeq acc seq exp arrs where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanSeq :: Arrays a
-          => (Acc a -> Acc a -> acc a)
-          -> acc a
-          -> seq [a]
-          -> PreSeq acc seq exp [a]
-
-  -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given
-  -- binary operation (+). (+) must be semi-associative, where (*) is
-  -- the companion operator:
-  --
-  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
-  --
-  -- and b0 must be the identity element for (*).
-  --
-  --   Forall b. b0 * b = b = b * b0.
-  --
-  -- Note on the name: Act is short for "semigroup action".
-  --
-  ScanSeqAct :: (Arrays a, Arrays b)
-             => (Acc a -> Acc b -> acc a)
-             -> (Acc b -> Acc b -> acc b)
-             -> acc a
-             -> acc b
-             -> seq [b]
-             -> PreSeq acc seq exp [a]
-
-  -- Convert the given sequence to an array.
-  FromSeq :: (Shape sh, Elt e)
-          => seq [Array sh e]
-          -> PreSeq acc seq exp (Array (Z:.Int) sh, Array (Z:.Int) e)
+  ScanSeq :: Elt a
+          => (Exp a -> Exp a -> exp a)
+          -> exp a
+          -> seq [Scalar a]
+          -> PreSeq acc seq exp [Scalar a]
 
   -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -359,31 +330,11 @@ data PreSeq acc seq exp arrs where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  FoldSeq :: Arrays a
-          => (Acc a -> Acc a -> acc a)
-          -> acc a
-          -> seq [a]
-          -> PreSeq acc seq exp a
-
-  -- FoldSeqAct (+) (*) a0 b0 x. Fold a sequence x by the given
-  -- binary operation (+). (+) must be semi-associative, where (*) is
-  -- the companion operator:
-  --
-  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
-  --
-  -- and b0 must be the identity element for (*).
-  --
-  --   Forall b. b0 * b = b = b * b0.
-  --
-  -- Note on the name: Act is short for "semigroup action".
-  --
-  FoldSeqAct :: (Arrays a, Arrays b)
-             => (Acc a -> Acc b -> acc a)
-             -> (Acc b -> Acc b -> acc b)
-             -> acc a
-             -> acc b
-             -> seq [b]
-             -> PreSeq acc seq exp a
+  FoldSeq :: Elt a
+          => (Exp a -> Exp a -> exp a)
+          -> exp a
+          -> seq [Scalar a]
+          -> PreSeq acc seq exp (Scalar a)
 
   -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct
   -- where reduction with the companion operator corresponds to
@@ -1287,15 +1238,12 @@ showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp Collect{}          = "Collect"
 
 showPreSeqOp :: PreSeq acc seq exp arrs -> String
+showPreSeqOp (StreamIn{})       = "StreamIn"
 showPreSeqOp (ToSeq{})          = "ToSeq"
-showPreSeqOp (UseLazy{})        = "UseLazy"
 showPreSeqOp (MapSeq{})         = "MapSeq"
 showPreSeqOp (ZipWithSeq{})     = "ZipWithSeq"
 showPreSeqOp (ScanSeq{})        = "ScanSeq"
-showPreSeqOp (ScanSeqAct{})     = "ScanSeqAct"
-showPreSeqOp (FromSeq{})        = "FromSeq"
 showPreSeqOp (FoldSeq{})        = "FoldSeq"
-showPreSeqOp (FoldSeqAct{})     = "FoldSeqAct"
 showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
 showPreSeqOp (Stuple{})         = "Stuple"
 

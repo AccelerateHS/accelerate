@@ -81,12 +81,11 @@ travSeq f c l seq =
   case seq of
     Producer p s' ->
       case p of
-        ToSeq _ ix a   -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSeq f c l s' ]
-        UseLazy  _ ix arr -> combine "UseLazy" [ travExp f c l  ix, travArrays f c l ArraysRarray arr, travSeq f c l s' ]
+        StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
+        ToSeq _ ix a  -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSeq f c l s' ]
         MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
         ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
-        ScanSeq afun a x -> combine "ScanSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)), travSeq f c l s' ]
-        ScanSeqAct afun1 afun2 a b x -> combine "ScanSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)), travSeq f c l s' ]
+        ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
     Consumer co -> travC co
     Reify ix    -> leaf (show (idxToInt ix))
   where
@@ -100,9 +99,7 @@ travSeq f c l seq =
     travC :: forall a. Consumer OpenAcc aenv senv a -> m b
     travC co =
       case co of
-        FromSeq x -> combine "FromSeq" [ leaf (show (idxToInt x)) ]
-        FoldSeq afun a x -> combine "FoldSeq" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
-        FoldSeqAct afun1 afun2 a b x -> combine "FoldSeqAct" [ travAfun f c l afun1, travAfun f c l afun2, travAcc f c l a, travAcc f c l b, leaf (show (idxToInt x)) ]
+        FoldSeq fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
         FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
 

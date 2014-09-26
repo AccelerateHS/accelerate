@@ -286,12 +286,11 @@ convertOpenSeq fuseAcc s =
     Producer p s' ->
       Producer
         (case p of
+           StreamIn arrs        -> StreamIn arrs
            ToSeq slix sh a      -> ToSeq slix (cvtE sh) (delayed fuseAcc a)
-           UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
            MapSeq f x           -> MapSeq (cvtAF f) x
            ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
-           ScanSeq f a x        -> ScanSeq (cvtAF f) (manifest fuseAcc a) x
-           ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (manifest fuseAcc a) (manifest fuseAcc b) x)
+           ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
         (convertOpenSeq fuseAcc s')
     Consumer c ->
       Consumer (cvtC c)
@@ -300,9 +299,7 @@ convertOpenSeq fuseAcc s =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
       case c of
-        FromSeq x            -> FromSeq x
-        FoldSeq f a x        -> FoldSeq (cvtAF f) (manifest fuseAcc a) x
-        FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (manifest fuseAcc a) (manifest fuseAcc b) x
+        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest fuseAcc a) x
         Stuple t             -> Stuple (cvtCT t)
 
@@ -316,6 +313,10 @@ convertOpenSeq fuseAcc s =
 
     cvtE :: OpenExp env aenv t -> DelayedOpenExp env aenv t
     cvtE = convertOpenExp fuseAcc
+
+    cvtF :: OpenFun env aenv f -> DelayedOpenFun env aenv f
+    cvtF (Lam f)  = Lam (cvtF f)
+    cvtF (Body b) = Body (cvtE b)
 
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
@@ -569,19 +570,16 @@ embedSeq embedAcc s
     travP (ToSeq slix sh a) env
       | Embed env' cc <- embedAcc (sink env a)
       = ExtendProducer env' (ToSeq slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
-    travP (UseLazy slix sh a) env    = ExtendProducer BaseEnv (UseLazy slix (cvtE (sink env sh)) a)
+    travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
     travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
     travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
-    travP (ScanSeq f a x) env        = ExtendProducer BaseEnv (ScanSeq (cvtAF (sink env f)) (cvtA (sink env a)) x)
-    travP (ScanSeqAct f g a b x) env = ExtendProducer BaseEnv (ScanSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x)
+    travP (ScanSeq f e x) env        = ExtendProducer BaseEnv (ScanSeq (cvtF (sink env f)) (cvtE (sink env e)) x)
 
     travC :: forall arrs' aenv' senv.
              Consumer acc aenv senv arrs'
           -> Extend acc aenv aenv'
           -> Consumer acc aenv' senv arrs'
-    travC (FromSeq x) _ = FromSeq x
-    travC (FoldSeq f a x) env = FoldSeq (cvtAF (sink env f)) (cvtA (sink env a)) x
-    travC (FoldSeqAct f g a b x) env = FoldSeqAct (cvtAF (sink env f)) (cvtAF (sink env g)) (cvtA (sink env a)) (cvtA (sink env b)) x
+    travC (FoldSeq f e x) env = FoldSeq (cvtF (sink env f)) (cvtE (sink env e)) x
     travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
     travC (Stuple t) env = Stuple (cvtCT t)
       where
@@ -591,6 +589,9 @@ embedSeq embedAcc s
 
     cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
     cvtE = simplify
+
+    cvtF :: PreFun acc aenv' t -> PreFun acc aenv' t
+    cvtF = simplify
 
     cvtA :: Arrays a => acc aenv' a -> acc aenv' a
     cvtA = computeAcc . embedAcc
@@ -765,19 +766,16 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenP :: forall a. Producer acc aenv senv a -> Producer acc aenv' senv a
       weakenP p =
         case p of
+          StreamIn arrs        -> StreamIn arrs
           ToSeq slix sh a      -> ToSeq   slix (weaken k sh) (weaken k a)
-          UseLazy slix sh arr  -> UseLazy slix (weaken k sh) arr
           MapSeq     f x       -> MapSeq     (weaken k f) x
           ZipWithSeq f x y     -> ZipWithSeq (weaken k f) x y
           ScanSeq f a x        -> ScanSeq    (weaken k f) (weaken k a) x
-          ScanSeqAct f g a b x -> ScanSeqAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
 
       weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
         case c of
-          FromSeq x            -> FromSeq x
           FoldSeq f a x        -> FoldSeq (weaken k f) (weaken k a) x
-          FoldSeqAct f g a b x -> FoldSeqAct (weaken k f) (weaken k g) (weaken k a) (weaken k b) x
           FoldSeqFlatten f a x -> FoldSeqFlatten (weaken k f) (weaken k a) x
           Stuple t             ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
@@ -1267,12 +1265,11 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
             Producer p s' ->
               Producer
                 (case p of
+                   StreamIn arrs        -> StreamIn arrs
                    ToSeq slix sh a      -> ToSeq slix (cvtE sh) (cvtA a)
-                   UseLazy  slix sh arr -> UseLazy  slix (cvtE sh) arr
                    MapSeq f x           -> MapSeq (cvtAF f) x
                    ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
-                   ScanSeq f a x        -> ScanSeq (cvtAF f) (cvtA a) x
-                   ScanSeqAct f g a b x -> ScanSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x)
+                   ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
                 (cvtSeq s')
             Consumer c ->
               Consumer (cvtC c)
@@ -1281,9 +1278,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
         cvtC c =
           case c of
-            FromSeq x            -> FromSeq x
-            FoldSeq f a x        -> FoldSeq (cvtAF f) (cvtA a) x
-            FoldSeqAct f g a b x -> FoldSeqAct (cvtAF f) (cvtAF g) (cvtA a) (cvtA b) x
+            FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
             FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x
             Stuple t             -> Stuple (cvtCT t)
 

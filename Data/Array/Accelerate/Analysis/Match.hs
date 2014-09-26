@@ -325,6 +325,9 @@ matchBoundary _  _            _            = False
 matchSeq :: forall acc aenv senv s t. MatchAcc acc -> HashAcc acc -> PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv t -> Maybe (s :=: t)
 matchSeq m h = match
   where
+    matchFun :: PreOpenFun acc env' aenv' u -> PreOpenFun acc env' aenv' v -> Maybe (u :=: v)
+    matchFun = matchPreOpenFun m h
+
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp m h
 
@@ -343,13 +346,11 @@ matchSeq m h = match
       = Nothing
 
     matchP :: forall senv s t. Producer acc aenv senv s -> Producer acc aenv senv t -> Maybe (s :=: t)
+    matchP (StreamIn arrs1) (StreamIn arrs2)
+      = undefined -- TODO: Should this function match on all arrays in the list?
     matchP (ToSeq _ slix1 a1) (ToSeq _ slix2 a2)
       | Just REFL <- matchExp slix1 slix2
       , Just REFL <- m a1 a2
-      = gcast REFL
-    matchP (UseLazy _ slix1 (a1 :: Array sh1 e1)) (UseLazy _ slix2 (a2 :: Array sh2 e2))
-      | Just REFL <- matchExp slix1 slix2
-      , Just REFL <- matchPreOpenAcc m h (Use (fromArr a1)) (Use (fromArr a2)) :: Maybe (Array sh1 e1 :=: Array sh2 e2)
       = gcast REFL
     matchP (MapSeq f1 x1) (MapSeq f2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
@@ -360,36 +361,19 @@ matchSeq m h = match
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- matchIdx y1 y2
       = Just REFL
-    matchP (ScanSeq f1 acc1 x1) (ScanSeq f2 acc2 x2)
-      | Just REFL <- matchPreOpenAfun m f1 f2
+    matchP (ScanSeq f1 e1 x1) (ScanSeq f2 e2 x2)
+      | Just REFL <- matchFun f1 f2
       , Just REFL <- matchIdx x1 x2
-      , Just REFL <- m acc1 acc2
-      = Just REFL
-    matchP (ScanSeqAct f1 g1 acc1 acc1' x1) (ScanSeqAct f2 g2 acc2 acc2' x2)
-      | Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- matchIdx x1 x2
-      , Just REFL <- m acc1 acc2
-      , Just REFL <- m acc1' acc2'
-      , Just REFL <- matchPreOpenAfun m g1 g2
+      , Just REFL <- matchExp e1 e2
       = Just REFL
     matchP _ _
       = Nothing
 
     matchC :: forall senv s t. Consumer acc aenv senv s -> Consumer acc aenv senv t -> Maybe (s :=: t)
-    matchC (FromSeq x1) (FromSeq x2)
+    matchC (FoldSeq f1 e1 x1) (FoldSeq f2 e2 x2)
       | Just REFL <- matchIdx x1 x2
-      = Just REFL
-    matchC (FoldSeq f1 acc1 x1) (FoldSeq f2 acc2 x2)
-      | Just REFL <- matchIdx x1 x2
-      , Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- m acc1 acc2
-      = Just REFL
-    matchC (FoldSeqAct f1 g1 acc1 acc1' x1) (FoldSeqAct f2 g2 acc2 acc2' x2)
-      | Just REFL <- matchIdx x1 x2
-      , Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- matchPreOpenAfun m g1 g2
-      , Just REFL <- m acc1 acc2
-      , Just REFL <- m acc1' acc2'
+      , Just REFL <- matchFun f1 f2
+      , Just REFL <- matchExp e1 e2
       = Just REFL
     matchC (FoldSeqFlatten f1 acc1 x1) (FoldSeqFlatten f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
@@ -962,8 +946,11 @@ hashPreOpenSeq hashAcc s =
     hashE :: forall env' aenv' e. Int -> PreOpenExp acc env' aenv' e -> Int
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
 
-    hashF :: forall aenv f. Int -> PreOpenAfun acc aenv f -> Int
-    hashF salt = hashWithSalt salt . hashAfun hashAcc
+    hashAF :: forall aenv f. Int -> PreOpenAfun acc aenv f -> Int
+    hashAF salt = hashWithSalt salt . hashAfun hashAcc
+
+    hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
+    hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
     hashSeq :: forall aenv senv' arrs'. Int -> PreOpenSeq acc aenv senv' arrs' -> Int
     hashSeq salt = hashWithSalt salt . hashPreOpenSeq hashAcc
@@ -974,22 +961,17 @@ hashPreOpenSeq hashAcc s =
     hashP :: Int -> Producer acc aenv senv a -> Int
     hashP salt p =
       case p of
+        StreamIn arrs       -> undefined -- TODO: Should we hash all arrays in list?
         ToSeq spec ix acc   -> hashWithSalt salt "ToSeq" `hashA` acc `hashE` ix `hashWithSalt` show spec
-        UseLazy spec ix arr -> hashWithSalt salt "UseLazy" `hashWithSalt` hashArrays ArraysRarray arr `hashE` ix `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq" `hashF` f `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashF` f `hashVar` x `hashVar` y
-        ScanSeq f acc x     -> hashWithSalt salt "ScanSeq" `hashF` f `hashA` acc `hashVar` x
-        ScanSeqAct f g acc1 acc2 x ->
-          hashWithSalt salt "ScanSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
+        MapSeq f x          -> hashWithSalt salt "MapSeq" `hashAF` f `hashVar` x
+        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f `hashVar` x `hashVar` y
+        ScanSeq f e x       -> hashWithSalt salt "ScanSeq" `hashF` f `hashE` e `hashVar` x
 
     hashC :: forall aenv senv a. Int -> Consumer acc aenv senv a -> Int
     hashC salt c =
       case c of
-        FromSeq x              -> hashWithSalt salt "FromSeq" `hashVar` x
-        FoldSeq f acc x        -> hashWithSalt salt "FoldSeq" `hashF` f `hashA` acc `hashVar` x
-        FoldSeqAct f g acc1 acc2 x ->
-          hashWithSalt salt "FoldSeqAct" `hashF` f `hashF` g `hashA` acc1 `hashA` acc2 `hashVar` x
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashF` f `hashA` acc `hashVar` x
+        FoldSeq f e x          -> hashWithSalt salt "FoldSeq" `hashF` f `hashE` e `hashVar` x
+        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
         Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of

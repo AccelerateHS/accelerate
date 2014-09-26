@@ -45,13 +45,13 @@ module Data.Array.Accelerate.Language (
   collect,
 
   -- * Sequence producers
-  toSeq, useLazy,
+  streamIn, toSeq,
 
   -- * Sequence transudcers
-  mapSeq, zipWithSeq, scanSeq, scanSeqAct,
+  mapSeq, zipWithSeq, scanSeq,
 
   -- * Sequence consumers
-  fromSeq, foldSeq, foldSeqAct, foldSeqFlatten,
+  foldSeq, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -473,6 +473,20 @@ stencil2 = Acc $$$$$ Stencil2
 -- Common sequence types
 --
 
+streamIn :: Arrays a
+         => [a]
+         -> Seq [a]
+streamIn arrs = Seq (StreamIn arrs)
+
+-- | Convert the given array to a sequence by sequencing the outer
+-- dimension.
+--
+toSeq :: (Slice slix, Elt a)
+      => Exp slix
+      -> Acc (Array (FullShape slix) a)
+      -> Seq [Array (SliceShape slix) a]
+toSeq spec acc = Seq (ToSeq spec acc)
+
 -- | Apply the given array function element-wise to the given sequence.
 --
 mapSeq :: (Arrays a, Arrays b)
@@ -501,56 +515,12 @@ zipWithSeq = Seq $$$ ZipWithSeq
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-scanSeq :: Arrays a
-        => (Acc a -> Acc a -> Acc a)
-        -> Acc a
-        -> Seq [a]
-        -> Seq [a]
+scanSeq :: Elt a
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
+        -> Seq [Scalar a]
+        -> Seq [Scalar a]
 scanSeq = Seq $$$ ScanSeq
-
--- | ScanSeqAct (+) (*) a0 x seq. Scan a sequence x by the given
--- binary operation (+). (+) must be semi-associative, where (*) is
--- the companion operator:
---
---   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
---
--- and b0 must be the identity element for (*).
---
---   Forall b. b0 * b = b = b * b0.
---
--- Note on the name: Act is short for "semigroup action".
---
-scanSeqAct :: (Arrays a, Arrays b)
-           => (Acc a -> Acc b -> Acc a)
-           -> (Acc b -> Acc b -> Acc b)
-           -> Acc a
-           -> Acc b
-           -> Seq [b]
-           -> Seq [a]
-scanSeqAct = Seq $$$$$ ScanSeqAct
-
--- | Convert the given array to a sequence by sequencing the outer
--- dimension.
---
-toSeq :: (Slice slix, Elt a)
-      => Exp slix
-      -> Acc (Array (FullShape slix) a)
-      -> Seq [Array (SliceShape slix) a]
-toSeq spec (Acc (Use arr)) = Seq (UseLazy spec arr)
-toSeq spec acc = Seq (ToSeq spec acc)
-
-useLazy :: (Slice slix, Elt a)
-        => Exp slix
-        -> Array (FullShape slix) a
-        -> Seq [Array (SliceShape slix) a]
-useLazy = Seq $$ UseLazy
-
-
--- | Convert the given scalar sequence to vector.
-fromSeq :: (Shape ix, Elt a)
-        => Seq [Array ix a]
-        -> Seq (Vector ix, Vector a)
-fromSeq = Seq . FromSeq
 
 -- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
@@ -562,33 +532,12 @@ fromSeq = Seq . FromSeq
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-foldSeq :: Arrays a
-        => (Acc a -> Acc a -> Acc a)
-        -> Acc a
-        -> Seq [a]
-        -> Seq a
+foldSeq :: Elt a
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
+        -> Seq [Scalar a]
+        -> Seq (Scalar a)
 foldSeq = Seq $$$ FoldSeq
-
--- | foldSeqAct (+) (*) a0 x seq. Fold a sequence x by the given
--- binary operation (+). (+) must be semi-associative, where (*) is
--- the companion operator:
---
---   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
---
--- and b0 must be the identity element for (*).
---
---   Forall b. b0 * b = b = b * b0.
---
--- Note on the name: Act is short for "semigroup action".
---
-foldSeqAct :: (Arrays a, Arrays b)
-           => (Acc a -> Acc b -> Acc a)
-           -> (Acc b -> Acc b -> Acc b)
-           -> Acc a
-           -> Acc b
-           -> Seq [b]
-           -> Seq a
-foldSeqAct = Seq $$$$$ FoldSeqAct
 
 -- | foldSeqFlatten f a0 x seq. A specialized version of
 -- FoldSeqAct where reduction with the companion operator

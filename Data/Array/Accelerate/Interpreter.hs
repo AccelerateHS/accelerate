@@ -435,7 +435,6 @@ scanl'Op f z (scanlOp f z -> arr)
     in
     (arr', sum)
 
-
 scanrOp
     :: Elt e
     => (e -> e -> e)
@@ -1080,10 +1079,6 @@ data Chunk a = Chunk
 emptyChunk :: forall a. Chunk a
 emptyChunk = Chunk { elems = [] }
 
--- The singleton chunk. O(1).
-singletonChunk :: forall a. a -> Chunk a
-singletonChunk a = Chunk { elems = [a] }
-
 -- Number of arrays in chunk. O(1).
 --
 clen :: forall a. Chunk a -> Int
@@ -1096,22 +1091,11 @@ elemsPerChunk conf n
     let (a,b) = chunkSize conf `quotRem` n
     in a + signum b
 
--- Chunk append. O(n+m).
---
-appendChunk :: forall a. Chunk a -> Chunk a -> Chunk a -- (Chunk a, Chunk a) leftovers c2
-appendChunk c1 c2 = Chunk { elems = elems c1 ++ elems c2 }
-
 -- Drop a number of arrays from a chunk. O(1). Note: Require keeping a
 -- scan of element sizes.
 --
 cdrop :: forall a. Int -> Chunk a -> Chunk a
 cdrop n c = c { elems = drop n (elems c) }
-
--- Take a number of arrays from a chunk. O(1). Note: Require keeping a
--- scan of element sizes.
---
-ctake :: forall a. Int -> Chunk a -> Chunk a
-ctake n c = c { elems = take n (elems c) }
 
 -- Get all the shapes of a chunk of arrays. O(1).
 --
@@ -1135,52 +1119,6 @@ mapChunk f c = c { elems = map f (elems c) }
 zipWithChunk :: forall a b c. (a -> b -> c) -> Chunk a -> Chunk b -> Chunk c -- (Chunk a, Chunk b, Chunk c) leftovers c1 c2
 zipWithChunk f c1 c2 = Chunk
   { elems = zipWith f (elems c1) (elems c2)
-  }
-
--- A version of zipWith that keeps the trailing elements of the
--- longest argument. O(n).
-zipWithChunk' :: forall a. (a -> a -> a) -> Chunk a -> Chunk a -> Chunk a
-zipWithChunk' f c1 c2 =
-  zipWithChunk f c1 c2 `appendChunk` cdrop (clen c2) c1 `appendChunk` cdrop (clen c1) c2
-
--- Pre-scan and reduce a Chunk. O(nlogn). TODO: Can work in-place for
--- fixed element-size sequences.
---
-scanReduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> (Chunk a, a) -- (Chunk a, Chunk a, a) leftovers c
-scanReduceChunk f a0 c = go c
-  where
-    go :: Chunk a -> (Chunk a, a)
-    go c =
-      case elems c of
-        []  -> (c, a0)
-        [a] -> (singletonChunk a0, a)
-        _ ->
-          let k = clen c `div` 2
-              (c', a') = go (ctake k c)
-              (c'', a'') = go (cdrop k c)
-          in (c' `appendChunk` mapChunk (f a') c'', f a' a'')
-
--- Reduce a Chunk. O(nlogn). TODO: Can work in-place for fixed
--- element-size sequences.
---
-reduceChunk :: forall a. (a -> a -> a) -> a -> Chunk a -> a
-reduceChunk f a0 c = go c
-  where
-    go :: Chunk a -> a
-    go c =
-      case elems c of
-        [] -> a0
-        [a] -> a
-        _ ->
-          let k = clen c `div` 2
-              c' = zipWithChunk' f (cdrop k c) (ctake k c)
-          in go c'
-
--- Replicate for Chunk. O(n). TODO Leftovers?
---
-replicateChunk :: forall a. Int -> a -> Chunk a
-replicateChunk k a = Chunk
-  { elems = replicate k a
   }
 
 -- A window on a sequence.
@@ -1260,19 +1198,9 @@ data ExecSeq senv arrs where
 -- An executable producer.
 --
 data ExecP senv a where
-  ExecToSeq :: Int -- Elements per chunk
-               -> [Array sh e]
-               -> ExecP senv (Array sh e)
-
-  ExecUseLazy :: (Elt slix, Shape sl, Elt e)
-              => SliceIndex (EltRepr slix)
-                            (EltRepr sl)
-                            co
-                            dim
-              -> Int -- Elements per chunk
-              -> [slix]
-              -> (slix -> Array sl e)
-              -> ExecP senv (Array sl e)
+  ExecStreamIn :: Int
+               -> [a]
+               -> ExecP senv a
 
   ExecMap :: (Chunk a -> Chunk b)
           -> Cursor senv a
@@ -1283,22 +1211,26 @@ data ExecP senv a where
               -> Cursor senv b
               -> ExecP senv c
 
-  ExecScanSeq :: (a -> Chunk b -> (Chunk a, a))
-              -> Cursor senv b
-              -> a
-              -> ExecP senv a
+  -- Stream scan skeleton.
+  ExecScan :: (a -> Chunk b -> (Chunk r, a)) -- Chunk scanner.
+           -> a                              -- Accumulator (internal state).
+           -> Cursor senv b                  -- Input stream.
+           -> ExecP senv r
 
 -- An executable consumer.
 --
 data ExecC senv a where
-  ExecFoldSeq' :: (acc -> Chunk b -> acc)
-                  -> (acc -> res)
-                  -> Cursor senv b
-                  -> acc
-                  -> ExecC senv res
-  ExecStuple   :: IsAtuple a
-                  => Atuple (ExecC senv) (TupleRepr a)
-                  -> ExecC senv a
+
+  -- Stream reduction skeleton.
+  ExecFold :: (a -> Chunk b -> a) -- Chunk consumer function.
+           -> (a -> r)            -- Finalizer function.
+           -> a                   -- Accumulator (internal state).
+           -> Cursor senv b       -- Input stream.
+           -> ExecC senv r
+
+  ExecStuple :: IsAtuple a
+             => Atuple (ExecC senv) (TupleRepr a)
+             -> ExecC senv a
 
 minCursor :: ExecSeq senv a -> SeqPos
 minCursor s = travS s 0
@@ -1318,10 +1250,10 @@ minCursor s = travS s 0
     travP :: ExecP senv a -> Int -> SeqPos
     travP p i =
       case p of
+        ExecStreamIn _ _ -> maxBound
         ExecMap _ c -> k c i
         ExecZipWith _ c1 c2 -> k c1 i `min` k c2 i
-        ExecScanSeq _ c _ -> k c i
-        _ -> maxBound
+        ExecScan _ _ c -> k c i
 
     travT :: Atuple (ExecC senv) t -> Int -> SeqPos
     travT NilAtup        _ = maxBound
@@ -1330,8 +1262,8 @@ minCursor s = travS s 0
     travC :: ExecC senv a -> Int -> SeqPos
     travC c i =
       case c of
-        ExecFoldSeq' _ _ c _ -> k c i
-        ExecStuple t         -> travT t i
+        ExecFold _ _ _ cu -> k cu i
+        ExecStuple t      -> travT t i
 
 evalDelayedSeq :: SeqConfig
                -> DelayedSeq arrs
@@ -1358,8 +1290,8 @@ evalSeq conf s aenv = evalSeq' s
              -> ExecSeq senv arrs'
     initSeq aenv s =
       case s of
-        Producer   p s' -> ExecP window0 (initProducer   aenv p) (initSeq aenv s')
-        Consumer   c    -> ExecC         (initConsumer   aenv c)
+        Producer   p s' -> ExecP window0 (initProducer p) (initSeq aenv s')
+        Consumer   c    -> ExecC         (initConsumer c)
         Reify      ix   -> ExecR (cursor0 ix)
 
     -- Generate a list from the sequence.
@@ -1409,81 +1341,57 @@ evalSeq conf s aenv = evalSeq' s
         ExecR ix     -> let c = prjChunk ix senv in (Just (ExecR (moveCursor (clen c) ix)), elems c)
 
     initProducer :: forall a senv.
-                    Val aenv
-                 -> Producer DelayedOpenAcc aenv senv a
+                    Producer DelayedOpenAcc aenv senv a
                  -> ExecP senv a
-    initProducer aenv p =
+    initProducer p =
       case p of
+        StreamIn arrs -> ExecStreamIn 1 arrs
         ToSeq sliceIndex slix (delayed -> Delayed sh ix _) ->
-          let slix' = restrictSlice sliceIndex sh (evalPreExp evalOpenAcc slix aenv)
+          let slix' = restrictSlice sliceIndex sh (evalE slix)
               n   = R.size (R.sliceShape sliceIndex (fromElt sh))
               k   = elemsPerChunk conf n
-          in ExecToSeq k (toSeqOp sliceIndex slix' (newArray sh ix))
-        UseLazy sliceIndex sl arr ->
-          let sl' = restrictSlice sliceIndex (shape arr) (evalPreExp evalOpenAcc sl aenv)
-              sls = enumSlices sliceIndex sl'
-              n   = R.size (R.sliceShape sliceIndex (fromElt (shape arr)))
-              k   = elemsPerChunk conf n
-              f slix = sliceOp sliceIndex arr slix
-          in ExecUseLazy sliceIndex k sls f
-        MapSeq     f x       -> ExecMap     (mapChunk (evalOpenAfun f aenv)) (cursor0 x)
-        ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalOpenAfun f aenv)) (cursor0 x) (cursor0 y)
-        ScanSeq    f acc x   -> initProducer aenv (ScanSeqAct f f acc acc x)
-        ScanSeqAct f g acc0 acc1 x -> ExecScanSeq h (cursor0 x) a0
+          in ExecStreamIn k (toSeqOp sliceIndex slix' (newArray sh ix))
+        MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
+        ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
+        ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
           where
-            f' = evalOpenAfun f aenv
-            g' = evalOpenAfun g aenv
-            a0 = evalOpenAcc acc0 aenv
-            b0 = evalOpenAcc acc1 aenv
-            h a bs =
-              let (bs', b) = scanReduceChunk g' b0 bs -- Scan and reduce chunk.
-                  as = mapChunk (f' a) bs'            -- Add accumulator.
-                  a' = f' a b                         -- Find new accumulator.
-              in (as, a')
+            scanner a c = 
+              let v0 = chunk2Vec c
+                  (v1, a') = scanl'Op (evalF f) a (delayArray v0)
+              in (vec2Chunk v1, fromScalar a')
+
+    evalA :: DelayedOpenAcc aenv a -> a
+    evalA acc = evalOpenAcc acc aenv
+
+    evalAF :: DelayedOpenAfun aenv f -> f
+    evalAF f = evalOpenAfun f aenv
+
+    evalE :: DelayedExp aenv t -> t
+    evalE exp = evalPreExp evalOpenAcc exp aenv
+
+    evalF :: DelayedFun aenv f -> f
+    evalF fun = evalPreFun evalOpenAcc fun aenv
 
     initConsumer :: forall a senv.
-                    Val aenv
-                 -> Consumer DelayedOpenAcc aenv senv a
+                    Consumer DelayedOpenAcc aenv senv a
                  -> ExecC senv a
-    initConsumer aenv c =
+    initConsumer c =
       case c of
-        FromSeq x ->
-          ExecFoldSeq'
-            appendChunk
-            (\ c -> (chunkShapes c, chunkElems c))
-            (cursor0 x)
-            emptyChunk
-        FoldSeq f acc x ->
-          let f' = evalOpenAfun f aenv
-              a0 = evalOpenAcc acc aenv
-              k = 1 -- TODO elemsPerChunk conf (size (shape a0))
-          in ExecFoldSeq'
-               (zipWithChunk' f')
-               (reduceChunk f' a0)
-               (cursor0 x)
-               (replicateChunk k a0)
-        FoldSeqAct f g acc1 acc2 x ->
-          let f' = evalOpenAfun f aenv
-              g' = evalOpenAfun g aenv
-              a0 = evalOpenAcc acc1 aenv
-              b0 = evalOpenAcc acc2 aenv
-          in ExecFoldSeq'
-               (\ a bs -> f' a (reduceChunk g' b0 bs))
-               id
-               (cursor0 x)
-               a0
-        FoldSeqFlatten f acc x ->
-          let f' = evalOpenAfun f aenv
-              a0 = evalOpenAcc acc aenv
-          in ExecFoldSeq'
-               (\ a bs -> f' a (chunkShapes bs) (chunkElems bs))
-               id
-               (cursor0 x)
-               a0
+        FoldSeq f e x -> 
+          let f' = evalF f
+              a0 = generateOp (Z :. chunkSize conf) (const (evalE e))
+              consumer v c = zipWithOp f' (delayArray v) (delayArray (chunk2Vec c))
+              finalizer = fold1Op f' . delayArray
+          in ExecFold consumer finalizer a0 (cursor0 x)
+        FoldSeqFlatten f acc x -> 
+          let f' = evalAF f
+              a0 = evalA acc
+              consumer a c = f' a (chunkShapes c) (chunkElems c)
+          in ExecFold consumer id a0 (cursor0 x)
         Stuple t ->
           let initTup :: Atuple (Consumer DelayedOpenAcc aenv senv) t -> Atuple (ExecC senv) t
               initTup NilAtup        = NilAtup
-              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer aenv c)
+              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer c)
           in ExecStuple (initTup t)
 
     delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
@@ -1495,18 +1403,13 @@ evalSeq conf s aenv = evalSeq' s
 produce :: ExecP senv a -> Val' senv -> (Chunk a, Maybe (ExecP senv a))
 produce p senv =
   case p of
-    ExecToSeq k xs ->
+    ExecStreamIn k xs ->
       let (xs', xs'') = (take k xs, drop k xs)
           c           = Chunk xs'
           mp          = if null xs''
                         then Nothing
-                        else Just (ExecToSeq k xs'')
+                        else Just (ExecStreamIn k xs'')
       in (c, mp)
-    ExecUseLazy sliceIndex k slixs f ->
-      let (slixs', slixs'') = (take k slixs, drop k slixs)
-          c                 = Chunk { elems = map f slixs' }
-      in ( c
-         , if null slixs'' then Nothing else Just $ ExecUseLazy sliceIndex k slixs'' f)
     ExecMap f x ->
       let c = prjChunk x senv
       in (f c, Just $ ExecMap f (moveCursor (clen c) x))
@@ -1515,20 +1418,21 @@ produce p senv =
           c2 = prjChunk y senv
           k = clen c1 `min` clen c2
       in (f c1 c2, Just $ ExecZipWith f (moveCursor k x) (moveCursor k y))
-    ExecScanSeq f x a   ->
+    ExecScan scanner a x ->
       let c = prjChunk x senv
-          (as, a') = f a c
-      in (as, Just $ ExecScanSeq f (moveCursor (clen c) x) a')
+          (c', a') = scanner a c
+          k = clen c
+      in (c', Just $ ExecScan scanner a' (moveCursor k x))
 
 consume :: forall senv a. ExecC senv a -> Val' senv -> (ExecC senv a, a)
 consume c senv =
   case c of
-    ExecFoldSeq' f g x acc  ->
+    ExecFold f g acc x ->
       let c    = prjChunk x senv
           acc' = f acc c
       -- Even though we call g here, lazy evaluation should guarantee it is
       -- only ever called once.
-      in (ExecFoldSeq' f g (moveCursor (clen c) x) acc', g acc')
+      in (ExecFold f g acc' (moveCursor (clen c) x), g acc')
     ExecStuple t ->
       let consT :: Atuple (ExecC senv) t -> (Atuple (ExecC senv) t, t)
           consT NilAtup        = (NilAtup, ())
@@ -1542,3 +1446,15 @@ evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv
 evalExtend (PushEnv ext1 ext2) aenv | aenv' <- (evalExtend ext1 aenv)
                                     = Push aenv' (evalOpenAcc (Manifest ext2) aenv')
+
+delayArray :: Array sh e -> Delayed (Array sh e)
+delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndexArrayData adata)
+
+vec2Chunk :: Vector a -> Chunk (Scalar a)
+vec2Chunk = undefined
+
+chunk2Vec :: Chunk (Scalar a) -> Vector a
+chunk2Vec = undefined
+
+fromScalar :: Scalar a -> a
+fromScalar = (!Z)

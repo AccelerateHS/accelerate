@@ -487,6 +487,11 @@ data PreOpenSeq acc aenv senv arrs where
            -> PreOpenSeq acc aenv senv [arrs]
 
 data Producer acc aenv senv a where
+  -- Convert the given Haskell-list of arrays to a sequence.
+  StreamIn :: Arrays a
+           => [a]
+           -> Producer acc aenv senv a
+
   -- Convert the given array to a sequence.
   ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
            => SliceIndex (EltRepr slix)
@@ -495,16 +500,6 @@ data Producer acc aenv senv a where
                          (EltRepr sh)
            -> PreExp acc aenv slix
            -> acc aenv (Array sh e)
-           -> Producer acc aenv senv (Array sl e)
-
-  -- Lazy version of Use.
-  UseLazy :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => SliceIndex (EltRepr slix)
-                         (EltRepr sl)
-                         co
-                         (EltRepr sh)
-           -> PreExp acc aenv slix
-           -> Array sh e
            -> Producer acc aenv senv (Array sl e)
 
   -- Apply the given the given function to all elements of the given
@@ -531,38 +526,13 @@ data Producer acc aenv senv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanSeq :: Arrays a
-          => PreOpenAfun acc aenv (a -> a -> a)
-          -> acc aenv a
-          -> Idx senv a
-          -> Producer acc aenv senv a
-
-  -- ScanSeqAct (+) (*) a0 b0 x. Scan a sequence x by the given binary
-  -- operation (+). (+) must be semi-associative, where (*) is the
-  -- companion operator:
-  --
-  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
-  --
-  -- and b0 must be the identity element for (*).
-  --
-  --   Forall b. b0 * b = b = b * b0.
-  --
-  -- Note on the name: Act is short for "semigroup action".
-  --
-  ScanSeqAct :: (Arrays a, Arrays b)
-             => PreOpenAfun acc aenv (a -> b -> a)
-             -> PreOpenAfun acc aenv (b -> b -> b)
-             -> acc aenv a
-             -> acc aenv b
-             -> Idx senv b
-             -> Producer acc aenv senv a
+  ScanSeq :: Elt a
+          => PreFun acc aenv (a -> a -> a)
+          -> PreExp acc aenv a
+          -> Idx senv (Scalar a)
+          -> Producer acc aenv senv (Scalar a)
 
 data Consumer acc aenv senv a where
-
-  -- Convert the given sequence to an array.
-  FromSeq :: (Shape sh, Elt e)
-          => Idx senv (Array sh e)
-          -> Consumer acc aenv senv (Array (Z:.Int) sh, Array (Z:.Int) e)
 
   -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
   -- using the given binary operation (+). (+) must be associative:
@@ -573,31 +543,11 @@ data Consumer acc aenv senv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  FoldSeq :: Arrays a
-          => PreOpenAfun acc aenv (a -> a -> a)
-          -> acc aenv a
-          -> Idx senv a
-          -> Consumer acc aenv senv a
-
-  -- FoldSeqAct (+) (*) a0 x. Fold a sequence x by the given binary
-  -- operation (+). (+) must be semi-associative, where (*) is the
-  -- companion operator:
-  --
-  --   Forall a b1 b2. (a + b1) + b2 = a + (b1 * b2).
-  --
-  -- and b0 must be the identity element for (*).
-  --
-  --   Forall b. b0 * b = b = b * b0.
-  --
-  -- Note on the name: Act is short for "semigroup action".
-  --
-  FoldSeqAct :: (Arrays a, Arrays b)
-             => PreOpenAfun acc aenv (a -> b -> a)
-             -> PreOpenAfun acc aenv (b -> b -> b)
-             -> acc aenv a
-             -> acc aenv b
-             -> Idx senv b
-             -> Consumer acc aenv senv a
+  FoldSeq :: Elt a
+          => PreFun acc aenv (a -> a -> a)
+          -> PreExp acc aenv a
+          -> Idx senv (Scalar a)
+          -> Consumer acc aenv senv (Scalar a)
 
   -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct where
   -- reduction with the companion operator corresponds to

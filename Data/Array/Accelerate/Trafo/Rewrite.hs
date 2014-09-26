@@ -116,19 +116,16 @@ convertSegmentsSeq s =
     cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
     cvtP p =
       case p of
+        StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl (cvtE slix) (cvtA a)
-        UseLazy  sl slix arr -> UseLazy  sl (cvtE slix) arr
         MapSeq f x           -> MapSeq (cvtAfun f) x
         ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
-        ScanSeq f a x        -> ScanSeq (cvtAfun f) (cvtA a) x
-        ScanSeqAct f g a b x -> ScanSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
+        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
     cvtC c =
       case c of
-        FromSeq x            -> FromSeq x
-        FoldSeq f a x        -> FoldSeq (cvtAfun f) (cvtA a) x
-        FoldSeqAct f g a b x -> FoldSeqAct (cvtAfun f) (cvtAfun g) (cvtA a) (cvtA b) x
+        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
         Stuple t             -> Stuple (cvtCT t)
 
@@ -138,6 +135,9 @@ convertSegmentsSeq s =
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
     cvtE = id
+
+    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF = id
 
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t
     cvtA = convertSegments
