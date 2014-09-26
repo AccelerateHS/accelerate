@@ -948,6 +948,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
+  
+  -- |Empty /shape/.
+  emptyS :: sh
 
   -- |Magic value identifying elements ignored in 'permute'.
   ignore :: sh
@@ -997,6 +1000,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
+  emptyS                = toElt Repr.emptyS
   -- (#) must be individually defined, as it holds for all instances *except*
   -- the one with the largest arity
 

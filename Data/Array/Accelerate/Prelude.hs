@@ -89,6 +89,10 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
+  -- * Sequence stuff
+  empty,
+  fromSeq,
+
 ) where
 
 -- avoid clashes with Prelude functions
@@ -1738,3 +1742,17 @@ null arr = size arr ==* 0
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
+-- Sequence operations
+-- --------------------------------------
+
+empty :: (Shape sh, Elt e) => Acc (Array sh e)
+empty = use (fromList emptyS [])
+
+fromSeq :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector ix, Vector a)
+fromSeq = foldSeqFlatten f (lift (empty, empty))
+  where
+    f x sh1 a1 =
+      let (sh0, a0) = unlift x
+      in lift (sh0 ++ sh1, a0 ++ a1)
