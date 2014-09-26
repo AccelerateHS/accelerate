@@ -88,7 +88,7 @@ convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
   where
     cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
     cvtE BaseEnv         = BaseEnv
-    cvtE (PushEnv env a) | Manifest a' <- convertOpenAcc fuseAcc (OpenAcc a)
+    cvtE (PushEnv env a) | a' <- convertOpenAcc fuseAcc a
                          = PushEnv (cvtE env) a'
 
 withSimplStats :: a -> a
@@ -516,7 +516,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
           ->       acc aenv as
           -> Embed acc aenv bs
     embed op (embedAcc -> Embed env cc)
-      = Embed (env `PushEnv` op env (inject (compute' cc))) (Done ZeroIdx)
+      = Embed (env `PushEnv` inject (op env (inject (compute' cc)))) (Done ZeroIdx)
 
     embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
@@ -527,7 +527,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
       | env     <- env1 `append` env0
       , acc1    <- inject . compute' $ sink env0 cc1
       , acc0    <- inject . compute' $ cc0
-      = Embed (env `PushEnv` op env acc1 acc0) (Done ZeroIdx)
+      = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
 
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
@@ -535,7 +535,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     collectD :: PreOpenSeq acc aenv () arrs
              -> Embed acc aenv arrs
     collectD s | ExtendSeq env s' <- embedSeq embedAcc s
-               = Embed (env `PushEnv` (Collect s')) (Done ZeroIdx)
+               = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
 
 -- Move additional bindings for producer outside of sequence, so
 -- that producers may fuse with their arguments, resulting in
@@ -687,10 +687,10 @@ instance Kit acc => Simplify (Cunctation acc aenv a) where
 
 -- Convert a real AST node into the internal representation
 --
-done :: Arrays a => PreOpenAcc acc aenv a -> Embed acc aenv a
+done :: (Arrays a, Kit acc) => PreOpenAcc acc aenv a -> Embed acc aenv a
 done pacc
-  | Avar v <- pacc      = Embed BaseEnv                  (Done v)
-  | otherwise           = Embed (BaseEnv `PushEnv` pacc) (Done ZeroIdx)
+  | Avar v <- pacc      = Embed BaseEnv                         (Done v)
+  | otherwise           = Embed (BaseEnv `PushEnv` inject pacc) (Done ZeroIdx)
 
 
 -- Recast a cunctation into a mapping from indices to elements.
@@ -923,7 +923,7 @@ reshapeD
     -> Embed  acc aenv (Array sl e)
 reshapeD (Embed env cc) (sink env -> sl)
   | Done v      <- cc
-  = Embed (env `PushEnv` Reshape sl (avarIn v)) (Done ZeroIdx)
+  = Embed (env `PushEnv` inject (Reshape sl (avarIn v))) (Done ZeroIdx)
 
   | otherwise
   = Stats.ruleFired "reshapeD"
@@ -1095,7 +1095,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
   | acc1                <- compute (Embed env1 cc1)
   , False               <- elimAcc (inject acc1) acc0
   = Stats.ruleFired "aletD/bind"
-  $ Embed (BaseEnv `PushEnv` acc1 `append` env0) cc0
+  $ Embed (BaseEnv `PushEnv` inject acc1 `append` env0) cc0
 
   -- let-elimination
   -- ---------------

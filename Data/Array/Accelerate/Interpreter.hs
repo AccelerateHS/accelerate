@@ -435,6 +435,7 @@ scanl'Op f z (scanlOp f z -> arr)
     in
     (arr', sum)
 
+
 scanrOp
     :: Elt e
     => (e -> e -> e)
