@@ -1070,7 +1070,7 @@ data SeqConfig = SeqConfig
 defaultSeqConfig :: SeqConfig
 defaultSeqConfig = SeqConfig { chunkSize = 2 }
 
--- A chunk of allocated elements. TODO: Change to use LiftedAcc.
+-- A chunk of allocated elements. TODO: Change to use Vector'.
 --
 data Chunk a = Chunk
   { elems :: [a]  -- Elements.
@@ -1109,6 +1109,11 @@ chunkElems :: forall sh a. Elt a => Chunk (Array sh a) -> Vector a
 chunkElems c =
   let xs = concatMap toList (elems c)
   in fromList (Z :. length xs) xs
+
+-- Convert a vector to a chunk of scalars.
+--
+vec2Chunk :: Elt e => Vector e -> Chunk (Scalar e)
+vec2Chunk v = Chunk { elems = [ unitOp (v!(Z:.i)) | i <- [0..size (shape v)] ] }
 
 -- fmap for Chunk. O(n).
 --
@@ -1357,7 +1362,7 @@ evalSeq conf s aenv = evalSeq' s
         ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
           where
             scanner a c = 
-              let v0 = chunk2Vec c
+              let v0 = chunkElems c
                   (v1, a') = scanl'Op (evalF f) a (delayArray v0)
               in (vec2Chunk v1, fromScalar a')
 
@@ -1381,7 +1386,7 @@ evalSeq conf s aenv = evalSeq' s
         FoldSeq f e x -> 
           let f' = evalF f
               a0 = generateOp (Z :. chunkSize conf) (const (evalE e))
-              consumer v c = zipWithOp f' (delayArray v) (delayArray (chunk2Vec c))
+              consumer v c = zipWithOp f' (delayArray v) (delayArray (chunkElems c))
               finalizer = fold1Op f' . delayArray
           in ExecFold consumer finalizer a0 (cursor0 x)
         FoldSeqFlatten f acc x -> 
@@ -1445,17 +1450,11 @@ consume c senv =
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv
-evalExtend (PushEnv ext1 ext2) aenv | aenv' <- (evalExtend ext1 aenv)
-                                    = Push aenv' (evalOpenAcc (Manifest ext2) aenv')
+evalExtend (PushEnv ext1 ext2) aenv | aenv' <- evalExtend ext1 aenv
+                                    = Push aenv' (evalOpenAcc ext2 aenv')
 
 delayArray :: Array sh e -> Delayed (Array sh e)
 delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndexArrayData adata)
-
-vec2Chunk :: Vector a -> Chunk (Scalar a)
-vec2Chunk = undefined
-
-chunk2Vec :: Chunk (Scalar a) -> Vector a
-chunk2Vec = undefined
 
 fromScalar :: Scalar a -> a
 fromScalar = (!Z)
