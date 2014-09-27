@@ -36,20 +36,14 @@ toSeq' = toSeq (constant (Any :. stream))
     stream :: Int
     stream = maxBound
 
-take2 :: (Arrays a, Arrays b, Arrays c) => Acc ((a,b),c) -> Acc (b,c)
-take2 x = lift (asnd (afst x), asnd x)
-
 iota :: Int -> Acc (Vector Int)
 iota n = generate (index1 (constant n)) unindex1
 
 iota' :: Acc (Scalar Int) -> Acc (Vector Int)
 iota' n = generate (index1 (the n)) unindex1
 
-rep :: (Shape sh, Elt a) => sh -> a -> Acc (Array sh a)
-rep sh a = fill (constant sh) (constant a)
-
-iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
-iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
+--iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
+--iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
 
 idSequence :: (sh ~ FullShape sh, Slice sh, Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Acc (Array (sh :. Int) a)
 idSequence xs = reshape sh . asnd . collect
@@ -65,8 +59,8 @@ idSequenceRef = id
 sumMaxSequence :: (Elt a, IsBounded a, IsNum a) => Acc (Vector a) -> Acc (Scalar a, Scalar a)
 sumMaxSequence xs = collect $
   let xs' = toSeq' xs
-  in lift ( foldSeq (zipWith (+)) (unit 0) xs'
-          , foldSeq (zipWith max) (unit minBound) xs')
+  in lift ( foldSeq (+) 0 xs'
+          , foldSeq max minBound xs')
 
 sumMaxSequenceRef :: (Elt a, Ord a, Bounded a, Num a) => Vector a -> (Scalar a, Scalar a)
 sumMaxSequenceRef xs = ( fromList Z . (:[]) . P.sum     . toList $ xs
@@ -92,28 +86,28 @@ scatterSequenceRef (vec, vec_upd) =
 
 logsum :: (Elt a, IsFloating a) => Int -> Acc (Scalar a)
 logsum n = collect
-  $ foldSeq (zipWith (+)) (unit 0.0)
+  $ foldSeq (+) 0.0
   $ mapSeq (map (log . fromIntegral . (+1)))
   $ toSeq' (iota n)
 
 logsumRef :: (Elt a, IsFloating a) => Int -> Scalar a
 logsumRef n = fromList Z [P.sum [log (P.fromIntegral i) | i <- [1..n]]]
 
-logsumChunk :: (Elt a, IsFloating a) => Int -> Int -> Acc (Scalar a)
-logsumChunk n b = sum $ collect
-  $ foldSeq (zipWith (+)) (rep (Z :. b) 0.0)
-  $ mapSeq (map (log . fromIntegral . (+1)))
-  $ toSeq' (iotaChunk n b)
+--logsumChunk :: (Elt a, IsFloating a) => Int -> Int -> Acc (Scalar a)
+--logsumChunk n b = sum $ collect
+--  $ foldSeq (+) (rep (Z :. b) 0.0)
+--  $ mapSeq (map (log . fromIntegral . (+1)))
+--  $ toSeq' (iotaChunk n b)
 
-logsumChunkRef :: (Elt a, IsFloating a) => Int -> Int -> Scalar a
-logsumChunkRef n b = logsumRef (n * b)
+--logsumChunkRef :: (Elt a, IsFloating a) => Int -> Int -> Scalar a
+--logsumChunkRef n b = logsumRef (n * b)
 
 nestedSequence :: Int -> Int -> Acc (Vector Int)
 nestedSequence n m = asnd . collect
   $ fromSeq
   $ mapSeq
   (\ i -> collect
-          $ foldSeq (zipWith (+)) (rep Z 0)
+          $ foldSeq (+) 0
           $ mapSeq (zipWith (+) i)
           $ toSeq' (iota m)
   )
@@ -127,7 +121,7 @@ nestedIrregularSequence n = asnd . collect
   $ fromSeq
   $ mapSeq
   (\ i -> collect
-        $ foldSeq (zipWith (+)) (rep Z 0)
+        $ foldSeq (+) 0
         $ mapSeq (zipWith (+) i)
         $ toSeq' (iota' i)
   )
@@ -144,10 +138,10 @@ deepNestedSequence n = asnd . collect
         $ fromSeq
         $ mapSeq
         (\ j -> collect
-              $ foldSeq (zipWith (+)) (rep Z 0)
+              $ foldSeq (+) 0
               $ mapSeq
               (\ k -> collect
-                    $ foldSeq (zipWith (+)) (rep Z 0)
+                    $ foldSeq (+) 0
                     $ toSeq' (iota' k)
               )
               $ toSeq' (iota' j)
@@ -162,7 +156,7 @@ deepNestedSequenceRef n = fromList (Z :. P.length xs) xs
 
 chunking1 :: Int -> Acc (Scalar Int)
 chunking1 n = collect
-  $ foldSeq (zipWith (+)) (rep Z 0)
+  $ foldSeq (+) 0
   $ let s = toSeq' (iota n)
     in zipWithSeq (\ x y -> zipWith (-) (sum x) (product y))
          (mapSeq iota' s)
@@ -182,8 +176,8 @@ chunking2b :: (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> Acc 
 chunking2b input = asnd $ collect
   $ fromSeq
   $ zipWithSeq (++)
-      (useLazy (constant (Z :. stream :. All)) (P.fst input))
-      (useLazy (constant (Z :. stream :. All)) (P.snd input))
+      (toSeq (constant (Z :. stream :. All)) $ use (P.fst input))
+      (toSeq (constant (Z :. stream :. All)) $ use (P.snd input))
   where
     stream = maxBound :: Int
 
@@ -242,10 +236,10 @@ test_sequences opt = testGroup "sequences"
     [ testLogsum configFloat  (undefined :: Float)
     , testLogsum configDouble (undefined :: Double)
     ]
-  , testGroup "logsum_chunked" $ catMaybes
-    [ testLogsumChunked configFloat  (undefined :: Float)
-    , testLogsumChunked configDouble (undefined :: Double)
-    ]
+  --, testGroup "logsum_chunked" $ catMaybes
+  --  [ testLogsumChunked configFloat  (undefined :: Float)
+  --  , testLogsumChunked configDouble (undefined :: Double)
+  --  ]
   , testGroup "nested"
     [ testNestedSequence
     , testNestedIrregularSequence
@@ -305,14 +299,14 @@ test_sequences opt = testGroup "sequences"
       | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
           (\ (NonNegative n) -> (run backend (logsum n) :: Scalar a) ~?= logsumRef n)
 
-    testLogsumChunked :: forall a. (Elt a, Similar a, IsFloating a, Arbitrary a)
-               => (Config :-> Bool)
-               -> a
-               -> Maybe Test
-    testLogsumChunked ok _
-      | P.not (get ok opt)      = Nothing
-      | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
-          (\ (NonNegative n) (Positive b) -> (run backend (logsumChunk n b) :: Scalar a) ~?= logsumChunkRef n b)
+    --testLogsumChunked :: forall a. (Elt a, Similar a, IsFloating a, Arbitrary a)
+    --           => (Config :-> Bool)
+    --           -> a
+    --           -> Maybe Test
+    --testLogsumChunked ok _
+    --  | P.not (get ok opt)      = Nothing
+    --  | otherwise               = Just $ testProperty (show (typeOf (undefined :: a)))
+    --      (\ (NonNegative n) (Positive b) -> (run backend (logsumChunk n b) :: Scalar a) ~?= logsumChunkRef n b)
 
     testNestedSequence :: Test
     testNestedSequence =
