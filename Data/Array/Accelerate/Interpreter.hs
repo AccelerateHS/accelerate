@@ -314,6 +314,21 @@ zipWithOp
 zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
   = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
 
+zipWith'Op
+    :: (Shape sh, Elt a)
+    => (a -> a -> a)
+    -> Delayed (Array sh a)
+    -> Delayed (Array sh a)
+    -> Array sh a
+zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
+  = newArray (shx `union` shy) (\ix -> if ix `outside` shx
+                                       then ys ix
+                                       else if ix `outside` shy
+                                       then xs ix
+                                       else f (xs ix) (ys ix))
+  where
+    a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
+
 
 foldOp
     :: (Shape sh, Elt e)
@@ -1361,7 +1376,7 @@ evalSeq conf s aenv = evalSeq' s
         ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
         ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
           where
-            scanner a c = 
+            scanner a c =
               let v0 = chunkElems c
                   (v1, a') = scanl'Op (evalF f) a (delayArray v0)
               in (vec2Chunk v1, fromScalar a')
@@ -1383,13 +1398,13 @@ evalSeq conf s aenv = evalSeq' s
                  -> ExecC senv a
     initConsumer c =
       case c of
-        FoldSeq f e x -> 
+        FoldSeq f e x ->
           let f' = evalF f
               a0 = generateOp (Z :. chunkSize conf) (const (evalE e))
-              consumer v c = zipWithOp f' (delayArray v) (delayArray (chunkElems c))
+              consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
               finalizer = fold1Op f' . delayArray
           in ExecFold consumer finalizer a0 (cursor0 x)
-        FoldSeqFlatten f acc x -> 
+        FoldSeqFlatten f acc x ->
           let f' = evalAF f
               a0 = evalA acc
               consumer a c = f' a (chunkShapes c) (chunkElems c)
