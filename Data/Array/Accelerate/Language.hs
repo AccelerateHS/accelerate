@@ -769,8 +769,8 @@ instance (Elt t, IsIntegral t) => Integral (Exp t) where
   rem  = mkRem
   div  = mkIDiv
   mod  = mkMod
---  quotRem =
---  divMod  =
+  quotRem = preludeError "quotRem" "Data.Array.Accelerate.quotRem"
+  divMod  = preludeError "divMod"  "Data.Array.Accelerate.divMod"
 --  toInteger =  -- makes no sense
 
 -- TODO: Replace with efficient versions (#171)
