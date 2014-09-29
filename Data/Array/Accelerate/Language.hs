@@ -83,6 +83,7 @@ module Data.Array.Accelerate.Language (
 
   -- * Methods of H98 classes that we need to redefine as their signatures change
   (==*), (/=*), (<*), (<=*), (>*), (>=*),
+  quotRem, divMod,
   bit, setBit, clearBit, complementBit, testBit,
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
@@ -652,12 +653,12 @@ instance (Elt t, IsScalar t) => Enum (Exp t)
 --  pred = mkPred
   -- FIXME: ops
 
-instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
+instance (Elt t, IsScalar t) => Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   (==)  = preludeError "Eq.==" "(==*)"
   (/=)  = preludeError "Eq./=" "(/=*)"
 
-instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
+instance (Elt t, IsScalar t) => Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   min           = mkMin
   max           = mkMax
@@ -771,6 +772,17 @@ instance (Elt t, IsIntegral t) => Integral (Exp t) where
 --  quotRem =
 --  divMod  =
 --  toInteger =  -- makes no sense
+
+-- TODO: Replace with efficient versions (#171)
+quotRem :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp (t, t)
+quotRem n d = tup2 ( mkQuot n d, mkRem n d )
+
+divMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp (t, t)
+divMod n d = cond p (tup2 (q `mkSub` 1, r `mkAdd` d)) qr
+  where
+    p           = mkSig r ==* mkNeg (mkSig d)
+    qr          = quotRem n d
+    (q,r)       = untup2 qr
 
 instance (Elt t, IsFloating t) => Floating (Exp t) where
   pi      = mkPi
