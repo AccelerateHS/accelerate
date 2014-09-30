@@ -228,7 +228,6 @@ module Data.Array.Accelerate (
   (L.==*), (L./=*), (L.<*), (L.<=*), (L.>*), (L.>=*),
 
   -- *** Numeric functions
-  L.quotRem, L.divMod,
   L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,
 
   -- *** Bitwise functions

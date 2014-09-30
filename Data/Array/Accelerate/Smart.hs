@@ -51,7 +51,7 @@ module Data.Array.Accelerate.Smart (
   mkAtan2,
 
   -- * Smart constructors for primitive functions
-  mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkIDiv, mkMod,
+  mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
   mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
   mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
   mkLAnd, mkLOr, mkLNot,
@@ -904,11 +904,17 @@ mkQuot x y = Exp $ PrimQuot integralType `PrimApp` tup2 (x, y)
 mkRem :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkRem x y = Exp $ PrimRem integralType `PrimApp` tup2 (x, y)
 
+mkQuotRem :: (Elt t, IsIntegral t) => Exp t -> Exp t -> (Exp t, Exp t)
+mkQuotRem x y = untup2 $ Exp $ PrimQuotRem integralType `PrimApp` tup2 (x ,y)
+
 mkIDiv :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkIDiv x y = Exp $ PrimIDiv integralType `PrimApp` tup2 (x, y)
 
 mkMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkMod x y = Exp $ PrimMod integralType `PrimApp` tup2 (x, y)
+
+mkDivMod :: (Elt t, IsIntegral t) => Exp t -> Exp t -> (Exp t, Exp t)
+mkDivMod x y = untup2 $ Exp $ PrimDivMod integralType `PrimApp` tup2 (x ,y)
 
 mkBAnd :: (Elt t, IsIntegral t) => Exp t -> Exp t -> Exp t
 mkBAnd x y = Exp $ PrimBAnd integralType `PrimApp` tup2 (x, y)
