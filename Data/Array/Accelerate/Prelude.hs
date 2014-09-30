@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Prelude (
   flatten,
 
   -- * Enumeration and filling
-  fill, enumFromN, enumFromStepN,
+  empty, fill, enumFromN, enumFromStepN,
 
   -- * Concatenation
   (++),
@@ -89,9 +89,8 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
-  -- * Sequence stuff
-  empty,
-  fromSeq,
+  -- * Sequence operations
+  fromSeq, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
@@ -873,6 +872,11 @@ flatten a = reshape (index1 $ size a) a
 
 -- Enumeration and filling
 -- -----------------------
+
+-- | Create an empty array.
+--
+empty :: (Shape sh, Elt e) => Acc (Array sh e)
+empty = use (fromList emptyS [])
 
 -- | Create an array where all elements are the same value.
 --
@@ -1745,9 +1749,9 @@ length = unindex1 . shape
 -- Sequence operations
 -- --------------------------------------
 
-empty :: (Shape sh, Elt e) => Acc (Array sh e)
-empty = use (fromList emptyS [])
-
+-- | Reduce a sequence by appending all the shapes and all the
+-- elements in two seperate vectors.
+--
 fromSeq :: (Shape ix, Elt a)
         => Seq [Array ix a]
         -> Seq (Vector ix, Vector a)
@@ -1756,3 +1760,40 @@ fromSeq = foldSeqFlatten f (lift (empty, empty))
     f x sh1 a1 =
       let (sh0, a0) = unlift x
       in lift (sh0 ++ sh1, a0 ++ a1)
+
+-- | Sequence an array on the innermost dimension.
+--
+toSeqInner :: (Shape sh, Elt a)
+           => Acc (Array (sh :. Int) a)
+           -> Seq [Array sh a]
+toSeqInner a = toSeq (constant (Any :. stream)) a
+  where
+    stream :: Int
+    stream = P.maxBound
+
+-- | Sequence a 2-dimensional array on the outermost dimension.
+--
+toSeqOuter2 :: (Elt a)
+           => Acc (Array DIM2 a)
+           -> Seq [Array DIM1 a]
+toSeqOuter2 a = toSeq (constant (Z :. stream :. All)) a
+  where
+    stream :: Int
+    stream = P.maxBound
+
+-- | Sequence a 3-dimensional array on the outermost dimension.
+toSeqOuter3 :: (Elt a)
+           => Acc (Array DIM3 a)
+           -> Seq [Array DIM2 a]
+toSeqOuter3 a = toSeq (constant (Z :. stream :. All :. All)) a
+  where
+    stream :: Int
+    stream = P.maxBound
+
+-- | Generate a scalar sequence of a fixed given length, by applying
+-- the given scalar function at each index.
+generateSeq :: (Elt a)
+            => Exp Int
+            -> (Exp Int -> Exp a)
+            -> Seq [Scalar a]
+generateSeq n f = toSeq (index1 n) (generate (index1 n) (f . unindex1))
