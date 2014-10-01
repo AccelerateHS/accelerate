@@ -50,7 +50,7 @@ stepRank from to sizes ranks
     in A.collect
      $ A.foldSeqFlatten addUpdates' zeroes
      $ A.zipWithSeq (contribution sizes ranks)
-         (A.useLazy (A.constant (Z :. stream)) from)
-         (A.useLazy (A.constant (Z :. stream)) to)
+         (A.toSeq (A.constant (Z :. stream)) (use from))
+         (A.toSeq (A.constant (Z :. stream)) (use to))
   where
     stream = maxBound :: Int
