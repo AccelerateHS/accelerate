@@ -31,10 +31,7 @@ import Data.Array.Accelerate.AST ( Idx(..) )
 toSeq' :: (Shape sh, Elt a)
           => Acc (Array (sh :. Int) a)
           -> Seq [Array sh a]
-toSeq' = toSeq (constant (Any :. stream))
-  where
-    stream :: Int
-    stream = maxBound
+toSeq' = toSeq (Any :. Split)
 
 iota :: Int -> Acc (Vector Int)
 iota n = generate (index1 (constant n)) unindex1
@@ -45,10 +42,10 @@ iota' n = generate (index1 (the n)) unindex1
 --iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
 --iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
 
-idSequence :: (sh ~ FullShape sh, Slice sh, Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Acc (Array (sh :. Int) a)
+idSequence :: (Shape sh, Elt a, Slice sh) => Acc (Array (sh :. Int) a) -> Acc (Array (sh :. Int) a)
 idSequence xs = reshape sh . asnd . collect
   $ fromSeq
-  $ toSeq sh xs
+  $ toSeq Divide xs
   where
     sh = Acc.shape xs
 
@@ -167,19 +164,15 @@ chunking2 :: Acc (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> A
 chunking2 input = asnd $ collect
   $ fromSeq
   $ zipWithSeq (++)
-      (toSeq (constant (Z :. stream :. All)) (afst input))
-      (toSeq (constant (Z :. stream :. All)) (asnd input))
-  where
-    stream = maxBound :: Int
+      (toSeq (Z :. Split :. All) (afst input))
+      (toSeq (Z :. Split :. All) (asnd input))
 
 chunking2b :: (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> Acc (Vector Int)
 chunking2b input = asnd $ collect
   $ fromSeq
   $ zipWithSeq (++)
-      (toSeq (constant (Z :. stream :. All)) $ use (P.fst input))
-      (toSeq (constant (Z :. stream :. All)) $ use (P.snd input))
-  where
-    stream = maxBound :: Int
+      (toSeq (Z :. Split :. All) $ use (P.fst input))
+      (toSeq (Z :. Split :. All) $ use (P.snd input))
 
 chunking2Ref :: (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> Vector Int
 chunking2Ref (a, b) =

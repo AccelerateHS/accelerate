@@ -16,7 +16,7 @@ import Control.Applicative
 import Criterion.Measurement
 import System.IO
 import System.Environment
-import Data.Array.Accelerate                        ( Z(..), (:.)(..), All(..) )
+import Data.Array.Accelerate                        ( Z(..), (:.)(..), All(..) , Split(..))
 import qualified Data.Array.Accelerate              as A
 import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
 import qualified Data.ByteString.Lazy.Char8         as L
@@ -53,11 +53,10 @@ main = do
             l digest = A.collect
                      $ A.foldSeq max (-1)
                      $ A.zipWithSeq (hashcat digest)
-                           (A.toSeq (A.constant (Z :. All :. stream)) (A.use dict))
-                           (A.toSeq (A.constant (Z :. stream)) (iota (Sugar.size (Sugar.shape dict))))
+                           (A.toSeq (Z :. All :. Split) (A.use dict))
+                           (A.toSeq (Z :. Split) (iota (Sugar.size (Sugar.shape dict))))
 
             iota n = A.generate (A.index1 (A.constant n)) A.unindex1
-            stream = maxBound :: Int
         --
         in case idx `A.indexArray` Z of
              -1 -> Nothing
