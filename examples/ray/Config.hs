@@ -3,53 +3,41 @@
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
-data Options = Options
+data Config = Config
   {
-    _optBackend         :: Backend
-  , _optWidth           :: Int
-  , _optHeight          :: Int
-  , _optZoom            :: Int
-  , _optFieldOfView     :: Int
-  , _optBounces         :: Int
-  , _optFramerate       :: Int
-  , _optBench           :: Bool
-  , _optHelp            :: Bool
+    _configWidth        :: Int
+  , _configHeight       :: Int
+  , _configZoom         :: Int
+  , _configFieldOfView  :: Int
+  , _configBounces      :: Int
+  , _configFramerate    :: Int
   }
   deriving Show
 
-$(mkLabels [''Options])
+$(mkLabels [''Config])
 
-defaults :: Options
-defaults = Options
-  { _optBackend         = maxBound
-  , _optWidth           = 800
-  , _optHeight          = 600
-  , _optFieldOfView     = 100
-  , _optZoom            = 1
-  , _optBounces         = 4
-  , _optFramerate       = 30
-#ifdef ACCELERATE_ENABLE_GUI
-  , _optBench           = False
-#else
-  , _optBench           = True
-#endif
-  , _optHelp            = False
+defaults :: Config
+defaults = Config
+  { _configWidth        = 800
+  , _configHeight       = 600
+  , _configFieldOfView  = 100
+  , _configZoom         = 1
+  , _configBounces      = 4
+  , _configFramerate    = 30
   }
 
 
-options :: [OptDescr (Options -> Options)]
+options :: [OptDescr (Config -> Config)]
 options =
-  [ Option []   ["width"]       (ReqArg (set optWidth . read) "INT")            (describe optWidth "visualisation width")
-  , Option []   ["height"]      (ReqArg (set optHeight . read) "INT")           (describe optHeight "visualisation height")
-  , Option []   ["zoom"]        (ReqArg (set optZoom . read) "INT")             (describe optZoom "pixel replication factor")
-  , Option []   ["fov"]         (ReqArg (set optFieldOfView . read) "INT")      (describe optFieldOfView "field of view")
-  , Option []   ["bounces"]     (ReqArg (set optBounces . read) "INT")          (describe optBounces "ray bounce limit")
-  , Option []   ["fps"]         (ReqArg (set optFramerate . read) "INT")        (describe optFramerate "frames per second")
-  , Option []   ["benchmark"]   (NoArg  (set optBench True))                    "benchmark instead of displaying animation"
-  , Option "h?" ["help"]        (NoArg  (set optHelp True))                     "show help message"
+  [ Option []   ["width"]       (ReqArg (set configWidth . read) "INT")         (describe configWidth "visualisation width")
+  , Option []   ["height"]      (ReqArg (set configHeight . read) "INT")        (describe configHeight "visualisation height")
+  , Option []   ["zoom"]        (ReqArg (set configZoom . read) "INT")          (describe configZoom "pixel replication factor")
+  , Option []   ["fov"]         (ReqArg (set configFieldOfView . read) "INT")   (describe configFieldOfView "field of view")
+  , Option []   ["bounces"]     (ReqArg (set configBounces . read) "INT")       (describe configBounces "ray bounce limit")
+  , Option []   ["fps"]         (ReqArg (set configFramerate . read) "INT")     (describe configFramerate "frames per second")
   ]
   where
     describe f msg      = msg ++ " (" ++ show (get f defaults) ++ ")"
@@ -68,5 +56,6 @@ footer =
   , "Runtime usage:"
   , "     WASD         move the eye position"
   , "     arrows       move the light source"
+  , ""
   ]
 

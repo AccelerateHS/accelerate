@@ -759,9 +759,8 @@ Executable accelerate-pagerank
 
 Executable accelerate-ray
   Main-is:              Main.hs
-  hs-source-dirs:       examples/ray lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  hs-source-dirs:       examples/ray
+  other-modules:        Config
                         Vec3
                         Gloss.Draw
                         Gloss.Event
@@ -776,38 +775,18 @@ Executable accelerate-ray
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
-                        accelerate-io                   == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
+                        accelerate-examples             == 0.16.*,
                         base                            == 4.7.*,
-                        criterion                       >= 1.0,
                         fclabels                        >= 1.0,
                         gloss                           == 1.8.*,
                         gloss-accelerate                == 1.8.*,
                         gloss-raster-accelerate         == 1.8.*
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 >= 0.16
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
-  if flag(ekg)
-    cpp-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
-    ghc-options:        -with-rtsopts=-T
-
-  if flag(gui)
-    CPP-options:        -DACCELERATE_ENABLE_GUI
-
   ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
 
+  if flag(ekg)
+    ghc-options:        -with-rtsopts=-T
 
 -- K-means
 -- -------
