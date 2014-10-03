@@ -342,7 +342,7 @@ parseArgs programOptions programConfig header footer args =
   -- header is not shown twice in the case of a subsequent options parse error.
   --
   if get optHelp c2
-     then putStrLn (helpMsg []) >> exitSuccess
+     then putStr   (helpMsg []) >> exitSuccess
      else putStrLn (fancyHeader c2 header footer)
 
   return (c1, c2 { _optCriterion = c3, _optTestFramework = c4 }, u4 ++ non ++ rest)
