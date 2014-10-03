@@ -1,12 +1,16 @@
-{-# OPTIONS_HADDOCK hide #-}
 
-module Util where
+module Data.Array.Accelerate.Examples.Internal.Util (
+
+  -- * Miscellaneous
+  showFFloatSIBase,
+
+) where
 
 import Numeric
 import Data.List
 
 
--- Utilities
+-- | Show a floating point number in scientific notation with a specific base.
 --
 showFFloatSIBase :: RealFloat a => Maybe Int -> a -> a -> ShowS
 showFFloatSIBase p b n

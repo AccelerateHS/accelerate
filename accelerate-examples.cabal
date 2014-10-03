@@ -126,14 +126,16 @@ Library
                         mwc-random                      >= 0.8,
                         test-framework                  >= 0.5
 
-  Exposed-modules:      Benchmark
-                        Interactive
-                        Monitoring
-                        ParseArgs
-                        ParseArgs.Criterion
-                        ParseArgs.TestFramework
-                        Random.Array
-                        Util
+  Exposed-modules:      Data.Array.Accelerate.Examples.Internal
+
+  Other-modules:        Data.Array.Accelerate.Examples.Internal.Benchmark
+                        Data.Array.Accelerate.Examples.Internal.Interactive
+                        Data.Array.Accelerate.Examples.Internal.Monitoring
+                        Data.Array.Accelerate.Examples.Internal.ParseArgs
+                        Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion
+                        Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework
+                        Data.Array.Accelerate.Examples.Internal.Random.Array
+                        Data.Array.Accelerate.Examples.Internal.Util
 
   ghc-options:          -O2 -Wall
   ghc-prof-options:     -caf-all -auto-all

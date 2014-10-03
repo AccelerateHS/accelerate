@@ -1,9 +1,12 @@
 {-# LANGUAGE KindSignatures  #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module ParseArgs.TestFramework
-  where
+module Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework (
+
+  -- ** Test framework options
+  module Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework
+
+) where
 
 import Data.Monoid
 import Data.Label.Derive

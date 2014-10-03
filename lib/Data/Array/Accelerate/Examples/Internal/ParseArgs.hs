@@ -3,9 +3,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE ViewPatterns    #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module ParseArgs (
+module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
   -- * Options processing
   parseArgs,
@@ -19,8 +18,8 @@ module ParseArgs (
 
 ) where
 
-import qualified ParseArgs.Criterion                    as Criterion
-import qualified ParseArgs.TestFramework                as TestFramework
+import qualified Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion            as Criterion
+import qualified Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework        as TestFramework
 
 import Data.List
 import Data.Label
@@ -50,13 +49,13 @@ import qualified Data.Array.Accelerate.LLVM.Multi       as Multi
 
 data Options = Options
   {
-    _optBackend         :: Backend
-  , _optBenchmark       :: Bool
-  , _optTest            :: Bool
-  , _optHelp            :: Bool
+    _optBackend         :: Backend                      -- ^ Accelerate backend to execute programs with
+  , _optBenchmark       :: Bool                         -- ^ Should benchmarks be run?
+  , _optTest            :: Bool                         -- ^ Should tests be run?
+  , _optHelp            :: Bool                         -- ^ Display help message (and exit)?
   --
-  , _optCriterion       :: Criterion.Config
-  , _optTestFramework   :: TestFramework.Config
+  , _optCriterion       :: Criterion.Config             -- ^ Options for criterion benchmarks
+  , _optTestFramework   :: TestFramework.Config         -- ^ Options for test-framework
   }
 
 
@@ -252,16 +251,16 @@ stripShortOpts = map strip
     strip x                                     = x
 
 
--- | Strip the argument description part of the options description structure,
--- so that the option lists can be combined for the purposes of displaying the
--- usage information.
+-- | Strip the operational part of the options description structure, so that
+-- the option lists can be combined for the purposes of displaying the usage
+-- information.
 --
-stripArgDescr :: [OptDescr a] -> [OptDescr x]
-stripArgDescr = map strip
+_stripArgDescr :: [OptDescr a] -> [OptDescr b]
+_stripArgDescr = map strip
   where
-    strip (Option short long (NoArg _)      desc) = Option short long (NoArg undefined) desc
-    strip (Option short long (ReqArg _ arg) desc) = Option short long (ReqArg undefined arg) desc
-    strip (Option short long (OptArg _ arg) desc) = Option short long (OptArg undefined arg) desc
+    strip (Option s l (NoArg _)    d) = Option s l (NoArg  undefined)   d
+    strip (Option s l (ReqArg _ a) d) = Option s l (ReqArg undefined a) d
+    strip (Option s l (OptArg _ a) d) = Option s l (OptArg undefined a) d
 
 
 -- | Process the command line arguments and return a tuple consisting of the

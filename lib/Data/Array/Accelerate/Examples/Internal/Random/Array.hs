@@ -1,9 +1,9 @@
 {-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module Random.Array (
+module Data.Array.Accelerate.Examples.Internal.Random.Array (
 
+  -- * Generating random arrays
   (:~>),
   uniform, uniformR,
   randomArray, randomArrayWithSeed, randomArrayWithSystemRandom,

@@ -1,17 +1,20 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module ParseArgs.Criterion (
+module Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion (
 
+  -- ** Criterion options
   Config, defaultConfig,
-  module ParseArgs.Criterion
+  module Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion
 
 ) where
 
+import Prelude                                  hiding ( (.), id )
 import Data.Char
 import Data.Label
 import Data.Label.Derive
+import Control.Category                         ( (.), id )
 import System.Console.GetOpt
+import Text.Printf
 import Text.PrettyPrint.ANSI.Leijen
 import qualified Data.Map                       as M
 
@@ -64,8 +67,8 @@ defaultOptions =
             (describe junitFile "file to write JUnit summary to")
 
   , Option  [] ["verbosity"]
-            (ReqArg (set verbosity . read) "LEVEL")
-            (describe verbosity "verbosity level")
+            (ReqArg (set verbosity . toEnum . range (0,2) . read) "LEVEL")
+            "verbosity level"
 
   , Option  [] ["template"]
             (ReqArg (set template) "FILE")
@@ -74,6 +77,10 @@ defaultOptions =
   where
     describe f msg
       = msg ++ " (" ++ show (get f defaultConfig) ++ ")"
+
+    range (n,m) x
+      | n <= x && x <= m = x
+      | otherwise        = error $ printf "%d is outside range (%d,%d)" x n m
 
 -- The following options are not part of the configuration structure, but will
 -- be intercepted when calling 'defaultMainWith', and control the execution

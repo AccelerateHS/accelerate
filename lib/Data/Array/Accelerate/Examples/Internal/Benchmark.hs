@@ -1,13 +1,13 @@
-{-# OPTIONS_HADDOCK hide #-}
 
-module Benchmark (
+module Data.Array.Accelerate.Examples.Internal.Benchmark (
 
+  -- * Criterion benchmarking
   runBenchmark,
   nf, nfIO, whnf, whnfIO,
 
 ) where
 
-import ParseArgs
+import Data.Array.Accelerate.Examples.Internal.ParseArgs
 
 import Data.Label
 import Control.Monad

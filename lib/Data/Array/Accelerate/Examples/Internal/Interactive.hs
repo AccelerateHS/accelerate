@@ -1,10 +1,13 @@
 {-# LANGUAGE CPP #-}
-{-# OPTIONS_HADDOCK hide #-}
 
-module Interactive
-  where
+module Data.Array.Accelerate.Examples.Internal.Interactive (
 
-import ParseArgs
+  -- * Interactive/GUI
+  runInteractive,
+
+) where
+
+import Data.Array.Accelerate.Examples.Internal.ParseArgs
 
 #ifdef ACCELERATE_ENABLE_GUI
 import Data.Label
@@ -12,8 +15,8 @@ import Control.Monad
 import System.Environment
 #endif
 
--- If we accelerate-examples is configured to enable GUI programs, and we are
--- not in benchmarking mode, then execute the interactive program.
+-- | If accelerate-examples is configured to enable GUI programs, and we are
+-- not in benchmarking mode, then execute the given action.
 --
 runInteractive :: Options -> [String] -> IO () -> IO ()
 #ifndef ACCELERATE_ENABLE_GUI
