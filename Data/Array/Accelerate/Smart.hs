@@ -277,17 +277,17 @@ data PreSeq acc seq exp arrs where
 
   -- Convert the given array to a sequence.
   -- Example:
-  -- slix = Z :. All :. Int :. All :. All :. Int
-  --              ^      ^      ^      ^      ^
-  --              |       \    /      /       |
-  --              |        \__/______/_______ Iteration space.
-  --              |          /      /
-  --           Element______/______/
+  -- slix = Z :. All :. Split :. All :. All :. Split
+  --              ^       ^       ^      ^      ^
+  --              |        \     /      /       |
+  --              |         \___/______/_______ Iteration space.
+  --              |            /      /
+  --           Element________/______/
   --            shape.
   --
-  ToSeq :: (Slice slix, Elt e,
-               Typeable (FullShape slix), Typeable (SliceShape slix))
-        => exp slix
+  ToSeq :: (Division slsix, Elt e, slix ~ DivisionSlice slsix, Slice slix,
+            Typeable (FullShape slix), Typeable (SliceShape slix))
+        => slsix
         -> acc (Array (FullShape slix) e)
         -> PreSeq acc seq exp [Array (SliceShape slix) e]
 

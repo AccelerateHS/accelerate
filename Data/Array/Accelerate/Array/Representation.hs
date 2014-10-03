@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -25,7 +26,7 @@ module Data.Array.Accelerate.Array.Representation (
   Shape(..), Slice(..), SliceIndex(..),
 
   -- * Slice shape functions
-  sliceShape, enumSlices, nextSlice, restrictSlice,
+  sliceShape, enumSlices,
 
 ) where
 
@@ -223,39 +224,9 @@ sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 --
 enumSlices :: forall slix co sl dim.
               SliceIndex slix sl co dim
-           -> slix
+           -> dim
            -> [slix]
 enumSlices SliceNil () = [()]
-enumSlices (SliceAll   sl) (sh, ()) = [ (sh', ()) | sh' <- enumSlices sl sh]
+enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
 enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
                                                   , i   <- [0..n-1]]
-
--- | Stepped version of enumSlices.
-nextSlice :: forall slix co sl dim.
-            SliceIndex slix sl co dim
-         -> slix
-         -> slix
-         -> Maybe slix
-nextSlice SliceNil () () = Nothing
-nextSlice (SliceAll sl)   (sh, ()) (sh', ()) = do
-  case nextSlice sl sh sh' of
-    Nothing -> Nothing
-    Just sh'' -> Just (sh'', ())
-nextSlice (SliceFixed sl) (sh, n) (sh', i) =
-  if (i < n - 1)
-    then Just (sh', i + 1)
-    else
-      case nextSlice sl sh sh' of
-       Just (sh'') -> Just (sh'', 0)
-       Nothing -> Nothing
-
--- | Restrict a slice to be within the bounds (inclusive) of the given
--- full shape.
-restrictSlice :: forall slix co sl dim.
-                 SliceIndex slix sl co dim
-              -> dim
-              -> slix
-              -> slix
-restrictSlice SliceNil () () = ()
-restrictSlice (SliceAll   sl) (sh, _) (sh', ()) = (restrictSlice sl sh sh', ())
-restrictSlice (SliceFixed sl) (sh, n) (sh', m)  = (restrictSlice sl sh sh', min n m)

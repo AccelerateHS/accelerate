@@ -36,6 +36,7 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Representation ( SliceIndex(..) )
 import Data.Array.Accelerate.Tuple              hiding ( tuple )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -144,8 +145,8 @@ prettySeq
     -> (Doc -> Doc)                             -- apply to compound expressions
     -> PreOpenSeq acc aenv senv arrs
     -> [Doc]
-prettySeq prettyAcc alvl llvl wrap s =
-  case s of
+prettySeq prettyAcc alvl llvl wrap seq =
+  case seq of
     Producer p s' ->
       (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
     Consumer c    ->
@@ -155,27 +156,32 @@ prettySeq prettyAcc alvl llvl wrap s =
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
     name ..$ docs = wrap $ hang (text name) 2 (sep docs)
-    
+
     ppE :: PreOpenExp acc env aenv e -> Doc
     ppE = prettyPreExp prettyAcc 0 alvl parens
 
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc alvl
-        
+
     ppA :: acc aenv a -> Doc
     ppA = prettyAcc alvl parens
 
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreAfun prettyAcc alvl
-    
+
     ppX :: Idx aenv' a -> Doc
     ppX x = var (idxToInt x)
+
+    ppSlix :: SliceIndex slix sl co sh -> Doc
+    ppSlix SliceNil       = text "Z"
+    ppSlix (SliceAll s)   = ppSlix s <+> text ":." <+> text "All"
+    ppSlix (SliceFixed s) = ppSlix s <+> text ":." <+> text "Split"
 
     prettyP :: forall a. Producer acc aenv senv a -> Doc
     prettyP p =
       case p of
         StreamIn _        -> "streamIn"   .$ [ text "..." ]
-        ToSeq _ ix a      -> "toSeq"      .$ [ ppE ix, ppA a ]
+        ToSeq slix _ a    -> "toSeq"      .$ [ ppSlix slix, ppA a ]
         MapSeq f x        -> "mapSeq"     .$ [ ppAF f
                                              , ppX x ]
 

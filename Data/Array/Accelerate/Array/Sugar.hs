@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..),
+  Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
@@ -54,7 +54,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Tuple(..), Atuple(..), IsTuple, IsAtuple, CstProxy(..),
 
   -- * Miscellaneous
-  showShape, Foreign(..), sliceShape, enumSlices, nextSlice, restrictSlice,
+  showShape, Foreign(..), sliceShape, enumSlices,
 
 ) where
 
@@ -94,7 +94,7 @@ infixl 3 :.
 data tail :. head = tail :. head
   deriving (Typeable, Show, Eq)
 
--- | Marker for entire dimensions in slice descriptors.
+-- | Marker for entire dimensions in slice and division descriptors.
 --
 -- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
 -- the occurrences of `All` indicate the dimensions into which the array's
@@ -104,7 +104,7 @@ data tail :. head = tail :. head
 data All = All
   deriving (Typeable, Show, Eq)
 
--- |Marker for arbitrary shapes in slice descriptors.  Such arbitrary
+-- |Marker for arbitrary shapes in slice and division descriptors.  Such arbitrary
 --  shapes may include an unknown number of dimensions.
 --
 --  `Any` can be used in the leftmost position of a slice instead of
@@ -116,6 +116,26 @@ data All = All
 -- > repN n a = replicate (constant $ Any :. n) a
 --
 data Any sh = Any
+  deriving (Typeable, Show, Eq)
+
+-- | Marker for splitting along an entire dimension in division descriptors.
+--
+-- For example, when used in a division descriptor passed to 'Data.Array.Accelerate.toSeq',
+-- a `Split` indicates that the array should be divided along this dimension
+-- forming the elements of the output sequence.
+--
+data Split = Split
+  deriving (Typeable, Show, Eq)
+
+-- | Marker for arbitrary shapes in slices descriptors, where it is desired to
+-- split along an unknown number of dimensions.
+--
+--  For example, in the following definition, 'Divide' matches against any
+--  shape and flattens everything but the innermost dimension.
+--
+-- > vectors :: (Shae sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
+-- > vectors = toSeq (Divide :. All)
+data Divide sh = Divide
   deriving (Typeable, Show, Eq)
 
 -- Representation change for array element types
@@ -941,14 +961,15 @@ type DIM9 = DIM8:.Int
 
 -- |Shapes and indices of multi-dimensional arrays
 --
-class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
+class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
+       => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   dim    :: sh -> Int
 
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
-  
+
   -- |Empty /shape/.
   emptyS :: sh
 
@@ -995,8 +1016,8 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- | The slice index for slice specifier 'Any sh'
   sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
-  -- | The slice index for specifying a slice with no projected component
-  sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh)  (EltRepr sh)
+  -- | The slice index for specifying a slice with only the Z component projected
+  sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
@@ -1071,6 +1092,40 @@ instance Shape sh => Slice (Any sh) where
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
+
+
+-- | Generalised array division, like above but use for splitting an array into
+-- many subarrays, as opposed to extracting a single subarray.
+--
+class (Slice (DivisionSlice sl))
+       => Division sl where
+  type DivisionSlice sl :: *     -- the slice
+  slicesIndex :: slix ~ DivisionSlice sl
+              => sl {- dummy -}
+              -> Repr.SliceIndex (EltRepr slix)
+                                 (EltRepr (SliceShape   slix))
+                                 (EltRepr (CoSliceShape slix))
+                                 (EltRepr (FullShape    slix))
+
+instance Division Z where
+  type DivisionSlice   Z = Z
+  slicesIndex _ = Repr.SliceNil
+
+instance Division sl => Division (sl:.All) where
+  type DivisionSlice  (sl:.All) = DivisionSlice sl :. All
+  slicesIndex _ = Repr.SliceAll (slicesIndex (undefined :: sl))
+
+instance Division sl => Division (sl:.Split) where
+  type DivisionSlice (sl:.Split) = DivisionSlice sl :. Int
+  slicesIndex _ = Repr.SliceFixed (slicesIndex (undefined :: sl))
+
+instance Shape sh => Division (Any sh) where
+  type DivisionSlice (Any sh) = Any sh
+  slicesIndex _ = sliceAnyIndex (undefined :: sh)
+
+instance (Shape sh, Slice sh) => Division (Divide sh) where
+  type DivisionSlice (Divide sh) = sh
+  slicesIndex _ = sliceNoneIndex (undefined :: sh)
 
 
 -- Array operations
@@ -1231,26 +1286,9 @@ sliceShape slix = toElt . Repr.sliceShape slix . fromElt
 --                                             , Z :. 1 :. 1 :. All
 --                                             , Z :. 1 :. 2 :. All ]
 --
-enumSlices :: forall slix co sl dim. (Elt slix)
-           => Repr.SliceIndex (EltRepr slix) sl co dim
-           -> slix   -- Bounds
+enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
+           => Repr.SliceIndex (EltRepr slix) sl co (EltRepr dim)
+           -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
-
--- | Stepped version of enumSlices.
-nextSlice :: forall slix co sl dim. (Elt slix)
-          => Repr.SliceIndex (EltRepr slix) sl co dim
-          -> slix       -- Slice bounds
-          -> slix       -- Slice of current iteration.
-          -> Maybe slix -- Slice of next iteration.
-nextSlice slix sh = fmap toElt . Repr.nextSlice slix (fromElt sh) . fromElt
-
--- | Restrict a slice to be within the bounds (inclusive) of the given
--- full shape.
-restrictSlice :: forall slix co sl dim. (Elt slix, Shape dim)
-              => Repr.SliceIndex (EltRepr slix) sl co (EltRepr dim)
-              -> dim
-              -> slix
-              -> slix -- Slice restricted to full shape.
-restrictSlice slix dim = toElt . Repr.restrictSlice slix (fromElt dim) . fromElt
 

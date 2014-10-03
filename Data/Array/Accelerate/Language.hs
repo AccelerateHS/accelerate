@@ -1,4 +1,5 @@
 {-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
+{-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS -fno-warn-missing-methods #-}
 {-# OPTIONS -fno-warn-orphans         #-}
@@ -478,13 +479,16 @@ streamIn :: Arrays a
          -> Seq [a]
 streamIn arrs = Seq (StreamIn arrs)
 
--- | Convert the given array to a sequence by sequencing the outer
--- dimension.
+-- | Convert the given array to a sequence by dividing the array up into subarrays.
+-- The first argument captures how to the division should be performed. The
+-- presence of `All` in the division descriptor indicates that elements in the
+-- corresponding dimension should be retained in the subarrays, whereas `Split`
+-- indicates that the input array should divided along this dimension.
 --
-toSeq :: (Slice slix, Elt a)
-      => Exp slix
-      -> Acc (Array (FullShape slix) a)
-      -> Seq [Array (SliceShape slix) a]
+toSeq :: (Division slsix, Elt a)
+      => slsix
+      -> Acc (Array (FullShape (DivisionSlice slsix)) a)
+      -> Seq [Array (SliceShape (DivisionSlice slsix)) a]
 toSeq spec acc = Seq (ToSeq spec acc)
 
 -- | Apply the given array function element-wise to the given sequence.

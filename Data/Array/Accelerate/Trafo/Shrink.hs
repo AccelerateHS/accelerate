@@ -203,7 +203,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkP p =
       case p of
         StreamIn arrs        -> StreamIn arrs
-        ToSeq sl slix a      -> ToSeq sl (shrinkE slix) (shrinkAcc a)
+        ToSeq sl slix a      -> ToSeq sl slix (shrinkAcc a)
         MapSeq f x           -> MapSeq (shrinkAF f) x
         ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
         ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
@@ -405,8 +405,8 @@ usesOfPreAcc withShape countAcc idx = countP
     countPr :: Producer acc aenv senv arrs -> Int
     countPr p =
       case p of
-        StreamIn _      -> 0
-        ToSeq _ sh a    -> countE sh + countA a
+        StreamIn _           -> 0
+        ToSeq _ _ a          -> countA a
         MapSeq f _           -> countAF f idx
         ZipWithSeq f _ _     -> countAF f idx
         ScanSeq f e _        -> countF f + countE e

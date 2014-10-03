@@ -287,7 +287,7 @@ convertOpenSeq fuseAcc s =
       Producer
         (case p of
            StreamIn arrs        -> StreamIn arrs
-           ToSeq slix sh a      -> ToSeq slix (cvtE sh) (delayed fuseAcc a)
+           ToSeq slix sh a      -> ToSeq slix sh (delayed fuseAcc a)
            MapSeq f x           -> MapSeq (cvtAF f) x
            ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
            ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
@@ -569,7 +569,7 @@ embedSeq embedAcc s
           -> ExtendProducer acc aenv' senv arrs'
     travP (ToSeq slix sh a) env
       | Embed env' cc <- embedAcc (sink env a)
-      = ExtendProducer env' (ToSeq slix (cvtE (sink (env `append` env') sh)) (inject (compute' cc)))
+      = ExtendProducer env' (ToSeq slix sh (inject (compute' cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
     travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
     travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
@@ -767,7 +767,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenP p =
         case p of
           StreamIn arrs        -> StreamIn arrs
-          ToSeq slix sh a      -> ToSeq   slix (weaken k sh) (weaken k a)
+          ToSeq slix sh a      -> ToSeq   slix sh (weaken k a)
           MapSeq     f x       -> MapSeq     (weaken k f) x
           ZipWithSeq f x y     -> ZipWithSeq (weaken k f) x y
           ScanSeq f a x        -> ScanSeq    (weaken k f) (weaken k a) x
@@ -1190,6 +1190,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           | otherwise                   -> LinearIndex a (cvtE i)
 
       where
+        a' :: acc aenv (Array sh e)
         a' = avarIn avar
 
         cvtE :: PreOpenExp acc env aenv s -> PreOpenExp acc env aenv s
@@ -1266,7 +1267,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
               Producer
                 (case p of
                    StreamIn arrs        -> StreamIn arrs
-                   ToSeq slix sh a      -> ToSeq slix (cvtE sh) (cvtA a)
+                   ToSeq slix sh a      -> ToSeq slix sh (cvtA a)
                    MapSeq f x           -> MapSeq (cvtAF f) x
                    ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
                    ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)

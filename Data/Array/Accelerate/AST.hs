@@ -494,11 +494,11 @@ data Producer acc aenv senv a where
 
   -- Convert the given array to a sequence.
   ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => SliceIndex (EltRepr slix)
-                         (EltRepr sl)
-                         co
-                         (EltRepr sh)
-           -> PreExp acc aenv slix
+           => SliceIndex  (EltRepr slix)
+                          (EltRepr sl)
+                          co
+                          (EltRepr sh)
+           -> proxy slix
            -> acc aenv (Array sh e)
            -> Producer acc aenv senv (Array sl e)
 

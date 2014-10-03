@@ -348,8 +348,8 @@ matchSeq m h = match
     matchP :: forall senv s t. Producer acc aenv senv s -> Producer acc aenv senv t -> Maybe (s :=: t)
     matchP (StreamIn arrs1) (StreamIn arrs2)
       = undefined -- TODO: Should this function match on all arrays in the list?
-    matchP (ToSeq _ slix1 a1) (ToSeq _ slix2 a2)
-      | Just REFL <- matchExp slix1 slix2
+    matchP (ToSeq _ (_::proxy1 slix1) a1) (ToSeq _ (_::proxy2 slix2) a2)
+      | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2) -- Divisions are singleton.
       , Just REFL <- m a1 a2
       = gcast REFL
     matchP (MapSeq f1 x1) (MapSeq f2 x2)
@@ -962,7 +962,7 @@ hashPreOpenSeq hashAcc s =
     hashP salt p =
       case p of
         StreamIn arrs       -> undefined -- TODO: Should we hash all arrays in list?
-        ToSeq spec ix acc   -> hashWithSalt salt "ToSeq" `hashA` acc `hashE` ix `hashWithSalt` show spec
+        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq" `hashA` acc `hashWithSalt` show spec
         MapSeq f x          -> hashWithSalt salt "MapSeq" `hashAF` f `hashVar` x
         ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f `hashVar` x `hashVar` y
         ScanSeq f e x       -> hashWithSalt salt "ScanSeq" `hashF` f `hashE` e `hashVar` x

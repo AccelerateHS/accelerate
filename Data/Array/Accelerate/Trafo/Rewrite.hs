@@ -117,7 +117,7 @@ convertSegmentsSeq s =
     cvtP p =
       case p of
         StreamIn arrs        -> StreamIn arrs
-        ToSeq sl slix a      -> ToSeq sl (cvtE slix) (cvtA a)
+        ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
         MapSeq f x           -> MapSeq (cvtAfun f) x
         ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x

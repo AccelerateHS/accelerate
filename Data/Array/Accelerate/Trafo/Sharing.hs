@@ -359,7 +359,7 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
     convSeq bnd body =
       case bnd of
         StreamIn arrs               -> producer $ AST.StreamIn arrs
-        ToSeq slix acc              -> producer $ mkToSeq (cvtE slix) (cvtA acc)
+        ToSeq slix acc              -> producer $ mkToSeq slix (cvtA acc)
         MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) (asIdx x)
         ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) (asIdx x) (asIdx y)
         ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
@@ -535,11 +535,11 @@ mkReplicate = AST.Replicate (sliceIndex slix)
   where
     slix = undefined :: slix
 
-mkToSeq :: forall slix e aenv senv. (Slice slix, Elt e)
-        => AST.Exp                  aenv slix
+mkToSeq :: forall slsix slix e aenv senv. (Division slsix, DivisionSlice slsix ~ slix, Elt e, Elt slix, Slice slix)
+        => slsix
         -> AST.OpenAcc              aenv (Array (FullShape  slix) e)
         -> AST.Producer AST.OpenAcc aenv senv (Array (SliceShape slix) e)
-mkToSeq = AST.ToSeq (sliceIndex slix)
+mkToSeq _ = AST.ToSeq (sliceIndex slix) (Proxy :: Proxy slix)
   where
     slix = undefined :: slix
 
@@ -1736,7 +1736,7 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
 
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
-    
+
     traverseFun2 :: (Elt a, Elt b, Typeable c)
                  => Level
                  -> (Exp a -> Exp b -> Exp c)
@@ -1792,8 +1792,7 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
             StreamIn arrs -> producer $ return (StreamIn arrs, 1)
             ToSeq sl acc -> producer $ do
               (acc', h1) <- traverseAcc lvl acc
-              (sl' , h2) <- traverseExp lvl sl
-              return (ToSeq sl' acc', h1 `max` h2 + 1)
+              return (ToSeq sl acc', h1 + 1)
             MapSeq afun s -> producer $ do
               (afun', h1) <- traverseAfun1 lvl afun
               (s'   , h2) <- traverseSeq lvl s
@@ -2715,8 +2714,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
         StreamIn arrs -> producer (StreamIn arrs) noNodeCounts
         ToSeq sl acc   -> let
                             (acc', accCount1) = scopesAcc acc
-                            (sl',  accCount2) = scopesExp sl
-                          in producer (ToSeq sl' acc') (accCount1 +++ accCount2)
+                          in producer (ToSeq sl acc') accCount1
         MapSeq     afun s'  -> let
                                  (afun', accCount1) = scopesAfun1 afun
                                  (s''  , accCount2) = scopesSeq s'

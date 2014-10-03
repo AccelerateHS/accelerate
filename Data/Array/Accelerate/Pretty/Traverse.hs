@@ -13,6 +13,7 @@ module Data.Array.Accelerate.Pretty.Traverse
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar hiding ((!))
+import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 
@@ -82,7 +83,7 @@ travSeq f c l seq =
     Producer p s' ->
       case p of
         StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
-        ToSeq _ ix a  -> combine "ToSeq" [ travExp f c l  ix, travAcc f c l a, travSeq f c l s' ]
+        ToSeq slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
         MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
         ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
         ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
@@ -102,6 +103,11 @@ travSeq f c l seq =
         FoldSeq fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
         FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
+
+    travSlix :: SliceIndex slix sl co sh -> String
+    travSlix SliceNil       = "Z"
+    travSlix (SliceAll s)   = travSlix s ++ ":.All"
+    travSlix (SliceFixed s) = travSlix s ++ ":.Split"
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)

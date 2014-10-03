@@ -1766,29 +1766,20 @@ fromSeq = foldSeqFlatten f (lift (empty, empty))
 toSeqInner :: (Shape sh, Elt a)
            => Acc (Array (sh :. Int) a)
            -> Seq [Array sh a]
-toSeqInner a = toSeq (constant (Any :. stream)) a
-  where
-    stream :: Int
-    stream = P.maxBound
+toSeqInner a = toSeq (Any :. Split) a
 
 -- | Sequence a 2-dimensional array on the outermost dimension.
 --
 toSeqOuter2 :: (Elt a)
            => Acc (Array DIM2 a)
            -> Seq [Array DIM1 a]
-toSeqOuter2 a = toSeq (constant (Z :. stream :. All)) a
-  where
-    stream :: Int
-    stream = P.maxBound
+toSeqOuter2 a = toSeq (Z :. Split :. All) a
 
 -- | Sequence a 3-dimensional array on the outermost dimension.
 toSeqOuter3 :: (Elt a)
            => Acc (Array DIM3 a)
            -> Seq [Array DIM2 a]
-toSeqOuter3 a = toSeq (constant (Z :. stream :. All :. All)) a
-  where
-    stream :: Int
-    stream = P.maxBound
+toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 
 -- | Generate a scalar sequence of a fixed given length, by applying
 -- the given scalar function at each index.
@@ -1796,4 +1787,4 @@ generateSeq :: (Elt a)
             => Exp Int
             -> (Exp Int -> Exp a)
             -> Seq [Scalar a]
-generateSeq n f = toSeq (index1 n) (generate (index1 n) (f . unindex1))
+generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))

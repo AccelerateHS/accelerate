@@ -617,15 +617,16 @@ stencil2Op stencil boundary1 arr1 boundary2 arr2
         Left v    -> toElt v
         Right ix' -> arr2 ! ix'
 
-toSeqOp :: (Elt slix, Shape sl, Shape dim, Elt e)
-           => SliceIndex (EltRepr slix)
-                         (EltRepr sl)
-                         co
-                         (EltRepr dim)
-           -> slix
-           -> Array dim e
-           -> [Array sl e]
-toSeqOp sliceIndex slix arr = map (sliceOp sliceIndex arr) (enumSlices sliceIndex slix)
+toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
+        => SliceIndex (EltRepr slix)
+                      (EltRepr sl)
+                      co
+                      (EltRepr dim)
+        -> proxy slix
+        -> Array dim e
+        -> [Array sl e]
+toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
+                               (enumSlices sliceIndex (shape arr))
 
 -- Scalar expression evaluation
 -- ----------------------------
@@ -1368,10 +1369,9 @@ evalSeq conf s aenv = evalSeq' s
       case p of
         StreamIn arrs -> ExecStreamIn 1 arrs
         ToSeq sliceIndex slix (delayed -> Delayed sh ix _) ->
-          let slix' = restrictSlice sliceIndex sh (evalE slix)
-              n   = R.size (R.sliceShape sliceIndex (fromElt sh))
+          let n   = R.size (R.sliceShape sliceIndex (fromElt sh))
               k   = elemsPerChunk conf n
-          in ExecStreamIn k (toSeqOp sliceIndex slix' (newArray sh ix))
+          in ExecStreamIn k (toSeqOp sliceIndex slix (newArray sh ix))
         MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
         ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
         ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
