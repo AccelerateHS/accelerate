@@ -747,6 +747,7 @@ Executable accelerate-ray
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
 
+
 -- K-means
 -- -------
 

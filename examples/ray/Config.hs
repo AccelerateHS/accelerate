@@ -44,7 +44,7 @@ options =
 
 header :: [String]
 header =
-  [ "accelerate-ray (c) [2013] The Accelerate Team"
+  [ "accelerate-ray (c) [2013..2014] The Accelerate Team"
   , ""
   , "Usage: accelerate-ray [OPTIONS]"
   , ""
