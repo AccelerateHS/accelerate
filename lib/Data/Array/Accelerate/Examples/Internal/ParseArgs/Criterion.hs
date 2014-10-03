@@ -54,7 +54,7 @@ defaultOptions =
             (OptArg (set rawDataFile) "FILE")
             (describe rawDataFile "file to write raw data to")
 
-  , Option  [] ["report"]
+  , Option  [] ["output"]
             (OptArg (set reportFile) "FILE")
             (describe reportFile "file to write report to")
 
