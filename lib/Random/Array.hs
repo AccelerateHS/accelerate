@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 module Random.Array (
 

@@ -1,6 +1,6 @@
 Name:                   accelerate-examples
 Version:                0.16.0.0
-Cabal-version:          >=1.6
+Cabal-version:          >=1.8
 Tested-with:            GHC == 7.8.*
 Build-type:             Simple
 
@@ -110,6 +110,52 @@ Flag ray
 Flag kmeans
   Description:          An implementation of k-means clustering in a plane
   Default:              True
+
+
+-- Test harness
+-- ------------
+
+Library
+  hs-source-dirs:       lib
+  Build-depends:        accelerate                      == 0.16.*,
+                        ansi-wl-pprint                  >= 0.6,
+                        base                            == 4.7.*,
+                        containers                      >= 0.5,
+                        criterion                       >= 1.0,
+                        fclabels                        >= 2.0,
+                        mwc-random                      >= 0.8,
+                        test-framework                  >= 0.5
+
+  Exposed-modules:      Benchmark
+                        Interactive
+                        Monitoring
+                        ParseArgs
+                        ParseArgs.Criterion
+                        ParseArgs.TestFramework
+                        Random.Array
+                        Util
+
+  ghc-options:          -O2 -Wall
+  ghc-prof-options:     -caf-all -auto-all
+
+  if flag(gui)
+    CPP-options:        -DACCELERATE_ENABLE_GUI
+
+  if flag(cuda)
+    CPP-options:        -DACCELERATE_CUDA_BACKEND
+    build-depends:      accelerate-cuda                 == 0.16.*
+
+  if flag(llvm-cpu)
+    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    build-depends:      accelerate-llvm-native          == 0.16.*
+
+  if flag(llvm-gpu)
+    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
+    build-depends:      accelerate-llvm-ptx             == 0.16.*
+
+  if flag(ekg)
+    CPP-options:        -DACCELERATE_ENABLE_EKG
+    build-depends:      ekg                             >= 0.3
 
 
 -- The main test program. This includes randomised quickcheck testing for array

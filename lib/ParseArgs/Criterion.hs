@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 module ParseArgs.Criterion (
 
@@ -123,7 +124,7 @@ regressParams m
 regressHelp :: String
 regressHelp
   = show
-  $ text "\nCriterion regression metrics for use with --regress:"
+  $ text "Criterion regression metrics for use with --regress:"
   <$> tabulate [(text n, text d) | (n,(_,d)) <- map f measureKeys]
   where
     f k = (k, measureAccessors M.! k)

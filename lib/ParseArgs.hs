@@ -1,19 +1,30 @@
-{-# LANGUAGE CPP           #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE PatternGuards   #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE ViewPatterns    #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 module ParseArgs (
 
-  module ParseArgs,
+  -- * Options processing
+  parseArgs,
+  Options, optBackend, optBenchmark, optTest, optHelp, optCriterion, optTestFramework,
+
   module System.Console.GetOpt,
+
+  -- * Executing programs
+  Backend(..),
+  run, run1, run2,
 
 ) where
 
-import ParseArgs.Criterion                              as Criterion
+import qualified ParseArgs.Criterion                    as Criterion
+import qualified ParseArgs.TestFramework                as TestFramework
 
 import Data.List
 import Data.Label
+import Data.Monoid
 import System.Exit
 import System.Console.GetOpt
 
@@ -33,6 +44,28 @@ import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
 import qualified Data.Array.Accelerate.LLVM.Multi       as Multi
 #endif
 
+
+-- Generic program options
+-- -----------------------
+
+data Options = Options
+  {
+    _optBackend         :: Backend
+  , _optBenchmark       :: Bool
+  , _optTest            :: Bool
+  , _optHelp            :: Bool
+  --
+  , _optCriterion       :: Criterion.Config
+  , _optTestFramework   :: TestFramework.Config
+  }
+
+
+-- Multiple backend support
+-- ------------------------
+--
+-- This section is all that should need editing to add support for new backends
+-- to the accelerate-examples package.
+--
 
 -- | Execute Accelerate expressions
 --
@@ -91,6 +124,9 @@ data Backend = Interpreter
   deriving (Eq, Bounded)
 
 
+-- The choice of show instance is important because this will be used to
+-- generate the command line flag.
+--
 instance Show Backend where
   show Interpreter      = "interpreter"
 #ifdef ACCELERATE_CUDA_BACKEND
@@ -107,50 +143,89 @@ instance Show Backend where
 #endif
 
 
-availableBackends :: (f :-> Backend) -> [OptDescr (f -> f)]
-availableBackends backend =
+-- This TH splice must go before the first use of any of the accessors that are
+-- generated are used, and after all of the data declarations are in scope.
+--
+$(mkLabels [''Options])
+
+
+-- The set of available backnds. This will be used for both the command line
+-- options as well as the fancy header generation.
+--
+availableBackends :: [OptDescr (Options -> Options)]
+availableBackends =
   [ Option  [] [show Interpreter]
-            (NoArg (set backend Interpreter))
+            (NoArg (set optBackend Interpreter))
             "reference implementation (sequential)"
 
 #ifdef ACCELERATE_CUDA_BACKEND
   , Option  [] [show CUDA]
-            (NoArg (set backend CUDA))
+            (NoArg (set optBackend CUDA))
             "implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show CPU]
-            (NoArg (set backend CPU))
+            (NoArg (set optBackend CPU))
             "LLVM based implementation for multicore CPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
   , Option  [] [show PTX]
-            (NoArg (set backend PTX))
+            (NoArg (set optBackend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   , Option  [] [show Multi]
-            (NoArg (set backend Multi))
+            (NoArg (set optBackend Multi))
             "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
 #endif
   ]
 
 
--- | Complete the options set by appending a description of the available
---   execution backends.
---
-withBackends :: (f :-> Backend) -> [OptDescr (f -> f)] -> [OptDescr (f -> f)]
-withBackends backend xs = availableBackends backend ++ xs
+-- Options parsing infrastructure
+-- ------------------------------
 
+defaultOptions :: Options
+defaultOptions = Options
+  {
+    _optBackend         = maxBound
+  , _optTest            = True
+#ifndef ACCELERATE_ENABLE_GUI
+  , _optBenchmark       = True
+#else
+  , _optBenchmark       = False
+#endif
+  , _optHelp            = False
+  , _optCriterion       = Criterion.defaultConfig
+  , _optTestFramework   = TestFramework.defaultConfig
+  }
 
--- | Create the help text including a list of the available (and selected)
---   Accelerate backends.
---
-fancyHeader :: (config :-> Backend) -> config -> [String] -> [String] -> String
-fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
+options :: [OptDescr (Options -> Options)]
+options = availableBackends ++
+  [
+    Option  [] ["benchmark"]
+            (OptArg (set optBenchmark . maybe True read) "BOOL")
+            (describe optBenchmark "enable benchmark mode")
+
+  , Option  [] ["test"]
+            (OptArg (set optTest  . maybe True read) "BOOL")
+            (describe optTest "enable test mode")
+
+  , Option  "h?" ["help"]
+            (NoArg  (set optHelp True))
+            "show help message"
+  ]
   where
-    active this         = if this == show (get backend opts) then "*" else ""
-    (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract (availableBackends backend)
+    describe f msg
+      = msg ++ " (" ++ show (get f defaultOptions) ++ ")"
+
+
+-- | Generate the list of available (and the selected) Accelerate backends.
+--
+fancyHeader :: Options -> [String] -> [String] -> String
+fancyHeader opts header footer = intercalate "\n" (header ++ body ++ footer)
+  where
+    active this         = if this == show (get optBackend opts) then "*" else ""
+    (ss,bs,ds)          = unzip3 $ map (\(b,d) -> (active b, b, d)) $ concatMap extract availableBackends
     table               = zipWith3 paste (sameLen ss) (sameLen bs) ds
     paste x y z         = "  " ++ x ++ "  " ++ y ++ "  " ++ z
     sameLen xs          = flushLeft ((maximum . map length) xs) xs
@@ -162,7 +237,7 @@ fancyHeader backend opts header footer = unlines (header ++ body ++ footer)
             []          -> [(losFmt, "")]
             (x:xs)      -> (losFmt, x) : [ ("",x') | x' <- xs ]
     --
-    body   = "Available backends:" : table
+    body                = "Available backends:" : table
 
 
 -- | Strip the short option arguments that have a required or optional argument.
@@ -177,49 +252,99 @@ stripShortOpts = map strip
     strip x                                     = x
 
 
+-- | Strip the argument description part of the options description structure,
+-- so that the option lists can be combined for the purposes of displaying the
+-- usage information.
+--
+stripArgDescr :: [OptDescr a] -> [OptDescr x]
+stripArgDescr = map strip
+  where
+    strip (Option short long (NoArg _)      desc) = Option short long (NoArg undefined) desc
+    strip (Option short long (ReqArg _ arg) desc) = Option short long (ReqArg undefined arg) desc
+    strip (Option short long (OptArg _ arg) desc) = Option short long (OptArg undefined arg) desc
+
+
 -- | Process the command line arguments and return a tuple consisting of the
--- options structure, options for Criterion, and a list of unrecognised and
--- non-options.
+-- user options structure, accelerate-examples options (including options for
+-- criterion and test-framework), and a list of unrecognised command line
+-- arguments.
 --
--- We drop any command line arguments following a "--".
+-- Since criterion and test-framework both bail if they encounter unrecognised
+-- options, we run getOpt' ourselves. This means that the error messages might
+-- be slightly different.
 --
-parseArgs :: (config :-> Bool)                  -- ^ access a help flag from the options structure
-          -> (config :-> Backend)               -- ^ access the chosen backend from the options structure
-          -> [OptDescr (config -> config)]      -- ^ the option descriptions
-          -> config                             -- ^ default option set
+-- Any command line arguments following a "--" are not processed, but are
+-- included as part of the unprocessed arguments returned on output.
+--
+parseArgs :: [OptDescr (config -> config)]      -- ^ the user option descriptions
+          -> config                             -- ^ user default option set
           -> [String]                           -- ^ header text
           -> [String]                           -- ^ footer text
           -> [String]                           -- ^ command line arguments
-          -> IO (config, Criterion.Config, [String])
-parseArgs help backend (withBackends backend -> options) config header footer args =
+          -> IO (config, Options, [String])
+parseArgs programOptions programConfig header footer args =
   let
-      (argv, rest)      = span (/= "--") args
-      criterionOptions  = stripShortOpts Criterion.defaultOptions
+      (argv, rest)          = span (/= "--") args
 
-      helpMsg err
-        =  concat err
-        ++ usageInfo (unlines header)               options
-        ++ usageInfo "\nGeneric criterion options:" (criterionOptions ++ Criterion.extraOptions)
-        ++ Criterion.regressHelp
+      criterionOptions      = stripShortOpts $ Criterion.defaultOptions ++ Criterion.extraOptions
+      testframeworkOptions  = stripShortOpts $ TestFramework.defaultOptions
+
+      helpMsg []  = helpMsg'
+      helpMsg err = unlines [ concat err, helpMsg' ]
+
+      helpMsg'    = unlines
+        [ fancyHeader defaultOptions header []
+        , ""
+        , usageInfo "Options:"                  options
+        , usageInfo "Program options:"          programOptions
+        , usageInfo "Criterion options:"        criterionOptions
+        , Criterion.regressHelp
+        , ""
+        , usageInfo "Test-Framework options:"   testframeworkOptions
+        ]
 
   in do
-
-  -- Process options for the main program. Any non-options will be split out
-  -- here. Unrecognised options get passed to criterion.
+  -- In the first round process options for the user program. Processing the
+  -- user options first means that we can still handle any short or long options
+  -- that take arguments but which were not joined with an equals sign; e.g.
   --
-  (conf,non,u1) <- case getOpt' Permute options argv of
-      (opts,n,u,[]) -> case foldr id config opts of
-        conf | False <- get help conf
-          -> putStrLn (fancyHeader backend conf header footer) >> return (conf,n,u)
-        _ -> putStrLn (helpMsg [])                             >> exitSuccess
-      --
+  --   "-f blah" or "--foo blah".
+  --
+  -- Following this phase we must disallow short options with arguments, and
+  -- only long options in the form "--foo=blah" will work correctly. This is
+  -- because getOpt is splitting the unrecognised options ("--foo") from the
+  -- non-option arguments ("blah").
+  --
+  (c1,non,u1)   <- case getOpt' Permute programOptions argv of
+      (opts,n,u,[]) -> case foldr id programConfig opts of
+        conf      -> return (conf,n,u)
       (_,_,_,err) -> error (helpMsg err)
 
-  -- Criterion option processing
+  -- The standard accelerate-examples options
   --
-  (cconf,_,u2) <- case getOpt' Permute criterionOptions u1 of
-      (opts,n,u,[]) -> return (foldr id Criterion.defaultConfig opts, n, u)
+  (c2,u2)       <- case getOpt' Permute options u1 of
+      (opts,_,u,[]) -> return (foldr id defaultOptions opts, u)
+      (_,_,_,err)   -> error (helpMsg err)
+
+  -- Criterion options
+  --
+  (c3,u3)       <- case getOpt' Permute criterionOptions u2 of
+      (opts,_,u,[]) -> return (foldr id Criterion.defaultConfig opts, u)
       (_,_,_,err)   -> error  (helpMsg err)
 
-  return (conf, cconf, non ++ u2 ++ rest)
+  -- Test framework options
+  --
+  (c4,u4)       <- case getOpt' Permute testframeworkOptions u3 of
+      (opts,_,u,[]) | Just os <- sequence opts
+                    -> return (mconcat os, u)
+      (_,_,_,err)   -> error  (helpMsg err)
+
+  -- Show the help message if that was requested. This is done last so that the
+  -- header is not shown twice in the case of a subsequent options parse error.
+  --
+  if get optHelp c2
+     then putStrLn (helpMsg []) >> exitSuccess
+     else putStrLn (fancyHeader c2 header footer)
+
+  return (c1, c2 { _optCriterion = c3, _optTestFramework = c4 }, u4 ++ non ++ rest)
 
