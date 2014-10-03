@@ -14,12 +14,12 @@ module World (
 
 import Mandel
 import Config
-import ParseArgs
 
 import Prelude                                  as P
 import Data.Char
 import Data.Label
 import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate.Examples.Internal  as A
 import Graphics.Gloss.Interface.Pure.Game       hiding ( translate, scale )
 
 
@@ -49,21 +49,21 @@ renderWorld (World view render _ _ _) = render $ A.fromList Z [view]
 
 -- Initialise the World state
 --
-initialWorld :: Options -> View Float -> World
-initialWorld config view
-  = setPrecisionOfWorld Float config
+initialWorld :: Config -> Options -> View Float -> World
+initialWorld conf opts view
+  = setPrecisionOfWorld Float conf opts
   $ World view undefined Nothing Nothing Nothing
 
 
 -- Reset the rendering routines to compute with the specified precision
 --
-setPrecisionOfWorld :: Precision -> Options -> World -> World
-setPrecisionOfWorld f config (World p _ z h v)
+setPrecisionOfWorld :: Precision -> Config -> Options -> World -> World
+setPrecisionOfWorld f conf opts (World p _ z h v)
   = let
-        width   = get optWidth config
-        height  = get optHeight config
-        limit   = get optLimit config
-        backend = get optBackend config
+        width   = get configWidth conf
+        height  = get configHeight conf
+        limit   = get configLimit conf
+        backend = get optBackend opts
 
         render :: (Elt a, IsFloating a) => Render a
         render  = run1 backend
@@ -131,8 +131,8 @@ refocus = move . zoom
 -- size is (100,100) with scale factor of 4, then the event coordinates are
 -- returned in the range [-200,200].
 --
-react :: Options -> Event -> World -> World
-react opt event world
+react :: Config -> Options -> Event -> World -> World
+react conf opts event world
   = case event of
       EventKey (Char c) s _ _           -> char (toLower c) s world
       EventKey (SpecialKey c) s _ _     -> special c s world
@@ -156,7 +156,7 @@ react opt event world
     toggle f x Down     = set f (Just x)
     toggle f _ Up       = set f Nothing
 
-    precision f Down    = setPrecisionOfWorld f opt
+    precision f Down    = setPrecisionOfWorld f conf opts
     precision _ _       = id
 
     preset n Down       = loadPreset (read [n])

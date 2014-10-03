@@ -6,16 +6,13 @@
 
 import World
 import Config
-import Monitoring
-import ParseArgs
 
 import Data.Label
-import Control.Monad
-import System.Environment                       ( getArgs, withArgs )
-import Criterion.Main                           ( defaultMainWith, bench, whnf )
+import System.Environment                       ( getArgs )
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate.Examples.Internal  as A
 import Graphics.Gloss.Accelerate.Data.Picture   as G
 import qualified Graphics.Gloss                 as G
 
@@ -27,51 +24,39 @@ makePicture world = bitmapOfArray (renderWorld world) False
 
 
 main :: IO ()
-main
-  = do
-        beginMonitoring
-        argv                    <- getArgs
-        (conf, cconf, rest)     <- parseArgs optHelp optBackend options defaults header footer argv
+main = do
+  beginMonitoring
+  argv                  <- getArgs
+  (conf, opts, rest)    <- parseArgs options defaults header footer argv
 
-        let world       = initialWorld conf view
-            fps         = get optFramerate conf
-            width       = get optWidth conf
-            height      = get optHeight conf
+  let world     = initialWorld conf opts view
+      fps       = get configFramerate conf
+      width     = get configWidth conf
+      height    = get configHeight conf
 
-            -- Centre coordinates: Re(c) = -0.7; Im(c) = 0
-            -- View width: 3.067
-            --
-            view        = (-2.23, -1.15, 0.83, 1.15)
+      -- Centre coordinates: Re(c) = -0.7; Im(c) = 0
+      -- View width: 3.067
+      --
+      view        = (-2.23, -1.15, 0.83, 1.15)
 
-            force arr   = indexArray arr (Z:.0:.0) `seq` arr
+      force arr   = indexArray arr (Z:.0:.0) `seq` arr
 
-            mandel
-              | get optBench conf
-              = withArgs rest $ defaultMainWith cconf
-                    [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
-#ifdef ACCELERATE_ENABLE_GUI
-              | fps == 0
-              = G.display
-                    (G.InWindow "Mandelbrot" (width, height) (10, 10))
-                    G.black
-                    (makePicture world)
+  runBenchmark opts rest
+    $ whnf (force . renderWorld) world
 
-              | fps > 0
-              = G.play
-                    (G.InWindow "Mandelbrot" (width, height) (10, 10))
-                    G.black
-                    fps
-                    world
-                    makePicture
-                    (react conf)
-                    (const refocus)
-#endif
-              | otherwise
-              = return ()
+  runInteractive opts rest
+    $ if fps == 0
+         then G.display
+                  (G.InWindow "Mandelbrot" (width, height) (10, 10))
+                  G.black
+                  (makePicture world)
 
-
-        unless (P.null rest) $
-          putStrLn $ "Warning: unrecognized options: " P.++ show rest
-
-        mandel
+         else G.play
+                  (G.InWindow "Mandelbrot" (width, height) (10, 10))
+                  G.black
+                  fps
+                  world
+                  makePicture
+                  (react conf opts)
+                  (const refocus)
 
