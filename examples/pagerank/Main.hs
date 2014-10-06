@@ -25,5 +25,5 @@ main
 
         if get optCount config
           then void (countPages linksPath)
-          else rank (get optBackend config) (get optSteps config) (get optChunkSize config) linksPath titlesPath
+          else rank (get optBackend config) (get optNoSeq config) (get optSteps config) (get optChunkSize config) linksPath titlesPath
 

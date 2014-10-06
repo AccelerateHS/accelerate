@@ -12,6 +12,7 @@ data Options = Options
   , _optSteps           :: Int
   , _optChunkSize       :: Int
   , _optCount           :: Bool
+  , _optNoSeq           :: Bool
   , _optHelp            :: Bool
   }
   deriving Show
@@ -24,6 +25,7 @@ defaults = Options
   , _optSteps           = 100
   , _optChunkSize       = 12000000
   , _optCount           = False
+  , _optNoSeq           = False
   , _optHelp            = False
   }
 
@@ -33,6 +35,7 @@ options =
   [ Option []   ["steps"]       (ReqArg (set optSteps . read) "INT")     "number of steps to perform"
   , Option []   ["chunk-size"]  (ReqArg (set optChunkSize . read) "INT") "size of chunks to be processed"
   , Option []   ["count"]       (NoArg  (set optCount True))             "count number of pages in the links file"
+  , Option []   ["noseq"]       (NoArg  (set optNoSeq True))             "do not use Accelerate sequencing"
   , Option "h?" ["help"]        (NoArg  (set optHelp True))              "show help message"
   ]
 
