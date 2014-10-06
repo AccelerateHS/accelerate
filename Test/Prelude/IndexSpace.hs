@@ -9,7 +9,7 @@ module Test.Prelude.IndexSpace (
 
 ) where
 
-import Prelude                                          as P
+import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
@@ -19,24 +19,24 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
 
-import Data.Array.Accelerate                            as A
-import Data.Array.Accelerate.Array.Sugar                ( newArray, dim )
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Array.Sugar                        ( newArray, dim )
+import Data.Array.Accelerate.Examples.Internal                  as A
 
-import Data.Array.ST                                    ( runSTArray )
-import qualified Data.Array.Unboxed                     as IArray
-import qualified Data.Array.MArray                      as M
+import Data.Array.ST                                            ( runSTArray )
+import qualified Data.Array.Unboxed                             as IArray
+import qualified Data.Array.MArray                              as M
 
 
 --
 -- Forward permutation ---------------------------------------------------------
 --
 
-test_permute :: Config -> Test
-test_permute opt = testGroup "permute" $ catMaybes
+test_permute :: Backend -> Config -> Test
+test_permute backend opt = testGroup "permute" $ catMaybes
   [ testIntegralElt configInt8   (undefined :: Int8)
   , testIntegralElt configInt16  (undefined :: Int16)
   , testIntegralElt configInt32  (undefined :: Int32)
@@ -49,8 +49,6 @@ test_permute opt = testGroup "permute" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
@@ -142,8 +140,8 @@ test_permute opt = testGroup "permute" $ catMaybes
 -- Backward permutation --------------------------------------------------------
 --
 
-test_backpermute :: Config -> Test
-test_backpermute opt = testGroup "backpermute" $ catMaybes
+test_backpermute :: Backend -> Config -> Test
+test_backpermute backend opt = testGroup "backpermute" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -171,7 +169,6 @@ test_backpermute opt = testGroup "backpermute" $ catMaybes
           , testProperty "gatherIf"     (test_gatherIf  :: Array DIM1 e -> Property)
           ]
 
-    backend           = get configBackend opt
     test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
     test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
 

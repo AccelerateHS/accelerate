@@ -3,18 +3,17 @@ module Test.Issues.Issue119 (test_issue119)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                          as P
-import Data.Array.Accelerate                            as A
-import Data.Label
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
-test_issue119 :: Config -> Test
-test_issue119 conf = testGroup "119"
+test_issue119 :: Backend -> Config -> Test
+test_issue119 backend _conf = testGroup "119"
   [ testCase "A" (assertEqual ref1 (run backend test1))
   , testCase "B" (assertEqual ref2 (run backend test2))
   , testCase "C" (assertEqual ref3 (run backend test3))
@@ -27,8 +26,6 @@ test_issue119 conf = testGroup "119"
   , testCase "J" (assertEqual ref10 (run backend test10))
   , testCase "K" (assertEqual ref11 (run backend test11))
   ]
-  where
-    backend = get configBackend conf
 
 
 -- Fold tests

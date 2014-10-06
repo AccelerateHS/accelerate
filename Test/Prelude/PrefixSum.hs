@@ -8,7 +8,7 @@ module Test.Prelude.PrefixSum (
 
 ) where
 
-import Prelude                                          as P
+import Prelude                                                  as P
 import Test.QuickCheck
 import Data.Label
 import Data.Maybe
@@ -17,18 +17,18 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
-import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
 --
 -- prefix sum ------------------------------------------------------------------
 --
 
-test_prefixsum :: Config -> Test
-test_prefixsum opt = testGroup "prefix sum" $ catMaybes
+test_prefixsum :: Backend -> Config -> Test
+test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -59,8 +59,6 @@ test_prefixsum opt = testGroup "prefix sum" $ catMaybes
           , testProperty "scanl'Seg"    (test_scanl'seg :: Vector e -> Property)
           , testProperty "scanr'Seg"    (test_scanr'seg :: Vector e -> Property)
           ]
-
-    backend = get configBackend opt
 
     -- left scan
     --

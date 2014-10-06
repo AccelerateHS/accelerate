@@ -3,23 +3,20 @@ module Test.Issues.Issue187 (test_issue187)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Label
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
-test_issue187 :: Config -> Test
-test_issue187 conf = testGroup "187"
+test_issue187 :: Backend -> Config -> Test
+test_issue187 backend _conf = testGroup "187"
   [ testCase "A" (assertEqual ref1 $ run backend test1)
   , testCase "B" (assertEqual ref2 $ run backend test2)
   ]
-  where
-    backend     = get configBackend conf
 
 
 ref1 :: Scalar Bool

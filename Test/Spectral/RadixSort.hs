@@ -23,10 +23,10 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
 --
@@ -37,8 +37,8 @@ import Data.Array.Accelerate                                    as A
 -- to the simple list-based representation for the time being.
 --
 
-test_radixsort :: Config -> Test
-test_radixsort opt = testGroup "radix sort" $ catMaybes
+test_radixsort :: Backend -> Config -> Test
+test_radixsort backend opt = testGroup "radix sort" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -49,8 +49,6 @@ test_radixsort opt = testGroup "radix sort" $ catMaybes
   , testElt configWord64 (undefined :: Word64)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Radix a, Ord a, Elt a, IsIntegral a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
