@@ -135,6 +135,7 @@ Library
                         Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion
                         Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework
                         Data.Array.Accelerate.Examples.Internal.Random.Array
+                        Data.Array.Accelerate.Examples.Internal.Test
                         Data.Array.Accelerate.Examples.Internal.Util
 
   ghc-options:          -O2 -Wall
