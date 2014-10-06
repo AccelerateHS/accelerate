@@ -8,26 +8,26 @@ module Test.Prelude.Replicate (
 
 ) where
 
-import Prelude                                          as P
-import Data.Array.Accelerate                            as A
-import Data.Array.Unboxed                               as IArray hiding ( Array )
+import Config
+import Test.Framework
+
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
+import Data.Array.Unboxed                                       as IArray hiding ( Array )
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.HUnit                                       hiding ( Test )
-import Test.Framework
+import Test.HUnit                                               hiding ( Test )
 import Test.Framework.Providers.HUnit
-
-import Config
-import ParseArgs
 
 
 --
 -- Slice -----------------------------------------------------------------------
 --
 
-test_replicate :: Config -> Test
-test_replicate opt = testGroup "replicate" $ catMaybes
+test_replicate :: Backend -> Config -> Test
+test_replicate backend opt = testGroup "replicate" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -40,8 +40,6 @@ test_replicate opt = testGroup "replicate" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall e. (Elt e, IsNum e, Num e, Eq e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing

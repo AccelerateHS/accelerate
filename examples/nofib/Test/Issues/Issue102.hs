@@ -4,21 +4,18 @@ module Test.Issues.Issue102 (test_issue102)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Label
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
-test_issue102 :: Config -> Test
-test_issue102 conf =
+test_issue102 :: Backend -> Config -> Test
+test_issue102 backend _conf =
   testCase "102" (assertEqual ref1 $ run backend test1)
-  where
-    backend = get configBackend conf
 
 
 ref1 :: Array DIM3 Int

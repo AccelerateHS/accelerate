@@ -12,20 +12,22 @@ import Test.Prelude.Reduction
 import Test.Prelude.Replicate
 import Test.Prelude.Stencil
 
+import Data.Array.Accelerate.Examples.Internal
 
-test_prelude :: Config -> Test
-test_prelude conf =
+
+test_prelude :: Backend -> Config -> Test
+test_prelude be conf =
   testGroup "prelude"
-    [ test_map conf
-    , test_zipWith conf
-    , test_foldAll conf
-    , test_fold conf
-    , test_backpermute conf
-    , test_permute conf
-    , test_prefixsum conf       -- requires fold
-    , test_foldSeg conf         -- requires scan
-    , test_stencil conf
-    , test_replicate conf
-    , test_filter conf
+    [ test_map be conf
+    , test_zipWith be conf
+    , test_foldAll be conf
+    , test_fold be conf
+    , test_backpermute be conf
+    , test_permute be conf
+    , test_prefixsum be conf            -- requires fold
+    , test_foldSeg be conf              -- requires scan
+    , test_stencil be conf
+    , test_replicate be conf
+    , test_filter be conf
     ]
 

@@ -12,6 +12,7 @@ import SMVM
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Label
 import Data.Maybe
 import Data.Typeable
@@ -20,13 +21,12 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
 
 
-test_smvm :: Config -> Test
-test_smvm opt = testGroup "smvm" $ catMaybes
+test_smvm :: Backend -> Config -> Test
+test_smvm backend opt = testGroup "smvm" $ catMaybes
 --  [ testElt configInt8   (undefined :: Int8)
 --  , testElt configInt16  (undefined :: Int16)
 --  , testElt configInt32  (undefined :: Int32)
@@ -39,8 +39,6 @@ test_smvm opt = testGroup "smvm" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a

@@ -168,22 +168,16 @@ Library
 --
 Executable accelerate-nofib
   Main-is:              Main.hs
-  hs-source-dirs:       lib
-                        examples/nofib
+  hs-source-dirs:       examples/nofib
                         examples/smvm
 
-  other-modules:
-                        -- Common
-                        Monitoring
-                        ParseArgs
-                        ParseArgs.Criterion
-
-                        -- Nofib
-                        Config
+  other-modules:        Config
                         QuickCheck.Arbitrary.Array
                         QuickCheck.Arbitrary.Shape
                         Test.Base
                         Test.FFT
+                        Test.Foreign
+                        Test.Foreign.CUDA
                         Test.IO
                         Test.IO.Ptr
                         Test.IO.Vector
@@ -233,32 +227,19 @@ Executable accelerate-nofib
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 == 0.16.*
-    other-modules:      Test.Foreign
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(nofib)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
+                        accelerate-examples             == 0.16.*,
                         accelerate-fft                  == 0.16.*,
                         accelerate-io                   == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
                         base                            == 4.7.*,
                         array                           >= 0.3,
                         containers                      >= 0.5,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         HUnit                           >= 1.2,
                         QuickCheck                      >= 2.7,

@@ -8,8 +8,14 @@ module Test.Imaginary.SAXPY (
 
 ) where
 
+import Config
+import Test.Base
+import QuickCheck.Arbitrary.Array                               ()
+
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
+
 import Data.Label
 import Data.Maybe
 import Data.Typeable
@@ -17,14 +23,9 @@ import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
-import Config
-import ParseArgs
-import Test.Base
-import QuickCheck.Arbitrary.Array                               ()
 
-
-test_saxpy :: Config -> Test
-test_saxpy opt = testGroup "saxpy" $ catMaybes
+test_saxpy :: Backend -> Config -> Test
+test_saxpy backend opt = testGroup "saxpy" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -37,8 +38,6 @@ test_saxpy opt = testGroup "saxpy" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a

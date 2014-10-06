@@ -16,17 +16,17 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 --
 -- Filter ----------------------------------------------------------------------
 --
 
-test_filter :: Config -> Test
-test_filter opt = testGroup "filter" $ catMaybes
+test_filter :: Backend -> Config -> Test
+test_filter backend opt = testGroup "filter" $ catMaybes
   [ testIntegralElt configInt8   (undefined :: Int8)
   , testIntegralElt configInt16  (undefined :: Int16)
   , testIntegralElt configInt32  (undefined :: Int32)
@@ -39,8 +39,6 @@ test_filter opt = testGroup "filter" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing

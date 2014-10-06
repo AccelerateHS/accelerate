@@ -9,24 +9,24 @@ module Test.Prelude.Stencil (
 
 ) where
 
-import Prelude                                          as P
+import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
-import Test.HUnit                                       ((@?=))
+import Test.HUnit                                               ((@?=))
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.Framework.Providers.HUnit
 
 import Config
-import ParseArgs
 import Test.Base
-import QuickCheck.Arbitrary.Array                       ()
+import QuickCheck.Arbitrary.Array                               ()
 
-import Data.Array.Accelerate                            as A
-import Data.Array.Unboxed                               as IArray hiding ( Array )
-import qualified Data.Array.IArray                      as IArray
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
+import Data.Array.Unboxed                                       as IArray hiding ( Array )
+import qualified Data.Array.IArray                              as IArray
 
 
 -- TODO:
@@ -39,8 +39,8 @@ import qualified Data.Array.IArray                      as IArray
 -- Stencil ---------------------------------------------------------------------
 --
 
-test_stencil :: Config -> Test
-test_stencil opt = testGroup "stencil" $ catMaybes
+test_stencil :: Backend -> Config -> Test
+test_stencil backend opt = testGroup "stencil" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -54,8 +54,6 @@ test_stencil opt = testGroup "stencil" $ catMaybes
   , testBoundary
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, IArray UArray a)
             => (Config :-> Bool)
             -> a
