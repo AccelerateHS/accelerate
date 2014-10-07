@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 --
 -- A Mandelbrot set generator.
 -- Originally submitted by Simon Marlow as part of Issue #49.

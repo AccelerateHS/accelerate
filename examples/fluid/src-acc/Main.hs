@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 --
 -- A stable fluid simulation
 --

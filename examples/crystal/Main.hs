@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -- Quasicrystals demo.
 --
 -- Based on code from:
