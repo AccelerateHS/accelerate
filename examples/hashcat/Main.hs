@@ -5,9 +5,6 @@ module Main where
 import Config
 import Digest
 import MD5
-import Monitoring
-import ParseArgs
-import Util
 
 import Data.Label
 import Text.Printf
@@ -16,9 +13,10 @@ import Control.Applicative
 import Criterion.Measurement
 import System.IO
 import System.Environment
-import Data.Array.Accelerate                    ( Z(..), (:.)(..) )
-import qualified Data.Array.Accelerate          as A
-import qualified Data.ByteString.Lazy.Char8     as L
+import Data.Array.Accelerate                            ( Z(..), (:.)(..) )
+import Data.Array.Accelerate.Examples.Internal
+import qualified Data.Array.Accelerate                  as A
+import qualified Data.ByteString.Lazy.Char8             as L
 
 
 main :: IO ()
@@ -26,7 +24,7 @@ main = do
   initializeTime
   beginMonitoring
   argv                  <- getArgs
-  (conf, _cconf, files) <- parseArgs configHelp configBackend options defaults header footer argv
+  (conf, opts, files)   <- parseArgs options defaults header footer argv
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
@@ -44,7 +42,7 @@ main = do
   -- function are applied, but is defeated by salting passwords. This is true
   -- even if the salt is known, so long as it is unique for each password.
   --
-  let backend = get configBackend conf
+  let backend = get optBackend opts
 
       recover hash =
         let abcd = readMD5 hash

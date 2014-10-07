@@ -483,38 +483,22 @@ Executable accelerate-smoothlife
 
 Executable accelerate-hashcat
   Main-is:              Main.hs
-  hs-source-dirs:       examples/hashcat lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  hs-source-dirs:       examples/hashcat
+  other-modules:        Config
                         Digest
                         MD5
-                        Util
 
   ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(hashcat)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
+                        accelerate-examples             == 0.16.*,
                         base                            == 4.7.*,
                         bytestring                      >= 0.9,
                         bytestring-lexing               >= 0.2,

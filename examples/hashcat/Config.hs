@@ -4,23 +4,18 @@
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
 
 data Config
   = Config
   {
-    -- How to execute the search
-    _configBackend              :: Backend
-
     -- Input data
-  , _configStrings              :: [String]
+    _configStrings              :: [String]
   , _configDict                 :: FilePath
   , _configMaxWords             :: Maybe Int
   , _configSkipWords            :: Int
-
-  , _configHelp                 :: Bool
   }
   deriving Show
 
@@ -29,12 +24,10 @@ $(mkLabels [''Config])
 defaults :: Config
 defaults = Config
   {
-    _configBackend              = maxBound
-  , _configStrings              = []
+    _configStrings              = []
   , _configDict                 = []
   , _configMaxWords             = Nothing
   , _configSkipWords            = 0
-  , _configHelp                 = False
   }
 
 
@@ -57,10 +50,6 @@ options =
   , Option      ['n'] ["max-words"]
                 (ReqArg (set configMaxWords . Just . read) "INT")
                 "Use at most this many words from the list"
-
-  , Option      ['h', '?'] ["help"]
-                (NoArg (set configHelp True))
-                "show this help message"
   ]
 
 
@@ -75,5 +64,5 @@ header =
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 
