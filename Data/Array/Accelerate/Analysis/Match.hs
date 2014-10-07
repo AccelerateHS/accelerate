@@ -347,7 +347,11 @@ matchSeq m h = match
 
     matchP :: forall senv s t. Producer acc aenv senv s -> Producer acc aenv senv t -> Maybe (s :=: t)
     matchP (StreamIn arrs1) (StreamIn arrs2)
-      = undefined -- TODO: Should this function match on all arrays in the list?
+      | unsafePerformIO $ do
+          sn1 <- makeStableName arrs1
+          sn2 <- makeStableName arrs2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
     matchP (ToSeq _ (_::proxy1 slix1) a1) (ToSeq _ (_::proxy2 slix2) a2)
       | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2) -- Divisions are singleton.
       , Just REFL <- m a1 a2
@@ -961,7 +965,7 @@ hashPreOpenSeq hashAcc s =
     hashP :: Int -> Producer acc aenv senv a -> Int
     hashP salt p =
       case p of
-        StreamIn arrs       -> undefined -- TODO: Should we hash all arrays in list?
+        StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
         ToSeq spec _ acc    -> hashWithSalt salt "ToSeq" `hashA` acc `hashWithSalt` show spec
         MapSeq f x          -> hashWithSalt salt "MapSeq" `hashAF` f `hashVar` x
         ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f `hashVar` x `hashVar` y
