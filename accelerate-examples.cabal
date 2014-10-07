@@ -512,37 +512,25 @@ Executable accelerate-hashcat
 
 Executable accelerate-fft
   Main-is:              Main.hs
-  hs-source-dirs:       examples/fft/src-acc lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
-                        ParseArgs
+  hs-source-dirs:       examples/fft/src-acc
+  other-modules:        Config
                         HighPass
                         FFT
 
   ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
+  if flag(ekg)
+    ghc-options:        -with-rtsopts=-T
 
   if !flag(fft)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
-                        accelerate-io                   == 0.16.*,
+                        accelerate-examples             == 0.16.*,
                         accelerate-fft                  == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
+                        accelerate-io                   == 0.16.*,
                         base                            == 4.7.*,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         filepath                        >= 1.0
 
