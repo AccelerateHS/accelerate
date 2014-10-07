@@ -2,12 +2,12 @@
 
 module Config where
 
-import ParseArgs
 import Common.Type
 
 import Data.Char
 import Data.List
 import Data.Label
+import System.Console.GetOpt
 
 
 data Solver = Naive1 | Naive2 | BarnsHut
@@ -18,8 +18,7 @@ data Config
   = Config
   {
     -- How to execute the simulation
-    _configBackend              :: Backend
-  , _configSolver               :: Solver
+    _configSolver               :: Solver
 
     -- How to present the output
   , _configWindowSize           :: Int
@@ -38,8 +37,6 @@ data Config
 
     -- Terminating conditions
   , _configMaxSteps             :: Maybe Int
-  , _configBenchmark            :: Bool
-  , _configHelp                 :: Bool
 
     -- Dump final particle locations to file
   , _configDumpFinal            :: Maybe FilePath
@@ -52,8 +49,7 @@ $(mkLabels [''Config])
 defaults :: Config
 defaults = Config
   {
-    _configBackend              = maxBound
-  , _configSolver               = Naive2        -- no barns-hut yet!
+    _configSolver               = Naive2        -- no barns-hut yet!
 
   , _configWindowSize           = 1000
   , _configShouldDrawTree       = False         -- no barns-hut yet!
@@ -68,9 +64,6 @@ defaults = Config
   , _configStartSpeed           = 1
 
   , _configMaxSteps             = Nothing
-  , _configBenchmark            = False
-  , _configHelp                 = False
-
   , _configDumpFinal            = Nothing
   }
 
@@ -123,17 +116,9 @@ options =
             (ReqArg (set configMaxSteps . read) "INT")
             (describe configMaxSteps "exit simulation after this many steps")
 
-  , Option  [] ["benchmark"]
-            (NoArg (set configBenchmark True))
-            (describe configBenchmark "benchmark instead of displaying animation")
-
   , Option  [] ["dump-final"]
             (ReqArg (set configDumpFinal . Just) "FILE")
             "dump final body positions to file"
-
-  , Option  ['h', '?'] ["help"]
-            (NoArg (set configHelp True))
-            "show this help message"
   ]
   where
     solver algorithm
@@ -160,5 +145,5 @@ header =
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 

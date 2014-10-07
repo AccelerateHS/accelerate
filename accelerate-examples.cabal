@@ -408,9 +408,8 @@ Executable accelerate-fluid
 
 Executable accelerate-nbody
   Main-is:              Main.hs
-  hs-source-dirs:       examples/n-body lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Common.Body
+  hs-source-dirs:       examples/n-body
+  other-modules:        Common.Body
                         Common.Dump
                         Common.Tree
                         Common.Type
@@ -420,7 +419,6 @@ Executable accelerate-nbody
                         Gloss.Draw
                         Gloss.Event
                         Gloss.Simulate
-                        Random.Array
                         Random.Position
                         Solver.BarnsHut
                         Solver.Naive1
@@ -429,33 +427,15 @@ Executable accelerate-nbody
   ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
 
-  if flag(gui)
-    cpp-options:        -DACCELERATE_ENABLE_GUI
-
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(nbody)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
+                        accelerate-examples             == 0.16.*,
                         base                            == 4.7.*,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         gloss                           >= 1.7,
                         mwc-random                      >= 0.8

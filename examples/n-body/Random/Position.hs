@@ -9,9 +9,9 @@ module Random.Position
 
 import Common.Type
 
-import Random.Array                             ( (:~>) )
-import System.Random.MWC                        ( uniformR )
-import Data.Array.Accelerate.Array.Sugar        as A
+import System.Random.MWC                                ( uniformR )
+import Data.Array.Accelerate.Examples.Internal          ( (:~>) )
+import Data.Array.Accelerate.Array.Sugar                as A
 
 
 -- | Points distributed as a disc
