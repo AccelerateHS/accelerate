@@ -90,7 +90,7 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence operations
-  fromSeq, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+  fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
@@ -1760,6 +1760,20 @@ fromSeq = foldSeqFlatten f (lift (empty, empty))
     f x sh1 a1 =
       let (sh0, a0) = unlift x
       in lift (sh0 ++ sh1, a0 ++ a1)
+
+fromSeqElems :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector a)
+fromSeqElems = foldSeqFlatten f empty
+  where
+    f a0 _ a1 = a0 ++ a1
+
+fromSeqShapes :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector ix)
+fromSeqShapes = foldSeqFlatten f empty
+  where
+    f sh0 sh1 _ = sh0 ++ sh1
 
 -- | Sequence an array on the innermost dimension.
 --

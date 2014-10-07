@@ -79,7 +79,7 @@ module Data.Array.Accelerate (
   L.use, L.unit,
 
   -- *** Initialisation
-  L.generate, L.replicate, P.fill,
+  L.generate, L.replicate, P.fill, P.empty,
 
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
@@ -155,7 +155,8 @@ module Data.Array.Accelerate (
   L.mapSeq, L.zipWithSeq, L.scanSeq,
 
   -- ** Sequence consumers
-  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
+  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes, 
+  P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),
