@@ -1,12 +1,11 @@
 {-# LANGUAGE PatternGuards #-}
 
--- An implementation of PageRank based off of Ben Lippmeier's Repa implementation (http://repa.ouroborus.net/).
+-- An implementation of PageRank based off of Ben Lippmeier's Repa
+-- implementation (http://repa.ouroborus.net/).
 --
 
 import Config
 import Count
-import Monitoring
-import ParseArgs
 import Rank
 
 import Control.Monad
@@ -15,15 +14,20 @@ import Data.Label                 ( get )
 import System.Environment
 import System.Exit
 
+import Data.Array.Accelerate.Examples.Internal
+
 
 main :: IO ()
-main
- = do
-        beginMonitoring
-        argv    <- getArgs
-        (config, _, linksPath : titlesPath : _)  <- parseArgs optHelp optBackend options defaults header footer argv
+main = do
+  beginMonitoring
+  argv                                     <- getArgs
+  (conf, opts, linksPath : titlesPath : _) <- parseArgs options defaults header footer argv
 
-        if get optCount config
-          then void (countPages linksPath)
-          else rank (get optBackend config) (get optSteps config) (get optChunkSize config) linksPath titlesPath
+  let backend   = get optBackend opts
+      steps     = get configSteps conf
+      chunk     = get configChunkSize conf
+
+  if get configCount conf
+     then void (countPages linksPath)
+     else rank backend steps chunk linksPath titlesPath
 

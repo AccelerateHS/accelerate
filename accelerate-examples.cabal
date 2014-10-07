@@ -539,9 +539,8 @@ Executable accelerate-fft
 
 Executable accelerate-pagerank
   Main-is:              Main.hs
-  hs-source-dirs:       examples/pagerank lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  hs-source-dirs:       examples/pagerank
+  other-modules:        Config
                         Page
                         Progress
                         Rank
@@ -553,28 +552,18 @@ Executable accelerate-pagerank
 
   ghc-options:          -rtsopts -threaded -O2
 
-  if flag(cuda)
-    cpp-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
+  if flag(ekg)
+    ghc-options:        -with-rtsopts=-T
 
   if !flag(pagerank)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
+                        accelerate-examples             == 0.16.*,
                         accelerate-io                   == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
                         base                            == 4.7.*,
                         bytestring                      >= 0.9.2,
                         containers                      >= 0.4.2,
-                        criterion                       >= 1.0,
                         directory                       >= 1.1,
                         fclabels                        >= 1.0,
                         vector                          >= 0.9,

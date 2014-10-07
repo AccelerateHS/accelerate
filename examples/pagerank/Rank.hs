@@ -1,19 +1,21 @@
 {-# LANGUAGE BangPatterns #-}
-module Rank
-        (rank)
-where
+
+module Rank (rank)
+  where
+
+
 import Load
 import Step
 import Count
 import Page
-import ParseArgs
 import System.Directory
 import Control.Monad
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.IO                 as A
-import qualified Data.Vector                    as V
-import qualified Data.Vector.Storable           as S
+import Prelude                                          as P
+import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.IO                         as A
+import Data.Array.Accelerate.Examples.Internal          as A
+import qualified Data.Vector                            as V
+import qualified Data.Vector.Storable                   as S
 import System.CPUTime
 
 
