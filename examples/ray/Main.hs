@@ -43,9 +43,10 @@ main = do
           in
           A.zipWith (traceRay bounces objects lights ambient) eyePos eyeDir
 
-  runBenchmark opts rest
+  runBenchmarks opts rest
+    [ bench "ray"
     $ whnf (run1 backend scene)
-           (get stateObjects state, get stateLights state)
+           (get stateObjects state, get stateLights state) ]
 
   runInteractive opts rest
     $ G.playFieldWith

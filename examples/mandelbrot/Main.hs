@@ -41,8 +41,8 @@ main = do
 
       force arr   = indexArray arr (Z:.0:.0) `seq` arr
 
-  runBenchmark opts rest
-    $ whnf (force . renderWorld) world
+  runBenchmarks opts rest
+    [ bench "mandelbrot" $ whnf (force . renderWorld) world ]
 
   runInteractive opts rest
     $ if fps == 0

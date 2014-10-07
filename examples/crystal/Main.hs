@@ -101,13 +101,11 @@ main = do
       degree    = get configDegree conf
       backend   = get optBackend opts
 
-      -- for benchmarking
-      force arr = A.indexArray arr (Z:.0:.0) `seq` arr
       frame     = run1 backend
                 $ makeField size size (\time -> quasicrystal scale degree (the time))
 
-  runBenchmark opts rest
-    $ whnf (force . frame) (A.fromList Z [1.0])
+  runBenchmarks opts rest
+    [ bench "crystal" $ whnf frame (A.fromList Z [1.0]) ]
 
   runInteractive opts rest
     $ G.animateFieldWith
