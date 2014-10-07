@@ -8,13 +8,13 @@
 module Config where
 
 import Type
-import ParseArgs
 
 import Data.Label
 import Control.Monad
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
+import Data.Array.Accelerate.Examples.Internal          as A
 
 
 data Initial a
@@ -40,11 +40,6 @@ data Config = Config
   , _initialDensity     :: DensityField
   , _initialVelocity    :: VelocityField
 
-  -- misc
-  , _optBackend         :: !Backend
-  , _optBench           :: !Bool
-  , _optHelp            :: !Bool
-
   -- extra options to specify initial conditions for command parsing
   , _setupDensity       :: Initial DensityField
   , _setupVelocity      :: Initial VelocityField
@@ -68,10 +63,6 @@ defaults = Config
   , _displayFramerate   = 25
   , _initialDensity     = error "initial density??"
   , _initialVelocity    = error "initial velocity??"
-
-  , _optBackend         = maxBound
-  , _optBench           = False
-  , _optHelp            = False
 
   , _setupDensity       = FromFunction makeField_empty
   , _setupVelocity      = FromFunction makeField_empty
@@ -144,15 +135,6 @@ options =
   , Option  [] ["init-elk"]
             (NoArg init_elk)
             "initial density field with swirling velocity"
-
-  -- Miscellaneous
-  , Option  [] ["benchmark"]
-            (NoArg (set optBench True))
-            (describe optBench "benchmark instead of displaying animation")
-
-  , Option  ['h','?'] ["help"]
-            (NoArg (set optHelp True))
-            (describe optHelp "show help message")
   ]
   where
     parse f x           = set f (read x)
@@ -185,15 +167,16 @@ footer =
   , "     r            reset the image"
   , "     d            toggle display of density field"
   , "     v            toggle display of velocity field lines"
+  , ""
   ]
 
 
 -- Initial conditions
 -- ------------------
 
-initialiseConfig :: Config -> IO Config
-initialiseConfig conf = do
-  let backend   = get optBackend conf
+initialiseConfig :: (Config, Options, [String]) -> IO (Config, Options, [String])
+initialiseConfig (conf, opts, rest) = do
+  let backend   = get optBackend opts
       width     = get simulationWidth conf
       height    = get simulationHeight conf
 
@@ -205,9 +188,11 @@ initialiseConfig conf = do
               FromFile fn       -> loadVelocity_bmp backend fn width height
               FromFunction f    -> return (f backend width height)
 
-  return . set initialDensity  dens
-         . set initialVelocity velo
-         $ conf
+  let conf'     = set initialDensity  dens
+                . set initialVelocity velo
+                $ conf
+
+  return (conf', opts, rest)
 
 
 makeField_empty :: FieldElt e => Backend -> Int -> Int -> Field e
