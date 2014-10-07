@@ -2,17 +2,15 @@
 import SMVM
 import Matrix
 import Config
-import ParseArgs
-import Monitoring
 
-import Prelude                                  as P
-import Data.Label                               ( get )
-import Criterion.Main                           ( defaultMainWith, bench, whnf )
+import Prelude                                          as P
+import Data.Label                                       ( get )
 import System.Random.MWC
 import System.Exit
 import System.Environment
-import Data.Array.Accelerate                    as A
-import qualified Data.Vector.Unboxed            as V
+import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.Examples.Internal          as A
+import qualified Data.Vector.Unboxed                    as V
 
 
 main :: IO ()
@@ -20,10 +18,10 @@ main = withSystemRandom $ \gen -> do
   beginMonitoring
 
   argv                  <- getArgs
-  (conf, cconf, rest)   <- parseArgs configHelp configBackend options defaults header footer argv
+  (_, opts, rest)       <- parseArgs options defaults header footer argv
   fileIn                <- case rest of
     (i:_)       -> return i
-    _           -> parseArgs configHelp configBackend options defaults [] [] ("--help":argv)
+    _           -> parseArgs options defaults [] [] ("--help":argv)
                 >> exitSuccess
 
   -- Read in the matrix file, and generate a random vector to multiply against
@@ -38,7 +36,7 @@ main = withSystemRandom $ \gen -> do
       svec      = fromFunction (Z :. V.length svec') (\(Z:.i) -> svec' V.! i)
       smat      = lift (use segd, svec)
 
-      backend   = get configBackend conf
+      backend   = get optBackend opts
 
   putStrLn $ "Reading matrix: " P.++ fileIn
   putStrLn $ "  with shape: " P.++ shows (V.length segd') " x " P.++ shows cols " and "
@@ -46,6 +44,6 @@ main = withSystemRandom $ \gen -> do
 
   -- Benchmark
   --
-  withArgs (P.tail rest) $ defaultMainWith cconf
+  runBenchmarks opts (P.tail rest)
     [ bench "smvm" $ whnf (run1 backend (smvm smat)) vec ]
 

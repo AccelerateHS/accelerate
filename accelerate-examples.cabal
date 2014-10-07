@@ -254,10 +254,9 @@ Executable accelerate-nofib
 -- -----------------------------------
 
 Executable accelerate-smvm
-  hs-source-dirs:       examples/smvm lib
   Main-is:              Main.hs
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  hs-source-dirs:       examples/smvm
+  other-modules:        Config
                         Matrix
                         MatrixMarket
                         SMVM
@@ -268,33 +267,18 @@ Executable accelerate-smvm
   if impl(ghc >= 7.6)
     ghc-options:        -fsimpl-tick-factor=130
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(smvm)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
+                        accelerate-examples             == 0.16.*,
                         base                            == 4.7.*,
                         attoparsec                      >= 0.10,
                         bytestring                      >= 0.9,
                         bytestring-lexing               >= 0.2,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         primitive                       >= 0.5,
                         mwc-random                      >= 0.8,
