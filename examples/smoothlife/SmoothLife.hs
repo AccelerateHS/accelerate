@@ -12,11 +12,11 @@ module SmoothLife
   where
 
 import Config
-import ParseArgs
 
-import Prelude                                  as P
+import Prelude                                          as P
 import Data.Label
-import Data.Array.Accelerate                    as A hiding ( size )
+import Data.Array.Accelerate                            as A hiding ( size )
+import Data.Array.Accelerate.Examples.Internal          as A hiding ( nf )
 import Data.Array.Accelerate.Math.FFT
 import Data.Array.Accelerate.Math.DFT.Centre
 import Data.Array.Accelerate.Data.Complex
@@ -30,9 +30,10 @@ import Data.Array.Accelerate.CUDA.Foreign
 
 smoothlife
     :: Config
+    -> Options
     -> Acc (Matrix R)
     -> Acc (Matrix R)
-smoothlife conf aa
+smoothlife conf opts aa
   = aa''
   where
     -- A simulation step
@@ -73,7 +74,7 @@ smoothlife conf aa
     kflr''      = constant (kflr' `A.indexArray` Z)
     kfld''      = constant (kfld' `A.indexArray` Z)
     (kflr', kfld', krf', kdf')
-                = run (get configBackend conf) $ lift (kflr, kfld, krf, kdf)
+                = run (get optBackend opts) $ lift (kflr, kfld, krf, kdf)
 
     -- Auxiliary
     --

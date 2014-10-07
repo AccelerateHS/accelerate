@@ -7,9 +7,8 @@ import Config
 
 import Control.Monad
 import System.Random.MWC
-import Random.Array                             ( (:~>) )
-import Data.Array.Accelerate                    ( DIM2, Z(..), (:.)(..) )
-
+import Data.Array.Accelerate                            ( DIM2, Z(..), (:.)(..) )
+import Data.Array.Accelerate.Examples.Internal          ( (:~>) )
 
 
 -- Generate a random point on the grid by checking which circles it overlaps.

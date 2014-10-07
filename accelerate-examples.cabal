@@ -446,48 +446,32 @@ Executable accelerate-nbody
 
 Executable accelerate-smoothlife
   Main-is:              Main.hs
-  hs-source-dirs:       examples/smoothlife lib
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  hs-source-dirs:       examples/smoothlife
+  other-modules:        Config
                         Gloss.Draw
                         Gloss.Event
                         Gloss.Simulate
-                        Random.Array
                         Random.Splat
                         SmoothLife
 
   ghc-options:          -O2 -Wall -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
 
-  if flag(gui)
-    cpp-options:        -DACCELERATE_ENABLE_GUI
-
   if flag(cuda)
     cpp-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 == 0.16.*
 
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(smoothlife)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
+                        accelerate-examples             == 0.16.*,
                         accelerate-fft                  == 0.16.*,
                         accelerate-io                   == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
                         base                            == 4.7.*,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         gloss                           >= 1.7,
                         gloss-accelerate                >= 1.7,
