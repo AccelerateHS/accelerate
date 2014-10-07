@@ -47,12 +47,12 @@ main = do
   --
   let backend = get configBackend conf
 
-      recover hash =
+      recoverSeq hash =
         let abcd = readMD5 hash
             idx  = run1 backend l (A.fromList Z [abcd])
             l digest = A.collect
                      $ A.foldSeq max (-1)
-                     $ A.zipWithSeq (hashcat digest)
+                     $ A.zipWithSeq (hashcatWord digest)
                            (A.toSeq (Z :. All :. Split) (A.use dict))
                            (A.toSeq (Z :. Split) (iota (Sugar.size (Sugar.shape dict))))
 
@@ -62,9 +62,20 @@ main = do
              -1 -> Nothing
              n  -> Just (extract dict n)
 
+      recover hash =
+        let abcd = readMD5 hash
+            idx  = run1 backend (hashcatDict (A.use dict)) (A.fromList Z [abcd])
+        --
+        in case idx `A.indexArray` Z of
+             -1 -> Nothing
+             n  -> Just (extract dict n)
+  
       recoverAll :: [L.ByteString] -> IO (Int,Int)
       recoverAll =
-        foldM (\(i,n) h -> maybe (return (i,n+1)) (\t -> showText h t >> return (i+1,n+1)) (recover h)) (0,0)
+        if get configNoSeq conf
+        then go recover
+        else go recoverSeq 
+        where go rec = foldM (\(i,n) h -> maybe (return (i,n+1)) (\t -> showText h t >> return (i+1,n+1)) (rec h)) (0,0)
 
       showText hash text = do
         L.putStr hash >> putStr ": " >> L.putStrLn text
