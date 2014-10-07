@@ -313,10 +313,9 @@ Executable accelerate-crystal
 -- --------------------
 
 Executable accelerate-canny
-  hs-source-dirs:       examples/canny/src-acc lib
+  hs-source-dirs:       examples/canny/src-acc
   Main-is:              Main.hs
-  other-modules:        Monitoring ParseArgs ParseArgs.Criterion
-                        Config
+  other-modules:        Config
                         Canny
                         Wildfire
 
@@ -330,31 +329,16 @@ Executable accelerate-canny
 
   ghc-prof-options:     -auto-all
 
-  if flag(cuda)
-    CPP-options:        -DACCELERATE_CUDA_BACKEND
-    build-depends:      accelerate-cuda                 == 0.16.*
-
-  if flag(llvm-cpu)
-    CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    build-depends:      accelerate-llvm-native          == 0.16.*
-
-  if flag(llvm-gpu)
-    CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
-    build-depends:      accelerate-llvm-ptx             == 0.16.*
-
   if flag(ekg)
-    CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
     ghc-options:        -with-rtsopts=-T
 
   if !flag(canny)
     buildable:          False
   else
     build-depends:      accelerate                      == 0.16.*,
+                        accelerate-examples             == 0.16.*,
                         accelerate-io                   == 0.16.*,
-                        ansi-wl-pprint                  >= 0.6,
                         base                            == 4.7.*,
-                        criterion                       >= 1.0,
                         fclabels                        >= 2.0,
                         repa                            >= 3.1,
                         repa-io                         >= 3.1,
