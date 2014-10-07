@@ -149,13 +149,13 @@ module Data.Array.Accelerate (
   L.collect,
 
   -- ** Sequence producers
-  L.streamIn, L.toSeq,
+  L.streamIn, L.toSeq, P.generateSeq,
 
   -- ** Sequence transducers
   L.mapSeq, L.zipWithSeq, L.scanSeq,
 
   -- ** Sequence consumers
-  L.foldSeq, L.foldSeqFlatten, P.fromSeq,
+  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),
