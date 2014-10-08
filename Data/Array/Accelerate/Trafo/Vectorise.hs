@@ -121,22 +121,22 @@ type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 
 type LiftedArray sh e = Vector' (Array sh e)
 
-instance Arrays t => IsConstrainedTuple Arrays (Vector' t) where
-  type TupleRepr (Vector' t) = LiftedRepr (ArrRepr' t) t
-  fromTuple _ (Vector' t) = t
-  toTuple _ = Vector'
-  tuple _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> TupleRsnoc TupleRunit
-                ArraysFarray -> TupleRsnoc (TupleRsnoc TupleRunit)
-                ArraysFtuple -> tup $ tuple ArraysProxy (undefined :: t)
+instance Arrays t => IsProduct Arrays (Vector' t) where
+  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr' t) t
+  fromProd _ (Vector' t) = t
+  toProd _ = Vector'
+  prod _ _ = case flavour (undefined :: t) of
+                ArraysFunit  -> ProdRsnoc ProdRunit
+                ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
+                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
     where
-      tup :: forall a. TupleR Arrays a -> TupleR Arrays (LiftedTupleRepr a)
-      tup TupleRunit     = TupleRunit
-      tup (TupleRsnoc t) = swiz
+      tup :: forall a. ProdR Arrays a -> ProdR Arrays (LiftedTupleRepr a)
+      tup ProdRunit     = ProdRunit
+      tup (ProdRsnoc t) = swiz
         where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => TupleR Arrays (LiftedTupleRepr a)
+          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (LiftedTupleRepr a)
           swiz | IsC <- isArraysFlat (undefined :: r)
-               = TupleRsnoc (tup t)
+               = ProdRsnoc (tup t)
 
 
 type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
@@ -144,31 +144,31 @@ type instance ArrRepr' (Vector' a) = ArrRepr (Vector' a)
 
 
 instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
-  arrays _ = arrs (tuple ArraysProxy (undefined :: Vector' t))
+  arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where
-      arrs :: forall a. TupleR Arrays a -> ArraysR (ArrRepr a)
-      arrs TupleRunit     = ArraysRunit
-      arrs (TupleRsnoc t) = ArraysRpair (arrs t) (arrays' t')
+      arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)
+      arrs ProdRunit     = ArraysRunit
+      arrs (ProdRsnoc t) = ArraysRpair (arrs t) (arrays' t')
         where t' :: (a ~ (l,r)) => r
               t' = undefined
   arrays' = arrays
   flavour _ = case flavour (undefined :: t) of
                 ArraysFunit  -> ArraysFtuple
                 ArraysFarray -> ArraysFtuple
-                ArraysFtuple | TupleRsnoc _ <- tuple ArraysProxy (undefined::t)
+                ArraysFtuple | ProdRsnoc _ <- prod (Proxy :: Proxy Arrays) (undefined::t)
                              -> ArraysFtuple
                              | otherwise -> error "Absurd"
   --
-  fromArr (Vector' t) = fa (tuple ArraysProxy (undefined :: Vector' t)) t
+  fromArr (Vector' t) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t)) t
     where
-      fa :: forall a. TupleR Arrays a -> a -> ArrRepr a
-      fa TupleRunit     ()    = ()
-      fa (TupleRsnoc t) (l,a) = (fa t l, fromArr' a)
-  toArr = Vector' . ta (tuple ArraysProxy (undefined :: Vector' t))
+      fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
+      fa ProdRunit     ()    = ()
+      fa (ProdRsnoc t) (l,a) = (fa t l, fromArr' a)
+  toArr = Vector' . ta (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where
-      ta :: forall a. TupleR Arrays a -> (ArrRepr a) -> a
-      ta TupleRunit     ()     = ()
-      ta (TupleRsnoc t) (l,a)  = (ta t l, toArr' a)
+      ta :: forall a. ProdR Arrays a -> (ArrRepr a) -> a
+      ta ProdRunit     ()     = ()
+      ta (ProdRsnoc t) (l,a)  = (ta t l, toArr' a)
   fromArr' = fromArr
   toArr' = toArr
 
@@ -193,11 +193,11 @@ instance Shape sh => Slice (None sh) where
   type FullShape    (None sh) = sh
   sliceIndex _ = sliceNoneIndex (undefined :: sh)
 
-instance Shape sh => IsConstrainedTuple Elt (None sh) where
-  type TupleRepr (None sh) = ((),sh)
-  fromTuple _ (None sh) = ((),sh)
-  toTuple _ ((),sh)     = None sh
-  tuple _ _ = TupleRsnoc TupleRunit
+instance Shape sh => IsProduct Elt (None sh) where
+  type ProdRepr (None sh) = ((),sh)
+  fromProd _ (None sh) = ((),sh)
+  toProd _ ((),sh)     = None sh
+  prod _ _ = ProdRsnoc ProdRunit
 
 data IsConstrained c where
   IsC :: c => IsConstrained c
@@ -209,14 +209,14 @@ type IsArraysFlat t = IsConstrained (Arrays (Vector' t))
 isTypeableArrRepr :: forall t. Arrays t => {- dummy -} t -> IsTypeableArrRepr (Vector' t)
 isTypeableArrRepr t = case flavour t of
                         ArraysFunit  -> IsC
-                        ArraysFtuple | IsC <- isT (tuple ArraysProxy (undefined :: Vector' t))
+                        ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
                                      -> IsC
                         ArraysFarray -> IsC
 
   where
-    isT :: forall t. TupleR Arrays t -> IsTypeableArrRepr t
-    isT TupleRunit     = IsC
-    isT (TupleRsnoc t) | IsC <- isT t
+    isT :: forall t. ProdR Arrays t -> IsTypeableArrRepr t
+    isT ProdRunit     = IsC
+    isT (ProdRsnoc t) | IsC <- isT t
                        = IsC
 
 isArraysFlat :: forall t. Arrays t => {- dummy -} t -> IsArraysFlat t
@@ -438,11 +438,11 @@ liftPreOpenAcc vectAcc strength ctx size acc
     liftedSize a = case flavour (undefined :: t) of
                      ArraysFunit  -> Index (inject $ Aprj ZeroTupIdx a) IndexNil
                      ArraysFarray -> ShapeSize (Shape $ segments a)
-                     ArraysFtuple -> fromTup $ tuple ArraysProxy (undefined :: t)
+                     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
       where
-        fromTup :: (ArrRepr' t ~ (l,e), IsAtuple t) => TupleR Arrays (TupleRepr t) -> Size acc aenv
-        fromTup TupleRunit     = Const ((),0)
-        fromTup (TupleRsnoc _) = convince a
+        fromTup :: (ArrRepr' t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
+        fromTup ProdRunit     = Const ((),0)
+        fromTup (ProdRsnoc _) = convince a
           where
             convince :: forall f l a e. (ArrRepr' t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
                      => acc aenv (Vector' t)
@@ -1834,11 +1834,11 @@ liftedArray :: (Shape sh, Elt e) => S.Acc (Segments sh) -> S.Acc (Vector e) -> S
 liftedArray segs vals = S.Acc $ S.Atuple $ SnocAtup (SnocAtup NilAtup segs) vals
 
 asAtuple :: forall a. (Arrays a, IsAtuple a) => S.Acc a -> Atuple S.Acc (TupleRepr a)
-asAtuple a = tOA (tuple ArraysProxy (undefined :: a)) id
+asAtuple a = tOA (prod (Proxy :: Proxy Arrays) (undefined :: a)) id
  where
-   tOA :: forall t. TupleR Arrays t -> (forall e. TupleIdx t e -> TupleIdx (TupleRepr a) e) -> Atuple S.Acc t
-   tOA TupleRunit     _   = NilAtup
-   tOA (TupleRsnoc t) ixt = SnocAtup (tOA t (ixt . SuccTupIdx)) (S.Acc $ S.Aprj (ixt ZeroTupIdx) a)
+   tOA :: forall t. ProdR Arrays t -> (forall e. TupleIdx t e -> TupleIdx (TupleRepr a) e) -> Atuple S.Acc t
+   tOA ProdRunit     _   = NilAtup
+   tOA (ProdRsnoc t) ixt = SnocAtup (tOA t (ixt . SuccTupIdx)) (S.Acc $ S.Aprj (ixt ZeroTupIdx) a)
 
 replicate :: forall a. Arrays a => S.Exp Int -> S.Acc a -> S.Acc (Vector' a)
 replicate size a = case flavour (undefined :: a) of
@@ -1910,11 +1910,11 @@ liftedCond pred th el
   = case (flavour (undefined :: a)) of
       ArraysFunit  -> th
       ArraysFarray -> liftedCond1 th el
-      ArraysFtuple -> S.Acc $ S.Atuple $ cvtT (tuple ArraysProxy (undefined :: a)) (asAtuple th) (asAtuple el)
+      ArraysFtuple -> S.Acc $ S.Atuple $ cvtT (prod (Proxy :: Proxy Arrays) (undefined :: a)) (asAtuple th) (asAtuple el)
   where
-    cvtT :: TupleR Arrays t -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t)
-    cvtT TupleRunit     NilAtup          NilAtup          = NilAtup
-    cvtT (TupleRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
+    cvtT :: ProdR Arrays t -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t) -> Atuple S.Acc (LiftedTupleRepr t)
+    cvtT ProdRunit     NilAtup          NilAtup          = NilAtup
+    cvtT (ProdRsnoc t) (SnocAtup t1 a1) (SnocAtup t2 a2) = SnocAtup (cvtT t t1 t2) (liftedCond pred a1 a2)
     cvtT _              _                _                = error "Unreachable code"
 
     liftedCond1 :: (Elt e, Shape sh) => S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e) -> S.Acc (LiftedArray sh e)

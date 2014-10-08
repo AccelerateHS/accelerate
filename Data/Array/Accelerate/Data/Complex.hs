@@ -48,11 +48,11 @@ instance Elt a => Elt (Complex a) where
   toElt' (a,b)                  = toElt a :+ toElt' b
   fromElt' (a :+ b)             = (fromElt a, fromElt' b)
 
-instance cst a => IsConstrainedTuple cst (Complex a) where
-  type TupleRepr (Complex a) = (((), a), a)
-  fromTuple _ (x :+ y)    = (((), x), y)
-  toTuple _ (((), x), y)  = (x :+ y)
-  tuple _ _               = TupleRsnoc $ TupleRsnoc TupleRunit
+instance cst a => IsProduct cst (Complex a) where
+  type ProdRepr (Complex a) = (((), a), a)
+  fromProd _ (x :+ y)    = (((), x), y)
+  toProd _ (((), x), y)  = (x :+ y)
+  prod _ _               = ProdRsnoc $ ProdRsnoc ProdRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)

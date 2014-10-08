@@ -51,7 +51,7 @@ module Data.Array.Accelerate.Array.Sugar (
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
   -- * Tuples
-  Tuple(..), Atuple(..), IsTuple, IsAtuple, CstProxy(..),
+  Tuple(..), Atuple(..), TupleRepr, IsTuple, IsAtuple, fromTuple, toTuple, fromAtuple, toAtuple,
 
   -- * Miscellaneous
   showShape, Foreign(..), sliceShape, enumSlices,
@@ -238,7 +238,13 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
 
 -- Scalar tuples
-type IsTuple = IsConstrainedTuple Elt
+type IsTuple = IsProduct Elt
+
+fromTuple :: IsTuple tup => tup -> ProdRepr tup
+fromTuple = fromProd (Proxy :: Proxy Elt)
+
+toTuple :: IsTuple tup => ProdRepr tup -> tup
+toTuple = toProd (Proxy :: Proxy Elt)
 
 
 -- Array elements (tuples of scalars)
@@ -751,7 +757,13 @@ type instance ArrRepr' (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrR
 type instance ArrRepr' (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
 type instance ArrRepr' (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
 
-type IsAtuple = IsConstrainedTuple Arrays
+type IsAtuple = IsProduct Arrays
+
+fromAtuple :: IsAtuple tup => tup -> ProdRepr tup
+fromAtuple = fromProd (Proxy :: Proxy Arrays)
+
+toAtuple :: IsAtuple tup => ProdRepr tup -> tup
+toAtuple = toProd (Proxy :: Proxy Arrays)
 
 -- Array type reification
 --
@@ -907,11 +919,8 @@ data Atuple c t where
   NilAtup  ::                                  Atuple c ()
   SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
 
--- | Proxy values for the tuple constraints we need.
---
-data CstProxy cst where
-  ArraysProxy:: CstProxy Arrays
-  EltProxy   :: CstProxy Elt
+-- |The tuple representation is equivalent to the product representation.
+type TupleRepr a = ProdRepr a
 
 -- |Multi-dimensional arrays for array processing.
 --

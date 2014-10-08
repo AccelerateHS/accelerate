@@ -26,7 +26,7 @@
 module Data.Array.Accelerate.Tuple (
 
   -- * Tuple representation
-  TupleIdx(..), IsConstrainedTuple(..), TupleR(..)
+  TupleIdx(..), IsProduct(..), ProdR(..)
 
 ) where
 
@@ -38,80 +38,80 @@ data TupleIdx t e where
   ZeroTupIdx ::                 TupleIdx (t, s) s
   SuccTupIdx :: TupleIdx t e -> TupleIdx (t, s) e
 
--- |Tuple reification
+-- |Product reification
 --
-data TupleR cst t where
-  TupleRunit   :: TupleR cst ()
-  TupleRsnoc   :: cst e => TupleR cst t -> TupleR cst (t,e)
+data ProdR cst t where
+  ProdRunit   :: ProdR cst ()
+  ProdRsnoc   :: cst e => ProdR cst t -> ProdR cst (t,e)
 
--- |Conversion between surface n-tuples and our tuple representation.
+-- |Conversion between surface product types and our product representation.
 --
--- We parameterise our tuples by a constraint on their elements (the 'cst' argument). Every element
--- in the tuple must obey this constraint, but the tuples themselves do not have to.
+-- We parameterise our products by a constraint on their elements (the 'cst' argument). Every element
+-- in the tuple must obey this constraint, but the tuples themselves do necessarily not have to.
 --
-class IsConstrainedTuple cst tup where
-  type TupleRepr tup
-  fromTuple :: proxy cst -> tup -> TupleRepr tup
-  toTuple   :: proxy cst -> TupleRepr tup -> tup
-  tuple     :: proxy cst -> {- dummy -} tup -> TupleR cst (TupleRepr tup)
+class IsProduct cst tup where
+  type ProdRepr tup
+  fromProd :: proxy cst -> tup -> ProdRepr tup
+  toProd   :: proxy cst -> ProdRepr tup -> tup
+  prod     :: proxy cst -> {- dummy -} tup -> ProdR cst (ProdRepr tup)
 
-instance IsConstrainedTuple cst () where
-  type TupleRepr () = ()
-  fromTuple _         = id
-  toTuple _           = id
-  tuple _ _           = TupleRunit
+instance IsProduct cst () where
+  type ProdRepr ()   = ()
+  fromProd _         = id
+  toProd _           = id
+  prod _ _           = ProdRunit
 
-instance (cst a, cst b) => IsConstrainedTuple cst (a, b) where
-  type TupleRepr (a, b) = (((), a), b)
-  fromTuple _ (x, y)      = (((), x), y)
-  toTuple _ (((), x), y)  = (x, y)
-  tuple _ _               = TupleRsnoc $ TupleRsnoc TupleRunit
+instance (cst a, cst b) => IsProduct cst (a, b) where
+  type ProdRepr (a, b)   = (((), a), b)
+  fromProd _ (x, y)      = (((), x), y)
+  toProd _ (((), x), y)  = (x, y)
+  prod _ _               = ProdRsnoc $ ProdRsnoc ProdRunit
 
-instance (cst a, cst b, cst c) => IsConstrainedTuple cst (a, b, c) where
-  type TupleRepr (a, b, c)  = (TupleRepr (a, b), c)
-  fromTuple _ (x, y, z)       = ((((), x), y), z)
-  toTuple _ ((((), x), y), z) = (x, y, z)
-  tuple p _                   = TupleRsnoc (tuple p (undefined :: (a,b)))
+instance (cst a, cst b, cst c) => IsProduct cst (a, b, c) where
+  type ProdRepr (a, b, c)    = (ProdRepr (a, b), c)
+  fromProd _ (x, y, z)       = ((((), x), y), z)
+  toProd _ ((((), x), y), z) = (x, y, z)
+  prod p _                   = ProdRsnoc (prod p (undefined :: (a,b)))
 
-instance (cst a, cst b, cst c, cst d) => IsConstrainedTuple cst (a, b, c, d) where
-  type TupleRepr (a, b, c, d)    = (TupleRepr (a, b, c), d)
-  fromTuple _ (x, y, z, v)         = (((((), x), y), z), v)
-  toTuple _ (((((), x), y), z), v) = (x, y, z, v)
-  tuple p _                        = TupleRsnoc (tuple p (undefined :: (a,b,c)))
+instance (cst a, cst b, cst c, cst d) => IsProduct cst (a, b, c, d) where
+  type ProdRepr (a, b, c, d)      = (ProdRepr (a, b, c), d)
+  fromProd _ (x, y, z, v)         = (((((), x), y), z), v)
+  toProd _ (((((), x), y), z), v) = (x, y, z, v)
+  prod p _                        = ProdRsnoc (prod p (undefined :: (a,b,c)))
 
-instance (cst a, cst b, cst c, cst d, cst e) => IsConstrainedTuple cst (a, b, c, d, e) where
-  type TupleRepr (a, b, c, d, e)      = (TupleRepr (a, b, c, d), e)
-  fromTuple _ (x, y, z, v, w)           = ((((((), x), y), z), v), w)
-  toTuple _ ((((((), x), y), z), v), w) = (x, y, z, v, w)
-  tuple p _                             = TupleRsnoc (tuple p (undefined :: (a,b,c,d)))
+instance (cst a, cst b, cst c, cst d, cst e) => IsProduct cst (a, b, c, d, e) where
+  type ProdRepr (a, b, c, d, e)        = (ProdRepr (a, b, c, d), e)
+  fromProd _ (x, y, z, v, w)           = ((((((), x), y), z), v), w)
+  toProd _ ((((((), x), y), z), v), w) = (x, y, z, v, w)
+  prod p _                             = ProdRsnoc (prod p (undefined :: (a,b,c,d)))
 
-instance (cst a, cst b, cst c, cst d, cst e, cst f) => IsConstrainedTuple cst (a, b, c, d, e, f) where
-  type TupleRepr (a, b, c, d, e, f)        = (TupleRepr (a, b, c, d, e), f)
-  fromTuple _ (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
-  toTuple _ (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
-  tuple p _                                  = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e)))
+instance (cst a, cst b, cst c, cst d, cst e, cst f) => IsProduct cst (a, b, c, d, e, f) where
+  type ProdRepr (a, b, c, d, e, f)          = (ProdRepr (a, b, c, d, e), f)
+  fromProd _ (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
+  toProd _ (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
+  prod p _                                  = ProdRsnoc (prod p (undefined :: (a,b,c,d,e)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g)
-  => IsConstrainedTuple cst (a, b, c, d, e, f, g) where
-  type TupleRepr (a, b, c, d, e, f, g)          = (TupleRepr (a, b, c, d, e, f), g)
-  fromTuple _ (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
-  toTuple _ ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
-  tuple p _                                       = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f)))
+  => IsProduct cst (a, b, c, d, e, f, g) where
+  type ProdRepr (a, b, c, d, e, f, g)            = (ProdRepr (a, b, c, d, e, f), g)
+  fromProd _ (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
+  toProd _ ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
+  prod p _                                       = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h)
-  => IsConstrainedTuple cst (a, b, c, d, e, f, g, h) where
-  type TupleRepr (a, b, c, d, e, f, g, h)            = (TupleRepr (a, b, c, d, e, f, g), h)
-  fromTuple _ (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
-  toTuple _ (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
-  tuple p _                                            = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f,g)))
+  => IsProduct cst (a, b, c, d, e, f, g, h) where
+  type ProdRepr (a, b, c, d, e, f, g, h)              = (ProdRepr (a, b, c, d, e, f, g), h)
+  fromProd _ (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
+  toProd _ (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
+  prod p _                                            = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i)
-  => IsConstrainedTuple cst (a, b, c, d, e, f, g, h, i) where
-  type TupleRepr (a, b, c, d, e, f, g, h, i) = (TupleRepr (a, b, c, d, e, f, g, h), i)
-  fromTuple _ (x, y, z, v, w, r, s, t, u)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i) = (ProdRepr (a, b, c, d, e, f, g, h), i)
+  fromProd _ (x, y, z, v, w, r, s, t, u)
     = ((((((((((), x), y), z), v), w), r), s), t), u)
-  toTuple _ ((((((((((), x), y), z), v), w), r), s), t), u)
+  toProd _ ((((((((((), x), y), z), v), w), r), s), t), u)
     = (x, y, z, v, w, r, s, t, u)
-  tuple p _
-    = TupleRsnoc (tuple p (undefined :: (a,b,c,d,e,f,g,h)))
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h)))
 

@@ -35,7 +35,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt, Tuple(..), CstProxy(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt, Tuple(..), fromTuple )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 
@@ -57,7 +57,7 @@ propagate env = cvtE
       Const c                                   -> Just (toElt c)
       PrimConst c                               -> Just (evalPrimConst c)
       Prj ix (Var v) | Tuple t <- prjExp v env  -> cvtT ix t
-      Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple EltProxy c)
+      Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple c)
       Var ix
         | e             <- prjExp ix env
         , Nothing       <- match exp e  -> cvtE e

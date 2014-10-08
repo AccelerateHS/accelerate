@@ -58,7 +58,7 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr'
                                                         , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
-                                                        , IsAtuple )
+                                                        , IsAtuple, TupleRepr )
 import Data.Array.Accelerate.Tuple
 
 import qualified Data.Array.Accelerate.Debug            as Stats

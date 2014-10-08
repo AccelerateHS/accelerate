@@ -158,8 +158,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
   case pacc of
     Avar ix                     -> prj ix aenv
     Alet acc1 acc2              -> evalOpenAcc acc2 (aenv `Push` manifest acc1)
-    Atuple atup                 -> toTuple ArraysProxy $ evalAtuple atup aenv
-    Aprj ix atup                -> evalPrj ix . fromTuple ArraysProxy $ manifest atup
+    Atuple atup                 -> toAtuple $ evalAtuple atup aenv
+    Aprj ix atup                -> evalPrj ix . fromAtuple $ manifest atup
     Apply afun acc              -> evalOpenAfun afun aenv  $ manifest acc
     Aforeign _ afun acc         -> evalOpenAfun afun Empty $ manifest acc
     Acond p acc1 acc2
@@ -683,8 +683,8 @@ evalPreOpenExp evalAcc pexp env aenv =
     Const c                     -> toElt c
     PrimConst c                 -> evalPrimConst c
     PrimApp f x                 -> evalPrim f (evalE x)
-    Tuple tup                   -> toTuple EltProxy $ evalTuple evalAcc tup env aenv
-    Prj ix tup                  -> evalPrj ix . fromTuple EltProxy $ evalE tup
+    Tuple tup                   -> toTuple $ evalTuple evalAcc tup env aenv
+    Prj ix tup                  -> evalPrj ix . fromTuple $ evalE tup
     IndexNil                    -> Z
     IndexAny                    -> Any
     IndexCons sh sz             -> evalE sh :. evalE sz
@@ -1461,7 +1461,7 @@ consume c senv =
                                , (t', acc') <- consT t
                                = (SnocAtup t' c', (acc', acc))
           (t', acc) = consT t
-      in (ExecStuple t', toTuple ArraysProxy acc)
+      in (ExecStuple t', toAtuple acc)
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv

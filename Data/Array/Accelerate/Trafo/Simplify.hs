@@ -42,7 +42,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
-                                                        , Tuple(..), Atuple(..), IsTuple, CstProxy(..) )
+                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr )
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -301,7 +301,7 @@ simplifyOpenExp env = first getAny . cvtE
         -> (Any, PreOpenExp acc env aenv s)
     prj ix exp@(_,exp')
       | Tuple t <- exp' = Stats.inline "prj/Tuple" . yes $ prjT ix t
-      | Const c <- exp' = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple EltProxy (toElt c :: t))
+      | Const c <- exp' = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
       | Let a b <- exp' = Stats.ruleFired "prj/Let"      $ cvtE (Let a (Prj ix b))
       | otherwise       = Prj ix <$> exp
       where
