@@ -40,20 +40,12 @@ Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
 
-Flag opencl
-  Description:          Enable the OpenCL parallel backend
-  Default:              False
-
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              False
 
 Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
-  Default:              False
-
-Flag llvm-multi
-  Description:          Enable the multi-device LLVM backend
   Default:              False
 
 
