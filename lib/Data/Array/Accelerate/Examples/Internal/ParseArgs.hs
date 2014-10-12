@@ -35,6 +35,7 @@ import Data.Label
 import Data.Monoid
 import System.Exit
 import System.Console.GetOpt
+import Text.PrettyPrint.ANSI.Leijen
 
 import Data.Array.Accelerate                            ( Arrays, Acc )
 import qualified Data.Array.Accelerate                  as A
@@ -227,6 +228,13 @@ options = availableBackends ++
       = msg ++ " (" ++ show (get f defaultOptions) ++ ")"
 
 
+-- | Format a (console) string as bold text. Assume the user has configured
+-- their terminal colours to something that looks good (and avoids the light vs.
+-- dark background debate).
+--
+sectionHeader :: String -> String
+sectionHeader = show . bold . text
+
 -- | Generate the list of available (and the selected) Accelerate backends.
 --
 fancyHeader :: Options -> [String] -> [String] -> String
@@ -308,15 +316,17 @@ parseArgs programOptions programConfig header footer args =
       helpMsg []  = helpMsg'
       helpMsg err = unlines [ concat err, helpMsg' ]
 
+      section (sectionHeader -> str) opts = usageInfo str opts
+
       helpMsg'    = unlines
         [ fancyHeader defaultOptions header []
         , ""
-        , usageInfo "Options:"                  options
-        , usageInfo "Program options:"          programOptions
-        , usageInfo "Criterion options:"        criterionOptions
+        , section "Options:"                    options
+        , section "Program options:"            programOptions
+        , section "Criterion options:"          criterionOptions
         , Criterion.regressHelp
         , ""
-        , usageInfo "Test-Framework options:"   testframeworkOptions
+        , section "Test-Framework options:"     testframeworkOptions
         ]
 
   in do
