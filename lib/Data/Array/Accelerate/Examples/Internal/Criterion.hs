@@ -1,5 +1,14 @@
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.Criterion
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
-module Data.Array.Accelerate.Examples.Internal.Benchmark (
+module Data.Array.Accelerate.Examples.Internal.Criterion (
 
   -- * Criterion benchmarking
   runBenchmarks,
@@ -9,7 +18,7 @@ module Data.Array.Accelerate.Examples.Internal.Benchmark (
 ) where
 
 import Data.Array.Accelerate.Examples.Internal.ParseArgs
-import Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion
+import Data.Array.Accelerate.Examples.Internal.Criterion.Config
 
 import Data.Label
 import Control.Monad

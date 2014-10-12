@@ -15,20 +15,20 @@
 module Data.Array.Accelerate.Examples.Internal (
 
   module Data.Array.Accelerate.Examples.Internal.ParseArgs,
-  module Data.Array.Accelerate.Examples.Internal.Benchmark,
+  module Data.Array.Accelerate.Examples.Internal.Criterion,
   module Data.Array.Accelerate.Examples.Internal.Interactive,
-  module Data.Array.Accelerate.Examples.Internal.Test,
+  module Data.Array.Accelerate.Examples.Internal.TestFramework,
   module Data.Array.Accelerate.Examples.Internal.Monitoring,
   module Data.Array.Accelerate.Examples.Internal.Random.Array,
   module Data.Array.Accelerate.Examples.Internal.Util,
 
 ) where
 
-import Data.Array.Accelerate.Examples.Internal.Benchmark
+import Data.Array.Accelerate.Examples.Internal.Criterion
 import Data.Array.Accelerate.Examples.Internal.Interactive
 import Data.Array.Accelerate.Examples.Internal.Monitoring
 import Data.Array.Accelerate.Examples.Internal.ParseArgs
 import Data.Array.Accelerate.Examples.Internal.Random.Array
-import Data.Array.Accelerate.Examples.Internal.Test
+import Data.Array.Accelerate.Examples.Internal.TestFramework
 import Data.Array.Accelerate.Examples.Internal.Util
 

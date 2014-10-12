@@ -1,10 +1,19 @@
 {-# LANGUAGE KindSignatures  #-}
 {-# LANGUAGE TemplateHaskell #-}
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.TestFramework.Config
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
-module Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework (
+module Data.Array.Accelerate.Examples.Internal.TestFramework.Config (
 
   -- ** Test framework options
-  module Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework
+  module Data.Array.Accelerate.Examples.Internal.TestFramework.Config
 
 ) where
 

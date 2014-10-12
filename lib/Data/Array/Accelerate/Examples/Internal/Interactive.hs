@@ -1,4 +1,17 @@
 {-# LANGUAGE CPP #-}
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.Interactive
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- This module exposes some internal infrastructure that is useful and common to
+-- the accelerate-examples test and benchmark program suite. This is not
+-- intended for general consumption.
+--
 
 module Data.Array.Accelerate.Examples.Internal.Interactive (
 

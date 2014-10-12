@@ -1,10 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators   #-}
 
-module Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion (
+module Data.Array.Accelerate.Examples.Internal.Criterion.Config (
 
   -- ** Criterion options
   Config, defaultConfig,
-  module Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion
+  module Data.Array.Accelerate.Examples.Internal.Criterion.Config
 
 ) where
 
@@ -68,15 +69,19 @@ defaultOptions =
 
   , Option  [] ["verbosity"]
             (ReqArg (set verbosity . toEnum . range (0,2) . read) "LEVEL")
-            "verbosity level"
+            (describe' fromEnum verbosity "verbosity level")
 
   , Option  [] ["template"]
             (ReqArg (set template) "FILE")
             (describe template "template to use for report")
   ]
   where
-    describe f msg
-      = msg ++ " (" ++ show (get f defaultConfig) ++ ")"
+    describe :: Show a => (Config :-> a) -> String -> String
+    describe = describe' id
+
+    describe' :: Show a => (b -> a) -> (Config :-> b) -> String -> String
+    describe' p f msg
+      = msg ++ " (" ++ show (p (get f defaultConfig)) ++ ")"
 
     range (n,m) x
       | n <= x && x <= m = x

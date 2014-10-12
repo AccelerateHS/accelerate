@@ -1,5 +1,14 @@
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.TestFramework
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
-module Data.Array.Accelerate.Examples.Internal.Test (
+module Data.Array.Accelerate.Examples.Internal.TestFramework (
 
   -- * Test-framework runner
   runTests,

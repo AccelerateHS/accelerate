@@ -3,6 +3,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE ViewPatterns    #-}
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.ParseArgs
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
 module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
@@ -18,8 +27,8 @@ module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
 ) where
 
-import qualified Data.Array.Accelerate.Examples.Internal.ParseArgs.Criterion            as Criterion
-import qualified Data.Array.Accelerate.Examples.Internal.ParseArgs.TestFramework        as TestFramework
+import qualified Data.Array.Accelerate.Examples.Internal.Criterion.Config       as Criterion
+import qualified Data.Array.Accelerate.Examples.Internal.TestFramework.Config   as TestFramework
 
 import Data.List
 import Data.Label
