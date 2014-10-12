@@ -50,6 +50,7 @@ runBenchmarks opt argv benchmarks
               tmp   <- getTemporaryDirectory
               (f,h) <- openBinaryTempFile tmp "accelerate-examples.dat"
               hClose h
+              removeFile f
               return f
 
         -- Run the standard benchmark loop
@@ -58,11 +59,15 @@ runBenchmarks opt argv benchmarks
 
         -- Retrieve the reports. Delete the temporary file if necessary.
         --
-        _reports <- either fail return =<< do
-          rs <- readReports rawFile
-          case get rawDataFile crit of
-              Nothing   -> removeFile rawFile >> return rs
-              Just _    -> return rs
+        _reports <- do
+          exists <- doesFileExist rawFile
+          if exists
+             then either fail return =<< do
+                    rs <- readReports rawFile
+                    case get rawDataFile crit of
+                        Nothing   -> removeFile rawFile >> return rs
+                        Just _    -> return rs
+             else return []
 
         -- TODO: Analyse the reports, upload to the benchmark server, etc.
         --

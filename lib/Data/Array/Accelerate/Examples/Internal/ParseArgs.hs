@@ -292,7 +292,15 @@ parseArgs :: [OptDescr (config -> config)]      -- ^ the user option description
           -> IO (config, Options, [String])
 parseArgs programOptions programConfig header footer args =
   let
-      (argv, rest)          = span (/= "--") args
+      -- The option "--list" is ambiguous. It is handled by criterion only when
+      -- benchmarks are being run, but if passed to test framework during option
+      -- processing it will be consumed and treated as the "--list-tests" flag.
+      --
+      (argv, rest) =
+        let (x,  y)     = span (/= "--") args
+            (ls, x')    = partition (== "--list") x
+        in
+        (x', ls ++ y)
 
       criterionOptions      = stripShortOpts $ Criterion.defaultOptions ++ Criterion.extraOptions
       testframeworkOptions  = stripShortOpts $ TestFramework.defaultOptions
@@ -336,7 +344,7 @@ parseArgs programOptions programConfig header footer args =
 
   -- Criterion options
   --
-  (c3,u3)       <- case getOpt' Permute criterionOptions u2 of
+  (c3,u3)       <- case getOpt' Permute Criterion.defaultOptions u2 of
       (opts,_,u,[]) -> return (foldr id Criterion.defaultConfig opts, u)
       (_,_,_,err)   -> error  (helpMsg err)
 
