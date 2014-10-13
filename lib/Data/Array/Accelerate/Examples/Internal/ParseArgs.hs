@@ -17,7 +17,8 @@ module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
   -- * Options processing
   parseArgs,
-  Options, optBackend, optBenchmark, optTest, optHelp, optCriterion, optTestFramework,
+  Options, optBackend, optTest, optBenchmark, optCodespeed, optHostname,
+  optVariant, optHelp, optCriterion, optTestFramework,
 
   module System.Console.GetOpt,
 
@@ -37,6 +38,11 @@ import System.Exit
 import System.Console.GetOpt
 import Text.PrettyPrint.ANSI.Leijen
 
+#ifdef ACCELERATE_ENABLE_CODESPEED
+import Data.Char
+import Network.BSD
+import System.IO.Unsafe
+#endif
 
 -- Generic program options
 -- -----------------------
@@ -44,12 +50,15 @@ import Text.PrettyPrint.ANSI.Leijen
 data Options = Options
   {
     _optBackend         :: Backend                      -- ^ Accelerate backend to execute programs with
-  , _optBenchmark       :: Bool                         -- ^ Should benchmarks be run?
   , _optTest            :: Bool                         -- ^ Should tests be run?
+  , _optBenchmark       :: Bool                         -- ^ Should benchmarks be run?
+  , _optCodespeed       :: Maybe String                 -- ^ URL of codespeed server to upload results to
+  , _optHostname        :: String                       -- ^ Machine name to use for reported results
+  , _optVariant         :: String                       -- ^ Variant to use for reported results
   , _optHelp            :: Bool                         -- ^ Display help message (and exit)?
   --
-  , _optCriterion       :: Criterion.Config             -- ^ Options for criterion benchmarks
   , _optTestFramework   :: TestFramework.Config         -- ^ Options for test-framework
+  , _optCriterion       :: Criterion.Config             -- ^ Options for criterion benchmarks
   }
 
 $(mkLabels [''Options])
@@ -68,10 +77,24 @@ defaultOptions = Options
 #else
   , _optBenchmark       = False
 #endif
+  , _optCodespeed       = Nothing
+  , _optVariant         = variant
+  , _optHostname        = hostname
   , _optHelp            = False
   , _optCriterion       = Criterion.defaultConfig
   , _optTestFramework   = TestFramework.defaultConfig
   }
+  where
+#ifdef ACCELERATE_ENABLE_CODESPEED
+    variant     = "accelerate-" ++ show (_optBackend defaultOptions)
+    hostname    = unsafePerformIO $ do
+      h <- getHostName
+      return $ map toLower $ takeWhile (/= '.') h
+#else
+    variant     = []
+    hostname    = []
+#endif
+
 
 options :: [OptDescr (Options -> Options)]
 options = availableBackends optBackend ++
@@ -83,6 +106,20 @@ options = availableBackends optBackend ++
   , Option  [] ["test"]
             (OptArg (set optTest  . maybe True read) "BOOL")
             (describe optTest "enable test mode")
+
+#ifdef ACCELERATE_ENABLE_CODESPEED
+  , Option  [] ["upload"]
+            (ReqArg (set optCodespeed . Just) "URL")
+            "address of codespeed server to upload benchmark results"
+
+  , Option  [] ["hostname"]
+            (ReqArg (set optHostname) "HOSTNAME")
+            (describe optHostname "hostname to use for reported results")
+
+  , Option  [] ["variant"]
+            (ReqArg (set optVariant) "STRING")
+            (describe optVariant "variant to use for reported results")
+#endif
 
   , Option  "h?" ["help"]
             (NoArg  (set optHelp True))

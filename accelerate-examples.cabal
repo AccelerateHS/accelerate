@@ -36,6 +36,10 @@ Flag ekg
   Description:          Enable EKG remote monitoring server at <http://localhost:8000>
   Default:              True
 
+Flag codespeed
+  Description:          Enable upload of results to benchmark server
+  Default:              True
+
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
@@ -128,6 +132,7 @@ Library
                         Data.Array.Accelerate.Examples.Internal.Monitoring
                         Data.Array.Accelerate.Examples.Internal.ParseArgs
                         Data.Array.Accelerate.Examples.Internal.Random.Array
+                        Data.Array.Accelerate.Examples.Internal.Report
                         Data.Array.Accelerate.Examples.Internal.TestFramework
                         Data.Array.Accelerate.Examples.Internal.TestFramework.Config
                         Data.Array.Accelerate.Examples.Internal.Util
@@ -153,6 +158,22 @@ Library
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
     build-depends:      ekg                             >= 0.3
+
+  if flag(codespeed)
+    CPP-options:        -DACCELERATE_ENABLE_CODESPEED
+    build-depends:      aeson                           >= 0.8,
+                        bytestring                      >= 0.10,
+                        HTTP                            >= 4000.2,
+                        http-types                      >= 0.8,
+                        network                         >= 2.5,
+                        process                         >= 1.0,
+                        statistics                      >= 0.13,
+                        template-haskell                >= 2.2,
+                        text                            >= 0.11,
+                        time                            >= 1.4
+
+    other-modules:      Data.Array.Accelerate.Examples.Internal.Codespeed
+                        Data.Array.Accelerate.Examples.Internal.TH
 
 
 -- The main test program. This includes randomised quickcheck testing for array

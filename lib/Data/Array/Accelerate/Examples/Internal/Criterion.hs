@@ -17,6 +17,7 @@ module Data.Array.Accelerate.Examples.Internal.Criterion (
 
 ) where
 
+import Data.Array.Accelerate.Examples.Internal.Report
 import Data.Array.Accelerate.Examples.Internal.ParseArgs
 import Data.Array.Accelerate.Examples.Internal.Criterion.Config
 
@@ -59,7 +60,7 @@ runBenchmarks opt argv benchmarks
 
         -- Retrieve the reports. Delete the temporary file if necessary.
         --
-        _reports <- do
+        reports <- do
           exists <- doesFileExist rawFile
           if exists
              then either fail return =<< do
@@ -69,7 +70,7 @@ runBenchmarks opt argv benchmarks
                         Just _    -> return rs
              else return []
 
-        -- TODO: Analyse the reports, upload to the benchmark server, etc.
+        -- Analyse the reports, upload to the benchmark server, etc.
         --
-        return ()
+        processReports opt reports
 
