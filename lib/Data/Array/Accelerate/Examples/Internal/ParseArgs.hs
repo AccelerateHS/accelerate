@@ -34,6 +34,7 @@ import qualified Data.Array.Accelerate.Examples.Internal.TestFramework.Config   
 import Data.List
 import Data.Label
 import Data.Monoid
+import Control.Monad
 import System.Exit
 import System.Console.GetOpt
 import Text.PrettyPrint.ANSI.Leijen
@@ -182,6 +183,14 @@ _stripArgDescr = map strip
     strip (Option s l (OptArg _ a) d) = Option s l (OptArg undefined a) d
 
 
+-- | Extract the option flags
+--
+extractOptFlags :: [OptDescr a] -> [String]
+extractOptFlags = concatMap extract
+  where
+    extract (Option short long _ _) = map (\s -> '-':s:[]) short ++ map ("--"++) long
+
+
 -- | Process the command line arguments and return a tuple consisting of the
 -- user options structure, accelerate-examples options (including options for
 -- criterion and test-framework), and a list of unrecognised command line
@@ -274,5 +283,16 @@ parseArgs programOptions programConfig header footer args =
      then putStr   (helpMsg []) >> exitSuccess
      else putStrLn (fancyHeader c2 header footer)
 
-  return (c1, c2 { _optCriterion = c3, _optTestFramework = c4 }, u4 ++ non ++ rest)
+  -- Issue a warning if there are any unrecognised options. Criterion will error
+  -- if we are in benchmark mode and there is anything it doesn't understand,
+  -- and the error message is somewhat confusing.
+  --
+  let eco       = extractOptFlags Criterion.extraOptions
+      (yes,no)  = partition (\x -> takeWhile (/= '=') x `elem` eco) u4
+
+  unless (null no) $ do
+    putStrLn "Warning: unrecognised options"
+    putStrLn $ unlines $ map ("  "++) no
+
+  return (c1, c2 { _optCriterion = c3, _optTestFramework = c4 }, yes ++ non ++ rest)
 
