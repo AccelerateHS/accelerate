@@ -121,7 +121,8 @@ Library
 
   Exposed-modules:      Data.Array.Accelerate.Examples.Internal
 
-  Other-modules:        Data.Array.Accelerate.Examples.Internal.Criterion
+  Other-modules:        Data.Array.Accelerate.Examples.Internal.Backend
+                        Data.Array.Accelerate.Examples.Internal.Criterion
                         Data.Array.Accelerate.Examples.Internal.Criterion.Config
                         Data.Array.Accelerate.Examples.Internal.Interactive
                         Data.Array.Accelerate.Examples.Internal.Monitoring
