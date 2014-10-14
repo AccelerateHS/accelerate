@@ -61,7 +61,7 @@
 
   * Repa-style array indices
 
-  * Additional collective operations supported by the CUDA backned: `stencil`s,
+  * Additional collective operations supported by the CUDA backend: `stencil`s,
     more `scan`s, rank-polymorphic `fold`, `generate`.
 
   * Conversions to other array formats
