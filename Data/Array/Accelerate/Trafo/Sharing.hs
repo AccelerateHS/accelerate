@@ -1159,10 +1159,6 @@ matchStableSeq sn1 (StableSharingSeq sn2 _)
   | Just sn1' <- gcast sn1 = sn1' == sn2
   | otherwise              = False
 
-{-# NOINLINE atag #-}
-atag :: Arrays a => Int -> Acc a
-atag lvl = Acc (Atag lvl)
-
 
 -- Occurrence counting
 -- ===================
@@ -1420,10 +1416,9 @@ makeOccMapAfun1 :: (Arrays a, Typeable b)
                 -> (Acc a -> Acc b)
                 -> IO (Acc a -> UnscopedAcc b, Int)
 makeOccMapAfun1 config accOccMap lvl f = do
-  let x = atag lvl
-  let !fx = f x
+  let x = Acc (Atag lvl)
   --
-  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) fx
+  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) (f x)
   return (const (UnscopedAcc [lvl] body), height)
 
 makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
@@ -1433,8 +1428,8 @@ makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
                 -> (Acc a -> Acc b -> Acc c)
                 -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
 makeOccMapAfun2 config accOccMap lvl f = do
-  let x = atag (lvl + 1)
-      y = atag (lvl + 0)
+  let x = Acc (Atag (lvl + 1))
+      y = Acc (Atag (lvl + 0))
   --
   (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+2) (f x y)
   return (\ _ _ -> (UnscopedAcc [lvl, lvl+1] body), height)
