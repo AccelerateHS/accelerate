@@ -14,7 +14,7 @@ import Vec3
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr', Tuple(..), fromTuple, toTuple )
 import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 -- standard library
@@ -170,10 +170,11 @@ instance Elt Sphere where
   toElt' sphere                 = let (p,r,c,s) = toElt' sphere in Sphere p r c s
   fromElt' (Sphere p r c s)     = fromElt' (p, r, c, s)
 
-instance IsTuple Sphere where
-  type TupleRepr Sphere = TupleRepr (Position, Float, Color, Float)
-  fromTuple (Sphere p r c s)    = fromTuple (p, r, c, s)
-  toTuple t                     = let (p, r, c, s) = toTuple t in Sphere p r c s
+instance IsProduct Elt Sphere where
+  type ProdRepr Sphere = ProdRepr (Position, Float, Color, Float)
+  fromProd _ (Sphere p r c s)    = fromTuple (p, r, c, s)
+  toProd _ t                     = let (p, r, c, s) = toTuple t in Sphere p r c s
+  prod cst _                     = prod cst (undefined :: (Position, Float, Color, Float))
 
 instance Lift Exp Sphere where
   type Plain Sphere = Sphere
@@ -197,10 +198,11 @@ instance Elt Plane where
   toElt' plane                  = let (p,n,c,s) = toElt' plane in Plane p n c s
   fromElt' (Plane p n c s)      = fromElt' (p, n, c, s)
 
-instance IsTuple Plane where
-  type TupleRepr Plane = TupleRepr (Position, Direction, Color, Float)
-  fromTuple (Plane p n c s)     = fromTuple (p, n, c, s)
-  toTuple t                     = let (p, n, c, s) = toTuple t in Plane p n c s
+instance IsProduct Elt Plane where
+  type ProdRepr Plane = ProdRepr (Position, Direction, Color, Float)
+  fromProd _ (Plane p n c s)     = fromTuple (p, n, c, s)
+  toProd _ t                     = let (p, n, c, s) = toTuple t in Plane p n c s
+  prod cst _                     = prod cst (undefined :: (Position, Direction, Color, Float))
 
 instance Lift Exp Plane where
   type Plain Plane = Plane

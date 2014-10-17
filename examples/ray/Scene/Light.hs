@@ -16,7 +16,7 @@ import Scene.Object
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Tuple
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr' )
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr', Tuple(..), fromTuple, toTuple )
 import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 -- standard library
@@ -104,10 +104,11 @@ instance Elt Light where
   toElt' light          = let (p,c) = toElt' light in Light p c
   fromElt' (Light p c)  = fromElt' (p,c)
 
-instance IsTuple Light where
-  type TupleRepr Light = TupleRepr (Position, Color)
-  fromTuple (Light p c) = fromTuple (p,c)
-  toTuple t             = let (p,c) = toTuple t in Light p c
+instance IsProduct Elt Light where
+  type ProdRepr Light = ProdRepr (Position, Color)
+  fromProd _ (Light p c) = fromTuple (p,c)
+  toProd _ t             = let (p,c) = toTuple t in Light p c
+  prod cst _             = prod cst (undefined :: (Position, Color))
 
 instance Lift Exp Light where
   type Plain Light = Light
