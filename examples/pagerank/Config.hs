@@ -25,7 +25,7 @@ defaults = Options
   , _optSteps           = 100
   , _optChunkSize       = 12000000
   , _optCount           = False
-  , _optNoSeq           = False
+  , _optNoSeq           = True
   , _optHelp            = False
   }
 
