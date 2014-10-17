@@ -774,12 +774,12 @@ instance (Elt t, IsScalar t) => Enum (Exp t)
 --  pred = mkPred
   -- FIXME: ops
 
-instance (Elt t, IsScalar t) => Prelude.Eq (Exp t) where
+instance (Elt t, IsScalar t) => Eq (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   (==)  = preludeError "Eq.==" "(==*)"
   (/=)  = preludeError "Eq./=" "(/=*)"
 
-instance (Elt t, IsScalar t) => Prelude.Ord (Exp t) where
+instance (Elt t, IsScalar t) => Ord (Exp t) where
   -- FIXME: instance makes no sense with standard signatures
   min           = mkMin
   max           = mkMax
@@ -886,12 +886,12 @@ instance (Elt t, IsNum t) => Real (Exp t)
   --   we support rational numbers in AP computations.
 
 instance (Elt t, IsIntegral t) => Integral (Exp t) where
-  quot = mkQuot
-  rem  = mkRem
-  div  = mkIDiv
-  mod  = mkMod
---  quotRem =
---  divMod  =
+  quot    = mkQuot
+  rem     = mkRem
+  div     = mkIDiv
+  mod     = mkMod
+  quotRem = mkQuotRem
+  divMod  = mkDivMod
 --  toInteger =  -- makes no sense
 
 instance (Elt t, IsFloating t) => Floating (Exp t) where

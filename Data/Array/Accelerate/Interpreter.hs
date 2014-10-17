@@ -755,8 +755,10 @@ evalPrim (PrimAbs             ty) = evalAbs ty
 evalPrim (PrimSig             ty) = evalSig ty
 evalPrim (PrimQuot            ty) = evalQuot ty
 evalPrim (PrimRem             ty) = evalRem ty
+evalPrim (PrimQuotRem         ty) = evalQuotRem ty
 evalPrim (PrimIDiv            ty) = evalIDiv ty
 evalPrim (PrimMod             ty) = evalMod ty
+evalPrim (PrimDivMod          ty) = evalDivMod ty
 evalPrim (PrimBAnd            ty) = evalBAnd ty
 evalPrim (PrimBOr             ty) = evalBOr ty
 evalPrim (PrimBXor            ty) = evalBXor ty
@@ -985,11 +987,17 @@ evalQuot ty | IntegralDict <- integralDict ty = uncurry quot
 evalRem :: IntegralType a -> ((a, a) -> a)
 evalRem ty | IntegralDict <- integralDict ty = uncurry rem
 
+evalQuotRem :: IntegralType a -> ((a, a) -> (a, a))
+evalQuotRem ty | IntegralDict <- integralDict ty = uncurry quotRem
+
 evalIDiv :: IntegralType a -> ((a, a) -> a)
 evalIDiv ty | IntegralDict <- integralDict ty = uncurry div
 
 evalMod :: IntegralType a -> ((a, a) -> a)
 evalMod ty | IntegralDict <- integralDict ty = uncurry mod
+
+evalDivMod :: IntegralType a -> ((a, a) -> (a, a))
+evalDivMod ty | IntegralDict <- integralDict ty = uncurry divMod
 
 evalBAnd :: IntegralType a -> ((a, a) -> a)
 evalBAnd ty | IntegralDict <- integralDict ty = uncurry (.&.)

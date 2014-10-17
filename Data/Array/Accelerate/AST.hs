@@ -990,8 +990,10 @@ data PrimFun sig where
   -- operators from Integral & Bits
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimQuotRem  :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimIDiv     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimMod      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimDivMod   :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimBAnd     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBOr      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBXor     :: IntegralType a -> PrimFun ((a, a)   -> a)
