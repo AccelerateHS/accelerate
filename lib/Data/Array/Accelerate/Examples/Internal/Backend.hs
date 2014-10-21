@@ -64,9 +64,7 @@ run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -
 run2 backend f x y = run1 backend (A.uncurry f) (x,y)
 
 
--- | The set of backends available to execute the program. The example programs
---   all choose 'maxBound' as the default, so there should be some honesty in
---   how this list is sorted.
+-- | The set of backends available to execute the program.
 --
 data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
@@ -100,6 +98,17 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   show Multi            = "llvm-multi"
+#endif
+
+
+-- The default backend to use. Currently the only complete accelerated backend
+-- is CUDA, so default to that if it is available.
+--
+defaultBackend :: Backend
+#ifdef ACCELERATE_CUDA_BACKEND
+defaultBackend = CUDA
+#else
+defaultBackend = maxBound
 #endif
 
 

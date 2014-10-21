@@ -71,7 +71,7 @@ $(mkLabels [''Options])
 defaultOptions :: Options
 defaultOptions = Options
   {
-    _optBackend         = maxBound
+    _optBackend         = defaultBackend
   , _optTest            = True
 #ifndef ACCELERATE_ENABLE_GUI
   , _optBenchmark       = True
