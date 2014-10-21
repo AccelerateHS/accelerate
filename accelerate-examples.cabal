@@ -52,6 +52,10 @@ Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
   Default:              False
 
+Flag cilk
+  Description:          Enable the Cilk backend for multicore CPUs
+  Default:              False
+
 
 -- Flags to specify which programs to build
 --
@@ -154,6 +158,10 @@ Library
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:      accelerate-llvm-ptx             == 0.16.*
+
+  if flag(cilk)
+    CPP-options:        -DACCELERATE_CILK_BACKEND
+    build-depends:      accelerate-icc-opencl           == 0.16.*
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG

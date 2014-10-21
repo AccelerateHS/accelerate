@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Examples.Internal.Backend
 import Data.Label
 import System.Console.GetOpt
 
-import Data.Array.Accelerate                            ( Arrays, Acc )
+import Data.Array.Accelerate
 import qualified Data.Array.Accelerate                  as A
 import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
@@ -30,6 +30,9 @@ import qualified Data.Array.Accelerate.LLVM.Native      as CPU
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
+#endif
+#ifdef ACCELERATE_CILK_BACKEND
+import qualified Data.Array.Accelerate.Cilk             as Cilk
 #endif
 
 
@@ -46,6 +49,9 @@ run CPU         = CPU.run
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run PTX         = PTX.run
 #endif
+#ifdef ACCELERATE_CILK_BACKEND
+run Cilk        = Cilk.run
+#endif
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
@@ -58,6 +64,9 @@ run1 CPU         f = CPU.run1 f
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run1 PTX         f = PTX.run1 f
+#endif
+#ifdef ACCELERATE_CILK_BACKEND
+run1 Cilk        f = Cilk.run . f . use
 #endif
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
@@ -79,6 +88,9 @@ data Backend = Interpreter
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
              | Multi
 #endif
+#ifdef ACCELERATE_CILK_BACKEND
+             | Cilk
+#endif
   deriving (Eq, Bounded)
 
 
@@ -98,6 +110,9 @@ instance Show Backend where
 #endif
 #ifdef ACCELERATE_LLVM_MULTIDEV_BACKEND
   show Multi            = "llvm-multi"
+#endif
+#ifdef ACCELERATE_CILK_BACKEND
+  show Cilk             = "cilk"
 #endif
 
 
@@ -140,6 +155,11 @@ availableBackends optBackend =
   , Option  [] [show Multi]
             (NoArg (set optBackend Multi))
             "LLVM based multi-device implementation using CPUs and GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_CILK_BACKEND
+  , Option  [] [show Cilk]
+            (NoArg (set optBackend Cilk))
+            "Cilk based implementation for multicore CPUs (parallel)"
 #endif
   ]
 
