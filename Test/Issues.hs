@@ -19,20 +19,22 @@ import Test.Issues.Issue184
 import Test.Issues.Issue185
 import Test.Issues.Issue187
 
+import Data.Array.Accelerate.Examples.Internal
 
-test_issues :: Config -> Test
-test_issues conf =
+
+test_issues :: Backend -> Config -> Test
+test_issues be conf =
   testGroup "issues"
     [
-      test_issue93  conf
-    , test_issue102 conf
-    , test_issue114 conf
-    , test_issue119 conf
-    , test_issue123 conf
-    , test_issue137 conf
-    , test_issue168 conf
-    , test_issue184 conf
-    , test_issue185 conf
-    , test_issue187 conf
+      test_issue93  be conf
+    , test_issue102 be conf
+    , test_issue114 be conf
+    , test_issue119 be conf
+    , test_issue123 be conf
+    , test_issue137 be conf
+    , test_issue168 be conf
+    , test_issue184 be conf
+    , test_issue185 be conf
+    , test_issue187 be conf
     ]
 

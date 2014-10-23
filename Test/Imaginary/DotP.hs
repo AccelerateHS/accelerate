@@ -8,8 +8,14 @@ module Test.Imaginary.DotP (
 
 ) where
 
+import Config
+import Test.Base
+import QuickCheck.Arbitrary.Array                               ()
+
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
+
 import Data.Label
 import Data.Maybe
 import Data.Typeable
@@ -17,14 +23,9 @@ import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
-import Config
-import ParseArgs
-import Test.Base
-import QuickCheck.Arbitrary.Array                               ()
 
-
-test_dotp :: Config -> Test
-test_dotp opt = testGroup "dot-product" $ catMaybes
+test_dotp :: Backend -> Config -> Test
+test_dotp backend opt = testGroup "dot-product" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -37,8 +38,6 @@ test_dotp opt = testGroup "dot-product" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a

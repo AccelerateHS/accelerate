@@ -21,10 +21,10 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as R
 
@@ -32,8 +32,8 @@ import qualified Data.Array.Accelerate.Array.Representation     as R
 -- Map -------------------------------------------------------------------------
 --
 
-test_map :: Config -> Test
-test_map opt = testGroup "map" $ catMaybes
+test_map :: Backend -> Config -> Test
+test_map backend opt = testGroup "map" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -46,7 +46,6 @@ test_map opt = testGroup "map" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend        = get configBackend opt
     test_square xs = run1 backend (A.map (\x -> x*x)) xs ~?= mapRef (\x -> x*x) xs
     test_abs    xs = run1 backend (A.map abs) xs         ~?= mapRef abs xs
     test_plus z xs =
@@ -73,8 +72,8 @@ test_map opt = testGroup "map" $ catMaybes
           ]
 
 
-test_zipWith :: Config -> Test
-test_zipWith opt = testGroup "zipWith" $ catMaybes
+test_zipWith :: Backend -> Config -> Test
+test_zipWith backend opt = testGroup "zipWith" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -87,7 +86,6 @@ test_zipWith opt = testGroup "zipWith" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    backend         = get configBackend opt
     test_zip  xs ys = run2 backend A.zip           xs ys ~?= zipWithRef (,) xs ys
     test_plus xs ys = run2 backend (A.zipWith (+)) xs ys ~?= zipWithRef (+) xs ys
     test_min  xs ys = run2 backend (A.zipWith min) xs ys ~?= zipWithRef min xs ys

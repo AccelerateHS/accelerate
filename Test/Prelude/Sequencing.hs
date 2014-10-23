@@ -21,12 +21,11 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
+import Data.Array.Accelerate.Examples.Internal
 import Data.Array.Accelerate                                    as Acc
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
-import Data.Array.Accelerate.AST ( Idx(..) )
 
 toSeq' :: (Shape sh, Elt a)
           => Acc (Array (sh :. Int) a)
@@ -189,8 +188,8 @@ chunking1Ref :: Int -> Scalar Int
 chunking1Ref n = fromList Z [x]
   where x = P.sum [ P.sum [0..i-1] - P.product [0..n-i-1] | i <- [0..n-1] ]
 
-test_sequences :: Config -> Test
-test_sequences opt = testGroup "sequences"
+test_sequences :: Backend -> Config -> Test
+test_sequences backend opt = testGroup "sequences"
   [ testGroup "id" $ catMaybes
     [ testIdSequence configInt8   (undefined :: Int8)
     , testIdSequence configInt16  (undefined :: Int16)
@@ -245,8 +244,6 @@ test_sequences opt = testGroup "sequences"
     ]
   ]
   where
-    backend = get configBackend opt
-
     testIdSequence :: forall a. (Elt a, Similar a, IsNum a, Arbitrary a)
             => (Config :-> Bool)
             -> a

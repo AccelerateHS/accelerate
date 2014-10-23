@@ -3,23 +3,20 @@ module Test.Issues.Issue114 (test_issue114)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Label
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
-test_issue114 :: Config -> Test
-test_issue114 conf = testGroup "114"
+test_issue114 :: Backend -> Config -> Test
+test_issue114 backend _conf = testGroup "114"
   [ testCase "A" (assertEqual ref1 $ run backend test1)
   , testCase "B" (assertEqual ref2 $ run backend test2)
   ]
-  where
-    backend     = get configBackend conf
 
 
 type EFloat = (Float, Float) -- Represents a real number with a value and error
