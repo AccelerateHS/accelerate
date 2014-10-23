@@ -1,16 +1,30 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators   #-}
+-- |
+-- Module:      : Data.Array.Accelerate.Examples.Internal.Criterion.Config
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
-module ParseArgs.Criterion (
+module Data.Array.Accelerate.Examples.Internal.Criterion.Config (
 
+  -- ** Criterion options
   Config, defaultConfig,
-  module ParseArgs.Criterion
+  module Data.Array.Accelerate.Examples.Internal.Criterion.Config
 
 ) where
 
+import Prelude                                  hiding ( (.), id )
 import Data.Char
 import Data.Label
 import Data.Label.Derive
+import Control.Category                         ( (.), id )
 import System.Console.GetOpt
+import Text.Printf
 import Text.PrettyPrint.ANSI.Leijen
 import qualified Data.Map                       as M
 
@@ -50,7 +64,7 @@ defaultOptions =
             (OptArg (set rawDataFile) "FILE")
             (describe rawDataFile "file to write raw data to")
 
-  , Option  [] ["report"]
+  , Option  [] ["output"]
             (OptArg (set reportFile) "FILE")
             (describe reportFile "file to write report to")
 
@@ -63,16 +77,24 @@ defaultOptions =
             (describe junitFile "file to write JUnit summary to")
 
   , Option  [] ["verbosity"]
-            (ReqArg (set verbosity . read) "LEVEL")
-            (describe verbosity "verbosity level")
+            (ReqArg (set verbosity . toEnum . range (0,2) . read) "LEVEL")
+            (describe' fromEnum verbosity "verbosity level")
 
   , Option  [] ["template"]
             (ReqArg (set template) "FILE")
             (describe template "template to use for report")
   ]
   where
-    describe f msg
-      = msg ++ " (" ++ show (get f defaultConfig) ++ ")"
+    describe :: Show a => (Config :-> a) -> String -> String
+    describe = describe' id
+
+    describe' :: Show a => (b -> a) -> (Config :-> b) -> String -> String
+    describe' p f msg
+      = msg ++ " (" ++ show (p (get f defaultConfig)) ++ ")"
+
+    range (n,m) x
+      | n <= x && x <= m = x
+      | otherwise        = error $ printf "%d is outside range (%d,%d)" x n m
 
 -- The following options are not part of the configuration structure, but will
 -- be intercepted when calling 'defaultMainWith', and control the execution
@@ -123,7 +145,7 @@ regressParams m
 regressHelp :: String
 regressHelp
   = show
-  $ text "\nCriterion regression metrics for use with --regress:"
+  $ text "Criterion regression metrics for use with --regress:"
   <$> tabulate [(text n, text d) | (n,(_,d)) <- map f measureKeys]
   where
     f k = (k, measureAccessors M.! k)

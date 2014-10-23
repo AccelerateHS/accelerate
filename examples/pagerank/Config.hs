@@ -1,42 +1,37 @@
-{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
-data Options = Options
+
+data Config = Config
   {
-    _optBackend         :: Backend
-  , _optSteps           :: Int
-  , _optChunkSize       :: Int
-  , _optCount           :: Bool
-  , _optNoSeq           :: Bool
-  , _optHelp            :: Bool
+    _configSteps        :: Int
+  , _configChunkSize    :: Int
+  , _configCount        :: Bool
+  , _configNoSeq        :: Bool
   }
   deriving Show
 
-$(mkLabels [''Options])
+$(mkLabels [''Config])
 
-defaults :: Options
-defaults = Options
-  { _optBackend         = maxBound
-  , _optSteps           = 100
-  , _optChunkSize       = 12000000
-  , _optCount           = False
-  , _optNoSeq           = True
-  , _optHelp            = False
+defaults :: Config
+defaults = Config
+  { _configSteps        = 10
+  , _configChunkSize    = 12000000
+  , _configCount        = False
+  , _configNoSeq        = True
   }
 
 
-options :: [OptDescr (Options -> Options)]
+options :: [OptDescr (Config -> Config)]
 options =
-  [ Option []   ["steps"]       (ReqArg (set optSteps . read) "INT")     "number of steps to perform"
-  , Option []   ["chunk-size"]  (ReqArg (set optChunkSize . read) "INT") "size of chunks to be processed"
-  , Option []   ["count"]       (NoArg  (set optCount True))             "count number of pages in the links file"
-  , Option []   ["noseq"]       (NoArg  (set optNoSeq True))             "do not use Accelerate sequencing"
-  , Option "h?" ["help"]        (NoArg  (set optHelp True))              "show help message"
+  [ Option []   ["steps"]       (ReqArg (set configSteps . read) "INT")     "number of steps to perform"
+  , Option []   ["chunk-size"]  (ReqArg (set configChunkSize . read) "INT") "size of chunks to be processed"
+  , Option []   ["count"]       (NoArg  (set configCount True))             "count number of pages in the links file"
+  , Option []   ["noseq"]       (NoArg  (set configNoSeq True))                "do not use Accelerate sequencing"
   ]
 
 
@@ -52,8 +47,9 @@ header =
   , "        running out of device memory. With experimentation, you can arrive"
   , "        at a heap size that will force garbage collection before device"
   , "        memory runs out."
+  , ""
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 

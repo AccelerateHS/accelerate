@@ -2,19 +2,15 @@
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
+
 
 data Config
   = Config
   {
-    -- Standard options
-    _configBackend              :: Backend
-  , _configHelp                 :: Bool
-  , _configBenchmark            :: Bool
-
     -- How to execute the program
-  , _configCutoff               :: Int
+    _configCutoff               :: Int
   , _configClip                 :: Int
 
   }
@@ -24,11 +20,7 @@ $(mkLabels [''Config])
 defaults :: Config
 defaults = Config
   {
-    _configBackend              = maxBound
-  , _configHelp                 = False
-  , _configBenchmark            = False
-
-  , _configCutoff               = 100
+    _configCutoff               = 100
   , _configClip                 = 128
   }
 
@@ -42,14 +34,6 @@ options =
   , Option  [] ["clip"]
             (ReqArg (set configClip . read) "INT")
             (describe configClip "fft magnitude clipping value")
-
-  , Option  [] ["benchmark"]
-            (NoArg (set configBenchmark True))
-            (describe configBenchmark "run criterion benchmark")
-
-  , Option  ['h', '?'] ["help"]
-            (NoArg (set configHelp True))
-            "show this help message"
   ]
   where
     describe f msg
@@ -74,5 +58,5 @@ header =
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 

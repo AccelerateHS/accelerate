@@ -3,24 +3,22 @@ module Test.Issues.Issue168 (test_issue168)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
-import Data.Label
+import Prelude                                                  as P
+import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 
-test_issue168 :: Config -> Test
-test_issue168 conf = testGroup "168"
+test_issue168 :: Backend -> Config -> Test
+test_issue168 backend _conf = testGroup "168"
   [ testCase "A" (assertEqual ref1 $ run backend (A.fill sh test1))
   , testCase "B" (assertEqual ref2 $ run backend (A.fill sh test2))
   , testCase "C" (assertEqual ref3 $ run backend (A.fill sh test3))
   ]
   where
-    backend     = get configBackend conf
     sh          = index1 (constant 1) :: Exp DIM1
 
     -- Test 1

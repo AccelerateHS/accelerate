@@ -12,12 +12,14 @@ import Test.Imaginary.DotP
 import Test.Imaginary.SASUM
 import Test.Imaginary.SAXPY
 
+import Data.Array.Accelerate.Examples.Internal
 
-test_imaginary :: Config -> Test
-test_imaginary conf =
+
+test_imaginary :: Backend -> Config -> Test
+test_imaginary be conf =
   testGroup "imaginary"
-    [ test_sasum conf
-    , test_saxpy conf
-    , test_dotp conf
+    [ test_sasum be conf
+    , test_saxpy be conf
+    , test_dotp be conf
     ]
 

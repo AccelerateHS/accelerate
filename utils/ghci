@@ -12,18 +12,20 @@ DIR=`dirname $0`
 #
 GHC_FLAGS="$GHC_FLAGS
     --interactive
-    -optP -include -optP $DIR/dist/build/autogen/cabal_macros.h
-    -optP -include -optP $DIR/../accelerate-cuda/dist/build/autogen/cabal_macros.h
     -i$DIR/utils
     -i$DIR/lib
     -i$DIR/../accelerate
     -i$DIR/../accelerate-cuda
     -i$DIR/../accelerate-io
     -i$DIR/../accelerate-fft
+    -DUNIX
     -DACCELERATE_DEBUG
     -DACCELERATE_BOUNDS_CHECKS
     -DACCELERATE_INTERNAL_CHECKS
     -DACCELERATE_CUDA_BACKEND"
+
+#    -optP -include -optP $DIR/dist/build/autogen/cabal_macros.h
+#    -optP -include -optP $DIR/../accelerate-cuda/dist/build/autogen/cabal_macros.h
 
 $GHC $GHC_FLAGS $@
 

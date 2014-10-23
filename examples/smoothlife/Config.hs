@@ -6,9 +6,9 @@ module Config
 import Prelude                                          as P hiding ((.), id, fst, snd)
 import qualified Prelude                                as P
 
-import ParseArgs
 import Data.Label
 import Control.Category
+import System.Console.GetOpt
 
 import Data.Array.Accelerate                            ( Array, DIM2 )
 import Data.Array.Accelerate.Data.Complex               ( Complex )
@@ -46,11 +46,8 @@ data ColourScheme
 
 data Config = Config
   {
-    -- How to execute the simulation
-    _configBackend              :: Backend
-
     -- How to present the output
-  , _configWindowSize           :: Int
+    _configWindowSize           :: Int
   , _configWindowZoom           :: Int
   , _configFramerate            :: Int
   , _configTimestep             :: Float
@@ -71,8 +68,6 @@ data Config = Config
 
     -- Terminating conditions
   , _configMaxSteps             :: Maybe Int
-  , _configBenchmark            :: Bool
-  , _configHelp                 :: Bool
   }
 
 $(mkLabels [''Config])
@@ -81,9 +76,7 @@ $(mkLabels [''Config])
 defaults :: Config
 defaults = Config
   {
-    _configBackend              = maxBound
-
-  , _configWindowSize           = 256
+    _configWindowSize           = 256
   , _configWindowZoom           = 3
   , _configFramerate            = 30
   , _configTimestep             = 0.1
@@ -114,8 +107,6 @@ defaults = Config
   , _configMixtype              = Smooth
 
   , _configMaxSteps             = Nothing
-  , _configBenchmark            = False
-  , _configHelp                 = False
   }
 
 
@@ -196,14 +187,6 @@ options =
   , Option  [] ["max-steps"]
             (ReqArg (set configMaxSteps . read) "INT")
             (describe configMaxSteps "exit simulation after this many steps")
-
-  , Option  [] ["benchmark"]
-            (NoArg (set configBenchmark True))
-            (describe configBenchmark "benchmark instead of displaying animation")
-
-  , Option  "h?" ["help"]
-            (NoArg (set configHelp True))
-            "show this help message"
   ]
   where
     describe f msg
@@ -228,5 +211,6 @@ footer =
   , ""
   , "Available colour schemes:"
   , "  " ++ unwords (map show [minBound .. maxBound :: ColourScheme])
+  , ""
   ]
 

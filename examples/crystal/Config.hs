@@ -1,60 +1,47 @@
-{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
-data Options = Options
+data Config = Config
   {
-    _optBackend         :: Backend
-  , _optSize            :: Int
-  , _optZoom            :: Int
-  , _optScale           :: Float
-  , _optDegree          :: Int
-  , _optBench           :: Bool
-  , _optHelp            :: Bool
+    _configSize         :: Int
+  , _configZoom         :: Int
+  , _configScale        :: Float
+  , _configDegree       :: Int
   }
   deriving Show
 
-$(mkLabels [''Options])
+$(mkLabels [''Config])
 
-defaults :: Options
-defaults = Options
-  { _optBackend         = maxBound
-  , _optSize            = 200
-  , _optZoom            = 3
-  , _optScale           = 30
-  , _optDegree          = 5
-#ifdef ACCELERATE_ENABLE_GUI
-  , _optBench           = False
-#else
-  , _optBench           = True
-#endif
-  , _optHelp            = False
+defaults :: Config
+defaults = Config
+  { _configSize         = 200
+  , _configZoom         = 3
+  , _configScale        = 30
+  , _configDegree       = 5
   }
 
 
-options :: [OptDescr (Options -> Options)]
+options :: [OptDescr (Config -> Config)]
 options =
-  [ Option []   ["size"]        (ReqArg (set optSize . read) "INT")     "visualisation size (200)"
-  , Option []   ["zoom"]        (ReqArg (set optZoom . read) "INT")     "pixel replication factor (3)"
-  , Option []   ["scale"]       (ReqArg (set optScale . read) "FLOAT")  "feature size of visualisation (30)"
-  , Option []   ["degree"]      (ReqArg (set optDegree . read) "INT")   "number of waves to sum for each point (5)"
-  , Option []   ["benchmark"]   (NoArg  (set optBench True))            "benchmark instead of displaying animation (False)"
-  , Option "h?" ["help"]        (NoArg  (set optHelp True))             "show help message"
+  [ Option []   ["size"]        (ReqArg (set configSize . read) "INT")          "visualisation size (200)"
+  , Option []   ["zoom"]        (ReqArg (set configZoom . read) "INT")          "pixel replication factor (3)"
+  , Option []   ["scale"]       (ReqArg (set configScale . read) "FLOAT")       "feature size of visualisation (30)"
+  , Option []   ["degree"]      (ReqArg (set configDegree . read) "INT")        "number of waves to sum for each point (5)"
   ]
 
 
 header :: [String]
 header =
-  [ "accelerate-crystal (c) [2011..2013] The Accelerate Team"
+  [ "accelerate-crystal (c) [2011..2014] The Accelerate Team"
   , ""
   , "Usage: accelerate-crystal [OPTIONS]"
   , ""
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 

@@ -5,9 +5,6 @@ module Main where
 import Config
 import Digest
 import MD5
-import Monitoring
-import ParseArgs
-import Util
 
 import Data.Label
 import Text.Printf
@@ -16,10 +13,11 @@ import Control.Applicative
 import Criterion.Measurement
 import System.IO
 import System.Environment
-import Data.Array.Accelerate                        ( Z(..), (:.)(..), All(..) , Split(..))
-import qualified Data.Array.Accelerate              as A
-import qualified Data.Array.Accelerate.Array.Sugar  as Sugar
-import qualified Data.ByteString.Lazy.Char8         as L
+import Data.Array.Accelerate                            ( Z(..), (:.)(..), All(..) , Split(..))
+import Data.Array.Accelerate.Examples.Internal
+import qualified Data.Array.Accelerate                  as A
+import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+import qualified Data.ByteString.Lazy.Char8             as L
 
 
 main :: IO ()
@@ -27,7 +25,7 @@ main = do
   initializeTime
   beginMonitoring
   argv                  <- getArgs
-  (conf, _cconf, files) <- parseArgs configHelp configBackend options defaults header footer argv
+  (conf, opts, files)   <- parseArgs options defaults header footer argv
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.
@@ -45,7 +43,7 @@ main = do
   -- function are applied, but is defeated by salting passwords. This is true
   -- even if the salt is known, so long as it is unique for each password.
   --
-  let backend = get configBackend conf
+  let backend = get optBackend opts
 
       recoverSeq hash =
         let abcd = readMD5 hash
@@ -69,12 +67,12 @@ main = do
         in case idx `A.indexArray` Z of
              -1 -> Nothing
              n  -> Just (extract dict n)
-  
+
       recoverAll :: [L.ByteString] -> IO (Int,Int)
       recoverAll =
         if get configNoSeq conf
         then go recover
-        else go recoverSeq 
+        else go recoverSeq
         where go rec = foldM (\(i,n) h -> maybe (return (i,n+1)) (\t -> showText h t >> return (i+1,n+1)) (rec h)) (0,0)
 
       showText hash text = do

@@ -23,22 +23,20 @@ import Foreign.Storable
 import System.Random
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as A
+import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.IO                                 as A
 
 
-test_blackscholes :: Config -> Test
-test_blackscholes opt = testGroup "black-scholes" $ catMaybes
+test_blackscholes :: Backend -> Config -> Test
+test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
   [ testElt configFloat  c_BlackScholes_f
   , testElt configDouble c_BlackScholes_d
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. ( Elt a, IsFloating a, Similar a, Arbitrary a, Random a, Storable a
                          , BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
             => (Config :-> Bool)

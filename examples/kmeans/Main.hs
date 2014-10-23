@@ -7,15 +7,13 @@ module Main where
 
 import Kmeans
 import Config
-import Monitoring
-import ParseArgs
 
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.Examples.Internal          as A
 
 import Control.Applicative                              ( (<$>), (<*>) )
 import Control.Monad                                    ( unless )
-import Criterion.Main                                   ( defaultMainWith, bench, whnf )
 import Data.Binary                                      ( decodeFile )
 import Data.Label                                       ( get )
 import System.Directory
@@ -23,39 +21,40 @@ import System.Environment
 
 
 main :: IO ()
-main
-  = do  beginMonitoring
-        argv                    <- getArgs
-        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
+main = do
 
-        inputs                  <- (&&) <$> doesFileExist "points.bin"
-                                        <*> doesFileExist "clusters"
-        unless inputs $ do
-          error "Run the GenSamples program first to generate random data"
+  beginMonitoring
+  argv                  <- getArgs
+  (_, opts, rest)       <- parseArgs options defaults header footer argv
 
-        points'                 <- decodeFile "points.bin"
-        initial'                <- read `fmap` readFile "clusters"
+  inputs                <- (&&) <$> doesFileExist "points.bin"
+                                <*> doesFileExist "clusters"
+  unless inputs $ do
+    error "Run the GenSamples program first to generate random data"
 
-        let nclusters   = P.length initial'
-            npoints     = P.length points'
+  points'               <- decodeFile "points.bin"
+  initial'              <- read `fmap` readFile "clusters"
 
-            solve       = run1 backend (kmeans (use points))
-            backend     = get configBackend conf
+  let nclusters   = P.length initial'
+      npoints     = P.length points'
 
-            initial :: Vector (Cluster Float)
-            initial = A.fromList (Z:.nclusters) initial'
+      solve       = run1 backend (kmeans (use points))
+      backend     = get optBackend opts
 
-            points :: Vector (Point Float)
-            points = A.fromList (Z:.npoints)   points'
+      initial :: Vector (Cluster Float)
+      initial = A.fromList (Z:.nclusters) initial'
 
-        -- Warm up first by printing the expected results
-        --
-        putStrLn $ "number of points: " P.++ show npoints
-        putStrLn $ "final clusters:\n"  P.++
-          unlines (P.map show . A.toList $ solve initial)
+      points :: Vector (Point Float)
+      points = A.fromList (Z:.npoints)   points'
 
-        -- Now benchmark
-        --
-        withArgs rest $ defaultMainWith cconf
-          [ bench "k-means" $ whnf solve initial ]
+  -- Warm up first by printing the expected results
+  --
+  putStrLn $ "number of points: " P.++ show npoints
+  putStrLn $ "final clusters:\n"  P.++
+    unlines (P.map show . A.toList $ solve initial)
+
+  -- Now benchmark
+  --
+  runBenchmarks opts rest
+    [ bench "k-means" $ whnf solve initial ]
 

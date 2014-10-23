@@ -9,7 +9,6 @@ module Test.FFT (
 )  where
 
 import Config
-import ParseArgs
 
 import Control.Applicative
 import Data.Label
@@ -19,15 +18,17 @@ import Data.Typeable
 import Prelude as P
 
 import Test.Base
-import Test.QuickCheck                        hiding ( (.&.) )
+import Test.QuickCheck                                          hiding ( (.&.) )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import QuickCheck.Arbitrary.Array
 
-import Data.Array.Accelerate.Math.FFT         as FFT
-import Data.Array.Accelerate                  as A hiding ( (!) )
-import Data.Array.Accelerate.Array.Sugar      ( (!) )
+import Data.Array.Accelerate.Math.FFT                           as FFT
+import Data.Array.Accelerate                                    as A hiding ( (!) )
+import Data.Array.Accelerate.Examples.Internal                  as A
+import Data.Array.Accelerate.Array.Sugar                        ( (!) )
 import Data.Array.Accelerate.Data.Complex
+
 
 newtype PowerOf2Array a = PowerOf2Array (Array DIM2 a) deriving Show
 
@@ -46,14 +47,12 @@ instance (Arbitrary a, Elt a) => Arbitrary (PowerOf2Array a) where
               , PowerOf2Array . fromList (Z:.h:.(w `div` 2)) $ [a ! (Z:.y:.x) | y <- [0..h - 1], x <- [0..w `div` 2]] ]
          else []
 
-test_fft :: Config -> Test
-test_fft opt =  testGroup "fft" $ catMaybes
+test_fft :: Backend -> Config -> Test
+test_fft backend opt = testGroup "fft" $ catMaybes
   [ testElt configFloat  (undefined::Float)
   , testElt configDouble (undefined::Double)
   ]
   where
-    backend = get configBackend opt
-
     testElt :: forall a. (Elt a, Similar a, Arbitrary a, IsFloating a, RealFloat a)
             => (Config :-> Bool)
             -> a

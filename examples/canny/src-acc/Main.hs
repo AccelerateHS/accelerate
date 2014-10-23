@@ -2,17 +2,15 @@
 
 import Canny
 import Config
-import Monitoring
-import ParseArgs
 import Wildfire
 
 import Prelude                                          as P
 import Data.Label
-import Criterion.Main                                   ( defaultMainWith, bgroup, bench, whnf )
 import System.Exit
 import System.Environment
 
 import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.Examples.Internal          as A
 import qualified Data.Array.Accelerate.IO               as A
 import qualified Data.Array.Repa.IO.BMP                 as R
 import qualified Data.Array.Repa.Repr.Unboxed           as R
@@ -25,10 +23,10 @@ main
   = do
         beginMonitoring
         argv                    <- getArgs
-        (conf, cconf, rest)     <- parseArgs configHelp configBackend options defaults header footer argv
+        (conf, opts, rest)     <- parseArgs options defaults header footer argv
         (fileIn, fileOut)       <- case rest of
           (i:o:_) -> return (i,o)
-          _       -> parseArgs configHelp configBackend options defaults header footer ("--help":argv)
+          _       -> parseArgs options defaults header footer ("--help":argv)
                   >> exitSuccess
 
         -- Read in the image file
@@ -37,7 +35,7 @@ main
         -- Set up the algorithm parameters
         let threshLow   = get configThreshLow conf
             threshHigh  = get configThreshHigh conf
-            backend     = get configBackend conf
+            backend     = get optBackend opts
 
             -- Set up the partial results so that we can benchmark individual
             -- kernel stages.
@@ -50,7 +48,7 @@ main
             magdir'             = run backend $ gradientMagDir low (use blurred')
             suppress'           = run backend $ nonMaximumSuppression low high (use magdir')
 
-        if P.not (get configBenchmark conf)
+        if P.not (get optBenchmark opts)
            then do
              -- Connect the strong and weak edges of the image using Repa, and
              -- write the final image to file
@@ -63,7 +61,7 @@ main
             -- Run each of the individual kernel stages through criterion, as
             -- well as the end-to-end step process.
             --
-            withArgs (P.drop 2 rest) $ defaultMainWith cconf
+            runBenchmarks opts (P.drop 2 rest)
               [ bgroup "kernels"
                 [ bench "greyscale"   $ whnf (run1 backend toGreyscale) img
                 , bench "blur-x"      $ whnf (run1 backend gaussianX) grey'

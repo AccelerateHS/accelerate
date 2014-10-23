@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -- Quasicrystals demo.
 --
 -- Based on code from:
@@ -10,14 +9,12 @@ module Main where
 
 import Prelude                                          as P
 import Config
-import Monitoring
-import ParseArgs
 
 import Data.Label                                       ( get )
-import Criterion.Main                                   ( defaultMainWith, bench, whnf )
 import System.Environment
 
 import Data.Array.Accelerate                            as A hiding ( size )
+import Data.Array.Accelerate.Examples.Internal          as A
 import Graphics.Gloss.Accelerate.Raster.Field           as G
 
 
@@ -95,26 +92,24 @@ main = do
 
   beginMonitoring
   argv                  <- getArgs
-  (config, crit, rest)  <- parseArgs optHelp optBackend options defaults header footer argv
+  (conf, opts, rest)    <- parseArgs options defaults header footer argv
 
-  let size      = get optSize config
-      zoom      = get optZoom config
-      scale     = get optScale config
-      degree    = get optDegree config
-      backend   = get optBackend config
+  let size      = get configSize conf
+      zoom      = get configZoom conf
+      scale     = get configScale conf
+      degree    = get configDegree conf
+      backend   = get optBackend opts
 
-      -- for benchmarking
-      force arr = A.indexArray arr (Z:.0:.0) `seq` arr
       frame     = run1 backend
                 $ makeField size size (\time -> quasicrystal scale degree (the time))
 
-  if get optBench config
-     then withArgs rest $ defaultMainWith crit
-              [ bench "crystal" $ whnf (force . frame) (A.fromList Z [1.0]) ]
+  runBenchmarks opts rest
+    [ bench "crystal" $ whnf frame (A.fromList Z [1.0]) ]
 
-     else G.animateFieldWith
-              (run1 backend)
-              (InWindow "Quasicrystals" (size * zoom, size * zoom) (10, 10))
-              (zoom, zoom)
-              (quasicrystal scale degree)
+  runInteractive opts rest
+    $ G.animateFieldWith
+          (run1 backend)
+          (InWindow "Quasicrystals" (size * zoom, size * zoom) (10, 10))
+          (zoom, zoom)
+          (quasicrystal scale degree)
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 --
 -- A stable fluid simulation
 --
@@ -8,38 +7,35 @@
 module Main where
 
 import Config
-import Monitoring
-import ParseArgs
 import World
 import Fluid
 import Event
 import Data.Label
-import Criterion.Main                           ( defaultMainWith, bench, whnf )
 import Control.Exception
 import System.Environment
 import Graphics.Gloss.Interface.IO.Game
 
-import Prelude                                  as P
-import Data.Array.Accelerate                    as A
+import Prelude                                          as P
+import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.Examples.Internal          as A
 
 
 main :: IO ()
 main = do
   beginMonitoring
   argv                  <- getArgs
-  (conf,crit,rest)      <- parseArgs optHelp optBackend options defaults header footer argv
-  opt                   <- initialiseConfig conf
+  (conf, opts, rest)    <- initialiseConfig =<< parseArgs options defaults header footer argv
 
   let -- configuration parameters
       --
-      width     = get simulationWidth  opt * get displayScale opt
-      height    = get simulationHeight opt * get displayScale opt
-      steps     = get simulationSteps  opt
-      fps       = get displayFramerate opt
-      dp        = get viscosity opt
-      dn        = get diffusion opt
-      dt        = get timestep opt
-      backend   = get optBackend opt
+      width     = get simulationWidth  conf * get displayScale conf
+      height    = get simulationHeight conf * get displayScale conf
+      steps     = get simulationSteps  conf
+      fps       = get displayFramerate conf
+      dp        = get viscosity conf
+      dn        = get diffusion conf
+      dt        = get timestep conf
+      backend   = get optBackend opts
 
       -- Prepare user-input density and velocity sources
       --
@@ -69,25 +65,20 @@ main = do
 
   -- warming up...
   --
-  initialWorld  <- evaluate (initialise opt)
+  initialWorld  <- evaluate (initialise conf)
   _             <- evaluate (simulate initialWorld)
 
-#ifndef ACCELERATE_ENABLE_GUI
-  if True
-#else
-  if get optBench opt
-#endif
-     -- benchmark
-     then withArgs rest $ defaultMainWith crit
-              [ bench "fluid" $ whnf simulate initialWorld ]
 
-     -- simulate
-     else playIO
-              (InWindow "accelerate-fluid" (width, height) (10, 20))
-              black                             -- background colour
-              fps                               -- display framerate
-              initialWorld                      -- initial state of the simulation
-              (render opt)                      -- render world state into a picture
-              (\e -> return . react opt e)      -- handle user events
-              (\_ -> return . simulate)         -- one step of the simulation
+  runBenchmarks opts rest
+    [ bench "fluid" $ whnf simulate initialWorld ]
+
+  runInteractive opts rest
+    $ playIO
+          (InWindow "accelerate-fluid" (width, height) (10, 20))
+          black                                 -- background colour
+          fps                                   -- display framerate
+          initialWorld                          -- initial state of the simulation
+          (render conf)                         -- render world state into a picture
+          (\e -> return . react conf e)         -- handle user events
+          (\_ -> return . simulate)             -- one step of the simulation
 

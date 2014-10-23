@@ -6,18 +6,17 @@ module Test.Issues.Issue185 (test_issue185)
   where
 
 import Config
-import ParseArgs
 import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
-import Data.Label
+import Data.Array.Accelerate.Examples.Internal          as A
 
 
-test_issue185 :: Config -> Test
-test_issue185 conf = testGroup "185"
+test_issue185 :: Backend -> Config -> Test
+test_issue185 backend _conf = testGroup "185"
   [ testCase "A" (assertEqual ref1 (run backend acc1 :: Vector Int))
   , testCase "B" (assertEqual ref2 (run backend acc2 :: Vector Int))
   , testCase "C" (assertEqual ref3 (run backend acc3 :: Vector Int))
@@ -25,8 +24,6 @@ test_issue185 conf = testGroup "185"
   , testCase "E" (assertEqual ref5 (run backend acc5 :: Vector Int))
   , testCase "F" (assertEqual ref6 (run backend acc6 :: Vector Int))
   ]
-  where
-    backend = get configBackend conf
 
 
 ref1 :: (Elt a, Num a) => Vector a

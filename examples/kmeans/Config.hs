@@ -2,38 +2,25 @@
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
 
 -- Configuration options
 --
-data Config
-  = Config
-  {
-    _configBackend      :: Backend
-  , _configHelp         :: Bool
-  }
+data Config = Config
   deriving Show
 
 $(mkLabels [''Config])
 
 defaults :: Config
 defaults = Config
-  {
-    _configBackend      = maxBound
-  , _configHelp         = False
-  }
 
 
 -- The set of available command line options
 --
 options :: [OptDescr (Config -> Config)]
-options =
-  [ Option  ['h', '?'] ["help"]
-            (NoArg (set configHelp True))
-            "show this help message"
-  ]
+options = []
 
 
 -- Command line decoration
@@ -50,5 +37,5 @@ header =
   ]
 
 footer :: [String]
-footer = []
+footer = [ "" ]
 

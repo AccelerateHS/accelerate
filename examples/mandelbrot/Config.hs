@@ -1,55 +1,43 @@
-{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Config where
 
-import ParseArgs
 import Data.Label
+import System.Console.GetOpt
 
-data Options = Options
+
+data Config = Config
   {
-    _optBackend         :: Backend
-  , _optWidth           :: Int
-  , _optHeight          :: Int
-  , _optLimit           :: Int
-  , _optFramerate       :: Int
-  , _optBench           :: Bool
-  , _optHelp            :: Bool
+    _configWidth        :: Int
+  , _configHeight       :: Int
+  , _configLimit        :: Int
+  , _configFramerate    :: Int
   }
   deriving Show
 
-$(mkLabels [''Options])
+$(mkLabels [''Config])
 
-defaults :: Options
-defaults = Options
-  { _optBackend         = maxBound
-  , _optWidth           = 800
-  , _optHeight          = 600
-  , _optLimit           = 255
-  , _optFramerate       = 25
-#ifdef ACCELERATE_ENABLE_GUI
-  , _optBench           = False
-#else
-  , _optBench           = True
-#endif
-  , _optHelp            = False
+defaults :: Config
+defaults = Config
+  { _configWidth        = 800
+  , _configHeight       = 600
+  , _configLimit        = 255
+  , _configFramerate    = 25
   }
 
-options :: [OptDescr (Options -> Options)]
+options :: [OptDescr (Config -> Config)]
 options =
-  [ Option []   ["width"]       (ReqArg (set optWidth . read) "INT")    "visualisation width (800)"
-  , Option []   ["height"]      (ReqArg (set optHeight . read) "INT")   "visualisation height (600)"
-  , Option []   ["limit"]       (ReqArg (set optLimit . read) "INT")    "iteration limit for escape (255)"
-  , Option []   ["framerate"]   (ReqArg (set optFramerate . read) "INT")"visualisation framerate (10)"
-  , Option []   ["static"]      (NoArg  (set optFramerate 0))           "do not animate the image"
-  , Option []   ["benchmark"]   (NoArg  (set optBench True))            "benchmark instead of displaying animation (False)"
-  , Option "h?" ["help"]        (NoArg  (set optHelp True))             "show help message"
+  [ Option []   ["width"]       (ReqArg (set configWidth . read) "INT")         "visualisation width (800)"
+  , Option []   ["height"]      (ReqArg (set configHeight . read) "INT")        "visualisation height (600)"
+  , Option []   ["limit"]       (ReqArg (set configLimit . read) "INT")         "iteration limit for escape (255)"
+  , Option []   ["framerate"]   (ReqArg (set configFramerate . read) "INT")     "visualisation framerate (10)"
+  , Option []   ["static"]      (NoArg  (set configFramerate 0))                "do not animate the image"
   ]
 
 
 header :: [String]
 header =
-  [ "accelerate-mandelbrot (c) [2011..2013] The Accelerate Team"
+  [ "accelerate-mandelbrot (c) [2011..2014] The Accelerate Team"
   , ""
   , "Usage: accelerate-mandelbrot [OPTIONS]"
   , ""
@@ -64,5 +52,6 @@ footer =
   , "     x q          zoom out"
   , "     f            single precision calculations"
   , "     d            double precision calculations (if supported)"
+  , ""
   ]
 

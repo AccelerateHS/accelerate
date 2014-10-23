@@ -10,7 +10,7 @@ module Test.Prelude.Reduction (
 
 ) where
 
-import Prelude                                          as P
+import Prelude                                                  as P
 import Data.List
 import Data.Label
 import Data.Maybe
@@ -18,11 +18,11 @@ import Data.Typeable
 import Test.QuickCheck
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
-import Data.Array.Accelerate                            as A hiding (indexHead, indexTail)
-import Data.Array.Accelerate.Array.Sugar                as Sugar
+import Data.Array.Accelerate                                    as A hiding (indexHead, indexTail)
+import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate.Examples.Internal                  as A
 
 import Config
-import ParseArgs
 import Test.Base
 import QuickCheck.Arbitrary.Array
 
@@ -35,8 +35,8 @@ import QuickCheck.Arbitrary.Array
 -- foldAll
 -- -------
 
-test_foldAll :: Config -> Test
-test_foldAll opt = testGroup "foldAll" $ catMaybes
+test_foldAll :: Backend -> Config -> Test
+test_foldAll backend opt = testGroup "foldAll" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -82,14 +82,13 @@ test_foldAll opt = testGroup "foldAll" $ catMaybes
       let z' = unit (constant z)
       in  run backend (A.foldAll (+) (the z') (use xs)) ~?= foldAllRef (+) z xs
 
-    backend = get configBackend opt
 
 
 -- multidimensional fold
 -- ---------------------
 
-test_fold :: Config -> Test
-test_fold opt = testGroup "fold" $ catMaybes
+test_fold :: Backend -> Config -> Test
+test_fold backend opt = testGroup "fold" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -134,14 +133,12 @@ test_fold opt = testGroup "fold" $ catMaybes
       let z' = unit (constant z)
       in  run backend (A.fold (+) (the z') (use xs)) ~?= foldRef (+) z xs
 
-    backend = get configBackend opt
-
 
 -- segmented fold
 -- --------------
 
-test_foldSeg :: Config -> Test
-test_foldSeg opt = testGroup "foldSeg" $ catMaybes
+test_foldSeg :: Backend -> Config -> Test
+test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
   [ testElt configInt8   (undefined :: Int8)
   , testElt configInt16  (undefined :: Int16)
   , testElt configInt32  (undefined :: Int32)
@@ -182,8 +179,6 @@ test_foldSeg opt = testGroup "foldSeg" $ catMaybes
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
               run backend (A.fold1Seg min (use xs) (use seg)) ~?= fold1SegRef min xs seg
           ]
-
-    backend = get configBackend opt
 
 
 -- Reference implementation

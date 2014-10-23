@@ -1,8 +1,17 @@
 {-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE TypeOperators #-}
+-- Module:      : Data.Array.Accelerate.Examples.Internal.Random.Array
+-- Copyright    : [2014] Trevor L. McDonell
+-- License      : BSD3
+--
+-- Maintainer   : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 
-module Random.Array (
+module Data.Array.Accelerate.Examples.Internal.Random.Array (
 
+  -- * Generating random arrays
   (:~>),
   uniform, uniformR,
   randomArray, randomArrayWithSeed, randomArrayWithSystemRandom,
