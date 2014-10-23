@@ -13,7 +13,7 @@ import Vec3
 -- frenemies
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr', Tuple(..), fromTuple, toTuple )
 import Graphics.Gloss.Accelerate.Data.Color.RGB
 

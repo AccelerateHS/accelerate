@@ -13,7 +13,7 @@ import Prelude
 import Data.Typeable
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 
 
