@@ -69,7 +69,7 @@ import qualified GHC.Exts                                       as GHC
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 

@@ -109,7 +109,7 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 

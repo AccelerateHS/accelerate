@@ -7,7 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Tuple
+-- Module      : Data.Array.Accelerate.Product
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
@@ -17,13 +17,13 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- Our representation of tuples are heterogenous snoc lists, which are typed by
+-- Our representation of products are heterogenous snoc lists, which are typed by
 -- type lists, where '()' and '(,)' are type-level nil and snoc, respectively.
 -- The components may only be drawn from types that can be used as array
 -- elements.
 --
 
-module Data.Array.Accelerate.Tuple (
+module Data.Array.Accelerate.Product (
 
   -- * Tuple representation
   TupleIdx(..), IsProduct(..), ProdR(..)
@@ -47,7 +47,7 @@ data ProdR cst t where
 -- |Conversion between surface product types and our product representation.
 --
 -- We parameterise our products by a constraint on their elements (the 'cst' argument). Every element
--- in the tuple must obey this constraint, but the tuples themselves do necessarily not have to.
+-- in the product must obey this constraint, but the products themselves do necessarily not have to.
 --
 class IsProduct cst tup where
   type ProdRepr tup

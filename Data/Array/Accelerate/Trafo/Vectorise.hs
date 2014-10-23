@@ -52,7 +52,7 @@ import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Smart            as S
 import qualified Data.Array.Accelerate.Prelude          as S

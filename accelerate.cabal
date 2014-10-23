@@ -209,9 +209,9 @@ Library
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Error
                         Data.Array.Accelerate.Pretty
+                        Data.Array.Accelerate.Product
                         Data.Array.Accelerate.Smart
                         Data.Array.Accelerate.Trafo
-                        Data.Array.Accelerate.Tuple
                         Data.Array.Accelerate.Type
 
   Other-modules:        Data.Array.Accelerate.Language

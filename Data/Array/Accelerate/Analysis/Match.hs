@@ -51,7 +51,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 
 
 -- Witness equality between types. A value of a :=: b is a proof that types a

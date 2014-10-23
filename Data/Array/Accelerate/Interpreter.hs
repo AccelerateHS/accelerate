@@ -60,7 +60,7 @@ import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..)
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Smart                    as Sugar
 import qualified Data.Array.Accelerate.Trafo                    as AST

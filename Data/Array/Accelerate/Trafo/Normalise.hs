@@ -17,7 +17,7 @@ module Data.Array.Accelerate.Trafo.Normalise (
 
 import Prelude                                          hiding ( exp )
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Substitution
 
 
