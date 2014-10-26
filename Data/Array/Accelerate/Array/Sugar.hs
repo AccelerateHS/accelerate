@@ -84,8 +84,8 @@ infixl 3 :.
 data tail :. head = tail :. head
   deriving (Typeable, Eq)
 
-instance (Show head, Show tail) => Show (head :. tail) where
-  show (head :. tail) = show head ++ " :. " ++ show tail
+instance (Show sh, Show sz) => Show (sh :. sz) where
+  show (sh :. sz) = show sh ++ " :. " ++ show sz
 
 -- | Marker for entire dimensions in slice descriptors.
 --
