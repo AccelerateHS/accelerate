@@ -40,7 +40,7 @@ import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..), shapeToList )
 
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -218,7 +218,7 @@ simplifyOpenExp env = first getAny . cvtE
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> pure $ Shape a
-      ShapeSize sh              -> ShapeSize <$> cvtE sh
+      ShapeSize sh              -> shapeSize (cvtE sh)
       Intersect s t             -> cvtE s `intersect` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
@@ -253,7 +253,6 @@ simplifyOpenExp env = first getAny . cvtE
         leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
         leaves (Intersect x y)  = leaves x ++ leaves y
         leaves rest             = [rest]
-
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.
@@ -316,6 +315,10 @@ simplifyOpenExp env = first getAny . cvtE
     indexTail (_, Const c)        = let sl :. _ = toElt c :: (sl :. sz) in yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _) = yes sl
     indexTail sh                  = IndexTail <$> sh
+
+    shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    shapeSize (_, Const c) = let sh = toElt c :: sh in yes (Const ((), (product (shapeToList sh))))
+    shapeSize sh           = ShapeSize <$> sh
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
