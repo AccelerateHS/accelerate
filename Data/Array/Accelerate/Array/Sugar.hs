@@ -92,7 +92,10 @@ data Z = Z
 --
 infixl 3 :.
 data tail :. head = tail :. head
-  deriving (Typeable, Show, Eq)
+  deriving (Typeable, Eq)
+
+instance (Show sh, Show sz) => Show (sh :. sz) where
+  show (sh :. sz) = show sh ++ " :. " ++ show sz
 
 -- | Marker for entire dimensions in slice and division descriptors.
 --

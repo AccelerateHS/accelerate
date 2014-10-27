@@ -42,7 +42,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
-                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr )
+                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -219,7 +219,7 @@ simplifyOpenExp env = first getAny . cvtE
       Index a sh                -> Index a <$> cvtE sh
       LinearIndex a i           -> LinearIndex a <$> cvtE i
       Shape a                   -> pure $ Shape a
-      ShapeSize sh              -> ShapeSize <$> cvtE sh
+      ShapeSize sh              -> shapeSize (cvtE sh)
       Intersect s t             -> cvtE s `intersect` cvtE t
       Union s t                 -> cvtE s `union` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
@@ -339,6 +339,10 @@ simplifyOpenExp env = first getAny . cvtE
     indexTail (_, Const c)        = let sl :. _ = toElt c :: (sl :. sz) in yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _) = yes sl
     indexTail sh                  = IndexTail <$> sh
+
+    shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    shapeSize (_, Const c) = let sh = toElt c :: sh in yes (Const ((), (product (shapeToList sh))))
+    shapeSize sh           = ShapeSize <$> sh
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
