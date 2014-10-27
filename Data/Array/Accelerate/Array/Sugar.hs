@@ -84,6 +84,24 @@ infixl 3 :.
 data tail :. head = tail :. head
   deriving (Typeable, Eq)
 
+-- We don't we use a derived Show instance for (:.) because this will insert
+-- parenthesis to demonstrate which order the operator is applied, i.e.:
+--
+--   (((Z :. z) :. y) :. x)
+--
+-- This is fine, but I find it a little unsightly. Instead, we drop all
+-- parenthesis and just display the shape thus:
+--
+--   Z :. z :. y :. x
+--
+-- and then require the down-stream user to wrap the whole thing in parentheses.
+-- This works fine for the most important case, which is to show Acc and Exp
+-- expressions via the pretty printer, although Show-ing a Shape directly
+-- results in no parenthesis being displayed.
+--
+-- One way around this might be to have specialised instances for DIM1, DIM2,
+-- etc.
+--
 instance (Show sh, Show sz) => Show (sh :. sz) where
   show (sh :. sz) = show sh ++ " :. " ++ show sz
 
