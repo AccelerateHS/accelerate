@@ -13,7 +13,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fusion
--- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -392,54 +392,14 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     stencil x f a       = Stencil f x a
     stencil2 x y f a b  = Stencil2 f x a y b
 
-    -- Conversions for closed scalar functions and expressions, with
-    -- pre-simplification. We don't bother traversing array-valued terms in
-    -- scalar expressions, as these are guaranteed to only be array variables.
+    -- Conversions for closed scalar functions and expressions. This just
+    -- applies scalar simplifications.
     --
     cvtF :: PreFun acc aenv t -> PreFun acc aenv t
-    cvtF = cvtF' . simplify
+    cvtF = simplify
 
     cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
-    cvtE = cvtE' . simplify
-
-    -- Conversions for scalar functions and expressions without
-    -- pre-simplification. Hence we can operate on open expressions.
-    --
-    cvtF' :: PreOpenFun acc env aenv' t -> PreOpenFun acc env aenv' t
-    cvtF' (Lam f)  = Lam  (cvtF' f)
-    cvtF' (Body b) = Body (cvtE' b)
-
-    cvtE' :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
-    cvtE' exp =
-      case exp of
-        Let bnd body            -> Let (cvtE' bnd) (cvtE' body)
-        Var ix                  -> Var ix
-        Const c                 -> Const c
-        Tuple tup               -> Tuple (cvtT tup)
-        Prj tup ix              -> Prj tup (cvtE' ix)
-        IndexNil                -> IndexNil
-        IndexCons sh sz         -> IndexCons (cvtE' sh) (cvtE' sz)
-        IndexHead sh            -> IndexHead (cvtE' sh)
-        IndexTail sh            -> IndexTail (cvtE' sh)
-        IndexAny                -> IndexAny
-        IndexSlice x ix sh      -> IndexSlice x (cvtE' ix) (cvtE' sh)
-        IndexFull x ix sl       -> IndexFull x (cvtE' ix) (cvtE' sl)
-        ToIndex sh ix           -> ToIndex (cvtE' sh) (cvtE' ix)
-        FromIndex sh ix         -> FromIndex (cvtE' sh) (cvtE' ix)
-        Cond p t e              -> Cond (cvtE' p) (cvtE' t) (cvtE' e)
-        While p f x             -> While (cvtF' p) (cvtF' f) (cvtE' x)
-        PrimConst c             -> PrimConst c
-        PrimApp f x             -> PrimApp f (cvtE' x)
-        Index a sh              -> Index a (cvtE' sh)
-        LinearIndex a i         -> LinearIndex a (cvtE' i)
-        Shape a                 -> Shape a
-        ShapeSize sh            -> ShapeSize (cvtE' sh)
-        Intersect s t           -> Intersect (cvtE' s) (cvtE' t)
-        Foreign ff f e          -> Foreign ff (cvtF' f) (cvtE' e)
-
-    cvtT :: Tuple (PreOpenExp acc env aenv') t -> Tuple (PreOpenExp acc env aenv') t
-    cvtT NilTup          = NilTup
-    cvtT (SnocTup tup e) = cvtT tup `SnocTup` cvtE' e
+    cvtE = simplify
 
     -- Helpers to embed and fuse delayed terms
     --
@@ -1034,6 +994,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       Yield{}   -> eliminate env1 cc1 acc0'
 
   where
+    acc0 :: acc (aenv, arrs) brrs
     acc0 = computeAcc (Embed env0 cc0)
 
     -- The second part of let-elimination. Splitting into two steps exposes the
@@ -1151,8 +1112,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Atuple tup              -> Atuple (cvtAT tup)
-        Awhile p f a            -> Awhile p f (cvtA a)          -- no sharing between p or f and a
-        Apply f a               -> Apply f (cvtA a)             -- no sharing between f and a
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
+        Apply f a               -> Apply (cvtAF f) (cvtA a)
         Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
         Generate sh f           -> Generate (cvtE sh) (cvtF f)
         Map f a                 -> Map (cvtF f) (cvtA a)
@@ -1179,6 +1140,19 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       where
         cvtA :: acc aenv s -> acc aenv s
         cvtA = kmap (replaceA sh' f' avar)
+
+        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
+        cvtAF = cvt sh' f' avar
+          where
+            cvt :: forall aenv a.
+                   PreExp acc aenv sh -> PreFun acc aenv (sh -> e) -> Idx aenv (Array sh e)
+                -> PreOpenAfun acc aenv a
+                -> PreOpenAfun acc aenv a
+            cvt sh'' f'' avar' (Abody a) = Abody $ kmap (replaceA sh'' f'' avar') a
+            cvt sh'' f'' avar' (Alam af) = Alam $ cvt (weakenEA rebuildAcc SuccIdx sh'')
+                                                      (weakenFA rebuildAcc SuccIdx f'')
+                                                      (SuccIdx avar')
+                                                      af
 
         cvtE :: PreExp acc aenv s -> PreExp acc aenv s
         cvtE = replaceE sh' f' avar

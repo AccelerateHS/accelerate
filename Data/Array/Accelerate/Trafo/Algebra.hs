@@ -6,7 +6,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Algebra
--- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -99,8 +99,10 @@ evalPrimApp env f x
       PrimSig ty                -> evalSig ty x env
       PrimQuot ty               -> evalQuot ty x env
       PrimRem ty                -> evalRem ty x env
+      PrimQuotRem ty            -> evalQuotRem ty x env
       PrimIDiv ty               -> evalIDiv ty x env
       PrimMod ty                -> evalMod ty x env
+      PrimDivMod ty             -> evalDivMod ty x env
       PrimBAnd ty               -> evalBAnd ty x env
       PrimBOr ty                -> evalBOr ty x env
       PrimBXor ty               -> evalBXor ty x env
@@ -265,13 +267,13 @@ eval2 f (untup2 -> Just (x,y)) env
 eval2 _ _ _
   = Nothing
 
--- tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
--- tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
+tup2 :: (Elt a, Elt b) => (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b) -> PreOpenExp acc env aenv (a, b)
+tup2 (a,b) = Tuple (NilTup `SnocTup` a `SnocTup` b)
 
 untup2 :: PreOpenExp acc env aenv (a, b) -> Maybe (PreOpenExp acc env aenv a, PreOpenExp acc env aenv b)
 untup2 exp
-  | Tuple (NilTup `SnocTup` a `SnocTup` b) <- exp   = Just (a, b)
-  | otherwise                                       = Nothing
+  | Tuple (NilTup `SnocTup` a `SnocTup` b) <- exp = Just (a, b)
+  | otherwise                                     = Nothing
 
 
 pprFun :: String -> PrimFun f -> String
@@ -356,6 +358,19 @@ evalQuot ty | IntegralDict <- integralDict ty = eval2 quot
 evalRem :: Elt a => IntegralType a -> (a,a) :-> a
 evalRem ty | IntegralDict <- integralDict ty = eval2 rem
 
+evalQuotRem :: IntegralType a -> (a,a) :-> (a,a)
+evalQuotRem ty exp env
+  | IntegralDict                           <- integralDict ty
+  , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
+  , Just a <- propagate env x
+  , Just b <- propagate env y
+  = Stats.substitution "constant fold"
+  $ Just $ let (u,v) = quotRem a b
+           in  tup2 (Const (fromElt u), Const (fromElt v))
+
+evalQuotRem _ _ _
+  = Nothing
+
 evalIDiv :: Elt a => IntegralType a -> (a,a) :-> a
 evalIDiv ty | IntegralDict <- integralDict ty = evalIDiv'
 
@@ -369,6 +384,19 @@ evalIDiv' arg env
 
 evalMod :: Elt a => IntegralType a -> (a,a) :-> a
 evalMod ty | IntegralDict <- integralDict ty = eval2 mod
+
+evalDivMod :: IntegralType a -> (a,a) :-> (a,a)
+evalDivMod ty exp env
+  | IntegralDict                           <- integralDict ty
+  , Tuple (NilTup `SnocTup` x `SnocTup` y) <- exp       -- TLM: untup2, but inlined to expose the Elt dictionary
+  , Just a <- propagate env x
+  , Just b <- propagate env y
+  = Stats.substitution "constant fold"
+  $ Just $ let (u,v) = divMod a b
+           in  tup2 (Const (fromElt u), Const (fromElt v))
+
+evalDivMod _ _ _
+  = Nothing
 
 evalBAnd :: Elt a => IntegralType a -> (a,a) :-> a
 evalBAnd ty | IntegralDict <- integralDict ty = eval2 (.&.)

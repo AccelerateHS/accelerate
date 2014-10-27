@@ -6,8 +6,9 @@
 {-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Print
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+--               [2008..2009] Sean Lee
+--               [2009..2014] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -63,6 +64,9 @@ prettyPreAcc prettyAcc alvl wrap = pp
     ppE :: PreOpenExp acc env aenv e -> Doc
     ppE = prettyPreExp prettyAcc 0 alvl parens
 
+    ppSh :: Shape sh => PreOpenExp acc env aenv sh -> Doc       -- Shape constraint is just to...
+    ppSh = parens . prettyPreExp prettyAcc 0 alvl noParens      -- ...demonstrate intent
+
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc alvl
 
@@ -109,9 +113,9 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Slice _ty acc ix)       = wrap $ sep [ ppA acc, char '!', prettyPreExp prettyAcc 0 alvl noParens ix ]
     pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays (undefined :: arrs)) arrs ]
     pp (Unit e)                 = "unit"        .$ [ ppE e ]
-    pp (Generate sh f)          = "generate"    .$ [ ppE sh, ppF f ]
-    pp (Transform sh ix f acc)  = "transform"   .$ [ ppE sh, ppF ix, ppF f, ppA acc ]
-    pp (Reshape sh acc)         = "reshape"     .$ [ ppE sh, ppA acc ]
+    pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
+    pp (Transform sh ix f acc)  = "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA acc ]
+    pp (Reshape sh acc)         = "reshape"     .$ [ ppSh sh, ppA acc ]
     pp (Replicate _ty ix acc)   = "replicate"   .$ [ prettyPreExp prettyAcc 0 alvl noParens ix, ppA acc ]
     pp (Map f acc)              = "map"         .$ [ ppF f, ppA acc ]
     pp (ZipWith f acc1 acc2)    = "zipWith"     .$ [ ppF f, ppA acc1, ppA acc2 ]
@@ -126,7 +130,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Scanr' f e acc)         = "scanr'"      .$ [ ppF f, ppE e, ppA acc ]
     pp (Scanr1 f acc)           = "scanr1"      .$ [ ppF f, ppA acc ]
     pp (Permute f dfts p acc)   = "permute"     .$ [ ppF f, ppA dfts, ppF p, ppA acc ]
-    pp (Backpermute sh p acc)   = "backpermute" .$ [ ppE sh, ppF p, ppA acc ]
+    pp (Backpermute sh p acc)   = "backpermute" .$ [ ppSh sh, ppF p, ppA acc ]
     pp (Aforeign ff _afun acc)  = "aforeign"    .$ [ text (strForeign ff), {- ppAf afun, -} ppA acc ]
     pp (Stencil sten bndy acc)  = "stencil"     .$ [ ppF sten, ppB acc bndy, ppA acc ]
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
@@ -190,6 +194,9 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     ppE  = prettyPreExp prettyAcc lvl alvl parens
     ppE' = prettyPreExp prettyAcc lvl alvl noParens
 
+    ppSh :: Shape sh => PreOpenExp acc env aenv sh -> Doc
+    ppSh = parens . ppE'
+
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreOpenFun prettyAcc lvl alvl
 
@@ -235,18 +242,18 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (Cond c t e)             = wrap $ sep [ ppE c, char '?' , tuple [ ppE' t, ppE' e ]]
     pp IndexNil                 = char 'Z'
     pp (IndexAny)               = text "indexAny"
-    pp (IndexCons t h)          = wrap $ ppE' t <+> text ":." <+> ppE' h
+    pp (IndexCons t h)          = ppE' t <+> text ":." <+> ppE' h
     pp (IndexHead ix)           = "indexHead"  .$ [ ppE ix ]
     pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
     pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppE slix, ppE sh ]
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
-    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppE sh, ppE ix ]
-    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppE sh, ppE ix ]
+    pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
+    pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppE ix ]
     pp (While p f x)            = "while"      .$ [ ppF p, ppF f, ppE x ]
     pp (Foreign ff _f e)        = "foreign"    .$ [ text (strForeign ff), {- ppF f, -} ppE e ]
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
-    pp (ShapeSize idx)          = "shapeSize"  .$ [ parens (ppE idx) ]
-    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppE sh1, ppE sh2 ]
+    pp (ShapeSize idx)          = "shapeSize"  .$ [ ppSh idx ]
+    pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppSh sh1, ppSh sh2 ]
     pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE i ]
     pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE i ]
 
@@ -301,8 +308,10 @@ prettyPrim (PrimAbs _)            = (False, text "abs")
 prettyPrim (PrimSig _)            = (False, text "signum")
 prettyPrim (PrimQuot _)           = (False, text "quot")
 prettyPrim (PrimRem _)            = (False, text "rem")
+prettyPrim (PrimQuotRem _)        = (False, text "quotRem")
 prettyPrim (PrimIDiv _)           = (False, text "div")
 prettyPrim (PrimMod _)            = (False, text "mod")
+prettyPrim (PrimDivMod _)         = (False, text "divMod")
 prettyPrim (PrimBAnd _)           = (True,  text ".&.")
 prettyPrim (PrimBOr _)            = (True,  text ".|.")
 prettyPrim (PrimBXor _)           = (False, text "xor")

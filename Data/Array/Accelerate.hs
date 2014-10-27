@@ -1,7 +1,9 @@
 -- |
 -- Module      : Data.Array.Accelerate
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+--               [2008..2009] Sean Lee
+--               [2009..2014] Trevor L. McDonell
+--               [2013..2014] Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -65,7 +67,7 @@ module Data.Array.Accelerate (
   (L.!), (L.!!), P.the,
 
   -- *** Shape information
-  P.null, L.shape, L.size, L.shapeSize,
+  P.null, P.length, L.shape, L.size, L.shapeSize,
 
   -- *** Extracting sub-arrays
   L.slice,

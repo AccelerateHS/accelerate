@@ -12,8 +12,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+--               [2008..2009] Sean Lee
+--               [2009..2014] Trevor L. McDonell
+--               [2010..2011] Ben Lever
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -866,8 +868,10 @@ data PrimFun sig where
   -- operators from Integral & Bits
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimRem      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimQuotRem  :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimIDiv     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimMod      :: IntegralType a -> PrimFun ((a, a)   -> a)
+  PrimDivMod   :: IntegralType a -> PrimFun ((a, a)   -> (a, a))
   PrimBAnd     :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBOr      :: IntegralType a -> PrimFun ((a, a)   -> a)
   PrimBXor     :: IntegralType a -> PrimFun ((a, a)   -> a)

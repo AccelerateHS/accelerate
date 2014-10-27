@@ -6,7 +6,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Substitution
--- Copyright   : [2012] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -133,22 +133,25 @@ subAtop _ (SuccIdx idx) = Avar idx
 --
 type env :> env' = forall t'. Idx env t' -> Idx env' t'
 
+{-# NOINLINE[1] weakenA #-}
 weakenA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' a
 weakenA k v = Stats.substitution "weakenA" . rebuildA k (Avar . v)
 
+{-# NOINLINE[1] weakenEA #-}
 weakenEA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv' t
 weakenEA k v = Stats.substitution "weakenEA" . rebuildEA k (Avar . v)
 
+{-# NOINLINE[1] weakenFA #-}
 weakenFA :: RebuildAcc acc -> aenv :> aenv' -> PreOpenFun acc env aenv f -> PreOpenFun acc env aenv' f
 weakenFA k v = Stats.substitution "weakenFA" . rebuildFA k (Avar . v)
 
-
+{-# NOINLINE[1] weakenE #-}
 weakenE :: env :> env' -> PreOpenExp acc env aenv t -> PreOpenExp acc env' aenv t
 weakenE v = Stats.substitution "weakenE" . rebuildE (Var . v)
 
+{-# NOINLINE[1] weakenFE #-}
 weakenFE :: env :> env' -> PreOpenFun acc env aenv f -> PreOpenFun acc env' aenv f
 weakenFE v = Stats.substitution "weakenFE" . rebuildFE (Var . v)
-
 
 {-# RULES
 "weakenA/weakenA" forall a (k :: RebuildAcc acc) (v1 :: env' :> env'') (v2 :: env :> env').

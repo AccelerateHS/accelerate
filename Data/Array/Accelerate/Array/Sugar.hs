@@ -12,9 +12,10 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
--- Copyright   : [2008..2011] Manuel M T Chakravarty, Gabriele Keller, Sean Lee
---               [2009..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
---               [2013] Robert Clifton-Everest
+-- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
+--               [2008..2009] Sean Lee
+--               [2009..2014] Trevor L. McDonell
+--               [2013..2014] Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -83,7 +84,28 @@ data Z = Z
 --
 infixl 3 :.
 data tail :. head = tail :. head
-  deriving (Typeable, Show, Eq)
+  deriving (Typeable, Eq)
+
+-- We don't we use a derived Show instance for (:.) because this will insert
+-- parenthesis to demonstrate which order the operator is applied, i.e.:
+--
+--   (((Z :. z) :. y) :. x)
+--
+-- This is fine, but I find it a little unsightly. Instead, we drop all
+-- parenthesis and just display the shape thus:
+--
+--   Z :. z :. y :. x
+--
+-- and then require the down-stream user to wrap the whole thing in parentheses.
+-- This works fine for the most important case, which is to show Acc and Exp
+-- expressions via the pretty printer, although Show-ing a Shape directly
+-- results in no parenthesis being displayed.
+--
+-- One way around this might be to have specialised instances for DIM1, DIM2,
+-- etc.
+--
+instance (Show sh, Show sz) => Show (sh :. sz) where
+  show (sh :. sz) = show sh ++ " :. " ++ show sz
 
 -- | Marker for entire dimensions in slice descriptors.
 --
@@ -1106,6 +1128,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- space; the index space is traversed in row-major order.
   iter  :: sh -> (sh -> a) -> (a -> a -> a) -> a -> a
 
+  -- |Variant of 'iter' without an initial value
+  iter1 :: sh -> (sh -> a) -> (a -> a -> a) -> a
+
   -- |Convert a minpoint-maxpoint index into a /shape/.
   rangeToShape ::  (sh, sh) -> sh
 
@@ -1135,7 +1160,8 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
                             Left v    -> Left v
                             Right ix' -> Right $ toElt ix'
 
-  iter sh f c r         = Repr.iter (fromElt sh) (f . toElt) c r
+  iter sh f c r         = Repr.iter  (fromElt sh) (f . toElt) c r
+  iter1 sh f r          = Repr.iter1 (fromElt sh) (f . toElt) r
 
   rangeToShape (low, high)
     = toElt (Repr.rangeToShape (fromElt low, fromElt high))
