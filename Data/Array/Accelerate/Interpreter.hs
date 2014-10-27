@@ -41,7 +41,6 @@ module Data.Array.Accelerate.Interpreter (
 
   -- Internal (hidden)
   evalPrim, evalPrimConst, evalPrj,
-  evalAcc, force
 
 ) where
 
