@@ -3,7 +3,7 @@
 module MD5 (
 
   Dictionary,
-  hashcat, readMD5, showMD5
+  hashcatWord, hashcatDict, readMD5, showMD5, md5Round
 
 ) where
 
@@ -27,10 +27,10 @@ import Data.Array.Accelerate                    as A
 -- matches the given unknown md5, returns the index into the dictionary of said
 -- match. If not found, this returns (-1).
 --
-hashcat :: Acc Dictionary
-        -> Acc (Scalar MD5)
-        -> Acc (Scalar Int)
-hashcat dict passwd
+hashcatDict :: Acc Dictionary
+         -> Acc (Scalar MD5)
+         -> Acc (Scalar Int)
+hashcatDict dict passwd
   = reshape (constant Z)
   $ permute const res (\ix -> crypt A.! ix `cmp` the passwd ? (constant (Z:.0), ignore))
                       (enumFromN (index1 n) 0)
@@ -39,6 +39,22 @@ hashcat dict passwd
     res         = use $ fromList (Z:.1) [-1]    :: Acc (Vector Int)
     crypt       = md5 dict
 
+    cmp x y     = let (x1,x2,x3,x4) = unlift x
+                      (y1,y2,y3,y4) = unlift y
+                  in x1 ==* y1 &&* x2 ==* y2 &&* x3 ==* y3 &&* x4 ==* y4
+
+-- Generate an MD5 hash for a single word, and if an entry matches the
+-- given unknown md5, returns the given index. If not matched, this
+-- returns (-1).
+--
+hashcatWord :: Acc (Scalar MD5)
+            -> Acc (Vector Word32)
+            -> Acc (Scalar Int)
+            -> Acc (Scalar Int)
+hashcatWord passwd word ix
+  = unit (crypt `cmp` the passwd ? (the ix, -1))
+  where
+    crypt       = md5Round (\i -> word A.! index1 i)
     cmp x y     = let (x1,x2,x3,x4) = unlift x
                       (y1,y2,y3,y4) = unlift y
                   in x1 ==* y1 &&* x2 ==* y2 &&* x3 ==* y3 &&* x4 ==* y4
@@ -60,14 +76,10 @@ md5 :: Acc Dictionary -> Acc (Vector MD5)
 md5 dict
   = let n = A.snd . unindex2 $ A.shape dict
     in
-    A.generate (index1 n) (md5Round dict)
+     A.generate (index1 n) (\ (unindex1 -> ix) -> md5Round (\i -> dict A.! index2 i ix))
 
-
--- A single round of MD5. For inputs longer than 512-bits we would simply
--- reapply this until we run out of input data to hash.
---
-md5Round :: Acc Dictionary -> Exp DIM1 -> Exp MD5
-md5Round word (unindex1 -> ix)
+md5Round :: (Exp Int -> Exp Word32) -> Exp MD5
+md5Round fetch
   = lift
   $ foldl step (a0,b0,c0,d0) [0..64]
   where
@@ -82,10 +94,10 @@ md5Round word (unindex1 -> ix)
 
     get :: Int -> Exp Word32
     get i
-      | i < 16    = word A.! index2 (constant i)                    ix
-      | i < 32    = word A.! index2 (constant ((5*i + 1) `rem` 16)) ix
-      | i < 48    = word A.! index2 (constant ((3*i + 5) `rem` 16)) ix
-      | otherwise = word A.! index2 (constant ((7*i)     `rem` 16)) ix
+      | i < 16    = fetch (constant i)
+      | i < 32    = fetch (constant ((5*i + 1) `rem` 16))
+      | i < 48    = fetch (constant ((3*i + 5) `rem` 16))
+      | otherwise = fetch (constant ((7*i)     `rem` 16))
 
     -- Initial values. For a multi-round implementation we would initialise the
     -- context with these values, and then after applying the round update the
@@ -133,7 +145,6 @@ md5Round word (unindex1 -> ix)
              , 4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23
              , 6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21 ]
 
-
 -- Display the result in big endian hexadecimal format, which is consistent with
 -- other MD5 hash implementations.
 --
@@ -161,4 +172,3 @@ readMD5 =
         return . P.fst $ fromMaybe (error "readHex32be: parse failure") (readHexadecimal s)
   in
   either error id . S.runGetLazy get
-

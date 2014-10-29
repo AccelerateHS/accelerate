@@ -11,6 +11,7 @@ import Test.Prelude.PrefixSum
 import Test.Prelude.Reduction
 import Test.Prelude.Replicate
 import Test.Prelude.Stencil
+import Test.Prelude.Sequencing
 
 import Data.Array.Accelerate.Examples.Internal
 
@@ -29,5 +30,5 @@ test_prelude be conf =
     , test_stencil be conf
     , test_replicate be conf
     , test_filter be conf
+    , test_sequences be conf
     ]
-

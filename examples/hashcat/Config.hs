@@ -16,6 +16,9 @@ data Config
   , _configDict                 :: FilePath
   , _configMaxWords             :: Maybe Int
   , _configSkipWords            :: Int
+  , _configNoSeq                :: Bool
+
+  , _configHelp                 :: Bool
   }
   deriving Show
 
@@ -28,6 +31,8 @@ defaults = Config
   , _configDict                 = []
   , _configMaxWords             = Nothing
   , _configSkipWords            = 0
+  , _configNoSeq                = True
+  , _configHelp                 = False
   }
 
 
@@ -50,6 +55,14 @@ options =
   , Option      ['n'] ["max-words"]
                 (ReqArg (set configMaxWords . Just . read) "INT")
                 "Use at most this many words from the list"
+
+  , Option      [] ["noseq"]
+                (NoArg (set configNoSeq True))
+                "do not use sequencing"
+
+  , Option      ['h', '?'] ["help"]
+                (NoArg (set configHelp True))
+                "show this help message"
   ]
 
 

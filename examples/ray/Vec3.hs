@@ -13,7 +13,7 @@ import Prelude
 import Data.Typeable
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 
 
@@ -113,10 +113,10 @@ instance Elt a => Elt (XYZ a) where
   toElt' p              = let (x,y,z) = toElt p in XYZ x y z
   fromElt' (XYZ x y z)  = fromElt (x, y, z)
 
-instance IsTuple (XYZ a) where
-  type TupleRepr (XYZ a) = TupleRepr (a, a, a)
-  fromTuple (XYZ x y z) = fromTuple (x, y, z)
-  toTuple t             = let (x,y,z) = toTuple t in XYZ x y z
+instance Elt a => IsProduct Elt (XYZ a) where
+  type ProdRepr (XYZ a)  = ProdRepr (a, a, a)
+  fromProd cst (XYZ x y z) = fromProd cst (x, y, z)
+  toProd _ t               = let (x,y,z) = toTuple t in XYZ x y z
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (XYZ a) where
   type Plain (XYZ a) = XYZ (Plain a)

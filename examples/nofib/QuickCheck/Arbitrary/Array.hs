@@ -10,7 +10,7 @@ import QuickCheck.Arbitrary.Shape
 import Data.List
 import Test.QuickCheck
 import System.Random                                    ( Random )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2 )
+import Data.Array.Accelerate.Array.Sugar                ( Array, Segments, Shape, Elt, Z(..), (:.)(..), (!), DIM0, DIM1, DIM2, DIM3, DIM4 )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Set                               as Set
 
@@ -40,6 +40,28 @@ instance (Elt e, Arbitrary e) => Arbitrary (Array DIM2 e) where
         , sly <- map nub $ shrink [0 .. height - 1]
     ]
 
+instance (Elt e, Arbitrary e) => Arbitrary (Array DIM3 e) where
+  arbitrary  = arbitraryArray =<< sized arbitraryShape
+  shrink arr =
+    let (Z :. width :. height :. depth)   = Sugar.shape arr
+    in
+    [ Sugar.fromList (Z :. length slx :. length sly :. length slz) [ arr ! (Z:.x:.y:.z) | x <- slx, y <- sly, z <- slz ]
+        | slx <- map nub $ shrink [0 .. width  - 1]
+        , sly <- map nub $ shrink [0 .. height - 1]
+        , slz <- map nub $ shrink [0 .. depth  - 1]
+    ]
+
+instance (Elt e, Arbitrary e) => Arbitrary (Array DIM4 e) where
+  arbitrary  = arbitraryArray =<< sized arbitraryShape
+  shrink arr =
+    let (Z :. width :. height :. depth :. time)   = Sugar.shape arr
+    in
+    [ Sugar.fromList (Z :. length slx :. length sly :. length slz :. length slw) [ arr ! (Z:.x:.y:.z:.w) | x <- slx, y <- sly, z <- slz, w <- slw ]
+        | slx <- map nub $ shrink [0 .. width  - 1]
+        , sly <- map nub $ shrink [0 .. height - 1]
+        , slz <- map nub $ shrink [0 .. depth  - 1]
+        , slw <- map nub $ shrink [0 .. time   - 1]
+    ]
 
 -- Generate an arbitrary array of the given shape using the default element
 -- generator
