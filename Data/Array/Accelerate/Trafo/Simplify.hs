@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns         #-}
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE PatternGuards        #-}
@@ -33,15 +34,15 @@ import Control.Applicative                              hiding ( Const )
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
 import Data.Array.Accelerate.Error
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..), shapeToList )
-
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
+                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -220,6 +221,7 @@ simplifyOpenExp env = first getAny . cvtE
       Shape a                   -> pure $ Shape a
       ShapeSize sh              -> shapeSize (cvtE sh)
       Intersect s t             -> cvtE s `intersect` cvtE t
+      Union s t                 -> cvtE s `union` cvtE t
       Foreign ff f e            -> Foreign ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
 
@@ -253,6 +255,28 @@ simplifyOpenExp env = first getAny . cvtE
         leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
         leaves (Intersect x y)  = leaves x ++ leaves y
         leaves rest             = [rest]
+
+    -- Return the minimal set of unique shapes to take the union of. This is a bit
+    -- inefficient, but the number of shapes is expected to be small so should
+    -- be fine in practice.
+    --
+    union :: Shape t
+          => (Any, PreOpenExp acc env aenv t)
+          -> (Any, PreOpenExp acc env aenv t)
+          -> (Any, PreOpenExp acc env aenv t)
+    union (c1, sh1) (c2, sh2)
+      | Nothing <- match sh sh' = Stats.ruleFired "union" (yes sh')
+      | otherwise               = (c1 <> c2, sh')
+      where
+        sh      = Union sh1 sh2
+        sh'     = foldl1 Union
+                $ nubBy (\x y -> isJust (match x y))
+                $ leaves sh1 ++ leaves sh2
+
+        leaves :: Shape t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
+        leaves (Union x y)  = leaves x ++ leaves y
+        leaves rest         = [rest]
+
 
     -- Simplify conditional expressions, in particular by eliminating branches
     -- when the predicate is a known constant.

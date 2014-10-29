@@ -22,21 +22,25 @@ module Data.Array.Accelerate.Trafo (
 
   convertAcc,  convertAccWith,
   convertAfun, convertAfunWith,
+  convertSeq, convertSeqWith,
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
+  DelayedSeq(..), Extend(..),
 
   -- * Substitution
-  rebuildAcc,
   module Data.Array.Accelerate.Trafo.Substitution,
 
 ) where
+
+import Data.Typeable
+
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
+import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun, convertSeq ) -- to export types
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
@@ -62,6 +66,9 @@ data Phase = Phase
     -- | Recover sharing of scalar expressions?
   , recoverExpSharing           :: Bool
 
+    -- | Recover sharing of sequence computations?
+  , recoverSeqSharing           :: Bool
+
     -- | Are array computations floated out of expressions irrespective of
     --   whether they are shared or not? Requires 'recoverAccSharing'.
   , floatOutAccFromExp          :: Bool
@@ -82,6 +89,7 @@ phases :: Phase
 phases =  Phase
   { recoverAccSharing      = True
   , recoverExpSharing      = True
+  , recoverSeqSharing      = True
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
@@ -105,7 +113,7 @@ convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = Fusion.convertAcc enableAccFusion
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
-  $ Sharing.convertAcc recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
 
 
@@ -119,7 +127,7 @@ convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = Fusion.convertAfun enableAccFusion
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
-  $ Sharing.convertAfun recoverAccSharing recoverExpSharing floatOutAccFromExp
+  $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
 
 
@@ -140,6 +148,19 @@ convertFun
   = Rewrite.simplify
   . Sharing.convertFun (recoverExpSharing phases)
 
+-- | Convert a closed sequence computation, incorporating sharing observation and
+--   optimisation.
+--
+convertSeq :: Typeable s => Seq s -> DelayedSeq s
+convertSeq = convertSeqWith phases
+
+convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
+convertSeqWith Phase{..} seq
+  = Fusion.convertSeq enableAccFusion
+  $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
+  $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
+  $ seq
+
 
 -- Pretty printing
 -- ---------------
@@ -156,6 +177,8 @@ instance Elt e => Show (Exp e) where
 instance Function (Exp a -> f) => Show (Exp a -> f) where
   show = withSimplStats . show . convertFun
 
+instance Typeable a => Show (Seq a) where
+  show = withSimplStats . show . convertSeq
 
 -- Debugging
 -- ---------
@@ -181,4 +204,3 @@ withSimplStats x = unsafePerformIO $ do
 #else
 withSimplStats x = x
 #endif
-

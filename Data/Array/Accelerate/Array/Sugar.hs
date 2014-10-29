@@ -9,6 +9,11 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ImpredicativeTypes  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -16,6 +21,7 @@
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
 --               [2013..2014] Robert Clifton-Everest
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -27,7 +33,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Segments,
-  Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
+  Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr, EltRepr',
@@ -39,13 +45,16 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  Z(..), (:.)(..), All(..), Any(..), Shape(..), Slice(..),
+  Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
 
+  -- * Tuples
+  Tuple(..), Atuple(..), TupleRepr, IsTuple, IsAtuple, fromTuple, toTuple, fromAtuple, toAtuple,
+
   -- * Miscellaneous
-  showShape, Foreign(..)
+  showShape, Foreign(..), sliceShape, enumSlices,
 
 ) where
 
@@ -60,6 +69,7 @@ import qualified GHC.Exts                                       as GHC
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Product
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
@@ -105,7 +115,7 @@ data tail :. head = tail :. head
 instance (Show sh, Show sz) => Show (sh :. sz) where
   show (sh :. sz) = show sh ++ " :. " ++ show sz
 
--- | Marker for entire dimensions in slice descriptors.
+-- | Marker for entire dimensions in slice and division descriptors.
 --
 -- For example, when used in slices passed to `Data.Array.Accelerate.replicate`,
 -- the occurrences of `All` indicate the dimensions into which the array's
@@ -115,7 +125,7 @@ instance (Show sh, Show sz) => Show (sh :. sz) where
 data All = All
   deriving (Typeable, Show, Eq)
 
--- |Marker for arbitrary shapes in slice descriptors.  Such arbitrary
+-- |Marker for arbitrary shapes in slice and division descriptors.  Such arbitrary
 --  shapes may include an unknown number of dimensions.
 --
 --  `Any` can be used in the leftmost position of a slice instead of
@@ -127,6 +137,26 @@ data All = All
 -- > repN n a = replicate (constant $ Any :. n) a
 --
 data Any sh = Any
+  deriving (Typeable, Show, Eq)
+
+-- | Marker for splitting along an entire dimension in division descriptors.
+--
+-- For example, when used in a division descriptor passed to 'Data.Array.Accelerate.toSeq',
+-- a `Split` indicates that the array should be divided along this dimension
+-- forming the elements of the output sequence.
+--
+data Split = Split
+  deriving (Typeable, Show, Eq)
+
+-- | Marker for arbitrary shapes in slices descriptors, where it is desired to
+-- split along an unknown number of dimensions.
+--
+--  For example, in the following definition, 'Divide' matches against any
+--  shape and flattens everything but the innermost dimension.
+--
+-- > vectors :: (Shae sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Vector e]
+-- > vectors = toSeq (Divide :. All)
+data Divide sh = Divide
   deriving (Typeable, Show, Eq)
 
 -- Representation change for array element types
@@ -227,6 +257,15 @@ type instance EltRepr' (a, b, c, d, e, f, g) = (EltRepr (a, b, c, d, e, f), EltR
 type instance EltRepr' (a, b, c, d, e, f, g, h) = (EltRepr (a, b, c, d, e, f, g), EltRepr' h)
 type instance EltRepr' (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
+
+-- Scalar tuples
+type IsTuple = IsProduct Elt
+
+fromTuple :: IsTuple tup => tup -> ProdRepr tup
+fromTuple = fromProd (Proxy :: Proxy Elt)
+
+toTuple :: IsTuple tup => ProdRepr tup -> tup
+toTuple = toProd (Proxy :: Proxy Elt)
 
 
 -- Array elements (tuples of scalars)
@@ -739,6 +778,14 @@ type instance ArrRepr' (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrR
 type instance ArrRepr' (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
 type instance ArrRepr' (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
 
+type IsAtuple = IsProduct Arrays
+
+fromAtuple :: IsAtuple tup => tup -> ProdRepr tup
+fromAtuple = fromProd (Proxy :: Proxy Arrays)
+
+toAtuple :: IsAtuple tup => ProdRepr tup -> tup
+toAtuple = toProd (Proxy :: Proxy Arrays)
+
 -- Array type reification
 --
 data ArraysR arrs where
@@ -746,9 +793,15 @@ data ArraysR arrs where
   ArraysRarray :: (Shape sh, Elt e) =>              ArraysR (Array sh e)
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
-class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
+data ArraysFlavour arrs where
+  ArraysFunit  ::                                            ArraysFlavour ()
+  ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
+  ArraysFtuple :: (IsAtuple arrs, ArrRepr' arrs ~ (l,r))  => ArraysFlavour arrs
+
+class ( Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
   arrays'  :: a {- dummy -} -> ArraysR (ArrRepr' a)
+  flavour  :: a {- dummy -} -> ArraysFlavour a
   --
   toArr    :: ArrRepr  a -> a
   toArr'   :: ArrRepr' a -> a
@@ -759,6 +812,7 @@ class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a wher
 instance Arrays () where
   arrays  _ = ArraysRunit
   arrays' _ = ArraysRunit
+  flavour _ = ArraysFunit
   --
   toArr     = id
   toArr'    = id
@@ -768,6 +822,7 @@ instance Arrays () where
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
   arrays  _       = ArraysRpair ArraysRunit ArraysRarray
   arrays' _       = ArraysRarray
+  flavour _       = ArraysFarray
   --
   toArr ((), arr) = arr
   toArr'          = id
@@ -777,7 +832,8 @@ instance (Shape sh, Elt e) => Arrays (Array sh e) where
 instance (Arrays b, Arrays a) => Arrays (b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
-  --
+  flavour _ = ArraysFtuple
+
   toArr    (b, a) = (toArr b, toArr' a)
   toArr'   (b, a) = (toArr b, toArr' a)
   fromArr  (b, a) = (fromArr b, fromArr' a)
@@ -786,6 +842,7 @@ instance (Arrays b, Arrays a) => Arrays (b, a) where
 instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
   toArr'   (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
@@ -795,6 +852,7 @@ instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
 instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
   toArr'   (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
@@ -804,6 +862,7 @@ instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
 instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
   toArr'   (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
@@ -814,6 +873,7 @@ instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
   toArr'   (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
@@ -824,6 +884,7 @@ instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
   => Arrays (g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
   toArr'   (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
@@ -834,6 +895,7 @@ instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, 
   => Arrays (h, g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
   toArr'   (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
@@ -844,6 +906,7 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
   => Arrays (i, h, g, f, e, d, c, b, a) where
   arrays  _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
   arrays' _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
+  flavour _ = ArraysFtuple
   --
   toArr    (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
   toArr'   (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
@@ -858,6 +921,27 @@ instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, 
 "toArr/fromArr" forall a.
   toArr (fromArr a) = a #-}
 
+
+-- Tuple representation
+-- --------------------
+
+-- |We represent tuples as heterogenous lists, typed by a type list.
+--
+data Tuple c t where
+  NilTup  ::                              Tuple c ()
+  SnocTup :: Elt t => Tuple c s -> c t -> Tuple c (s, t)
+
+-- TLM: It is irritating that we need a separate data type for tuples of scalars
+--   vs. arrays, purely to carry the class constraint.
+--
+-- | Tuples of Arrays.  Note that this carries the `Arrays` class
+--   constraint rather than `Elt` in the case of tuples of scalars.
+data Atuple c t where
+  NilAtup  ::                                  Atuple c ()
+  SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
+
+-- |The tuple representation is equivalent to the product representation.
+type TupleRepr a = ProdRepr a
 
 -- |Multi-dimensional arrays for array processing.
 --
@@ -907,7 +991,8 @@ type DIM9 = DIM8:.Int
 
 -- |Shapes and indices of multi-dimensional arrays
 --
-class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
+class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSliceShape sh ~ sh, SliceShape sh ~ Z)
+       => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
   dim    :: sh -> Int
@@ -915,11 +1000,17 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
 
+  -- |Empty /shape/.
+  emptyS :: sh
+
   -- |Magic value identifying elements ignored in 'permute'.
   ignore :: sh
 
   -- |Yield the intersection of two shapes
   intersect :: sh -> sh -> sh
+
+  -- |Yield the union of two shapes
+  union :: sh -> sh -> sh
 
   -- |Map a multi-dimensional index into one in a linear, row-major
   -- representation of the array (first argument is the /shape/, second
@@ -955,13 +1046,18 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
   -- | The slice index for slice specifier 'Any sh'
   sliceAnyIndex :: sh -> Repr.SliceIndex (EltRepr (Any sh)) (EltRepr sh) () (EltRepr sh)
 
+  -- | The slice index for specifying a slice with only the Z component projected
+  sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
+
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
+  emptyS                = toElt Repr.emptyS
   -- (#) must be individually defined, as it holds for all instances *except*
   -- the one with the largest arity
 
   ignore                = toElt Repr.ignore
   intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
+  union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
 
@@ -984,9 +1080,11 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh)) => Shape sh where
 
 instance Shape Z where
   sliceAnyIndex _ = Repr.SliceNil
+  sliceNoneIndex _ = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
+  sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions
@@ -1024,6 +1122,40 @@ instance Shape sh => Slice (Any sh) where
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
+
+
+-- | Generalised array division, like above but use for splitting an array into
+-- many subarrays, as opposed to extracting a single subarray.
+--
+class (Slice (DivisionSlice sl))
+       => Division sl where
+  type DivisionSlice sl :: *     -- the slice
+  slicesIndex :: slix ~ DivisionSlice sl
+              => sl {- dummy -}
+              -> Repr.SliceIndex (EltRepr slix)
+                                 (EltRepr (SliceShape   slix))
+                                 (EltRepr (CoSliceShape slix))
+                                 (EltRepr (FullShape    slix))
+
+instance Division Z where
+  type DivisionSlice   Z = Z
+  slicesIndex _ = Repr.SliceNil
+
+instance Division sl => Division (sl:.All) where
+  type DivisionSlice  (sl:.All) = DivisionSlice sl :. All
+  slicesIndex _ = Repr.SliceAll (slicesIndex (undefined :: sl))
+
+instance Division sl => Division (sl:.Split) where
+  type DivisionSlice (sl:.Split) = DivisionSlice sl :. Int
+  slicesIndex _ = Repr.SliceFixed (slicesIndex (undefined :: sl))
+
+instance Shape sh => Division (Any sh) where
+  type DivisionSlice (Any sh) = Any sh
+  slicesIndex _ = sliceAnyIndex (undefined :: sh)
+
+instance (Shape sh, Slice sh) => Division (Divide sh) where
+  type DivisionSlice (Divide sh) = sh
+  slicesIndex _ = sliceNoneIndex (undefined :: sh)
 
 
 -- Array operations
@@ -1166,4 +1298,27 @@ instance Show (Array DIM2 e) where
 --
 showShape :: Shape sh => sh -> String
 showShape = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList
+
+-- | Project the shape of a slice from the full shape.
+sliceShape :: forall slix co sl dim. (Shape sl, Shape dim)
+           => Repr.SliceIndex slix (EltRepr sl) co (EltRepr dim)
+           -> dim
+           -> sl
+sliceShape slix = toElt . Repr.sliceShape slix . fromElt
+
+-- | Enumerate all slices within a given bound. The innermost
+-- dimension changes most rapid.
+--
+-- E.g. enumSlices slix (Z :. 2 :. 3 :. All) = [ Z :. 0 :. 0 :. All
+--                                             , Z :. 0 :. 1 :. All
+--                                             , Z :. 0 :. 2 :. All
+--                                             , Z :. 1 :. 0 :. All
+--                                             , Z :. 1 :. 1 :. All
+--                                             , Z :. 1 :. 2 :. All ]
+--
+enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
+           => Repr.SliceIndex (EltRepr slix) sl co (EltRepr dim)
+           -> dim    -- Bounds
+           -> [slix] -- All slices within bounds.
+enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
 

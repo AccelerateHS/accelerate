@@ -13,8 +13,8 @@ module Data.Array.Accelerate.Pretty.Traverse
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar hiding ((!))
+import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Type
 
 
@@ -74,6 +74,40 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
+    travAcc' (Collect seq)                         = travSeq f c l seq
+
+travSeq :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+         -> (String -> String -> m b) -> PreOpenSeq OpenAcc aenv senv a -> m b
+travSeq f c l seq =
+  case seq of
+    Producer p s' ->
+      case p of
+        StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
+        ToSeq slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
+        MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
+        ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
+        ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
+    Consumer co -> travC co
+    Reify ix    -> leaf (show (idxToInt ix))
+  where
+    combine = c (accFormat f)
+    leaf    = l (accFormat f)
+    --
+    travT :: Atuple (Consumer OpenAcc aenv senv) t' -> m b
+    travT NilAtup          = l (tupleFormat f) "NilAtup"
+    travT (SnocAtup tup s) = c (tupleFormat f) "SnocAtup" [ travT tup, travC s ]
+
+    travC :: forall a. Consumer OpenAcc aenv senv a -> m b
+    travC co =
+      case co of
+        FoldSeq fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
+        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
+        Stuple t -> travT t
+
+    travSlix :: SliceIndex slix sl co sh -> String
+    travSlix SliceNil       = "Z"
+    travSlix (SliceAll s)   = travSlix s ++ ":.All"
+    travSlix (SliceFixed s) = travSlix s ++ ":.Split"
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
@@ -108,6 +142,7 @@ travExp f c l expr = travExp' expr
     travExp' (Shape idx)                = combine "Shape" [ travAcc f c l idx ]
     travExp' (ShapeSize e)              = combine "ShapeSize" [ travExp f c l e ]
     travExp' (Intersect sh1 sh2)        = combine "Intersect" [ travExp f c l sh1, travExp f c l sh2 ]
+    travExp' (Union sh1 sh2)            = combine "Union" [ travExp f c l sh1, travExp f c l sh2 ]
     travExp' (Foreign ff fun e)         = combine ("Foreign " ++ strForeign ff) [ travFun f c l fun, travExp f c l e ]
 
 

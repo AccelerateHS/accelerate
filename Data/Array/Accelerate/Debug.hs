@@ -22,7 +22,7 @@
 module Data.Array.Accelerate.Debug (
 
   -- * Dynamic debugging flags
-  dump_sharing, dump_simpl_stats, dump_simpl_iterations, verbose,
+  dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation, verbose,
   queryFlag, setFlag,
 
   -- * Tracing
@@ -62,6 +62,7 @@ data Flags = Flags
     _dump_sharing               :: !Bool                -- sharing recovery phase
   , _dump_simpl_stats           :: !Bool                -- statistics form fusion/simplification
   , _dump_simpl_iterations      :: !Bool                -- output from each simplifier iteration
+  , _dump_vectorisation         :: !Bool                -- output from the vectoriser
   , _verbose                    :: !Bool                -- additional, uncategorised status messages
 
     -- functionality / phase control
@@ -90,6 +91,7 @@ dflags =
     Option "dump-sharing"               (set dump_sharing)              -- print sharing recovery trace
   , Option "dump-simpl-stats"           (set dump_simpl_stats)          -- dump simplifier stats
   , Option "dump-simpl-iterations"      (set dump_simpl_iterations)     -- dump output from each simplifier iteration
+  , Option "dump-vectorisation"         (set dump_vectorisation)        -- dump vectorisation messages
   , Option "verbose"                    (set verbose)                   -- print additional information
   ]
 
@@ -110,7 +112,7 @@ fflags =
 initialise :: IO Flags
 initialise = parse `fmap` getArgs
   where
-    defaults            = Flags False False False False Nothing Nothing Nothing Nothing
+    defaults            = Flags False False False False False Nothing Nothing Nothing Nothing
     parse               = foldl parse1 defaults
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of

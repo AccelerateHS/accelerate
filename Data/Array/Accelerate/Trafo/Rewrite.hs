@@ -16,9 +16,8 @@ module Data.Array.Accelerate.Trafo.Rewrite
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Trafo.Substitution
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt, Tuple(..), Atuple(..) )
 
 
 -- Convert segment length arrays passed to segmented operations into offset
@@ -88,16 +87,17 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+      Collect s               -> Collect (convertSegmentsSeq s)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
-        where f' = weakenFA rebuildOpenAcc SuccIdx f
-              z' = weakenEA rebuildOpenAcc SuccIdx z
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+        where f' = weaken SuccIdx f
+              z' = weaken SuccIdx z
+              a' = weaken SuccIdx a
 
       Fold1Seg f a s            -> Alet (segments s) (OpenAcc (Fold1Seg (cvtF f') (cvtA a') a0))
-        where f' = weakenFA rebuildOpenAcc SuccIdx f
-              a' = rebuildOpenAcc (Avar . SuccIdx) a
+        where f' = weaken SuccIdx f
+              a' = weaken SuccIdx a
 
 
 convertSegmentsAfun :: OpenAfun aenv t -> OpenAfun aenv t
@@ -106,3 +106,41 @@ convertSegmentsAfun afun =
     Abody b     -> Abody (convertSegments b)
     Alam f      -> Alam (convertSegmentsAfun f)
 
+convertSegmentsSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
+convertSegmentsSeq s =
+  case s of
+    Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
+    Consumer c   -> Consumer (cvtC c)
+    Reify ix     -> Reify ix
+  where
+    cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
+    cvtP p =
+      case p of
+        StreamIn arrs        -> StreamIn arrs
+        ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
+        MapSeq f x           -> MapSeq (cvtAfun f) x
+        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
+
+    cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
+    cvtC c =
+      case c of
+        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
+        Stuple t             -> Stuple (cvtCT t)
+
+    cvtCT :: Atuple (Consumer OpenAcc senv aenv) t -> Atuple (Consumer OpenAcc senv aenv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
+    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE = id
+
+    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF = id
+
+    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
+    cvtA = convertSegments
+
+    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
+    cvtAfun = convertSegmentsAfun

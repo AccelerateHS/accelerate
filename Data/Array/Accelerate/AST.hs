@@ -16,6 +16,7 @@
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
 --               [2010..2011] Ben Lever
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -88,6 +89,10 @@ module Data.Array.Accelerate.AST (
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   Stencil(..), StencilR(..),
 
+  -- * Accelerated sequences
+  PreOpenSeq(..), Seq,
+  Producer(..), Consumer(..),
+
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
@@ -104,7 +109,7 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
@@ -162,7 +167,6 @@ prjElt ZeroIdx       (PushElt _   v) = Sugar.toElt v
 prjElt (SuccIdx idx) (PushElt val _) = prjElt idx val
 prjElt _             _               = $internalError "prjElt" "inconsistent valuation"
 
-
 -- Array expressions
 -- -----------------
 
@@ -218,11 +222,11 @@ data PreOpenAcc acc aenv a where
               -> PreOpenAcc acc aenv arrs
 
   -- Tuples of arrays
-  Atuple      :: (Arrays arrs, IsTuple arrs)
+  Atuple      :: (Arrays arrs, IsAtuple arrs)
               => Atuple    (acc aenv) (TupleRepr arrs)
               -> PreOpenAcc acc aenv  arrs
 
-  Aprj        :: (Arrays arrs, IsTuple arrs, Arrays a)
+  Aprj        :: (Arrays arrs, IsAtuple arrs, Arrays a)
               => TupleIdx (TupleRepr arrs) a
               ->            acc aenv arrs
               -> PreOpenAcc acc aenv a
@@ -457,6 +461,10 @@ data PreOpenAcc acc aenv a where
               -> acc            aenv (Array sh e2)              -- source array #2
               -> PreOpenAcc acc aenv (Array sh e')
 
+  -- A sequence of operations.
+  Collect     :: Arrays arrs
+              => PreOpenSeq acc aenv () arrs
+              -> PreOpenAcc acc aenv arrs
 
 -- Vanilla open array computations
 --
@@ -465,13 +473,121 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
+data PreOpenSeq acc aenv senv arrs where
+  Producer :: (Arrays a)
+           => Producer acc aenv senv a
+           -> PreOpenSeq acc aenv (senv, a) arrs
+           -> PreOpenSeq acc aenv senv arrs
+
+  Consumer :: Arrays arrs
+           => Consumer acc aenv senv arrs
+           -> PreOpenSeq acc aenv senv arrs
+
+  Reify    :: Idx senv arrs
+           -> PreOpenSeq acc aenv senv [arrs]
+
+data Producer acc aenv senv a where
+  -- Convert the given Haskell-list of arrays to a sequence.
+  StreamIn :: Arrays a
+           => [a]
+           -> Producer acc aenv senv a
+
+  -- Convert the given array to a sequence.
+  ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
+           => SliceIndex  (EltRepr slix)
+                          (EltRepr sl)
+                          co
+                          (EltRepr sh)
+           -> proxy slix
+           -> acc aenv (Array sh e)
+           -> Producer acc aenv senv (Array sl e)
+
+  -- Apply the given the given function to all elements of the given
+  -- sequence.
+  MapSeq :: (Arrays a, Arrays b)
+         => PreOpenAfun acc aenv (a -> b)
+         -> Idx senv a
+         -> Producer acc aenv senv b
+
+  -- Apply a given binary function pairwise to all elements of the
+  -- given sequences.
+  ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
+             => PreOpenAfun acc aenv (a -> b -> c)
+             -> Idx senv a
+             -> Idx senv b
+             -> Producer acc aenv senv c
+
+  -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   Forall a b c. (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   Forall a. a0 + a = a = a + a0.
+  --
+  ScanSeq :: Elt a
+          => PreFun acc aenv (a -> a -> a)
+          -> PreExp acc aenv a
+          -> Idx senv (Scalar a)
+          -> Producer acc aenv senv (Scalar a)
+
+data Consumer acc aenv senv a where
+
+  -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
+  -- using the given binary operation (+). (+) must be associative:
+  --
+  --   Forall a b c. (a + b) + c = a + (b + c),
+  --
+  -- and a0 must be the identity element for (+):
+  --
+  --   Forall a. a0 + a = a = a + a0.
+  --
+  FoldSeq :: Elt a
+          => PreFun acc aenv (a -> a -> a)
+          -> PreExp acc aenv a
+          -> Idx senv (Scalar a)
+          -> Consumer acc aenv senv (Scalar a)
+
+  -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct where
+  -- reduction with the companion operator corresponds to
+  -- flattening. f must be semi-associative, with vecotor append (++)
+  -- as the companion operator:
+  --
+  --   Forall b sh1 a1 sh2 a2.
+--       f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --
+  -- It is common to ignore the shape vectors, yielding the usual
+  -- semi-associativity law:
+  --
+  --   f b a _ = b + a,
+  --
+  -- for some (+) satisfying:
+  --
+  --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
+  --
+  FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
+                 => PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
+                 -> acc aenv a
+                 -> Idx senv (Array sh e)
+                 -> Consumer acc aenv senv a
+
+  Stuple :: (Arrays a, IsAtuple a)
+         => Atuple (Consumer acc aenv senv) (TupleRepr a)
+         -> Consumer acc aenv senv a
+
+-- |Closed sequence computation
+--
+type Seq = PreOpenSeq OpenAcc () ()
+
 -- |Closed array expression aka an array program
 --
 type Acc = OpenAcc ()
 
+
 -- |Operations on stencils.
 --
-class (Shape sh, Elt e, IsTuple stencil) => Stencil sh e stencil where
+class (Shape sh, Elt e, IsTuple stencil, Elt stencil) => Stencil sh e stencil where
   stencil       :: StencilR sh e stencil
   stencilAccess :: (sh -> e) -> sh -> stencil
 
@@ -829,6 +945,12 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv dim
                 -> PreOpenExp acc env aenv dim
 
+  -- Union of two shapes
+  Union         :: Shape dim
+                => PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
+                -> PreOpenExp acc env aenv dim
+
 
 -- |Vanilla open expression
 --
@@ -972,6 +1094,7 @@ showPreAccOp Permute{}          = "Permute"
 showPreAccOp Backpermute{}      = "Backpermute"
 showPreAccOp Stencil{}          = "Stencil"
 showPreAccOp Stencil2{}         = "Stencil2"
+showPreAccOp Collect{}          = "Collect"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr
@@ -1019,4 +1142,5 @@ showPreExpOp LinearIndex{}      = "LinearIndex"
 showPreExpOp Shape{}            = "Shape"
 showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
+showPreExpOp Union{}            = "Union"
 

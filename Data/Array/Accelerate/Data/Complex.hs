@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE IncoherentInstances   #-}
@@ -5,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Array.Accelerate.Data.Complex (
@@ -30,7 +32,7 @@ import Prelude
 import Data.Complex                             ( Complex(..) )
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 
 
@@ -46,10 +48,11 @@ instance Elt a => Elt (Complex a) where
   toElt' (a,b)                  = toElt a :+ toElt' b
   fromElt' (a :+ b)             = (fromElt a, fromElt' b)
 
-instance IsTuple (Complex a) where
-  type TupleRepr (Complex a) = (((), a), a)
-  fromTuple (x :+ y)    = (((), x), y)
-  toTuple (((), x), y)  = (x :+ y)
+instance cst a => IsProduct cst (Complex a) where
+  type ProdRepr (Complex a) = (((), a), a)
+  fromProd _ (x :+ y)    = (((), x), y)
+  toProd _ (((), x), y)  = (x :+ y)
+  prod _ _               = ProdRsnoc $ ProdRsnoc ProdRunit
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)

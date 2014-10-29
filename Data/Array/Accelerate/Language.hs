@@ -1,4 +1,5 @@
 {-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
+{-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS -fno-warn-missing-methods #-}
 {-# OPTIONS -fno-warn-orphans         #-}
@@ -6,6 +7,7 @@
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2009..2014] Trevor L. McDonell
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -23,7 +25,7 @@
 module Data.Array.Accelerate.Language (
 
   -- * Array and scalar expressions
-  Acc, Exp,                                 -- re-exporting from 'Smart'
+  Acc, Seq, Exp,                            -- re-exporting from 'Smart'
 
   -- * Scalar introduction
   constant,                                 -- re-exporting from 'Smart'
@@ -39,6 +41,18 @@ module Data.Array.Accelerate.Language (
 
   -- * Map-like functions
   map, zipWith,
+
+  -- * Sequence collection
+  collect,
+
+  -- * Sequence producers
+  streamIn, toSeq,
+
+  -- * Sequence transudcers
+  mapSeq, zipWithSeq, scanSeq,
+
+  -- * Sequence consumers
+  foldSeq, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -73,7 +87,7 @@ module Data.Array.Accelerate.Language (
 
   -- * Index construction and destruction
   indexHead, indexTail, toIndex, fromIndex,
-  intersect,
+  intersect, union,
 
   -- * Flow-control
   cond, while,
@@ -113,7 +127,7 @@ import Text.Printf
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect)
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -453,6 +467,109 @@ stencil2 :: (Shape ix, Elt a, Elt b, Elt c,
         -> Acc (Array ix c)                   -- ^destination array
 stencil2 = Acc $$$$$ Stencil2
 
+
+-- Sequence operations
+-- ------------------
+
+-- Common sequence types
+--
+
+streamIn :: Arrays a
+         => [a]
+         -> Seq [a]
+streamIn arrs = Seq (StreamIn arrs)
+
+-- | Convert the given array to a sequence by dividing the array up into subarrays.
+-- The first argument captures how to the division should be performed. The
+-- presence of `All` in the division descriptor indicates that elements in the
+-- corresponding dimension should be retained in the subarrays, whereas `Split`
+-- indicates that the input array should divided along this dimension.
+--
+toSeq :: (Division slsix, Elt a)
+      => slsix
+      -> Acc (Array (FullShape (DivisionSlice slsix)) a)
+      -> Seq [Array (SliceShape (DivisionSlice slsix)) a]
+toSeq spec acc = Seq (ToSeq spec acc)
+
+-- | Apply the given array function element-wise to the given sequence.
+--
+mapSeq :: (Arrays a, Arrays b)
+       => (Acc a -> Acc b)
+       -> Seq [a]
+       -> Seq [b]
+mapSeq = Seq $$ MapSeq
+
+-- | Apply the given binary function element-wise to the two sequences.  The length of the resulting
+-- sequence is the minumum of the lengths of the two source sequences.
+--
+zipWithSeq :: (Arrays a, Arrays b, Arrays c)
+           => (Acc a -> Acc b -> Acc c)
+           -> Seq [a]
+           -> Seq [b]
+           -> Seq [c]
+zipWithSeq = Seq $$$ ZipWithSeq
+
+-- | scanSeq (+) a0 x seq. Scan a sequence x by combining each
+-- element using the given binary operation (+). (+) must be
+-- associative:
+--
+--   Forall a b c. (a + b) + c = a + (b + c),
+--
+-- and a0 must be the identity element for (+):
+--
+--   Forall a. a0 + a = a = a + a0.
+--
+scanSeq :: Elt a
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
+        -> Seq [Scalar a]
+        -> Seq [Scalar a]
+scanSeq = Seq $$$ ScanSeq
+
+-- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
+-- element using the given binary operation (+). (+) must be
+-- associative:
+--
+--   Forall a b c. (a + b) + c = a + (b + c),
+--
+-- and a0 must be the identity element for (+):
+--
+--   Forall a. a0 + a = a = a + a0.
+--
+foldSeq :: Elt a
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
+        -> Seq [Scalar a]
+        -> Seq (Scalar a)
+foldSeq = Seq $$$ FoldSeq
+
+-- | foldSeqFlatten f a0 x seq. A specialized version of
+-- FoldSeqAct where reduction with the companion operator
+-- corresponds to flattening. f must be semi-associative, with vecotor
+-- append (++) as the companion operator:
+--
+--   Forall b sh1 a1 sh2 a2.
+--     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+--
+-- It is common to ignore the shape vectors, yielding the usual
+-- semi-associativity law:
+--
+--   f b a _ = b + a,
+--
+-- for some (+) satisfying:
+--
+--   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
+--
+foldSeqFlatten :: (Arrays a, Shape jx, Elt b)
+               => (Acc a -> Acc (Vector jx) -> Acc (Vector b) -> Acc a)
+               -> Acc a
+               -> Seq [Array jx b]
+               -> Seq a
+foldSeqFlatten = Seq $$$ FoldSeqFlatten
+
+collect :: Arrays arrs => Seq arrs -> Acc arrs
+collect = Acc . Collect
+
 -- Foreign function calling
 -- ------------------------
 
@@ -581,6 +698,11 @@ fromIndex = Exp $$ FromIndex
 --
 intersect :: Shape sh => Exp sh -> Exp sh -> Exp sh
 intersect = Exp $$ Intersect
+
+-- | Union of two shapes
+--
+union :: Shape sh => Exp sh -> Exp sh -> Exp sh
+union = Exp $$ Union
 
 
 -- Flow-control

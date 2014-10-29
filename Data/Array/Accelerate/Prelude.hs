@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Prelude (
   flatten,
 
   -- * Enumeration and filling
-  fill, enumFromN, enumFromStepN,
+  empty, fill, enumFromN, enumFromStepN,
 
   -- * Concatenation
   (++),
@@ -89,6 +89,9 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
+  -- * Sequence operations
+  fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+
 ) where
 
 -- avoid clashes with Prelude functions
@@ -103,7 +106,6 @@ import qualified Prelude as P
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Tuple
 import Data.Array.Accelerate.Type
 
 
@@ -871,6 +873,11 @@ flatten a = reshape (index1 $ size a) a
 -- Enumeration and filling
 -- -----------------------
 
+-- | Create an empty array.
+--
+empty :: (Shape sh, Elt e) => Acc (Array sh e)
+empty = use (fromList emptyS [])
+
 -- | Create an array where all elements are the same value.
 --
 fill :: (Shape sh, Elt e) => Exp sh -> Exp e -> Acc (Array sh e)
@@ -1469,6 +1476,12 @@ instance Lift Acc (Acc a) where
   type Plain (Acc a) = a
   lift = id
 
+-- Instance for Accelerate sequence computations
+
+instance Lift Seq (Seq a) where
+  type Plain (Seq a) = a
+  lift = id
+
 -- Instances for Arrays class
 
 --instance Lift Acc () where
@@ -1562,6 +1575,62 @@ instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, 
   => Unlift Acc (Acc a, Acc b, Acc c, Acc d, Acc e, Acc f, Acc g, Acc h, Acc i) where
   unlift = unatup9
 
+
+-- Instances for Seq
+
+instance (Lift Seq a, Lift Seq b, Arrays (Plain a), Arrays (Plain b)) => Lift Seq (a, b) where
+  type Plain (a, b) = (Plain a, Plain b)
+  lift (x, y) = stup2 (lift x, lift y)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c))
+  => Lift Seq (a, b, c) where
+  type Plain (a, b, c) = (Plain a, Plain b, Plain c)
+  lift (x, y, z) = stup3 (lift x, lift y, lift z)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d))
+  => Lift Seq (a, b, c, d) where
+  type Plain (a, b, c, d) = (Plain a, Plain b, Plain c, Plain d)
+  lift (x, y, z, u) = stup4 (lift x, lift y, lift z, lift u)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e))
+  => Lift Seq (a, b, c, d, e) where
+  type Plain (a, b, c, d, e) = (Plain a, Plain b, Plain c, Plain d, Plain e)
+  lift (x, y, z, u, v) = stup5 (lift x, lift y, lift z, lift u, lift v)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f))
+  => Lift Seq (a, b, c, d, e, f) where
+  type Plain (a, b, c, d, e, f) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f)
+  lift (x, y, z, u, v, w) = stup6 (lift x, lift y, lift z, lift u, lift v, lift w)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g))
+  => Lift Seq (a, b, c, d, e, f, g) where
+  type Plain (a, b, c, d, e, f, g) = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g)
+  lift (x, y, z, u, v, w, r) = stup7 (lift x, lift y, lift z, lift u, lift v, lift w, lift r)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e, Lift Seq f, Lift Seq g, Lift Seq h,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e), Arrays (Plain f),
+          Arrays (Plain g), Arrays (Plain h))
+  => Lift Seq (a, b, c, d, e, f, g, h) where
+  type Plain (a, b, c, d, e, f, g, h)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h)
+  lift (x, y, z, u, v, w, r, s)
+    = stup8 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s)
+
+instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
+          Lift Seq f, Lift Seq g, Lift Seq h, Lift Seq i,
+          Arrays (Plain a), Arrays (Plain b), Arrays (Plain c), Arrays (Plain d), Arrays (Plain e),
+          Arrays (Plain f), Arrays (Plain g), Arrays (Plain h), Arrays (Plain i))
+  => Lift Seq (a, b, c, d, e, f, g, h, i) where
+  type Plain (a, b, c, d, e, f, g, h, i)
+    = (Plain a, Plain b, Plain c, Plain d, Plain e, Plain f, Plain g, Plain h, Plain i)
+  lift (x, y, z, u, v, w, r, s, t)
+    = stup9 (lift x, lift y, lift z, lift u, lift v, lift w, lift r, lift s, lift t)
 
 
 -- |Lift a unary function into 'Exp'.
@@ -1677,3 +1746,59 @@ null arr = size arr ==* 0
 length :: Elt e => Acc (Vector e) -> Exp Int
 length = unindex1 . shape
 
+-- Sequence operations
+-- --------------------------------------
+
+-- | Reduce a sequence by appending all the shapes and all the
+-- elements in two seperate vectors.
+--
+fromSeq :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector ix, Vector a)
+fromSeq = foldSeqFlatten f (lift (empty, empty))
+  where
+    f x sh1 a1 =
+      let (sh0, a0) = unlift x
+      in lift (sh0 ++ sh1, a0 ++ a1)
+
+fromSeqElems :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector a)
+fromSeqElems = foldSeqFlatten f empty
+  where
+    f a0 _ a1 = a0 ++ a1
+
+fromSeqShapes :: (Shape ix, Elt a)
+        => Seq [Array ix a]
+        -> Seq (Vector ix)
+fromSeqShapes = foldSeqFlatten f empty
+  where
+    f sh0 sh1 _ = sh0 ++ sh1
+
+-- | Sequence an array on the innermost dimension.
+--
+toSeqInner :: (Shape sh, Elt a)
+           => Acc (Array (sh :. Int) a)
+           -> Seq [Array sh a]
+toSeqInner a = toSeq (Any :. Split) a
+
+-- | Sequence a 2-dimensional array on the outermost dimension.
+--
+toSeqOuter2 :: (Elt a)
+           => Acc (Array DIM2 a)
+           -> Seq [Array DIM1 a]
+toSeqOuter2 a = toSeq (Z :. Split :. All) a
+
+-- | Sequence a 3-dimensional array on the outermost dimension.
+toSeqOuter3 :: (Elt a)
+           => Acc (Array DIM3 a)
+           -> Seq [Array DIM2 a]
+toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
+
+-- | Generate a scalar sequence of a fixed given length, by applying
+-- the given scalar function at each index.
+generateSeq :: (Elt a)
+            => Exp Int
+            -> (Exp Int -> Exp a)
+            -> Seq [Scalar a]
+generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))

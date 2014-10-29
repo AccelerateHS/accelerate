@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreExp,  prettyExp,
   prettyPreAfun, prettyAfun,
   prettyPreFun,  prettyFun,
-  prettyPrim,
+  prettyPrim, prettySeq,
   noParens
 
 ) where
@@ -36,7 +36,8 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Array.Representation ( SliceIndex(..) )
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 
@@ -136,7 +137,80 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
+    pp (Collect s)              = sep $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap s)
 
+
+prettySeq
+    :: forall acc aenv senv arrs.
+       PrettyAcc acc
+    -> Int                                      -- level of array variables
+    -> Int                                      -- level of sequence variables
+    -> (Doc -> Doc)                             -- apply to compound expressions
+    -> PreOpenSeq acc aenv senv arrs
+    -> [Doc]
+prettySeq prettyAcc alvl llvl wrap seq =
+  case seq of
+    Producer p s' ->
+      (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
+    Consumer c    ->
+      [prettyC c]
+    Reify ix      -> [var (idxToInt ix)]
+  where
+    var n          = char 's' <> int n
+    name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
+    name ..$ docs = wrap $ hang (text name) 2 (sep docs)
+
+    ppE :: PreOpenExp acc env aenv e -> Doc
+    ppE = prettyPreExp prettyAcc 0 alvl parens
+
+    ppF :: PreOpenFun acc env aenv f -> Doc
+    ppF = parens . prettyPreFun prettyAcc alvl
+
+    ppA :: acc aenv a -> Doc
+    ppA = prettyAcc alvl parens
+
+    ppAF :: PreOpenAfun acc aenv f -> Doc
+    ppAF = parens . prettyPreAfun prettyAcc alvl
+
+    ppX :: Idx aenv' a -> Doc
+    ppX x = var (idxToInt x)
+
+    ppSlix :: SliceIndex slix sl co sh -> Doc
+    ppSlix SliceNil       = text "Z"
+    ppSlix (SliceAll s)   = ppSlix s <+> text ":." <+> text "All"
+    ppSlix (SliceFixed s) = ppSlix s <+> text ":." <+> text "Split"
+
+    prettyP :: forall a. Producer acc aenv senv a -> Doc
+    prettyP p =
+      case p of
+        StreamIn _        -> "streamIn"   .$ [ text "..." ]
+        ToSeq slix _ a    -> "toSeq"      .$ [ ppSlix slix, ppA a ]
+        MapSeq f x        -> "mapSeq"     .$ [ ppAF f
+                                             , ppX x ]
+
+        ZipWithSeq f x y  -> "zipWithSeq" .$ [ ppAF f
+                                             , ppX x
+                                             , ppX y ]
+
+        ScanSeq f e x     -> "foldSeq"    .$ [ ppF f
+                                             , ppE e
+                                             , ppX x ]
+
+    prettyC :: forall a. Consumer acc aenv senv a -> Doc
+    prettyC c =
+      case c of
+        FoldSeq f e x        -> "foldSeq"        ..$ [ ppF f
+                                                     , ppE e
+                                                     , ppX x ]
+
+        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f
+                                                     , ppA a
+                                                     , ppX x ]
+        Stuple t             -> tuple (prettyT t)
+
+    prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
+    prettyT NilAtup        = []
+    prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
 
 -- Pretty print a function over array computations.
 --
@@ -254,6 +328,7 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
     pp (ShapeSize idx)          = "shapeSize"  .$ [ ppSh idx ]
     pp (Intersect sh1 sh2)      = "intersect"  .$ [ ppSh sh1, ppSh sh2 ]
+    pp (Union sh1 sh2)          = "union"      .$ [ ppSh sh1, ppSh sh2 ]
     pp (Index idx i)            = wrap $ cat [ ppA idx, char '!',  ppE i ]
     pp (LinearIndex idx i)      = wrap $ cat [ ppA idx, text "!!", ppE i ]
 

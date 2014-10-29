@@ -101,6 +101,10 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
 
+    Collect _           -> case arrays' (undefined :: Array sh e) of
+                             ArraysRarray -> eltType (undefined::e)
+                             _            -> error "Something funny"
+
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
     Use ((),a)          -> arrayType a
@@ -166,6 +170,7 @@ preExpType k e =
     Shape _           -> eltType (undefined::t)
     ShapeSize _       -> eltType (undefined::t)
     Intersect _ _     -> eltType (undefined::t)
+    Union _ _         -> eltType (undefined::t)
     Foreign _ _ _     -> eltType (undefined::t)
 
 

@@ -38,7 +38,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Array.Sugar               hiding ( Any )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
 
@@ -56,10 +56,10 @@ class Shrink f where
 
   shrink = snd . shrink'
 
-instance Shrink (PreOpenExp acc env aenv e) where
+instance Kit acc => Shrink (PreOpenExp acc env aenv e) where
   shrink' = shrinkExp
 
-instance Shrink (PreOpenFun acc env aenv f) where
+instance Kit acc => Shrink (PreOpenFun acc env aenv f) where
   shrink' = shrinkFun
 
 
@@ -70,16 +70,17 @@ instance Shrink (PreOpenFun acc env aenv f) where
 -- instance of beta-reduction to cases where the bound variable is used zero
 -- (dead-code elimination) or one (linear inlining) times.
 --
-shrinkExp :: PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
+shrinkExp :: Kit acc => PreOpenExp acc env aenv t -> (Bool, PreOpenExp acc env aenv t)
 shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. In cases where it is not used at all, this is equivalent
     -- to dead-code elimination.
     --
+    lIMIT :: Int
     lIMIT = 1
 
-    shrinkE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    shrinkE :: Kit acc => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
     shrinkE exp = case exp of
       Let bnd body
         | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
@@ -116,13 +117,14 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       Shape a                   -> pure (Shape a)
       ShapeSize sh              -> ShapeSize <$> shrinkE sh
       Intersect sh sz           -> Intersect <$> shrinkE sh <*> shrinkE sz
+      Union sh sz               -> Union <$> shrinkE sh <*> shrinkE sz
       Foreign ff f e            -> Foreign ff <$> shrinkF f <*> shrinkE e
 
-    shrinkT :: Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
+    shrinkT :: Kit acc => Tuple (PreOpenExp acc env aenv) t -> (Any, Tuple (PreOpenExp acc env aenv) t)
     shrinkT NilTup        = pure NilTup
     shrinkT (SnocTup t e) = SnocTup <$> shrinkT t <*> shrinkE e
 
-    shrinkF :: PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
+    shrinkF :: Kit acc => PreOpenFun acc env aenv t -> (Any, PreOpenFun acc env aenv t)
     shrinkF = first Any . shrinkFun
 
     first :: (a -> a') -> (a,b) -> (a',b)
@@ -131,7 +133,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
     yes :: (Any, x) -> (Any, x)
     yes (_, x) = (Any True, x)
 
-shrinkFun :: PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
+shrinkFun :: Kit acc => PreOpenFun acc env aenv f -> (Bool, PreOpenFun acc env aenv f)
 shrinkFun (Lam f)  = Lam  <$> shrinkFun f
 shrinkFun (Body b) = Body <$> shrinkExp b
 
@@ -188,6 +190,34 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
+      Collect seq               -> Collect (shrinkSeq seq)
+
+    shrinkSeq :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
+    shrinkSeq s =
+      case s of
+        Producer p s -> Producer (shrinkP p)  (shrinkSeq s)
+        Consumer c   -> Consumer (shrinkC c)
+        Reify ix     -> Reify ix
+
+    shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
+    shrinkP p =
+      case p of
+        StreamIn arrs        -> StreamIn arrs
+        ToSeq sl slix a      -> ToSeq sl slix (shrinkAcc a)
+        MapSeq f x           -> MapSeq (shrinkAF f) x
+        ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
+        ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
+
+    shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
+    shrinkC c =
+      case c of
+        FoldSeq f e x        -> FoldSeq (shrinkF f) (shrinkE e) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) x
+        Stuple t             -> Stuple (shrinkCT t)
+
+    shrinkCT :: Atuple (Consumer acc aenv' senv) t -> Atuple (Consumer acc aenv' senv) t
+    shrinkCT NilAtup        = NilAtup
+    shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkC c)
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -214,6 +244,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Shape a                   -> Shape (shrinkAcc a)
       ShapeSize sh              -> ShapeSize (shrinkE sh)
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
+      Union sh sz               -> Union (shrinkE sh) (shrinkE sz)
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
 
     shrinkF :: PreOpenFun acc env aenv' f -> PreOpenFun acc env aenv' f
@@ -242,8 +273,8 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA rebuildAcc (subAtop bnd) pbody
+  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
+  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
   | otherwise           = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
@@ -296,6 +327,7 @@ usesOfExp idx = countE
       Shape _                   -> 0
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
+      Union sh sz               -> countE sh + countE sz
       Foreign _ _ e             -> countE e
 
     countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
@@ -322,11 +354,14 @@ usesOfPreAcc
     -> Int
 usesOfPreAcc withShape countAcc idx = countP
   where
+    countIdx :: Idx aenv a -> Int
+    countIdx this
+        | Just REFL <- match this idx   = 1
+        | otherwise                     = 0
+
     countP :: PreOpenAcc acc aenv a -> Int
     countP pacc = case pacc of
-      Avar this
-        | Just REFL <- match this idx   -> 1
-        | otherwise                     -> 0
+      Avar this                 -> countIdx this
       --
       Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
       Atuple tup                -> countAT tup
@@ -358,6 +393,34 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
+      Collect s                 -> countSeq s
+
+    countSeq :: PreOpenSeq acc aenv senv arrs -> Int
+    countSeq s =
+      case s of
+        Producer p s -> countPr p + countSeq s
+        Consumer c   -> countC  c
+        Reify _      -> 0
+
+    countPr :: Producer acc aenv senv arrs -> Int
+    countPr p =
+      case p of
+        StreamIn _           -> 0
+        ToSeq _ _ a          -> countA a
+        MapSeq f _           -> countAF f idx
+        ZipWithSeq f _ _     -> countAF f idx
+        ScanSeq f e _        -> countF f + countE e
+
+    countC :: Consumer acc aenv senv arrs -> Int
+    countC c =
+      case c of
+        FoldSeq f e _        -> countF f + countE e
+        FoldSeqFlatten f a _ -> countAF f idx + countA a
+        Stuple t             -> countCT t
+
+    countCT :: Atuple (Consumer acc aenv senv) t' -> Int
+    countCT NilAtup        = 0
+    countCT (SnocAtup t c) = countCT t + countC c
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
@@ -386,10 +449,18 @@ usesOfPreAcc withShape countAcc idx = countP
       LinearIndex a i           -> countA a + countE i
       ShapeSize sh              -> countE sh
       Intersect sh sz           -> countE sh + countE sz
+      Union sh sz               -> countE sh + countE sz
       Shape a
         | withShape             -> countA a
         | otherwise             -> 0
       Foreign _ _ e             -> countE e
+
+    countAF :: Kit acc
+            => PreOpenAfun acc aenv' f
+            -> Idx aenv' s
+            -> Int
+    countAF (Alam f) idx  = countAF f (SuccIdx idx)
+    countAF (Abody a) idx = countAcc withShape idx a
 
     countF :: PreOpenFun acc env aenv f -> Int
     countF (Lam  f) = countF f

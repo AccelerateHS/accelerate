@@ -4,6 +4,7 @@
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
 --               [2013..2014] Robert Clifton-Everest
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -48,7 +49,7 @@ module Data.Array.Accelerate (
 
   -- * The /Accelerate/ Array Language
   -- ** Array data types
-  L.Acc, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
+  L.Acc, L.Seq, S.Arrays, S.Array, S.Scalar, S.Vector, S.Segments,
 
   -- ** Array element types
   S.Elt,
@@ -59,7 +60,7 @@ module Data.Array.Accelerate (
   -- end-of-list token, `Z`, occurs on the left. For example, the type of a
   -- rank-2 array index is @Z :. Int :. Int@.
   --
-  S.Z(..), (S.:.)(..), S.Shape, S.All(..), S.Any(..), S.Slice(..),
+  S.Z(..), (S.:.)(..), S.Shape, S.All(..), S.Any(..), S.Split(..), S.Divide(..), S.Slice(..), S.Division(..),
   S.DIM0, S.DIM1, S.DIM2, S.DIM3, S.DIM4, S.DIM5, S.DIM6, S.DIM7, S.DIM8, S.DIM9,
 
   -- ** Accessors
@@ -78,7 +79,7 @@ module Data.Array.Accelerate (
   L.use, L.unit,
 
   -- *** Initialisation
-  L.generate, L.replicate, P.fill,
+  L.generate, L.replicate, P.fill, P.empty,
 
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
@@ -143,6 +144,19 @@ module Data.Array.Accelerate (
 
   -- ** Stencil
   L.stencil, L.stencil2,
+
+  -- ** Sequence elimination
+  L.collect,
+
+  -- ** Sequence producers
+  L.streamIn, L.toSeq, P.generateSeq,
+
+  -- ** Sequence transducers
+  L.mapSeq, L.zipWithSeq, L.scanSeq,
+
+  -- ** Sequence consumers
+  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes, 
+  P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),

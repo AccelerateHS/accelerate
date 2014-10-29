@@ -33,9 +33,9 @@ import qualified Prelude                                as P
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Tuple
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt, Tuple(..), fromTuple )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 

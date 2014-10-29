@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -11,6 +12,7 @@
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2008..2009] Sean Lee
 --               [2009..2014] Trevor L. McDonell
+--               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
@@ -22,6 +24,9 @@ module Data.Array.Accelerate.Array.Representation (
 
   -- * Array shapes, indices, and slices
   Shape(..), Slice(..), SliceIndex(..),
+
+  -- * Slice shape functions
+  sliceShape, enumSlices,
 
 ) where
 
@@ -42,9 +47,11 @@ class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
   dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
   size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
+  emptyS    :: sh                    -- ^empty shape.
 
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
+  union     :: sh -> sh -> sh  -- yield the union of two shapes
   ignore    :: sh              -- identifies ignored elements in 'permute'
   toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
@@ -74,8 +81,10 @@ class (Eq sh, Slice sh) => Shape sh where
 instance Shape () where
   dim _             = 0
   size ()           = 1
+  emptyS            = ()
 
   () `intersect` () = ()
+  () `union` ()     = ()
   ignore            = ()
   toIndex () ()     = 0
   fromIndex () _    = ()
@@ -93,8 +102,10 @@ instance Shape () where
 instance Shape sh => Shape (sh, Int) where
   dim _                             = dim (undefined :: sh) + 1
   size (sh, sz)                     = size sh * sz
+  emptyS                            = (emptyS, 0)
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
+  (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
   ignore                            = (ignore, -1)
   toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i
@@ -191,3 +202,31 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
   show (SliceAll rest)   = "SliceAll (" ++ show rest ++ ")"
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 
+-- | Project the shape of a slice from the full shape.
+sliceShape :: forall slix co sl dim.
+              SliceIndex slix sl co dim
+           -> dim
+           -> sl
+sliceShape SliceNil () = ()
+sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
+sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
+
+
+-- | Enumerate all slices within a given bound. The outermost
+-- dimension changes most rapid.
+--
+-- E.g. enumSlices slix ((((), 2), 3), ()) = [ ((((), 0), 0), ())
+--                                           , ((((), 0), 1), ())
+--                                           , ((((), 0), 2), ())
+--                                           , ((((), 1), 0), ())
+--                                           , ((((), 1), 1), ())
+--                                           , ((((), 1), 2), ()) ]
+--
+enumSlices :: forall slix co sl dim.
+              SliceIndex slix sl co dim
+           -> dim
+           -> [slix]
+enumSlices SliceNil () = [()]
+enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
+                                                  , i   <- [0..n-1]]
