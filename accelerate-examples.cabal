@@ -27,6 +27,8 @@ Stability:              Experimental
 Extra-source-files:     data/hashcat/README.md
                         data/matrices/README.md
 
+-- Flags that control features of the benchmark programs
+--
 Flag gui
   Description:          Enable gloss-based GUIs, where applicable. If not
                         enabled, the application always runs in benchmark mode.
@@ -38,8 +40,10 @@ Flag ekg
 
 Flag codespeed
   Description:          Enable upload of results to benchmark server
-  Default:              True
+  Default:              False
 
+-- Flags that control which Accelerate backends that are linked against
+--
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
   Default:              True
@@ -55,7 +59,6 @@ Flag llvm-gpu
 Flag cilk
   Description:          Enable the Cilk backend for multicore CPUs
   Default:              False
-
 
 -- Flags to specify which programs to build
 --
