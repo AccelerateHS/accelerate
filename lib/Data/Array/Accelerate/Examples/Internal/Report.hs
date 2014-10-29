@@ -26,9 +26,9 @@ import Data.Array.Accelerate.Examples.Internal.Codespeed
 -- | Post-process the benchmark reports.
 --
 processReports :: Options -> [Report] -> IO ()
-processReports opt reports = do
+processReports _opt _reports = do
 #ifdef ACCELERATE_ENABLE_CODESPEED
-  uploadReports opt reports
+  uploadReports _opt _reports
 #endif
 
   return ()
