@@ -46,9 +46,29 @@ defaults = Config
   , _configWord8        = False
   }
 
+extensive :: Config
+extensive = Config
+  {
+    _configDouble       = True
+  , _configFloat        = True
+  , _configInt64        = True
+  , _configInt32        = True
+  , _configInt16        = True
+  , _configInt8         = True
+  , _configWord64       = True
+  , _configWord32       = True
+  , _configWord16       = True
+  , _configWord8        = True
+  }
+
+
 options :: [OptDescr (Config -> Config)]
 options =
-  [ Option  [] ["double"]
+  [ Option  [] ["all"]
+            (NoArg (const extensive))
+            "enable tests on all primitive types"
+
+  , Option  [] ["double"]
             (OptArg (set configDouble . read . fromMaybe "True") "BOOL")
             (describe configDouble "enable double-precision tests")
 
