@@ -34,9 +34,9 @@ $(mkLabel ''Config)
 defaults :: Config
 defaults = Config
   {
-    _configDouble       = False
+    _configDouble       = True
   , _configFloat        = False
-  , _configInt64        = True
+  , _configInt64        = False
   , _configInt32        = True
   , _configInt16        = False
   , _configInt8         = False
@@ -54,7 +54,7 @@ options =
 
   , Option  [] ["float"]
             (OptArg (set configFloat . read . fromMaybe "True") "BOOL")
-            (describe configDouble "enable single-precision tests")
+            (describe configFloat "enable single-precision tests")
 
   , Option  [] ["int64"]
             (OptArg (set configInt64 . read . fromMaybe "True") "BOOL")
