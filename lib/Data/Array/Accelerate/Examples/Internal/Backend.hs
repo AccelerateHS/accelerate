@@ -163,3 +163,34 @@ availableBackends optBackend =
 #endif
   ]
 
+
+-- By default, how many instances of the backend can be run concurrently?
+--
+-- If this returns `Nothing` then we make no changes to the configuration and
+-- inherit the RTS options. If this is `Just n`, then by default only `n`
+-- threads will be used to run tests at once. This option can still be
+-- overridden via the command line flags, it just sets a default.
+--
+-- e.g.
+--   * A multicore CPU backend may specify `Just 1`, so that only one instance
+--     runs at once, and it inherits all threads specified via `+RTS -Nn`
+--
+--   * A thread-safe accelerator backend can specify `Nothing`, while a
+--     non-thread-safe backend (perhaps it requires exclusive access to the
+--     accelerator board) should specify `Just 1`.
+--
+concurrentBackends :: Backend -> Maybe Int
+concurrentBackends Interpreter  = Nothing
+#ifdef ACCELERATE_CUDA_BACKEND
+concurrentBackends CUDA         = Nothing       -- not quite true! D:
+#endif
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+concurrentBackends CPU          = Just 1
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+concurrentBackends PTX          = Nothing       -- ???
+#endif
+#ifdef ACCELERATE_CILK_BACKEND
+concurrentBackends Cilk         = Just 1
+#endif
+

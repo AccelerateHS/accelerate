@@ -71,7 +71,7 @@ $(mkLabels [''Options])
 defaultOptions :: Options
 defaultOptions = Options
   {
-    _optBackend         = defaultBackend
+    _optBackend         = backend
   , _optTest            = True
 #ifndef ACCELERATE_ENABLE_GUI
   , _optBenchmark       = True
@@ -83,9 +83,10 @@ defaultOptions = Options
   , _optHostname        = hostname
   , _optHelp            = False
   , _optCriterion       = Criterion.defaultConfig
-  , _optTestFramework   = TestFramework.defaultConfig
+  , _optTestFramework   = TestFramework.defaultConfig backend
   }
   where
+    backend     = defaultBackend
 #ifdef ACCELERATE_ENABLE_CODESPEED
     variant     = "accelerate-" ++ show (_optBackend defaultOptions)
     hostname    = unsafePerformIO $ do
