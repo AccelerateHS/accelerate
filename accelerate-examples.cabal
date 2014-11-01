@@ -203,7 +203,6 @@ Executable accelerate-nofib
                         Test.Base
                         Test.FFT
                         Test.Foreign
-                        Test.Foreign.CUDA
                         Test.IO
                         Test.IO.Ptr
                         Test.IO.Vector
@@ -254,6 +253,8 @@ Executable accelerate-nofib
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:      accelerate-cuda                 == 2.0.*
+    other-modules:      Test.Foreign.CUDA
+
   if flag(ekg)
     ghc-options:        -with-rtsopts=-T
 
