@@ -20,7 +20,6 @@ import Test.Framework.Providers.QuickCheck2
 import Test.Framework.Providers.HUnit
 
 import Config
-import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 
 import Data.Array.Accelerate                                    as A

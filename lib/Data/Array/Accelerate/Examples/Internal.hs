@@ -29,6 +29,7 @@ import Data.Array.Accelerate.Examples.Internal.Interactive
 import Data.Array.Accelerate.Examples.Internal.Monitoring
 import Data.Array.Accelerate.Examples.Internal.ParseArgs
 import Data.Array.Accelerate.Examples.Internal.Random.Array
+import Data.Array.Accelerate.Examples.Internal.Similar
 import Data.Array.Accelerate.Examples.Internal.TestFramework
 import Data.Array.Accelerate.Examples.Internal.Util
 

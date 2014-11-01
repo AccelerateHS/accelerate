@@ -17,8 +17,6 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
 
 import Config
 import Test.Base
@@ -50,7 +48,7 @@ test_smvm backend opt = testGroup "smvm" $ catMaybes
 
     run_smvm :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a) => a -> Property
     run_smvm _ =
-      forAll arbitraryCSRMatrix         $ \(segd, svec :: Vector (Int32,a), cols) ->
+      forAll arbitraryCSRMatrix           $ \(segd, svec :: Vector (Int32,a), cols) ->
       forAll (arbitraryArray (Z :. cols)) $ \vec ->
         run2 backend smvm (segd, svec) vec
         ~?=

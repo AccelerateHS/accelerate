@@ -3,15 +3,11 @@ module Test.Foreign.CUDA
   where
 
 import Config
-import Test.Base
 import Test.Prelude.Mapping
 
 import Prelude                                                  as P
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Examples.Internal                  as A
-import Test.Framework
-import Test.QuickCheck
-import Test.Framework.Providers.QuickCheck2
 import Data.Array.Accelerate.CUDA.Foreign                       as A
 
 

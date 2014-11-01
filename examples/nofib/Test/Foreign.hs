@@ -7,7 +7,6 @@ module Test.Foreign (
 ) where
 
 import Config
-import Test.Framework
 #ifdef ACCELERATE_CUDA_BACKEND
 import Test.Foreign.CUDA
 #endif

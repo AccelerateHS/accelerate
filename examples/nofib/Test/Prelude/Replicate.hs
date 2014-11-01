@@ -19,7 +19,6 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.HUnit                                               hiding ( Test )
-import Test.Framework.Providers.HUnit
 
 
 --

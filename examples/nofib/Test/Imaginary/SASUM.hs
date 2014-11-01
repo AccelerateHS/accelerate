@@ -8,7 +8,6 @@ module Test.Imaginary.SASUM (
 ) where
 
 import Config
-import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 
 import Prelude                                                  as P
@@ -19,8 +18,6 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 import Test.QuickCheck
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
 
 
 test_sasum :: Backend -> Config -> Test
