@@ -3,7 +3,6 @@ module Test.Issues.Issue184 (test_issue184)
   where
 
 import Config
-import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 

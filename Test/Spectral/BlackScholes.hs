@@ -23,7 +23,6 @@ import Foreign.Storable
 import System.Random
 
 import Config
-import Test.Base
 import QuickCheck.Arbitrary.Array
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as A

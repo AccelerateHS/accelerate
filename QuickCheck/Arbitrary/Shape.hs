@@ -49,9 +49,6 @@ instance Arbitrary DIM4 where
   shrink (Z :. h :. w :. d :. t) = [ Z :. h' :. w' :. d' :. t' | h' <- shrink h, w' <- shrink w, d' <- shrink d, t' <- shrink t ]
 
 
-
-
-
 -- Generate an arbitrary shape with approximately this many elements in each
 -- dimension. If the generated shape does not contain approximately the
 -- specified number of elements (within 10%), the shape is thrown out and a new

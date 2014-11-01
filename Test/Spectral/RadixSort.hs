@@ -18,12 +18,11 @@ import Data.Label
 import Data.Maybe
 import Data.Function
 import Data.Typeable
-import Test.QuickCheck                                          ( Arbitrary, Property )
+import Test.QuickCheck                                          ( Arbitrary )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 
 import Config
-import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Examples.Internal                  as A

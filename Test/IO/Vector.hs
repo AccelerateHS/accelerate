@@ -19,6 +19,7 @@ import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate
 import Data.Array.Accelerate.IO                                 ( toVectors, fromVectors )
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
+import Data.Array.Accelerate.Examples.Internal
 
 
 test_vector :: Config -> Test

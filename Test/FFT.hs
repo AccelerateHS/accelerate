@@ -17,7 +17,6 @@ import Data.Typeable
 
 import Prelude as P
 
-import Test.Base
 import Test.QuickCheck                                          hiding ( (.&.) )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2

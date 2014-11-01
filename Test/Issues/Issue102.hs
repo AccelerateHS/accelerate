@@ -4,7 +4,6 @@ module Test.Issues.Issue102 (test_issue102)
   where
 
 import Config
-import Test.Base
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
