@@ -455,6 +455,7 @@ Executable accelerate-nbody
                         Solver.BarnsHut
                         Solver.Naive1
                         Solver.Naive2
+                        Test
 
   ghc-options:          -O2 -Wall -threaded -eventlog -rtsopts
   ghc-prof-options:     -auto-all
