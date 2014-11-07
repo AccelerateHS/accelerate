@@ -806,14 +806,16 @@ instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
 shift :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 shift  x i
   = cond (i ==* 0) x
-  $ cond (i <*  0) (x `shiftR` (-i))
-                   (x `shiftL` i)
+  $ cond (i <*  0) (x `mkBShiftR` (-i))
+                   (x `mkBShiftL` i)
 
 -- | Shift the argument left by the specified number of bits
 -- (which must be non-negative).
 --
 shiftL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftL = mkBShiftL
+shiftL x i
+  = cond (i ==* 0) x
+  $ mkBShiftL x i
 
 -- | Shift the first argument right by the specified number of bits. The result
 -- is undefined for negative shift amounts and shift amounts greater or equal to
@@ -823,7 +825,9 @@ shiftL = mkBShiftL
 -- the top bits with 1 if the @x@ is negative and with 0 otherwise.
 --
 shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftR = mkBShiftR
+shiftR x i
+  = cond (i ==* 0) x
+  $ mkBShiftR x i
 
 -- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right by
 -- @-i@ bits otherwise.
@@ -831,20 +835,24 @@ shiftR = mkBShiftR
 rotate :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
 rotate x i
   = cond (i ==* 0) x
-  $ cond (i <*  0) (x `rotateR` (-i))
-                   (x `rotateL` i)
+  $ cond (i <*  0) (x `mkBRotateR` (-i))
+                   (x `mkBRotateL` i)
 
 -- | Rotate the argument left by the specified number of bits
 -- (which must be non-negative).
 --
 rotateL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateL = mkBRotateL
+rotateL x i
+  = cond (i ==* 0) x
+  $ mkBRotateL x i
 
 -- | Rotate the argument right by the specified number of bits
 -- (which must be non-negative).
 --
 rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateR = mkBRotateR
+rotateR x i
+  = cond (i ==* 0) x
+  $ mkBRotateR x i
 
 -- | @bit i@ is a value with the @i@th bit set and all other bits clear
 --
