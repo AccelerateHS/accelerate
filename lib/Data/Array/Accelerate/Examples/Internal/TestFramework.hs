@@ -35,7 +35,7 @@ import System.Environment
 
 import Test.Framework
 import Test.HUnit                                       ( Assertion, assertFailure )
-import Test.QuickCheck                                  ( Property, counterexample )
+import Test.QuickCheck                                  ( Property, counterexample, ioProperty )
 import Test.Framework.Providers.HUnit                   ( testCase )
 import Test.Framework.Providers.QuickCheck2             ( testProperty )
 
@@ -79,7 +79,10 @@ infix 1 ~=?, ~?=
 -- on the right hand side and the expected value on the left.
 --
 (~=?) :: (Similar a, Show a) => a -> a -> Property
-expected ~=? actual = counterexample (failure expected actual) (expected ~= actual)
+expected ~=? actual =
+  ioProperty $ do
+    actual' <- evaluate actual
+    return  $! counterexample (failure expected actual') (expected ~= actual')
 
 -- | Short hand for a test case that asserts similarity, with the actual value
 -- on the left hand side and the expected value on the right.
