@@ -46,6 +46,10 @@ instance Elt a => Elt (Complex a) where
   toElt' (a,b)                  = toElt a :+ toElt' b
   fromElt' (a :+ b)             = (fromElt a, fromElt' b)
 
+  reifyTupTree _ =
+    let (_, ta) = reifyTupTree (undefined :: a)
+    in  (TupKind, TupTree [ta,ta])
+
 instance IsTuple (Complex a) where
   type TupleRepr (Complex a) = (((), a), a)
   fromTuple (x :+ y)    = (((), x), y)
