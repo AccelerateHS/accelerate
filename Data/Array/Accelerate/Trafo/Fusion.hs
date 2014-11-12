@@ -379,12 +379,12 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- want to fuse past array let bindings, as this would imply work
     -- duplication. SEE: [Sharing vs. Fusion]
     --
+    Apply f a           -> applyD (cvtAF f) (cvtA a)
     Alet bnd body       -> aletD embedAcc elimAcc bnd body
-    Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Aprj ix tup         -> aprjD embedAcc ix tup
+    Acond p at ae       -> acondD embedAcc (cvtE p) at ae
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Atuple tup          -> done $ Atuple (cvtAT tup)
-    Apply f a           -> done $ Apply (cvtAF f) (cvtA a)
     Aforeign ff f a     -> done $ Aforeign ff (cvtAF f) (cvtA a)
     Collect s           -> collectD s
 
@@ -1309,6 +1309,28 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
         cvtAT NilAtup          = NilAtup
         cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+
+
+-- The apply operator, or (>->) in the surface language. This eliminates
+-- redundant application to an identity function, instead lifting the argument
+-- to a let-binding. This case arises in the use of pipe to avoid fusion and
+-- force its argument to be evaluated, e.g.:
+--
+-- > compute :: Acc a -> Acc a
+-- > compute = id >-> id
+--
+applyD :: (Kit acc, Arrays as, Arrays bs)
+       => PreOpenAfun acc aenv (as -> bs)
+       ->             acc aenv as
+       -> Embed       acc aenv bs
+applyD afun x
+  | Alam (Abody body)   <- afun
+  , Avar ZeroIdx        <- extract body
+  = Stats.ruleFired "applyD/identity"
+  $ done $ extract x
+
+  | otherwise
+  = done $ Apply afun x
 
 
 -- Array conditionals, in particular eliminate branches when the predicate
