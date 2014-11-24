@@ -1110,7 +1110,7 @@ type StableSeqName arrs = StableNameHeight (Seq arrs)
 -- and SharingExp
 --
 data SharingSeq acc seq exp arrs where
-  SvarSharing :: Typeable arrs
+  SvarSharing :: (Typeable arrs, Arrays arrs)
               => StableSeqName [arrs]                       -> SharingSeq acc seq exp [arrs]
   SletSharing :: StableSharingSeq -> seq t                  -> SharingSeq acc seq exp t
   SeqSharing  :: Typeable arrs
@@ -1767,7 +1767,7 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
           -- NB: This function can only be used in the case alternatives below; outside of the
           --     case we cannot discharge the 'Arrays arrs' constraint.
           --
-          let producer :: (arrs ~ [a], Typeable a)
+          let producer :: (arrs ~ [a], Typeable a, Arrays a)
                        => IO (PreSeq UnscopedAcc UnscopedSeq RootExp arrs, Int)
                        -> IO (UnscopedSeq arrs, Int)
               producer newSeq
@@ -2741,7 +2741,7 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
       where
         -- All producers must be replaced by sharing variables
         --
-        producer :: (t ~ [a], Typeable a) => PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
+        producer :: (t ~ [a], Typeable a, Arrays a) => PreSeq ScopedAcc ScopedSeq ScopedExp t -> NodeCounts
                  -> (ScopedSeq t, NodeCounts)
         producer newSeq subCount
           = let allCount = StableSharingSeq sn (SeqSharing sn newSeq) `insertSeqNode` subCount

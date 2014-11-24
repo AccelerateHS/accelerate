@@ -214,7 +214,8 @@ Library
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Type
 
-  Other-modules:        Data.Array.Accelerate.Language
+  Other-modules:        Data.Array.Accelerate.Array.Lifted
+                        Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Pretty.Traverse

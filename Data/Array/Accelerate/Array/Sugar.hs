@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
 
   -- * Array shape query, indexing, and conversions
-  shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList,
+  shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
 
   -- * Tuples
   Tuple(..), Atuple(..), TupleRepr, IsTuple, IsAtuple, fromTuple, toTuple, fromAtuple, toAtuple,
@@ -1187,6 +1187,22 @@ newArray sh f = adata `seq` Array (fromElt sh) adata
                                                            (fromElt (f ix))
                    iter sh write (>>) (return ())
                    return (arr, undefined)
+
+
+-- |Create a vector from the concatenation of the given list of vectors.
+--
+concatVectors :: Elt e => [Vector e] -> Vector e
+{-# INLINE concatVectors #-}
+concatVectors vs = adata `seq` Array ((), n) adata
+  where
+    offsets = scanl (+) 0 (map (size . shape) vs)
+    n = last offsets
+    (adata, _) = runArrayData $ do
+              arr <- newArrayData n
+              sequence_ [ unsafeWriteArrayData arr (i + k) (unsafeIndexArrayData ad i) 
+                        | (Array ((), n) ad, k) <- vs `zip` offsets
+                        , i <- [0 .. n - 1] ]
+              return (arr, undefined)
 
 -- | Creates a new, uninitialized Accelerate array.
 --

@@ -47,6 +47,7 @@ import Data.Maybe
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Analysis.Match            ( matchIdx )
+import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
@@ -100,78 +101,6 @@ type VectoriseAcc acc = forall aenv aenv' t.
                      -> acc aenv t
                      -> LiftedAcc acc aenv' t
 
--- Lifted arrays
--- ----------------
---
--- We specify a special new type of surface tuple to represent the lifted version of members of the
--- `Arrays' class. We do this in order to convince the type checker that the lifted arrays or tuples
--- of arrays, are still members of the 'Arrays' class.
-
-newtype Vector' a = Vector' (LiftedRepr (ArrRepr' a) a) deriving Typeable
-
-type family LiftedRepr r a where
-  LiftedRepr ()     ()                 = ((),Scalar Int)
-  LiftedRepr (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
-  LiftedRepr (l,r) a                   = LiftedTupleRepr (TupleRepr a)
-
--- The lifting is performed over the tuple representation of arrays.
-type family LiftedTupleRepr t :: *
-type instance LiftedTupleRepr () = ()
-type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
-
-type LiftedArray sh e = Vector' (Array sh e)
-
-instance Arrays t => IsProduct Arrays (Vector' t) where
-  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr' t) t
-  fromProd _ (Vector' t) = t
-  toProd _ = Vector'
-  prod _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
-                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-    where
-      tup :: forall a. ProdR Arrays a -> ProdR Arrays (LiftedTupleRepr a)
-      tup ProdRunit     = ProdRunit
-      tup (ProdRsnoc t) = swiz
-        where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (LiftedTupleRepr a)
-          swiz | IsC <- isArraysFlat (undefined :: r)
-               = ProdRsnoc (tup t)
-
-
-type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
-type instance ArrRepr' (Vector' a) = ArrRepr (Vector' a)
-
-
-instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
-  arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
-    where
-      arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)
-      arrs ProdRunit     = ArraysRunit
-      arrs (ProdRsnoc t) = ArraysRpair (arrs t) (arrays' t')
-        where t' :: (a ~ (l,r)) => r
-              t' = undefined
-  arrays' = arrays
-  flavour _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ArraysFtuple
-                ArraysFarray -> ArraysFtuple
-                ArraysFtuple | ProdRsnoc _ <- prod (Proxy :: Proxy Arrays) (undefined::t)
-                             -> ArraysFtuple
-                             | otherwise -> error "Absurd"
-  --
-  fromArr (Vector' t) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t)) t
-    where
-      fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
-      fa ProdRunit     ()    = ()
-      fa (ProdRsnoc t) (l,a) = (fa t l, fromArr' a)
-  toArr = Vector' . ta (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
-    where
-      ta :: forall a. ProdR Arrays a -> (ArrRepr a) -> a
-      ta ProdRunit     ()     = ()
-      ta (ProdRsnoc t) (l,a)  = (ta t l, toArr' a)
-  fromArr' = fromArr
-  toArr' = toArr
-
 data None sh = None sh
   deriving (Typeable, Show, Eq)
 
@@ -198,33 +127,6 @@ instance Shape sh => IsProduct Elt (None sh) where
   fromProd _ (None sh) = ((),sh)
   toProd _ ((),sh)     = None sh
   prod _ _ = ProdRsnoc ProdRunit
-
-data IsConstrained c where
-  IsC :: c => IsConstrained c
-
-type IsTypeableArrRepr t = IsConstrained (Typeable (ArrRepr t))
-
-type IsArraysFlat t = IsConstrained (Arrays (Vector' t))
-
-isTypeableArrRepr :: forall t. Arrays t => {- dummy -} t -> IsTypeableArrRepr (Vector' t)
-isTypeableArrRepr t = case flavour t of
-                        ArraysFunit  -> IsC
-                        ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
-                                     -> IsC
-                        ArraysFarray -> IsC
-
-  where
-    isT :: forall t. ProdR Arrays t -> IsTypeableArrRepr t
-    isT ProdRunit     = IsC
-    isT (ProdRsnoc t) | IsC <- isT t
-                       = IsC
-
-isArraysFlat :: forall t. Arrays t => {- dummy -} t -> IsArraysFlat t
-isArraysFlat t = case flavour t of
-                   ArraysFunit  -> IsC
-                   ArraysFtuple | IsC <- isTypeableArrRepr t
-                                -> IsC
-                   ArraysFarray -> IsC
 
 -- Lifting terms
 -- ---------------

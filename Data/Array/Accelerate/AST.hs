@@ -483,7 +483,8 @@ data PreOpenSeq acc aenv senv arrs where
            => Consumer acc aenv senv arrs
            -> PreOpenSeq acc aenv senv arrs
 
-  Reify    :: Idx senv arrs
+  Reify    :: Arrays arrs
+           => Idx senv arrs
            -> PreOpenSeq acc aenv senv [arrs]
 
 data Producer acc aenv senv a where
@@ -526,11 +527,11 @@ data Producer acc aenv senv a where
   --
   --   Forall a. a0 + a = a = a + a0.
   --
-  ScanSeq :: Elt a
-          => PreFun acc aenv (a -> a -> a)
-          -> PreExp acc aenv a
-          -> Idx senv (Scalar a)
-          -> Producer acc aenv senv (Scalar a)
+  ScanSeq :: Elt e
+          => PreFun acc aenv (e -> e -> e)
+          -> PreExp acc aenv e
+          -> Idx senv (Scalar e)
+          -> Producer acc aenv senv (Scalar e)
 
 data Consumer acc aenv senv a where
 
