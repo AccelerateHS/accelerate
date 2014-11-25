@@ -35,7 +35,6 @@ module Data.Array.Accelerate.Trafo (
 
 import Data.Typeable
 
-
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
@@ -155,11 +154,11 @@ convertSeq :: Typeable s => Seq s -> DelayedSeq s
 convertSeq = convertSeqWith phases
 
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
-convertSeqWith Phase{..} seq
+convertSeqWith Phase{..} s
   = Fusion.convertSeq enableAccFusion
   $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
-  $ seq
+  $ s
 
 
 -- Pretty printing
@@ -204,3 +203,4 @@ withSimplStats x = unsafePerformIO $ do
 #else
 withSimplStats x = x
 #endif
+
