@@ -37,7 +37,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
-import Prelude                                  hiding ( exp )
+import Prelude                                  hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple(..) )
@@ -476,8 +476,8 @@ rebuildSeq
     -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
     -> PreOpenSeq acc aenv senv t
     -> f (PreOpenSeq acc aenv' senv t)
-rebuildSeq k v s =
-  case s of
+rebuildSeq k v seq =
+  case seq of
     Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
     Consumer c   -> Consumer <$> (rebuildC k v c)
     Reify ix     -> pure $ Reify ix
