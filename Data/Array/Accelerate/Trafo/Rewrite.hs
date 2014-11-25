@@ -13,6 +13,8 @@
 module Data.Array.Accelerate.Trafo.Rewrite
   where
 
+import Prelude                                          hiding ( seq )
+
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -107,8 +109,8 @@ convertSegmentsAfun afun =
     Alam f      -> Alam (convertSegmentsAfun f)
 
 convertSegmentsSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
-convertSegmentsSeq s =
-  case s of
+convertSegmentsSeq seq =
+  case seq of
     Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
     Consumer c   -> Consumer (cvtC c)
     Reify ix     -> Reify ix
@@ -144,3 +146,4 @@ convertSegmentsSeq s =
 
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = convertSegmentsAfun
+
