@@ -45,7 +45,7 @@ import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Debug            as Stats
 
 -- standard library
-import Prelude                                          hiding ( exp )
+import Prelude                                          hiding ( exp, seq )
 import Data.Monoid
 import Control.Applicative                              hiding ( Const )
 
@@ -190,12 +190,12 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Collect seq               -> Collect (shrinkSeq seq)
+      Collect s                 -> Collect (shrinkS s)
 
-    shrinkSeq :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
-    shrinkSeq s =
-      case s of
-        Producer p s -> Producer (shrinkP p)  (shrinkSeq s)
+    shrinkS :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
+    shrinkS seq =
+      case seq of
+        Producer p s -> Producer (shrinkP p) (shrinkS s)
         Consumer c   -> Consumer (shrinkC c)
         Reify ix     -> Reify ix
 
@@ -352,15 +352,15 @@ usesOfPreAcc
     -> Idx            aenv s
     -> PreOpenAcc acc aenv t
     -> Int
-usesOfPreAcc withShape countAcc idx = countP
+usesOfPreAcc withShape countAcc idx = count
   where
     countIdx :: Idx aenv a -> Int
     countIdx this
         | Just REFL <- match this idx   = 1
         | otherwise                     = 0
 
-    countP :: PreOpenAcc acc aenv a -> Int
-    countP pacc = case pacc of
+    count :: PreOpenAcc acc aenv a -> Int
+    count pacc = case pacc of
       Avar this                 -> countIdx this
       --
       Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
@@ -393,17 +393,17 @@ usesOfPreAcc withShape countAcc idx = countP
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Collect s                 -> countSeq s
+      Collect s                 -> countS s
 
-    countSeq :: PreOpenSeq acc aenv senv arrs -> Int
-    countSeq s =
-      case s of
-        Producer p s -> countPr p + countSeq s
-        Consumer c   -> countC  c
+    countS :: PreOpenSeq acc aenv senv arrs -> Int
+    countS seq =
+      case seq of
+        Producer p s -> countP p + countS s
+        Consumer c   -> countC c
         Reify _      -> 0
 
-    countPr :: Producer acc aenv senv arrs -> Int
-    countPr p =
+    countP :: Producer acc aenv senv arrs -> Int
+    countP p =
       case p of
         StreamIn _           -> 0
         ToSeq _ _ a          -> countA a
@@ -459,8 +459,8 @@ usesOfPreAcc withShape countAcc idx = countP
             => PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Int
-    countAF (Alam f) idx  = countAF f (SuccIdx idx)
-    countAF (Abody a) idx = countAcc withShape idx a
+    countAF (Alam f)  v = countAF f (SuccIdx v)
+    countAF (Abody a) v = countAcc withShape v a
 
     countF :: PreOpenFun acc env aenv f -> Int
     countF (Lam  f) = countF f
