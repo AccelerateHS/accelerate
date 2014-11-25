@@ -331,7 +331,7 @@ matchSeq m h = match
     matchExp :: PreOpenExp acc env' aenv' u -> PreOpenExp acc env' aenv' v -> Maybe (u :=: v)
     matchExp = matchPreOpenExp m h
 
-    match :: forall senv s t. PreOpenSeq acc aenv senv s -> PreOpenSeq acc aenv senv t -> Maybe (s :=: t)
+    match :: PreOpenSeq acc aenv senv' u -> PreOpenSeq acc aenv senv' v -> Maybe (u :=: v)
     match (Producer p1 s1)   (Producer p2 s2)
       | Just REFL <- matchP p1 p2
       , Just REFL <- match s1 s2
@@ -345,7 +345,7 @@ matchSeq m h = match
     match _ _
       = Nothing
 
-    matchP :: forall senv s t. Producer acc aenv senv s -> Producer acc aenv senv t -> Maybe (s :=: t)
+    matchP :: Producer acc aenv senv' u -> Producer acc aenv senv' v -> Maybe (u :=: v)
     matchP (StreamIn arrs1) (StreamIn arrs2)
       | unsafePerformIO $ do
           sn1 <- makeStableName arrs1
@@ -373,7 +373,7 @@ matchSeq m h = match
     matchP _ _
       = Nothing
 
-    matchC :: forall senv s t. Consumer acc aenv senv s -> Consumer acc aenv senv t -> Maybe (s :=: t)
+    matchC :: Consumer acc aenv senv' u -> Consumer acc aenv senv' v -> Maybe (u :=: v)
     matchC (FoldSeq f1 e1 x1) (FoldSeq f2 e2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchFun f1 f2
@@ -948,42 +948,42 @@ hashOpenAcc (OpenAcc pacc) = hashPreOpenAcc hashOpenAcc pacc
 hashPreOpenSeq :: forall acc aenv senv arrs. HashAcc acc -> PreOpenSeq acc aenv senv arrs -> Int
 hashPreOpenSeq hashAcc s =
   let
-    hashA :: forall aenv a. Int -> acc aenv a -> Int
+    hashA :: Int -> acc aenv' a -> Int
     hashA salt = hashWithSalt salt . hashAcc
 
-    hashE :: forall env' aenv' e. Int -> PreOpenExp acc env' aenv' e -> Int
+    hashE :: Int -> PreOpenExp acc env' aenv' e -> Int
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
 
-    hashAF :: forall aenv f. Int -> PreOpenAfun acc aenv f -> Int
+    hashAF :: Int -> PreOpenAfun acc aenv' f -> Int
     hashAF salt = hashWithSalt salt . hashAfun hashAcc
 
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-    hashSeq :: forall aenv senv' arrs'. Int -> PreOpenSeq acc aenv senv' arrs' -> Int
-    hashSeq salt = hashWithSalt salt . hashPreOpenSeq hashAcc
+    hashS :: Int -> PreOpenSeq acc aenv senv' arrs' -> Int
+    hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
-    hashVar :: forall senv a. Int -> Idx senv a -> Int
+    hashVar :: Int -> Idx senv' a -> Int
     hashVar salt = hashWithSalt salt . idxToInt
 
     hashP :: Int -> Producer acc aenv senv a -> Int
     hashP salt p =
       case p of
         StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
-        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq" `hashA` acc `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq" `hashAF` f `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f `hashVar` x `hashVar` y
-        ScanSeq f e x       -> hashWithSalt salt "ScanSeq" `hashF` f `hashE` e `hashVar` x
+        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"      `hashA`  acc `hashWithSalt` show spec
+        MapSeq f x          -> hashWithSalt salt "MapSeq"     `hashAF` f   `hashVar` x
+        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f   `hashVar` x `hashVar` y
+        ScanSeq f e x       -> hashWithSalt salt "ScanSeq"    `hashF`  f   `hashE`   e `hashVar` x
 
-    hashC :: forall aenv senv a. Int -> Consumer acc aenv senv a -> Int
+    hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =
       case c of
-        FoldSeq f e x          -> hashWithSalt salt "FoldSeq" `hashF` f `hashE` e `hashVar` x
+        FoldSeq f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
         FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
         Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of
-    Producer   p s' -> hash "Producer"   `hashP` p `hashSeq` s'
+    Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
     Consumer   c    -> hash "Consumer"   `hashC` c
     Reify      ix   -> hash "Reify"      `hashVar` ix
 
@@ -1000,8 +1000,8 @@ hashPreOpenAcc hashAcc pacc =
     hashF :: Int -> PreOpenFun acc env' aenv' f -> Int
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
 
-    hashSeq :: Int -> PreOpenSeq acc aenv senv arrs -> Int
-    hashSeq salt = hashWithSalt salt . hashPreOpenSeq hashAcc
+    hashS :: Int -> PreOpenSeq acc aenv senv arrs -> Int
+    hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
   in case pacc of
     Alet bnd body               -> hash "Alet"          `hashA` bnd `hashA` body
@@ -1035,7 +1035,7 @@ hashPreOpenAcc hashAcc pacc =
     Permute f1 a1 f2 a2         -> hash "Permute"       `hashF` f1 `hashA` a1 `hashF` f2 `hashA` a2
     Stencil f b a               -> hash "Stencil"       `hashF` f  `hashA` a             `hashWithSalt` hashBoundary a  b
     Stencil2 f b1 a1 b2 a2      -> hash "Stencil2"      `hashF` f  `hashA` a1 `hashA` a2 `hashWithSalt` hashBoundary a1 b1 `hashWithSalt` hashBoundary a2 b2
-    Collect seq                 -> hash "Seq"           `hashSeq` seq
+    Collect s                   -> hash "Seq"           `hashS` s
 
 
 hashArrays :: ArraysR a -> a -> Int
