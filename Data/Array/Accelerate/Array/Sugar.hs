@@ -1,19 +1,19 @@
-{-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE DeriveDataTypeable  #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
-{-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE ImpredicativeTypes    #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ImpredicativeTypes  #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Sugar
@@ -798,7 +798,7 @@ data ArraysFlavour arrs where
   ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
   ArraysFtuple :: (IsAtuple arrs, ArrRepr' arrs ~ (l,r))  => ArraysFlavour arrs
 
-class ( Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
+class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
   arrays'  :: a {- dummy -} -> ArraysR (ArrRepr' a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
@@ -936,11 +936,13 @@ data Tuple c t where
 --
 -- | Tuples of Arrays.  Note that this carries the `Arrays` class
 --   constraint rather than `Elt` in the case of tuples of scalars.
+--
 data Atuple c t where
   NilAtup  ::                                  Atuple c ()
   SnocAtup :: Arrays a => Atuple c s -> c a -> Atuple c (s, a)
 
 -- |The tuple representation is equivalent to the product representation.
+--
 type TupleRepr a = ProdRepr a
 
 -- |Multi-dimensional arrays for array processing.
