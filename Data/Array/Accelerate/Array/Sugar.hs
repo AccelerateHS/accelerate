@@ -1193,13 +1193,13 @@ newArray sh f = adata `seq` Array (fromElt sh) adata
 --
 concatVectors :: Elt e => [Vector e] -> Vector e
 {-# INLINE concatVectors #-}
-concatVectors vs = adata `seq` Array ((), n) adata
+concatVectors vs = adata `seq` Array ((), len) adata
   where
-    offsets = scanl (+) 0 (map (size . shape) vs)
-    n = last offsets
-    (adata, _) = runArrayData $ do
-              arr <- newArrayData n
-              sequence_ [ unsafeWriteArrayData arr (i + k) (unsafeIndexArrayData ad i) 
+    offsets     = scanl (+) 0 (map (size . shape) vs)
+    len         = last offsets
+    (adata, _)  = runArrayData $ do
+              arr <- newArrayData len
+              sequence_ [ unsafeWriteArrayData arr (i + k) (unsafeIndexArrayData ad i)
                         | (Array ((), n) ad, k) <- vs `zip` offsets
                         , i <- [0 .. n - 1] ]
               return (arr, undefined)
