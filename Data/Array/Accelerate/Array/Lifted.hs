@@ -1,12 +1,12 @@
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE PatternGuards        #-}
-{-# LANGUAGE DeriveDataTypeable   #-}
-{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Vectorise
 -- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everes
@@ -33,12 +33,13 @@ module Data.Array.Accelerate.Array.Lifted (
 
 ) where
 
+import Prelude                                                  hiding ( concat )
 import Data.Typeable
 
 -- friends
-import qualified Data.Array.Accelerate.Array.Representation as Repr
-import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Array.Sugar
+import qualified Data.Array.Accelerate.Array.Representation     as Repr
 
 
 -- Lifted arrays
@@ -79,7 +80,7 @@ instance Arrays t => IsProduct Arrays (Vector' t) where
                = ProdRsnoc (tup t)
 
 
-type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
+type instance ArrRepr  (Vector' a) = ArrRepr (TupleRepr (Vector' a))
 type instance ArrRepr' (Vector' a) = ArrRepr (Vector' a)
 
 
@@ -99,7 +100,7 @@ instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
                              -> ArraysFtuple
                              | otherwise -> error "Absurd"
   --
-  fromArr (Vector' t) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t)) t
+  fromArr (Vector' vt) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t)) vt
     where
       fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
       fa ProdRunit     ()    = ()
@@ -120,17 +121,16 @@ type IsTypeableArrRepr t = IsConstrained (Typeable (ArrRepr t))
 type IsArraysFlat t = IsConstrained (Arrays (Vector' t))
 
 isTypeableArrRepr :: forall t. Arrays t => {- dummy -} t -> IsTypeableArrRepr (Vector' t)
-isTypeableArrRepr t = case flavour t of
-                        ArraysFunit  -> IsC
-                        ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
-                                     -> IsC
-                        ArraysFarray -> IsC
-
+isTypeableArrRepr _ =
+  case flavour (undefined :: t) of
+    ArraysFunit  -> IsC
+    ArraysFarray -> IsC
+    ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
+                 -> IsC
   where
-    isT :: forall t. ProdR Arrays t -> IsTypeableArrRepr t
-    isT ProdRunit     = IsC
-    isT (ProdRsnoc t) | IsC <- isT t
-                       = IsC
+    isT :: ProdR Arrays t' -> IsTypeableArrRepr t'
+    isT ProdRunit                    = IsC
+    isT (ProdRsnoc t) | IsC <- isT t = IsC
 
 isArraysFlat :: forall t. Arrays t => {- dummy -} t -> IsArraysFlat t
 isArraysFlat t = case flavour t of
@@ -138,7 +138,6 @@ isArraysFlat t = case flavour t of
                    ArraysFtuple | IsC <- isTypeableArrRepr t
                                 -> IsC
                    ArraysFarray -> IsC
-
 
 
 -- Useful helper-functions (not exported)
@@ -253,8 +252,8 @@ fromList' concat xs = Vector' $
     ArraysFtuple -> tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (map (fromProd (Proxy :: Proxy Arrays)) xs)
   where
     tup :: forall t. ProdR Arrays t -> [t] -> LiftedTupleRepr t
-    tup ProdRunit _ = ()
-    tup (ProdRsnoc t) abs = (tup t (Prelude.map fst abs), fromList' concat (map snd abs))
+    tup ProdRunit _     = ()
+    tup (ProdRsnoc t) a = (tup t (Prelude.map fst a), fromList' concat (map snd a))
 
 {-
 map' :: (Arrays a, Arrays b)
@@ -283,3 +282,4 @@ helper units arr unit pair fix (Vector' x) =
     tup ProdRunit () = unit
     tup (ProdRsnoc t) (x, y) = tup t x `pair` helper units arr unit pair fix y
 -}
+
