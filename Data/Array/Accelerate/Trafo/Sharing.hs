@@ -2840,16 +2840,16 @@ recoverSharingSeq config seq
 
 traceLine :: String -> String -> IO ()
 traceLine header msg
-  = Debug.traceMessage Debug.dump_sharing
+  = Debug.traceIO Debug.dump_sharing
   $ header ++ ": " ++ msg
 
 traceChunk :: String -> String -> IO ()
 traceChunk header msg
-  = Debug.traceMessage Debug.dump_sharing
+  = Debug.traceIO Debug.dump_sharing
   $ header ++ "\n      " ++ msg
 
 tracePure :: String -> String -> a -> a
 tracePure header msg
-  = Debug.tracePure Debug.dump_sharing
+  = Debug.trace Debug.dump_sharing
   $ header ++ ": " ++ msg
 

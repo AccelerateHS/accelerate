@@ -215,6 +215,9 @@ Library
                         Data.Array.Accelerate.Type
 
   Other-modules:        Data.Array.Accelerate.Array.Lifted
+                        Data.Array.Accelerate.Debug.Flags
+                        Data.Array.Accelerate.Debug.Stats
+                        Data.Array.Accelerate.Debug.Trace
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
                         Data.Array.Accelerate.Pretty.Print

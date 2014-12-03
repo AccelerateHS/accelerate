@@ -2538,5 +2538,6 @@ infixr 0 $^
 -- ----------
 trace :: String -> String -> a -> a
 trace header msg
-  = Debug.tracePure Debug.dump_vectorisation
+  = Debug.trace Debug.dump_vectorisation
   $ header ++ ": " ++ msg
+

@@ -198,7 +198,7 @@ withSimplStats x = unsafePerformIO $ do
      then return x
      else do resetSimplCount
              stats <- length x `seq` simplCount
-             traceMessage dump_simpl_stats (show stats)
+             traceIO dump_simpl_stats (show stats)
              return x
 #else
 withSimplStats x = x

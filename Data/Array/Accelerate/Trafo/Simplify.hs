@@ -429,5 +429,5 @@ iterate ppr f = fix 0 . setup . simplify'
       | otherwise       = v
 
     msg :: f a -> x -> x
-    msg x next          = Stats.tracePure Stats.dump_simpl_iterations (unlines [ "simplifier done", ppr x ]) next
+    msg x next          = Stats.trace Stats.dump_simpl_iterations (unlines [ "simplifier done", ppr x ]) next
 
