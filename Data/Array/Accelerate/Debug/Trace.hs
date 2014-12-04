@@ -77,6 +77,10 @@ trace _ _ expr = expr
 -- | The 'traceIO' function outputs the trace message together with a time stamp
 -- from the IO monad. This sequences the output with respect to other IO
 -- actions.
+
+-- TLM: Perhaps we should automatically format the log messages. Namely:
+--        * prefix with a description of the mode (e.g. "gc: foo")
+--        * align multi-line messages
 --
 traceIO :: Mode -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
