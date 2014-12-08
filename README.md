@@ -92,7 +92,10 @@ Accelerate users have also built some substantial applications of their own.
 Please feel free to add your own examples!
 
   * Henning Thielemann, [patch-image](http://hackage.haskell.org/package/patch-image): Combine a collage of overlapping images
+  * Edward A. Kmett [linear-accelerate](http://hackage.haskell.org/package/linear-accelerate): Instances to use linear vector spaces in Accelerate
   * apunktbau, [bildpunkt](https://github.com/apunktbau/bildpunkt): A ray-marching distance field renderer
+  * klarh, [hasdy](https://github.com/klarh/hasdy): Molecular dynamics in Haskell using Accelerate
+  * Alexandros Gremm used Accelerate as part of the [2014 CSCS summer school](http://user.cscs.ch/blog/2014/cscs_usi_summer_school_2014_30_june_10_july_2014_in_serpiano_tessin/index.html) ([code](https://github.com/agremm/cscs))
 
 
 Mailing list and contacts
