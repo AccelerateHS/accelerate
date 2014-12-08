@@ -86,7 +86,14 @@ The GitHub repository contains a submodule [accelerate-examples][accelerate-exam
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
 
 [![Mandelbrot](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot-small.jpg "accelerate-mandelbrot")](http://www.cse.unsw.edu.au/~tmcdonell/images/mandelbrot.jpg)
+
+<video width=400 height=300 controls=false autoplay loop>
+  <source="http://www.cse.unsw.edu.au/~tmcdonell/images/ray.mp4" type="video/mp4">
+</video>
+
+<!--
 [![Raytracer](http://www.cse.unsw.edu.au/~tmcdonell/images/ray-small.jpg "accelerate-ray")](http://www.cse.unsw.edu.au/~tmcdonell/images/ray.jpg)
+-->
 
 Accelerate users have also built some substantial applications of their own.
 Please feel free to add your own examples!
