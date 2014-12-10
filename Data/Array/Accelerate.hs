@@ -94,6 +94,9 @@ module Data.Array.Accelerate (
   -- *** Pipelining
   (L.>->),
 
+  -- *** Controlling execution
+  P.compute,
+
   -- ** Modifying Arrays
   -- *** Shape manipulation
   L.reshape, P.flatten,

@@ -64,6 +64,9 @@ module Data.Array.Accelerate.Prelude (
   -- * Extracting sub-vectors
   init, tail, take, drop, slit,
 
+  -- * Controlling execution
+  compute,
+
   -- * Array-level flow control
   (?|),
 
@@ -1133,6 +1136,41 @@ slit i n =
   let i' = the (unit i)
       n' = the (unit n)
   in  backpermute (index1 n') (ilift1 (+ i'))
+
+
+-- Controlling execution
+-- ---------------------
+
+-- | Force an array expression to be evaluated, preventing it from fusing with
+-- other operations.
+--
+-- In the case of GPU execution, this also means that the operation is available
+-- to be executed concurrently with other kernels. In particular, consider using
+-- this if you have a series of operations that are compute bound rather than
+-- memory bound.
+--
+-- Here is the synthetic example:
+--
+-- > loop :: Exp Int -> Exp Int
+-- > loop ticks =
+-- >   let clockRate = 900000   -- kHz
+-- >   in  A.while (\i -> i <* clockRate * ticks) (+1) 0
+-- >
+-- > test :: Acc (Vector Int)
+-- > test =
+-- >   A.zip3
+-- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
+-- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
+-- >     (compute $ A.map loop (use $ A.fromList (Z:.1) [10]))
+-- >
+--
+-- Without the use of 'compute', the operations are fused together and the three
+-- long-running loops are executed sequentially in a single kernel. Instead, the
+-- individual kernels can now be executed concurrently, reducing overall runtime
+-- (on hardware that supports concurrent kernel execution).
+--
+compute :: Arrays a => Acc a -> Acc a
+compute = id >-> id
 
 
 -- Flow control
