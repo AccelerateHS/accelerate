@@ -158,7 +158,7 @@ module Data.Array.Accelerate (
   L.mapSeq, L.zipWithSeq, L.scanSeq,
 
   -- ** Sequence consumers
-  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes, 
+  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes,
   P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
 
   -- *** Specification
@@ -246,6 +246,7 @@ module Data.Array.Accelerate (
 
   -- *** Numeric functions
   L.truncate, L.round, L.floor, L.ceiling, L.even, L.odd,
+  L.isNaN,
 
   -- *** Bitwise functions
   L.bit, L.setBit, L.clearBit, L.complementBit, L.testBit,

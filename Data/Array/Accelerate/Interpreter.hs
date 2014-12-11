@@ -789,6 +789,7 @@ evalPrim (PrimRound        ta tb) = evalRound ta tb
 evalPrim (PrimFloor        ta tb) = evalFloor ta tb
 evalPrim (PrimCeiling      ta tb) = evalCeiling ta tb
 evalPrim (PrimAtan2           ty) = evalAtan2 ty
+evalPrim (PrimIsNaN           ty) = evalIsNaN ty
 evalPrim (PrimLt              ty) = evalLt ty
 evalPrim (PrimGt              ty) = evalGt ty
 evalPrim (PrimLtEq            ty) = evalLtEq ty
@@ -953,6 +954,9 @@ evalCeiling ta tb
 
 evalAtan2 :: FloatingType a -> ((a, a) -> a)
 evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
+
+evalIsNaN :: FloatingType a -> (a -> Bool)
+evalIsNaN ty | FloatingDict <- floatingDict ty = isNaN
 
 
 -- Methods of Num
