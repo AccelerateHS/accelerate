@@ -1004,8 +1004,7 @@ data PrimFun sig where
   PrimBRotateL :: IntegralType a -> PrimFun ((a, Int) -> a)
   PrimBRotateR :: IntegralType a -> PrimFun ((a, Int) -> a)
 
-  -- operators from Fractional, Floating, RealFrac & RealFloat
-
+  -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimRecip       :: FloatingType a -> PrimFun (a      -> a)
   PrimSin         :: FloatingType a -> PrimFun (a      -> a)
@@ -1022,18 +1021,31 @@ data PrimFun sig where
   PrimLog         :: FloatingType a -> PrimFun (a      -> a)
   PrimFPow        :: FloatingType a -> PrimFun ((a, a) -> a)
   PrimLogBase     :: FloatingType a -> PrimFun ((a, a) -> a)
-  PrimAtan2       :: FloatingType a -> PrimFun ((a, a) -> a)
 
-  -- RealFrac
+  -- FIXME: add missing operations from RealFrac & RealFloat
+
+  -- operators from RealFrac
   PrimTruncate :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimRound    :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimFloor    :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
   PrimCeiling  :: FloatingType a -> IntegralType b -> PrimFun (a -> b)
+  -- PrimProperFraction :: FloatingType a -> IntegralType b -> PrimFun (a -> (b, a))
 
-  -- RealFloat
+  -- operators from RealFloat
   PrimIsNaN :: FloatingType a -> PrimFun (a -> Bool)
-
-  -- FIXME: add missing operations from RealFrac & RealFloat
+  PrimAtan2 :: FloatingType a -> PrimFun ((a, a) -> a)
+  -- PrimFloatRadix     :: FloatingType a -> PrimFun (a -> Int)         -- Integer?
+  -- PrimFloatDigits    :: FloatingType a -> PrimFun (a -> Int)
+  -- PrimFloatRange     :: FloatingType a -> PrimFun (a -> (Int, Int))
+  -- PrimDecodeFloat    :: FloatingType a -> PrimFun (a -> (Int, Int))  -- Integer?
+  -- PrimEncodeFloat    :: FloatingType a -> PrimFun ((Int, Int) -> a)  -- Integer?
+  -- PrimExponent       :: FloatingType a -> PrimFun (a -> Int)
+  -- PrimSignificand    :: FloatingType a -> PrimFun (a -> a)
+  -- PrimScaleFloat     :: FloatingType a -> PrimFun ((Int, a) -> a)
+  -- PrimIsInfinite     :: FloatingType a -> PrimFun (a -> Bool)
+  -- PrimIsDenormalized :: FloatingType a -> PrimFun (a -> Bool)
+  -- PrimIsNegativeZero :: FloatingType a -> PrimFun (a -> Bool)
+  -- PrimIsIEEE         :: FloatingType a -> PrimFun (a -> Bool)
 
   -- relational and equality operators
   PrimLt   :: ScalarType a -> PrimFun ((a, a) -> Bool)
