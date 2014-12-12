@@ -101,7 +101,7 @@ module Data.Array.Accelerate.Language (
   shift,  shiftL,  shiftR,
   rotate, rotateL, rotateR,
   truncate, round, floor, ceiling,
-  even, odd,
+  even, odd, isNaN,
 
   -- * Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
@@ -1003,6 +1003,11 @@ even x = x .&. 1 ==* 0
 --
 odd :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
 odd x = x .&. 1 ==* 1
+
+-- | return if the argument is an IEEE "not-a-number" (NaN) value
+--
+isNaN :: (Elt a, IsFloating a) => Exp a -> Exp Bool
+isNaN = mkIsNaN
 
 
 -- Non-overloaded standard functions, where we need other signatures

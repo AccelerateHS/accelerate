@@ -132,6 +132,7 @@ evalPrimApp env f x
       PrimRound ta tb           -> evalRound ta tb x env
       PrimFloor ta tb           -> evalFloor ta tb x env
       PrimCeiling ta tb         -> evalCeiling ta tb x env
+      PrimIsNaN ty              -> evalIsNaN ty x env
       PrimLt ty                 -> evalLt ty x env
       PrimGt ty                 -> evalGt ty x env
       PrimLtEq ty               -> evalLtEq ty x env
@@ -523,6 +524,9 @@ evalCeiling :: (Elt a, Elt b) => FloatingType a -> IntegralType b -> a :-> b
 evalCeiling ta tb
   | FloatingDict <- floatingDict ta
   , IntegralDict <- integralDict tb = eval1 ceiling
+
+evalIsNaN :: Elt a => FloatingType a -> a :-> Bool
+evalIsNaN ty | FloatingDict <- floatingDict ty = eval1 isNaN
 
 
 -- Relational & Equality
