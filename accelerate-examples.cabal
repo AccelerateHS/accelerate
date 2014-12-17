@@ -432,7 +432,8 @@ Executable accelerate-fluid
                         base                            == 4.7.*,
                         bmp                             >= 1.2,
                         fclabels                        >= 2.0,
-                        gloss                           >= 1.7
+                        gloss                           >= 1.9,
+                        gloss-rendering                 >= 1.9
 
 
 -- Simulation of gravitational attraction between solid particles

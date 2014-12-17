@@ -11,6 +11,7 @@ import Config
 
 import Data.Word
 import Data.Label
+import Graphics.Gloss.Rendering
 import Graphics.Gloss.Interface.IO.Game
 import Foreign.Ptr
 import Foreign.ForeignPtr
