@@ -124,8 +124,8 @@ checkers pos
   = let
         (x,_,z) = xyzOfVec pos
 
-        v1      = (A.truncate (x / 100) :: Exp Int32) `rem` 2
-        v2      = (A.truncate (z / 100) :: Exp Int32) `rem` 2
+        v1      = (A.truncate (x / 100) :: Exp Int32) `mod` 2
+        v2      = (A.truncate (z / 100) :: Exp Int32) `mod` 2
         v3      = A.fromIntegral . boolToInt $ x <* 0.0
         v4      = A.fromIntegral . boolToInt $ z <* 0.0
     in
