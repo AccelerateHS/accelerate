@@ -628,9 +628,9 @@ Executable accelerate-ray
                         accelerate-examples             == 2.0.*,
                         base                            == 4.7.*,
                         fclabels                        >= 1.0,
-                        gloss                           == 1.8.*,
-                        gloss-accelerate                == 1.8.*,
-                        gloss-raster-accelerate         == 1.8.*
+                        gloss                           >= 1.8,
+                        gloss-accelerate                >= 1.8,
+                        gloss-raster-accelerate         >= 1.8
 
   ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
