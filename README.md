@@ -6,6 +6,7 @@ An Embedded Language for Accelerated Array Computations
 For more details, see our papers:
  * [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]
  * [Optimising Purely Functional GPU Programs][MCKL13]
+ * [Embedding Foreign Code][CMCK14]
 
 There are also slides from some fairly recent presentations:
  * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
@@ -112,6 +113,30 @@ Mailing list and contacts
 
 The maintainers of Accelerate are Manuel M T Chakravarty <chak@cse.unsw.edu.au> and Trevor L McDonell <tmcdonell@cse.unsw.edu.au>.
 
+
+Citing Accelerate
+-----------------
+
+If you use Accelerate for academic research, you are encouraged (though not
+required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmcdonell/papers/accelerate.bib)):
+
+  * Manuel M. T. Chakravarty, Gabriele Keller, Sean Lee, Trevor L. McDonell, and Vinod Grover.
+    [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11].
+    In _DAMP '11: Declarative Aspects of Multicore Programming_, ACM, 2011.
+
+  * Trevor L. McDonell, Manuel M. T. Chakravarty, Gabriele Keller, and Ben Lippmeier.
+    [Optimising Purely Functional GPU Programs][MCKL13].
+    In _ICFP '13: The 18th ACM SIGPLAN International Conference on Functional Programming_, ACM, 2013.
+
+  * Robert Clifton-Everest, Trevor L. McDonell, Manuel M. T. Chakravarty, and Gabriele Keller.
+    [Embedding Foreign Code][CMCK14].
+    In _PADL '14: The 16th International Symposium on Practical Aspects of Declarative Languages_, Springer-Verlag, LNCS, 2014.
+
+Accelerate is primarily developed by academics, so citations matter a lot to us.
+As an added benefit, you increase Accelerate's exposure and potential user (and
+developer!) base, which is a benefit to all users of Accelerate. Thanks in advance!
+
+
 What's missing?
 ---------------
 
@@ -123,6 +148,7 @@ Here is a list of features that are currently missing:
 
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
   [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
+  [CMCK14]:                 http://www.cse.unsw.edu.au/~chak/papers/CMCK14.html
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
   [Mar13]:                  http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
