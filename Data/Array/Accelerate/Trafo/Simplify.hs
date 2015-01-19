@@ -211,8 +211,8 @@ simplifyOpenExp env = first getAny . cvtE
       IndexTail sh              -> indexTail (cvtE sh)
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
-      ToIndex sh ix             -> ToIndex <$> cvtE sh <*> cvtE ix
-      FromIndex sh ix           -> FromIndex <$> cvtE sh <*> cvtE ix
+      ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
+      FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> evalPrimApp env f <$> cvtE x
@@ -347,6 +347,16 @@ simplifyOpenExp env = first getAny . cvtE
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     shapeSize (_, Const c) = let sh = toElt c :: sh in yes (Const ((), (product (shapeToList sh))))
     shapeSize sh           = ShapeSize <$> sh
+
+    toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
+    toIndex  (_,sh) (_,FromIndex sh' ix)
+      | Just REFL <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+    toIndex sh ix                 = ToIndex <$> sh <*> ix
+
+    fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
+    fromIndex  (_,sh) (_,ToIndex sh' ix)
+      | Just REFL <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+    fromIndex sh ix               = FromIndex <$> sh <*> ix
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)
