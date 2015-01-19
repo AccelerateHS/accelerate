@@ -101,8 +101,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Bits
 import Data.Bool
-import Prelude ((.), ($), (+), (-), (*), const, subtract, id, min, max, Float,
-  Double, Char)
+import Prelude ((.), ($), (+), (-), (*), const, id, min, max, Float, Double, Char)
 import qualified Prelude as P
 
 -- friends
@@ -873,6 +872,7 @@ unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 flatten :: (Shape ix, Elt a) => Acc (Array ix a) -> Acc (Vector a)
 flatten a = reshape (index1 $ size a) a
 
+
 -- Enumeration and filling
 -- -----------------------
 
@@ -1095,47 +1095,78 @@ transpose mat =
 -- Extracting sub-vectors
 -- ----------------------
 
--- | Yield the first @n@ elements of the input vector. The vector must contain
--- no more than @n@ elements.
+-- | Yield the first @n@ elements in the outermost dimension of the array (plus
+-- all lower dimensional elements).
 --
-take :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
-take n =
-  let n' = the (unit n)
-  in  backpermute (index1 n') id
-
--- | Yield all but the first @n@ elements of the input vector. The vector must
---   contain no fewer than @n@ elements.
---
-drop :: Elt e => Exp Int -> Acc (Vector e) -> Acc (Vector e)
-drop n arr =
-  let n' = the (unit n)
-  in  backpermute (ilift1 (subtract n') (shape arr)) (ilift1 (+ n')) arr
+take :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Exp Int
+     -> Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+take n acc =
+  let n'        = the (unit (n `min` sz))
+      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
+  in
+  backpermute (lift (sh :. n')) id acc
 
 
--- | Yield all but the last element of the input vector. The vector must not be
---   empty.
+-- | Yield all but the first @n@ elements along the outermost dimension of the
+-- array (plus all lower dimensional elements).
 --
-init :: Elt e => Acc (Vector e) -> Acc (Vector e)
-init arr = backpermute (ilift1 (subtract 1) (shape arr)) id arr
+drop :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Exp Int
+     -> Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+drop n acc =
+  let n'        = the (unit n)
+      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
+      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
+                  in  lift (j :. i + n')
+  in
+  backpermute (lift (sh :. 0 `max` (sz - n'))) index acc
+
+
+-- | Yield all but the elements in the last index of the outermost dimension.
+--
+init :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+init acc =
+  let sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
+  in  backpermute (lift (sh :. sz `min` (sz - 1))) id acc
 
 
 -- | Yield all but the first element of the input vector. The vector must not be
 --   empty.
 --
-tail :: Elt e => Acc (Vector e) -> Acc (Vector e)
-tail arr = backpermute (ilift1 (subtract 1) (shape arr)) (ilift1 (+1)) arr
+tail :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+tail acc =
+  let sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
+      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
+                  in  lift (j :. i + 1)
+  in
+  backpermute (lift (sh :. 0 `max` (sz - 1))) index acc
 
 
--- | Yield a slit (slice) from the vector. The vector must contain at least
---   @i + n@ elements. Denotationally, we have:
+-- | Yield a slit (slice) of the outermost indices of an array. Denotationally,
+-- we have:
 --
 -- > slit i n = take n . drop i
 --
-slit :: Elt e => Exp Int -> Exp Int -> Acc (Vector e) -> Acc (Vector e)
-slit i n =
-  let i' = the (unit i)
-      n' = the (unit n)
-  in  backpermute (index1 n') (ilift1 (+ i'))
+slit :: forall sh e. (Slice sh, Shape sh, Elt e)
+     => Exp Int
+     -> Exp Int
+     -> Acc (Array (sh :. Int) e)
+     -> Acc (Array (sh :. Int) e)
+slit m n acc =
+  let m'        = the (unit m)
+      n'        = the (unit n)
+      sh :. sz  = unlift (shape acc)            :: Exp sh :. Exp Int
+      index ix  = let j :. i = unlift ix        :: Exp sh :. Exp Int
+                  in  lift (j :. i + m')
+  in
+  backpermute (lift (sh :. (n' `min` ((sz - m') `max` 0)))) index acc
 
 
 -- Controlling execution
