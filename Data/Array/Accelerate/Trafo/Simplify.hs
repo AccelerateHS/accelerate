@@ -327,6 +327,10 @@ simplifyOpenExp env = first getAny . cvtE
       , Just sh'        <- gcast sh
       = yes sh'
 
+    indexCons (_,IndexTail sl') (_,IndexHead sz')
+      | Just REFL       <- match sl' sz'
+      = yes sl'
+
     indexCons sl sz
       = IndexCons <$> sl <*> sz
 
