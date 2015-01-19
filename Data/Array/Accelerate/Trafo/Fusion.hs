@@ -283,18 +283,16 @@ convertOpenAfun c (Abody b) = Abody (convertOpenAcc  c b)
 convertOpenSeq :: Bool -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOpenAcc aenv senv a
 convertOpenSeq fuseAcc s =
   case s of
-    Producer p s' ->
-      Producer
-        (case p of
-           StreamIn arrs        -> StreamIn arrs
-           ToSeq slix sh a      -> ToSeq slix sh (delayed fuseAcc a)
-           MapSeq f x           -> MapSeq (cvtAF f) x
-           ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
-           ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
-        (convertOpenSeq fuseAcc s')
-    Consumer c ->
-      Consumer (cvtC c)
-    Reify ix -> Reify ix
+    Consumer c          -> Consumer (cvtC c)
+    Reify ix            -> Reify ix
+    Producer p s'       -> Producer p' (convertOpenSeq fuseAcc s')
+      where
+        p' = case p of
+               StreamIn arrs    -> StreamIn arrs
+               ToSeq slix sh a  -> ToSeq slix sh (delayed fuseAcc a)
+               MapSeq f x       -> MapSeq (cvtAF f) x
+               ZipWithSeq f x y -> ZipWithSeq (cvtAF f) x y
+               ScanSeq f e x    -> ScanSeq (cvtF f) (cvtE e) x
   where
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
@@ -1435,3 +1433,4 @@ indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
 
 linearIndex :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (Int -> e)
 linearIndex v = Lam (Body (LinearIndex (avarIn v) (Var ZeroIdx)))
+
