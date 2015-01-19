@@ -60,9 +60,9 @@ propagate env = cvtE
       Prj ix e       | Just c  <- cvtE e        -> cvtP ix (fromTuple c)
       Var ix
         | e             <- prjExp ix env
-        , Nothing       <- match exp e  -> cvtE e
+        , Nothing       <- match exp e          -> cvtE e
       --
-      _                                 -> Nothing
+      _                                         -> Nothing
 
     cvtP :: TupleIdx t e -> t -> Maybe e
     cvtP ZeroTupIdx       (_, v)   = Just v
