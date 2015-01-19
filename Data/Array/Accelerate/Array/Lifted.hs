@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 -- |
--- Module      : Data.Array.Accelerate.Trafo.Vectorise
+-- Module      : Data.Array.Accelerate.Array.Lifted
 -- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everes
 -- License     : BSD3
 --
