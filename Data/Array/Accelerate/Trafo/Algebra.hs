@@ -35,7 +35,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Pretty.Print               ( prettyPrim )
-import Data.Array.Accelerate.Array.Sugar                ( Elt, toElt, fromElt, Tuple(..), fromTuple )
+import Data.Array.Accelerate.Array.Sugar                ( (:.)(..), Elt(..), Tuple(..), fromTuple )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 
@@ -62,6 +62,8 @@ propagate env = cvtE
         | e             <- prjExp ix env
         , Nothing       <- match exp e          -> cvtE e
       --
+      IndexHead (cvtE -> Just (_  :. z))        -> Just z
+      IndexTail (cvtE -> Just (sh :. _))        -> Just sh
       _                                         -> Nothing
 
     cvtP :: TupleIdx t e -> t -> Maybe e
