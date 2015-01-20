@@ -261,10 +261,10 @@ sinkGamma _   EmptyExp        = EmptyExp
 sinkGamma ext (PushExp env e) = PushExp (sinkGamma ext env) (sink ext e)
 
 lookupExp :: Kit acc => Gamma acc env env' aenv -> PreOpenExp acc env aenv t -> Maybe (Idx env' t)
-lookupExp EmptyExp        _       = Nothing
+lookupExp EmptyExp        _ = Nothing
 lookupExp (PushExp env e) x
-  | Just REFL <- match e x = Just ZeroIdx
-  | otherwise              = SuccIdx `fmap` lookupExp env x
+  | Just REFL <- match e x  = Just ZeroIdx
+  | otherwise               = SuccIdx `fmap` lookupExp env x
 
 
 -- As part of various transformations we often need to lift out array valued
@@ -350,3 +350,4 @@ subApply _                _ = error "subApply: inconsistent evaluation"
 --
 inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
 inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
+

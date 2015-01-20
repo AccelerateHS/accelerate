@@ -924,6 +924,9 @@ infixr 5 ++
              (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
                      in  i <* n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
 
+-- TLM: If we have something like (concat . split) then the source array will
+--      have two use sites, but is actually safe (and better) to inline.
+
 
 -- Filtering
 -- ---------

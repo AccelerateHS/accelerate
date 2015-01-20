@@ -182,6 +182,12 @@ recoverLoops _ bnd e3
 --       introduced by the fusion transformation. This would benefit from a
 --       rewrite rule schema.
 --
+-- TODO: Our implementation of CSE doesn't catch the following, where an
+--       expression in the body is equivalent to an existing binding (presumably
+--       through simplifications):
+--
+--       > let x = e in .. e ..
+--
 simplifyOpenExp
     :: forall acc env aenv e. Kit acc
     => Gamma acc env env aenv
