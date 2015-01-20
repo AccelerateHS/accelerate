@@ -320,16 +320,18 @@ simplifyOpenExp env = first getAny . cvtE
               => (Any, PreOpenExp acc env aenv sl)
               -> (Any, PreOpenExp acc env aenv sz)
               -> (Any, PreOpenExp acc env aenv (sl :. sz))
-    indexCons (_,sl') (_,sz')
-      | Just REFL       <- match sl' IndexNil
-      , IndexHead sh    <- sz'
-      , expDim sz' == 1  -- no type information that this is a 1D shape, hence gcast next
-      , Just sh'        <- gcast sh
-      = yes sh'
+    indexCons (_,IndexNil) (_,Const c)
+      | Just c'         <- cast c       -- EltRepr Z ~ EltRepr ()
+      = Stats.ruleFired "Z:.Const" $ yes (Const c')
+
+    indexCons (_,IndexNil) (_,IndexHead sz')
+      | 0               <- expDim sz'   -- no type information that this is a 1D shape, hence gcast next
+      , Just sh'        <- gcast sz'
+      = Stats.ruleFired "Z:.indexHead" $ yes sh'
 
     indexCons (_,IndexTail sl') (_,IndexHead sz')
       | Just REFL       <- match sl' sz'
-      = yes sl'
+      = Stats.ruleFired "indexTail:.IndexHead" $ yes sl'
 
     indexCons sl sz
       = IndexCons <$> sl <*> sz
