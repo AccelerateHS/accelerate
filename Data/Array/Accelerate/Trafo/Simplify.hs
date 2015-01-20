@@ -324,7 +324,7 @@ simplifyOpenExp env = first getAny . cvtE
       | Just c'         <- cast c       -- EltRepr Z ~ EltRepr ()
       = Stats.ruleFired "Z:.const" $ yes (Const c')
     indexCons (_,IndexNil) (_,IndexHead sz')
-      | 0               <- expDim sz'   -- no type information that this is a 1D shape, hence gcast next
+      | 1               <- expDim sz'   -- no type information that this is a 1D shape, hence gcast next
       , Just sh'        <- gcast sz'
       = Stats.ruleFired "Z:.indexHead" $ yes sh'
     indexCons (_,IndexTail sl') (_,IndexHead sz')
