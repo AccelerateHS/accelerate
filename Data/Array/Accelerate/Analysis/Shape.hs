@@ -65,6 +65,10 @@ preAccDim k pacc =
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "inconceivable!"
 
+    Collect _            -> case arrays' (undefined :: Array sh e) of
+                              ArraysRarray -> ndim (eltType (undefined::sh))
+                              _            -> error "ppbbbbbt~"
+
     Acond _ acc _        -> k acc
     Awhile _ _ acc       -> k acc
     Use ((),(Array _ _)) -> ndim (eltType (undefined::sh))
@@ -88,9 +92,6 @@ preAccDim k pacc =
     Backpermute _ _ _    -> ndim (eltType (undefined::sh))
     Stencil _ _ acc      -> k acc
     Stencil2 _ _ acc _ _ -> k acc
-    Collect _ -> case arrays' (undefined :: Array sh e) of
-      ArraysRarray -> ndim (eltType (undefined::sh))
-      _            -> error "halt, fiend!"
 
 
 -- |Reify dimensionality of a scalar expression yielding a shape
