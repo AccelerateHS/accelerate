@@ -322,32 +322,31 @@ simplifyOpenExp env = first getAny . cvtE
               -> (Any, PreOpenExp acc env aenv (sl :. sz))
     indexCons (_,IndexNil) (_,Const c)
       | Just c'         <- cast c       -- EltRepr Z ~ EltRepr ()
-      = Stats.ruleFired "Z:.Const" $ yes (Const c')
-
+      = Stats.ruleFired "Z:.const" $ yes (Const c')
     indexCons (_,IndexNil) (_,IndexHead sz')
       | 0               <- expDim sz'   -- no type information that this is a 1D shape, hence gcast next
       , Just sh'        <- gcast sz'
       = Stats.ruleFired "Z:.indexHead" $ yes sh'
-
     indexCons (_,IndexTail sl') (_,IndexHead sz')
       | Just REFL       <- match sl' sz'
-      = Stats.ruleFired "indexTail:.IndexHead" $ yes sl'
-
+      = Stats.ruleFired "indexTail:.indexHead" $ yes sl'
     indexCons sl sz
       = IndexCons <$> sl <*> sz
 
     indexHead :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sz)
-    indexHead (_, Const c)        = let _ :. sz = toElt c :: (sl :. sz) in yes (Const (fromElt sz))
-    indexHead (_, IndexCons _ sz) = yes sz
-    indexHead sh                  = IndexHead <$> sh
+    indexHead (_, Const c)
+      | _ :. sz <- toElt c :: sl :. sz  = Stats.ruleFired "indexHead/const"     $ yes (Const (fromElt sz))
+    indexHead (_, IndexCons _ sz)       = Stats.ruleFired "indexHead/indexCons" $ yes sz
+    indexHead sh                        = IndexHead <$> sh
 
     indexTail :: forall sl sz. (Slice sl, Elt sz) => (Any, PreOpenExp acc env aenv (sl :. sz)) -> (Any, PreOpenExp acc env aenv sl)
-    indexTail (_, Const c)        = let sl :. _ = toElt c :: (sl :. sz) in yes (Const (fromElt sl))
-    indexTail (_, IndexCons sl _) = yes sl
-    indexTail sh                  = IndexTail <$> sh
+    indexTail (_, Const c)
+      | sl :. _ <- toElt c :: sl :. sz  = Stats.ruleFired "indexTail/const"     $ yes (Const (fromElt sl))
+    indexTail (_, IndexCons sl _)       = Stats.ruleFired "indexTail/indexCons" $ yes sl
+    indexTail sh                        = IndexTail <$> sh
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    shapeSize (_, Const c) = let sh = toElt c :: sh in yes (Const ((), (product (shapeToList sh))))
+    shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const ((), (product (shapeToList (toElt c :: sh)))))
     shapeSize sh           = ShapeSize <$> sh
 
     toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
