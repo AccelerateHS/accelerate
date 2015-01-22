@@ -31,6 +31,10 @@
 
 module Data.Array.Accelerate.Trafo.Vectorise (
 
+  vectoriseSeq,
+  vectoriseSeqAcc,
+  vectoriseSeqAfun,
+
   liftOpenAfun1,
   liftOpenAfun2,
   Size,
@@ -181,26 +185,45 @@ vectoriseOpenAcc :: Arrays t
                  -> LiftedOpenAcc aenv' t
 vectoriseOpenAcc strength ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc strength ctx size a
 
+liftedSize :: forall acc aenv t.
+              (Kit acc, Arrays t, Arrays (Vector' t))
+           => acc aenv (Vector' t)
+           -> Size acc aenv
+liftedSize a =
+  case flavour (undefined :: t) of
+    ArraysFunit  -> Index (inject $ Aprj ZeroTupIdx a) IndexNil
+    ArraysFarray -> ShapeSize (Shape $ inject $ Aprj (SuccTupIdx ZeroTupIdx) a)
+    ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
+  where
+    fromTup :: (ArrRepr' t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
+    fromTup ProdRunit     = Const ((),0)
+    fromTup (ProdRsnoc _) = convince a
+      where
+        convince :: forall f l a e. (ArrRepr' t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
+                 => acc aenv (Vector' t)
+                 -> Size acc aenv
+        convince a | IsC <- isArraysFlat (undefined :: a)
+                   = liftedSize $^ Aprj ZeroTupIdx a
+
 -- |Lift a unary open array function
 --
 liftOpenAfun1 :: forall aenv aenv' a b.
                  Strength
               -> Context () aenv () aenv'
-              -> Size OpenAcc aenv'
               -> OpenAfun aenv  (a -> b)
               -> OpenAfun aenv' (Vector' a -> Vector' b)
-liftOpenAfun1 strength ctx sz (Alam (Abody f))
+liftOpenAfun1 strength ctx (Alam (Abody f))
   | trace "liftOpenAfun1" ("Starting " ++ show strength ++ " vectorisation") True
   , IsC <- isArraysFlat (undefined :: a)
   , IsC <- isArraysFlat (undefined :: b)
-  = case vectoriseOpenAcc Conservative (PushLAccC ctx) (weakenA1 sz) f of
+  = case vectoriseOpenAcc Conservative (PushLAccC ctx) (liftedSize avar0) f of
       -- In the case that the body of the function does not depend on its argument,
       -- conservative vectorisation will return the unmodified body. In this,
       -- we just need to replicate the result.
-      AvoidedAcc a' -> Alam . Abody $ replicateC (inject $ Unit (weakenA1 sz)) a'
+      AvoidedAcc a' -> Alam . Abody $ replicateC (inject $ Unit (liftedSize avar0)) a'
       -- Otherwise, we have the lifted body.
       LiftedAcc  a' -> Alam . Abody $ a'
-liftOpenAfun1 _ _ _ _
+liftOpenAfun1 _ _ _
   = error "Unreachable"
 
 -- |Lift a binary open array function
@@ -2542,3 +2565,314 @@ trace header msg
   = Debug.trace Debug.dump_vectorisation
   $ header ++ ": " ++ msg
 
+
+
+
+-- Sequence vectorisation
+-- ------------------------
+sequenceFreeAfun :: OpenAfun aenv t -> Bool
+sequenceFreeAfun afun =
+  case afun of
+    Alam f -> sequenceFreeAfun f
+    Abody b -> sequenceFreeAcc b
+
+sequenceFreeFun :: OpenFun env aenv t -> Bool
+sequenceFreeFun afun =
+  case afun of
+    Lam f -> sequenceFreeFun f
+    Body b -> sequenceFreeExp b
+
+sequenceFreeExp :: OpenExp env aenv t -> Bool
+sequenceFreeExp = travE
+  where
+    travF :: OpenFun env aenv t -> Bool
+    travF = sequenceFreeFun
+
+    travT :: Tuple (OpenExp env aenv) t -> Bool
+    travT = sequenceFreeTup
+
+    travA :: OpenAcc aenv t -> Bool
+    travA = sequenceFreeAcc
+
+    travE :: OpenExp env aenv t -> Bool
+    travE exp =
+      case exp of
+        Let bnd body            -> travE bnd && travE body
+        Var _                   -> True
+        Const _                 -> True
+        Tuple tup               -> travT tup
+        Prj _ t                 -> travE t
+        IndexNil                -> True
+        IndexCons sh sz         -> travE sh && travE sz
+        IndexHead sh            -> travE sh
+        IndexTail sh            -> travE sh
+        IndexAny                -> True
+        IndexSlice _ ix sh      -> travE ix && travE sh
+        IndexFull _ ix sl       -> travE ix && travE sl
+        ToIndex sh ix           -> travE sh && travE ix
+        FromIndex sh ix         -> travE sh && travE ix
+        Cond p t e              -> travE p && travE t && travE e
+        While p f x             -> travF p && travF f && travE x
+        PrimConst _             -> True
+        PrimApp _ x             -> travE x
+        Index a sh              -> travA a && travE sh
+        LinearIndex a i         -> travA a && travE i
+        Shape a                 -> travA a
+        ShapeSize sh            -> travE sh
+        Intersect s t           -> travE s && travE t
+        Union s t               -> travE s && travE t
+        Foreign _ f e           -> travF f && travE e
+
+sequenceFreeAtup :: Atuple (OpenAcc aenv) t -> Bool
+sequenceFreeAtup t =
+  case t of
+    NilAtup -> True
+    SnocAtup t e -> sequenceFreeAtup t && sequenceFreeAcc e
+
+sequenceFreeTup :: Tuple (OpenExp env aenv) t -> Bool
+sequenceFreeTup t =
+  case t of
+    NilTup -> True
+    SnocTup t e -> sequenceFreeTup t && sequenceFreeExp e
+
+sequenceFreeAcc :: OpenAcc aenv a -> Bool
+sequenceFreeAcc = travA
+  where
+    travAfun :: OpenAfun aenv t -> Bool
+    travAfun = sequenceFreeAfun
+
+    travE :: Elt t => Exp aenv t -> Bool
+    travE = sequenceFreeExp
+
+    travF :: Fun aenv t -> Bool
+    travF = sequenceFreeFun
+
+    travAT :: Atuple (OpenAcc aenv) t -> Bool
+    travAT = sequenceFreeAtup
+
+    travA :: OpenAcc aenv t -> Bool
+    travA (OpenAcc acc) =
+      case acc of
+        Alet bnd body             -> travA bnd && travA body
+        Avar _                    -> True
+        Atuple tup                -> travAT tup
+        Aprj _ a                  -> travA a
+        Apply f a                 -> travAfun f && travA a
+        Aforeign _ afun acc       -> travAfun afun && travA acc
+        Acond p t e               -> travE p && travA t && travA e
+        Awhile p f a              -> travAfun p && travAfun f && travA a
+        Use _                     -> True
+        Unit e                    -> travE e
+        Reshape e a               -> travE e && travA a
+        Generate e f              -> travE e && travF f
+        Transform sh ix f a       -> travE sh && travF ix && travF f && travA a
+        Replicate _ slix a        -> travE slix && travA a
+        Slice _ a slix            -> travA a && travE slix
+        Map f a                   -> travF f && travA a
+        ZipWith f a1 a2           -> travF f && travA a1 && travA a2
+        Fold f z a                -> travF f && travE z && travA a
+        Fold1 f a                 -> travF f && travA a
+        Scanl f z a               -> travF f && travE z && travA a
+        Scanl' f z a              -> travF f && travE z && travA a
+        Scanl1 f a                -> travF f && travA a
+        Scanr f z a               -> travF f && travE z && travA a
+        Scanr' f z a              -> travF f && travE z && travA a
+        Scanr1 f a                -> travF f && travA a
+        Permute f1 a1 f2 a2       -> travF f1 && travA a1 && travF f2 && travA a2
+        Backpermute sh f a        -> travE sh && travF f && travA a
+        Stencil f _ a             -> travF f && travA a
+        Stencil2 f _ a1 _ a2      -> travF f && travA a1 && travA a2
+        -- Interesting case:
+        Collect _                 -> False
+        FoldSeg f z a s           -> travF f && travE z && travA a && travA s
+        Fold1Seg f a s            -> travF f && travA a && travA s
+
+vectoriseSeq :: PreOpenSeq OpenAcc () () a -> PreOpenSeq OpenAcc () () a
+vectoriseSeq = vectoriseOpenSeq Aggressive EmptyC
+
+vectoriseOpenSeq :: forall aenv senv a.
+                Strength
+             -> Context () aenv () aenv
+             -> PreOpenSeq OpenAcc aenv senv a
+             -> PreOpenSeq OpenAcc aenv senv a
+vectoriseOpenSeq strength ctx seq =
+    case seq of
+    Producer p s -> Producer (cvtP p) (vectoriseOpenSeq strength ctx s)
+    Consumer c   -> Consumer (cvtC c)
+    Reify ix     -> Reify ix
+  where
+    cvtP :: Producer OpenAcc aenv senv t -> Producer OpenAcc aenv senv t
+    cvtP p =
+      case p of
+        StreamIn arrs        -> StreamIn arrs
+        ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
+        -- Interesting case:
+        MapSeq f x
+          | sequenceFreeAfun f -> trace "vectoriseSeq" ("MapSeq succesfully vectorised: " ++ show (liftOpenAfun1 strength ctx (cvtAfun f))) $
+              ChunkedMapSeq (liftOpenAfun1 strength ctx (cvtAfun f)) x
+          -- The following case is needed because we don't know how to
+          -- lift sequences yet.
+          | otherwise          -> trace "vectoriseSeq" ("MapSeq could not be vectorised: " ++ show (cvtAfun f)) $
+                                    MapSeq (cvtAfun f) x
+        ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAfun f) x
+        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
+
+    cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
+    cvtC c =
+      case c of
+        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
+        Stuple t             -> Stuple (cvtCT t)
+
+    cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer OpenAcc aenv senv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
+    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE = vectoriseSeqOpenExp strength ctx
+
+    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF = vectoriseSeqOpenFun strength ctx
+
+    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
+    cvtA = vectoriseSeqOpenAcc strength ctx
+
+    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
+    cvtAfun = vectoriseSeqOpenAfun strength ctx
+
+stripExpCtx :: Context env aenv env aenv -> Context () aenv () aenv
+stripExpCtx c =
+  case c of
+    EmptyC -> EmptyC
+    PushExpC c' -> stripExpCtx c'
+    PushAccC c' -> PushAccC (stripExpCtx c')
+    _ -> error "unreachable"
+
+vectoriseSeqOpenExp :: forall env aenv a.
+                       Strength
+                    -> Context env aenv env aenv
+                    -> OpenExp env aenv a
+                    -> OpenExp env aenv a
+vectoriseSeqOpenExp strength ctx = cvtE
+  where
+    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
+    cvtA a = vectoriseSeqOpenAcc strength (stripExpCtx ctx) a
+
+    cvtT :: Tuple (OpenExp env aenv) t -> Tuple (OpenExp env aenv) t
+    cvtT tup = case tup of
+      NilTup      -> NilTup
+      SnocTup t a -> cvtT t `SnocTup` cvtE a
+
+    cvtF :: OpenFun env aenv t -> OpenFun env aenv t
+    cvtF = vectoriseSeqOpenFun strength ctx
+
+    cvtE :: OpenExp env aenv t -> OpenExp env aenv t
+    cvtE exp =
+      case exp of
+        Let bnd body            -> Let (cvtE bnd) (vectoriseSeqOpenExp strength (PushExpC ctx) body)
+        Var ix                  -> Var ix
+        Const c                 -> Const c
+        Tuple tup               -> Tuple (cvtT tup)
+        Prj tup t               -> Prj tup (cvtE t)
+        IndexNil                -> IndexNil
+        IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
+        IndexHead sh            -> IndexHead (cvtE sh)
+        IndexTail sh            -> IndexTail (cvtE sh)
+        IndexAny                -> IndexAny
+        IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
+        ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
+        FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
+        Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
+        While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
+        PrimConst c             -> PrimConst c
+        PrimApp f x             -> PrimApp f (cvtE x)
+        Index a sh              -> Index (cvtA a) (cvtE sh)
+        LinearIndex a i         -> LinearIndex (cvtA a) (cvtE i)
+        Shape a                 -> Shape (cvtA a)
+        ShapeSize sh            -> ShapeSize (cvtE sh)
+        Intersect s t           -> Intersect (cvtE s) (cvtE t)
+        Union s t               -> Union (cvtE s) (cvtE t)
+        Foreign ff f e          -> Foreign ff (vectoriseSeqOpenFun strength EmptyC f) (cvtE e)
+
+vectoriseSeqAcc :: OpenAcc () a -> OpenAcc () a
+vectoriseSeqAcc = vectoriseSeqOpenAcc Aggressive EmptyC
+
+vectoriseSeqOpenAcc :: forall aenv a.
+                       Strength
+                    -> Context () aenv () aenv
+                    -> OpenAcc aenv a
+                    -> OpenAcc aenv a
+vectoriseSeqOpenAcc strength ctx = cvtA
+  where
+    cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
+    cvtT atup = case atup of
+      NilAtup      -> NilAtup
+      SnocAtup t a -> cvtT t `SnocAtup` cvtA a
+
+    cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
+    cvtAfun = vectoriseSeqOpenAfun strength ctx
+
+    cvtE :: Elt t => Exp aenv t -> Exp aenv t
+    cvtE = vectoriseSeqOpenExp strength ctx
+
+    cvtF :: Fun aenv t -> Fun aenv t
+    cvtF = vectoriseSeqOpenFun strength ctx
+
+    cvtA :: OpenAcc aenv t -> OpenAcc aenv t
+    cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
+      Alet bnd body             -> Alet (cvtA bnd) (vectoriseSeqOpenAcc strength (PushAccC ctx) body)
+      Avar ix                   -> Avar ix
+      Atuple tup                -> Atuple (cvtT tup)
+      Aprj tup a                -> Aprj tup (cvtA a)
+      Apply f a                 -> Apply (cvtAfun f) (cvtA a)
+      Aforeign ff afun acc      -> Aforeign ff (vectoriseSeqAfun afun) (cvtA acc)
+      Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
+      Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
+      Use a                     -> Use a
+      Unit e                    -> Unit (cvtE e)
+      Reshape e a               -> Reshape (cvtE e) (cvtA a)
+      Generate e f              -> Generate (cvtE e) (cvtF f)
+      Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
+      Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
+      Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
+      Map f a                   -> Map (cvtF f) (cvtA a)
+      ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
+      Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
+      Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
+      Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
+      Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+      Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
+      Scanr f z a               -> Scanr (cvtF f) (cvtE z) (cvtA a)
+      Scanr' f z a              -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+      Scanr1 f a                -> Scanr1 (cvtF f) (cvtA a)
+      Permute f1 a1 f2 a2       -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
+      Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
+      Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
+      Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+      Collect s                 -> Collect (vectoriseOpenSeq strength ctx s)
+      FoldSeg f z a s           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+      Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
+
+vectoriseSeqAfun :: OpenAfun () t -> OpenAfun () t
+vectoriseSeqAfun = vectoriseSeqOpenAfun Aggressive EmptyC
+
+vectoriseSeqOpenFun :: forall env aenv t.
+                       Strength
+                    -> Context env aenv env aenv
+                    -> OpenFun env aenv t
+                    -> OpenFun env aenv t
+vectoriseSeqOpenFun strength ctx fun =
+  case fun of
+    Body b -> Body (vectoriseSeqOpenExp strength ctx b)
+    Lam f  -> Lam (vectoriseSeqOpenFun strength (PushExpC ctx) f)
+
+vectoriseSeqOpenAfun :: Strength
+                     -> Context () aenv () aenv
+                     -> OpenAfun aenv t
+                     -> OpenAfun aenv t
+vectoriseSeqOpenAfun strength ctx afun =
+  case afun of
+    Abody b -> Abody (vectoriseSeqOpenAcc strength ctx b)
+    Alam f  -> Alam (vectoriseSeqOpenAfun strength (PushAccC ctx) f)

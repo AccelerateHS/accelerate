@@ -205,6 +205,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
         StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl slix (shrinkAcc a)
         MapSeq f x           -> MapSeq (shrinkAF f) x
+        ChunkedMapSeq f x    -> ChunkedMapSeq (shrinkAF f) x
         ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
         ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
 
@@ -408,6 +409,7 @@ usesOfPreAcc withShape countAcc idx = count
         StreamIn _           -> 0
         ToSeq _ _ a          -> countA a
         MapSeq f _           -> countAF f idx
+        ChunkedMapSeq f _    -> countAF f idx
         ZipWithSeq f _ _     -> countAF f idx
         ScanSeq f e _        -> countF f + countE e
 

@@ -110,6 +110,7 @@ import Data.Typeable
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Array.Lifted               ( Vector' )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
@@ -509,6 +510,13 @@ data Producer acc aenv senv a where
          => PreOpenAfun acc aenv (a -> b)
          -> Idx senv a
          -> Producer acc aenv senv b
+
+  -- Apply the given the given function to all elements of the given
+  -- sequence.
+  ChunkedMapSeq :: (Arrays a, Arrays b)
+                => PreOpenAfun acc aenv (Vector' a -> Vector' b)
+                -> Idx senv a
+                -> Producer acc aenv senv b
 
   -- Apply a given binary function pairwise to all elements of the
   -- given sequences.

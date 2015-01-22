@@ -288,11 +288,12 @@ convertOpenSeq fuseAcc s =
     Producer p s'       -> Producer p' (convertOpenSeq fuseAcc s')
       where
         p' = case p of
-               StreamIn arrs    -> StreamIn arrs
-               ToSeq slix sh a  -> ToSeq slix sh (delayed fuseAcc a)
-               MapSeq f x       -> MapSeq (cvtAF f) x
-               ZipWithSeq f x y -> ZipWithSeq (cvtAF f) x y
-               ScanSeq f e x    -> ScanSeq (cvtF f) (cvtE e) x
+               StreamIn arrs     -> StreamIn arrs
+               ToSeq slix sh a   -> ToSeq slix sh (delayed fuseAcc a)
+               MapSeq f x        -> MapSeq (cvtAF f) x
+               ChunkedMapSeq f x -> ChunkedMapSeq (cvtAF f) x
+               ZipWithSeq f x y  -> ZipWithSeq (cvtAF f) x y
+               ScanSeq f e x     -> ScanSeq (cvtF f) (cvtE e) x
   where
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
@@ -570,6 +571,7 @@ embedSeq embedAcc s
       = ExtendProducer env' (ToSeq slix sh (inject (compute' cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
     travP (MapSeq f x) env           = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) x)
+    travP (ChunkedMapSeq f x) env    = ExtendProducer BaseEnv (ChunkedMapSeq (cvtAF (sink env f)) x)
     travP (ZipWithSeq f x y) env     = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) x y)
     travP (ScanSeq f e x) env        = ExtendProducer BaseEnv (ScanSeq (cvtF (sink env f)) (cvtE (sink env e)) x)
 
@@ -765,10 +767,11 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenP p =
         case p of
           StreamIn arrs        -> StreamIn arrs
-          ToSeq slix sh a      -> ToSeq   slix sh (weaken k a)
-          MapSeq     f x       -> MapSeq     (weaken k f) x
+          ToSeq slix sh a      -> ToSeq slix sh (weaken k a)
+          MapSeq f x           -> MapSeq (weaken k f) x
+          ChunkedMapSeq f x    -> ChunkedMapSeq (weaken k f) x
           ZipWithSeq f x y     -> ZipWithSeq (weaken k f) x y
-          ScanSeq f a x        -> ScanSeq    (weaken k f) (weaken k a) x
+          ScanSeq f a x        -> ScanSeq (weaken k f) (weaken k a) x
 
       weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
@@ -1267,6 +1270,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                    StreamIn arrs        -> StreamIn arrs
                    ToSeq slix sh a      -> ToSeq slix sh (cvtA a)
                    MapSeq f x           -> MapSeq (cvtAF f) x
+                   ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAF f) x
                    ZipWithSeq f x y     -> ZipWithSeq (cvtAF f) x y
                    ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
                 (cvtSeq s')

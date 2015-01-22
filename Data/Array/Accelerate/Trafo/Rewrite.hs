@@ -121,6 +121,7 @@ convertSegmentsSeq seq =
         StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
         MapSeq f x           -> MapSeq (cvtAfun f) x
+        ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAfun f) x
         ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 

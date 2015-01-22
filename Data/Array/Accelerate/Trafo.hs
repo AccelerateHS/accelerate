@@ -47,6 +47,7 @@ import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
+import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe
@@ -78,6 +79,10 @@ data Phase = Phase
 
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
+
+    -- | Vectorise maps and zipwiths in sequence computations to
+    --   enable chunked execution?
+  , vectoriseSequences :: Bool
   }
 
 
@@ -92,6 +97,7 @@ phases =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
+  , vectoriseSequences     = True
   }
 
 when :: (a -> a) -> Bool -> a -> a
@@ -111,6 +117,7 @@ convertAcc = convertAccWith phases
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
   = Fusion.convertAcc enableAccFusion
+  $ Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
@@ -125,6 +132,7 @@ convertAfun = convertAfunWith phases
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
   = Fusion.convertAfun enableAccFusion
+  $ Vectorise.vectoriseSeqAfun `when` vectoriseSequences
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ acc
@@ -156,6 +164,7 @@ convertSeq = convertSeqWith phases
 convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
 convertSeqWith Phase{..} s
   = Fusion.convertSeq enableAccFusion
+  $ Vectorise.vectoriseSeq `when` vectoriseSequences
   $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
   $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ s

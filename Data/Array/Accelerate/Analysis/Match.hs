@@ -972,10 +972,11 @@ hashPreOpenSeq hashAcc s =
     hashP salt p =
       case p of
         StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
-        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"      `hashA`  acc `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq"     `hashAF` f   `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq" `hashAF` f   `hashVar` x `hashVar` y
-        ScanSeq f e x       -> hashWithSalt salt "ScanSeq"    `hashF`  f   `hashE`   e `hashVar` x
+        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
+        MapSeq f x          -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
+        ChunkedMapSeq f x   -> hashWithSalt salt "ChunkedMapSeq" `hashAF` f   `hashVar` x
+        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
+        ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
 
     hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =

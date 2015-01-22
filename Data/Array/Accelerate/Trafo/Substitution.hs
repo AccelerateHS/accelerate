@@ -493,6 +493,7 @@ rebuildP k v p =
     StreamIn arrs        -> pure (StreamIn arrs)
     ToSeq sl slix acc    -> ToSeq sl slix <$> k v acc
     MapSeq f x           -> MapSeq <$> rebuildAfun k v f <*> pure x
+    ChunkedMapSeq f x    -> ChunkedMapSeq <$> rebuildAfun k v f <*> pure x
     ZipWithSeq f x y     -> ZipWithSeq <$> rebuildAfun k v f <*> pure x <*> pure y
     ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
 

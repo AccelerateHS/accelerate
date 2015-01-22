@@ -103,6 +103,7 @@ config =  Phase
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
   , convertOffsetOfSegment = False
+  , vectoriseSequences     = True
   }
 
 
@@ -1408,6 +1409,7 @@ evalSeq conf s aenv = evalSeq' s
               k   = elemsPerChunk conf n
           in ExecStreamIn k (toSeqOp sliceIndex slix (newArray sh ix))
         MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
+        ChunkedMapSeq f x    -> ExecMap     (evalAF f) (cursor0 x)
         ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
         ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
           where
