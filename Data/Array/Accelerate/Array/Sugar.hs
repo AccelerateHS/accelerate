@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Arrays(..), ArraysR(..), ArrRepr, ArrRepr',
 
   -- * Class of supported surface element types and their mapping to representation types
-  Elt(..), EltRepr, EltRepr',
+  Elt(..), EltR(..), EltRepr, EltRepr',
 
   -- * Derived functions
   liftToElt, liftToElt2, sinkFromElt, sinkFromElt2,
@@ -229,6 +229,52 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
   = (EltRepr (a, b, c, d, e, f, g, h), EltRepr' i)
 
 
+-- Reification of surface types
+-- ----------------------------
+
+data family EltR a :: *
+data instance EltR ()       = EltR_Unit
+data instance EltR Z        = EltR_Z
+data instance EltR (t:.h)   = EltR_Cons (EltR t) (EltR h)
+data instance EltR All      = EltR_All
+data instance EltR (Any sh) = EltR_Any (EltR sh)
+data instance EltR Int      = EltR_Int
+data instance EltR Int8     = EltR_Int8
+data instance EltR Int16    = EltR_Int16
+data instance EltR Int32    = EltR_Int32
+data instance EltR Int64    = EltR_Int64
+data instance EltR Word     = EltR_Word
+data instance EltR Word8    = EltR_Word8
+data instance EltR Word16   = EltR_Word16
+data instance EltR Word32   = EltR_Word32
+data instance EltR Word64   = EltR_Word64
+data instance EltR CShort   = EltR_CShort
+data instance EltR CUShort  = EltR_CUShort
+data instance EltR CInt     = EltR_CInt
+data instance EltR CUInt    = EltR_CUInt
+data instance EltR CLong    = EltR_CLong
+data instance EltR CULong   = EltR_CULong
+data instance EltR CLLong   = EltR_CLLong
+data instance EltR CULLong  = EltR_CULLong
+data instance EltR Float    = EltR_Float
+data instance EltR Double   = EltR_Double
+data instance EltR CFloat   = EltR_CFloat
+data instance EltR CDouble  = EltR_CDouble
+data instance EltR Bool     = EltR_Bool
+data instance EltR Char     = EltR_Char
+data instance EltR CChar    = EltR_CChar
+data instance EltR CSChar   = EltR_CSChar
+data instance EltR CUChar   = EltR_CUChar
+data instance EltR (a, b)   = EltR_Tup2 (EltR a) (EltR b)
+data instance EltR (a, b, c) = EltR_Tup3 (EltR a) (EltR b) (EltR c)
+data instance EltR (a, b, c, d) = EltR_Tup4 (EltR a) (EltR b) (EltR c) (EltR d)
+data instance EltR (a, b, c, d, e) = EltR_Tup5 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e)
+data instance EltR (a, b, c, d, e, f) = EltR_Tup6 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f)
+data instance EltR (a, b, c, d, e, f, g) = EltR_Tup7 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g)
+data instance EltR (a, b, c, d, e, f, g, h) = EltR_Tup8 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h)
+data instance EltR (a, b, c, d, e, f, g, h, i) = EltR_Tup9 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h) (EltR i)
+
+
 -- Array elements (tuples of scalars)
 -- ----------------------------------
 
@@ -243,6 +289,9 @@ class (Show a, Typeable a,
        Typeable (EltRepr a), Typeable (EltRepr' a),
        ArrayElt (EltRepr a), ArrayElt (EltRepr' a))
       => Elt a where
+
+  elts     :: {-dummy-} a -> EltR a
+
   eltType  :: {-dummy-} a -> TupleType (EltRepr a)
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
@@ -253,34 +302,41 @@ class (Show a, Typeable a,
 
 
 instance Elt () where
-  eltType _ = UnitTuple
-  fromElt = id
-  toElt   = id
+  elts _     = EltR_Unit
+
+  eltType _  = UnitTuple
+  fromElt    = id
+  toElt      = id
 
   eltType' _ = UnitTuple
-  fromElt' = id
-  toElt'   = id
-
+  fromElt'   = id
+  toElt'     = id
 
 instance Elt Z where
-  eltType _ = UnitTuple
-  fromElt Z = ()
-  toElt ()  = Z
+  elts _     = EltR_Z
+
+  eltType _  = UnitTuple
+  fromElt Z  = ()
+  toElt ()   = Z
 
   eltType' _ = UnitTuple
   fromElt' Z = ()
   toElt' ()  = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
-  eltType (_::(t:.h)) = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
-  fromElt (t:.h)      = (fromElt t, fromElt' h)
-  toElt (t, h)        = toElt t :. toElt' h
+  elts _               = EltR_Cons (elts (undefined :: t)) (elts (undefined :: h))
+
+  eltType (_::(t:.h))  = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
+  fromElt (t:.h)       = (fromElt t, fromElt' h)
+  toElt (t, h)         = toElt t :. toElt' h
 
   eltType' (_::(t:.h)) = PairTuple (eltType (undefined :: t)) (eltType' (undefined :: h))
   fromElt' (t:.h)      = (fromElt t, fromElt' h)
   toElt' (t, h)        = toElt t :. toElt' h
 
 instance Elt All where
+  elts _         = EltR_All
+
   eltType _      = PairTuple UnitTuple UnitTuple
   fromElt All    = ((), ())
   toElt ((), ()) = All
@@ -290,24 +346,30 @@ instance Elt All where
   toElt' ()      = All
 
 instance Elt (Any Z) where
-  eltType _ = UnitTuple
-  fromElt _ = ()
-  toElt _   = Any
+  elts _     = EltR_Any EltR_Z
+
+  eltType _  = UnitTuple
+  fromElt _  = ()
+  toElt _    = Any
 
   eltType' _ = UnitTuple
   fromElt' _ = ()
   toElt' _   = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
-  eltType _ = PairTuple (eltType (undefined::Any sh)) UnitTuple
-  fromElt _ = (fromElt (undefined :: Any sh), ())
-  toElt _   = Any
+  elts _     = EltR_Any (elts (undefined :: sh) `EltR_Cons` EltR_Int)
+
+  eltType _  = PairTuple (eltType (undefined::Any sh)) UnitTuple
+  fromElt _  = (fromElt (undefined :: Any sh), ())
+  toElt _    = Any
 
   eltType' _ = PairTuple (eltType' (undefined::Any sh)) UnitTuple
   fromElt' _ = (fromElt' (undefined :: Any sh), ())
   toElt' _   = Any
 
 instance Elt Int where
+  elts _        = EltR_Int
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -317,6 +379,8 @@ instance Elt Int where
   toElt'        = id
 
 instance Elt Int8 where
+  elts _        = EltR_Int8
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -326,6 +390,8 @@ instance Elt Int8 where
   toElt'        = id
 
 instance Elt Int16 where
+  elts _        = EltR_Int16
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -335,6 +401,8 @@ instance Elt Int16 where
   toElt'        = id
 
 instance Elt Int32 where
+  elts _        = EltR_Int32
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -344,6 +412,8 @@ instance Elt Int32 where
   toElt'        = id
 
 instance Elt Int64 where
+  elts _        = EltR_Int64
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -353,6 +423,8 @@ instance Elt Int64 where
   toElt'        = id
 
 instance Elt Word where
+  elts _        = EltR_Word
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -362,6 +434,8 @@ instance Elt Word where
   toElt'        = id
 
 instance Elt Word8 where
+  elts _        = EltR_Word8
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -371,6 +445,8 @@ instance Elt Word8 where
   toElt'        = id
 
 instance Elt Word16 where
+  elts _        = EltR_Word16
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -380,6 +456,8 @@ instance Elt Word16 where
   toElt'        = id
 
 instance Elt Word32 where
+  elts _        = EltR_Word32
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -389,6 +467,8 @@ instance Elt Word32 where
   toElt'        = id
 
 instance Elt Word64 where
+  elts _        = EltR_Word64
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -398,6 +478,8 @@ instance Elt Word64 where
   toElt'        = id
 
 instance Elt CShort where
+  elts _        = EltR_CShort
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -407,6 +489,8 @@ instance Elt CShort where
   toElt'        = id
 
 instance Elt CUShort where
+  elts _        = EltR_CUShort
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -416,6 +500,8 @@ instance Elt CUShort where
   toElt'        = id
 
 instance Elt CInt where
+  elts _        = EltR_CInt
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -425,6 +511,8 @@ instance Elt CInt where
   toElt'        = id
 
 instance Elt CUInt where
+  elts _        = EltR_CUInt
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -434,6 +522,8 @@ instance Elt CUInt where
   toElt'        = id
 
 instance Elt CLong where
+  elts _        = EltR_CLong
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -443,6 +533,8 @@ instance Elt CLong where
   toElt'        = id
 
 instance Elt CULong where
+  elts _        = EltR_CULong
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -452,6 +544,8 @@ instance Elt CULong where
   toElt'        = id
 
 instance Elt CLLong where
+  elts _        = EltR_CLLong
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -461,6 +555,8 @@ instance Elt CLLong where
   toElt'        = id
 
 instance Elt CULLong where
+  elts _        = EltR_CULLong
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -470,6 +566,8 @@ instance Elt CULLong where
   toElt'        = id
 
 instance Elt Float where
+  elts _        = EltR_Float
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -479,6 +577,8 @@ instance Elt Float where
   toElt'        = id
 
 instance Elt Double where
+  elts _        = EltR_Double
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -488,6 +588,8 @@ instance Elt Double where
   toElt'        = id
 
 instance Elt CFloat where
+  elts _        = EltR_CFloat
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -497,6 +599,8 @@ instance Elt CFloat where
   toElt'        = id
 
 instance Elt CDouble where
+  elts _        = EltR_CDouble
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -506,6 +610,8 @@ instance Elt CDouble where
   toElt'        = id
 
 instance Elt Bool where
+  elts _        = EltR_Bool
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -515,6 +621,8 @@ instance Elt Bool where
   toElt'        = id
 
 instance Elt Char where
+  elts _        = EltR_Char
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -524,6 +632,8 @@ instance Elt Char where
   toElt'        = id
 
 instance Elt CChar where
+  elts _        = EltR_CChar
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -533,6 +643,8 @@ instance Elt CChar where
   toElt'        = id
 
 instance Elt CSChar where
+  elts _        = EltR_CSChar
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -542,6 +654,8 @@ instance Elt CSChar where
   toElt'        = id
 
 instance Elt CUChar where
+  elts _        = EltR_CUChar
+
   eltType       = singletonScalarType
   fromElt v     = ((), v)
   toElt ((), v) = v
@@ -551,6 +665,8 @@ instance Elt CUChar where
   toElt'        = id
 
 instance (Elt a, Elt b) => Elt (a, b) where
+  elts _        = EltR_Tup2 (elts (undefined :: a)) (elts (undefined :: b))
+
   eltType (_::(a, b))
     = PairTuple (eltType (undefined :: a)) (eltType' (undefined :: b))
   fromElt (a, b)  = (fromElt a, fromElt' b)
@@ -562,6 +678,8 @@ instance (Elt a, Elt b) => Elt (a, b) where
   toElt' (a, b) = (toElt a, toElt' b)
 
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
+  elts _        = EltR_Tup3 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c))
+
   eltType (_::(a, b, c))
     = PairTuple (eltType (undefined :: (a, b))) (eltType' (undefined :: c))
   fromElt (a, b, c) = (fromElt (a, b), fromElt' c)
@@ -573,6 +691,9 @@ instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   toElt' (ab, c) = let (a, b) = toElt ab in (a, b, toElt' c)
 
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
+  elts _        = EltR_Tup4 (elts (undefined :: a)) (elts (undefined :: b))
+                            (elts (undefined :: c)) (elts (undefined :: d))
+
   eltType (_::(a, b, c, d))
     = PairTuple (eltType (undefined :: (a, b, c))) (eltType' (undefined :: d))
   fromElt (a, b, c, d) = (fromElt (a, b, c), fromElt' d)
@@ -584,6 +705,9 @@ instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
   toElt' (abc, d) = let (a, b, c) = toElt abc in (a, b, c, toElt' d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
+  elts _        = EltR_Tup5 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c))
+                            (elts (undefined :: d)) (elts (undefined :: e))
+
   eltType (_::(a, b, c, d, e))
     = PairTuple (eltType (undefined :: (a, b, c, d)))
                 (eltType' (undefined :: e))
@@ -597,6 +721,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   toElt' (abcd, e) = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt' e)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
+  elts _        = EltR_Tup6 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c))
+                            (elts (undefined :: d)) (elts (undefined :: e)) (elts (undefined :: f))
+
   eltType (_::(a, b, c, d, e, f))
     = PairTuple (eltType (undefined :: (a, b, c, d, e)))
                 (eltType' (undefined :: f))
@@ -611,6 +738,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) wh
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   => Elt (a, b, c, d, e, f, g) where
+  elts _        = EltR_Tup7 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c)) (elts (undefined :: d))
+                            (elts (undefined :: e)) (elts (undefined :: f)) (elts (undefined :: g))
+
   eltType (_::(a, b, c, d, e, f, g))
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f)))
                 (eltType' (undefined :: g))
@@ -625,6 +755,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   => Elt (a, b, c, d, e, f, g, h) where
+  elts _        = EltR_Tup8 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c)) (elts (undefined :: d))
+                            (elts (undefined :: e)) (elts (undefined :: f)) (elts (undefined :: g)) (elts (undefined :: h))
+
   eltType (_::(a, b, c, d, e, f, g, h))
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType' (undefined :: h))
@@ -641,6 +774,9 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Elt (a, b, c, d, e, f, g, h, i) where
+  elts _        = EltR_Tup9 (elts (undefined :: a)) (elts (undefined :: b)) (elts (undefined :: c)) (elts (undefined :: d)) (elts (undefined :: e))
+                            (elts (undefined :: f)) (elts (undefined :: g)) (elts (undefined :: h)) (elts (undefined :: i))
+
   eltType (_::(a, b, c, d, e, f, g, h, i))
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType' (undefined :: i))
