@@ -238,61 +238,47 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 -- add new types.  While the EltRepr type function encodes these types
 -- in a form supported by Accelerate backend implementations, in
 -- contrast, EltR describes their surface structure precisely.
-data family EltR a :: *
-data instance EltR ()       = EltR_Unit                    deriving (Show,Read,Eq,Ord)
-data instance EltR Z        = EltR_Z                       deriving (Show,Read,Eq,Ord)
-data instance EltR (t:.h)   = EltR_Cons (EltR t) (EltR h)  -- deriving (Show,Read,Eq,Ord)
-data instance EltR All      = EltR_All                     deriving (Show,Read,Eq,Ord)
-data instance EltR (Any sh) = EltR_Any (EltR sh)
-data instance EltR Int      = EltR_Int                     deriving (Show,Read,Eq,Ord)
-data instance EltR Int8     = EltR_Int8                    deriving (Show,Read,Eq,Ord)
-data instance EltR Int16    = EltR_Int16                   deriving (Show,Read,Eq,Ord)
-data instance EltR Int32    = EltR_Int32                   deriving (Show,Read,Eq,Ord)
-data instance EltR Int64    = EltR_Int64                   deriving (Show,Read,Eq,Ord)
-data instance EltR Word     = EltR_Word                    deriving (Show,Read,Eq,Ord)
-data instance EltR Word8    = EltR_Word8                   deriving (Show,Read,Eq,Ord)
-data instance EltR Word16   = EltR_Word16                  deriving (Show,Read,Eq,Ord)
-data instance EltR Word32   = EltR_Word32                  deriving (Show,Read,Eq,Ord)
-data instance EltR Word64   = EltR_Word64                  deriving (Show,Read,Eq,Ord)
-data instance EltR CShort   = EltR_CShort                  deriving (Show,Read,Eq,Ord)
-data instance EltR CUShort  = EltR_CUShort                 deriving (Show,Read,Eq,Ord)
-data instance EltR CInt     = EltR_CInt                    deriving (Show,Read,Eq,Ord)
-data instance EltR CUInt    = EltR_CUInt                   deriving (Show,Read,Eq,Ord)
-data instance EltR CLong    = EltR_CLong                   deriving (Show,Read,Eq,Ord)
-data instance EltR CULong   = EltR_CULong                  deriving (Show,Read,Eq,Ord)
-data instance EltR CLLong   = EltR_CLLong                  deriving (Show,Read,Eq,Ord)
-data instance EltR CULLong  = EltR_CULLong                 deriving (Show,Read,Eq,Ord)
-data instance EltR Float    = EltR_Float                   deriving (Show,Read,Eq,Ord)
-data instance EltR Double   = EltR_Double                  deriving (Show,Read,Eq,Ord)
-data instance EltR CFloat   = EltR_CFloat                  deriving (Show,Read,Eq,Ord)
-data instance EltR CDouble  = EltR_CDouble                 deriving (Show,Read,Eq,Ord)
-data instance EltR Bool     = EltR_Bool                    deriving (Show,Read,Eq,Ord)
-data instance EltR Char     = EltR_Char                    deriving (Show,Read,Eq,Ord)
-data instance EltR CChar    = EltR_CChar                   deriving (Show,Read,Eq,Ord)
-data instance EltR CSChar   = EltR_CSChar                  deriving (Show,Read,Eq,Ord)
-data instance EltR CUChar   = EltR_CUChar                  deriving (Show,Read,Eq,Ord)
-data instance EltR (a, b)   = EltR_Tup2 (EltR a) (EltR b)
-data instance EltR (a, b, c) = EltR_Tup3 (EltR a) (EltR b) (EltR c)
-data instance EltR (a, b, c, d) = EltR_Tup4 (EltR a) (EltR b) (EltR c) (EltR d)
-data instance EltR (a, b, c, d, e) = EltR_Tup5 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e)
-data instance EltR (a, b, c, d, e, f) = EltR_Tup6 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f)
-data instance EltR (a, b, c, d, e, f, g) = EltR_Tup7 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g)
-data instance EltR (a, b, c, d, e, f, g, h) = EltR_Tup8 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h)
-data instance EltR (a, b, c, d, e, f, g, h, i) = EltR_Tup9 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h) (EltR i)
-
-deriving instance (Show (EltR t), Show (EltR h)) => Show (EltR (t:.h))
-deriving instance (Read (EltR t), Read (EltR h)) => Read (EltR (t:.h))
-deriving instance (Eq (EltR t), Eq (EltR h))     => Eq  (EltR (t:.h))
-deriving instance (Ord (EltR t), Ord (EltR h))   => Ord (EltR (t:.h))
-
-instance (Show (EltR a), Show (EltR b)) => Show (EltR (a,b)) where
-  show (EltR_Tup2 a b) = "(EltR_Tup2 "++show a++" "++show b++")"
-
-instance (Show (EltR a), Show (EltR b), Show (EltR c))
-         => Show (EltR (a,b,c)) where
-  show (EltR_Tup3 a b c) = "(EltR_Tup3 "++show a++" "++show b++" "++show c++")"
-
--- FINISHME: Tup4 through Tup9, plus Read,Eq,Ord...
+data EltR a where
+   EltR_Unit :: EltR ()
+   EltR_Z    :: EltR Z
+   EltR_Cons :: (EltR t) -> (EltR h) -> EltR (t:.h)
+   EltR_All  :: EltR All
+   EltR_Any  :: (EltR sh) -> EltR (Any sh)
+   EltR_Int  :: EltR Int
+   EltR_Int8 :: EltR Int8
+   EltR_Int16 :: EltR Int16
+   EltR_Int32 :: EltR Int32
+   EltR_Int64 :: EltR Int64
+   EltR_Word :: EltR Word
+   EltR_Word8 :: EltR Word8
+   EltR_Word16 :: EltR Word16
+   EltR_Word32 :: EltR Word32
+   EltR_Word64 :: EltR Word64
+   EltR_CShort :: EltR CShort
+   EltR_CUShort :: EltR CUShort
+   EltR_CInt :: EltR CInt
+   EltR_CUInt :: EltR CUInt
+   EltR_CLong :: EltR CLong
+   EltR_CULong :: EltR CULong
+   EltR_CLLong :: EltR CLLong
+   EltR_CULLong :: EltR CULLong
+   EltR_Float :: EltR Float
+   EltR_Double :: EltR Double
+   EltR_CFloat :: EltR CFloat
+   EltR_CDouble :: EltR CDouble
+   EltR_Bool :: EltR Bool
+   EltR_Char :: EltR Char
+   EltR_CChar :: EltR CChar
+   EltR_CSChar :: EltR CSChar
+   EltR_CUChar :: EltR CUChar
+   EltR_Tup2  :: (EltR a) -> (EltR b) -> EltR (a, b)
+   EltR_Tup3  :: (EltR a) -> (EltR b) -> (EltR c) -> EltR (a, b, c)
+   EltR_Tup4  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> EltR (a, b, c, d)
+   EltR_Tup5  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> (EltR e) -> EltR (a, b, c, d, e)
+   EltR_Tup6  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> (EltR e) -> (EltR f) -> EltR (a, b, c, d, e, f)
+   EltR_Tup7  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> (EltR e) -> (EltR f) -> (EltR g) -> EltR (a, b, c, d, e, f, g)
+   EltR_Tup8  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> (EltR e) -> (EltR f) -> (EltR g) -> (EltR h) -> EltR (a, b, c, d, e, f, g, h)
+   EltR_Tup9  :: (EltR a) -> (EltR b) -> (EltR c) -> (EltR d) -> (EltR e) -> (EltR f) -> (EltR g) -> (EltR h) -> (EltR i) -> EltR (a, b, c, d, e, f, g, h, i)
 
 
 -- Array elements (tuples of scalars)

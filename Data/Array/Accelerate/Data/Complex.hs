@@ -36,7 +36,6 @@ import Data.Array.Accelerate.Array.Sugar
 
 type instance EltRepr  (Complex a) = (EltRepr a, EltRepr' a)
 type instance EltRepr' (Complex a) = (EltRepr a, EltRepr' a)
-data instance EltR     (Complex a) = EltR_Complex (EltR a)
 
 instance Elt a => Elt (Complex a) where
   eltType (_::Complex a)        = eltType (undefined :: (a,a))
@@ -47,7 +46,7 @@ instance Elt a => Elt (Complex a) where
   toElt' (a,b)                  = toElt a :+ toElt' b
   fromElt' (a :+ b)             = (fromElt a, fromElt' b)
 
-  eltRep (_::Complex a) = EltR_Complex (eltRep (undefined :: a))
+  eltRep (_::Complex a) = error "Complex is a custom type, not supported by closed eltRep"
 
 instance IsTuple (Complex a) where
   type TupleRepr (Complex a) = (((), a), a)
