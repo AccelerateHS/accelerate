@@ -36,17 +36,12 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 
 
-type instance EltRepr  (Complex a) = (EltRepr a, EltRepr' a)
-type instance EltRepr' (Complex a) = (EltRepr a, EltRepr' a)
+type instance EltRepr (Complex a) = EltRepr (a, a)
 
 instance Elt a => Elt (Complex a) where
-  eltType (_::Complex a)        = eltType (undefined :: (a,a))
-  toElt (a,b)                   = toElt a :+ toElt' b
-  fromElt (a :+ b)              = (fromElt a, fromElt' b)
-
-  eltType' (_::Complex a)       = eltType' (undefined :: (a,a))
-  toElt' (a,b)                  = toElt a :+ toElt' b
-  fromElt' (a :+ b)             = (fromElt a, fromElt' b)
+  eltType _             = eltType (undefined :: (a,a))
+  toElt (((),a),b)      = toElt a :+ toElt b
+  fromElt (a :+ b)      = (((), fromElt a), fromElt b)
 
 instance cst a => IsProduct cst (Complex a) where
   type ProdRepr (Complex a) = (((), a), a)

@@ -58,7 +58,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
-import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr'
+import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
                                                         , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
                                                         , IsAtuple, TupleRepr )
 import Data.Array.Accelerate.Product
@@ -703,7 +703,7 @@ yield cc =
     Yield{}                             -> cc
     Step sh p f v                       -> Yield sh (f `compose` indexArray v `compose` p)
     Done v
-      | ArraysRarray <- accType' cc     -> Yield (arrayShape v) (indexArray v)
+      | ArraysRarray <- accType cc      -> Yield (arrayShape v) (indexArray v)
       | otherwise                       -> error "yield: impossible case"
 
 
@@ -718,7 +718,7 @@ step cc =
     Yield{}                             -> Nothing
     Step{}                              -> Just cc
     Done v
-      | ArraysRarray <- accType' cc     -> Just $ Step (arrayShape v) identity identity v
+      | ArraysRarray <- accType cc      -> Just $ Step (arrayShape v) identity identity v
       | otherwise                       -> error "step: impossible case"
 
 
@@ -732,8 +732,8 @@ shape cc
 
 -- Reified type of a delayed array representation.
 --
-accType' :: forall acc aenv a. Arrays a => Cunctation acc aenv a -> ArraysR (ArrRepr' a)
-accType' _ = arrays' (undefined :: a)
+accType :: forall acc aenv a. Arrays a => Cunctation acc aenv a -> ArraysR (ArrRepr a)
+accType _ = arrays (undefined :: a)
 
 
 -- Environment manipulation
