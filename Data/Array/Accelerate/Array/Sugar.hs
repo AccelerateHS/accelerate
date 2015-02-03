@@ -232,12 +232,6 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 -- Reification of surface types
 -- ----------------------------
 
--- | Elt types, reified.
--- 
--- The family of surface Accelerate types is *open*.  The user can
--- add new types.  While the EltRepr type function encodes these types
--- in a form supported by Accelerate backend implementations, in
--- contrast, EltR describes their surface structure precisely.
 data family EltR a :: *
 data instance EltR ()       = EltR_Unit
 data instance EltR Z        = EltR_Z
