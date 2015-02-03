@@ -33,7 +33,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array representation
   Array(..), Scalar, Vector, Segments,
-  Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr, ArrRepr',
+  Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr,
 
   -- * Class of supported surface element types and their mapping to representation types
   Elt(..), EltRepr,
@@ -521,28 +521,16 @@ class Typeable f => Foreign (f :: * -> * -> *) where
 -- results of Accelerate array computations.
 --
 type family ArrRepr a :: *
-type instance ArrRepr () = ()
-type instance ArrRepr (Array sh e) = ((), Array sh e)
-type instance ArrRepr (b, a) = (ArrRepr b, ArrRepr' a)
-type instance ArrRepr (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
-type instance ArrRepr (d, c, b, a) = (ArrRepr (d, c, b), ArrRepr' a)
-type instance ArrRepr (e, d, c, b, a) = (ArrRepr (e, d, c, b), ArrRepr' a)
-type instance ArrRepr (f, e, d, c, b, a) = (ArrRepr (f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
-
-type family ArrRepr' a :: *
-type instance ArrRepr' () = ()
-type instance ArrRepr' (Array sh e) = Array sh e
-type instance ArrRepr' (b, a) = (ArrRepr b, ArrRepr' a)
-type instance ArrRepr' (c, b, a) = (ArrRepr (c, b), ArrRepr' a)
-type instance ArrRepr' (d, c, b, a) = (ArrRepr (d, c, b), ArrRepr' a)
-type instance ArrRepr' (e, d, c, b, a) = (ArrRepr (e, d, c, b), ArrRepr' a)
-type instance ArrRepr' (f, e, d, c, b, a) = (ArrRepr (f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr' (g, f, e, d, c, b, a) = (ArrRepr (g, f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr' (h, g, f, e, d, c, b, a) = (ArrRepr (h, g, f, e, d, c, b), ArrRepr' a)
-type instance ArrRepr' (i, h, g, f, e, d, c, b, a) = (ArrRepr (i, h, g, f, e, d, c, b), ArrRepr' a)
+type instance ArrRepr ()           = ()
+type instance ArrRepr (Array sh e) = Array sh e
+type instance ArrRepr (a, b)       = TupleRepr (ArrRepr a, ArrRepr b)
+type instance ArrRepr (a, b, c)    = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c)
+type instance ArrRepr (a, b, c, d) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d)
+type instance ArrRepr (a, b, c, d, e) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e)
+type instance ArrRepr (a, b, c, d, e, f) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f)
+type instance ArrRepr (a, b, c, d, e, f, g) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g)
+type instance ArrRepr (a, b, c, d, e, f, g, h) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h)
+type instance ArrRepr (a, b, c, d, e, f, g, h, i) = TupleRepr (ArrRepr a, ArrRepr b, ArrRepr c, ArrRepr d, ArrRepr e, ArrRepr f, ArrRepr g, ArrRepr h, ArrRepr i)
 
 type IsAtuple = IsProduct Arrays
 
@@ -560,124 +548,92 @@ data ArraysR arrs where
   ArraysRpair  :: ArraysR arrs1 -> ArraysR arrs2 -> ArraysR (arrs1, arrs2)
 
 data ArraysFlavour arrs where
-  ArraysFunit  ::                                            ArraysFlavour ()
-  ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
-  ArraysFtuple :: (IsAtuple arrs, ArrRepr' arrs ~ (l,r))  => ArraysFlavour arrs
+  ArraysFunit  ::                                          ArraysFlavour ()
+  ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
+  ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
-class (Typeable (ArrRepr a), Typeable (ArrRepr' a), Typeable a) => Arrays a where
-  arrays   :: a {- dummy -} -> ArraysR (ArrRepr  a)
-  arrays'  :: a {- dummy -} -> ArraysR (ArrRepr' a)
+class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
+  arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
   --
   toArr    :: ArrRepr  a -> a
-  toArr'   :: ArrRepr' a -> a
   fromArr  :: a -> ArrRepr  a
-  fromArr' :: a -> ArrRepr' a
 
 
 instance Arrays () where
   arrays  _ = ArraysRunit
-  arrays' _ = ArraysRunit
   flavour _ = ArraysFunit
   --
   toArr     = id
-  toArr'    = id
   fromArr   = id
-  fromArr'  = id
 
 instance (Shape sh, Elt e) => Arrays (Array sh e) where
-  arrays  _       = ArraysRpair ArraysRunit ArraysRarray
-  arrays' _       = ArraysRarray
-  flavour _       = ArraysFarray
+  arrays _      = ArraysRarray
+  flavour _     = ArraysFarray
   --
-  toArr ((), arr) = arr
-  toArr'          = id
-  fromArr arr     = ((), arr)
-  fromArr'        = id
+  toArr         = id
+  fromArr       = id
 
-instance (Arrays b, Arrays a) => Arrays (b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::b)) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
-
-  toArr    (b, a) = (toArr b, toArr' a)
-  toArr'   (b, a) = (toArr b, toArr' a)
-  fromArr  (b, a) = (fromArr b, fromArr' a)
-  fromArr' (b, a) = (fromArr b, fromArr' a)
-
-instance (Arrays c, Arrays b, Arrays a) => Arrays (c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b) => Arrays (a, b) where
+  arrays  _             = ArraysRpair (ArraysRpair ArraysRunit (arrays (undefined::a))) (arrays (undefined::b))
+  flavour _             = ArraysFtuple
   --
-  toArr    (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
-  toArr'   (cb, a) = let (c, b) = toArr cb in (c, b, toArr' a)
-  fromArr  (c, b, a) = (fromArr (c, b), fromArr' a)
-  fromArr' (c, b, a) = (fromArr (c, b), fromArr' a)
+  toArr    (((),a), b)  = (toArr a, toArr b)
+  fromArr  (a, b)       = (((), fromArr a), fromArr b)
 
-instance (Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c) => Arrays (a, b, c) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b))) (arrays (undefined::c))
+  flavour _             = ArraysFtuple
   --
-  toArr    (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
-  toArr'   (dcb, a) = let (d, c, b) = toArr dcb in (d, c, b, toArr' a)
-  fromArr  (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
-  fromArr' (d, c, b, a) = (fromArr (d, c, b), fromArr' a)
+  toArr    (ab, c)      = let (a, b) = toArr ab in (a, b, toArr c)
+  fromArr  (a, b, c)    = (fromArr (a, b), fromArr c)
 
-instance (Arrays e, Arrays d, Arrays c, Arrays b, Arrays a) => Arrays (e, d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(e,d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c, Arrays d) => Arrays (a, b, c, d) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c))) (arrays (undefined::d))
+  flavour _             = ArraysFtuple
   --
-  toArr    (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
-  toArr'   (edcb, a) = let (e, d, c, b) = toArr edcb in (e, d, c, b, toArr' a)
-  fromArr  (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
-  fromArr' (e, d, c, b, a) = (fromArr (e, d, c, b), fromArr' a)
+  toArr    (abc, d)     = let (a, b, c) = toArr abc in (a, b, c, toArr d)
+  fromArr  (a, b, c, d) = (fromArr (a, b, c), fromArr d)
 
-instance (Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
-  => Arrays (f, e, d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(f,e,d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e) => Arrays (a, b, c, d, e) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d))) (arrays (undefined::e))
+  flavour _             = ArraysFtuple
   --
-  toArr    (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
-  toArr'   (fedcb, a) = let (f, e, d, c, b) = toArr fedcb in (f, e, d, c, b, toArr' a)
-  fromArr  (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
-  fromArr' (f, e, d, c, b, a) = (fromArr (f, e, d, c, b), fromArr' a)
+  toArr    (abcd, e)    = let (a, b, c, d) = toArr abcd in (a, b, c, d, toArr e)
+  fromArr  (a, b, c, d, e) = (fromArr (a, b, c, d), fromArr e)
 
-instance (Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
-  => Arrays (g, f, e, d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(g,f,e,d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f)
+  => Arrays (a, b, c, d, e, f) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e))) (arrays (undefined::f))
+  flavour _             = ArraysFtuple
   --
-  toArr    (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
-  toArr'   (gfedcb, a) = let (g, f, e, d, c, b) = toArr gfedcb in (g, f, e, d, c, b, toArr' a)
-  fromArr  (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
-  fromArr' (g, f, e, d, c, b, a) = (fromArr (g, f, e, d, c, b), fromArr' a)
+  toArr    (abcde, f)   = let (a, b, c, d, e) = toArr abcde in (a, b, c, d, e, toArr f)
+  fromArr  (a, b, c, d, e, f) = (fromArr (a, b, c, d, e), fromArr f)
 
-instance (Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
-  => Arrays (h, g, f, e, d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(h,g,f,e,d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g)
+  => Arrays (a, b, c, d, e, f, g) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f))) (arrays (undefined::g))
+  flavour _             = ArraysFtuple
   --
-  toArr    (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
-  toArr'   (hgfedcb, a) = let (h, g, f, e, d, c, b) = toArr hgfedcb in (h, g, f, e, d, c, b, toArr' a)
-  fromArr  (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
-  fromArr' (h, g, f, e, d, c, b, a) = (fromArr (h, g, f, e, d, c, b), fromArr' a)
+  toArr    (abcdef, g)   = let (a, b, c, d, e, f) = toArr abcdef in (a, b, c, d, e, f, toArr g)
+  fromArr  (a, b, c, d, e, f, g) = (fromArr (a, b, c, d, e, f), fromArr g)
 
-instance (Arrays i, Arrays h, Arrays g, Arrays f, Arrays e, Arrays d, Arrays c, Arrays b, Arrays a)
-  => Arrays (i, h, g, f, e, d, c, b, a) where
-  arrays  _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
-  arrays' _ = ArraysRpair (arrays (undefined::(i,h,g,f,e,d,c,b))) (arrays' (undefined::a))
-  flavour _ = ArraysFtuple
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h)
+  => Arrays (a, b, c, d, e, f, g, h) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g))) (arrays (undefined::h))
+  flavour _             = ArraysFtuple
   --
-  toArr    (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
-  toArr'   (ihgfedcb, a) = let (i, h, g, f, e, d, c, b) = toArr ihgfedcb in (i, h, g, f, e, d, c, b, toArr' a)
-  fromArr  (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
-  fromArr' (i, h, g, f, e, d, c, b, a) = (fromArr (i, h, g, f, e, d, c, b), fromArr' a)
+  toArr    (abcdefg, h)   = let (a, b, c, d, e, f, g) = toArr abcdefg in (a, b, c, d, e, f, g, toArr h)
+  fromArr  (a, b, c, d, e, f, g, h) = (fromArr (a, b, c, d, e, f, g), fromArr h)
+
+instance (Arrays a, Arrays b, Arrays c, Arrays d, Arrays e, Arrays f, Arrays g, Arrays h, Arrays i)
+  => Arrays (a, b, c, d, e, f, g, h, i) where
+  arrays  _             = ArraysRpair (arrays (undefined :: (a, b, c, d, e, f, g, h))) (arrays (undefined::i))
+  flavour _             = ArraysFtuple
+  --
+  toArr    (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toArr abcdefgh in (a, b, c, d, e, f, g, h, toArr i)
+  fromArr  (a, b, c, d, e, f, g, h, i) = (fromArr (a, b, c, d, e, f, g, h), fromArr i)
+
 
 {-# RULES
 
