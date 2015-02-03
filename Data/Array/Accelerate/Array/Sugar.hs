@@ -239,38 +239,38 @@ type instance EltRepr' (a, b, c, d, e, f, g, h, i)
 -- in a form supported by Accelerate backend implementations, in
 -- contrast, EltR describes their surface structure precisely.
 data family EltR a :: *
-data instance EltR ()       = EltR_Unit                    deriving (Show,Read,Eq,Ord)
-data instance EltR Z        = EltR_Z                       deriving (Show,Read,Eq,Ord)
-data instance EltR (t:.h)   = EltR_Cons (EltR t) (EltR h)  -- deriving (Show,Read,Eq,Ord)
-data instance EltR All      = EltR_All                     deriving (Show,Read,Eq,Ord)
+data instance EltR ()       = EltR_Unit
+data instance EltR Z        = EltR_Z
+data instance EltR (t:.h)   = EltR_Cons (EltR t) (EltR h)
+data instance EltR All      = EltR_All
 data instance EltR (Any sh) = EltR_Any (EltR sh)
-data instance EltR Int      = EltR_Int                     deriving (Show,Read,Eq,Ord)
-data instance EltR Int8     = EltR_Int8                    deriving (Show,Read,Eq,Ord)
-data instance EltR Int16    = EltR_Int16                   deriving (Show,Read,Eq,Ord)
-data instance EltR Int32    = EltR_Int32                   deriving (Show,Read,Eq,Ord)
-data instance EltR Int64    = EltR_Int64                   deriving (Show,Read,Eq,Ord)
-data instance EltR Word     = EltR_Word                    deriving (Show,Read,Eq,Ord)
-data instance EltR Word8    = EltR_Word8                   deriving (Show,Read,Eq,Ord)
-data instance EltR Word16   = EltR_Word16                  deriving (Show,Read,Eq,Ord)
-data instance EltR Word32   = EltR_Word32                  deriving (Show,Read,Eq,Ord)
-data instance EltR Word64   = EltR_Word64                  deriving (Show,Read,Eq,Ord)
-data instance EltR CShort   = EltR_CShort                  deriving (Show,Read,Eq,Ord)
-data instance EltR CUShort  = EltR_CUShort                 deriving (Show,Read,Eq,Ord)
-data instance EltR CInt     = EltR_CInt                    deriving (Show,Read,Eq,Ord)
-data instance EltR CUInt    = EltR_CUInt                   deriving (Show,Read,Eq,Ord)
-data instance EltR CLong    = EltR_CLong                   deriving (Show,Read,Eq,Ord)
-data instance EltR CULong   = EltR_CULong                  deriving (Show,Read,Eq,Ord)
-data instance EltR CLLong   = EltR_CLLong                  deriving (Show,Read,Eq,Ord)
-data instance EltR CULLong  = EltR_CULLong                 deriving (Show,Read,Eq,Ord)
-data instance EltR Float    = EltR_Float                   deriving (Show,Read,Eq,Ord)
-data instance EltR Double   = EltR_Double                  deriving (Show,Read,Eq,Ord)
-data instance EltR CFloat   = EltR_CFloat                  deriving (Show,Read,Eq,Ord)
-data instance EltR CDouble  = EltR_CDouble                 deriving (Show,Read,Eq,Ord)
-data instance EltR Bool     = EltR_Bool                    deriving (Show,Read,Eq,Ord)
-data instance EltR Char     = EltR_Char                    deriving (Show,Read,Eq,Ord)
-data instance EltR CChar    = EltR_CChar                   deriving (Show,Read,Eq,Ord)
-data instance EltR CSChar   = EltR_CSChar                  deriving (Show,Read,Eq,Ord)
-data instance EltR CUChar   = EltR_CUChar                  deriving (Show,Read,Eq,Ord)
+data instance EltR Int      = EltR_Int
+data instance EltR Int8     = EltR_Int8
+data instance EltR Int16    = EltR_Int16
+data instance EltR Int32    = EltR_Int32
+data instance EltR Int64    = EltR_Int64
+data instance EltR Word     = EltR_Word
+data instance EltR Word8    = EltR_Word8
+data instance EltR Word16   = EltR_Word16
+data instance EltR Word32   = EltR_Word32
+data instance EltR Word64   = EltR_Word64
+data instance EltR CShort   = EltR_CShort
+data instance EltR CUShort  = EltR_CUShort
+data instance EltR CInt     = EltR_CInt
+data instance EltR CUInt    = EltR_CUInt
+data instance EltR CLong    = EltR_CLong
+data instance EltR CULong   = EltR_CULong
+data instance EltR CLLong   = EltR_CLLong
+data instance EltR CULLong  = EltR_CULLong
+data instance EltR Float    = EltR_Float
+data instance EltR Double   = EltR_Double
+data instance EltR CFloat   = EltR_CFloat
+data instance EltR CDouble  = EltR_CDouble
+data instance EltR Bool     = EltR_Bool
+data instance EltR Char     = EltR_Char
+data instance EltR CChar    = EltR_CChar
+data instance EltR CSChar   = EltR_CSChar
+data instance EltR CUChar   = EltR_CUChar
 data instance EltR (a, b)   = EltR_Tup2 (EltR a) (EltR b)
 data instance EltR (a, b, c) = EltR_Tup3 (EltR a) (EltR b) (EltR c)
 data instance EltR (a, b, c, d) = EltR_Tup4 (EltR a) (EltR b) (EltR c) (EltR d)
@@ -279,18 +279,6 @@ data instance EltR (a, b, c, d, e, f) = EltR_Tup6 (EltR a) (EltR b) (EltR c) (El
 data instance EltR (a, b, c, d, e, f, g) = EltR_Tup7 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g)
 data instance EltR (a, b, c, d, e, f, g, h) = EltR_Tup8 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h)
 data instance EltR (a, b, c, d, e, f, g, h, i) = EltR_Tup9 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h) (EltR i)
-
-instance (Show (EltR t), Show (EltR h)) => Show (EltR (t:.h)) where
-  show (EltR_Cons a b) = "(EltR_Cons "++show a++" "++show b++")"
-
-instance (Show (EltR a), Show (EltR b)) => Show (EltR (a,b)) where
-  show (EltR_Tup2 a b) = "(EltR_Tup2 "++show a++" "++show b++")"
-
-instance (Show (EltR a), Show (EltR b), Show (EltR c))
-         => Show (EltR (a,b,c)) where
-  show (EltR_Tup3 a b c) = "(EltR_Tup3 "++show a++" "++show b++" "++show c++")"
-
--- FINISHME: Tup4 through Tup9, plus Read,Eq,Ord...
 
 
 -- Array elements (tuples of scalars)
@@ -303,7 +291,7 @@ instance (Show (EltR a), Show (EltR b), Show (EltR c))
 -- This class characterises the types of values that can be array elements, and
 -- hence, appear in scalar Accelerate expressions.
 --
-class (Show a, Typeable a, -- Show (EltR a),
+class (Show a, Typeable a,
        Typeable (EltRepr a), Typeable (EltRepr' a),
        ArrayElt (EltRepr a), ArrayElt (EltRepr' a))
       => Elt a where
