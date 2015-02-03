@@ -280,8 +280,10 @@ data instance EltR (a, b, c, d, e, f, g) = EltR_Tup7 (EltR a) (EltR b) (EltR c) 
 data instance EltR (a, b, c, d, e, f, g, h) = EltR_Tup8 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h)
 data instance EltR (a, b, c, d, e, f, g, h, i) = EltR_Tup9 (EltR a) (EltR b) (EltR c) (EltR d) (EltR e) (EltR f) (EltR g) (EltR h) (EltR i)
 
-instance (Show (EltR t), Show (EltR h)) => Show (EltR (t:.h)) where
-  show (EltR_Cons a b) = "(EltR_Cons "++show a++" "++show b++")"
+deriving instance (Show (EltR t), Show (EltR h)) => Show (EltR (t:.h))
+deriving instance (Read (EltR t), Read (EltR h)) => Read (EltR (t:.h))
+deriving instance (Eq (EltR t), Eq (EltR h))     => Eq  (EltR (t:.h))
+deriving instance (Ord (EltR t), Ord (EltR h))   => Ord (EltR (t:.h))
 
 instance (Show (EltR a), Show (EltR b)) => Show (EltR (a,b)) where
   show (EltR_Tup2 a b) = "(EltR_Tup2 "++show a++" "++show b++")"
