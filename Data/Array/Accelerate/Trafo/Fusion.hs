@@ -43,6 +43,8 @@ module Data.Array.Accelerate.Trafo.Fusion (
   -- ** Conversion
   convertAcc, convertAfun, convertSeq,
 
+  convertOpenAcc,
+
 ) where
 
 -- standard library
@@ -1348,8 +1350,8 @@ acondD :: (Kit acc, Arrays arrs)
        ->          acc aenv arrs
        -> Embed    acc aenv arrs
 acondD embedAcc p t e
-  | Const ((),True)  <- p   = Stats.knownBranch "True"      $ embedAcc t
-  | Const ((),False) <- p   = Stats.knownBranch "False"     $ embedAcc e
+  | Const True  <- p        = Stats.knownBranch "True"      $ embedAcc t
+  | Const False <- p        = Stats.knownBranch "False"     $ embedAcc e
   | Just REFL <- match t e  = Stats.knownBranch "redundant" $ embedAcc e
   | otherwise               = done $ Acond p (computeAcc (embedAcc t))
                                              (computeAcc (embedAcc e))

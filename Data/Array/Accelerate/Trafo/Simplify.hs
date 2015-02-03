@@ -293,8 +293,8 @@ simplifyOpenExp env = first getAny . cvtE
          -> (Any, PreOpenExp acc env aenv t)
          -> (Any, PreOpenExp acc env aenv t)
     cond p@(_,p') t@(_,t') e@(_,e')
-      | Const ((),True)  <- p'   = Stats.knownBranch "True"      (yes t')
-      | Const ((),False) <- p'   = Stats.knownBranch "False"     (yes e')
+      | Const True  <- p'        = Stats.knownBranch "True"      (yes t')
+      | Const False <- p'        = Stats.knownBranch "False"     (yes e')
       | Just REFL <- match t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                = Cond <$> p <*> t <*> e
 
@@ -352,7 +352,7 @@ simplifyOpenExp env = first getAny . cvtE
     indexTail sh                        = IndexTail <$> sh
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const ((), (product (shapeToList (toElt c :: sh)))))
+    shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
     shapeSize sh           = ShapeSize <$> sh
 
     toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
