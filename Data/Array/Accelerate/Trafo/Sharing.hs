@@ -31,7 +31,9 @@ module Data.Array.Accelerate.Trafo.Sharing (
   -- * HOAS -> de Bruijn conversion
   convertAcc, convertAfun, Afunction, AfunctionR,
   convertExp, convertFun,  Function,  FunctionR,
-  convertSeq
+  convertSeq,
+
+  Layout(..), Config(..), convertOpenAcc
 
 ) where
 

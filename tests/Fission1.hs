@@ -10,9 +10,12 @@ import Prelude                                          as P
 import Control.Monad
 
 import qualified Data.Array.Accelerate                  as A
+import qualified Data.Array.Accelerate.Smart            as S
+
 import Data.Array.Accelerate.AST                        as AST
 
 import Data.Array.Accelerate.Trafo
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
@@ -92,6 +95,7 @@ split len k = P.zip points (P.tail points)
 
 type FissionAcc acc = forall aenv a. acc aenv a -> acc aenv a
 
+{--
 fissionPreOpenAcc
     :: forall acc aenv arrs. Arrays arrs
     => Int                      -- fission factor
@@ -109,7 +113,7 @@ fissionPreOpenAcc k cvtA pacc =
 --             ->            acc aenv (Array sh a)
 --             -> PreOpenAcc acc aenv (Array sh b)
 --    fission1 c a = undefined
-
+--}
 
 -- When splitting an array 'acc' into 'k' pieces, what (outermost) index should
 -- split point 'i' be?
@@ -174,14 +178,16 @@ bounds k i acc
   $ tup2 (v (s z)) (v z)
 
 
+-- pass cvta in
 -- Split the array 'acc' into 'k' pieces and return chunk 'i'
 --
 chunk :: (Slice sh, Shape sh, Elt e)
-      => Int
+      => FissionAcc acc
+      -> Int
       -> Int
       ->            acc aenv (Array (sh :. Int) e)
       -> PreOpenAcc acc aenv (Array (sh :. Int) e)
-chunk k i acc
+chunk cvta k i acc
   = Backpermute sh' f acc
   where
     sh' = withSplitPts k i acc
@@ -197,24 +203,65 @@ chunk k i acc
 
 
 fissionPreOpenAcc
-    :: Int
+    :: (Kit acc)
+    => Int
     -> FissionAcc acc                                   -- parameterised via recursive closure
     -> PreOpenAcc acc aenv (Array (sh :. Int) e)
     -> PreOpenAcc acc aenv (Array (sh :. Int) e)
 fissionPreOpenAcc k cvtA pacc =
   case pacc of
+    
     Map f a     -> let a'       = cvtA a
-                       a1       = (inject $ Map f (chunk 2 0 (sink SuccIdx a')))
-                       a2       = (inject $ Map f (chunk 2 1 (sink SuccIdx a')))
-                   in
-                   Let a1
-                    $ Let a2
-                    $ concat (v z) (v (s z))
+                       
+                   in Alet (inject $ Map f $
+                            inject $ chunk cvtA 2 0 a') $ inject $ 
+                      Alet (inject $ Map (weaken s f) $
+                            inject $ chunk cvtA 2 1 (weaken s a')) $
+                      pconcat (inject (Avar z)) (inject (Avar (s z)))
+                      
+    _           -> error "FIXME: Case not handled in fissionPreOpenAcc"
+    
 --                       chunks   = map (\i -> chunk k i a') [0.. k-1]
 --                       parts    = map (Let . Map f . weaken SuccIdx) chunks
 
 
 
+
+
+
+
+
+-- infixr 5 ++
+-- (++) :: forall sh e. (Slice sh, Shape sh, Elt e)
+--      => Acc (Array (sh :. Int) e)
+--      -> Acc (Array (sh :. Int) e)
+--      -> Acc (Array (sh :. Int) e)
+-- (++) xs ys
+--   = let sh1 :. n        = unlift (shape xs)     :: Exp sh :. Exp Int
+--         sh2 :. m        = unlift (shape ys)     :: Exp sh :. Exp Int
+--     in
+--     generate (lift (intersect sh1 sh2 :. n + m))
+--              (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
+--                      in  i <* n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
+
+pconcat :: forall sh e acc env aenv. (Slice sh, Shape sh, Elt e)
+           => acc aenv (Array (sh :. Int) e)
+           -> acc aenv (Array (sh :. Int) e)
+           -> acc aenv (Array (sh :. Int) e)
+pconcat xs ys = undefined
+
+{--
+pconcat :: forall sh e acc env aenv. (Slice sh, Shape sh, Elt e)
+           => acc aenv (Array (sh :. Int) e)
+           -> acc aenv (Array (sh :. Int) e)
+           -> acc aenv (Array (sh :. Int) e)
+pconcat xs ys = Generate shape func
+  where shape = Let (IndexHead (Shape xs)) $ -- n
+                Let (IndexHead (Shape ys)) $ -- m
+                Let (IndexTail (Shape xs)) $ -- sh1
+                Let (IndexTail (Shape ys)) -- $ -- sh2
+        func  = undefined
+--}     
 
 -- Writing in abstract syntax is for chumps ):
 --
@@ -239,7 +286,7 @@ s = SuccIdx
 
 -- Test
 --------------------------------------------------------------------------------
-
+{--
 xs :: Vector Int
 xs = A.fromList (Z :. 10) [0..]
 
@@ -262,3 +309,4 @@ test3 k i
   = T.convertOpenAcc True
   $ OpenAcc $ Alet xs' (OpenAcc $ chunk k i (OpenAcc (Avar ZeroIdx)))
 
+--}
