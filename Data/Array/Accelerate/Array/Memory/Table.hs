@@ -19,6 +19,7 @@
 -- doing so. Keeping track of arrays in a `MemoryTable` ensures that any memory
 -- allocated for them will be freed when GHC's garbage collector collects the
 -- host array.
+--
 module Data.Array.Accelerate.Array.Memory.Table (
 
   -- Tables for host/device memory associations
@@ -42,13 +43,13 @@ import Foreign.Storable                                         ( Storable, size
 
 import qualified Data.HashTable.IO                              as HT
 
-import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
-import qualified Data.Array.Accelerate.Array.Memory             as M
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..), NRS )
+import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
+import qualified Data.Array.Accelerate.Debug                    as D
 
 
 -- We use an MVar to the hash table, so that several threads may safely access
@@ -158,12 +159,14 @@ malloc :: forall a b m. (Typeable a, Typeable b, Storable b, RemoteMemory m, Mon
        -> m (RemotePointer m b)
 malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- Note: [Allocation sizes]
+  --
   -- Instead of allocating the exact number of elements requested, we round up to
   -- a fixed chunk size; currently set at 128 elements. This means there is a
   -- greater chance the nursery will get a hit, and moreover that we can search
-  -- the nursery for an exact size. TLM: I believe the CUDA API allocates in
-  -- chunks, of size 4MB.
-
+  -- the nursery for an exact size.
+  --
+  -- TLM: I believe the CUDA API allocates in chunks, of size 4MB.
+  --
   chunk <- M.chunkSize
   let -- next highest multiple of f from x
       multiple x f      = (x + (f-1)) `div` f

@@ -24,10 +24,10 @@ module Data.Array.Accelerate.Array.Memory.Nursery (
 ) where
 
 -- friends
-import Data.Array.Accelerate.FullList                      ( FullList(..) )
+import Data.Array.Accelerate.FullList                           ( FullList(..) )
+import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 
 -- libraries
