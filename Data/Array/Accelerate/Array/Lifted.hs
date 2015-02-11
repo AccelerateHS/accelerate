@@ -9,7 +9,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Lifted
--- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everes
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
@@ -49,7 +49,8 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- `Arrays' class. We do this in order to convince the type checker that the lifted arrays or tuples
 -- of arrays, are still members of the 'Arrays' class.
 
-newtype Vector' a = Vector' (LiftedRepr (ArrRepr' a) a) deriving Typeable
+newtype Vector' a = Vector' (LiftedRepr (ArrRepr a) a)
+  deriving Typeable
 
 type family LiftedRepr r a where
   LiftedRepr ()     ()                 = ((),Scalar Int)
@@ -63,7 +64,7 @@ type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
 type LiftedArray sh e = Vector' (Array sh e)
 
 instance Arrays t => IsProduct Arrays (Vector' t) where
-  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr' t) t
+  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr t) t
   fromProd _ (Vector' t) = t
   toProd _ = Vector'
   prod _ _ = case flavour (undefined :: t) of
@@ -80,8 +81,7 @@ instance Arrays t => IsProduct Arrays (Vector' t) where
                = ProdRsnoc (tup t)
 
 
-type instance ArrRepr  (Vector' a) = ArrRepr (TupleRepr (Vector' a))
-type instance ArrRepr' (Vector' a) = ArrRepr (Vector' a)
+type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
 
 
 instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
@@ -89,10 +89,9 @@ instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
     where
       arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)
       arrs ProdRunit     = ArraysRunit
-      arrs (ProdRsnoc t) = ArraysRpair (arrs t) (arrays' t')
+      arrs (ProdRsnoc t) = ArraysRpair (ArraysRpair ArraysRunit (arrs t)) (arrays t')
         where t' :: (a ~ (l,r)) => r
               t' = undefined
-  arrays' = arrays
   flavour _ = case flavour (undefined :: t) of
                 ArraysFunit  -> ArraysFtuple
                 ArraysFarray -> ArraysFtuple
@@ -104,14 +103,12 @@ instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
     where
       fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
       fa ProdRunit     ()    = ()
-      fa (ProdRsnoc t) (l,a) = (fa t l, fromArr' a)
+      fa (ProdRsnoc t) (l,a) = (((), fa t l), fromArr a)
   toArr = Vector' . ta (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
     where
       ta :: forall a. ProdR Arrays a -> ArrRepr a -> a
-      ta ProdRunit     ()     = ()
-      ta (ProdRsnoc t) (l,a)  = (ta t l, toArr' a)
-  fromArr' = fromArr
-  toArr' = toArr
+      ta ProdRunit     ()         = ()
+      ta (ProdRsnoc t) (((),l),a) = (ta t l, toArr a)
 
 data IsConstrained c where
   IsC :: c => IsConstrained c

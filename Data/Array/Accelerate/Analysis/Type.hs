@@ -81,33 +81,33 @@ preAccType k pacc =
     -- The following all contain impossible pattern matches, but GHC's type
     -- checker does no grok that
     --
-    Avar _              -> case arrays' (undefined :: (Array sh e)) of
+    Avar _              -> case arrays (undefined :: (Array sh e)) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "When I get sad, I stop being sad and be AWESOME instead."
 
-    Apply _ _           -> case arrays' (undefined :: Array sh e) of
+    Apply _ _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "TRUE STORY."
 
-    Atuple _            -> case arrays' (undefined :: Array sh e) of
+    Atuple _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "I made you a cookie, but I eated it."
 
-    Aprj _ _            -> case arrays' (undefined :: Array sh e) of
+    Aprj _ _            -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Hey look! even the leaves are falling for you."
 
-    Aforeign _ _ _      -> case arrays' (undefined :: Array sh e) of
+    Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
 
-    Collect _           -> case arrays' (undefined :: Array sh e) of
+    Collect _           -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Something funny"
 
     Acond _ acc _       -> k acc
     Awhile _ _ acc      -> k acc
-    Use ((),a)          -> arrayType a
+    Use a               -> arrayType a
     Unit _              -> eltType (undefined::e)
     Generate _ _        -> eltType (undefined::e)
     Transform _ _ _ _   -> eltType (undefined::e)

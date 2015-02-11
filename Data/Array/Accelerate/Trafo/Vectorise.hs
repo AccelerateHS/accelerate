@@ -110,16 +110,11 @@ data None sh = None sh
   deriving (Typeable, Show, Eq)
 
 type instance EltRepr (None sh) = EltRepr sh
-type instance EltRepr' (None sh) = EltRepr' sh
 
 instance Shape sh => Elt (None sh) where
   eltType _         = eltType (undefined::sh)
   fromElt (None sh) = fromElt sh
   toElt sh          = None (toElt sh)
-
-  eltType' _         = eltType' (undefined::sh)
-  fromElt' (None sh) = fromElt' sh
-  toElt' sh          = None (toElt' sh)
 
 instance Shape sh => Slice (None sh) where
   type SliceShape   (None sh) = Z
@@ -366,11 +361,11 @@ liftPreOpenAcc vectAcc strength ctx size acc
                      ArraysFarray -> ShapeSize (Shape $ segments a)
                      ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
       where
-        fromTup :: (ArrRepr' t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
-        fromTup ProdRunit     = Const ((),0)
+        fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
+        fromTup ProdRunit     = Const 0
         fromTup (ProdRsnoc _) = convince a
           where
-            convince :: forall f l a e. (ArrRepr' t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
+            convince :: forall f l a e. (ArrRepr t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
                      => acc aenv (Vector' t)
                      -> Size acc aenv
             convince a | IsC <- isArraysFlat (undefined :: a)
@@ -495,10 +490,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
         ix = sliceIndex (undefined :: Any sh :. Int)
 
         slix :: forall env. PreOpenExp acc env aenv (Any sh :. Int)
-        slix = IndexCons IndexAny (Const ((), 0 :: Int))
+        slix = IndexCons IndexAny (Const (0 :: Int))
 
         slix' :: forall env. PreOpenExp acc (env,sh) aenv (None sh :. All)
-        slix' = IndexCons (Tuple (SnocTup NilTup var0)) (Const ((),()))
+        slix' = IndexCons (Tuple (SnocTup NilTup var0)) (Const ())
 
         ix' :: SliceIndex (EltRepr sh, ()) ((),Int) (EltRepr sh) (EltRepr sh, Int)
         ix' = SliceAll (sliceNoneIndex (undefined :: sh))
@@ -1416,7 +1411,7 @@ liftExp vectAcc strength ctx size exp
         p'  :: PreOpenAfun acc aenv' ((Vector e, Vector Bool) -> Scalar Bool)
         p'  = Alam $ Abody $ let
                 flags     = sndA avar0
-                any     f = inject $ Fold or (Const ((),False)) f
+                any     f = inject $ Fold or (Const False) f
                 or        = fun2 (PrimApp PrimLOr S.$$ tup)
               in any flags
 
@@ -1437,7 +1432,7 @@ liftExp vectAcc strength ctx size exp
 
 
         i'  :: acc aenv' (Vector e, Vector Bool)
-        i'  = cvtE i `atup` inject (replicateE size (Const ((), True)))
+        i'  = cvtE i `atup` inject (replicateE size (Const True))
 
     indexL :: forall sh'. (Elt e, Shape sh')
            => acc            aenv  (Array sh' e)
@@ -2418,7 +2413,7 @@ segmented :: (Elt e, Kit acc)
           -> PreOpenFun acc env aenv ((Int, e) -> (Int, e) -> (Int, e))
 segmented f = Lam . Lam . Body
   $ tup (PrimBOr integralType `PrimApp` tup (fstE var1) (fstE var0))
-        (Cond (PrimNEq scalarType `PrimApp` tup (fstE var0) (Const ((),0)))
+        (Cond (PrimNEq scalarType `PrimApp` tup (fstE var0) (Const 0))
               (sndE var0)
               (subApplyE2 (weakenE2 f) (sndE var0) (sndE var1)))
 

@@ -30,13 +30,13 @@ module Data.Array.Accelerate.Pretty.Print (
 ) where
 
 -- standard libraries
-import Prelude                                  hiding ( exp, seq )
+import Prelude                                          hiding ( exp, seq )
 import Data.List
 import Text.PrettyPrint
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Array.Representation ( SliceIndex(..) )
+import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
