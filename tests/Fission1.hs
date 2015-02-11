@@ -8,12 +8,14 @@ module Fission where
 
 import Prelude                                          as P
 import Control.Monad
+import Data.Typeable
 
 import qualified Data.Array.Accelerate                  as A
 import qualified Data.Array.Accelerate.Smart            as S
 
 import Data.Array.Accelerate.AST                        as AST
 
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Simplify
@@ -178,17 +180,16 @@ bounds k i acc
   $ tup2 (v (s z)) (v z)
 
 
--- pass cvta in
--- Split the array 'acc' into 'k' pieces and return chunk 'i'
---
-chunk :: (Slice sh, Shape sh, Elt e)
-      => FissionAcc acc
-      -> Int
-      -> Int
-      ->            acc aenv (Array (sh :. Int) e)
-      -> PreOpenAcc acc aenv (Array (sh :. Int) e)
-chunk cvta k i acc
-  = Backpermute sh' f acc
+chunkA
+    :: forall acc aenv sh e. (Slice sh, Shape sh, Elt e, Kit acc)
+    => FissionAcc acc
+    -> Int
+    -> Int
+    -> acc aenv (Array (sh :. Int) e)
+    -> acc aenv (Array (sh :. Int) e)
+chunkA _ k i acc
+  = inject
+  $ Backpermute sh' f acc
   where
     sh' = withSplitPts k i acc
         $ IndexCons (IndexTail (Shape acc))
@@ -201,26 +202,62 @@ chunk cvta k i acc
       where
         ix = v (s (s (s (s (s (s (s z)))))))
 
+matchArrayShape
+    :: forall acc aenv sh sh' e. (Shape sh, Shape sh')
+    => acc aenv (Array sh e)
+    -> sh'
+    -> Maybe (sh :=: sh')
+matchArrayShape _ _
+  | Just REFL <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::sh'))
+  = gcast REFL
 
+  | otherwise
+  = Nothing
+
+splitArray
+  :: forall acc aenv sh e. (Shape sh, Elt e, Kit acc)
+  => FissionAcc acc
+  -> Int
+  -> Int
+  -> acc aenv (Array sh e)
+  -> acc aenv (Array sh e)
+splitArray cvtA k i acc
+  | Just REFL <- matchArrayShape acc (undefined::Z)
+  = acc
+
+  | Just REFL <- matchArrayShape acc (undefined::DIM1)
+  = chunkA cvtA k i acc
+
+{--
 fissionPreOpenAcc
-    :: (Kit acc)
+    :: (Kit acc, Arrays arrs)
     => Int
     -> FissionAcc acc                                   -- parameterised via recursive closure
-    -> PreOpenAcc acc aenv (Array (sh :. Int) e)
-    -> PreOpenAcc acc aenv (Array (sh :. Int) e)
+    -> PreOpenAcc acc aenv arrs
+    -> PreOpenAcc acc aenv arrs
 fissionPreOpenAcc k cvtA pacc =
   case pacc of
-    
-    Map f a     -> let a'       = cvtA a
-                       
+    Use a       -> Use a
+    Map f a     ->
+      let a'    = cvtA a
+          a1    = inject $ Map f (splitArray cvtA k 0 a')
+          a2    = inject $ Map (weaken SuccIdx f) (weaken SuccIdx (splitArray cvtA k 1 a'))
+          r     = pconcat (inject (Avar (SuccIdx ZeroIdx))) (inject (Avar ZeroIdx))
+      in
+      Alet a1
+      $ Alet a2
+      $ r
+{--
                    in Alet (inject $ Map f $
-                            inject $ chunk cvtA 2 0 a') $ inject $ 
+                            inject $ chunk cvtA 2 0 a') $ inject $
                       Alet (inject $ Map (weaken s f) $
                             inject $ chunk cvtA 2 1 (weaken s a')) $
                       pconcat (inject (Avar z)) (inject (Avar (s z)))
-                      
+--}
+
     _           -> error "FIXME: Case not handled in fissionPreOpenAcc"
-    
+--}
+
 --                       chunks   = map (\i -> chunk k i a') [0.. k-1]
 --                       parts    = map (Let . Map f . weaken SuccIdx) chunks
 
@@ -261,7 +298,7 @@ pconcat xs ys = Generate shape func
                 Let (IndexTail (Shape xs)) $ -- sh1
                 Let (IndexTail (Shape ys)) -- $ -- sh2
         func  = undefined
---}     
+--}
 
 -- Writing in abstract syntax is for chumps ):
 --
