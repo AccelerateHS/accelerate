@@ -27,12 +27,14 @@ module Data.Array.Accelerate.Array.Memory.Nursery (
 import Data.Array.Accelerate.FullList                      ( FullList(..) )
 import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory )
+import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 
 -- libraries
 import Prelude
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, mkWeakMVar )
+import Control.Monad.IO.Class
+import Data.Proxy
 import System.Mem.Weak                                          ( Weak )
 
 import qualified Data.HashTable.IO                              as HT
@@ -50,16 +52,16 @@ type HashTable key val  = HT.BasicHashTable key val
 
 type NRS p            = MVar ( HashTable Int (FullList () (p ())) )
 data Nursery p        = Nursery {-# UNPACK #-} !(NRS p)
-                                  {-# UNPACK #-} !(Weak (NRS p))
+                                {-# UNPACK #-} !(Weak (NRS p))
 
 
 -- Generate a fresh nursery
 --
-new :: RemoteMemory p => IO (Nursery p)
-new = do
+new :: forall m. (RemoteMemory m, MonadIO m) => (RemotePointer m () -> IO ()) -> m (Nursery (RemotePointer m))
+new free = liftIO $ do
   tbl    <- HT.new
   ref    <- newMVar tbl
-  weak   <- mkWeakMVar ref (flush tbl)
+  weak   <- mkWeakMVar ref (flush free tbl)
   return $! Nursery ref weak
 
 
@@ -68,7 +70,7 @@ new = do
 -- returned.
 --
 {-# INLINE malloc #-}
-malloc :: Int -> (Nursery p) -> IO (Maybe (p ()))
+malloc :: Int -> Nursery p -> IO (Maybe (p ()))
 malloc !n (Nursery !ref _) = withMVar ref $ \tbl -> do
   mp  <- HT.lookup tbl n
   case mp of
@@ -82,8 +84,8 @@ malloc !n (Nursery !ref _) = withMVar ref $ \tbl -> do
 -- Add a device pointer to the nursery.
 --
 {-# INLINE stash #-}
-stash :: RemoteMemory p => Int -> NRS p -> p e -> IO ()
-stash !n !ref (M.castPtr -> !ptr) = withMVar ref $ \tbl -> do
+stash :: forall m e proxy. RemoteMemory m => proxy m -> Int -> NRS (RemotePointer m) -> RemotePointer m e -> IO ()
+stash _ !n !ref (M.castPtr (Proxy :: Proxy m) -> ptr) = withMVar ref $ \tbl -> do
   mp  <- HT.lookup tbl n
   case mp of
     Nothing     -> HT.insert tbl n (FL.singleton () ptr)
@@ -92,10 +94,10 @@ stash !n !ref (M.castPtr -> !ptr) = withMVar ref $ \tbl -> do
 
 -- Delete all entries from the nursery and free all associated device memory.
 --
-flush :: RemoteMemory p => HashTable Int (FullList () (p ())) -> IO ()
-flush !tbl =
+flush :: (p () -> IO ()) -> HashTable Int (FullList () (p ())) -> IO ()
+flush free !tbl =
   let clean (!key,!val) = do
-        FL.mapM_ (const M.free) val
+        FL.mapM_ (const free) val
         HT.delete tbl key
   in
   message "flush nursery" >> HT.mapM_ clean tbl

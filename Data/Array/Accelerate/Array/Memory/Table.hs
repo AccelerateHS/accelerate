@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 -- |
@@ -31,9 +32,9 @@ import Data.Hashable                                            ( Hashable(..) )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
 import Control.Monad                                            ( unless )
+import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent                                       ( yield )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, mkWeakMVar )
-import Control.Applicative                                      ( (<$>) )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, mkWeak, deRefWeak, finalize )
 import System.Mem.StableName                                    ( StableName, makeStableName, hashStableName )
@@ -44,7 +45,7 @@ import qualified Data.HashTable.IO                              as HT
 import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData )
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory )
+import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..), NRS )
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
@@ -68,6 +69,7 @@ type MT p               = MVar ( HashTable HostArray (RemoteArray p) )
 data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Weak (MT p))
                                       {-# UNPACK #-} !(Nursery p)
+                                      (forall a. p a -> IO ())
 
 -- Arrays on the host and in the remote memory.
 --
@@ -99,20 +101,25 @@ instance Show HostArray where
 
 -- |Create a new memory table from host to remote arrays.
 --
-new :: RemoteMemory p => IO (MemoryTable p)
-new = do
+-- The function supplied should be the `free` for the remote pointers being
+-- stored. This function will be called by the GC, which typically runs on a
+-- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
+-- depend on any state.
+--
+new :: (RemoteMemory m, MonadIO m) => (forall a. RemotePointer m a -> IO ()) -> m (MemoryTable (RemotePointer m))
+new free = do
   message "initialise memory table"
-  tbl  <- HT.new
-  ref  <- newMVar tbl
-  nrs  <- N.new
-  weak <- mkWeakMVar ref (table_finalizer tbl)
-  return $! MemoryTable ref weak nrs
+  tbl  <- liftIO $ HT.new
+  ref  <- liftIO $ newMVar tbl
+  nrs  <- N.new free
+  weak <- liftIO $ mkWeakMVar ref (table_finalizer tbl)
+  return $! MemoryTable ref weak nrs free
 
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
 lookup :: (Typeable a, Typeable b) => MemoryTable p -> ArrayData a -> IO (Maybe (p b))
-lookup (MemoryTable !ref _ _) !arr = do
+lookup (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray  arr
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
@@ -144,32 +151,41 @@ lookup (MemoryTable !ref _ _) !arr = do
 -- In order to reduce the number of raw allocations, previously allocated remote
 -- arrays will be re-used.
 --
-malloc :: forall a b p. (Typeable a, Typeable b, Storable b, RemoteMemory p) => MemoryTable p -> ArrayData a -> Int -> IO (p b)
-malloc mt@(MemoryTable _ _ !nursery) !ad !n = do
+malloc :: forall a b m. (Typeable a, Typeable b, Storable b, RemoteMemory m, MonadIO m)
+       => MemoryTable (RemotePointer m)
+       -> ArrayData a
+       -> Int
+       -> m (RemotePointer m b)
+malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- Note: [Allocation sizes]
   -- Instead of allocating the exact number of elements requested, we round up to
   -- a fixed chunk size; currently set at 128 elements. This means there is a
   -- greater chance the nursery will get a hit, and moreover that we can search
   -- the nursery for an exact size. TLM: I believe the CUDA API allocates in
   -- chunks, of size 4MB.
+
+  chunk <- M.chunkSize
   let -- next highest multiple of f from x
       multiple x f      = (x + (f-1)) `div` f
-      chunk             = M.chunkSize (Proxy :: Proxy p)
 
       !n'               = chunk * multiple n chunk
       !bytes            = n' * sizeOf (undefined :: b)
   --
-  mp  <- N.malloc bytes nursery
+  mp  <- liftIO $ N.malloc bytes nursery
   ptr <- case mp of
-           Just p       -> trace "malloc/nursery" $ return (M.castPtr p)
+           Just p       -> trace "malloc/nursery" $ return $ M.castPtr (Proxy :: Proxy m) p
            Nothing      -> trace "malloc/new"     $ do
              mp' <- M.malloc n'
              case mp' of
-               Nothing -> trace "malloc/failed-reclaiming" $ reclaim mt >>
-                 (maybe (error "Remote memory exhausted") return =<< M.malloc n')
+               Nothing -> trace "malloc/failed-reclaiming" $ do
+                  reclaim mt
+                  mp'' <- M.malloc n'
+                  case mp'' of
+                    Nothing -> error "Remote memory exhausted"
+                    Just p'' -> return p''
                Just p -> return p
 
-  insert  mt ad ptr bytes
+  insert mt ad ptr bytes
   return ptr
 
 
@@ -177,7 +193,7 @@ malloc mt@(MemoryTable _ _ !nursery) !ad !n = do
 -- Typically this should only be called in very specific circumstances.
 --
 free :: Typeable a => MemoryTable p -> ArrayData a -> IO ()
-free (MemoryTable !ref _ _) !arr = do
+free (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray  arr
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
@@ -188,12 +204,17 @@ free (MemoryTable !ref _ _) !arr = do
 -- Record an association between a host-side array and a new device memory area.
 -- The device memory will be freed when the host array is garbage collected.
 --
-insert :: (Typeable a, Typeable b, RemoteMemory p) => MemoryTable p -> ArrayData a -> p b -> Int -> IO ()
-insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs)) !arr !ptr !bytes = do
+insert :: forall m a b. (Typeable a, Typeable b, RemoteMemory m, MonadIO m)
+       => MemoryTable (RemotePointer m)
+       -> ArrayData a
+       -> RemotePointer m b
+       -> Int
+       -> m ()
+insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs) free) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
-  dev  <- RemoteArray `fmap` mkWeak arr ptr (Just $ finalizer weak_ref weak_nrs key ptr bytes)
+  dev  <- liftIO $ RemoteArray `fmap` mkWeak arr ptr (Just $ finalizer (Proxy :: Proxy m) free weak_ref weak_nrs key ptr bytes)
   message      $ "insert: " ++ show key
-  withMVar ref $ \tbl -> HT.insert tbl key dev
+  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
 
 -- |Record an association between a host-side array and a remote memory area
@@ -202,12 +223,12 @@ insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs)) !arr !ptr !bytes = do
 --
 -- This typically only has use for backends that provide an FFI.
 --
-insertUnmanaged :: (Typeable a, Typeable b) => MemoryTable p -> ArrayData a -> p b -> IO ()
-insertUnmanaged (MemoryTable !ref !weak_ref _) !arr !ptr = do
+insertUnmanaged :: (Typeable a, Typeable b, MonadIO m) => MemoryTable p -> ArrayData a -> p b -> m ()
+insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   key  <- makeStableArray  arr
-  dev  <- RemoteArray `fmap` mkWeak arr ptr (Just $ remoteFinalizer weak_ref key)
-  message      $ "insertUnmanaged: " ++ show key
-  withMVar ref $ \tbl -> HT.insert tbl key dev
+  dev  <- liftIO $ RemoteArray `fmap` mkWeak arr ptr (Just $ remoteFinalizer weak_ref key)
+  message $ "insertUnmanaged: " ++ show key
+  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
 
 -- Removing entries
@@ -216,23 +237,24 @@ insertUnmanaged (MemoryTable !ref !weak_ref _) !arr !ptr = do
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
-reclaim :: forall p. RemoteMemory p => MemoryTable p -> IO ()
-reclaim (MemoryTable _ weak_ref (Nursery nrs _)) = do
-  before <- M.availableMem (Proxy :: Proxy p)
-  total <- M.totalMem (Proxy :: Proxy p)
-  performGC
-  yield
-  withMVar nrs N.flush
-  mr <- deRefWeak weak_ref
-  case mr of
-    Nothing  -> return ()
-    Just ref -> withMVar ref $ \tbl ->
-      flip HT.mapM_ tbl $ \(_,RemoteArray w) -> do
-        alive <- isJust `fmap` deRefWeak w
-        unless alive $ finalize w
+reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+reclaim (MemoryTable _ weak_ref (Nursery nrs _) free) = do
+  before <- M.availableMem
+  total <- M.totalMem
+  liftIO $ do
+    performGC
+    yield
+    withMVar nrs (N.flush free)
+    mr <- deRefWeak weak_ref
+    case mr of
+      Nothing  -> return ()
+      Just ref -> withMVar ref $ \tbl ->
+        flip HT.mapM_ tbl $ \(_,RemoteArray w) -> do
+          alive <- isJust `fmap` deRefWeak w
+          unless alive $ finalize w
   --
   D.when D.dump_gc $ do
-    after <- M.availableMem (Proxy :: Proxy p)
+    after <- M.availableMem
     message $ "reclaim: freed "   ++ showBytes (fromIntegral (before - after))
                         ++ ", "   ++ showBytes (fromIntegral after)
                         ++ " of " ++ showBytes (fromIntegral total) ++ " remaining"
@@ -246,8 +268,16 @@ reclaim (MemoryTable _ weak_ref (Nursery nrs _)) = do
 -- the hash tables --- but we must do this first before failing to use a dead
 -- context.
 --
-finalizer :: RemoteMemory p => Weak (MT p) -> Weak (NRS p) -> HostArray -> p b -> Int -> IO ()
-finalizer !weak_ref !weak_nrs !key !ptr !bytes = do
+finalizer :: (RemoteMemory m, MonadIO m)
+          => proxy m
+          -> (forall a. RemotePointer m a -> IO ())
+          -> Weak (MT (RemotePointer m))
+          -> Weak (NRS (RemotePointer m))
+          -> HostArray
+          -> RemotePointer m b
+          -> Int
+          -> IO ()
+finalizer proxy free !weak_ref !weak_nrs !key !ptr !bytes = do
   mr <- deRefWeak weak_ref
   case mr of
     Nothing  -> message ("finalise/dead table: " ++ show key)
@@ -255,8 +285,8 @@ finalizer !weak_ref !weak_nrs !key !ptr !bytes = do
   --
   mn <- deRefWeak weak_nrs
   case mn of
-    Nothing  -> trace ("finalise/free: "     ++ show key) $ M.free ptr
-    Just nrs -> trace ("finalise/nursery: "  ++ show key) $ N.stash bytes  nrs ptr
+    Nothing  -> trace ("finalise/free: "     ++ show key) $ free ptr
+    Just nrs -> trace ("finalise/nursery: "  ++ show key) $ N.stash proxy bytes  nrs ptr
 
 remoteFinalizer :: Weak (MT p) -> HostArray -> IO ()
 remoteFinalizer !weak_ref !key = do
@@ -275,9 +305,10 @@ table_finalizer !tbl
 -- -------------
 
 {-# INLINE makeStableArray #-}
-makeStableArray :: Typeable a => ArrayData a -> IO HostArray
-makeStableArray !arr = HostArray <$> makeStableName arr
-
+makeStableArray :: (MonadIO m, Typeable a) => ArrayData a -> m HostArray
+makeStableArray !arr = do
+  sn <- liftIO (makeStableName arr)
+  return (HostArray sn)
 
 -- Debug
 -- -----
@@ -287,10 +318,10 @@ showBytes :: Int -> String
 showBytes x = D.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
-trace :: String -> IO a -> IO a
+trace :: MonadIO m => String -> m a -> m a
 trace msg next = message msg >> next
 
 {-# INLINE message #-}
-message :: String -> IO ()
-message msg = D.traceIO D.dump_gc ("gc: " ++ msg)
+message :: MonadIO m => String -> m ()
+message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 
