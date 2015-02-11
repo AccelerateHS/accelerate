@@ -21,9 +21,11 @@ import Data.Array.Accelerate.Debug.Flags        as Debug
 import Data.Array.Accelerate.Debug.Stats        as Debug
 import Data.Array.Accelerate.Debug.Trace        as Debug
 
+import Control.Monad.IO.Class
+
 -- | Conditional execution of a monadic expression
 --
-when :: Mode -> IO () -> IO ()
+when :: MonadIO m => Mode -> m () -> m ()
 when f s = do
-  yes <- queryFlag f
+  yes <- liftIO $ queryFlag f
   if yes then s else return ()
