@@ -41,9 +41,9 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun, convertSeq, convertOpenAcc
+  convertAcc, convertAfun, convertSeq,
 
-  convertOpenAcc,
+  convertOpenAcc,       -- temporary
 
 ) where
 
