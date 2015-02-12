@@ -934,9 +934,9 @@ concatVectors vs = adata `seq` Array ((), len) adata
 
 -- | Creates a new, uninitialized Accelerate array.
 --
-allocateArray :: (Shape sh, Elt e) => sh -> Array sh e
+allocateArray :: (Shape sh, Elt e) => sh -> IO (Array sh e)
 {-# INLINE allocateArray #-}
-allocateArray sh = adata `seq` Array (fromElt sh) adata
+allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
   where
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
