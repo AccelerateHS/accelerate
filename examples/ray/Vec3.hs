@@ -101,17 +101,12 @@ clip v maxVal =
 data XYZ a = XYZ a a a
   deriving (Eq, Show, Typeable)
 
-type instance EltRepr  (XYZ a)  = EltRepr  (a, a, a)
-type instance EltRepr' (XYZ a)  = EltRepr' (a, a, a)
+type instance EltRepr (XYZ a)  = EltRepr  (a, a, a)
 
 instance Elt a => Elt (XYZ a) where
   eltType (_ :: XYZ a)  = eltType (undefined :: (a, a, a))
   toElt p               = let (x,y,z) = toElt p in XYZ x y z
   fromElt (XYZ x y z)   = fromElt (x, y, z)
-
-  eltType' (_ :: XYZ a) = eltType (undefined :: (a, a, a))
-  toElt' p              = let (x,y,z) = toElt p in XYZ x y z
-  fromElt' (XYZ x y z)  = fromElt (x, y, z)
 
 instance Elt a => IsProduct Elt (XYZ a) where
   type ProdRepr (XYZ a)  = ProdRepr (a, a, a)
