@@ -950,19 +950,25 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
 --
 fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
            => a ix e -> Array sh e
+fromIArray = error "TODO: fromIArray is broken" -- due to EltRepr changes
+{--
 fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
   where
     (lo,hi) = IArray.bounds iarr
     sh      = Repr.rangeToShape (fromElt lo, fromElt hi)
+--}
 
 -- | Convert an accelerated array to an 'IArray'.
 --
 toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
          => Array sh e -> a ix e
+toIArray = error "TODO: toIArray is broken"     -- due to EltRepr changes
+{--
 toIArray arr = IArray.array bnds [(ix, arr ! toElt (fromElt ix)) | ix <- IArray.range bnds]
   where
     (lo,hi) = Repr.shapeToRange (fromElt (shape arr))
     bnds    = (toElt lo, toElt hi)
+--}
 
 -- | Convert a list, with elements in row-major order, into an accelerated array.
 --
