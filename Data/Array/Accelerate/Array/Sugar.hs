@@ -948,10 +948,11 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
 -- @ix@ must be the unit type @()@ for singleton arrays, or an @Int@ or tuple of
 -- @Int@'s for multidimensional arrays.
 --
-fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
-           => a ix e -> Array sh e
+fromIArray :: (IArray a e, IArray.Ix ix) => a ix e -> Array sh e
 fromIArray = error "TODO: fromIArray is broken" -- due to EltRepr changes
 {--
+fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+           => a ix e -> Array sh e
 fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
   where
     (lo,hi) = IArray.bounds iarr
@@ -960,10 +961,11 @@ fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
 
 -- | Convert an accelerated array to an 'IArray'.
 --
-toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
-         => Array sh e -> a ix e
+toIArray :: (IArray a e, IArray.Ix ix) => Array sh e -> a ix e
 toIArray = error "TODO: toIArray is broken"     -- due to EltRepr changes
 {--
+toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+         => Array sh e -> a ix e
 toIArray arr = IArray.array bnds [(ix, arr ! toElt (fromElt ix)) | ix <- IArray.range bnds]
   where
     (lo,hi) = Repr.shapeToRange (fromElt (shape arr))
