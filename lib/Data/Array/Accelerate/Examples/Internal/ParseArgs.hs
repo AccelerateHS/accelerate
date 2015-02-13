@@ -220,7 +220,7 @@ parseArgs programOptions programConfig header footer args =
         let (x,  y)     = span (/= "--") args
             (ls, x')    = partition (== "--list") x
         in
-        (x', ls ++ y)
+        (x', ls ++ dropWhile (== "--") y)
 
       criterionOptions      = stripShortOpts $ Criterion.defaultOptions ++ Criterion.extraOptions
       testframeworkOptions  = stripShortOpts $ TestFramework.defaultOptions
