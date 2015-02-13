@@ -51,7 +51,7 @@ import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe
-import Data.Array.Accelerate.Debug
+import Data.Array.Accelerate.Debug                      hiding ( when )
 #endif
 
 

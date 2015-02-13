@@ -1824,53 +1824,39 @@ length = unindex1 . shape
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.
 --
-fromSeq :: (Shape ix, Elt a)
-        => Seq [Array ix a]
-        -> Seq (Vector ix, Vector a)
+fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
 fromSeq = foldSeqFlatten f (lift (empty, empty))
   where
     f x sh1 a1 =
       let (sh0, a0) = unlift x
       in lift (sh0 ++ sh1, a0 ++ a1)
 
-fromSeqElems :: (Shape ix, Elt a)
-        => Seq [Array ix a]
-        -> Seq (Vector a)
+fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
 fromSeqElems = foldSeqFlatten f empty
   where
     f a0 _ a1 = a0 ++ a1
 
-fromSeqShapes :: (Shape ix, Elt a)
-        => Seq [Array ix a]
-        -> Seq (Vector ix)
+fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
 fromSeqShapes = foldSeqFlatten f empty
   where
     f sh0 sh1 _ = sh0 ++ sh1
 
 -- | Sequence an array on the innermost dimension.
 --
-toSeqInner :: (Shape sh, Elt a)
-           => Acc (Array (sh :. Int) a)
-           -> Seq [Array sh a]
+toSeqInner :: (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
 toSeqInner a = toSeq (Any :. Split) a
 
 -- | Sequence a 2-dimensional array on the outermost dimension.
 --
-toSeqOuter2 :: (Elt a)
-           => Acc (Array DIM2 a)
-           -> Seq [Array DIM1 a]
+toSeqOuter2 :: Elt a => Acc (Array DIM2 a) -> Seq [Array DIM1 a]
 toSeqOuter2 a = toSeq (Z :. Split :. All) a
 
 -- | Sequence a 3-dimensional array on the outermost dimension.
-toSeqOuter3 :: (Elt a)
-           => Acc (Array DIM3 a)
-           -> Seq [Array DIM2 a]
+toSeqOuter3 :: Elt a => Acc (Array DIM3 a) -> Seq [Array DIM2 a]
 toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 
 -- | Generate a scalar sequence of a fixed given length, by applying
 -- the given scalar function at each index.
-generateSeq :: (Elt a)
-            => Exp Int
-            -> (Exp Int -> Exp a)
-            -> Seq [Scalar a]
+generateSeq :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
 generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+

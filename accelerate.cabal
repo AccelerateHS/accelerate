@@ -204,10 +204,13 @@ Library
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Array.Data
+                        Data.Array.Accelerate.Array.Memory
+                        Data.Array.Accelerate.Array.Memory.Table
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Error
+                        Data.Array.Accelerate.FullList
                         Data.Array.Accelerate.Pretty
                         Data.Array.Accelerate.Product
                         Data.Array.Accelerate.Smart
@@ -217,6 +220,7 @@ Library
                         Data.Array.Accelerate.Type
 
   Other-modules:        Data.Array.Accelerate.Array.Lifted
+                        Data.Array.Accelerate.Array.Memory.Nursery
                         Data.Array.Accelerate.Debug.Flags
                         Data.Array.Accelerate.Debug.Stats
                         Data.Array.Accelerate.Debug.Trace
