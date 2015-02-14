@@ -3,6 +3,8 @@ module Main where
 
 -- Ray
 import Config
+import Scene.Object                                             ( Objects )
+import Scene.Light                                              ( Lights )
 import Scene.State
 import Gloss.Draw
 import Gloss.Event
@@ -35,6 +37,7 @@ main = do
       state     = initState 0
       ambient   = rawColor 0.3 0.3 0.3
 
+      scene :: Acc (Objects,Lights) -> Acc (Array DIM2 Color)
       scene st
         = let eye               = constant (get stateEyePos state)
               eyeDir            = castViewRays width height fov eye
