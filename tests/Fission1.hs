@@ -245,9 +245,8 @@ mapSplitArray cvtA acc f
       a2 = weaken s $
            chunkA cvtA 2 1 a'
     in
-     inject  $
-     Alet (Map f a1) $
-     Alet (Map (weaken s f) (weaken s a2)) $
+     Alet (inject $ Map f a1) $
+     inject $ Alet (inject $ Map (weaken s f) a2) $
      pconcat (inject (Avar (s z))) (inject (Avar z))
 
 fissionPreOpenAcc
