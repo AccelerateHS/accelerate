@@ -214,60 +214,31 @@ matchArrayShape _ _
   | otherwise
   = Nothing
 
-splitArray
-  :: forall acc aenv sh e. (Shape sh, Elt e, Kit acc)
+withSplitArray
+  :: forall acc env aenv sh e. (Shape sh, Elt e, Kit acc)
   => FissionAcc acc
   -> Int
-  -> Int
   -> acc aenv (Array sh e)
-  -> acc aenv (Array sh e)
-splitArray cvtA k i acc 
+  -> PreOpenAcc acc aenv (Array sh e)
+  -> PreOpenAcc acc aenv (Array sh e)
+withSplitArray cvtA k acc pacc
   | Just REFL <- matchArrayShape acc (undefined::Z)
-  = acc
-
+  = Alet acc $
+    inject $ weaken s pacc
   | Just REFL <- matchArrayShape acc (undefined::DIM1)
-  = chunkA cvtA k i acc
-
-fissionPreOpenAcc
-  :: forall acc aenv sh e. (Shape sh, Elt e, Kit acc)
-  => FissionAcc acc
-  -> acc aenv (Array sh e)
-  -> PreOpenAcc acc aenv (Array sh e)
-  -> PreOpenAcc acc aenv (Array sh e)
-fissionPreOpenAcc cvtA acc pacc
-
--- Moving the fissioning passes inside this pattern match
--- We have to return a PreOpenAcc, but we are given acc, so
--- we have (?) to use extract
-  | Just REFL <- matchArrayShape acc (undefined::Z) = extract acc
-
--- This used to be the whole fissionPreOpenAcc
-  | Just REFL <- matchArrayShape acc (undefined::DIM1) =
-    case pacc of
-
-      -- Fissioning cases
-      
-      Use a -> Use a
+  = let
+      a' = cvtA acc
+      a1 = chunkA cvtA k 0 a'
+      a2 = weaken s $
+           chunkA cvtA k 1 a'
+    in
+     inject  $
+     Alet a1 $
+     Alet a2 $
+     pacc
+     
 
 
-      Map f a ->
-        
-        let
-          
-          a' = cvtA a
-          a1 = inject $ Map f (chunkA cvtA 2 0 a')
-          a2 = inject $ Map (weaken SuccIdx f) (weaken SuccIdx (chunkA cvtA 2 1 a'))
-          r  = pconcat (inject (Avar (SuccIdx ZeroIdx))) (inject (Avar ZeroIdx))
-
-        in
-
-         Alet a1 $
-         Alet a2 $
-         r
-      
-      _ -> error "FIXME: Case not handled in fissionPreOpenAcc"
-
-{--
 fissionPreOpenAcc
     :: (Kit acc, Arrays arrs)
     => Int
@@ -278,7 +249,15 @@ fissionPreOpenAcc k cvtA pacc =
   case pacc of
     Use a       -> Use a
     Map f a     ->
-      let a'    = cvtA a
+      withSplitArray cvtA 2 a $
+      inject $ Alet (Map f (Avar (s z))) $ -- map f a1
+      inject $ Alet (Map (weaken s f) (weaken s (Avar (s z)))) $ -- map f a2
+      pconcat (inject (Avar (s z))) (inject (Avar z))
+{-- 
+      let
+        a1 = Map f $ Avar z
+        a2 = Map f $ Avar (s (s z))
+      in withSplitArray cvtA 2 a pacc $ 
           a1    = inject $ Map f (splitArray cvtA k 0 a')
           a2    = inject $ Map (weaken SuccIdx f) (weaken SuccIdx (splitArray cvtA k 1 a'))
           r     = pconcat (inject (Avar (SuccIdx ZeroIdx))) (inject (Avar ZeroIdx))
@@ -295,13 +274,13 @@ fissionPreOpenAcc k cvtA pacc =
 --}
 
     _           -> error "FIXME: Case not handled in fissionPreOpenAcc"
-
+--}
 
 --                       chunks   = map (\i -> chunk k i a') [0.. k-1]
 --                       parts    = map (Let . Map f . weaken SuccIdx) chunks
 
 
---}
+
 
 
 
