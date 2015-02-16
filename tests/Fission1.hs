@@ -214,41 +214,54 @@ matchArrayShape _ _
   | otherwise
   = Nothing
 
-withSplitArray
-  :: forall acc env aenv sh e. (Shape sh, Elt e, Kit acc)
+splitArray
+  :: forall acc aenv sh e. (Shape sh, Elt e, Kit acc)
   => FissionAcc acc
   -> Int
+  -> Int
   -> acc aenv (Array sh e)
-  -> PreOpenAcc acc aenv (Array sh e)
-  -> PreOpenAcc acc aenv (Array sh e)
-withSplitArray cvtA k acc pacc
+  -> acc aenv (Array sh e)
+splitArray cvtA k i acc
+  | Just REFL <- matchArrayShape acc (undefined::Z)
+  = acc
+
+  | Just REFL <- matchArrayShape acc (undefined::DIM1)
+  = chunkA cvtA k i acc
+
+mapSplitArray
+  :: forall acc env aenv sh e e'. (Shape sh, Elt e, Elt e', Kit acc)
+  => FissionAcc acc
+  -> acc aenv (Array sh e)
+  -> PreFun acc aenv (e -> e') 
+  -> PreOpenAcc acc aenv (Array sh e')
+mapSplitArray cvtA acc f
   | Just REFL <- matchArrayShape acc (undefined::Z)
   = Alet acc $
-    inject $ weaken s pacc
+    inject $ weaken s $ Map f acc
   | Just REFL <- matchArrayShape acc (undefined::DIM1)
   = let
       a' = cvtA acc
-      a1 = chunkA cvtA k 0 a'
+      a1 = chunkA cvtA 2 0 a'
       a2 = weaken s $
-           chunkA cvtA k 1 a'
+           chunkA cvtA 2 1 a'
     in
      inject  $
-     Alet a1 $
-     Alet a2 $
-     pacc
-     
-
+     Alet (Map f a1) $
+     Alet (Map (weaken s f) (weaken s a2)) $
+     pconcat (inject (Avar (s z))) (inject (Avar z))
 
 fissionPreOpenAcc
-    :: (Kit acc, Arrays arrs)
+    :: forall acc sh e aenv. (Kit acc, Shape sh, Elt e)
     => Int
     -> FissionAcc acc                                   -- parameterised via recursive closure
-    -> PreOpenAcc acc aenv arrs
-    -> PreOpenAcc acc aenv arrs
+    -> PreOpenAcc acc aenv (Array sh e)
+    -> PreOpenAcc acc aenv (Array sh e)
 fissionPreOpenAcc k cvtA pacc =
   case pacc of
     Use a       -> Use a
-    Map f a     ->
+    Map f a     -> mapSplitArray cvtA a f
+      
+{--
       withSplitArray cvtA 2 a $
       inject $ Alet (Map f (Avar (s z))) $ -- map f a1
       inject $ Alet (Map (weaken s f) (weaken s (Avar (s z)))) $ -- map f a2
@@ -278,7 +291,7 @@ fissionPreOpenAcc k cvtA pacc =
 
 --                       chunks   = map (\i -> chunk k i a') [0.. k-1]
 --                       parts    = map (Let . Map f . weaken SuccIdx) chunks
-
+--}
 
 
 
