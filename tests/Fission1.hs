@@ -214,6 +214,7 @@ matchArrayShape _ _
   | otherwise
   = Nothing
 
+{--
 splitArray
   :: forall acc aenv sh e. (Shape sh, Elt e, Kit acc)
   => FissionAcc acc
@@ -248,18 +249,50 @@ mapSplitArray cvtA acc f
      Alet (inject $ Map f a1) $
      inject $ Alet (inject $ Map (weaken s f) a2) $
      pconcat (inject (Avar (s z))) (inject (Avar z))
+--}
 
 fissionPreOpenAcc
-    :: forall acc sh e aenv. (Kit acc, Shape sh, Elt e)
+    :: forall acc aenv arrs. (Kit acc, Arrays arrs)
     => Int
     -> FissionAcc acc                                   -- parameterised via recursive closure
-    -> PreOpenAcc acc aenv (Array sh e)
-    -> PreOpenAcc acc aenv (Array sh e)
-fissionPreOpenAcc k cvtA pacc =
+    -> PreOpenAcc acc aenv arrs
+    -> PreOpenAcc acc aenv arrs
+fissionPreOpenAcc _ cvtA pacc =
   case pacc of
     Use a       -> Use a
-    Map f a     -> mapSplitArray cvtA a f
-      
+    Map f a     -> reconstruct (Map (cvtF f)) (cvtA a)
+
+
+    where
+      cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
+      cvtF = id
+
+      reconstruct
+          :: (Shape sh, Elt a, Elt b)
+          => (acc aenv (Array sh a) -> PreOpenAcc acc aenv (Array sh b))
+          ->            acc aenv (Array sh a)
+          -> PreOpenAcc acc aenv (Array sh b)
+      reconstruct f a
+        | Just REFL <- matchArrayShape a (undefined::DIM1) = fission f a
+        | Just REFL <- matchArrayShape a (undefined::DIM2) = fission f a
+        | otherwise                                        = f a
+
+      fission
+          :: (Shape sh, Slice sh, Elt a, Elt b)
+          => (acc aenv (Array (sh :. Int) a) -> PreOpenAcc acc aenv (Array (sh :. Int) b))
+          -> acc aenv (Array (sh :. Int) a)
+          -> PreOpenAcc acc aenv (Array (sh :. Int) b)
+      fission f a
+        = let
+              a1 = chunkA cvtA 2 0 a
+              a2 = chunkA cvtA 2 1 a
+          in
+          Alet (inject            $ f a1) . inject $
+          Alet (inject . weaken s $ f a2) . inject $
+            pconcat (inject (Avar (s z)))
+                    (inject (Avar z))
+
+
 {--
       withSplitArray cvtA 2 a $
       inject $ Alet (Map f (Avar (s z))) $ -- map f a1
@@ -311,10 +344,11 @@ fissionPreOpenAcc k cvtA pacc =
 --              (\ix -> let sh :. i = unlift ix    :: Exp sh :. Exp Int
 --                      in  i <* n ? ( xs ! ix, ys ! lift (sh :. i-n)) )
 
-pconcat :: forall sh e acc env aenv. (Slice sh, Shape sh, Elt e)
-           => acc aenv (Array (sh :. Int) e)
-           -> acc aenv (Array (sh :. Int) e)
-           -> acc aenv (Array (sh :. Int) e)
+pconcat
+    :: forall sh e acc env aenv. (Slice sh, Shape sh, Elt e)
+    =>            acc aenv (Array (sh :. Int) e)
+    ->            acc aenv (Array (sh :. Int) e)
+    -> PreOpenAcc acc aenv (Array (sh :. Int) e)
 pconcat xs ys = undefined
 
 {--
