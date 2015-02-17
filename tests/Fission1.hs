@@ -259,10 +259,17 @@ fissionPreOpenAcc
     -> PreOpenAcc acc aenv arrs
 fissionPreOpenAcc _ cvtA pacc =
   case pacc of
-    Use a       -> Use a
-    Map f a     -> reconstruct (Map (cvtF f)) (cvtA a)
+  
+    Use a            -> Use a
+    
+    Map f a          -> reconstruct (Map (cvtF f)) (cvtA a)
 
-    _           -> error "Case not handled in fissionPreOpenAcc!"
+--  These don't work: Could not deduce (sh ~ (sh :. Int))
+--  Fold f e a       -> reconstruct (Fold (cvtF f) e) (cvtA a)
+--  Fold1 f a        -> reconstruct (Fold1 (cvtF f)) (cvtA a)
+    
+
+    _                -> error "Case not handled in fissionPreOpenAcc!"
 
     where
       cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
@@ -277,6 +284,7 @@ fissionPreOpenAcc _ cvtA pacc =
         | Just REFL <- matchArrayShape a (undefined::DIM1) = fission f a
         | Just REFL <- matchArrayShape a (undefined::DIM2) = fission f a
         | otherwise                                        = f a
+                                                             
 
       fission
           :: (Shape sh, Slice sh, Elt a, Elt b)
