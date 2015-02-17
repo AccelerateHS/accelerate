@@ -262,6 +262,7 @@ fissionPreOpenAcc _ cvtA pacc =
     Use a       -> Use a
     Map f a     -> reconstruct (Map (cvtF f)) (cvtA a)
 
+    _           -> error "Case not handled in fissionPreOpenAcc!"
 
     where
       cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
@@ -349,20 +350,30 @@ pconcat
     =>            acc aenv (Array (sh :. Int) e)
     ->            acc aenv (Array (sh :. Int) e)
     -> PreOpenAcc acc aenv (Array (sh :. Int) e)
-pconcat xs ys = undefined
-
-{--
-pconcat :: forall sh e acc env aenv. (Slice sh, Shape sh, Elt e)
-           => acc aenv (Array (sh :. Int) e)
-           -> acc aenv (Array (sh :. Int) e)
-           -> acc aenv (Array (sh :. Int) e)
 pconcat xs ys = Generate shape func
-  where shape = Let (IndexHead (Shape xs)) $ -- n
-                Let (IndexHead (Shape ys)) $ -- m
-                Let (IndexTail (Shape xs)) $ -- sh1
-                Let (IndexTail (Shape ys)) -- $ -- sh2
-        func  = undefined
---}
+  where shape = Let (IndexHead (Shape xs)) $                         -- n
+                Let (IndexHead (Shape ys)) $                         -- m
+                Let (IndexTail (Shape xs)) $                         -- sh1
+                Let (IndexTail (Shape ys)) $                         -- sh2
+                IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
+                (PrimAdd num `app` tup2
+                 (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
+        func  = Lam . Body $                                         -- ix
+                Let (IndexHead (Shape xs)) $                         -- n
+                Let (IndexHead (Shape ys)) $                         -- m
+                Let (IndexTail (Shape xs)) $                         -- sh1
+                Let (IndexTail (Shape ys)) $                         -- sh2
+                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+                Cond                                                 -- 
+                (PrimLt scalarType `app` tup2
+                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+                (Index ys                                            -- ys !
+                 (IndexCons (v (s z))                                -- sh :.
+                  (PrimSub num `app` tup2 (v z)                      -- i-n
+                   (v (s (s (s (s (s z)))))))))
+
 
 -- Writing in abstract syntax is for chumps ):
 --
