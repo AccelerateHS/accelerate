@@ -43,8 +43,6 @@ module Data.Array.Accelerate.Trafo.Fusion (
   -- ** Conversion
   convertAcc, convertAfun, convertSeq,
 
-  convertOpenAcc,
-
 ) where
 
 -- standard library
