@@ -83,15 +83,14 @@ convertOpenAcc (Manifest pacc)
         ->            DelayedOpenAcc aenv (Array sh a)
         -> PreOpenAcc DelayedOpenAcc aenv (Array sh b)
     map f a
-      | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin a
-      | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin a
+      | Just REFL <- matchArrayShape a (undefined::DIM1) = map' a
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = map' a
       | otherwise                                        = Map f a
       where
-        splitjoin
-            :: (Shape sh', Slice sh')
-            =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
-            -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
-        splitjoin a'
+        map' :: (Shape sh', Slice sh')
+             =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
+             -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
+        map' a'
           = let a1 = splitArray 2 0 a'
                 a2 = splitArray 2 1 a'
             in
@@ -105,20 +104,21 @@ convertOpenAcc (Manifest pacc)
          -> PreExp     acc            aenv e
          ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
          -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
-    fold f e a = error "fold: finish me"
+    fold f e a -- = error "fold: finish me"
       -- | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin1 a
-      -- | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin2 a
-      -- | otherwise                                        = Fold f e a
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin2 a
+--      | otherwise                                        = Fold f e a
       where
         splitjoin1
           :: (Shape sh', Slice sh')
           =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
           -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
         splitjoin1 a' = error "fold splitjoin1: finish me"
+
         splitjoin2
           :: (Shape sh', Slice sh')
           =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) a)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) b)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
         splitjoin2 a' = error "fold splitjoin2: finish me"
         
 
