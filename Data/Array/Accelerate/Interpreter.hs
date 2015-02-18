@@ -96,15 +96,7 @@ streamOut seq = let seq' = convertSeqWith config seq
 
 
 config :: Phase
-config =  Phase
-  { recoverAccSharing      = True
-  , recoverExpSharing      = True
-  , recoverSeqSharing      = True
-  , floatOutAccFromExp     = True
-  , enableAccFusion        = True
-  , convertOffsetOfSegment = False
-  , vectoriseSequences     = True
-  }
+config =  phases
 
 
 -- Delayed Arrays
