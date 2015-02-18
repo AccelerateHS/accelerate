@@ -14,6 +14,7 @@ import qualified Data.Array.Accelerate.AST              as AST
 
 import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Trafo
+import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
 -- import Data.Array.Accelerate.Type
 -- import Data.Array.Accelerate.Product
@@ -44,7 +45,7 @@ pconcat =
        AST.Alam (AST.Alam (AST.Abody x)) -> x
 
 
-pconcat' :: Elt a => AST.OpenAcc (((), Vector a), Vector a) (Vector a)
+pconcat' :: Elt a => AST.OpenAcc ((aenv, Vector a), Vector a) (Vector a)
 pconcat' =
   let vars      = [1, 0]
       x         = S.Acc $ S.Atag 1
@@ -52,6 +53,11 @@ pconcat' =
       alyt      = Sharing.EmptyLayout `Sharing.PushLayout` AST.SuccIdx AST.ZeroIdx
                                       `Sharing.PushLayout` AST.ZeroIdx
       config    = Sharing.Config True True True True
+
+      open :: AST.Idx (((),a),b) t -> AST.Idx ((aenv,a),b) t
+      open AST.ZeroIdx               = AST.ZeroIdx
+      open (AST.SuccIdx AST.ZeroIdx) = AST.SuccIdx AST.ZeroIdx
+      open _                         = error "unpossible!"
   in
-  Sharing.convertOpenAcc config 2 vars alyt (x A.++ y)
+  weaken open $ Sharing.convertOpenAcc config 2 vars alyt (x A.++ y)
 
