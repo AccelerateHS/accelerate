@@ -34,6 +34,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
+import Unsafe.Coerce
 
 -- | Apply the fission transformation to a closed de Bruijn AST
 --
@@ -73,7 +74,7 @@ convertOpenAcc (Manifest pacc)
   where
     prim :: String
     prim        = showPreAccOp pacc
-    fusionError = $internalError "convertOpenAcc" $ "unexpected fusible materials: " ++ prim
+    fusionError = $internalError "convertOpenAcc" $ "unexpected fusible materials: " Prelude.++ prim
 
     cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
     cvtF = id
@@ -136,38 +137,29 @@ convertOpenAcc (Manifest pacc)
 
 -- Concatenate two arrays, as in (++).
 --
+
 concatArray
     :: (Slice sh, Shape sh, Elt e)
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs ys = case xs of
-                     Delayed _ _ _ ->
-                       (extract $ Delayed{
-                           extentD = shap,
-                           indexD = funce xs ys,
-                           linearIndexD = funci xs ys
-                           })
-                     Manifest _ -> Generate shap $ funce xs ys
-  where shap = Let (IndexHead (Shape xs)) $                         -- n
-               Let (IndexHead (Shape ys)) $                         -- m
-               Let (IndexTail (Shape xs)) $                         -- sh1
-               Let (IndexTail (Shape ys)) $                         -- sh2
+concatArray xs@(Manifest _) ys@(Manifest _) = Generate shap $ funce xs ys
+  where shap = Let (IndexHead (makeShape xs)) $                         -- n
+               Let (IndexHead (makeShape ys)) $                         -- m
+               Let (IndexTail (makeShape xs)) $                         -- sh1
+               Let (IndexTail (makeShape ys)) $                         -- sh2
                IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
                (PrimAdd num `app` tup2
-                (v (s (s (s z)))) (v (s (s z))))                    -- n + m)               
-
---- i hate everything
-funce :: forall (acc :: * -> * -> *) env aenv t a bnd_t.
-         (Elt a, Elt t, Shape (bnd_t :. a), Slice bnd_t, IsNum a) =>
-         acc aenv (Array (bnd_t :. a) t)
-         -> acc aenv (Array (bnd_t :. a) t)
-         -> PreOpenFun acc env aenv ((bnd_t :. a) -> t) 
+                (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
+concatArray _ _
+  = error "concatArray should not operate on delayed arrays!"
+    
+-- --- i hate everything
 funce xs ys = Lam . Body $
-              Let (IndexHead (Shape xs)) $                         -- n
-              Let (IndexHead (Shape ys)) $                         -- m
-              Let (IndexTail (Shape xs)) $                         -- sh1
-              Let (IndexTail (Shape ys)) $                         -- sh2
+              Let (IndexHead (makeShape xs)) $                         -- n
+              Let (IndexHead (makeShape ys)) $                         -- m
+              Let (IndexTail (makeShape xs)) $                         -- sh1
+              Let (IndexTail (makeShape ys)) $                         -- sh2
               Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
               Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
               Cond                                                 -- 
@@ -178,60 +170,6 @@ funce xs ys = Lam . Body $
                (IndexCons (v (s z))                                -- sh :.
                 (PrimSub num `app` tup2 (v z)                      -- i-n
                  (v (s (s (s (s (s z)))))))))
-
-funci :: forall (acc :: * -> * -> *) env aenv t bnd_t a.
-         (Elt a, Elt t, Shape (bnd_t :. a), Shape bnd_t, Slice bnd_t,
-          IsNum a) =>
-         acc aenv (Array (bnd_t :. a) t)
-         -> acc aenv (Array (bnd_t :. a) t)
-         -> PreOpenFun acc env aenv (Int -> t)
-funci xs ys = Lam . Body $
-              Let (FromIndex
-                   (Let (IndexHead (Shape xs)) $                         -- n
-                    Let (IndexHead (Shape ys)) $                         -- m
-                    Let (IndexTail (Shape xs)) $                         -- sh1
-                    Let (IndexTail (Shape ys)) $                         -- sh2
-                    IndexCons (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
-                    (PrimAdd num `app` tup2
-                     (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
-                   (v z)) $
-              Let (IndexHead (Shape xs)) $                         -- n
-              Let (IndexHead (Shape ys)) $                         -- m
-              Let (IndexTail (Shape xs)) $                         -- sh1
-              Let (IndexTail (Shape ys)) $                         -- sh2
-              Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
-              Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
-              Cond                                                 -- 
-              (PrimLt scalarType `app` tup2
-               (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
-              (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
-              (Index ys                                            -- ys !
-               (IndexCons (v (s z))                                -- sh :.
-                (PrimSub num `app` tup2 (v z)                      -- i-n
-                 (v (s (s (s (s (s z)))))))))
-              
-                -- Lam . Body $
-                -- Let (IndexHead (Shape xs)) $                         -- n
-                -- Let (IndexHead (Shape ys)) $                         -- m
-                -- Let (IndexTail (Shape xs)) $                         -- sh1
-                -- Let (IndexTail (Shape ys)) $                         -- sh2
-                -- Let (FromIndex
-                --      (IndexCons
-                --       (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
-                --       (PrimAdd num `app` tup2
-                --        (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
-                --      (v z)) $
-                -- Let (IndexTail (v (s (s (s (s (s z))))))) $              -- sh
-                -- Let (IndexHead (v (s (s (s (s (s (s z)))))))) $          -- i
-                -- Cond                                                 -- 
-                -- (PrimLt scalarType `app` tup2
-                --  (v z) (v (s (s (s (s (s (s z))))))))                    -- i <* n
-                -- (Index xs (s (s z)))             -- xs ! ix
-                -- (Index ys                                            -- ys !
-                --  (IndexCons (v (s z))                                -- sh :.
-                --   (PrimSub num `app` tup2 (v z)                      -- i-n
-                --    (v (s (s (s (s (s (s z))))))))))
-
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
 --
@@ -243,32 +181,51 @@ splitArray
   -> DelayedOpenAcc aenv (Array (sh :. Int) e)
 splitArray n m delayed@Delayed{..}
   = let sh' = withSplitPts n m extentD $
-              IndexCons (IndexTail (Shape delayed))
-                        (PrimSub num `app` tup2 (v z) (v (s z)))
-    in Delayed{ extentD = sh', .. }
+              Let (PrimSub num `app` tup2 (v z) (v (s z))) $
+              IndexCons (IndexTail (makeShape delayed))
+                        (v (s z))
+        ix  = v (s (s (s (s (s (s (s z)))))))
+        fe  = Lam . Body
+            $ withSplitPts n m (makeShape delayed)
+            $ Let (IndexCons (IndexTail ix)
+                             (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
+            $ Index delayed (v z)
+        fi  = Lam . Body
+            $ Let (FromIndex (makeShape delayed) (v z))
+            $ withSplitPts n m (makeShape delayed)
+            $ Let (IndexCons (IndexTail ix)
+                             (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
+            $ Index delayed (v z)
+    in Delayed{ extentD = sh',
+                indexD = fe,
+                linearIndexD = fi
+                }
 splitArray n m acc@(Manifest _)
   = splitManifestArray n m acc
 
 splitManifestArray
-  :: forall acc aenv sh e. (Slice sh, Shape sh, Elt e, Kit acc)
+  :: forall aenv sh e. (Slice sh, Shape sh, Elt e)
   => Int
   -> Int
-  -> acc aenv (Array (sh :. Int) e)
-  -> acc aenv (Array (sh :. Int) e)
+  -> DelayedOpenAcc aenv (Array (sh :. Int) e)
+  -> DelayedOpenAcc aenv (Array (sh :. Int) e)
 splitManifestArray k i acc
   = inject
   $ Backpermute sh' f acc
   where
-    sh' = withSplitPts k i (Shape acc)
-        $ IndexCons (IndexTail (Shape acc))
+    sh' = withSplitPts k i (makeShape acc)
+        $ IndexCons (IndexTail (makeShape acc))
                     (PrimSub num `app` tup2 (v z) (v (s z)))
 
     f   = Lam . Body
-        $ withSplitPts k i (Shape acc)
+        $ withSplitPts k i (makeShape acc)
         $ IndexCons (IndexTail ix)
                     (PrimAdd num `app` tup2 (IndexHead ix) (v (s z)))
       where
         ix = v (s (s (s (s (s (s (s z)))))))
+
+makeShape arr@Manifest{} = Shape arr
+makeShape Delayed{..} = unsafeCoerce extentD
 
 -- When splitting an array 'acc' into 'k' pieces, put into the environment as
 -- the last two bound variables the split indices for the start and end of chunk
