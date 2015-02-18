@@ -101,27 +101,39 @@ convertOpenAcc (Manifest pacc)
               concatArray (inject (Avar (SuccIdx ZeroIdx)))
                           (inject (Avar ZeroIdx))
 
-    fold :: forall acc aenv sh e. (Shape sh, Elt e)
+    fold :: forall aenv sh e. (Shape sh, Elt e)
          =>            DelayedFun aenv (e -> e -> e)
          -> PreExp     DelayedOpenAcc aenv e
          ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
          -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
-    fold f e a -- = error "fold: finish me"
-      | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin1 a
-      | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin2 a
+    fold f e a 
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = fold'a a
+      | Just REFL <- matchArrayShape a (undefined::DIM3) = fold'b a
       | otherwise                                        = Fold f e a
       where
-        splitjoin1
+        fold'a
           :: (Shape sh', Slice sh')
-          =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array sh' b)
-        splitjoin1 a' = error "fold splitjoin1: finish me"
-
-        splitjoin2
+          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) e)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) e)
+        fold'a a' 
+          = let a1 = splitArray 2 0 a'
+                a2 = splitArray 2 1 a'
+            in Alet (inject            $ Fold f e a1) . inject $
+               Alet (inject . weaken s $ Fold f e a2) . inject $
+               concatArray (inject (Avar (s z)))
+                           (inject (Avar z))
+        fold'b
           :: (Shape sh', Slice sh')
-          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) a)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
-        splitjoin2 a' = error "fold splitjoin2: finish me"
+          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) e)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) e)
+        fold'b a' 
+          = let a1 = splitArray 2 0 a'
+                a2 = splitArray 2 1 a'
+            in Alet (inject            $ Fold f e a1) . inject $
+               Alet (inject . weaken s $ Fold f e a2) . inject $
+               ZipWith (weaken (s . s) f)
+                       (inject (Avar (s z)))
+                       (inject (Avar z))
         
 
 -- Concatenate two arrays, as in (++).
