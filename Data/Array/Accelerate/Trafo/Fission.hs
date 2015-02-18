@@ -34,9 +34,6 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Smart                    as S
-import qualified Data.Array.Accelerate.Trafo.Sharing            as Sharing
-import qualified Data.Array.Accelerate                          as A
 
 -- | Apply the fission transformation to a closed de Bruijn AST
 --
@@ -137,22 +134,6 @@ convertOpenAcc (Manifest pacc)
 
 -- Concatenate two arrays, as in (++).
 --
-pconcat' :: Elt a => OpenAcc ((aenv, Vector a), Vector a) (Vector a)
-pconcat' =
-  let vars      = [1, 0]
-      x         = S.Acc $ S.Atag 1
-      y         = S.Acc $ S.Atag 0
-      alyt      = Sharing.EmptyLayout `Sharing.PushLayout` s z
-                                      `Sharing.PushLayout` z
-      config    = Sharing.Config True True True True
-
-      open :: Idx (((),a),b) t -> Idx ((aenv,a),b) t
-      open ZeroIdx           = z
-      open (SuccIdx ZeroIdx) = s z
-      open _                         = error "unpossible!"
-  in
-  weaken open $ Sharing.convertOpenAcc config 2 vars alyt (x A.++ y)
-
 concatArray
     :: (Slice sh, Shape sh, Elt e)
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
