@@ -34,7 +34,9 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
-
+import qualified Data.Array.Accelerate.Smart                    as S
+import qualified Data.Array.Accelerate.Trafo.Sharing            as Sharing
+import qualified Data.Array.Accelerate                          as A
 
 -- | Apply the fission transformation to a closed de Bruijn AST
 --
@@ -124,20 +126,40 @@ convertOpenAcc (Manifest pacc)
 
 -- Concatenate two arrays, as in (++).
 --
+pconcat' :: Elt a => OpenAcc ((aenv, Vector a), Vector a) (Vector a)
+pconcat' =
+  let vars      = [1, 0]
+      x         = S.Acc $ S.Atag 1
+      y         = S.Acc $ S.Atag 0
+      alyt      = Sharing.EmptyLayout `Sharing.PushLayout` s z
+                                      `Sharing.PushLayout` z
+      config    = Sharing.Config True True True True
+
+      open :: Idx (((),a),b) t -> Idx ((aenv,a),b) t
+      open ZeroIdx           = z
+      open (SuccIdx ZeroIdx) = s z
+      open _                         = error "unpossible!"
+  in
+  weaken open $ Sharing.convertOpenAcc config 2 vars alyt (x A.++ y)
+
 concatArray
     :: (Slice sh, Shape sh, Elt e)
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs ys = Generate shap func -- extract $ Delayed{ extentD = shap, indexD = func }
-  where shap  = Let (IndexHead (Shape xs)) $                         -- n
-                Let (IndexHead (Shape ys)) $                         -- m
-                Let (IndexTail (Shape xs)) $                         -- sh1
-                Let (IndexTail (Shape ys)) $                         -- sh2
-                IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
-                (PrimAdd num `app` tup2
-                 (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
-        func  = Lam . Body $                                         -- ix
+concatArray xs ys = extract $ Delayed{
+  extentD = (Let (IndexHead (Shape xs)) $                         -- n
+             Let (IndexHead (Shape ys)) $                         -- m
+             Let (IndexTail (Shape xs)) $                         -- sh1
+             Let (IndexTail (Shape ys)) $                         -- sh2
+             IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
+             (PrimAdd num `app` tup2
+              (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
+             ),
+  indexD = funce,
+  linearIndexD = funci
+  }
+  where funce = Lam . Body $
                 Let (IndexHead (Shape xs)) $                         -- n
                 Let (IndexHead (Shape ys)) $                         -- m
                 Let (IndexTail (Shape xs)) $                         -- sh1
@@ -152,7 +174,30 @@ concatArray xs ys = Generate shap func -- extract $ Delayed{ extentD = shap, ind
                  (IndexCons (v (s z))                                -- sh :.
                   (PrimSub num `app` tup2 (v z)                      -- i-n
                    (v (s (s (s (s (s z)))))))))
-
+        funci = Lam . Body $
+                Let (FromIndex
+                     (Let (IndexHead (Shape xs)) $                         -- n
+                      Let (IndexHead (Shape ys)) $                         -- m
+                      Let (IndexTail (Shape xs)) $                         -- sh1
+                      Let (IndexTail (Shape ys)) $                         -- sh2
+                      IndexCons (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
+                      (PrimAdd num `app` tup2
+                       (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
+                     (v z)) $
+                Let (IndexHead (Shape xs)) $                         -- n
+                Let (IndexHead (Shape ys)) $                         -- m
+                Let (IndexTail (Shape xs)) $                         -- sh1
+                Let (IndexTail (Shape ys)) $                         -- sh2
+                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+                Cond                                                 -- 
+                (PrimLt scalarType `app` tup2
+                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+                (Index ys                                            -- ys !
+                 (IndexCons (v (s z))                                -- sh :.
+                  (PrimSub num `app` tup2 (v z)                      -- i-n
+                   (v (s (s (s (s (s z)))))))))
 
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
