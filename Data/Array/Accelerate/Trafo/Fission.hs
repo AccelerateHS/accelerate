@@ -3,6 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE PatternGuards       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Fission
 -- Copyright   : [2015] Trevor L. McDonell, Michael Vollmer
@@ -101,8 +104,30 @@ concatArray
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs ys
-  = error "concatArray: finish me"
+concatArray xs ys = Generate shap func
+  where shap  = Let (IndexHead (Shape xs)) $                         -- n
+                Let (IndexHead (Shape ys)) $                         -- m
+                Let (IndexTail (Shape xs)) $                         -- sh1
+                Let (IndexTail (Shape ys)) $                         -- sh2
+                IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
+                (PrimAdd num `app` tup2
+                 (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
+        func  = Lam . Body $                                         -- ix
+                Let (IndexHead (Shape xs)) $                         -- n
+                Let (IndexHead (Shape ys)) $                         -- m
+                Let (IndexTail (Shape xs)) $                         -- sh1
+                Let (IndexTail (Shape ys)) $                         -- sh2
+                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+                Cond                                                 -- 
+                (PrimLt scalarType `app` tup2
+                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+                (Index ys                                            -- ys !
+                 (IndexCons (v (s z))                                -- sh :.
+                  (PrimSub num `app` tup2 (v z)                      -- i-n
+                   (v (s (s (s (s (s z)))))))))
+
 
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
@@ -151,20 +176,9 @@ withSplitPts k' i' sh cont
     k           = constant k'
     i           = constant i'
     i1          = constant (i'+1)
-
-    z           = ZeroIdx
-    s           = SuccIdx
-    num         = numType
     int         = integralType
-    app f x     = f `PrimApp` x
-    tup2 x y    = Tuple (NilTup `SnocTup` x `SnocTup` y)
-
     constant :: Elt e => e -> PreOpenExp acc env' aenv' e
     constant    = Const . fromElt
-
-    v :: Elt e => Idx env' e -> PreOpenExp acc env' aenv' e
-    v           = Var
-
 
 -- Producet a type witness for the shape of a given array. This is used so that
 -- we can apply split/concat operations to arrays, which is only valid for
@@ -182,3 +196,29 @@ matchArrayShape _ _
   | otherwise
   = Nothing
 
+-- Helpers for writing in abstract syntax.
+--
+num :: IsNum a => NumType a
+num = numType
+
+app :: forall (acc :: * -> * -> *) env aenv r a.
+       (Elt a, Elt r) =>
+       PrimFun (a -> r)
+       -> PreOpenExp acc env aenv a -> PreOpenExp acc env aenv r
+app f x   = f `PrimApp` x
+
+tup2 :: forall (acc :: * -> * -> *) env aenv t t1 t2.
+        (Elt t2, Elt t1, Elt t, IsProduct Elt t,
+         ProdRepr t ~ (((), t2), t1)) =>
+        PreOpenExp acc env aenv t2
+        -> PreOpenExp acc env aenv t1 -> PreOpenExp acc env aenv t
+tup2 x y  = Tuple (NilTup `SnocTup` x `SnocTup` y)
+
+v :: Elt t => Idx env t -> PreOpenExp acc env aenv t
+v = Var
+
+z :: forall t env. Idx (env, t) t
+z = ZeroIdx
+
+s :: forall t env s. Idx env t -> Idx (env, s) t
+s = SuccIdx
