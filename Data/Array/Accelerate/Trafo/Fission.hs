@@ -52,8 +52,8 @@ convertOpenAcc
     :: forall aenv arrs. Arrays arrs
     => DelayedOpenAcc aenv arrs
     -> DelayedOpenAcc aenv arrs
-convertOpenAcc Delayed{}
-  = $internalError "convertOpenAcc" "unexpected delayed array"
+convertOpenAcc p@Delayed{} = p
+--  = $internalError "convertOpenAcc" "unexpected delayed array"
 
 convertOpenAcc (Manifest pacc)
   = Manifest
@@ -65,6 +65,8 @@ convertOpenAcc (Manifest pacc)
       ZipWith{}         -> fusionError
       Slice{}           -> fusionError
       Replicate{}       -> fusionError
+
+      Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
 
       -- Otherwise, return pacc
       _                 -> pacc
@@ -139,57 +141,96 @@ concatArray
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs ys = extract $ Delayed{
-  extentD = (Let (IndexHead (Shape xs)) $                         -- n
-             Let (IndexHead (Shape ys)) $                         -- m
-             Let (IndexTail (Shape xs)) $                         -- sh1
-             Let (IndexTail (Shape ys)) $                         -- sh2
-             IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
-             (PrimAdd num `app` tup2
-              (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
-             ),
-  indexD = funce,
-  linearIndexD = funci
-  }
-  where funce = Lam . Body $
-                Let (IndexHead (Shape xs)) $                         -- n
-                Let (IndexHead (Shape ys)) $                         -- m
-                Let (IndexTail (Shape xs)) $                         -- sh1
-                Let (IndexTail (Shape ys)) $                         -- sh2
-                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
-                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
-                Cond                                                 -- 
-                (PrimLt scalarType `app` tup2
-                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
-                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
-                (Index ys                                            -- ys !
-                 (IndexCons (v (s z))                                -- sh :.
-                  (PrimSub num `app` tup2 (v z)                      -- i-n
-                   (v (s (s (s (s (s z)))))))))
-        funci = Lam . Body $
-                Let (FromIndex
-                     (Let (IndexHead (Shape xs)) $                         -- n
-                      Let (IndexHead (Shape ys)) $                         -- m
-                      Let (IndexTail (Shape xs)) $                         -- sh1
-                      Let (IndexTail (Shape ys)) $                         -- sh2
-                      IndexCons (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
-                      (PrimAdd num `app` tup2
-                       (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
-                     (v z)) $
-                Let (IndexHead (Shape xs)) $                         -- n
-                Let (IndexHead (Shape ys)) $                         -- m
-                Let (IndexTail (Shape xs)) $                         -- sh1
-                Let (IndexTail (Shape ys)) $                         -- sh2
-                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
-                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
-                Cond                                                 -- 
-                (PrimLt scalarType `app` tup2
-                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
-                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
-                (Index ys                                            -- ys !
-                 (IndexCons (v (s z))                                -- sh :.
-                  (PrimSub num `app` tup2 (v z)                      -- i-n
-                   (v (s (s (s (s (s z)))))))))
+concatArray xs ys = case xs of
+                     Delayed _ _ _ ->
+                       (extract $ Delayed{
+                           extentD = shap,
+                           indexD = funce xs ys,
+                           linearIndexD = funci xs ys
+                           })
+                     Manifest _ -> Generate shap $ funce xs ys
+  where shap = Let (IndexHead (Shape xs)) $                         -- n
+               Let (IndexHead (Shape ys)) $                         -- m
+               Let (IndexTail (Shape xs)) $                         -- sh1
+               Let (IndexTail (Shape ys)) $                         -- sh2
+               IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
+               (PrimAdd num `app` tup2
+                (v (s (s (s z)))) (v (s (s z))))                    -- n + m)               
+
+--- i hate everything
+funce :: forall (acc :: * -> * -> *) env aenv t a bnd_t.
+         (Elt a, Elt t, Shape (bnd_t :. a), Slice bnd_t, IsNum a) =>
+         acc aenv (Array (bnd_t :. a) t)
+         -> acc aenv (Array (bnd_t :. a) t)
+         -> PreOpenFun acc env aenv ((bnd_t :. a) -> t) 
+funce xs ys = Lam . Body $
+              Let (IndexHead (Shape xs)) $                         -- n
+              Let (IndexHead (Shape ys)) $                         -- m
+              Let (IndexTail (Shape xs)) $                         -- sh1
+              Let (IndexTail (Shape ys)) $                         -- sh2
+              Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+              Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+              Cond                                                 -- 
+              (PrimLt scalarType `app` tup2
+               (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+              (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+              (Index ys                                            -- ys !
+               (IndexCons (v (s z))                                -- sh :.
+                (PrimSub num `app` tup2 (v z)                      -- i-n
+                 (v (s (s (s (s (s z)))))))))
+
+funci :: forall (acc :: * -> * -> *) env aenv t bnd_t a.
+         (Elt a, Elt t, Shape (bnd_t :. a), Shape bnd_t, Slice bnd_t,
+          IsNum a) =>
+         acc aenv (Array (bnd_t :. a) t)
+         -> acc aenv (Array (bnd_t :. a) t)
+         -> PreOpenFun acc env aenv (Int -> t)
+funci xs ys = Lam . Body $
+              Let (FromIndex
+                   (Let (IndexHead (Shape xs)) $                         -- n
+                    Let (IndexHead (Shape ys)) $                         -- m
+                    Let (IndexTail (Shape xs)) $                         -- sh1
+                    Let (IndexTail (Shape ys)) $                         -- sh2
+                    IndexCons (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
+                    (PrimAdd num `app` tup2
+                     (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
+                   (v z)) $
+              Let (IndexHead (Shape xs)) $                         -- n
+              Let (IndexHead (Shape ys)) $                         -- m
+              Let (IndexTail (Shape xs)) $                         -- sh1
+              Let (IndexTail (Shape ys)) $                         -- sh2
+              Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+              Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+              Cond                                                 -- 
+              (PrimLt scalarType `app` tup2
+               (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+              (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+              (Index ys                                            -- ys !
+               (IndexCons (v (s z))                                -- sh :.
+                (PrimSub num `app` tup2 (v z)                      -- i-n
+                 (v (s (s (s (s (s z)))))))))
+              
+                -- Lam . Body $
+                -- Let (IndexHead (Shape xs)) $                         -- n
+                -- Let (IndexHead (Shape ys)) $                         -- m
+                -- Let (IndexTail (Shape xs)) $                         -- sh1
+                -- Let (IndexTail (Shape ys)) $                         -- sh2
+                -- Let (FromIndex
+                --      (IndexCons
+                --       (Intersect (v (s z)) (v z))                -- :. (intersect sh1 sh2) 
+                --       (PrimAdd num `app` tup2
+                --        (v (s (s (s z)))) (v (s (s z)))))                   -- n + m
+                --      (v z)) $
+                -- Let (IndexTail (v (s (s (s (s (s z))))))) $              -- sh
+                -- Let (IndexHead (v (s (s (s (s (s (s z)))))))) $          -- i
+                -- Cond                                                 -- 
+                -- (PrimLt scalarType `app` tup2
+                --  (v z) (v (s (s (s (s (s (s z))))))))                    -- i <* n
+                -- (Index xs (s (s z)))             -- xs ! ix
+                -- (Index ys                                            -- ys !
+                --  (IndexCons (v (s z))                                -- sh :.
+                --   (PrimSub num `app` tup2 (v z)                      -- i-n
+                --    (v (s (s (s (s (s (s z))))))))))
 
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
