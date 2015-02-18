@@ -139,10 +139,18 @@ splitArray
   -> DelayedOpenAcc aenv (Array (sh :. Int) e)
   -> DelayedOpenAcc aenv (Array (sh :. Int) e)
 splitArray n m delayed@Delayed{..}
-  = let sh' = withSplitPts n m extentD
-            $ error "splitArray: finish me"
+  = let sh' = withSplitPts n m extentD $
+              IndexCons (IndexTail (Shape delayed))
+                        (PrimSub num `app` tup2 (v z) (v (s z)))
+        f   = undefined
+        
+        -- f   = Lam . Body $
+        --       withSplitPts n m extentD $  
+        --       IndexCons (IndexTail (v (s (s (s (s (s (s (s z)))))))))
+        --                 (PrimAdd num `app` tup2 (IndexHead (v (s (s (s (s (s (s (s z)))))))))
+        --                  (v (s z)))
     in
-    Delayed{ extentD = sh', .. }
+    Delayed{ extentD = sh', indexD = f, .. }
 
 splitArray n m (Manifest pacc)
   = error "splitArray: finish me"
