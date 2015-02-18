@@ -43,10 +43,11 @@ import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, con
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
 import Data.Array.Accelerate.Trafo.Substitution
 import qualified Data.Array.Accelerate.AST              as AST
+import qualified Data.Array.Accelerate.Trafo.Fission    as Fission
 import qualified Data.Array.Accelerate.Trafo.Fusion     as Fusion
 import qualified Data.Array.Accelerate.Trafo.Rewrite    as Rewrite
-import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Sharing    as Sharing
+import qualified Data.Array.Accelerate.Trafo.Simplify   as Rewrite
 import qualified Data.Array.Accelerate.Trafo.Vectorise  as Vectorise
 
 #ifdef ACCELERATE_DEBUG
@@ -77,6 +78,10 @@ data Phase = Phase
     --   expressions. NOTE: currently always enabled.
   , enableAccFusion             :: Bool
 
+    -- | Fission computations?
+    --
+  , enableAccFission            :: Bool
+
     -- | Convert segment length arrays into segment offset arrays?
   , convertOffsetOfSegment      :: Bool
 
@@ -96,6 +101,7 @@ phases =  Phase
   , recoverSeqSharing      = True
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
+  , enableAccFission       = True
   , convertOffsetOfSegment = False
   , vectoriseSequences     = True
   }
@@ -116,7 +122,8 @@ convertAcc = convertAccWith phases
 
 convertAccWith :: Arrays arrs => Phase -> Acc arrs -> DelayedAcc arrs
 convertAccWith Phase{..} acc
-  = Fusion.convertAcc enableAccFusion
+  = Fission.convertAcc `when` enableAccFission
+  $ Fusion.convertAcc enableAccFusion
   $ Vectorise.vectoriseSeqAcc `when` vectoriseSequences
   $ Rewrite.convertSegments `when` convertOffsetOfSegment
   $ Sharing.convertAcc recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
@@ -131,7 +138,8 @@ convertAfun = convertAfunWith phases
 
 convertAfunWith :: Afunction f => Phase -> f -> DelayedAfun (AfunctionR f)
 convertAfunWith Phase{..} acc
-  = Fusion.convertAfun enableAccFusion
+  = Fission.convertAfun `when` enableAccFission
+  $ Fusion.convertAfun enableAccFusion
   $ Vectorise.vectoriseSeqAfun `when` vectoriseSequences
   $ Rewrite.convertSegmentsAfun `when` convertOffsetOfSegment
   $ Sharing.convertAfun recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp

@@ -20,7 +20,7 @@
 
 module Data.Array.Accelerate.Trafo.Fission (
 
-  convertAcc
+  convertAcc, convertAfun,
 
 ) where
 
@@ -42,6 +42,11 @@ import qualified Data.Array.Accelerate                          as A
 --
 convertAcc :: Arrays arrs => DelayedAcc arrs -> DelayedAcc arrs
 convertAcc = convertOpenAcc
+
+-- | Apply the fission transformation to a function of array arguments
+--
+convertAfun :: DelayedAfun f -> DelayedAfun f
+convertAfun = error "TODO: convertAfun"
 
 
 -- | Apply the fissioning transformation to an AST.
