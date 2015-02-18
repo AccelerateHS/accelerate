@@ -129,7 +129,7 @@ concatArray
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs ys = Generate shap func
+concatArray xs ys = Generate shap func -- extract $ Delayed{ extentD = shap, indexD = func }
   where shap  = Let (IndexHead (Shape xs)) $                         -- n
                 Let (IndexHead (Shape ys)) $                         -- m
                 Let (IndexTail (Shape xs)) $                         -- sh1
@@ -164,18 +164,21 @@ splitArray
   -> DelayedOpenAcc aenv (Array (sh :. Int) e)
   -> DelayedOpenAcc aenv (Array (sh :. Int) e)
 splitArray n m delayed@Delayed{..}
-  = let sh' = withSplitPts n m extentD $
+  = let sh' = withSplitPts n m delayed $
               IndexCons (IndexTail (Shape delayed))
                         (PrimSub num `app` tup2 (v z) (v (s z)))
-        f   = error "splitArray: finish me"
+        ix  = v (s (s (s (s (s (s (s z)))))))
+        f   = Lam . Body
+            $ withSplitPts n m delayed
+            $ IndexCons (IndexTail ix)
+                        (PrimAdd num `app` tup2 (IndexHead ix) (v (s z)))
         -- f   = Lam . Body $
         --       withSplitPts n m extentD $
-        --       Index delayed (
-        --         IndexCons (IndexTail (v (s (s (s (s (s (s (s z)))))))))
-        --         (PrimAdd num `app` tup2 (IndexHead (v (s (s (s (s (s (s (s z)))))))))
-        --          (v (s z))))
+        --       IndexCons (IndexTail ix)
+        --       (PrimAdd num `app` tup2 (IndexHead ix) (v (s z)))
     in
-    Delayed{ extentD = sh', indexD = f, .. }
+     inject $ Backpermute sh' f delayed
+--     Delayed{ extentD = sh', indexD = f, .. }
 
 splitArray n m (Manifest pacc)
   = error "splitArray: finish me"
@@ -185,15 +188,42 @@ splitArray n m (Manifest pacc)
 -- the last two bound variables the split indices for the start and end of chunk
 -- 'i'. Assumes that 'i < k'.
 --
+-- withSplitPts
+--     :: forall acc env aenv sh t. (Slice sh, Shape sh, Elt t)
+--     => Int
+--     -> Int
+--     -> PreOpenExp acc env aenv (sh :. Int)
+--     -> PreOpenExp acc (((((((env, Int), (Int, Int)), Int), Int), Int), Int), Int) aenv t
+--     -> PreOpenExp acc env aenv t
+-- withSplitPts k' i' sh cont
+--   = Let (IndexHead sh)
+--   $ Let (PrimQuotRem int `app` tup2 (v z) k)                                                            -- (chunk, leftover)
+--   $ Let (Prj (SuccTupIdx ZeroTupIdx) (v z))                                                             -- chunk
+--   $ Let (Prj ZeroTupIdx (v (s z)))                                                                      -- leftover
+--   $ Let (PrimAdd num `app` tup2 (v (s z)) (constant 1))                                                 -- chunk + 1
+--   $ Let (Cond (PrimLt scalarType `app` tup2 i (v (s z)))                                                -- if i <* leftover
+--               (PrimMul num `app` tup2 i (v z))                                                          --   then start = i * (chunk + 1)
+--               (PrimAdd num `app` tup2 (PrimMul num `app` tup2 i (v (s (s z)))) (v (s z))))              --   else start = i * chunk + leftover
+--   $ Let (Cond (PrimLt scalarType `app` tup2 i1 (v (s (s z))))                                           -- if i+1 <* leftover
+--               (PrimAdd num `app` tup2 (v z) (v (s (s (s z)))))                                          --   then end = start + chunk
+--               (PrimAdd num `app` tup2 (PrimMul num `app` tup2 i1 (v (s (s (s z))))) (v (s (s z)))))     --   else end = (i+1) * chunk + leftover
+--   $ cont
+--   where
+--     k           = constant k'
+--     i           = constant i'
+--     i1          = constant (i'+1)
+--     int         = integralType
+--     constant :: Elt e => e -> PreOpenExp acc env' aenv' e
+--     constant    = Const . fromElt
 withSplitPts
-    :: forall acc env aenv sh t. (Slice sh, Shape sh, Elt t)
+    :: forall acc env aenv sh e t. (Slice sh, Shape sh, Elt e, Elt t)
     => Int
     -> Int
-    -> PreOpenExp acc env aenv (sh :. Int)
+    -> acc aenv (Array (sh :. Int) e)
     -> PreOpenExp acc (((((((env, Int), (Int, Int)), Int), Int), Int), Int), Int) aenv t
     -> PreOpenExp acc env aenv t
-withSplitPts k' i' sh cont
-  = Let (IndexHead sh)
+withSplitPts k' i' acc cont
+  = Let (IndexHead (Shape acc))                                                                         -- n
   $ Let (PrimQuotRem int `app` tup2 (v z) k)                                                            -- (chunk, leftover)
   $ Let (Prj (SuccTupIdx ZeroTupIdx) (v z))                                                             -- chunk
   $ Let (Prj ZeroTupIdx (v (s z)))                                                                      -- leftover
@@ -206,12 +236,9 @@ withSplitPts k' i' sh cont
               (PrimAdd num `app` tup2 (PrimMul num `app` tup2 i1 (v (s (s (s z))))) (v (s (s z)))))     --   else end = (i+1) * chunk + leftover
   $ cont
   where
-    k           = constant k'
-    i           = constant i'
-    i1          = constant (i'+1)
-    int         = integralType
-    constant :: Elt e => e -> PreOpenExp acc env' aenv' e
-    constant    = Const . fromElt
+    k   = constant k'
+    i   = constant i'
+    i1  = constant (i'+1)
 
 -- Producet a type witness for the shape of a given array. This is used so that
 -- we can apply split/concat operations to arrays, which is only valid for
@@ -255,3 +282,9 @@ z = ZeroIdx
 
 s :: forall t env s. Idx env t -> Idx (env, s) t
 s = SuccIdx
+
+int :: IsIntegral a => IntegralType a
+int = integralType
+
+constant :: Elt e => e -> PreOpenExp acc env aenv e
+constant  = Const . fromElt
