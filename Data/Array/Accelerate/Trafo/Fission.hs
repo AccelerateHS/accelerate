@@ -100,19 +100,19 @@ convertOpenAcc (Manifest pacc)
                           (inject (Avar ZeroIdx))
 
     fold :: forall acc aenv sh e. (Shape sh, Elt e)
-         => PreFun     DelayedOpenAcc aenv (e -> e -> e)
-         -> PreExp     acc            aenv e
+         =>            DelayedFun aenv (e -> e -> e)
+         -> PreExp     DelayedOpenAcc aenv e
          ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
          -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
     fold f e a -- = error "fold: finish me"
-      -- | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin1 a
+      | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin1 a
       | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin2 a
---      | otherwise                                        = Fold f e a
+      | otherwise                                        = Fold f e a
       where
         splitjoin1
           :: (Shape sh', Slice sh')
           =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array sh' b)
         splitjoin1 a' = error "fold splitjoin1: finish me"
 
         splitjoin2
@@ -168,9 +168,8 @@ splitArray n m delayed@Delayed{..}
               IndexCons (IndexTail (Shape delayed))
                         (PrimSub num `app` tup2 (v z) (v (s z)))
     in Delayed{ extentD = sh', .. }
-
-splitArray n m (Manifest pacc)
-  = splitManifestArray n m $ Manifest pacc
+splitArray n m acc@(Manifest _)
+  = splitManifestArray n m acc
 
 splitManifestArray
   :: forall acc aenv sh e. (Slice sh, Shape sh, Elt e, Kit acc)
