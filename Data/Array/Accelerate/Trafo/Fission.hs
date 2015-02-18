@@ -63,6 +63,9 @@ convertOpenAcc (Manifest pacc)
       ZipWith{}         -> fusionError
       Slice{}           -> fusionError
       Replicate{}       -> fusionError
+
+      -- Otherwise, return pacc
+      _                 -> pacc
   where
     prim :: String
     prim        = showPreAccOp pacc
@@ -277,9 +280,6 @@ withSplitPts k' i' sh cont
     k           = constant k'
     i           = constant i'
     i1          = constant (i'+1)
-    int         = integralType
-    constant :: Elt e => e -> PreOpenExp acc env' aenv' e
-    constant    = Const . fromElt
 
 -- Producet a type witness for the shape of a given array. This is used so that
 -- we can apply split/concat operations to arrays, which is only valid for
