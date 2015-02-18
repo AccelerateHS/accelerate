@@ -56,6 +56,7 @@ convertOpenAcc (Manifest pacc)
   $ case pacc of
       Use a             -> Use a
       Map f a           -> map (cvtF f) (cvtA a)
+      Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
 
       ZipWith{}         -> fusionError
       Slice{}           -> fusionError
@@ -67,6 +68,9 @@ convertOpenAcc (Manifest pacc)
 
     cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
     cvtF = id
+
+    cvtE :: PreExp acc aenv e -> PreExp acc aenv e
+    cvtE = id
 
     cvtA :: Arrays a => DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
     cvtA = convertOpenAcc
@@ -96,6 +100,27 @@ convertOpenAcc (Manifest pacc)
               concatArray (inject (Avar (SuccIdx ZeroIdx)))
                           (inject (Avar ZeroIdx))
 
+    fold :: forall acc aenv sh e. (Shape sh, Elt e)
+         => PreFun     DelayedOpenAcc aenv (e -> e -> e)
+         -> PreExp     acc            aenv e
+         ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
+         -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
+    fold f e a = error "fold: finish me"
+      -- | Just REFL <- matchArrayShape a (undefined::DIM1) = splitjoin1 a
+      -- | Just REFL <- matchArrayShape a (undefined::DIM2) = splitjoin2 a
+      -- | otherwise                                        = Fold f e a
+      where
+        splitjoin1
+          :: (Shape sh', Slice sh')
+          =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
+        splitjoin1 a' = error "fold splitjoin1: finish me"
+        splitjoin2
+          :: (Shape sh', Slice sh')
+          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) a)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) b)
+        splitjoin2 a' = error "fold splitjoin2: finish me"
+        
 
 -- Concatenate two arrays, as in (++).
 --
@@ -142,13 +167,13 @@ splitArray n m delayed@Delayed{..}
   = let sh' = withSplitPts n m extentD $
               IndexCons (IndexTail (Shape delayed))
                         (PrimSub num `app` tup2 (v z) (v (s z)))
-        f   = undefined
-        
+        f   = error "splitArray: finish me"
         -- f   = Lam . Body $
-        --       withSplitPts n m extentD $  
-        --       IndexCons (IndexTail (v (s (s (s (s (s (s (s z)))))))))
-        --                 (PrimAdd num `app` tup2 (IndexHead (v (s (s (s (s (s (s (s z)))))))))
-        --                  (v (s z)))
+        --       withSplitPts n m extentD $
+        --       Index delayed (
+        --         IndexCons (IndexTail (v (s (s (s (s (s (s (s z)))))))))
+        --         (PrimAdd num `app` tup2 (IndexHead (v (s (s (s (s (s (s (s z)))))))))
+        --          (v (s z))))
     in
     Delayed{ extentD = sh', indexD = f, .. }
 
