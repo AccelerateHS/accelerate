@@ -90,6 +90,7 @@ convertOpenAcc (Manifest pacc)
     map f a
       | Just REFL <- matchArrayShape a (undefined::DIM1) = map' a
       | Just REFL <- matchArrayShape a (undefined::DIM2) = map' a
+      | Just REFL <- matchArrayShape a (undefined::DIM3) = map' a                                                           
       | otherwise                                        = Map f a
       where
         map' :: (Shape sh', Slice sh')
@@ -110,26 +111,16 @@ convertOpenAcc (Manifest pacc)
          ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
          -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
     fold f e a 
-      | Just REFL <- matchArrayShape a (undefined::DIM2) = fold'a a
-      | Just REFL <- matchArrayShape a (undefined::DIM3) = fold'b a
+      | Just REFL <- matchArrayShape a (undefined::DIM1) = fold' a
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = fold' a
+      | Just REFL <- matchArrayShape a (undefined::DIM3) = fold' a
       | otherwise                                        = Fold f e a
       where
-        fold'a
+        fold'
           :: (Shape sh', Slice sh')
-          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) e)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) e)
-        fold'a a' 
-          = let a1 = splitArray 2 0 a'
-                a2 = splitArray 2 1 a'
-            in Alet (inject            $ Fold f e a1) . inject $
-               Alet (inject . weaken s $ Fold f e a2) . inject $
-               concatArray (inject (Avar (s z)))
-                           (inject (Avar z))
-        fold'b
-          :: (Shape sh', Slice sh')
-          =>            DelayedOpenAcc aenv (Array ((sh' :. Int) :. Int) e)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) e)
-        fold'b a' 
+          =>            DelayedOpenAcc aenv (Array (sh' :. Int) e)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array sh' e)
+        fold' a' 
           = let a1 = splitArray 2 0 a'
                 a2 = splitArray 2 1 a'
             in Alet (inject            $ Fold f e a1) . inject $
