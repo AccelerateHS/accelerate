@@ -105,10 +105,11 @@ convertOpenAcc (Manifest pacc)
           = let a1 = splitArray 2 0 a'
                 a2 = splitArray 2 1 a'
             in
-            Alet (inject                  $ Map f a1) . inject $
-            Alet (inject . weaken SuccIdx $ Map f a2) . inject $
-              concatArray (inject (Avar (SuccIdx ZeroIdx)))
-                          (inject (Avar ZeroIdx))
+            Alet (inject            $ Map f a1) . inject $
+            Alet (inject . weaken s $ Map f a2) . inject $
+            -- concatArray expects manifest arrays arrays
+            concatArray (inject (Avar (SuccIdx ZeroIdx)))
+                        (inject (Avar ZeroIdx))
 
     fold :: forall aenv sh e. (Shape sh, Elt e)
          =>            DelayedFun aenv (e -> e -> e)
@@ -131,19 +132,22 @@ convertOpenAcc (Manifest pacc)
             in Alet (inject            $ Fold f e a1) . inject $
                Alet (inject . weaken s $ Fold f e a2) . inject $
                ZipWith (weaken (s . s) f)
-                       (inject (Avar (s z)))
-                       (inject (Avar z))
+                       (Delayed (Shape (inject (Avar (s z))))
+                                (Lam . Body $ Index (inject (Avar (s z))) (v z))
+                                undefined)
+                       (Delayed (Shape (inject (Avar z)))
+                                (Lam . Body $ Index (inject (Avar z)) (v z))
+                                undefined)
         
 
 -- Concatenate two arrays, as in (++).
 --
-
 concatArray
     :: (Slice sh, Shape sh, Elt e)
     =>            DelayedOpenAcc aenv (Array (sh :. Int) e)
     ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
     -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
-concatArray xs@(Manifest _) ys@(Manifest _) = Generate shap $ funce xs ys
+concatArray xs@(Manifest _) ys@(Manifest _) = Generate shap $ funce
   where shap = Let (IndexHead (makeShape xs)) $                         -- n
                Let (IndexHead (makeShape ys)) $                         -- m
                Let (IndexTail (makeShape xs)) $                         -- sh1
@@ -151,25 +155,24 @@ concatArray xs@(Manifest _) ys@(Manifest _) = Generate shap $ funce xs ys
                IndexCons (Intersect (v (s z)) (v z))                -- (:. (intersect sh1 sh2) 
                (PrimAdd num `app` tup2
                 (v (s (s (s z)))) (v (s (s z))))                    -- n + m)
+        funce = Lam . Body $
+                Let (IndexHead (makeShape xs)) $                         -- n
+                Let (IndexHead (makeShape ys)) $                         -- m
+                Let (IndexTail (makeShape xs)) $                         -- sh1
+                Let (IndexTail (makeShape ys)) $                         -- sh2
+                Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
+                Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
+                Cond                                                 -- 
+                (PrimLt scalarType `app` tup2
+                 (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
+                (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
+                (Index ys                                            -- ys !
+                 (IndexCons (v (s z))                                -- sh :.
+                  (PrimSub num `app` tup2 (v z)                      -- i-n
+                   (v (s (s (s (s (s z)))))))))
+
 concatArray _ _
-  = error "concatArray should not operate on delayed arrays!"
-    
--- --- i hate everything
-funce xs ys = Lam . Body $
-              Let (IndexHead (makeShape xs)) $                         -- n
-              Let (IndexHead (makeShape ys)) $                         -- m
-              Let (IndexTail (makeShape xs)) $                         -- sh1
-              Let (IndexTail (makeShape ys)) $                         -- sh2
-              Let (IndexTail (v (s (s (s (s z)))))) $              -- sh
-              Let (IndexHead (v (s (s (s (s (s z))))))) $          -- i
-              Cond                                                 -- 
-              (PrimLt scalarType `app` tup2
-               (v z) (v (s (s (s (s (s z)))))))                    -- i <* n
-              (Index xs (v (s (s (s (s (s (s z))))))))             -- xs ! ix
-              (Index ys                                            -- ys !
-               (IndexCons (v (s z))                                -- sh :.
-                (PrimSub num `app` tup2 (v z)                      -- i-n
-                 (v (s (s (s (s (s z)))))))))
+ = error "concatArray should not operate on delayed arrays!"
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
 --
@@ -183,20 +186,26 @@ splitArray n m delayed@Delayed{..}
   = let sh' = withSplitPts n m extentD $
               Let (PrimSub num `app` tup2 (v z) (v (s z))) $
               IndexCons (IndexTail (makeShape delayed))
-                        (v (s z))
+                        (v z)
         ix  = v (s (s (s (s (s (s (s z)))))))
         fe  = Lam . Body
             $ withSplitPts n m (makeShape delayed)
             $ Let (IndexCons (IndexTail ix)
                              (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
-            $ Index delayed (v z)
+            -- I feel really bad about this
+            $ (case indexD of
+                (Lam (Body b)) -> unsafeCoerce b
+                _ -> error "indexD isn't what I expected")
         fi  = Lam . Body
             $ Let (FromIndex (makeShape delayed) (v z))
             $ withSplitPts n m (makeShape delayed)
             $ Let (IndexCons (IndexTail ix)
                              (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
-            $ Index delayed (v z)
-    in Delayed{ extentD = sh',
+            -- here too :(
+            $ (case linearIndexD of
+                (Lam (Body b)) -> unsafeCoerce b
+                _ -> error "indexD isn't what I expected")
+    in Delayed{ extentD = sh', 
                 indexD = fe,
                 linearIndexD = fi
                 }
@@ -224,6 +233,7 @@ splitManifestArray k i acc
       where
         ix = v (s (s (s (s (s (s (s z)))))))
 
+-- and here :( :(
 makeShape arr@Manifest{} = Shape arr
 makeShape Delayed{..} = unsafeCoerce extentD
 
