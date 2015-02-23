@@ -23,7 +23,9 @@
 module Data.Array.Accelerate.Array.Memory.Table (
 
   -- Tables for host/device memory associations
-  MemoryTable, new, lookup, malloc, free, insertUnmanaged, reclaim
+  MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
+
+  StableArray, makeStableArray
 
 ) where
 
@@ -66,35 +68,35 @@ import qualified Data.Array.Accelerate.Debug                    as D
 -- semantics of weak pointers in the documentation).
 --
 type HashTable key val  = HT.BasicHashTable key val
-type MT p               = MVar ( HashTable HostArray (RemoteArray p) )
+type MT p               = MVar ( HashTable StableArray (RemoteArray p) )
 data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Weak (MT p))
                                       {-# UNPACK #-} !(Nursery p)
                                       (forall a. p a -> IO ())
 
--- Arrays on the host and in the remote memory.
+-- | An untyped reference to an array, similar to a stablename.
 --
-data HostArray where
-  HostArray :: Typeable e
-            => {-# UNPACK #-} !(StableName (ArrayData e))
-            -> HostArray
+data StableArray where
+  StableArray :: Typeable e
+              => {-# UNPACK #-} !(StableName (ArrayData e))
+              -> StableArray
 
 data RemoteArray p where
   RemoteArray :: Typeable e
               => {-# UNPACK #-} !(Weak (p e))
               -> RemoteArray p
 
-instance Eq HostArray where
-  HostArray a1 == HostArray a2
+instance Eq StableArray where
+  StableArray a1 == StableArray a2
     = maybe False (== a2) (gcast a1)
 
-instance Hashable HostArray where
+instance Hashable StableArray where
   {-# INLINE hashWithSalt #-}
-  hashWithSalt salt (HostArray sn)
+  hashWithSalt salt (StableArray sn)
     = salt `hashWithSalt` sn
 
-instance Show HostArray where
-  show (HostArray sn) = "Array #" ++ show (hashStableName sn)
+instance Show StableArray where
+  show (StableArray sn) = "Array #" ++ show (hashStableName sn)
 
 
 -- Referencing arrays
@@ -150,13 +152,14 @@ lookup (MemoryTable !ref _ _ _) !arr = do
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This may not always use the `malloc` provided by the `RemoteMemory` instance.
 -- In order to reduce the number of raw allocations, previously allocated remote
--- arrays will be re-used.
+-- arrays will be re-used. In the event that the remote memory is exhausted,
+-- 'Nothing' is returned.
 --
 malloc :: forall a b m. (Typeable a, Typeable b, Storable b, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePointer m)
        -> ArrayData a
        -> Int
-       -> m (RemotePointer m b)
+       -> m (Maybe (RemotePointer m b))
 malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- Note: [Allocation sizes]
   --
@@ -175,29 +178,36 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
       !bytes            = n' * sizeOf (undefined :: b)
   --
   mp  <- liftIO $ N.malloc bytes nursery
-  ptr <- case mp of
-           Just p       -> trace "malloc/nursery" $ return $ M.castPtr (Proxy :: Proxy m) p
-           Nothing      -> trace "malloc/new"     $ do
-             mp' <- M.malloc n'
-             case mp' of
-               Nothing -> trace "malloc/failed-reclaiming" $ do
-                  reclaim mt
-                  mp'' <- M.malloc n'
-                  case mp'' of
-                    Nothing -> error "Remote memory exhausted"
-                    Just p'' -> return p''
-               Just p -> return p
+  case mp of
+    Just p       -> trace "malloc/nursery" $ do
+      let p' = M.castPtr (Proxy :: Proxy m) p
+      insert mt ad p' bytes
+      return (Just p')
 
-  insert mt ad ptr bytes
-  return ptr
+    Nothing      -> trace "malloc/new"     $ do
+      mp' <- M.malloc n'
+      case mp' of
+        Nothing -> trace "malloc/failed-reclaiming" $ do
+           reclaim mt
+           M.malloc n'
+        Just p -> do
+          insert mt ad p bytes
+          return (Just p)
 
 
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
 free :: Typeable a => MemoryTable p -> ArrayData a -> IO ()
-free (MemoryTable !ref _ _ _) !arr = do
+free mt !arr = do
   sa <- makeStableArray  arr
+  freeStable mt sa
+
+-- | Deallocate the device array associated with the given StableArray. This
+-- is useful for other memory managers built on top of the memory table.
+--
+freeStable :: MemoryTable p -> StableArray -> IO ()
+freeStable (MemoryTable !ref _ _ _) !sa = do
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
     Nothing              -> message ("free/not found: " ++ show sa)
@@ -276,7 +286,7 @@ finalizer :: (RemoteMemory m, MonadIO m)
           -> (forall a. RemotePointer m a -> IO ())
           -> Weak (MT (RemotePointer m))
           -> Weak (NRS (RemotePointer m))
-          -> HostArray
+          -> StableArray
           -> RemotePointer m b
           -> Int
           -> IO ()
@@ -291,27 +301,27 @@ finalizer proxy free !weak_ref !weak_nrs !key !ptr !bytes = do
     Nothing  -> trace ("finalise/free: "     ++ show key) $ free ptr
     Just nrs -> trace ("finalise/nursery: "  ++ show key) $ N.stash proxy bytes  nrs ptr
 
-remoteFinalizer :: Weak (MT p) -> HostArray -> IO ()
+remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
   mr <- deRefWeak weak_ref
   case mr of
     Nothing  -> message ("finalise/dead table: " ++ show key)
     Just ref -> trace   ("finalise: "            ++ show key) $ withMVar ref (`HT.delete` key)
 
-table_finalizer :: HashTable HostArray (RemoteArray p) -> IO ()
+table_finalizer :: HashTable StableArray (RemoteArray p) -> IO ()
 table_finalizer !tbl
   = trace "table finaliser"
   $ HT.mapM_ (\(_,RemoteArray w) -> finalize w) tbl
 
-
 -- Miscellaneous
 -- -------------
 
+-- | Make a new StableArray.
 {-# INLINE makeStableArray #-}
-makeStableArray :: (MonadIO m, Typeable a) => ArrayData a -> m HostArray
+makeStableArray :: (MonadIO m, Typeable a) => ArrayData a -> m StableArray
 makeStableArray !arr = do
   sn <- liftIO (makeStableName arr)
-  return (HostArray sn)
+  return (StableArray sn)
 
 -- Debug
 -- -----

@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE TypeFamilies          #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Memory
@@ -10,14 +11,18 @@
 --
 
 module Data.Array.Accelerate.Array.Memory (
-  RemoteMemory(..)
+  RemoteMemory(..), PrimElt
   ) where
 
 import Data.Array.Accelerate.Array.Data
 
 import Data.Int
+import Data.Typeable
 import Foreign.Ptr
 import Foreign.Storable
+
+-- |Matches array element types to primitive types.
+type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typeable a)
 
 -- |Monads that have access to a remote memory.
 --
@@ -34,10 +39,10 @@ class Monad m => RemoteMemory m where
   malloc :: Storable e => Int -> m (Maybe (RemotePointer m e))
 
   -- | Copy from host array to remote memory.
-  poke :: (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a) => Int -> RemotePointer m a -> ArrayData e -> m ()
+  poke :: PrimElt e a => Int -> RemotePointer m a -> ArrayData e -> m ()
 
   -- | Copy from remote memory to host array.
-  peek :: (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a) => Int -> RemotePointer m a -> MutableArrayData e -> m ()
+  peek :: PrimElt e a => Int -> RemotePointer m a -> MutableArrayData e -> m ()
 
   -- | Free memory previously allocated with `malloc`.
   --

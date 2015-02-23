@@ -206,6 +206,7 @@ Library
                         Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Memory
                         Data.Array.Accelerate.Array.Memory.Table
+                        Data.Array.Accelerate.Array.Memory.Cache
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Debug
