@@ -127,27 +127,42 @@ dflags =
   ]
 
 
+class DebugFlag a where
+  def :: a
+
+instance DebugFlag Bool where
+  {-# INLINE def #-}
+  def = False
+
+instance DebugFlag (Maybe a) where
+  {-# INLINE def #-}
+  def = Nothing
+
+
 -- Initialise the debugging flags structure. This reads from both the command
 -- line arguments as well as the environment variable "ACCELERATE_FLAGS".
 -- Where applicable, options on the command line take precedence.
 --
+-- This is only available when compiled with debugging mode, because trying to
+-- access it at any other time is an error.
+--
+#ifdef ACCELERATE_DEBUG
 initialiseFlags :: IO Flags
 initialiseFlags = do
   argv  <- getArgs
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    n                   = Nothing
-    f                   = False
-    defaults            = Flags n n n n n n f f f f f f f f f f f f
+    defaults            = Flags def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
         [Option _ go]   -> go opts
         []              -> trace unknown opts
-        alts            -> trace (ambiguous alts) opts
-
+        alts            -> case find (\(Option flag _) -> flag == this) alts of
+                             Just (Option _ go) -> go opts
+                             Nothing            -> trace (ambiguous alts) opts
       where
         unknown         = render $ text "Unknown option:" <+> quotes (text this)
         ambiguous alts  = render $
@@ -156,15 +171,25 @@ initialiseFlags = do
                , text "Did you mean one of these?"
                , nest 4 $ vcat (map (\(Option s _) -> text s) alts)
                ]
+#endif
 
 
+-- This is only defined in debug mode because to access it at any other time
+-- should be an error.
+--
+#ifdef ACCELERATE_DEBUG
 {-# NOINLINE _flags #-}
 _flags :: IORef Flags
 _flags = unsafePerformIO $ newIORef =<< initialiseFlags
+#endif
 
 {-# INLINE queryFlag #-}
-queryFlag :: (Flags :-> a) -> IO a
+queryFlag :: DebugFlag a => (Flags :-> a) -> IO a
+#ifdef ACCELERATE_DEBUG
 queryFlag f = get f `fmap` readIORef _flags
+#else
+queryFlag _ = return def
+#endif
 
 
 type Mode = Flags :-> Bool
@@ -174,25 +199,11 @@ setFlag f   = setFlags [f]
 clearFlag f = clearFlags [f]
 
 setFlags, clearFlags :: [Mode] -> IO ()
+#ifdef ACCELERATE_DEBUG
 setFlags f   = modifyIORef _flags (\opt -> foldr (flip set True)  opt f)
 clearFlags f = modifyIORef _flags (\opt -> foldr (flip set False) opt f)
-
-
-{--
-{-# INLINE mode #-}
-mode :: Mode -> Bool
-#ifdef ACCELERATE_DEBUG
-mode f = unsafePerformIO $! queryFlag f
 #else
-mode _ = False
+setFlags _   = return ()
+clearFlags _ = return ()
 #endif
-
-{-# INLINE option #-}
-option :: (Flags :-> Maybe a) -> Maybe a
-#ifdef ACCELERATE_DEBUG
-option f = unsafePerformIO $! queryFlag f
-#else
-option _ = Nothing
-#endif
---}
 
