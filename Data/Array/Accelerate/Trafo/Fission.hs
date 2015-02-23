@@ -44,8 +44,15 @@ convertAcc = convertOpenAcc
 -- | Apply the fission transformation to a function of array arguments
 --
 convertAfun :: DelayedAfun f -> DelayedAfun f
-convertAfun = id
+convertAfun fun = case fun of
+  (Alam (Abody a)) -> (Alam (Abody $ convertOpenAcc a))
+  _                -> fun
 
+convertAfun' :: PreOpenAfun DelayedOpenAcc aenv f
+             -> PreOpenAfun DelayedOpenAcc aenv f 
+convertAfun' fun = case fun of
+  (Alam (Abody a)) -> (Alam (Abody $ convertOpenAcc a))
+  _                -> fun
 
 -- | Apply the fissioning transformation to an AST.
 --
@@ -68,6 +75,7 @@ convertOpenAcc (Manifest pacc)
       Replicate{}       -> fusionError
 
       Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
+      Apply f a         -> Apply (convertAfun' f) a
 
       -- Otherwise, return pacc
       _                 -> pacc
@@ -194,17 +202,16 @@ splitArray n m delayed@Delayed{..}
                              (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
             -- I feel really bad about this
             $ (case indexD of
-                (Lam (Body b)) -> unsafeCoerce b
-                _ -> error "indexD isn't what I expected")
+                (Lam (Body b)) -> unsafeCoerce b)
         fi  = Lam . Body
             $ Let (FromIndex (makeShape delayed) (v z))
             $ withSplitPts n m (makeShape delayed)
             $ Let (IndexCons (IndexTail ix)
                              (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
+            $ Let (ToIndex (makeShape delayed) (v z))
             -- here too :(
             $ (case linearIndexD of
-                (Lam (Body b)) -> unsafeCoerce b
-                _ -> error "indexD isn't what I expected")
+                (Lam (Body b)) -> unsafeCoerce b)
     in Delayed{ extentD = sh', 
                 indexD = fe,
                 linearIndexD = fi
