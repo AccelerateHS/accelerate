@@ -35,6 +35,8 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Type
 import Unsafe.Coerce
+import System.Environment
+import System.IO.Unsafe
 
 -- | Apply the fission transformation to a closed de Bruijn AST
 --
@@ -61,24 +63,26 @@ convertOpenAcc
     => DelayedOpenAcc aenv arrs
     -> DelayedOpenAcc aenv arrs
 convertOpenAcc p@Delayed{} = p
---  = $internalError "convertOpenAcc" "unexpected delayed array"
 
 convertOpenAcc (Manifest pacc)
-  = Manifest
-  $ case pacc of
-      Use a             -> Use a
-      Map f a           -> map (cvtF f) (cvtA a)
-      Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+  = case unsafePerformIO $ lookupEnv "FISSION" of
+     Nothing  -> Manifest pacc
+     Just "0" -> Manifest pacc
+     Just _   ->
+       Manifest
+       $ case pacc of
+          Use a             -> Use a
+          Map f a           -> map (cvtF f) (cvtA a)
+          Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
 
-      ZipWith{}         -> fusionError
-      Slice{}           -> fusionError
-      Replicate{}       -> fusionError
+          ZipWith{}         -> fusionError
+          Slice{}           -> fusionError
+          Replicate{}       -> fusionError
 
-      Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
-      Apply f a         -> Apply (convertAfun' f) a
+          Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
+          Apply f a         -> Apply (convertAfun' f) a
 
-      -- Otherwise, return pacc
-      _                 -> pacc
+          _                 -> pacc
   where
     prim :: String
     prim        = showPreAccOp pacc
@@ -97,7 +101,7 @@ convertOpenAcc (Manifest pacc)
     -- -----------------
 
     map :: forall aenv sh a b. (Shape sh, Elt a, Elt b)
-        => DelayedFun aenv (a -> b)
+           => DelayedFun aenv (a -> b)
         ->            DelayedOpenAcc aenv (Array sh a)
         -> PreOpenAcc DelayedOpenAcc aenv (Array sh b)
     map f a
@@ -107,20 +111,20 @@ convertOpenAcc (Manifest pacc)
       | otherwise                                        = Map f a
       where
         map' :: (Shape sh', Slice sh')
-             =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
+                =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
              -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
         map' a'
           = let a1 = splitArray 2 0 a'
                 a2 = splitArray 2 1 a'
             in
-            Alet (inject            $ Map f a1) . inject $
-            Alet (inject . weaken s $ Map f a2) . inject $
-            -- concatArray expects manifest arrays arrays
-            concatArray (inject (Avar (SuccIdx ZeroIdx)))
-                        (inject (Avar ZeroIdx))
+             Alet (inject            $ Map f a1) . inject $
+             Alet (inject . weaken s $ Map f a2) . inject $
+             -- concatArray expects manifest arrays arrays
+             concatArray (inject (Avar (SuccIdx ZeroIdx)))
+             (inject (Avar ZeroIdx))
 
     fold :: forall aenv sh e. (Shape sh, Elt e)
-         =>            DelayedFun aenv (e -> e -> e)
+            =>            DelayedFun aenv (e -> e -> e)
          -> PreExp     DelayedOpenAcc aenv e
          ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
          -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
@@ -132,7 +136,7 @@ convertOpenAcc (Manifest pacc)
       where
         fold'
           :: (Shape sh', Slice sh')
-          =>            DelayedOpenAcc aenv (Array (sh' :. Int) e)
+             =>            DelayedOpenAcc aenv (Array (sh' :. Int) e)
           -> PreOpenAcc DelayedOpenAcc aenv (Array sh' e)
         fold' a' 
           = let a1 = splitArray 2 0 a'
@@ -140,12 +144,12 @@ convertOpenAcc (Manifest pacc)
             in Alet (inject            $ Fold f e a1) . inject $
                Alet (inject . weaken s $ Fold f e a2) . inject $
                ZipWith (weaken (s . s) f)
-                       (Delayed (Shape (inject (Avar (s z))))
-                                (Lam . Body $ Index (inject (Avar (s z))) (v z))
-                                undefined)
-                       (Delayed (Shape (inject (Avar z)))
-                                (Lam . Body $ Index (inject (Avar z)) (v z))
-                                undefined)
+               (Delayed (Shape (inject (Avar (s z))))
+                (Lam . Body $ Index (inject (Avar (s z))) (v z))
+                undefined)
+               (Delayed (Shape (inject (Avar z)))
+                (Lam . Body $ Index (inject (Avar z)) (v z))
+                undefined)
         
 
 -- Concatenate two arrays, as in (++).
