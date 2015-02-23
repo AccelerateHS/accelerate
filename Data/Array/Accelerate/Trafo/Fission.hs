@@ -44,7 +44,7 @@ convertAcc = convertOpenAcc
 -- | Apply the fission transformation to a function of array arguments
 --
 convertAfun :: DelayedAfun f -> DelayedAfun f
-convertAfun = error "TODO: convertAfun"
+convertAfun = id
 
 
 -- | Apply the fissioning transformation to an AST.
