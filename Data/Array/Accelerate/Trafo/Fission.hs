@@ -37,7 +37,6 @@ import Data.Array.Accelerate.Type
 import Unsafe.Coerce
 import System.Environment
 import System.IO.Unsafe
-import Debug.Trace
 
 -- | Apply the fission transformation to a closed de Bruijn AST
 --
@@ -67,11 +66,11 @@ convertOpenAcc p@Delayed{} = p
 
 convertOpenAcc (Manifest pacc)
   = case unsafePerformIO $ lookupEnv "FISSION" of
-     Nothing  -> trace ("FISSION OFF") $ Manifest pacc
-     Just "0" -> trace ("FISSION OFF") $ Manifest pacc
-     Just "2" -> trace ("FISSION ON") $ convertOpenAcc2 (Manifest pacc)
-     Just "4" -> trace ("FISSION ON") $ convertOpenAcc4 (Manifest pacc)
-     Just _   -> trace ("FISSION ON") $ convertOpenAcc2 (Manifest pacc)
+     Nothing  ->  Manifest pacc
+     Just "0" ->  Manifest pacc
+     Just "2" ->  convertOpenAcc2 (Manifest pacc)
+     Just "4" ->  convertOpenAcc4 (Manifest pacc)
+     Just _   ->  convertOpenAcc2 (Manifest pacc)
 
 convertOpenAcc2
     :: forall aenv arrs. Arrays arrs
