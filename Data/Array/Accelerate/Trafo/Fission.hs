@@ -68,21 +68,117 @@ convertOpenAcc (Manifest pacc)
   = case unsafePerformIO $ lookupEnv "FISSION" of
      Nothing  -> Manifest pacc
      Just "0" -> Manifest pacc
-     Just _   ->
-       Manifest
-       $ case pacc of
-          Use a             -> Use a
-          Map f a           -> map (cvtF f) (cvtA a)
-          Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+     Just "2" -> convertOpenAcc2 (Manifest pacc)
+     Just "4" -> convertOpenAcc4 (Manifest pacc)
+     Just _   -> convertOpenAcc2 (Manifest pacc)
 
-          ZipWith{}         -> fusionError
-          Slice{}           -> fusionError
-          Replicate{}       -> fusionError
+convertOpenAcc2
+    :: forall aenv arrs. Arrays arrs
+    => DelayedOpenAcc aenv arrs
+    -> DelayedOpenAcc aenv arrs
+convertOpenAcc2 (Manifest pacc) =  
+  Manifest
+  $ case pacc of
+     Use a             -> Use a
+     Map f a           -> map (cvtF f) (cvtA a)
+     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
 
-          Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
-          Apply f a         -> Apply (convertAfun' f) a
+     ZipWith{}         -> fusionError
+     Slice{}           -> fusionError
+     Replicate{}       -> fusionError
 
-          _                 -> pacc
+     Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
+     Apply f a         -> Apply (convertAfun' f) a
+
+     _                 -> pacc
+  where
+    prim :: String
+    prim        = showPreAccOp pacc
+    fusionError = $internalError "convertOpenAcc" $ "unexpected fusible materials: " Prelude.++ prim
+
+    cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
+    cvtF = id
+
+    cvtE :: PreExp acc aenv e -> PreExp acc aenv e
+    cvtE = id
+
+    cvtA :: Arrays a => DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
+    cvtA = convertOpenAcc
+
+    -- The fission rules
+    -- -----------------
+
+    map :: forall aenv sh a b. (Shape sh, Elt a, Elt b)
+        => DelayedFun aenv (a -> b)
+        ->            DelayedOpenAcc aenv (Array sh a)
+        -> PreOpenAcc DelayedOpenAcc aenv (Array sh b)
+    map f a
+      | Just REFL <- matchArrayShape a (undefined::DIM1) = map' a
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = map' a
+      | Just REFL <- matchArrayShape a (undefined::DIM3) = map' a                                                           
+      | otherwise                                        = Map f a
+      where
+        map' :: (Shape sh', Slice sh')
+                =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
+             -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
+        map' a'
+          = let a1 = splitArray 2 0 a'
+                a2 = splitArray 2 1 a'
+            in
+             Alet (inject            $ Map f a1) . inject $
+             Alet (inject . weaken s $ Map f a2) . inject $
+             -- concatArray expects manifest arrays arrays
+             concatArray (inject (Avar (SuccIdx ZeroIdx)))
+                         (inject (Avar ZeroIdx))
+
+    fold :: forall aenv sh e. (Shape sh, Elt e)
+         =>            DelayedFun aenv (e -> e -> e)
+         -> PreExp     DelayedOpenAcc aenv e
+         ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
+         -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
+    fold f e a 
+      | Just REFL <- matchArrayShape a (undefined::DIM1) = fold' a
+      | Just REFL <- matchArrayShape a (undefined::DIM2) = fold' a
+      | Just REFL <- matchArrayShape a (undefined::DIM3) = fold' a
+      | otherwise                                        = Fold f e a
+      where
+        fold'
+          :: (Shape sh', Slice sh')
+          =>            DelayedOpenAcc aenv (Array (sh' :. Int) e)
+          -> PreOpenAcc DelayedOpenAcc aenv (Array sh' e)
+        fold' a' 
+          = let a1 = splitArray 2 0 a'
+                a2 = splitArray 2 1 a'
+            in Alet (inject            $ Fold f e a1) . inject $
+               Alet (inject . weaken s $ Fold f e a2) . inject $
+               ZipWith (weaken (s . s) f)
+               (Delayed (Shape (inject (Avar (s z))))
+                (Lam . Body $ Index (inject (Avar (s z))) (v z))
+                undefined)
+               (Delayed (Shape (inject (Avar z)))
+                (Lam . Body $ Index (inject (Avar z)) (v z))
+                undefined)
+
+
+convertOpenAcc4
+    :: forall aenv arrs. Arrays arrs
+    => DelayedOpenAcc aenv arrs
+    -> DelayedOpenAcc aenv arrs
+convertOpenAcc4 (Manifest pacc) =  
+  Manifest
+  $ case pacc of
+     Use a             -> Use a
+     Map f a           -> map (cvtF f) (cvtA a)
+     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+
+     ZipWith{}         -> fusionError
+     Slice{}           -> fusionError
+     Replicate{}       -> fusionError
+
+     Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
+     Apply f a         -> Apply (convertAfun' f) a
+
+     _                 -> pacc
   where
     prim :: String
     prim        = showPreAccOp pacc
@@ -114,14 +210,25 @@ convertOpenAcc (Manifest pacc)
                 =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
              -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
         map' a'
-          = let a1 = splitArray 2 0 a'
-                a2 = splitArray 2 1 a'
+          = let a1 = splitArray 4 0 a'
+                a2 = splitArray 4 1 a'
+                a3 = splitArray 4 2 a'
+                a4 = splitArray 4 3 a'
             in
-             Alet (inject            $ Map f a1) . inject $
+             Alet (inject $ Map f a1) . inject $
              Alet (inject . weaken s $ Map f a2) . inject $
-             -- concatArray expects manifest arrays arrays
-             concatArray (inject (Avar (SuccIdx ZeroIdx)))
-             (inject (Avar ZeroIdx))
+             Alet (inject . weaken (s . s) $ Map f a3) . inject $
+             Alet (inject . weaken (s . s . s) $ Map f a4) . inject $
+             -- This should be replaced by a smarter concat!
+             Alet (inject
+                   (concatArray (inject (Avar (s (s z))))
+                                (inject (Avar (s (s (s z))))))) . inject $
+             Alet (inject
+                   (concatArray (inject (Avar (s (s z))))
+                                (inject (Avar (s z))))) . inject $
+             (concatArray (inject (Avar (s z)))
+                          (inject (Avar z)))
+             
 
     fold :: forall aenv sh e. (Shape sh, Elt e)
             =>            DelayedFun aenv (e -> e -> e)
@@ -150,7 +257,7 @@ convertOpenAcc (Manifest pacc)
                (Delayed (Shape (inject (Avar z)))
                 (Lam . Body $ Index (inject (Avar z)) (v z))
                 undefined)
-        
+
 
 -- Concatenate two arrays, as in (++).
 --
