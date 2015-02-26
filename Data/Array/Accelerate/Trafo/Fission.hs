@@ -81,7 +81,7 @@ convertOpenAcc2 (Manifest pacc) =
   $ case pacc of
      Use a             -> Use a
      Map f a           -> map (cvtF f) (cvtA a)
-     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+--     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
 
      ZipWith{}         -> fusionError
      Slice{}           -> fusionError
