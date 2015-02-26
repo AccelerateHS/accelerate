@@ -24,12 +24,14 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
   -- Tables for host/device memory associations
   MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
+  availableMem,
 
   StableArray, makeStableArray
 
 ) where
 
 import Prelude                                                  hiding ( lookup )
+import Data.Int
 import Data.Maybe                                               ( isJust )
 import Data.Hashable                                            ( Hashable(..) )
 import Data.Proxy
@@ -37,7 +39,7 @@ import Data.Typeable                                            ( Typeable, gcas
 import Control.Monad                                            ( unless )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent                                       ( yield )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, mkWeakMVar )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, mkWeak, deRefWeak, finalize )
 import System.Mem.StableName                                    ( StableName, makeStableName, hashStableName )
@@ -244,6 +246,16 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
 
+-- |The amount of memory that can be considered available for new arrays. As
+-- the MemoryTable re-uses arrays, this gives a more accurate answer than
+-- Data.Array.Accelerate.Memory.availableMem
+availableMem :: (RemoteMemory m, MonadIO m) => MemoryTable p -> m Int64
+availableMem (MemoryTable _ _ !nrs _) = do
+  available <- M.availableMem
+  cached    <- liftIO $ N.size nrs
+  return (available + cached)
+
+
 -- Removing entries
 -- ----------------
 
@@ -257,7 +269,7 @@ reclaim (MemoryTable _ weak_ref (Nursery nrs _) free) = do
   liftIO $ do
     performGC
     yield
-    withMVar nrs (N.flush free)
+    modifyMVar_ nrs (\(tbl,_) -> N.flush free tbl >> return (tbl, 0))
     mr <- deRefWeak weak_ref
     case mr of
       Nothing  -> return ()

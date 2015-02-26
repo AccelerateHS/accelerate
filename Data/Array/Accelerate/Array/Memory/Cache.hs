@@ -34,13 +34,14 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 
 import Prelude                                                  hiding ( lookup )
 import Data.Functor                                             ( (<$>) )
+import Data.Int
 import Data.Maybe                                               ( isJust )
 import Data.Typeable                                            ( Typeable )
 import Control.Monad                                            ( unless, filterM )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar )
 import System.CPUTime
-import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr )
+import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr, finalize )
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -56,13 +57,16 @@ import qualified Data.Array.Accelerate.Array.Memory.Table       as MT
 -- A key invariant is that the arrays in the MemoryTable are a subset of the
 -- arrays in the UseTable. The UseTable reflects all arrays that have ever been
 -- in the cache.
-data MemoryCache p task = MemoryCache (MemoryTable p) (UseTable task)
+data MemoryCache p task = MemoryCache (MemoryTable p) (UseTable task) (Weak (UT task))
 
-type UseTable task = MVar (HT.BasicHashTable StableArray (Used task))
+type UseTable task = MVar (UT task)
+
+type UT task = HT.BasicHashTable StableArray (Used task)
 
 data Status = Clean     -- Array in remote memory matches array in host memory.
             | Dirty     -- Array in remote memory has been modified.
             | Unmanaged -- Array in remote memory was injected by FFI, so we
+            | Evicted   -- Array has been evicted from remote memory
                         -- cannot remove it under any circumstance.
             deriving Eq
 
@@ -87,8 +91,15 @@ class Task task where
 instance Task () where
   isDone () = return True
 
--- Referencing arrays
--- ------------------
+-- At what percentage of available memory should we start evicting old arrays to
+-- host memory.
+--
+-- RCE: This is highly necessary with the CUDA backend as OSX's (and presumably
+-- other OSes) UI doesn't handle GPU memory exhaustion very well (it crashes).
+--
+-- RCE: Experimentation should be done to come up with a better value.
+threshold :: Float
+threshold = 10.0
 
 -- |Create a new memory cache from host to remote arrays.
 --
@@ -102,7 +113,8 @@ new free = do
   mt   <- MT.new free
   utbl <- liftIO $ HT.new
   ref  <- liftIO $ newMVar utbl
-  return $ MemoryCache mt ref
+  weak_utbl <- liftIO $ mkWeakPtr utbl Nothing
+  return $ MemoryCache mt ref weak_utbl
 
 -- |Perform some IO action that requires the remote pointer corresponding to
 -- the given array. Returns `Nothing` if the array have NEVER been in the
@@ -122,13 +134,12 @@ withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, Mona
            -> ArrayData a
            -> (RemotePointer m b -> IO (task, c))
            -> m (Maybe c)
-withRemote mc@(MemoryCache !tbl !ref) !arr run = do
+withRemote mc@(MemoryCache !tbl !ref _) !arr run = do
   mp  <- liftIO $ withMVar ref $ const $ MT.lookup tbl arr
   case mp of
     Just p  -> Just <$> run' p -- The array already exists, use it.
     Nothing -> trace "withRemote/array not found" $ do
-      mp' <- copyIfKnown -- If we have the array backed up in host memory,
-                         -- move it back into the remote memory and use it.
+      mp' <- copyIfKnown
       case mp' of
         Just p -> Just <$> run' p -- The move was possible.
         Nothing -> return Nothing -- The array was never in the table.
@@ -148,7 +159,8 @@ withRemote mc@(MemoryCache !tbl !ref) !arr run = do
       mu <- liftIO $ withMVar ref $ flip HT.lookup key
       case mu of
         Nothing -> return Nothing
-        Just usage -> Just <$> mallocWithUsage mc arr usage
+        Just usage -> trace "withRemote/reuploading-evicted-array" $
+                      Just <$> mallocWithUsage mc arr usage
 
     run' :: RemotePointer m b -> m c
     run' p = liftIO $ do
@@ -164,7 +176,7 @@ withRemote mc@(MemoryCache !tbl !ref) !arr run = do
 -- | Check if a given array has ever been in the cache.
 --
 contains :: forall e a p task. PrimElt e a => MemoryCache p task -> ArrayData e -> IO Bool
-contains (MemoryCache _ ref) !ad = withMVar ref $ \utbl -> do
+contains (MemoryCache _ ref _) !ad = withMVar ref $ \utbl -> do
   key <- MT.makeStableArray ad
   isJust <$> HT.lookup utbl key
 
@@ -183,10 +195,11 @@ malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        -> Bool                               -- ^True if host array is frozen.
        -> Int
        -> m ()
-malloc mc !ad !frozen !n = do
+malloc mc@(MemoryCache _ _ weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
+  key <- MT.makeStableArray ad
   let status = if frozen then Clean else Dirty
-  weak_arr <- liftIO $ mkWeakPtr ad Nothing
+  weak_arr <- liftIO $ mkWeakPtr ad (Just $ finalizer key weak_utbl)
   _ <- mallocWithUsage mc ad (Used ts status [] n weak_arr)
   return ()
 
@@ -196,19 +209,26 @@ mallocWithUsage
     -> ArrayData e
     -> Used task
     -> m (RemotePointer m a)
-mallocWithUsage (MemoryCache !mt !ref) !ad !usage@(Used _ _ _ n _) = do
+mallocWithUsage (MemoryCache !mt !ref _) !ad !usage@(Used _ _ _ n _) = do
   utbl <- liftIO $ takeMVar ref
   p <- malloc' utbl
   liftIO $ putMVar ref utbl
   return p
   where
-    malloc' :: HT.BasicHashTable StableArray (Used task) -> m (RemotePointer m a)
     malloc' utbl = do
+      left <- percentAvailable mt
+      if left < threshold
+        then management "malloc/threshold-reached" >> do
+          success <- evictLRU utbl mt
+          if success then malloc' utbl else malloc'' utbl
+        else malloc'' utbl
+
+    malloc'' utbl = do
       mp <- MT.malloc mt ad n :: m (Maybe (RemotePointer m a))
       p <- case mp of
-        Nothing -> trace "malloc/evicting-eldest-array" $ do
+        Nothing -> do
           success <- evictLRU utbl mt
-          if success then malloc' utbl else error "Remote memory exhausted"
+          if success then malloc'' utbl else error "Remote memory exhausted"
         Just p -> return p
       liftIO $ do
         key <- MT.makeStableArray ad
@@ -216,37 +236,55 @@ mallocWithUsage (MemoryCache !mt !ref) !ad !usage@(Used _ _ _ n _) = do
       return p
 
 evictLRU :: forall m task. (RemoteMemory m, MonadIO m, Task task)
-         => HT.BasicHashTable StableArray (Used task)
+         => UT task
          -> MemoryTable (RemotePointer m)
          -> m Bool
-evictLRU utbl mt = do
+evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
   mused <- liftIO $ HT.foldM eldest Nothing utbl
   case mused of
-    Just (sa, Used _ status _ n weak_arr) -> do
+    Just (sa, Used ts status tasks n weak_arr) -> do
       mad <- liftIO $ deRefWeak weak_arr
       case mad of
-        Nothing ->
-          -- The array is no longer reachable. We can free it without concern.
+        Nothing -> do
+          -- This can only happen if our eviction process was interrupted by
+          -- garbage collection. In which case, even though we didn't actually
+          -- evict anything, we should return true, as we know some remote
+          -- memory is now free.
+          --
+          -- Small caveat: Due to finalisers being delayed, it's a good idea
+          -- to free the array here.
           liftIO $ MT.freeStable mt sa
+          liftIO $ finalize weak_arr
+          message "evictLRU/Accelerate GC interrupted by GHC GC"
         Just arr -> do
           copyIfNecessary status n arr
-          unless (status == Unmanaged) (liftIO $ MT.free mt arr)
+          liftIO $ MT.free mt arr
+          liftIO $ HT.insert utbl sa (Used ts Evicted tasks n weak_arr)
       return True
     _ -> trace "evictLRU/All arrays in use, unable to evict" $ return False
   where
     -- Find the eldest, not currently in use, array.
     eldest :: (Maybe (StableArray, Used task)) -> (StableArray, Used task) -> IO (Maybe (StableArray, Used task))
-    eldest prev (sa, used@(Used ts status tasks n weak_arr)) = do
-        tasks' <- cleanUses tasks
-        HT.insert utbl sa (Used ts status tasks' n weak_arr)
-        case tasks' of
-          [] | Just (_, Used ts' _ _ _ _) <-prev
-             , ts' < ts -> return (Just (sa, used))
-          _  -> return prev
+    eldest prev (sa, used@(Used ts status tasks n weak_arr)) | evictable status = do
+      tasks' <- cleanUses tasks
+      HT.insert utbl sa (Used ts status tasks' n weak_arr)
+      case tasks' of
+        [] | Just (_, Used ts' _ _ _ _) <- prev
+           , ts' < ts        -> return (Just (sa, used))
+           | Nothing <- prev -> return (Just (sa, used))
+        _  -> return prev
+    eldest prev _ = return prev
+
+    evictable :: Status -> Bool
+    evictable Clean     = True
+    evictable Dirty     = True
+    evictable Unmanaged = False
+    evictable Evicted   = False
 
     copyIfNecessary :: PrimElt e a => Status -> Int -> ArrayData e -> m ()
     copyIfNecessary Clean     _ _ = return ()
     copyIfNecessary Unmanaged _ _ = return ()
+    copyIfNecessary Evicted   _ _ = $internalError "evictLRU" "Attempting to evict already evicted array"
     copyIfNecessary Dirty n ad = do
       mp <- liftIO $ MT.lookup mt ad
       case mp of
@@ -257,7 +295,7 @@ evictLRU utbl mt = do
 -- Typically this should only be called in very specific circumstances.
 --
 free :: Typeable a => MemoryCache p task -> ArrayData a -> IO ()
-free (MemoryCache !mt !ref) !arr = withMVar ref $ \utbl -> do
+free (MemoryCache !mt !ref _) !arr = withMVar ref $ \utbl -> do
   key <- MT.makeStableArray arr
   HT.delete utbl key
   MT.freeStable mt key
@@ -270,7 +308,7 @@ free (MemoryCache !mt !ref) !arr = withMVar ref $ \utbl -> do
 -- This typically only has use for backends that provide an FFI.
 --
 insertUnmanaged :: (PrimElt e a, MonadIO m) => MemoryCache p task -> ArrayData e -> p a -> m ()
-insertUnmanaged (MemoryCache mt ref) !arr !ptr = liftIO . withMVar ref $ \utbl -> do
+insertUnmanaged (MemoryCache mt ref _) !arr !ptr = liftIO . withMVar ref $ \utbl -> do
   key <- MT.makeStableArray arr
   MT.insertUnmanaged mt arr ptr
   ts <- getCPUTime
@@ -281,11 +319,18 @@ insertUnmanaged (MemoryCache mt ref) !arr !ptr = liftIO . withMVar ref $ \utbl -
 -- Removing entries
 -- ----------------
 
+finalizer :: StableArray -> Weak (UT task) -> IO ()
+finalizer arr weak_utbl = do
+  mutbl <- deRefWeak weak_utbl
+  case mutbl of
+    Nothing -> return ()
+    Just utbl -> HT.delete utbl arr
+
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
 reclaim :: forall m task. (RemoteMemory m, MonadIO m) => MemoryCache (RemotePointer m) task -> m ()
-reclaim (MemoryCache !mt _) = MT.reclaim mt
+reclaim (MemoryCache !mt _ _) = MT.reclaim mt
 
 
 -- Miscellaneous
@@ -294,12 +339,29 @@ reclaim (MemoryCache !mt _) = MT.reclaim mt
 cleanUses :: Task task => [task] -> IO [task]
 cleanUses = filterM (fmap not . isDone)
 
+percentAvailable :: (RemoteMemory m, MonadIO m) => MemoryTable p -> m Float
+percentAvailable mt  = do
+  left  <- MT.availableMem mt
+  total <- M.totalMem
+  return (100.0 * fromIntegral left / fromIntegral total)
+
 -- Debug
 -- -----
+
+{-# INLINE showBytes #-}
+showBytes :: Int64 -> String
+showBytes x = D.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
 trace :: MonadIO m => String -> m a -> m a
 trace msg next = message msg >> next
+
+{-# INLINE management #-}
+management :: (RemoteMemory m, MonadIO m) => String -> m ()
+management msg = D.when D.dump_gc $ do
+  left <- M.availableMem
+  total <- M.totalMem
+  message (msg ++ " (" ++ showBytes left ++ "/" ++ showBytes total ++ " available)")
 
 {-# INLINE message #-}
 message :: MonadIO m => String -> m ()
