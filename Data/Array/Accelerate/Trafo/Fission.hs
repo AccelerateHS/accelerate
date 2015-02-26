@@ -69,7 +69,7 @@ convertOpenAcc (Manifest pacc)
      Nothing  ->  Manifest pacc
      Just "0" ->  Manifest pacc
      Just "2" ->  convertOpenAcc2 (Manifest pacc)
-     Just "4" ->  convertOpenAcc4 (Manifest pacc)
+--     Just "4" ->  convertOpenAcc4 (Manifest pacc)
      Just _   ->  convertOpenAcc2 (Manifest pacc)
 
 convertOpenAcc2
@@ -81,7 +81,8 @@ convertOpenAcc2 (Manifest pacc) =
   $ case pacc of
      Use a             -> Use a
      Map f a           -> map (cvtF f) (cvtA a)
---     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
+     Generate sh f     -> generate sh f
 
      ZipWith{}         -> fusionError
      Slice{}           -> fusionError
@@ -109,7 +110,7 @@ convertOpenAcc2 (Manifest pacc) =
     -- -----------------
 
     map :: forall aenv sh a b. (Shape sh, Elt a, Elt b)
-        => DelayedFun aenv (a -> b)
+        =>            DelayedFun     aenv (a -> b)
         ->            DelayedOpenAcc aenv (Array sh a)
         -> PreOpenAcc DelayedOpenAcc aenv (Array sh b)
     map f a
@@ -119,7 +120,7 @@ convertOpenAcc2 (Manifest pacc) =
       | otherwise                                        = Map f a
       where
         map' :: (Shape sh', Slice sh')
-                =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
+             =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
              -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
         map' a'
           = let a1 = splitArray 2 0 a'
@@ -153,111 +154,35 @@ convertOpenAcc2 (Manifest pacc) =
                Alet (inject . weaken s $ Fold f e a2) . inject $
                ZipWith (weaken (s . s) f)
                (Delayed (Shape (inject (Avar (s z))))
-                (Lam . Body $ Index (inject (Avar (s z))) (v z))
-                undefined)
+                (Lam . Body $
+                 Index (inject (Avar (s z))) (v z))
+                (Lam . Body $
+                 LinearIndex (inject (Avar (s z))) (v z)))
                (Delayed (Shape (inject (Avar z)))
-                (Lam . Body $ Index (inject (Avar z)) (v z))
-                undefined)
-
-
-convertOpenAcc4
-    :: forall aenv arrs. Arrays arrs
-    => DelayedOpenAcc aenv arrs
-    -> DelayedOpenAcc aenv arrs
-convertOpenAcc4 (Manifest pacc) =  
-  Manifest
-  $ case pacc of
-     Use a             -> Use a
-     Map f a           -> map (cvtF f) (cvtA a)
-     Fold f e a        -> fold (cvtF f) (cvtE e) (cvtA a)
-
-     ZipWith{}         -> fusionError
-     Slice{}           -> fusionError
-     Replicate{}       -> fusionError
-
-     Alet lhs rhs      -> Alet (convertOpenAcc lhs) (convertOpenAcc rhs)
-     Apply f a         -> Apply (convertAfun' f) a
-
-     _                 -> pacc
-  where
-    prim :: String
-    prim        = showPreAccOp pacc
-    fusionError = $internalError "convertOpenAcc" $ "unexpected fusible materials: " Prelude.++ prim
-
-    cvtF :: PreOpenFun acc env aenv f -> PreOpenFun acc env aenv f
-    cvtF = id
-
-    cvtE :: PreExp acc aenv e -> PreExp acc aenv e
-    cvtE = id
-
-    cvtA :: Arrays a => DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
-    cvtA = convertOpenAcc
-
-    -- The fission rules
-    -- -----------------
-
-    map :: forall aenv sh a b. (Shape sh, Elt a, Elt b)
-           => DelayedFun aenv (a -> b)
-        ->            DelayedOpenAcc aenv (Array sh a)
-        -> PreOpenAcc DelayedOpenAcc aenv (Array sh b)
-    map f a
-      | Just REFL <- matchArrayShape a (undefined::DIM1) = map' a
-      | Just REFL <- matchArrayShape a (undefined::DIM2) = map' a
-      | Just REFL <- matchArrayShape a (undefined::DIM3) = map' a                                                           
-      | otherwise                                        = Map f a
-      where
-        map' :: (Shape sh', Slice sh')
-                =>            DelayedOpenAcc aenv (Array (sh' :. Int) a)
-             -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) b)
-        map' a'
-          = let a1 = splitArray 4 0 a'
-                a2 = splitArray 4 1 a'
-                a3 = splitArray 4 2 a'
-                a4 = splitArray 4 3 a'
-            in
-             Alet (inject $ Map f a1) . inject $
-             Alet (inject . weaken s $ Map f a2) . inject $
-             Alet (inject . weaken (s . s) $ Map f a3) . inject $
-             Alet (inject . weaken (s . s . s) $ Map f a4) . inject $
-             -- This should be replaced by a smarter concat!
-             Alet (inject
-                   (concatArray (inject (Avar (s (s z))))
-                                (inject (Avar (s (s (s z))))))) . inject $
-             Alet (inject
-                   (concatArray (inject (Avar (s (s z))))
-                                (inject (Avar (s z))))) . inject $
-             (concatArray (inject (Avar (s z)))
-                          (inject (Avar z)))
-             
-
-    fold :: forall aenv sh e. (Shape sh, Elt e)
-            =>            DelayedFun aenv (e -> e -> e)
-         -> PreExp     DelayedOpenAcc aenv e
-         ->            DelayedOpenAcc aenv (Array (sh :. Int) e)
-         -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
-    fold f e a 
-      | Just REFL <- matchArrayShape a (undefined::DIM1) = fold' a
-      | Just REFL <- matchArrayShape a (undefined::DIM2) = fold' a
-      | Just REFL <- matchArrayShape a (undefined::DIM3) = fold' a
-      | otherwise                                        = Fold f e a
-      where
-        fold'
-          :: (Shape sh', Slice sh')
-             =>            DelayedOpenAcc aenv (Array (sh' :. Int) e)
-          -> PreOpenAcc DelayedOpenAcc aenv (Array sh' e)
-        fold' a' 
-          = let a1 = splitArray 2 0 a'
-                a2 = splitArray 2 1 a'
-            in Alet (inject            $ Fold f e a1) . inject $
-               Alet (inject . weaken s $ Fold f e a2) . inject $
-               ZipWith (weaken (s . s) f)
-               (Delayed (Shape (inject (Avar (s z))))
-                (Lam . Body $ Index (inject (Avar (s z))) (v z))
-                undefined)
-               (Delayed (Shape (inject (Avar z)))
-                (Lam . Body $ Index (inject (Avar z)) (v z))
-                undefined)
-
+                (Lam . Body $
+                 Index (inject (Avar z)) (v z))
+                (Lam . Body $
+                 LinearIndex (inject (Avar (s z))) (v z)))
+               
+    generate :: forall aenv sh e. (Shape sh, Elt e)
+             => PreExp     DelayedOpenAcc aenv sh
+             ->            DelayedFun     aenv (sh -> e)
+             -> PreOpenAcc DelayedOpenAcc aenv (Array sh e)
+    generate shExp f
+      | Just REFL <- matchShape shExp (undefined::DIM1) = generate' shExp f
+      | Just REFL <- matchShape shExp (undefined::DIM2) = generate' shExp f
+      | Just REFL <- matchShape shExp (undefined::DIM3) = generate' shExp f
+      | otherwise                                       = Generate shExp f
+      where generate' 
+              :: (Shape sh', Slice sh')
+              => PreExp     DelayedOpenAcc aenv (sh' :. Int)
+              ->            DelayedFun     aenv ((sh' :. Int) -> e)
+              -> PreOpenAcc DelayedOpenAcc aenv (Array (sh' :. Int) e) 
+            generate' sh0 f0
+              = Alet (inject            $ genSplit 2 0 sh0 f0) . inject $
+                Alet (inject . weaken s $ genSplit 2 1 sh0 f0) . inject $
+                concatArray (inject (Avar (SuccIdx ZeroIdx)))
+                            (inject (Avar ZeroIdx))
 
 -- Concatenate two arrays, as in (++).
 --
@@ -293,6 +218,44 @@ concatArray xs@(Manifest _) ys@(Manifest _) = Generate shap $ funce
 concatArray _ _
  = error "concatArray should not operate on delayed arrays!"
 
+genSplit :: (Slice sh, Shape sh, Elt e)
+         => Int
+         -> Int
+         -> PreExp     DelayedOpenAcc aenv (sh :. Int)
+         ->            DelayedFun     aenv ((sh :. Int) -> e)
+         -> PreOpenAcc DelayedOpenAcc aenv (Array (sh :. Int) e)
+genSplit n m sh f = Generate shap func
+  where shap = withSplitPts n m sh $
+               Let (PrimSub num `app` tup2 (v z) (v (s z))) $
+               -- I hate everything
+               IndexCons (IndexTail (unsafeCoerce sh :: PreOpenExp
+                                                        DelayedOpenAcc
+                                                        (((((((((), Int), (Int, Int)), Int), Int), Int), Int), Int), Int)
+                                                        aenv
+                                                        (sh :. Int)))
+                         (v z)
+        x'  = (s (s (s (s (s (s (s z)))))))
+        body = Let (IndexTail (v (s z))) $
+               Let (IndexHead (v (s (s z)))) $
+               withSplitPts n m (v (s (s z))) $
+               Let (IndexCons
+                    (v (s x'))
+                    (PrimAdd num `app` tup2
+                     (v x')
+                     (v (s z)))) $
+               (case f of
+                 (Lam (Body b)) -> unsafeCoerce b
+                 _              -> error "Match failed")
+        func = Lam . Body $
+               -- I still hate everyting
+               Let (unsafeCoerce sh :: PreOpenExp
+                                       DelayedOpenAcc
+                                       ((), sh :. Int)
+                                       aenv (sh :. Int)) $
+               body
+               
+               
+
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
 --
 splitArray
@@ -313,7 +276,9 @@ splitArray n m delayed@Delayed{..}
                              (PrimAdd num `app` tup2 (IndexHead ix) (v (s z))))
             -- I feel really bad about this
             $ (case indexD of
-                (Lam (Body b)) -> unsafeCoerce b)
+                (Lam (Body b)) -> unsafeCoerce b
+                _              -> error "Match failed"
+              )
         fi  = Lam . Body
             $ Let (FromIndex (makeShape delayed) (v z))
             $ withSplitPts n m (makeShape delayed)
@@ -322,7 +287,9 @@ splitArray n m delayed@Delayed{..}
             $ Let (ToIndex (makeShape delayed) (v z))
             -- here too :(
             $ (case linearIndexD of
-                (Lam (Body b)) -> unsafeCoerce b)
+                (Lam (Body b)) -> unsafeCoerce b
+                _              -> error "Match failed"
+              )
     in Delayed{ extentD = sh', 
                 indexD = fe,
                 linearIndexD = fi
@@ -352,6 +319,10 @@ splitManifestArray k i acc
         ix = v (s (s (s (s (s (s (s z)))))))
 
 -- and here :( :(
+makeShape :: forall env aenv dim e.
+             (Elt e, Shape dim) =>
+             DelayedOpenAcc aenv (Array dim e)
+             -> PreOpenExp DelayedOpenAcc env aenv dim
 makeShape arr@Manifest{} = Shape arr
 makeShape Delayed{..} = unsafeCoerce extentD
 
@@ -395,6 +366,19 @@ matchArrayShape
     -> Maybe (sh :=: sh')
 matchArrayShape _ _
   | Just REFL <- matchTupleType (eltType (undefined::sh)) (eltType (undefined::sh'))
+  = gcast REFL
+
+  | otherwise
+  = Nothing
+
+matchShape
+  :: forall aenv sh sh'. (Shape sh, Shape sh')
+  => PreExp DelayedOpenAcc aenv sh
+  -> sh'
+  -> Maybe (sh :=: sh')
+matchShape _ _
+  | Just REFL <- matchTupleType (eltType (undefined::sh))
+                                (eltType (undefined::sh'))
   = gcast REFL
 
   | otherwise
