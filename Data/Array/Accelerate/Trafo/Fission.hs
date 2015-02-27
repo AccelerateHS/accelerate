@@ -46,9 +46,10 @@ convertAcc = convertOpenAcc
 -- | Apply the fission transformation to a function of array arguments
 --
 convertAfun :: DelayedAfun f -> DelayedAfun f
-convertAfun fun = case fun of
-  (Alam (Abody a)) -> (Alam (Abody $ convertOpenAcc a))
-  _                -> fun
+convertAfun = id
+-- convertAfun fun = case fun of
+--   (Alam (Abody a)) -> (Alam (Abody $ convertOpenAcc a))
+--   _                -> fun
 
 convertAfun' :: PreOpenAfun DelayedOpenAcc aenv f
              -> PreOpenAfun DelayedOpenAcc aenv f 
@@ -104,7 +105,7 @@ convertOpenAcc2 (Manifest pacc) =
     cvtE = id
 
     cvtA :: Arrays a => DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
-    cvtA = convertOpenAcc
+    cvtA = id
 
     -- The fission rules
     -- -----------------
@@ -152,17 +153,8 @@ convertOpenAcc2 (Manifest pacc) =
                 a2 = splitArray 2 1 a'
             in Alet (inject            $ Fold f e a1) . inject $
                Alet (inject . weaken s $ Fold f e a2) . inject $
-               ZipWith (weaken (s . s) f)
-               (Delayed (Shape (inject (Avar (s z))))
-                (Lam . Body $
-                 Index (inject (Avar (s z))) (v z))
-                (Lam . Body $
-                 LinearIndex (inject (Avar (s z))) (v z)))
-               (Delayed (Shape (inject (Avar z)))
-                (Lam . Body $
-                 Index (inject (Avar z)) (v z))
-                (Lam . Body $
-                 LinearIndex (inject (Avar (s z))) (v z)))
+               fakeZipWith (weaken (s . s) f) (inject (Avar (s z)))
+                                              (inject (Avar z))
                
     generate :: forall aenv sh e. (Shape sh, Elt e)
              => PreExp     DelayedOpenAcc aenv sh
@@ -245,7 +237,7 @@ genSplit n m sh f = Generate shap func
                      (v (s z)))) $
                (case f of
                  (Lam (Body b)) -> unsafeCoerce b
-                 _              -> error "Match failed")
+                 _              -> error "Match failed gensplit")
         func = Lam . Body $
                -- I still hate everyting
                Let (unsafeCoerce sh :: PreOpenExp
@@ -255,6 +247,21 @@ genSplit n m sh f = Generate shap func
                body
                
                
+
+fakeZipWith :: (Shape sh, Elt e1, Elt e2, Elt e3)
+            => PreFun     DelayedOpenAcc aenv (e1 -> e2 -> e3)
+            ->            DelayedOpenAcc aenv (Array sh e1)
+            ->            DelayedOpenAcc aenv (Array sh e2)
+            -> PreOpenAcc DelayedOpenAcc aenv (Array sh e3)
+fakeZipWith f a@(Manifest _) b@(Manifest _) = Generate shap func
+  where shap = makeShape a
+        func = Lam . Body $
+               Let (Index a (v z)) $
+               Let (Index b (v (s z))) $
+               (case f of
+                 (Lam (Lam (Body bo))) -> unsafeCoerce bo
+                 _                     -> error "Match failed fakezipwith")
+fakeZipWith _ _ _ = error "unexpected delayed array"
 
 -- Return chunk 'm' of an array that was split into 'n' equal pieces.
 --
