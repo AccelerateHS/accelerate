@@ -164,8 +164,9 @@ withRemote mc@(MemoryCache !tbl !ref _) !arr run = do
 
     run' :: RemotePointer m b -> m c
     run' p = liftIO $ do
-      (task, c) <- run p
       key <- MT.makeStableArray arr
+      message ("withRemote/using: " ++ show key)
+      (task, c) <- run p
       withMVar ref $ \utbl -> do
         mu       <- HT.lookup utbl key
         u        <- updateTask mu task
@@ -323,8 +324,8 @@ finalizer :: StableArray -> Weak (UT task) -> IO ()
 finalizer arr weak_utbl = do
   mutbl <- deRefWeak weak_utbl
   case mutbl of
-    Nothing -> return ()
-    Just utbl -> HT.delete utbl arr
+    Nothing -> trace "finalize cache/dead table" $ return ()
+    Just utbl -> trace ("finalize cache: " ++ show arr) $ HT.delete utbl arr
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
