@@ -91,16 +91,6 @@ class Task task where
 instance Task () where
   isDone () = return True
 
--- At what percentage of available memory should we start evicting old arrays to
--- host memory.
---
--- RCE: This is highly necessary with the CUDA backend as OSX's (and presumably
--- other OSes) UI doesn't handle GPU memory exhaustion very well (it crashes).
---
--- RCE: Experimentation should be done to come up with a better value.
-threshold :: Float
-threshold = 10.0
-
 -- |Create a new memory cache from host to remote arrays.
 --
 -- The function supplied should be the `free` for the remote pointers being
@@ -196,40 +186,31 @@ malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        -> Bool                               -- ^True if host array is frozen.
        -> Int
        -> m ()
-malloc mc@(MemoryCache _ _ weak_utbl) !ad !frozen !n = do
+malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
   key <- MT.makeStableArray ad
   let status = if frozen then Clean else Dirty
   weak_arr <- liftIO $ mkWeakPtr ad (Just $ finalizer key weak_utbl)
-  _ <- mallocWithUsage mc ad (Used ts status [] n weak_arr)
+  utbl <- liftIO $ takeMVar ref
+  _ <-  mallocWithUsage mt utbl ad (Used ts status [] n weak_arr)
+  liftIO $ putMVar ref utbl
   return ()
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
-    => MemoryCache (RemotePointer m) task
+    => MemoryTable (RemotePointer m)
+    -> UT task
     -> ArrayData e
     -> Used task
     -> m (RemotePointer m a)
-mallocWithUsage (MemoryCache !mt !ref _) !ad !usage@(Used _ _ _ n _) = do
-  utbl <- liftIO $ takeMVar ref
-  p <- malloc' utbl
-  liftIO $ putMVar ref utbl
-  return p
+mallocWithUsage !mt utbl !ad !usage@(Used _ _ _ n _) = malloc'
   where
-    malloc' utbl = do
-      left <- percentAvailable mt
-      if left < threshold
-        then management "malloc/threshold-reached" >> do
-          success <- evictLRU utbl mt
-          if success then malloc' utbl else malloc'' utbl
-        else malloc'' utbl
-
-    malloc'' utbl = do
+    malloc' = do
       mp <- MT.malloc mt ad n :: m (Maybe (RemotePointer m a))
       p <- case mp of
         Nothing -> do
           success <- evictLRU utbl mt
-          if success then malloc'' utbl else error "Remote memory exhausted"
+          if success then malloc' else $internalError "malloc" "Remote memory exhausted"
         Just p -> return p
       liftIO $ do
         key <- MT.makeStableArray ad
@@ -255,9 +236,10 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
           -- Small caveat: Due to finalisers being delayed, it's a good idea
           -- to free the array here.
           liftIO $ MT.freeStable mt sa
-          liftIO $ finalize weak_arr
+          liftIO $ HT.delete utbl sa
           message "evictLRU/Accelerate GC interrupted by GHC GC"
         Just arr -> do
+          message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n arr
           liftIO $ MT.free mt arr
           liftIO $ HT.insert utbl sa (Used ts Evicted tasks n weak_arr)
@@ -340,29 +322,12 @@ reclaim (MemoryCache !mt _ _) = MT.reclaim mt
 cleanUses :: Task task => [task] -> IO [task]
 cleanUses = filterM (fmap not . isDone)
 
-percentAvailable :: (RemoteMemory m, MonadIO m) => MemoryTable p -> m Float
-percentAvailable mt  = do
-  left  <- MT.availableMem mt
-  total <- M.totalMem
-  return (100.0 * fromIntegral left / fromIntegral total)
-
 -- Debug
 -- -----
-
-{-# INLINE showBytes #-}
-showBytes :: Int64 -> String
-showBytes x = D.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
 trace :: MonadIO m => String -> m a -> m a
 trace msg next = message msg >> next
-
-{-# INLINE management #-}
-management :: (RemoteMemory m, MonadIO m) => String -> m ()
-management msg = D.when D.dump_gc $ do
-  left <- M.availableMem
-  total <- M.totalMem
-  message (msg ++ " (" ++ showBytes left ++ "/" ++ showBytes total ++ " available)")
 
 {-# INLINE message #-}
 message :: MonadIO m => String -> m ()

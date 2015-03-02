@@ -24,19 +24,17 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
   -- Tables for host/device memory associations
   MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
-  availableMem,
 
   StableArray, makeStableArray
 
 ) where
 
 import Prelude                                                  hiding ( lookup )
-import Data.Int
 import Data.Maybe                                               ( isJust )
 import Data.Hashable                                            ( Hashable(..) )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
-import Control.Monad                                            ( unless )
+import Control.Monad                                            ( unless, when )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent                                       ( yield )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
@@ -101,8 +99,14 @@ instance Show StableArray where
   show (StableArray sn) = "Array #" ++ show (hashStableName sn)
 
 
--- Referencing arrays
--- ------------------
+-- At what percentage of available memory should we consider it empty.
+--
+-- RCE: This is highly necessary with the CUDA backend as OSX's (and presumably
+-- other OSes) UI doesn't handle GPU memory exhaustion very well (it crashes).
+--
+-- RCE: Experimentation should be done to come up with a better value.
+threshold :: Float
+threshold = 5.0
 
 -- |Create a new memory table from host to remote arrays.
 --
@@ -187,14 +191,25 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
       return (Just p')
 
     Nothing      -> trace "malloc/new"     $ do
-      mp' <- M.malloc n'
+      left <- percentAvailable
+      when (left < threshold) $ do
+        management "malloc/threshold-reached (reclaiming)"
+        reclaim mt
+      mp' <- M.malloc bytes
       case mp' of
-        Nothing -> trace "malloc/failed-reclaiming" $ do
-           reclaim mt
-           M.malloc n'
-        Just p -> do
-          insert mt ad p bytes
-          return (Just p)
+        Nothing -> trace "malloc/remote-memory-exhausted (reclaiming)" $ do
+          reclaim mt
+          mp'' <- M.malloc bytes
+          case mp'' of
+            Nothing -> trace "malloc/remote-memory-exhausted (non-recoverable)" $
+              return Nothing
+            Just p'' -> do
+              insert mt ad p'' bytes
+              return (Just p'')
+        Just p' -> do
+          insert mt ad p' bytes
+          return (Just p')
+
 
 
 -- | Deallocate the device array associated with the given host-side array.
@@ -245,15 +260,11 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   message $ "insertUnmanaged: " ++ show key
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
-
--- |The amount of memory that can be considered available for new arrays. As
--- the MemoryTable re-uses arrays, this gives a more accurate answer than
--- Data.Array.Accelerate.Memory.availableMem
-availableMem :: (RemoteMemory m, MonadIO m) => MemoryTable p -> m Int64
-availableMem (MemoryTable _ _ !nrs _) = do
-  available <- M.availableMem
-  cached    <- liftIO $ N.size nrs
-  return (available + cached)
+percentAvailable :: (RemoteMemory m, MonadIO m) => m Float
+percentAvailable = do
+  left  <- M.availableMem
+  total <- M.totalMem
+  return (100.0 * fromIntegral left / fromIntegral total)
 
 
 -- Removing entries
@@ -280,9 +291,9 @@ reclaim (MemoryTable _ weak_ref (Nursery nrs _) free) = do
   --
   D.when D.dump_gc $ do
     after <- M.availableMem
-    message $ "reclaim: freed "   ++ showBytes (fromIntegral (before - after))
-                        ++ ", "   ++ showBytes (fromIntegral after)
-                        ++ " of " ++ showBytes (fromIntegral total) ++ " remaining"
+    message $ "reclaim: freed "   ++ showBytes (before - after)
+                        ++ ", "   ++ showBytes after
+                        ++ " of " ++ showBytes total ++ " remaining"
 
 -- Because a finaliser might run at any time, we must reinstate the context in
 -- which the array was allocated before attempting to release it.
@@ -339,7 +350,7 @@ makeStableArray !arr = do
 -- -----
 
 {-# INLINE showBytes #-}
-showBytes :: Int -> String
+showBytes :: Integral n => n -> String
 showBytes x = D.showFFloatSIBase (Just 0) 1024 (fromIntegral x :: Double) "B"
 
 {-# INLINE trace #-}
@@ -350,3 +361,9 @@ trace msg next = message msg >> next
 message :: MonadIO m => String -> m ()
 message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 
+{-# INLINE management #-}
+management :: (RemoteMemory m, MonadIO m) => String -> m ()
+management msg = D.when D.dump_gc $ do
+  left <- M.availableMem
+  total <- M.totalMem
+  message (msg ++ " (" ++ showBytes left ++ "/" ++ showBytes total ++ " available)")
