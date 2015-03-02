@@ -34,14 +34,13 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 
 import Prelude                                                  hiding ( lookup )
 import Data.Functor                                             ( (<$>) )
-import Data.Int
 import Data.Maybe                                               ( isJust )
 import Data.Typeable                                            ( Typeable )
-import Control.Monad                                            ( unless, filterM )
+import Control.Monad                                            ( filterM )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar )
 import System.CPUTime
-import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr, finalize )
+import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr )
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -124,8 +123,8 @@ withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, Mona
            -> ArrayData a
            -> (RemotePointer m b -> IO (task, c))
            -> m (Maybe c)
-withRemote mc@(MemoryCache !tbl !ref _) !arr run = do
-  mp  <- liftIO $ withMVar ref $ const $ MT.lookup tbl arr
+withRemote (MemoryCache !mt !ref _) !arr run = do
+  mp  <- liftIO $ withMVar ref $ const $ MT.lookup mt arr
   case mp of
     Just p  -> Just <$> run' p -- The array already exists, use it.
     Nothing -> trace "withRemote/array not found" $ do
@@ -149,8 +148,15 @@ withRemote mc@(MemoryCache !tbl !ref _) !arr run = do
       mu <- liftIO $ withMVar ref $ flip HT.lookup key
       case mu of
         Nothing -> return Nothing
-        Just usage -> trace "withRemote/reuploading-evicted-array" $
-                      Just <$> mallocWithUsage mc arr usage
+        Just (Used ts _ tasks n weak_arr) -> do
+          message "withRemote/reuploading-evicted-array"
+          utbl <- liftIO $ takeMVar ref
+          p <- mallocWithUsage mt utbl arr
+                     (Used ts Clean tasks n weak_arr)
+          M.poke n p arr
+          liftIO $ putMVar ref utbl
+          return (Just p)
+
 
     run' :: RemotePointer m b -> m c
     run' p = liftIO $ do
@@ -265,10 +271,10 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
     evictable Evicted   = False
 
     copyIfNecessary :: PrimElt e a => Status -> Int -> ArrayData e -> m ()
-    copyIfNecessary Clean     _ _ = return ()
-    copyIfNecessary Unmanaged _ _ = return ()
-    copyIfNecessary Evicted   _ _ = $internalError "evictLRU" "Attempting to evict already evicted array"
-    copyIfNecessary Dirty n ad = do
+    copyIfNecessary Clean     _ _  = return ()
+    copyIfNecessary Unmanaged _ _  = return ()
+    copyIfNecessary Evicted   _ _  = $internalError "evictLRU" "Attempting to evict already evicted array"
+    copyIfNecessary Dirty     n ad = do
       mp <- liftIO $ MT.lookup mt ad
       case mp of
         Nothing -> return () -- RCE: I think this branch is actually impossible.
