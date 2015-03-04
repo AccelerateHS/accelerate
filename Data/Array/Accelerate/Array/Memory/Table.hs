@@ -197,11 +197,11 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
         reclaim mt
       mp' <- M.malloc bytes
       case mp' of
-        Nothing -> trace "malloc/remote-memory-exhausted (reclaiming)" $ do
+        Nothing -> management "malloc/remote-malloc-failed (reclaiming)" >> do
           reclaim mt
           mp'' <- M.malloc bytes
           case mp'' of
-            Nothing -> trace "malloc/remote-memory-exhausted (non-recoverable)" $
+            Nothing -> management "malloc/remote-malloc-failed (non-recoverable)" >>
               return Nothing
             Just p'' -> do
               insert mt ad p'' bytes
