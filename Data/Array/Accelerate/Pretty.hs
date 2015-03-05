@@ -70,3 +70,4 @@ instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
 
 instance Show (DelayedSeq a) where
   show = renderStyle wide . prettyDelayedSeq noParens
+

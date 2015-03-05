@@ -36,23 +36,18 @@ import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 
 
-type instance EltRepr  (Complex a) = (EltRepr a, EltRepr' a)
-type instance EltRepr' (Complex a) = (EltRepr a, EltRepr' a)
+type instance EltRepr (Complex a) = EltRepr (a, a)
 
 instance Elt a => Elt (Complex a) where
-  eltType (_::Complex a)        = eltType (undefined :: (a,a))
-  toElt (a,b)                   = toElt a :+ toElt' b
-  fromElt (a :+ b)              = (fromElt a, fromElt' b)
-
-  eltType' (_::Complex a)       = eltType' (undefined :: (a,a))
-  toElt' (a,b)                  = toElt a :+ toElt' b
-  fromElt' (a :+ b)             = (fromElt a, fromElt' b)
+  eltType _             = eltType (undefined :: (a,a))
+  toElt p               = let (a, b) = toElt p in a :+ b
+  fromElt (a :+ b)      = fromElt (a, b)
 
 instance cst a => IsProduct cst (Complex a) where
-  type ProdRepr (Complex a) = (((), a), a)
-  fromProd _ (x :+ y)    = (((), x), y)
-  toProd _ (((), x), y)  = (x :+ y)
-  prod _ _               = ProdRsnoc $ ProdRsnoc ProdRunit
+  type ProdRepr (Complex a) = ProdRepr (a, a)
+  fromProd cst (x :+ y) = fromProd cst (x, y)
+  toProd cst p          = let (x, y) = toProd cst p in (x :+ y)
+  prod cst _            = prod cst (undefined :: (a, a))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Complex a) where
   type Plain (Complex a) = Complex (Plain a)

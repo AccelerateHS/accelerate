@@ -1,6 +1,7 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE TypeOperators            #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -21,6 +22,7 @@ module Data.Array.Accelerate.Debug.Flags (
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm, dump_exec, dump_sched,
 
+  accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
 
 ) where
@@ -31,6 +33,12 @@ import Data.IORef
 import Text.PrettyPrint                         hiding ( Mode )
 import System.Environment
 import System.IO.Unsafe
+
+import Foreign.C
+import Foreign.Marshal
+import Foreign.Ptr
+import GHC.Foreign                              as GHC
+import GHC.IO.Encoding                          ( getFileSystemEncoding )
 
 import Debug.Trace
 
@@ -127,27 +135,57 @@ dflags =
   ]
 
 
+class DebugFlag a where
+  def :: a
+
+instance DebugFlag Bool where
+  {-# INLINE def #-}
+  def = False
+
+instance DebugFlag (Maybe a) where
+  {-# INLINE def #-}
+  def = Nothing
+
+
+-- | A bit of a hack to get the command line options processing out of the way.
+--
+-- We would like to have this automatically called once during program
+-- initialisation, so that our command-line debug flags between +ACC .. [-ACC]
+-- don't interfere with other programs.
+--
+-- Hacks beget hacks beget hacks...
+--
+accInit :: IO ()
+#ifdef ACCELERATE_DEBUG
+accInit = _flags `seq` return ()
+#else
+accInit = getUpdateArgs >> return ()
+#endif
+
 -- Initialise the debugging flags structure. This reads from both the command
 -- line arguments as well as the environment variable "ACCELERATE_FLAGS".
 -- Where applicable, options on the command line take precedence.
 --
+-- This is only available when compiled with debugging mode, because trying to
+-- access it at any other time is an error.
+--
+#ifdef ACCELERATE_DEBUG
 initialiseFlags :: IO Flags
 initialiseFlags = do
-  argv  <- getArgs
+  argv  <- getUpdateArgs
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    n                   = Nothing
-    f                   = False
-    defaults            = Flags n n n n n n f f f f f f f f f f f f
+    defaults            = Flags def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
         [Option _ go]   -> go opts
         []              -> trace unknown opts
-        alts            -> trace (ambiguous alts) opts
-
+        alts            -> case find (\(Option flag _) -> flag == this) alts of
+                             Just (Option _ go) -> go opts
+                             Nothing            -> trace (ambiguous alts) opts
       where
         unknown         = render $ text "Unknown option:" <+> quotes (text this)
         ambiguous alts  = render $
@@ -156,15 +194,41 @@ initialiseFlags = do
                , text "Did you mean one of these?"
                , nest 4 $ vcat (map (\(Option s _) -> text s) alts)
                ]
+#endif
 
 
+-- If the command line arguments include a section "+ACC ... [-ACC]" then return
+-- that section, and update the command line arguments to not include that part.
+--
+getUpdateArgs :: IO [String]
+getUpdateArgs = do
+  prog <- getProgName
+  argv <- getArgs
+  --
+  let (before, r1)      = span (/= "+ACC") argv
+      (flags,  r2)      = span (/= "-ACC") $ dropWhile (== "+ACC") r1
+      after             = dropWhile (== "-ACC") r2
+  --
+  setProgArgv (prog : before ++ after)
+  return flags
+
+
+-- This is only defined in debug mode because to access it at any other time
+-- should be an error.
+--
+#ifdef ACCELERATE_DEBUG
 {-# NOINLINE _flags #-}
 _flags :: IORef Flags
 _flags = unsafePerformIO $ newIORef =<< initialiseFlags
+#endif
 
 {-# INLINE queryFlag #-}
-queryFlag :: (Flags :-> a) -> IO a
+queryFlag :: DebugFlag a => (Flags :-> a) -> IO a
+#ifdef ACCELERATE_DEBUG
 queryFlag f = get f `fmap` readIORef _flags
+#else
+queryFlag _ = return def
+#endif
 
 
 type Mode = Flags :-> Bool
@@ -174,25 +238,23 @@ setFlag f   = setFlags [f]
 clearFlag f = clearFlags [f]
 
 setFlags, clearFlags :: [Mode] -> IO ()
+#ifdef ACCELERATE_DEBUG
 setFlags f   = modifyIORef _flags (\opt -> foldr (flip set True)  opt f)
 clearFlags f = modifyIORef _flags (\opt -> foldr (flip set False) opt f)
-
-
-{--
-{-# INLINE mode #-}
-mode :: Mode -> Bool
-#ifdef ACCELERATE_DEBUG
-mode f = unsafePerformIO $! queryFlag f
 #else
-mode _ = False
+setFlags _   = return ()
+clearFlags _ = return ()
 #endif
 
-{-# INLINE option #-}
-option :: (Flags :-> Maybe a) -> Maybe a
-#ifdef ACCELERATE_DEBUG
-option f = unsafePerformIO $! queryFlag f
-#else
-option _ = Nothing
-#endif
---}
+
+-- Stolen from System.Environment
+--
+setProgArgv :: [String] -> IO ()
+setProgArgv argv = do
+  enc <- getFileSystemEncoding
+  vs  <- mapM (GHC.newCString enc) argv >>= newArray0 nullPtr
+  c_setProgArgv (genericLength argv) vs
+
+foreign import ccall unsafe "setProgArgv"
+  c_setProgArgv  :: CInt -> Ptr CString -> IO ()
 

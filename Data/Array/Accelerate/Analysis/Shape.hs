@@ -45,33 +45,33 @@ preAccDim :: forall acc aenv sh e. AccDim acc -> PreOpenAcc acc aenv (Array sh e
 preAccDim k pacc =
   case pacc of
     Alet  _ acc          -> k acc
-    Avar _               -> case arrays' (undefined :: Array sh e) of
+    Avar _               -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "halt, fiend!"
 
-    Apply _ _            -> case arrays' (undefined :: Array sh e) of
+    Apply _ _            -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "umm, hello"
 
-    Aforeign _ _ _      -> case arrays' (undefined :: Array sh e) of
+    Aforeign _ _ _      -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "I don't even like snails!"
 
-    Atuple _             -> case arrays' (undefined :: Array sh e) of
+    Atuple _             -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "can we keep him?"
 
-    Aprj _ _             -> case arrays' (undefined :: Array sh e) of
+    Aprj _ _             -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "inconceivable!"
 
-    Collect _            -> case arrays' (undefined :: Array sh e) of
+    Collect _            -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "ppbbbbbt~"
 
     Acond _ acc _        -> k acc
     Awhile _ _ acc       -> k acc
-    Use ((),(Array _ _)) -> ndim (eltType (undefined::sh))
+    Use Array{}          -> ndim (eltType (undefined::sh))
     Unit _               -> 0
     Generate _ _         -> ndim (eltType (undefined::sh))
     Transform _ _ _ _    -> ndim (eltType (undefined::sh))
