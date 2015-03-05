@@ -1,6 +1,7 @@
-{-# LANGUAGE CPP             #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE TypeOperators            #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -31,6 +32,12 @@ import Data.IORef
 import Text.PrettyPrint                         hiding ( Mode )
 import System.Environment
 import System.IO.Unsafe
+
+import Foreign.C
+import Foreign.Marshal
+import Foreign.Ptr
+import GHC.Foreign                              as GHC
+import GHC.IO.Encoding                          ( getFileSystemEncoding )
 
 import Debug.Trace
 
@@ -149,7 +156,7 @@ instance DebugFlag (Maybe a) where
 #ifdef ACCELERATE_DEBUG
 initialiseFlags :: IO Flags
 initialiseFlags = do
-  argv  <- getArgs
+  argv  <- getUpdateArgs
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
@@ -171,6 +178,21 @@ initialiseFlags = do
                , text "Did you mean one of these?"
                , nest 4 $ vcat (map (\(Option s _) -> text s) alts)
                ]
+
+
+-- If the command line arguments include a section "+ACC ... [-ACC]" then return
+-- that section, and update the command line arguments to not include that part.
+--
+getUpdateArgs :: IO [String]
+getUpdateArgs = do
+  argv <- getArgs
+  --
+  let (before, r1)      = span (/= "+ACC") argv
+      (flags,  r2)      = span (/= "-ACC") $ dropWhile (== "+ACC") r1
+      after             = dropWhile (== "-ACC") r2
+  --
+  setProgArgv (before ++ after)
+  return flags
 #endif
 
 
@@ -205,5 +227,18 @@ clearFlags f = modifyIORef _flags (\opt -> foldr (flip set False) opt f)
 #else
 setFlags _   = return ()
 clearFlags _ = return ()
+#endif
+
+#if ACCELERATE_DEBUG
+-- Stolen from System.Environment
+--
+setProgArgv :: [String] -> IO ()
+setProgArgv argv = do
+  enc <- getFileSystemEncoding
+  vs  <- mapM (GHC.newCString enc) argv >>= newArray0 nullPtr
+  c_setProgArgv (genericLength argv) vs
+
+foreign import ccall unsafe "setProgArgv"
+  c_setProgArgv  :: CInt -> Ptr CString -> IO ()
 #endif
 
