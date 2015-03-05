@@ -190,11 +190,11 @@ liftedSize a =
     ArraysFarray -> ShapeSize (Shape $ inject $ Aprj (SuccTupIdx ZeroTupIdx) a)
     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
   where
-    fromTup :: (ArrRepr' t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
-    fromTup ProdRunit     = Const ((),0)
+    fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
+    fromTup ProdRunit     = Const 0
     fromTup (ProdRsnoc _) = convince a
       where
-        convince :: forall f l a e. (ArrRepr' t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
+        convince :: forall f l a e. (ArrRepr t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
                  => acc aenv (Vector' t)
                  -> Size acc aenv
         convince a | IsC <- isArraysFlat (undefined :: a)
