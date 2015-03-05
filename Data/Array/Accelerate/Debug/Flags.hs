@@ -24,15 +24,17 @@ module Data.Array.Accelerate.Debug.Flags (
 
   accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
+  when, unless,
 
 ) where
 
+import Control.Monad.IO.Class
+import Data.IORef
 import Data.Label
 import Data.List
-import Data.IORef
-import Text.PrettyPrint                         hiding ( Mode )
 import System.Environment
 import System.IO.Unsafe
+import Text.PrettyPrint                         hiding ( Mode )
 
 import Foreign.C
 import Foreign.Marshal
@@ -245,6 +247,23 @@ clearFlags f = modifyIORef _flags (\opt -> foldr (flip set False) opt f)
 setFlags _   = return ()
 clearFlags _ = return ()
 #endif
+
+
+-- | Conditional execution of a monadic debugging expression
+--
+when :: MonadIO m => Mode -> m () -> m ()
+when f s = do
+  yes <- liftIO $ queryFlag f
+  if yes then s
+         else return ()
+
+-- | The opposite of 'when'
+--
+unless :: MonadIO m => Mode -> m () -> m ()
+unless f s = do
+  yes <- liftIO $ queryFlag f
+  if yes then return ()
+         else s
 
 
 -- Stolen from System.Environment

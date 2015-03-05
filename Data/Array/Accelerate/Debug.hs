@@ -14,18 +14,10 @@
 -- not meant for library users.
 --
 
-module Data.Array.Accelerate.Debug ( module Debug, when )
+module Data.Array.Accelerate.Debug ( module Debug )
   where
 
 import Data.Array.Accelerate.Debug.Flags        as Debug
 import Data.Array.Accelerate.Debug.Stats        as Debug
 import Data.Array.Accelerate.Debug.Trace        as Debug
 
-import Control.Monad.IO.Class
-
--- | Conditional execution of a monadic expression
---
-when :: MonadIO m => Mode -> m () -> m ()
-when f s = do
-  yes <- liftIO $ queryFlag f
-  if yes then s else return ()
