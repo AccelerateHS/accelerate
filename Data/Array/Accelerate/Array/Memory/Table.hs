@@ -364,6 +364,7 @@ message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => String -> m ()
 management msg = D.when D.dump_gc $ do
-  left <- M.availableMem
+  left  <- M.availableMem
   total <- M.totalMem
   message (msg ++ " (" ++ showBytes left ++ "/" ++ showBytes total ++ " available)")
+
