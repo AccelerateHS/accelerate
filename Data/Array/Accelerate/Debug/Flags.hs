@@ -143,12 +143,19 @@ initialiseFlags = do
 
     parse               = foldl parse1 defaults
     parse1 opts this    =
-      case find (\(Option flag _) -> this == flag) allFlags of
-        Just (Option _ go) -> go opts
-        Nothing            -> trace unknown opts
+      case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
+        [Option _ go]   -> go opts
+        []              -> trace unknown opts
+        alts            -> trace (ambiguous alts) opts
 
       where
         unknown         = render $ text "Unknown option:" <+> quotes (text this)
+        ambiguous alts  = render $
+          vcat [ text "Ambiguous option:" <+> quotes (text this)
+               , text ""
+               , text "Did you mean one of these?"
+               , nest 4 $ vcat (map (\(Option s _) -> text s) alts)
+               ]
 
 
 {-# NOINLINE _flags #-}
