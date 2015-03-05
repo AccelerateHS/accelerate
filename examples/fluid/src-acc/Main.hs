@@ -12,7 +12,6 @@ import Fluid
 import Event
 import Data.Label
 import Control.Exception
-import System.Environment
 import Graphics.Gloss.Interface.IO.Game
 
 import Prelude                                          as P
@@ -23,8 +22,7 @@ import Data.Array.Accelerate.Examples.Internal          as A
 main :: IO ()
 main = do
   beginMonitoring
-  argv                  <- getArgs
-  (conf, opts, rest)    <- initialiseConfig =<< parseArgs options defaults header footer argv
+  (conf, opts, rest)    <- initialiseConfig =<< parseArgs options defaults header footer
 
   let -- configuration parameters
       --

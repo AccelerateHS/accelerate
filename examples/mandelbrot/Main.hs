@@ -7,7 +7,6 @@ import World
 import Config
 
 import Data.Label
-import System.Environment                       ( getArgs )
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
@@ -25,8 +24,7 @@ makePicture world = bitmapOfArray (renderWorld world) False
 main :: IO ()
 main = do
   beginMonitoring
-  argv                  <- getArgs
-  (conf, opts, rest)    <- parseArgs options defaults header footer argv
+  (conf, opts, rest)    <- parseArgs options defaults header footer
 
   let world     = initialWorld conf opts view
       fps       = get configFramerate conf

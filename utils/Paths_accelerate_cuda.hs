@@ -9,7 +9,7 @@ import System.Directory
 import System.FilePath
 
 version :: Version
-version = Version {versionBranch = [0,14,0,0], versionTags = ["dev"]}
+version = Version {versionBranch = [2,0,0,0], versionTags = ["dev"]}
 
 getDataDir :: IO FilePath
 getDataDir = do

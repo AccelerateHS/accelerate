@@ -43,7 +43,7 @@ intToBool _ = True
 fromPtrInt32 :: Assertion
 fromPtrInt32 = do
   ptr   <- oneToTen
-  arr   <- fromPtr (Z :. 10) ((), ptr)  :: IO (Vector Int32)
+  arr   <- fromPtr (Z :. 10) ptr        :: IO (Vector Int32)
   toList arr @?= [1..10]
 
 fromPtrIntDouble :: Assertion
@@ -61,7 +61,7 @@ toPtrInt16 = do
       arr = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
   --
   ohi <- nInt16s (P.fromIntegral n)
-  toPtr arr ((), ohi)
+  toPtr arr ohi
   b   <- isFilledWithEvens16 ohi (P.fromIntegral n)
   intToBool b @?= True
 
@@ -72,7 +72,7 @@ toPtrInt32 = do
       arr = fromList (Z:.10:.10) [2 * P.fromIntegral x | x <- [0..n-1]]
   --
   ohi <- nInt32s n
-  toPtr arr ((), ohi)
+  toPtr arr ohi
   b   <- isFilledWithEvens32 ohi n
   intToBool b @?= True
 
@@ -83,7 +83,7 @@ toPtrInt64 = do
       arr = fromList (Z:.n) [2 * P.fromIntegral x | x <- [0..n-1]]
   --
   ohi <- nInt64s (P.fromIntegral n)
-  toPtr arr ((), ohi)
+  toPtr arr ohi
   b   <- isFilledWithEvens64 ohi (P.fromIntegral n)
   intToBool b @?= True
 
@@ -95,7 +95,7 @@ fromArrayInt32 = do
       arr = fromList (Z:.5:.5:.5) [2*x | x <- [0..n-1]]
   --
   ohi <- nInt32s (P.fromIntegral n)
-  fromArray arr ((), memcpy ohi)
+  fromArray arr (memcpy ohi)
   b   <- isFilledWithEvens32 ohi (P.fromIntegral n)
   intToBool b @?= True
 

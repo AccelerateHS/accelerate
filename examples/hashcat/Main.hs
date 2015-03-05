@@ -12,7 +12,6 @@ import Control.Monad
 import Control.Applicative
 import Criterion.Measurement
 import System.IO
-import System.Environment
 import Data.Array.Accelerate                            ( Z(..), (:.)(..), All(..) , Split(..))
 import Data.Array.Accelerate.Examples.Internal
 import qualified Data.Array.Accelerate                  as A
@@ -24,8 +23,7 @@ main :: IO ()
 main = do
   initializeTime
   beginMonitoring
-  argv                  <- getArgs
-  (conf, opts, files)   <- parseArgs options defaults header footer argv
+  (conf, opts, files)   <- parseArgs options defaults header footer
 
   -- Read the plain text word lists. This creates a vector of MD5 chunks ready
   -- for hashing.

@@ -7,5 +7,5 @@ module Paths_accelerate_examples where
 import Data.Version
 
 version :: Version
-version = Version {versionBranch = [0,1,0,0], versionTags = []}
+version = Version {versionBranch = [2,0,0,0], versionTags = []}
 

@@ -1,7 +1,7 @@
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE TypeFamilies             #-}
+{-# LANGUAGE TypeOperators            #-}
 
 module Test.Spectral.BlackScholes (
 
@@ -37,7 +37,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
   ]
   where
     testElt :: forall a. ( Elt a, IsFloating a, Similar a, Arbitrary a, Random a, Storable a
-                         , BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
+                         , BlockPtrs (EltRepr a) ~ Ptr a )
             => (Config :-> Bool)
             -> BlackScholes a
             -> Maybe Test
@@ -50,7 +50,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
     opts = (,,) <$> choose (5,30) <*> choose (1,100) <*> choose (0.25,10)
 
     run_blackscholes :: forall a. ( Elt a, IsFloating a, Similar a, Storable a, Random a, Arbitrary a
-                                  , BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
+                                  , BlockPtrs (EltRepr a) ~ Ptr a )
                      => BlackScholes a
                      -> Property
     run_blackscholes cfun =
@@ -110,7 +110,7 @@ blackscholes = A.map go
 type BlackScholes a = Ptr a -> Ptr a -> Ptr a -> Ptr a -> Ptr a -> a -> a -> Int32 -> IO ()
 
 blackScholesRef
-    :: forall a. (Storable a, Floating a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a), BlockPtrs (EltRepr' a) ~ Ptr a)
+    :: forall a. (Storable a, Floating a, Elt a, BlockPtrs (EltRepr a) ~ Ptr a)
     => BlackScholes a
     -> Vector (a,a,a)
     -> IO (Vector (a,a))

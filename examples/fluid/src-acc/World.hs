@@ -86,7 +86,7 @@ renderDensity df@(Array _ ad) = do
   fptr  <- newForeignPtr finalizerFree dst
   return $ bitmapOfForeignPtr w h fptr False
   where
-    ((),src)    = A.ptrsOfArrayData ad
+    src         = A.ptrsOfArrayData ad
     Z:.h:.w     = A.arrayShape df
     n           = h*w
     colour !f   = let c = 0 `max` f `min` 1

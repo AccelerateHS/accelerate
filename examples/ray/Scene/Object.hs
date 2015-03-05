@@ -14,7 +14,7 @@ import Vec3
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr', Tuple(..), fromTuple, toTuple )
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
 import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 -- standard library
@@ -158,17 +158,12 @@ planeCheckShine  = planeShine
 -- Sphere
 -- ------
 
-type instance EltRepr Sphere  = EltRepr (Position, Float, Color, Float)
-type instance EltRepr' Sphere = EltRepr' (Position, Float, Color, Float)
+type instance EltRepr Sphere = EltRepr (Position, Float, Color, Float)
 
 instance Elt Sphere where
   eltType (_ :: Sphere)         = eltType (undefined :: (Position, Float, Color, Float))
   toElt sphere                  = let (p,r,c,s) = toElt sphere in Sphere p r c s
   fromElt (Sphere p r c s)      = fromElt (p, r, c, s)
-
-  eltType' (_ :: Sphere)        = eltType' (undefined :: (Position, Float, Color, Float))
-  toElt' sphere                 = let (p,r,c,s) = toElt' sphere in Sphere p r c s
-  fromElt' (Sphere p r c s)     = fromElt' (p, r, c, s)
 
 instance IsProduct Elt Sphere where
   type ProdRepr Sphere = ProdRepr (Position, Float, Color, Float)
@@ -186,17 +181,12 @@ instance Lift Exp Sphere where
 -- Plane
 -- -----
 
-type instance EltRepr Plane  = EltRepr (Position, Direction, Color, Float)
-type instance EltRepr' Plane = EltRepr' (Position, Direction, Color, Float)
+type instance EltRepr Plane = EltRepr (Position, Direction, Color, Float)
 
 instance Elt Plane where
   eltType (_ :: Plane)          = eltType (undefined :: (Position, Direction, Color, Float))
   toElt plane                   = let (p,n,c,s) = toElt plane in Plane p n c s
   fromElt (Plane p n c s)       = fromElt (p, n, c, s)
-
-  eltType' (_ :: Plane)         = eltType' (undefined :: (Position, Direction, Color, Float))
-  toElt' plane                  = let (p,n,c,s) = toElt' plane in Plane p n c s
-  fromElt' (Plane p n c s)      = fromElt' (p, n, c, s)
 
 instance IsProduct Elt Plane where
   type ProdRepr Plane = ProdRepr (Position, Direction, Color, Float)
@@ -215,17 +205,12 @@ instance Lift Exp Plane where
 -- Checkered Plane
 -- ---------------
 
-type instance EltRepr PlaneCheck  = EltRepr (Position, Direction, Float)
-type instance EltRepr' PlaneCheck = EltRepr' (Position, Direction, Float)
+type instance EltRepr PlaneCheck = EltRepr (Position, Direction, Float)
 
 instance Elt PlaneCheck where
   eltType (_ :: PlaneCheck)     = eltType (undefined :: (Position, Direction, Float))
   toElt plane                   = let (p,n,s) = toElt plane in PlaneCheck p n s
   fromElt (PlaneCheck p n s)    = fromElt (p, n, s)
-
-  eltType' (_ :: PlaneCheck)    = eltType' (undefined :: (Position, Direction, Float))
-  toElt' plane                  = let (p,n,s) = toElt' plane in PlaneCheck p n s
-  fromElt' (PlaneCheck p n s)   = fromElt' (p, n, s)
 
 instance IsTuple PlaneCheck where
   type TupleRepr PlaneCheck = TupleRepr (Position, Direction, Float)

@@ -16,7 +16,7 @@ import Scene.Object
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, EltRepr', Tuple(..), fromTuple, toTuple )
+import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
 import Graphics.Gloss.Accelerate.Data.Color.RGB
 
 -- standard library
@@ -92,17 +92,12 @@ applyLight objects point normal light
 lightPos l   = Exp $ SuccTupIdx ZeroTupIdx `Prj` l
 lightColor l = Exp $ ZeroTupIdx `Prj` l
 
-type instance EltRepr Light  = EltRepr (Position, Color)
-type instance EltRepr' Light = EltRepr' (Position, Color)
+type instance EltRepr Light = EltRepr (Position, Color)
 
 instance Elt Light where
   eltType (_ :: Light)  = eltType (undefined :: (Position, Color))
   toElt light           = let (p,c) = toElt light in Light p c
   fromElt (Light p c)   = fromElt (p,c)
-
-  eltType' (_ :: Light) = eltType' (undefined :: (Position, Color))
-  toElt' light          = let (p,c) = toElt' light in Light p c
-  fromElt' (Light p c)  = fromElt' (p,c)
 
 instance IsProduct Elt Light where
   type ProdRepr Light = ProdRepr (Position, Color)

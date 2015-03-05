@@ -19,7 +19,7 @@ import qualified Data.Vector.Storable                   as S
 import System.CPUTime
 
 
-arrayize vec = (A.fromVectors (Z :. S.length vec) ((), vec))
+arrayize vec = (A.fromVectors (Z :. S.length vec) vec)
 
 -- | Perform some iterations of the PageRank algorithm by loading the whole
 --   links graph into memory and passes it off in chunks to Accelerate to

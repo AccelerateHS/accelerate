@@ -17,11 +17,10 @@ main :: IO ()
 main = withSystemRandom $ \gen -> do
   beginMonitoring
 
-  argv                  <- getArgs
-  (_, opts, rest)       <- parseArgs options defaults header footer argv
+  (_, opts, rest)       <- parseArgs options defaults header footer
   fileIn                <- case rest of
     (i:_)       -> return i
-    _           -> parseArgs options defaults [] [] ("--help":argv)
+    _           -> withArgs ["--help"] $ parseArgs options defaults [] []
                 >> exitSuccess
 
   -- Read in the matrix file, and generate a random vector to multiply against
