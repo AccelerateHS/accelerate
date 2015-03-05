@@ -259,7 +259,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
       HT.insert utbl sa (Used ts status tasks' n weak_arr)
       case tasks' of
         [] | Just (_, Used ts' _ _ _ _) <- prev
-           , ts' < ts        -> return (Just (sa, used))
+           , ts < ts'        -> return (Just (sa, used))
            | Nothing <- prev -> return (Just (sa, used))
         _  -> return prev
     eldest prev _ = return prev
