@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Debug.Flags (
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm, dump_exec, dump_sched,
 
+  accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
 
 ) where
@@ -146,6 +147,21 @@ instance DebugFlag (Maybe a) where
   def = Nothing
 
 
+-- | A bit of a hack to get the command line options processing out of the way.
+--
+-- We would like to have this automatically called once during program
+-- initialisation, so that our command-line debug flags between +ACC .. [-ACC]
+-- don't interfere with other programs.
+--
+-- Hacks beget hacks beget hacks...
+--
+accInit :: IO ()
+#ifdef ACCELERATE_DEBUG
+accInit = _flags `seq` return ()
+#else
+accInit = getUpdateArgs >> return ()
+#endif
+
 -- Initialise the debugging flags structure. This reads from both the command
 -- line arguments as well as the environment variable "ACCELERATE_FLAGS".
 -- Where applicable, options on the command line take precedence.
@@ -178,6 +194,7 @@ initialiseFlags = do
                , text "Did you mean one of these?"
                , nest 4 $ vcat (map (\(Option s _) -> text s) alts)
                ]
+#endif
 
 
 -- If the command line arguments include a section "+ACC ... [-ACC]" then return
@@ -185,15 +202,15 @@ initialiseFlags = do
 --
 getUpdateArgs :: IO [String]
 getUpdateArgs = do
+  prog <- getProgName
   argv <- getArgs
   --
   let (before, r1)      = span (/= "+ACC") argv
       (flags,  r2)      = span (/= "-ACC") $ dropWhile (== "+ACC") r1
       after             = dropWhile (== "-ACC") r2
   --
-  setProgArgv (before ++ after)
+  setProgArgv (prog : before ++ after)
   return flags
-#endif
 
 
 -- This is only defined in debug mode because to access it at any other time
@@ -229,7 +246,7 @@ setFlags _   = return ()
 clearFlags _ = return ()
 #endif
 
-#if ACCELERATE_DEBUG
+
 -- Stolen from System.Environment
 --
 setProgArgv :: [String] -> IO ()
@@ -240,5 +257,4 @@ setProgArgv argv = do
 
 foreign import ccall unsafe "setProgArgv"
   c_setProgArgv  :: CInt -> Ptr CString -> IO ()
-#endif
 
