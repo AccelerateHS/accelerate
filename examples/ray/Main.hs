@@ -18,14 +18,12 @@ import qualified Graphics.Gloss.Accelerate.Raster.Field         as G
 
 -- Enemies
 import Data.Label
-import System.Environment                                       ( getArgs )
 
 
 main :: IO ()
 main = do
   beginMonitoring
-  argv                  <- getArgs
-  (conf, opts, rest)    <- parseArgs options defaults header footer argv
+  (conf, opts, rest)    <- parseArgs options defaults header footer
 
   let width     = get configWidth conf
       height    = get configHeight conf

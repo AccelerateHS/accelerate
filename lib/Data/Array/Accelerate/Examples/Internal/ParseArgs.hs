@@ -27,6 +27,7 @@ module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
 ) where
 
+import Data.Array.Accelerate.Debug
 import Data.Array.Accelerate.Examples.Internal.Backend
 import qualified Data.Array.Accelerate.Examples.Internal.Criterion.Config       as Criterion
 import qualified Data.Array.Accelerate.Examples.Internal.TestFramework.Config   as TestFramework
@@ -36,6 +37,7 @@ import Data.Label
 import Data.Monoid
 import Control.Monad
 import System.Exit
+import System.Environment
 import System.Console.GetOpt
 import Text.PrettyPrint.ANSI.Leijen
 
@@ -208,9 +210,11 @@ parseArgs :: [OptDescr (config -> config)]      -- ^ the user option description
           -> config                             -- ^ user default option set
           -> [String]                           -- ^ header text
           -> [String]                           -- ^ footer text
-          -> [String]                           -- ^ command line arguments
           -> IO (config, Options, [String])
-parseArgs programOptions programConfig header footer args =
+parseArgs programOptions programConfig header footer = do
+  accInit
+  args <- getArgs
+
   let
       -- The option "--list" is ambiguous. It is handled by criterion only when
       -- benchmarks are being run, but if passed to test framework during option
@@ -241,7 +245,6 @@ parseArgs programOptions programConfig header footer args =
         , section "Test-Framework options:"     testframeworkOptions
         ]
 
-  in do
   -- In the first round process options for the user program. Processing the
   -- user options first means that we can still handle any short or long options
   -- that take arguments but which were not joined with an equals sign; e.g.

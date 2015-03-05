@@ -22,11 +22,10 @@ main :: IO ()
 main
   = do
         beginMonitoring
-        argv                    <- getArgs
-        (conf, opts, rest)     <- parseArgs options defaults header footer argv
+        (conf, opts, rest)      <- parseArgs options defaults header footer
         (fileIn, fileOut)       <- case rest of
           (i:o:_) -> return (i,o)
-          _       -> parseArgs options defaults header footer ("--help":argv)
+          _       -> withArgs ["--help"] $ parseArgs options defaults header footer
                   >> exitSuccess
 
         -- Read in the image file

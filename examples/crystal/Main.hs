@@ -11,7 +11,6 @@ import Prelude                                          as P
 import Config
 
 import Data.Label                                       ( get )
-import System.Environment
 
 import Data.Array.Accelerate                            as A hiding ( size )
 import Data.Array.Accelerate.Examples.Internal          as A
@@ -91,8 +90,7 @@ main :: IO ()
 main = do
 
   beginMonitoring
-  argv                  <- getArgs
-  (conf, opts, rest)    <- parseArgs options defaults header footer argv
+  (conf, opts, rest)    <- parseArgs options defaults header footer
 
   let size      = get configSize conf
       zoom      = get configZoom conf
