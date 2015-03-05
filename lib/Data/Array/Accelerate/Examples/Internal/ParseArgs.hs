@@ -27,7 +27,7 @@ module Data.Array.Accelerate.Examples.Internal.ParseArgs (
 
 ) where
 
-import Data.Array.Accelerate.Debug
+import Data.Array.Accelerate.Debug                                              ( accInit )
 import Data.Array.Accelerate.Examples.Internal.Backend
 import qualified Data.Array.Accelerate.Examples.Internal.Criterion.Config       as Criterion
 import qualified Data.Array.Accelerate.Examples.Internal.TestFramework.Config   as TestFramework
