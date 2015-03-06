@@ -17,6 +17,19 @@ Chapter 6 of Simon Marlow's book [Parallel and Concurrent Programming in Haskell
 [Trevor's PhD thesis][Trevor-thesis] details the design and implementation of frontend optimisations and CUDA backend.
 
 
+**Table of Contents**  *generated with [DocToc](http://doctoc.herokuapp.com/)*
+
+- [An Embedded Language for Accelerated Array Computations](#)
+	- [A simple example](#)
+	- [Availability](#)
+	- [Additional components](#)
+	- [Requirements](#)
+	- [Documentation](#)
+	- [Examples](#)
+	- [Mailing list and contacts](#)
+	- [Citing Accelerate](#)
+	- [What's missing?](#)
+
 A simple example
 ----------------
 
