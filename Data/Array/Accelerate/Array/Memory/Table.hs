@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Array.Memory.Table (
 ) where
 
 import Prelude                                                  hiding ( lookup )
+import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Hashable                                            ( Hashable(..) )
 import Data.Proxy
@@ -183,32 +184,45 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
       !n'               = chunk * multiple n chunk
       !bytes            = n' * sizeOf (undefined :: b)
   --
-  mp  <- liftIO $ N.malloc bytes nursery
+  message ("malloc: " ++ showBytes bytes)
+  mp <-
+      attempt "malloc/nursery" (liftIO $ fmap (M.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+    `orElse` attempt "malloc/new" (do
+      left <- percentAvailable
+      when (left < threshold) $ reclaim mt
+      M.malloc bytes)
+    `orElse` (do
+      message "malloc/remote-malloc-failed (cleaning)"
+      clean mt
+      liftIO $ fmap (M.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+    `orElse` (do
+      message "malloc/remote-malloc-failed (purging)"
+      purge mt
+      M.malloc bytes)
+    `orElse` (do
+      message "malloc/remote-malloc-failed (non-recoverable)"
+      return Nothing)
+
   case mp of
-    Just p       -> trace "malloc/nursery" $ do
-      let p' = M.castPtr (Proxy :: Proxy m) p
+    Nothing -> return Nothing
+    Just p' -> do
       insert mt ad p' bytes
       return (Just p')
 
-    Nothing      -> trace "malloc/new"     $ do
-      left <- percentAvailable
-      when (left < threshold) $ do
-        management "malloc/threshold-reached (reclaiming)"
-        reclaim mt
-      mp' <- M.malloc bytes
-      case mp' of
-        Nothing -> management "malloc/remote-malloc-failed (reclaiming)" >> do
-          reclaim mt
-          mp'' <- M.malloc bytes
-          case mp'' of
-            Nothing -> management "malloc/remote-malloc-failed (non-recoverable)" >>
-              return Nothing
-            Just p'' -> do
-              insert mt ad p'' bytes
-              return (Just p'')
-        Just p' -> do
-          insert mt ad p' bytes
-          return (Just p')
+  where
+    orElse :: m (Maybe x) -> m (Maybe x) -> m (Maybe x)
+    orElse ra rb = do
+      ma <- ra
+      case ma of
+        Nothing -> rb
+        Just a  -> return (Just a)
+
+    attempt :: String -> m (Maybe x) -> m (Maybe x)
+    attempt msg next = do
+      ma <- next
+      case ma of
+        Nothing -> return Nothing
+        Just a  -> trace msg (return (Just a))
 
 
 
@@ -270,30 +284,33 @@ percentAvailable = do
 -- Removing entries
 -- ----------------
 
+-- |Initiate garbage collection and mark any arrays that no longer have host-side
+-- equivalents as reusable.
+--
+clean :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+clean (MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
+  performGC
+  yield
+  mr <- deRefWeak weak_ref
+  case mr of
+    Nothing  -> return ()
+    Just ref -> withMVar ref $ \tbl ->
+      flip HT.mapM_ tbl $ \(_,RemoteArray w) -> do
+        alive <- isJust `fmap` deRefWeak w
+        unless alive $ finalize w
+
+-- |Call `free` on all arrays that are not currently associated with host-side
+-- arrays.
+--
+purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+purge (MemoryTable _ _ nursery@(Nursery nrs _) free) = management "purge" nursery . liftIO $
+  modifyMVar_ nrs (\(tbl,_) -> N.flush free tbl >> return (tbl, 0))
+
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
 reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
-reclaim (MemoryTable _ weak_ref (Nursery nrs _) free) = do
-  before <- M.availableMem
-  total <- M.totalMem
-  liftIO $ do
-    performGC
-    yield
-    modifyMVar_ nrs (\(tbl,_) -> N.flush free tbl >> return (tbl, 0))
-    mr <- deRefWeak weak_ref
-    case mr of
-      Nothing  -> return ()
-      Just ref -> withMVar ref $ \tbl ->
-        flip HT.mapM_ tbl $ \(_,RemoteArray w) -> do
-          alive <- isJust `fmap` deRefWeak w
-          unless alive $ finalize w
-  --
-  D.when D.dump_gc $ do
-    after <- M.availableMem
-    message $ "reclaim: freed "   ++ showBytes (before - after)
-                        ++ ", "   ++ showBytes after
-                        ++ " of " ++ showBytes total ++ " remaining"
+reclaim mt = clean mt >> purge mt
 
 -- Because a finaliser might run at any time, we must reinstate the context in
 -- which the array was allocated before attempting to release it.
@@ -362,9 +379,17 @@ message :: MonadIO m => String -> m ()
 message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 
 {-# INLINE management #-}
-management :: (RemoteMemory m, MonadIO m) => String -> m ()
-management msg = D.when D.dump_gc $ do
-  left  <- M.availableMem
-  total <- M.totalMem
-  message (msg ++ " (" ++ showBytes left ++ "/" ++ showBytes total ++ " available)")
-
+management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
+management msg nrs next = do
+  before     <- M.availableMem
+  before_nrs <- liftIO $ N.size nrs
+  total      <- M.totalMem
+  r          <- next
+  D.when D.dump_gc $ do
+    after     <- M.availableMem
+    after_nrs <- liftIO $ N.size nrs
+    message $ msg ++ " (freed: "     ++ showBytes (after - before)
+                  ++ ", stashed: "   ++ showBytes (before_nrs - after_nrs)
+                  ++ ", remaining: " ++ showBytes after
+                  ++ " of "          ++ showBytes total ++ ")"
+  return r
