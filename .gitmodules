@@ -1,9 +1,6 @@
 [submodule "accelerate-io"]
 	path = accelerate-io
 	url = https://github.com/AccelerateHS/accelerate-io.git
-[submodule "accelerate-buildbot"]
-	path = accelerate-buildbot
-	url = https://github.com/AccelerateHS/accelerate-buildbot.git
 [submodule "accelerate-examples"]
 	path = accelerate-examples
 	url = https://github.com/AccelerateHS/accelerate-examples.git
