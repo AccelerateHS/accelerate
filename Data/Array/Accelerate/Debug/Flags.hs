@@ -2,7 +2,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
-{-# OPTIONS -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -34,7 +33,6 @@ import Data.IORef
 import Data.Label
 import Data.List
 import System.Environment
-import System.IO
 import System.IO.Unsafe
 import Text.PrettyPrint                         hiding ( Mode )
 import qualified Control.Monad                  as M ( when, unless )
@@ -218,7 +216,7 @@ getUpdateArgs = do
   setProgArgv (prog : before ++ after)
 #else
   M.unless (null flags)
-    $ hPutStrLn stderr "accelerate: Debugging options are disabled. Install with -fdebug to enable them."
+    $ error "Data.Array.Accelerate: Debugging options are disabled. Install with -fdebug to enable them."
 #endif
   return flags
 
