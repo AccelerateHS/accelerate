@@ -2,6 +2,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
+{-# OPTIONS -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -33,8 +34,10 @@ import Data.IORef
 import Data.Label
 import Data.List
 import System.Environment
+import System.IO
 import System.IO.Unsafe
 import Text.PrettyPrint                         hiding ( Mode )
+import qualified Control.Monad                  as M ( when, unless )
 
 import Foreign.C
 import Foreign.Marshal
@@ -211,7 +214,12 @@ getUpdateArgs = do
       (flags,  r2)      = span (/= "-ACC") $ dropWhile (== "+ACC") r1
       after             = dropWhile (== "-ACC") r2
   --
+#ifdef ACCELERATE_DEBUG
   setProgArgv (prog : before ++ after)
+#else
+  M.unless (null flags)
+    $ hPutStrLn stderr "accelerate: Debugging options are disabled. Install with -fdebug to enable them."
+#endif
   return flags
 
 
@@ -255,8 +263,7 @@ clearFlags _ = return ()
 when :: MonadIO m => Mode -> m () -> m ()
 when f s = do
   yes <- liftIO $ queryFlag f
-  if yes then s
-         else return ()
+  M.when yes s
 
 -- | The opposite of 'when'
 --
@@ -264,10 +271,10 @@ when f s = do
 unless :: MonadIO m => Mode -> m () -> m ()
 unless f s = do
   yes <- liftIO $ queryFlag f
-  if yes then return ()
-         else s
+  M.unless yes s
 
 
+#ifdef ACCELERATE_DEBUG
 -- Stolen from System.Environment
 --
 setProgArgv :: [String] -> IO ()
@@ -278,4 +285,5 @@ setProgArgv argv = do
 
 foreign import ccall unsafe "setProgArgv"
   c_setProgArgv  :: CInt -> Ptr CString -> IO ()
+#endif
 
