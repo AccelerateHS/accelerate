@@ -22,7 +22,6 @@ module Data.Array.Accelerate.Debug.Trace
 import Data.Array.Accelerate.Debug.Flags
 
 import Numeric
-import Control.Monad
 import System.CPUTime
 import System.IO.Unsafe
 import qualified Debug.Trace                            as D
@@ -85,8 +84,7 @@ trace _ _ expr = expr
 traceIO :: Mode -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
 traceIO f msg = do
-  enabled <- queryFlag f
-  when enabled $ do
+  when f $ do
     psec        <- getCPUTime
     let secs    = fromIntegral psec * 1E-12 :: Double
     D.traceIO   $ showFFloat (Just 3) secs (':':msg)
@@ -121,8 +119,7 @@ traceEvent _ _ expr = expr
 traceEventIO :: Mode -> String -> IO ()
 #ifdef ACCELERATE_DEBUG
 traceEventIO f msg = do
-  enabled <- queryFlag f
-  when enabled $ D.traceEventIO msg
+  when f $ D.traceEventIO msg
 #else
 {-# INLINE traceEventIO #-}
 traceEventIO _ _ = return ()

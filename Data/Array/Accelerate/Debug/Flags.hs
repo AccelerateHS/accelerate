@@ -251,6 +251,7 @@ clearFlags _ = return ()
 
 -- | Conditional execution of a monadic debugging expression
 --
+{-# SPECIALISE when :: Mode -> IO () -> IO () #-}
 when :: MonadIO m => Mode -> m () -> m ()
 when f s = do
   yes <- liftIO $ queryFlag f
@@ -259,6 +260,7 @@ when f s = do
 
 -- | The opposite of 'when'
 --
+{-# SPECIALISE unless :: Mode -> IO () -> IO () #-}
 unless :: MonadIO m => Mode -> m () -> m ()
 unless f s = do
   yes <- liftIO $ queryFlag f
