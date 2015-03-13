@@ -36,7 +36,7 @@ import Prelude                                                  hiding ( lookup 
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Typeable                                            ( Typeable )
-import Control.Monad                                            ( filterM )
+import Control.Monad                                            ( filterM, when )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar )
 import System.CPUTime
@@ -87,8 +87,12 @@ class Task task where
   -- |Returns true when the task has finished.
   isDone :: task -> IO Bool
 
+  -- |Frees any resources associated with the task.
+  destroy :: task -> IO ()
+
 instance Task () where
   isDone () = return True
+  destroy () = return ()
 
 -- |Create a new memory cache from host to remote arrays.
 --
@@ -308,12 +312,16 @@ insertUnmanaged (MemoryCache mt ref _) !arr !ptr = liftIO . withMVar ref $ \utbl
 -- Removing entries
 -- ----------------
 
-finalizer :: StableArray -> Weak (UT task) -> IO ()
+finalizer :: Task task => StableArray -> Weak (UT task) -> IO ()
 finalizer arr weak_utbl = do
   mutbl <- deRefWeak weak_utbl
   case mutbl of
     Nothing -> trace "finalize cache/dead table" $ return ()
-    Just utbl -> trace ("finalize cache: " ++ show arr) $ HT.delete utbl arr
+    Just utbl -> trace ("finalize cache: " ++ show arr) $ do
+      mu <- HT.lookup utbl arr
+      case mu of
+        Nothing -> return ()
+        Just (Used _ _ us _ _) -> cleanUses us >> HT.delete utbl arr
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
@@ -326,7 +334,12 @@ reclaim (MemoryCache !mt _ _) = MT.reclaim mt
 -- -------------
 
 cleanUses :: Task task => [task] -> IO [task]
-cleanUses = filterM (fmap not . isDone)
+cleanUses = filterM (fmap not . clean)
+  where
+    clean u = do
+      d <- isDone u
+      when d $ destroy u
+      return d
 
 -- Debug
 -- -----
