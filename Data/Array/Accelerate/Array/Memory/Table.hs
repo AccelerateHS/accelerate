@@ -1,9 +1,13 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE UnboxedTuples       #-}
+{-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Memory.Table
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -25,14 +29,17 @@ module Data.Array.Accelerate.Array.Memory.Table (
   -- Tables for host/device memory associations
   MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
 
-  StableArray, makeStableArray
+  StableArray, makeStableArray,
+
+  -- Weak pointers of arrays
+  makeWeakArrayData
 
 ) where
 
 import Prelude                                                  hiding ( lookup )
+import Data.Array.Storable.Internals                            ( StorableArray(..) )
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
-import Data.Hashable                                            ( Hashable(..) )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
 import Control.Monad                                            ( unless, when )
@@ -40,15 +47,23 @@ import Control.Monad.IO.Class                                   ( MonadIO, liftI
 import Control.Concurrent                                       ( yield )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
 import System.Mem                                               ( performGC )
-import System.Mem.Weak                                          ( Weak, mkWeak, deRefWeak, finalize )
-import System.Mem.StableName                                    ( StableName, makeStableName, hashStableName )
-import Foreign.Storable                                         ( Storable, sizeOf )
+import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
+import Foreign.Storable                                         ( sizeOf )
+
+import GHC.Exts                                                 ( Ptr(..) )
+import GHC.ForeignPtr                                           ( ForeignPtr(..), ForeignPtrContents(..) )
+import GHC.IORef                                                ( IORef(..) )
+import GHC.STRef                                                ( STRef(..) )
+import GHC.Base                                                 ( mkWeak#, mkWeakNoFinalizer#, IO(..) )
+import GHC.Weak                                                 ( Weak(..) )
 
 import qualified Data.HashTable.IO                              as HT
 
 import Data.Array.Accelerate.Error                              ( internalError )
-import Data.Array.Accelerate.Array.Data                         ( ArrayData )
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
+import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
+                                                                  ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..),
+                                                                  UniqueArray, storableFromUnique, getUniqueId )
+import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..), NRS )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
@@ -77,27 +92,12 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
 
 -- | An untyped reference to an array, similar to a stablename.
 --
-data StableArray where
-  StableArray :: Typeable e
-              => {-# UNPACK #-} !(StableName (ArrayData e))
-              -> StableArray
+type StableArray = Int
 
 data RemoteArray p where
   RemoteArray :: Typeable e
               => {-# UNPACK #-} !(Weak (p e))
               -> RemoteArray p
-
-instance Eq StableArray where
-  StableArray a1 == StableArray a2
-    = maybe False (== a2) (gcast a1)
-
-instance Hashable StableArray where
-  {-# INLINE hashWithSalt #-}
-  hashWithSalt salt (StableArray sn)
-    = salt `hashWithSalt` sn
-
-instance Show StableArray where
-  show (StableArray sn) = "Array #" ++ show (hashStableName sn)
 
 
 -- At what percentage of available memory should we consider it empty.
@@ -128,9 +128,9 @@ new free = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup :: (Typeable a, Typeable b) => MemoryTable p -> ArrayData a -> IO (Maybe (p b))
+lookup :: (PrimElt a b) => MemoryTable p -> ArrayData a -> IO (Maybe (p b))
 lookup (MemoryTable !ref _ _ _) !arr = do
-  sa <- makeStableArray  arr
+  sa <- makeStableArray arr
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
     Nothing              -> trace ("lookup/not found: " ++ show sa) $ return Nothing
@@ -162,7 +162,7 @@ lookup (MemoryTable !ref _ _ _) !arr = do
 -- arrays will be re-used. In the event that the remote memory is exhausted,
 -- 'Nothing' is returned.
 --
-malloc :: forall a b m. (Typeable a, Typeable b, Storable b, RemoteMemory m, MonadIO m)
+malloc :: forall a b m. (PrimElt a b, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePointer m)
        -> ArrayData a
        -> Int
@@ -229,10 +229,11 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
-free :: Typeable a => MemoryTable p -> ArrayData a -> IO ()
+free :: PrimElt a b => MemoryTable p -> ArrayData a -> IO ()
 free mt !arr = do
-  sa <- makeStableArray  arr
+  sa <- makeStableArray arr
   freeStable mt sa
+  yield
 
 -- | Deallocate the device array associated with the given StableArray. This
 -- is useful for other memory managers built on top of the memory table.
@@ -248,7 +249,7 @@ freeStable (MemoryTable !ref _ _ _) !sa = do
 -- Record an association between a host-side array and a new device memory area.
 -- The device memory will be freed when the host array is garbage collected.
 --
-insert :: forall m a b. (Typeable a, Typeable b, RemoteMemory m, MonadIO m)
+insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
        => MemoryTable (RemotePointer m)
        -> ArrayData a
        -> RemotePointer m b
@@ -256,7 +257,7 @@ insert :: forall m a b. (Typeable a, Typeable b, RemoteMemory m, MonadIO m)
        -> m ()
 insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs) free) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
-  dev  <- liftIO $ RemoteArray `fmap` mkWeak arr ptr (Just $ finalizer (Proxy :: Proxy m) free weak_ref weak_nrs key ptr bytes)
+  dev  <- liftIO $ RemoteArray `fmap` makeWeakArrayData arr ptr (Just $ finalizer (Proxy :: Proxy m) free weak_ref weak_nrs key ptr bytes)
   message      $ "insert: " ++ show key
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
@@ -267,10 +268,10 @@ insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs) free) !arr !ptr !bytes 
 --
 -- This typically only has use for backends that provide an FFI.
 --
-insertUnmanaged :: (Typeable a, Typeable b, MonadIO m) => MemoryTable p -> ArrayData a -> p b -> m ()
+insertUnmanaged :: (PrimElt a b, MonadIO m) => MemoryTable p -> ArrayData a -> p b -> m ()
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   key  <- makeStableArray  arr
-  dev  <- liftIO $ RemoteArray `fmap` mkWeak arr ptr (Just $ remoteFinalizer weak_ref key)
+  dev  <- liftIO $ RemoteArray `fmap` makeWeakArrayData arr ptr (Just $ remoteFinalizer weak_ref key)
   message $ "insertUnmanaged: " ++ show key
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
 
@@ -358,10 +359,107 @@ table_finalizer !tbl
 
 -- | Make a new StableArray.
 {-# INLINE makeStableArray #-}
-makeStableArray :: (MonadIO m, Typeable a) => ArrayData a -> m StableArray
-makeStableArray !arr = do
-  sn <- liftIO (makeStableName arr)
-  return (StableArray sn)
+makeStableArray :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a) => ArrayData a -> m StableArray
+makeStableArray !ad = liftIO $ id arrayElt ad
+  where
+    id :: ArrayEltR e -> ArrayData e -> IO Int
+    id ArrayEltRint     (AD_Int ua)     = getUniqueId ua
+    id ArrayEltRint8    (AD_Int8 ua)    = getUniqueId ua
+    id ArrayEltRint16   (AD_Int16 ua)   = getUniqueId ua
+    id ArrayEltRint32   (AD_Int32 ua)   = getUniqueId ua
+    id ArrayEltRint64   (AD_Int64 ua)   = getUniqueId ua
+    id ArrayEltRword    (AD_Word ua)    = getUniqueId ua
+    id ArrayEltRword8   (AD_Word8 ua)   = getUniqueId ua
+    id ArrayEltRword16  (AD_Word16 ua)  = getUniqueId ua
+    id ArrayEltRword32  (AD_Word32 ua)  = getUniqueId ua
+    id ArrayEltRword64  (AD_Word64 ua)  = getUniqueId ua
+    id ArrayEltRcshort  (AD_CShort ua)  = getUniqueId ua
+    id ArrayEltRcushort (AD_CUShort ua) = getUniqueId ua
+    id ArrayEltRcint    (AD_CInt ua)    = getUniqueId ua
+    id ArrayEltRcuint   (AD_CUInt ua)   = getUniqueId ua
+    id ArrayEltRclong   (AD_CLong ua)   = getUniqueId ua
+    id ArrayEltRculong  (AD_CULong ua)  = getUniqueId ua
+    id ArrayEltRcllong  (AD_CLLong ua)  = getUniqueId ua
+    id ArrayEltRcullong (AD_CULLong ua) = getUniqueId ua
+    id ArrayEltRfloat   (AD_Float ua)   = getUniqueId ua
+    id ArrayEltRdouble  (AD_Double ua)  = getUniqueId ua
+    id ArrayEltRcfloat  (AD_CFloat ua)  = getUniqueId ua
+    id ArrayEltRcdouble (AD_CDouble ua) = getUniqueId ua
+    id ArrayEltRbool    (AD_Bool ua)    = getUniqueId ua
+    id ArrayEltRchar    (AD_Char ua)    = getUniqueId ua
+    id ArrayEltRcchar   (AD_CChar ua)   = getUniqueId ua
+    id ArrayEltRcschar  (AD_CSChar ua)  = getUniqueId ua
+    id ArrayEltRcuchar  (AD_CUChar ua)  = getUniqueId ua
+    id _                _               = error "I do have a cause, though. It is obscenity. I'm for it."
+
+-- Weak arrays
+-- ----------------------
+
+-- |Make a weak pointer using an array as a key. Unlike the stanard `mkWeak`,
+-- this guarantees finalisers won't fire early.
+makeWeakArrayData :: forall a e c. (ArrayElt e, ArrayPtrs e ~ Ptr a) => ArrayData e -> c -> Maybe (IO ()) -> IO (Weak c)
+makeWeakArrayData ad c f = mw arrayElt ad
+  where
+    mw :: ArrayEltR e -> ArrayData e -> IO (Weak c)
+    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua c f
+    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua c f
+    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua c f
+    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua c f
+    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua c f
+    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua c f
+    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua c f
+    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua c f
+    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua c f
+    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua c f
+    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua c f
+    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua c f
+    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua c f
+    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua c f
+    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua c f
+    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua c f
+    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua c f
+    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua c f
+    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua c f
+    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua c f
+    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua c f
+    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua c f
+    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua c f
+    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua c f
+    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua c f
+    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua c f
+    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua c f
+    mw _                _               = error "Base eight is just like base ten really — if you're missing two fingers."
+
+    -- Note: [Weak Array pointers]
+    --
+    -- One of the unfortunate properties of GHC's weak pointers is that if they
+    -- a weak pointer is created with a non-primitive object as key, there is
+    -- the possibility that the finalizer attached to the pointer may fire early.
+    -- The reason for this is that optimiser, at compile time, and the GC, at
+    -- runtime, are free create copies of the objects they are attached to. This
+    -- is less than ideal if we want to properly track when arrays are no longer
+    -- reachable.
+    --
+    -- The solution to this problem is to use a primitive object as a key for
+    -- any weak pointers we create. However, the obvious choice of primitive,
+    -- the `Addr#` that points to the pinned payload of the array, is not
+    -- suitable. Being a pointer into non-GHC managed memory, the rts won't let
+    -- us use it as a key. Instead we use the `MutVar#` contained within an
+    -- IORef, itself part of the ForeignPtr contained within a StorableArray.
+    -- This means that GHC is free to create as many copies of the container
+    -- and any finalizers will not fire until all copies have been made
+    -- unreachable
+    --
+    mkWeak' :: UniqueArray i a -> c -> Maybe (IO ()) -> IO (Weak c)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c (Just f)
+      = IO $ \s ->
+          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c Nothing
+      = IO $ \s ->
+          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' _                                                                     _ _
+      = $internalError "makeWeakArrayData" "Internal representation of Storable array has changed"
+
 
 -- Debug
 -- -----

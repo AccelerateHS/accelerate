@@ -35,13 +35,13 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 import Prelude                                                  hiding ( lookup )
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
-import Data.Typeable                                            ( Typeable )
 import Control.Monad                                            ( filterM, when )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
+import Control.Concurrent                                       ( yield )
 import System.CPUTime
-import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr, finalize )
+import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -50,7 +50,7 @@ import Data.Array.Accelerate.Error                              ( internalError 
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import qualified Data.Array.Accelerate.Array.Memory             as M
-import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray )
+import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
 import qualified Data.Array.Accelerate.Array.Memory.Table       as MT
 
 -- We build the cache on top of a memory table.
@@ -66,8 +66,8 @@ type UT task = HT.BasicHashTable StableArray (Used task)
 data Status = Clean     -- Array in remote memory matches array in host memory.
             | Dirty     -- Array in remote memory has been modified.
             | Unmanaged -- Array in remote memory was injected by FFI, so we
-            | Evicted   -- Array has been evicted from remote memory
                         -- cannot remove it under any circumstance.
+            | Evicted   -- Array has been evicted from remote memory
             deriving Eq
 
 type Timestamp = Integer
@@ -181,11 +181,10 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
 
 -- | Check if a given array has ever been in the cache.
 --
-contains :: forall e a p task. PrimElt e a => MemoryCache p task -> ArrayData e -> IO Bool
-contains (MemoryCache _ ref _) !ad = withMVar ref $ \utbl -> do
+contains :: forall e a p task. (PrimElt e a, Task task) => MemoryCache p task -> ArrayData e -> IO Bool
+contains (MemoryCache _ ref _) !ad = do
   key <- MT.makeStableArray ad
-  isJust <$> HT.lookup utbl key
-
+  isJust <$> (withMVar' ref $ \utbl -> HT.lookup utbl key)
 
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This has similar behaviour to malloc in Data.Array.Accelerate.Array.Memory.Table
@@ -289,12 +288,15 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
-free :: Typeable a => MemoryCache p task -> ArrayData a -> IO ()
-free (MemoryCache !mt !ref _) !arr = withMVar ref $ \utbl -> do
+free :: PrimElt a b => MemoryCache p task -> ArrayData a -> IO ()
+free (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
   key <- MT.makeStableArray arr
-  HT.delete utbl key
+  mu <- HT.lookup utbl key
+  case mu of
+    Nothing -> return ()
+    Just (Used _ _ _ _ _ weak_arr) -> finalize weak_arr
   MT.freeStable mt key
-
+  yield
 
 -- |Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used
@@ -302,12 +304,12 @@ free (MemoryCache !mt !ref _) !arr = withMVar ref $ \utbl -> do
 --
 -- This typically only has use for backends that provide an FFI.
 --
-insertUnmanaged :: (PrimElt e a, MonadIO m) => MemoryCache p task -> ArrayData e -> p a -> m ()
-insertUnmanaged (MemoryCache mt ref _) !arr !ptr = liftIO . withMVar ref $ \utbl -> do
+insertUnmanaged :: (PrimElt e a, MonadIO m, Task task) => MemoryCache p task -> ArrayData e -> p a -> m ()
+insertUnmanaged (MemoryCache mt ref weak_utbl) !arr !ptr = liftIO . withMVar' ref $ \utbl -> do
   key <- MT.makeStableArray arr
   MT.insertUnmanaged mt arr ptr
   ts <- getCPUTime
-  weak_arr <- mkWeakPtr arr Nothing
+  weak_arr <- makeWeakArrayData arr arr (Just $ finalizer key weak_utbl)
   HT.insert utbl key (Used ts Unmanaged 0 [] 0 weak_arr)
 
 
@@ -315,17 +317,15 @@ insertUnmanaged (MemoryCache mt ref _) !arr !ptr = liftIO . withMVar ref $ \utbl
 -- ----------------
 
 finalizer :: Task task => StableArray -> Weak (UseTable task) -> IO ()
-finalizer arr weak_utbl = do
+finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
     Nothing -> trace "finalize cache/dead table" $ return ()
-    Just ref -> trace ("finalize cache: " ++ show arr) $ withMVar ref $ \utbl -> do
-      mu <- HT.lookup utbl arr
+    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref $ \utbl -> do
+      mu <- HT.lookup utbl key
       case mu of
         Nothing -> return ()
-        Just (Used ts status count us n weak_arr) -> do
-          us' <- cleanUses us
-          HT.insert utbl arr (Used ts status count us' n weak_arr)-- >> HT.delete utbl arr
+        Just (Used _ _ _ us _ _) -> cleanUses us >> HT.delete utbl key
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
