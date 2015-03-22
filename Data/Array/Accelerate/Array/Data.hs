@@ -196,6 +196,7 @@ class ArrayElt e where
   --
   unsafeIndexArrayData   :: ArrayData e -> Int -> e
   ptrsOfArrayData        :: ArrayData e -> ArrayPtrs e
+  touchArrayData         :: ArrayData e -> IO ()
   --
   newArrayData           :: Int -> IO (MutableArrayData e)
   unsafeReadArrayData    :: MutableArrayData e -> Int      -> IO e
@@ -211,6 +212,7 @@ instance ArrayElt () where
   type ArrayPtrs () = ()
   unsafeIndexArrayData AD_Unit i    = i `seq` ()
   ptrsOfArrayData AD_Unit           = ()
+  touchArrayData AD_Unit            = return ()
   newArrayData size                 = size `seq` return AD_Unit
   unsafeReadArrayData AD_Unit i     = i `seq` return ()
   unsafeWriteArrayData AD_Unit i () = i `seq` return ()
@@ -220,6 +222,7 @@ instance ArrayElt Int where
   type ArrayPtrs Int = Ptr Int
   unsafeIndexArrayData (AD_Int ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int ba)          = storableArrayPtr ba
+  touchArrayData (AD_Int ba)           = touchStorableArray ba
   newArrayData size                    = liftM AD_Int $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Int ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Int ba) i e = unsafeWriteArray ba i e
@@ -229,6 +232,7 @@ instance ArrayElt Int8 where
   type ArrayPtrs Int8 = Ptr Int8
   unsafeIndexArrayData (AD_Int8 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int8 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Int8 ba)           = touchStorableArray ba
   newArrayData size                     = liftM AD_Int8 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Int8 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Int8 ba) i e = unsafeWriteArray ba i e
@@ -238,6 +242,7 @@ instance ArrayElt Int16 where
   type ArrayPtrs Int16 = Ptr Int16
   unsafeIndexArrayData (AD_Int16 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int16 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Int16 ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_Int16 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Int16 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Int16 ba) i e = unsafeWriteArray ba i e
@@ -247,6 +252,7 @@ instance ArrayElt Int32 where
   type ArrayPtrs Int32 = Ptr Int32
   unsafeIndexArrayData (AD_Int32 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int32 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Int32 ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_Int32 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Int32 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Int32 ba) i e = unsafeWriteArray ba i e
@@ -256,6 +262,7 @@ instance ArrayElt Int64 where
   type ArrayPtrs Int64 = Ptr Int64
   unsafeIndexArrayData (AD_Int64 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Int64 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Int64 ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_Int64 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Int64 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Int64 ba) i e = unsafeWriteArray ba i e
@@ -265,6 +272,7 @@ instance ArrayElt Word where
   type ArrayPtrs Word = Ptr Word
   unsafeIndexArrayData (AD_Word ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word ba)          = storableArrayPtr ba
+  touchArrayData (AD_Word ba)           = touchStorableArray ba
   newArrayData size                     = liftM AD_Word $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Word ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Word ba) i e = unsafeWriteArray ba i e
@@ -274,6 +282,7 @@ instance ArrayElt Word8 where
   type ArrayPtrs Word8 = Ptr Word8
   unsafeIndexArrayData (AD_Word8 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word8 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Word8 ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_Word8 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Word8 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Word8 ba) i e = unsafeWriteArray ba i e
@@ -283,6 +292,7 @@ instance ArrayElt Word16 where
   type ArrayPtrs Word16 = Ptr Word16
   unsafeIndexArrayData (AD_Word16 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word16 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Word16 ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_Word16 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Word16 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Word16 ba) i e = unsafeWriteArray ba i e
@@ -292,6 +302,7 @@ instance ArrayElt Word32 where
   type ArrayPtrs Word32 = Ptr Word32
   unsafeIndexArrayData (AD_Word32 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word32 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Word32 ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_Word32 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Word32 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Word32 ba) i e = unsafeWriteArray ba i e
@@ -301,6 +312,7 @@ instance ArrayElt Word64 where
   type ArrayPtrs Word64 = Ptr Word64
   unsafeIndexArrayData (AD_Word64 ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Word64 ba)          = storableArrayPtr ba
+  touchArrayData (AD_Word64 ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_Word64 $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Word64 ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Word64 ba) i e = unsafeWriteArray ba i e
@@ -310,6 +322,7 @@ instance ArrayElt CShort where
   type ArrayPtrs CShort = Ptr Int16
   unsafeIndexArrayData (AD_CShort ba) i   = CShort $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CShort ba)          = storableArrayPtr ba
+  touchArrayData (AD_CShort ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CShort $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CShort ba) i    = CShort <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CShort ba) i (CShort e)
@@ -320,6 +333,7 @@ instance ArrayElt CUShort where
   type ArrayPtrs CUShort = Ptr Word16
   unsafeIndexArrayData (AD_CUShort ba) i   = CUShort $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CUShort ba)          = storableArrayPtr ba
+  touchArrayData (AD_CUShort ba)           = touchStorableArray ba
   newArrayData size                        = liftM AD_CUShort $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CUShort ba) i    = CUShort <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CUShort ba) i (CUShort e)
@@ -330,6 +344,7 @@ instance ArrayElt CInt where
   type ArrayPtrs CInt = Ptr Int32
   unsafeIndexArrayData (AD_CInt ba) i   = CInt $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CInt ba)          = storableArrayPtr ba
+  touchArrayData (AD_CInt ba)           = touchStorableArray ba
   newArrayData size                     = liftM AD_CInt $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CInt ba) i    = CInt <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CInt ba) i (CInt e)
@@ -340,6 +355,7 @@ instance ArrayElt CUInt where
   type ArrayPtrs CUInt = Ptr Word32
   unsafeIndexArrayData (AD_CUInt ba) i   = CUInt $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CUInt ba)          = storableArrayPtr ba
+  touchArrayData (AD_CUInt ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_CUInt $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CUInt ba) i    = CUInt <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CUInt ba) i (CUInt e)
@@ -350,6 +366,7 @@ instance ArrayElt CLong where
   type ArrayPtrs CLong = Ptr HTYPE_LONG
   unsafeIndexArrayData (AD_CLong ba) i   = CLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CLong ba)          = storableArrayPtr ba
+  touchArrayData (AD_CLong ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_CLong $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CLong ba) i    = CLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CLong ba) i (CLong e)
@@ -360,6 +377,7 @@ instance ArrayElt CULong where
   type ArrayPtrs CULong = Ptr HTYPE_UNSIGNED_LONG
   unsafeIndexArrayData (AD_CULong ba) i   = CULong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CULong ba)          = storableArrayPtr ba
+  touchArrayData (AD_CULong ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CULong $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CULong ba) i    = CULong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CULong ba) i (CULong e)
@@ -370,6 +388,7 @@ instance ArrayElt CLLong where
   type ArrayPtrs CLLong = Ptr Int64
   unsafeIndexArrayData (AD_CLLong ba) i   = CLLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CLLong ba)          = storableArrayPtr ba
+  touchArrayData (AD_CLLong ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CLLong $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CLLong ba) i    = CLLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CLLong ba) i (CLLong e)
@@ -380,6 +399,7 @@ instance ArrayElt CULLong where
   type ArrayPtrs CULLong = Ptr Word64
   unsafeIndexArrayData (AD_CULLong ba) i   = CULLong $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CULLong ba)          = storableArrayPtr ba
+  touchArrayData (AD_CULLong ba)           = touchStorableArray ba
   newArrayData size                        = liftM AD_CULLong $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CULLong ba) i    = CULLong <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CULLong ba) i (CULLong e)
@@ -390,6 +410,7 @@ instance ArrayElt Float where
   type ArrayPtrs Float = Ptr Float
   unsafeIndexArrayData (AD_Float ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Float ba)          = storableArrayPtr ba
+  touchArrayData (AD_Float ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_Float $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Float ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Float ba) i e = unsafeWriteArray ba i e
@@ -399,6 +420,7 @@ instance ArrayElt Double where
   type ArrayPtrs Double = Ptr Double
   unsafeIndexArrayData (AD_Double ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Double ba)          = storableArrayPtr ba
+  touchArrayData (AD_Double ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_Double $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Double ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Double ba) i e = unsafeWriteArray ba i e
@@ -408,6 +430,7 @@ instance ArrayElt CFloat where
   type ArrayPtrs CFloat = Ptr Float
   unsafeIndexArrayData (AD_CFloat ba) i   = CFloat $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CFloat ba)          = storableArrayPtr ba
+  touchArrayData (AD_CFloat ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CFloat $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CFloat ba) i    = CFloat <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CFloat ba) i (CFloat e)
@@ -418,6 +441,7 @@ instance ArrayElt CDouble where
   type ArrayPtrs CDouble = Ptr Double
   unsafeIndexArrayData (AD_CDouble ba) i   = CDouble $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CDouble ba)          = storableArrayPtr ba
+  touchArrayData (AD_CDouble ba)           = touchStorableArray ba
   newArrayData size                        = liftM AD_CDouble $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CDouble ba) i    = CDouble <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CDouble ba) i (CDouble e)
@@ -433,6 +457,7 @@ instance ArrayElt Bool where
   type ArrayPtrs Bool = Ptr Word8
   unsafeIndexArrayData (AD_Bool ba) i   = toBool (unsafeIndexArray ba i)
   ptrsOfArrayData (AD_Bool ba)          = storableArrayPtr ba
+  touchArrayData (AD_Bool ba)           = touchStorableArray ba
   newArrayData size                     = liftM AD_Bool $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Bool ba) i    = liftM toBool  $ unsafeReadArray ba i
   unsafeWriteArrayData (AD_Bool ba) i e = unsafeWriteArray ba i (fromBool e)
@@ -455,6 +480,7 @@ instance ArrayElt Char where
   type ArrayPtrs Char = Ptr Char
   unsafeIndexArrayData (AD_Char ba) i   = unsafeIndexArray ba i
   ptrsOfArrayData (AD_Char ba)          = storableArrayPtr ba
+  touchArrayData (AD_Char ba)           = touchStorableArray ba
   newArrayData size                     = liftM AD_Char $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_Char ba) i    = unsafeReadArray ba i
   unsafeWriteArrayData (AD_Char ba) i e = unsafeWriteArray ba i e
@@ -464,6 +490,7 @@ instance ArrayElt CChar where
   type ArrayPtrs CChar = Ptr HTYPE_CCHAR
   unsafeIndexArrayData (AD_CChar ba) i   = CChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CChar ba)          = storableArrayPtr ba
+  touchArrayData (AD_CChar ba)           = touchStorableArray ba
   newArrayData size                      = liftM AD_CChar $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CChar ba) i    = CChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CChar ba) i (CChar e)
@@ -474,6 +501,7 @@ instance ArrayElt CSChar where
   type ArrayPtrs CSChar = Ptr Int8
   unsafeIndexArrayData (AD_CSChar ba) i   = CSChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CSChar ba)          = storableArrayPtr ba
+  touchArrayData (AD_CSChar ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CSChar $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CSChar ba) i    = CSChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CSChar ba) i (CSChar e)
@@ -484,6 +512,7 @@ instance ArrayElt CUChar where
   type ArrayPtrs CUChar = Ptr Word8
   unsafeIndexArrayData (AD_CUChar ba) i   = CUChar $ unsafeIndexArray ba i
   ptrsOfArrayData (AD_CUChar ba)          = storableArrayPtr ba
+  touchArrayData (AD_CUChar ba)           = touchStorableArray ba
   newArrayData size                       = liftM AD_CUChar $ unsafeNewArray_ (0,size-1)
   unsafeReadArrayData (AD_CUChar ba) i    = CUChar <$> unsafeReadArray ba i
   unsafeWriteArrayData (AD_CUChar ba) i (CUChar e)
@@ -494,6 +523,7 @@ instance (ArrayElt a, ArrayElt b) => ArrayElt (a, b) where
   type ArrayPtrs (a, b)                = (ArrayPtrs a, ArrayPtrs b)
   unsafeIndexArrayData (AD_Pair a b) i = (unsafeIndexArrayData a i, unsafeIndexArrayData b i)
   ptrsOfArrayData (AD_Pair a b)        = (ptrsOfArrayData a, ptrsOfArrayData b)
+  touchArrayData (AD_Pair a b)         = touchArrayData a >> touchArrayData b
   newArrayData size
     = do
         a <- newArrayData size

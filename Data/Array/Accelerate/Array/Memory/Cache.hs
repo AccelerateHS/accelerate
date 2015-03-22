@@ -46,7 +46,7 @@ import qualified Data.HashTable.IO                              as HT
 
 import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
-import Data.Array.Accelerate.Array.Data                         ( ArrayData )
+import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray )
@@ -173,6 +173,7 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
         mu       <- HT.lookup utbl key
         u        <- updateTask mu task
         HT.insert utbl key u
+      touchArrayData arr
       return c
 
 
