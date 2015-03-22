@@ -432,13 +432,13 @@ makeWeakArrayData ad c f = mw arrayElt ad
 
     -- Note: [Weak Array pointers]
     --
-    -- One of the unfortunate properties of GHC's weak pointers is that if they
-    -- a weak pointer is created with a non-primitive object as key, there is
+    -- One of the unfortunate properties of GHC's weak pointers is that if a
+    -- weak pointer is created with a non-primitive object as key, there is
     -- the possibility that the finalizer attached to the pointer may fire early.
-    -- The reason for this is that optimiser, at compile time, and the GC, at
-    -- runtime, are free create copies of the objects they are attached to. This
-    -- is less than ideal if we want to properly track when arrays are no longer
-    -- reachable.
+    -- The reason for this is that the optimiser, at compile time, and the GC, at
+    -- runtime, are free to create copies of the objects they are attached to.
+    -- This is less than ideal if we want to properly track when arrays are no
+    -- longer reachable.
     --
     -- The solution to this problem is to use a primitive object as a key for
     -- any weak pointers we create. However, the obvious choice of primitive,
