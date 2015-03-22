@@ -37,8 +37,9 @@ import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Typeable                                            ( Typeable )
 import Control.Monad                                            ( filterM, when )
+import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, takeMVar, putMVar, mkWeakMVar )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, mkWeakPtr, finalize )
 
@@ -130,18 +131,19 @@ withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, Mona
            -> m (Maybe c)
 withRemote (MemoryCache !mt !ref _) !arr run = do
   key  <- MT.makeStableArray arr
-  utbl <- liftIO $ takeMVar ref
-  mu <- liftIO $ HT.lookup utbl key
-  mp <- case mu of
-    Nothing -> trace ("withRemote/array has never been malloc'd: " ++ show key)
-             $ return Nothing
-    Just u  -> Just <$> do
-      liftIO $ HT.insert utbl key (incCount u)
-      mp <- liftIO $ MT.lookup mt arr
-      case mp of
-        Nothing -> copy utbl (incCount u)
-        Just p  -> return p
-  liftIO $ putMVar ref utbl
+  mp <- withMVar' ref $ \utbl -> do
+   mu <- liftIO $ HT.lookup utbl key
+   case mu of
+     Nothing -> trace ("withRemote/array has never been malloc'd: " ++ show key)
+              $ return Nothing
+     Just u  -> Just <$> do
+       liftIO $ HT.insert utbl key (incCount u)
+       mp <- liftIO $ MT.lookup mt arr
+       case mp of
+         Nothing | isEvicted u -> copy utbl (incCount u)
+         Just p                -> return p
+         _                     -> trace ("lost array " ++ show key) $ $internalError "withRemote" "non-evicted array has been lost"
+
   case mp of
     Just p -> Just <$> run' p
     Nothing -> return Nothing -- The array was never in the table.
@@ -169,7 +171,7 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
       key <- MT.makeStableArray arr
       message ("withRemote/using: " ++ show key)
       (task, c) <- run p
-      withMVar ref $ \utbl -> do
+      withMVar' ref $ \utbl -> do
         mu       <- HT.lookup utbl key
         u        <- updateTask mu task
         HT.insert utbl key u
@@ -203,10 +205,8 @@ malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
   key <- MT.makeStableArray ad
   let status = if frozen then Clean else Dirty
-  weak_arr <- liftIO $ mkWeakPtr ad (Just $ finalizer key weak_utbl)
-  utbl <- liftIO $ takeMVar ref
-  _ <-  mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
-  liftIO $ putMVar ref utbl
+  weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
+  _ <- withMVar' ref $ \utbl -> mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
   return ()
 
 mallocWithUsage
@@ -355,6 +355,16 @@ cleanUses = filterM (fmap not . clean)
 
 incCount :: Used task -> Used task
 incCount (Used ts status count uses n weak_arr) = Used ts status (count + 1) uses n weak_arr
+
+isEvicted :: Used task -> Bool
+isEvicted (Used _ status _ _ _ _) = status == Evicted
+
+withMVar' :: (MonadIO m, MonadCatch m, MonadMask m) => MVar a -> (a -> m b) -> m b
+withMVar' m f = mask $ \restore -> do
+  a <- liftIO $ takeMVar m
+  b <- restore (f a) `onException` (liftIO $ putMVar m a)
+  liftIO $ putMVar m a
+  return b
 
 -- Debug
 -- -----

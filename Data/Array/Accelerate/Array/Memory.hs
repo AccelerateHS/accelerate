@@ -16,6 +16,7 @@ module Data.Array.Accelerate.Array.Memory (
 
 import Data.Array.Accelerate.Array.Data
 
+import Control.Monad.Catch
 import Data.Int
 import Data.Typeable
 import Foreign.Ptr
@@ -30,7 +31,7 @@ type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typ
 -- advantage of the automated memory managers we provide as part of the base
 -- package.
 --
-class Monad m => RemoteMemory m where
+class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
 
   -- | Pointers into this particalur remote memory.
   type RemotePointer m :: * -> *
