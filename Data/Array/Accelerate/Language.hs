@@ -572,7 +572,7 @@ indexTail = Exp . IndexTail
 toIndex :: Shape sh => Exp sh -> Exp sh -> Exp Int
 toIndex = Exp $$ ToIndex
 
--- | Inverse of 'fromIndex'
+-- | Inverse of 'toIndex'
 --
 fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
 fromIndex = Exp $$ FromIndex
