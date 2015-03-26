@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns  #-}
 {-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.FullList
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
