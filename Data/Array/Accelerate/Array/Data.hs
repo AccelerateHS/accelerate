@@ -53,8 +53,8 @@ import Foreign            (Ptr)
 import Foreign.C.Types
 import Data.Bits
 import Data.Functor       ((<$>))
+import Data.IORef         ( IORef, newIORef, atomicModifyIORef' )
 import Data.Typeable      (Typeable)
-import Control.Concurrent.MVar ( MVar, newMVar, modifyMVar )
 import Control.Monad
 #ifdef ACCELERATE_UNSAFE_CHECKS
 import qualified Data.Array.Base    as MArray (readArray, writeArray)
@@ -124,7 +124,7 @@ data UniqueArray i e = UniqueArray {-# UNPACK #-} !Int {-# UNPACK #-} !(Storable
 {-# INLINE uniqueFromStorable #-}
 uniqueFromStorable :: StorableArray i a -> IO (UniqueArray i a)
 uniqueFromStorable sa = do
-  i <- modifyMVar counter (\n -> return (n+1,n))
+  i <- atomicModifyIORef' counter (\n -> (n+1,n))
   return $ UniqueArray i sa
 
 -- |Get the storable array backing the unique array
@@ -678,5 +678,5 @@ uniqueArrayPtr (UniqueArray _ (StorableArray _ _ _ fp)) = unsafeForeignPtrToPtr 
 
 -- The global counter that gives new ids for unique arrays.
 {-# NOINLINE counter #-}
-counter :: MVar Int
-counter = unsafePerformIO $ newMVar 0
+counter :: IORef Int
+counter = unsafePerformIO $ newIORef 0
