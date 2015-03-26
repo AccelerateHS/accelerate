@@ -117,7 +117,7 @@ $( runQ [d| type HTYPE_CCHAR = $(
 -- this by attaching an Int to each array, the value of which we get from a
 -- global counter that we increment for every array construction.
 --
-data UniqueArray i e = UniqueArray !Int !(StorableArray i e)
+data UniqueArray i e = UniqueArray {-# UNPACK #-} !Int {-# UNPACK #-} !(StorableArray i e)
 
 -- |Create a unique array from a storable array
 --
