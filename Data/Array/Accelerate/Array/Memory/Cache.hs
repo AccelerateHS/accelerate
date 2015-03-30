@@ -36,6 +36,7 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 import Prelude                                                  hiding ( lookup )
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
+import Data.Proxy
 import Control.Monad                                            ( filterM, when )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
@@ -247,12 +248,12 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
           --
           -- Small caveat: Due to finalisers being delayed, it's a good idea
           -- to free the array here.
-          liftIO $ MT.freeStable mt sa
+          liftIO $ MT.freeStable (Proxy :: Proxy m) mt sa
           message "evictLRU/Accelerate GC interrupted by GHC GC"
         Just arr -> do
           message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n arr
-          liftIO $ MT.free mt arr
+          liftIO $ MT.freeStable (Proxy :: Proxy m) mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n weak_arr)
       return True
     _ -> trace "evictLRU/All arrays in use, unable to evict" $ return False
@@ -287,16 +288,17 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
         Just p  -> M.peek n p ad
 
 -- | Deallocate the device array associated with the given host-side array.
--- Typically this should only be called in very specific circumstances.
+-- Typically this should only be called in very specific circumstances. This
+-- operation is not thread-safe.
 --
-free :: PrimElt a b => MemoryCache p task -> ArrayData a -> IO ()
-free (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
+free :: (RemoteMemory m, PrimElt a b) => proxy m -> MemoryCache (RemotePointer m) task -> ArrayData a -> IO ()
+free proxy (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
   key <- MT.makeStableArray arr
   mu <- HT.lookup utbl key
   case mu of
     Nothing -> return ()
     Just (Used _ _ _ _ _ weak_arr) -> finalize weak_arr
-  MT.freeStable mt key
+  MT.freeStable proxy mt key
   yield
 
 -- |Record an association between a host-side array and a remote memory area

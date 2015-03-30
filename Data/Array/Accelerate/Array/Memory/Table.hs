@@ -43,12 +43,12 @@ import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
-import Control.Monad                                            ( unless, when )
+import Control.Monad                                            ( when )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent                                       ( yield )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
 import System.Mem                                               ( performGC )
-import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
+import System.Mem.Weak                                          ( Weak, deRefWeak )
 import Foreign.Storable                                         ( sizeOf )
 
 import GHC.Exts                                                 ( Ptr(..) )
@@ -65,7 +65,7 @@ import Data.Array.Accelerate.Array.Data                         ( ArrayData, GAr
                                                                   ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..),
                                                                   UniqueArray, storableFromUnique, getUniqueId )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
-import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..), NRS )
+import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..) )
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
@@ -97,7 +97,9 @@ type StableArray = Int
 
 data RemoteArray p where
   RemoteArray :: Typeable e
-              => {-# UNPACK #-} !(Weak (p e))
+              => {-# UNPACK #-} !(Weak ()) -- Keep track of host array liveness.
+              -> p e                       -- The actual remote pointer
+              -> Int                       -- The array size in bytes
               -> RemoteArray p
 
 
@@ -123,7 +125,7 @@ new free = do
   tbl  <- liftIO $ HT.new
   ref  <- liftIO $ newMVar tbl
   nrs  <- N.new free
-  weak <- liftIO $ mkWeakMVar ref (table_finalizer tbl)
+  weak <- liftIO $ mkWeakMVar ref (return ())
   return $! MemoryTable ref weak nrs free
 
 
@@ -135,11 +137,11 @@ lookup (MemoryTable !ref _ _ _) !arr = do
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
     Nothing              -> trace ("lookup/not found: " ++ show sa) $ return Nothing
-    Just (RemoteArray w) -> do
+    Just (RemoteArray w p _) -> do
       mv <- deRefWeak w
       case mv of
-        Just v | Just p <- gcast v -> trace ("lookup/found: " ++ show sa) $ return (Just p)
-               | otherwise         -> $internalError "lookup" $ "type mismatch"
+        Just _ | Just p' <- gcast p -> trace ("lookup/found: " ++ show sa) $ return (Just p')
+               | otherwise          -> $internalError "lookup" $ "type mismatch"
 
         -- Note: [Weak pointer weirdness]
         --
@@ -230,21 +232,25 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
-free :: PrimElt a b => MemoryTable p -> ArrayData a -> IO ()
-free mt !arr = do
+free :: (RemoteMemory m, PrimElt a b) => proxy m ->  MemoryTable (RemotePointer m) -> ArrayData a -> IO ()
+free proxy mt !arr = do
   sa <- makeStableArray arr
-  freeStable mt sa
-  yield
+  freeStable proxy mt sa
 
 -- | Deallocate the device array associated with the given StableArray. This
 -- is useful for other memory managers built on top of the memory table.
 --
-freeStable :: MemoryTable p -> StableArray -> IO ()
-freeStable (MemoryTable !ref _ _ _) !sa = do
+freeStable :: RemoteMemory m => proxy m -> MemoryTable (RemotePointer m) -> StableArray -> IO ()
+freeStable proxy (MemoryTable !ref _ nrs _) !sa = do
   mw <- withMVar ref (`HT.lookup` sa)
   case mw of
-    Nothing              -> message ("free/not found: " ++ show sa)
-    Just (RemoteArray w) -> trace   ("free/evict: " ++ show sa) $ finalize w
+    Nothing -> message ("free/not found: " ++ show sa)
+    Just r  -> trace   ("free/evict: " ++ show sa) $ do
+      freeRemote proxy nrs r
+      withMVar ref (`HT.delete` sa)
+
+freeRemote :: RemoteMemory m => proxy m -> Nursery (RemotePointer m) -> RemoteArray (RemotePointer m) -> IO ()
+freeRemote proxy (Nursery !nrs _) (RemoteArray _ !p !bytes) = N.stash proxy bytes nrs p
 
 
 -- Record an association between a host-side array and a new device memory area.
@@ -256,11 +262,11 @@ insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
        -> RemotePointer m b
        -> Int
        -> m ()
-insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs) free) !arr !ptr !bytes = do
+insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
-  dev  <- liftIO $ RemoteArray `fmap` makeWeakArrayData arr ptr (Just $ finalizer (Proxy :: Proxy m) free weak_ref weak_nrs key ptr bytes)
+  weak <- liftIO $ makeWeakArrayData arr () (Just $ finalizer (Proxy :: Proxy m) mt key)
   message      $ "insert: " ++ show key
-  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
+  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr bytes)
 
 
 -- |Record an association between a host-side array and a remote memory area
@@ -272,9 +278,9 @@ insert (MemoryTable !ref !weak_ref (Nursery _ !weak_nrs) free) !arr !ptr !bytes 
 insertUnmanaged :: (PrimElt a b, MonadIO m) => MemoryTable p -> ArrayData a -> p b -> m ()
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   key  <- makeStableArray  arr
-  dev  <- liftIO $ RemoteArray `fmap` makeWeakArrayData arr ptr (Just $ remoteFinalizer weak_ref key)
+  weak <- liftIO $ makeWeakArrayData arr () (Just $ remoteFinalizer weak_ref key)
   message $ "insertUnmanaged: " ++ show key
-  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key dev
+  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr 0)
 
 percentAvailable :: (RemoteMemory m, MonadIO m) => m Float
 percentAvailable = do
@@ -289,17 +295,26 @@ percentAvailable = do
 -- |Initiate garbage collection and mark any arrays that no longer have host-side
 -- equivalents as reusable.
 --
-clean :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
-clean (MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
+clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
+  -- Unforunately there is no real way to force a GC then wait for it to finsh.
+  -- Calling performGC then yielding works moderately well in single-threaded
+  -- cases, but tends to fall down otherwise. Either way, given that finalizers
+  -- are often significantly delayed, it is worth our while traversing the table
+  -- and explicitly freeing any dead entires.
+  --
   performGC
   yield
   mr <- deRefWeak weak_ref
   case mr of
     Nothing  -> return ()
-    Just ref -> withMVar ref $ \tbl ->
-      flip HT.mapM_ tbl $ \(_,RemoteArray w) -> do
-        alive <- isJust `fmap` deRefWeak w
-        unless alive $ finalize w
+    Just ref -> do
+      rs <- withMVar ref $ HT.foldM removable []  -- collect arrays that can be removed
+      mapM_ (freeStable (Proxy :: Proxy m) mt) rs -- remove them all
+  where
+    removable rs (sa, RemoteArray w _ _) = do
+      alive <- isJust <$> deRefWeak w
+      if alive then return rs else return (sa:rs)
 
 -- |Call `free` on all arrays that are not currently associated with host-side
 -- arrays.
@@ -325,23 +340,17 @@ reclaim mt = clean mt >> purge mt
 --
 finalizer :: (RemoteMemory m, MonadIO m)
           => proxy m
-          -> (forall a. RemotePointer m a -> IO ())
-          -> Weak (MT (RemotePointer m))
-          -> Weak (NRS (RemotePointer m))
+          -> MemoryTable (RemotePointer m)
           -> StableArray
-          -> RemotePointer m b
-          -> Int
           -> IO ()
-finalizer proxy free !weak_ref !weak_nrs !key !ptr !bytes = do
-  mr <- deRefWeak weak_ref
-  case mr of
-    Nothing  -> message ("finalise/dead table: " ++ show key)
-    Just ref -> withMVar ref (`HT.delete` key)
-  --
-  mn <- deRefWeak weak_nrs
-  case mn of
-    Nothing  -> trace ("finalise/free: "     ++ show key) $ free ptr
-    Just nrs -> trace ("finalise/nursery: "  ++ show key) $ N.stash proxy bytes  nrs ptr
+finalizer proxy (MemoryTable !ref _ (Nursery !nrs _) _) !key = do
+  withMVar ref $ \mt -> do
+    mr <- HT.lookup mt key
+    case mr of
+      Nothing -> message ("finalize/already-removed: " ++ show key)
+      Just (RemoteArray _ ptr bytes) -> do
+        N.stash proxy bytes nrs ptr
+        HT.delete mt key
 
 remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
@@ -349,11 +358,6 @@ remoteFinalizer !weak_ref !key = do
   case mr of
     Nothing  -> message ("finalise/dead table: " ++ show key)
     Just ref -> trace   ("finalise: "            ++ show key) $ withMVar ref (`HT.delete` key)
-
-table_finalizer :: HashTable StableArray (RemoteArray p) -> IO ()
-table_finalizer !tbl
-  = trace "table finaliser"
-  $ HT.mapM_ (\(_,RemoteArray w) -> finalize w) tbl
 
 -- Miscellaneous
 -- -------------
