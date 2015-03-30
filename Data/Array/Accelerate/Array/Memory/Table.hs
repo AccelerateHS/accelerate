@@ -191,7 +191,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
     `orElse` attempt "malloc/new" (do
       left <- percentAvailable
       when (left < threshold) $ reclaim mt
-      M.malloc bytes)
+      M.malloc n')
     `orElse` (do
       message "malloc/remote-malloc-failed (cleaning)"
       clean mt
@@ -199,7 +199,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
     `orElse` (do
       message "malloc/remote-malloc-failed (purging)"
       purge mt
-      M.malloc bytes)
+      M.malloc n')
     `orElse` (do
       message "malloc/remote-malloc-failed (non-recoverable)"
       return Nothing)
