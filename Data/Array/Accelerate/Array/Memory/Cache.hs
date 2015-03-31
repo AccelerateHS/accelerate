@@ -240,7 +240,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
     Just (sa, Used ts status count tasks n weak_arr) -> do
       mad <- liftIO $ deRefWeak weak_arr
       case mad of
-        Nothing -> do
+        Nothing -> liftIO $ do
           -- This can only happen if our eviction process was interrupted by
           -- garbage collection. In which case, even though we didn't actually
           -- evict anything, we should return true, as we know some remote
@@ -248,7 +248,8 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
           --
           -- Small caveat: Due to finalisers being delayed, it's a good idea
           -- to free the array here.
-          liftIO $ MT.freeStable (Proxy :: Proxy m) mt sa
+          MT.freeStable (Proxy :: Proxy m) mt sa
+          delete utbl sa
           message "evictLRU/Accelerate GC interrupted by GHC GC"
         Just arr -> do
           message ("evictLRU/evicting " ++ show sa)
@@ -324,11 +325,14 @@ finalizer !key !weak_utbl = do
   mref <- deRefWeak weak_utbl
   case mref of
     Nothing -> trace "finalize cache/dead table" $ return ()
-    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref $ \utbl -> do
-      mu <- HT.lookup utbl key
-      case mu of
-        Nothing -> return ()
-        Just (Used _ _ _ us _ _) -> cleanUses us >> HT.delete utbl key
+    Just ref -> trace ("finalize cache: " ++ show key) $ withMVar' ref (`delete` key)
+
+delete :: Task task => UT task -> StableArray -> IO ()
+delete utbl key = do
+  mu <- HT.lookup utbl key
+  case mu of
+    Nothing -> return ()
+    Just (Used _ _ _ us _ _) -> cleanUses us >> HT.delete utbl key
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
