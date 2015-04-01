@@ -1,0 +1,125 @@
+{-# LANGUAGE MagicHash     #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE UnboxedTuples #-}
+{-# OPTIONS_HADDOCK hide #-}
+-- |
+-- Module      : Data.Array.Accelerate.Lifetime
+-- Copyright   : [2015] Robert Clifton-Everest, Manuel M T Chakravarty, Gabriele Keller
+-- License     : BSD3
+--
+-- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+
+module Data.Array.Accelerate.Lifetime (
+
+  Lifetime, newLifetime, withLifetime, addFinalizer, finalize, mkWeak,
+  mkWeakPtr, unsafeGetValue
+
+) where
+
+import Control.Applicative          ( (<*) )
+import Data.Function                ( on )
+import Data.IORef                   ( mkWeakIORef, atomicModifyIORef' )
+
+import GHC.Base                     ( touch#, IO(..))
+import GHC.IORef                    ( IORef(.. ), newIORef )
+import GHC.Prim                     ( mkWeak# )
+import GHC.STRef                    ( STRef(..) )
+import GHC.Weak                     ( Weak(..) )
+
+-- | A lifetime represents a value with attached finalizers. This is similar to
+-- the functionality provided by "System.Mem.Weak", but has the following
+-- stronger properties:
+--
+-- * Unless explicitly forced, finalizers will not fire until after the
+--   'Lifetime' has become unreachable, where \"reachability\" is the same as
+--   defined in "System.Mem.Weak". That is to say, there is no issue with
+--   creating a 'Lifetime' for a non-primitve type and finalizers firing while
+--   an object is still reachable.
+--
+-- * Finalizers are fired in the order they were attached to the 'Lifetime'.
+--
+-- * As the finalizers are attached to the 'Lifetime' and not the underlying
+--   value there is no danger in storing it UNPACKED as part of another
+--   structure.
+--
+data Lifetime a = Lifetime {-# UNPACK #-} !(IORef [IO ()]) {-# UNPACK #-} !(Weak (IORef [IO ()])) a
+
+instance Eq a => Eq (Lifetime a) where
+  (==) = (==) `on` unsafeGetValue
+
+-- | Construct a new 'Lifetime' from the given value.
+--
+newLifetime :: a -> IO (Lifetime a)
+newLifetime a = do
+  ref  <- newIORef []
+  weak <- mkWeakIORef ref (finalizer ref)
+  return $! Lifetime ref weak a
+
+-- | This provides a way of looking at the value inside a 'Lifetime'. The
+-- supplied function is executed immediately and the 'Lifetime' kept alive
+-- throughout its execution. It is important to not let the value /leak/ outside
+-- the function, either by returning it or by using it with 'unsafePerformIO'.
+--
+withLifetime :: Lifetime a -> (a -> IO b) -> IO b
+withLifetime (Lifetime ref _ a) f = f a <* touch ref
+
+-- | Attaches a finalizer to a 'Lifetime'. Like in "System.Mem.Weak", there is
+-- no guarantee that the finalizer will eventually run. If they do run,
+-- they will be executed in the order in which they were supplied.
+--
+addFinalizer :: Lifetime a -> IO () -> IO ()
+addFinalizer (Lifetime ref _ _) f = atomicModifyIORef' ref (\fs -> (f:fs,()))
+
+-- | Causes any finalizers associated with the given lifetime to be run
+-- immediately on the calling thread.
+--
+finalize :: Lifetime a -> IO ()
+finalize (Lifetime ref _ _) = finalizer ref
+
+-- | Create a weak pointer from a 'Lifetime' to the supplied value.
+--
+-- Because weak pointers have their own concept of finalizers, it is important
+-- to note these behaviours:
+--
+-- * Calling 'System.Mem.Weak.finalize' causes the finalizers attached to the
+--   lifetime to be scheduled, and run in the correct order, but does not
+--   guarantee they will execute on the calling thread.
+--
+-- * If 'deRefWeak' returns Nothing, there is no guarantee that the finalizers
+--   have already run.
+--
+mkWeak :: Lifetime k -> v -> IO (Weak v)
+mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = IO $ \s ->
+  case mkWeak# r# v f s of (# s', w# #) -> (# s', Weak w# #)
+  where
+    f = finalizer ref
+
+-- A specialised version of 'mkWeak' where the key and value are the same
+-- 'Lifetime'.
+--
+-- > mkWeakPtr key = mkWeak key key
+--
+mkWeakPtr :: Lifetime a -> IO (Weak (Lifetime a))
+mkWeakPtr l = mkWeak l l
+
+-- | Retrieve the value from a lifetime. This is unsafe because, unless the
+-- 'Lifetime' is still reachable, the finalizers may fire, potentially
+-- invalidating the value.
+--
+unsafeGetValue :: Lifetime a -> a
+unsafeGetValue (Lifetime _ _ a) = a
+
+-- The actual finalizer for 'Lifetime's.
+--
+finalizer :: IORef [IO ()] -> IO ()
+finalizer ref = do
+  fins <- atomicModifyIORef' ref $ (,[])
+  sequence_ (reverse fins)
+
+-- Touch an 'IORef', keeping it alive.
+--
+touch :: IORef a -> IO ()
+touch r = IO $ \s -> case touch# r s of s' -> (# s', () #)
