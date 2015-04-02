@@ -37,7 +37,7 @@ import Prelude                                                  hiding ( lookup 
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
-import Control.Monad                                            ( filterM, when )
+import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
@@ -91,12 +91,8 @@ class Task task where
   -- |Returns true when the task has finished.
   isDone :: task -> IO Bool
 
-  -- |Frees any resources associated with the task.
-  destroy :: task -> IO ()
-
 instance Task () where
   isDone () = return True
-  destroy () = return ()
 
 -- |Create a new memory cache from host to remote arrays.
 --
@@ -332,7 +328,7 @@ delete utbl key = do
   mu <- HT.lookup utbl key
   case mu of
     Nothing -> return ()
-    Just (Used _ _ _ us _ _) -> cleanUses us >> HT.delete utbl key
+    Just _  -> HT.delete utbl key
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
@@ -353,12 +349,7 @@ cache_finalizer !tbl
 -- -------------
 
 cleanUses :: Task task => [task] -> IO [task]
-cleanUses = filterM (fmap not . clean)
-  where
-    clean u = do
-      d <- isDone u
-      when d $ destroy u
-      return d
+cleanUses = filterM (fmap not . isDone)
 
 incCount :: Used task -> Used task
 incCount (Used ts status count uses n weak_arr) = Used ts status (count + 1) uses n weak_arr
