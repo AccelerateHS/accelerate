@@ -116,7 +116,7 @@ unsafeGetValue (Lifetime _ _ a) = a
 --
 finalizer :: IORef [IO ()] -> IO ()
 finalizer ref = do
-  fins <- atomicModifyIORef' ref $ (,[])
+  fins <- atomicModifyIORef' ref ([],)
   sequence_ (reverse fins)
 
 -- Touch an 'IORef', keeping it alive.
