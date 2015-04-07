@@ -103,15 +103,6 @@ data RemoteArray p where
               -> RemoteArray p
 
 
--- At what percentage of available memory should we consider it empty.
---
--- RCE: This is highly necessary with the CUDA backend as OSX's (and presumably
--- other OSes) UI doesn't handle GPU memory exhaustion very well (it crashes).
---
--- RCE: Experimentation should be done to come up with a better value.
-threshold :: Float
-threshold = 5.0
-
 -- |Create a new memory table from host to remote arrays.
 --
 -- The function supplied should be the `free` for the remote pointers being
@@ -191,8 +182,6 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   mp <-
       attempt "malloc/nursery" (liftIO $ fmap (M.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
     `orElse` attempt "malloc/new" (do
-      left <- percentAvailable
-      when (left < threshold) $ reclaim mt
       M.malloc n')
     `orElse` (do
       message "malloc/remote-malloc-failed (cleaning)"
@@ -281,12 +270,6 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   weak <- liftIO $ makeWeakArrayData arr () (Just $ remoteFinalizer weak_ref key)
   message $ "insertUnmanaged: " ++ show key
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr 0)
-
-percentAvailable :: (RemoteMemory m, MonadIO m) => m Float
-percentAvailable = do
-  left  <- M.availableMem
-  total <- M.totalMem
-  return (100.0 * fromIntegral left / fromIntegral total)
 
 
 -- Removing entries
