@@ -37,7 +37,7 @@ import Prelude                                                  hiding ( lookup 
 import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
-import Control.Monad                                            ( filterM )
+import Control.Monad                                            ( filterM, unless )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
@@ -192,6 +192,10 @@ contains (MemoryCache _ ref _) !ad = do
 -- That is to say the array arrays contents will never change. In the event that
 -- the array has to be evicted from the remote memory, the copy already residing
 -- in host memory should be considered valid.
+--
+-- If malloc is called on an array that is already contained within the cache,
+-- it becomes a no-op.
+--
 malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        => MemoryCache (RemotePointer m) task
        -> ArrayData e
@@ -202,9 +206,13 @@ malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
   key <- MT.makeStableArray ad
   let status = if frozen then Clean else Dirty
-  weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
-  _ <- withMVar' ref $ \utbl -> mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
-  return ()
+
+  withMVar' ref $ \utbl -> do
+    mu <- liftIO $ HT.lookup utbl key
+    unless (isJust mu) $ do
+      weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
+      _ <- mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
+      return ()
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
