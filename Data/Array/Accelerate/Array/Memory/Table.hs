@@ -15,7 +15,7 @@
 --               [2009..2014] Trevor L. McDonell
 -- License     : BSD3
 --
--- Maintainer  : Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- Maintainer  : Robert Clifton-Everest <tmcdonell@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
@@ -43,7 +43,6 @@ import Data.Functor                                             ( (<$>) )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
-import Control.Monad                                            ( when )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent                                       ( yield )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
@@ -230,16 +229,13 @@ free proxy mt !arr = do
 -- is useful for other memory managers built on top of the memory table.
 --
 freeStable :: RemoteMemory m => proxy m -> MemoryTable (RemotePointer m) -> StableArray -> IO ()
-freeStable proxy (MemoryTable !ref _ nrs _) !sa = withMVar ref $ \mt -> do
+freeStable proxy (MemoryTable !ref _ (Nursery !nrs _) _) !sa = withMVar ref $ \mt -> do
   mw <-  mt `HT.lookup` sa
   case mw of
-    Nothing -> message ("free/not found: " ++ show sa)
-    Just r  -> trace   ("free/evict: " ++ show sa) $ do
-      freeRemote proxy nrs r
+    Nothing -> message ("free/already-removed: " ++ show sa)
+    Just (RemoteArray _ !p !bytes)  -> trace ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes) $ do
+      N.stash proxy bytes nrs p
       mt `HT.delete` sa
-
-freeRemote :: RemoteMemory m => proxy m -> Nursery (RemotePointer m) -> RemoteArray (RemotePointer m) -> IO ()
-freeRemote proxy (Nursery !nrs _) (RemoteArray _ !p !bytes) = N.stash proxy bytes nrs p
 
 
 -- Record an association between a host-side array and a new device memory area.
@@ -253,7 +249,7 @@ insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
        -> m ()
 insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
-  weak <- liftIO $ makeWeakArrayData arr () (Just $ finalizer (Proxy :: Proxy m) mt key)
+  weak <- liftIO $ makeWeakArrayData arr () (Just $ freeStable (Proxy :: Proxy m) mt key)
   message      $ "insert: " ++ show key
   liftIO $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr bytes)
 
@@ -311,29 +307,6 @@ purge (MemoryTable _ _ nursery@(Nursery nrs _) free) = management "purge" nurser
 --
 reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
 reclaim mt = clean mt >> purge mt
-
--- Because a finaliser might run at any time, we must reinstate the context in
--- which the array was allocated before attempting to release it.
---
--- Note also that finaliser threads will silently terminate if an exception is
--- raised. If the context, and thereby all allocated memory, was destroyed
--- externally before the thread had a chance to run, all we need do is update
--- the hash tables --- but we must do this first before failing to use a dead
--- context.
---
-finalizer :: (RemoteMemory m, MonadIO m)
-          => proxy m
-          -> MemoryTable (RemotePointer m)
-          -> StableArray
-          -> IO ()
-finalizer proxy (MemoryTable !ref _ (Nursery !nrs _) _) !key = do
-  withMVar ref $ \mt -> do
-    mr <- HT.lookup mt key
-    case mr of
-      Nothing -> message ("finalize/already-removed: " ++ show key)
-      Just (RemoteArray _ ptr bytes) -> do
-        N.stash proxy bytes nrs ptr
-        HT.delete mt key
 
 remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
 remoteFinalizer !weak_ref !key = do
