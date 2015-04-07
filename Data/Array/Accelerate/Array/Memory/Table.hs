@@ -241,13 +241,13 @@ free proxy mt !arr = do
 -- is useful for other memory managers built on top of the memory table.
 --
 freeStable :: RemoteMemory m => proxy m -> MemoryTable (RemotePointer m) -> StableArray -> IO ()
-freeStable proxy (MemoryTable !ref _ nrs _) !sa = do
-  mw <- withMVar ref (`HT.lookup` sa)
+freeStable proxy (MemoryTable !ref _ nrs _) !sa = withMVar ref $ \mt -> do
+  mw <-  mt `HT.lookup` sa
   case mw of
     Nothing -> message ("free/not found: " ++ show sa)
     Just r  -> trace   ("free/evict: " ++ show sa) $ do
       freeRemote proxy nrs r
-      withMVar ref (`HT.delete` sa)
+      mt `HT.delete` sa
 
 freeRemote :: RemoteMemory m => proxy m -> Nursery (RemotePointer m) -> RemoteArray (RemotePointer m) -> IO ()
 freeRemote proxy (Nursery !nrs _) (RemoteArray _ !p !bytes) = N.stash proxy bytes nrs p
