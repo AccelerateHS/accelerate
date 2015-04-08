@@ -941,6 +941,29 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
     (adata, _) = runArrayData $ (,undefined) `fmap` newArrayData (size sh)
 
 
+type family IxShapeRepr e where
+  IxShapeRepr ()    = ()
+  IxShapeRepr Int   = ((),Int)
+  IxShapeRepr (t,h) = (IxShapeRepr t, h)
+
+fromIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => sh -> ix
+fromIxShapeRepr sh = toElt (go (eltType (undefined::ix)) (fromElt sh))
+  where
+    go :: forall ix. TupleType ix -> IxShapeRepr ix -> ix
+    go UnitTuple () = ()
+    go (SingleTuple (NumScalarType (IntegralNumType (TypeInt _)))) ((),h) = h
+    go (PairTuple tt _) (t,h) = (go tt t, h)
+    go _ _ = error "Not a valid IArray.Ix"
+
+toIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => ix -> sh
+toIxShapeRepr ix = toElt (go (eltType (undefined::ix)) (fromElt ix))
+  where
+    go :: forall ix. TupleType ix -> ix -> IxShapeRepr ix
+    go UnitTuple () = ()
+    go (SingleTuple (NumScalarType (IntegralNumType (TypeInt _)))) h = ((),h)
+    go (PairTuple tt _) (t,h) = (go tt t, h)
+    go _ _ = error "Not a valid IArray.Ix"
+
 -- | Convert an 'IArray' to an accelerated array.
 --
 -- While the type signature mentions Accelerate internals that are not exported,
@@ -948,29 +971,21 @@ allocateArray sh = adata `seq` return (Array (fromElt sh) adata)
 -- @ix@ must be the unit type @()@ for singleton arrays, or an @Int@ or tuple of
 -- @Int@'s for multidimensional arrays.
 --
-fromIArray :: (IArray a e, IArray.Ix ix) => a ix e -> Array sh e
-fromIArray = error "TODO: fromIArray is broken" -- due to EltRepr changes
-{--
-fromIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+fromIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
            => a ix e -> Array sh e
-fromIArray iarr = newArray (toElt sh) (\ix -> iarr IArray.! toElt (fromElt ix))
+fromIArray iarr = newArray sh (\ix -> iarr IArray.! fromIxShapeRepr ix)
   where
     (lo,hi) = IArray.bounds iarr
-    sh      = Repr.rangeToShape (fromElt lo, fromElt hi)
---}
+    sh      = rangeToShape (toIxShapeRepr lo, toIxShapeRepr hi)
 
 -- | Convert an accelerated array to an 'IArray'.
 --
-toIArray :: (IArray a e, IArray.Ix ix) => Array sh e -> a ix e
-toIArray = error "TODO: toIArray is broken"     -- due to EltRepr changes
-{--
-toIArray :: (EltRepr ix ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
+toIArray :: (IxShapeRepr (EltRepr ix) ~ EltRepr sh, IArray a e, IArray.Ix ix, Shape sh, Elt ix, Elt e)
          => Array sh e -> a ix e
-toIArray arr = IArray.array bnds [(ix, arr ! toElt (fromElt ix)) | ix <- IArray.range bnds]
+toIArray arr = IArray.array bnds [(ix, arr ! toIxShapeRepr ix) | ix <- IArray.range bnds]
   where
-    (lo,hi) = Repr.shapeToRange (fromElt (shape arr))
-    bnds    = (toElt lo, toElt hi)
---}
+    (lo,hi) = shapeToRange (shape arr)
+    bnds    = (fromIxShapeRepr lo, fromIxShapeRepr hi)
 
 -- | Convert a list, with elements in row-major order, into an accelerated array.
 --
