@@ -39,7 +39,8 @@ import GHC.Weak                     ( Weak(..) )
 --   creating a 'Lifetime' for a non-primitve type and finalizers firing while
 --   an object is still reachable.
 --
--- * Finalizers are fired in the order they were attached to the 'Lifetime'.
+-- * Finalizers are fired sequentially in reverse of the order in which they
+--   were attached.
 --
 -- * As the finalizers are attached to the 'Lifetime' and not the underlying
 --   value there is no danger in storing it UNPACKED as part of another
@@ -117,7 +118,7 @@ unsafeGetValue (Lifetime _ _ a) = a
 finalizer :: IORef [IO ()] -> IO ()
 finalizer ref = do
   fins <- atomicModifyIORef' ref ([],)
-  sequence_ (reverse fins)
+  sequence_ fins
 
 -- Touch an 'IORef', keeping it alive.
 --
