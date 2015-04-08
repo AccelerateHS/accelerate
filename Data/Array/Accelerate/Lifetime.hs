@@ -77,6 +77,11 @@ addFinalizer (Lifetime ref _ _) f = atomicModifyIORef' ref (\fs -> (f:fs,()))
 -- | Causes any finalizers associated with the given lifetime to be run
 -- immediately on the calling thread.
 --
+-- Because the finalizer is run on the calling thread. Care should be taken to
+-- ensure that the it does not try to acquire any locks the calling thread might
+-- already possess. This can result in deadlock and is in contrast to calling
+-- 'System.Mem.Weak.finalize' on 'System.Mem.Weak.Weak'.
+--
 finalize :: Lifetime a -> IO ()
 finalize (Lifetime ref _ _) = finalizer ref
 
