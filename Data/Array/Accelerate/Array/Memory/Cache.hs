@@ -26,7 +26,7 @@
 module Data.Array.Accelerate.Array.Memory.Cache (
 
   -- Tables for host/device memory associations
-  MemoryCache, new, withRemote, contains, malloc, free, insertUnmanaged, reclaim,
+  MemoryCache, new, withRemote, malloc, free, insertUnmanaged, reclaim,
 
   -- Asynchronous tasks
   Task(..)
@@ -35,9 +35,9 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 
 import Prelude                                                  hiding ( lookup )
 import Data.Functor                                             ( (<$>) )
-import Data.Maybe                                               ( isJust )
+import Data.Maybe                                               ( isNothing )
 import Data.Proxy
-import Control.Monad                                            ( filterM, unless )
+import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
@@ -177,13 +177,6 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
       return c
 
 
--- | Check if a given array has ever been in the cache.
---
-contains :: forall e a p task. (PrimElt e a, Task task) => MemoryCache p task -> ArrayData e -> IO Bool
-contains (MemoryCache _ ref _) !ad = do
-  key <- MT.makeStableArray ad
-  isJust <$> (withMVar' ref $ \utbl -> HT.lookup utbl key)
-
 -- | Allocate a new device array to be associated with the given host-side array.
 -- This has similar behaviour to malloc in Data.Array.Accelerate.Array.Memory.Table
 -- but also will copy remote arrays back to main memory in order to make space.
@@ -201,7 +194,7 @@ malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        -> ArrayData e
        -> Bool                               -- ^True if host array is frozen.
        -> Int
-       -> m ()
+       -> m Bool
 malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
   key <- MT.makeStableArray ad
@@ -209,10 +202,11 @@ malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
 
   withMVar' ref $ \utbl -> do
     mu <- liftIO $ HT.lookup utbl key
-    unless (isJust mu) $ do
+    if isNothing mu then do
       weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
       _ <- mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
-      return ()
+      return True
+    else return False
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
