@@ -1,14 +1,14 @@
 language: haskell
 env:
     - GHC=7.8.4
-    - GHC=7.10.1
     - GHC=7.8.4 MODE=-fdebug
-    - GHC=7.10.1 MODE=-fdebug
-    - GHC=head MODE=-fdebug
+    - GHC=7.10.1 CABAL=1.22
+    - GHC=7.10.1 CABAL=1.22 MODE=-fdebug
+    - GHC=head CABAL=head MODE=-fdebug
 
 matrix:
     allow_failures:
-        - env: GHC=head MODE=-fdebug
+        - env: GHC=head CABAL=head MODE=-fdebug
 
 before_install:
     # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
@@ -22,11 +22,11 @@ before_install:
             travis_retry sudo apt-get install -y ghc-${GHC}
             export PATH=/opt/ghc/${GHC}/bin:${PATH}
         fi
-    # - |
-    #     if [ ${GHC} = "head" ]; then
-    #         travis_retry sudo apt-get install -y cabal-install-head
-    #         export PATH=/opt/cabal/head/bin:${PATH}
-    #     fi
+    - |
+        if [ ${CABAL} ]; then
+            travis_retry sudo apt-get install -y cabal-install-${CABAL}
+            export PATH=/opt/cabal/${CABAL}/bin:${PATH}
+        fi
 
 install:
     - ghc --version
