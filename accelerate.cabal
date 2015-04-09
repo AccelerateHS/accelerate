@@ -167,15 +167,15 @@ Flag internal-checks
 
 Library
   Build-depends:        array                   >= 0.3,
-                        base                    == 4.7.*,
+                        base                    >= 4.6,
                         containers              >= 0.3,
                         unordered-containers    >= 0.2,
                         fclabels                >= 2.0,
-                        ghc-prim                >= 0.2,
+                        ghc-prim,
                         hashable                >= 1.1,
                         hashtables              >= 1.0,
                         pretty                  >= 1.0,
-                        template-haskell        == 2.9.*
+                        template-haskell
 
   if flag(more-pp)
     Build-depends:      bytestring              >= 0.9,
