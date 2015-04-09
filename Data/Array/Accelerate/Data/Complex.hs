@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Array.Accelerate.Data.Complex (
@@ -27,8 +28,11 @@ module Data.Array.Accelerate.Data.Complex (
   conjugate,
 
 ) where
-
+#if __GLASGOW_HASKELL__ >= 710
+import Prelude                           hiding ( (<*))
+#else
 import Prelude
+#endif
 import Data.Complex                             ( Complex(..) )
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart
@@ -166,4 +170,3 @@ imag c =
 --
 conjugate :: (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
 conjugate z = lift $ real z :+ (- imag z)
-
