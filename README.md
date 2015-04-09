@@ -1,6 +1,8 @@
 An Embedded Language for Accelerated Array Computations
 =======================================================
 
+[![Build Status](https://travis-ci.org/tmcdonell/accelerate.svg?branch=master)](https://travis-ci.org/tmcdonell/accelerate)
+
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
 For more details, see our papers:
