@@ -8,7 +8,7 @@ env:
 
 matrix:
     allow_failures:
-        - env: GHC=head MODE=debug
+        - env: GHC=head MODE=-fdebug
 
 before_install:
     # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
