@@ -30,7 +30,7 @@ module Data.Array.Accelerate.Data.Complex (
 
 import Prelude
 import Data.Complex                             ( Complex(..) )
-import Data.Array.Accelerate
+import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
@@ -90,11 +90,11 @@ instance (Elt a, IsFloating a, RealFloat a) => Floating (Exp (Complex a)) where
           x :+ y        = unlift z
           v'            = abs y / (u'*2)
           u'            = sqrt ((magnitude z + abs x) / 2)
-          (u, v)        = unlift ( x <* 0 ? ( lift (v',u'), lift (u',v') ) )
+          (u, v)        = unlift ( x A.<* 0 ? ( lift (v',u'), lift (u',v') ) )
       in
       x ==* 0 &&* y ==* 0 ?
         {- then -} ( 0
-        {- else -} , lift (u :+ (y <* 0 ? (-v,v))) )
+        {- else -} , lift (u :+ (y A.<* 0 ? (-v,v))) )
 
   pi            = lift (pi :+ constant 0)
   log z         = lift (log (magnitude z) :+ phase z)
