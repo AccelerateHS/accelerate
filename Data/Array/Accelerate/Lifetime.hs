@@ -43,7 +43,7 @@ import GHC.Weak                     ( Weak(..) )
 --   were attached.
 --
 -- * As the finalizers are attached to the 'Lifetime' and not the underlying
---   value there is no danger in storing it UNPACKED as part of another
+--   value, there is no danger in storing it UNPACKED as part of another
 --   structure.
 --
 data Lifetime a = Lifetime {-# UNPACK #-} !(IORef [IO ()]) {-# UNPACK #-} !(Weak (IORef [IO ()])) a
@@ -62,13 +62,13 @@ newLifetime a = do
 -- | This provides a way of looking at the value inside a 'Lifetime'. The
 -- supplied function is executed immediately and the 'Lifetime' kept alive
 -- throughout its execution. It is important to not let the value /leak/ outside
--- the function, either by returning it or by using it with 'unsafePerformIO'.
+-- the function, either by returning it or by lazy IO.
 --
 withLifetime :: Lifetime a -> (a -> IO b) -> IO b
 withLifetime (Lifetime ref _ a) f = f a <* touch ref
 
 -- | Attaches a finalizer to a 'Lifetime'. Like in "System.Mem.Weak", there is
--- no guarantee that the finalizer will eventually run. If they do run,
+-- no guarantee that the finalizers will eventually run. If they do run,
 -- they will be executed in the order in which they were supplied.
 --
 addFinalizer :: Lifetime a -> IO () -> IO ()
