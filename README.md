@@ -59,17 +59,17 @@ The following supported addons are available as separate packages on Hackage and
   * [`accelerate-examples`][accelerate-examples] Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * [`accelerate-io`][accelerate-io] Fast conversion between Accelerate arrays and other array formats (including Repa arrays)
   * [`accelerate-fft`][accelerate-fft] Fast Fourier transform implementation, with optimised implementation for the CUDA backend
-  * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
-  * [`accelerate-buildbot`][accelerate-buildbot] Build bot for automatic performance & regression testing
 
 Install them from Hackage with `cabal install PACKAGENAME`.
 
-The following components are experimental and incomplete incomplete:
+The following components are experimental and/or incomplete:
 
   * [`accelerate-llvm`][accelerate-llvm] A framework for constructing backends targeting LLVM IR, with concrete backends for multicore CPUs and NVIDIA GPUs.
+  * [`accelerate-backend-kit`][accelerate-backend-kit] Simplified internal AST to get going on writing backends
 
-The following components are incomplete and not currently maintained. Please contact us if you are interested in working on them!
+The following components are incomplete or not currently maintained. Please contact us if you are interested in working on them!
 
+  * [`accelerate-buildbot`][accelerate-buildbot] Build bot for automatic performance & regression testing
   * [`accelerate-opencl`][accelerate-opencl] Backend targeting GPUs via the OpenCL standard
   * [`accelerate-repa`][accelerate-repa] Backend targeting multicore CPUs via the [Repa][repa] parallel array library
 
