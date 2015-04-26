@@ -79,7 +79,7 @@ module Data.Array.Accelerate (
   L.use, L.unit,
 
   -- *** Initialisation
-  L.generate, L.replicate, P.fill, P.empty,
+  L.generate, L.replicate, P.fill,
 
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,

@@ -729,7 +729,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   size   :: sh -> Int
 
   -- |Empty /shape/.
-  emptyS :: sh
+  empty :: sh
 
   -- |Magic value identifying elements ignored in 'permute'.
   ignore :: sh
@@ -779,7 +779,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
 
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
-  emptyS                = toElt Repr.emptyS
+  empty                 = toElt Repr.empty
   -- (#) must be individually defined, as it holds for all instances *except*
   -- the one with the largest arity
 

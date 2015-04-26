@@ -45,7 +45,7 @@ module Data.Array.Accelerate.Prelude (
   flatten,
 
   -- * Enumeration and filling
-  empty, fill, enumFromN, enumFromStepN,
+  fill, enumFromN, enumFromStepN,
 
   -- * Concatenation
   (++),
@@ -101,7 +101,7 @@ module Data.Array.Accelerate.Prelude (
 --
 import Data.Bits
 import Data.Bool
-import Prelude ((.), ($), (+), (-), (*), const, id, min, max, Float, Double, Char)
+import Prelude ((.), ($), (+), (-), (*), undefined, const, id, min, max, Float, Double, Char)
 import qualified Prelude as P
 
 -- friends
@@ -875,11 +875,6 @@ flatten a = reshape (index1 $ size a) a
 
 -- Enumeration and filling
 -- -----------------------
-
--- | Create an empty array.
---
-empty :: (Shape sh, Elt e) => Acc (Array sh e)
-empty = use (fromList emptyS [])
 
 -- | Create an array where all elements are the same value.
 --
@@ -1821,23 +1816,27 @@ length = unindex1 . shape
 -- Sequence operations
 -- --------------------------------------
 
+emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray = use (newArray empty undefined)
+
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.
 --
 fromSeq :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix, Vector a)
-fromSeq = foldSeqFlatten f (lift (empty, empty))
+fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
   where
     f x sh1 a1 =
       let (sh0, a0) = unlift x
       in lift (sh0 ++ sh1, a0 ++ a1)
 
+
 fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
-fromSeqElems = foldSeqFlatten f empty
+fromSeqElems = foldSeqFlatten f emptyArray
   where
     f a0 _ a1 = a0 ++ a1
 
 fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
-fromSeqShapes = foldSeqFlatten f empty
+fromSeqShapes = foldSeqFlatten f emptyArray
   where
     f sh0 sh1 _ = sh0 ++ sh1
 

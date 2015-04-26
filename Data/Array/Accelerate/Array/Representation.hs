@@ -47,7 +47,7 @@ class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
   dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
   size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
-  emptyS    :: sh                    -- ^empty shape.
+  empty     :: sh                    -- ^empty shape.
 
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
@@ -81,7 +81,7 @@ class (Eq sh, Slice sh) => Shape sh where
 instance Shape () where
   dim _             = 0
   size ()           = 1
-  emptyS            = ()
+  empty             = ()
 
   () `intersect` () = ()
   () `union` ()     = ()
@@ -102,7 +102,7 @@ instance Shape () where
 instance Shape sh => Shape (sh, Int) where
   dim _                             = dim (undefined :: sh) + 1
   size (sh, sz)                     = size sh * sz
-  emptyS                            = (emptyS, 0)
+  empty                             = (empty, 0)
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
