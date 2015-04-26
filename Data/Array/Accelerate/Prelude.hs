@@ -1297,6 +1297,31 @@ class Lift c e => Unlift c e where
   --
   unlift :: c (Plain e) -> e
 
+
+-- identity instances
+
+instance Lift Exp (Exp e) where
+  type Plain (Exp e) = e
+  lift = id
+
+instance Unlift Exp (Exp e) where
+  unlift = id
+
+instance Lift Acc (Acc a) where
+  type Plain (Acc a) = a
+  lift = id
+
+instance Unlift Acc (Acc a) where
+  unlift = id
+
+instance Lift Seq (Seq a) where
+  type Plain (Seq a) = a
+  lift = id
+
+instance Unlift Seq (Seq a) where
+  unlift = id
+
+
 -- instances for indices
 
 instance Lift Exp () where
@@ -1529,25 +1554,6 @@ instance (Lift Exp a, Lift Exp b, Lift Exp c, Lift Exp d, Lift Exp e,
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   => Unlift Exp (Exp a, Exp b, Exp c, Exp d, Exp e, Exp f, Exp g, Exp h, Exp i) where
   unlift = untup9
-
--- Instance for scalar Accelerate expressions
-
-instance Lift Exp (Exp e) where
-  type Plain (Exp e) = e
-  lift = id
-
-
--- Instance for Accelerate array computations
-
-instance Lift Acc (Acc a) where
-  type Plain (Acc a) = a
-  lift = id
-
--- Instance for Accelerate sequence computations
-
-instance Lift Seq (Seq a) where
-  type Plain (Seq a) = a
-  lift = id
 
 -- Instances for Arrays class
 
