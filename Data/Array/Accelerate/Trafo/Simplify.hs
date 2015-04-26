@@ -24,12 +24,12 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp, iterate )
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
 import Control.Applicative                              hiding ( Const )
+import Prelude                                          hiding ( exp, iterate )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )

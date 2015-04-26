@@ -37,9 +37,8 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
 ) where
 
-import Prelude                                                  hiding ( lookup )
 import Data.Array.Storable.Internals                            ( StorableArray(..) )
-import Data.Functor                                             ( (<$>) )
+import Data.Functor
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
@@ -49,6 +48,7 @@ import Control.Concurrent.MVar                                  ( MVar, newMVar,
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
 import Foreign.Storable                                         ( sizeOf )
+import Prelude                                                  hiding ( lookup )
 
 import GHC.Exts                                                 ( Ptr(..) )
 import GHC.ForeignPtr                                           ( ForeignPtr(..), ForeignPtrContents(..) )

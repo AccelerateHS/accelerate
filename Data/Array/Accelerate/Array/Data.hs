@@ -1,16 +1,16 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE DeriveDataTypeable  #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE UnboxedTuples       #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UnboxedTuples         #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 {-# OPTIONS_GHC -fno-warn-orphans         #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -49,25 +49,26 @@ module Data.Array.Accelerate.Array.Data (
 ) where
 
 -- standard libraries
-import Foreign            (Ptr)
+import Foreign                                  ( Ptr )
 import Foreign.C.Types
 import Data.Bits
-import Data.Functor       ((<$>))
-import Data.IORef         ( IORef, newIORef, atomicModifyIORef' )
-import Data.Typeable      (Typeable)
+import Data.Functor
+import Data.IORef                               (  IORef, newIORef, atomicModifyIORef' )
+import Data.Typeable                            ( Typeable )
 import Control.Monad
 #ifdef ACCELERATE_UNSAFE_CHECKS
-import qualified Data.Array.Base    as MArray (readArray, writeArray)
+import qualified Data.Array.Base                as MArray ( readArray, writeArray )
 #else
-import qualified Data.Array.Base    as MArray (unsafeRead, unsafeWrite)
+import qualified Data.Array.Base                as MArray ( unsafeRead, unsafeWrite )
 #endif
 import Data.Array.Storable.Internals
 import Foreign.ForeignPtr.Unsafe
 import Foreign.Storable
 import System.IO.Unsafe
-import Data.Array.MArray  (MArray(..))
-import Data.Array.Base    (unsafeNewArray_)
+import Data.Array.MArray                        ( MArray(..) )
+import Data.Array.Base                          ( unsafeNewArray_ )
 import Language.Haskell.TH
+import Prelude
 
 -- friends
 import Data.Array.Accelerate.Type

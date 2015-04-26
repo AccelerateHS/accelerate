@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Lifetime (
 import Control.Applicative          ( (<*) )
 import Data.Function                ( on )
 import Data.IORef                   ( mkWeakIORef, atomicModifyIORef' )
+import Prelude
 
 import GHC.Base                     ( touch#, IO(..))
 import GHC.IORef                    ( IORef(.. ), newIORef )

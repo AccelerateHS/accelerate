@@ -33,8 +33,7 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 
 ) where
 
-import Prelude                                                  hiding ( lookup )
-import Data.Functor                                             ( (<$>) )
+import Data.Functor
 import Data.Maybe                                               ( isNothing )
 import Data.Proxy
 import Control.Monad                                            ( filterM )
@@ -44,6 +43,7 @@ import Control.Concurrent.MVar                                  ( MVar, newMVar,
 import Control.Concurrent                                       ( yield )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
+import Prelude                                                  hiding ( lookup )
 
 import qualified Data.HashTable.IO                              as HT
 

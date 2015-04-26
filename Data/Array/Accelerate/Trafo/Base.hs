@@ -47,10 +47,10 @@ module Data.Array.Accelerate.Trafo.Base (
 ) where
 
 -- standard library
-import Prelude                                          hiding ( until )
 import Control.Applicative
 import Data.Hashable
 import Text.PrettyPrint
+import Prelude                                          hiding ( until )
 
 -- friends
 import Data.Array.Accelerate.AST
