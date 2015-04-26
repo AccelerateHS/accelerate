@@ -81,7 +81,7 @@ module Data.Array.Accelerate.Prelude (
 
   -- * Lifting and unlifting
   Lift(..), Unlift(..),
-  lift1, lift2, ilift1, ilift2,
+  lift1, lift2, lift3, ilift1, ilift2, ilift3,
 
   -- ** Tuple construction and destruction
   fst, afst, snd, asnd, curry, uncurry,
@@ -1702,20 +1702,30 @@ instance (Lift Seq a, Lift Seq b, Lift Seq c, Lift Seq d, Lift Seq e,
 
 -- |Lift a unary function into 'Exp'.
 --
-lift1 :: (Unlift Exp e1, Lift Exp e2)
-      => (e1 -> e2)
-      -> Exp (Plain e1)
-      -> Exp (Plain e2)
+lift1 :: (Unlift Exp a, Lift Exp b)
+      => (a -> b)
+      -> Exp (Plain a)
+      -> Exp (Plain b)
 lift1 f = lift . f . unlift
 
 -- |Lift a binary function into 'Exp'.
 --
-lift2 :: (Unlift Exp e1, Unlift Exp e2, Lift Exp e3)
-      => (e1 -> e2 -> e3)
-      -> Exp (Plain e1)
-      -> Exp (Plain e2)
-      -> Exp (Plain e3)
+lift2 :: (Unlift Exp a, Unlift Exp b, Lift Exp c)
+      => (a -> b -> c)
+      -> Exp (Plain a)
+      -> Exp (Plain b)
+      -> Exp (Plain c)
 lift2 f x y = lift $ f (unlift x) (unlift y)
+
+-- |Lift a ternary function into 'Exp'.
+--
+lift3 :: (Unlift Exp a, Unlift Exp b, Unlift Exp c, Lift Exp d)
+      => (a -> b -> c -> d)
+      -> Exp (Plain a)
+      -> Exp (Plain b)
+      -> Exp (Plain c)
+      -> Exp (Plain d)
+lift3 f x y z = lift $ f (unlift x) (unlift y) (unlift z)
 
 -- |Lift a unary function to a computation over rank-1 indices.
 --
@@ -1726,6 +1736,11 @@ ilift1 f = lift1 (\(Z:.i) -> Z :. f i)
 --
 ilift2 :: (Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
 ilift2 f = lift2 (\(Z:.i) (Z:.j) -> Z :. f i j)
+
+-- |Lift a ternary function to a computation over rank-1 indices.
+--
+ilift3 :: (Exp Int -> Exp Int -> Exp Int -> Exp Int) -> Exp DIM1 -> Exp DIM1 -> Exp DIM1 -> Exp DIM1
+ilift3 f = lift3 (\(Z:.i) (Z:.j) (Z:.k) -> Z :. f i j k)
 
 
 -- Tuples

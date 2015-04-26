@@ -218,7 +218,7 @@ module Data.Array.Accelerate (
   -- >     -> lift      :: Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
-  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
+  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.lift3, P.ilift1, P.ilift2, P.ilift3,
 
   -- ** Operations
   --
