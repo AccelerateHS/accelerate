@@ -19,7 +19,7 @@ module Data.Array.Accelerate.Lifetime (
 
 ) where
 
-import Control.Applicative          ( (<*) )
+import Control.Applicative
 import Data.Function                ( on )
 import Data.IORef                   ( mkWeakIORef, atomicModifyIORef' )
 import Prelude

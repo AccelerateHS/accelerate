@@ -949,19 +949,19 @@ type family IxShapeRepr e where
 fromIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => sh -> ix
 fromIxShapeRepr sh = toElt (go (eltType (undefined::ix)) (fromElt sh))
   where
-    go :: forall ix. TupleType ix -> IxShapeRepr ix -> ix
-    go UnitTuple () = ()
-    go (SingleTuple (NumScalarType (IntegralNumType (TypeInt _)))) ((),h) = h
-    go (PairTuple tt _) (t,h) = (go tt t, h)
+    go :: forall ix'. TupleType ix' -> IxShapeRepr ix' -> ix'
+    go UnitTuple ()                                                         = ()
+    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) ((),h) = h
+    go (PairTuple tt _) (t, h)                                              = (go tt t, h)
     go _ _ = error "Not a valid IArray.Ix"
 
 toIxShapeRepr :: forall ix sh. (IxShapeRepr (EltRepr ix) ~ EltRepr sh, Shape sh, Elt ix) => ix -> sh
 toIxShapeRepr ix = toElt (go (eltType (undefined::ix)) (fromElt ix))
   where
-    go :: forall ix. TupleType ix -> ix -> IxShapeRepr ix
-    go UnitTuple () = ()
-    go (SingleTuple (NumScalarType (IntegralNumType (TypeInt _)))) h = ((),h)
-    go (PairTuple tt _) (t,h) = (go tt t, h)
+    go :: forall ix'. TupleType ix' -> ix' -> IxShapeRepr ix'
+    go UnitTuple        ()                                             = ()
+    go (SingleTuple     (NumScalarType (IntegralNumType TypeInt{}))) h = ((), h)
+    go (PairTuple tt _) (t, h)                                         = (go tt t, h)
     go _ _ = error "Not a valid IArray.Ix"
 
 -- | Convert an 'IArray' to an accelerated array.
