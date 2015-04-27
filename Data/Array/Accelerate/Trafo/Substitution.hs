@@ -492,9 +492,10 @@ rebuildP k v p =
   case p of
     StreamIn arrs        -> pure (StreamIn arrs)
     ToSeq sl slix acc    -> ToSeq sl slix <$> k v acc
-    MapSeq f x           -> MapSeq <$> rebuildAfun k v f <*> pure x
-    ChunkedMapSeq f x    -> ChunkedMapSeq <$> rebuildAfun k v f <*> pure x
-    ZipWithSeq f x y     -> ZipWithSeq <$> rebuildAfun k v f <*> pure x <*> pure y
+    MapSeq f Nothing   x -> flip MapSeq Nothing <$> rebuildAfun k v f <*> pure x
+    MapSeq f (Just f') x -> (. Just) . MapSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x
+    ZipWithSeq f Nothing   x y -> flip ZipWithSeq Nothing <$> rebuildAfun k v f <*> pure x <*> pure y
+    ZipWithSeq f (Just f') x y -> (. Just) . ZipWithSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x <*> pure y
     ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
 
 rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)

@@ -508,20 +508,15 @@ data Producer acc aenv senv a where
   -- sequence.
   MapSeq :: (Arrays a, Arrays b)
          => PreOpenAfun acc aenv (a -> b)
+         -> Maybe (PreOpenAfun acc aenv (Vector' a -> Vector' b))
          -> Idx senv a
          -> Producer acc aenv senv b
-
-  -- Apply the given the given function to all elements of the given
-  -- sequence.
-  ChunkedMapSeq :: (Arrays a, Arrays b)
-                => PreOpenAfun acc aenv (Vector' a -> Vector' b)
-                -> Idx senv a
-                -> Producer acc aenv senv b
 
   -- Apply a given binary function pairwise to all elements of the
   -- given sequences.
   ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
              => PreOpenAfun acc aenv (a -> b -> c)
+             -> Maybe (PreOpenAfun acc aenv (Vector' a -> Vector' b -> Vector' c))
              -> Idx senv a
              -> Idx senv b
              -> Producer acc aenv senv c

@@ -356,11 +356,11 @@ matchSeq m h = match
       | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2) -- Divisions are singleton.
       , Just REFL <- m a1 a2
       = gcast REFL
-    matchP (MapSeq f1 x1) (MapSeq f2 x2)
+    matchP (MapSeq f1 _ x1) (MapSeq f2 _ x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       = Just REFL
-    matchP (ZipWithSeq f1 x1 y1) (ZipWithSeq f2 x2 y2)
+    matchP (ZipWithSeq f1 _ x1 y1) (ZipWithSeq f2 _ x2 y2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
       , Just REFL <- matchIdx y1 y2
@@ -973,9 +973,8 @@ hashPreOpenSeq hashAcc s =
       case p of
         StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
         ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
-        MapSeq f x          -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
-        ChunkedMapSeq f x   -> hashWithSalt salt "ChunkedMapSeq" `hashAF` f   `hashVar` x
-        ZipWithSeq f x y    -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
+        MapSeq f _ x        -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
+        ZipWithSeq f _ x y  -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
         ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
 
     hashC :: Int -> Consumer acc aenv senv' a -> Int

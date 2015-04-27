@@ -84,9 +84,8 @@ travSeq f c l seq =
       case p of
         StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
         ToSeq slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
-        MapSeq afun x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
-        ChunkedMapSeq afun x -> combine "ChunkedMapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
-        ZipWithSeq afun x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
+        MapSeq afun _ x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
+        ZipWithSeq afun _ x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
         ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
     Consumer co -> travC co
     Reify ix    -> leaf (show (idxToInt ix))

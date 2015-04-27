@@ -350,4 +350,3 @@ subApply _                _ = error "subApply: inconsistent evaluation"
 --
 inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
 inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
-

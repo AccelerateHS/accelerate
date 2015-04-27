@@ -360,8 +360,8 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
       case bnd of
         StreamIn arrs               -> producer $ AST.StreamIn arrs
         ToSeq slix acc              -> producer $ mkToSeq slix (cvtA acc)
-        MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) (asIdx x)
-        ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) (asIdx x) (asIdx y)
+        MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) Nothing (asIdx x)
+        ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) Nothing (asIdx x) (asIdx y)
         ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where

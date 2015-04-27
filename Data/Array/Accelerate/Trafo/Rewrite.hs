@@ -120,9 +120,8 @@ convertSegmentsSeq seq =
       case p of
         StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
-        MapSeq f x           -> MapSeq (cvtAfun f) x
-        ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAfun f) x
-        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        MapSeq f f' x        -> MapSeq (cvtAfun f) (cvtAfun `fmap` f') x
+        ZipWithSeq f f' x y  -> ZipWithSeq (cvtAfun f) (cvtAfun `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a

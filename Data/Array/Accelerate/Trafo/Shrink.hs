@@ -204,9 +204,8 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case p of
         StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl slix (shrinkAcc a)
-        MapSeq f x           -> MapSeq (shrinkAF f) x
-        ChunkedMapSeq f x    -> ChunkedMapSeq (shrinkAF f) x
-        ZipWithSeq f x y     -> ZipWithSeq (shrinkAF f) x y
+        MapSeq f f' x        -> MapSeq (shrinkAF f) (shrinkAF <$> f') x
+        ZipWithSeq f f' x y  -> ZipWithSeq (shrinkAF f) (shrinkAF <$> f') x y
         ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
 
     shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
@@ -408,9 +407,8 @@ usesOfPreAcc withShape countAcc idx = count
       case p of
         StreamIn _           -> 0
         ToSeq _ _ a          -> countA a
-        MapSeq f _           -> countAF f idx
-        ChunkedMapSeq f _    -> countAF f idx
-        ZipWithSeq f _ _     -> countAF f idx
+        MapSeq f _ _         -> countAF f idx -- Count f'?
+        ZipWithSeq f _ _ _   -> countAF f idx
         ScanSeq f e _        -> countF f + countE e
 
     countC :: Consumer acc aenv senv arrs -> Int

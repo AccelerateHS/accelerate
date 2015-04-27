@@ -49,12 +49,14 @@ module Data.Array.Accelerate.Interpreter (
 
 -- standard libraries
 import Control.Monad
+import Control.Applicative                              ( (<$>), (<*>) )
 import Data.Bits
 import Data.Char                                        ( chr, ord )
 import Prelude                                          hiding ( sum )
 
 -- friends
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
@@ -1082,10 +1084,6 @@ evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   =
 -- Sequence evaluation
 -- ---------------
 
--- Position in sequence.
---
-type SeqPos = Int
-
 -- Configuration for sequence evaluation.
 --
 data SeqConfig = SeqConfig
@@ -1101,28 +1099,6 @@ defaultSeqConfig :: SeqConfig
 defaultSeqConfig = SeqConfig { chunkSize = 2 }
 
 type Chunk a = Vector' a
-
--- The empty chunk. O(1).
-emptyChunk :: Arrays a => Chunk a
-emptyChunk = empty'
-
--- Number of arrays in chunk. O(1).
---
-clen :: Arrays a => Chunk a -> Int
-clen = length'
-
-elemsPerChunk :: SeqConfig -> Int -> Int
-elemsPerChunk conf n
-  | n < 1 = chunkSize conf
-  | otherwise =
-    let (a,b) = chunkSize conf `quotRem` n
-    in a + signum b
-
--- Drop a number of arrays from a chunk. O(1). Note: Require keeping a
--- scan of element sizes.
---
-cdrop :: Arrays a => Int -> Chunk a -> Chunk a
-cdrop = drop' dropOp (fst . offsetsOp)
 
 -- Get all the shapes of a chunk of arrays. O(1).
 --
@@ -1163,79 +1139,29 @@ zipWithChunk :: (Arrays a, Arrays b, Arrays c)
              -> Chunk a -> Chunk b -> Chunk c
 zipWithChunk f c1 c2 = fromListChunk $ zipWith f (toListChunk c1) (toListChunk c2)
 
--- A window on a sequence.
+-- Valuation for an environment of shapes.
 --
-data Window a = Window
-  { chunk :: Chunk a   -- Current allocated chunk.
-  , wpos  :: SeqPos    -- Position of the window on the sequence, given
-                       -- in number of elements.
-  }
-
--- The initial empty window.
---
-window0 :: Arrays a => Window a
-window0 = Window { chunk = emptyChunk, wpos = 0 }
-
--- Index the given window by the given index on the sequence.
---
-(!#) :: Arrays a => Window a -> SeqPos -> Chunk a
-w !# i
-  | j <- i - wpos w
-  , j >= 0
-  = cdrop j (chunk w)
-  | otherwise = error $ "Window indexed before position. wpos = " ++ show (wpos w) ++ " i = " ++ show i
-
--- Move the give window by supplying the next chunk.
---
-moveWin :: Arrays a => Window a -> Chunk a -> Window a
-moveWin w c = w { chunk = c
-                , wpos = wpos w + clen (chunk w)
-                }
-
--- A cursor on a sequence.
---
-data Cursor senv a = Cursor
-  { ref  :: Idx senv a -- Reference to the sequence.
-  , cpos :: SeqPos     -- Position of the cursor on the sequence,
-                       -- given in number of elements.
-  }
-
--- Initial cursor.
---
-cursor0 :: Idx senv a -> Cursor senv a
-cursor0 x = Cursor { ref = x, cpos = 0 }
-
--- Advance cursor by a relative amount.
---
-moveCursor :: Int -> Cursor senv a -> Cursor senv a
-moveCursor k c = c { cpos = cpos c + k }
 
 -- Valuation for an environment of sequence windows.
 --
 data Val' senv where
   Empty' :: Val' ()
-  Push'  :: Val' senv -> Window t -> Val' (senv, t)
+  Push'  :: Val' senv -> Chunk t -> Val' (senv, t)
 
 -- Projection of a window from a window valuation using a de Bruijn
 -- index.
 --
-prj' :: Idx senv t -> Val' senv -> Window t
+prj' :: Idx senv t -> Val' senv -> Chunk t
 prj' ZeroIdx       (Push' _   v) = v
 prj' (SuccIdx idx) (Push' val _) = prj' idx val
 prj' _             _             = $internalError "prj" "inconsistent valuation"
 
--- Projection of a chunk from a window valuation using a sequence
--- cursor.
---
-prjChunk :: Arrays a => Cursor senv a -> Val' senv -> Chunk a
-prjChunk c senv = prj' (ref c) senv !# cpos c
-
 -- An executable sequence.
 --
 data ExecSeq senv arrs where
-  ExecP :: Arrays a => Window a -> ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
-  ExecC :: Arrays a =>             ExecC senv a ->                           ExecSeq senv  a
-  ExecR :: Arrays a =>             Cursor senv a ->                          ExecSeq senv  [a]
+  ExecP :: Arrays a => ExecP senv a -> ExecSeq (senv, a) arrs -> ExecSeq senv  arrs
+  ExecC :: Arrays a => ExecC senv a ->                           ExecSeq senv  a
+  ExecR :: Arrays a => Idx senv a ->                          ExecSeq senv  [a]
 
 -- An executable producer.
 --
@@ -1244,23 +1170,13 @@ data ExecP senv a where
                -> [a]
                -> ExecP senv a
 
-  ExecMap :: Arrays a
-          => (Chunk a -> Chunk b)
-          -> Cursor senv a
-          -> ExecP senv b
-
-  ExecZipWith :: (Arrays a, Arrays b)
-              => (Chunk a -> Chunk b -> Chunk c)
-              -> Cursor senv a
-              -> Cursor senv b
-              -> ExecP senv c
+  ExecMap :: (Val' senv -> Chunk a)
+          -> ExecP senv a
 
   -- Stream scan skeleton.
-  ExecScan :: Arrays a
-           => (s -> Chunk a -> (Chunk r, s)) -- Chunk scanner.
-           -> s                              -- Accumulator (internal state).
-           -> Cursor senv a                  -- Input stream.
-           -> ExecP senv r
+  ExecScan :: (Val' senv -> s -> (Chunk a, s)) -- Chunk scanner.
+           -> s                                -- Accumulator (internal state).
+           -> ExecP senv a
 
 -- An executable consumer.
 --
@@ -1271,45 +1187,12 @@ data ExecC senv a where
            => (s -> Chunk a -> s) -- Chunk consumer function.
            -> (s -> r)            -- Finalizer function.
            -> s                   -- Accumulator (internal state).
-           -> Cursor senv a       -- Input stream.
+           -> Idx senv a       -- Input stream.
            -> ExecC senv r
 
   ExecStuple :: IsAtuple a
              => Atuple (ExecC senv) (TupleRepr a)
              -> ExecC senv a
-
-minCursor :: ExecSeq senv a -> SeqPos
-minCursor s = travS s 0
-  where
-    travS :: ExecSeq senv a -> Int -> SeqPos
-    travS s i =
-      case s of
-        ExecP _ p s' -> travP p i `min` travS s' (i+1)
-        ExecC   c    -> travC c i
-        ExecR   _    -> maxBound
-
-    k :: Cursor senv a -> Int -> SeqPos
-    k c i
-      | i == idxToInt (ref c) = cpos c
-      | otherwise             = maxBound
-
-    travP :: ExecP senv a -> Int -> SeqPos
-    travP p i =
-      case p of
-        ExecStreamIn _ _ -> maxBound
-        ExecMap _ c -> k c i
-        ExecZipWith _ c1 c2 -> k c1 i `min` k c2 i
-        ExecScan _ _ c -> k c i
-
-    travT :: Atuple (ExecC senv) t -> Int -> SeqPos
-    travT NilAtup        _ = maxBound
-    travT (SnocAtup t c) i = travT t i `min` travC c i
-
-    travC :: ExecC senv a -> Int -> SeqPos
-    travC c i =
-      case c of
-        ExecFold _ _ _ cu -> k cu i
-        ExecStuple t      -> travT t i
 
 evalDelayedSeq :: SeqConfig
                -> DelayedSeq arrs
@@ -1325,66 +1208,84 @@ evalSeq conf s aenv = evalSeq' s
   where
     evalSeq' :: PreOpenSeq DelayedOpenAcc aenv senv arrs -> arrs
     evalSeq' (Producer _ s) = evalSeq' s
-    evalSeq' (Consumer _)   = loop (initSeq aenv s)
-    evalSeq' (Reify _)      = reify (initSeq aenv s)
+    evalSeq' (Consumer _)   =
+      let (s0, maxElemSize) = initSeq aenv EmptyPartial s
+          pd = maxStepSize (chunkSize conf) maxElemSize
+      in loop pd s0
+    evalSeq' (Reify _) =
+      let (s0, maxElemSize) = initSeq aenv EmptyPartial s
+          pd = maxStepSize (chunkSize conf) maxElemSize
+      in reify pd s0
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
     initSeq :: forall senv arrs'.
                 Val aenv
+             -> ValPartial senv
              -> PreOpenSeq DelayedOpenAcc aenv senv arrs'
-             -> ExecSeq senv arrs'
-    initSeq aenv s =
+             -> (ExecSeq senv arrs', Maybe Int)
+    initSeq aenv senvp s =
       case s of
-        Producer   p s' -> ExecP window0 (initProducer p) (initSeq aenv s')
-        Consumer   c    -> ExecC         (initConsumer c)
-        Reify      ix   -> ExecR (cursor0 ix)
-
-    -- Generate a list from the sequence.
-    reify :: forall arrs. ExecSeq () [arrs]
-          -> [arrs]
-    reify s = case step s Empty' of
-                (Just s', a) -> a ++ reify s'
-                (Nothing, a) -> a
+        Producer   p s' ->
+          let (execP, (a, shs)) = initProducer p senvp
+              (s'',   n1) = initSeq aenv (PushPartial senvp a) s'
+          in (ExecP execP s'', max <$> n1 <*> (shapeTreeMaxSize <$> (Append shs <$> toShapeTree a)))
+        Consumer   c    -> (ExecC (initConsumer c), Just 0)
+        Reify      ix   -> (ExecR ix, Just 0)
 
     -- Iterate the given sequence until it terminates.
     -- A sequence only terminates when one of the producers are exhausted.
     loop :: Arrays arrs
-         => ExecSeq () arrs
+         => Int
+         -> ExecSeq () arrs
          -> arrs
-    loop s =
-      case step' s of
-        (Nothing, arrs) -> arrs
-        (Just s', _)    -> loop s'
+    loop n s =
+      let k = stepSize n s
+          (s', arrs0) = step s Empty' k
+      in if k < n then arrs0 else loop n s'
 
-      where
-        step' :: ExecSeq () arrs -> (Maybe (ExecSeq () arrs), arrs)
-        step' s = step s Empty'
+    -- Iterate the given sequence until it terminates.
+    -- A sequence only terminates when one of the producers are exhausted.
+    reify :: Arrays a
+          => Int
+          -> ExecSeq () [a]
+          -> [a]
+    reify n s =
+      let k = stepSize n s
+          (s', arrs0) = step s Empty' k
+      in if k < n then arrs0 else arrs0 ++ reify n s'
+
+    maxStepSize :: Int -> Maybe Int -> Int
+    maxStepSize _            Nothing         = 1
+    maxStepSize maxChunkSize (Just elemSize) =
+      let (a,b) = maxChunkSize `quotRem` (elemSize `max` 1)
+      in a + signum b
+
+    stepSize :: Int -> ExecSeq senv arrs' -> Int
+    stepSize n s =
+      case s of
+        ExecP p s -> min (stepSize n s) $
+          case p of
+            ExecStreamIn _ xs -> length (take n xs)
+            _ -> n
+        _ -> n
 
     -- One iteration of a sequence.
     step :: forall senv arrs'.
             ExecSeq senv arrs'
          -> Val' senv
-         -> (Maybe (ExecSeq senv arrs'), arrs')
-    step s senv =
+         -> Int
+         -> (ExecSeq senv arrs', arrs')
+    step s senv k =
       case s of
-        ExecP w p s' ->
-          let (c, mp')  = produce p senv
-              finished  = 0 == clen (w !# minCursor s')
-              w'        = if finished then moveWin w c else w
-              (ms'', a) = step s' (senv `Push'` w')
-          in case ms'' of
-            Nothing  -> (Nothing, a)
-            Just s'' | finished
-                     , Just p' <- mp'
-                     -> (Just (ExecP w' p' s''), a)
-                     | not finished
-                     -> (Just (ExecP w' p  s''), a)
-                     | otherwise
-                     -> (Nothing, a)
-        ExecC   c    -> let (c', acc) = consume c senv
-                        in (Just (ExecC c'), acc)
-        ExecR ix     -> let c = prjChunk ix senv in (Just (ExecR (moveCursor (clen c) ix)), toListChunk c)
+        ExecP p s' ->
+          let (c', p') = produce p senv k
+              (s'', a) = step s' (senv `Push'` c') k
+          in (ExecP p' s'', a)
+        ExecC   c  ->
+          let (c', a) = consume c senv
+          in  (ExecC c', a)
+        ExecR x -> (ExecR x, toListChunk (prj' x senv))
 
     evalA :: DelayedOpenAcc aenv a -> a
     evalA acc = evalOpenAcc acc aenv
@@ -1400,23 +1301,21 @@ evalSeq conf s aenv = evalSeq' s
 
     initProducer :: forall a senv.
                     Producer DelayedOpenAcc aenv senv a
-                 -> ExecP senv a
-    initProducer p =
+                 -> ValPartial senv
+                 -> (ExecP senv a, (ArraysPartial a, ShapeTree))
+    initProducer p senvp =
       case p of
-        StreamIn arrs -> ExecStreamIn 1 arrs
+        StreamIn arrs -> (ExecStreamIn 1 arrs, (partialBottom, EmptyShapeTree))
         ToSeq sliceIndex slix (delayed -> Delayed sh ix _) ->
-          let n   = R.size (R.sliceShape sliceIndex (fromElt sh))
-              k   = elemsPerChunk conf n
-          in ExecStreamIn k (toSeqOp sliceIndex slix (newArray sh ix))
-        MapSeq     f x       -> ExecMap     (mapChunk (evalAF f)) (cursor0 x)
-        ChunkedMapSeq f x    -> ExecMap     (evalAF f) (cursor0 x)
-        ZipWithSeq f x y     -> ExecZipWith (zipWithChunk (evalAF f)) (cursor0 x) (cursor0 y)
-        ScanSeq    f e x     -> ExecScan scanner (evalE e) (cursor0 x)
+          let sl = R.sliceShape sliceIndex (fromElt sh)
+          in (ExecStreamIn (R.size sl) (toSeqOp sliceIndex slix (newArray sh ix)), (PartialArray (Just (toElt sl)) Nothing, EmptyShapeTree))
+        MapSeq f f' x       -> initMapSeq f f' x senvp
+        ZipWithSeq f f' x y -> initZipWithSeq f f' x y senvp
+        ScanSeq f e x       -> (ExecScan scanner (evalE e), (PartialArray (Just Z) Nothing, EmptyShapeTree))
           where
-            scanner a c =
-              let v0 = chunkElems c
-                  (v1, a') = scanl'Op (evalF f) a (delayArray v0)
-              in (vec2Chunk v1, fromScalar a')
+            scanner senv a =
+              let (v1, a') = scanl'Op (evalF f) a (delayArray (chunkElems (prj' x senv)))
+              in (vec2Chunk v1, a' ! Z)
 
     initConsumer :: forall a senv.
                     Consumer DelayedOpenAcc aenv senv a
@@ -1428,12 +1327,12 @@ evalSeq conf s aenv = evalSeq' s
               a0 = newArray (Z :. chunkSize conf) (const (evalE e))
               consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
               finalizer = fold1Op f' . delayArray
-          in ExecFold consumer finalizer a0 (cursor0 x)
+          in ExecFold consumer finalizer a0 x
         FoldSeqFlatten f acc x ->
           let f' = evalAF f
               a0 = evalA acc
               consumer a c = f' a (chunkShapes c) (chunkElems c)
-          in ExecFold consumer id a0 (cursor0 x)
+          in ExecFold consumer id a0 x
         Stuple t ->
           let initTup :: Atuple (Consumer DelayedOpenAcc aenv senv) t -> Atuple (ExecC senv) t
               initTup NilAtup        = NilAtup
@@ -1446,39 +1345,50 @@ evalSeq conf s aenv = evalSeq' s
                                       (evalPreFun evalOpenAcc indexD aenv)
                                       (evalPreFun evalOpenAcc linearIndexD aenv)
 
-produce :: Arrays a => ExecP senv a -> Val' senv -> (Chunk a, Maybe (ExecP senv a))
-produce p senv =
+    initMapSeq :: forall a b senv. (Arrays a, Arrays b)
+               => PreOpenAfun DelayedOpenAcc aenv (a -> b)
+               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Vector' a -> Vector' b))
+               -> Idx senv a
+               -> ValPartial senv
+               -> (ExecP senv b, (ArraysPartial b, ShapeTree))
+    initMapSeq f mf x senvp =
+       case (evalShape1 f (valToValPartial aenv) (prjArraysPartial x senvp), mf) of
+         (Just sh, Just f') -> (ExecMap (evalAF f'           . prj' x), sh)
+         _                  -> (ExecMap (mapChunk (evalAF f) . prj' x), (partialBottom, EmptyShapeTree))
+
+    initZipWithSeq :: forall a b c senv. (Arrays a, Arrays b, Arrays c)
+               => PreOpenAfun DelayedOpenAcc aenv (a -> b -> c)
+               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Vector' a -> Vector' b -> Vector' c))
+               -> Idx senv a
+               -> Idx senv b
+               -> ValPartial senv
+               -> (ExecP senv c, (ArraysPartial c, ShapeTree))
+    initZipWithSeq f mf x y senvp =
+       case (evalShape2 f (valToValPartial aenv) (prjArraysPartial x senvp) (prjArraysPartial y senvp), mf) of
+         (Just sh, Just f') -> (ExecMap (\ senv -> evalAF f'               (prj' x senv) (prj' y senv)), sh)
+         _                  -> (ExecMap (\ senv -> zipWithChunk (evalAF f) (prj' x senv) (prj' y senv)), (partialBottom, EmptyShapeTree))
+
+produce :: Arrays a => ExecP senv a -> Val' senv -> Int -> (Chunk a, ExecP senv a)
+produce p senv k =
   case p of
-    ExecStreamIn k xs ->
+    ExecStreamIn k' xs ->
       let (xs', xs'') = (take k xs, drop k xs)
           c           = fromListChunk xs'
-          mp          = if null xs''
-                        then Nothing
-                        else Just (ExecStreamIn k xs'')
-      in (c, mp)
-    ExecMap f x ->
-      let c = prjChunk x senv
-      in (f c, Just $ ExecMap f (moveCursor (clen c) x))
-    ExecZipWith f x y ->
-      let c1 = prjChunk x senv
-          c2 = prjChunk y senv
-          k = clen c1 `min` clen c2
-      in (f c1 c2, Just $ ExecZipWith f (moveCursor k x) (moveCursor k y))
-    ExecScan scanner a x ->
-      let c = prjChunk x senv
-          (c', a') = scanner a c
-          k = clen c
-      in (c', Just $ ExecScan scanner a' (moveCursor k x))
+      in (c, ExecStreamIn k' xs'')
+    ExecMap f -> (f senv, ExecMap f)
+    ExecScan scanner a ->
+      let (c', a') = scanner senv a
+      in (c', ExecScan scanner a')
 
 consume :: forall senv a. ExecC senv a -> Val' senv -> (ExecC senv a, a)
 consume c senv =
   case c of
     ExecFold f g acc x ->
-      let c    = prjChunk x senv
+      let c    = prj' x senv
           acc' = f acc c
       -- Even though we call g here, lazy evaluation should guarantee it is
       -- only ever called once.
-      in (ExecFold f g acc' (moveCursor (clen c) x), g acc')
+      in (ExecFold f g acc' x, g acc')
     ExecStuple t ->
       let consT :: Atuple (ExecC senv) t -> (Atuple (ExecC senv) t, t)
           consT NilAtup        = (NilAtup, ())
@@ -1496,9 +1406,6 @@ evalExtend (PushEnv ext1 ext2) aenv | aenv' <- evalExtend ext1 aenv
 delayArray :: Array sh e -> Delayed (Array sh e)
 delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndexArrayData adata)
 
-fromScalar :: Scalar a -> a
-fromScalar = (!Z)
-
 concatOp :: forall e. Elt e => [Vector e] -> Vector e
 concatOp = concatVectors
 
@@ -1510,17 +1417,6 @@ fetchAllOp segs elts
   | otherwise = error $ "illegal argument to fetchAllOp"
   where
     fetch sh offset = newArray sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
-
-dropOp :: Elt e => Int -> Vector e -> Vector e
-dropOp i v   -- TODO
-             --  * Implement using C-style pointer-plus.
-             --    ; dropOp is used often (from prjChunk),
-             --      so it ought to be efficient O(1).
-  | n <- size (shape v)
-  , i <= n
-  , i >= 0
-  = newArray (Z :. n - i) (\ (Z :. j) -> v ! (Z :. i + j))
-  | otherwise = error $ "illegal argument to drop"
 
 offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)
 offsetsOp segs = scanl'Op (+) 0 $ delayArray (mapOp size (delayArray segs))

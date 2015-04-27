@@ -185,15 +185,11 @@ prettySeq prettyAcc alvl llvl wrap seq =
       case p of
         StreamIn _        -> "streamIn"   .$ [ text "..." ]
         ToSeq slix _ a    -> "toSeq"      .$ [ ppSlix slix, ppA a ]
-        MapSeq f x        -> "mapSeq"     .$ [ ppAF f
+        MapSeq f _ x      -> "mapSeq"     .$ [ ppAF f
                                              , ppX x ]
-
-        ChunkedMapSeq f x -> "chunkedMapSeq" .$ [ ppAF f
-                                                , ppX x ]
-
-        ZipWithSeq f x y  -> "zipWithSeq" .$ [ ppAF f
-                                             , ppX x
-                                             , ppX y ]
+        ZipWithSeq f _ x y -> "zipWithSeq" .$ [ ppAF f
+                                              , ppX x
+                                              , ppX y ]
 
         ScanSeq f e x     -> "foldSeq"    .$ [ ppF f
                                              , ppE e

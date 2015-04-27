@@ -226,22 +226,21 @@ liftOpenAfun1 _ _ _
 liftOpenAfun2 :: forall aenv aenv' a b c.
                  Strength
               -> Context () aenv () aenv'
-              -> Size OpenAcc aenv'
               -> OpenAfun aenv  (a -> b -> c)
               -> OpenAfun aenv' (Vector' a -> Vector' b -> Vector' c)
-liftOpenAfun2 strength ctx sz (Alam (Alam (Abody f)))
+liftOpenAfun2 strength ctx (Alam (Alam (Abody f)))
   | trace "liftOpenAfun2" ("Starting " ++ show strength ++ " vectorisation") True
   , IsC <- isArraysFlat (undefined :: a)
   , IsC <- isArraysFlat (undefined :: b)
   , IsC <- isArraysFlat (undefined :: c)
-  = case vectoriseOpenAcc Conservative (PushLAccC . PushLAccC $ ctx) (weakenA2 sz) f of
+  = case vectoriseOpenAcc Conservative (PushLAccC . PushLAccC $ ctx) (liftedSize avar0) f of
       -- In the case that the body of the function does not depend on its argument,
       -- conservative vectorisation will return the unmodified body. In this,
       -- we just need to replicate the result.
-      AvoidedAcc a' -> Alam . Alam . Abody $ replicateC (inject $ Unit (weakenA2 sz)) a'
+      AvoidedAcc a' -> Alam . Alam . Abody $ replicateC (inject $ Unit (liftedSize avar0)) a'
       -- Otherwise, we have the lifted body.
       LiftedAcc  a' -> Alam . Alam . Abody $ a'
-liftOpenAfun2 _ _ _ _
+liftOpenAfun2 _ _ _
   = error "Unreachable"
 
 -- |The core of the lifting transformation for array expression.
@@ -2565,123 +2564,6 @@ trace header msg
 
 -- Sequence vectorisation
 -- ------------------------
-sequenceFreeAfun :: OpenAfun aenv t -> Bool
-sequenceFreeAfun afun =
-  case afun of
-    Alam f -> sequenceFreeAfun f
-    Abody b -> sequenceFreeAcc b
-
-sequenceFreeFun :: OpenFun env aenv t -> Bool
-sequenceFreeFun afun =
-  case afun of
-    Lam f -> sequenceFreeFun f
-    Body b -> sequenceFreeExp b
-
-sequenceFreeExp :: OpenExp env aenv t -> Bool
-sequenceFreeExp = travE
-  where
-    travF :: OpenFun env aenv t -> Bool
-    travF = sequenceFreeFun
-
-    travT :: Tuple (OpenExp env aenv) t -> Bool
-    travT = sequenceFreeTup
-
-    travA :: OpenAcc aenv t -> Bool
-    travA = sequenceFreeAcc
-
-    travE :: OpenExp env aenv t -> Bool
-    travE exp =
-      case exp of
-        Let bnd body            -> travE bnd && travE body
-        Var _                   -> True
-        Const _                 -> True
-        Tuple tup               -> travT tup
-        Prj _ t                 -> travE t
-        IndexNil                -> True
-        IndexCons sh sz         -> travE sh && travE sz
-        IndexHead sh            -> travE sh
-        IndexTail sh            -> travE sh
-        IndexAny                -> True
-        IndexSlice _ ix sh      -> travE ix && travE sh
-        IndexFull _ ix sl       -> travE ix && travE sl
-        ToIndex sh ix           -> travE sh && travE ix
-        FromIndex sh ix         -> travE sh && travE ix
-        Cond p t e              -> travE p && travE t && travE e
-        While p f x             -> travF p && travF f && travE x
-        PrimConst _             -> True
-        PrimApp _ x             -> travE x
-        Index a sh              -> travA a && travE sh
-        LinearIndex a i         -> travA a && travE i
-        Shape a                 -> travA a
-        ShapeSize sh            -> travE sh
-        Intersect s t           -> travE s && travE t
-        Union s t               -> travE s && travE t
-        Foreign _ f e           -> travF f && travE e
-
-sequenceFreeAtup :: Atuple (OpenAcc aenv) t -> Bool
-sequenceFreeAtup t =
-  case t of
-    NilAtup -> True
-    SnocAtup t e -> sequenceFreeAtup t && sequenceFreeAcc e
-
-sequenceFreeTup :: Tuple (OpenExp env aenv) t -> Bool
-sequenceFreeTup t =
-  case t of
-    NilTup -> True
-    SnocTup t e -> sequenceFreeTup t && sequenceFreeExp e
-
-sequenceFreeAcc :: OpenAcc aenv a -> Bool
-sequenceFreeAcc = travA
-  where
-    travAfun :: OpenAfun aenv t -> Bool
-    travAfun = sequenceFreeAfun
-
-    travE :: Elt t => Exp aenv t -> Bool
-    travE = sequenceFreeExp
-
-    travF :: Fun aenv t -> Bool
-    travF = sequenceFreeFun
-
-    travAT :: Atuple (OpenAcc aenv) t -> Bool
-    travAT = sequenceFreeAtup
-
-    travA :: OpenAcc aenv t -> Bool
-    travA (OpenAcc acc) =
-      case acc of
-        Alet bnd body             -> travA bnd && travA body
-        Avar _                    -> True
-        Atuple tup                -> travAT tup
-        Aprj _ a                  -> travA a
-        Apply f a                 -> travAfun f && travA a
-        Aforeign _ afun acc       -> travAfun afun && travA acc
-        Acond p t e               -> travE p && travA t && travA e
-        Awhile p f a              -> travAfun p && travAfun f && travA a
-        Use _                     -> True
-        Unit e                    -> travE e
-        Reshape e a               -> travE e && travA a
-        Generate e f              -> travE e && travF f
-        Transform sh ix f a       -> travE sh && travF ix && travF f && travA a
-        Replicate _ slix a        -> travE slix && travA a
-        Slice _ a slix            -> travA a && travE slix
-        Map f a                   -> travF f && travA a
-        ZipWith f a1 a2           -> travF f && travA a1 && travA a2
-        Fold f z a                -> travF f && travE z && travA a
-        Fold1 f a                 -> travF f && travA a
-        Scanl f z a               -> travF f && travE z && travA a
-        Scanl' f z a              -> travF f && travE z && travA a
-        Scanl1 f a                -> travF f && travA a
-        Scanr f z a               -> travF f && travE z && travA a
-        Scanr' f z a              -> travF f && travE z && travA a
-        Scanr1 f a                -> travF f && travA a
-        Permute f1 a1 f2 a2       -> travF f1 && travA a1 && travF f2 && travA a2
-        Backpermute sh f a        -> travE sh && travF f && travA a
-        Stencil f _ a             -> travF f && travA a
-        Stencil2 f _ a1 _ a2      -> travF f && travA a1 && travA a2
-        -- Interesting case:
-        Collect _                 -> False
-        FoldSeg f z a s           -> travF f && travE z && travA a && travA s
-        Fold1Seg f a s            -> travF f && travA a && travA s
-
 vectoriseSeq :: PreOpenSeq OpenAcc () () a -> PreOpenSeq OpenAcc () () a
 vectoriseSeq = vectoriseOpenSeq Aggressive EmptyC
 
@@ -2702,15 +2584,8 @@ vectoriseOpenSeq strength ctx seq =
         StreamIn arrs        -> StreamIn arrs
         ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
         -- Interesting case:
-        MapSeq f x
-          | sequenceFreeAfun f -> trace "vectoriseSeq" ("MapSeq succesfully vectorised: " ++ show (liftOpenAfun1 strength ctx (cvtAfun f))) $
-              ChunkedMapSeq (liftOpenAfun1 strength ctx (cvtAfun f)) x
-          -- The following case is needed because we don't know how to
-          -- lift sequences yet.
-          | otherwise          -> trace "vectoriseSeq" ("MapSeq could not be vectorised: " ++ show (cvtAfun f)) $
-                                    MapSeq (cvtAfun f) x
-        ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAfun f) x
-        ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
+        MapSeq f _ x         -> MapSeq f (Just (liftOpenAfun1 strength ctx (cvtAfun f))) x
+        ZipWithSeq f _ x y   -> ZipWithSeq (cvtAfun f) (Just (liftOpenAfun2 strength ctx (cvtAfun f))) x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
