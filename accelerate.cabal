@@ -205,6 +205,7 @@ Library
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Array.Data
+                        Data.Array.Accelerate.Array.Lifted
                         Data.Array.Accelerate.Array.Memory
                         Data.Array.Accelerate.Array.Memory.Table
                         Data.Array.Accelerate.Array.Memory.Cache
@@ -220,8 +221,7 @@ Library
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Type
 
-  Other-modules:        Data.Array.Accelerate.Array.Lifted
-                        Data.Array.Accelerate.Array.Memory.Nursery
+  Other-modules:        Data.Array.Accelerate.Array.Memory.Nursery
                         Data.Array.Accelerate.Debug.Flags
                         Data.Array.Accelerate.Debug.Stats
                         Data.Array.Accelerate.Debug.Trace
