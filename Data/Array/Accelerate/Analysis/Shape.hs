@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Analysis.Shape (
   -- * Shape analysis
   ShapeTree(..),
   ArraysPartial(..),
-  evalShape1, evalShape2, valToValPartial, ValPartial(..), prjArraysPartial, partialBottom, toShapeTree, shapeTreeMaxSize,
+  evalShape1, evalShape2, valToValPartial, ValPartial(..), prjArraysPartial, partialBottom, toPartialShapesOnly, toShapeTree, shapeTreeMaxSize,
 
 ) where
 
@@ -174,6 +174,19 @@ toPartial v =
         go :: ProdR Arrays t1 -> t1 -> Atuple ArraysPartial t1
         go ProdRunit () = NilAtup
         go (ProdRsnoc pr) (tup, arr) = go pr tup `SnocAtup` toPartial arr
+
+
+toPartialShapesOnly :: forall t. Arrays t => t -> ArraysPartial t
+toPartialShapesOnly v =
+  case flavour (undefined :: t) of
+    ArraysFunit  -> PartialAtup NilAtup
+    ArraysFarray -> PartialArray (Just (shape v)) Nothing
+    ArraysFtuple -> PartialAtup $ go (prod (Proxy :: Proxy Arrays) (undefined :: t)) (fromAtuple v)
+      where
+        go :: ProdR Arrays t1 -> t1 -> Atuple ArraysPartial t1
+        go ProdRunit () = NilAtup
+        go (ProdRsnoc pr) (tup, arr) = go pr tup `SnocAtup` toPartialShapesOnly arr
+
 
 -- You know nothing, Jon Snow.
 partialBottom :: forall t. Arrays t => ArraysPartial t
