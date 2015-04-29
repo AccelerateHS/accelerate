@@ -340,8 +340,9 @@ evalMul' arg env
   = eval2 (*) arg env
 
 evalNeg :: Elt a => NumType a -> a :-> a
-evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 negate
-evalNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 negate
+evalNeg _                    x _   | PrimApp PrimNeg{} x' <- x       = Stats.ruleFired "negate/negate" $ Just x'
+evalNeg (IntegralNumType ty) x env | IntegralDict <- integralDict ty = eval1 negate x env
+evalNeg (FloatingNumType ty) x env | FloatingDict <- floatingDict ty = eval1 negate x env
 
 evalAbs :: Elt a => NumType a -> a :-> a
 evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 abs
@@ -597,7 +598,8 @@ evalLOr _ _
   = Nothing
 
 evalLNot :: Bool :-> Bool
-evalLNot = eval1 not
+evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
+evalLNot x env                            = eval1 not x env
 
 evalOrd :: Char :-> Int
 evalOrd = eval1 ord
