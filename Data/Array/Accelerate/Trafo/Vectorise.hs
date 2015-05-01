@@ -2564,6 +2564,123 @@ trace header msg
 
 -- Sequence vectorisation
 -- ------------------------
+sequenceFreeAfun :: OpenAfun aenv t -> Bool
+sequenceFreeAfun afun =
+  case afun of
+    Alam f -> sequenceFreeAfun f
+    Abody b -> sequenceFreeAcc b
+
+sequenceFreeFun :: OpenFun env aenv t -> Bool
+sequenceFreeFun afun =
+  case afun of
+    Lam f -> sequenceFreeFun f
+    Body b -> sequenceFreeExp b
+
+sequenceFreeExp :: OpenExp env aenv t -> Bool
+sequenceFreeExp = travE
+  where
+    travF :: OpenFun env aenv t -> Bool
+    travF = sequenceFreeFun
+
+    travT :: Tuple (OpenExp env aenv) t -> Bool
+    travT = sequenceFreeTup
+
+    travA :: OpenAcc aenv t -> Bool
+    travA = sequenceFreeAcc
+
+    travE :: OpenExp env aenv t -> Bool
+    travE exp =
+      case exp of
+        Let bnd body            -> travE bnd && travE body
+        Var _                   -> True
+        Const _                 -> True
+        Tuple tup               -> travT tup
+        Prj _ t                 -> travE t
+        IndexNil                -> True
+        IndexCons sh sz         -> travE sh && travE sz
+        IndexHead sh            -> travE sh
+        IndexTail sh            -> travE sh
+        IndexAny                -> True
+        IndexSlice _ ix sh      -> travE ix && travE sh
+        IndexFull _ ix sl       -> travE ix && travE sl
+        ToIndex sh ix           -> travE sh && travE ix
+        FromIndex sh ix         -> travE sh && travE ix
+        Cond p t e              -> travE p && travE t && travE e
+        While p f x             -> travF p && travF f && travE x
+        PrimConst _             -> True
+        PrimApp _ x             -> travE x
+        Index a sh              -> travA a && travE sh
+        LinearIndex a i         -> travA a && travE i
+        Shape a                 -> travA a
+        ShapeSize sh            -> travE sh
+        Intersect s t           -> travE s && travE t
+        Union s t               -> travE s && travE t
+        Foreign _ f e           -> travF f && travE e
+
+sequenceFreeAtup :: Atuple (OpenAcc aenv) t -> Bool
+sequenceFreeAtup t =
+  case t of
+    NilAtup -> True
+    SnocAtup t e -> sequenceFreeAtup t && sequenceFreeAcc e
+
+sequenceFreeTup :: Tuple (OpenExp env aenv) t -> Bool
+sequenceFreeTup t =
+  case t of
+    NilTup -> True
+    SnocTup t e -> sequenceFreeTup t && sequenceFreeExp e
+
+sequenceFreeAcc :: OpenAcc aenv a -> Bool
+sequenceFreeAcc = travA
+  where
+    travAfun :: OpenAfun aenv t -> Bool
+    travAfun = sequenceFreeAfun
+
+    travE :: Elt t => Exp aenv t -> Bool
+    travE = sequenceFreeExp
+
+    travF :: Fun aenv t -> Bool
+    travF = sequenceFreeFun
+
+    travAT :: Atuple (OpenAcc aenv) t -> Bool
+    travAT = sequenceFreeAtup
+
+    travA :: OpenAcc aenv t -> Bool
+    travA (OpenAcc acc) =
+      case acc of
+        Alet bnd body             -> travA bnd && travA body
+        Avar _                    -> True
+        Atuple tup                -> travAT tup
+        Aprj _ a                  -> travA a
+        Apply f a                 -> travAfun f && travA a
+        Aforeign _ afun acc       -> travAfun afun && travA acc
+        Acond p t e               -> travE p && travA t && travA e
+        Awhile p f a              -> travAfun p && travAfun f && travA a
+        Use _                     -> True
+        Unit e                    -> travE e
+        Reshape e a               -> travE e && travA a
+        Generate e f              -> travE e && travF f
+        Transform sh ix f a       -> travE sh && travF ix && travF f && travA a
+        Replicate _ slix a        -> travE slix && travA a
+        Slice _ a slix            -> travA a && travE slix
+        Map f a                   -> travF f && travA a
+        ZipWith f a1 a2           -> travF f && travA a1 && travA a2
+        Fold f z a                -> travF f && travE z && travA a
+        Fold1 f a                 -> travF f && travA a
+        Scanl f z a               -> travF f && travE z && travA a
+        Scanl' f z a              -> travF f && travE z && travA a
+        Scanl1 f a                -> travF f && travA a
+        Scanr f z a               -> travF f && travE z && travA a
+        Scanr' f z a              -> travF f && travE z && travA a
+        Scanr1 f a                -> travF f && travA a
+        Permute f1 a1 f2 a2       -> travF f1 && travA a1 && travF f2 && travA a2
+        Backpermute sh f a        -> travE sh && travF f && travA a
+        Stencil f _ a             -> travF f && travA a
+        Stencil2 f _ a1 _ a2      -> travF f && travA a1 && travA a2
+        -- Interesting case:
+        Collect _                 -> False
+        FoldSeg f z a s           -> travF f && travE z && travA a && travA s
+        Fold1Seg f a s            -> travF f && travA a && travA s
+
 vectoriseSeq :: PreOpenSeq OpenAcc () () a -> PreOpenSeq OpenAcc () () a
 vectoriseSeq = vectoriseOpenSeq Aggressive EmptyC
 
@@ -2585,8 +2702,12 @@ vectoriseOpenSeq strength ctx seq =
         StreamIn arrs        -> StreamIn arrs
         ToSeq _ sl slix a    -> ToSeq (Just (Alam $ Abody $ fromHOAS regularVector' avar0)) sl slix (cvtA a)
         -- Interesting cases:
-        MapSeq f _ x         -> MapSeq f (Just (liftOpenAfun1 strength ctx (cvtAfun f))) x
-        ZipWithSeq f _ x y   -> ZipWithSeq (cvtAfun f) (Just (liftOpenAfun2 strength ctx (cvtAfun f))) x y
+        MapSeq f _ x
+          | sequenceFreeAfun f -> MapSeq f (Just (liftOpenAfun1 strength ctx (cvtAfun f))) x
+          | otherwise           -> MapSeq f Nothing x
+        ZipWithSeq f _ x y
+          | sequenceFreeAfun f -> ZipWithSeq (cvtAfun f) (Just (liftOpenAfun2 strength ctx (cvtAfun f))) x y
+          | otherwise          -> ZipWithSeq (cvtAfun f) Nothing x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
@@ -2797,10 +2918,10 @@ zipWith' f as bs
          let ix = var0
          in 
           Cond
-            (PrimApp (PrimGtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape as) `SnocTup` IndexHead ix))
+            (PrimApp (PrimLtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape as) `SnocTup` IndexHead ix))
             (Index bs ix)
             (Cond
-               (PrimApp (PrimGtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape bs) `SnocTup` IndexHead ix))
+               (PrimApp (PrimLtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape bs) `SnocTup` IndexHead ix))
                (Index as ix)
                (subApplyE2 (weakenE SuccIdx f) (Index bs ix) (Index as ix))
             )
