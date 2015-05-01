@@ -46,7 +46,7 @@ script:
         export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
         cd dist
         if [ -f "$SRC_TGZ" ]; then
-            cabal install --force-reinstalls ${MODE} ${SRC_TGZ}
+            cabal install --force-reinstalls ${MODE} ${SRC_TGZ} || exit 1
         else
             echo "'$SRC_TGZ': not found"
             exit 1
