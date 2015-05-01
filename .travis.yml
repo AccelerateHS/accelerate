@@ -7,8 +7,8 @@ env:
     - GHC=head CABAL=head MODE=-fdebug
 
 matrix:
-    allow_failures:
-        - env: GHC=head CABAL=head MODE=-fdebug
+  allow_failures:
+    - env: GHC=head CABAL=head MODE=-fdebug
 
 before_install:
     # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
