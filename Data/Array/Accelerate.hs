@@ -254,7 +254,7 @@ module Data.Array.Accelerate (
   L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  P.index0, P.index1, P.unindex1, P.index2, P.unindex2,
+  P.index0, P.index1, P.unindex1, P.index2, P.unindex2, P.index3, P.unindex3,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
   L.intersect,

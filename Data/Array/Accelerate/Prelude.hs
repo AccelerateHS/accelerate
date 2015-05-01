@@ -87,7 +87,7 @@ module Data.Array.Accelerate.Prelude (
   fst, afst, snd, asnd, curry, uncurry,
 
   -- ** Index construction and destruction
-  index0, index1, unindex1, index2, unindex2,
+  index0, index1, unindex1, index2, unindex2, index3, unindex3,
 
   -- * Array operations with a scalar result
   the, null, length,
@@ -1815,6 +1815,25 @@ unindex2 :: forall i. (Elt i, Slice (Z :. i))
 unindex2 ix
   = let Z :. i :. j = unlift ix :: Z :. Exp i :. Exp i
     in  lift (i, j)
+
+-- | Create a rank-3 index from three Exp Int`s
+--
+index3
+    :: (Elt i, Slice (Z :. i), Slice (Z :. i :. i))
+    => Exp i
+    -> Exp i
+    -> Exp i
+    -> Exp (Z :. i :. i :. i)
+index3 k j i = lift (Z :. k :. j :. i)
+
+-- | Destruct a rank-3 index into an Exp tuple of Int`s
+unindex3
+    :: forall i. (Elt i, Slice (Z :. i), Slice (Z :. i :. i))
+    => Exp (Z :. i :. i :. i)
+    -> Exp (i, i, i)
+unindex3 ix = let Z :. k :. j :. i = unlift ix  :: Z :. Exp i :. Exp i :. Exp i
+              in  lift (k, j, i)
+
 
 -- Array operations with a scalar result
 -- -------------------------------------
