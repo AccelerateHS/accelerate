@@ -257,5 +257,5 @@ Source-repository this
   type:                 git
   location:             git://github.com/AccelerateHS/accelerate.git
   branch:               release/0.15
-  tag:                  0.15.0.0
+  tag:                  0.15.1.0
 
