@@ -1,0 +1,57 @@
+language: haskell
+env:
+    - GHC=7.8.4
+    - GHC=7.8.4 MODE=-fdebug
+    - GHC=7.10.1 CABAL=1.22
+    - GHC=7.10.1 CABAL=1.22 MODE=-fdebug
+    - GHC=head CABAL=head MODE=-fdebug
+
+matrix:
+  allow_failures:
+    - env: GHC=head CABAL=head MODE=-fdebug
+
+before_install:
+    # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
+    - echo "Setting up GHC"
+    - travis_retry sudo add-apt-repository -y ppa:hvr/ghc
+    - travis_retry sudo apt-get update -qq
+    - travis_retry sudo apt-get autoremove
+    - export PATH=/usr/local/ghc/${GHC}/bin:${PATH}
+    - |
+        if [ $(ghc --numeric-version) != ${GHC} ]; then
+            travis_retry sudo apt-get install -y ghc-${GHC}
+            export PATH=/opt/ghc/${GHC}/bin:${PATH}
+        fi
+    - |
+        if [ ${CABAL} ]; then
+            travis_retry sudo apt-get install -y cabal-install-${CABAL}
+            export PATH=/opt/cabal/${CABAL}/bin:${PATH}
+        fi
+
+install:
+    - ghc --version
+    - cabal --version
+    - cabal install --only-dependencies --enable-tests ${MODE}
+
+script:
+    # Check the build
+    - cabal configure -v2 -flib-Werror ${MODE}
+    - cabal build
+    - cabal haddock
+#    - cabal test --show-details=always
+
+    # Check the source distribution can be generated, built, and installed
+    - cabal sdist
+    - |
+        export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
+        cd dist
+        if [ -f "$SRC_TGZ" ]; then
+            cabal install --force-reinstalls ${MODE} ${SRC_TGZ} || exit 1
+        else
+            echo "'$SRC_TGZ': not found"
+            exit 1
+        fi
+
+after_failure:
+    - dmesg
+
