@@ -43,6 +43,7 @@ import qualified Data.HashMap.Strict                    as Map
 import qualified Data.HashSet                           as Set
 import System.IO.Unsafe                                 ( unsafePerformIO )
 import System.Mem.StableName
+import Prelude
 
 -- friends
 import Data.Array.Accelerate.Error

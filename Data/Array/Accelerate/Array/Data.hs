@@ -45,23 +45,24 @@ module Data.Array.Accelerate.Array.Data (
 ) where
 
 -- standard libraries
-import Foreign            (Ptr)
+import Foreign                                  ( Ptr )
 import Foreign.C.Types
 import Data.Bits
-import Data.Functor       ((<$>))
-import Data.Typeable      (Typeable)
+import Data.Functor
+import Data.Typeable                            ( Typeable )
 import Control.Monad
 #ifdef ACCELERATE_UNSAFE_CHECKS
-import qualified Data.Array.Base    as MArray (readArray, writeArray)
+import qualified Data.Array.Base                as MArray ( readArray, writeArray )
 #else
-import qualified Data.Array.Base    as MArray (unsafeRead, unsafeWrite)
+import qualified Data.Array.Base                as MArray ( unsafeRead, unsafeWrite )
 #endif
 import Data.Array.Storable.Internals
 import Foreign.ForeignPtr.Unsafe
 import System.IO.Unsafe
-import Data.Array.MArray  (MArray)
-import Data.Array.Base    (unsafeNewArray_)
+import Data.Array.MArray                        ( MArray )
+import Data.Array.Base                          ( unsafeNewArray_ )
 import Language.Haskell.TH
+import Prelude
 
 -- friends
 import Data.Array.Accelerate.Type
