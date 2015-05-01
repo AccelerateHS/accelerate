@@ -340,7 +340,7 @@ convertSharingSeq
     -> AST.PreOpenSeq AST.OpenAcc aenv senv arrs
 convertSharingSeq _ _ slyt _ senv (ScopedSeq (SvarSharing sn))
   | Just i <- findIndex (matchStableSeq sn) senv
-  = AST.Reify $ prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+  = AST.Reify Nothing $ prjIdx (ctxt ++ "; i = " ++ show i) i slyt
   | null senv
   = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
             show (hashStableNameHeight sn) ++ ")"
@@ -413,7 +413,7 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenSeq AST.OpenAcc aenv senv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FoldSeq fun e x                    -> AST.Consumer $ AST.FoldSeq (cvtF2 fun) (cvtE e) (asIdx x)
+        FoldSeq fun e x                    -> AST.Consumer $ AST.FoldSeq Nothing (cvtF2 fun) (cvtE e) (asIdx x)
         FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
@@ -539,7 +539,7 @@ mkToSeq :: forall slsix slix e aenv senv. (Division slsix, DivisionSlice slsix ~
         => slsix
         -> AST.OpenAcc              aenv (Array (FullShape  slix) e)
         -> AST.Producer AST.OpenAcc aenv senv (Array (SliceShape slix) e)
-mkToSeq _ = AST.ToSeq (sliceIndex slix) (Proxy :: Proxy slix)
+mkToSeq _ = AST.ToSeq Nothing (sliceIndex slix) (Proxy :: Proxy slix)
   where
     slix = undefined :: slix
 

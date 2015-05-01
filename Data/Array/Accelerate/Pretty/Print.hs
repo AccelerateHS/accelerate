@@ -154,7 +154,7 @@ prettySeq prettyAcc alvl llvl wrap seq =
       (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
     Consumer c    ->
       [prettyC c]
-    Reify ix      -> [var (idxToInt ix)]
+    Reify f ix    -> [ppMaybeAF f, var (idxToInt ix)]
   where
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
@@ -172,6 +172,10 @@ prettySeq prettyAcc alvl llvl wrap seq =
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreAfun prettyAcc alvl
 
+    ppMaybeAF :: Maybe (PreOpenAfun acc aenv f) -> Doc
+    ppMaybeAF Nothing = text "Nothing"
+    ppMaybeAF (Just f) = ppAF f
+    
     ppX :: Idx aenv' a -> Doc
     ppX x = var (idxToInt x)
 
@@ -184,12 +188,14 @@ prettySeq prettyAcc alvl llvl wrap seq =
     prettyP p =
       case p of
         StreamIn _        -> "streamIn"   .$ [ text "..." ]
-        ToSeq slix _ a    -> "toSeq"      .$ [ ppSlix slix, ppA a ]
-        MapSeq f _ x      -> "mapSeq"     .$ [ ppAF f
-                                             , ppX x ]
-        ZipWithSeq f _ x y -> "zipWithSeq" .$ [ ppAF f
-                                              , ppX x
-                                              , ppX y ]
+        ToSeq f slix _ a  -> "toSeq"      .$ [ ppMaybeAF f, ppSlix slix, ppA a ]
+        MapSeq f f' x      -> "mapSeq"     .$ [ ppAF f
+                                              , ppMaybeAF f'
+                                              , ppX x ]
+        ZipWithSeq f f' x y -> "zipWithSeq" .$ [ ppAF f
+                                               , ppMaybeAF f'
+                                               , ppX x
+                                               , ppX y ]
 
         ScanSeq f e x     -> "foldSeq"    .$ [ ppF f
                                              , ppE e
@@ -198,7 +204,8 @@ prettySeq prettyAcc alvl llvl wrap seq =
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
-        FoldSeq f e x        -> "foldSeq"        ..$ [ ppF f
+        FoldSeq f' f e x     -> "foldSeq"        ..$ [ ppMaybeAF f'
+                                                     , ppF f
                                                      , ppE e
                                                      , ppX x ]
 

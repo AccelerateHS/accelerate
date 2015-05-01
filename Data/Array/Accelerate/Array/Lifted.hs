@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Array.Lifted (
 
   isArraysFlat,
 
-  elements', shapes', empty', length', drop', vec2Vec', fromList', toList'
+  elements', shapes', empty', length', drop', vec2Vec', fromList', toList', unit', the'
 
 ) where
 
@@ -40,7 +40,6 @@ import Data.Typeable
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as Repr
-
 
 -- Lifted arrays
 -- ----------------
@@ -252,6 +251,34 @@ fromList' concat xs = Vector' $
     tup ProdRunit _     = ()
     tup (ProdRsnoc t) a = (tup t (Prelude.map fst a), fromList' concat (map snd a))
 
+the' :: forall a. Arrays a
+     => Vector' a -> a
+the' (Vector' x) =
+  case flavour (undefined :: a) of
+    ArraysFunit | ((), _) <- x -> ()
+    ArraysFarray | (((), lens), Array _ vals) <- x
+                 -> Array (fromElt (lens ! (Z :. 0))) vals
+    ArraysFtuple -> toProd (Proxy :: Proxy Arrays) (tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) x)
+  where
+    tup :: forall t. ProdR Arrays t -> LiftedTupleRepr t -> t
+    tup ProdRunit () = ()
+    tup (ProdRsnoc t) (a, b) = (tup t a, the' b)
+
+unit' :: forall a. Arrays a
+      => a -> Vector' a
+unit' xs = Vector' $
+  case flavour (undefined :: a) of
+    ArraysFunit -> ((), scalar 1)
+    ArraysFarray ->
+      let seg = shape xs
+          vals = flatten xs
+      in (((), fromList (Z :. 1) [seg]), vals)
+    ArraysFtuple -> tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (fromProd (Proxy :: Proxy Arrays) xs)
+  where
+    tup :: forall t. ProdR Arrays t -> t -> LiftedTupleRepr t
+    tup ProdRunit _          = ()
+    tup (ProdRsnoc t) (a, b) = (tup t a, unit' b)
+
 {-
 map' :: (Arrays a, Arrays b)
      => (forall e. Elt e => [Vector e] -> Vector e)
@@ -279,4 +306,3 @@ helper units arr unit pair fix (Vector' x) =
     tup ProdRunit () = unit
     tup (ProdRsnoc t) (x, y) = tup t x `pair` helper units arr unit pair fix y
 -}
-

@@ -83,12 +83,12 @@ travSeq f c l seq =
     Producer p s' ->
       case p of
         StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
-        ToSeq slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
+        ToSeq _ slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
         MapSeq afun _ x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
         ZipWithSeq afun _ x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
         ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
     Consumer co -> travC co
-    Reify ix    -> leaf (show (idxToInt ix))
+    Reify _ ix  -> leaf (show (idxToInt ix))
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
@@ -100,7 +100,7 @@ travSeq f c l seq =
     travC :: forall a. Consumer OpenAcc aenv senv a -> m b
     travC co =
       case co of
-        FoldSeq fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
+        FoldSeq _ fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
         FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
 

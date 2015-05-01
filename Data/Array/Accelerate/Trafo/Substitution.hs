@@ -481,7 +481,8 @@ rebuildSeq k v seq =
   case seq of
     Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
     Consumer c   -> Consumer <$> (rebuildC k v c)
-    Reify ix     -> pure $ Reify ix
+    Reify (Just f) ix  -> Reify . Just  <$> rebuildAfun k v f <*> pure ix
+    Reify Nothing  ix  -> pure $ Reify Nothing ix
 
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -491,7 +492,8 @@ rebuildP :: (SyntacticAcc fa, Applicative f)
 rebuildP k v p =
   case p of
     StreamIn arrs        -> pure (StreamIn arrs)
-    ToSeq sl slix acc    -> ToSeq sl slix <$> k v acc
+    ToSeq (Just f) sl slix acc  -> ToSeq . Just  <$> rebuildAfun k v f <*> pure sl <*> pure slix <*> k v acc
+    ToSeq Nothing  sl slix acc  -> ToSeq Nothing sl slix <$> k v acc
     MapSeq f Nothing   x -> flip MapSeq Nothing <$> rebuildAfun k v f <*> pure x
     MapSeq f (Just f') x -> (. Just) . MapSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x
     ZipWithSeq f Nothing   x y -> flip ZipWithSeq Nothing <$> rebuildAfun k v f <*> pure x <*> pure y
@@ -505,7 +507,8 @@ rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
   case c of
-    FoldSeq f e x          -> FoldSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
+    FoldSeq Nothing f e x  -> FoldSeq Nothing <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
+    FoldSeq (Just f') f e x -> FoldSeq . Just <$> rebuildAfun k v f' <*> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
     FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> pure x
     Stuple t               -> Stuple <$> rebuildT t
   where

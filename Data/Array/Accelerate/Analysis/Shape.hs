@@ -26,7 +26,8 @@ module Data.Array.Accelerate.Analysis.Shape (
   -- * Shape analysis
   ShapeTree(..),
   ArraysPartial(..),
-  evalShape1, evalShape2, valToValPartial, ValPartial(..), prjArraysPartial, partialBottom, toPartialShapesOnly, toShapeTree, shapeTreeMaxSize,
+  valToValPartial, ValPartial(..), shapeTreeMaxSize, toPartialShapesOnly,
+  seqShapes,
 
 ) where
 
@@ -188,7 +189,6 @@ toPartialShapesOnly v =
         go (ProdRsnoc pr) (tup, arr) = go pr tup `SnocAtup` toPartialShapesOnly arr
 
 
--- You know nothing, Jon Snow.
 partialBottom :: forall t. Arrays t => ArraysPartial t
 partialBottom =
   case flavour (undefined :: t) of
@@ -231,15 +231,31 @@ valToValPartial (aenv `Push` a) = valToValPartial aenv `PushTotal` a
 -- Monad for handling partiality and tracking intermediate shapes
 type Shapes = WriterT ShapeTree Maybe
 
-evalShape1 :: (Arrays a, Arrays b)
-           => DelayedOpenAfun aenv (a -> b)
-           -> ValPartial aenv -> ArraysPartial a -> Maybe (ArraysPartial b, ShapeTree)
-evalShape1 f aenv a = runWriterT $ evalDelayedOpenAfun1 f aenv a
+seqShapes :: PreOpenSeq DelayedOpenAcc aenv () arrs -> ValPartial aenv -> Maybe ShapeTree
+seqShapes s aenv = snd <$> runWriterT (evalShapeSeq s aenv EmptyPartial)
 
-evalShape2 :: (Arrays a, Arrays b, Arrays c)
-           => DelayedOpenAfun aenv (a -> b -> c)
-           -> ValPartial aenv -> ArraysPartial a -> ArraysPartial b -> Maybe (ArraysPartial c, ShapeTree)
-evalShape2 f aenv a b = runWriterT $ evalDelayedOpenAfun2 f aenv a b
+evalShapeSeq :: forall aenv senv arrs.
+                PreOpenSeq DelayedOpenAcc aenv senv arrs
+             -> ValPartial aenv -> ValPartial senv -> Shapes ()
+evalShapeSeq s aenv senv =
+  case s of
+    Producer p s0 -> do 
+      a <- evalP p
+      tell =<< lift (toShapeTree a)
+      evalShapeSeq s0 aenv (senv `PushPartial` a)
+    Consumer _ -> return ()
+    Reify _ _ -> return ()
+  where
+    evalP :: Producer DelayedOpenAcc aenv senv a -> Shapes (ArraysPartial a)
+    evalP p =
+      case p of
+        StreamIn _ -> return partialBottom
+        ToSeq _ sl _ acc -> do
+          PartialArray sh _ <- evalDelayedOpenAcc acc aenv
+          return $ PartialArray (sliceShape sl <$> sh) Nothing
+        MapSeq f _ x -> evalDelayedOpenAfun1 f aenv (prjArraysPartial x senv)
+        ZipWithSeq f _ x y -> evalDelayedOpenAfun2 f aenv (prjArraysPartial x senv) (prjArraysPartial y senv)
+        ScanSeq _ _ _ ->  return $ PartialArray (Just Z) Nothing
 
 evalDelayedOpenAfun1 :: (Arrays a, Arrays b)
                      => DelayedOpenAfun aenv (a -> b)
@@ -288,11 +304,7 @@ evalDelayedOpenAcc (Manifest acc) aenv =
     Acond{} -> lift Nothing
     Awhile{} -> lift Nothing
     Use arr -> return (toPartial (toArr arr))
-    Unit e -> 
-      case runWriterT (evalE e) of
-        Just (e', t) ->
-          tell t >> return (PartialArray (Just Z) (Just (const e')))
-        Nothing -> return (PartialArray (Just Z) Nothing)
+    Unit _ -> return (PartialArray (Just Z) Nothing)
     Collect{} -> lift Nothing
 
     Map _ acc                   -> sameShapeOp <$> delayed acc

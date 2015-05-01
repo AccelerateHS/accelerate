@@ -284,12 +284,12 @@ convertOpenSeq :: Bool -> PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq DelayedOp
 convertOpenSeq fuseAcc s =
   case s of
     Consumer c          -> Consumer (cvtC c)
-    Reify ix            -> Reify ix
+    Reify f ix          -> Reify (cvtAF `fmap` f) ix
     Producer p s'       -> Producer p' (convertOpenSeq fuseAcc s')
       where
         p' = case p of
                StreamIn arrs       -> StreamIn arrs
-               ToSeq slix sh a     -> ToSeq slix sh (delayed fuseAcc a)
+               ToSeq f slix sh a   -> ToSeq (cvtAF `fmap` f) slix sh (delayed fuseAcc a)
                MapSeq f f' x       -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
                ZipWithSeq f f' x y -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
                ScanSeq f e x       -> ScanSeq (cvtF f) (cvtE e) x
@@ -297,7 +297,7 @@ convertOpenSeq fuseAcc s =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
       case c of
-        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+        FoldSeq f' f e x     -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest fuseAcc a) x
         Stuple t             -> Stuple (cvtCT t)
 
@@ -558,16 +558,16 @@ embedSeq embedAcc s
         Consumer c
           | c' <- travC c env
           -> ExtendSeq env (Consumer c')
-        Reify ix
-          -> ExtendSeq env (Reify ix)
+        Reify f ix
+          -> ExtendSeq env (Reify (cvtAF `fmap` (sink env `fmap` f)) ix)
 
     travP :: forall arrs' aenv' senv.
              Producer acc aenv senv arrs'
           -> Extend acc aenv aenv'
           -> ExtendProducer acc aenv' senv arrs'
-    travP (ToSeq slix sh a) env
+    travP (ToSeq f slix sh a) env
       | Embed env' cc <- embedAcc (sink env a)
-      = ExtendProducer env' (ToSeq slix sh (inject (compute' cc)))
+      = ExtendProducer env' (ToSeq (cvtAF `fmap` (sink env' `fmap` (sink env `fmap` f))) slix sh (inject (compute' cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
     travP (MapSeq f f' x) env        = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x)
     travP (ZipWithSeq f f' x y) env  = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x y)
@@ -577,7 +577,7 @@ embedSeq embedAcc s
              Consumer acc aenv senv arrs'
           -> Extend acc aenv aenv'
           -> Consumer acc aenv' senv arrs'
-    travC (FoldSeq f e x) env = FoldSeq (cvtF (sink env f)) (cvtE (sink env e)) x
+    travC (FoldSeq f' f e x) env = FoldSeq (cvtAF `fmap` (sink env `fmap` f')) (cvtF (sink env f)) (cvtE (sink env e)) x
     travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
     travC (Stuple t) env = Stuple (cvtCT t)
       where
@@ -755,7 +755,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
     case s of
       Producer p s' -> Producer   (weakenP p) (weakenL s')
       Consumer c    -> Consumer   (weakenC c)
-      Reify ix      -> Reify      ix
+      Reify f ix    -> Reify      (weaken k `fmap` f) ix
 
     where
       weakenL :: forall senv' arrs'. PreOpenSeq acc aenv senv' arrs' -> PreOpenSeq acc aenv' senv' arrs'
@@ -765,7 +765,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenP p =
         case p of
           StreamIn arrs        -> StreamIn arrs
-          ToSeq slix sh a      -> ToSeq slix sh (weaken k a)
+          ToSeq f slix sh a    -> ToSeq (weaken k `fmap` f) slix sh (weaken k a)
           MapSeq f f' x        -> MapSeq (weaken k f) (weaken k `fmap` f') x
           ZipWithSeq f f' x y  -> ZipWithSeq (weaken k f) (weaken k `fmap` f') x y
           ScanSeq f a x        -> ScanSeq (weaken k f) (weaken k a) x
@@ -773,7 +773,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
         case c of
-          FoldSeq f a x        -> FoldSeq (weaken k f) (weaken k a) x
+          FoldSeq f' f a x     -> FoldSeq (weaken k `fmap` f') (weaken k f) (weaken k a) x
           FoldSeqFlatten f a x -> FoldSeqFlatten (weaken k f) (weaken k a) x
           Stuple t             ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
@@ -1265,19 +1265,19 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
               Producer
                 (case p of
                    StreamIn arrs        -> StreamIn arrs
-                   ToSeq slix sh a      -> ToSeq slix sh (cvtA a)
+                   ToSeq f slix sh a    -> ToSeq (cvtAF `fmap` f) slix sh (cvtA a)
                    MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
-                   ZipWithSeq f f' x y     -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
+                   ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
                    ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
                 (cvtSeq s')
             Consumer c ->
               Consumer (cvtC c)
-            Reify ix -> Reify ix
+            Reify f ix -> Reify (cvtAF `fmap` f) ix
 
         cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
         cvtC c =
           case c of
-            FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+            FoldSeq f' f e x     -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
             FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x
             Stuple t             -> Stuple (cvtCT t)
 

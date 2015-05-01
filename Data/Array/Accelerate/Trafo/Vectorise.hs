@@ -2576,14 +2576,15 @@ vectoriseOpenSeq strength ctx seq =
     case seq of
     Producer p s -> Producer (cvtP p) (vectoriseOpenSeq strength ctx s)
     Consumer c   -> Consumer (cvtC c)
-    Reify ix     -> Reify ix
+    Reify _ ix   | IsC <- isArraysFlat (undefined :: a ~ [b] => b)
+                 -> Reify (Just (Alam $ Alam $ Abody $ fromHOAS indexVector' avar1 avar0)) ix
   where
     cvtP :: Producer OpenAcc aenv senv t -> Producer OpenAcc aenv senv t
     cvtP p =
       case p of
         StreamIn arrs        -> StreamIn arrs
-        ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
-        -- Interesting case:
+        ToSeq _ sl slix a    -> ToSeq (Just (Alam $ Abody $ fromHOAS regularVector' avar0)) sl slix (cvtA a)
+        -- Interesting cases:
         MapSeq f _ x         -> MapSeq f (Just (liftOpenAfun1 strength ctx (cvtAfun f))) x
         ZipWithSeq f _ x y   -> ZipWithSeq (cvtAfun f) (Just (liftOpenAfun2 strength ctx (cvtAfun f))) x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
@@ -2591,7 +2592,7 @@ vectoriseOpenSeq strength ctx seq =
     cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
     cvtC c =
       case c of
-        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+        FoldSeq _ f e x      -> FoldSeq (Just (Alam $ Alam $ Abody $ (zipWith' (weaken (SuccIdx . SuccIdx) f)) avar1 avar0)) (cvtF f) (cvtE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
         Stuple t             -> Stuple (cvtCT t)
 
@@ -2746,3 +2747,103 @@ vectoriseSeqOpenAfun strength ctx afun =
   case afun of
     Abody b -> Abody (vectoriseSeqOpenAcc strength ctx b)
     Alam f  -> Alam (vectoriseSeqOpenAfun strength (PushAccC ctx) f)
+
+
+indexVector' :: forall a. Arrays a
+       => S.Acc (Vector' a) -> S.Acc (Scalar Int) -> S.Acc a
+indexVector' v i = case flavour (undefined :: a) of
+  ArraysFunit  -> S.Acc $ S.Atuple NilAtup
+  ArraysFarray -> 
+    let 
+      seg = segments v
+      sh = seg S.!! (S.the i)
+      vals = values v
+      (offs, _) = offsets seg
+    in S.generate sh (\ ix -> vals S.!! (offs S.!! (S.the i) +  S.toIndex sh ix))
+  ArraysFtuple | IsC <- isArraysFlat (undefined :: a)
+               ->
+    let vs = asAtuple v
+    in S.Acc $ S.Atuple $ tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) vs
+    where
+      tup :: forall t. ProdR Arrays t
+                 -> Atuple S.Acc (LiftedTupleRepr t)
+                 -> Atuple S.Acc t
+      tup ProdRunit _ = NilAtup
+      tup (ProdRsnoc t) (a `SnocAtup` b) = tup t a `SnocAtup` indexVector' b i
+      tup _ _ = error "unreachable indexVector'"
+
+regularVector' :: (Shape sh, Elt e) => S.Acc (Array (sh :. Int) e) -> S.Acc (Vector' (Array sh e))
+regularVector' arr = 
+  let sh = S.shape arr
+  in liftedArray
+       (S.generate 
+         (S.index1 (indexLast sh)) 
+         (\ _ -> indexInit sh)
+       ) 
+       (S.flatten arr)
+
+
+-- | Zip three arrays with the given function, analogous to 'zipWith'.
+--
+zipWith' :: Elt e
+         => Fun aenv (e -> e -> e)
+         -> OpenAcc aenv (Vector e)
+         -> OpenAcc aenv (Vector e)
+         -> OpenAcc aenv (Vector e)
+zipWith' f as bs
+  = OpenAcc $ Generate 
+      (Shape as `Union` Shape bs)
+      (Lam $ Body $
+         let ix = var0
+         in 
+          Cond
+            (PrimApp (PrimGtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape as) `SnocTup` IndexHead ix))
+            (Index bs ix)
+            (Cond
+               (PrimApp (PrimGtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape bs) `SnocTup` IndexHead ix))
+               (Index as ix)
+               (subApplyE2 (weakenE SuccIdx f) (Index bs ix) (Index as ix))
+            )
+      )
+
+-- Remove the outermost dimension
+indexInit :: forall sh. Typeable sh => S.Exp (sh :. Int) -> S.Exp sh
+indexInit sh
+  | P.Just (Refl :: sh :~: Z) <- eqT 
+  = S.lift Z
+  | P.Just (Refl :: sh :~: (Z :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
+  | otherwise = $internalError "indexInit" "This many dimensions is not supported"
+
+-- Get the outermost dimension
+indexLast :: forall sh. Typeable sh => S.Exp (sh :. Int) -> S.Exp Int
+indexLast sh
+  | P.Just (Refl :: sh :~: Z) <- eqT
+  = S.indexHead sh
+  | P.Just (Refl :: sh :~: (Z :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
+  = S.lift $ indexLast (S.indexTail sh)
+  | otherwise = $internalError "indexLast" "This many dimensions is not supported"

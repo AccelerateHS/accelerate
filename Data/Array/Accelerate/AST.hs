@@ -485,7 +485,8 @@ data PreOpenSeq acc aenv senv arrs where
            -> PreOpenSeq acc aenv senv arrs
 
   Reify    :: Arrays arrs
-           => Idx senv arrs
+           => Maybe (PreOpenAfun acc aenv (Vector' arrs -> Scalar Int -> arrs))
+           -> Idx senv arrs
            -> PreOpenSeq acc aenv senv [arrs]
 
 data Producer acc aenv senv a where
@@ -496,7 +497,8 @@ data Producer acc aenv senv a where
 
   -- Convert the given array to a sequence.
   ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => SliceIndex  (EltRepr slix)
+           => Maybe (PreOpenAfun acc aenv (Array (sl :. Int) e -> Vector' (Array sl e)))
+           -> SliceIndex  (EltRepr slix)
                           (EltRepr sl)
                           co
                           (EltRepr sh)
@@ -548,7 +550,8 @@ data Consumer acc aenv senv a where
   --   Forall a. a0 + a = a = a + a0.
   --
   FoldSeq :: Elt a
-          => PreFun acc aenv (a -> a -> a)
+          => Maybe (PreOpenAfun acc aenv (Vector a -> Vector a -> Vector a))
+          -> PreFun acc aenv (a -> a -> a)
           -> PreExp acc aenv a
           -> Idx senv (Scalar a)
           -> Consumer acc aenv senv (Scalar a)

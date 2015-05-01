@@ -113,13 +113,13 @@ convertSegmentsSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
     Consumer c   -> Consumer (cvtC c)
-    Reify ix     -> Reify ix
+    Reify f ix   -> Reify (cvtAfun `fmap` f) ix
   where
     cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
     cvtP p =
       case p of
         StreamIn arrs        -> StreamIn arrs
-        ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
+        ToSeq f sl slix a    -> ToSeq (cvtAfun `fmap` f) sl slix (cvtA a)
         MapSeq f f' x        -> MapSeq (cvtAfun f) (cvtAfun `fmap` f') x
         ZipWithSeq f f' x y  -> ZipWithSeq (cvtAfun f) (cvtAfun `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
@@ -127,7 +127,7 @@ convertSegmentsSeq seq =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
     cvtC c =
       case c of
-        FoldSeq f e x        -> FoldSeq (cvtF f) (cvtE e) x
+        FoldSeq f' f e x     -> FoldSeq (cvtAfun `fmap` f') (cvtF f) (cvtE e) x
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) x
         Stuple t             -> Stuple (cvtCT t)
 

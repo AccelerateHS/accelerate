@@ -339,7 +339,7 @@ matchSeq m h = match
     match (Consumer c1)   (Consumer c2)
       | Just REFL <- matchC c1 c2
       = Just REFL
-    match (Reify ix1) (Reify ix2)
+    match (Reify _ ix1) (Reify _ ix2)
       | Just REFL <- matchIdx ix1 ix2
       = Just REFL
     match _ _
@@ -352,7 +352,7 @@ matchSeq m h = match
           sn2 <- makeStableName arrs2
           return $! hashStableName sn1 == hashStableName sn2
       = gcast REFL
-    matchP (ToSeq _ (_::proxy1 slix1) a1) (ToSeq _ (_::proxy2 slix2) a2)
+    matchP (ToSeq _ _ (_::proxy1 slix1) a1) (ToSeq _ _ (_::proxy2 slix2) a2)
       | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2) -- Divisions are singleton.
       , Just REFL <- m a1 a2
       = gcast REFL
@@ -374,7 +374,7 @@ matchSeq m h = match
       = Nothing
 
     matchC :: Consumer acc aenv senv' u -> Consumer acc aenv senv' v -> Maybe (u :=: v)
-    matchC (FoldSeq f1 e1 x1) (FoldSeq f2 e2 x2)
+    matchC (FoldSeq _ f1 e1 x1) (FoldSeq _ f2 e2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchFun f1 f2
       , Just REFL <- matchExp e1 e2
@@ -972,7 +972,7 @@ hashPreOpenSeq hashAcc s =
     hashP salt p =
       case p of
         StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
-        ToSeq spec _ acc    -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
+        ToSeq _ spec _ acc  -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
         MapSeq f _ x        -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
         ZipWithSeq f _ x y  -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
         ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
@@ -980,14 +980,14 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =
       case c of
-        FoldSeq f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
+        FoldSeq _ f e x        -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
         FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
         Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
     Consumer   c    -> hash "Consumer"   `hashC` c
-    Reify      ix   -> hash "Reify"      `hashVar` ix
+    Reify    _ ix   -> hash "Reify"      `hashVar` ix
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int
