@@ -1,3 +1,8 @@
+0.15.1.0
+
+  * Compiles with ghc-7.8 and ghc-7.10
+
+  * Minor bug fixes
 
 0.15.0.0
 
