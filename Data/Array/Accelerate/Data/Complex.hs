@@ -7,8 +7,8 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS -fno-warn-orphans #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Data.Array.Accelerate.Data.Complex (
 
   -- * Rectangular from

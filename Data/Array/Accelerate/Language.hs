@@ -1,8 +1,8 @@
 {-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
-{-# OPTIONS -fno-warn-missing-methods #-}
-{-# OPTIONS -fno-warn-orphans         #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_GHC -fno-warn-orphans         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
