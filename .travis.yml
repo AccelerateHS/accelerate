@@ -31,7 +31,7 @@ before_install:
 install:
     - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
     - cabal --version
-    - cabal install --only-dependencies --enable-tests ${MODE}
+    - travis_retry cabal install --only-dependencies --enable-tests ${MODE}
 
 script:
     # Check the build
