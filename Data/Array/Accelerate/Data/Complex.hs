@@ -7,8 +7,18 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+-- |
+-- Module      : Data.Array.Accelerate.Data.Complex
+-- Copyright   : [2015] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- Complex numbers
+--
 module Data.Array.Accelerate.Data.Complex (
 
   -- * Rectangular from
