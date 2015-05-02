@@ -34,6 +34,7 @@ import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
+import qualified Data.Complex                   as C
 
 
 type instance EltRepr (Complex a) = EltRepr (a, a)
@@ -96,7 +97,7 @@ instance (Elt a, IsFloating a, RealFloat a) => Floating (Exp (Complex a)) where
         {- then -} ( 0
         {- else -} , lift (u :+ (y A.<* 0 ? (-v,v))) )
 
-  pi            = lift (pi :+ constant 0)
+  pi            = lift (pi :: Complex (Exp a))
   log z         = lift (log (magnitude z) :+ phase z)
   exp           = lift1 (exp :: Complex (Exp a) -> Complex (Exp a))
   sin           = lift1 (sin :: Complex (Exp a) -> Complex (Exp a))
@@ -137,33 +138,29 @@ polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: (Elt a, IsFloating a) => Exp a -> Exp a -> Exp (Complex a)
-mkPolar r theta  =  lift $ r * cos theta :+ r * sin theta
+mkPolar :: forall a. (Elt a, IsFloating a) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: (Elt a, IsFloating a) => Exp a -> Exp (Complex a)
-cis theta = lift $ cos theta :+ sin theta
+cis :: forall a. (Elt a, IsFloating a) => Exp a -> Exp (Complex a)
+cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
-real :: Elt a => Exp (Complex a) -> Exp a
-real c =
-  let r :+ _    = unlift c
-  in  r
+real :: forall a. Elt a => Exp (Complex a) -> Exp a
+real = lift1 (C.realPart :: Complex (Exp a) -> Exp a)
 
 -- | Return the imaginary part of a complex number
 --
-imag :: Elt a => Exp (Complex a) -> Exp a
-imag c =
-  let _ :+ i    = unlift c
-  in  i
+imag :: forall a. Elt a => Exp (Complex a) -> Exp a
+imag = lift1 (C.imagPart :: Complex (Exp a) -> Exp a)
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
-conjugate z = lift $ real z :+ (- imag z)
+conjugate :: forall a. (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
+conjugate = lift1 (C.conjugate :: Complex (Exp a) -> Complex (Exp a))
 
