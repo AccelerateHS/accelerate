@@ -159,18 +159,22 @@ cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --
-real :: forall a. Elt a => Exp (Complex a) -> Exp a
-real = lift1 (C.realPart :: Complex (Exp a) -> Exp a)
+real :: Elt a => Exp (Complex a) -> Exp a
+real c =
+  let r :+ _    = unlift c
+  in  r
 
 -- | Return the imaginary part of a complex number
 --
-imag :: forall a. Elt a => Exp (Complex a) -> Exp a
-imag = lift1 (C.imagPart :: Complex (Exp a) -> Exp a)
+imag :: Elt a => Exp (Complex a) -> Exp a
+imag c =
+  let _ :+ i    = unlift c
+  in  i
 
 -- | Return the complex conjugate of a complex number, defined as
 --
 -- > conjugate(Z) = X - iY
 --
-conjugate :: forall a. (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
-conjugate = lift1 (C.conjugate :: Complex (Exp a) -> Complex (Exp a))
+conjugate :: (Elt a, IsNum a) => Exp (Complex a) -> Exp (Complex a)
+conjugate z = lift $ real z :+ (- imag z)
 
