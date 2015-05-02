@@ -48,6 +48,7 @@ module Data.Array.Accelerate.Smart (
   mkMinBound, mkMaxBound, mkPi,
   mkSin, mkCos, mkTan,
   mkAsin, mkAcos, mkAtan,
+  mkSinh, mkCosh, mkTanh,
   mkAsinh, mkAcosh, mkAtanh,
   mkExpFloating, mkSqrt, mkLog,
   mkFPow, mkLogBase,
@@ -1014,6 +1015,15 @@ mkAcos x = Exp $ PrimAcos floatingType `PrimApp` x
 
 mkAtan :: (Elt t, IsFloating t) => Exp t -> Exp t
 mkAtan x = Exp $ PrimAtan floatingType `PrimApp` x
+
+mkSinh :: (Elt t, IsFloating t) => Exp t -> Exp t
+mkSinh x = Exp $ PrimSinh floatingType `PrimApp` x
+
+mkCosh :: (Elt t, IsFloating t) => Exp t -> Exp t
+mkCosh x = Exp $ PrimCosh floatingType `PrimApp` x
+
+mkTanh :: (Elt t, IsFloating t) => Exp t -> Exp t
+mkTanh x = Exp $ PrimTanh floatingType `PrimApp` x
 
 mkAsinh :: (Elt t, IsFloating t) => Exp t -> Exp t
 mkAsinh x = Exp $ PrimAsinh floatingType `PrimApp` x

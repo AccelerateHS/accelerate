@@ -121,6 +121,9 @@ evalPrimApp env f x
       PrimAsin ty               -> evalAsin ty x env
       PrimAcos ty               -> evalAcos ty x env
       PrimAtan ty               -> evalAtan ty x env
+      PrimSinh ty               -> evalSinh ty x env
+      PrimCosh ty               -> evalCosh ty x env
+      PrimTanh ty               -> evalTanh ty x env
       PrimAsinh ty              -> evalAsinh ty x env
       PrimAcosh ty              -> evalAcosh ty x env
       PrimAtanh ty              -> evalAtanh ty x env
@@ -480,6 +483,15 @@ evalAcos ty | FloatingDict <- floatingDict ty = eval1 acos
 
 evalAtan :: Elt a => FloatingType a -> a :-> a
 evalAtan ty | FloatingDict <- floatingDict ty = eval1 atan
+
+evalSinh :: Elt a => FloatingType a -> a :-> a
+evalSinh ty | FloatingDict <- floatingDict ty = eval1 sinh
+
+evalCosh :: Elt a => FloatingType a -> a :-> a
+evalCosh ty | FloatingDict <- floatingDict ty = eval1 cosh
+
+evalTanh :: Elt a => FloatingType a -> a :-> a
+evalTanh ty | FloatingDict <- floatingDict ty = eval1 tanh
 
 evalAsinh :: Elt a => FloatingType a -> a :-> a
 evalAsinh ty | FloatingDict <- floatingDict ty = eval1 asinh

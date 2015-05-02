@@ -777,6 +777,9 @@ evalPrim (PrimTan             ty) = evalTan ty
 evalPrim (PrimAsin            ty) = evalAsin ty
 evalPrim (PrimAcos            ty) = evalAcos ty
 evalPrim (PrimAtan            ty) = evalAtan ty
+evalPrim (PrimSinh            ty) = evalSinh ty
+evalPrim (PrimCosh            ty) = evalCosh ty
+evalPrim (PrimTanh            ty) = evalTanh ty
 evalPrim (PrimAsinh           ty) = evalAsinh ty
 evalPrim (PrimAcosh           ty) = evalAcosh ty
 evalPrim (PrimAtanh           ty) = evalAtanh ty
@@ -904,6 +907,15 @@ evalAcos ty | FloatingDict <- floatingDict ty = acos
 
 evalAtan :: FloatingType a -> (a -> a)
 evalAtan ty | FloatingDict <- floatingDict ty = atan
+
+evalSinh :: FloatingType a -> (a -> a)
+evalSinh ty | FloatingDict <- floatingDict ty = sinh
+
+evalCosh :: FloatingType a -> (a -> a)
+evalCosh ty | FloatingDict <- floatingDict ty = cosh
+
+evalTanh :: FloatingType a -> (a -> a)
+evalTanh ty | FloatingDict <- floatingDict ty = tanh
 
 evalAsinh :: FloatingType a -> (a -> a)
 evalAsinh ty | FloatingDict <- floatingDict ty = asinh
