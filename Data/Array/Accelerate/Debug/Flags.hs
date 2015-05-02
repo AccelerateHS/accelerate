@@ -2,6 +2,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
