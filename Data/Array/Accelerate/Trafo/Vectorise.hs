@@ -102,7 +102,7 @@ type VectoriseAcc acc = forall aenv aenv' t.
                         Arrays t
                      => Strength
                      -> Context () aenv () aenv'
-                     -> Size acc aenv'
+                     -> Size acc aenv' Int
                      -> acc aenv t
                      -> LiftedAcc acc aenv' t
 
@@ -134,7 +134,11 @@ instance Shape sh => IsProduct Elt (None sh) where
 
 -- |The size parameter in the lifting transform.
 --
-type Size acc aenv = PreExp acc aenv Int
+data Size acc aenv e where
+  Size :: Arrays a => acc aenv a -> PreExp acc (aenv,a) e -> Size acc aenv e
+
+instance Kit acc => Sink (Size acc) where
+  weaken k (Size b s) = Size (weaken k b) (weaken (newTop k) s)
 
 data LiftedAcc acc aenv t = AvoidedAcc (acc aenv t)
                           | LiftedAcc (acc aenv (Vector' t))
@@ -175,7 +179,7 @@ injectL = over inject inject
 vectoriseOpenAcc :: Arrays t
                  => Strength
                  -> Context () aenv () aenv'
-                 -> Size OpenAcc aenv'
+                 -> Size OpenAcc aenv' Int
                  -> OpenAcc aenv t
                  -> LiftedOpenAcc aenv' t
 vectoriseOpenAcc strength ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc strength ctx size a
@@ -183,20 +187,20 @@ vectoriseOpenAcc strength ctx size (OpenAcc a) = liftPreOpenAcc vectoriseOpenAcc
 liftedSize :: forall acc aenv t.
               (Kit acc, Arrays t, Arrays (Vector' t))
            => acc aenv (Vector' t)
-           -> Size acc aenv
+           -> Size acc aenv Int
 liftedSize a =
   case flavour (undefined :: t) of
-    ArraysFunit  -> Index (inject $ Aprj ZeroTupIdx a) IndexNil
-    ArraysFarray -> ShapeSize (Shape $ inject $ Aprj (SuccTupIdx ZeroTupIdx) a)
+    ArraysFunit  -> Size (inject $ Aprj ZeroTupIdx a) $ Index avar0 IndexNil
+    ArraysFarray -> Size (inject $ Aprj (SuccTupIdx ZeroTupIdx) a) $ ShapeSize (Shape avar0)
     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
   where
-    fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
-    fromTup ProdRunit     = Const 0
+    fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv Int
+    fromTup ProdRunit     = error "Unreachable"
     fromTup (ProdRsnoc _) = convince a
       where
         convince :: forall f l a e. (ArrRepr t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
                  => acc aenv (Vector' t)
-                 -> Size acc aenv
+                 -> Size acc aenv Int
         convince a | IsC <- isArraysFlat (undefined :: a)
                    = liftedSize $^ Aprj ZeroTupIdx a
 
@@ -215,7 +219,8 @@ liftOpenAfun1 strength ctx (Alam (Abody f))
       -- In the case that the body of the function does not depend on its argument,
       -- conservative vectorisation will return the unmodified body. In this,
       -- we just need to replicate the result.
-      AvoidedAcc a' -> Alam . Abody $ replicateC (inject $ Unit (liftedSize avar0)) a'
+      AvoidedAcc a' | Size b s <- liftedSize avar0
+                    -> Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
       -- Otherwise, we have the lifted body.
       LiftedAcc  a' -> Alam . Abody $ a'
 liftOpenAfun1 _ _ _
@@ -237,7 +242,8 @@ liftOpenAfun2 strength ctx (Alam (Alam (Abody f)))
       -- In the case that the body of the function does not depend on its argument,
       -- conservative vectorisation will return the unmodified body. In this,
       -- we just need to replicate the result.
-      AvoidedAcc a' -> Alam . Alam . Abody $ replicateC (inject $ Unit (liftedSize avar0)) a'
+      AvoidedAcc a' | Size b s <- liftedSize avar0
+                    -> Alam . Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
       -- Otherwise, we have the lifted body.
       LiftedAcc  a' -> Alam . Alam . Abody $ a'
 liftOpenAfun2 _ _ _
@@ -249,7 +255,7 @@ liftPreOpenAcc :: forall acc aenv aenv' t. (Kit acc, Arrays t)
                => VectoriseAcc acc
                -> Strength
                -> Context () aenv () aenv'
-               -> Size acc aenv'
+               -> Size acc aenv' Int
                -> PreOpenAcc acc aenv t
                -> LiftedAcc acc aenv' t
 liftPreOpenAcc vectAcc strength ctx size acc
@@ -312,7 +318,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
 
     liftE :: forall env env' aenv aenv' e. (Elt e)
           => Context env aenv env' aenv'
-          -> Size acc aenv'
+          -> Size acc aenv' Int
           -> PreOpenExp acc env aenv e
           -> PreOpenAcc acc aenv' (Vector e)
     liftE | HoistOnly <- strength
@@ -350,26 +356,6 @@ liftPreOpenAcc vectAcc strength ctx size acc
     liftTupleIdx ZeroTupIdx = ZeroTupIdx
     liftTupleIdx (SuccTupIdx ix) = SuccTupIdx (liftTupleIdx ix)
 
-    -- We are slightly introducing nested parallelism here in that we are  embedding `Aprj` in an
-    -- `Exp`. Fusion should always be able to handle this case properly however.
-    liftedSize :: forall aenv t. (Arrays t, Arrays (Vector' t))
-               => acc aenv (Vector' t)
-               -> Size acc aenv
-    liftedSize a = case flavour (undefined :: t) of
-                     ArraysFunit  -> Index (inject $ Aprj ZeroTupIdx a) IndexNil
-                     ArraysFarray -> ShapeSize (Shape $ segments a)
-                     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-      where
-        fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv
-        fromTup ProdRunit     = Const 0
-        fromTup (ProdRsnoc _) = convince a
-          where
-            convince :: forall f l a e. (ArrRepr t ~ (l,e), TupleRepr t ~ (f,a), Arrays a)
-                     => acc aenv (Vector' t)
-                     -> Size acc aenv
-            convince a | IsC <- isArraysFlat (undefined :: a)
-                       = liftedSize $^ Aprj ZeroTupIdx a
-
     liftAfun1 :: forall a b. (Arrays a, Arrays b)
               => PreOpenAfun acc aenv (a -> b)
               -> ( PreOpenAfun acc aenv' (Vector' a -> Vector' b)
@@ -395,7 +381,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
           -> ( PreOpenAfun acc aenv' (Vector a -> Vector b)
              , Maybe (AvoidedFun acc () aenv' (a -> b)))
     cvtF1 f@(Lam (Body e))
-      = let l = Alam (Abody (inject $ liftE (PushLExpC ctx) (ShapeSize (Shape avar0)) e))
+      = let l = Alam (Abody (inject $ liftE (PushLExpC ctx) (simpleSize $ ShapeSize (Shape avar0)) e))
         in case (avoidF f) of
              Avoided (b, Lam (Body e')) | avoidLifting
                                         -> (l, Just $ AvoidedFun b (Lam (Body e')))
@@ -409,7 +395,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
              , Maybe (AvoidedFun acc () aenv' (a -> b -> c)))
     cvtF2 f@(Lam (Lam (Body e)))
       = let l = Alam (Alam (Abody (inject $ liftE (PushLExpC (PushLExpC ctx))
-                                                  (ShapeSize (Shape avar0))
+                                                  (simpleSize $ ShapeSize (Shape avar0))
                                                   e)))
 
         in case (avoidF f) of
@@ -425,7 +411,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
               , Maybe (AvoidedFun acc () aenv' (a -> b -> c)))
     cvtF2' f@(Lam (Lam (Body e)))
       = let l = Alam (Alam (Abody (inject $ liftE (PushLExpC (PushLExpC ctx))
-                                                  (ShapeSize (Shape avar0))
+                                                  (simpleSize $ ShapeSize (Shape avar0))
                                                   e)))
         in case (avoidF f) of
              Avoided (b, Lam (Lam (Body e'))) -> (l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
@@ -546,7 +532,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
     atupleL t = case atl (cvtT t) of
                   Left (a,_)  -> AvoidedAcc (inject $ Atuple a)
                   Right a     -> case flavour (undefined :: t) of
-                                   ArraysFunit  -> liftedAcc $^ Atuple (SnocAtup NilAtup (inject $ Unit size))
+                                   ArraysFunit  -> liftedAcc $^ Atuple (SnocAtup NilAtup (unitSize size))
                                    ArraysFtuple -> liftedAcc $ inject $ Atuple a
                                    _            -> error "Absurd"
       where
@@ -1284,7 +1270,7 @@ liftExp :: forall acc env env' aenv aenv' e. Kit acc
         => VectoriseAcc acc
         -> Strength
         -> Context env aenv env' aenv'
-        -> Size acc aenv'
+        -> Size acc aenv' Int
         -> PreOpenExp acc env       aenv  e
         -> PreOpenAcc acc aenv' (Vector e)
 liftExp vectAcc strength ctx size exp
@@ -1339,14 +1325,14 @@ liftExp vectAcc strength ctx size exp
           -> PreOpenAfun acc aenv' (Vector a -> Vector b)
     cvtF1 (Lam (Body f)) = Alam . Abody
                          $ inject
-                         $ liftExp vectAcc strength (PushLExpC ctx) (ShapeSize (Shape avar0)) f
+                         $ liftExp vectAcc strength (PushLExpC ctx) (simpleSize $ ShapeSize (Shape avar0)) f
     cvtF1 _              = $internalError "liftExp" "Inconsistent valuation"
 
     replicateE :: forall e aenv. Elt e
-               => Size acc aenv
+               => Size acc aenv Int
                -> PreExp acc aenv e
                -> PreOpenAcc acc aenv (Vector e)
-    replicateE s c = Generate (index1 s) (Lam (Body $ weakenE1 c))
+    replicateE (Size b s) c = Alet b $^ Generate (index1 s) (Lam (Body $ weakenA1 $ weakenE1 c))
 
     -- Lifted versions of operations
     -- ==============================
@@ -1440,7 +1426,8 @@ liftExp vectAcc strength ctx size exp
     indexL (cvtA -> a) (cvtE -> ix)
       | avoidLifting
       , AvoidedAcc a' <- a
-      = Backpermute (index1 size) (fun1 (Index ix)) a'
+      , Size b s <- size
+      = Alet b $^ Backpermute (index1 s) (fun1 (Index $ weakenA1 ix)) (weakenA1 a')
       | otherwise
       =  extract
       $  liftedIndexC (lifted a) ix
@@ -1452,9 +1439,11 @@ liftExp vectAcc strength ctx size exp
     linearIndexL (cvtA -> a) (cvtE -> ix)
       | avoidLifting
       , AvoidedAcc a' <- a
-      =  Alet a'
-      $^ Generate (index1 $ weakenA1 size)
-                  (Lam $ Body $ LinearIndex avar0 $ Index (weakenA1 ix) $ var0)
+      , Size b s <- size
+      =  Alet b
+      $^ Alet (weakenA1 a')
+      $^ Generate (index1 (weakenA1 s))
+                  (Lam $ Body $ LinearIndex avar0 $ Index (weakenA2 ix) $ var0)
       | otherwise
       = extract $
         fromHOAS liftedLinearIndex (lifted a) ix
@@ -1501,7 +1490,7 @@ liftTuple :: forall acc env aenv env' aenv' e.
           => VectoriseAcc acc
           -> Strength
           -> Context env aenv env' aenv'
-          -> Size acc aenv'
+          -> Size acc aenv' Int
           -> Tuple (PreOpenExp acc env aenv) (TupleRepr e)
           -> PreOpenAcc acc aenv' (Vector e)
 liftTuple vectAcc strength ctx size t = cvtT t (liftExp vectAcc strength ctx size) gen size
@@ -1509,8 +1498,8 @@ liftTuple vectAcc strength ctx size t = cvtT t (liftExp vectAcc strength ctx siz
     cvtT :: forall t aenv'.
             Tuple (PreOpenExp acc env aenv) t
          -> (forall e. PreOpenExp acc env aenv e -> PreOpenAcc acc aenv' (Vector e))
-         -> (Size acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) -> PreOpenAcc acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) (Vector e))
-         -> Size acc aenv'
+         -> (Size acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) Int -> PreOpenAcc acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) (Vector e))
+         -> Size acc aenv' Int
          -> PreOpenAcc acc aenv'                                    (Vector e)
     cvtT NilTup        _    arr size = arr size
     cvtT(SnocTup t' e) lift arr size = Alet (inject $ lift e) (inject $ cvtT t' lift' arr (weakenA1 size))
@@ -1518,8 +1507,8 @@ liftTuple vectAcc strength ctx size t = cvtT t (liftExp vectAcc strength ctx siz
         lift' :: forall e e'. PreOpenExp acc env aenv e -> PreOpenAcc acc (aenv', Vector e') (Vector e)
         lift' = weakenA1 . lift
 
-    gen :: Size acc (TupleEnv aenv' e) -> PreOpenAcc acc (TupleEnv aenv' e) (Vector e)
-    gen size = Generate (index1 size) (Lam (Body (Tuple t')))
+    gen :: Size acc (TupleEnv aenv' e) Int -> PreOpenAcc acc (TupleEnv aenv' e) (Vector e)
+    gen (Size b s) = Alet b $^ Generate (index1 s) (weakenA1 $ Lam (Body (Tuple t')))
       where
         t' :: Tuple (PreOpenExp acc ((),DIM1) (TupleEnv aenv' e)) (TupleRepr e)
         t' = weakenTup (ixt (undefined :: aenv') t) (mkTup t)
@@ -1717,7 +1706,7 @@ liftExtend :: forall acc aenv0 aenv0' aenv1. Kit acc
            -> Strength
            -> Extend acc aenv0 aenv1
            -> Context () aenv0 () aenv0'
-           -> Size acc aenv0'
+           -> Size acc aenv0' Int
            -> ExtendContext acc aenv0' aenv1
 liftExtend _ _ BaseEnv ctx _
   = ExtendContext ctx BaseEnv
@@ -2361,18 +2350,18 @@ atup3 a b c = inject $ Atuple $ NilAtup `SnocAtup` a `SnocAtup` b `SnocAtup` c
 replicateA :: forall acc aenv a.
              (Kit acc, Arrays a)
           => acc aenv a
-          -> Size acc aenv
+          -> Size acc  aenv Int
           -> acc aenv (Vector' a)
 replicateA a size
   | IsC <- isArraysFlat (undefined :: a)
-  = replicateC (inject $ Unit size) a
+  = replicateC (unitSize size) a
 
 replicateE :: forall acc aenv e.
               (Kit acc, Elt e)
            => PreExp acc aenv e
-           -> Size acc aenv
+           -> Size acc aenv Int
            -> PreOpenAcc acc aenv (Vector e)
-replicateE e size = Replicate (SliceFixed SliceNil) (IndexCons IndexNil size) (inject $ Unit e)
+replicateE e (Size b s) = Alet b $^ Replicate (SliceFixed SliceNil) (IndexCons IndexNil s) (inject . weakenA1 $ Unit e)
 
 var0 :: (Kit acc, Elt t)
      => PreOpenExp acc (env, t) aenv t
@@ -2551,6 +2540,13 @@ infixr 0 $^
      -> PreOpenAcc acc aenv a
      -> t
 ($^) f a = f $ inject a
+
+
+simpleSize :: forall acc aenv e. Kit acc => PreExp acc aenv e ->  Size acc aenv e
+simpleSize e = Size (inject $ Use () :: acc aenv ()) (weakenA1 e)
+
+unitSize :: (Kit acc, Elt e) => Size acc aenv e -> acc aenv (Scalar e)
+unitSize (Size b s) = inject $ Alet b $ inject $ Unit s
 
 -- Debugging
 -- ----------
