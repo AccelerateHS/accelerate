@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Analysis.Shape (
   -- * Shape analysis
   ShapeTree(..),
   ArraysPartial(..),
-  valToValPartial, ValPartial(..), shapeTreeMaxSize, toPartialShapesOnly,
+  valToValPartial, ValPartial(..), shapeTreeMaxSize,
   seqShapes,
 
 ) where
@@ -215,13 +215,16 @@ toShapeTree (PartialAtup t)     = go t
 data ValPartial env where
   EmptyPartial :: ValPartial ()
   PushPartial  :: ValPartial env -> ArraysPartial t -> ValPartial (env, t)
-  PushTotal    :: ValPartial env ->              t -> ValPartial (env, t)
+  PushTotal    :: ValPartial env ->               t -> ValPartial (env, t)
+  PushTotalShapesOnly :: ValPartial env ->        t -> ValPartial (env, t)
 
 prjArraysPartial :: Arrays t => Idx env t -> ValPartial env -> ArraysPartial t
 prjArraysPartial ZeroIdx       (PushPartial _   v) = v
 prjArraysPartial ZeroIdx       (PushTotal   _   v) = toPartial v
+prjArraysPartial ZeroIdx       (PushTotalShapesOnly _ v) = toPartialShapesOnly v
 prjArraysPartial (SuccIdx idx) (PushPartial val _) = prjArraysPartial idx val
 prjArraysPartial (SuccIdx idx) (PushTotal   val _) = prjArraysPartial idx val
+prjArraysPartial (SuccIdx idx) (PushTotalShapesOnly val _) = prjArraysPartial idx val
 prjArraysPartial _             _                   = $internalError "prj" "inconsistent valuation"
 
 valToValPartial :: Val a -> ValPartial a
