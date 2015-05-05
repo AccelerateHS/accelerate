@@ -53,6 +53,7 @@ import Control.Applicative                              ( (<$>) )
 import Data.Bits
 import Data.Char                                        ( chr, ord )
 import Prelude                                          hiding ( sum )
+import System.IO.Unsafe                                 ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.AST
@@ -61,6 +62,7 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Debug                              ( queryFlag, chunk_size )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
 import Data.Array.Accelerate.Product
@@ -1096,7 +1098,7 @@ data SeqConfig = SeqConfig
 -- Default sequence evaluation configuration for testing purposes.
 --
 defaultSeqConfig :: SeqConfig
-defaultSeqConfig = SeqConfig { chunkSize = 2 }
+defaultSeqConfig = SeqConfig { chunkSize = case unsafePerformIO (queryFlag chunk_size) of Nothing -> 2; Just n -> n }
 
 type Chunk a = Vector' a
 
@@ -1161,7 +1163,7 @@ prj' _             _             = $internalError "prj" "inconsistent valuation"
 data StreamDAG senv arrs where
   StreamP :: Arrays a => StreamP senv a -> StreamDAG (senv, a) arrs -> StreamDAG senv arrs
   StreamC :: Arrays a => StreamC senv a ->                             StreamDAG senv a
-  StreamR :: Arrays a 
+  StreamR :: Arrays a
           => Maybe (Vector' a -> Scalar Int -> a)
           -> Idx senv a
           -> StreamDAG senv [a]

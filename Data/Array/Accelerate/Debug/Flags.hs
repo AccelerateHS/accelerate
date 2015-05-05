@@ -21,6 +21,7 @@ module Data.Array.Accelerate.Debug.Flags (
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
   dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm, dump_exec, dump_sched,
+  chunk_size,
 
   accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
@@ -92,6 +93,8 @@ fclabels [d|
       -- execution
     , dump_exec                 :: !Bool                -- dump execution trace
     , dump_sched                :: !Bool                -- dump scheduler trace
+      
+    , chunk_size                :: !(Maybe Int)         -- override the chunk size for sequences
     }
  |]
 
@@ -100,6 +103,7 @@ allFlags :: [FlagSpec (Flags -> Flags)]
 allFlags
   =  map (enable  'd') dflags
   ++ map (enable  'f') fflags ++ map (disable 'f') fflags
+  ++ [ Option "chunk-size" id]
   where
     enable  p (Option f go) = Option ('-':p:f)        (go True)
     disable p (Option f go) = Option ('-':p:"no-"++f) (go False)
@@ -179,9 +183,16 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
+    parse1 opts this 
+      | "-chunk-size=" `isPrefixOf` this
+      = let arg = tail $ dropWhile (/='=') this 
+            r = reads arg
+        in case r of
+             [(n, "")] | n > 0 -> set chunk_size (Just n) opts
+             _ -> trace ("Illegal argument to chunk-size: " ++ show arg ++ ". Expected positive integer.") opts
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
         [Option _ go]   -> go opts
