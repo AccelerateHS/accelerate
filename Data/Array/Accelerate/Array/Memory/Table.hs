@@ -418,6 +418,18 @@ makeWeakArrayData ad c f = mw arrayElt ad
     mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c Nothing
       = IO $ \s ->
           case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainForeignPtr (IORef (STRef r#))))) c (Just f)
+          = IO $ \s ->
+              case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainForeignPtr (IORef (STRef r#))))) c Nothing
+          = IO $ \s ->
+              case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainPtr r#))) c (Just f)
+      = IO $ \s ->
+          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainPtr r#))) c Nothing
+      = IO $ \s ->
+          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
     mkWeak' _                                                                     _ _
       = $internalError "makeWeakArrayData" "Internal representation of Storable array has changed"
 
