@@ -36,7 +36,7 @@ install:
 script:
     # Check the build
     - cabal configure -v2 -flib-Werror ${MODE}
-    - cabal build
+    - travis_wait cabal build
     - cabal haddock
 #    - cabal test --show-details=always
 
