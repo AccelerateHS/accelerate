@@ -90,6 +90,20 @@ localCSE env bnd body
   | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
   | otherwise                    = Nothing
 
+-- Common subexpression elimination, which attempts to match the given
+-- expression against something already bound in the environment. This can occur
+-- due to simplification, in which case we replace the entire subterm with x.
+--
+-- > let x = e in .. e ..
+--
+globalCSE :: (Kit acc, Elt t)
+          => Gamma      acc env env aenv
+          -> PreOpenExp acc env     aenv t
+          -> Maybe (PreOpenExp acc env aenv t)
+globalCSE env exp
+  | Just ix <- lookupExp env exp = Stats.ruleFired "CSE" . Just $ Var ix
+  | otherwise                    = Nothing
+
 
 -- Compared to regular Haskell, the scalar expression language of Accelerate is
 -- rather limited in order to meet the restrictions of what can be efficiently
@@ -182,12 +196,6 @@ recoverLoops _ bnd e3
 --       introduced by the fusion transformation. This would benefit from a
 --       rewrite rule schema.
 --
--- TODO: Our implementation of CSE doesn't catch the following, where an
---       expression in the body is equivalent to an existing binding (presumably
---       through simplifications):
---
---       > let x = e in .. e ..
---
 simplifyOpenExp
     :: forall acc env aenv e. Kit acc
     => Gamma acc env env aenv
@@ -196,6 +204,7 @@ simplifyOpenExp
 simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+--    cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
         | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
