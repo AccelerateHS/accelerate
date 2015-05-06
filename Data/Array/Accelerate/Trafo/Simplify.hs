@@ -209,7 +209,7 @@ simplifyOpenExp env = first getAny . cvtE
       Var ix                    -> pure $ Var ix
       Const c                   -> pure $ Const c
       Tuple tup                 -> Tuple <$> cvtT tup
-      Prj ix t                  -> prj ix (cvtE t)
+      Prj ix t                  -> prj env ix (cvtE t)
       IndexNil                  -> pure IndexNil
       IndexAny                  -> pure IndexAny
       IndexCons sh sz           -> indexCons (cvtE sh) (cvtE sz)
@@ -303,27 +303,42 @@ simplifyOpenExp env = first getAny . cvtE
     --
     -- Follow variable bindings, but only if they result in a simplification.
     --
-    prj :: forall s t. (Elt s, Elt t, IsTuple t)
-        => TupleIdx (TupleRepr t) s
-        -> (Any, PreOpenExp acc env aenv t)
-        -> (Any, PreOpenExp acc env aenv s)
-    prj ix exp@(_,exp')
-      | Tuple t <- exp'                  = Stats.inline "prj/Tuple" . yes $ prjT ix t
-      | Const c <- exp'                  = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
-      | Var v         <- exp'
-      , e             <- prjExp v env
-      , Nothing       <- match exp' e
-      , (Any True, c) <- prj ix (pure e) = Stats.inline "prj/Var"   . yes $ c
-      | otherwise                        = Prj ix <$> exp
+    prj :: forall env' s t. (Elt s, Elt t, IsTuple t)
+        => Gamma acc env' env' aenv
+        -> TupleIdx (TupleRepr t) s
+        -> (Any, PreOpenExp acc env' aenv t)
+        -> (Any, PreOpenExp acc env' aenv s)
+    prj env' ix top@(_,e) = case e of
+      Tuple t                      -> Stats.inline "prj/Tuple" . yes $ prjT ix t
+      Const c                      -> Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
+      Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"   . yes $ x
+--      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
+      _                            -> Prj ix <$> top
       where
-        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env aenv) tup -> PreOpenExp acc env aenv s
-        prjT ZeroTupIdx       (SnocTup _ e) = e
+        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
+        prjT ZeroTupIdx       (SnocTup _ v) = v
         prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
         prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
 
-        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env aenv s
+        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
         prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
         prjC (SuccTupIdx idx) (tup, _) = prjC idx tup
+
+        prjV :: Idx env' t -> Maybe (PreOpenExp acc env' aenv s)
+        prjV var
+          | e'            <- prjExp var env'
+          , Nothing       <- match e e'
+          , (Any True, x) <- prj env' ix (pure e') = Just x
+        prjV _                                     = Nothing
+
+        prjL :: Elt a
+             => PreOpenExp acc env'     aenv a
+             -> PreOpenExp acc (env',a) aenv t
+             -> Maybe (PreOpenExp acc env' aenv s)
+        prjL a b
+          | (Any True, c) <- prj (incExp $ PushExp env' a) ix (pure b) = Just (Let a c)
+        prjL _ _                                                       = Nothing
+
 
     -- Shape manipulations
     --
