@@ -1427,7 +1427,9 @@ liftExp vectAcc strength ctx size exp
       | avoidLifting
       , AvoidedAcc a' <- a
       , Size b s <- size
-      = Alet b $^ Backpermute (index1 s) (fun1 (Index $ weakenA1 ix)) (weakenA1 a')
+      = Alet b
+      $^ Alet (weakenA1 ix)
+      $^ Backpermute (index1 (weakenA1 s)) (fun1 (Index avar0)) (weakenA2 a')
       | otherwise
       =  extract
       $  liftedIndexC (lifted a) ix
@@ -1442,8 +1444,9 @@ liftExp vectAcc strength ctx size exp
       , Size b s <- size
       =  Alet b
       $^ Alet (weakenA1 a')
-      $^ Generate (index1 (weakenA1 s))
-                  (Lam $ Body $ LinearIndex avar0 $ Index (weakenA2 ix) $ var0)
+      $^ Alet (weakenA2 ix)
+      $^ Generate (index1 (weakenA2 s))
+                  (Lam $ Body $ LinearIndex avar1 $ Index avar0 $ var0)
       | otherwise
       = extract $
         fromHOAS liftedLinearIndex (lifted a) ix
