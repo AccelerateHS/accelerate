@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -321,7 +322,7 @@ simplifyOpenExp env = first getAny . cvtE
       Tuple t                      -> Stats.inline "prj/Tuple" . yes $ prjT ix t
       Const c                      -> Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
       Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"   . yes $ x
---      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
+      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
       _                            -> Prj ix <$> top
       where
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
@@ -335,10 +336,15 @@ simplifyOpenExp env = first getAny . cvtE
 
         prjV :: Idx env' t -> Maybe (PreOpenExp acc env' aenv s)
         prjV var
-          | e'            <- prjExp var env'
-          , Nothing       <- match e e'
-          , (Any True, x) <- prj env' ix (pure e') = Just x
-        prjV _                                     = Nothing
+          | e'      <- prjExp var env'
+          , Nothing <- match e e'
+          = case e' of
+              -- Don't push through nested let-bindings; this leads to code explosion
+              Let _ _                                    -> Nothing
+              _ | (Any True, x) <- prj env' ix (pure e') -> Just x
+              _                                          -> Nothing
+          | otherwise
+          = Nothing
 
         prjL :: Elt a
              => PreOpenExp acc env'     aenv a
