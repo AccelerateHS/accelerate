@@ -477,7 +477,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     cvtF :: PreFun acc aenv t -> PreFun acc aenv t
     cvtF = simplify
 
-    cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
+    cvtE :: Elt t =>PreExp acc aenv' t -> PreExp acc aenv' t
     cvtE = simplify
 
     -- Helpers to embed and fuse delayed terms
@@ -587,7 +587,7 @@ embedSeq embedAcc s
         cvtCT NilAtup        = NilAtup
         cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (travC c env)
 
-    cvtE :: PreExp acc aenv' t -> PreExp acc aenv' t
+    cvtE :: Elt t => PreExp acc aenv' t -> PreExp acc aenv' t
     cvtE = simplify
 
     cvtF :: PreFun acc aenv' t -> PreFun acc aenv' t

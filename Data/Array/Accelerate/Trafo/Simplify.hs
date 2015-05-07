@@ -54,7 +54,7 @@ class Simplify f where
 instance Kit acc => Simplify (PreFun acc aenv f) where
   simplify = simplifyFun
 
-instance Kit acc => Simplify (PreExp acc aenv e) where
+instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
   simplify = simplifyExp
 
 
@@ -198,14 +198,14 @@ recoverLoops _ bnd e3
 --       rewrite rule schema.
 --
 simplifyOpenExp
-    :: forall acc env aenv e. Kit acc
+    :: forall acc env aenv e. (Kit acc, Elt e)
     => Gamma acc env env aenv
     -> PreOpenExp acc env aenv e
     -> (Bool, PreOpenExp acc env aenv e)
 simplifyOpenExp env = first getAny . cvtE
   where
-    cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
---    cvtE exp | Just e <- globalCSE env exp = yes e
+    cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
         | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
@@ -245,7 +245,7 @@ simplifyOpenExp env = first getAny . cvtE
     cvtT NilTup        = pure NilTup
     cvtT (SnocTup t e) = SnocTup <$> cvtT t <*> cvtE e
 
-    cvtE' :: Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
+    cvtE' :: Elt e' => Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
 
     cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
@@ -423,7 +423,7 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
 -- Simplify closed expressions and functions. The process is applied repeatedly
 -- until no more changes are made.
 --
-simplifyExp :: Kit acc => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp :: Elt t => Kit acc => PreExp acc aenv t -> PreExp acc aenv t
 simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
