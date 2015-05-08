@@ -1100,12 +1100,12 @@ data SeqConfig = SeqConfig
 defaultSeqConfig :: SeqConfig
 defaultSeqConfig = SeqConfig { chunkSize = case unsafePerformIO (queryFlag chunk_size) of Nothing -> 2; Just n -> n }
 
-type Chunk a = Vector' a
+type Chunk a = Regular a
 
--- Get all the shapes of a chunk of arrays. O(1).
+-- Get the shape of a chunk of arrays. O(1).
 --
-chunkShapes :: Chunk (Array sh a) -> Vector sh
-chunkShapes = shapes'
+chunkShape :: Shape sh => Chunk (Array sh a) -> sh
+chunkShape = shape'
 
 -- Get all the elements of a chunk of arrays. O(1).
 --
@@ -1115,16 +1115,16 @@ chunkElems = elements'
 -- Convert a vector to a chunk of scalars.
 --
 vec2Chunk :: Elt e => Vector e -> Chunk (Scalar e)
-vec2Chunk = vec2Vec'
+vec2Chunk = vec2Regular
 
 -- Convert a list of arrays to a chunk.
 --
-fromListChunk :: Arrays a => [a] -> Vector' a
+fromListChunk :: Arrays a => [a] -> Regular a
 fromListChunk = fromList' concatOp
 
 -- Convert a chunk to a list of arrays.
 --
-toListChunk :: Arrays a => Vector' a -> [a]
+toListChunk :: Arrays a => Regular a -> [a]
 toListChunk = toList' fetchAllOp
 
 -- fmap for Chunk. O(n).
@@ -1164,7 +1164,7 @@ data StreamDAG senv arrs where
   StreamP :: Arrays a => StreamP senv a -> StreamDAG (senv, a) arrs -> StreamDAG senv arrs
   StreamC :: Arrays a => StreamC senv a ->                             StreamDAG senv a
   StreamR :: Arrays a
-          => Maybe (Vector' a -> Scalar Int -> a)
+          => Maybe (Regular a -> Scalar Int -> a)
           -> Idx senv a
           -> StreamDAG senv [a]
 
@@ -1329,10 +1329,12 @@ evalSeq conf s aenv = evalSeq' s
               consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
               finalizer = fold1Op f' . delayArray
           in StreamFold consumer finalizer a0 x
-        FoldSeqFlatten f acc x ->
+        FoldSeqFlatten _ f acc x ->
           let f' = evalAF f
               a0 = evalA acc
-              consumer a c = f' a (chunkShapes c) (chunkElems c)
+              consumer a c =
+                let n = length' c
+                in f' a (fromList (Z:.n) (replicate n (chunkShape c))) (chunkElems c)
           in StreamFold consumer id a0 x
         Stuple t ->
           let initTup :: Atuple (Consumer DelayedOpenAcc aenv senv) t -> Atuple (StreamC senv) t
@@ -1361,7 +1363,7 @@ evalSeq conf s aenv = evalSeq' s
 
     initMapSeq :: forall a b senv. (Arrays a, Arrays b)
                => PreOpenAfun DelayedOpenAcc aenv (a -> b)
-               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Vector' a -> Vector' b))
+               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Regular a -> Regular b))
                -> Idx senv a
                -> Maybe Int
                -> StreamP senv b
@@ -1372,7 +1374,7 @@ evalSeq conf s aenv = evalSeq' s
 
     initZipWithSeq :: forall a b c senv. (Arrays a, Arrays b, Arrays c)
                => PreOpenAfun DelayedOpenAcc aenv (a -> b -> c)
-               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Vector' a -> Vector' b -> Vector' c))
+               -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Regular a -> Regular b -> Regular c))
                -> Idx senv a
                -> Idx senv b
                -> Maybe Int
@@ -1423,14 +1425,10 @@ delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndex
 concatOp :: forall e. Elt e => [Vector e] -> Vector e
 concatOp = concatVectors
 
-fetchAllOp :: (Shape sh, Elt e) => Segments sh -> Vector e -> [Array sh e]
-fetchAllOp segs elts
-  | (offsets, n) <- offsetsOp segs
-  , (n ! Z) <= size (shape elts)
-  = [fetch (segs ! (Z :. i)) (offsets ! (Z :. i)) | i <- [0 .. size (shape segs) - 1]]
-  | otherwise = error $ "illegal argument to fetchAllOp"
+fetchAllOp :: (Shape sh, Elt e) => sh -> Vector e -> [Array sh e]
+fetchAllOp seg elts
+  | (n,0) <- size (shape elts) `divMod` size seg
+  = [fetch seg (i * size seg) | i <- [0..n-1]]
+  | otherwise = $internalError "fetchAllOp" "Vector is the wrong size"
   where
     fetch sh offset = newArray sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
-
-offsetsOp :: Shape sh => Segments sh -> (Vector Int, Scalar Int)
-offsetsOp segs = scanl'Op (+) 0 $ delayArray (mapOp size (delayArray segs))

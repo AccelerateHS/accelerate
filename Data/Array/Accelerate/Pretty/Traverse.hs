@@ -101,7 +101,7 @@ travSeq f c l seq =
     travC co =
       case co of
         FoldSeq _ fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
-        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
+        FoldSeqFlatten _ afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
 
     travSlix :: SliceIndex slix sl co sh -> String

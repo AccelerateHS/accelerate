@@ -414,7 +414,7 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
         FoldSeq fun e x                    -> AST.Consumer $ AST.FoldSeq Nothing (cvtF2 fun) (cvtE e) (asIdx x)
-        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
+        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten Nothing (cvtAF3 afun) (cvtA acc) (asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"

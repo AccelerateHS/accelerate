@@ -379,7 +379,7 @@ matchSeq m h = match
       , Just REFL <- matchFun f1 f2
       , Just REFL <- matchExp e1 e2
       = Just REFL
-    matchC (FoldSeqFlatten f1 acc1 x1) (FoldSeqFlatten f2 acc2 x2)
+    matchC (FoldSeqFlatten _ f1 acc1 x1) (FoldSeqFlatten _ f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
@@ -980,9 +980,9 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =
       case c of
-        FoldSeq _ f e x        -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
-        Stuple t               -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
+        FoldSeq _ f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
+        FoldSeqFlatten _ f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
+        Stuple t                 -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'

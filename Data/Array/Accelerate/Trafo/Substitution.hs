@@ -509,7 +509,8 @@ rebuildC k v c =
   case c of
     FoldSeq Nothing f e x  -> FoldSeq Nothing <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
     FoldSeq (Just f') f e x -> FoldSeq . Just <$> rebuildAfun k v f' <*> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
-    FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> pure x
+    FoldSeqFlatten (Just f') f acc x -> FoldSeqFlatten . Just <$> rebuildAfun k v f' <*> rebuildAfun k v f <*> k v acc <*> pure x
+    FoldSeqFlatten Nothing f acc x -> FoldSeqFlatten Nothing <$> rebuildAfun k v f <*> k v acc <*> pure x
     Stuple t               -> Stuple <$> rebuildT t
   where
     rebuildT :: Atuple (Consumer acc aenv senv) t -> f (Atuple (Consumer acc aenv' senv) t)

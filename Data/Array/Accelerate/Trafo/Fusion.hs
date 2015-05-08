@@ -300,9 +300,9 @@ convertOpenSeq fuseAcc s =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
       case c of
-        FoldSeq f' f e x     -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
-        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (manifest fuseAcc a) x
-        Stuple t             -> Stuple (cvtCT t)
+        FoldSeq f' f e x        -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
+        FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (manifest fuseAcc a) x
+        Stuple t                -> Stuple (cvtCT t)
 
     cvtCT :: Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer DelayedOpenAcc aenv senv) t
     cvtCT NilAtup        = NilAtup
@@ -583,7 +583,7 @@ embedSeq embedAcc s
           -> Extend acc aenv aenv'
           -> Consumer acc aenv' senv arrs'
     travC (FoldSeq f' f e x) env = FoldSeq (cvtAF `fmap` (sink env `fmap` f')) (cvtF (sink env f)) (cvtE (sink env e)) x
-    travC (FoldSeqFlatten f a x) env = FoldSeqFlatten (cvtAF (sink env f)) (cvtA (sink env a)) x
+    travC (FoldSeqFlatten f' f a x) env = FoldSeqFlatten (cvtAF `fmap` (sink env `fmap` f')) (cvtAF (sink env f)) (cvtA (sink env a)) x
     travC (Stuple t) env = Stuple (cvtCT t)
       where
         cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
@@ -778,9 +778,9 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
         case c of
-          FoldSeq f' f a x     -> FoldSeq (weaken k `fmap` f') (weaken k f) (weaken k a) x
-          FoldSeqFlatten f a x -> FoldSeqFlatten (weaken k f) (weaken k a) x
-          Stuple t             ->
+          FoldSeq f' f a x        -> FoldSeq (weaken k `fmap` f') (weaken k f) (weaken k a) x
+          FoldSeqFlatten f' f a x -> FoldSeqFlatten (weaken k `fmap` f') (weaken k f) (weaken k a) x
+          Stuple t                ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
                 wk NilAtup        = NilAtup
                 wk (SnocAtup t c) = SnocAtup (wk t) (weakenC c)
@@ -1282,9 +1282,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
         cvtC c =
           case c of
-            FoldSeq f' f e x     -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
-            FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAF f) (cvtA a) x
-            Stuple t             -> Stuple (cvtCT t)
+            FoldSeq f' f e x        -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
+            FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
+            Stuple t                -> Stuple (cvtCT t)
 
         cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv senv) t
         cvtCT NilAtup        = NilAtup

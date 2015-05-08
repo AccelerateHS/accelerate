@@ -110,7 +110,7 @@ import Data.Typeable
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Lifted               ( Vector' )
+import Data.Array.Accelerate.Array.Lifted               ( Regular )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 
@@ -485,7 +485,7 @@ data PreOpenSeq acc aenv senv arrs where
            -> PreOpenSeq acc aenv senv arrs
 
   Reify    :: Arrays arrs
-           => Maybe (PreOpenAfun acc aenv (Vector' arrs -> Scalar Int -> arrs))
+           => Maybe (PreOpenAfun acc aenv (Regular arrs -> Scalar Int -> arrs))
            -> Idx senv arrs
            -> PreOpenSeq acc aenv senv [arrs]
 
@@ -497,7 +497,7 @@ data Producer acc aenv senv a where
 
   -- Convert the given array to a sequence.
   ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => Maybe (PreOpenAfun acc aenv (Array (sl :. Int) e -> Vector' (Array sl e)))
+           => Maybe (PreOpenAfun acc aenv (Array (sl :. Int) e -> Regular (Array sl e)))
            -> SliceIndex  (EltRepr slix)
                           (EltRepr sl)
                           co
@@ -510,7 +510,7 @@ data Producer acc aenv senv a where
   -- sequence.
   MapSeq :: (Arrays a, Arrays b)
          => PreOpenAfun acc aenv (a -> b)
-         -> Maybe (PreOpenAfun acc aenv (Vector' a -> Vector' b))
+         -> Maybe (PreOpenAfun acc aenv (Regular a -> Regular b))
          -> Idx senv a
          -> Producer acc aenv senv b
 
@@ -518,7 +518,7 @@ data Producer acc aenv senv a where
   -- given sequences.
   ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
              => PreOpenAfun acc aenv (a -> b -> c)
-             -> Maybe (PreOpenAfun acc aenv (Vector' a -> Vector' b -> Vector' c))
+             -> Maybe (PreOpenAfun acc aenv (Regular a -> Regular b -> Regular c))
              -> Idx senv a
              -> Idx senv b
              -> Producer acc aenv senv c
@@ -574,7 +574,8 @@ data Consumer acc aenv senv a where
   --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
   FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
-                 => PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
+                 => Maybe (PreOpenAfun acc aenv (a -> Regular (Array sh e) -> a))
+                 -> PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
                  -> acc aenv a
                  -> Idx senv (Array sh e)
                  -> Consumer acc aenv senv a
