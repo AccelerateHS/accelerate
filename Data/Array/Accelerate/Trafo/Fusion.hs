@@ -289,7 +289,10 @@ convertOpenSeq fuseAcc s =
       where
         p' = case p of
                StreamIn arrs       -> StreamIn arrs
-               ToSeq f slix sh a   -> ToSeq (cvtAF `fmap` f) slix sh (delayed fuseAcc a)
+               ToSeq f slix sh a   -> ToSeq (cvtAF `fmap` f) slix sh $
+                                      case a of -- Enable "use lazy" optimization.
+                                        OpenAcc (Use _) -> manifest fuseAcc a
+                                        _               -> delayed fuseAcc a
                MapSeq f f' x       -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
                ZipWithSeq f f' x y -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
                ScanSeq f e x       -> ScanSeq (cvtF f) (cvtE e) x
@@ -566,6 +569,8 @@ embedSeq embedAcc s
           -> Extend acc aenv aenv'
           -> ExtendProducer acc aenv' senv arrs'
     travP (ToSeq f slix sh a) env
+      | Use _ <- extract a  -- Enable "use lazy" optimization.
+      = ExtendProducer BaseEnv (ToSeq (cvtAF `fmap` (sink env `fmap` f)) slix sh (sink env a))
       | Embed env' cc <- embedAcc (sink env a)
       = ExtendProducer env' (ToSeq (cvtAF `fmap` (sink env' `fmap` (sink env `fmap` f))) slix sh (inject (compute' cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
