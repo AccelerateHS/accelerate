@@ -225,8 +225,8 @@ prettyDelayedSeq wrap (DelayedSeq env s)
   where
     pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
     pp BaseEnv          lvl = ([],lvl)
-    pp (PushEnv env' a) lvl | (d', _) <- pp env' (lvl + 1)
-                            = (prettyAcc lvl wrap a : d', lvl)
+    pp (PushEnv env' a) lvl | (d', lvl') <- pp env' (lvl + 1)
+                            = (prettyAcc lvl wrap a : d', lvl')
 
 
 -- Environments
