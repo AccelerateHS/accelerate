@@ -220,14 +220,14 @@ prettyDelayedSeq
     -> Doc
 prettyDelayedSeq wrap (DelayedSeq env s)
   | (d, lvl) <- pp env 0
-  =  wrap $   (hang (text "let") 2 $ sep $ punctuate (text ";") d)
-          <+> (hang (text "in") 2  $ sep $ punctuate (text ";") $ prettySeq prettyAcc lvl 0 wrap s)
+  =  wrap $  (hang (text "let") 2 $ vcat $ d)
+          $$ (hang (text "in sequence")  2 $ vcat $ punctuate (text ";") $ prettySeq prettyAcc lvl 0 wrap s)
   where
     pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
     pp BaseEnv          lvl = ([],lvl)
     pp (PushEnv env' a) lvl | (d', lvl') <- pp env' (lvl + 1)
-                            = (prettyAcc lvl wrap a : d', lvl')
-
+                            = let x = char 'a' <> int lvl
+                              in (x <+> equals <+> prettyAcc lvl wrap a : d', lvl')
 
 -- Environments
 -- ============

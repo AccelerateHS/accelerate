@@ -137,7 +137,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
-    pp (Collect s)              = sep $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap s)
+    pp (Collect s)              = wrap . hang (text "collect") 2 . vcat $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap s)
 
 
 prettySeq
@@ -154,7 +154,7 @@ prettySeq prettyAcc alvl llvl wrap seq =
       (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
     Consumer c    ->
       [prettyC c]
-    Reify f ix    -> [ppMaybeAF f, var (idxToInt ix)]
+    Reify f ix    -> ["reify" ..$ [ppMaybeAF f, var (idxToInt ix)]]
   where
     var n          = char 's' <> int n
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
@@ -173,45 +173,34 @@ prettySeq prettyAcc alvl llvl wrap seq =
     ppAF = parens . prettyPreAfun prettyAcc alvl
 
     ppMaybeAF :: Maybe (PreOpenAfun acc aenv f) -> Doc
-    ppMaybeAF Nothing = text "Nothing"
-    ppMaybeAF (Just f) = ppAF f
-    
+    ppMaybeAF Nothing  = text "Nothing"
+    ppMaybeAF (Just f) = parens (text "Just" <+> ppAF f)
+
     ppX :: Idx aenv' a -> Doc
     ppX x = var (idxToInt x)
 
     ppSlix :: SliceIndex slix sl co sh -> Doc
-    ppSlix SliceNil       = text "Z"
-    ppSlix (SliceAll s)   = ppSlix s <+> text ":." <+> text "All"
-    ppSlix (SliceFixed s) = ppSlix s <+> text ":." <+> text "Split"
+    ppSlix = parens . pp
+      where
+        pp :: SliceIndex slix sl co sh -> Doc
+        pp SliceNil       = text "Z"
+        pp (SliceAll s)   = pp s <+> text ":." <+> text "All"
+        pp (SliceFixed s) = pp s <+> text ":." <+> text "Split"
 
     prettyP :: forall a. Producer acc aenv senv a -> Doc
     prettyP p =
       case p of
-        StreamIn _        -> "streamIn"   .$ [ text "..." ]
-        ToSeq f slix _ a  -> "toSeq"      .$ [ ppMaybeAF f, ppSlix slix, ppA a ]
-        MapSeq f f' x      -> "mapSeq"     .$ [ ppAF f
-                                              , ppMaybeAF f'
-                                              , ppX x ]
-        ZipWithSeq f f' x y -> "zipWithSeq" .$ [ ppAF f
-                                               , ppMaybeAF f'
-                                               , ppX x
-                                               , ppX y ]
-
-        ScanSeq f e x     -> "foldSeq"    .$ [ ppF f
-                                             , ppE e
-                                             , ppX x ]
+        StreamIn _          -> "streamIn"   .$ [ text "[..]" ]
+        ToSeq f slix _ a    -> "toSeq"      .$ [ ppMaybeAF f, ppSlix slix, ppA a ]
+        MapSeq f f' x       -> "mapSeq"     .$ [ ppAF f, ppMaybeAF f', ppX x ]
+        ZipWithSeq f f' x y -> "zipWithSeq" .$ [ ppAF f, ppMaybeAF f', ppX x, ppX y ]
+        ScanSeq f e x       -> "foldSeq"    .$ [ ppF f, ppE e, ppX x ]
 
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
-        FoldSeq f' f e x     -> "foldSeq"        ..$ [ ppMaybeAF f'
-                                                     , ppF f
-                                                     , ppE e
-                                                     , ppX x ]
-
-        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f
-                                                     , ppA a
-                                                     , ppX x ]
+        FoldSeq f' f e x     -> "foldSeq"        ..$ [ ppMaybeAF f', ppF f, ppE e, ppX x ]
+        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f, ppA a, ppX x ]
         Stuple t             -> tuple (prettyT t)
 
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
