@@ -331,6 +331,7 @@ rebuildPreOpenExp k v av exp =
     IndexCons sh sz     -> IndexCons <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av sz
     IndexHead sh        -> IndexHead <$> rebuildPreOpenExp k v av sh
     IndexTail sh        -> IndexTail <$> rebuildPreOpenExp k v av sh
+    IndexTrans sh       -> IndexTrans <$> rebuildPreOpenExp k v av sh
     IndexAny            -> pure IndexAny
     IndexSlice x ix sh  -> IndexSlice x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
     IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl

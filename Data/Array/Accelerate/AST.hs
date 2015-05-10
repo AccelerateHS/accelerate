@@ -873,6 +873,10 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 => PreOpenExp acc env aenv (sl:.a)
                 -> PreOpenExp acc env aenv sl
 
+  IndexTrans    :: Shape sl
+                => PreOpenExp acc env aenv sl
+                -> PreOpenExp acc env aenv sl
+
   IndexAny      :: Shape sh
                 => PreOpenExp acc env aenv (Any sh)
 
@@ -1154,6 +1158,7 @@ showPreExpOp IndexNil           = "IndexNil"
 showPreExpOp IndexCons{}        = "IndexCons"
 showPreExpOp IndexHead{}        = "IndexHead"
 showPreExpOp IndexTail{}        = "IndexTail"
+showPreExpOp IndexTrans{}       = "IndexTrans"
 showPreExpOp IndexAny           = "IndexAny"
 showPreExpOp IndexSlice{}       = "IndexSlice"
 showPreExpOp IndexFull{}        = "IndexFull"

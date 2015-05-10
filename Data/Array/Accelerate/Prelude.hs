@@ -105,7 +105,7 @@ import Prelude ((.), ($), (+), (-), (*), const, id, min, max, Float, Double, Cha
 import qualified Prelude as P
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect, union)
+import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect, union, transpose)
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type

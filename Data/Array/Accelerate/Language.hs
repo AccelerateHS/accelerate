@@ -86,7 +86,7 @@ module Data.Array.Accelerate.Language (
   acond, awhile,
 
   -- * Index construction and destruction
-  indexHead, indexTail, toIndex, fromIndex,
+  indexHead, indexTail, toIndex, fromIndex, indexTrans,
   intersect, union,
 
   -- * Flow-control
@@ -682,6 +682,11 @@ indexHead = Exp . IndexHead
 --
 indexTail :: Slice sh => Exp (sh :. Int) -> Exp sh
 indexTail = Exp . IndexTail
+
+-- | Transpose a shape.
+--
+indexTrans :: Shape sh => Exp sh -> Exp sh
+indexTrans = Exp . IndexTrans
 
 -- | Map a multi-dimensional index into a linear, row-major representation of an
 -- array. The first argument is the array shape, the second is the index.

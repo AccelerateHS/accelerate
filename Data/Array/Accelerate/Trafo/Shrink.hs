@@ -103,6 +103,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       IndexCons sl sz           -> IndexCons <$> shrinkE sl <*> shrinkE sz
       IndexHead sh              -> IndexHead <$> shrinkE sh
       IndexTail sh              -> IndexTail <$> shrinkE sh
+      IndexTrans sh             -> IndexTrans <$> shrinkE sh
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       IndexAny                  -> pure IndexAny
@@ -230,6 +231,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       IndexCons sl sz           -> IndexCons (shrinkE sl) (shrinkE sz)
       IndexHead sh              -> IndexHead (shrinkE sh)
       IndexTail sh              -> IndexTail (shrinkE sh)
+      IndexTrans sh             -> IndexTrans (shrinkE sh)
       IndexSlice x ix sh        -> IndexSlice x (shrinkE ix) (shrinkE sh)
       IndexFull x ix sl         -> IndexFull x (shrinkE ix) (shrinkE sl)
       IndexAny                  -> IndexAny
@@ -313,6 +315,7 @@ usesOfExp idx = countE
       IndexCons sl sz           -> countE sl + countE sz
       IndexHead sh              -> countE sh
       IndexTail sh              -> countE sh
+      IndexTrans sh             -> countE sh
       IndexSlice _ ix sh        -> countE ix + countE sh
       IndexFull _ ix sl         -> countE ix + countE sl
       IndexAny                  -> 0
@@ -436,6 +439,7 @@ usesOfPreAcc withShape countAcc idx = count
       IndexCons sl sz           -> countE sl + countE sz
       IndexHead sh              -> countE sh
       IndexTail sh              -> countE sh
+      IndexTrans sh             -> countE sh
       IndexSlice _ ix sh        -> countE ix + countE sh
       IndexFull _ ix sl         -> countE ix + countE sl
       IndexAny                  -> 0

@@ -314,6 +314,7 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (IndexCons t h)          = ppE' t <+> text ":." <+> ppE' h
     pp (IndexHead ix)           = "indexHead"  .$ [ ppE ix ]
     pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
+    pp (IndexTrans ix)          = "indexTrans" .$ [ ppE ix ]
     pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppE slix, ppE sh ]
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
     pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]

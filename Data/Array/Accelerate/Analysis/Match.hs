@@ -486,6 +486,10 @@ matchPreOpenExp matchAcc hashAcc = match
       | Just REFL <- match sl1 sl2
       = Just REFL
 
+    match (IndexTrans sl1) (IndexTrans sl2)
+      | Just REFL <- match sl1 sl2
+      = Just REFL
+
     match (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
       | Just REFL <- match ix1 ix2
       , Just REFL <- match sh1 sh2
@@ -1086,6 +1090,7 @@ hashPreOpenExp hashAcc exp =
     IndexCons sl a              -> hash "IndexCons"     `hashE` sl `hashE` a
     IndexHead sl                -> hash "IndexHead"     `hashE` sl
     IndexTail sl                -> hash "IndexTail"     `hashE` sl
+    IndexTrans sl               -> hash "IndexTrans"    `hashE` sl
     IndexSlice spec ix sh       -> hash "IndexSlice"    `hashE` ix `hashE` sh `hashWithSalt` show spec
     IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i

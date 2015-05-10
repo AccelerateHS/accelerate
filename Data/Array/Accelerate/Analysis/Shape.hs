@@ -21,8 +21,8 @@ module Data.Array.Accelerate.Analysis.Shape (
 
   -- * query AST dimensionality
   AccDim, accDim, delayedDim, preAccDim,
-  expDim, 
-  
+  expDim,
+
   -- * Shape analysis
   ShapeTree(..),
   ArraysPartial(..),
@@ -242,7 +242,7 @@ evalShapeSeq :: forall aenv senv arrs.
              -> ValPartial aenv -> ValPartial senv -> Shapes ()
 evalShapeSeq s aenv senv =
   case s of
-    Producer p s0 -> do 
+    Producer p s0 -> do
       a <- evalP p
       tell =<< lift (toShapeTree a)
       evalShapeSeq s0 aenv (senv `PushPartial` a)
@@ -396,7 +396,7 @@ fold1Op acc = PartialArray ((\ (sh :. _) -> sh) <$> shapePartial acc) Nothing
 
 foldSegOp :: Shape sh => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> ArraysPartial (Array (sh :. Int) e)
 foldSegOp arr seg =
-  let sh = 
+  let sh =
         do sh0 :. _ <- shapePartial arr
            Z  :. n <- shapePartial seg
            return (sh0 :. n)
@@ -404,7 +404,7 @@ foldSegOp arr seg =
 
 fold1SegOp :: Shape sh => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> ArraysPartial (Array (sh :. Int) e)
 fold1SegOp arr seg =
-  let sh = 
+  let sh =
         do sh :. _ <- shapePartial arr
            Z  :. n <- shapePartial seg
            return (sh :. n)
@@ -414,8 +414,8 @@ scan'Op :: Elt e => ArraysPartial (Vector e) -> ArraysPartial (Vector e, Scalar 
 scan'Op acc = PartialAtup $ NilAtup `SnocAtup` PartialArray (shapePartial acc) Nothing `SnocAtup` PartialArray (Just Z) Nothing
 
 scanOp :: Elt e => ArraysPartial (Vector e) -> ArraysPartial (Vector e)
-scanOp acc = 
-  PartialArray 
+scanOp acc =
+  PartialArray
     ((\ (Z :. n) -> Z :. n + 1) <$> shapePartial acc)
     Nothing
 
@@ -461,6 +461,7 @@ evalPreOpenExp exp env aenv =
     IndexCons sh sz -> (:.) <$> evalE sh <*> evalE sz
     IndexHead sh    -> (\ x -> let _  :. ix = x in ix) <$> evalE sh
     IndexTail sh    -> (\ x -> let ix :. _  = x in ix) <$> evalE sh
+    IndexTrans sh   -> transpose <$> evalE sh
     IndexSlice slice slix sh    ->
       do slix' <- evalE slix
          sh' <- evalE sh

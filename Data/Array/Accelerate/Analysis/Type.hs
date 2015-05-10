@@ -156,6 +156,7 @@ preExpType k e =
     IndexCons _ _     -> eltType (undefined::t)
     IndexHead _       -> eltType (undefined::t)
     IndexTail _       -> eltType (undefined::t)
+    IndexTrans _      -> eltType (undefined::t)
     IndexAny          -> eltType (undefined::t)
     IndexSlice _ _ _  -> eltType (undefined::t)
     IndexFull _ _ _   -> eltType (undefined::t)

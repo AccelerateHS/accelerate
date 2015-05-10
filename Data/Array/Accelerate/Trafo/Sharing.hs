@@ -660,6 +660,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           IndexCons ix i        -> AST.IndexCons (cvt ix) (cvt i)
           IndexHead i           -> AST.IndexHead (cvt i)
           IndexTail ix          -> AST.IndexTail (cvt ix)
+          IndexTrans ix         -> AST.IndexTrans (cvt ix)
           IndexAny              -> AST.IndexAny
           ToIndex sh ix         -> AST.ToIndex (cvt sh) (cvt ix)
           FromIndex sh e        -> AST.FromIndex (cvt sh) (cvt e)
@@ -1601,6 +1602,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             IndexCons ix i      -> reconstruct $ travE2 IndexCons ix i
             IndexHead i         -> reconstruct $ travE1 IndexHead i
             IndexTail ix        -> reconstruct $ travE1 IndexTail ix
+            IndexTrans ix       -> reconstruct $ travE1 IndexTrans ix
             IndexAny            -> reconstruct $ return (IndexAny, 1)
             ToIndex sh ix       -> reconstruct $ travE2 ToIndex sh ix
             FromIndex sh e      -> reconstruct $ travE2 FromIndex sh e
@@ -2451,6 +2453,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           IndexCons ix i        -> travE2 IndexCons ix i
           IndexHead i           -> travE1 IndexHead i
           IndexTail ix          -> travE1 IndexTail ix
+          IndexTrans ix         -> travE1 IndexTrans ix
           IndexAny              -> reconstruct IndexAny noNodeCounts
           ToIndex sh ix         -> travE2 ToIndex sh ix
           FromIndex sh e        -> travE2 FromIndex sh e

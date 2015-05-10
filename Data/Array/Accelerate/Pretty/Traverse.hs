@@ -128,6 +128,7 @@ travExp f c l expr = travExp' expr
     travExp' (IndexCons t h)            = combine "IndexCons" [ travExp f c l t, travExp f c l h]
     travExp' (IndexHead ix)             = combine "IndexHead" [ travExp f c l ix ]
     travExp' (IndexTail ix)             = combine "IndexTail" [ travExp f c l ix ]
+    travExp' (IndexTrans ix)            = combine "IndexTrans" [ travExp f c l ix ]
     travExp' (IndexAny)                 = leaf "IndexAny"
     travExp' (IndexSlice _ slix sh)     = combine "IndexSlice" [ travExp f c l slix, travExp f c l sh ]
     travExp' (IndexFull _ slix sl)      = combine "IndexFull" [ travExp f c l slix, travExp f c l sl ]

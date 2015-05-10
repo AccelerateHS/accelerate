@@ -52,6 +52,7 @@ class (Eq sh, Slice sh) => Shape sh where
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
   union     :: sh -> sh -> sh  -- yield the union of two shapes
+  transpose :: sh -> sh        -- transpose a shape
   ignore    :: sh              -- identifies ignored elements in 'permute'
   toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
                                -- the array (first argument is the shape)
@@ -77,6 +78,8 @@ class (Eq sh, Slice sh) => Shape sh where
   -- other conversions
   shapeToList :: sh -> [Int]    -- convert a shape into its list of dimensions
   listToShape :: [Int] -> sh    -- convert a list of dimensions into a shape
+
+  transpose = listToShape . reverse . shapeToList
 
 instance Shape () where
   dim _             = 0

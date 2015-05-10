@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TupleSections         #-}
@@ -41,7 +42,7 @@ module Data.Array.Accelerate.Array.Sugar (
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
 
   -- * Array indexing and slicing
-  Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..),
+  Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..), AsSlice(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
@@ -740,6 +741,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- |Yield the union of two shapes
   union :: sh -> sh -> sh
 
+  -- |Transpose a shape
+  transpose :: sh -> sh
+
   -- |Map a multi-dimensional index into one in a linear, row-major
   -- representation of the array (first argument is the /shape/, second
   -- argument is the index).
@@ -777,6 +781,8 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- | The slice index for specifying a slice with only the Z component projected
   sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
+  asSlice :: proxy sh -> AsSlice sh
+
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
   emptyS                = toElt Repr.emptyS
@@ -786,6 +792,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   ignore                = toElt Repr.ignore
   intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
   union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
+  transpose             = toElt . Repr.transpose . fromElt
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)
 
@@ -806,13 +813,18 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   shapeToList = Repr.shapeToList . fromElt
   listToShape = toElt . Repr.listToShape
 
+data AsSlice sh = Slice sh => AsSlice
+
 instance Shape Z where
   sliceAnyIndex _ = Repr.SliceNil
   sliceNoneIndex _ = Repr.SliceNil
+  asSlice _ = AsSlice
 
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
   sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
+  asSlice _ | AsSlice <- asSlice (Proxy :: Proxy sh)
+            = AsSlice
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions

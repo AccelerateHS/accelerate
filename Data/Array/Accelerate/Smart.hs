@@ -425,6 +425,10 @@ data PreExp acc seq exp t where
                 => exp (sl:.a)
                 -> PreExp acc seq exp sl
 
+  IndexTrans    :: Shape sh
+                => exp sh
+                -> PreExp acc seq exp sh
+
   IndexAny      :: Shape sh
                 => PreExp acc seq exp (Any sh)
 
@@ -1286,6 +1290,7 @@ showPreExpOp IndexNil           = "IndexNil"
 showPreExpOp IndexCons{}        = "IndexCons"
 showPreExpOp IndexHead{}        = "IndexHead"
 showPreExpOp IndexTail{}        = "IndexTail"
+showPreExpOp IndexTrans{}       = "IndexTrans"
 showPreExpOp IndexAny           = "IndexAny"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"

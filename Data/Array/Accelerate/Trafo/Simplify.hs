@@ -42,7 +42,7 @@ import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
-                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
+                                                        , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList, transpose )
 import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -215,6 +215,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexCons sh sz           -> indexCons (cvtE sh) (cvtE sz)
       IndexHead sh              -> indexHead (cvtE sh)
       IndexTail sh              -> indexTail (cvtE sh)
+      IndexTrans sh             -> indexTrans (cvtE sh)
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
@@ -350,6 +351,11 @@ simplifyOpenExp env = first getAny . cvtE
       | sl :. _ <- toElt c :: sl :. sz  = Stats.ruleFired "indexTail/const"     $ yes (Const (fromElt sl))
     indexTail (_, IndexCons sl _)       = Stats.ruleFired "indexTail/indexCons" $ yes sl
     indexTail sh                        = IndexTail <$> sh
+
+    indexTrans :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh)
+    indexTrans (_, Const c)       = Stats.ruleFired "indexTrans/const"      $ yes (Const (fromElt (transpose (toElt c :: sh))))
+    indexTrans (_, IndexTrans sh) = Stats.ruleFired "indexTrans/indexTrans" $ yes sh
+    indexTrans sh                 = IndexTrans <$> sh
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))

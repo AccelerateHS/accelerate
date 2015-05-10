@@ -696,6 +696,7 @@ evalPreOpenExp evalAcc pexp env aenv =
     IndexCons sh sz             -> evalE sh :. evalE sz
     IndexHead sh                -> let _  :. ix = evalE sh in ix
     IndexTail sh                -> let ix :. _  = evalE sh in ix
+    IndexTrans sh               -> transpose (evalE sh)
     IndexSlice slice slix sh    -> toElt $ restrict slice (fromElt (evalE slix))
                                                           (fromElt (evalE sh))
       where

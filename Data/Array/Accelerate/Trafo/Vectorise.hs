@@ -1285,6 +1285,7 @@ liftExp vectAcc strength ctx size exp
       IndexCons sh sz           -> ZipWith (fun2 IndexCons) (cvtE sh) (cvtE sz)
       IndexHead sh              -> Map (fun1 IndexHead) (cvtE sh)
       IndexTail sh              -> Map (fun1 IndexTail) (cvtE sh)
+      IndexTrans sh             -> Map (fun1 IndexTrans) (cvtE sh)
       IndexSlice x ix sh        -> ZipWith (fun2 (IndexSlice x)) (cvtE ix) (cvtE sh)
       IndexFull x ix sl         -> ZipWith (fun2 (IndexFull x)) (cvtE ix) (cvtE sl)
       ToIndex sh ix             -> ZipWith (fun2 ToIndex) (cvtE sh) (cvtE ix)
@@ -1580,6 +1581,7 @@ avoidExp = cvtE
         IndexCons sh sz     -> cvtE2 IndexCons sh sz
         IndexHead sh        -> IndexHead `cvtE1` sh
         IndexTail sh        -> IndexTail `cvtE1` sh
+        IndexTrans sh       -> IndexTrans `cvtE1` sh
         IndexAny            -> simple IndexAny
         IndexSlice x ix sh  -> cvtE2 (IndexSlice x) ix sh
         IndexFull x ix sl   -> cvtE2 (IndexFull x) ix sl
@@ -2713,6 +2715,7 @@ sequenceFreeExp = travE
         IndexCons sh sz         -> travE sh && travE sz
         IndexHead sh            -> travE sh
         IndexTail sh            -> travE sh
+        IndexTrans sh           -> travE sh
         IndexAny                -> True
         IndexSlice _ ix sh      -> travE ix && travE sh
         IndexFull _ ix sl       -> travE ix && travE sl
@@ -2887,6 +2890,7 @@ vectoriseSeqOpenExp strength ctx = cvtE
         IndexCons sh sz         -> IndexCons (cvtE sh) (cvtE sz)
         IndexHead sh            -> IndexHead (cvtE sh)
         IndexTail sh            -> IndexTail (cvtE sh)
+        IndexTrans sh           -> IndexTrans (cvtE sh)
         IndexAny                -> IndexAny
         IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
         IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
@@ -3041,43 +3045,11 @@ zipWith' f as bs
       )
 
 -- Remove the outermost dimension
-indexInit :: forall sh. Typeable sh => S.Exp (sh :. Int) -> S.Exp sh
-indexInit sh
-  | P.Just (Refl :: sh :~: Z) <- eqT
-  = S.lift Z
-  | P.Just (Refl :: sh :~: (Z :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexInit (S.indexTail sh) :. S.indexHead sh
-  | otherwise = $internalError "indexInit" "This many dimensions is not supported"
+indexInit :: forall sh. Shape sh => S.Exp (sh :. Int) -> S.Exp sh
+indexInit | AsSlice <- asSlice (Proxy :: Proxy sh)
+          = S.indexTrans . S.indexTail . S.indexTrans
 
 -- Get the outermost dimension
-indexLast :: forall sh. Typeable sh => S.Exp (sh :. Int) -> S.Exp Int
-indexLast sh
-  | P.Just (Refl :: sh :~: Z) <- eqT
-  = S.indexHead sh
-  | P.Just (Refl :: sh :~: (Z :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | P.Just (Refl :: sh :~: (Z :. Int :. Int :. Int :. Int :. Int :. Int :. Int)) <- eqT
-  = S.lift $ indexLast (S.indexTail sh)
-  | otherwise = $internalError "indexLast" "This many dimensions is not supported"
+indexLast :: forall sh. Shape sh => S.Exp (sh :. Int) -> S.Exp Int
+indexLast | AsSlice <- asSlice (Proxy :: Proxy sh)
+          = S.indexHead . S.indexTrans
