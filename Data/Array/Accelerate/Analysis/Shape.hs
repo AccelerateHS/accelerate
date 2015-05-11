@@ -254,11 +254,13 @@ evalShapeSeq s aenv senv =
       case p of
         StreamIn _ -> return partialBottom
         ToSeq _ sl _ acc -> do
-          PartialArray sh _ <- evalDelayedOpenAcc acc aenv
-          return $ PartialArray (sliceShape sl <$> sh) Nothing
-        MapSeq f _ x -> evalDelayedOpenAfun1 f aenv (prjArraysPartial x senv)
+           -- This acc argument will not be executed in each step of
+           -- the sequence. Throw away the intermediate sizes:
+          let arr = fst <$> runWriterT (evalDelayedOpenAcc acc aenv)
+          return $ PartialArray (sliceShape sl <$> (shapePartial =<< arr)) Nothing 
+        MapSeq     f _ x   -> evalDelayedOpenAfun1 f aenv (prjArraysPartial x senv)
         ZipWithSeq f _ x y -> evalDelayedOpenAfun2 f aenv (prjArraysPartial x senv) (prjArraysPartial y senv)
-        ScanSeq _ _ _ ->  return $ PartialArray (Just Z) Nothing
+        ScanSeq _ _ _      ->  return $ PartialArray (Just Z) Nothing
 
 evalDelayedOpenAfun1 :: (Arrays a, Arrays b)
                      => DelayedOpenAfun aenv (a -> b)
@@ -280,9 +282,17 @@ evalDelayedOpenAcc (Manifest acc) aenv =
   let
       manifest :: Arrays a' => DelayedOpenAcc aenv a' -> Shapes (ArraysPartial a')
       manifest a =
-        do a' <- evalDelayedOpenAcc a aenv
-           tell =<< lift (toShapeTree a') -- Remember the size of this intermediate result.
-           return a'
+        case a of
+          -- If a is a variable, assume the shape is already accounted
+          -- for.
+          Manifest (Avar _) -> evalDelayedOpenAcc a aenv
+          
+           -- Otherwise, temember the size of this intermediate
+           -- result.
+          _                 -> do
+            a' <- evalDelayedOpenAcc a aenv
+            tell =<< lift (toShapeTree a')
+            return a'
 
       delayed :: Arrays a' => DelayedOpenAcc aenv a' -> Shapes (ArraysPartial a')
       delayed a = evalDelayedOpenAcc a aenv
