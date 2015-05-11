@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Lifted
@@ -26,7 +27,7 @@ module Data.Array.Accelerate.Array.Lifted (
 
   LiftedTupleRepr,
 
-  Regular(..), RegularTupleRepr,
+  Regular, RegularTupleRepr,
 
   IsConstrained(..),
 
@@ -125,7 +126,7 @@ newtype Regular a = Regular (RegularRepr (ArrRepr a) a)
 
 type family RegularRepr r a where
   RegularRepr ()     ()                 = ((),Scalar Int)
-  RegularRepr (Array sh e) (Array sh e) = ((((),Scalar Int), Scalar sh), Vector e)
+  RegularRepr (Array sh e) (Array sh e) = ((),Array (sh:.Int) e)
   RegularRepr (l,r) a                   = RegularTupleRepr (TupleRepr a)
 
 type family RegularTupleRepr t :: *
@@ -138,7 +139,7 @@ instance Arrays t => IsProduct Arrays (Regular t) where
   toProd _ = Regular
   prod _ _ = case flavour (undefined :: t) of
                 ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc (ProdRsnoc (ProdRsnoc ProdRunit))
+                ArraysFarray -> ProdRsnoc ProdRunit
                 ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
     where
       tup :: forall a. ProdR Arrays a -> ProdR Arrays (RegularTupleRepr a)
@@ -190,7 +191,7 @@ isTypeableVector' _ =
   case flavour (undefined :: t) of
     ArraysFunit  -> IsC
     ArraysFarray -> IsC
-    ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
+    ArraysFtuple | IsC <- isT (prod arraysP (undefined :: Vector' t))
                  -> IsC
   where
     isT :: ProdR Arrays t' -> IsTypeableArrRepr t'
@@ -202,7 +203,7 @@ isTypeableRegular _ =
   case flavour (undefined :: t) of
     ArraysFunit  -> IsC
     ArraysFarray -> IsC
-    ArraysFtuple | IsC <- isT (prod (Proxy :: Proxy Arrays) (undefined :: Regular t))
+    ArraysFtuple | IsC <- isT (prod arraysP (undefined :: Regular t))
                  -> IsC
   where
     isT :: ProdR Arrays t' -> IsTypeableArrRepr t'
@@ -230,45 +231,63 @@ emptyVec = fromList (Z :. (0 :: Int)) []
 flatten :: Array sh e -> Vector e
 flatten (Array sh e) = Array ((), Repr.size sh) e
 
+reshape :: (Shape sh, Shape sh') => sh' -> Array sh e -> Array sh' e
+reshape sh' (Array sh e) | size sh' == Repr.size sh
+                         = Array (fromElt sh') e
+                         | otherwise
+                         = $internalError "reshape" "shape mismatch"
+
+arraysP :: Proxy Arrays
+arraysP = Proxy
 
 -- Useful helper-functions for Regular
 -- ----------------------------------
 
+-- Extract the array out of a regular nested vector.
+--
+fromRegular :: Regular (Array sh e) -> Array (sh:.Int) e
+fromRegular (Regular ((),a)) = a
+
+-- Turn an array into a regular nested vector
+--
+toRegular :: Array (sh:.Int) e -> Regular (Array sh e)
+toRegular a = Regular ((),a)
+
 -- Get all the elements. O(1).
 --
 elements' :: Regular (Array sh e) -> Vector e
-elements' (Regular (_, elts)) = elts
+elements' = flatten . fromRegular
 
 -- Get all the shapes. O(1).
 --
-shape' :: Elt sh => Regular (Array sh a) -> sh
-shape' (Regular ((_, shape), _)) = shape ! Z
+shape' :: Shape sh => Regular (Array sh a) -> sh
+shape' = listToShape . init . shapeToList . shape . fromRegular
 
 -- The empty Regular. O(1).
 empty' :: forall a. Arrays a => Regular a
 empty' =
   case flavour (undefined :: a) of
-    ArraysFunit  -> Regular ((), scalar 0)
+    ArraysFunit  -> Regular ((),scalar 0)
     ArraysFarray -> newRegularArray 0 emptyS emptyVec
-    ArraysFtuple -> Regular $ tup (prod (Proxy :: Proxy Arrays) (undefined :: a))
+    ArraysFtuple -> Regular $ tup (prod arraysP (undefined :: a))
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t
     tup ProdRunit = ()
     tup (ProdRsnoc t) = (tup t, empty')
 
-newRegularArray :: Elt sh => Int -> sh -> Vector e -> Regular (Array sh e)
-newRegularArray n sh vals = Regular ((((),scalar n), scalar sh), vals)
+newRegularArray :: Shape sh => Int -> sh -> Vector e -> Regular (Array sh e)
+newRegularArray n sh vals = toRegular (reshape sh' vals)
+  where
+    sh' = listToShape (shapeToList sh ++ [n])
 
 -- Number of arrays in Regular. O(1).
 --
 length' :: forall a. Arrays a => Regular a -> Int
-length' (Regular x) =
+length' x =
   case flavour (undefined :: a) of
-    ArraysFunit  | ((), n) <- x
-                 -> n ! Z
-    ArraysFarray | ((((), n), _), _) <- x
-                 -> n ! Z
-    ArraysFtuple -> tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) x
+    ArraysFunit  | Regular ((),n) <- x -> n ! Z
+    ArraysFarray -> last (shapeToList (shape' x))
+    ArraysFtuple -> tup (prod arraysP (undefined :: a)) (fromProd arraysP x)
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> Int
     tup ProdRunit () = error "unreachable"
@@ -282,15 +301,15 @@ drop' :: forall a. Arrays a
       -> Int -> Regular a -> Regular a
 drop' dropVec k x =
   case flavour (undefined :: a) of
-    ArraysFunit -> Regular ((), scalar (length' x - k `max` 0))
+    ArraysFunit -> Regular ((),scalar (length' x - k `max` 0))
     ArraysFarray | k < length' x
                  -> let sh = shape' x
                         k' = k * size sh
                     in newRegularArray (length' x - k) sh (dropVec k' (elements' x))
                  | otherwise -> empty'
     ArraysFtuple -> Regular $
-                      tup (prod (Proxy :: Proxy Arrays) (undefined :: a))
-                          (fromProd (Proxy :: Proxy Arrays) x)
+                      tup (prod arraysP (undefined :: a))
+                          (fromProd arraysP x)
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> RegularTupleRepr t
     tup ProdRunit () = ()
@@ -309,7 +328,7 @@ toList' fetchAll x =
   case flavour (undefined :: a) of
     ArraysFunit  -> replicate (length' x) ()
     ArraysFarray -> fetchAll (shape' x) (elements' x)
-    ArraysFtuple -> let proxy = (Proxy :: Proxy Arrays)
+    ArraysFtuple -> let proxy = arraysP
                     in map (toProd proxy)
                            (tup (prod proxy (undefined :: a)) (fromProd proxy x))
   where
@@ -323,13 +342,13 @@ fromList' :: forall a. Arrays a
           -> [a] -> Regular a
 fromList' concat xs =
   case flavour (undefined :: a) of
-    ArraysFunit -> Regular ((), scalar (length xs))
+    ArraysFunit -> Regular ((),scalar (length xs))
     ArraysFarray | not (null xs) ->
       let sh   = shape (head xs)
           vals = concat (map flatten xs)
       in newRegularArray (length xs) sh vals
                  | otherwise -> empty'
-    ArraysFtuple -> Regular $ tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (map (fromProd (Proxy :: Proxy Arrays)) xs)
+    ArraysFtuple -> Regular $ tup (prod arraysP (undefined :: a)) (map (fromProd arraysP) xs)
   where
     tup :: forall t. ProdR Arrays t -> [t] -> RegularTupleRepr t
     tup ProdRunit _     = ()
@@ -345,7 +364,7 @@ the' x =
                  -> Array (fromElt (shape' x)) vals
                  | otherwise
                  -> $internalError "the'" "non-unit regular nested array"
-    ArraysFtuple -> let proxy = (Proxy :: Proxy Arrays)
+    ArraysFtuple -> let proxy = arraysP
                     in toProd proxy (tup (prod proxy (undefined :: a)) (fromProd proxy x))
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> t
@@ -356,12 +375,12 @@ unit' :: forall a. Arrays a
       => a -> Regular a
 unit' xs =
   case flavour (undefined :: a) of
-    ArraysFunit -> Regular ((), scalar 1)
+    ArraysFunit  -> Regular ((),scalar 1)
     ArraysFarray ->
       let seg = shape xs
           vals = flatten xs
       in newRegularArray 1 seg vals
-    ArraysFtuple -> Regular $ tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) (fromProd (Proxy :: Proxy Arrays) xs)
+    ArraysFtuple -> Regular $ tup (prod arraysP (undefined :: a)) (fromProd arraysP xs)
   where
     tup :: forall t. ProdR Arrays t -> t -> RegularTupleRepr t
     tup ProdRunit _          = ()
@@ -388,7 +407,7 @@ helper units arr unit pair fix (Vector' x) =
     ArraysFunit | ((), n) <- x -> units n
     ArraysFarray | (((), lens), vals) <- x
                  -> arr lens vals
-    ArraysFtuple -> fix $ tup (prod (Proxy :: Proxy Arrays) (undefined :: a)) x
+    ArraysFtuple -> fix $ tup (prod arraysP (undefined :: a)) x
   where
     tup :: forall t. ProdR Arrays t -> LiftedTupleRepr t -> r t
     tup ProdRunit () = unit
