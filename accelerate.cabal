@@ -232,6 +232,7 @@ Library
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
+                        Data.Array.Accelerate.Trafo.Normalise
                         Data.Array.Accelerate.Trafo.Rewrite
                         Data.Array.Accelerate.Trafo.Sharing
                         Data.Array.Accelerate.Trafo.Shrink
