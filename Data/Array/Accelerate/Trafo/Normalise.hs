@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Normalise
@@ -24,6 +25,7 @@ import Prelude                                          hiding ( exp )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Trafo.Substitution
 
 import Data.Proxy
 
@@ -218,6 +220,12 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
     cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
 
     alet :: (Arrays bnd, Arrays body) => OpenAcc aenv bnd -> OpenAcc (aenv, bnd) body -> Untupled (PreOpenAcc OpenAcc aenv') body
+    alet (OpenAcc (Alet (OpenAcc (Aprj tix (OpenAcc (Avar ix)))) body')) body
+      = alet (OpenAcc (Aprj tix (OpenAcc (Avar ix)))) (OpenAcc (Alet body' (weaken ixt body)))
+      where
+        ixt :: forall aenv a b. (aenv, a) :> ((aenv, b), a)
+        ixt ZeroIdx      = ZeroIdx
+        ixt (SuccIdx ix) = SuccIdx (SuccIdx ix)
     alet bnd body =
       case untupleAcc tmap bnd of
         OneTuple tr bnd' -> Alet bnd' `wrap` untupleAcc (OneTupleMap tmap tr) body

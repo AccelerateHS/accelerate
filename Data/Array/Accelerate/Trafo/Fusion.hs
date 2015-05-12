@@ -58,7 +58,7 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
                                                         , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
-                                                        , IsAtuple, TupleRepr )
+                                                        , IsAtuple, TupleRepr, Scalar )
 import Data.Array.Accelerate.Product
 
 import qualified Data.Array.Accelerate.Debug            as Stats
@@ -352,6 +352,9 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
       | count False ZeroIdx body <= lIMIT
       = True
 
+      | Unit e <- extract bnd
+      = Stats.ruleFired "simpleScalar" (simpleExp e)
+
       | otherwise
       = False
       where
@@ -393,7 +396,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Array injection
     Avar v              -> done $ Avar v
     Use arrs            -> done $ Use arrs
-    Unit e              -> done $ Unit (cvtE e)
+    Unit e              -> unitD (cvtE e)
 
     -- Producers
     -- ---------
@@ -810,6 +813,7 @@ compute (Embed env cc) = bind env (compute' cc)
 compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
 compute' cc = case simplify cc of
   Done v                                        -> Avar v
+  Yield IndexNil (Lam (Body b))                 -> Unit (simplify (Let IndexNil b))
   Yield sh f                                    -> Generate sh f
   Step sh p f v
     | Just REFL <- match sh (arrayShape v)
@@ -826,6 +830,10 @@ compute' cc = case simplify cc of
 computeAcc :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> acc aenv arrs
 computeAcc = inject . compute
 
+unitD :: (Kit acc, Elt e)
+      => PreExp acc aenv e
+      -> Embed acc aenv (Scalar e)
+unitD e = Embed BaseEnv (Yield IndexNil (Lam (Body (weakenE SuccIdx e))))
 
 -- Representation of a generator as a delayed array
 --
@@ -1441,3 +1449,33 @@ indexArray v = Lam (Body (Index (avarIn v) (Var ZeroIdx)))
 linearIndex :: (Kit acc, Shape sh, Elt e) => Idx aenv (Array sh e) -> PreFun acc aenv (Int -> e)
 linearIndex v = Lam (Body (LinearIndex (avarIn v) (Var ZeroIdx)))
 
+simpleExp :: PreOpenExp acc env aenv t -> Bool
+simpleExp e =
+  case e of
+    Let x y            -> simpleExp x && simpleExp y
+    Var _              -> True
+    Const _            -> True
+    Tuple t            -> simpleTuple t
+    Prj _ e            -> simpleExp e
+    IndexNil           -> True
+    IndexCons sl sz    -> simpleExp sl && simpleExp sz
+    IndexHead sh       -> simpleExp sh
+    IndexTail sz       -> simpleExp sz
+    IndexTrans sz      -> simpleExp sz
+    IndexAny           -> True
+    IndexSlice _ ix sh -> simpleExp ix && simpleExp sh
+    IndexFull _ ix sl  -> simpleExp ix && simpleExp sl
+    ToIndex sh ix      -> simpleExp sh && simpleExp ix
+    FromIndex sh i     -> simpleExp sh && simpleExp i
+    PrimConst _        -> True
+    PrimApp _ x        -> simpleExp x
+    ShapeSize sh       -> simpleExp sh
+    Intersect sh sl    -> simpleExp sh && simpleExp sl
+    Union s t          -> simpleExp s && simpleExp t
+    Shape _            -> True
+    Index _ IndexNil   -> True
+    _                  -> False
+
+simpleTuple :: Tuple (PreOpenExp acc env aenv) t -> Bool
+simpleTuple NilTup        = True
+simpleTuple (SnocTup t e) = simpleTuple t && simpleExp e
