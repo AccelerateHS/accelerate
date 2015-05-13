@@ -1833,7 +1833,7 @@ foldSeq :: Elt a
         -> Exp a
         -> Seq [Scalar a]
         -> Seq (Scalar a)
-foldSeq f z = foldSeqFlatten (\ acc _ -> fold f (the acc)) (unit z)
+foldSeq f z = foldSeqFlatten (\ acc _ bs -> unit (f (the (fold1 f bs)) (the acc))) (unit z)
 
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.

@@ -438,12 +438,6 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
 
-    cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
-    cvtE = convertSharingExp config EmptyLayout alyt [] aenv
-
-    cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
-    cvtF2 = convertSharingFun2 config alyt aenv
-
     cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
     cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
 
