@@ -320,22 +320,6 @@ zipWithOp
 zipWithOp f (Delayed shx xs _) (Delayed shy ys _)
   = newArray (shx `intersect` shy) (\ix -> f (xs ix) (ys ix))
 
-zipWith'Op
-    :: (Shape sh, Elt a)
-    => (a -> a -> a)
-    -> Delayed (Array sh a)
-    -> Delayed (Array sh a)
-    -> Array sh a
-zipWith'Op f (Delayed shx xs _) (Delayed shy ys _)
-  = newArray (shx `union` shy) (\ix -> if ix `outside` shx
-                                       then ys ix
-                                       else if ix `outside` shy
-                                       then xs ix
-                                       else f (xs ix) (ys ix))
-  where
-    a `outside` b = or $ zipWith (>=) (shapeToList a) (shapeToList b)
-
-
 foldOp
     :: (Shape sh, Elt e)
     => (e -> e -> e)

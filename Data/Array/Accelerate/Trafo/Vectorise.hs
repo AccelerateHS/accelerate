@@ -3073,30 +3073,6 @@ indexRegular v i = case flavour (undefined :: a) of
 asRegular :: (Shape sh, Elt e) => S.Acc (Array (sh :. Int) e) -> S.Acc (Regular (Array sh e))
 asRegular = S.Acc . S.Atuple . SnocAtup NilAtup
 
-
--- | Zip three arrays with the given function, analogous to 'zipWith'.
---
-zipWith' :: Elt e
-         => Fun aenv (e -> e -> e)
-         -> OpenAcc aenv (Vector e)
-         -> OpenAcc aenv (Vector e)
-         -> OpenAcc aenv (Vector e)
-zipWith' f as bs
-  = OpenAcc $ Generate
-      (Shape as `Union` Shape bs)
-      (Lam $ Body $
-         let ix = var0
-         in
-          Cond
-            (PrimApp (PrimLtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape as) `SnocTup` IndexHead ix))
-            (Index bs ix)
-            (Cond
-               (PrimApp (PrimLtEq scalarType) (Tuple $ NilTup `SnocTup` IndexHead (Shape bs) `SnocTup` IndexHead ix))
-               (Index as ix)
-               (subApplyE2 (weakenE SuccIdx f) (Index bs ix) (Index as ix))
-            )
-      )
-
 -- Remove the outermost dimension
 indexInit :: forall sh. Shape sh => S.Exp (sh :. Int) -> S.Exp sh
 indexInit | AsSlice <- asSlice (Proxy :: Proxy sh)
