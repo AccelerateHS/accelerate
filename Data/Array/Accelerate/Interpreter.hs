@@ -1324,12 +1324,6 @@ evalSeq conf s aenv = evalSeq' s
                  -> StreamC senv a
     initConsumer c =
       case c of
-        FoldSeq _ f e x ->
-          let f' = evalF f
-              a0 = newArray (Z :. chunkSize conf) (const (evalE e))
-              consumer v c = zipWith'Op f' (delayArray v) (delayArray (chunkElems c))
-              finalizer = fold1Op f' . delayArray
-          in StreamFold consumer finalizer a0 x
         FoldSeqFlatten _ f acc x ->
           let f' = evalAF f
               a0 = evalA acc
@@ -1350,17 +1344,24 @@ evalSeq conf s aenv = evalSeq' s
                                       (evalPreFun evalOpenAcc linearIndexD aenv)
 
 
-    initToSeq :: (Elt slix, Shape sl)
+    initToSeq :: (Elt slix, Shape sl, Elt e, Shape sh)
               => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
               -> proxy slix
               -> DelayedOpenAcc aenv (Array sh e)
               -> Maybe Int
               -> StreamP senv (Array sl e)
-
-    initToSeq sliceIndex slix (delayed -> Delayed sh ix _) k =
-      case k of
-        Just n  -> StreamStreamIn n (toSeqOp sliceIndex slix (newArray sh ix))
-        Nothing -> StreamStreamIn 1 (toSeqOp sliceIndex slix (newArray sh ix))
+    initToSeq sliceIndex slix acc k =
+      case acc of
+        AST.Manifest (Use arr) -> 
+          case k of
+            Just n  -> StreamStreamIn n (toSeqOp sliceIndex slix (toArr arr))
+            Nothing -> StreamStreamIn 1 (toSeqOp sliceIndex slix (toArr arr))
+        _-> 
+          case delayed acc of
+            Delayed sh ix _ ->
+              case k of
+                Just n  -> StreamStreamIn n (toSeqOp sliceIndex slix (newArray sh ix))
+                Nothing -> StreamStreamIn 1 (toSeqOp sliceIndex slix (newArray sh ix))
 
     initMapSeq :: forall a b senv. (Arrays a, Arrays b)
                => PreOpenAfun DelayedOpenAcc aenv (a -> b)

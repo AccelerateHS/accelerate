@@ -374,11 +374,6 @@ matchSeq m h = match
       = Nothing
 
     matchC :: Consumer acc aenv senv' u -> Consumer acc aenv senv' v -> Maybe (u :=: v)
-    matchC (FoldSeq _ f1 e1 x1) (FoldSeq _ f2 e2 x2)
-      | Just REFL <- matchIdx x1 x2
-      , Just REFL <- matchFun f1 f2
-      , Just REFL <- matchExp e1 e2
-      = Just REFL
     matchC (FoldSeqFlatten _ f1 acc1 x1) (FoldSeqFlatten _ f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
@@ -984,7 +979,6 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =
       case c of
-        FoldSeq _ f e x          -> hashWithSalt salt "FoldSeq"        `hashF`  f `hashE` e   `hashVar` x
         FoldSeqFlatten _ f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
         Stuple t                 -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 

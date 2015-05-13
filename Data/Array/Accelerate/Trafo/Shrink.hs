@@ -212,7 +212,6 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
     shrinkC c =
       case c of
-        FoldSeq f' f e x        -> FoldSeq (shrinkAF <$> f') (shrinkF f) (shrinkE e) x
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (shrinkAF <$> f') (shrinkAF f) (shrinkAcc a) x
         Stuple t                -> Stuple (shrinkCT t)
 
@@ -417,7 +416,6 @@ usesOfPreAcc withShape countAcc idx = count
     countC :: Consumer acc aenv senv arrs -> Int
     countC c =
       case c of
-        FoldSeq _ f e _        -> countF f + countE e
         FoldSeqFlatten _ f a _ -> countAF f idx + countA a
         Stuple t               -> countCT t
 

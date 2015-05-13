@@ -100,7 +100,6 @@ travSeq f c l seq =
     travC :: forall a. Consumer OpenAcc aenv senv a -> m b
     travC co =
       case co of
-        FoldSeq _ fun e x -> combine "FoldSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)) ]
         FoldSeqFlatten _ afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
 

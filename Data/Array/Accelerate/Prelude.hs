@@ -93,7 +93,8 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence operations
-  fromSeq, fromSeqElems, fromSeqShapes, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+  foldSeq, fromSeq, fromSeqElems, fromSeqShapes, 
+  toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
 
 ) where
 
@@ -1820,6 +1821,19 @@ length = unindex1 . shape
 
 -- Sequence operations
 -- --------------------------------------
+
+-- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
+-- element using the given binary operation (+). (+) must be
+-- associative:
+--
+--   Forall a b c. (a + b) + c = a + (b + c),
+--
+foldSeq :: Elt a
+        => (Exp a -> Exp a -> Exp a)
+        -> Exp a
+        -> Seq [Scalar a]
+        -> Seq (Scalar a)
+foldSeq f z = foldSeqFlatten (\ acc _ -> fold f (the acc)) (unit z)
 
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.

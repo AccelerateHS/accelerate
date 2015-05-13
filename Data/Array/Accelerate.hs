@@ -158,7 +158,7 @@ module Data.Array.Accelerate (
   L.mapSeq, L.zipWithSeq, L.scanSeq,
 
   -- ** Sequence consumers
-  L.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes,
+  P.foldSeq, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes,
   P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
 
   -- *** Specification

@@ -199,7 +199,6 @@ prettySeq prettyAcc alvl llvl wrap seq =
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
-        FoldSeq f' f e x        -> "foldSeq"        ..$ [ ppMaybeAF f', ppF f, ppE e, ppX x ]
         FoldSeqFlatten f' f a x -> "foldSeqFlatten" ..$ [ ppMaybeAF f', ppAF f, ppA a, ppX x ]
         Stuple t                -> tuple (prettyT t)
 

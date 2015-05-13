@@ -127,7 +127,6 @@ convertSegmentsSeq seq =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
     cvtC c =
       case c of
-        FoldSeq f' f e x        -> FoldSeq (cvtAfun `fmap` f') (cvtF f) (cvtE e) x
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAfun `fmap` f') (cvtAfun f) (cvtA a) x
         Stuple t                -> Stuple (cvtCT t)
 

@@ -2886,7 +2886,6 @@ vectoriseOpenSeq strength ctx seq =
     cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
     cvtC c =
       case c of
-        FoldSeq _ f e x        -> FoldSeq (Just (untup $ Alam $ Alam $ Abody $ (zipWith' (weaken (SuccIdx . SuccIdx) f)) avar1 avar0)) (cvtF f) (cvtE e) x
         FoldSeqFlatten _ f a x -> FoldSeqFlatten (Just (untup (flatFun f))) (cvtAfun f) (cvtA a) x
         Stuple t               -> Stuple (cvtCT t)
 

@@ -52,7 +52,7 @@ module Data.Array.Accelerate.Language (
   mapSeq, zipWithSeq, scanSeq,
 
   -- * Sequence consumers
-  foldSeq, foldSeqFlatten,
+  foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -526,27 +526,8 @@ scanSeq :: Elt a
         -> Seq [Scalar a]
 scanSeq = Seq $$$ ScanSeq
 
--- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
--- element using the given binary operation (+). (+) must be
--- associative:
---
---   Forall a b c. (a + b) + c = a + (b + c),
---
--- and a0 must be the identity element for (+):
---
---   Forall a. a0 + a = a = a + a0.
---
-foldSeq :: Elt a
-        => (Exp a -> Exp a -> Exp a)
-        -> Exp a
-        -> Seq [Scalar a]
-        -> Seq (Scalar a)
-foldSeq = Seq $$$ FoldSeq
-
--- | foldSeqFlatten f a0 x seq. A specialized version of
--- FoldSeqAct where reduction with the companion operator
--- corresponds to flattening. f must be semi-associative, with vecotor
--- append (++) as the companion operator:
+-- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
+-- vecotor append (++) as the companion operator:
 --
 --   Forall b sh1 a1 sh2 a2.
 --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).

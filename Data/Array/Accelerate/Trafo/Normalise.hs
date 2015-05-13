@@ -211,7 +211,6 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
     cvtC :: forall senv t. Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv' senv t
     cvtC c =
       case c of
-        FoldSeq f' f e x        -> FoldSeq (cvtAF `fmap` f') (cvtF f) (cvtE e) x
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (same a) x
         Stuple t                -> Stuple (cvtCT t)
 

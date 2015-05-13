@@ -321,25 +321,9 @@ data PreSeq acc seq exp arrs where
           -> seq [Scalar a]
           -> PreSeq acc seq exp [Scalar a]
 
-  -- FoldSeq (+) a0 x. Fold a sequence x by combining each element
-  -- using the given binary operation (+). (+) must be associative:
-  --
-  --   Forall a b c. (a + b) + c = a + (b + c),
-  --
-  -- and a0 must be the identity element for (+):
-  --
-  --   Forall a. a0 + a = a = a + a0.
-  --
-  FoldSeq :: Elt a
-          => (Exp a -> Exp a -> exp a)
-          -> exp a
-          -> seq [Scalar a]
-          -> PreSeq acc seq exp (Scalar a)
 
-  -- FoldSeqFlatten f a0 x. A specialized version of FoldSeqAct
-  -- where reduction with the companion operator corresponds to
-  -- flattening. f must be semi-associative, with vecotor append (++)
-  -- as the companion operator:
+  -- FoldSeqFlatten f a0 x. f must be semi-associative, with vecotor
+  -- append (++) as the companion operator:
   --
   --   Forall b s1 a2 sh2 a2.
   --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
@@ -1256,7 +1240,6 @@ showPreSeqOp (ToSeq{})          = "ToSeq"
 showPreSeqOp (MapSeq{})         = "MapSeq"
 showPreSeqOp (ZipWithSeq{})     = "ZipWithSeq"
 showPreSeqOp (ScanSeq{})        = "ScanSeq"
-showPreSeqOp (FoldSeq{})        = "FoldSeq"
 showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
 showPreSeqOp (Stuple{})         = "Stuple"
 

@@ -413,7 +413,6 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenSeq AST.OpenAcc aenv senv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FoldSeq fun e x                    -> AST.Consumer $ AST.FoldSeq Nothing (cvtF2 fun) (cvtE e) (asIdx x)
         FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten Nothing (cvtAF3 afun) (cvtA acc) (asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
@@ -1804,11 +1803,6 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
               (e',  h2) <- traverseExp lvl e
               (s'   , h3) <- traverseSeq lvl s
               return (ScanSeq fun' e' s', h1 `max` h2 `max` h3 + 1)
-            FoldSeq fun e s -> consumer $ do
-              (fun', h1) <- traverseFun2 lvl fun
-              (e'  , h2) <- traverseExp lvl e
-              (s'  , h3) <- traverseSeq lvl s
-              return (FoldSeq fun' e' s', h1 `max` h2 `max` h3 + 1)
             FoldSeqFlatten afun acc s -> consumer $ do
               (afun', h1) <- traverseAfun3 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
@@ -2727,11 +2721,6 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                               (e'  , accCount2) = scopesExp e
                               (s'' , accCount3) = scopesSeq s'
                             in producer (ScanSeq fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
-        FoldSeq fun e s' -> let
-                              (fun', accCount1) = scopesFun2 fun
-                              (e'  , accCount2) = scopesExp e
-                              (s'' , accCount3) = scopesSeq s'
-                            in consumer (FoldSeq fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
         FoldSeqFlatten afun acc s' ->
                                let
                                  (afun', accCount1) = scopesAfun3 afun
