@@ -41,7 +41,6 @@ import Control.Monad                                            ( filterM )
 import Control.Monad.Catch
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
-import Control.Concurrent                                       ( yield )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
 
@@ -290,15 +289,11 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
 -- Typically this should only be called in very specific circumstances. This
 -- operation is not thread-safe.
 --
-free :: (RemoteMemory m, PrimElt a b) => proxy m -> MemoryCache (RemotePointer m) task -> ArrayData a -> IO ()
+free :: (RemoteMemory m, Task task, PrimElt a b) => proxy m -> MemoryCache (RemotePointer m) task -> ArrayData a -> IO ()
 free proxy (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
   key <- MT.makeStableArray arr
-  mu <- HT.lookup utbl key
-  case mu of
-    Nothing -> return ()
-    Just (Used _ _ _ _ _ weak_arr) -> finalize weak_arr
+  delete utbl key
   MT.freeStable proxy mt key
-  yield
 
 -- |Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used
