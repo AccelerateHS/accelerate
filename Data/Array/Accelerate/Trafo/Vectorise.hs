@@ -768,6 +768,12 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = AvoidedAcc
       $^ bind b
       $  Map f (sink b a')
+      | avoidLifting
+      , Just (AvoidedFun binds f) <- f_a
+      = liftedAcc
+      $  constructRegular
+      $^ bind binds
+      $  Map f (sink binds $ asArrayC (lifted a))
       | otherwise
       = liftedAcc
       $^ Alet (asArrayC (lifted a))
@@ -782,12 +788,19 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> acc            aenv  (Array sh b)
              -> LiftedAcc  acc aenv' (Array sh c)
     zipWithL (cvtF2 -> (f_l, f_a)) (cvtA -> a) (cvtA -> b)
-      | Just (AvoidedFun binds f) <- f_a
+      | avoidLifting
+      , Just (AvoidedFun binds f) <- f_a
       , AvoidedAcc a'             <- a
       , AvoidedAcc b'             <- b
       = AvoidedAcc
       $^ bind binds
       $ ZipWith f (sink binds a') (sink binds b')
+      | avoidLifting
+      , Just (AvoidedFun binds f) <- f_a
+      = liftedAcc
+      $  constructRegular
+      $^ bind binds
+      $  ZipWith f (sink binds $ asArrayC (lifted a)) (sink binds $ asArrayC (lifted b))
       | otherwise
       = liftedAcc
       $^ Alet (asArrayC (lifted a))
