@@ -265,6 +265,9 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     ppSh :: Shape sh => PreOpenExp acc env aenv sh -> Doc
     ppSh = parens . ppE'
 
+    ppSl :: Elt sl => PreOpenExp acc env aenv sl -> Doc
+    ppSl = parens . ppE'
+
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreOpenFun prettyAcc lvl alvl
 
@@ -311,11 +314,11 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp IndexNil                 = char 'Z'
     pp (IndexAny)               = text "indexAny"
     pp (IndexCons t h)          = ppE' t <+> text ":." <+> ppE' h
-    pp (IndexHead ix)           = "indexHead"  .$ [ ppE ix ]
-    pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
-    pp (IndexTrans ix)          = "indexTrans" .$ [ ppE ix ]
-    pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppE slix, ppE sh ]
-    pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppE slix, ppE sl ]
+    pp (IndexHead ix)           = "indexHead"  .$ [ ppSl ix ]
+    pp (IndexTail ix)           = "indexTail"  .$ [ ppSl ix ]
+    pp (IndexTrans ix)          = "indexTrans" .$ [ ppSh ix ]
+    pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppSl slix, ppSh sh ]
+    pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppSl slix, ppSh sl ]
     pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
     pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppE ix ]
     pp (While p f x)            = "while"      .$ [ ppF p, ppF f, ppE x ]
