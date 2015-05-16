@@ -92,9 +92,14 @@ module Data.Array.Accelerate.Prelude (
   -- * Array operations with a scalar result
   the, null, length,
 
-  -- * Sequence operations
-  foldSeq, fromSeq, fromSeqElems, fromSeqShapes, 
-  toSeqInner, toSeqOuter2, toSeqOuter3, generateSeq,
+  -- * Sequence reductions
+  foldSeqE, fromSeq, fromSeqE, shapes,
+
+  -- * Sequence generators
+  toSeqE, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeqE,
+
+  -- * Sequence transducers
+  mapSeqE, zipWithSeqE
 
 ) where
 
@@ -1822,18 +1827,18 @@ length = unindex1 . shape
 -- Sequence operations
 -- --------------------------------------
 
--- | foldSeq (+) a0 x seq. Fold a sequence x by combining each
+-- | foldSeqE (+) a0 x seq. Fold a sequence x by combining each
 -- element using the given binary operation (+). (+) must be
 -- associative:
 --
 --   Forall a b c. (a + b) + c = a + (b + c),
 --
-foldSeq :: Elt a
-        => (Exp a -> Exp a -> Exp a)
-        -> Exp a
-        -> Seq [Scalar a]
-        -> Seq (Scalar a)
-foldSeq f z = foldSeqFlatten (\ acc _ bs -> unit (f (the (fold1 f bs)) (the acc))) (unit z)
+foldSeqE :: Elt a
+         => (Exp a -> Exp a -> Exp a)
+         -> Exp a
+         -> Seq [Scalar a]
+         -> Seq (Scalar a)
+foldSeqE f z = foldSeqFlatten (\ acc _ bs -> unit (f (the (fold1 f bs)) (the acc))) (unit z)
 
 -- | Reduce a sequence by appending all the shapes and all the
 -- elements in two seperate vectors.
@@ -1845,15 +1850,24 @@ fromSeq = foldSeqFlatten f (lift (empty, empty))
       let (sh0, a0) = unlift x
       in lift (sh0 ++ sh1, a0 ++ a1)
 
-fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
-fromSeqElems = foldSeqFlatten f empty
+-- | A version of fromSeq specialised for scalar sequences.
+--
+fromSeqE :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
+fromSeqE = foldSeqFlatten f empty
   where
     f a0 _ a1 = a0 ++ a1
 
-fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
-fromSeqShapes = foldSeqFlatten f empty
+-- | Get a vector returning all the shapes of a sequence.
+--
+shapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
+shapes = foldSeqFlatten f empty
   where
     f sh0 sh1 _ = sh0 ++ sh1
+
+-- | Create a scalar sequence from a vector
+--
+toSeqE ::Elt a => Acc (Vector a) -> Seq [Scalar a]
+toSeqE = toSeqInner
 
 -- | Sequence an array on the innermost dimension.
 --
@@ -1866,11 +1880,23 @@ toSeqOuter2 :: Elt a => Acc (Array DIM2 a) -> Seq [Array DIM1 a]
 toSeqOuter2 a = toSeq (Z :. Split :. All) a
 
 -- | Sequence a 3-dimensional array on the outermost dimension.
+--
 toSeqOuter3 :: Elt a => Acc (Array DIM3 a) -> Seq [Array DIM2 a]
 toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
 
 -- | Generate a scalar sequence of a fixed given length, by applying
 -- the given scalar function at each index.
-generateSeq :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
-generateSeq n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+--
+generateSeqE :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
+generateSeqE n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+
+-- | Map over sequences specialised to scalar sequences.
+--
+mapSeqE :: (Elt a, Elt b) => (Exp a -> Exp b) -> Seq [Scalar a] -> Seq [Scalar b]
+mapSeqE f = mapSeq (map f)
+
+-- | ZipWith over sequences specialised to scalar sequences.
+--
+zipWithSeqE :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> Seq [Scalar a] -> Seq [Scalar b] -> Seq [Scalar c]
+zipWithSeqE f = zipWithSeq (zipWith f)
 

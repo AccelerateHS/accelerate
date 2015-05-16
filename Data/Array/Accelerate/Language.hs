@@ -49,7 +49,7 @@ module Data.Array.Accelerate.Language (
   streamIn, toSeq,
 
   -- * Sequence transudcers
-  mapSeq, zipWithSeq, scanSeq,
+  mapSeq, zipWithSeq, scanSeqE,
 
   -- * Sequence consumers
   foldSeqFlatten,
@@ -519,12 +519,12 @@ zipWithSeq = Seq $$$ ZipWithSeq
 --
 --   Forall a. a0 + a = a = a + a0.
 --
-scanSeq :: Elt a
+scanSeqE :: Elt a
         => (Exp a -> Exp a -> Exp a)
         -> Exp a
         -> Seq [Scalar a]
         -> Seq [Scalar a]
-scanSeq = Seq $$$ ScanSeq
+scanSeqE = Seq $$$ ScanSeq
 
 -- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
 -- vecotor append (++) as the companion operator:
