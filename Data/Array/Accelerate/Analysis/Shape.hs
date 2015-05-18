@@ -257,10 +257,29 @@ evalShapeSeq s aenv senv =
            -- This acc argument will not be executed in each step of
            -- the sequence. Throw away the intermediate sizes:
           let arr = fst <$> runWriterT (evalDelayedOpenAcc acc aenv)
-          return $ PartialArray (sliceShape sl <$> (shapePartial =<< arr)) Nothing 
-        MapSeq     f _ x   -> evalDelayedOpenAfun1 f aenv (prjArraysPartial x senv)
-        ZipWithSeq f _ x y -> evalDelayedOpenAfun2 f aenv (prjArraysPartial x senv) (prjArraysPartial y senv)
+          return $ PartialArray (sliceShape sl <$> (shapePartial =<< arr)) Nothing
+        GeneralMapSeq p a _ -> evalDelayedOpenAcc   a (bringIntoScope p aenv senv)
+        MapSeq     f _ x    -> evalDelayedOpenAfun1 f aenv (prjArraysPartial x senv)
+        ZipWithSeq f _ x y  -> evalDelayedOpenAfun2 f aenv (prjArraysPartial x senv) (prjArraysPartial y senv)
         ScanSeq _ _ _      ->  return $ PartialArray (Just Z) Nothing
+
+bringIntoScope :: SeqPrelude aenv senv aenv' envReg
+                 -> ValPartial aenv -> ValPartial senv -> ValPartial aenv'
+bringIntoScope (SeqPrelude aconsts extc exts) aenv senv =
+  ext exts (ext extc aenv (eval aconsts)) senv
+  where
+    ext :: ExtReg a a' b c c' -> ValPartial a -> ValPartial b -> ValPartial c
+    ext ExtEmpty a _ = a
+    ext (ExtPush e x) a b = ext e a b `PushPartial` prjArraysPartial x b
+
+    eval :: Atuple Aconst arrs -> ValPartial arrs
+    eval NilAtup = EmptyPartial
+    eval (SnocAtup arrs a) = eval arrs `PushPartial` eval1 a
+
+    eval1 :: Aconst a -> ArraysPartial a
+    eval1 (SliceArr slix _ a) = PartialArray (Just (sliceShape slix (shape a))) Nothing
+    eval1 (ArrList _) = partialBottom
+    eval1 (RegArrList sh _) = PartialArray (Just sh) Nothing
 
 evalDelayedOpenAfun1 :: (Arrays a, Arrays b)
                      => DelayedOpenAfun aenv (a -> b)
@@ -286,7 +305,7 @@ evalDelayedOpenAcc (Manifest acc) aenv =
           -- If a is a variable, assume the shape is already accounted
           -- for.
           Manifest (Avar _) -> evalDelayedOpenAcc a aenv
-          
+
            -- Otherwise, temember the size of this intermediate
            -- result.
           _                 -> do

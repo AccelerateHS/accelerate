@@ -207,6 +207,27 @@ liftedSize a =
 
 -- |Lift a unary open array function
 --
+liftOpenAcc :: forall aenv aenv' a. Arrays a =>
+                 Strength
+              -> Context () aenv () aenv'
+              -> OpenAcc aenv   a
+              -> OpenAfun aenv' (Scalar Int -> Regular a)
+liftOpenAcc strength ctx (weaken SuccIdx -> acc)
+  | trace "liftOpenAcc" ("Starting " ++ show strength ++ " vectorisation") True
+  , IsC <- isArraysFlat (undefined :: a)
+  = case vectoriseOpenAcc Conservative (PushAccC ctx) (simpleSize (the avar0)) acc of
+      -- In the case that the body of the function does not depend on its argument,
+      -- conservative vectorisation will return the unmodified body. In this,
+      -- we just need to replicate the result.
+      AvoidedAcc a' | Size b s <- simpleSize (the avar0)
+                    -> Alam . Abody $ replicateC (inject $ Alet b $ inject $ Unit s) a'
+      -- Otherwise, we have the lifted body.
+      LiftedAcc  a' -> Alam . Abody $ a'
+liftOpenAcc _ _ _
+  = error "Unreachable"
+
+-- |Lift a unary open array function
+--
 liftOpenAfun1 :: forall aenv aenv' a b.
                  Strength
               -> Context () aenv () aenv'
@@ -2894,11 +2915,13 @@ vectoriseOpenSeq strength ctx seq =
         ZipWithSeq f _ x y
           | sequenceFreeAfun f -> ZipWithSeq (cvtAfun f) (Just (untup (liftOpenAfun2 strength ctx (cvtAfun f)))) x y
           | otherwise          -> ZipWithSeq (cvtAfun f) Nothing x y
+        GeneralMapSeq _ _ _    -> error "Fusion error"
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv senv t
     cvtC c =
       case c of
+        FoldSeqRegular _ _ _   -> error "Fusion error"
         FoldSeqFlatten _ f a x -> FoldSeqFlatten (Just (untup (flatFun f))) (cvtAfun f) (cvtA a) x
         Stuple t               -> Stuple (cvtCT t)
 
@@ -2915,14 +2938,36 @@ vectoriseOpenSeq strength ctx seq =
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t
     cvtA = vectoriseSeqOpenAcc strength ctx
 
+--    cvtAp :: SeqPrelude aenv senv env envReg -> OpenAcc env t -> OpenAcc env t
+--    cvtAp p = vectoriseSeqOpenAcc strength (extCtx p ctx)
+
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = vectoriseSeqOpenAfun strength ctx
 
+{-
+    extCtxReg :: SeqPrelude aenv senv env envReg
+              -> Context () aenv () aenv
+              -> Context () env () envReg
+    extCtxReg p@(SeqPrelude _ e1 e2) ctx = ctx `ext` e1 `ext` e2
+      where
+        ext :: forall a b a' b' x. Context () a () a' -> ExtReg a a' x b b' -> Context () b () b'
+        ext ctx ExtEmpty = ctx
+        ext ctx (ExtPush e1 _) = PushLAccC (ext ctx e1)
+
+    extCtx :: SeqPrelude aenv senv env envReg
+           -> Context () aenv () aenv
+           -> Context () env () env
+    extCtx (SeqPrelude _ e1 e2) ctx = ctx `ext` e1 `ext` e2
+      where
+        ext :: forall a b a' b' x. Context () a () a -> ExtReg a a' x b b' -> Context () b () b
+        ext ctx ExtEmpty = ctx
+        ext ctx (ExtPush e _) = PushAccC (ext ctx e)
+-}
     untup :: OpenAfun aenv t -> OpenAfun aenv t
     untup = untupleAfun BaseTupleMap
 
-    flatFun :: (Arrays t, Shape sh, Elt e) => OpenAfun aenv (t -> Vector sh -> Vector e -> t) -> OpenAfun aenv (t -> Regular (Array sh e) -> t)
-    flatFun f = Alam . Alam $ weakenA2 f `partApply` avar1 `partApply` fromHOAS asSegments avar0 `partApply` fromHOAS regularValues avar0
+    flatFun :: (Arrays t, Shape sh, Elt e) => OpenAfun aenv (t -> Vector sh -> Vector e -> t) -> OpenAfun aenv (Regular (Array sh e) -> t -> t)
+    flatFun f = Alam . Alam $ weakenA2 f `partApply` avar0 `partApply` fromHOAS asSegments avar1 `partApply` fromHOAS regularValues avar1
 
 stripExpCtx :: Context env aenv env aenv -> Context () aenv () aenv
 stripExpCtx c =

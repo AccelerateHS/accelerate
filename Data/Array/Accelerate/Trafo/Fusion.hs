@@ -45,16 +45,22 @@ module Data.Array.Accelerate.Trafo.Fusion (
 
 ) where
 
+-- TODO remove
+import Debug.Trace (trace)
+
 -- standard library
 import Prelude                                          hiding ( exp, until )
+import Control.Applicative                              ( pure, (<$>), (<*>) )
 
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
+import Data.Array.Accelerate.Array.Lifted               ( Regular, isArraysFlat, IsConstrained(..) )
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
                                                         , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
@@ -84,7 +90,7 @@ convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 --   in a sequence computation.
 convertSeq :: Bool -> Seq a -> DelayedSeq a
 convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
-  = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc s))
+  = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc (fuseSeq s)))
   where
     cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
     cvtE BaseEnv         = BaseEnv
@@ -202,7 +208,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
 
     -- Seq operations
-    Collect seq             -> Collect (convertOpenSeq fuseAcc seq)
+    Collect seq             -> Collect (convertOpenSeq fuseAcc (fuseSeq seq))
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -302,10 +308,12 @@ convertOpenSeq fuseAcc s =
                MapSeq f f' x       -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
                ZipWithSeq f f' x y -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
                ScanSeq f e x       -> ScanSeq (cvtF f) (cvtE e) x
+               GeneralMapSeq pre a a' -> GeneralMapSeq pre (manifest fuseAcc a) (manifest fuseAcc <$> a')
   where
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer DelayedOpenAcc aenv senv a
     cvtC c =
       case c of
+        FoldSeqRegular pre f a  -> FoldSeqRegular pre (cvtAF f) (manifest fuseAcc a)
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (manifest fuseAcc a) x
         Stuple t                -> Stuple (cvtCT t)
 
@@ -366,7 +374,6 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
 
         count :: UsesOfAcc OpenAcc
         count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
-
 
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
@@ -546,6 +553,398 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     collectD s | ExtendSeq env s' <- embedSeq embedAcc s
                = Embed (env `PushEnv` inject (Collect s')) (Done ZeroIdx)
 
+data DelayedProducer acc aenv senv a where
+  DoneP  :: Idx senv a -> DelayedProducer acc aenv senv a
+  YieldP :: Arrays a 
+         => SeqPrelude aenv senv env envReg
+         -> acc env a
+         -> Maybe (acc envReg (Regular a))
+         -> DelayedProducer acc aenv senv a
+
+-- Fuse after vectorization but before ordinary fusion.
+fuseSeq :: PreOpenSeq OpenAcc aenv () arrs -> PreOpenSeq OpenAcc aenv () arrs
+-- fuseSeq s = s -- Uncomment to disable sequence fusion.
+fuseSeq s | Just REFL <- matchOpenSeq s (fuseOpenSeq s) = s
+          | otherwise                                   = fuseSeq (fuseOpenSeq s)
+
+fuseOpenSeq :: forall aenv senv arrs. PreOpenSeq OpenAcc aenv senv arrs -> PreOpenSeq OpenAcc aenv senv arrs
+fuseOpenSeq s =
+  case s of
+    Producer p s0
+      | uses ZeroIdx s0 == 1
+      , Just s0' <- strSeq k $ subSeq (ZeroIdx, delayedP p) (fuseOpenSeq s0)
+      -> s0'
+      | otherwise
+      -> Producer p (fuseOpenSeq s0)
+    Consumer c -> Consumer c
+    Reify f x -> Reify f x
+  where
+    k :: Idx (senv, a) b -> Maybe (Idx senv b)
+    k ZeroIdx     = Nothing
+    k (SuccIdx x) = Just x
+
+    delayedP :: Producer OpenAcc aenv senv a -> DelayedProducer OpenAcc aenv (senv, a) a
+    delayedP p =
+      case p of
+        StreamIn arrs         -> shiftDelayedP $ YieldP (SeqPrelude (NilAtup `SnocAtup` ArrList arrs) (ExtEmpty `ExtPush` ZeroIdx) ExtEmpty) (OpenAcc (Avar ZeroIdx)) Nothing
+        ToSeq _ slix prox (OpenAcc (Use arr)) ->
+          shiftDelayedP $ YieldP (SeqPrelude (NilAtup `SnocAtup` SliceArr slix prox arr) (ExtEmpty `ExtPush` ZeroIdx) ExtEmpty) (OpenAcc (Avar ZeroIdx)) (Just (OpenAcc (Avar ZeroIdx)))
+        GeneralMapSeq p0 a a' -> shiftDelayedP $ YieldP p0 a a'
+        MapSeq f f' x         -> shiftDelayedP $ YieldP (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x)) (dF1 f) (dF1 <$> f')
+        ZipWithSeq f f' x y   -> shiftDelayedP $ YieldP (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x `ExtPush` y)) (dF2 f) (dF2 <$> f')
+        _                     -> DoneP ZeroIdx
+
+    dF1 :: PreOpenAfun OpenAcc aenv (a -> b) -> OpenAcc (aenv, a) b
+    dF1 (Alam (Abody acc)) = acc
+
+    dF2 :: PreOpenAfun OpenAcc aenv (a -> b -> c) -> OpenAcc ((aenv, a), b) c
+    dF2 (Alam (Alam (Abody acc))) = acc
+
+shiftDelayedP :: DelayedProducer OpenAcc aenv senv a -> DelayedProducer OpenAcc aenv (senv, b) a
+shiftDelayedP (DoneP x) = DoneP (SuccIdx x)
+shiftDelayedP (YieldP pre a a') = YieldP (shiftPre pre) a a'
+
+shiftPre :: SeqPrelude aenv senv env envReg -> SeqPrelude aenv (senv, a) env envReg
+shiftPre (SeqPrelude arrs ex ex') = SeqPrelude arrs ex (shiftEx ex')
+
+shiftEx :: ExtReg a a' x b b' -> ExtReg a a' (x, t) b b'
+shiftEx ExtEmpty = ExtEmpty
+shiftEx (ExtPush ex x) = shiftEx ex `ExtPush` SuccIdx x
+
+strSeq :: forall aenv senv senv' arrs. senv :?> senv' -> PreOpenSeq OpenAcc aenv senv arrs -> Maybe (PreOpenSeq OpenAcc aenv senv' arrs)
+strSeq k s =
+  case s of
+    Producer p s0 -> Producer <$> strP p <*> strSeq (under' k) s0
+    Consumer c -> Consumer <$> strC c
+    Reify f x -> Reify f <$> k x
+  where
+    strP :: Producer OpenAcc aenv senv a -> Maybe (Producer OpenAcc aenv senv' a)
+    strP p =
+      case p of
+        StreamIn arrs -> Just (StreamIn arrs)
+        ToSeq mf slix prox a -> Just (ToSeq mf slix prox a)
+        GeneralMapSeq p a a'
+          | PreStr pre' ka ka' <- strPrelude p k
+          -> GeneralMapSeq pre' <$> strengthen ka a <*>
+               case a' of
+                 Nothing -> Just Nothing
+                 Just x  -> Just <$> strengthen ka' x
+          | otherwise
+          -> Nothing
+        MapSeq f f' x -> MapSeq f f' <$> k x
+        ZipWithSeq f f' x y -> ZipWithSeq f f' <$> k x <*> k y
+        ScanSeq f z x -> ScanSeq f z <$> k x
+
+    strC :: Consumer OpenAcc aenv senv c -> Maybe (Consumer OpenAcc aenv senv' c)
+    strC c =
+      case c of
+        FoldSeqFlatten mf f a x -> FoldSeqFlatten mf f a <$> k x
+        FoldSeqRegular p f a
+          | PreStr pre' _ ka' <- strPrelude p k
+          -> FoldSeqRegular pre' <$> strengthen ka' f <*> pure a
+          | otherwise
+          -> Nothing
+        Stuple tup ->
+          let f :: Atuple (Consumer OpenAcc aenv senv) t -> Maybe (Atuple (Consumer OpenAcc aenv senv') t)
+              f NilAtup = Just NilAtup
+              f (SnocAtup tup c0) = SnocAtup <$> f tup <*> strC c0
+          in Stuple <$> f tup
+
+subAcc :: forall aenv t arrs. (Arrays t, Arrays arrs)
+       => (Idx aenv t, OpenAcc aenv t)
+       -> OpenAcc aenv arrs
+       -> OpenAcc aenv arrs
+subAcc (x0, a0) a = 
+  if count True x0 a == 1 -- Inline if only used one place.
+    then rebuildA k' a
+    else OpenAcc (a0 `alet` rebuildA k a) -- Otherwise, let-bind in front.
+  where
+    
+    k' :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc aenv a'
+    k' x | Just REFL <- matchIdx x x0
+         , OpenAcc a0' <- a0
+         = a0'
+         | otherwise
+         = Avar x
+    
+    k :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc (aenv, t) a'
+    k x | Just REFL <- matchIdx x x0
+        = Avar ZeroIdx
+        | otherwise
+        = Avar (SuccIdx x)
+
+    count :: UsesOfAcc OpenAcc
+    count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
+    
+    alet bnd body
+      | OpenAcc (Avar ZeroIdx) <- body
+      , OpenAcc x              <- bnd
+      = x
+
+      | OpenAcc (Aprj tupix (OpenAcc (Avar ix))) <- bnd
+      , OpenAcc (Alet bnd' body')           <- body
+      , Just REFL                           <- matchAcc (weaken SuccIdx bnd) bnd'
+      = Alet (OpenAcc $ Aprj tupix (OpenAcc (Avar ix))) (inlineA body' (Avar ZeroIdx))
+
+      | otherwise
+      = Alet bnd body
+
+
+subSeq :: forall aenv senv t arrs.
+          (Idx senv t, DelayedProducer OpenAcc aenv senv t)
+       -> PreOpenSeq OpenAcc aenv senv arrs
+       -> PreOpenSeq OpenAcc aenv senv arrs
+subSeq (x0, p0) s =
+  case s of
+    Producer p s0
+      | usesP x0 p == 1 -> Producer (subP p) (subSeq (SuccIdx x0, shiftDelayedP p0) s0)
+      | otherwise       -> Producer p        (subSeq (SuccIdx x0, shiftDelayedP p0) s0)
+    Consumer c          -> Consumer (subC c)
+    Reify f x  -> Reify f x
+  where
+    subP :: Producer OpenAcc aenv senv b -> Producer OpenAcc aenv senv b
+    subP p =
+      case p of
+        StreamIn arrs -> StreamIn arrs
+        ToSeq mf slix prox a -> ToSeq mf slix prox a
+        GeneralMapSeq pre0 a0 a0' -> subGeneral pre0 a0 a0'
+        MapSeq f f' x -> subGeneral (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x)) (dF1 f) (dF1 <$> f')
+        ZipWithSeq f f' x y -> subGeneral (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x `ExtPush` y)) (dF2 f) (dF2 <$> f')
+        ScanSeq f z x -> ScanSeq f z x
+
+    subGeneral :: forall a env envReg. Arrays a => SeqPrelude aenv senv env envReg -> OpenAcc env a -> Maybe (OpenAcc envReg (Regular a)) -> Producer OpenAcc aenv senv a
+    subGeneral pre0 a0 a0' =
+      case p0 of
+        YieldP pre1 (a1::OpenAcc aenv' t) a1'
+          | IsC <- isArraysFlat (undefined :: a)
+          , IsC <- isArraysFlat (undefined :: t)
+          , PreAppend pre w0 w1 w0' w1' <- appendPrelude pre0 pre1
+          , a1'w <- weaken w1' <$> a1'
+          , Just x0'  <- preLookup pre x0
+          , Just x0'r <- preLookupReg pre x0
+          -> GeneralMapSeq pre (subAcc (x0', weaken w1 a1) (weaken w0 a0)) (subAcc <$> ((,) x0'r <$> a1'w) <*> (weaken w0' <$> a0'))
+        _ -> GeneralMapSeq pre0 a0 a0'
+
+    dF1 :: PreOpenAfun OpenAcc aenv (a -> b) -> OpenAcc (aenv, a) b
+    dF1 (Alam (Abody acc)) = acc
+
+    dF2 :: PreOpenAfun OpenAcc aenv (a -> b -> c) -> OpenAcc ((aenv, a), b) c
+    dF2 (Alam (Alam (Abody acc))) = acc
+
+    subC :: Consumer OpenAcc aenv senv b -> Consumer OpenAcc aenv senv b
+    subC c
+      | usesC x0 c == 1
+      = case c of
+          FoldSeqFlatten (Just (Alam f')) _ a x -> subGeneralC (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x)) f' a
+          FoldSeqFlatten Nothing f a x -> FoldSeqFlatten Nothing f a x
+          FoldSeqRegular pre0 f a -> subGeneralC pre0 f a
+          Stuple tup ->
+            let f :: Atuple (Consumer OpenAcc aenv senv) tup -> Atuple (Consumer OpenAcc aenv senv) tup
+                f NilAtup = NilAtup
+                f (SnocAtup t c0) = f t `SnocAtup` subC c0
+            in Stuple $ f tup
+      | otherwise
+      = c
+
+    subGeneralC :: Arrays a => SeqPrelude aenv senv env envReg -> OpenAfun envReg (a -> a) -> OpenAcc aenv a -> Consumer OpenAcc aenv senv a
+    subGeneralC pre0 f a =
+      case p0 of
+        YieldP pre1 (_::OpenAcc aenv' t) a1'
+          | IsC <- isArraysFlat (undefined :: t)
+          , PreAppend pre _ _ w0' w1' <- appendPrelude pre0 pre1
+          , Just a1'w <- weaken w1' <$> a1'
+          , Just x0'r <- preLookupReg pre x0
+          , Alam (Abody bdy) <- weaken w0' f
+          -> FoldSeqRegular pre (Alam $ Abody $ subAcc (SuccIdx x0'r, weaken SuccIdx a1'w) bdy) a
+        _ -> FoldSeqRegular pre0 f a
+
+data ExtAppend a a' x b1 b2 b1' b2' where
+  ExtAppend :: ExtReg a a' x b b'
+         -> b1 :> b
+         -> b2 :> b
+         -> b1' :> b'
+         -> b2' :> b'
+         -> ExtAppend a a' x b1 b2 b1' b2'
+
+data ArrAppend arrs1 arrs2 where
+  ArrAppend :: Atuple Aconst arrs
+            -> arrs1 :> arrs
+            -> arrs2 :> arrs
+            -> ArrAppend arrs1 arrs2
+
+strPrelude :: SeqPrelude aenv senv env envReg -> senv :?> senv' -> PreStr aenv senv' env envReg
+strPrelude (SeqPrelude arrs ex ex') k
+  | ExtStr ex'' a b <- strExt ex' k
+  = PreStr (SeqPrelude arrs ex ex'') a b
+
+strExt :: ExtReg a a' x b b' -> x :?> x' -> ExtStr a a' x' b b'
+strExt ExtEmpty _ = ExtStr ExtEmpty Just Just
+strExt (ExtPush ex x) k =
+  case k x of
+    Nothing
+      | ExtStr ex' a b <- strExt ex k
+      -> ExtStr ex'
+           (\ x -> case x of ZeroIdx -> Nothing; SuccIdx x0 -> a x0)
+           (\ x -> case x of ZeroIdx -> Nothing; SuccIdx x0 -> b x0)
+    Just x'
+      | ExtStr ex' a b <- strExt ex k
+      -> ExtStr (ex' `ExtPush` x') (under' a) (under' b)
+
+data PreAppend aenv senv env1 env2 envReg1 envReg2 where
+  PreAppend :: SeqPrelude aenv senv env3 envReg3
+      -> env1 :> env3
+      -> env2 :> env3
+      -> envReg1 :> envReg3
+      -> envReg2 :> envReg3
+      -> PreAppend aenv senv env1 env2 envReg1 envReg2
+
+preLookup :: SeqPrelude aenv senv env envReg -> senv :?> env
+preLookup (SeqPrelude _ _ ex) = extLookup ex
+
+preLookupReg :: SeqPrelude aenv senv env envReg -> Idx senv t -> Maybe (Idx envReg (Regular t))
+preLookupReg (SeqPrelude _ _ ex) = extLookupReg ex
+
+extLookup :: forall a a' x b b'. ExtReg a a' x b b' -> x :?> b
+extLookup ExtEmpty _          = Nothing
+extLookup (ExtPush ext y) x
+  | Just REFL <- matchIdx x y = Just ZeroIdx
+  | otherwise                 = SuccIdx <$> extLookup ext x
+
+extLookupReg :: forall a a' x b b' t. ExtReg a a' x b b' -> Idx x t -> Maybe (Idx b' (Regular t))
+extLookupReg ExtEmpty _          = Nothing
+extLookupReg (ExtPush ext y) x
+  | Just REFL <- matchIdx x y = Just ZeroIdx
+  | otherwise                 = SuccIdx <$> extLookupReg ext x
+
+appendExt :: ExtReg a a' x b1 b1'
+          -> ExtReg a a' x b2 b2'
+          -> ExtAppend a a' x b1 b2 b1' b2'
+appendExt ex ExtEmpty = ExtAppend ex id (extShift ex) id (extShiftReg ex)
+appendExt ex1 (ExtPush ex2 x)
+  | ExtAppend ex w1 w2 w1' w2' <- appendExt ex1 ex2
+  = case (extLookup ex1 x, extLookupReg ex1 x) of
+      (Nothing, Nothing) -> ExtAppend (ExtPush ex x) (SuccIdx . w1) (under w2) (SuccIdx . w1') (under w2')
+      (Just y, Just y')  -> ExtAppend ex 
+                 w1 
+                 (\ x -> case x of ZeroIdx -> w1 y; SuccIdx x0 -> w2 x0) 
+                 w1' 
+                 (\ x -> case x of ZeroIdx -> w1' y'; SuccIdx x0 -> w2' x0)
+
+appendArrs :: Atuple Aconst arrs1 -> Atuple Aconst arrs2 -> ArrAppend arrs1 arrs2
+appendArrs arrs1 NilAtup = ArrAppend arrs1 id (error "empty function :: Idx () t -> Idx arrs1 t")
+appendArrs arrs1 (SnocAtup arrs2 a)
+  | ArrAppend arrs wa1 wa2 <- appendArrs arrs1 arrs2
+  = case arrLookup arrs1 a of
+      Nothing -> ArrAppend (arrs `SnocAtup` a) (SuccIdx . wa1) (under wa2)
+      Just y  -> ArrAppend arrs wa1 (\ x -> case x of ZeroIdx -> wa1 y; SuccIdx x0 -> wa2 x0)
+
+arrLookup :: Atuple Aconst arrs -> Aconst a -> Maybe (Idx arrs a)
+arrLookup NilAtup _ = Nothing
+arrLookup (SnocAtup tup a) a0
+  | Just REFL <- matchAconst a a0 = Just ZeroIdx
+  | otherwise                     = SuccIdx <$> arrLookup tup a0
+
+appendPrelude :: SeqPrelude aenv senv env1 envReg1
+              -> SeqPrelude aenv senv env2 envReg2
+              -> PreAppend aenv senv env1 env2 envReg1 envReg2
+appendPrelude (SeqPrelude arrs1 ex1 ex1') (SeqPrelude arrs2 ex2 ex2')
+  | ArrAppend arrs wa1 wa2 <- appendArrs arrs1 arrs2
+  , ExtAppend ex w1 w2 w1' w2' <- appendExt (weakenArrs wa1 ex1) (weakenArrs wa2 ex2)
+  , ExtWeak ex1'' s1 s1' <- extWeak ex1' w1 w1'
+  , ExtWeak ex2'' s2 s2' <- extWeak ex2' w2 w2'
+  , ExtAppend ex' q1 q2 q1' q2' <- appendExt ex1'' ex2''
+  = PreAppend (SeqPrelude arrs ex ex') (q1 . s1) (q2 . s2) (q1' . s1') (q2' . s2')
+
+data ExtWeak a a' x b b' where
+  ExtWeak :: ExtReg a a' x q q'
+             -> b  :> q
+             -> b' :> q'
+             -> ExtWeak a a' x b b'
+
+data PreStr aenv senv env envReg where
+  PreStr :: SeqPrelude aenv senv env' envReg'
+         -> env    :?> env'
+         -> envReg :?> envReg'
+         -> PreStr aenv senv env envReg
+
+data PreWeak aenv senv env envReg where
+  PreWeak :: SeqPrelude aenv senv env' envReg'
+          -> env    :> env'
+          -> envReg :> envReg'
+          -> PreWeak aenv senv env envReg
+
+weakenPrelude :: SeqPrelude aenv senv env envReg -> aenv :> aenv' -> PreWeak aenv' senv env envReg
+weakenPrelude (SeqPrelude arrs ex ex') k
+  | ExtWeak ex0  a b <- extWeak ex  k k
+  , ExtWeak ex0' c d <- extWeak ex' a b
+  = PreWeak (SeqPrelude arrs ex0 ex0') c d
+
+data ExtStr a a' x b b' where
+  ExtStr :: ExtReg a a' x q q'
+         -> b  :?> q
+         -> b' :?> q'
+         -> ExtStr a a' x b b'
+
+extWeak :: ExtReg a a' x b b'
+    -> a  :> c
+    -> a' :> c'
+    -> ExtWeak c c' x b b'
+extWeak ExtEmpty k k' = ExtWeak ExtEmpty k k'
+extWeak (ExtPush ex x) k k'
+  | ExtWeak ex0 k0 k0' <- extWeak ex k k'
+  = ExtWeak (ex0 `ExtPush` x) (under k0) (under k0')
+
+weakenArrs :: x :> x' -> ExtReg a a' x b b' -> ExtReg a a' x' b b'
+weakenArrs _ ExtEmpty = ExtEmpty
+weakenArrs k (ExtPush ex0 x) = weakenArrs k ex0 `ExtPush` k x
+
+under :: x :> y -> (x, a) :> (y, a)
+under _ ZeroIdx = ZeroIdx
+under k (SuccIdx x) = SuccIdx (k x)
+
+under' :: x :?> y -> (x, a) :?> (y, a)
+under' _ ZeroIdx = Just ZeroIdx
+under' k (SuccIdx x) = SuccIdx <$> k x
+
+uses :: Idx senv a -> PreOpenSeq acc aenv senv arrs -> Int
+uses idx s =
+  case s of
+    Producer p s0 -> usesP idx p + uses (SuccIdx idx) s0
+    Consumer c    -> usesC idx c
+    Reify _ x     -> usesX idx x
+
+usesX :: Idx senv a -> Idx senv b -> Int
+usesX x y | idxToInt x == idxToInt y = 1
+          | otherwise                = 0
+
+usesPre :: forall aenv senv env envReg a. Idx senv a -> SeqPrelude aenv senv env envReg -> Int
+usesPre idx (SeqPrelude _ _ ex) =
+  let f :: ExtReg c c' senv b b' -> Int
+      f ExtEmpty = 0
+      f (ExtPush ex0 x) = f ex0 + usesX idx x
+  in f ex `max` 1
+
+usesP :: Idx senv a -> Producer acc aenv senv b -> Int
+usesP idx p =
+  case p of
+    StreamIn{} -> 0
+    ToSeq{}    -> 0
+    GeneralMapSeq p _ _ -> usesPre idx p
+    MapSeq _ _ x -> usesX idx x
+    ZipWithSeq _ _ x y -> usesX idx x `max` usesX idx y
+    ScanSeq _ _ x -> usesX idx x
+
+usesC :: forall acc aenv senv a b. Idx senv a -> Consumer acc aenv senv b -> Int
+usesC idx c =
+  case c of
+    FoldSeqFlatten _ _ _ x -> usesX idx x
+    FoldSeqRegular p _ _ -> usesPre idx p
+    Stuple tup ->
+      let f :: Atuple (Consumer acc aenv senv) t -> Int
+          f NilAtup = 0
+          f (SnocAtup tup c0) = f tup + usesC idx c0
+      in f tup
+
 -- Move additional bindings for producer outside of sequence, so
 -- that producers may fuse with their arguments, resulting in
 -- actual sequencing.
@@ -572,6 +971,11 @@ embedSeq embedAcc s
         Reify f ix
           -> ExtendSeq env (Reify (cvtAF `fmap` (sink env `fmap` f)) ix)
 
+    sinkExtend :: Extend acc env env' -> env :> env'
+    sinkExtend BaseEnv       = id
+    sinkExtend (PushEnv e _) = SuccIdx . sinkExtend e
+
+
     travP :: forall arrs' aenv' senv.
              Producer acc aenv senv arrs'
           -> Extend acc aenv aenv'
@@ -582,6 +986,11 @@ embedSeq embedAcc s
       | Embed env' cc <- embedAcc (sink env a)
       = ExtendProducer env' (ToSeq (cvtAF `fmap` (sink env' `fmap` (sink env `fmap` f))) slix sh (inject (compute' cc)))
     travP (StreamIn arrs) _          = ExtendProducer BaseEnv (StreamIn arrs)
+    travP (GeneralMapSeq pre a a') env
+      | IsC <- isArraysFlat (undefined :: arrs')
+      , PreWeak pre' k k' <- weakenPrelude pre (sinkExtend env)
+      = ExtendProducer BaseEnv (GeneralMapSeq pre' (cvtA (weaken k a)) (cvtA `fmap` (weaken k' `fmap` a')))
+      | otherwise = error "should not happen"
     travP (MapSeq f f' x) env        = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x)
     travP (ZipWithSeq f f' x y) env  = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x y)
     travP (ScanSeq f e x) env        = ExtendProducer BaseEnv (ScanSeq (cvtF (sink env f)) (cvtE (sink env e)) x)
@@ -590,6 +999,11 @@ embedSeq embedAcc s
              Consumer acc aenv senv arrs'
           -> Extend acc aenv aenv'
           -> Consumer acc aenv' senv arrs'
+    travC (FoldSeqRegular pre f a) env
+      | IsC <- isArraysFlat (undefined :: arrs')
+      , PreWeak pre' _ k' <- weakenPrelude pre (sinkExtend env)
+      = FoldSeqRegular pre' (cvtAF (weaken k' f)) (cvtA (sink env a))
+      | otherwise = error "should not happen"
     travC (FoldSeqFlatten f' f a x) env = FoldSeqFlatten (cvtAF `fmap` (sink env `fmap` f')) (cvtAF (sink env f)) (cvtA (sink env a)) x
     travC (Stuple t) env = Stuple (cvtCT t)
       where
@@ -778,6 +1192,11 @@ instance Kit acc => Sink (SinkSeq acc senv) where
         case p of
           StreamIn arrs        -> StreamIn arrs
           ToSeq f slix sh a    -> ToSeq (weaken k `fmap` f) slix sh (weaken k a)
+          GeneralMapSeq pre a a'
+            | IsC <- isArraysFlat (undefined :: a)
+            , PreWeak pre' k1 k1' <- weakenPrelude pre k
+            -> GeneralMapSeq pre' (weaken k1 a) (weaken k1' `fmap` a')
+            | otherwise -> error "should not happen"
           MapSeq f f' x        -> MapSeq (weaken k f) (weaken k `fmap` f') x
           ZipWithSeq f f' x y  -> ZipWithSeq (weaken k f) (weaken k `fmap` f') x y
           ScanSeq f a x        -> ScanSeq (weaken k f) (weaken k a) x
@@ -785,6 +1204,11 @@ instance Kit acc => Sink (SinkSeq acc senv) where
       weakenC :: forall a. Consumer acc aenv senv a -> Consumer acc aenv' senv a
       weakenC c =
         case c of
+          FoldSeqRegular pre f a
+            | IsC <- isArraysFlat (undefined :: a)
+            , PreWeak pre' _ k1' <- weakenPrelude pre k
+            -> FoldSeqRegular pre' (weaken k1' f) (weaken k a)
+            | otherwise -> error "should not happen"
           FoldSeqFlatten f' f a x -> FoldSeqFlatten (weaken k `fmap` f') (weaken k f) (weaken k a) x
           Stuple t                ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
@@ -1283,6 +1707,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                 (case p of
                    StreamIn arrs        -> StreamIn arrs
                    ToSeq f slix sh a    -> ToSeq (cvtAF `fmap` f) slix sh (cvtA a)
+                   GeneralMapSeq pre a a' ->
+                     GeneralMapSeq pre
+                       (kmap (replaceA (weaken (seqPreludeShift pre) sh') (weaken (seqPreludeShift pre) f') (weaken (seqPreludeShift pre) avar)) a)
+                       (kmap (replaceA (weaken (seqPreludeShiftReg pre) sh') (weaken (seqPreludeShiftReg pre) f') (weaken (seqPreludeShiftReg pre) avar)) <$> a')
                    MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
                    ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
                    ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x)
@@ -1294,6 +1722,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtC :: Consumer acc aenv senv s -> Consumer acc aenv senv s
         cvtC c =
           case c of
+            FoldSeqRegular pre (Alam (Abody acc)) a ->
+              FoldSeqRegular pre
+                       (Alam $ Abody $ kmap (replaceA (weaken (SuccIdx . seqPreludeShiftReg pre) sh') (weaken (SuccIdx . seqPreludeShiftReg pre) f') (weaken (SuccIdx . seqPreludeShiftReg pre) avar)) acc)
+                       (cvtA a)
             FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
             Stuple t                -> Stuple (cvtCT t)
 

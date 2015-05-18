@@ -157,6 +157,8 @@ prettySeq prettyAcc alvl llvl wrap seq =
     Reify f ix    -> ["reify" ..$ [ppMaybeAF f, var (idxToInt ix)]]
   where
     var n          = char 's' <> int n
+    avar n         = char 'a' <> int n
+    cvar n         = char 'c' <> int n    
     name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
     name ..$ docs = wrap $ hang (text name) 2 (sep docs)
 
@@ -193,18 +195,41 @@ prettySeq prettyAcc alvl llvl wrap seq =
         StreamIn _          -> "streamIn"   .$ [ text "[..]" ]
         ToSeq f slix _ a    -> "toSeq"      .$ [ ppMaybeAF f, ppSlix slix, ppA a ]
         MapSeq f f' x       -> "mapSeq"     .$ [ ppAF f, ppMaybeAF f', ppX x ]
+        GeneralMapSeq pre a a' 
+          | (ppre, alvl') <- prettyPre pre alvl
+          -> "generalMapSeq" .$ [ppre, prettyAcc alvl' parens a, case a' of Nothing -> text "Nothing"; Just a0' -> parens (text "Just" <+> prettyAcc alvl parens a0')]
         ZipWithSeq f f' x y -> "zipWithSeq" .$ [ ppAF f, ppMaybeAF f', ppX x, ppX y ]
         ScanSeq f e x       -> "foldSeq"    .$ [ ppF f, ppE e, ppX x ]
 
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
+        FoldSeqRegular pre f a  
+          | (ppre, alvl') <- prettyPre pre alvl
+          -> "foldSeqRegular" ..$ [ ppre , parens (prettyPreAfun prettyAcc alvl' f), ppA a ]
         FoldSeqFlatten f' f a x -> "foldSeqFlatten" ..$ [ ppMaybeAF f', ppAF f, ppA a, ppX x ]
         Stuple t                -> tuple (prettyT t)
 
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
     prettyT NilAtup        = []
     prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
+
+    prettyPre :: SeqPrelude aenv senv env envReg -> Int -> (Doc, Int)
+    prettyPre (SeqPrelude arrs ex1 ex2) alvl0 = 
+      let (pex1, alvl1) = prettyExt cvar ex1 alvl0
+          (pex2, alvl2) = prettyExt var  ex2 alvl1
+      in (parens (prettyAtuple ppAconst alvl (toAconstT' arrs) $$ brackets (hsep pex1) <+> brackets (hsep pex2)), alvl2)
+    
+    prettyExt :: (Int -> Doc) -> ExtReg a a' x b b' -> Int -> ([Doc], Int)
+    prettyExt _  ExtEmpty alvl = ([], alvl)
+    prettyExt pv (ExtPush ex x) alvl =
+      let (docs, alvl') = prettyExt pv ex (alvl + 1)
+      in (avar alvl <+> text ":=" <+> pv (idxToInt x) : docs, alvl')
+    
+    ppAconst :: PrettyAcc Aconst'
+    ppAconst _ _ (Aconst' (SliceArr slix _ a))   = "sliceArr"    ..$ [ ppSlix slix, prettyArrays (arrays a) a ]
+    ppAconst _ _ (Aconst' (ArrList _))           = "arrList"     ..$ [ text "[..]" ]
+    ppAconst _ _ (Aconst' (RegArrList _ _))      = "regArrList"  ..$ [ text "[..]" ]
 
 -- Pretty print a function over array computations.
 --

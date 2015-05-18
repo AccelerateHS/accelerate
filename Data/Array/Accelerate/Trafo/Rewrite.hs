@@ -120,6 +120,7 @@ convertSegmentsSeq seq =
       case p of
         StreamIn arrs        -> StreamIn arrs
         ToSeq f sl slix a    -> ToSeq (cvtAfun `fmap` f) sl slix (cvtA a)
+        GeneralMapSeq pre a a' -> GeneralMapSeq pre (cvtA a) (cvtA `fmap` a')
         MapSeq f f' x        -> MapSeq (cvtAfun f) (cvtAfun `fmap` f') x
         ZipWithSeq f f' x y  -> ZipWithSeq (cvtAfun f) (cvtAfun `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
@@ -127,6 +128,7 @@ convertSegmentsSeq seq =
     cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
     cvtC c =
       case c of
+        FoldSeqRegular pre f a  -> FoldSeqRegular pre (cvtAfun f) (cvtA a)
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAfun `fmap` f') (cvtAfun f) (cvtA a) x
         Stuple t                -> Stuple (cvtCT t)
 

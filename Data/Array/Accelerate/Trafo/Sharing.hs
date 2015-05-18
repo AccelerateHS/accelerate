@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE ViewPatterns         #-}
 {-# OPTIONS_GHC -fno-warn-orphans        #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -361,7 +362,9 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
         StreamIn arrs               -> producer $ AST.StreamIn arrs
         ToSeq slix acc              -> producer $ mkToSeq slix (cvtA acc)
         MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) Nothing (asIdx x)
+--        MapSeq (cvtAF1 -> Alam (Abody acc)) x -> producer $ AST.GeneralMapSeq (SeqPrelude AconstsEmpty ExtEmpty (ExtEmpty `ExtPush` asIdx x)) acc Nothing
         ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) Nothing (asIdx x) (asIdx y)
+--        ZipWithSeq (cvtAF2 -> Alam (Alam (Abody acc))) x y -> producer $ AST.GeneralMapSeq (SeqPrelude AconstsEmpty ExtEmpty (ExtEmpty `ExtPush` asIdx x `ExtPush` asIdx y)) acc Nothing        
         ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where

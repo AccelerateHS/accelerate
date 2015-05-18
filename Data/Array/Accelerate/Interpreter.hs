@@ -47,6 +47,9 @@ module Data.Array.Accelerate.Interpreter (
 
 ) where
 
+-- Tmp TODO del
+import Debug.Trace
+
 -- standard libraries
 import Control.Monad
 import Control.Applicative                              ( (<$>) )
@@ -1067,7 +1070,6 @@ evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty =
 evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
 
 
-
 -- Sequence evaluation
 -- ---------------
 
@@ -1161,6 +1163,7 @@ data StreamP senv a where
   -- Stream scan skeleton.
   StreamScan :: (Val' senv -> s -> (Chunk a, s)) -- Chunk scanner.
              -> s                                -- Accumulator (internal state).
+             -> (Int -> s -> Int)                -- If I want n elements, how many can I get (in the current state)?
              -> StreamP senv a
 
 -- An executable consumer.
@@ -1168,11 +1171,10 @@ data StreamP senv a where
 data StreamC senv a where
 
   -- Stream reduction skeleton.
-  StreamFold :: Arrays a
-             => (s -> Chunk a -> s) -- Chunk consumer function.
-             -> (s -> r)            -- Finalizer function.
-             -> s                   -- Accumulator (internal state).
-             -> Idx senv a       -- Input stream.
+  StreamFold :: (s -> Val' senv -> s) -- Chunk consumer function.
+             -> (s -> r)              -- Finalizer function.
+             -> s                     -- Accumulator (internal state).
+             -> (Int -> s -> Int)     -- If I want n elements, how many can I get?
              -> StreamC senv r
 
   StreamStuple :: IsAtuple a
@@ -1195,20 +1197,20 @@ evalSeq conf s aenv = evalSeq' s
     evalSeq' (Producer _ s) = evalSeq' s
     evalSeq' (Consumer _)   =
       let maxElemSize = shapeTreeMaxSize <$> seqShapes s (valToValPartial aenv)
-          s0 = initSeq aenv maxElemSize s
           pd = maxStepSize (chunkSize conf) maxElemSize
-      in loop pd s0
+          s0 = initSeq aenv pd s
+      in loop pd 0 s0
     evalSeq' (Reify _ _) =
       let maxElemSize = shapeTreeMaxSize <$> seqShapes s (valToValPartial aenv)
-          s0 = initSeq aenv maxElemSize s
           pd = maxStepSize (chunkSize conf) maxElemSize
-      in reify pd s0
+          s0 = initSeq aenv pd s
+      in reify pd 0 s0
 
     -- Initialize the producers and the accumulators of the consumers
     -- with the given array enviroment.
     initSeq :: forall senv arrs'.
                 Val aenv
-             -> Maybe Int
+             -> Int
              -> PreOpenSeq DelayedOpenAcc aenv senv arrs'
              -> StreamDAG senv arrs'
     initSeq aenv k s =
@@ -1217,30 +1219,38 @@ evalSeq conf s aenv = evalSeq' s
           let execP = initProducer p k
               s'' = initSeq aenv k s'
           in StreamP execP s''
-        Consumer   c    -> StreamC (initConsumer c)
+        Consumer   c    -> StreamC (initConsumer c k)
         Reify    f ix   -> StreamR (flip evalOpenAfun aenv <$> f) ix
 
     -- Iterate the given sequence until it terminates.
     -- A sequence only terminates when one of the producers are exhausted.
     loop :: Arrays arrs
          => Int
+         -> Int
          -> StreamDAG () arrs
          -> arrs
-    loop n s =
-      let k = stepSize n s
-          (s', arrs0) = step s Empty' k
-      in if k < n then arrs0 else loop n s'
+    loop pd i s =
+      let k = stepSize pd s
+      in if k == 0
+            then returnOut s
+            else 
+              let (s', _) = step s Empty' (i, k)
+              in loop pd (i + k) s'
 
     -- Iterate the given sequence until it terminates.
     -- A sequence only terminates when one of the producers are exhausted.
     reify :: Arrays a
           => Int
+          -> Int
           -> StreamDAG () [a]
           -> [a]
-    reify n s =
-      let k = stepSize n s
-          (s', arrs0) = step s Empty' k
-      in if k < n then arrs0 else arrs0 ++ reify n s'
+    reify pd i s =
+      let k = stepSize pd s
+      in if k == 0
+            then []
+            else 
+              let (s', arrs0) = step s Empty' (i, k)
+              in arrs0 ++ reify pd (i + k) s'
 
     maxStepSize :: Int -> Maybe Int -> Int
     maxStepSize _            Nothing         = 1
@@ -1254,23 +1264,36 @@ evalSeq conf s aenv = evalSeq' s
         StreamP p s -> min (stepSize n s) $
           case p of
             StreamStreamIn _ xs -> length (take n xs)
+            StreamScan _ s f -> f n s
             _ -> n
+        StreamC c -> stepSizeC c
         _ -> n
+      where
+        stepSizeC :: StreamC senv a -> Int
+        stepSizeC c =
+          case c of
+            StreamFold _ _ s f -> f n s
+            StreamStuple tup ->
+              let f :: Atuple (StreamC senv) t -> Int
+                  f NilAtup = n
+                  f (SnocAtup tup c) = f tup `min` stepSizeC c
+              in f tup
+            _ -> n
 
     -- One iteration of a sequence.
     step :: forall senv arrs'.
             StreamDAG senv arrs'
          -> Val' senv
-         -> Int
+         -> (Int, Int)
          -> (StreamDAG senv arrs', arrs')
-    step s senv k =
+    step s senv (i, k) =
       case s of
         StreamP p s' ->
-          let (c', p') = produce p senv k
-              (s'', a) = step s' (senv `Push'` c') k
+          let (c', p') = produce p senv (i, k)
+              (s'', a) = step s' (senv `Push'` c') (i, k)
           in (StreamP p' s'', a)
         StreamC   c  ->
-          let (c', a) = consume c senv
+          let (c', a) = consume c senv (i, k)
           in  (StreamC c', a)
         StreamR (Just f) x -> (StreamR (Just f) x, [f (prj' x senv) (unitOp i) | i <- [0..k-1]])
         StreamR Nothing x -> (StreamR Nothing x, toListChunk (prj' x senv))
@@ -1289,15 +1312,16 @@ evalSeq conf s aenv = evalSeq' s
 
     initProducer :: forall a senv.
                     Producer DelayedOpenAcc aenv senv a
-                 -> Maybe Int
+                 -> Int
                  -> StreamP senv a
     initProducer p k =
       case p of
         StreamIn arrs -> StreamStreamIn 1 arrs
         ToSeq _ sliceIndex slix acc -> initToSeq sliceIndex slix acc k
         MapSeq f f' x       -> initMapSeq f f' x k
+        GeneralMapSeq p a a' -> initGeneralMapSeq p a a' k
         ZipWithSeq f f' x y -> initZipWithSeq f f' x y k
-        ScanSeq f e x       -> StreamScan scanner (evalE e)
+        ScanSeq f e x       -> StreamScan scanner (evalE e) (\ n _ -> n)
           where
             scanner senv a =
               let (v1, a') = scanl'Op (evalF f) a (delayArray (chunkElems (prj' x senv)))
@@ -1305,20 +1329,32 @@ evalSeq conf s aenv = evalSeq' s
 
     initConsumer :: forall a senv.
                     Consumer DelayedOpenAcc aenv senv a
+                 -> Int
                  -> StreamC senv a
-    initConsumer c =
+    initConsumer c k =
       case c of
+        FoldSeqRegular (SeqPrelude arrs0 ex ex') f a ->
+          let a0 = evalA a
+              consumer (a, arrs) senv =
+                let aenv' = extendValReg (SeqPrelude arrs ex ex') k senv
+                in (evalOpenAfun f aenv' a, dropArrs k arrs)
+          in StreamFold
+               consumer 
+               fst 
+               (a0, evalArrs arrs0) 
+               (\ n -> lenArrs n . snd)
         FoldSeqFlatten _ f acc x ->
           let f' = evalAF f
               a0 = evalA acc
-              consumer a c =
-                let n = length' c
-                in f' a (fromList (Z:.n) (replicate n (chunkShape c))) (chunkElems c)
-          in StreamFold consumer id a0 x
+              consumer a senv =
+                let c = prj' x senv
+                    k0 = length' c
+                in f' a (fromList (Z:.k0) (replicate k (chunkShape c))) (chunkElems c)
+          in StreamFold consumer id a0 (\ n _ -> n)
         Stuple t ->
           let initTup :: Atuple (Consumer DelayedOpenAcc aenv senv) t -> Atuple (StreamC senv) t
               initTup NilAtup        = NilAtup
-              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer c)
+              initTup (SnocAtup t c) = SnocAtup (initTup t) (initConsumer c k)
           in StreamStuple (initTup t)
 
     delayed :: DelayedOpenAcc aenv (Array sh e) -> Delayed (Array sh e)
@@ -1332,69 +1368,147 @@ evalSeq conf s aenv = evalSeq' s
               => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
               -> proxy slix
               -> DelayedOpenAcc aenv (Array sh e)
-              -> Maybe Int
+              -> Int
               -> StreamP senv (Array sl e)
     initToSeq sliceIndex slix acc k =
       case acc of
-        AST.Manifest (Use arr) -> 
-          case k of
-            Just n  -> StreamStreamIn n (toSeqOp sliceIndex slix (toArr arr))
-            Nothing -> StreamStreamIn 1 (toSeqOp sliceIndex slix (toArr arr))
+        AST.Manifest (Use arr) -> StreamStreamIn k (toSeqOp sliceIndex slix (toArr arr))
         _-> 
           case delayed acc of
-            Delayed sh ix _ ->
-              case k of
-                Just n  -> StreamStreamIn n (toSeqOp sliceIndex slix (newArray sh ix))
-                Nothing -> StreamStreamIn 1 (toSeqOp sliceIndex slix (newArray sh ix))
+            Delayed sh ix _ -> StreamStreamIn k (toSeqOp sliceIndex slix (newArray sh ix))
 
     initMapSeq :: forall a b senv. (Arrays a, Arrays b)
                => PreOpenAfun DelayedOpenAcc aenv (a -> b)
                -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Regular a -> Regular b))
                -> Idx senv a
-               -> Maybe Int
+               -> Int
                -> StreamP senv b
     initMapSeq f mf x k =
-       case (k, mf) of
-         (Just _, Just f')  -> StreamMap (evalAF f'           . prj' x)
-         _                  -> StreamMap (mapChunk (evalAF f) . prj' x)
+       case mf of
+         Just f' | k > 1  -> StreamMap (\ senv -> evalAF f' (prj' x senv))
+         _                -> StreamMap (\ senv -> mapChunk (evalAF f) (prj' x senv))
 
     initZipWithSeq :: forall a b c senv. (Arrays a, Arrays b, Arrays c)
                => PreOpenAfun DelayedOpenAcc aenv (a -> b -> c)
                -> Maybe (PreOpenAfun DelayedOpenAcc aenv (Regular a -> Regular b -> Regular c))
                -> Idx senv a
                -> Idx senv b
-               -> Maybe Int
+               -> Int
                -> StreamP senv c
     initZipWithSeq f mf x y k =
-       case (k, mf) of
-         (Just _, Just f') -> StreamMap (\ senv -> evalAF f'               (prj' x senv) (prj' y senv))
-         _                 -> StreamMap (\ senv -> zipWithChunk (evalAF f) (prj' x senv) (prj' y senv))
+       case mf of
+         Just f' | k > 1 -> StreamMap (\ senv -> evalAF f'               (prj' x senv) (prj' y senv))
+         _               -> StreamMap (\ senv -> zipWithChunk (evalAF f) (prj' x senv) (prj' y senv))
 
-produce :: Arrays a => StreamP senv a -> Val' senv -> Int -> (Chunk a, StreamP senv a)
-produce p senv k =
+    initGeneralMapSeq :: forall a senv env envReg. (Arrays a)
+                      => SeqPrelude aenv senv env envReg
+                      -> DelayedOpenAcc env a   
+                      -> Maybe (DelayedOpenAcc envReg (Regular a))
+                      -> Int
+                      -> StreamP senv a
+    initGeneralMapSeq p@(SeqPrelude arrs0 ex ex') a ma k =
+      case ma of
+        Just a' | k > 1 -> 
+          StreamScan 
+            (\ senv arrs -> (evalOpenAcc a' (extendValReg (SeqPrelude arrs ex ex') k senv), dropArrs k arrs))
+            (evalArrs arrs0)
+            lenArrs
+--        _                  -> 
+--          StreamScan (\ senv arrs -> fromListChunk [evalOpenAcc a (_ arrs senv)]) (0, n) (\ _ _ -> 1)
+        
+    evalArrs :: Atuple Aconst a -> Atuple Aconst a
+    evalArrs NilAtup = NilAtup
+    evalArrs (SnocAtup arrs a) = evalArrs arrs `SnocAtup` evalAconst a
+    
+    evalAconst :: Aconst a -> Aconst a
+    evalAconst (SliceArr slix prox arr) = ArrList (toSeqOp slix prox arr)
+    evalAconst (ArrList arrs) = ArrList arrs
+    evalAconst (RegArrList _ arrs) = ArrList arrs
+
+    extendValReg :: forall senv env envReg. 
+                    SeqPrelude aenv senv env envReg
+                 -> Int
+                 -> Val' senv 
+                 -> Val envReg
+    extendValReg (SeqPrelude arrs e1 e2) k senv = ext senv (ext (takeArrs k arrs) aenv e1) e2
+      where
+        ext :: Val' x -> Val a' -> ExtReg a a' x b b' -> Val b'
+        ext _ aenv ExtEmpty = aenv
+        ext arrs aenv (ExtPush e x) = ext arrs aenv e `Push` prj' x arrs
+
+    extendVal :: forall senv env envReg. 
+                 SeqPrelude aenv senv env envReg
+              -> Int
+              -> Val' senv 
+              -> Val env
+    extendVal (SeqPrelude arrs e1 e2) i senv = ext senv (ext (takeArrs 1 arrs) aenv e1) e2
+      where
+        ext :: Val' x -> Val a -> ExtReg a a' x b b' -> Val b
+        ext _ aenv ExtEmpty = aenv
+        ext arrs aenv (ExtPush e x) = ext arrs aenv e `Push` head (toListChunk (prj' x arrs))
+
+    takeArrs :: forall arrs. Int -> Atuple Aconst arrs -> Val' arrs
+    takeArrs _ NilAtup = Empty'
+    takeArrs k (SnocAtup arrs a) = takeArrs k arrs `Push'` takeArr k a
+    
+    takeArr :: Int -> Aconst a -> Chunk a
+    takeArr k (ArrList as) = fromListChunk $ take k $ as
+
+    dropArrs :: forall arrs. Int -> Atuple Aconst arrs -> Atuple Aconst arrs
+    dropArrs _ NilAtup = NilAtup
+    dropArrs k (SnocAtup arrs a) = dropArrs k arrs `SnocAtup` dropArr k a
+    
+    dropArr :: Int -> Aconst a -> Aconst a
+    dropArr k (ArrList as) = ArrList $ drop k $ as
+
+    lenArrs :: forall arrs. Int -> Atuple Aconst arrs -> Int
+    lenArrs k NilAtup = k
+    lenArrs k (SnocAtup arrs a) = lenArrs k arrs `min` lenArr k a
+
+    lenArr :: Int -> Aconst a -> Int
+    lenArr k (ArrList as) = length (take k as)
+
+returnOut :: StreamDAG senv arrs -> arrs
+returnOut s =
+  case s of
+    StreamP _ s0 -> returnOut s0
+    StreamC c -> retC c
+    StreamR _ _ -> error "absurd"
+  where
+    retC :: StreamC senv arrs -> arrs
+    retC !c =
+      case c of
+        StreamFold _ g accum _ -> g accum
+        StreamStuple !t ->
+          let retT :: Atuple (StreamC senv) t -> t
+              retT NilAtup = ()
+              retT (SnocAtup t0 c0) = (retT t0, retC c0)
+          in toAtuple $ retT t
+
+produce :: Arrays a => StreamP senv a -> Val' senv -> (Int, Int) -> (Chunk a, StreamP senv a)
+produce p senv (i, k) =
   case p of
     StreamStreamIn k' xs ->
       let (xs', xs'') = (take k xs, drop k xs)
           c           = fromListChunk xs'
       in (c, StreamStreamIn k' xs'')
     StreamMap f -> (f senv, StreamMap f)
-    StreamScan scanner a ->
+    StreamScan scanner a sz ->
       let (c', a') = scanner senv a
-      in (c', StreamScan scanner a')
+      in (c', StreamScan scanner a' sz)
 
-consume :: forall senv a. StreamC senv a -> Val' senv -> (StreamC senv a, a)
-consume c senv =
+consume :: forall senv a. StreamC senv a -> Val' senv -> (Int, Int) -> (StreamC senv a, a)
+consume c senv k =
   case c of
-    StreamFold f g acc x ->
-      let c    = prj' x senv
-          acc' = f acc c
+    StreamFold f g acc sz ->
+      let acc' = f acc senv
       -- Even though we call g here, lazy evaluation should guarantee it is
       -- only ever called once.
-      in (StreamFold f g acc' x, g acc')
+      in (StreamFold f g acc' sz, g acc')
     StreamStuple t ->
       let consT :: Atuple (StreamC senv) t -> (Atuple (StreamC senv) t, t)
           consT NilAtup        = (NilAtup, ())
-          consT (SnocAtup t c) | (c', acc) <- consume c senv
+          consT (SnocAtup t c) | (c', acc) <- consume c senv k
                                , (t', acc') <- consT t
                                = (SnocAtup t' c', (acc', acc))
           (t', acc) = consT t

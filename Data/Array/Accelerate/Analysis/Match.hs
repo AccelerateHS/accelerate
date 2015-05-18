@@ -25,10 +25,12 @@ module Data.Array.Accelerate.Analysis.Match (
   matchOpenExp,  matchPreOpenExp,
   matchOpenFun,  matchPreOpenFun,
   matchPrimFun,  matchPrimFun',
+  matchOpenSeq,
 
   -- auxiliary
   matchIdx, matchTupleType,
   matchIntegralType, matchFloatingType, matchNumType, matchScalarType,
+  matchAconst,
 
   -- hashing expressions
   HashAcc,
@@ -75,7 +77,6 @@ type MatchAcc acc = forall aenv s t. acc aenv s -> acc aenv t -> Maybe (s :=: t)
 matchOpenAcc :: OpenAcc aenv s -> OpenAcc aenv t -> Maybe (s :=: t)
 matchOpenAcc (OpenAcc acc1) (OpenAcc acc2) =
   matchPreOpenAcc matchOpenAcc hashOpenAcc acc1 acc2
-
 
 matchPreOpenAcc
     :: forall acc aenv s t.
@@ -356,6 +357,10 @@ matchSeq m h = match
       | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2) -- Divisions are singleton.
       , Just REFL <- m a1 a2
       = gcast REFL
+    matchP (GeneralMapSeq pre1 a1 _) (GeneralMapSeq pre2 a2 _)
+      | Just (REFL, REFL) <- matchSeqPrelude pre1 pre2
+      , Just REFL <- m a1 a2
+      = Just REFL
     matchP (MapSeq f1 _ x1) (MapSeq f2 _ x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- matchIdx x1 x2
@@ -374,6 +379,11 @@ matchSeq m h = match
       = Nothing
 
     matchC :: Consumer acc aenv senv' u -> Consumer acc aenv senv' v -> Maybe (u :=: v)
+    matchC (FoldSeqRegular pre1 f1 a1) (FoldSeqRegular pre2 f2 a2)
+      | Just (REFL, REFL) <- matchSeqPrelude pre1 pre2
+      , Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- m a1 a2
+      = Just REFL
     matchC (FoldSeqFlatten _ f1 acc1 x1) (FoldSeqFlatten _ f2 acc2 x2)
       | Just REFL <- matchIdx x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
@@ -384,6 +394,45 @@ matchSeq m h = match
       = gcast REFL
     matchC _ _
       = Nothing
+
+matchAconst' :: MatchAcc Aconst'
+matchAconst' a1 a2 = matchAconst (runAconst' a1) (runAconst' a2)
+
+matchAconst :: forall s t. Aconst s -> Aconst t -> Maybe (s :=: t)
+matchAconst (SliceArr _ (_::proxy1 slix1) a1) (SliceArr _ (_::proxy2 slix2) a2)
+  | Just REFL <- gcast REFL :: Maybe (slix1 :=: slix2)
+  , Just REFL <- matchArrays (arrays a1) (arrays a2) a1 a2
+  = gcast REFL
+matchAconst (ArrList arrs1) (ArrList arrs2)
+      | unsafePerformIO $ do
+          sn1 <- makeStableName arrs1
+          sn2 <- makeStableName arrs2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+matchAconst (RegArrList _ arrs1) (RegArrList _ arrs2)
+      | unsafePerformIO $ do
+          sn1 <- makeStableName arrs1
+          sn2 <- makeStableName arrs2
+          return $! hashStableName sn1 == hashStableName sn2
+      = gcast REFL
+matchAconst _ _ = Nothing
+
+
+matchSeqPrelude :: SeqPrelude aenv senv env1 envReg1 -> SeqPrelude aenv senv env2 envReg2 -> Maybe (env1 :=: env2, envReg1 :=: envReg2)
+matchSeqPrelude (SeqPrelude arrs1 ex1 ex1') (SeqPrelude arrs2 ex2 ex2')
+  | Just REFL <- matchAtuple matchAconst' (toAconstT' arrs1) (toAconstT' arrs2)
+  , Just (REFL, REFL) <- matchExtRegular ex1 ex2
+  , Just (REFL, REFL) <- matchExtRegular ex1' ex2'                 
+  = Just (REFL, REFL)
+matchSeqPrelude _ _ = Nothing
+
+matchExtRegular :: ExtReg a a' x b1 b1' -> ExtReg a a' x b2 b2' -> Maybe (b1 :=: b2, b1' :=: b2')
+matchExtRegular ExtEmpty ExtEmpty = Just (REFL, REFL)
+matchExtRegular (ExtPush ex1 x1) (ExtPush ex2 x2)
+  | Just (REFL, REFL) <- matchExtRegular ex1 ex2
+  , Just REFL <- matchIdx x1 x2
+  = Just (REFL, REFL)
+matchExtRegular _ _ = Nothing
 
 -- Match arrays
 --
@@ -826,6 +875,8 @@ matchPrimFun' (PrimNEq s) (PrimNEq t)
 matchPrimFun' _ _
   = Nothing
 
+matchOpenSeq :: PreOpenSeq OpenAcc aenv senv s -> PreOpenSeq OpenAcc aenv senv t -> Maybe (s :=: t)
+matchOpenSeq = matchSeq matchOpenAcc hashOpenAcc
 
 -- Match reified types
 --
@@ -973,12 +1024,28 @@ hashPreOpenSeq hashAcc s =
         StreamIn arrs       -> unsafePerformIO $! hashStableName `fmap` makeStableName arrs
         ToSeq _ spec _ acc  -> hashWithSalt salt "ToSeq"         `hashA`  acc `hashWithSalt` show spec
         MapSeq f _ x        -> hashWithSalt salt "MapSeq"        `hashAF` f   `hashVar` x
+        GeneralMapSeq pre a _ -> hashWithSalt salt "GeneralMapSeq" `hashPre` pre `hashA` a
         ZipWithSeq f _ x y  -> hashWithSalt salt "ZipWithSeq"    `hashAF` f   `hashVar` x `hashVar` y
         ScanSeq f e x       -> hashWithSalt salt "ScanSeq"       `hashF`  f   `hashE`   e `hashVar` x
+
+    hashPre :: Int -> SeqPrelude aenv senv' env envReg -> Int
+    hashPre salt (SeqPrelude arrs0 ex ex') = hashWithSalt salt $ hashAtuple hashAconst (toAconstT' arrs0) `hashExt` ex `hashExt` ex'
+    
+    hashAconst :: HashAcc Aconst'
+    hashAconst (Aconst' a) =
+      case a of
+        SliceArr  spec _ arr -> hash "SliceArr" `hashWithSalt` hashArrays (arrays arr) arr `hashWithSalt` show spec
+        ArrList    arrs      -> hash "ArrList"  `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
+        RegArrList _ arrs    -> hash "RegArrList" `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
+
+    hashExt :: Int -> ExtReg a a' x b b' -> Int
+    hashExt salt ExtEmpty = salt
+    hashExt salt (ExtPush ex x) = hashExt salt ex `hashVar` x
 
     hashC :: Int -> Consumer acc aenv senv' a -> Int
     hashC salt c =
       case c of
+        FoldSeqRegular pre f a   -> hashWithSalt salt "FoldSeqRegular" `hashPre` pre `hashAF` f `hashA` a
         FoldSeqFlatten _ f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
         Stuple t                 -> hash "Stuple" `hashWithSalt` hashAtuple (hashC salt) t
 

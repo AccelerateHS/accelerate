@@ -205,6 +205,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case p of
         StreamIn arrs        -> StreamIn arrs
         ToSeq f sl slix a    -> ToSeq (shrinkAF <$> f) sl slix (shrinkAcc a)
+        GeneralMapSeq pre a a' -> GeneralMapSeq pre (shrinkAcc a) (shrinkAcc <$> a')
         MapSeq f f' x        -> MapSeq (shrinkAF f) (shrinkAF <$> f') x
         ZipWithSeq f f' x y  -> ZipWithSeq (shrinkAF f) (shrinkAF <$> f') x y
         ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
@@ -212,6 +213,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
     shrinkC c =
       case c of
+        FoldSeqRegular pre f a -> FoldSeqRegular pre (shrinkAF f) (shrinkAcc a)
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (shrinkAF <$> f') (shrinkAF f) (shrinkAcc a) x
         Stuple t                -> Stuple (shrinkCT t)
 
@@ -409,6 +411,7 @@ usesOfPreAcc withShape countAcc idx = count
       case p of
         StreamIn _           -> 0
         ToSeq _ _ _ a        -> countA a
+        GeneralMapSeq pre a _  -> countAcc withShape (weaken (seqPreludeShift pre) idx) a
         MapSeq f _ _         -> countAF f idx -- Count f'?
         ZipWithSeq f _ _ _   -> countAF f idx
         ScanSeq f e _        -> countF f + countE e
@@ -416,6 +419,8 @@ usesOfPreAcc withShape countAcc idx = count
     countC :: Consumer acc aenv senv arrs -> Int
     countC c =
       case c of
+        FoldSeqRegular pre (Alam (Abody f)) a -> countAcc withShape (weaken (SuccIdx . seqPreludeShiftReg pre) idx) f + countA a
+        FoldSeqRegular _ _ _   -> error "should not happen"
         FoldSeqFlatten _ f a _ -> countAF f idx + countA a
         Stuple t               -> countCT t
 

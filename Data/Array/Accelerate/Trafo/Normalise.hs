@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Trafo.Normalise (
 ) where
 
 import Prelude                                          hiding ( exp )
+import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Product
@@ -205,12 +206,30 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
         StreamIn arrs        -> StreamIn arrs
         ToSeq f sl slix a    -> ToSeq (cvtAF `fmap` f) sl slix (cvtA a)
         MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
+        GeneralMapSeq pre a a' 
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' m m' <- hackPre tmap pre
+          , Same a0  <- untupleAcc m a
+          , Just (Same a0') <- untupleAcc m' `fmap` a'
+          -> GeneralMapSeq pre' a0 (Just a0')
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' m m' <- hackPre tmap pre
+          , Same a0  <- untupleAcc m a
+          , Nothing <- untupleAcc m' `fmap` a'
+          -> GeneralMapSeq pre' a0 Nothing
+          | otherwise -> error "should not happen"
         ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
     cvtC :: forall senv t. Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv' senv t
     cvtC c =
       case c of
+        FoldSeqRegular pre f a  
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' _ m <- hackPre tmap pre
+          , Same a0 <- untupleAcc tmap a
+          -> FoldSeqRegular pre' (untupleAfun m f) a0
+          | otherwise -> error "should not happen"
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (same a) x
         Stuple t                -> Stuple (cvtCT t)
 
@@ -268,6 +287,35 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
           = OneTuple (TROne) (Use (fromArr t'))
           | otherwise
           = Same $ Use t
+
+data HackPre aenv senv env envReg where
+  HackPre :: SeqPrelude aenv senv env' envReg'
+        -> TupleMap env env'
+        -> TupleMap envReg envReg'
+        -> HackPre aenv senv env envReg
+
+data HackExt a a' x b b' where
+  HackExt :: ExtReg a a' x b0 b0'
+          -> TupleMap b b0
+          -> TupleMap b' b0'
+          -> HackExt a a' x b b'
+
+hackExt :: TupleMap a a0
+        -> TupleMap a' a0'
+        -> ExtReg a a' x b b'
+        -> HackExt a0 a0' x b b'
+hackExt v v' ExtEmpty = HackExt ExtEmpty v v'
+hackExt v v' (ExtPush ex x) 
+  | HackExt ex0 a b <- hackExt v v' ex
+  = HackExt (ex0 `ExtPush` x) (SnocTupleMap a) (SnocTupleMap b)
+
+hackPre :: TupleMap aenv aenv'
+        -> SeqPrelude aenv senv env envReg
+        -> HackPre aenv' senv env envReg
+hackPre v (SeqPrelude arrs0 ex ex') 
+  | HackExt ex0  a b <- hackExt v v ex
+  , HackExt ex0' c d <- hackExt a b ex'
+  = HackPre (SeqPrelude arrs0 ex0 ex0') c d
 
 untupleAfun :: TupleMap aenv aenv' -> OpenAfun aenv f -> OpenAfun aenv' f
 untupleAfun tm (Abody a) =

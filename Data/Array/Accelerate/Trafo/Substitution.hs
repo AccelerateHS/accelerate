@@ -33,7 +33,10 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
   -- ** Rebuilding terms
   RebuildAcc, Rebuildable(..), RebuildableAcc,
-  RebuildableExp(..), RebuildTup(..)
+  RebuildableExp(..), RebuildTup(..),
+
+  -- ** Sequence prelude environment shifting
+  seqPreludeShift, seqPreludeShiftReg, extShift, extShiftReg
 
 ) where
 
@@ -485,6 +488,39 @@ rebuildSeq k v seq =
     Reify (Just f) ix  -> Reify . Just  <$> rebuildAfun k v f <*> pure ix
     Reify Nothing  ix  -> pure $ Reify Nothing ix
 
+data HackPre f fa (acc :: * -> * -> *) aenv senv env envReg where
+  HackPre :: SeqPrelude aenv senv env' envReg'
+        -> (forall t. Arrays t => Idx env t -> f (fa acc env' t))
+        -> (forall t. Arrays t => Idx envReg t -> f (fa acc envReg' t))
+        -> HackPre f fa acc aenv senv env envReg
+
+data HackExt f fa (acc :: * -> * -> *) a a' x b b' where
+  HackExt :: ExtReg a a' x b0 b0'
+        -> (forall t. Arrays t => Idx b  t -> f (fa acc b0  t))
+        -> (forall t. Arrays t => Idx b' t -> f (fa acc b0' t))
+        -> HackExt f fa acc a a' x b b'
+
+hackExt ::(Applicative f, SyntacticAcc fa)
+     => RebuildAcc acc
+     -> (forall t. Arrays t => Idx a  t -> f (fa acc a0  t))
+     -> (forall t. Arrays t => Idx a' t -> f (fa acc a0' t))
+     -> ExtReg a a' x b b'
+     -> HackExt f fa acc a0 a0' x b b'
+hackExt _ v v' ExtEmpty = HackExt ExtEmpty v v'
+hackExt k v v' (ExtPush ex x)
+  | HackExt ex0 a b <- hackExt k v v' ex
+  = HackExt (ex0 `ExtPush` x) (shiftA k a) (shiftA k b)
+
+hackPre :: (Applicative f, SyntacticAcc fa)
+     => RebuildAcc acc
+     -> (forall t. Arrays t => Idx aenv t -> f (fa acc aenv' t))
+     -> SeqPrelude aenv senv env envReg
+     -> HackPre f fa acc aenv' senv env envReg
+hackPre k v (SeqPrelude arrs0 ex ex')
+  | HackExt ex0  a b  <- hackExt k v v ex
+  , HackExt ex0' c d <- hackExt k a b ex'
+  = HackPre (SeqPrelude arrs0 ex0 ex0') c d
+
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
@@ -495,6 +531,13 @@ rebuildP k v p =
     StreamIn arrs        -> pure (StreamIn arrs)
     ToSeq (Just f) sl slix acc  -> ToSeq . Just  <$> rebuildAfun k v f <*> pure sl <*> pure slix <*> k v acc
     ToSeq Nothing  sl slix acc  -> ToSeq Nothing sl slix <$> k v acc
+    GeneralMapSeq pre a Nothing
+      | HackPre pre' m _ <- hackPre k v pre
+      -> flip (GeneralMapSeq pre') Nothing <$> k m a
+    GeneralMapSeq pre a (Just a')
+      | HackPre pre' m m' <- hackPre k v pre
+      -> (. Just) . GeneralMapSeq pre' <$> k m a <*> k m' a'
+
     MapSeq f Nothing   x -> flip MapSeq Nothing <$> rebuildAfun k v f <*> pure x
     MapSeq f (Just f') x -> (. Just) . MapSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x
     ZipWithSeq f Nothing   x y -> flip ZipWithSeq Nothing <$> rebuildAfun k v f <*> pure x <*> pure y
@@ -508,6 +551,9 @@ rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer acc aenv' senv a)
 rebuildC k v c =
   case c of
+    FoldSeqRegular pre f a
+      | HackPre pre' _ m' <- hackPre k v pre
+      -> FoldSeqRegular pre' <$> rebuildAfun k m' f <*> k v a
     FoldSeqFlatten (Just f') f acc x -> FoldSeqFlatten . Just <$> rebuildAfun k v f' <*> rebuildAfun k v f <*> k v acc <*> pure x
     FoldSeqFlatten Nothing f acc x -> FoldSeqFlatten Nothing <$> rebuildAfun k v f <*> k v acc <*> pure x
     Stuple t               -> Stuple <$> rebuildT t
@@ -525,3 +571,18 @@ rebuildOpenAcc
     -> f (OpenAcc aenv' t)
 rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc
 
+
+
+seqPreludeShift :: SeqPrelude aenv senv env envReg -> aenv :> env
+seqPreludeShift (SeqPrelude _ ex1 ex2) = extShift ex2 . extShift ex1
+
+seqPreludeShiftReg :: SeqPrelude aenv senv env envReg -> aenv :> envReg
+seqPreludeShiftReg (SeqPrelude _ ex1 ex2) = extShiftReg ex2 . extShiftReg ex1
+
+extShift :: ExtReg a a' x b b' -> a :> b
+extShift ExtEmpty = id
+extShift (ExtPush ex0 _) = SuccIdx . extShift ex0
+
+extShiftReg :: ExtReg a a' x b b' -> a' :> b'
+extShiftReg ExtEmpty = id
+extShiftReg (ExtPush ex0 _) = SuccIdx . extShiftReg ex0

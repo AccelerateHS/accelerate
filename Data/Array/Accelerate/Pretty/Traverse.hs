@@ -84,6 +84,7 @@ travSeq f c l seq =
       case p of
         StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
         ToSeq _ slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
+        GeneralMapSeq pre a _ -> combine "GeneralMapSeq" [ travAcc f c l a ]
         MapSeq afun _ x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
         ZipWithSeq afun _ x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
         ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
@@ -100,6 +101,7 @@ travSeq f c l seq =
     travC :: forall a. Consumer OpenAcc aenv senv a -> m b
     travC co =
       case co of
+        FoldSeqRegular pre afun a -> combine "FoldSeqRegular" [ travAfun f c l afun, travAcc f c l a ]
         FoldSeqFlatten _ afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
         Stuple t -> travT t
 

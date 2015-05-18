@@ -96,6 +96,8 @@ module Data.Array.Accelerate.AST (
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
+  
+  ExtReg(..), SeqPrelude(..), Aconst(..), Aconst'(..), fromAconstT', toAconstT',
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -489,6 +491,45 @@ data PreOpenSeq acc aenv senv arrs where
            -> Idx senv arrs
            -> PreOpenSeq acc aenv senv [arrs]
 
+data ExtReg env renv env0 env' renv' where
+  ExtEmpty :: ExtReg env renv env0 env renv
+  ExtPush  :: Arrays a => ExtReg env renv env0 env' renv' -> Idx env0 a -> ExtReg env renv env0 (env', a) (renv', Regular a)
+
+
+-- Decorate aconst with an extra type variable aenv.
+newtype Aconst' aenv a = Aconst' { runAconst' :: Aconst a }
+
+toAconstT'   :: Atuple Aconst a -> Atuple (Aconst' aenv) a
+toAconstT' NilAtup = NilAtup
+toAconstT' (SnocAtup arr a) = SnocAtup (toAconstT' arr) (Aconst' a)
+
+fromAconstT' :: Atuple (Aconst' aenv) a -> Atuple Aconst a
+fromAconstT' NilAtup = NilAtup
+fromAconstT' (SnocAtup arr a) = SnocAtup (fromAconstT' arr) (runAconst' a)
+
+data Aconst a where
+  SliceArr :: (Elt slix, Shape sl, Shape sh, Elt e)
+           => SliceIndex  (EltRepr slix)
+                          (EltRepr sl)
+                          co
+                          (EltRepr sh)
+           -> proxy slix
+           -> Array sh e
+           -> Aconst (Array sl e)
+  ArrList :: Arrays a => [a] -> Aconst a
+  RegArrList :: (Shape sh, Elt e) 
+             => sh -> [Array sh e] -> Aconst (Array sh e)
+
+-- aenv:   original array env.
+-- senv:   sequence env.
+-- env:    new flat array env.
+-- envReg: new regular array env for chunking.
+data SeqPrelude aenv senv env envReg where
+  SeqPrelude :: Atuple Aconst arrs -- Array constants to copy (lazily if so required by backend).
+             -> ExtReg aenv aenv    arrs env' envReg' -- Bring array constants into aenv scope.
+             -> ExtReg env' envReg' senv env  envReg  -- Bring sequence bindings into aenv scope.
+             -> SeqPrelude aenv senv env envReg
+
 data Producer acc aenv senv a where
   -- Convert the given Haskell-list of arrays to a sequence.
   StreamIn :: Arrays a
@@ -505,6 +546,13 @@ data Producer acc aenv senv a where
            -> proxy slix
            -> acc aenv (Array sh e)
            -> Producer acc aenv senv (Array sl e)
+
+  -- Generalized fusible sequence producer.
+  GeneralMapSeq :: Arrays a
+       => SeqPrelude aenv senv env envReg
+       -> acc env a
+       -> Maybe (acc envReg (Regular a))
+       -> Producer acc aenv senv a
 
   -- Apply the given the given function to all elements of the given
   -- sequence.
@@ -556,10 +604,16 @@ data Consumer acc aenv senv a where
   --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
   --
   FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
-                 => Maybe (PreOpenAfun acc aenv (a -> Regular (Array sh e) -> a))
+                 => Maybe (PreOpenAfun acc aenv (Regular (Array sh e) -> a -> a))
                  -> PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
                  -> acc aenv a
                  -> Idx senv (Array sh e)
+                 -> Consumer acc aenv senv a
+
+  FoldSeqRegular :: Arrays a
+                 => SeqPrelude aenv senv env envReg
+                 -> PreOpenAfun acc envReg (a -> a)
+                 -> acc aenv a
                  -> Consumer acc aenv senv a
 
   Stuple :: (Arrays a, IsAtuple a)
