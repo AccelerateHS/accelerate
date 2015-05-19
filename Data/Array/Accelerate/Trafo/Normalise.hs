@@ -17,7 +17,7 @@
 
 module Data.Array.Accelerate.Trafo.Normalise (
 
-  untupleAcc, untupleAfun, TupleMap(..)
+  untupleAcc, untupleAfun, TupleMap(..), untupleSeq
 
 ) where
 
@@ -26,6 +26,7 @@ import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
 
 import Data.Proxy
@@ -111,6 +112,14 @@ data TupleReduction t t' where
   TRNest :: (Arrays t, IsAtuple t)
          => TupleReduction (TupleRepr t) t' -> TupleReduction ((),t) t'
 
+data HasReduction t where
+  HasReduction :: Arrays t' => TupleReduction t t' -> HasReduction t
+
+data UntupledAfun aenv f where
+  UTBody  :: Arrays t => Untupled (OpenAcc aenv) t -> UntupledAfun aenv t
+  SameLam :: Arrays a => UntupledAfun (aenv,a) b -> UntupledAfun aenv (a -> b)
+  OTLam   :: (Arrays a, Arrays a', IsAtuple a) => TupleReduction (TupleRepr a) a' -> UntupledAfun (aenv,a') b -> UntupledAfun aenv (a -> b)
+
 buildTuple :: Arrays t' => TupleReduction t t' -> OpenAcc aenv t' -> Atuple (OpenAcc aenv) t
 buildTuple TROne t'  = NilAtup `SnocAtup` t'
 buildTuple (TRNest tr) t' = NilAtup `SnocAtup` OpenAcc (Atuple (buildTuple tr t'))
@@ -155,7 +164,7 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
   Backpermute sh f a        -> Same $ Backpermute (cvtE sh) (cvtF f) (cvtA a)
   Stencil f b a             -> Same $ Stencil (cvtF f) b (cvtA a)
   Stencil2 f b1 a1 b2 a2    -> Same $ Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-  Collect s                 -> Same $ Collect (cvtS s)
+  Collect s                 -> Same $ Collect (untupleSeq tmap s)
   FoldSeg f z a s           -> Same $ FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
   Fold1Seg f a s            -> Same $ Fold1Seg (cvtF f) (cvtA a) (cvtA s)
 
@@ -193,57 +202,10 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
     cvtF :: forall t. Fun aenv t -> Fun aenv' t
     cvtF = untupleFun tmap
 
-    cvtS :: forall senv t. PreOpenSeq OpenAcc aenv senv t -> PreOpenSeq OpenAcc aenv' senv t
-    cvtS seq =
-      case seq of
-        Producer p s -> Producer (cvtP p) (cvtS s)
-        Consumer c   -> Consumer (cvtC c)
-        Reify f ix   -> Reify (cvtAF `fmap` f) ix
-
-    cvtP :: forall senv t. Producer OpenAcc aenv senv t -> Producer OpenAcc aenv' senv t
-    cvtP p =
-      case p of
-        StreamIn arrs        -> StreamIn arrs
-        ToSeq f sl slix a    -> ToSeq (cvtAF `fmap` f) sl slix (cvtA a)
-        MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
-        GeneralMapSeq pre a a' 
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' m m' <- hackPre tmap pre
-          , Same a0  <- untupleAcc m a
-          , Just (Same a0') <- untupleAcc m' `fmap` a'
-          -> GeneralMapSeq pre' a0 (Just a0')
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' m m' <- hackPre tmap pre
-          , Same a0  <- untupleAcc m a
-          , Nothing <- untupleAcc m' `fmap` a'
-          -> GeneralMapSeq pre' a0 Nothing
-          | otherwise -> error "should not happen"
-        ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
-        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
-
-    cvtC :: forall senv t. Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv' senv t
-    cvtC c =
-      case c of
-        FoldSeqRegular pre f a  
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' _ m <- hackPre tmap pre
-          , Same a0 <- untupleAcc tmap a
-          -> FoldSeqRegular pre' (untupleAfun m f) a0
-          | otherwise -> error "should not happen"
-        FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (same a) x
-        Stuple t                -> Stuple (cvtCT t)
-
-    cvtCT :: forall senv t. Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer OpenAcc aenv' senv) t
-    cvtCT NilAtup        = NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
-
     alet :: (Arrays bnd, Arrays body) => OpenAcc aenv bnd -> OpenAcc (aenv, bnd) body -> Untupled (PreOpenAcc OpenAcc aenv') body
-    alet (OpenAcc (Alet (OpenAcc (Aprj tix (OpenAcc (Avar ix)))) body')) body
-      = alet (OpenAcc (Aprj tix (OpenAcc (Avar ix)))) (OpenAcc (Alet body' (weaken ixt body)))
-      where
-        ixt :: forall aenv a b. (aenv, a) :> ((aenv, b), a)
-        ixt ZeroIdx      = ZeroIdx
-        ixt (SuccIdx ix) = SuccIdx (SuccIdx ix)
+    alet (OpenAcc (Avar ix)) body = extract `wrap` untupleAcc tmap  (inlineA body (Avar ix))
+    alet (OpenAcc (Alet bnd body')) body
+      = alet bnd (OpenAcc (Alet body' (weaken oneBelow body)))
     alet bnd body =
       case untupleAcc tmap bnd of
         OneTuple tr bnd' -> Alet bnd' `wrap` untupleAcc (OneTupleMap tmap tr) body
@@ -288,6 +250,69 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
           | otherwise
           = Same $ Use t
 
+untupleSeq :: forall senv aenv aenv' t.
+              TupleMap aenv aenv'
+           -> PreOpenSeq OpenAcc aenv senv t
+           -> PreOpenSeq OpenAcc aenv' senv t
+untupleSeq tmap seq =
+  case seq of
+    Producer p s -> Producer (cvtP p) (untupleSeq tmap s)
+    Consumer c   -> Consumer (cvtC c)
+    Reify f ix   -> Reify (cvtAF `fmap` f) ix
+  where
+    cvtP :: forall senv t. Producer OpenAcc aenv senv t -> Producer OpenAcc aenv' senv t
+    cvtP p =
+      case p of
+        StreamIn arrs        -> StreamIn arrs
+        ToSeq f sl slix a    -> ToSeq (cvtAF `fmap` f) sl slix (cvtA a)
+        MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
+        GeneralMapSeq pre a a'
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' m m' <- hackPre tmap pre
+          , Same a0  <- untupleAcc m a
+          , Just (Same a0') <- untupleAcc m' `fmap` a'
+          -> GeneralMapSeq pre' a0 (Just a0')
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' m m' <- hackPre tmap pre
+          , Same a0  <- untupleAcc m a
+          , Nothing <- untupleAcc m' `fmap` a'
+          -> GeneralMapSeq pre' a0 Nothing
+          | otherwise -> error "should not happen"
+        ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
+        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
+
+    cvtC :: forall senv t. Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv' senv t
+    cvtC c =
+      case c of
+        FoldSeqRegular pre f a
+          | IsC <- isArraysFlat (undefined :: t)
+          , HackPre pre' _ m <- hackPre tmap pre
+          , Same a0 <- untupleAcc tmap a
+          -> FoldSeqRegular pre' (untupleAfun m f) a0
+          | otherwise -> error "should not happen"
+        FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
+        Stuple t                -> Stuple (cvtCT t)
+
+    cvtCT :: forall senv t. Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer OpenAcc aenv' senv) t
+    cvtCT NilAtup        = NilAtup
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+
+    cvtA :: Arrays a
+         => OpenAcc aenv  a
+         -> OpenAcc aenv' a
+    cvtA a = case untupleAcc tmap a of
+               Same a'        -> a'
+               OneTuple tr a' -> OpenAcc (Atuple (buildTuple tr a'))
+
+    cvtAF :: forall t. OpenAfun aenv t -> OpenAfun aenv' t
+    cvtAF = untupleAfun tmap
+
+    cvtE :: forall t. Exp aenv t -> Exp aenv' t
+    cvtE = untupleExp tmap
+
+    cvtF :: forall t. Fun aenv t -> Fun aenv' t
+    cvtF = untupleFun tmap
+
 data HackPre aenv senv env envReg where
   HackPre :: SeqPrelude aenv senv env' envReg'
         -> TupleMap env env'
@@ -300,29 +325,64 @@ data HackExt a a' x b b' where
           -> TupleMap b' b0'
           -> HackExt a a' x b b'
 
-hackExt :: TupleMap a a0
+hackExt :: forall a a0 a0' a' x b b'.
+           TupleMap a a0
         -> TupleMap a' a0'
         -> ExtReg a a' x b b'
         -> HackExt a0 a0' x b b'
 hackExt v v' ExtEmpty = HackExt ExtEmpty v v'
-hackExt v v' (ExtPush ex x) 
+hackExt v v' (ExtPush ex (x :: Idx x c))
   | HackExt ex0 a b <- hackExt v v' ex
+  -- , ArraysFarray <- flavour (undefined :: c)
+  -- , Just (HasReduction tr) <- hasTupleReduction (prod (Proxy :: Proxy Arrays) (undefined :: Regular c))
   = HackExt (ex0 `ExtPush` x) (SnocTupleMap a) (SnocTupleMap b)
 
 hackPre :: TupleMap aenv aenv'
         -> SeqPrelude aenv senv env envReg
         -> HackPre aenv' senv env envReg
-hackPre v (SeqPrelude arrs0 ex ex') 
+hackPre v (SeqPrelude arrs0 ex ex')
   | HackExt ex0  a b <- hackExt v v ex
   , HackExt ex0' c d <- hackExt a b ex'
   = HackPre (SeqPrelude arrs0 ex0 ex0') c d
 
 untupleAfun :: TupleMap aenv aenv' -> OpenAfun aenv f -> OpenAfun aenv' f
-untupleAfun tm (Abody a) =
-  case untupleAcc tm a of
-    OneTuple tr a' -> Abody (OpenAcc (Atuple (buildTuple tr a')))
-    Same a'        -> Abody a'
-untupleAfun tm (Alam a)  = Alam $ untupleAfun (SnocTupleMap tm) a
+untupleAfun tm f = retupleAfun $ untupleAfun' tm f
+
+untupleAfun' :: forall aenv aenv' f. TupleMap aenv aenv' -> OpenAfun aenv f -> UntupledAfun aenv' f
+untupleAfun' tm (Abody a) = UTBody (untupleAcc tm a)
+untupleAfun' tm (Alam (a :: OpenAfun (aenv,a) r))
+  | ArraysFtuple <- flavour (undefined :: a)
+  , Just (HasReduction tr) <- hasTupleReduction (prod (Proxy :: Proxy Arrays) (undefined :: a))
+  = OTLam tr (untupleAfun' (OneTupleMap tm tr) a)
+  | otherwise
+  = SameLam (untupleAfun' (SnocTupleMap tm) a)
+
+retupleAfun :: forall aenv f. UntupledAfun aenv f -> OpenAfun aenv f
+retupleAfun = rt
+  where
+    rt :: forall aenv f. UntupledAfun aenv f -> OpenAfun aenv f
+    rt (UTBody   b) =
+      case b of
+        Same a        -> Abody a
+        OneTuple tr a -> Abody (OpenAcc $ Atuple $ buildTuple tr a)
+    rt (SameLam  f) = Alam (rt f)
+    rt (OTLam tr f) = Alam (bindOne tr (rt f))
+
+    bindOne :: forall a a' f aenv. (Arrays a', Arrays a, IsAtuple a)
+            => TupleReduction (TupleRepr a) a'
+            -> OpenAfun (aenv,a') f
+            -> OpenAfun (aenv,a) f
+    bindOne tr (Abody b) = Abody $ OpenAcc $ Alet (reduceTuple tr (OpenAcc $ Avar ZeroIdx)) (weaken oneBelow b)
+    bindOne tr (Alam f)  = Alam $ weaken swapTop $ bindOne tr (weaken swapTop f)
+
+reduceTuple :: (Arrays a', Arrays a, IsAtuple a) => TupleReduction (TupleRepr a) a' -> OpenAcc aenv a -> OpenAcc aenv a'
+reduceTuple TROne       = OpenAcc . Aprj ZeroTupIdx
+reduceTuple (TRNest tr) = reduceTuple tr . OpenAcc . Aprj ZeroTupIdx
+
+hasTupleReduction :: ProdR Arrays t -> Maybe (HasReduction t)
+hasTupleReduction ProdRunit             = Nothing
+hasTupleReduction (ProdRsnoc ProdRunit) = Just (HasReduction TROne)
+hasTupleReduction _                     = Nothing
 
 untupleExp :: forall env aenv aenv' t. TupleMap aenv aenv'
            -> OpenExp env aenv  t
@@ -375,3 +435,17 @@ untupleFun :: TupleMap aenv aenv' -> OpenFun env aenv t -> OpenFun env aenv' t
 untupleFun tmap f = case f of
   Body e -> Body (untupleExp tmap e)
   Lam f  -> Lam  (untupleFun tmap f)
+
+
+
+-- Utility functions
+-- -------------------
+
+oneBelow :: forall aenv a b. (aenv,a) :> ((aenv,b),a)
+oneBelow ZeroIdx      = ZeroIdx
+oneBelow (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
+swapTop :: forall aenv a b. ((aenv,a),b) :> ((aenv,b),a)
+swapTop ZeroIdx           = SuccIdx ZeroIdx
+swapTop (SuccIdx ZeroIdx) = ZeroIdx
+swapTop (SuccIdx (SuccIdx idx)) = SuccIdx (SuccIdx idx)

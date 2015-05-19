@@ -57,6 +57,7 @@ import Data.Array.Accelerate.Array.Representation      ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Normalise
+import Data.Array.Accelerate.Trafo.Fusion
 import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
@@ -3080,7 +3081,7 @@ vectoriseSeqOpenAcc strength ctx = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s                 -> Collect (vectoriseOpenSeq strength ctx s)
+      Collect s                 -> Collect (fuseSeq $ vectoriseOpenSeq strength ctx s)
       FoldSeg f z a s           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
       Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
 

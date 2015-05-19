@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
 
   -- ** Conversion
-  convertAcc, convertAfun, convertSeq,
+  convertAcc, convertAfun, convertSeq, fuseSeq
 
 ) where
 
@@ -57,6 +57,7 @@ import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
+import Data.Array.Accelerate.Trafo.Normalise            ( untupleSeq, TupleMap(..))
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Simplify
 import Data.Array.Accelerate.Trafo.Substitution
@@ -208,7 +209,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
 
     -- Seq operations
-    Collect seq             -> Collect (convertOpenSeq fuseAcc (fuseSeq seq))
+    Collect seq             -> Collect (convertOpenSeq fuseAcc seq)
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -555,7 +556,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
 
 data DelayedProducer acc aenv senv a where
   DoneP  :: Idx senv a -> DelayedProducer acc aenv senv a
-  YieldP :: Arrays a 
+  YieldP :: Arrays a
          => SeqPrelude aenv senv env envReg
          -> acc env a
          -> Maybe (acc envReg (Regular a))
@@ -564,7 +565,7 @@ data DelayedProducer acc aenv senv a where
 -- Fuse after vectorization but before ordinary fusion.
 fuseSeq :: PreOpenSeq OpenAcc aenv () arrs -> PreOpenSeq OpenAcc aenv () arrs
 -- fuseSeq s = s -- Uncomment to disable sequence fusion.
-fuseSeq s | Just REFL <- matchOpenSeq s (fuseOpenSeq s) = s
+fuseSeq s | Just REFL <- matchOpenSeq s (fuseOpenSeq s) = untupleSeq BaseTupleMap s
           | otherwise                                   = fuseSeq (fuseOpenSeq s)
 
 fuseOpenSeq :: forall aenv senv arrs. PreOpenSeq OpenAcc aenv senv arrs -> PreOpenSeq OpenAcc aenv senv arrs
@@ -654,19 +655,19 @@ subAcc :: forall aenv t arrs. (Arrays t, Arrays arrs)
        => (Idx aenv t, OpenAcc aenv t)
        -> OpenAcc aenv arrs
        -> OpenAcc aenv arrs
-subAcc (x0, a0) a = 
+subAcc (x0, a0) a =
   if count True x0 a == 1 -- Inline if only used one place.
     then rebuildA k' a
     else OpenAcc (a0 `alet` rebuildA k a) -- Otherwise, let-bind in front.
   where
-    
+
     k' :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc aenv a'
     k' x | Just REFL <- matchIdx x x0
          , OpenAcc a0' <- a0
          = a0'
          | otherwise
          = Avar x
-    
+
     k :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc (aenv, t) a'
     k x | Just REFL <- matchIdx x x0
         = Avar ZeroIdx
@@ -675,7 +676,7 @@ subAcc (x0, a0) a =
 
     count :: UsesOfAcc OpenAcc
     count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
-    
+
     alet bnd body
       | OpenAcc (Avar ZeroIdx) <- body
       , OpenAcc x              <- bnd
@@ -824,10 +825,10 @@ appendExt ex1 (ExtPush ex2 x)
   | ExtAppend ex w1 w2 w1' w2' <- appendExt ex1 ex2
   = case (extLookup ex1 x, extLookupReg ex1 x) of
       (Nothing, Nothing) -> ExtAppend (ExtPush ex x) (SuccIdx . w1) (under w2) (SuccIdx . w1') (under w2')
-      (Just y, Just y')  -> ExtAppend ex 
-                 w1 
-                 (\ x -> case x of ZeroIdx -> w1 y; SuccIdx x0 -> w2 x0) 
-                 w1' 
+      (Just y, Just y')  -> ExtAppend ex
+                 w1
+                 (\ x -> case x of ZeroIdx -> w1 y; SuccIdx x0 -> w2 x0)
+                 w1'
                  (\ x -> case x of ZeroIdx -> w1' y'; SuccIdx x0 -> w2' x0)
 
 appendArrs :: Atuple Aconst arrs1 -> Atuple Aconst arrs2 -> ArrAppend arrs1 arrs2
