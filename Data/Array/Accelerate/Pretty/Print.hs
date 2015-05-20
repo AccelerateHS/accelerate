@@ -183,32 +183,18 @@ prettySeq prettyAcc alvl llvl wrap seq =
     prettyP :: forall a. Producer acc aenv senv a -> Doc
     prettyP p =
       case p of
-        StreamIn _        -> "streamIn"   .$ [ text "..." ]
-        ToSeq slix _ a    -> "toSeq"      .$ [ ppSlix slix, ppA a ]
-        MapSeq f x        -> "mapSeq"     .$ [ ppAF f
-                                             , ppX x ]
-
-        ChunkedMapSeq f x -> "chunkedMapSeq" .$ [ ppAF f
-                                                , ppX x ]
-
-        ZipWithSeq f x y  -> "zipWithSeq" .$ [ ppAF f
-                                             , ppX x
-                                             , ppX y ]
-
-        ScanSeq f e x     -> "foldSeq"    .$ [ ppF f
-                                             , ppE e
-                                             , ppX x ]
+        StreamIn _        -> "streamIn"      .$ [ text "..." ]
+        ToSeq slix _ a    -> "toSeq"         .$ [ ppSlix slix, ppA a ]
+        MapSeq f x        -> "mapSeq"        .$ [ ppAF f , ppX x ]
+        ChunkedMapSeq f x -> "chunkedMapSeq" .$ [ ppAF f , ppX x ]
+        ZipWithSeq f x y  -> "zipWithSeq"    .$ [ ppAF f , ppX x , ppX y ]
+        ScanSeq f e x     -> "foldSeq"       .$ [ ppF f , ppE e , ppX x ]
 
     prettyC :: forall a. Consumer acc aenv senv a -> Doc
     prettyC c =
       case c of
-        FoldSeq f e x        -> "foldSeq"        ..$ [ ppF f
-                                                     , ppE e
-                                                     , ppX x ]
-
-        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f
-                                                     , ppA a
-                                                     , ppX x ]
+        FoldSeq f e x        -> "foldSeq"        ..$ [ ppF f , ppE e , ppX x ]
+        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f , ppA a , ppX x ]
         Stuple t             -> tuple (prettyT t)
 
     prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
