@@ -420,7 +420,7 @@ usesOfPreAcc withShape countAcc idx = count
     countC c =
       case c of
         FoldSeqRegular pre (Alam (Abody f)) a -> countAcc withShape (weaken (SuccIdx . seqPreludeShiftReg pre) idx) f + countA a
-        FoldSeqRegular _ _ _   -> error "should not happen"
+        FoldSeqRegular _ _ _   -> error "should not happen countC"
         FoldSeqFlatten _ f a _ -> countAF f idx + countA a
         Stuple t               -> countCT t
 

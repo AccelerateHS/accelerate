@@ -46,6 +46,8 @@ module Data.Array.Accelerate.Trafo.Fusion (
 ) where
 
 -- TODO remove
+import Text.PrettyPrint
+import Data.Array.Accelerate.Pretty.Print
 import Debug.Trace (trace)
 
 -- standard library
@@ -56,6 +58,7 @@ import Control.Applicative                              ( pure, (<$>), (<*>) )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Analysis.Match
+import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Normalise            ( untupleSeq, TupleMap(..))
 import Data.Array.Accelerate.Trafo.Shrink
@@ -565,18 +568,24 @@ data DelayedProducer acc aenv senv a where
 -- Fuse after vectorization but before ordinary fusion.
 fuseSeq :: PreOpenSeq OpenAcc aenv () arrs -> PreOpenSeq OpenAcc aenv () arrs
 -- fuseSeq s = s -- Uncomment to disable sequence fusion.
-fuseSeq s | Just REFL <- matchOpenSeq s (fuseOpenSeq s) = untupleSeq BaseTupleMap s
-          | otherwise                                   = fuseSeq (fuseOpenSeq s)
+fuseSeq s | Just REFL <- matchOpenSeq s (fuseOpenSeq (isChunkingOk s) s) 
+          = untupleSeq BaseTupleMap s
+          | otherwise                                                                    
+          = fuseSeq (fuseOpenSeq (isChunkingOk s) s)
 
-fuseOpenSeq :: forall aenv senv arrs. PreOpenSeq OpenAcc aenv senv arrs -> PreOpenSeq OpenAcc aenv senv arrs
-fuseOpenSeq s =
+isChunkingOk :: PreOpenSeq OpenAcc aenv () arrs -> Bool
+isChunkingOk s | Just _ <- seqShapesOpenAcc s ValBottom = True
+               | otherwise = False
+
+fuseOpenSeq :: forall acc aenv senv arrs. Bool -> PreOpenSeq OpenAcc aenv senv arrs -> PreOpenSeq OpenAcc aenv senv arrs
+fuseOpenSeq chunkingOk s =
   case s of
     Producer p s0
       | uses ZeroIdx s0 == 1
-      , Just s0' <- strSeq k $ subSeq (ZeroIdx, delayedP p) (fuseOpenSeq s0)
+      , Just s0' <- strSeq k $ subSeq chunkingOk (ZeroIdx, delayedP p) (fuseOpenSeq chunkingOk s0)
       -> s0'
       | otherwise
-      -> Producer p (fuseOpenSeq s0)
+      -> Producer p (fuseOpenSeq chunkingOk s0)
     Consumer c -> Consumer c
     Reify f x -> Reify f x
   where
@@ -656,50 +665,61 @@ subAcc :: forall aenv t arrs. (Arrays t, Arrays arrs)
        -> OpenAcc aenv arrs
        -> OpenAcc aenv arrs
 subAcc (x0, a0) a =
-  if count True x0 a == 1 -- Inline if only used one place.
-    then rebuildA k' a
-    else OpenAcc (a0 `alet` rebuildA k a) -- Otherwise, let-bind in front.
-  where
-
-    k' :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc aenv a'
-    k' x | Just REFL <- matchIdx x x0
-         , OpenAcc a0' <- a0
-         = a0'
-         | otherwise
-         = Avar x
-
-    k :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc (aenv, t) a'
-    k x | Just REFL <- matchIdx x x0
-        = Avar ZeroIdx
+  let
+   a' =
+    if count True x0 a == 1 || isSimple a0 -- Inline if only used one
+                                           -- place, or if the
+                                           -- substituted term is
+                                           -- simple (defined below).
+      then rebuildA k' a
+      else OpenAcc (a0 `alet` rebuildA k a) -- Otherwise, let-bind in front.
+    where
+      isSimple (OpenAcc (Avar _)) = True
+      isSimple (OpenAcc (Aprj _ (OpenAcc (Avar _)))) = True
+      isSimple _ = False
+  
+      k' :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc aenv a'
+      k' x | Just REFL <- matchIdx x x0
+           , OpenAcc a0' <- a0
+           = a0'
+           | otherwise
+           = Avar x
+      
+      k :: forall a'. Arrays a' => Idx aenv a' -> PreOpenAcc OpenAcc (aenv, t) a'
+      k x | Just REFL <- matchIdx x x0
+          = Avar ZeroIdx
+          | otherwise
+          = Avar (SuccIdx x)
+  
+      count :: UsesOfAcc OpenAcc
+      count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
+      
+      alet bnd body
+        | OpenAcc (Avar ZeroIdx) <- body
+        , OpenAcc x              <- bnd
+        = x
+  
+        | OpenAcc (Aprj tupix (OpenAcc (Avar ix))) <- bnd
+        , OpenAcc (Alet bnd' body')           <- body
+        , Just REFL                           <- matchAcc (weaken SuccIdx bnd) bnd'
+        = Alet (OpenAcc $ Aprj tupix (OpenAcc (Avar ix))) (inlineA body' (Avar ZeroIdx))
+  
         | otherwise
-        = Avar (SuccIdx x)
-
-    count :: UsesOfAcc OpenAcc
-    count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
-
-    alet bnd body
-      | OpenAcc (Avar ZeroIdx) <- body
-      , OpenAcc x              <- bnd
-      = x
-
-      | OpenAcc (Aprj tupix (OpenAcc (Avar ix))) <- bnd
-      , OpenAcc (Alet bnd' body')           <- body
-      , Just REFL                           <- matchAcc (weaken SuccIdx bnd) bnd'
-      = Alet (OpenAcc $ Aprj tupix (OpenAcc (Avar ix))) (inlineA body' (Avar ZeroIdx))
-
-      | otherwise
-      = Alet bnd body
-
+        = Alet bnd body
+--   pp c = renderStyle (style { lineLength = 150 }) $ prettyAcc 0 noParens c
+--   str = "Substition:\n" ++ "(a" ++ pp (OpenAcc (Avar x0)) ++ ", " ++ pp a0 ++ ")" ++ "\nIn:\n" ++ pp a ++ "\nYields:\n" ++ pp a'
+  in a' -- trace str a'
 
 subSeq :: forall aenv senv t arrs.
-          (Idx senv t, DelayedProducer OpenAcc aenv senv t)
+          Bool -- Chunking is okay in any aenv?
+       -> (Idx senv t, DelayedProducer OpenAcc aenv senv t)
        -> PreOpenSeq OpenAcc aenv senv arrs
        -> PreOpenSeq OpenAcc aenv senv arrs
-subSeq (x0, p0) s =
+subSeq chunkingOk (x0, p0) s =
   case s of
     Producer p s0
-      | usesP x0 p == 1 -> Producer (subP p) (subSeq (SuccIdx x0, shiftDelayedP p0) s0)
-      | otherwise       -> Producer p        (subSeq (SuccIdx x0, shiftDelayedP p0) s0)
+      | usesP x0 p == 1 -> Producer (subP p) (subSeq chunkingOk (SuccIdx x0, shiftDelayedP p0) s0)
+      | otherwise       -> Producer p        (subSeq chunkingOk (SuccIdx x0, shiftDelayedP p0) s0)
     Consumer c          -> Consumer (subC c)
     Reify f x  -> Reify f x
   where
@@ -736,8 +756,8 @@ subSeq (x0, p0) s =
     subC c
       | usesC x0 c == 1
       = case c of
-          FoldSeqFlatten (Just (Alam f')) _ a x -> subGeneralC (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x)) f' a
-          FoldSeqFlatten Nothing f a x -> FoldSeqFlatten Nothing f a x
+          FoldSeqFlatten (Just (Alam f')) _ a x | chunkingOk -> subGeneralC (SeqPrelude NilAtup ExtEmpty (ExtEmpty `ExtPush` x)) f' a
+          FoldSeqFlatten f' f a x -> FoldSeqFlatten f' f a x
           FoldSeqRegular pre0 f a -> subGeneralC pre0 f a
           Stuple tup ->
             let f :: Atuple (Consumer OpenAcc aenv senv) tup -> Atuple (Consumer OpenAcc aenv senv) tup
@@ -991,7 +1011,7 @@ embedSeq embedAcc s
       | IsC <- isArraysFlat (undefined :: arrs')
       , PreWeak pre' k k' <- weakenPrelude pre (sinkExtend env)
       = ExtendProducer BaseEnv (GeneralMapSeq pre' (cvtA (weaken k a)) (cvtA `fmap` (weaken k' `fmap` a')))
-      | otherwise = error "should not happen"
+      | otherwise = $internalError "embedSeq.travP" "should not happen"
     travP (MapSeq f f' x) env        = ExtendProducer BaseEnv (MapSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x)
     travP (ZipWithSeq f f' x y) env  = ExtendProducer BaseEnv (ZipWithSeq (cvtAF (sink env f)) (cvtAF `fmap` (sink env `fmap` f')) x y)
     travP (ScanSeq f e x) env        = ExtendProducer BaseEnv (ScanSeq (cvtF (sink env f)) (cvtE (sink env e)) x)
@@ -1004,7 +1024,7 @@ embedSeq embedAcc s
       | IsC <- isArraysFlat (undefined :: arrs')
       , PreWeak pre' _ k' <- weakenPrelude pre (sinkExtend env)
       = FoldSeqRegular pre' (cvtAF (weaken k' f)) (cvtA (sink env a))
-      | otherwise = error "should not happen"
+      | otherwise = $internalError "embedSeq.travC" "should not happen"
     travC (FoldSeqFlatten f' f a x) env = FoldSeqFlatten (cvtAF `fmap` (sink env `fmap` f')) (cvtAF (sink env f)) (cvtA (sink env a)) x
     travC (Stuple t) env = Stuple (cvtCT t)
       where
@@ -1197,7 +1217,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
             | IsC <- isArraysFlat (undefined :: a)
             , PreWeak pre' k1 k1' <- weakenPrelude pre k
             -> GeneralMapSeq pre' (weaken k1 a) (weaken k1' `fmap` a')
-            | otherwise -> error "should not happen"
+            | otherwise -> $internalError "weakenP" "should not happen"
           MapSeq f f' x        -> MapSeq (weaken k f) (weaken k `fmap` f') x
           ZipWithSeq f f' x y  -> ZipWithSeq (weaken k f) (weaken k `fmap` f') x y
           ScanSeq f a x        -> ScanSeq (weaken k f) (weaken k a) x
@@ -1209,7 +1229,7 @@ instance Kit acc => Sink (SinkSeq acc senv) where
             | IsC <- isArraysFlat (undefined :: a)
             , PreWeak pre' _ k1' <- weakenPrelude pre k
             -> FoldSeqRegular pre' (weaken k1' f) (weaken k a)
-            | otherwise -> error "should not happen"
+            | otherwise -> $internalError "weakenC" "should not happen"
           FoldSeqFlatten f' f a x -> FoldSeqFlatten (weaken k `fmap` f') (weaken k f) (weaken k a) x
           Stuple t                ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t

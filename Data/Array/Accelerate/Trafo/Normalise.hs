@@ -277,7 +277,7 @@ untupleSeq tmap seq =
           , Same a0  <- untupleAcc m a
           , Nothing <- untupleAcc m' `fmap` a'
           -> GeneralMapSeq pre' a0 Nothing
-          | otherwise -> error "should not happen"
+          | otherwise -> error "should not happen normalise prod."
         ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
 
@@ -289,7 +289,7 @@ untupleSeq tmap seq =
           , HackPre pre' _ m <- hackPre tmap pre
           , Same a0 <- untupleAcc tmap a
           -> FoldSeqRegular pre' (untupleAfun m f) a0
-          | otherwise -> error "should not happen"
+          | otherwise -> error "should not happen normalise cons."
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
         Stuple t                -> Stuple (cvtCT t)
 
