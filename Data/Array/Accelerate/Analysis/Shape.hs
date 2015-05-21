@@ -402,7 +402,10 @@ evalDelayedOpenAcc (Manifest a) aenv =
       a' <- evalPreOpenAcc evalDelayedOpenAcc a aenv
       tell =<< lift (toShapeTree a')
       return a'
-evalDelayedOpenAcc Delayed{..} aenv = return $ PartialArray (evalPreOpenExp evalDelayedOpenAcc extentD EmptyElt aenv) Nothing
+evalDelayedOpenAcc Delayed{..} aenv = 
+  do let a = PartialArray (evalPreOpenExp evalDelayedOpenAcc extentD EmptyElt aenv) Nothing
+     tell =<< lift (toShapeTree a)
+     return a
 
 evalOpenAcc :: EvalAcc OpenAcc
 evalOpenAcc (OpenAcc a) aenv =
