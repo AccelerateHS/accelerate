@@ -461,7 +461,9 @@ evalPreOpenAcc eval acc aenv =
     Collect{} -> lift Nothing
 
     Map _ acc                   -> sameShapeOp =<< evalA acc
-    Generate sh _               -> (\ x -> PartialArray (Just x) Nothing) <$> evalE sh
+    Generate sh _               -> do sh' <- evalE sh
+                                      parDegree (size sh')
+                                      return $ PartialArray (Just sh') Nothing
     Transform sh _ _ acc        -> join $ fixedShapeOp <$> evalE sh <*> evalA acc
     Backpermute sh _ acc        -> join $ fixedShapeOp <$> evalE sh <*> evalA acc
     Reshape sh acc              -> do _ <- evalA acc
