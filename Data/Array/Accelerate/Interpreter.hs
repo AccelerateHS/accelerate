@@ -1196,7 +1196,7 @@ evalSeq conf s aenv = evalSeq' s
     evalSeq' :: PreOpenSeq DelayedOpenAcc aenv senv arrs -> arrs
     evalSeq' (Producer _ s) = evalSeq' s
     evalSeq' (Consumer _)   =
-      let maxElemSize = shapeTreeMaxSize <$> seqShapes s (valToValPartial aenv)
+      let maxElemSize = seqPD s (valToValPartial aenv)
           pd = maxStepSize (chunkSize conf) maxElemSize
           s0 = initSeq aenv pd s
       in loop pd 0 s0

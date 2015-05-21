@@ -28,15 +28,16 @@ module Data.Array.Accelerate.Analysis.Shape (
   ShapeTree(..),
   ArraysPartial(..),
   valToValPartial, ValPartial(..), shapeTreeMaxSize,
-  seqShapes, seqShapesOpenAcc,
+  seqShapes, seqPD, seqShapesOpenAcc,
 
 ) where
 
 -- standard libraries
 import Control.Applicative          ( (<$>), (<*>) )
+import Control.Monad                ( join )
 import Control.Monad.Writer         ( runWriterT, WriterT, tell )
 import Control.Monad.Trans          ( lift )
-import Data.Monoid                  ( Monoid(..), (<>) )
+import Data.Monoid                  ( Monoid(..), (<>), mempty )
 import Data.Typeable
 
 -- friends
@@ -131,10 +132,6 @@ ndim UnitTuple       = 0
 ndim (SingleTuple _) = 1
 ndim (PairTuple a b) = ndim a + ndim b
 
-
-
-
--- Trees of existentially qualified shapes
 data ShapeTree where
   EmptyShapeTree :: ShapeTree
   Leaf           :: Shape sh => sh -> ShapeTree
@@ -267,15 +264,27 @@ valToValPartial Empty = ValBottom
 valToValPartial (aenv `Push` a) = valToValPartial aenv `PushTotal` a
 
 -- Monad for handling partiality and tracking intermediate shapes
-type Shapes = WriterT ShapeTree Maybe
+type Shapes = WriterT (ShapeTree, MaxNat) Maybe
+
+-- Report a parallel degree.
+parDegree :: Int -> Shapes ()
+parDegree pd = tell (mempty, MaxNat pd)
+
+-- Report an intermediate shape.
+intermediateShape :: ShapeTree -> Shapes ()
+intermediateShape shT = tell (shT, mempty)
 
 type EvalAcc acc = forall aenv a. Arrays a => acc aenv a -> ValPartial aenv -> Shapes (ArraysPartial a)
 
 seqShapes :: PreOpenSeq DelayedOpenAcc aenv () arrs -> ValPartial aenv -> Maybe ShapeTree
-seqShapes s aenv = snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv ValBottom)
+seqShapes s aenv = fst . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv ValBottom)
+
+seqPD :: PreOpenSeq DelayedOpenAcc aenv () arrs -> ValPartial aenv -> Maybe Int
+seqPD s aenv = runMaxNat . snd . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv ValBottom)
+
 
 seqShapesOpenAcc :: PreOpenSeq OpenAcc aenv () arrs -> ValPartial aenv -> Maybe ShapeTree
-seqShapesOpenAcc s aenv = snd <$> runWriterT (evalShapeSeq evalOpenAcc s aenv ValBottom)
+seqShapesOpenAcc s aenv = fst . snd <$> runWriterT (evalShapeSeq evalOpenAcc s aenv ValBottom)
 
 evalShapeSeq :: forall acc aenv senv arrs.
                 EvalAcc acc
@@ -285,7 +294,7 @@ evalShapeSeq eval s aenv senv =
   case s of
     Producer p s0 -> do
       a <- evalP p
-      tell =<< lift (toShapeTree a)
+      intermediateShape =<< lift (toShapeTree a)
       evalShapeSeq eval s0 aenv (senv `PushPartial` a)
     Consumer c -> evalC c
     Reify _ _ -> return ()
@@ -400,12 +409,9 @@ evalDelayedOpenAcc (Manifest a) aenv =
     -- result.
     _                 -> do
       a' <- evalPreOpenAcc evalDelayedOpenAcc a aenv
-      tell =<< lift (toShapeTree a')
+      intermediateShape =<< lift (toShapeTree a')
       return a'
-evalDelayedOpenAcc Delayed{..} aenv = 
-  do let a = PartialArray (evalPreOpenExp evalDelayedOpenAcc extentD EmptyElt aenv) Nothing
-     tell =<< lift (toShapeTree a)
-     return a
+evalDelayedOpenAcc Delayed{..} aenv = return $ PartialArray (evalPreOpenExp evalDelayedOpenAcc extentD EmptyElt aenv) Nothing
 
 evalOpenAcc :: EvalAcc OpenAcc
 evalOpenAcc (OpenAcc a) aenv =
@@ -418,7 +424,7 @@ evalOpenAcc (OpenAcc a) aenv =
     -- result.
     _ -> do
       a' <- evalPreOpenAcc evalOpenAcc a aenv
-      tell =<< lift (toShapeTree a')
+      intermediateShape =<< lift (toShapeTree a')
       return a'
 
 evalPreOpenAcc :: forall acc aenv arrs.
@@ -454,46 +460,59 @@ evalPreOpenAcc eval acc aenv =
     Unit _ -> return (PartialArray (Just Z) Nothing)
     Collect{} -> lift Nothing
 
-    Map _ acc                   -> sameShapeOp <$> evalA acc
+    Map _ acc                   -> sameShapeOp =<< evalA acc
     Generate sh _               -> (\ x -> PartialArray (Just x) Nothing) <$> evalE sh
-    Transform sh _ _ acc        -> fixedShapeOp <$> evalE sh <*> evalA acc
-    Backpermute sh _ acc        -> fixedShapeOp <$> evalE sh <*> evalA acc
-    Reshape sh acc              -> fixedShapeOp <$> evalE sh <*> evalA acc
-    ZipWith _ acc1 acc2         -> intersectShapeOp <$> evalA acc1 <*> evalA acc2
-    Replicate slice slix acc    -> replicateOp slice <$> evalE slix <*> evalA acc
-    Slice slice acc slix        -> sliceOp slice <$> evalA acc <*> evalE slix
+    Transform sh _ _ acc        -> join $ fixedShapeOp <$> evalE sh <*> evalA acc
+    Backpermute sh _ acc        -> join $ fixedShapeOp <$> evalE sh <*> evalA acc
+    Reshape sh acc              -> do _ <- evalA acc
+                                      PartialArray <$> (Just <$> evalE sh) <*> return Nothing
+    ZipWith _ acc1 acc2         -> join $ intersectShapeOp <$> evalA acc1 <*> evalA acc2
+    Replicate slice slix acc    -> join $ replicateOp slice <$> evalE slix <*> evalA acc
+    Slice slice acc slix        -> join $ sliceOp slice <$> evalA acc <*> evalE slix
 
     -- Consumers
     -- ---------
-    Fold _ _ acc                -> foldOp <$> evalA acc
-    Fold1 _ acc                 -> fold1Op <$> evalA acc
-    FoldSeg _ _ acc seg         -> foldSegOp  <$> evalA acc <*> evalA seg
-    Fold1Seg _ acc seg          -> fold1SegOp <$> evalA acc <*> evalA seg
-    Scanl _ _ acc               -> scanOp <$> evalA acc
-    Scanl' _ _ acc              -> scan'Op <$> evalA acc
-    Scanl1 _ acc                -> sameShapeOp <$> evalA acc
-    Scanr _ _ acc               -> scanOp  <$> evalA acc
-    Scanr' _ _ acc              -> scan'Op <$> evalA acc
-    Scanr1 _ acc                -> sameShapeOp <$> evalA acc
-    Permute _ def _ acc         -> permuteOp <$> evalA def <*> evalA acc
-    Stencil _ _ acc             -> sameShapeOp <$> evalA acc
-    Stencil2 _ _ acc1 _ acc2    -> intersectShapeOp <$> evalA acc1 <*> evalA acc2
+    Fold _ _ acc                -> join $ foldOp <$> evalA acc
+    Fold1 _ acc                 -> join $ fold1Op <$> evalA acc
+    FoldSeg _ _ acc seg         -> join $ foldSegOp  <$> evalA acc <*> evalA seg
+    Fold1Seg _ acc seg          -> join $ fold1SegOp <$> evalA acc <*> evalA seg
+    Scanl _ _ acc               -> join $ scanOp <$> evalA acc
+    Scanl' _ _ acc              -> join $ scan'Op <$> evalA acc
+    Scanl1 _ acc                -> sameShapeOp =<< evalA acc
+    Scanr _ _ acc               -> join $ scanOp  <$> evalA acc
+    Scanr' _ _ acc              -> join $ scan'Op <$> evalA acc
+    Scanr1 _ acc                -> sameShapeOp =<< evalA acc
+    Permute _ def _ acc         -> join $ permuteOp <$> evalA def <*> evalA acc
+    Stencil _ _ acc             -> sameShapeOp =<< evalA acc
+    Stencil2 _ _ acc1 _ acc2    -> join $ intersectShapeOp <$> evalA acc1 <*> evalA acc2
 
-fixedShapeOp :: (Shape sh, Elt e) => sh -> ArraysPartial (Array sh' e') -> ArraysPartial (Array sh e)
-fixedShapeOp sh _ = PartialArray (Just sh) Nothing
+fixedShapeOp :: (Shape sh, Elt e) => sh -> ArraysPartial (Array sh' e') -> Shapes (ArraysPartial (Array sh e))
+fixedShapeOp sh _ = do
+  parDegree (size sh)
+  return $ PartialArray (Just sh) Nothing
 
-sameShapeOp :: (Shape sh, Elt e, Elt e') => ArraysPartial (Array sh e) -> ArraysPartial (Array sh e')
-sameShapeOp arr = PartialArray (shapePartial arr) Nothing
+-- An operation that produces the same shape with parallel degree the
+-- size of that shape.
+sameShapeOp :: (Shape sh, Elt e, Elt e') => ArraysPartial (Array sh e) -> Shapes (ArraysPartial (Array sh e'))
+sameShapeOp arr = do
+  sh <- lift $ shapePartial arr
+  parDegree  (size sh)
+  return $ PartialArray (Just sh) Nothing
 
-intersectShapeOp :: (Shape sh, Elt e'') => ArraysPartial (Array sh e) -> ArraysPartial (Array sh e') -> ArraysPartial (Array sh e'')
-intersectShapeOp acc1 acc2 = PartialArray (intersect <$> shapePartial acc1 <*> shapePartial acc2) Nothing
+intersectShapeOp :: (Shape sh, Elt e'') => ArraysPartial (Array sh e) -> ArraysPartial (Array sh e') -> Shapes (ArraysPartial (Array sh e''))
+intersectShapeOp arr1 arr2 = do
+  sh1 <- lift $ shapePartial arr1
+  sh2 <- lift $ shapePartial arr2
+  parDegree  (size sh1 `min` size sh2)
+  return $ PartialArray (Just $ intersect sh1 sh2) Nothing
 
 replicateOp :: (Shape sh, Shape sl, Elt slix, Elt e)
             => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-            -> slix -> ArraysPartial (Array sl e) -> ArraysPartial (Array sh e)
-replicateOp slice slix arr = PartialArray (toElt <$> sh) Nothing
-  where
-    sh = extend slice (fromElt slix) <$> (fromElt <$> shapePartial arr)
+            -> slix -> ArraysPartial (Array sl e) -> Shapes (ArraysPartial (Array sh e))
+replicateOp slice slix arr = do
+  shIn <- lift $ shapePartial arr
+  let
+    sh = toElt $ extend slice (fromElt slix) (fromElt shIn)
 
     extend :: SliceIndex slix sl co dim
            -> slix
@@ -506,13 +525,16 @@ replicateOp slice slix arr = PartialArray (toElt <$> sh) Nothing
     extend (SliceFixed sliceIdx) (slx, sz) sl
       = let dim' = extend sliceIdx slx sl
         in  (dim', sz)
+  parDegree  (size sh)
+  return $ PartialArray (Just sh) Nothing
 
 sliceOp :: (Shape sh, Shape sl, Elt slix, Elt e)
         => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-        -> ArraysPartial (Array sh e) -> slix -> ArraysPartial (Array sl e)
-sliceOp slice arr slix = PartialArray (toElt <$> sh') Nothing
-  where
-    sh' = restrict slice (fromElt slix) <$> (fromElt <$> shapePartial arr)
+        -> ArraysPartial (Array sh e) -> slix -> Shapes (ArraysPartial (Array sl e))
+sliceOp slice arr slix = do
+  shIn <- lift $ shapePartial arr
+  let
+    sh' = toElt $ restrict slice (fromElt slix) (fromElt shIn)
 
     restrict :: SliceIndex slix sl co sh
              -> slix
@@ -525,46 +547,62 @@ sliceOp slice arr slix = PartialArray (toElt <$> sh') Nothing
     restrict (SliceFixed sliceIdx) (slx, i)  (sl, sz)
       = let sl' = restrict sliceIdx slx sl
         in  $indexCheck "slice" i sz $ sl'
+  parDegree  (size sh')
+  return $ PartialArray (Just sh') Nothing
 
-foldOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Array sh e)
-foldOp acc =
-  let sh =
-        do sh0 :. _ <- shapePartial acc
+foldOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> Shapes (ArraysPartial (Array sh e))
+foldOp arr = do
+  shIn <- lift $ shapePartial arr
+  parDegree  (size shIn)
+  let sh | sh0 :. _ <- shIn =
            case size sh0 of
-             0 -> return (listToShape . map (max 1) . shapeToList $ sh0)
-             _ -> return sh0
-  in PartialArray sh Nothing
+             0 -> (listToShape . map (max 1) . shapeToList $ sh0)
+             _ -> sh0
+  return $ PartialArray (Just sh) Nothing
 
-fold1Op :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Array sh e)
-fold1Op acc = PartialArray ((\ (sh :. _) -> sh) <$> shapePartial acc) Nothing
+fold1Op :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> Shapes (ArraysPartial (Array sh e))
+fold1Op arr =  do
+  shIn <- lift $ shapePartial arr
+  parDegree (size shIn)
+  return $ PartialArray (Just $ (\ (sh :. _) -> sh) shIn) Nothing
 
-foldSegOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> ArraysPartial (Array (sh :. Int) e)
-foldSegOp arr seg =
+foldSegOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> Shapes (ArraysPartial (Array (sh :. Int) e))
+foldSegOp arr seg = do
+  sh0 :. sz <- lift $ shapePartial arr
+  parDegree $ size sh0 * sz
   let sh =
-        do sh0 :. _ <- shapePartial arr
-           Z  :. n <- shapePartial seg
+        do Z  :. n <- shapePartial seg
            return (sh0 :. n)
-  in PartialArray sh Nothing
+  return $ PartialArray sh Nothing
 
-fold1SegOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> ArraysPartial (Array (sh :. Int) e)
-fold1SegOp arr seg =
+fold1SegOp :: (Shape sh, Elt e) => ArraysPartial (Array (sh :. Int) e) -> ArraysPartial (Vector i) -> Shapes (ArraysPartial (Array (sh :. Int) e))
+fold1SegOp arr seg = do
+  sh0 :. sz <- lift $ shapePartial arr
+  parDegree $ size sh0 * sz
   let sh =
-        do sh :. _ <- shapePartial arr
-           Z  :. n <- shapePartial seg
-           return (sh :. n)
-  in PartialArray sh Nothing
+        do Z  :. n <- shapePartial seg
+           return (sh0 :. n)
+  return $ PartialArray sh Nothing
 
-scan'Op :: Elt e => ArraysPartial (Vector e) -> ArraysPartial (Vector e, Scalar e)
-scan'Op acc = PartialAtup $ NilAtup `SnocAtup` PartialArray (shapePartial acc) Nothing `SnocAtup` PartialArray (Just Z) Nothing
+scan'Op :: Elt e => ArraysPartial (Vector e) -> Shapes (ArraysPartial (Vector e, Scalar e))
+scan'Op acc = do
+  sh <- lift $ shapePartial acc
+  parDegree $ size sh
+  return $ PartialAtup $ NilAtup `SnocAtup` PartialArray (Just sh) Nothing `SnocAtup` PartialArray (Just Z) Nothing
 
-scanOp :: Elt e => ArraysPartial (Vector e) -> ArraysPartial (Vector e)
-scanOp acc =
-  PartialArray
-    ((\ (Z :. n) -> Z :. n + 1) <$> shapePartial acc)
-    Nothing
+scanOp :: Elt e => ArraysPartial (Vector e) -> Shapes (ArraysPartial (Vector e))
+scanOp acc = do
+  sh <- lift $ shapePartial acc
+  parDegree $ size sh
+  return $ PartialArray
+             (Just $ (\ (Z :. n) -> Z :. n + 1) sh)
+             Nothing
 
-permuteOp :: (Shape sh, Elt e) => ArraysPartial (Array sh e) -> ArraysPartial (Array sh' e) -> ArraysPartial (Array sh e)
-permuteOp def _ = PartialArray (shapePartial def) Nothing
+permuteOp :: (Shape sh, Elt e) => ArraysPartial (Array sh e) -> ArraysPartial (Array sh' e) -> Shapes (ArraysPartial (Array sh e))
+permuteOp def _ = do
+  sh <- lift $ shapePartial def
+  parDegree $ size sh
+  return $ PartialArray (Just sh) Nothing
 
 evalPreOpenFun :: (Elt a, Elt b)
                => EvalAcc acc
