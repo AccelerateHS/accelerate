@@ -43,7 +43,7 @@ import Data.Typeable
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Error
--- import Data.Array.Accelerate.Interpreter (evalPrimConst, evalPrim)
+import Data.Array.Accelerate.Interpreter.Prim                   ( evalPrimConst, evalPrim )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Trafo.Base
@@ -634,13 +634,8 @@ evalPreOpenExp eval exp env aenv =
          evalPreOpenExp eval exp2 (env `PushElt` fromElt v1) aenv
     Var ix -> return (prjElt ix env)
     Const c -> return (toElt c)
-
-    -- FMMA TODO: Importing evalPrimConst and evalPrim causes a cyclic
-    -- dependency.
-    -- Possible fix: Move those operations to a new module
-    -- Data.Array.Accelerate.Interpreter.Prim.
-    PrimConst _c -> Nothing -- return (evalPrimConst c)
-    PrimApp _f _x -> Nothing -- evalPrim f <$> evalE x
+    PrimConst c -> return (evalPrimConst c)
+    PrimApp f x -> evalPrim f <$> evalE x
     Tuple tup -> toTuple <$> evalTuple eval tup env aenv
     Prj ix tup -> evalPrj ix . fromTuple <$> evalE tup
     IndexNil -> return Z

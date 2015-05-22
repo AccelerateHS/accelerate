@@ -194,6 +194,7 @@ Library
                         -- The core language and reference implementation
                         Data.Array.Accelerate
                         Data.Array.Accelerate.Interpreter
+                        Data.Array.Accelerate.Interpreter.Prim
 
                         -- Prelude-like
                         Data.Array.Accelerate.Data.Complex
