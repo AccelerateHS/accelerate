@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Trafo.Normalise (
 ) where
 
 import Prelude                                          hiding ( exp )
+import Data.Functor                                     ( (<$>) )
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
@@ -128,6 +129,11 @@ wrap :: Arrays t => (forall t. Arrays t => f t -> f' t) -> Untupled f t -> Untup
 wrap f (Same t)     = Same (f t)
 wrap f (OneTuple tr t) = OneTuple tr (f t)
 
+makeSame :: Untupled (OpenAcc aenv) t -> OpenAcc aenv t
+makeSame a = case a of
+               Same a'        -> a'
+               OneTuple tr a' -> OpenAcc (Atuple (buildTuple tr a'))
+
 -- Remove any 1-tuples
 --
 untupleAcc :: forall aenv aenv' t. Arrays t
@@ -178,9 +184,7 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
     same :: Arrays a
          => OpenAcc aenv  a
          -> OpenAcc aenv' a
-    same a = case untupleAcc tmap a of
-               Same a'        -> a'
-               OneTuple tr a' -> OpenAcc (Atuple (buildTuple tr a'))
+    same a = makeSame (untupleAcc tmap a)
 
     atuple :: IsAtuple t => Atuple (OpenAcc aenv) (TupleRepr t) -> Untupled (PreOpenAcc OpenAcc aenv') t
     atuple (NilAtup `SnocAtup` t) = case untupleAcc tmap t of
@@ -269,14 +273,12 @@ untupleSeq tmap seq =
         GeneralMapSeq pre a a'
           | IsC <- isArraysFlat (undefined :: t)
           , HackPre pre' m m' <- hackPre tmap pre
-          , Same a0  <- untupleAcc m a
-          , Just (Same a0') <- untupleAcc m' `fmap` a'
-          -> GeneralMapSeq pre' a0 (Just a0')
+          , Just a0' <- makeSame . untupleAcc m' <$> a'
+          -> GeneralMapSeq pre' (makeSame (untupleAcc m a)) (Just a0')
           | IsC <- isArraysFlat (undefined :: t)
           , HackPre pre' m m' <- hackPre tmap pre
-          , Same a0  <- untupleAcc m a
-          , Nothing <- untupleAcc m' `fmap` a'
-          -> GeneralMapSeq pre' a0 Nothing
+          , Nothing <- makeSame . untupleAcc m' <$> a'
+          -> GeneralMapSeq pre' (makeSame (untupleAcc m a)) Nothing
           | otherwise -> error "should not happen normalise prod."
         ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
@@ -287,8 +289,7 @@ untupleSeq tmap seq =
         FoldSeqRegular pre f a
           | IsC <- isArraysFlat (undefined :: t)
           , HackPre pre' _ m <- hackPre tmap pre
-          , Same a0 <- untupleAcc tmap a
-          -> FoldSeqRegular pre' (untupleAfun m f) a0
+          -> FoldSeqRegular pre' (untupleAfun m f) (makeSame (untupleAcc tmap a))
           | otherwise -> error "should not happen normalise cons."
         FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
         Stuple t                -> Stuple (cvtCT t)
