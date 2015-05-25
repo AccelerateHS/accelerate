@@ -287,7 +287,7 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
 
     pp (PrimApp p a)
       | infixOp, Tuple (NilTup `SnocTup` x `SnocTup` y) <- a
-      = wrap $ ppE x <+> f <+> ppE y
+      = wrap $ sep [ppE x, f, ppE y]
       | otherwise
       = wrap $ f' <+> ppE a
       where
