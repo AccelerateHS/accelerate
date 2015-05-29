@@ -675,12 +675,12 @@ awhile = Acc $$$ Awhile
 
 -- | Get the outermost dimension of a shape
 --
-indexHead :: Slice sh => Exp (sh :. Int) -> Exp Int
+indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
 
 -- | Get all but the outermost element of a shape
 --
-indexTail :: Slice sh => Exp (sh :. Int) -> Exp sh
+indexTail :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail = Exp . IndexTail
 
 -- | Map a multi-dimensional index into a linear, row-major representation of an
