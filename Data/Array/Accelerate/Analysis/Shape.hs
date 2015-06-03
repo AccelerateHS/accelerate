@@ -600,10 +600,11 @@ scanOp acc = do
              (Just $ (\ (Z :. n) -> Z :. n + 1) sh)
              Nothing
 
-permuteOp :: (Shape sh, Elt e) => ArraysPartial (Array sh e) -> ArraysPartial (Array sh' e) -> Shapes (ArraysPartial (Array sh e))
-permuteOp def _ = do
-  sh <- lift $ shapePartial def
-  parDegree $ size sh
+permuteOp :: (Shape sh, Shape sh', Elt e) => ArraysPartial (Array sh e) -> ArraysPartial (Array sh' e) -> Shapes (ArraysPartial (Array sh e))
+permuteOp def acc = do
+  sh  <- lift $ shapePartial def
+  sh' <- lift $ shapePartial acc
+  parDegree $ size sh'
   return $ PartialArray (Just sh) Nothing
 
 evalPreOpenFun :: (Elt a, Elt b)
