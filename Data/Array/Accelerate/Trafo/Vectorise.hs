@@ -637,7 +637,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = liftedAcc $ toRegularC $ liftedCondC (liftedE p) (fromRegularC $ lifted t) (fromRegularC $ lifted e)
 
     -- TODO: Try to find a way to clean this up
-    awhileL :: forall t. (Arrays t, Arrays (Vector' t))
+    awhileL :: forall t. (Arrays t, Arrays (Vector' t), Arrays (Regular t))
             => PreOpenAfun acc aenv (t -> Scalar Bool)
             -> PreOpenAfun acc aenv (t -> t)
             -> acc             aenv t
@@ -649,35 +649,33 @@ liftPreOpenAcc vectAcc strength ctx size acc
       , Just iter_p'  <- iter_p
       = AvoidedAcc $ inject $ Awhile pred_p' iter_p' a'
       | otherwise
-      = $internalError "liftPreOpenAcc" "AWhile is currently unsupported"
-      -- = liftedAcc . toRegularC
-      -- $^ Alet (fromRegularC (lifted a))
-      -- $^ let
-      --      init  = avar0
-      --      init' = inject $ Alet (values $ inject $ weakenA1 pred_l `subApply` init)
-      --                     $ atup3 (weakenA1 init) avar0 (fromHOAS S.or avar0)
+      = liftedAcc
+      $^ Alet (lifted a)
+      $^ let
+           init' = inject $ Alet (regularValuesC $ inject $ weakenA1 pred_l `subApply` avar0)
+                          $ atup3 avar1 avar0 (fromHOAS S.or avar0)
 
-      --      pred' = Alam $ Abody $ inject $ Aprj ZeroTupIdx avar0
+           pred' = Alam $ Abody $ inject $ Aprj ZeroTupIdx avar0
 
-      --      iter' :: acc (aenv', s) (Vector' t)
-      --            -> acc (aenv', s) (Vector Bool)
-      --            -> acc (aenv', s) (Scalar Bool)
-      --            -> acc (aenv', s) (Vector' t, Vector Bool, Scalar Bool)
-      --      iter' a f _ = let a' = liftedCondC f (inject $ weakenA1 iter_l `subApply` a) a
-      --                        f' = fromHOAS (S.zipWith (S.&&*)) f (values $ inject $ weakenA1 pred_l `subApply` a')
-      --                        c' = fromHOAS S.or f'
-      --                    in atup3 a' f' c'
+           iter' :: acc (aenv', s) (Regular t)
+                 -> acc (aenv', s) (Vector Bool)
+                 -> acc (aenv', s) (Scalar Bool)
+                 -> acc (aenv', s) (Regular t, Vector Bool, Scalar Bool)
+           iter' a f _ = let a' = toRegularC $ liftedCondC f (fromRegularC $ inject $ weakenA1 iter_l `subApply` a) (fromRegularC a)
+                             f' = fromHOAS (S.zipWith (S.&&*)) f (regularValuesC $ inject $ weakenA1 pred_l `subApply` a')
+                             c' = fromHOAS S.or f'
+                         in atup3 a' f' c'
 
-      --      iter'' :: PreOpenAfun acc aenv' ((Vector' t, Vector Bool, Scalar Bool)
-      --             -> (Vector' t, Vector Bool, Scalar Bool))
-      --      iter'' = Alam $ Abody $ iter' (inject $ Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx) avar0)
-      --                                    (inject $ Aprj (SuccTupIdx ZeroTupIdx) avar0)
-      --                                    (inject $ Aprj ZeroTupIdx avar0)
+           iter'' :: PreOpenAfun acc aenv' ((Regular t, Vector Bool, Scalar Bool)
+                  -> (Regular t, Vector Bool, Scalar Bool))
+           iter'' = Alam $ Abody $ iter' (inject $ Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx) avar0)
+                                         (inject $ Aprj (SuccTupIdx ZeroTupIdx) avar0)
+                                         (inject $ Aprj ZeroTupIdx avar0)
 
-      --    in Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx)
-      --    $^ Awhile pred'
-      --              (weakenA1 iter'')
-      --              init'
+         in Aprj (SuccTupIdx . SuccTupIdx $ ZeroTupIdx)
+         $^ Awhile pred'
+                   (weakenA1 iter'')
+                   init'
 
     useL :: Arrays a
          => ArrRepr a
