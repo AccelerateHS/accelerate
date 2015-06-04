@@ -4,10 +4,12 @@ env:
     - GHC=7.8.4 MODE=-fdebug
     - GHC=7.10.1 CABAL=1.22
     - GHC=7.10.1 CABAL=1.22 MODE=-fdebug
+    - GHC=7.10.2 CABAL=1.22 MODE=-fdebug
     - GHC=head CABAL=head MODE=-fdebug
 
 matrix:
   allow_failures:
+    - env: GHC=7.10.2 CABAL=1.22 MODE=-fdebug
     - env: GHC=head CABAL=head MODE=-fdebug
 
 before_install:
