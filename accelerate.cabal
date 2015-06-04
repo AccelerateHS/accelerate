@@ -259,7 +259,7 @@ Library
   ghc-prof-options:     -caf-all -auto-all
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25
+    ghc-options:        -fspec-constr-count=25 -fcontext-stack=25
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
