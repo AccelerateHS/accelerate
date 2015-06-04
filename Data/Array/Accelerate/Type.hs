@@ -50,11 +50,17 @@ import Foreign.C.Types (
   -- in the future, CHalf
 
 
--- Extend Typeable support for 8- and 9-tuple
--- ------------------------------------------
+-- Extend Typeable support for 8-tuple and beyond
+-- ----------------------------------------------
 
 deriving instance Typeable (,,,,,,,)
 deriving instance Typeable (,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,,,,,)
+deriving instance Typeable (,,,,,,,,,,,,,,)
 
 
 -- Scalar types
