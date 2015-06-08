@@ -168,6 +168,7 @@ Flag internal-checks
 Library
   Build-depends:        array                   >= 0.3,
                         base                    >= 4.7,
+                        base-orphans            >= 0.3,
                         containers              >= 0.3,
                         exceptions              >= 0.6,
                         unordered-containers    >= 0.2,
