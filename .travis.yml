@@ -38,12 +38,12 @@ install:
 script:
     # Check the build
     - cabal configure -v2 -flib-Werror ${MODE}
-    - cabal build
-    - cabal haddock
-#    - cabal test --show-details=always
+    - travis_wait cabal build
+    - travis_wait cabal haddock
+#    - travis_wait cabal test --show-details=always
 
     # Check the source distribution can be generated, built, and installed
-    - cabal sdist
+    - travis_wait cabal sdist
     - |
         export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
         cd dist
