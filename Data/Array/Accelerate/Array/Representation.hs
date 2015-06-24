@@ -120,17 +120,25 @@ instance Shape sh => Shape (sh, Int) where
 
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
-                                        Clamp      -> bound sh ix bndy `addDim` 0
-                                        Mirror     -> bound sh ix bndy `addDim` (-i)
-                                        Wrap       -> bound sh ix bndy `addDim` (sz+i)
+                                        Clamp      -> next `addDim` 0
+                                        Mirror     -> next `addDim` (-i)
+                                        Wrap       -> next `addDim` (sz+i)
                                         Constant e -> Left e
     | i >= sz                       = case bndy of
-                                        Clamp      -> bound sh ix bndy `addDim` (sz-1)
-                                        Mirror     -> bound sh ix bndy `addDim` (sz-(i-sz+2))
-                                        Wrap       -> bound sh ix bndy `addDim` (i-sz)
+                                        Clamp      -> next `addDim` (sz-1)
+                                        Mirror     -> next `addDim` (sz-(i-sz+2))
+                                        Wrap       -> next `addDim` (i-sz)
                                         Constant e -> Left e
-    | otherwise                     = bound sh ix bndy `addDim` i
+    | otherwise                     = next `addDim` i
     where
+      -- This function is quite difficult to optimize due to the deep recursion
+      -- that is can generate with high-dimensional arrays. If we let 'next' be
+      -- inlined into each alternative of the cases above the size of this
+      -- function on an n-dimensional array will grow as 7^n. This quickly causes
+      -- GHC's head to explode. See GHC Trac #10491 for more details.
+      next = bound sh ix bndy
+      {-# NOINLINE next #-}
+
       Right ds `addDim` d = Right (ds, d)
       Left e   `addDim` _ = Left e
 
