@@ -88,12 +88,12 @@ prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
 -- (x,y,z) yields a dark background with light highlights.
 --
 escapeToColour :: Exp Int32 -> Exp RGBA32
-escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (x,y,z,w))
+escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (r,g,b,a))
   where
-    x   = constant 0
-    w   = A.fromIntegral (3 * m)
-    z   = A.fromIntegral (5 * m)
-    y   = A.fromIntegral (7 * m)
+    r   = A.fromIntegral (3 * m)
+    g   = A.fromIntegral (5 * m)
+    b   = A.fromIntegral (7 * m)
+    a   = constant 0
 
 
 {--
