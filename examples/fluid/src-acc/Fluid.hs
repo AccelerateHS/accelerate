@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 --
 -- Fluid simulation
 --
@@ -167,7 +168,7 @@ advect dt vf df = A.generate sh backtrace
 
         -- read the density values surrounding the calculated advection point
         get ix'@(Z :. j' :. i')
-          = (j' <* 0 ||* i' <* 0 ||* j' >=* h ||* i' >=* w)
+          = (j' A.<* 0 ||* i' A.<* 0 ||* j' >=* h ||* i' >=* w)
           ? (A.constant zero, df A.! A.lift ix')
 
         d00     = get (Z :. j0 :. i0)

@@ -1,5 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternGuards   #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies    #-}
+
 module Page
         ( PageId
         , Rank

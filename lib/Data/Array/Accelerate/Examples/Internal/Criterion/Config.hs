@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Examples.Internal.Criterion.Config (
 
 ) where
 
-import Prelude                                  hiding ( (.), id )
+import Prelude                                  hiding ( (.), (<$>), id )
 import Data.Char
 import Data.Label
 import Data.Label.Derive

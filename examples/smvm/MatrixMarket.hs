@@ -8,7 +8,7 @@ import Control.Applicative                      hiding ( many )
 import Data.Int
 import Data.Complex
 import Data.Attoparsec.ByteString.Char8
-import Data.ByteString.Lex.Double
+import Data.ByteString.Lex.Fractional
 import qualified Data.Attoparsec.Lazy           as L
 import qualified Data.ByteString.Lazy           as L
 
@@ -60,13 +60,14 @@ data Matrix
 
 comment :: Parser ()
 comment = char '%' *> skipWhile (not . eol) *> endOfLine
-  where eol w = w `elem` "\n\r"
+  where
+    eol w = w `elem` ("\n\r" :: String)
 
 floating :: Fractional a => Parser a
 floating = do
-  mv <- readDouble <$> (skipSpace *> takeTill isSpace)  -- readDouble does the fancy stuff
+  mv <- readDecimal <$> (skipSpace *> takeTill isSpace)  -- readDecimal does the fancy stuff
   case mv of
-       Just (v,_) -> return . realToFrac $ v
+       Just (v,_) -> return v
        Nothing    -> fail "floating-point number"
 
 integral :: Integral a => Parser a

@@ -86,7 +86,7 @@ findClosestCluster clusters points =
       let d  = A.snd st
           d' = distance p (centroidOfCluster c)
       in
-      d' <* d ? ( lift (idOfCluster c, d') , st )
+      d' A.<* d ? ( lift (idOfCluster c, d') , st )
 
 
 -- Given a vector of points and a vector of clusters we, we first locate the

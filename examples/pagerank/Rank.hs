@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Rank (rank)
   where

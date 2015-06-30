@@ -1,5 +1,6 @@
-{-# LANGUAGE PatternGuards   #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PatternGuards    #-}
+{-# LANGUAGE TemplateHaskell  #-}
 --
 -- Configuration parameters
 --

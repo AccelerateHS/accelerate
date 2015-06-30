@@ -6,7 +6,6 @@ module Digest (readDict, extract)
 import MD5
 import Config
 
-import Prelude
 import Data.Label
 import Control.Monad
 import Control.Applicative
@@ -14,6 +13,7 @@ import Data.ByteString.Internal                 ( w2c )
 import qualified Data.Serialize                 as S
 import qualified Data.ByteString                as S
 import qualified Data.ByteString.Lazy.Char8     as L
+import Prelude
 
 import Data.Array.Accelerate.Array.Data         as A
 import Data.Array.Accelerate.Array.Sugar        as A

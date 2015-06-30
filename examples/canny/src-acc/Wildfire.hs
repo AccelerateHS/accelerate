@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE TypeOperators #-}
 -- This module defines the final phase of the Canny algorithm, a recursive
 -- algorithm to "connect" pixels of the output image.

@@ -178,8 +178,8 @@ nonMaximumSuppression low high magdir =
         --          |
         --   255 --- ---
         --
-        offsetx         = dir >* orient' Vert  ? (-1, dir <* orient' Vert ? (1, 0))
-        offsety         = dir <* orient' Horiz ? (-1, 0)
+        offsetx         = dir A.>* orient' Vert  ? (-1, dir A.<* orient' Vert ? (1, 0))
+        offsety         = dir A.<* orient' Horiz ? (-1, 0)
 
         (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
         (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
@@ -188,7 +188,7 @@ nonMaximumSuppression low high magdir =
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --
-        none            = dir ==* orient' Undef ||* mag <* low ||* mag <* fwd ||* mag <* rev
+        none            = dir ==* orient' Undef ||* mag A.<* low ||* mag A.<* fwd ||* mag A.<* rev
         strong          = mag >=* high
     in
     A.fromIntegral (boolToInt (A.not none) * (1 + boolToInt strong)) * 0.5

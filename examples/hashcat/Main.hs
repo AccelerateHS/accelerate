@@ -1,4 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns     #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -17,6 +18,7 @@ import Data.Array.Accelerate.Examples.Internal
 import qualified Data.Array.Accelerate                  as A
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.ByteString.Lazy.Char8             as L
+import Prelude
 
 
 main :: IO ()

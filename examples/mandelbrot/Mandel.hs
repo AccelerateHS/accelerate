@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 --
 -- A Mandelbrot set generator.
@@ -48,7 +49,7 @@ mandelbrot
 mandelbrot screenX screenY depth view =
   generate (constant (Z:.screenY:.screenX))
            (\ix -> let c = initial ix
-                   in  A.snd $ A.while (\zi -> A.snd zi <* lIMIT &&* dot (A.fst zi) <* 4)
+                   in  A.snd $ A.while (\zi -> A.snd zi A.<* lIMIT &&* dot (A.fst zi) A.<* 4)
                                        (\zi -> lift1 (next c) zi)
                                        (lift (c, constant 0)))
   where

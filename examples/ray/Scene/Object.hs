@@ -126,8 +126,8 @@ checkers pos
 
         v1      = (A.truncate (x / 100) :: Exp Int32) `mod` 2
         v2      = (A.truncate (z / 100) :: Exp Int32) `mod` 2
-        v3      = A.fromIntegral . boolToInt $ x <* 0.0
-        v4      = A.fromIntegral . boolToInt $ z <* 0.0
+        v3      = A.fromIntegral . boolToInt $ x A.<* 0.0
+        v4      = A.fromIntegral . boolToInt $ z A.<* 0.0
     in
     v1 `xor` v2 `xor` v3 `xor` v4 ==* 1 {- True -}
       ? ( rawColor 1.0 1.0 1.0

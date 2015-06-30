@@ -22,6 +22,7 @@ import Data.Label
 import Data.Label.Derive
 import Test.Framework                           ( RunnerOptions, RunnerOptions', optionsDescription, SuppliedRunnerOptions )
 import System.Console.GetOpt
+import Prelude
 
 import Data.Array.Accelerate.Examples.Internal.Backend
 

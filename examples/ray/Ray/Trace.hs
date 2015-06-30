@@ -85,7 +85,7 @@ traceRay limit objects lights ambient = go limit
               next_p      = hitPlaneCheck p dist_p orig dir
 
               (point, normal, color, shine)
-                          = unlift (dist_s <* dist_p ? ( next_s, next_p ))
+                          = unlift (dist_s A.<* dist_p ? ( next_s, next_p ))
 
               -- result angle of ray after reflection
               newdir      = dir - (2.0 * (normal `dot` dir)) .* normal

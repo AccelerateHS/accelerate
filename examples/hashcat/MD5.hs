@@ -1,4 +1,5 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns     #-}
 
 module MD5 (
 
@@ -8,17 +9,17 @@ module MD5 (
 ) where
 
 
-import Prelude                                  as P
 import Numeric
 import Control.Monad
 import Control.Applicative
 import Data.Maybe
 import Data.List                                ( foldl' )
 import Data.Bits                                hiding ( rotateL )
+import Data.ByteString.Lex.Integral             ( readHexadecimal )
 import qualified Data.Serialize                 as S
 import qualified Data.ByteString                as B
 import qualified Data.ByteString.Lazy           as L
-import Data.ByteString.Lex.Integral             ( readHexadecimal )
+import Prelude                                  as P
 
 import Data.Array.Accelerate                    as A
 

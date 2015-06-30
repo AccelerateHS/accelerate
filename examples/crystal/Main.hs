@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 -- Quasicrystals demo.
 --
 -- Based on code from:

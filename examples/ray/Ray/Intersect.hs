@@ -26,8 +26,8 @@ nearest x y
         (h1, d1, _ :: Exp a) = unlift x
         (h2, d2, _ :: Exp a) = unlift y
     in
-    h1 &&* h2 ? ( d1 <* d2 ? (x, y)     -- both objects intersect; take the nearest
-                , h1 ?       (x, y) )   -- only one object intersects
+    h1 &&* h2 ? ( d1 A.<* d2 ? (x, y)     -- both objects intersect; take the nearest
+                , h1 ?         (x, y) )   -- only one object intersects
 
 
 -- | Find the nearest point of intersection for a ray. If there is a hit, then
@@ -54,7 +54,7 @@ castRay distanceTo  dummy objects orig dir
   = sfoldl (\s o -> let (_,   dist, _)  = unlift s      :: (Exp Bool, Exp Float, Exp object)
                         (hit, dist')    = unlift $ distanceTo o orig dir
                     in
-                    hit &&* dist' <* dist ? (lift (hit, dist', o), s))
+                    hit &&* dist' A.<* dist ? (lift (hit, dist', o), s))
            (lift (False, infinity, dummy))
            (constant Z)
            objects
@@ -72,9 +72,9 @@ checkRay
     -> Exp Float                        -- minimum distance
     -> Exp Bool
 checkRay distanceTo objs orig dir dist
-  = A.fst $ A.while (\s -> let (hit, i) = unlift s in A.not hit &&* i <* unindex1 (shape objs))
+  = A.fst $ A.while (\s -> let (hit, i) = unlift s in A.not hit &&* i A.<* unindex1 (shape objs))
                     (\s -> let i            = A.snd s
                                (hit, dist') = unlift $ distanceTo (objs ! index1 i) orig dir
-                           in  hit &&* dist' <* dist ? (lift (True, i), lift (False, i+1)))
+                           in  hit &&* dist' A.<* dist ? (lift (True, i), lift (False, i+1)))
                     (constant (False, 0))
 
