@@ -112,8 +112,8 @@ before_install:
 install:
     - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
     - cabal --version
-    - cabal install --only-dependencies --enable-tests ${MODE} . deps/*
-    - cabal install ${MODE} deps/*
+    - travis_retry cabal install --only-dependencies --enable-tests ${MODE} . deps/*
+    - travis_retry cabal install ${MODE} deps/*
 
 script:
     # Check the build
@@ -128,7 +128,7 @@ script:
         export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
         cd dist
         if [ -f "$SRC_TGZ" ]; then
-            cabal install --force-reinstalls ${MODE} ${SRC_TGZ}
+            travis_wait cabal install --force-reinstalls ${MODE} ${SRC_TGZ}
         else
             echo "'$SRC_TGZ': not found"
             exit 1
