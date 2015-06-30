@@ -324,6 +324,7 @@ Executable accelerate-smvm
 Executable accelerate-crystal
   hs-source-dirs:       examples/crystal
   Main-is:              Main.hs
+  other-modules:        Config
 
   ghc-options:          -O2 -Wall -threaded -rtsopts -eventlog
   ghc-prof-options:     -auto-all
@@ -575,14 +576,12 @@ Executable accelerate-pagerank
   Main-is:              Main.hs
   hs-source-dirs:       examples/pagerank
   other-modules:        Config
+                        Count
+                        Load
                         Page
                         Progress
                         Rank
                         Step
-                        Count
-                        Rank
-                        Step
-                        Load
 
   ghc-options:          -rtsopts -threaded -O2
 
@@ -648,6 +647,7 @@ Executable accelerate-kmeans
   other-modules:        Config
                         Main
                         Kmeans
+                        GenSamples
 
   if !flag(kmeans)
     buildable:          False
