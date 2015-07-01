@@ -88,8 +88,10 @@ prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
 -- Directly convert the iteration count on escape to a colour. The base set
 -- (x,y,z) yields a dark background with light highlights.
 --
+-- Note that OpenGL reads pixel data in AGBR format, rather than RGBA.
+--
 escapeToColour :: Exp Int32 -> Exp RGBA32
-escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (r,g,b,a))
+escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (a,b,g,r))
   where
     r   = A.fromIntegral (3 * m)
     g   = A.fromIntegral (5 * m)
