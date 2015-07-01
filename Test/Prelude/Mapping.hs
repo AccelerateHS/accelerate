@@ -169,8 +169,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "rotateR"      (testSR A.rotateR P.rotateR)
 
             -- relational and equality operators
-          , testProperty "(<)"          (testAB (<*) (<))
-          , testProperty "(>)"          (testAB (>*) (>))
+          , testProperty "(<)"          (testAB (A.<*) (<))
+          , testProperty "(>)"          (testAB (A.>*) (>))
           , testProperty "(<=)"         (testAB (<=*) (<=))
           , testProperty "(>=)"         (testAB (>=*) (>=))
           , testProperty "(==)"         (testAB (==*) (==))
@@ -211,8 +211,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
                                          requiring (> 0) $ \ys -> test logBase logBase xs ys)
 
             -- relational and equality operators
-          , testProperty "(<)"          (testAB (<*) (<))
-          , testProperty "(>)"          (testAB (>*) (>))
+          , testProperty "(<)"          (testAB (A.<*) (<))
+          , testProperty "(>)"          (testAB (A.>*) (>))
           , testProperty "(<=)"         (testAB (<=*) (<=))
           , testProperty "(>=)"         (testAB (>=*) (>=))
           , testProperty "(==)"         (testAB (==*) (==))

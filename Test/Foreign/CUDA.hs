@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 
 module Test.Foreign.CUDA
   where

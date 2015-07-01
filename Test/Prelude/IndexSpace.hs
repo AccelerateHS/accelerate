@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 
 module Test.Prelude.IndexSpace (
@@ -27,6 +28,7 @@ import Data.Array.Accelerate.Array.Sugar                        ( newArray, dim 
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 import Data.Array.ST                                            ( runSTArray )
+import Data.Array.Unboxed                                       ( IArray, UArray )
 import qualified Data.Array.Unboxed                             as IArray
 import qualified Data.Array.MArray                              as M
 
@@ -49,7 +51,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
+    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -60,7 +62,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
-    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
+    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -84,20 +86,23 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       where
         testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
         testDim sh = testProperty ("DIM" P.++ show (dim sh)) (push_fill :: Array sh e -> Property)
-
-        push_fill xs =
-          let xs'   = use xs
-              zeros = A.fill (A.shape xs') (constant 0)
-          in
-          run backend (permute const zeros id xs') ~?= xs
+          where
+            push_fill :: Array sh e -> Property
+            push_fill xs =
+              let xs'   = use xs
+                  zeros = A.fill (A.shape xs') (constant 0)
+              in
+              run backend (permute const zeros id xs') ~?= xs
 
     -- Test if the combining operation for forward permutation works, by
     -- building a histogram. Often tricky for parallel backends.
     --
+    test_histogram :: (Elt e, IsNum e, Similar e, Arbitrary e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
     test_histogram f g xs =
       forAll (sized return) $
         \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
 
+    histogramAcc :: (Elt e, IsNum e) => Int -> (Exp e -> Exp Int) -> Vector e -> Acc (Vector e)
     histogramAcc n f xs =
       let n'        = unit (constant n)
           xs'       = use xs
@@ -106,8 +111,9 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       in
       permute (+) zeros (\ix -> index1 $ f (xs' A.! ix) `mod` the n') ones
 
+    histogramRef :: forall e. (Elt e, Num e, IArray UArray e) => Int -> (e -> Int) -> Vector e -> Vector e
     histogramRef n f xs =
-      let arr :: IArray.UArray Int Int32
+      let arr :: IArray.UArray Int e
           arr =  IArray.accumArray (+) 0 (0, n-1) [ (f e `mod` n, 1) | e <- toList xs ]
       in
       fromIArray arr
@@ -168,71 +174,81 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           , testProperty "gather"       (test_gather    :: Array DIM1 e -> Property)
           , testProperty "gatherIf"     (test_gatherIf  :: Array DIM1 e -> Property)
           ]
+      where
+        test_reverse :: Vector e -> Property
+        test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
 
-    test_reverse xs   = run backend (reverseAcc xs)   ~?= reverseRef xs
-    test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
+        test_transpose :: Array DIM2 e -> Property
+        test_transpose xs = run backend (transposeAcc xs) ~?= transposeRef xs
 
-    -- Reverse a vector
-    --
-    reverseAcc xs = A.reverse (use xs)
-    reverseRef xs = fromList (arrayShape xs) (P.reverse $ toList xs)
+        -- Reverse a vector
+        --
+        reverseAcc xs = A.reverse (use xs)
+        reverseRef xs = fromList (arrayShape xs) (P.reverse $ toList xs)
 
-    -- Transpose a 2D matrix
-    --
-    transposeAcc xs = A.transpose (use xs)
-    transposeRef xs =
-      let swap (Z:.x:.y)    = Z :. y :. x
-      in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
+        -- Transpose a 2D matrix
+        --
+        transposeAcc xs = A.transpose (use xs)
+        transposeRef xs =
+          let swap (Z:.x:.y)    = Z :. y :. x
+          in  newArray (swap (arrayShape xs)) (\ix -> indexArray xs (swap ix))
 
-    -- Extracting sub-vectors
-    --
-    test_init xs =
-      P.not (isEmptyArray xs)
-        ==> toList (run backend (A.init (A.use xs))) ~?= P.init (toList xs)
+        -- Extracting sub-vectors
+        --
+        test_init :: Vector e -> Property
+        test_init xs =
+          P.not (isEmptyArray xs)
+            ==> toList (run backend (A.init (A.use xs))) ~?= P.init (toList xs)
 
-    test_tail xs =
-      P.not (isEmptyArray xs)
-        ==> toList (run backend (A.tail (A.use xs))) ~?= P.tail (toList xs)
+        test_tail :: Vector e -> Property
+        test_tail xs =
+          P.not (isEmptyArray xs)
+            ==> toList (run backend (A.tail (A.use xs))) ~?= P.tail (toList xs)
 
-    test_drop xs =
-      let n = arraySize (arrayShape xs)
-      in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-            toList (run backend (A.drop (constant i) (use xs))) ~?= P.drop i (toList xs)
+        test_drop :: Vector e -> Property
+        test_drop xs =
+          let n = arraySize (arrayShape xs)
+          in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
+                toList (run backend (A.drop (constant i) (use xs))) ~?= P.drop i (toList xs)
 
-    test_take xs =
-      let n = arraySize (arrayShape xs)
-      in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
-            toList (run backend (A.take (constant i) (use xs))) ~?= P.take i (toList xs)
+        test_take :: Vector e -> Property
+        test_take xs =
+          let n = arraySize (arrayShape xs)
+          in  forAll (choose (0, 0 `P.max` (n-1)))  $ \i ->
+                toList (run backend (A.take (constant i) (use xs))) ~?= P.take i (toList xs)
 
-    test_slit xs =
-      let n = arraySize (arrayShape xs)
-      in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
-          forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
-            toList (run backend (A.slit (constant i) (constant j) (use xs))) ~?= P.take j (P.drop i (toList xs))
+        test_slit :: Vector e -> Property
+        test_slit xs =
+          let n = arraySize (arrayShape xs)
+          in  forAll (choose (0, 0 `P.max` (n-1)))   $ \i ->
+              forAll (choose (0, 0 `P.max` (n-1-i))) $ \j ->
+                toList (run backend (A.slit (constant i) (constant j) (use xs))) ~?= P.take j (P.drop i (toList xs))
 
-    -- Gathering
-    --
-    test_gather xs =
-      let n     = arraySize (arrayShape xs)
-          n'    = 0 `P.max` (n-1)
-      in
-      forAll arbitrary                              $ \sh' ->
-      forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
-        toList (run backend (A.gather (use mapv) (use xs)))
-        ~?=
-        [ xs `indexArray` (Z:.i) | i <- toList mapv ]
+        -- Gathering
+        --
+        test_gather :: Vector e -> Property
+        test_gather xs =
+          let n     = arraySize (arrayShape xs)
+              n'    = 0 `P.max` (n-1)
+          in
+          forAll arbitrary                              $ \sh' ->
+          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+            toList (run backend (A.gather (use mapv) (use xs)))
+            ~?=
+            [ xs `indexArray` (Z:.i) | i <- toList mapv ]
 
-    test_gatherIf xs =
-      let n             = arraySize (arrayShape xs)
-          n'            = 0 `P.max` (n-1)
-      in
-      forAll arbitrary                              $ \sh' ->
-      forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
-      forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
-      forAll (arbitraryArray sh')                   $ \defaultv ->
-        toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
-        ~?=
-        gatherIfRef P.even mapv maskv defaultv xs
+        test_gatherIf :: Vector e -> Property
+        test_gatherIf xs =
+          let n             = arraySize (arrayShape xs)
+              n'            = 0 `P.max` (n-1)
+          in
+          forAll arbitrary                              $ \sh' ->
+          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+          forAll (arbitraryArray sh')                   $ \(maskv :: Vector Int) ->
+          forAll (arbitraryArray sh')                   $ \defaultv ->
+            toList (run backend $ A.gatherIf (use mapv) (use maskv) A.even (use defaultv) (use xs))
+            ~?=
+            gatherIfRef P.even mapv maskv defaultv xs
 
 
 -- Reference Implementation

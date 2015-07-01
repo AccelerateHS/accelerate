@@ -1,9 +1,9 @@
-{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 
 module Test.Prelude.Sequencing (
 
@@ -11,25 +11,24 @@ module Test.Prelude.Sequencing (
 
 ) where
 
-import Prelude hiding ( zip, zipWith, fst, snd, map, fromIntegral, sum, product, replicate, (++) )
-import qualified Prelude                                        as P
+import Prelude                                                  as P
 import Data.Label
 import Data.Maybe
 import Data.Typeable
-import Test.QuickCheck hiding ( generate, collect )
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
+import Test.QuickCheck                                          hiding ( generate, collect )
 
 import Config
 import Test.Base
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate.Examples.Internal
-import Data.Array.Accelerate                                    as Acc
+import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 
 toSeq' :: (Shape sh, Elt a)
-          => Acc (Array (sh :. Int) a)
-          -> Seq [Array sh a]
+       => Acc (Array (sh :. Int) a)
+       -> Seq [Array sh a]
 toSeq' = toSeq (Any :. Split)
 
 iota :: Int -> Acc (Vector Int)
@@ -41,13 +40,17 @@ iota' n = generate (index1 (the n)) unindex1
 --iotaChunk :: Int -> Int -> Acc (Array (Z :. Int :. Int) Int)
 --iotaChunk n b = reshape (constant (Z :. b :. n)) $ generate (index1 (constant (n * b))) unindex1
 
-idSequence :: (Shape sh, Elt a, Slice sh) => Acc (Array (sh :. Int) a) -> Acc (Array (sh :. Int) a)
-idSequence xs = reshape sh . asnd . collect
-  $ fromSeq
+idSequence
+    :: forall sh a. (Shape sh, Slice sh, Elt a)
+    => Acc (Array (sh :. Int) a)
+    -> Acc (Array (sh :. Int) a)
+idSequence = error "idSequence is currently disabled"
+{--
+idSequence xs
+  = reshape (A.shape xs) . asnd . collect
+  . fromSeq
   $ toSeq Divide xs
-  where
-    sh = Acc.shape xs
-
+--}
 
 idSequenceRef :: (Shape sh, Elt a) => (Array (sh :. Int) a) -> (Array (sh :. Int) a)
 idSequenceRef = id
@@ -68,22 +71,23 @@ scatterSequence input = collect
   $ toSeq' (asnd input)
   where
     f xs' _ upd =
-      let (to, ys) = Acc.unzip upd
-      in permute (+) xs' (index1 . (`mod` Acc.size (afst input)) . (to Acc.!)) ys
+      let (to, ys) = A.unzip upd
+      in permute (+) xs' (index1 . (`mod` A.size (afst input)) . (to A.!)) ys
 
 scatterSequenceRef :: (Elt a, IsNum a) => (Vector a, Vector (Int, a)) -> Vector a
 scatterSequenceRef (vec, vec_upd) =
-  let xs = toList vec
-      n = P.length xs
-      updates = toList vec_upd
-      f xs' (i, x) = [ if j == i `P.mod` n then x P.+ y else y | (j, y) <- P.zip [0..] xs']
-      ys = P.foldl f xs updates
-  in fromList (Z :. n) ys
+  let xs                = toList vec
+      updates           = toList vec_upd
+      n                 = P.length xs
+      ys                = P.foldl f xs updates
+      f xs' (i, x)      = [ if j == i `P.mod` n then x P.+ y else y | (j, y) <- P.zip [0..] xs']
+  in
+  fromList (Z :. n) ys
 
 logsum :: (Elt a, IsFloating a) => Int -> Acc (Scalar a)
 logsum n = collect
   $ foldSeq (+) 0.0
-  $ mapSeq (map (log . fromIntegral . (+1)))
+  $ mapSeq (A.map (log . A.fromIntegral . (+1)))
   $ toSeq' (iota n)
 
 logsumRef :: (Elt a, IsFloating a) => Int -> Scalar a
@@ -104,7 +108,7 @@ nestedSequence n m = asnd . collect
   $ mapSeq
   (\ i -> collect
           $ foldSeq (+) 0
-          $ mapSeq (zipWith (+) i)
+          $ mapSeq (A.zipWith (+) i)
           $ toSeq' (iota m)
   )
   $ toSeq' (iota n)
@@ -118,7 +122,7 @@ nestedIrregularSequence n = asnd . collect
   $ mapSeq
   (\ i -> collect
         $ foldSeq (+) 0
-        $ mapSeq (zipWith (+) i)
+        $ mapSeq (A.zipWith (+) i)
         $ toSeq' (iota' i)
   )
   $ toSeq' (iota n)
@@ -154,22 +158,22 @@ chunking1 :: Int -> Acc (Scalar Int)
 chunking1 n = collect
   $ foldSeq (+) 0
   $ let s = toSeq' (iota n)
-    in zipWithSeq (\ x y -> zipWith (-) (sum x) (product y))
+    in zipWithSeq (\ x y -> A.zipWith (-) (A.sum x) (A.product y))
          (mapSeq iota' s)
-         (mapSeq (iota' . map (constant n -)) s)
+         (mapSeq (iota' . A.map (constant n -)) s)
 
 
 chunking2 :: Acc (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> Acc (Vector Int)
 chunking2 input = asnd $ collect
   $ fromSeq
-  $ zipWithSeq (++)
+  $ zipWithSeq (A.++)
       (toSeq (Z :. Split :. All) (afst input))
       (toSeq (Z :. Split :. All) (asnd input))
 
 chunking2b :: (Array (Z :. Int :. Int) Int, Array (Z :. Int :. Int) Int) -> Acc (Vector Int)
 chunking2b input = asnd $ collect
   $ fromSeq
-  $ zipWithSeq (++)
+  $ zipWithSeq (A.++)
       (toSeq (Z :. Split :. All) $ use (P.fst input))
       (toSeq (Z :. Split :. All) $ use (P.snd input))
 
@@ -235,7 +239,7 @@ test_sequences backend opt = testGroup "sequences"
   , testGroup "nested"
     [ testNestedSequence
     , testNestedIrregularSequence
---    , testDeepNestedSequence
+    , testDeepNestedSequence
     ]
   , testGroup "chunking"
     [ testChunking1
