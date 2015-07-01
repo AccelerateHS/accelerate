@@ -1,6 +1,7 @@
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE CPP                 #-}
 --
 -- A cellular automata simulation over a smooth domain.
 --
@@ -91,8 +92,8 @@ smoothlife conf opts aa
       sqrt (x*x + y*y)
 
     linear x l u
-      = x <* l-u/2 ? ( 0.0
-      , x >* l+u/2 ? ( 1.0
+      = x A.<* l-u/2 ? ( 0.0
+      , x A.>* l+u/2 ? ( 1.0
       , (x - l + u / 2) / u ))
 
     clamp = A.map
@@ -164,6 +165,6 @@ getSigmoidFunction f x a ea
   where
     bounded :: (Exp R -> Exp R -> Exp R -> Exp R) -> Exp R -> Exp R -> Exp R -> Exp R
     bounded f' x' a' ea'
-      = x' <* a'-ea'/2.0 ? ( 0.0
-      , x' >* a'+ea'/2.0 ? ( 1.0
+      = x' A.<* a'-ea'/2.0 ? ( 0.0
+      , x' A.>* a'+ea'/2.0 ? ( 1.0
       , f' x' a' ea' ))

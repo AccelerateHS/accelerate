@@ -36,8 +36,8 @@ transform width height cutoff' arrReal = arrResult
     centreY     = constant (height `div` 2)
 
     zap ix      = let (Z :. y :. x)     = unlift ix
-                      inx               = x >* centreX - cutoff &&* x <* centreX + cutoff
-                      iny               = y >* centreY - cutoff &&* y <* centreY + cutoff
+                      inx               = x >* centreX - cutoff &&* x A.<* centreX + cutoff
+                      iny               = y >* centreY - cutoff &&* y A.<* centreY + cutoff
                   in
                   inx &&* iny ? (constant (0 :+ 0), arrFreq A.! ix)
 

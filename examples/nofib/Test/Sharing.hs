@@ -236,19 +236,19 @@ iteration = testGroup "iteration"
 
     test1 :: Acc (Vector Float)
     test1 = flip A.map vec
-      $ \x -> A.while (<* x) (+1) 0
+      $ \x -> A.while (A.<* x) (+1) 0
 
     test2 :: Acc (Vector Float)
     test2 = flip A.map vec
       $ \x -> let y = 2*pi
-              in  y + A.while (<* 10) (+y) x
+              in  y + A.while (A.<* 10) (+y) x
 
     test3 :: Acc (Vector Float)
     test3 = flip A.map vec
-      $ \x -> A.while (<* x) (+x) 0
+      $ \x -> A.while (A.<* x) (+x) 0
 
     awhile_test :: Acc (Vector Float)
-    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) <* 200)) (A.map (+1)) vec
+    awhile_test = A.awhile (\a -> A.unit (the (A.sum a) A.<* 200)) (A.map (+1)) vec
 
     iterate_test :: Acc (Vector Float)
     iterate_test = flip A.map vec

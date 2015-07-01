@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 
 module Gloss.Draw
   where
@@ -36,13 +37,13 @@ colourise scheme = A.map (rgba32OfFloat . colour scheme)
     colour Rainbow3 f    = rainbow' (sqrt (sqrt (1-f))) (sqrt (sqrt f))
 
     rainbow p x
-      = p >* 0 &&* p <* 1
-               ? (lift (x,          x*p,        constant 0, alpha)
-      , p <* 2 ? (lift (x*(2-p),    x,          constant 0, alpha)
-      , p <* 3 ? (lift (constant 0, x,          x*(p-2),    alpha)
-      , p <* 4 ? (lift (constant 0, x*(4-p),    x,          alpha)
-      , p <* 5 ? (lift (x*(p-4),    constant 0, x,          alpha)
-      , p <* 6 ? (lift (x,          constant 0, x*(6-p),    alpha)
+      = p >* 0 &&* p A.<* 1
+                 ? (lift (x,          x*p,        constant 0, alpha)
+      , p A.<* 2 ? (lift (x*(2-p),    x,          constant 0, alpha)
+      , p A.<* 3 ? (lift (constant 0, x,          x*(p-2),    alpha)
+      , p A.<* 4 ? (lift (constant 0, x*(4-p),    x,          alpha)
+      , p A.<* 5 ? (lift (x*(p-4),    constant 0, x,          alpha)
+      , p A.<* 6 ? (lift (x,          constant 0, x*(6-p),    alpha)
       , {-else-} (constant (0,0,0,0))))))))
 
     rainbow' p x
