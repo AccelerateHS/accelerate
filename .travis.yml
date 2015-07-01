@@ -27,8 +27,10 @@ env:
     - GHC=7.8.4 CUDA=6.5-14
     - GHC=7.8.4 CUDA=7.0-28
     - GHC=7.10.1 CABAL=1.22
-    - GHC=7.10.1 CABAL=1.22 CUDA=6.5-14
-    - GHC=7.10.1 CABAL=1.22 CUDA=7.0-28
+      # GHC-7.10 is too slow and uses too much memory for a complete build
+      # within the 50 minute time limit.
+      # - GHC=7.10.1 CABAL=1.22 CUDA=6.5-14
+      # - GHC=7.10.1 CABAL=1.22 CUDA=7.0-28
     - GHC=head CABAL=head CUDA=7.0-28
 
 matrix:
@@ -112,8 +114,8 @@ before_install:
 install:
     - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
     - cabal --version
-    - travis_retry cabal install --only-dependencies --enable-tests ${MODE} . deps/*
-    - travis_retry cabal install ${MODE} deps/*
+    - cabal install --only-dependencies --enable-tests ${MODE} . deps/*
+    - cabal install ${MODE} deps/*
 
 script:
     # Check the build
