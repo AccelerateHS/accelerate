@@ -7,7 +7,7 @@ env:
     - SHA_ACCELERATE=4d181866db677d0bb0fad0aa3224d8856c5a0911
     - URL_ACCELERATE=https://github.com/AccelerateHS/accelerate.git
 
-    - SHA_ACCELERATE_IO=8f5fbf325625a5abdefa3aed79d265e8098fa235
+    - SHA_ACCELERATE_IO=af478f260b8ea9df892f9af633eec1ba1d694317
     - URL_ACCELERATE_IO=https://github.com/AccelerateHS/accelerate-io.git
 
     - SHA_ACCELERATE_FFT=319520e23804315e10d5d7bdf0405a742df9eab2
