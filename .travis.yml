@@ -114,8 +114,8 @@ before_install:
 install:
     - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
     - cabal --version
-    - llc --version
-    - opt --version
+    - llc --version; true
+    - opt --version; true
     - cabal install --only-dependencies --enable-tests ${MODE} . deps/*
     - cabal install ${MODE} deps/*
 
