@@ -20,7 +20,7 @@ $(mkLabels [''Config])
 defaults :: Config
 defaults = Config
   {
-    _configCutoff               = 100
+    _configCutoff               = 10
   , _configClip                 = 128
   }
 
