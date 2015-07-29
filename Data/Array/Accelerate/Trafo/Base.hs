@@ -338,6 +338,7 @@ bindExps BaseSup       = id
 bindExps (PushSup g b) = bindExps g . Let b
 
 -- Application via let binding.
+--
 subApply :: (RebuildableAcc acc, Arrays a)
          => PreOpenAfun acc aenv (a -> b)
          -> acc             aenv a
@@ -345,8 +346,8 @@ subApply :: (RebuildableAcc acc, Arrays a)
 subApply (Alam (Abody f)) a = Alet a f
 subApply _                _ = error "subApply: inconsistent evaluation"
 
--- | Replace all occurences of the first variable with the given array expression. The environment
--- shrinks.
+-- | Replace all occurrences of the first variable with the given array
+-- expression. The environment shrinks.
 --
 inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
 inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f
