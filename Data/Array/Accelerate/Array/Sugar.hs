@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
@@ -43,6 +44,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array indexing and slicing
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..), AsSlice(..),
+  (:<=),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
@@ -896,6 +898,17 @@ instance Shape sh => Division (Any sh) where
 instance (Shape sh, Slice sh) => Division (Divide sh) where
   type DivisionSlice (Divide sh) = sh
   slicesIndex _ = sliceNoneIndex (undefined :: sh)
+
+
+-- | Ensures the rank of one shape is less than the rank of another.
+--
+class sh1 :<= sh2 where
+
+infix 2 :<=
+
+instance Z :<= sh
+
+instance (sh1 :<= sh2) => sh1:.i1 :<= sh2:.i2
 
 
 -- Array operations

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -46,10 +47,10 @@ module Data.Array.Accelerate.Language (
   collect,
 
   -- * Sequence producers
-  streamIn, toSeq,
+  streamIn, subarrays, produce,
 
   -- * Sequence transudcers
-  mapSeq, zipWithSeq, scanSeqE,
+  mapSeq, zipWithSeq, mapAccumFlat,
 
   -- * Sequence consumers
   foldSeqFlatten,
@@ -86,8 +87,8 @@ module Data.Array.Accelerate.Language (
   acond, awhile,
 
   -- * Index construction and destruction
-  indexHead, indexTail, toIndex, fromIndex, indexTrans,
-  intersect, union,
+  indexHead, indexTail, toIndex, fromIndex, indexSlice, indexTrans,
+  intersect, union, toSlice,
 
   -- * Flow-control
   cond, while,
@@ -477,19 +478,25 @@ stencil2 = Acc $$$$$ Stencil2
 streamIn :: Arrays a
          => [a]
          -> Seq [a]
-streamIn arrs = Seq (StreamIn arrs)
+streamIn = Seq . StreamIn
 
--- | Convert the given array to a sequence by dividing the array up into subarrays.
--- The first argument captures how to the division should be performed. The
--- presence of `All` in the division descriptor indicates that elements in the
--- corresponding dimension should be retained in the subarrays, whereas `Split`
--- indicates that the input array should divided along this dimension.
+-- |Split an array up into subarrays of given shape along the outermost dimension
+-- moving inward - e.g. if the array is a matrix, the returned sequence is the
+-- submatrices in column major order.
 --
-toSeq :: (Division slsix, Elt a)
-      => slsix
-      -> Acc (Array (FullShape (DivisionSlice slsix)) a)
-      -> Seq [Array (SliceShape (DivisionSlice slsix)) a]
-toSeq spec acc = Seq (ToSeq spec acc)
+subarrays :: (Shape sh, Elt e, sh :<= DIM3)
+          => Exp sh
+          -> Array sh e
+          -> Seq [Array sh e]
+subarrays = Seq $$ Subarrays
+
+-- |Generate a sequence by applying a function at every index.
+--
+produce :: Arrays a
+        => Exp Int
+        -> (Acc (Scalar Int) -> Acc a)
+        -> Seq [a]
+produce = Seq $$ Produce
 
 -- | Apply the given array function element-wise to the given sequence.
 --
@@ -509,22 +516,24 @@ zipWithSeq :: (Arrays a, Arrays b, Arrays c)
            -> Seq [c]
 zipWithSeq = Seq $$$ ZipWithSeq
 
--- | scanSeq (+) a0 x seq. Scan a sequence x by combining each
--- element using the given binary operation (+). (+) must be
--- associative:
+-- |A combination of map and fold. Applies a function to a chunk of a sequence,
+-- passing an accumulating parameter from left to right, and returning the new
+-- sequence.
 --
---   Forall a b c. (a + b) + c = a + (b + c),
+-- The function "f" needs to obey the following law, at least
+-- observationally:
 --
--- and a0 must be the identity element for (+):
+--   forall a shs1 shs2 es1 es2.
+--     uncurry3 f (f b shs1 es1) = f b (shs1 ++ shs2) (es1 ++ es2)
 --
---   Forall a. a0 + a = a = a + a0.
+--     where uncurry3 f (a, b, c) = f a b c
 --
-scanSeqE :: Elt a
-        => (Exp a -> Exp a -> Exp a)
-        -> Exp a
-        -> Seq [Scalar a]
-        -> Seq [Scalar a]
-scanSeqE = Seq $$$ ScanSeq
+mapAccumFlat :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
+             => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> Acc (a, Vector sh', Vector e'))
+             -> Acc a
+             -> Seq [Array sh e]
+             -> Seq [Array sh' e']
+mapAccumFlat = Seq $$$ MapAccumFlat
 
 -- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
 -- vecotor append (++) as the companion operator:
@@ -669,6 +678,14 @@ indexTail = Exp . IndexTail
 indexTrans :: Shape sh => Exp sh -> Exp sh
 indexTrans = Exp . IndexTrans
 
+-- | Project the shape of a slice from the shape of an array.
+--
+indexSlice :: Slice slix
+           => Exp slix
+           -> Exp (FullShape slix)
+           -> Exp (SliceShape slix)
+indexSlice = Exp $$ IndexSlice
+
 -- | Map a multi-dimensional index into a linear, row-major representation of an
 -- array. The first argument is the array shape, the second is the index.
 --
@@ -679,6 +696,15 @@ toIndex = Exp $$ ToIndex
 --
 fromIndex :: Shape sh => Exp sh -> Exp Int -> Exp sh
 fromIndex = Exp $$ FromIndex
+
+-- | Get the index of the Nth slice in an array starting from the given index.
+--
+toSlice :: Slice slix
+        => Exp slix
+        -> Exp (FullShape slix)
+        -> Exp Int
+        -> Exp slix
+toSlice = Exp $$$ ToSlice
 
 -- | Intersection of two shapes
 --

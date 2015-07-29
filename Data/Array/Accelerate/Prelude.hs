@@ -96,10 +96,10 @@ module Data.Array.Accelerate.Prelude (
   foldSeqE, fromSeq, fromSeqE, shapes,
 
   -- * Sequence generators
-  toSeqE, toSeqInner, toSeqOuter2, toSeqOuter3, generateSeqE,
+  toSeqE, toSeqInner, toSeqOuter, generateSeqE,
 
   -- * Sequence transducers
-  mapSeqE, zipWithSeqE
+  mapSeqE, zipWithSeqE, scanSeqE
 
 ) where
 
@@ -1095,10 +1095,8 @@ reverse xs =
 
 -- | Transpose the rows and columns of a matrix.
 --
-transpose :: Elt e => Acc (Array DIM2 e) -> Acc (Array DIM2 e)
-transpose mat =
-  let swap = lift1 $ \(Z:.x:.y) -> Z:.y:.x :: Z:.Exp Int:.Exp Int
-  in  backpermute (swap $ shape mat) swap mat
+transpose :: (Shape sh, Elt e) => Acc (Array sh e) -> Acc (Array sh e)
+transpose mat = backpermute (indexTrans $ shape mat) indexTrans mat
 
 
 -- Extracting sub-vectors
@@ -1872,23 +1870,18 @@ toSeqE = toSeqInner
 -- | Sequence an array on the innermost dimension.
 --
 toSeqInner :: (Shape sh, Elt a) => Acc (Array (sh :. Int) a) -> Seq [Array sh a]
-toSeqInner a = toSeq (Any :. Split) a
+toSeqInner = toSeq (lift (Any :. (0 :: Int)))
 
--- | Sequence a 2-dimensional array on the outermost dimension.
+-- | Sequence an array on the outermost dimension.
 --
-toSeqOuter2 :: Elt a => Acc (Array DIM2 a) -> Seq [Array DIM1 a]
-toSeqOuter2 a = toSeq (Z :. Split :. All) a
-
--- | Sequence a 3-dimensional array on the outermost dimension.
---
-toSeqOuter3 :: Elt a => Acc (Array DIM3 a) -> Seq [Array DIM2 a]
-toSeqOuter3 a = toSeq (Z :. Split :. All :. All) a
+toSeqOuter :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Array sh e]
+toSeqOuter = toSeqInner . transpose
 
 -- | Generate a scalar sequence of a fixed given length, by applying
 -- the given scalar function at each index.
 --
 generateSeqE :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
-generateSeqE n f = toSeq (Z :. Split) (generate (index1 n) (f . unindex1))
+generateSeqE n f = produce n (unit . f . the)
 
 -- | Map over sequences specialised to scalar sequences.
 --
@@ -1897,6 +1890,34 @@ mapSeqE f = mapSeq (map f)
 
 -- | ZipWith over sequences specialised to scalar sequences.
 --
-zipWithSeqE :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> Seq [Scalar a] -> Seq [Scalar b] -> Seq [Scalar c]
+zipWithSeqE :: (Elt a, Elt b, Elt c)
+            => (Exp a -> Exp b -> Exp c)
+            -> Seq [Scalar a]
+            -> Seq [Scalar b]
+            -> Seq [Scalar c]
 zipWithSeqE f = zipWithSeq (zipWith f)
 
+-- | Perform an exclusive left-to-right scan over a scalar sequence x by
+-- combining each element using the given binary operation (+). (+) must be
+-- associative.
+--
+scanSeqE :: Elt e
+         => (Exp e -> Exp e -> Exp e)
+         -> Exp e
+         -> Seq [Scalar e]
+         -> Seq [Scalar e]
+scanSeqE f z = mapAccumFlat (\acc shs es -> let (es', acc') = (scanl' f (the acc) es)
+                                            in lift (acc', shs, es')) (unit z)
+
+-- | Convert the given array to a sequence by dividing the array up into slices.
+-- This is similar to 'slice' in the way the array is indexed. The initial slice
+-- index represents the starting point with the sequence yielding each
+-- subsequent slice.
+--
+toSeq :: (Slice slix, Elt a)
+      => Exp slix
+      -> Acc (Array (FullShape slix) a)
+      -> Seq [Array (SliceShape slix) a]
+toSeq spec acc
+  = let length = size acc `P.div` shapeSize (indexSlice spec (shape acc))
+    in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))

@@ -53,9 +53,10 @@ import System.Mem.StableName
 -- friends
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenSeq(..), Producer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Debug            as Debug
@@ -308,7 +309,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
                         (cvtA acc1)
                         (convertBoundary bndy2)
                         (cvtA acc2)
-      Collect seq -> AST.Collect (convertSharingSeq config alyt EmptyLayout aenv' [] seq)
+      Collect seq -> AST.Collect (convertSharingSeq config alyt aenv' [] seq) Nothing
 
 -- Sequence expressions
 -- ------------------
@@ -323,25 +324,24 @@ convertSeq
     -> Bool             -- ^ recover sharing of sequence computations ?
     -> Bool             -- ^ always float array computations out of expressions?
     -> Seq s            -- ^ computation to be converted
-    -> AST.Seq s
+    -> AST.NaturalSeq s
 convertSeq shareAcc shareExp shareSeq floatAcc seq
   = let config = Config shareAcc shareExp shareSeq floatAcc
         (sharingSeq, initialEnv) = recoverSharingSeq config seq
     in
-    convertSharingSeq config EmptyLayout EmptyLayout [] initialEnv sharingSeq
+    convertSharingSeq config EmptyLayout [] initialEnv sharingSeq
 
 convertSharingSeq
-    :: forall aenv senv arrs.
+    :: forall aenv arrs.
        Config
     -> Layout aenv aenv
-    -> Layout senv senv
     -> [StableSharingAcc]
     -> [StableSharingSeq]
     -> ScopedSeq arrs
-    -> AST.PreOpenSeq AST.OpenAcc aenv senv arrs
-convertSharingSeq _ _ slyt _ senv (ScopedSeq (SvarSharing sn))
+    -> AST.PreOpenNaturalSeq AST.OpenAcc aenv arrs
+convertSharingSeq _ alyt _ senv (ScopedSeq (SvarSharing sn))
   | Just i <- findIndex (matchStableSeq sn) senv
-  = AST.Reify Nothing $ prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+  = AST.Reify Nothing $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
   | null senv
   = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
             show (hashStableNameHeight sn) ++ ")"
@@ -350,37 +350,36 @@ convertSharingSeq _ _ slyt _ senv (ScopedSeq (SvarSharing sn))
   where
     ctxt = "shared 'Seq' tree with stable name " ++ show (hashStableNameHeight sn)
     err  = "inconsistent valuation @ " ++ ctxt ++ ";\n  senv = " ++ show senv
-convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
+convertSharingSeq config alyt aenv senv (ScopedSeq (SletSharing sa@(StableSharingSeq _ (SeqSharing _ boundSeq)) bodySeq))
   = convSeq boundSeq bodySeq
   where
     convSeq :: forall bnd body.
                PreSeq ScopedAcc ScopedSeq ScopedExp bnd
             -> ScopedSeq body
-            -> AST.PreOpenSeq AST.OpenAcc aenv senv body
+            -> AST.PreOpenNaturalSeq AST.OpenAcc aenv body
     convSeq bnd body =
       case bnd of
-        StreamIn arrs               -> producer $ AST.StreamIn arrs
-        ToSeq slix acc              -> producer $ mkToSeq slix (cvtA acc)
-        MapSeq afun x               -> producer $ AST.MapSeq (cvtAF1 afun) Nothing (asIdx x)
---        MapSeq (cvtAF1 -> Alam (Abody acc)) x -> producer $ AST.GeneralMapSeq (SeqPrelude AconstsEmpty ExtEmpty (ExtEmpty `ExtPush` asIdx x)) acc Nothing
-        ZipWithSeq afun x y         -> producer $ AST.ZipWithSeq (cvtAF2 afun) Nothing (asIdx x) (asIdx y)
---        ZipWithSeq (cvtAF2 -> Alam (Alam (Abody acc))) x y -> producer $ AST.GeneralMapSeq (SeqPrelude AconstsEmpty ExtEmpty (ExtEmpty `ExtPush` asIdx x `ExtPush` asIdx y)) acc Nothing        
-        ScanSeq fun e x             -> producer $ AST.ScanSeq (cvtF2 fun) (cvtE e) (asIdx x)
+        StreamIn arrs               -> producer $ AST.Pull (AST.List arrs)
+        Subarrays sh arr            -> producer $ AST.Subarrays (cvtE sh) arr
+        Produce l f                 -> producer $ AST.Produce (Sized (cvtE l)) (cvtAF1 f)
+        MapSeq afun x               -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x)
+        ZipWithSeq afun x y         -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x) (asIdx y)
+        MapAccumFlat fun a x        -> producer $ AST.MapAccumFlat (cvtAF3 fun) (cvtA a) (asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
         producer :: (bnd ~ [a], Arrays a)
-                 => AST.Producer AST.OpenAcc aenv senv a
-                 -> AST.PreOpenSeq AST.OpenAcc aenv senv body
-        producer p = AST.Producer p $ convertSharingSeq config alyt slyt' aenv (sa:senv) body
+                 => AST.NaturalProducer AST.OpenAcc aenv a
+                 -> AST.PreOpenNaturalSeq AST.OpenAcc aenv body
+        producer p = AST.Producer p $ convertSharingSeq config alyt' aenv (sa:senv) body
           where
-            slyt' = incLayout slyt `PushLayout` ZeroIdx
+            alyt' = incLayout alyt `PushLayout` ZeroIdx
 
         asIdx :: Arrays a
               => ScopedSeq [a]
-              -> Idx senv a
+              -> Idx aenv a
         asIdx (ScopedSeq (SvarSharing sn))
           | Just i <- findIndex (matchStableSeq sn) senv
-          = prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+          = prjIdx (ctxt ++ "; i = " ++ show i) i alyt
           | null senv
           = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
                     show (hashStableNameHeight sn) ++ ")"
@@ -392,41 +391,38 @@ convertSharingSeq config alyt slyt aenv senv (ScopedSeq (SletSharing sa@(StableS
         asIdx _
           = $internalError "convertSharingSeq:asIdx" "Sequence computation not in A-normal form"
 
-        cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
-        cvtA acc = convertSharingAcc config alyt aenv acc
-
         cvtE :: forall t. Elt t => ScopedExp t -> AST.Exp aenv t
         cvtE = convertSharingExp config EmptyLayout alyt [] aenv
 
-        cvtF2 :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> ScopedExp c) -> AST.Fun aenv (a -> b -> c)
-        cvtF2 = convertSharingFun2 config alyt aenv
+        cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
+        cvtA acc = convertSharingAcc config alyt aenv acc
 
         cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
-        cvtAF1 afun = convertSharingAfun1 config alyt aenv afun
+        cvtAF1 = convertSharingAfun1 config alyt aenv
 
-        cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
-        cvtAF2 afun = convertSharingAfun2 config alyt aenv afun
+        cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
+        cvtAF3 = convertSharingAfun3 config alyt aenv
 
-convertSharingSeq _ _ _ _ _ (ScopedSeq (SletSharing _ _))
+convertSharingSeq _ _ _ _ (ScopedSeq (SletSharing _ _))
  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
 
-convertSharingSeq config alyt slyt aenv senv s
+convertSharingSeq config alyt aenv senv s
   = cvtC s
   where
-    cvtC :: ScopedSeq a -> AST.PreOpenSeq AST.OpenAcc aenv senv a
+    cvtC :: ScopedSeq a -> AST.PreOpenNaturalSeq AST.OpenAcc aenv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten Nothing (cvtAF3 afun) (cvtA acc) (asIdx x)
+        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"
 
     asIdx :: Arrays a
           => ScopedSeq [a]
-          -> Idx senv a
+          -> Idx aenv a
     asIdx (ScopedSeq (SvarSharing sn))
       | Just i <- findIndex (matchStableSeq sn) senv
-      = prjIdx (ctxt ++ "; i = " ++ show i) i slyt
+      = prjIdx (ctxt ++ "; i = " ++ show i) i alyt
       | null senv
       = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
                 show (hashStableNameHeight sn) ++ ")"
@@ -444,7 +440,7 @@ convertSharingSeq config alyt slyt aenv senv s
     cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
     cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
 
-    cvtST :: Atuple ScopedSeq t -> Atuple (AST.Consumer AST.OpenAcc aenv senv) t
+    cvtST :: Atuple ScopedSeq t -> Atuple (AST.NaturalConsumer AST.OpenAcc aenv) t
     cvtST NilAtup        = NilAtup
     cvtST (SnocAtup t c) | AST.Consumer c' <- cvtC c
                          = SnocAtup (cvtST t) c'
@@ -531,14 +527,29 @@ mkReplicate = AST.Replicate (sliceIndex slix)
   where
     slix = undefined :: slix
 
-mkToSeq :: forall slsix slix e aenv senv. (Division slsix, DivisionSlice slsix ~ slix, Elt e, Elt slix, Slice slix)
-        => slsix
-        -> AST.OpenAcc              aenv (Array (FullShape  slix) e)
-        -> AST.Producer AST.OpenAcc aenv senv (Array (SliceShape slix) e)
-mkToSeq _ = AST.ToSeq Nothing (sliceIndex slix) (Proxy :: Proxy slix)
-  where
-    slix = undefined :: slix
+mkMapSeq :: (Arrays a, Arrays b)
+          => AST.OpenAfun (aenv, Scalar Int) (a -> b)
+          -> Idx aenv a
+          -> AST.NaturalProducer AST.OpenAcc aenv b
+mkMapSeq (AST.Alam (AST.Abody f)) x =
+  AST.Produce (Minimum (idxToSubEnv x)) ( AST.Alam . AST.Abody . AST.OpenAcc
+              $ AST.Alet (AST.OpenAcc (AST.Avar (SuccIdx x)))
+                         f)
+mkMapSeq _ _ = error "Wrong arity function"
 
+mkZipWithSeq :: (Arrays a, Arrays b)
+             => AST.OpenAfun (aenv, Scalar Int) (a -> b -> c)
+             -> Idx aenv a
+             -> Idx aenv b
+             -> AST.NaturalProducer AST.OpenAcc aenv c
+mkZipWithSeq (AST.Alam (AST.Alam (AST.Abody f))) x y =
+  AST.Produce (Minimum (idxToSubEnv x `subUnion` idxToSubEnv y))
+              ( AST.Alam . AST.Abody . AST.OpenAcc
+              $ AST.Alet (AST.OpenAcc (AST.Avar (SuccIdx x)))
+              $ AST.OpenAcc
+              $ AST.Alet (AST.OpenAcc (AST.Avar (SuccIdx (SuccIdx y))))
+                         f)
+mkZipWithSeq _ _ _ = error "Wrong arity function"
 
 -- Scalar functions
 -- ----------------
@@ -658,8 +669,10 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           IndexTail ix          -> AST.IndexTail (cvt ix)
           IndexTrans ix         -> AST.IndexTrans (cvt ix)
           IndexAny              -> AST.IndexAny
+          IndexSlice slix sh    -> AST.IndexSlice (mkSliceIndex slix) (cvt slix) (cvt sh)
           ToIndex sh ix         -> AST.ToIndex (cvt sh) (cvt ix)
           FromIndex sh e        -> AST.FromIndex (cvt sh) (cvt e)
+          ToSlice slix sh i     -> AST.ToSlice (mkSliceIndex slix) (cvt slix) (cvt sh) (cvt i)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           While p it i          -> AST.While (cvtFun1 p) (cvtFun1 it) (cvt i)
           PrimConst c           -> AST.PrimConst c
@@ -692,6 +705,16 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
     cvtPrimFun f e = case e of
       AST.Let bnd body    -> AST.Let bnd (cvtPrimFun f body)
       x                   -> AST.PrimApp f x
+
+    -- Make a 'SliceIndex'
+    --
+    mkSliceIndex :: forall c slix. Slice slix
+                 => c slix
+                 -> SliceIndex (EltRepr slix)
+                               (EltRepr (SliceShape  slix))
+                               (EltRepr (CoSliceShape  slix))
+                               (EltRepr (FullShape  slix))
+    mkSliceIndex _ = sliceIndex (undefined :: slix)
 
 -- | Convert a tuple expression
 --
@@ -1032,6 +1055,10 @@ matchStableAcc sn1 (StableSharingAcc sn2 _)
 --
 noStableAccName :: StableAccName arrs
 noStableAccName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
+
+noStableSharingAcc :: StableSharingAcc
+noStableSharingAcc = StableSharingAcc noStableAccName (undefined :: SharingAcc acc seq exp ())
+
 
 -- Stable 'Exp' nodes
 -- ------------------
@@ -1600,8 +1627,10 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             IndexTail ix        -> reconstruct $ travE1 IndexTail ix
             IndexTrans ix       -> reconstruct $ travE1 IndexTrans ix
             IndexAny            -> reconstruct $ return (IndexAny, 1)
+            IndexSlice slix sh  -> reconstruct $ travE2 IndexSlice slix sh
             ToIndex sh ix       -> reconstruct $ travE2 ToIndex sh ix
             FromIndex sh e      -> reconstruct $ travE2 FromIndex sh e
+            ToSlice slix sh i   -> reconstruct $ travE3 ToSlice slix sh i
             Cond e1 e2 e3       -> reconstruct $ travE3 Cond e1 e2 e3
             While p iter init   -> reconstruct $ do
                                      (p'   , h1) <- traverseFun1 lvl p
@@ -1730,12 +1759,6 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
-    traverseFun2 :: (Elt a, Elt b, Typeable c)
-                 => Level
-                 -> (Exp a -> Exp b -> Exp c)
-                 -> IO (Exp a -> Exp b -> RootExp c, Int)
-    traverseFun2 = makeOccMapFun2 config accOccMap
-
     traverseTup :: Level -> Atuple Seq tup -> IO (Atuple UnscopedSeq tup, Int)
     traverseTup _   NilAtup          = return (NilAtup, 1)
     traverseTup lvl (SnocAtup tup s) = do
@@ -1783,9 +1806,13 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
 
           case seq of
             StreamIn arrs -> producer $ return (StreamIn arrs, 1)
-            ToSeq sl acc -> producer $ do
-              (acc', h1) <- traverseAcc lvl acc
-              return (ToSeq sl acc', h1 + 1)
+            Subarrays sh arr -> producer $ do
+              (sh', h1) <- traverseExp lvl sh
+              return (Subarrays sh' arr, h1 + 1)
+            Produce l afun -> producer $ do
+              (l'   , h1) <- traverseExp lvl l
+              (afun', h2) <- traverseAfun1 lvl afun
+              return (Produce l' afun', h1 `max` h2 + 1)
             MapSeq afun s -> producer $ do
               (afun', h1) <- traverseAfun1 lvl afun
               (s'   , h2) <- traverseSeq lvl s
@@ -1795,11 +1822,11 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
               (s1'  , h2) <- traverseSeq lvl s1
               (s2'  , h3) <- traverseSeq lvl s2
               return (ZipWithSeq afun' s1' s2', h1 `max` h2 `max` h3 + 1)
-            ScanSeq fun e s -> producer $ do
-              (fun', h1) <- traverseFun2 lvl fun
-              (e',  h2) <- traverseExp lvl e
-              (s'   , h3) <- traverseSeq lvl s
-              return (ScanSeq fun' e' s', h1 `max` h2 `max` h3 + 1)
+            MapAccumFlat fun a s -> producer $ do
+              (fun', h1) <- traverseAfun3 lvl fun
+              (a'  , h2) <- traverseAcc lvl a
+              (s'  , h3) <- traverseSeq lvl s
+              return (MapAccumFlat fun' a' s', h1 `max` h2 `max` h3 + 1)
             FoldSeqFlatten afun acc s -> consumer $ do
               (afun', h1) <- traverseAfun3 lvl afun
               (acc',  h2) <- traverseAcc lvl acc
@@ -1973,7 +2000,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
   where
     lookupSA sas tag1
       = case filter hasTag sas of
-          []   -> noStableSharing    -- tag is not used in the analysed expression
+          []   -> noStableSharingAcc -- tag is not used in the analysed expression
           [sa] -> sa                 -- tag has a unique occurrence
           sas2 -> $internalError "buildInitialEnvAcc"
                 $ "Encountered duplicate 'ATag's\n  " ++ intercalate ", " (map showSA sas2)
@@ -1982,9 +2009,6 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
         hasTag sa
           = $internalError "buildInitialEnvAcc"
           $ "Encountered a node that is not a plain 'Atag'\n  " ++ showSA sa
-
-        noStableSharing :: StableSharingAcc
-        noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc seq exp ())
 
     showSA (StableSharingAcc _ (AccSharing  sn acc)) = show (hashStableNameHeight sn) ++ ": " ++
                                                        showPreAccOp acc
@@ -2446,8 +2470,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           IndexTail ix          -> travE1 IndexTail ix
           IndexTrans ix         -> travE1 IndexTrans ix
           IndexAny              -> reconstruct IndexAny noNodeCounts
+          IndexSlice slix sh    -> travE2 IndexSlice slix sh
           ToIndex sh ix         -> travE2 ToIndex sh ix
           FromIndex sh e        -> travE2 FromIndex sh e
+          ToSlice slix sh i     -> travE3 ToSlice slix sh i
           Cond e1 e2 e3         -> travE3 Cond e1 e2 e3
           While p it i          -> let
                                      (p' , accCount1) = scopesFun1 p
@@ -2641,13 +2667,6 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
     scopesExp :: RootExp t -> (ScopedExp t, NodeCounts)
     scopesExp = determineScopesExp config accOccMap
 
-    scopesFun2 :: (Elt e1, Elt e2)
-               => (Exp e1 -> Exp e2 -> RootExp e3)
-               -> (Exp e1 -> Exp e2 -> ScopedExp e3, NodeCounts)
-    scopesFun2 f = (\_ _ -> body, counts)
-      where
-        (body, counts) = scopesExp (f undefined undefined)
-
     -- The lambda bound variable is at this point already irrelevant; for details, see
     -- Note [Traversing functions and side effects]
     --
@@ -2701,9 +2720,13 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
     scopesSeq (UnscopedSeq (SeqSharing sn s)) =
       case s of
         StreamIn arrs -> producer (StreamIn arrs) noNodeCounts
-        ToSeq sl acc   -> let
-                            (acc', accCount1) = scopesAcc acc
-                          in producer (ToSeq sl acc') accCount1
+        Subarrays sh arr -> let
+                              (sh'   , accCount1) = scopesExp sh
+                            in producer (Subarrays sh' arr) accCount1
+        Produce l afun -> let
+                            (l'   , accCount1) = scopesExp l
+                            (afun', accCount2) = scopesAfun1 afun
+                          in producer (Produce l' afun') (accCount1 +++ accCount2)
         MapSeq     afun s'  -> let
                                  (afun', accCount1) = scopesAfun1 afun
                                  (s''  , accCount2) = scopesSeq s'
@@ -2713,11 +2736,11 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                                    (s1'  , accCount2) = scopesSeq s1
                                    (s2'  , accCount3) = scopesSeq s2
                                  in producer (ZipWithSeq afun' s1' s2') (accCount1 +++ accCount2 +++ accCount3)
-        ScanSeq fun e s' -> let
-                              (fun', accCount1) = scopesFun2 fun
-                              (e'  , accCount2) = scopesExp e
+        MapAccumFlat fun e s' -> let
+                              (fun', accCount1) = scopesAfun3 fun
+                              (e'  , accCount2) = scopesAcc e
                               (s'' , accCount3) = scopesSeq s'
-                            in producer (ScanSeq fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
+                            in producer (MapAccumFlat fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
         FoldSeqFlatten afun acc s' ->
                                let
                                  (afun', accCount1) = scopesAfun3 afun

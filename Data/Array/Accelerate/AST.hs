@@ -83,21 +83,20 @@ module Data.Array.Accelerate.AST (
   Idx(..), idxToInt, tupleIdxToInt,
 
   -- * Valuation environment
-  Val(..), ValElt(..), prj, prjElt,
+  Val(..), ValElt(..), prj, prjElt, SubEnv(..), idxToSubEnv, subUnion, subEnvToInts,
 
   -- * Accelerated array expressions
   PreOpenAfun(..), OpenAfun, PreAfun, Afun, PreOpenAcc(..), OpenAcc(..), Acc,
   Stencil(..), StencilR(..),
 
   -- * Accelerated sequences
-  PreOpenSeq(..), Seq,
-  Producer(..), Consumer(..),
+  PreOpenSeq(..), PreOpenNaturalSeq, PreOpenChunkedSeq, NaturalSeq, ChunkedSeq,
+  Producer(..), Consumer(..), NaturalProducer, ChunkedProducer, NaturalConsumer, ChunkedConsumer,
+  Source(..), Limit(..),
 
   -- * Scalar expressions
   PreOpenFun(..), OpenFun, PreFun, Fun, PreOpenExp(..), OpenExp, PreExp, Exp, PrimConst(..),
   PrimFun(..),
-  
-  ExtReg(..), SeqPrelude(..), Aconst(..), Aconst'(..), fromAconstT', toAconstT',
 
   -- debugging
   showPreAccOp, showPreExpOp,
@@ -148,6 +147,36 @@ data Val env where
   Push  :: Val env -> t -> Val (env, t)
 
 deriving instance Typeable Val
+
+-- Dynamically captures the subset of an environment.
+--
+data SubEnv env where
+  BaseSub :: SubEnv env
+  InSub   :: SubEnv env -> SubEnv (env,t)
+  OutSub  :: SubEnv env -> SubEnv (env,t)
+
+deriving instance Eq (SubEnv env)
+
+idxToSubEnv :: Idx env t -> SubEnv env
+idxToSubEnv ZeroIdx      = InSub BaseSub
+idxToSubEnv (SuccIdx ix) = OutSub (idxToSubEnv ix)
+
+subUnion :: SubEnv env -> SubEnv env -> SubEnv env
+BaseSub   `subUnion` s         = s
+s         `subUnion` BaseSub   = s
+InSub s1  `subUnion` InSub s2  = InSub  (s1 `subUnion` s2)
+InSub s1  `subUnion` OutSub s2 = InSub  (s1 `subUnion` s2)
+OutSub s1 `subUnion` InSub s2  = InSub  (s1 `subUnion` s2)
+OutSub s1 `subUnion` OutSub s2 = OutSub (s1 `subUnion` s2)
+
+subEnvToInts :: SubEnv env -> [Int]
+subEnvToInts s = f s 0
+  where
+    f :: SubEnv env -> Int -> [Int]
+    f BaseSub    _ = []
+    f (InSub s)  i = i : f s (i + 1)
+    f (OutSub s) i = f s (i + 1)
+
 
 -- Valuation for an environment of array elements
 --
@@ -272,6 +301,13 @@ data PreOpenAcc acc aenv a where
   Use         :: Arrays arrs
               => ArrRepr arrs
               -> PreOpenAcc acc aenv arrs
+
+  -- Subarray inlet by strided copy
+  Subarray    :: (Shape sh, Elt e)
+              => PreExp acc aenv sh                             -- index of subarray
+              -> PreExp acc aenv sh                             -- extent of subarray
+              -> Array sh e
+              -> PreOpenAcc acc aenv (Array sh e)
 
   -- Capture a scalar (or a tuple of scalars) in a singleton array
   Unit        :: Elt e
@@ -466,7 +502,8 @@ data PreOpenAcc acc aenv a where
 
   -- A sequence of operations.
   Collect     :: Arrays arrs
-              => PreOpenSeq acc aenv () arrs
+              => PreOpenNaturalSeq acc aenv arrs
+              -> Maybe (PreOpenChunkedSeq acc aenv arrs)
               -> PreOpenAcc acc aenv arrs
 
 -- Vanilla open array computations
@@ -476,153 +513,171 @@ newtype OpenAcc aenv t = OpenAcc (PreOpenAcc OpenAcc aenv t)
 -- deriving instance Typeable PreOpenAcc
 deriving instance Typeable OpenAcc
 
-data PreOpenSeq acc aenv senv arrs where
+-- | Computations over sequences.
+--
+-- By parameterising over the index type, we can encode sequences that compute
+-- an element at a time as well as sequences that compute elements in chunks.
+--
+data PreOpenSeq index acc aenv arrs where
+
+  -- Bind a producer.
   Producer :: (Arrays a)
-           => Producer acc aenv senv a
-           -> PreOpenSeq acc aenv (senv, a) arrs
-           -> PreOpenSeq acc aenv senv arrs
+           => Producer index acc aenv a
+           -> PreOpenSeq index acc (aenv, a) arrs
+           -> PreOpenSeq index acc aenv      arrs
 
+  -- Consume previously bound producers.
   Consumer :: Arrays arrs
-           => Consumer acc aenv senv arrs
-           -> PreOpenSeq acc aenv senv arrs
+           => Consumer   index acc aenv arrs
+           -> PreOpenSeq index acc aenv arrs
 
+  -- Make a sequence manifest.
   Reify    :: Arrays arrs
            => Maybe (PreOpenAfun acc aenv (Regular arrs -> Scalar Int -> arrs))
-           -> Idx senv arrs
-           -> PreOpenSeq acc aenv senv [arrs]
+           -> Idx aenv arrs
+           -> PreOpenSeq index acc aenv [arrs]
 
-data ExtReg env renv env0 env' renv' where
-  ExtEmpty :: ExtReg env renv env0 env renv
-  ExtPush  :: Arrays a => ExtReg env renv env0 env' renv' -> Idx env0 a -> ExtReg env renv env0 (env', a) (renv', Regular a)
+-- | External sources of sequences for sequence computations.
+--
+data Source a where
 
+  -- Lazily pull elements from a list to create a sequence.
+  List      :: Arrays a
+            => [a]
+            -> Source a
 
--- Decorate aconst with an extra type variable aenv.
-newtype Aconst' aenv a = Aconst' { runAconst' :: Aconst a }
+  -- Similar to above but all arrays are of a statically known shape.
+  RegularList :: (Shape sh, Elt e)
+              => sh
+              -> [Array sh e]
+              -> Source (Array sh e)
 
-toAconstT'   :: Atuple Aconst a -> Atuple (Aconst' aenv) a
-toAconstT' NilAtup = NilAtup
-toAconstT' (SnocAtup arr a) = SnocAtup (toAconstT' arr) (Aconst' a)
+-- | The limit of a sequence. The point at which it should stop producing new
+-- elements.
+--
+data Limit acc aenv a where
 
-fromAconstT' :: Atuple (Aconst' aenv) a -> Atuple Aconst a
-fromAconstT' NilAtup = NilAtup
-fromAconstT' (SnocAtup arr a) = SnocAtup (fromAconstT' arr) (runAconst' a)
+  -- Keep producing forever.
+  Infinite :: Limit acc aenv a
 
-data Aconst a where
-  SliceArr :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => SliceIndex  (EltRepr slix)
-                          (EltRepr sl)
-                          co
-                          (EltRepr sh)
-           -> proxy slix
-           -> Array sh e
-           -> Aconst (Array sl e)
-  ArrList :: Arrays a => [a] -> Aconst a
-  RegArrList :: (Shape sh, Elt e) 
-             => sh -> [Array sh e] -> Aconst (Array sh e)
+  -- The sequence is of a fixed size.
+  Sized    :: PreExp acc aenv Int
+           -> Limit acc aenv a
 
--- aenv:   original array env.
--- senv:   sequence env.
--- env:    new flat array env.
--- envReg: new regular array env for chunking.
-data SeqPrelude aenv senv env envReg where
-  SeqPrelude :: Atuple Aconst arrs -- Array constants to copy (lazily if so required by backend).
-             -> ExtReg aenv aenv    arrs env' envReg' -- Bring array constants into aenv scope.
-             -> ExtReg env' envReg' senv env  envReg  -- Bring sequence bindings into aenv scope.
-             -> SeqPrelude aenv senv env envReg
+  -- The sequence is the same size as the minimum of a set of other sequences.
+  Minimum  :: SubEnv aenv
+           -> Limit acc aenv c
 
-data Producer acc aenv senv a where
-  -- Convert the given Haskell-list of arrays to a sequence.
-  StreamIn :: Arrays a
-           => [a]
-           -> Producer acc aenv senv a
+-- | A sequence producer.
+--
+data Producer index acc aenv a where
 
-  -- Convert the given array to a sequence.
-  ToSeq :: (Elt slix, Shape sl, Shape sh, Elt e)
-           => Maybe (PreOpenAfun acc aenv (Array (sl :. Int) e -> Regular (Array sl e)))
-           -> SliceIndex  (EltRepr slix)
-                          (EltRepr sl)
-                          co
-                          (EltRepr sh)
-           -> proxy slix
-           -> acc aenv (Array sh e)
-           -> Producer acc aenv senv (Array sl e)
+  -- Pull from the given source
+  --
+  -- Occurs in all stages of the pipeline.
+  Pull         :: Arrays a
+               => Source a
+               -> Producer index acc aenv a
 
-  -- Generalized fusible sequence producer.
-  GeneralMapSeq :: Arrays a
-       => SeqPrelude aenv senv env envReg
-       -> acc env a
-       -> Maybe (acc envReg (Regular a))
-       -> Producer acc aenv senv a
+  -- Split an array up into subarrays along the outermost dimension.
+  --
+  -- Turned into 'ProduceAccum' and 'Subarray' by vectorisation.
+  Subarrays    :: (Shape sh, Elt e, sh :<= DIM3)
+               => PreExp acc aenv sh             -- The size of each subarray
+               -> Array sh e                     -- The array to extract from
+               -> Producer index acc aenv (Array sh e)
 
-  -- Apply the given the given function to all elements of the given
+  -- Generate a sequence from a function until limit is reached.
+  --
+  -- Converted to ProduceAccum by vectorisation (with () as the accumulator.)
+  Produce      :: Arrays a
+               => Limit acc aenv a
+               -> PreOpenAfun acc aenv (index -> a)
+               -> Producer index acc aenv a
+
+  -- A combination of map and fold. Applies a function to a chunk of a sequence,
+  -- passing an accumulating parameter from left to right, and returning the new
   -- sequence.
-  MapSeq :: (Arrays a, Arrays b)
-         => PreOpenAfun acc aenv (a -> b)
-         -> Maybe (PreOpenAfun acc aenv (Regular a -> Regular b))
-         -> Idx senv a
-         -> Producer acc aenv senv b
+  --
+  -- The function "f" needs to obey the following law, at least
+  -- observationally:
+  --
+  --   forall a shs1 shs2 es1 es2.
+  --     uncurry3 f (f b shs1 es1) = f b (shs1 ++ shs2) (es1 ++ es2)
+  --
+  --     where uncurry3 f (a, b, c) = f a b c
+  --
+  -- Turned into ProduceAccum by vectorisation.
+  MapAccumFlat :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
+               => PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> (a, Vector sh', Vector e'))
+               -> acc aenv a
+               -> Idx aenv (Array sh e)
+               -> Producer index acc aenv (Array sh' e')
 
-  -- Apply a given binary function pairwise to all elements of the
-  -- given sequences.
-  ZipWithSeq :: (Arrays a, Arrays b, Arrays c)
-             => PreOpenAfun acc aenv (a -> b -> c)
-             -> Maybe (PreOpenAfun acc aenv (Regular a -> Regular b -> Regular c))
-             -> Idx senv a
-             -> Idx senv b
-             -> Producer acc aenv senv c
+  -- Generate a sequence with some accumulator.
+  --
+  -- Generated by vectorisation. Not present in prior stages.
+  ProduceAccum :: (Arrays a, Arrays b)
+               => Limit acc aenv a
+               -> PreOpenAfun acc aenv (index -> b -> (a, b))
+               -> acc aenv b
+               -> Producer index acc aenv a
 
-  -- ScanSeq (+) a0 x. Scan a sequence x by combining each element
-  -- using the given binary operation (+). (+) must be associative:
-  --
-  --   Forall a b c. (a + b) + c = a + (b + c),
-  --
-  -- and a0 must be the identity element for (+):
-  --
-  --   Forall a. a0 + a = a = a + a0.
-  --
-  ScanSeq :: Elt e
-          => PreFun acc aenv (e -> e -> e)
-          -> PreExp acc aenv e
-          -> Idx senv (Scalar e)
-          -> Producer acc aenv senv (Scalar e)
-
-data Consumer acc aenv senv a where
+-- | A sequence consumer.
+--
+data Consumer index acc aenv a where
 
   -- FoldSeqFlatten f a0 x. f must be semi-associative, with vecotor
   -- append (++) as the companion operator:
   --
-  --   Forall b sh1 a1 sh2 a2.
---       f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+  --   forall b sh1 a1 sh2 a2.
+  --     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
   --
-  -- It is common to ignore the shape vectors, yielding the usual
-  -- semi-associativity law:
-  --
-  --   f b a _ = b + a,
-  --
-  -- for some (+) satisfying:
-  --
-  --   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
-  --
+  -- Removed by fusion.
   FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
-                 => Maybe (PreOpenAfun acc aenv (Regular (Array sh e) -> a -> a))
-                 -> PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
+                 => PreOpenAfun acc aenv (a -> Vector sh -> Vector e -> a)
                  -> acc aenv a
-                 -> Idx senv (Array sh e)
-                 -> Consumer acc aenv senv a
+                 -> Idx aenv (Array sh e)
+                 -> Consumer index acc aenv a
 
-  FoldSeqRegular :: Arrays a
-                 => SeqPrelude aenv senv env envReg
-                 -> PreOpenAfun acc envReg (a -> a)
+  -- Starting with the initial value, iterate with the given function until
+  -- limit is reached.
+  --
+  -- Generated by vectorisation. Not present in prior stages as it can't be
+  -- lifted.
+  Iterate        :: Arrays a
+                 => Limit acc aenv a
+                 -> PreOpenAfun acc aenv (index -> a -> a)
                  -> acc aenv a
-                 -> Consumer acc aenv senv a
+                 -> Consumer index acc aenv a
 
-  Stuple :: (Arrays a, IsAtuple a)
-         => Atuple (Consumer acc aenv senv) (TupleRepr a)
-         -> Consumer acc aenv senv a
+  -- Build a tuple of sequences.
+  --
+  -- Exists throughout all stages of the pipeline.
+  --
+  Stuple         :: (Arrays a, IsAtuple a)
+                 => Atuple (Consumer index acc aenv) (TupleRepr a)
+                 -> Consumer index acc aenv a
 
--- |Closed sequence computation
+-- |A natural sequence computation is one where elements are computed one at a
+-- time.
 --
-type Seq = PreOpenSeq OpenAcc () ()
+type PreOpenNaturalSeq = PreOpenSeq (Scalar Int)
+
+-- |In a chunked sequence computation, elements are computed in chunks.
+--
+type PreOpenChunkedSeq = PreOpenSeq (Scalar Int, Scalar Int)
+
+type NaturalProducer = Producer (Scalar Int)
+type ChunkedProducer = Producer (Scalar Int, Scalar Int)
+type NaturalConsumer = Consumer (Scalar Int)
+type ChunkedConsumer = Consumer (Scalar Int, Scalar Int)
+
+
+-- |Closed sequence computations
+--
+type NaturalSeq = PreOpenNaturalSeq OpenAcc ()
+type ChunkedSeq = PreOpenChunkedSeq OpenAcc ()
 
 -- |Closed array expression aka an array program
 --
@@ -939,6 +994,13 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
                 -> PreOpenExp acc env aenv Int          -- index into linear representation
                 -> PreOpenExp acc env aenv sh
 
+  ToSlice       :: (Shape sh, Elt slix)
+                => SliceIndex (EltRepr slix) sl co (EltRepr sh)
+                -> PreOpenExp acc env aenv slix
+                -> PreOpenExp acc env aenv sh
+                -> PreOpenExp acc env aenv Int
+                -> PreOpenExp acc env aenv slix
+
   -- Conditional expression (non-strict in 2nd and 3rd argument)
   Cond          :: Elt t
                 => PreOpenExp acc env aenv Bool
@@ -1132,6 +1194,7 @@ showPreAccOp :: forall acc aenv arrs. PreOpenAcc acc aenv arrs -> String
 showPreAccOp Alet{}             = "Alet"
 showPreAccOp (Avar ix)          = "Avar a" ++ show (idxToInt ix)
 showPreAccOp (Use a)            = "Use "  ++ showArrays (toArr a :: arrs)
+showPreAccOp Subarray{}         = "Subarray"
 showPreAccOp Apply{}            = "Apply"
 showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp Acond{}            = "Acond"
@@ -1200,6 +1263,7 @@ showPreExpOp IndexSlice{}       = "IndexSlice"
 showPreExpOp IndexFull{}        = "IndexFull"
 showPreExpOp ToIndex{}          = "ToIndex"
 showPreExpOp FromIndex{}        = "FromIndex"
+showPreExpOp ToSlice{}          = "ToSlice"
 showPreExpOp Cond{}             = "Cond"
 showPreExpOp While{}            = "While"
 showPreExpOp PrimConst{}        = "PrimConst"
