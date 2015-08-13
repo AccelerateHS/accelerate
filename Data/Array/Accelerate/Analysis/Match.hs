@@ -42,7 +42,7 @@ module Data.Array.Accelerate.Analysis.Match (
 
 -- standard library
 import Prelude                                          hiding ( exp )
-import Control.Applicative                              ( (<*>) )
+import Control.Applicative                              ( (<*>), liftA2 )
 import Control.Monad                                    ( join )
 import Data.Functor                                     ( (<$>) )
 import Data.Maybe
@@ -349,8 +349,8 @@ matchSeq m h = match
     match (Consumer c1)   (Consumer c2)
       | Just REFL <- matchC c1 c2
       = Just REFL
-    match (Reify _ ix1) (Reify _ ix2)
-      | Just REFL <- matchIdx ix1 ix2
+    match (Reify ix1) (Reify ix2)
+      | Just REFL <- m ix1 ix2
       = Just REFL
     match _ _
       = Nothing
@@ -364,16 +364,16 @@ matchSeq m h = match
       , Just REFL <- matchArrays ArraysRarray ArraysRarray a1 a2
       = Just REFL
     matchP (Produce l1 f1) (Produce l2 f2)
-      | Just REFL <- matchLimit l1 l2
+      | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
       = Just REFL
     matchP (MapAccumFlat f1 a1 x1) (MapAccumFlat f2 a2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m a1 a2
-      , Just REFL <- matchIdx x1 x2
+      , Just REFL <- m x1 x2
       = Just REFL
     matchP (ProduceAccum l1 f1 a1) (ProduceAccum l2 f2 a2)
-      | Just REFL <- matchLimit l1 l2
+      | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m a1 a2
       = Just REFL
@@ -382,12 +382,12 @@ matchSeq m h = match
 
     matchC :: forall aenv u v. Consumer idx acc aenv u -> Consumer idx acc aenv v -> Maybe (u :=: v)
     matchC (FoldSeqFlatten f1 acc1 x1) (FoldSeqFlatten f2 acc2 x2)
-      | Just REFL <- matchIdx x1 x2
+      | Just REFL <- m x1 x2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
       = Just REFL
     matchC (Iterate l1 f1 acc1) (Iterate l2 f2 acc2)
-      | Just REFL <- matchLimit l1 l2
+      | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
       , Just REFL <- m acc1 acc2
       = Just REFL
@@ -396,18 +396,6 @@ matchSeq m h = match
       = gcast REFL
     matchC _ _
       = Nothing
-
-    matchLimit :: forall aenv s t. (Arrays s, Arrays t) => Limit acc aenv s -> Limit acc aenv t -> Maybe (s :=: t)
-    matchLimit Infinite Infinite = gcast REFL
-    matchLimit (Sized s1) (Sized s2)
-      | Just REFL <- matchExp s1 s2
-      = gcast REFL
-    matchLimit (Minimum sub1) (Minimum sub2)
-      | sub1 == sub2
-      = gcast REFL
-    matchLimit _ _
-      = Nothing
-
 
 matchSource :: forall s t. Source s -> Source t -> Maybe (s :=: t)
 matchSource (List arrs1) (List arrs2)
@@ -1009,8 +997,9 @@ hashPreOpenSeq hashAcc s =
     hashS :: Int -> PreOpenSeq idx acc aenv' arrs' -> Int
     hashS salt = hashWithSalt salt . hashPreOpenSeq hashAcc
 
-    hashVar :: Int -> Idx aenv' a -> Int
-    hashVar salt = hashWithSalt salt . idxToInt
+    hashL :: Int -> Maybe (PreExp acc aenv' e) -> Int
+    hashL salt Nothing = salt
+    hashL salt (Just l) = hashE salt l
 
     hashP :: Int -> Producer idx acc aenv' a -> Int
     hashP salt p =
@@ -1018,7 +1007,7 @@ hashPreOpenSeq hashAcc s =
         Pull src            -> hashWithSalt salt "Pull"         `hashSource` src
         Subarrays sh a      -> hashWithSalt salt "Subarrays"    `hashE` sh `hashWithSalt` hashArrays ArraysRarray a
         Produce l f         -> hashWithSalt salt "Produce"      `hashL` l  `hashAF` f
-        MapAccumFlat f a x  -> hashWithSalt salt "MapAccumFlat" `hashAF` f `hashA`  a `hashVar` x
+        MapAccumFlat f a x  -> hashWithSalt salt "MapAccumFlat" `hashAF` f `hashA`  a `hashA` x
         ProduceAccum l f a  -> hashWithSalt salt "ProduceAccum" `hashL` l `hashAF` f `hashA` a
 
 
@@ -1028,24 +1017,17 @@ hashPreOpenSeq hashAcc s =
         List arrs          -> hashWithSalt salt "List"        `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
         RegularList _ arrs -> hashWithSalt salt "RegularList" `hashWithSalt` (unsafePerformIO $! hashStableName `fmap` makeStableName arrs)
 
-    hashL :: Int -> Limit acc aenv' a -> Int
-    hashL salt l =
-      case l of
-        Infinite  -> hashWithSalt salt "Infinite"
-        Sized e   -> hashWithSalt salt "Sized"    `hashE` e
-        Minimum s -> hashWithSalt salt "Minimum"  `hashWithSalt` foldl hashWithSalt 0 (subEnvToInts s)
-
     hashC :: Int -> Consumer idx acc aenv' a -> Int
     hashC salt c =
       case c of
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashVar` x
+        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashA` x
         Iterate l f acc        -> hashWithSalt salt "Iterate"        `hashL` l `hashAF` f `hashA` acc
         Stuple t               -> hash "Stuple"                      `hashWithSalt` hashAtuple (hashC salt) t
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
     Consumer   c    -> hash "Consumer"   `hashC` c
-    Reify    _ ix   -> hash "Reify"      `hashVar` ix
+    Reify      ix   -> hash "Reify"      `hashA` ix
 
 
 hashPreOpenAcc :: forall acc aenv arrs. HashAcc acc -> PreOpenAcc acc aenv arrs -> Int

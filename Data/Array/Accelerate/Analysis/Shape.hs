@@ -34,7 +34,7 @@ module Data.Array.Accelerate.Analysis.Shape (
 
 -- standard libraries
 import Control.Applicative          ( (<$>), (<*>) )
-import Control.Monad                ( join )
+import Control.Monad                ( join, void )
 import Control.Monad.Writer         ( runWriterT, WriterT, tell )
 import Control.Monad.Trans          ( lift )
 import Data.Monoid                  ( Monoid(..), (<>), mempty )
@@ -47,7 +47,6 @@ import Data.Array.Accelerate.Interpreter.Prim                   ( evalPrimConst,
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Trafo.Base
-import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
 
@@ -90,13 +89,14 @@ preAccDim k pacc =
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "inconceivable!"
 
-    Collect _            -> case arrays (undefined :: Array sh e) of
+    Collect _ _          -> case arrays (undefined :: Array sh e) of
                               ArraysRarray -> ndim (eltType (undefined::sh))
                               _            -> error "ppbbbbbt~"
 
     Acond _ acc _        -> k acc
     Awhile _ _ acc       -> k acc
     Use Array{}          -> ndim (eltType (undefined::sh))
+    Subarray _ _ _       -> ndim (eltType (undefined::sh))
     Unit _               -> 0
     Generate _ _         -> ndim (eltType (undefined::sh))
     Transform _ _ _ _    -> ndim (eltType (undefined::sh))
@@ -175,27 +175,6 @@ sameShape (PartialAtup t1) (PartialAtup t2) = go t1 t2
     go _ _ = error "unreachable"
 sameShape _ _ = False
 -}
-
-(.:) :: Shape sh => Int -> sh -> (sh :. Int)
-(.:) sz sh = listToShape (shapeToList sh ++ [sz])
-
-indexInit :: Shape sh => (sh :. Int) -> sh
-indexInit sh = listToShape (init $ shapeToList sh)
-
-liftReg1 :: forall arrs. Arrays arrs => ArraysPartial arrs -> ArraysPartial (Regular arrs)
-liftReg1 a =
-  case flavour (undefined :: arrs) of
-    ArraysFunit  -> PartialAtup $ NilAtup `SnocAtup` PartialArray (Just Z) (Just (const 1))
-    ArraysFarray | PartialArray sh e <-a-> PartialAtup (NilAtup `SnocAtup` PartialArray ((.:) 1 <$> sh) ((\ f -> f . indexInit) <$> e))
-    ArraysFtuple | PartialAtup tup   <-a-> PartialAtup $ go (prod (Proxy :: Proxy Arrays) (undefined :: arrs)) tup
-      where
-        go :: ProdR Arrays t -> Atuple ArraysPartial t -> Atuple ArraysPartial (RegularTupleRepr t)
-        go ProdRunit NilAtup = NilAtup
-        go (ProdRsnoc pr) (tup `SnocAtup` (arr :: ArraysPartial a))
-          | IsC <- isArraysFlat (undefined :: a)
-          = go pr tup `SnocAtup` liftReg1 arr
-        go _ _ = error "liftReg1"
-    _ -> error "liftReg1"
 
 toPartial :: forall t. Arrays t => t -> ArraysPartial t
 toPartial v =
@@ -276,106 +255,83 @@ intermediateShape shT = tell (shT, mempty)
 
 type EvalAcc acc = forall aenv a. Arrays a => acc aenv a -> ValPartial aenv -> Shapes (ArraysPartial a)
 
-seqShapes :: PreOpenSeq DelayedOpenAcc aenv () arrs -> ValPartial aenv -> Maybe ShapeTree
-seqShapes s aenv = fst . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv ValBottom)
+seqShapes :: PreOpenSeq (Scalar Int) DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
+seqShapes s aenv = fst . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv)
 
-seqPD :: PreOpenSeq DelayedOpenAcc aenv () arrs -> ValPartial aenv -> Maybe Int
-seqPD s aenv = runMaxNat . snd . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv ValBottom)
+seqPD :: PreOpenSeq (Scalar Int) DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe Int
+seqPD s aenv = runMaxNat . snd . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv)
 
 
-seqShapesOpenAcc :: PreOpenSeq OpenAcc aenv () arrs -> ValPartial aenv -> Maybe ShapeTree
-seqShapesOpenAcc s aenv = fst . snd <$> runWriterT (evalShapeSeq evalOpenAcc s aenv ValBottom)
+seqShapesOpenAcc :: PreOpenSeq (Scalar Int) OpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
+seqShapesOpenAcc s aenv = fst . snd <$> runWriterT (evalShapeSeq evalOpenAcc s aenv)
 
-evalShapeSeq :: forall acc aenv senv arrs.
+evalShapeSeq :: forall acc aenv arrs.
                 EvalAcc acc
-             -> PreOpenSeq acc aenv senv arrs
-             -> ValPartial aenv -> ValPartial senv -> Shapes ()
-evalShapeSeq eval s aenv senv =
+             -> PreOpenSeq (Scalar Int) acc aenv arrs
+             -> ValPartial aenv -> Shapes ()
+evalShapeSeq eval s aenv =
   case s of
     Producer p s0 -> do
       a <- evalP p
       intermediateShape =<< lift (toShapeTree a)
-      evalShapeSeq eval s0 aenv (senv `PushPartial` a)
+      evalShapeSeq eval s0 (aenv `PushPartial` a)
     Consumer c -> evalC c
-    Reify _ _ -> return ()
+    Reify    _ -> return ()
   where
-    evalP :: Producer acc aenv senv a -> Shapes (ArraysPartial a)
+    evalP :: Producer (Scalar Int) acc aenv a -> Shapes (ArraysPartial a)
     evalP p =
       case p of
-        StreamIn _ -> return partialBottom
-        ToSeq _ sl _ acc -> do
-           -- This acc argument will not be executed in each step of
+        Pull src -> return $ evalSrc src
+        Subarrays sh _ -> let sh' = evalPreOpenExp eval sh EmptyElt aenv
+                          in return (PartialArray sh' Nothing)
+        Produce _ f -> evalPreOpenAfun1 eval f aenv (PartialArray (Just Z) Nothing)
+        MapAccumFlat f a x -> do
+           -- This a argument will not be executed in each step of
            -- the sequence. Throw away the intermediate sizes:
-          let arr = fst <$> runWriterT (eval acc aenv)
-          return $ PartialArray (sliceShape sl <$> (shapePartial =<< arr)) Nothing
-        GeneralMapSeq p a _ -> eval   a (bringIntoScope p aenv senv)
-        MapSeq     f _ x    -> evalPreOpenAfun1 eval f aenv (prjArraysPartial x senv)
-        ZipWithSeq f _ x y  -> evalPreOpenAfun2 eval f aenv (prjArraysPartial x senv) (prjArraysPartial y senv)
-        ScanSeq _ _ _      ->  return $ PartialArray (Just Z) Nothing
+          let a' = maybe partialBottom fst (runWriterT (eval a aenv))
+          PartialArray sh _ <- eval x aenv
+          PartialAtup (_ `SnocAtup` PartialArray _ mfsh `SnocAtup` _) <- evalPreOpenAfun3 eval f aenv
+                   a'
+                   (PartialArray (Just (Z :. 1)) (const <$> sh))
+                   (PartialArray ((Z :.) . size <$> sh) Nothing)
+          case mfsh of
+            Just fsh -> return $ PartialArray (Just $ fsh (Z:.0)) Nothing
+            Nothing  -> return partialBottom
+        ProduceAccum _ f a -> do
+          let a' = maybe partialBottom fst (runWriterT (eval a aenv))
+          PartialAtup (_ `SnocAtup` b `SnocAtup` _ ) <- evalPreOpenAfun2 eval f aenv
+            (PartialArray (Just Z) Nothing)
+            a'
+          return b
 
-    evalC :: Consumer acc aenv senv a -> Shapes ()
+    evalC :: Consumer (Scalar Int) acc aenv a -> Shapes ()
     evalC c =
       case c of
-        FoldSeqFlatten _ f acc x
-          | PartialArray sh _ <- prjArraysPartial x senv
+        FoldSeqFlatten f acc x
           -> do
           let a1 = case fst <$> runWriterT (eval acc aenv) of
                       Just x -> x
                       _ -> partialBottom
-          _a2 <- evalPreOpenAfun3 eval f aenv
+          PartialArray sh _ <- eval x aenv
+          void $
+              evalPreOpenAfun3 eval f aenv
                    a1
                    (PartialArray (Just (Z :. 1)) (const <$> sh))
                    (PartialArray ((Z :.) . size <$> sh) Nothing)
-          return ()
-        FoldSeqFlatten{} -> error "unreachable"
-        FoldSeqRegular p f acc -> do
-          let a1 = case fst <$> runWriterT (eval acc aenv) of
-                      Just x -> x
-                      _ -> partialBottom
-          _a2 <- evalPreOpenAfun1 eval f (bringIntoScopeReg1 p aenv senv) a1
-          return ()
+        Iterate _ f a -> do
+          let a' = maybe partialBottom fst (runWriterT (eval a aenv))
+          void $ evalPreOpenAfun2 eval f aenv
+            (PartialArray (Just Z) Nothing )
+            a'
         Stuple tup ->
-          let f :: Atuple (Consumer acc aenv senv) t -> Shapes ()
+          let f :: Atuple (Consumer (Scalar Int) acc aenv) t -> Shapes ()
               f NilAtup = return ()
               f (SnocAtup t c) = f t >> evalC c
           in f tup
 
-bringIntoScope :: SeqPrelude aenv senv aenv' envReg
-                 -> ValPartial aenv -> ValPartial senv -> ValPartial aenv'
-bringIntoScope (SeqPrelude aconsts extc exts) aenv senv =
-  ext exts (ext extc aenv (eval aconsts)) senv
-  where
-    ext :: ExtReg a a' b c c' -> ValPartial a -> ValPartial b -> ValPartial c
-    ext ExtEmpty a _ = a
-    ext (ExtPush e x) a b = ext e a b `PushPartial` prjArraysPartial x b
-
-    eval :: Atuple Aconst arrs -> ValPartial arrs
-    eval NilAtup = ValBottom
-    eval (SnocAtup arrs a) = eval arrs `PushPartial` eval1 a
-
-    eval1 :: Aconst a -> ArraysPartial a
-    eval1 (SliceArr slix _ a) = PartialArray (Just (sliceShape slix (shape a))) Nothing
-    eval1 (ArrList _) = partialBottom
-    eval1 (RegArrList sh _) = PartialArray (Just sh) Nothing
-
-bringIntoScopeReg1 :: SeqPrelude aenv senv aenv' envReg
-                 -> ValPartial aenv -> ValPartial senv -> ValPartial envReg
-bringIntoScopeReg1 (SeqPrelude aconsts extc exts) aenv senv =
-  ext exts (ext extc aenv (eval aconsts)) senv
-  where
-    ext :: ExtReg a a' b c c' -> ValPartial a' -> ValPartial b -> ValPartial c'
-    ext ExtEmpty a _ = a
-    ext (ExtPush e x) a b = ext e a b `PushPartial` liftReg1 (prjArraysPartial x b)
-
-    eval :: Atuple Aconst arrs -> ValPartial arrs
-    eval NilAtup = ValBottom
-    eval (SnocAtup arrs a) = eval arrs `PushPartial` eval1 a
-
-    eval1 :: Aconst a -> ArraysPartial a
-    eval1 (SliceArr slix _ a) = PartialArray (Just (sliceShape slix (shape a))) Nothing
-    eval1 (ArrList _) = partialBottom
-    eval1 (RegArrList sh _) = PartialArray (Just sh) Nothing
-
+    evalSrc :: Source a -> ArraysPartial a
+    evalSrc (List _)           = partialBottom
+    evalSrc (RegularList sh _) = PartialArray (Just sh) Nothing
 
 evalPreOpenAfun1 :: (Arrays a, Arrays b)
                  => EvalAcc acc
@@ -457,6 +413,7 @@ evalPreOpenAcc eval acc aenv =
     Acond{} -> lift Nothing
     Awhile{} -> lift Nothing
     Use arr -> return (toPartial (toArr arr))
+    Subarray _ _ _ -> $internalError "evalPreOpenAcc" "Subarray should not occur prior to vectorisation"
     Unit _ -> return (PartialArray (Just Z) Nothing)
     Collect{} -> lift Nothing
 
@@ -676,6 +633,7 @@ evalPreOpenExp eval exp env aenv =
 
     ToIndex sh ix               -> toIndex <$> evalE sh <*> evalE ix
     FromIndex sh ix             -> fromIndex <$> evalE sh <*> evalE ix
+    ToSlice _ slix sh i         -> toSlice <$> evalE slix <*> evalE sh <*> evalE i
     Cond c t e ->
       do b <- evalE c
          case b of

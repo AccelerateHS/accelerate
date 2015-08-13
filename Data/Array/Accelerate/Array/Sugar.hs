@@ -4,8 +4,10 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE ImpredicativeTypes    #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TupleSections         #-}
@@ -548,7 +550,7 @@ data ArraysR arrs where
 
 data ArraysFlavour arrs where
   ArraysFunit  ::                                          ArraysFlavour ()
-  ArraysFarray :: (Shape sh, Elt e)                     => ArraysFlavour (Array sh e)
+  ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
 class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
@@ -840,30 +842,35 @@ class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape 
                                     (EltRepr (SliceShape   sl))
                                     (EltRepr (CoSliceShape sl))
                                     (EltRepr (FullShape    sl))
+  toSlice :: sl -> (FullShape sl) -> Int -> sl
 
 instance Slice Z where
   type SliceShape   Z = Z
   type CoSliceShape Z = Z
   type FullShape    Z = Z
   sliceIndex _ = Repr.SliceNil
+  toSlice _ _ _ = Z
 
 instance Slice sl => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
+  toSlice (sl :. All) (sh :. _) i = toSlice sl sh i :. All
 
 instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
   type FullShape    (sl:.Int) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined :: sl))
+  toSlice (sl :. i) (sh :. n) i' = toSlice sl sh ((i + i')  `div` n) :. ((i + i') `mod` n)
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
+  toSlice Any _ _ = Any
 
 
 -- | Generalised array division, like above but use for splitting an array into

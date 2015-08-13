@@ -35,9 +35,6 @@ module Data.Array.Accelerate.Trafo.Substitution (
   RebuildAcc, Rebuildable(..), RebuildableAcc,
   RebuildableExp(..), RebuildTup(..),
 
-  -- ** Sequence prelude environment shifting
-  seqPreludeShift, seqPreludeShiftReg, extShift, extShiftReg
-
 ) where
 
 import Prelude                                  hiding ( exp, seq )
@@ -48,6 +45,7 @@ import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple
 import qualified Data.Array.Accelerate.Debug    as Stats
 
 import Control.Applicative                      hiding ( Const )
+import Data.Traversable
 
 -- NOTE: [Renaming and Substitution]
 --
@@ -340,6 +338,7 @@ rebuildPreOpenExp k v av exp =
     IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
     ToIndex sh ix       -> ToIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
     FromIndex sh ix     -> FromIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    ToSlice x sl sh ix  -> ToSlice x <$> rebuildPreOpenExp k v av sl <*> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
     Cond p t e          -> Cond <$> rebuildPreOpenExp k v av p <*> rebuildPreOpenExp k v av t <*> rebuildPreOpenExp k v av e
     While p f x         -> While <$> rebuildFun k v av p <*> rebuildFun k v av f <*> rebuildPreOpenExp k v av x
     PrimConst c         -> pure $ PrimConst c
@@ -428,6 +427,7 @@ rebuildPreOpenAcc k av acc =
     Acond p t e         -> Acond <$> rebuildPreOpenExp k (pure . IE) av p <*> k av t <*> k av e
     Awhile p f a        -> Awhile <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a
     Use a               -> pure $ Use a
+    Subarray ix sh a    -> Subarray <$> rebuildPreOpenExp k (pure . IE) av ix <*> rebuildPreOpenExp k (pure . IE) av sh <*> pure a
     Unit e              -> Unit <$> rebuildPreOpenExp k (pure . IE) av e
     Reshape e a         -> Reshape <$> rebuildPreOpenExp k (pure . IE) av e <*> k av a
     Generate e f        -> Generate <$> rebuildPreOpenExp k (pure . IE) av e <*> rebuildFun k (pure . IE) av f
@@ -451,7 +451,7 @@ rebuildPreOpenAcc k av acc =
     Stencil f b a       -> Stencil <$> rebuildFun k (pure . IE) av f <*> pure b <*> k av a
     Stencil2 f b1 a1 b2 a2
                         -> Stencil2 <$> rebuildFun k (pure . IE) av f <*> pure b1 <*> k av a1 <*> pure b2 <*> k av a2
-    Collect seq         -> Collect <$> rebuildSeq k av seq
+    Collect s cs        -> Collect <$> rebuildSeq k av s <*> sequenceA (rebuildSeq k av <$> cs)
 
 rebuildAfun
     :: (Applicative f, SyntacticAcc fa)
@@ -479,86 +479,39 @@ rebuildSeq
     :: (SyntacticAcc fa, Applicative f)
     => RebuildAcc acc
     -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-    -> PreOpenSeq acc aenv senv t
-    -> f (PreOpenSeq acc aenv' senv t)
+    -> PreOpenSeq idx acc aenv t
+    -> f (PreOpenSeq idx acc aenv' t)
 rebuildSeq k v seq =
   case seq of
-    Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k v s)
+    Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k (shiftA k v) s)
     Consumer c   -> Consumer <$> (rebuildC k v c)
-    Reify (Just f) ix  -> Reify . Just  <$> rebuildAfun k v f <*> pure ix
-    Reify Nothing  ix  -> pure $ Reify Nothing ix
-
-data HackPre f fa (acc :: * -> * -> *) aenv senv env envReg where
-  HackPre :: SeqPrelude aenv senv env' envReg'
-        -> (forall t. Arrays t => Idx env t -> f (fa acc env' t))
-        -> (forall t. Arrays t => Idx envReg t -> f (fa acc envReg' t))
-        -> HackPre f fa acc aenv senv env envReg
-
-data HackExt f fa (acc :: * -> * -> *) a a' x b b' where
-  HackExt :: ExtReg a a' x b0 b0'
-        -> (forall t. Arrays t => Idx b  t -> f (fa acc b0  t))
-        -> (forall t. Arrays t => Idx b' t -> f (fa acc b0' t))
-        -> HackExt f fa acc a a' x b b'
-
-hackExt ::(Applicative f, SyntacticAcc fa)
-     => RebuildAcc acc
-     -> (forall t. Arrays t => Idx a  t -> f (fa acc a0  t))
-     -> (forall t. Arrays t => Idx a' t -> f (fa acc a0' t))
-     -> ExtReg a a' x b b'
-     -> HackExt f fa acc a0 a0' x b b'
-hackExt _ v v' ExtEmpty = HackExt ExtEmpty v v'
-hackExt k v v' (ExtPush ex x)
-  | HackExt ex0 a b <- hackExt k v v' ex
-  = HackExt (ex0 `ExtPush` x) (shiftA k a) (shiftA k b)
-
-hackPre :: (Applicative f, SyntacticAcc fa)
-     => RebuildAcc acc
-     -> (forall t. Arrays t => Idx aenv t -> f (fa acc aenv' t))
-     -> SeqPrelude aenv senv env envReg
-     -> HackPre f fa acc aenv' senv env envReg
-hackPre k v (SeqPrelude arrs0 ex ex')
-  | HackExt ex0  a b  <- hackExt k v v ex
-  , HackExt ex0' c d <- hackExt k a b ex'
-  = HackPre (SeqPrelude arrs0 ex0 ex0') c d
+    Reify a      -> Reify    <$> k v a
 
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-         -> Producer acc aenv senv a
-         -> f (Producer acc aenv' senv a)
+         -> Producer idx acc aenv a
+         -> f (Producer idx acc aenv' a)
 rebuildP k v p =
   case p of
-    StreamIn arrs        -> pure (StreamIn arrs)
-    ToSeq (Just f) sl slix acc  -> ToSeq . Just  <$> rebuildAfun k v f <*> pure sl <*> pure slix <*> k v acc
-    ToSeq Nothing  sl slix acc  -> ToSeq Nothing sl slix <$> k v acc
-    GeneralMapSeq pre a Nothing
-      | HackPre pre' m _ <- hackPre k v pre
-      -> flip (GeneralMapSeq pre') Nothing <$> k m a
-    GeneralMapSeq pre a (Just a')
-      | HackPre pre' m m' <- hackPre k v pre
-      -> (. Just) . GeneralMapSeq pre' <$> k m a <*> k m' a'
+    Pull arrs          -> pure (Pull arrs)
+    Subarrays sh arr   -> Subarrays <$> rebuildPreOpenExp k (pure . IE) v sh <*> pure arr
+    Produce l f        -> Produce <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f
+    MapAccumFlat f a x -> MapAccumFlat <$> rebuildAfun k v f <*> k v a <*> k v x
+    ProduceAccum l f a -> ProduceAccum <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v a
 
-    MapSeq f Nothing   x -> flip MapSeq Nothing <$> rebuildAfun k v f <*> pure x
-    MapSeq f (Just f') x -> (. Just) . MapSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x
-    ZipWithSeq f Nothing   x y -> flip ZipWithSeq Nothing <$> rebuildAfun k v f <*> pure x <*> pure y
-    ZipWithSeq f (Just f') x y -> (. Just) . ZipWithSeq   <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> pure x <*> pure y
-    ScanSeq f e x        -> ScanSeq <$> rebuildFun k (pure . IE) v f <*> rebuildPreOpenExp k (pure . IE) v e <*> pure x
-
-rebuildC :: forall acc fa f aenv aenv' senv a. (SyntacticAcc fa, Applicative f)
+rebuildC :: forall idx acc fa f aenv aenv' a. (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
          -> (forall t'. Arrays t' => Idx aenv t' -> f (fa acc aenv' t'))
-         -> Consumer acc aenv senv a
-         -> f (Consumer acc aenv' senv a)
+         -> Consumer idx acc aenv a
+         -> f (Consumer idx acc aenv' a)
 rebuildC k v c =
   case c of
-    FoldSeqRegular pre f a
-      | HackPre pre' _ m' <- hackPre k v pre
-      -> FoldSeqRegular pre' <$> rebuildAfun k m' f <*> k v a
-    FoldSeqFlatten (Just f') f acc x -> FoldSeqFlatten . Just <$> rebuildAfun k v f' <*> rebuildAfun k v f <*> k v acc <*> pure x
-    FoldSeqFlatten Nothing f acc x -> FoldSeqFlatten Nothing <$> rebuildAfun k v f <*> k v acc <*> pure x
+    FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> k v x
+    Iterate l f acc        -> Iterate <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v acc
     Stuple t               -> Stuple <$> rebuildT t
   where
-    rebuildT :: Atuple (Consumer acc aenv senv) t -> f (Atuple (Consumer acc aenv' senv) t)
+    rebuildT :: Atuple (Consumer idx acc aenv) t -> f (Atuple (Consumer idx acc aenv') t)
     rebuildT NilAtup        = pure NilAtup
     rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
 
@@ -570,19 +523,3 @@ rebuildOpenAcc
     -> OpenAcc aenv  t
     -> f (OpenAcc aenv' t)
 rebuildOpenAcc av (OpenAcc acc) = OpenAcc <$> rebuildPreOpenAcc rebuildOpenAcc av acc
-
-
-
-seqPreludeShift :: SeqPrelude aenv senv env envReg -> aenv :> env
-seqPreludeShift (SeqPrelude _ ex1 ex2) = extShift ex2 . extShift ex1
-
-seqPreludeShiftReg :: SeqPrelude aenv senv env envReg -> aenv :> envReg
-seqPreludeShiftReg (SeqPrelude _ ex1 ex2) = extShiftReg ex2 . extShiftReg ex1
-
-extShift :: ExtReg a a' x b b' -> a :> b
-extShift ExtEmpty = id
-extShift (ExtPush ex0 _) = SuccIdx . extShift ex0
-
-extShiftReg :: ExtReg a a' x b b' -> a' :> b'
-extShiftReg ExtEmpty = id
-extShiftReg (ExtPush ex0 _) = SuccIdx . extShiftReg ex0

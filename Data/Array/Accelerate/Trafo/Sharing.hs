@@ -341,7 +341,7 @@ convertSharingSeq
     -> AST.PreOpenNaturalSeq AST.OpenAcc aenv arrs
 convertSharingSeq _ alyt _ senv (ScopedSeq (SvarSharing sn))
   | Just i <- findIndex (matchStableSeq sn) senv
-  = AST.Reify Nothing $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
+  = AST.Reify $ AST.OpenAcc . AST.Avar $ prjIdx (ctxt ++ "; i = " ++ show i) i alyt
   | null senv
   = error $ "Cyclic definition of a value of type 'Seq' (sa = " ++
             show (hashStableNameHeight sn) ++ ")"
@@ -361,10 +361,10 @@ convertSharingSeq config alyt aenv senv (ScopedSeq (SletSharing sa@(StableSharin
       case bnd of
         StreamIn arrs               -> producer $ AST.Pull (AST.List arrs)
         Subarrays sh arr            -> producer $ AST.Subarrays (cvtE sh) arr
-        Produce l f                 -> producer $ AST.Produce (Sized (cvtE l)) (cvtAF1 f)
+        Produce l f                 -> producer $ AST.Produce (Just $ cvtE l) (cvtAF1 f)
         MapSeq afun x               -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x)
         ZipWithSeq afun x y         -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x) (asIdx y)
-        MapAccumFlat fun a x        -> producer $ AST.MapAccumFlat (cvtAF3 fun) (cvtA a) (asIdx x)
+        MapAccumFlat fun a x        -> producer $ AST.MapAccumFlat (cvtAF3 fun) (cvtA a) (AST.OpenAcc . AST.Avar $ asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
         producer :: (bnd ~ [a], Arrays a)
@@ -412,7 +412,7 @@ convertSharingSeq config alyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenNaturalSeq AST.OpenAcc aenv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (asIdx x)
+        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (AST.OpenAcc . AST.Avar $ asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"
@@ -532,7 +532,7 @@ mkMapSeq :: (Arrays a, Arrays b)
           -> Idx aenv a
           -> AST.NaturalProducer AST.OpenAcc aenv b
 mkMapSeq (AST.Alam (AST.Abody f)) x =
-  AST.Produce (Minimum (idxToSubEnv x)) ( AST.Alam . AST.Abody . AST.OpenAcc
+  AST.Produce Nothing ( AST.Alam . AST.Abody . AST.OpenAcc
               $ AST.Alet (AST.OpenAcc (AST.Avar (SuccIdx x)))
                          f)
 mkMapSeq _ _ = error "Wrong arity function"
@@ -543,7 +543,7 @@ mkZipWithSeq :: (Arrays a, Arrays b)
              -> Idx aenv b
              -> AST.NaturalProducer AST.OpenAcc aenv c
 mkZipWithSeq (AST.Alam (AST.Alam (AST.Abody f))) x y =
-  AST.Produce (Minimum (idxToSubEnv x `subUnion` idxToSubEnv y))
+  AST.Produce Nothing
               ( AST.Alam . AST.Abody . AST.OpenAcc
               $ AST.Alet (AST.OpenAcc (AST.Avar (SuccIdx x)))
               $ AST.OpenAcc
