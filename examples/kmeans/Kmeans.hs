@@ -137,7 +137,7 @@ makeNewClusters points clusters
     -- and number of points assigned to each centroid.
     --
     makePointSum :: Acc (Vector Id) -> Acc (Vector (PointSum a))
-    makePointSum = A.fold1 addPointSum . pointSum
+    makePointSum = A.fold1 addPointSum . compute . pointSum
 
     -- The point sum is an intermediate 2D array (it gets fused away, so does
     -- not exist in memory). The points are laid out along the innermost
