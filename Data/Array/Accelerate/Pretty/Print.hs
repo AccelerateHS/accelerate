@@ -349,7 +349,7 @@ prettyTuple pp lvl alvl = tuple . collect
 prettyTupleIdx :: TupleIdx t e -> Doc
 prettyTupleIdx = int . toInt
   where
-    toInt  :: TupleIdx t e -> Int
+    toInt :: TupleIdx t e -> Int
     toInt ZeroTupIdx       = 0
     toInt (SuccTupIdx tup) = toInt tup + 1
 

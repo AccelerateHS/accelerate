@@ -54,6 +54,9 @@ instance Show (OpenAcc aenv a) where
 instance Show (DelayedOpenAcc aenv a) where
   show c = renderStyle wide $ prettyAcc 0 noParens c
 
+instance Show (DelayedSeq a) where
+  show = renderStyle wide . prettyDelayedSeq noParens
+
 -- These parameterised instances are fine because there is a concrete kind
 --
 instance Kit acc => Show (PreOpenAfun acc aenv f) where
@@ -67,7 +70,4 @@ instance Kit acc => Show (PreOpenExp acc env aenv t) where
 
 instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
-
-instance Show (DelayedSeq a) where
-  show = renderStyle wide . prettyDelayedSeq noParens
 

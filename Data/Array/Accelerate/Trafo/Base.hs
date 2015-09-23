@@ -133,7 +133,9 @@ type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
 data DelayedSeq t where
- DelayedSeq :: Extend DelayedOpenAcc () aenv -> DelayedOpenSeq aenv () t -> DelayedSeq t
+  DelayedSeq :: Extend DelayedOpenAcc () aenv
+             -> DelayedOpenSeq aenv () t
+             -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
@@ -170,8 +172,8 @@ instance Kit DelayedOpenAcc where
 
 
 hashDelayed :: HashAcc DelayedOpenAcc
-hashDelayed (Manifest pacc)     = hash "Manifest"       `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayed Delayed{..}         = hash "Delayed"        `hashE` extentD `hashF` indexD `hashF` linearIndexD
+hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayed Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
   where
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
