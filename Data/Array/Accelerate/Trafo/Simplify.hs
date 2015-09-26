@@ -44,7 +44,6 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList )
-import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
 
@@ -420,14 +419,16 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
     env' = incExp env `PushExp` Var ZeroIdx
 
 
--- Simplify closed expressions and functions. The process is applied repeatedly
--- until no more changes are made.
+-- Simplify closed expressions and functions. The process is applied
+-- repeatedly until no more changes are made.
 --
-simplifyExp :: Elt t => Kit acc => PreExp acc aenv t -> PreExp acc aenv t
-simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
+simplifyExp :: (Elt t, Kit acc) => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenExp EmptyExp)
+-- simplifyExp = iterate (show . prettyPreOpenExp prettyAcc noParens PP.Empty PP.Empty) (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
-simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyExp)
+simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
+-- simplifyFun = iterate (show . prettyPreOpenFun prettyAcc PP.Empty) (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]

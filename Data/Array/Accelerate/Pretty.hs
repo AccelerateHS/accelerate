@@ -48,26 +48,27 @@ wide = style { lineLength = 150 }
 -- This matches any type of kind (* -> * -> *), which can cause problems
 -- interacting with other packages. See Issue #108.
 --
-instance Show (OpenAcc aenv a) where
-  show c = renderStyle wide $ prettyAcc 0 noParens c
+instance PrettyEnv aenv => Show (OpenAcc aenv a) where
+  show c = renderStyle wide $ prettyAcc noParens prettyEnv c
 
-instance Show (DelayedOpenAcc aenv a) where
-  show c = renderStyle wide $ prettyAcc 0 noParens c
-
-instance Show (DelayedSeq a) where
-  show = renderStyle wide . prettyDelayedSeq noParens
+instance PrettyEnv aenv => Show (DelayedOpenAcc aenv a) where
+  show c = renderStyle wide $ prettyAcc noParens prettyEnv c
 
 -- These parameterised instances are fine because there is a concrete kind
 --
-instance Kit acc => Show (PreOpenAfun acc aenv f) where
-  show f = renderStyle wide $ prettyPreAfun prettyAcc 0 f
+-- TLM: Ugh, his new 'PrettyEnv' constraint really just enforces something
+--      that we already know, which is that our environments are nested
+--      tuples, but our type parameter 'env' doesn't capture that.
+--
+instance (Kit acc, PrettyEnv aenv) => Show (PreOpenAfun acc aenv f) where
+  show f = renderStyle wide $ prettyPreOpenAfun prettyAcc prettyEnv f
 
-instance Kit acc => Show (PreOpenFun acc env aenv f) where
-  show f = renderStyle wide $ prettyPreFun prettyAcc 0 f
+instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenFun acc env aenv f) where
+  show f = renderStyle wide $ prettyPreOpenFun prettyAcc prettyEnv prettyEnv f
 
-instance Kit acc => Show (PreOpenExp acc env aenv t) where
-  show e = renderStyle wide $ prettyPreExp prettyAcc 0 0 noParens e
+instance (Kit acc, PrettyEnv env, PrettyEnv aenv) => Show (PreOpenExp acc env aenv t) where
+  show e = renderStyle wide $ prettyPreOpenExp prettyAcc noParens prettyEnv prettyEnv e
 
-instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
-  show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
+-- instance Kit acc => Show (PreOpenSeq acc aenv senv t) where
+--   show s = renderStyle wide $ sep $ punctuate (text ";") $ prettySeq prettyAcc 0 0 noParens s
 
