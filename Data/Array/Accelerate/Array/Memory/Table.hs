@@ -412,12 +412,17 @@ makeWeakArrayData ad c f = mw arrayElt ad
     -- unreachable
     --
     mkWeak' :: UniqueArray i a -> c -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c (Just f)
-      = IO $ \s ->
-          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c Nothing
-      = IO $ \s ->
-          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+    mkWeak' (storableFromUnique -> StorableArray _ _ _ fptr) c finalizer =
+      case fptr of
+        ForeignPtr _ (MallocPtr       _ (IORef (STRef r#))) ->
+          case finalizer of
+            Just f  -> IO $ \s -> case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
+            Nothing -> IO $ \s -> case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+        ForeignPtr _ (PlainForeignPtr   (IORef (STRef r#))) ->
+          case finalizer of
+            Just f  -> IO $ \s -> case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
+            Nothing -> IO $ \s -> case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
+        ForeignPtr _ _ -> $internalError "makeWeakArrayData" "Trying to make weak pointer to PlainPtr"
     mkWeak' _                                                                     _ _
       = $internalError "makeWeakArrayData" "Internal representation of Storable array has changed"
 
