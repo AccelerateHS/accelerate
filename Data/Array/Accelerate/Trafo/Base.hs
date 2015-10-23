@@ -159,13 +159,14 @@ instance Rebuildable DelayedOpenAcc where
 instance Sink DelayedOpenAcc where
 
 instance Kit DelayedOpenAcc where
-  inject        = Manifest
-  extract       = error "DelayedAcc.extract"
-  fromOpenAcc   = error "DelayedAcc.fromOpenAcc"
+  inject                  = Manifest
+  extract (Manifest pacc) = pacc
+  extract Delayed{}       = error "DelayedAcc.extract"
+  fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  matchAcc      = matchDelayed
-  hashAcc       = hashDelayed
-  prettyAcc     = prettyDelayed
+  matchAcc                = matchDelayed
+  hashAcc                 = hashDelayed
+  prettyAcc               = prettyDelayed
 
 
 hashDelayed :: HashAcc DelayedOpenAcc
