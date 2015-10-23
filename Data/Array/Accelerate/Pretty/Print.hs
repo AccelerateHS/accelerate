@@ -34,10 +34,13 @@ module Data.Array.Accelerate.Pretty.Print (
   prettyPreExp, prettyPreOpenExp,
   prettyPreFun, prettyPreOpenFun,
   prettyPrim,
+  prettyArrays,
+  prettyTupleIdx,
 
   -- ** Utilities
-  Val(..), PrettyEnv(..),
+  Val(..), PrettyEnv(..), prj, sizeEnv,
   noParens,
+  tuple,
 
 ) where
 
@@ -101,8 +104,8 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     ppE :: PreExp acc aenv e -> Doc
     ppE = prettyPreExp prettyAcc parens aenv
 
-    ppSh :: Shape sh => PreExp acc aenv sh -> Doc               -- Shape constraint is just to...
-    ppSh = parens . prettyPreExp prettyAcc noParens aenv        -- ...demonstrate intent
+    ppSh :: PreExp acc aenv sh -> Doc
+    ppSh = parens . prettyPreExp prettyAcc noParens aenv
 
     ppF :: PreFun acc aenv f -> Doc
     ppF = parens . prettyPreFun prettyAcc aenv
@@ -153,7 +156,7 @@ prettyPreOpenAcc prettyAcc wrap aenv = pp
     pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
     pp (Transform sh ix f acc)  = "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA acc ]
     pp (Reshape sh acc)         = "reshape"     .$ [ ppSh sh, ppA acc ]
-    pp (Replicate _ty ix acc)   = "replicate"   .$ [ prettyPreExp prettyAcc noParens aenv ix, ppA acc ]
+    pp (Replicate _ty ix acc)   = "replicate"   .$ [ ppSh ix, ppA acc ]
     pp (Map f acc)              = "map"         .$ [ ppF f, ppA acc ]
     pp (ZipWith f acc1 acc2)    = "zipWith"     .$ [ ppF f, ppA acc1, ppA acc2 ]
     pp (Fold f e acc)           = "fold"        .$ [ ppF f, ppE e, ppA acc ]
@@ -345,7 +348,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (Prj idx e)              = wrap $ char '#' <> prettyTupleIdx idx <+> ppE e
     pp (Cond c t e)             = wrap $ sep [ ppE c, char '?' , tuple [ ppE' t, ppE' e ]]
     pp IndexNil                 = char 'Z'
-    pp (IndexAny)               = text "indexAny"
+    pp IndexAny                 = text "indexAny"
     pp (IndexCons t h)          = ppE' t <+> text ":." <+> ppE' h
     pp (IndexHead ix)           = "indexHead"  .$ [ ppE ix ]
     pp (IndexTail ix)           = "indexTail"  .$ [ ppE ix ]
