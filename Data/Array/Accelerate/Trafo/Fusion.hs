@@ -87,9 +87,8 @@ convertSeq fuseAcc (embedSeq (embedOpenAcc fuseAcc) -> ExtendSeq aenv s)
   = withSimplStats (DelayedSeq (cvtE aenv) (convertOpenSeq fuseAcc s))
   where
     cvtE :: Extend OpenAcc aenv aenv' -> Extend DelayedOpenAcc aenv aenv'
-    cvtE BaseEnv         = BaseEnv
-    cvtE (PushEnv env a) | a' <- convertOpenAcc fuseAcc a
-                         = PushEnv (cvtE env) a'
+    cvtE BaseEnv                                          = BaseEnv
+    cvtE (PushEnv env a) | a' <- convertOpenAcc fuseAcc a = PushEnv (cvtE env) a'
 
 withSimplStats :: a -> a
 #ifdef ACCELERATE_DEBUG
@@ -200,9 +199,7 @@ manifest fuseAcc (OpenAcc pacc) =
     Permute f d p a         -> Permute  (cvtF f) (manifest fuseAcc d) (cvtF p) (delayed fuseAcc a)
     Stencil f x a           -> Stencil  (cvtF f) x (manifest fuseAcc a)
     Stencil2 f x a y b      -> Stencil2 (cvtF f) x (manifest fuseAcc a) y (manifest fuseAcc b)
-
-    -- Seq operations
-    Collect seq             -> Collect (convertOpenSeq fuseAcc seq)
+    Collect s               -> Collect  (cvtS s)
 
     where
       -- Flatten needless let-binds, which can be introduced by the conversion to
@@ -223,6 +220,9 @@ manifest fuseAcc (OpenAcc pacc) =
       cvtAF :: OpenAfun aenv f -> PreOpenAfun DelayedOpenAcc aenv f
       cvtAF (Alam f)  = Alam  (cvtAF f)
       cvtAF (Abody b) = Abody (manifest fuseAcc b)
+
+      cvtS :: PreOpenSeq OpenAcc aenv senv s -> PreOpenSeq DelayedOpenAcc aenv senv s
+      cvtS = convertOpenSeq fuseAcc
 
       -- Conversions for closed scalar functions and expressions
       --
@@ -432,19 +432,19 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- node, so that the producer can be directly embedded into the consumer
     -- during the code generation phase.
     --
-    Fold f z a          -> embed  (into2 Fold          (cvtF f) (cvtE z)) a
-    Fold1 f a           -> embed  (into  Fold1         (cvtF f)) a
-    FoldSeg f z a s     -> embed2 (into2 FoldSeg       (cvtF f) (cvtE z)) a s
-    Fold1Seg f a s      -> embed2 (into  Fold1Seg      (cvtF f)) a s
-    Scanl f z a         -> embed  (into2 Scanl         (cvtF f) (cvtE z)) a
-    Scanl1 f a          -> embed  (into  Scanl1        (cvtF f)) a
-    Scanl' f z a        -> embed  (into2 Scanl'        (cvtF f) (cvtE z)) a
-    Scanr f z a         -> embed  (into2 Scanr         (cvtF f) (cvtE z)) a
-    Scanr1 f a          -> embed  (into  Scanr1        (cvtF f)) a
-    Scanr' f z a        -> embed  (into2 Scanr'        (cvtF f) (cvtE z)) a
-    Permute f d p a     -> embed2 (into2 permute       (cvtF f) (cvtF p)) d a
-    Stencil f x a       -> embed  (into (stencil x)    (cvtF f)) a
-    Stencil2 f x a y b  -> embed2 (into (stencil2 x y) (cvtF f)) a b
+    Fold f z a          -> embed     (into2 Fold          (cvtF f) (cvtE z)) a
+    Fold1 f a           -> embed     (into  Fold1         (cvtF f)) a
+    FoldSeg f z a s     -> embed2    (into2 FoldSeg       (cvtF f) (cvtE z)) a s
+    Fold1Seg f a s      -> embed2    (into  Fold1Seg      (cvtF f)) a s
+    Scanl f z a         -> embed     (into2 Scanl         (cvtF f) (cvtE z)) a
+    Scanl1 f a          -> embed     (into  Scanl1        (cvtF f)) a
+    Scanl' f z a        -> embed     (into2 Scanl'        (cvtF f) (cvtE z)) a
+    Scanr f z a         -> embed     (into2 Scanr         (cvtF f) (cvtE z)) a
+    Scanr1 f a          -> embed     (into  Scanr1        (cvtF f)) a
+    Scanr' f z a        -> embed     (into2 Scanr'        (cvtF f) (cvtE z)) a
+    Permute f d p a     -> permuteD  (into2 permute       (cvtF f) (cvtF p)) d a
+    Stencil f x a       -> stencilD  (into (stencil x)    (cvtF f)) a
+    Stencil2 f x a y b  -> stencil2D (into (stencil2 x y) (cvtF f)) a b
 
   where
     -- If fusion is not enabled, force terms to the manifest representation
@@ -470,6 +470,39 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     permute f p d a     = Permute f d p a
     stencil x f a       = Stencil f x a
     stencil2 x y f a b  = Stencil2 f x a y b
+
+    -- Helper functions for operations which require their argument arrays
+    -- to be manifest. Without this we can get sequences like:
+    --
+    -- > stencil s (map f a)
+    --
+    -- rather than:
+    --
+    -- > let a' = map f a
+    -- > in  stencil s a'
+    --
+    -- This way we retain the invariant that every time we expect
+    -- a manifest array it will be in the form of an environment index.
+    --
+    stencilD :: (Arrays as, Arrays bs)
+             => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
+             -> acc aenv as
+             -> Embed acc aenv bs
+    stencilD = trav1 bind
+
+    stencil2D :: (Arrays as, Arrays bs, Arrays cs)
+              => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+              ->       acc aenv as
+              ->       acc aenv bs
+              -> Embed acc aenv cs
+    stencil2D = trav2 bind bind
+
+    permuteD :: (Arrays as, Arrays bs, Arrays cs)
+              => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+              ->       acc aenv as
+              ->       acc aenv bs
+              -> Embed acc aenv cs
+    permuteD = trav2 bind id
 
     -- Conversions for closed scalar functions and expressions. This just
     -- applies scalar simplifications.
@@ -514,19 +547,40 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
           => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
           ->       acc aenv as
           -> Embed acc aenv bs
-    embed op (embedAcc -> Embed env cc)
-      = Embed (env `PushEnv` inject (op env (inject (compute' cc)))) (Done ZeroIdx)
+    embed = trav1 id
 
     embed2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
            => (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
            ->       acc aenv as
            ->       acc aenv bs
            -> Embed acc aenv cs
-    embed2 op (embedAcc -> Embed env1 cc1) (embedAcc . sink env1 -> Embed env0 cc0)
+    embed2 = trav2 id id
+
+    trav1 :: (Arrays as, Arrays bs)
+          => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
+          -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> PreOpenAcc acc aenv' bs)
+          ->       acc aenv as
+          -> Embed acc aenv bs
+    trav1 f op (f . embedAcc -> Embed env cc)
+      = Embed (env `PushEnv` inject (op env (inject (compute' cc)))) (Done ZeroIdx)
+
+    trav2 :: forall aenv as bs cs. (Arrays as, Arrays bs, Arrays cs)
+          => (forall aenv'. Embed acc aenv' as -> Embed acc aenv' as)
+          -> (forall aenv'. Embed acc aenv' bs -> Embed acc aenv' bs)
+          -> (forall aenv'. Extend acc aenv aenv' -> acc aenv' as -> acc aenv' bs -> PreOpenAcc acc aenv' cs)
+          ->       acc aenv as
+          ->       acc aenv bs
+          -> Embed acc aenv cs
+    trav2 f1 f0 op (f1 . embedAcc -> Embed env1 cc1) (f0 . embedAcc . sink env1 -> Embed env0 cc0)
       | env     <- env1 `append` env0
       , acc1    <- inject . compute' $ sink env0 cc1
       , acc0    <- inject . compute' $ cc0
       = Embed (env `PushEnv` inject (op env acc1 acc0)) (Done ZeroIdx)
+
+    bind :: Arrays as => Embed acc aenv' as -> Embed acc aenv' as
+    bind (Embed env cc)
+      | Done{} <- cc = Embed env                                  cc
+      | otherwise    = Embed (env `PushEnv` inject (compute' cc)) (Done ZeroIdx)
 
     -- Move additional bindings for producer outside of sequence, so
     -- that producers may fuse with their arguments, resulting in
