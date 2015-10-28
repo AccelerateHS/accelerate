@@ -19,11 +19,15 @@ module Data.Array.Accelerate.Pretty.Graphviz
 -- standard libraries
 import Data.List
 import Data.Maybe
+import Data.IntMap                                      ( IntMap )
+import Text.Printf
 import Text.PrettyPrint
+import System.Mem.StableName
 import Control.Monad.State
 import Control.Arrow                                    ( (***), (&&&), first )
 import Control.Applicative                              hiding ( Const, empty )
-import Prelude                                          hiding ( exp, seq )
+import Prelude                                          hiding ( exp )
+import qualified Data.IntMap                            as IM
 
 -- friends
 import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenFun(..), PreOpenExp(..) )
@@ -37,71 +41,68 @@ import qualified Data.Array.Accelerate.AST              as AST
 
 -- Configuration options
 --
-cfgUniqueOnly, cfgIncludeShape :: Bool
+cfgUniqueOnly, cfgIncludeShape, cfgSimple :: Bool
 cfgUniqueOnly   = False
 cfgIncludeShape = False
 cfgSimple       = False
 
 
-type Dot a    = State DotState a
+type Dot a    = StateT DotState IO a
 data DotState = DotState
-  { named       :: {-# UNPACK #-} !Int
+  { fresh       :: {-# UNPACK #-} !Int
+  , nodeMap     :: IntMap NodeId
   , dotEdges    :: [Edge]
   , dotNodes    :: [Node]
   , dotGraph    :: [Graph]
   }
 
--- runDot :: Dot Node' -> Doc
--- runDot acc =
---   let ((),s) = flip runState (DotState 0 [] [] [])
---              $ do
---                   (r, fvs) <- acc
---                   to       <- node (text "last") r
---                   sequence_ [ edge (NodeId (text "Node_" <> from) Nothing) to | from <- fvs ]
---   in
---   ppGraph . Graph empty $
---     [ N n | n <- dotNodes s ] ++
---     [ E e | e <- dotEdges s ] ++
---     [ G g | g <- dotGraph s ]
 
+nodeIdOfLabel :: Label -> Dot NodeId
+nodeIdOfLabel l =
+  case show l of
+    'a':rest | [(n,[])] <- reads rest -> state $ \s -> (nodeMap s IM.! n, s)
+    _                                 -> $internalError "nodeIdOfLabel" "expected array variable"
 
-freshName :: Dot Label
-freshName
-  = state
-  $ \s -> ( char 'a' <> int (named s)
-          , s { named = named s + 1 }
-          )
+mkLabel :: NodeId -> Dot Label
+mkLabel nid = state $ \s ->
+  let n = fresh s
+  in
+  ( char 'a' <> int n
+  , s { fresh   = n + 1
+      , nodeMap = IM.insert n nid (nodeMap s)
+      }
+  )
 
+mkNodeId :: a -> Dot NodeId
+mkNodeId node = do
+  sn    <- liftIO $ makeStableName node
+  return $ sn `seq` NodeId (text (printf "Node_%#0x" (hashStableName sn))) Nothing
 
-mkNode :: Label -> Doc -> Dot NodeId
-mkNode label body = do
-  let nid = NodeId (text "Node_" <> label) Nothing
-      n   = Node nid (Just label) body
-  --
-  modify (\s -> s { dotNodes = n : dotNodes s })
-  return nid
+addNode :: NodeId -> Maybe Label -> Doc -> Dot ()
+addNode nid label body =
+  modify (\s -> s { dotNodes = Node nid label body : dotNodes s })
 
-mkEdge :: NodeId -> NodeId -> Dot ()
-mkEdge from to =
+addEdge :: NodeId -> NodeId -> Dot ()
+addEdge from to =
   modify (\s -> s { dotEdges = Edge from to : dotEdges s })
 
 
 graphDelayedAcc
     :: Val aenv
     -> DelayedOpenAcc aenv a
-    -> Graph
-graphDelayedAcc aenv acc
-  = Graph empty
-  $ [ N n | n <- dotNodes s ] ++
-    [ E e | e <- dotEdges s ] ++
-    [ G g | g <- dotGraph s ]
-  where
-    s = flip execState (DotState 0 [] [] [])
+    -> IO Graph
+graphDelayedAcc aenv acc = do
+  s <- flip execStateT (DotState 0 IM.empty [] [] [])
       $ do
           (r, fvs) <- prettyDelayedOpenAcc noParens aenv acc
-          let to = NodeId (text "result") Nothing
-          modify (\s' -> s' { dotNodes = Node to Nothing r : dotNodes s' })
-          sequence_ [ mkEdge (NodeId (text "Node_" <> from) Nothing) to | from <- fvs ]
+          to       <- mkNodeId r
+          addNode to Nothing r
+          mapM (flip addEdge to) =<< mapM nodeIdOfLabel fvs
+  return
+    $ Graph empty
+    $ [ N n | n <- dotNodes s ] ++
+      [ E e | e <- dotEdges s ] ++
+      [ G g | g <- dotGraph s ]
 
 
 
@@ -155,11 +156,14 @@ prettyDelayedOpenAcc wrap aenv = ppA
     pp :: forall a. PreOpenAcc DelayedOpenAcc aenv a -> Dot Node'
     pp (Avar ix)       = let v = prj ix aenv in return (v, [v])
     pp (Alet bnd body) = do
-      a           <- freshName
+      to          <- mkNodeId bnd
+      a           <- mkLabel to
+      --
       (bnd', fvs) <- prettyDelayedOpenAcc noParens aenv            bnd
       body'       <- prettyDelayedOpenAcc noParens (aenv `Push` a) body
-      to          <- mkNode a bnd'
-      sequence_ [ mkEdge (NodeId (text "Node_" <> from) Nothing) to | from <- fvs ]
+      --
+      addNode to (Just a) bnd'
+      mapM (flip addEdge to) =<< mapM nodeIdOfLabel fvs
       return body'
 
     -- pp (Apply afun acc)         = error "Apply" -- wrap $ sep [ ppAF afun, ppA acc ]
@@ -394,7 +398,7 @@ ppNode (Node nid xl l) =
     wide = style { lineLength = 200 }
 
     escape :: Char -> String
-    escape ' '  = "\\ "   -- don't collapse multiple spaces
+    escape ' '  = "\\ "         -- don't collapse multiple spaces
     escape '>'  = "\\>"
     escape '<'  = "\\<"
     escape '|'  = "\\|"
