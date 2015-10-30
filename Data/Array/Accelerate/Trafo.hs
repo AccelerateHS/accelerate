@@ -101,7 +101,7 @@ phases =  Phase
   , recoverSeqSharing      = True
   , floatOutAccFromExp     = True
   , enableAccFusion        = True
-  , enableAccFission       = True
+  , enableAccFission       = False
   , convertOffsetOfSegment = False
   , vectoriseSequences     = True
   }

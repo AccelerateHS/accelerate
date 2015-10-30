@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
-import Prelude
+import Prelude hiding ((<*),(>*))
 import Data.Complex                             ( Complex(..) )
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Smart
