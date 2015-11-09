@@ -65,6 +65,7 @@ import Data.Array.Accelerate.Array.Data                         ( ArrayData, GAr
                                                                   UniqueArray, storableFromUnique, getUniqueId )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..) )
+import Data.Array.Accelerate.Lifetime
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
@@ -391,35 +392,11 @@ makeWeakArrayData ad c f = mw arrayElt ad
     mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua c f
     mw _                _               = error "Base eight is just like base ten really — if you're missing two fingers."
 
-    -- Note: [Weak Array pointers]
-    --
-    -- One of the unfortunate properties of GHC's weak pointers is that if a
-    -- weak pointer is created with a non-primitive object as key, there is
-    -- the possibility that the finalizer attached to the pointer may fire early.
-    -- The reason for this is that the optimiser, at compile time, and the GC, at
-    -- runtime, are free to create copies of the objects they are attached to.
-    -- This is less than ideal if we want to properly track when arrays are no
-    -- longer reachable.
-    --
-    -- The solution to this problem is to use a primitive object as a key for
-    -- any weak pointers we create. However, the obvious choice of primitive,
-    -- the `Addr#` that points to the pinned payload of the array, is not
-    -- suitable. Being a pointer into non-GHC managed memory, the rts won't let
-    -- us use it as a key. Instead we use the `MutVar#` contained within an
-    -- IORef, itself part of the ForeignPtr contained within a StorableArray.
-    -- This means that GHC is free to create as many copies of the container
-    -- and any finalizers will not fire until all copies have been made
-    -- unreachable
-    --
     mkWeak' :: UniqueArray i a -> c -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c (Just f)
-      = IO $ \s ->
-          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c Nothing
-      = IO $ \s ->
-          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' _                                                                     _ _
-      = $internalError "makeWeakArrayData" "Internal representation of Storable array has changed"
+    mkWeak' ua k Nothing = mkWeak (storableFromUnique ua) k
+    mkWeak' ua k (Just f) = do
+      addFinalizer (storableFromUnique ua) f
+      mkWeak (storableFromUnique ua) k
 
 
 -- Debug

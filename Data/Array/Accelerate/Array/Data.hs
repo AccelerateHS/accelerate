@@ -11,6 +11,7 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UnboxedTuples         #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 {-# OPTIONS_GHC -fno-warn-orphans         #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -71,6 +72,7 @@ import Language.Haskell.TH
 import Prelude
 
 -- friends
+import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Type
 
 -- Add needed Typeable instance for StorableArray
@@ -118,7 +120,8 @@ $( runQ [d| type HTYPE_CCHAR = $(
 -- this by attaching an Int to each array, the value of which we get from a
 -- global counter that we increment for every array construction.
 --
-data UniqueArray i e = UniqueArray {-# UNPACK #-} !Int {-# UNPACK #-} !(StorableArray i e)
+data UniqueArray i e = UniqueArray {-# UNPACK #-} !Int
+                                   {-# UNPACK #-} !(Lifetime (StorableArray i e))
 
 -- |Create a unique array from a storable array
 --
@@ -126,12 +129,12 @@ data UniqueArray i e = UniqueArray {-# UNPACK #-} !Int {-# UNPACK #-} !(Storable
 uniqueFromStorable :: StorableArray i a -> IO (UniqueArray i a)
 uniqueFromStorable sa = do
   i <- atomicModifyIORef' counter (\n -> (n+1,n))
-  return $ UniqueArray i sa
+  UniqueArray i <$> newLifetime sa
 
 -- |Get the storable array backing the unique array
 --
 {-# INLINE storableFromUnique #-}
-storableFromUnique :: UniqueArray i a -> StorableArray i a
+storableFromUnique :: UniqueArray i a -> Lifetime (StorableArray i a)
 storableFromUnique (UniqueArray _ sa) = sa
 
 -- |Get the unique identifier associated with the unique array
@@ -141,7 +144,7 @@ getUniqueId :: UniqueArray i a -> IO Int
 getUniqueId (UniqueArray n _) = return n
 
 instance Storable e => MArray UniqueArray e IO where
-  getBounds (UniqueArray _ sa) = getBounds sa
+  getBounds (UniqueArray _ sa) = getBounds (unsafeGetValue sa)
 
   newArray lu i = uniqueFromStorable =<< newArray lu i
 
@@ -149,9 +152,9 @@ instance Storable e => MArray UniqueArray e IO where
 
   newArray_ = unsafeNewArray_
 
-  unsafeRead (UniqueArray _ sa) = MArray.unsafeRead sa
+  unsafeRead (UniqueArray _ sa) = MArray.unsafeRead (unsafeGetValue sa)
 
-  unsafeWrite (UniqueArray _ sa) = MArray.unsafeWrite sa
+  unsafeWrite (UniqueArray _ sa) = MArray.unsafeWrite (unsafeGetValue sa)
 
 -- Array representation
 -- --------------------
@@ -669,13 +672,14 @@ unsafeWriteArray = MArray.unsafeWrite
 --
 {-# INLINE touchUniqueArray #-}
 touchUniqueArray :: UniqueArray i a -> IO ()
-touchUniqueArray (UniqueArray _ sa) = touchStorableArray sa
+touchUniqueArray (UniqueArray _ sa) = withLifetime sa touchStorableArray
 
 -- Obtains a pointer to the payload of an unique array.
 --
 {-# INLINE uniqueArrayPtr #-}
 uniqueArrayPtr :: UniqueArray i a -> Ptr a
-uniqueArrayPtr (UniqueArray _ (StorableArray _ _ _ fp)) = unsafeForeignPtrToPtr fp
+uniqueArrayPtr (UniqueArray _ (unsafeGetValue -> StorableArray _ _ _ fp))
+  = unsafeForeignPtrToPtr fp
 
 -- The global counter that gives new ids for unique arrays.
 {-# NOINLINE counter #-}
