@@ -1328,12 +1328,12 @@ applyD :: (Kit acc, Arrays as, Arrays bs)
        ->             acc aenv as
        -> Embed       acc aenv bs
 applyD afun x
-  | Alam (Abody body)   <- afun
-  , Avar ZeroIdx        <- extract body
-  = Stats.ruleFired "applyD/identity"
-  $ done $ extract x
+  -- | Alam (Abody body)   <- afun
+  -- , Avar ZeroIdx        <- extract body
+  -- = Stats.ruleFired "applyD/identity"
+  -- $ done $ extract x
 
-  | otherwise
+  -- | otherwise
   = done $ Apply afun x
 
 
