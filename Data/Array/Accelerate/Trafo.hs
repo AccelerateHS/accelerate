@@ -82,7 +82,7 @@ data Phase = Phase
 
     -- | Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
-  , vectoriseSequences :: Bool
+  , vectoriseSequences          :: Bool
   }
 
 
