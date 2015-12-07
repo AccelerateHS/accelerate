@@ -211,6 +211,7 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 
 -- | Project the shape of a slice from the full shape.
+--
 sliceShape :: forall slix co sl dim.
               SliceIndex slix sl co dim
            -> dim
@@ -221,20 +222,15 @@ sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 
 -- | Enumerate all slices within a given bound. The outermost
--- dimension changes most rapid.
+-- dimension changes most rapidly.
 --
--- E.g. enumSlices slix ((((), 2), 3), ()) = [ ((((), 0), 0), ())
---                                           , ((((), 0), 1), ())
---                                           , ((((), 0), 2), ())
---                                           , ((((), 1), 0), ())
---                                           , ((((), 1), 1), ())
---                                           , ((((), 1), 2), ()) ]
+-- See 'Data.Array.Accelerate.Array.Sugar.enumSlices' for an example.
 --
 enumSlices :: forall slix co sl dim.
               SliceIndex slix sl co dim
            -> dim
            -> [slix]
-enumSlices SliceNil () = [()]
+enumSlices SliceNil        ()       = [()]
 enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
-enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
-                                                  , i   <- [0..n-1]]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
+

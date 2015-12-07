@@ -921,11 +921,11 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   listToShape = toElt . Repr.listToShape
 
 instance Shape Z where
-  sliceAnyIndex _ = Repr.SliceNil
+  sliceAnyIndex  _ = Repr.SliceNil
   sliceNoneIndex _ = Repr.SliceNil
 
 instance Shape sh => Shape (sh:.Int) where
-  sliceAnyIndex _ = Repr.SliceAll (sliceAnyIndex (undefined :: sh))
+  sliceAnyIndex  _ = Repr.SliceAll   (sliceAnyIndex  (undefined :: sh))
   sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
@@ -1181,21 +1181,22 @@ showShape :: Shape sh => sh -> String
 showShape = foldr (\sh str -> str ++ " :. " ++ show sh) "Z" . shapeToList
 
 -- | Project the shape of a slice from the full shape.
+--
 sliceShape :: forall slix co sl dim. (Shape sl, Shape dim)
            => Repr.SliceIndex slix (EltRepr sl) co (EltRepr dim)
            -> dim
            -> sl
 sliceShape slix = toElt . Repr.sliceShape slix . fromElt
 
--- | Enumerate all slices within a given bound. The innermost
--- dimension changes most rapid.
+-- | Enumerate all slices within a given bound. The innermost dimension
+-- changes most rapidly.
 --
--- E.g. enumSlices slix (Z :. 2 :. 3 :. All) = [ Z :. 0 :. 0 :. All
---                                             , Z :. 0 :. 1 :. All
---                                             , Z :. 0 :. 2 :. All
---                                             , Z :. 1 :. 0 :. All
---                                             , Z :. 1 :. 1 :. All
---                                             , Z :. 1 :. 2 :. All ]
+-- Example:
+--
+-- > let slix = sliceIndex (undefined :: Z :. Int :. Int :. All)
+-- >     sh   = Z :. 2 :. 3 :. 1 :: DIM3
+-- > in
+-- > enumSlices slix sh :: [ Z :. Int :. Int :. All ]
 --
 enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            => Repr.SliceIndex (EltRepr slix) sl co (EltRepr dim)
