@@ -1,5 +1,6 @@
 # vim: nospell
 language: c
+sudo: false
 
 cache:
   directories:
@@ -8,7 +9,7 @@ cache:
 matrix:
   include:
     - env: GHC=7.8.4 CABAL=1.18
-      compiler: "#GHC 7.8"
+      compiler: ": #GHC 7.8"
       addons:
         apt:
           sources:
@@ -20,7 +21,7 @@ matrix:
             - alex-3.1.4
 
     - env: GHC=7.10.2 CABAL=1.22
-      compiler: "#GHC 7.10"
+      compiler: ": #GHC 7.10"
       addons:
         apt:
           sources:
@@ -45,6 +46,7 @@ before_install:
   - mv stack-*/stack $HOME/bin
   - ln -s stack-${GHC%.*}.yaml stack.yaml
   - travis_retry stack setup
+  - travis_retry stack install hscolour
 
 install:
   - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
