@@ -1,59 +1,58 @@
-language: haskell
-env:
-    - GHC=7.8.4
-    - GHC=7.8.4 MODE=-fdebug
-    - GHC=7.10.1 CABAL=1.22
-    - GHC=7.10.1 CABAL=1.22 MODE=-fdebug
-    - GHC=7.10.2 CABAL=1.22 MODE=-fdebug
-    - GHC=head CABAL=head MODE=-fdebug
+# vim: nospell
+language: c
+
+cache:
+  directories:
+    - $HOME/.stack
 
 matrix:
+  include:
+    - env: GHC=7.8.4 CABAL=1.18
+      compiler: "#GHC 7.8"
+      addons:
+        apt:
+          sources:
+            - hvr-ghc
+          packages:
+            - ghc-7.8.4
+            - cabal-install-1.18
+            - happy-1.19.5
+            - alex-3.1.4
+
+    - env: GHC=7.10.2 CABAL=1.22
+      compiler: "#GHC 7.10"
+      addons:
+        apt:
+          sources:
+            - hvr-ghc
+          packages:
+            - ghc-7.10.2
+            - cabal-install-1.22
+            - happy-1.19.5
+            - alex-3.1.4
+
   allow_failures:
-    - env: GHC=7.10.2 CABAL=1.22 MODE=-fdebug
-    - env: GHC=head CABAL=head MODE=-fdebug
+    - env: CABAL=head GHC=head
 
 before_install:
-    # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
-    - echo "Setting up GHC"
-    - travis_retry sudo add-apt-repository -y ppa:hvr/ghc
-    - travis_retry sudo apt-get update -qq
-    - travis_retry sudo apt-get autoremove
-    - export PATH=/usr/local/ghc/${GHC}/bin:${PATH}
-    - |
-        if [ $(ghc --numeric-version) != ${GHC} ]; then
-            travis_retry sudo apt-get install -y ghc-${GHC}
-            export PATH=/opt/ghc/${GHC}/bin:${PATH}
-        fi
-    - |
-        if [ ${CABAL} ]; then
-            travis_retry sudo apt-get install -y cabal-install-${CABAL}
-            export PATH=/opt/cabal/${CABAL}/bin:${PATH}
-        fi
+  - unset CC
+  - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
+
+  # Fetch stack
+  - mkdir $HOME/bin
+  - export PATH=$HOME/bin:$PATH
+  - travis_retry curl -L "https://www.stackage.org/stack/linux-x86_64" | gunzip | tar -x
+  - mv stack-*/stack $HOME/bin
+  - ln -s stack-${GHC%.*}.yaml stack.yaml
+  - travis_retry stack setup
 
 install:
-    - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
-    - cabal --version
-    - travis_retry cabal install --only-dependencies --enable-tests ${MODE}
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - stack --version
+  - opt --version; true
+  - llc --version; true
+  - travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
 
 script:
-    # Check the build
-    - cabal configure -v2 -flib-Werror ${MODE}
-    - travis_wait cabal build
-    - travis_wait cabal haddock
-#    - travis_wait cabal test --show-details=always
-
-    # Check the source distribution can be generated, built, and installed
-    - travis_wait cabal sdist
-    - |
-        export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
-        cd dist
-        if [ -f "$SRC_TGZ" ]; then
-            cabal install --force-reinstalls ${MODE} ${SRC_TGZ} || exit 1
-        else
-            echo "'$SRC_TGZ': not found"
-            exit 1
-        fi
-
-after_failure:
-    - dmesg
+  - stack build --no-terminal --haddock --no-haddock-deps
 
