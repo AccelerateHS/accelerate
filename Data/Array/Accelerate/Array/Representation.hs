@@ -216,7 +216,7 @@ sliceShape :: forall slix co sl dim.
               SliceIndex slix sl co dim
            -> dim
            -> sl
-sliceShape SliceNil () = ()
+sliceShape SliceNil        ()      = ()
 sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 

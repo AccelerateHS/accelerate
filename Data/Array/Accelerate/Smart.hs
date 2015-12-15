@@ -286,8 +286,13 @@ data PreSeq acc seq exp arrs where
   --           Element________/______/
   --            shape.
   --
-  ToSeq :: (Division slsix, Elt e, slix ~ DivisionSlice slsix, Slice slix,
-            Typeable (FullShape slix), Typeable (SliceShape slix))
+  ToSeq :: ( Elt e
+           , Slice slix
+           , Division slsix
+           , DivisionSlice slsix ~ slix
+           , Typeable (FullShape slix)
+           , Typeable (SliceShape slix)
+           )
         => slsix
         -> acc (Array (FullShape slix) e)
         -> PreSeq acc seq exp [Array (SliceShape slix) e]

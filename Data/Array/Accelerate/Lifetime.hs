@@ -47,7 +47,8 @@ import GHC.Weak                     ( Weak(..) )
 --   value, there is no danger in storing it UNPACKED as part of another
 --   structure.
 --
-data Lifetime a = Lifetime {-# UNPACK #-} !(IORef [IO ()]) {-# UNPACK #-} !(Weak (IORef [IO ()])) a
+data Lifetime a = Lifetime {-# UNPACK #-} !LTF {-# UNPACK #-} !(Weak LTF) a
+type LTF        = IORef [IO ()]
 
 instance Eq a => Eq (Lifetime a) where
   (==) = (==) `on` unsafeGetValue
@@ -130,3 +131,4 @@ finalizer ref = do
 --
 touch :: IORef a -> IO ()
 touch r = IO $ \s -> case touch# r s of s' -> (# s', () #)
+
