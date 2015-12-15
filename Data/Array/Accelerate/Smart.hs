@@ -153,19 +153,13 @@ data PreAcc acc seq exp as where
                 -> acc (Array sh' e)
                 -> PreAcc acc seq exp (Array sh e)
 
-  Replicate     :: (Slice slix, Elt e,
-                    Typeable (SliceShape slix), Typeable (FullShape slix))
-                    -- the Typeable constraints shouldn't be necessary as they are implied by
-                    -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
+  Replicate     :: (Slice slix, Elt e)
                 => exp slix
-                -> acc            (Array (SliceShape slix) e)
+                -> acc                (Array (SliceShape slix) e)
                 -> PreAcc acc seq exp (Array (FullShape  slix) e)
 
-  Slice         :: (Slice slix, Elt e,
-                    Typeable (SliceShape slix), Typeable (FullShape slix))
-                    -- the Typeable constraints shouldn't be necessary as they are implied by
-                    -- 'SliceIx slix' — unfortunately, the (old) type checker doesn't grok that
-                => acc            (Array (FullShape  slix) e)
+  Slice         :: (Slice slix, Elt e)
+                => acc                (Array (FullShape  slix) e)
                 -> exp slix
                 -> PreAcc acc seq exp (Array (SliceShape slix) e)
 
