@@ -72,7 +72,8 @@ ppSubgraph (Graph l ss) =
   vcat [ text "subgraph cluster_" <> l <+> lbrace
        , nest 4 $ vcat
                 $ punctuate semi
-                $ map ppStatement ss
+                $ text "label" <> equals <> l
+                : map ppStatement ss
        , rbrace
        ]
 

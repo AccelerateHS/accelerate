@@ -5,7 +5,6 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz
@@ -22,15 +21,17 @@ module Data.Array.Accelerate.Pretty.Graphviz
 -- standard libraries
 import Data.List
 import Data.Maybe
+import Data.HashSet                                     ( HashSet )
 import Text.PrettyPrint
-import Control.Monad.State                              ( modify )
+import Control.Monad.State                              ( modify, gets )
 import Control.Arrow                                    ( (***), (&&&), first )
 import Control.Applicative                              hiding ( Const, empty )
 import Prelude                                          hiding ( exp )
 import qualified Data.Sequence                          as Seq
+import qualified Data.HashSet                           as Set
 
 -- friends
-import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenFun(..), PreOpenExp(..), Idx(..) )
+import Data.Array.Accelerate.AST                        ( PreOpenAcc(..), PreOpenAfun(..), PreOpenFun(..), PreOpenExp(..), Idx(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Elt, EltRepr, Tuple(..), Atuple(..), arrays, toElt, strForeign )
 import Data.Array.Accelerate.Type                       ( Boundary(..) )
 import Data.Array.Accelerate.Error
@@ -209,6 +210,14 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
       ident <- mkNode acc acc' Nothing
       return $ Vertex ident Nothing
 
+    apply :: DelayedOpenAfun aenv (a -> b) -> DelayedOpenAcc aenv a -> Dot PNode
+    apply f a = do
+      (a',deps) <- prettyDelayedOpenAcc simple parens aenv a
+      f'        <- prettyDelayedAfun    simple        aenv f
+      return $ case a' of
+        Leaf (p,d)   -> ( Leaf (p, f' <+> d),                  deps )
+        Forest trees -> ( Forest (Leaf (Nothing, f') : trees), deps ) -- XXX: ???
+
     -- Our main pretty-printer needs to return a PNode structure, because cases
     -- such as 'Acond' require the additional port structure. *sigh*
     --
@@ -230,7 +239,7 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return (doc,deps)
 
-    pp Apply{}                  = error "Apply"
+    pp (Apply afun acc)         = apply afun acc
     pp Awhile{}                 = error "Awhile"
 
     pp (Atuple atup)            = prettyDelayedAtuple simple aenv atup
@@ -267,6 +276,50 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppM acc1,
                                                                ppB acc2 bndy2, ppM acc2 ]
     pp Collect{}                = error "Collect"
+
+
+-- Pretty print array functions as separate sub-graphs, and return the name of
+-- the sub-graph as if it can be called like a function. We will add additional
+-- nodes at the top of the graph to represent the bound variables.
+--
+-- Note: [Edge placement]
+--
+-- If a node belongs to a particular graph, so too must all its edges (and
+-- vertices). This means that if the subgraph references anything from the
+-- enclosing environment, we must lift those edges out of this subgraph,
+-- otherwise the referenced node will be drawn inside of the subgraph.
+--
+prettyDelayedAfun
+    :: Bool
+    -> Aval aenv
+    -> DelayedOpenAfun aenv afun
+    -> Dot Label
+prettyDelayedAfun simple aenv afun = do
+  Graph _ ss  <- mkSubgraph (go aenv afun)
+  n           <- Seq.length <$> gets dotGraph
+  let label         = "afun" <> int (n+1)
+      outer         = collect aenv
+      (lifted,ss')  =
+        flip partition ss $ \s ->
+        case s of
+          E (Edge (Vertex ident _) _) -> Set.member ident outer
+          _                           -> False
+  --
+  modify $ \s -> s { dotGraph = dotGraph s                         Seq.|> Graph label ss'
+                   , dotEdges = Seq.fromList [ e | E e <- lifted ] Seq.>< dotEdges s
+                   }
+  return label
+  where
+    go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
+    go aenv' (Abody b) = graphDelayedOpenAcc simple aenv' b
+    go aenv' (Alam  f) = do
+      a     <- mkLabel
+      ident <- mkNode f (Leaf (Nothing,a), []) Nothing
+      go (Apush aenv' ident a) f
+
+    collect :: Aval aenv' -> HashSet NodeId
+    collect Aempty        = Set.empty
+    collect (Apush a i _) = Set.insert i (collect a)
 
 
 -- Display array tuples, which ends up being a bit tricky (and potentially quite

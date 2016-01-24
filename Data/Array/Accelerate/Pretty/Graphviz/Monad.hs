@@ -11,7 +11,7 @@
 module Data.Array.Accelerate.Pretty.Graphviz.Monad
   where
 
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.Foldable                                    ( toList )
 import Data.Sequence                                    ( Seq )
 import Text.PrettyPrint
@@ -59,7 +59,15 @@ mkNodeId node = do
 mkGraph :: Dot Graph
 mkGraph =
   state $ \DotState{..} ->
-    ( Graph empty (toList $ fmap G dotGraph Seq.>< fmap N dotNodes Seq.>< fmap E dotEdges)
+    ( Graph empty (toList $ fmap N dotNodes Seq.>< fmap E dotEdges Seq.>< fmap G dotGraph)
     , emptyState { fresh = fresh }
     )
+
+mkSubgraph :: Dot Graph -> Dot Graph
+mkSubgraph g = do
+  n       <- gets fresh
+  (r, s') <- lift . runDot $ do
+    modify $ \s -> s { fresh = n }
+    g
+  state $ \s -> (r, s { fresh = fresh s' })
 
