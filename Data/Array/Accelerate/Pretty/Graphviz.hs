@@ -226,7 +226,7 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
       ve       <- lift e
       (p', vs) <- ppE p
       let port = Just "P"
-          doc  = addTFPorts $ Leaf (port,p')
+          doc  = addTFPorts $ Leaf (port, if simple then "?|" else p')
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return (doc,deps)
 
