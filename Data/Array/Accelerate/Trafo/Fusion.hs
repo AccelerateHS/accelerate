@@ -835,8 +835,9 @@ instance Kit acc => Sink (SinkSeq acc senv) where
           Stuple t             ->
             let wk :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv' senv) t
                 wk NilAtup        = NilAtup
-                wk (SnocAtup t c) = SnocAtup (wk t) (weakenC c)
-            in Stuple (wk t)
+                wk (SnocAtup t c) = wk t `SnocAtup` weakenC c
+            in
+            Stuple (wk t)
 
 
 instance Kit acc => Sink (Cunctation acc) where
@@ -1341,7 +1342,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
 
         cvtCT :: Atuple (Consumer acc aenv senv) t -> Atuple (Consumer acc aenv senv) t
         cvtCT NilAtup        = NilAtup
-        cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+        cvtCT (SnocAtup t c) = cvtCT t `SnocAtup` cvtC c
 
         cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv s
         cvtAF = cvt sh' f' avar
