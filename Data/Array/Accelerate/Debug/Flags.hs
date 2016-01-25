@@ -25,7 +25,8 @@ module Data.Array.Accelerate.Debug.Flags (
   Flags, Mode,
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
-  dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm, dump_exec, dump_sched,
+  dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
+  dump_exec, dump_sched,
 
   accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
@@ -84,6 +85,8 @@ fclabels [d|
     , dump_simpl_stats          :: !Bool                -- statistics form fusion/simplification
     , dump_simpl_iterations     :: !Bool                -- output from each simplifier iteration
     , dump_vectorisation        :: !Bool                -- output from the vectoriser
+    , dump_dot                  :: !Bool                -- generate dot output of the program
+    , dump_simpl_dot            :: !Bool                -- generate simplified dot output
 
       -- garbage collection
     , dump_gc                   :: !Bool                -- dump GC trace
@@ -133,6 +136,8 @@ dflags =
   , Option "dump-simpl-stats"           (set dump_simpl_stats)
   , Option "dump-simpl-iterations"      (set dump_simpl_iterations)
   , Option "dump-vectorisation"         (set dump_vectorisation)
+  , Option "dump-dot"                   (set dump_dot)
+  , Option "dump-simpl-dot"             (set dump_simpl_dot)
   , Option "dump-gc"                    (set dump_gc)
   , Option "dump-gc-stats"              (set dump_gc_stats)
   , Option "debug-cc"                   (set debug_cc)
@@ -184,7 +189,7 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
     parse1 opts this    =

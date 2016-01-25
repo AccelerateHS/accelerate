@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Vectorise
--- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everes
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
@@ -162,7 +162,7 @@ data AvoidedFun acc env aenv t where
 
 type LiftedOpenAcc aenv t = LiftedAcc OpenAcc aenv t
 
-over :: (acc aenv t          -> acc' aenv' t')
+over :: (acc aenv t           -> acc' aenv' t')
      -> (acc aenv (Vector' t) -> acc' aenv' (Vector' t'))
      -> LiftedAcc acc  aenv t
      -> LiftedAcc acc' aenv' t'
@@ -400,9 +400,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
         in case (avoidF f) of
              Avoided (b, Lam (Body e')) | avoidLifting
                                         -> (l, Just $ AvoidedFun b (Lam (Body e')))
-             _                          -> trace "liftPreOpenAcc" ("Function had to be lifted: \n" ++ show f)
+             _                          -> trace "liftPreOpenAcc" "Function had to be lifted"
                                         $  (l, Nothing)
-    cvtF1 f              = $internalError "cvtF1" ("Inconsistent valuation" ++ show f)
+    cvtF1 _              = $internalError "cvtF1" "Inconsistent valuation"
 
     cvtF2 :: forall a b c. (Elt a, Elt b, Elt c)
           => PreFun  acc  aenv  (a -> b -> c)
@@ -416,7 +416,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
         in case (avoidF f) of
              Avoided (b, Lam (Lam (Body e'))) | avoidLifting
                                               -> (l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
-             _                                -> trace "liftPreOpenAcc" ("Function had to be lifted: \n" ++ show f)
+             _                                -> trace "liftPreOpenAcc" "Function had to be lifted"
                                               $  (l, Nothing)
     cvtF2 _              = $internalError "cvtF2" "Inconsistent valuation"
 
@@ -1563,9 +1563,9 @@ data Avoid f acc env aenv e where
   Avoided :: (Extend acc aenv aenv', f acc env aenv' e) -> Avoid f acc env aenv e
   Unavoided :: Avoid f acc env aenv e
 
-instance Kit acc => Show (Avoid PreOpenFun acc env aenv e) where
-  show (Avoided (_,e)) = "lets ...\n" ++ show e
-  show Unavoided       = "Unavoided"
+-- instance Kit acc => Show (Avoid PreOpenFun acc env aenv e) where
+--   show (Avoided (_,e)) = "lets ...\n" ++ show e
+--   show Unavoided       = "Unavoided"
 
 type AvoidExp = Avoid PreOpenExp
 type AvoidFun = Avoid PreOpenFun
@@ -2703,12 +2703,12 @@ vectoriseOpenSeq strength ctx seq =
         ToSeq sl slix a      -> ToSeq sl slix (cvtA a)
         -- Interesting case:
         MapSeq f x
-          | sequenceFreeAfun f -> trace "vectoriseSeq" ("MapSeq succesfully vectorised: " ++ show (liftOpenAfun1 strength ctx (cvtAfun f))) $
+          | sequenceFreeAfun f -> trace "vectoriseSeq" "MapSeq succesfully vectorised" -- ++ show (liftOpenAfun1 strength ctx (cvtAfun f))) $
               ChunkedMapSeq (liftOpenAfun1 strength ctx (cvtAfun f)) x
           -- The following case is needed because we don't know how to
           -- lift sequences yet.
-          | otherwise          -> trace "vectoriseSeq" ("MapSeq could not be vectorised: " ++ show (cvtAfun f)) $
-                                    MapSeq (cvtAfun f) x
+          | otherwise          -> trace "vectoriseSeq" "MapSeq could not be vectorised" -- ++ show (cvtAfun f)) $
+                                $ MapSeq (cvtAfun f) x
         ChunkedMapSeq f x    -> ChunkedMapSeq (cvtAfun f) x
         ZipWithSeq f x y     -> ZipWithSeq (cvtAfun f) x y
         ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x

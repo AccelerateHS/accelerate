@@ -12,9 +12,9 @@ module Data.Array.Accelerate.Pretty.Traverse
   where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!))
-import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
+import Data.Array.Accelerate.Array.Sugar          hiding ((!))
 import Data.Array.Accelerate.Type
 
 

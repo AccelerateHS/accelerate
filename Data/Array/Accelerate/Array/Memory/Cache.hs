@@ -50,8 +50,8 @@ import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
-import qualified Data.Array.Accelerate.Array.Memory             as M
 import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
+import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Table       as MT
 
 -- We build the cache on top of a memory table.

@@ -149,10 +149,6 @@ Flag debug
     * -dverbose: other, uncategorised messages
     .
 
-Flag more-pp
-  Description:          Enable HTML and Graphviz pretty printing.
-  Default:              False
-
 Flag bounds-checks
   Description:          Enable bounds checking
   Default:              True
@@ -180,16 +176,6 @@ Library
                         template-haskell,
                         mtl                     >= 2.0,
                         transformers            >= 0.3
-
-  if flag(more-pp)
-    Build-depends:      bytestring              >= 0.9,
-                        blaze-html              >= 0.5,
-                        blaze-markup            >= 0.5,
-                        directory               >= 1.0,
-                        filepath                >= 1.0,
-                        mtl                     >= 2.0,
-                        text                    >= 0.10,
-                        unix                    >= 2.4
 
   Exposed-modules:
                         -- The core language and reference implementation
@@ -228,8 +214,10 @@ Library
                         Data.Array.Accelerate.Debug.Trace
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
+                        Data.Array.Accelerate.Pretty.Graphviz
+                        Data.Array.Accelerate.Pretty.Graphviz.Monad
+                        Data.Array.Accelerate.Pretty.Graphviz.Type
                         Data.Array.Accelerate.Pretty.Print
-                        Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
@@ -239,10 +227,6 @@ Library
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
                         Data.Array.Accelerate.Trafo.Vectorise
-
-  if flag(more-pp)
-    Other-modules:      Data.Array.Accelerate.Pretty.HTML
-                        Data.Array.Accelerate.Pretty.Graphviz
 
   if flag(debug)
     cpp-options:        -DACCELERATE_DEBUG
@@ -268,7 +252,8 @@ Library
   --
   -- Extensions:
 
-Source-repository head
+source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
 
+-- vim: nospell

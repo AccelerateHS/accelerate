@@ -41,9 +41,6 @@ module Data.Array.Accelerate.Trafo.Base (
 
   subApply, inlineA,
 
-  -- Miscellaneous
-  prettyDelayedSeq
-
 ) where
 
 -- standard library
@@ -53,7 +50,7 @@ import Text.PrettyPrint
 import Prelude                                          hiding ( until )
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                        hiding ( Val(..) )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Error
@@ -133,7 +130,9 @@ type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
 data DelayedSeq t where
- DelayedSeq :: Extend DelayedOpenAcc () aenv -> DelayedOpenSeq aenv () t -> DelayedSeq t
+  DelayedSeq :: Extend DelayedOpenAcc () aenv
+             -> DelayedOpenSeq aenv () t
+             -> DelayedSeq t
 
 type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
 type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
@@ -160,18 +159,19 @@ instance Rebuildable DelayedOpenAcc where
 instance Sink DelayedOpenAcc where
 
 instance Kit DelayedOpenAcc where
-  inject        = Manifest
-  extract       = error "DelayedAcc.extract"
-  fromOpenAcc   = error "DelayedAcc.fromOpenAcc"
+  inject                  = Manifest
+  extract (Manifest pacc) = pacc
+  extract Delayed{}       = error "DelayedAcc.extract"
+  fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  matchAcc      = matchDelayed
-  hashAcc       = hashDelayed
-  prettyAcc     = prettyDelayed
+  matchAcc                = matchDelayed
+  hashAcc                 = hashDelayed
+  prettyAcc               = prettyDelayed
 
 
 hashDelayed :: HashAcc DelayedOpenAcc
-hashDelayed (Manifest pacc)     = hash "Manifest"       `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayed Delayed{..}         = hash "Delayed"        `hashE` extentD `hashF` indexD `hashF` linearIndexD
+hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayed Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
   where
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
@@ -200,33 +200,40 @@ matchDelayed _ _
 -- > let a0 = <...> in map f a0
 --
 prettyDelayed :: PrettyAcc DelayedOpenAcc
-prettyDelayed alvl wrap acc = case acc of
-  Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
+prettyDelayed wrap aenv acc = case acc of
+  Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
     , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
-    -> prettyDelayed alvl wrap a
+    -> prettyDelayed wrap aenv a
 
     | otherwise
     -> wrap $ hang (text "Delayed") 2
-            $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
-                  , parens (prettyPreFun prettyDelayed alvl f)
+            $ sep [ prettyPreExp prettyDelayed parens aenv sh
+                  , parens (prettyPreFun prettyDelayed aenv f)
                   ]
 
+
+{--
+-- Pretty print delayed sequences
+--
+-- TLM: What is going on with this sequence thing, why is it closed?
+--
 prettyDelayedSeq
-    :: forall arrs.
-       (Doc -> Doc)                             -- apply to compound expressions
+    :: (Doc -> Doc)                             -- apply to compound expressions
     -> DelayedSeq arrs
     -> Doc
-prettyDelayedSeq wrap (DelayedSeq env s)
+prettyDelayedSeq wrap (DelayedSeq aenv s)
   | (d, lvl) <- pp env 0
-  =  wrap $   (hang (text "let") 2 $ sep $ punctuate (text ";") d)
-          <+> (hang (text "in") 2  $ sep $ punctuate (text ";") $ prettySeq prettyAcc lvl 0 wrap s)
+  =  wrap $   (hang (text "let") 2 $ sep $ punctuate semi d)
+          <+> (hang (text "in")  2 $ sep $ punctuate semi
+                                         $ prettyPreSeq wrap prettyAcc lvl 0 s)
   where
     pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
     pp BaseEnv          lvl = ([],lvl)
     pp (PushEnv env' a) lvl | (d', _) <- pp env' (lvl + 1)
                             = (prettyAcc lvl wrap a : d', lvl)
+--}
 
 
 -- Environments
