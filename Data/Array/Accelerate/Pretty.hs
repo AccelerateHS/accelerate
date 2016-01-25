@@ -34,6 +34,7 @@ import Text.PrettyPrint
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Pretty.Print
+import Data.Array.Accelerate.Pretty.Graphviz
 
 -- |Show instances
 -- ---------------
