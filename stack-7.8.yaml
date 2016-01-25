@@ -16,7 +16,6 @@ flags:
     bounds-checks: true
     debug: false
     internal-checks: false
-    more-pp: false
 
 # Extra package databases containing global packages
 extra-package-dbs: []
