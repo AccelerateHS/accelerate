@@ -1,5 +1,5 @@
 # vim: nospell
-language: c
+language: minimal
 sudo: false
 
 cache:
@@ -9,7 +9,7 @@ cache:
 matrix:
   include:
     - env: GHC=7.8.4 CABAL=1.18
-      compiler: ": #GHC 7.8"
+      compiler: "GHC 7.8"
       addons:
         apt:
           sources:
@@ -21,7 +21,7 @@ matrix:
             - alex-3.1.4
 
     - env: GHC=7.10.2 CABAL=1.22
-      compiler: ": #GHC 7.10"
+      compiler: "GHC 7.10"
       addons:
         apt:
           sources:
@@ -36,7 +36,6 @@ matrix:
     - env: CABAL=head GHC=head
 
 before_install:
-  - unset CC
   - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
 
   # Fetch stack
