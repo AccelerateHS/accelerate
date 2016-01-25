@@ -40,9 +40,14 @@ data Statement  = N Node | E Edge | G Graph
 data Node       = Node (Maybe Label) NodeId (Tree (Maybe Port, Doc))
 data NodeId     = NodeId !Int
 
-type Label      = Doc
-type Port       = String  -- XXX: required for GHC-7.8, where the included
-                          -- version of 'pretty' does no have an Eq Doc instance
+-- XXX: Changed from 'Doc' to 'String' because the version of 'pretty' included
+--      with ghc-7.8 does not have an Eq Doc instance, which was added in
+--      pretty-1.1.1.2. However, we don't want to simply depend on a newer
+--      version of the library, because this will indirectly lead to
+--      a dependency on multiple versions (through, e.g., template-haskell).
+--
+type Label      = String
+type Port       = String
 
 data Vertex     = Vertex NodeId (Maybe Port)
 data Edge       = Edge {- from -} Vertex
@@ -62,7 +67,7 @@ instance Show Graph where
 --
 ppGraph :: Graph -> Doc
 ppGraph (Graph l ss) =
-  vcat [ text "digraph" <+> l <+> lbrace
+  vcat [ text "digraph" <+> text l <+> lbrace
        , nest 4 $ vcat
                 $ punctuate semi
                 $ text "graph [compound=true]"
@@ -73,10 +78,10 @@ ppGraph (Graph l ss) =
 
 ppSubgraph :: Graph -> Doc
 ppSubgraph (Graph l ss) =
-  vcat [ text "subgraph cluster_" <> l <+> lbrace
+  vcat [ text "subgraph cluster_" <> text l <+> lbrace
        , nest 4 $ vcat
                 $ punctuate semi
-                $ text "label" <> equals <> l
+                $ text "label" <> equals <> text l
                 : map ppStatement ss
        , rbrace
        ]
@@ -98,7 +103,7 @@ ppNode (Node label nid body) =
        , brackets
        $ hcat
        $ punctuate comma
-       $ catMaybes [ fmap ((text "xlabel" <> equals <>) . doubleQuotes) label
+       $ catMaybes [ fmap ((text "xlabel" <> equals <>) . doubleQuotes . text) label
                    , Just ( text "label"  <> equals <>    doubleQuotes (ppNodeTree body))
                    ]
        ]

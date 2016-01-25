@@ -11,11 +11,10 @@
 module Data.Array.Accelerate.Pretty.Graphviz.Monad
   where
 
-import Control.Applicative                              ( (<$>) )
+import Control.Applicative
 import Control.Monad.State
 import Data.Foldable                                    ( toList )
 import Data.Sequence                                    ( Seq )
-import Text.PrettyPrint
 import System.Mem.StableName
 import Prelude
 import qualified Data.Sequence                          as Seq
@@ -51,7 +50,7 @@ execDot dot = snd <$> runDot dot
 mkLabel :: Dot Label
 mkLabel = state $ \s ->
   let n = fresh s
-  in  ( char 'a' <> int n, s { fresh = n + 1 } )
+  in  ( 'a' : show n, s { fresh = n + 1 } )
 
 mkNodeId :: a -> Dot NodeId
 mkNodeId node = do
@@ -61,7 +60,7 @@ mkNodeId node = do
 mkGraph :: Dot Graph
 mkGraph =
   state $ \DotState{..} ->
-    ( Graph empty (toList $ fmap N dotNodes Seq.>< fmap E dotEdges Seq.>< fmap G dotGraph)
+    ( Graph [] (toList $ fmap N dotNodes Seq.>< fmap E dotEdges Seq.>< fmap G dotGraph)
     , emptyState { fresh = fresh }
     )
 

@@ -71,7 +71,7 @@ data Aval env where
 --
 avalToVal :: Aval aenv -> Val aenv
 avalToVal Aempty           = Empty
-avalToVal (Apush aenv _ v) = Push (avalToVal aenv) v
+avalToVal (Apush aenv _ v) = Push (avalToVal aenv) (text v)
 
 aprj :: Idx aenv t -> Aval aenv -> (NodeId, Label)        -- TLM: (Vertex, Label) ??
 aprj ZeroIdx      (Apush _    n v) = (n,v)
@@ -193,7 +193,7 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
       --
       this   <- mkNodeId atop
       fident <- mkNodeId f
-      body   <- mkNode (PNode fident (Leaf (Nothing, f')) [(Vertex this (Just "T"), Nothing)]) Nothing
+      body   <- mkNode (PNode fident (Leaf (Nothing, text f')) [(Vertex this (Just "T"), Nothing)]) Nothing
       let PNode _ pd pv = apply p' x'
           pd'           = mkTF pd
           pv'           = (Vertex body Nothing, Nothing) : pv
@@ -270,7 +270,7 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
     --
     avar :: Idx aenv t -> PDoc
     avar ix = let (ident, v) = aprj ix aenv
-              in  PDoc v [Vertex ident Nothing]
+              in  PDoc (text v) [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
@@ -317,8 +317,8 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
     apply :: Label -> PNode -> PNode
     apply f (PNode ident x vs) =
       let x' = case x of
-                 Leaf (p,d) -> Leaf (p, f <+> d)
-                 Forest ts  -> Forest (Leaf (Nothing,f) : ts)
+                 Leaf (p,d) -> Leaf (p, text f <+> d)
+                 Forest ts  -> Forest (Leaf (Nothing,text f) : ts)
       in
       PNode ident x' vs
 
@@ -342,7 +342,7 @@ prettyDelayedAfun
 prettyDelayedAfun simple aenv afun = do
   Graph _ ss  <- mkSubgraph (go aenv afun)
   n           <- Seq.length <$> gets dotGraph
-  let label         = "afun" <> int (n+1)
+  let label         = "afun" ++ show (n+1)
       outer         = collect aenv
       (lifted,ss')  =
         flip partition ss $ \s ->
@@ -360,7 +360,7 @@ prettyDelayedAfun simple aenv afun = do
     go aenv' (Alam  f) = do
       a     <- mkLabel
       ident <- mkNodeId f
-      _     <- mkNode (PNode ident (Leaf (Nothing,a)) []) Nothing
+      _     <- mkNode (PNode ident (Leaf (Nothing, text a)) []) Nothing
       go (Apush aenv' ident a) f
 
     collect :: Aval aenv' -> HashSet NodeId
