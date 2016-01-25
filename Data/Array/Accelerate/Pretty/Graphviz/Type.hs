@@ -53,6 +53,9 @@ deriving instance Eq Vertex
 instance Hashable NodeId where
   hashWithSalt salt (NodeId ident) = hashWithSalt salt ident
 
+instance Show Graph where
+  show = show . ppGraph
+
 
 -- Pretty print a (directed) graph to dot format
 --
