@@ -23,8 +23,8 @@ import Data.List
 import Data.Maybe
 import Data.HashSet                                     ( HashSet )
 import Text.PrettyPrint
-import Control.Monad.State                              ( modify, gets )
-import Control.Arrow                                    ( (***), (&&&), first )
+import Control.Monad.State                              ( modify, gets, state )
+import Control.Arrow                                    ( (&&&) )
 import Control.Applicative                              hiding ( Const, empty )
 import Prelude                                          hiding ( exp )
 import qualified Data.Sequence                          as Seq
@@ -76,25 +76,25 @@ aprj _            _                = error "inconsistent valuation"
 -- Graph construction
 -- ------------------
 
-mkNode :: a -> PNode -> Maybe Label -> Dot NodeId
-mkNode this (tree, deps) label = do
-  ident <- mkNodeId this
-  --
+mkNode :: PNode -> Maybe Label -> Dot NodeId
+mkNode (PNode ident tree deps) label =
   let node  = Node label ident tree
       edges = Seq.fromList
             $ map (\(from, to) -> Edge from (Vertex ident to))
             $ if cfgUnique then nub deps else deps
-  --
-  modify $ \s ->
-    s { dotNodes = node  Seq.<| dotNodes s
-      , dotEdges = edges Seq.>< dotEdges s
-      }
-  return ident
+  in
+  state $ \s ->
+    ( ident
+    , s { dotNodes = node  Seq.<| dotNodes s
+        , dotEdges = edges Seq.>< dotEdges s
+        }
+    )
+
 
 -- Add [T|F] ports underneath the given tree.
 --
-addTFPorts :: Tree (Maybe Port, Doc) -> Tree (Maybe Port, Doc)
-addTFPorts this =
+mkTF :: Tree (Maybe Port, Doc) -> Tree (Maybe Port, Doc)
+mkTF this =
   Forest [ this
          , Forest [ Leaf (Just "T", "T")
                   , Leaf (Just "F", "F")
@@ -108,9 +108,8 @@ addTFPorts this =
 -- Partially constructed graph nodes, consists of some body text and a list of
 -- vertices which we will draw edges from (and later, the port we connect into).
 --
-type PDoc  = (Doc,                    [Vertex])
-type PNode = (Tree (Maybe Port, Doc), [(Vertex, Maybe Port)])
-
+data PDoc  = PDoc Doc [Vertex]
+data PNode = PNode NodeId (Tree (Maybe Port, Doc)) [(Vertex, Maybe Port)]
 
 graphDelayedAcc :: Bool -> DelayedAcc a -> Dot Graph
 graphDelayedAcc simple = graphDelayedOpenAcc simple Aempty
@@ -122,7 +121,7 @@ graphDelayedOpenAcc
     -> Dot Graph
 graphDelayedOpenAcc simple aenv acc = do
   r <- prettyDelayedOpenAcc simple noParens aenv acc
-  _ <- mkNode r r Nothing -- terminal node, so its NodeID doesn't matter
+  _ <- mkNode r Nothing
   mkGraph
 
 -- Generate a graph for the given term.
@@ -134,8 +133,80 @@ prettyDelayedOpenAcc
     -> Aval aenv
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
-prettyDelayedOpenAcc _      _    _    Delayed{}       = $internalError "prettyDelayedOpenAcc" "expected manifest array"
-prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
+prettyDelayedOpenAcc _      _    _    Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
+prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
+  case pacc of
+    Avar ix                 -> pnode (avar ix)
+    Alet bnd body           -> do
+      bnd'  <- prettyDelayedOpenAcc simple noParens aenv                 bnd
+      a     <- mkLabel
+      ident <- mkNode bnd' (Just a)
+      body' <- prettyDelayedOpenAcc simple noParens (Apush aenv ident a) body
+      return body'
+
+    Acond p t e             -> do
+      ident      <- mkNodeId atop
+      vt         <- lift t
+      ve         <- lift e
+      PDoc p' vs <- ppE p
+      let port = Just "P"
+          doc  = mkTF $ Leaf (port, if simple then "?|" else p')
+          deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
+      return $ PNode ident doc deps
+
+    Apply afun acc          -> apply <$> prettyDelayedAfun    simple        aenv afun
+                                     <*> prettyDelayedOpenAcc simple parens aenv acc
+
+    Awhile p f x            -> do
+      x'   <- prettyDelayedOpenAcc simple parens aenv x
+      p'   <- prettyDelayedAfun    simple        aenv p
+      f'   <- prettyDelayedAfun    simple        aenv f
+      --
+      this   <- mkNodeId atop
+      fident <- mkNodeId f
+      body   <- mkNode (PNode fident (Leaf (Nothing, f')) [(Vertex this (Just "T"), Nothing)]) Nothing
+      let PNode _ pd pv = apply p' x'
+          pd'           = mkTF pd
+          pv'           = (Vertex body Nothing, Nothing) : pv
+      --
+      return $ PNode this pd' pv'
+
+    Atuple atup             -> prettyDelayedAtuple simple aenv atup
+    Aprj ix atup            -> do
+      PNode ident atup' deps <- prettyDelayedOpenAcc simple noParens aenv atup
+      let prj' = case atup' of
+                   Leaf (port,doc) -> Leaf (port, wrap (char '#' <> prettyTupleIdx ix <+> doc))
+                   Forest rest     -> Forest [ Leaf (Nothing, char '#' <> prettyTupleIdx ix), Forest rest]
+      return $ PNode ident prj' deps
+
+    Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
+    Unit e                  -> "unit"        .$ [ ppE e ]
+    Generate sh f           -> "generate"    .$ [ ppSh sh, ppF f ]
+    Transform sh ix f xs    -> "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppD xs ]
+    Reshape sh xs           -> "reshape"     .$ [ ppSh sh, ppM xs ]
+    Replicate _ty ix xs     -> "replicate"   .$ [ ppSh ix, ppD xs ]
+    Slice _ty xs ix         -> "slice"       .$ [ ppD xs, ppSh ix ]
+    Map f xs                -> "map"         .$ [ ppF f, ppD xs ]
+    ZipWith f xs ys         -> "zipWith"     .$ [ ppF f, ppD xs, ppD ys ]
+    Fold f e xs             -> "fold"        .$ [ ppF f, ppE e, ppD xs ]
+    Fold1 f xs              -> "fold1"       .$ [ ppF f, ppD xs ]
+    FoldSeg f e xs ys       -> "foldSeg"     .$ [ ppF f, ppE e, ppD xs, ppD ys ]
+    Fold1Seg f xs ys        -> "fold1Seg"    .$ [ ppF f, ppD xs, ppD ys ]
+    Scanl f e xs            -> "scanl"       .$ [ ppF f, ppE e, ppD xs ]
+    Scanl' f e xs           -> "scanl'"      .$ [ ppF f, ppE e, ppD xs ]
+    Scanl1 f xs             -> "scanl1"      .$ [ ppF f, ppD xs ]
+    Scanr f e xs            -> "scanr"       .$ [ ppF f, ppE e, ppD xs ]
+    Scanr' f e xs           -> "scanr'"      .$ [ ppF f, ppE e, ppD xs ]
+    Scanr1 f xs             -> "scanr1"      .$ [ ppF f, ppD xs ]
+    Permute f dfts p xs     -> "permute"     .$ [ ppF f, ppM dfts, ppF p, ppD xs ]
+    Backpermute sh p xs     -> "backpermute" .$ [ ppSh sh, ppF p, ppD xs ]
+    Aforeign ff _afun xs    -> "aforeign"    .$ [ return (PDoc (text (strForeign ff)) []), {- ppAf afun, -} ppM xs ]
+    Stencil sten bndy xs    -> "stencil"     .$ [ ppF sten, ppB xs bndy, ppM xs ]
+    Stencil2 sten bndy1 acc1 bndy2 acc2
+                            -> "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppM acc1,
+                                                               ppB acc2 bndy2, ppM acc2 ]
+    Collect{}               -> error "Collect"
+
   where
     ppM :: DelayedOpenAcc aenv a -> Dot PDoc
     ppM (Manifest (Avar ix)) = return (avar ix)
@@ -146,22 +217,26 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
       | Shape a    <- sh                                             -- identical shape
       , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
       = ppM a
-    ppD (Delayed sh f _) = first parens <$> "Delayed" `fmt` [ ppSh sh, ppF f ]
+    ppD (Delayed sh f _) = do PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
+                              return    $ PDoc (parens d) v
     ppD Manifest{}       = $internalError "prettyDelayedOpenAcc" "expected delayed array"
 
     (.$) :: String -> [Dot PDoc] -> Dot PNode
-    name .$ docs = pnode <$> fmt name docs
+    name .$ docs = pnode =<< fmt name docs
 
     fmt :: String -> [Dot PDoc] -> Dot PDoc
     fmt name docs = do
-      (args,fvs) <- unzip <$> sequence docs
-      return      $ ( hang (text name) 2 (if simple then empty else sep args)
-                    , concat fvs )
+      docs' <- sequence docs
+      let args = [ x | PDoc x _ <- docs' ]
+          fvs  = [ x | PDoc _ x <- docs' ]
+      return $ PDoc (hang (text name) 2 (if simple then empty else sep args))
+                    (concat fvs)
 
-    pnode :: PDoc -> PNode
-    pnode (doc,vs) =
+    pnode :: PDoc -> Dot PNode
+    pnode (PDoc doc vs) = do
       let port = Nothing
-      in  (Leaf (port, doc), map (,port) vs)
+      ident <- mkNodeId atop
+      return $ PNode ident (Leaf (port, doc)) (map (,port) vs)
 
     -- Free variables
     --
@@ -179,7 +254,7 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
     --
     avar :: Idx aenv t -> PDoc
     avar ix = let (ident, v) = aprj ix aenv
-              in  (v, [Vertex ident Nothing])
+              in  PDoc v [Vertex ident Nothing]
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
@@ -188,94 +263,35 @@ prettyDelayedOpenAcc simple wrap aenv (Manifest pacc) = pp pacc
         => {-dummy-} DelayedOpenAcc aenv (Array sh e)
         -> Boundary (EltRepr e)
         -> Dot PDoc
-    ppB _ Clamp        = return ("Clamp",  [])
-    ppB _ Mirror       = return ("Mirror", [])
-    ppB _ Wrap         = return ("Wrap",   [])
-    ppB _ (Constant e) = return (parens $ "Constant" <+> text (show (toElt e :: e)), [])
+    ppB _ Clamp        = return (PDoc "Clamp"  [])
+    ppB _ Mirror       = return (PDoc "Mirror" [])
+    ppB _ Wrap         = return (PDoc "Wrap"   [])
+    ppB _ (Constant e) = return (PDoc (parens $ "Constant" <+> text (show (toElt e :: e))) [])
 
     ppF :: DelayedFun aenv t -> Dot PDoc
-    ppF = return . (parens . prettyDelayedFun aenv' &&& fvF)
+    ppF = return . uncurry PDoc . (parens . prettyDelayedFun aenv' &&& fvF)
 
     ppE :: DelayedExp aenv t -> Dot PDoc
-    ppE = return . (prettyDelayedExp parens aenv' &&& fvE)
+    ppE = return . uncurry PDoc . (prettyDelayedExp parens aenv' &&& fvE)
 
     ppSh :: DelayedExp aenv sh -> Dot PDoc
-    ppSh = return . (parens . prettyDelayedExp noParens aenv' &&& fvE)
+    ppSh = return . uncurry PDoc . (parens . prettyDelayedExp noParens aenv' &&& fvE)
 
     lift :: DelayedOpenAcc aenv a -> Dot Vertex
     lift Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
     lift (Manifest (Avar ix)) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                  = do
       acc'  <- prettyDelayedOpenAcc simple noParens aenv acc
-      ident <- mkNode acc acc' Nothing
+      ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
 
-    apply :: DelayedOpenAfun aenv (a -> b) -> DelayedOpenAcc aenv a -> Dot PNode
-    apply f a = do
-      (a',deps) <- prettyDelayedOpenAcc simple parens aenv a
-      f'        <- prettyDelayedAfun    simple        aenv f
-      return $ case a' of
-        Leaf (p,d)   -> ( Leaf (p, f' <+> d),                  deps )
-        Forest trees -> ( Forest (Leaf (Nothing, f') : trees), deps ) -- XXX: ???
-
-    -- Our main pretty-printer needs to return a PNode structure, because cases
-    -- such as 'Acond' require the additional port structure. *sigh*
-    --
-    pp :: forall a. PreOpenAcc DelayedOpenAcc aenv a -> Dot PNode
-    pp (Avar ix)                = return (pnode (avar ix))
-    pp (Alet bnd body)          = do
-      bnd'  <- prettyDelayedOpenAcc simple noParens aenv                 bnd
-      a     <- mkLabel
-      ident <- mkNode bnd bnd' (Just a)
-      body' <- prettyDelayedOpenAcc simple noParens (Apush aenv ident a) body
-      return body'
-
-    pp (Acond p t e)            = do
-      vt       <- lift t
-      ve       <- lift e
-      (p', vs) <- ppE p
-      let port = Just "P"
-          doc  = addTFPorts $ Leaf (port, if simple then "?|" else p')
-          deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
-      return (doc,deps)
-
-    pp (Apply afun acc)         = apply afun acc
-    pp Awhile{}                 = error "Awhile"
-
-    pp (Atuple atup)            = prettyDelayedAtuple simple aenv atup
-    pp (Aprj ix atup)           = do
-      (atup', deps) <- prettyDelayedOpenAcc simple noParens aenv atup
-      return $ case atup' of
-        Leaf (port,doc)  -> (Leaf (port, wrap (char '#' <> prettyTupleIdx ix <+> doc)), deps )
-        Forest rest      -> (Forest [ Leaf (Nothing, char '#' <> prettyTupleIdx ix), Forest rest], deps )
-
-    pp (Use arrs)               = "use"         .$ [ return $ (prettyArrays (arrays (undefined::a)) arrs, []) ]
-    pp (Unit e)                 = "unit"        .$ [ ppE e ]
-    pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
-    pp (Transform sh ix f xs)   = "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppD xs ]
-    pp (Reshape sh xs)          = "reshape"     .$ [ ppSh sh, ppM xs ]
-    pp (Replicate _ty ix xs)    = "replicate"   .$ [ ppSh ix, ppD xs ]
-    pp (Slice _ty xs ix)        = "slice"       .$ [ ppD xs, ppSh ix ]
-    pp (Map f xs)               = "map"         .$ [ ppF f, ppD xs ]
-    pp (ZipWith f xs ys)        = "zipWith"     .$ [ ppF f, ppD xs, ppD ys ]
-    pp (Fold f e xs)            = "fold"        .$ [ ppF f, ppE e, ppD xs ]
-    pp (Fold1 f xs)             = "fold1"       .$ [ ppF f, ppD xs ]
-    pp (FoldSeg f e xs ys)      = "foldSeg"     .$ [ ppF f, ppE e, ppD xs, ppD ys ]
-    pp (Fold1Seg f xs ys)       = "fold1Seg"    .$ [ ppF f, ppD xs, ppD ys ]
-    pp (Scanl f e xs)           = "scanl"       .$ [ ppF f, ppE e, ppD xs ]
-    pp (Scanl' f e xs)          = "scanl'"      .$ [ ppF f, ppE e, ppD xs ]
-    pp (Scanl1 f xs)            = "scanl1"      .$ [ ppF f, ppD xs ]
-    pp (Scanr f e xs)           = "scanr"       .$ [ ppF f, ppE e, ppD xs ]
-    pp (Scanr' f e xs)          = "scanr'"      .$ [ ppF f, ppE e, ppD xs ]
-    pp (Scanr1 f xs)            = "scanr1"      .$ [ ppF f, ppD xs ]
-    pp (Permute f dfts p xs)    = "permute"     .$ [ ppF f, ppM dfts, ppF p, ppD xs ]
-    pp (Backpermute sh p xs)    = "backpermute" .$ [ ppSh sh, ppF p, ppD xs ]
-    pp (Aforeign ff _afun xs)   = "aforeign"    .$ [ return (text (strForeign ff), []), {- ppAf afun, -} ppM xs ]
-    pp (Stencil sten bndy xs)   = "stencil"     .$ [ ppF sten, ppB xs bndy, ppM xs ]
-    pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
-                                = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppM acc1,
-                                                               ppB acc2 bndy2, ppM acc2 ]
-    pp Collect{}                = error "Collect"
+    apply :: Label -> PNode -> PNode
+    apply f (PNode ident x vs) =
+      let x' = case x of
+                 Leaf (p,d) -> Leaf (p, f <+> d)
+                 Forest ts  -> Forest (Leaf (Nothing,f) : ts)
+      in
+      PNode ident x' vs
 
 
 -- Pretty print array functions as separate sub-graphs, and return the name of
@@ -314,7 +330,8 @@ prettyDelayedAfun simple aenv afun = do
     go aenv' (Abody b) = graphDelayedOpenAcc simple aenv' b
     go aenv' (Alam  f) = do
       a     <- mkLabel
-      ident <- mkNode f (Leaf (Nothing,a), []) Nothing
+      ident <- mkNodeId f
+      _     <- mkNode (PNode ident (Leaf (Nothing,a)) []) Nothing
       go (Apush aenv' ident a) f
 
     collect :: Aval aenv' -> HashSet NodeId
@@ -322,8 +339,7 @@ prettyDelayedAfun simple aenv afun = do
     collect (Apush a i _) = Set.insert i (collect a)
 
 
--- Display array tuples, which ends up being a bit tricky (and potentially quite
--- ugly>
+-- Display array tuples. This is a little tricky...
 --
 prettyDelayedAtuple
     :: forall aenv atup.
@@ -331,7 +347,11 @@ prettyDelayedAtuple
     -> Aval aenv
     -> Atuple (DelayedOpenAcc aenv) atup
     -> Dot PNode
-prettyDelayedAtuple simple aenv atup = (forest *** concat) . unzip . reverse <$> collect 0 atup
+prettyDelayedAtuple simple aenv atup = do
+  ident         <- mkNodeId atup
+  (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) . reverse <$> collect 0 atup
+  modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
+  return $ PNode ident (forest ts) (concat vs)
   where
     collect :: Int -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
     collect _ NilAtup        = return []
@@ -342,13 +362,21 @@ prettyDelayedAtuple simple aenv atup = (forest *** concat) . unzip . reverse <$>
     -- sub-regions of the node
     --
     relabel :: Int -> PNode -> PNode
-    relabel n (ts,vs) =
+    relabel n (PNode ident ts vs) =
       let
           paint Nothing     = Just (int n)
           paint (Just port) = Just (port <> int n)
       in
-      ( fmap (\(p,d) -> (paint p, d)) ts
-      , fmap (\(v,p) -> (v, paint p)) vs )
+      PNode ident (fmap (\(p,d) -> (paint p, d)) ts)
+                  (fmap (\(v,p) -> (v, paint p)) vs)
+
+    -- Redirect any edges that pointed into one of the nodes now part of this
+    -- tuple, to instead point to the container node.
+    --
+    redirect :: NodeId -> [NodeId] -> Edge -> Edge
+    redirect new subs edge@(Edge from (Vertex to port))
+      | to `elem` subs = Edge from (Vertex new port)
+      | otherwise      = edge
 
     -- How should we display array tuples?
     --

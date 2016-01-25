@@ -11,7 +11,7 @@
 module Data.Array.Accelerate.Pretty.Graphviz.Monad
   where
 
-import Control.Monad.State.Strict
+import Control.Monad.State
 import Data.Foldable                                    ( toList )
 import Data.Sequence                                    ( Seq )
 import Text.PrettyPrint
