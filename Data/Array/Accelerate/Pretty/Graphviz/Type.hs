@@ -41,7 +41,8 @@ data Node       = Node (Maybe Label) NodeId (Tree (Maybe Port, Doc))
 data NodeId     = NodeId !Int
 
 type Label      = Doc
-type Port       = Doc
+type Port       = String  -- XXX: required for GHC-7.8, where the included
+                          -- version of 'pretty' does no have an Eq Doc instance
 
 data Vertex     = Vertex NodeId (Maybe Port)
 data Edge       = Edge {- from -} Vertex
@@ -89,7 +90,7 @@ ppEdge :: Edge -> Doc
 ppEdge (Edge from to) = ppVertex from <+> text "->" <+> ppVertex to
 
 ppVertex :: Vertex -> Doc
-ppVertex (Vertex n p) = ppNodeId n <> maybe empty (colon<>) p
+ppVertex (Vertex n p) = ppNodeId n <> maybe empty (colon<>) (fmap text p)
 
 ppNode :: Node -> Doc
 ppNode (Node label nid body) =
@@ -104,7 +105,7 @@ ppNode (Node label nid body) =
 
 ppNodeTree :: Tree (Maybe Port, Doc) -> Doc
 ppNodeTree (Forest trees)      = braces $ hcat (punctuate (char '|') (map ppNodeTree trees))
-ppNodeTree (Leaf (port, body)) = maybe empty (\p -> char '<' <> p <> char '>') port <> pp body
+ppNodeTree (Leaf (port, body)) = maybe empty (\p -> char '<' <> p <> char '>') (fmap text port) <> pp body
   where
     -- In order for the text to be properly rendered by graphviz, we need to
     -- escape some special characters. If the text takes up more than one line,

@@ -11,11 +11,13 @@
 module Data.Array.Accelerate.Pretty.Graphviz.Monad
   where
 
+import Control.Applicative                              ( (<$>) )
 import Control.Monad.State
 import Data.Foldable                                    ( toList )
 import Data.Sequence                                    ( Seq )
 import Text.PrettyPrint
 import System.Mem.StableName
+import Prelude
 import qualified Data.Sequence                          as Seq
 
 import Data.Array.Accelerate.Pretty.Graphviz.Type

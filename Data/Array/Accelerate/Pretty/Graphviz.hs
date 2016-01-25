@@ -393,8 +393,8 @@ prettyDelayedAtuple simple aenv atup = do
     relabel :: Int -> PNode -> PNode
     relabel n (PNode ident ts vs) =
       let
-          paint Nothing     = Just (int n)
-          paint (Just port) = Just (port <> int n)
+          paint Nothing     = Just (show n)
+          paint (Just port) = Just (port ++ show n)
       in
       PNode ident (fmap (\(p,d) -> (paint p, d)) ts)
                   (fmap (\(v,p) -> (v, paint p)) vs)
