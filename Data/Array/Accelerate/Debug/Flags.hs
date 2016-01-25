@@ -215,7 +215,6 @@ initialiseFlags = do
 --
 getUpdateArgs :: IO [String]
 getUpdateArgs = do
-  prog <- getProgName
   argv <- getArgs
   --
   let (before, r1)      = span (/= "+ACC") argv
@@ -223,6 +222,7 @@ getUpdateArgs = do
       after             = dropWhile (== "-ACC") r2
   --
 #ifdef ACCELERATE_DEBUG
+  prog <- getProgName
   setProgArgv (prog : before ++ after)
 #else
   M.unless (null flags)
