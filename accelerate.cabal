@@ -172,7 +172,7 @@ Library
                         ghc-prim,
                         hashable                >= 1.1,
                         hashtables              >= 1.0,
-                        pretty                  >= 1.0,
+                        pretty                  >= 1.1.1.2,
                         template-haskell,
                         mtl                     >= 2.0,
                         transformers            >= 0.3
