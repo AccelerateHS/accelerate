@@ -214,6 +214,9 @@ Library
                         Data.Array.Accelerate.Debug.Trace
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
+                        Data.Array.Accelerate.Pretty.Graphviz
+                        Data.Array.Accelerate.Pretty.Graphviz.Monad
+                        Data.Array.Accelerate.Pretty.Graphviz.Type
                         Data.Array.Accelerate.Pretty.Print
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Base

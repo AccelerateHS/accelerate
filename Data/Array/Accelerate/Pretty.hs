@@ -20,7 +20,8 @@
 module Data.Array.Accelerate.Pretty (
 
   -- * Pretty printing functions
-  module Data.Array.Accelerate.Pretty.Print
+  module Data.Array.Accelerate.Pretty.Print,
+  module Data.Array.Accelerate.Pretty.Graphviz,
 
   -- * Instances of Show
 

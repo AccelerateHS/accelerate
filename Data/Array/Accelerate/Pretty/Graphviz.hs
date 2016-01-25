@@ -8,15 +8,19 @@
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz
--- Copyright   : [2015] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
+-- Copyright   : [2015..2016] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
-module Data.Array.Accelerate.Pretty.Graphviz
-  where
+module Data.Array.Accelerate.Pretty.Graphviz (
+
+  Graph,
+  graphDelayedAcc, graphDelayedAfun,
+
+) where
 
 -- standard libraries
 import Data.List
@@ -25,6 +29,7 @@ import Data.HashSet                                     ( HashSet )
 import Text.PrettyPrint
 import Control.Monad.State                              ( modify, gets, state )
 import Control.Arrow                                    ( (&&&) )
+import System.IO.Unsafe                                 ( unsafePerformIO )
 import Control.Applicative                              hiding ( Const, empty )
 import Prelude                                          hiding ( exp )
 import qualified Data.Sequence                          as Seq
@@ -102,6 +107,32 @@ mkTF this =
          ]
 
 
+-- Pretty Printing
+-- ===============
+--
+-- The use of unsafePerformIO in the below is safe in the sense that we only
+-- require IO to recover the stable names of terms. At worst, if we do not
+-- recover the correct stable name for some reason, we will be left with
+-- dandling edges in the graph.
+--
+
+-- | Generate a dependency graph for the given computation
+--
+graphDelayedAcc :: Bool -> DelayedAcc a -> Graph
+graphDelayedAcc simple acc =
+  unsafePerformIO $! evalDot (graphDelayedOpenAcc simple Aempty acc)
+
+-- | Generate a dependency graph for an array function
+--
+graphDelayedAfun :: Bool -> DelayedAfun f -> Graph
+graphDelayedAfun simple afun = unsafePerformIO . evalDot $! do
+  l <- prettyDelayedAfun simple Aempty afun
+  state $ \s ->
+    case Seq.viewl (dotGraph s) of
+      g@(Graph l' _) Seq.:< gs | l == l' -> (g, s { dotGraph = gs })
+      _                                  -> $internalError "graphDelaydAfun" "unexpected error"
+
+
 -- Pretty-printing data-dependency graphs
 -- --------------------------------------
 
@@ -110,9 +141,6 @@ mkTF this =
 --
 data PDoc  = PDoc Doc [Vertex]
 data PNode = PNode NodeId (Tree (Maybe Port, Doc)) [(Vertex, Maybe Port)]
-
-graphDelayedAcc :: Bool -> DelayedAcc a -> Dot Graph
-graphDelayedAcc simple = graphDelayedOpenAcc simple Aempty
 
 graphDelayedOpenAcc
     :: Bool
@@ -208,19 +236,6 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
     Collect{}               -> error "Collect"
 
   where
-    ppM :: DelayedOpenAcc aenv a -> Dot PDoc
-    ppM (Manifest (Avar ix)) = return (avar ix)
-    ppM _                    = $internalError "prettyDelayedOpenAcc" "expected array variable"
-
-    ppD :: DelayedOpenAcc aenv a -> Dot PDoc
-    ppD (Delayed sh f _)
-      | Shape a    <- sh                                             -- identical shape
-      , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
-      = ppM a
-    ppD (Delayed sh f _) = do PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
-                              return    $ PDoc (parens d) v
-    ppD Manifest{}       = $internalError "prettyDelayedOpenAcc" "expected delayed array"
-
     (.$) :: String -> [Dot PDoc] -> Dot PNode
     name .$ docs = pnode =<< fmt name docs
 
@@ -258,6 +273,19 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
 
     aenv' :: Val aenv
     aenv' = avalToVal aenv
+
+    ppM :: DelayedOpenAcc aenv a -> Dot PDoc
+    ppM (Manifest (Avar ix)) = return (avar ix)
+    ppM _                    = $internalError "prettyDelayedOpenAcc" "expected array variable"
+
+    ppD :: DelayedOpenAcc aenv a -> Dot PDoc
+    ppD (Delayed sh f _)
+      | Shape a    <- sh                                             -- identical shape
+      , Just REFL  <- match f (Lam (Body (Index a (Var ZeroIdx))))   -- identity function
+      = ppM a
+    ppD (Delayed sh f _) = do PDoc d v <- "Delayed" `fmt` [ ppSh sh, ppF f ]
+                              return    $ PDoc (parens d) v
+    ppD Manifest{}       = $internalError "prettyDelayedOpenAcc" "expected delayed array"
 
     ppB :: forall sh e. Elt e
         => {-dummy-} DelayedOpenAcc aenv (Array sh e)
