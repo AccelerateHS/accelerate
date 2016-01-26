@@ -376,16 +376,16 @@ prettyDelayedAtuple
     -> Dot PNode
 prettyDelayedAtuple simple aenv atup = do
   ident         <- mkNodeId atup
-  (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) . reverse <$> collect 0 atup
+  (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) <$> collect [] atup
   modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
   return $ PNode ident (forest ts) (concat vs)
   where
-    collect :: Int -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
-    collect _ NilAtup        = return []
-    collect n (SnocAtup t a) = do
-      a' <- replant =<< prettyDelayedOpenAcc simple noParens aenv a
-      t' <- collect (n+1) t
-      return (a':t')
+    collect :: [PNode] -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
+    collect acc NilAtup          = return acc
+    collect acc (SnocAtup tup a) = do
+      a'   <- replant =<< prettyDelayedOpenAcc simple noParens aenv a
+      tup' <- collect (a':acc) tup
+      return tup'
 
     -- Redirect any edges that pointed into one of the nodes now part of this
     -- tuple, to instead point to the container node.
