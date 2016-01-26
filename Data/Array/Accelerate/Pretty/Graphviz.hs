@@ -202,11 +202,9 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
 
     Atuple atup             -> prettyDelayedAtuple simple aenv atup
     Aprj ix atup            -> do
-      PNode ident atup' deps <- prettyDelayedOpenAcc simple noParens aenv atup
-      let prj' = case atup' of
-                   Leaf (port,doc) -> Leaf (port, wrap (char '#' <> prettyTupleIdx ix <+> doc))
-                   Forest rest     -> Forest [ Leaf (Nothing, char '#' <> prettyTupleIdx ix), Forest rest]
-      return $ PNode ident prj' deps
+      ident                     <- mkNodeId atop
+      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc simple noParens aenv atup
+      return $ PNode ident (Leaf (p, wrap (char '#' <> prettyTupleIdx ix <+> d))) deps
 
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
@@ -384,20 +382,10 @@ prettyDelayedAtuple simple aenv atup = do
   where
     collect :: Int -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
     collect _ NilAtup        = return []
-    collect n (SnocAtup t a) = (:) <$> relabel n `fmap` prettyDelayedOpenAcc simple noParens aenv a
-                                   <*> collect (n+1) t
-
-    -- relabel ports and incoming edges in order to point to the correct
-    -- sub-regions of the node
-    --
-    relabel :: Int -> PNode -> PNode
-    relabel n (PNode ident ts vs) =
-      let
-          paint Nothing     = Just (show n)
-          paint (Just port) = Just (port ++ show n)
-      in
-      PNode ident (fmap (\(p,d) -> (paint p, d)) ts)
-                  (fmap (\(v,p) -> (v, paint p)) vs)
+    collect n (SnocAtup t a) = do
+      a' <- replant =<< prettyDelayedOpenAcc simple noParens aenv a
+      t' <- collect (n+1) t
+      return (a':t')
 
     -- Redirect any edges that pointed into one of the nodes now part of this
     -- tuple, to instead point to the container node.
@@ -407,26 +395,25 @@ prettyDelayedAtuple simple aenv atup = do
       | to `elem` subs = Edge from (Vertex new port)
       | otherwise      = edge
 
-    -- How should we display array tuples?
-    --
-    -- The problem is when we have tuples containing Acond, and thus a [T|F]
-    -- sub-structure in the node. Since there could be multiple such structures
-    -- in this node, we display all fields of the tuple in a separate box. This
-    -- looks a little strange, but makes the dependency relationships clear.
-    --
-    -- For the common case where we don't have this sub-structure, then just
-    -- output a single node containing the usual pretty-printed output. This
-    -- tends to make the arrows drawn by graphviz look better as well since it
-    -- has more flexibility in their placement.
+    -- Since we have lifted out any non-leaves into separate nodes, we can
+    -- simply tuple-up all of the elements.
     --
     forest :: [Tree (Maybe Port, Doc)] -> Tree (Maybe Port, Doc)
-    forest trees =
-      let leaves Forest{} = False
-          leaves Leaf{}   = True
-      in
-      if all leaves trees
-         then Leaf (Nothing, tuple [ d | Leaf (_,d) <- trees ])
-         else Forest trees
+    forest leaves = Leaf (Nothing, tuple [ d | Leaf (Nothing,d) <- leaves ])
+
+
+-- Lift out anything that isn't a Leaf node and output it to the graph
+-- immediately as a new labelled node.
+--
+replant :: PNode -> Dot PNode
+replant pnode@(PNode ident tree _) =
+  case tree of
+    Leaf (Nothing, _) -> return pnode
+    _                 -> do
+      vacuous <- mkNodeId pnode
+      a       <- mkLabel
+      _       <- mkNode pnode (Just a)
+      return   $ PNode vacuous (Leaf (Nothing, text a)) [(Vertex ident Nothing, Nothing)]
 
 
 -- Pretty printing scalar functions and expressions
