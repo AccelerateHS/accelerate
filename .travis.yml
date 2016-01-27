@@ -55,6 +55,7 @@ install:
   - travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
 
 script:
+  - stack build --no-terminal --flag accelerate:debug
   - stack build --no-terminal --haddock --no-haddock-deps
 
 notifications:
