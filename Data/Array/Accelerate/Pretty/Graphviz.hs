@@ -19,6 +19,7 @@
 module Data.Array.Accelerate.Pretty.Graphviz (
 
   Graph,
+  Detail(..),
   graphDelayedAcc, graphDelayedAfun,
 
 ) where
@@ -117,19 +118,25 @@ mkTF this =
 -- dandling edges in the graph.
 --
 
+data Detail = Simple | Full
+
+simple :: Detail -> Bool
+simple Simple = True
+simple _      = False
+
 -- | Generate a dependency graph for the given computation
 --
 {-# NOINLINE graphDelayedAcc #-}
-graphDelayedAcc :: Bool -> DelayedAcc a -> Graph
-graphDelayedAcc simple acc =
-  unsafePerformIO $! evalDot (graphDelayedOpenAcc simple Aempty acc)
+graphDelayedAcc :: Detail -> DelayedAcc a -> Graph
+graphDelayedAcc detail acc =
+  unsafePerformIO $! evalDot (graphDelayedOpenAcc detail Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
 {-# NOINLINE graphDelayedAfun #-}
-graphDelayedAfun :: Bool -> DelayedAfun f -> Graph
-graphDelayedAfun simple afun = unsafePerformIO . evalDot $! do
-  l <- prettyDelayedAfun simple Aempty afun
+graphDelayedAfun :: Detail -> DelayedAfun f -> Graph
+graphDelayedAfun detail afun = unsafePerformIO . evalDot $! do
+  l <- prettyDelayedAfun detail Aempty afun
   state $ \s ->
     case Seq.viewl (dotGraph s) of
       g@(Graph l' _) Seq.:< gs | l == l' -> (g, s { dotGraph = gs })
@@ -146,12 +153,12 @@ data PDoc  = PDoc Doc [Vertex]
 data PNode = PNode NodeId (Tree (Maybe Port, Doc)) [(Vertex, Maybe Port)]
 
 graphDelayedOpenAcc
-    :: Bool
+    :: Detail
     -> Aval aenv
     -> DelayedOpenAcc aenv a
     -> Dot Graph
-graphDelayedOpenAcc simple aenv acc = do
-  r <- prettyDelayedOpenAcc simple noParens aenv acc
+graphDelayedOpenAcc detail aenv acc = do
+  r <- prettyDelayedOpenAcc detail noParens aenv acc
   _ <- mkNode r Nothing
   mkGraph
 
@@ -159,20 +166,20 @@ graphDelayedOpenAcc simple aenv acc = do
 --
 prettyDelayedOpenAcc
     :: forall aenv arrs.
-       Bool                                 -- simplified output: only print operator name
+       Detail                               -- simplified output: only print operator name
     -> (Doc -> Doc)
     -> Aval aenv
     -> DelayedOpenAcc aenv arrs
     -> Dot PNode
 prettyDelayedOpenAcc _      _    _    Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
-prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
+prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
   case pacc of
     Avar ix                 -> pnode (avar ix)
     Alet bnd body           -> do
-      bnd'  <- prettyDelayedOpenAcc simple noParens aenv                 bnd
+      bnd'  <- prettyDelayedOpenAcc detail noParens aenv                 bnd
       a     <- mkLabel
       ident <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc simple noParens (Apush aenv ident a) body
+      body' <- prettyDelayedOpenAcc detail noParens (Apush aenv ident a) body
       return body'
 
     Acond p t e             -> do
@@ -181,17 +188,17 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
       ve         <- lift e
       PDoc p' vs <- ppE p
       let port = Just "P"
-          doc  = mkTF $ Leaf (port, if simple then "?|" else p')
+          doc  = mkTF $ Leaf (port, if simple detail then "?|" else p')
           deps = (vt, Just "T") : (ve, Just "F") : map (,port) vs
       return $ PNode ident doc deps
 
-    Apply afun acc          -> apply <$> prettyDelayedAfun    simple        aenv afun
-                                     <*> prettyDelayedOpenAcc simple parens aenv acc
+    Apply afun acc          -> apply <$> prettyDelayedAfun    detail        aenv afun
+                                     <*> prettyDelayedOpenAcc detail parens aenv acc
 
     Awhile p f x            -> do
-      x'   <- prettyDelayedOpenAcc simple parens aenv x
-      p'   <- prettyDelayedAfun    simple        aenv p
-      f'   <- prettyDelayedAfun    simple        aenv f
+      x'   <- prettyDelayedOpenAcc detail parens aenv x
+      p'   <- prettyDelayedAfun    detail        aenv p
+      f'   <- prettyDelayedAfun    detail        aenv f
       --
       this   <- mkNodeId atop
       fident <- mkNodeId f
@@ -202,10 +209,10 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
       --
       return $ PNode this pd' pv'
 
-    Atuple atup             -> prettyDelayedAtuple simple aenv atup
+    Atuple atup             -> prettyDelayedAtuple detail aenv atup
     Aprj ix atup            -> do
       ident                     <- mkNodeId atop
-      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc simple noParens aenv atup
+      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail noParens aenv atup
       return $ PNode ident (Leaf (p, wrap (char '#' <> prettyTupleIdx ix <+> d))) deps
 
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
@@ -245,7 +252,7 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
       docs' <- sequence docs
       let args = [ x | PDoc x _ <- docs' ]
           fvs  = [ x | PDoc _ x <- docs' ]
-      return $ PDoc (hang (text name) 2 (if simple then empty else sep args))
+      return $ PDoc (hang (text name) 2 (if simple detail then empty else sep args))
                     (concat fvs)
 
     pnode :: PDoc -> Dot PNode
@@ -310,7 +317,7 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
     lift Delayed{}            = $internalError "prettyDelayedOpenAcc" "expected manifest array"
     lift (Manifest (Avar ix)) = return $ Vertex (fst (aprj ix aenv)) Nothing
     lift acc                  = do
-      acc'  <- prettyDelayedOpenAcc simple noParens aenv acc
+      acc'  <- prettyDelayedOpenAcc detail noParens aenv acc
       ident <- mkNode acc' Nothing
       return $ Vertex ident Nothing
 
@@ -335,11 +342,11 @@ prettyDelayedOpenAcc simple wrap aenv atop@(Manifest pacc) =
 -- otherwise the referenced node will be drawn inside of the subgraph.
 --
 prettyDelayedAfun
-    :: Bool
+    :: Detail
     -> Aval aenv
     -> DelayedOpenAfun aenv afun
     -> Dot Label
-prettyDelayedAfun simple aenv afun = do
+prettyDelayedAfun detail aenv afun = do
   Graph _ ss  <- mkSubgraph (go aenv afun)
   n           <- Seq.length <$> gets dotGraph
   let label         = "afun" ++ show (n+1)
@@ -356,7 +363,7 @@ prettyDelayedAfun simple aenv afun = do
   return label
   where
     go :: Aval aenv' -> DelayedOpenAfun aenv' a' -> Dot Graph
-    go aenv' (Abody b) = graphDelayedOpenAcc simple aenv' b
+    go aenv' (Abody b) = graphDelayedOpenAcc detail aenv' b
     go aenv' (Alam  f) = do
       a     <- mkLabel
       ident <- mkNodeId f
@@ -372,11 +379,11 @@ prettyDelayedAfun simple aenv afun = do
 --
 prettyDelayedAtuple
     :: forall aenv atup.
-       Bool
+       Detail
     -> Aval aenv
     -> Atuple (DelayedOpenAcc aenv) atup
     -> Dot PNode
-prettyDelayedAtuple simple aenv atup = do
+prettyDelayedAtuple detail aenv atup = do
   ident         <- mkNodeId atup
   (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) <$> collect [] atup
   modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
@@ -385,7 +392,7 @@ prettyDelayedAtuple simple aenv atup = do
     collect :: [PNode] -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
     collect acc NilAtup          = return acc
     collect acc (SnocAtup tup a) = do
-      a'   <- replant =<< prettyDelayedOpenAcc simple noParens aenv a
+      a'   <- replant =<< prettyDelayedOpenAcc detail noParens aenv a
       tup' <- collect (a':acc) tup
       return tup'
 
