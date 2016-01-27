@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternGuards        #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Pretty.Graphviz
@@ -19,7 +21,8 @@
 module Data.Array.Accelerate.Pretty.Graphviz (
 
   Graph,
-  Detail(..),
+  PrettyGraph(..), Detail(..),
+
   graphDelayedAcc, graphDelayedAfun,
 
 ) where
@@ -117,6 +120,15 @@ mkTF this =
 -- recover the correct stable name for some reason, we will be left with
 -- dandling edges in the graph.
 --
+
+class PrettyGraph g where
+  ppGraph :: Detail -> g -> Graph
+
+instance PrettyGraph (DelayedAcc a) where
+  ppGraph = graphDelayedAcc
+
+instance PrettyGraph (DelayedAfun a) where
+  ppGraph = graphDelayedAfun
 
 data Detail = Simple | Full
 
