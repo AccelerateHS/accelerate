@@ -85,7 +85,7 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Nursery p)
                                       (forall a. p a -> IO ())
 
--- | An untyped reference to an array, similar to a stablename.
+-- | An untyped reference to an array, similar to a StableName.
 --
 type StableArray = Int
 
@@ -271,11 +271,11 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
 --
 clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
 clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
-  -- Unforunately there is no real way to force a GC then wait for it to finsh.
-  -- Calling performGC then yielding works moderately well in single-threaded
-  -- cases, but tends to fall down otherwise. Either way, given that finalizers
-  -- are often significantly delayed, it is worth our while traversing the table
-  -- and explicitly freeing any dead entires.
+  -- Unfortunately there is no real way to force a GC then wait for it to
+  -- finish. Calling performGC then yielding works moderately well in
+  -- single-threaded cases, but tends to fall down otherwise. Either way, given
+  -- that finalizers are often significantly delayed, it is worth our while
+  -- traversing the table and explicitly freeing any dead entires.
   --
   performGC
   yield
@@ -433,3 +433,4 @@ management msg nrs next = do
                   ++ ", remaining: " ++ showBytes after
                   ++ " of "          ++ showBytes total ++ ")"
   return r
+
