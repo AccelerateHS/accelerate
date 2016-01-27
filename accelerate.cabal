@@ -162,20 +162,23 @@ Flag internal-checks
   Default:              False
 
 Library
-  Build-depends:        array                   >= 0.3,
-                        base                    >= 4.7,
-                        base-orphans            >= 0.3,
-                        containers              >= 0.3,
-                        exceptions              >= 0.6,
-                        unordered-containers    >= 0.2,
-                        fclabels                >= 2.0,
-                        ghc-prim,
-                        hashable                >= 1.1,
-                        hashtables              >= 1.0,
-                        pretty                  >= 1.0,
-                        template-haskell,
-                        mtl                     >= 2.0,
-                        transformers            >= 0.3
+  Build-depends:
+          base                          >= 4.7
+        , array                         >= 0.3
+        , base-orphans                  >= 0.3
+        , containers                    >= 0.3
+        , directory                     >= 1.0
+        , exceptions                    >= 0.6
+        , fclabels                      >= 2.0
+        , filepath                      >= 1.0
+        , ghc-prim
+        , hashable                      >= 1.1
+        , hashtables                    >= 1.0
+        , mtl                           >= 2.0
+        , pretty                        >= 1.0
+        , template-haskell
+        , transformers                  >= 0.3
+        , unordered-containers          >= 0.2
 
   Exposed-modules:
                         -- The core language and reference implementation
@@ -239,6 +242,13 @@ Library
 
   if flag(internal-checks)
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
+
+  if os(windows)
+    cpp-options:        -DWIN32
+    build-depends:      Win32
+  else
+    cpp-options:        -DUNIX
+    build-depends:      unix
 
   ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
   ghc-prof-options:     -caf-all -auto-all

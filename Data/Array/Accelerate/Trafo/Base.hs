@@ -57,7 +57,7 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Trafo.Substitution
 
-import Data.Array.Accelerate.Debug                      as Stats
+import Data.Array.Accelerate.Debug.Stats                as Stats
 
 
 -- Toolkit
