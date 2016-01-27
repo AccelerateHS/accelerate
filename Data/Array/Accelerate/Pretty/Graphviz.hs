@@ -119,12 +119,14 @@ mkTF this =
 
 -- | Generate a dependency graph for the given computation
 --
+{-# NOINLINE graphDelayedAcc #-}
 graphDelayedAcc :: Bool -> DelayedAcc a -> Graph
 graphDelayedAcc simple acc =
   unsafePerformIO $! evalDot (graphDelayedOpenAcc simple Aempty acc)
 
 -- | Generate a dependency graph for an array function
 --
+{-# NOINLINE graphDelayedAfun #-}
 graphDelayedAfun :: Bool -> DelayedAfun f -> Graph
 graphDelayedAfun simple afun = unsafePerformIO . evalDot $! do
   l <- prettyDelayedAfun simple Aempty afun
