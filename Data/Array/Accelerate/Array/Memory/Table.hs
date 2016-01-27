@@ -37,7 +37,6 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
 ) where
 
-import Data.Array.Storable.Internals                            ( StorableArray(..) )
 import Data.Functor
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
@@ -48,14 +47,9 @@ import Control.Concurrent.MVar                                  ( MVar, newMVar,
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
 import Foreign.Storable                                         ( sizeOf )
-import Prelude                                                  hiding ( lookup )
+import Prelude                                                  hiding ( lookup, id )
 
 import GHC.Exts                                                 ( Ptr(..) )
-import GHC.ForeignPtr                                           ( ForeignPtr(..), ForeignPtrContents(..) )
-import GHC.IORef                                                ( IORef(..) )
-import GHC.STRef                                                ( STRef(..) )
-import GHC.Base                                                 ( mkWeak#, mkWeakNoFinalizer#, IO(..) )
-import GHC.Weak                                                 ( Weak(..) )
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -111,13 +105,13 @@ data RemoteArray p where
 -- depend on any state.
 --
 new :: (RemoteMemory m, MonadIO m) => (forall a. RemotePointer m a -> IO ()) -> m (MemoryTable (RemotePointer m))
-new free = do
+new release = do
   message "initialise memory table"
   tbl  <- liftIO $ HT.new
   ref  <- liftIO $ newMVar tbl
-  nrs  <- N.new free
+  nrs  <- N.new release
   weak <- liftIO $ mkWeakMVar ref (return ())
-  return $! MemoryTable ref weak nrs free
+  return $! MemoryTable ref weak nrs release
 
 
 -- | Look for the remote pointer corresponding to a given host-side array.
@@ -300,8 +294,8 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
 -- arrays.
 --
 purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
-purge (MemoryTable _ _ nursery@(Nursery nrs _) free) = management "purge" nursery . liftIO $
-  modifyMVar_ nrs (\(tbl,_) -> N.flush free tbl >> return (tbl, 0))
+purge (MemoryTable _ _ nursery@(Nursery nrs _) release) = management "purge" nursery . liftIO $
+  modifyMVar_ nrs (\(tbl,_) -> N.flush release tbl >> return (tbl, 0))
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
@@ -319,9 +313,13 @@ remoteFinalizer !weak_ref !key = do
 -- Miscellaneous
 -- -------------
 
--- | Make a new StableArray.
+-- | Make a new 'StableArray'.
+--
 {-# INLINE makeStableArray #-}
-makeStableArray :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a) => ArrayData a -> m StableArray
+makeStableArray
+    :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a)
+    => ArrayData a
+    -> m StableArray
 makeStableArray !ad = liftIO $ id arrayElt ad
   where
     id :: ArrayEltR e -> ArrayData e -> IO Int
@@ -359,44 +357,50 @@ makeStableArray !ad = liftIO $ id arrayElt ad
 
 -- |Make a weak pointer using an array as a key. Unlike the stanard `mkWeak`,
 -- this guarantees finalisers won't fire early.
-makeWeakArrayData :: forall a e c. (ArrayElt e, ArrayPtrs e ~ Ptr a) => ArrayData e -> c -> Maybe (IO ()) -> IO (Weak c)
-makeWeakArrayData ad c f = mw arrayElt ad
+--
+makeWeakArrayData
+    :: forall a e c. (ArrayElt e, ArrayPtrs e ~ Ptr a)
+    => ArrayData e
+    -> c
+    -> Maybe (IO ())
+    -> IO (Weak c)
+makeWeakArrayData ad c mf = mw arrayElt ad
   where
     mw :: ArrayEltR e -> ArrayData e -> IO (Weak c)
-    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua c f
-    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua c f
-    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua c f
-    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua c f
-    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua c f
-    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua c f
-    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua c f
-    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua c f
-    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua c f
-    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua c f
-    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua c f
-    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua c f
-    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua c f
-    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua c f
-    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua c f
-    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua c f
-    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua c f
-    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua c f
-    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua c f
-    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua c f
-    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua c f
-    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua c f
-    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua c f
-    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua c f
-    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua c f
-    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua c f
-    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua c f
-    mw _                _               = error "Base eight is just like base ten really — if you're missing two fingers."
+    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua mf
+    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua mf
+    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua mf
+    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua mf
+    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua mf
+    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua mf
+    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua mf
+    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua mf
+    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua mf
+    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua mf
+    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua mf
+    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua mf
+    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua mf
+    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua mf
+    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua mf
+    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua mf
+    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua mf
+    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua mf
+    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua mf
+    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua mf
+    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua mf
+    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua mf
+    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua mf
+    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua mf
+    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua mf
+    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua mf
+    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua mf
+    mw _                _               = error "Base eight is just like base ten really - if you're missing two fingers."
 
-    mkWeak' :: UniqueArray i a -> c -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' ua k Nothing = mkWeak (storableFromUnique ua) k
-    mkWeak' ua k (Just f) = do
+    mkWeak' :: UniqueArray i a -> Maybe (IO ()) -> IO (Weak c)
+    mkWeak' ua Nothing  = mkWeak (storableFromUnique ua) c
+    mkWeak' ua (Just f) = do
       addFinalizer (storableFromUnique ua) f
-      mkWeak (storableFromUnique ua) k
+      mkWeak (storableFromUnique ua) c
 
 
 -- Debug

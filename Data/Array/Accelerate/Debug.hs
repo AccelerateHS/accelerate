@@ -30,13 +30,14 @@ import Data.Array.Accelerate.Debug.Trace                as Debug
 
 import Data.Array.Accelerate.Pretty.Graphviz
 
-import Control.Monad.Trans                              ( MonadIO, liftIO )
+import Control.Monad.Trans                              ( MonadIO )
 
 #if ACCELERATE_DEBUG
 import Control.Exception                                ( bracket )
-import System.IO                                        ( Handle, openTempFile, hPutStrLn, hPrint, hClose, stderr )
-import System.FilePath                                  ( (</>) )
+import Control.Monad.Trans                              ( liftIO )
 import System.Directory                                 ( getTemporaryDirectory, createDirectoryIfMissing )
+import System.FilePath                                  ( (</>) )
+import System.IO                                        ( Handle, openTempFile, hPutStrLn, hPrint, hClose, stderr )
 
 #if   defined(UNIX)
 import System.Posix.Process                             ( getProcessID )
