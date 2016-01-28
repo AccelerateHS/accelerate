@@ -171,7 +171,9 @@ graphDelayedOpenAcc
     -> Dot Graph
 graphDelayedOpenAcc detail aenv acc = do
   r <- prettyDelayedOpenAcc detail noParens aenv acc
-  _ <- mkNode r Nothing
+  i <- mkNodeId r
+  v <- mkNode r Nothing
+  _ <- mkNode (PNode i (Leaf (Nothing,"result")) [(Vertex v Nothing, Nothing)]) Nothing
   mkGraph
 
 -- Generate a graph for the given term.
@@ -195,9 +197,9 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       return body'
 
     Acond p t e             -> do
-      ident      <- mkNodeId atop
-      vt         <- lift t
-      ve         <- lift e
+      ident <- mkNodeId atop
+      vt    <- lift t
+      ve    <- lift e
       PDoc p' vs <- ppE p
       let port = Just "P"
           doc  = mkTF $ Leaf (port, if simple detail then "?|" else p')
@@ -208,24 +210,20 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
                                      <*> prettyDelayedOpenAcc detail parens aenv acc
 
     Awhile p f x            -> do
-      x'   <- prettyDelayedOpenAcc detail parens aenv x
-      p'   <- prettyDelayedAfun    detail        aenv p
-      f'   <- prettyDelayedAfun    detail        aenv f
+      ident <- mkNodeId atop
+      x'    <- replant =<< prettyDelayedOpenAcc detail parens aenv x
+      p'    <- prettyDelayedAfun    detail        aenv p
+      f'    <- prettyDelayedAfun    detail        aenv f
       --
-      this   <- mkNodeId atop
-      fident <- mkNodeId f
-      body   <- mkNode (PNode fident (Leaf (Nothing, text f')) [(Vertex this (Just "T"), Nothing)]) Nothing
-      let PNode _ pd pv = apply p' x'
-          pd'           = mkTF pd
-          pv'           = (Vertex body Nothing, Nothing) : pv
-      --
-      return $ PNode this pd' pv'
+      let PNode _ (Leaf (Nothing,xb)) fvs = x'
+          loop                            = wrap $ hang "awhile" 2 (sep [ text p', text f', xb ])
+      return $ PNode ident (Leaf (Nothing,loop)) fvs
 
-    Atuple atup             -> prettyDelayedAtuple detail aenv atup
+    Atuple atup             -> prettyDelayedAtuple detail wrap aenv atup
     Aprj ix atup            -> do
       ident                     <- mkNodeId atop
-      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail noParens aenv atup
-      return $ PNode ident (Leaf (p, wrap (char '#' <> prettyTupleIdx ix <+> d))) deps
+      PNode _ (Leaf (p,d)) deps <- replant =<< prettyDelayedOpenAcc detail parens aenv atup
+      return $ PNode ident (Leaf (p, wrap (char '#' <> prettyTupleIdx ix <+> nest 2 d))) deps
 
     Use arrs                -> "use"         .$ [ return $ PDoc (prettyArrays (arrays (undefined::arrs)) arrs) [] ]
     Unit e                  -> "unit"        .$ [ ppE e ]
@@ -264,7 +262,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
       docs' <- sequence docs
       let args = [ x | PDoc x _ <- docs' ]
           fvs  = [ x | PDoc _ x <- docs' ]
-      return $ PDoc (hang (text name) 2 (if simple detail then empty else sep args))
+      return $ PDoc (wrap $ hang (text name) 2 (if simple detail then empty else sep args))
                     (concat fvs)
 
     pnode :: PDoc -> Dot PNode
@@ -336,7 +334,7 @@ prettyDelayedOpenAcc detail wrap aenv atop@(Manifest pacc) =
     apply :: Label -> PNode -> PNode
     apply f (PNode ident x vs) =
       let x' = case x of
-                 Leaf (p,d) -> Leaf (p, text f <+> d)
+                 Leaf (p,d) -> Leaf (p, wrap (text f <+> d))
                  Forest ts  -> Forest (Leaf (Nothing,text f) : ts)
       in
       PNode ident x' vs
@@ -392,10 +390,11 @@ prettyDelayedAfun detail aenv afun = do
 prettyDelayedAtuple
     :: forall aenv atup.
        Detail
+    -> (Doc -> Doc)
     -> Aval aenv
     -> Atuple (DelayedOpenAcc aenv) atup
     -> Dot PNode
-prettyDelayedAtuple detail aenv atup = do
+prettyDelayedAtuple detail wrap aenv atup = do
   ident         <- mkNodeId atup
   (ids, ts, vs) <- unzip3 . map (\(PNode i t v) -> (i,t,v)) <$> collect [] atup
   modify $ \s -> s { dotEdges = fmap (redirect ident ids) (dotEdges s) }
@@ -404,7 +403,7 @@ prettyDelayedAtuple detail aenv atup = do
     collect :: [PNode] -> Atuple (DelayedOpenAcc aenv) t -> Dot [PNode]
     collect acc NilAtup          = return acc
     collect acc (SnocAtup tup a) = do
-      a'   <- replant =<< prettyDelayedOpenAcc detail noParens aenv a
+      a'   <- replant =<< prettyDelayedOpenAcc detail wrap aenv a
       tup' <- collect (a':acc) tup
       return tup'
 
