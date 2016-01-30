@@ -178,6 +178,7 @@ Library
         , pretty                        >= 1.0
         , template-haskell
         , transformers                  >= 0.3
+        , unique
         , unordered-containers          >= 0.2
 
   Exposed-modules:
@@ -200,6 +201,7 @@ Library
                         Data.Array.Accelerate.Array.Memory.Table
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Array.Unique
                         Data.Array.Accelerate.Async
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Error

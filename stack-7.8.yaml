@@ -8,6 +8,7 @@ packages:
 
 extra-deps:
 - 'base-orphans-0.4.4'
+- 'unique-0'
 
 # Override default flag values for local packages and extra-deps
 flags:

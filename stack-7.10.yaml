@@ -6,7 +6,8 @@ resolver: lts-3.15
 packages:
 - '.'
 
-extra-deps: []
+extra-deps:
+- 'unique-0'
 
 # Override default flag values for local packages and extra-deps
 flags:
