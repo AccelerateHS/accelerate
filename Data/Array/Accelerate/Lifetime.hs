@@ -19,7 +19,6 @@ module Data.Array.Accelerate.Lifetime (
 
 ) where
 
-import Control.Applicative
 import Data.Function                ( on )
 import Data.IORef                   ( mkWeakIORef, atomicModifyIORef' )
 import Prelude
@@ -29,6 +28,7 @@ import GHC.IORef                    ( IORef(.. ), newIORef )
 import GHC.Prim                     ( mkWeak# )
 import GHC.STRef                    ( STRef(..) )
 import GHC.Weak                     ( Weak(..) )
+
 
 -- | A lifetime represents a value with attached finalizers. This is similar to
 -- the functionality provided by "System.Mem.Weak", but has the following
@@ -47,8 +47,10 @@ import GHC.Weak                     ( Weak(..) )
 --   value, there is no danger in storing it UNPACKED as part of another
 --   structure.
 --
-data Lifetime a = Lifetime {-# UNPACK #-} !LTF {-# UNPACK #-} !(Weak LTF) a
 type LTF        = IORef [IO ()]
+data Lifetime a = Lifetime {-# UNPACK #-} !LTF
+                           {-# UNPACK #-} !(Weak LTF)
+                           {- LAZY -}     a
 
 instance Eq a => Eq (Lifetime a) where
   (==) = (==) `on` unsafeGetValue
@@ -67,14 +69,18 @@ newLifetime a = do
 -- the function, either by returning it or by lazy IO.
 --
 withLifetime :: Lifetime a -> (a -> IO b) -> IO b
-withLifetime (Lifetime ref _ a) f = f a <* touch ref
+withLifetime (Lifetime ref _ a) f = do
+  r <- f a
+  touchIORef ref
+  return r
 
 -- | Attaches a finalizer to a 'Lifetime'. Like in "System.Mem.Weak", there is
 -- no guarantee that the finalizers will eventually run. If they do run,
 -- they will be executed in the order in which they were supplied.
 --
 addFinalizer :: Lifetime a -> IO () -> IO ()
-addFinalizer (Lifetime ref _ _) f = atomicModifyIORef' ref (\fs -> (f:fs,()))
+addFinalizer (Lifetime ref _ _) f =
+  atomicModifyIORef' ref (\fs -> (f:fs,()))
 
 -- | Causes any finalizers associated with the given lifetime to be run
 -- immediately on the calling thread.
@@ -101,9 +107,7 @@ finalize (Lifetime ref _ _) = finalizer ref
 --
 mkWeak :: Lifetime k -> v -> IO (Weak v)
 mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = IO $ \s ->
-  case mkWeak# r# v f s of (# s', w# #) -> (# s', Weak w# #)
-  where
-    f = finalizer ref
+  case mkWeak# r# v (finalizer ref) s of (# s', w# #) -> (# s', Weak w# #)
 
 -- A specialised version of 'mkWeak' where the key and value are the same
 -- 'Lifetime'.
@@ -127,8 +131,9 @@ finalizer ref = do
   fins <- atomicModifyIORef' ref ([],)
   sequence_ fins
 
--- Touch an 'IORef', keeping it alive.
+-- Touch an 'IORef', ensuring that it is alive at this point in a sequence of IO
+-- actions.
 --
-touch :: IORef a -> IO ()
-touch r = IO $ \s -> case touch# r s of s' -> (# s', () #)
+touchIORef :: IORef a -> IO ()
+touchIORef r = IO $ \s -> case touch# r s of s' -> (# s', () #)
 
