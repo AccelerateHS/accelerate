@@ -37,26 +37,27 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
 ) where
 
+import Control.Concurrent                                       ( yield )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
+import Control.Concurrent.Unique                                ( Unique )
+import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Data.Functor
+import Data.Hashable                                            ( hash )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
-import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
-import Control.Concurrent                                       ( yield )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
+import Foreign.Storable                                         ( sizeOf )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
-import Foreign.Storable                                         ( sizeOf )
 import Prelude                                                  hiding ( lookup, id )
+import qualified Data.HashTable.IO                              as HT
 
 import GHC.Exts                                                 ( Ptr(..) )
 
-import qualified Data.HashTable.IO                              as HT
-
 import Data.Array.Accelerate.Error                              ( internalError )
+import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
-                                                                  ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..),
-                                                                  UniqueArray, storableFromUnique, getUniqueId )
+                                                                  ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..) )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..) )
 import Data.Array.Accelerate.Lifetime
@@ -85,10 +86,6 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Nursery p)
                                       (forall a. p a -> IO ())
 
--- | An untyped reference to an array, similar to a StableName.
---
-type StableArray = Int
-
 data RemoteArray p where
   RemoteArray :: Typeable e
               => {-# UNPACK #-} !(Weak ()) -- Keep track of host array liveness.
@@ -96,6 +93,9 @@ data RemoteArray p where
               -> Int                       -- The array size in bytes
               -> RemoteArray p
 
+-- | An untyped reference to an array, similar to a StableName.
+--
+type StableArray = Int
 
 -- |Create a new memory table from host to remote arrays.
 --
@@ -140,8 +140,8 @@ lookup (MemoryTable !ref _ _ _) !arr = do
         -- pointers, is why we can not reuse the stable name 'sa' computed
         -- above in the error message.
         --
-        Nothing                    ->
-          makeStableArray  arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
+        Nothing                     ->
+          makeStableArray arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
 
 
 -- | Allocate a new device array to be associated with the given host-side array.
@@ -320,42 +320,42 @@ makeStableArray
     :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a)
     => ArrayData a
     -> m StableArray
-makeStableArray !ad = liftIO $ id arrayElt ad
+makeStableArray !ad = return $! hash (id arrayElt ad)
   where
-    id :: ArrayEltR e -> ArrayData e -> IO Int
-    id ArrayEltRint     (AD_Int ua)     = getUniqueId ua
-    id ArrayEltRint8    (AD_Int8 ua)    = getUniqueId ua
-    id ArrayEltRint16   (AD_Int16 ua)   = getUniqueId ua
-    id ArrayEltRint32   (AD_Int32 ua)   = getUniqueId ua
-    id ArrayEltRint64   (AD_Int64 ua)   = getUniqueId ua
-    id ArrayEltRword    (AD_Word ua)    = getUniqueId ua
-    id ArrayEltRword8   (AD_Word8 ua)   = getUniqueId ua
-    id ArrayEltRword16  (AD_Word16 ua)  = getUniqueId ua
-    id ArrayEltRword32  (AD_Word32 ua)  = getUniqueId ua
-    id ArrayEltRword64  (AD_Word64 ua)  = getUniqueId ua
-    id ArrayEltRcshort  (AD_CShort ua)  = getUniqueId ua
-    id ArrayEltRcushort (AD_CUShort ua) = getUniqueId ua
-    id ArrayEltRcint    (AD_CInt ua)    = getUniqueId ua
-    id ArrayEltRcuint   (AD_CUInt ua)   = getUniqueId ua
-    id ArrayEltRclong   (AD_CLong ua)   = getUniqueId ua
-    id ArrayEltRculong  (AD_CULong ua)  = getUniqueId ua
-    id ArrayEltRcllong  (AD_CLLong ua)  = getUniqueId ua
-    id ArrayEltRcullong (AD_CULLong ua) = getUniqueId ua
-    id ArrayEltRfloat   (AD_Float ua)   = getUniqueId ua
-    id ArrayEltRdouble  (AD_Double ua)  = getUniqueId ua
-    id ArrayEltRcfloat  (AD_CFloat ua)  = getUniqueId ua
-    id ArrayEltRcdouble (AD_CDouble ua) = getUniqueId ua
-    id ArrayEltRbool    (AD_Bool ua)    = getUniqueId ua
-    id ArrayEltRchar    (AD_Char ua)    = getUniqueId ua
-    id ArrayEltRcchar   (AD_CChar ua)   = getUniqueId ua
-    id ArrayEltRcschar  (AD_CSChar ua)  = getUniqueId ua
-    id ArrayEltRcuchar  (AD_CUChar ua)  = getUniqueId ua
+    id :: ArrayEltR e -> ArrayData e -> Unique
+    id ArrayEltRint     (AD_Int ua)     = uniqueArrayId ua
+    id ArrayEltRint8    (AD_Int8 ua)    = uniqueArrayId ua
+    id ArrayEltRint16   (AD_Int16 ua)   = uniqueArrayId ua
+    id ArrayEltRint32   (AD_Int32 ua)   = uniqueArrayId ua
+    id ArrayEltRint64   (AD_Int64 ua)   = uniqueArrayId ua
+    id ArrayEltRword    (AD_Word ua)    = uniqueArrayId ua
+    id ArrayEltRword8   (AD_Word8 ua)   = uniqueArrayId ua
+    id ArrayEltRword16  (AD_Word16 ua)  = uniqueArrayId ua
+    id ArrayEltRword32  (AD_Word32 ua)  = uniqueArrayId ua
+    id ArrayEltRword64  (AD_Word64 ua)  = uniqueArrayId ua
+    id ArrayEltRcshort  (AD_CShort ua)  = uniqueArrayId ua
+    id ArrayEltRcushort (AD_CUShort ua) = uniqueArrayId ua
+    id ArrayEltRcint    (AD_CInt ua)    = uniqueArrayId ua
+    id ArrayEltRcuint   (AD_CUInt ua)   = uniqueArrayId ua
+    id ArrayEltRclong   (AD_CLong ua)   = uniqueArrayId ua
+    id ArrayEltRculong  (AD_CULong ua)  = uniqueArrayId ua
+    id ArrayEltRcllong  (AD_CLLong ua)  = uniqueArrayId ua
+    id ArrayEltRcullong (AD_CULLong ua) = uniqueArrayId ua
+    id ArrayEltRfloat   (AD_Float ua)   = uniqueArrayId ua
+    id ArrayEltRdouble  (AD_Double ua)  = uniqueArrayId ua
+    id ArrayEltRcfloat  (AD_CFloat ua)  = uniqueArrayId ua
+    id ArrayEltRcdouble (AD_CDouble ua) = uniqueArrayId ua
+    id ArrayEltRbool    (AD_Bool ua)    = uniqueArrayId ua
+    id ArrayEltRchar    (AD_Char ua)    = uniqueArrayId ua
+    id ArrayEltRcchar   (AD_CChar ua)   = uniqueArrayId ua
+    id ArrayEltRcschar  (AD_CSChar ua)  = uniqueArrayId ua
+    id ArrayEltRcuchar  (AD_CUChar ua)  = uniqueArrayId ua
     id _                _               = error "I do have a cause, though. It is obscenity. I'm for it."
 
 -- Weak arrays
 -- ----------------------
 
--- |Make a weak pointer using an array as a key. Unlike the stanard `mkWeak`,
+-- |Make a weak pointer using an array as a key. Unlike the standard `mkWeak`,
 -- this guarantees finalisers won't fire early.
 --
 makeWeakArrayData
@@ -396,11 +396,11 @@ makeWeakArrayData ad c mf = mw arrayElt ad
     mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua mf
     mw _                _               = error "Base eight is just like base ten really - if you're missing two fingers."
 
-    mkWeak' :: UniqueArray i a -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' ua Nothing  = mkWeak (storableFromUnique ua) c
+    mkWeak' :: UniqueArray a -> Maybe (IO ()) -> IO (Weak c)
+    mkWeak' ua Nothing  = mkWeak (uniqueArrayData ua) c
     mkWeak' ua (Just f) = do
-      addFinalizer (storableFromUnique ua) f
-      mkWeak (storableFromUnique ua) c
+      addFinalizer (uniqueArrayData ua) f
+      mkWeak (uniqueArrayData ua) c
 
 
 -- Debug
