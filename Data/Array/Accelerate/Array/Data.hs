@@ -1,7 +1,8 @@
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell    #-}
-{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Data
@@ -50,9 +51,9 @@ import Data.Bits
 import Data.Functor
 import Data.IORef
 import Data.Typeable                            ( Typeable )
-import Foreign                                  ( Ptr )
 import Foreign.C.Types
 import Foreign.ForeignPtr
+import Foreign.Ptr
 import Foreign.Storable
 import Language.Haskell.TH
 import System.IO.Unsafe
@@ -759,27 +760,27 @@ unsafeWriteArray ua i e =
 -- intermediate arrays that contain meaningful data only on the device.
 --
 {-# INLINE newArrayData' #-}
-newArrayData' :: Storable e => Int -> IO (UniqueArray e)
+newArrayData' :: forall e. Storable e => Int -> IO (UniqueArray e)
 newArrayData' size =
   newUniqueArray . unsafePerformIO $ do
-    new <- readIORef __mallocForeignPtrArray
-    ptr <- new size
+    new <- readIORef __mallocForeignPtrBytes
+    ptr <- new (size * sizeOf (undefined :: e))
     traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
-    return ptr
+    return (castForeignPtr ptr)
 
 -- | Register the given function as the callback to use to allocate new array
--- data on the host. The returned array must be pinned (with respect to
--- Haskell's GC), so that it can be passed to foreign code.
+-- data on the host containing the specified number of bytes. The returned array
+-- must be pinned (with respect to Haskell's GC), so that it can be passed to
+-- foreign code.
 --
 registerForeignPtrAllocator
-    :: Storable a
-    => (Int -> IO (ForeignPtr a))
+    :: (Int -> IO (ForeignPtr Word8))
     -> IO ()
 registerForeignPtrAllocator new = do
   traceIO dump_gc "registering new array allocator"
-  writeIORef __mallocForeignPtrArray new
+  writeIORef __mallocForeignPtrBytes new
 
-{-# NOINLINE __mallocForeignPtrArray #-}
-__mallocForeignPtrArray :: Storable a => IORef (Int -> IO (ForeignPtr a))
-__mallocForeignPtrArray = unsafePerformIO $ newIORef mallocForeignPtrArray
+{-# NOINLINE __mallocForeignPtrBytes #-}
+__mallocForeignPtrBytes :: IORef (Int -> IO (ForeignPtr Word8))
+__mallocForeignPtrBytes = unsafePerformIO $ newIORef mallocForeignPtrBytes
 
