@@ -775,7 +775,9 @@ registerForeignPtrAllocator
     :: Storable a
     => (Int -> IO (ForeignPtr a))
     -> IO ()
-registerForeignPtrAllocator = writeIORef __mallocForeignPtrArray
+registerForeignPtrAllocator new = do
+  traceIO dump_gc "registering new array allocator"
+  writeIORef __mallocForeignPtrArray new
 
 {-# NOINLINE __mallocForeignPtrArray #-}
 __mallocForeignPtrArray :: Storable a => IORef (Int -> IO (ForeignPtr a))
