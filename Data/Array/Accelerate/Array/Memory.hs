@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Memory
@@ -12,8 +12,10 @@
 --
 
 module Data.Array.Accelerate.Array.Memory (
+
   RemoteMemory(..), PrimElt
-  ) where
+
+) where
 
 import Data.Array.Accelerate.Array.Data
 
@@ -64,3 +66,4 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- number of allocations.
   chunkSize :: m Int
   chunkSize = return 1
+
