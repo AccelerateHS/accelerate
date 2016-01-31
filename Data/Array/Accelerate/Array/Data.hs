@@ -46,9 +46,9 @@ import Data.Array.Accelerate.Debug.Flags
 import Data.Array.Accelerate.Debug.Trace
 
 -- standard libraries
+import Control.Applicative
 import Control.Monad
 import Data.Bits
-import Data.Functor
 import Data.IORef
 import Data.Typeable                            ( Typeable )
 import Foreign.C.Types
