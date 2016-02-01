@@ -82,7 +82,7 @@ data Phase = Phase
 
     -- | Vectorise maps and zipwiths in sequence computations to
     --   enable chunked execution?
-  , vectoriseSequences :: Bool
+  , vectoriseSequences          :: Bool
   }
 
 
@@ -185,8 +185,8 @@ instance Elt e => Show (Exp e) where
 instance Function (Exp a -> f) => Show (Exp a -> f) where
   show = withSimplStats . show . convertFun
 
-instance Typeable a => Show (Seq a) where
-  show = withSimplStats . show . convertSeq
+-- instance Typeable a => Show (Seq a) where
+--   show = withSimplStats . show . convertSeq
 
 -- Debugging
 -- ---------

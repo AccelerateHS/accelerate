@@ -38,6 +38,8 @@ module Data.Array.Accelerate.Type (
   module Data.Array.Accelerate.Type
 ) where
 
+-- Imports Typeable instances for 8-tuples and beyond
+import Data.Orphans ()
 -- standard libraries
 import Data.Bits
 import Data.Int
@@ -48,14 +50,6 @@ import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
   CLLong, CULLong, CFloat, CDouble)
   -- in the future, CHalf
-
-
--- Extend Typeable support for 8- and 9-tuple
--- ------------------------------------------
-
-deriving instance Typeable (,,,,,,,)
-deriving instance Typeable (,,,,,,,,)
-
 
 -- Scalar types
 -- ------------

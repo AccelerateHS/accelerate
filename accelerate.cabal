@@ -149,10 +149,6 @@ Flag debug
     * -dverbose: other, uncategorised messages
     .
 
-Flag more-pp
-  Description:          Enable HTML and Graphviz pretty printing.
-  Default:              False
-
 Flag bounds-checks
   Description:          Enable bounds checking
   Default:              True
@@ -166,29 +162,24 @@ Flag internal-checks
   Default:              False
 
 Library
-  Build-depends:        array                   >= 0.3,
-                        base                    >= 4.7,
-                        containers              >= 0.3,
-                        exceptions              >= 0.6,
-                        unordered-containers    >= 0.2,
-                        fclabels                >= 2.0,
-                        ghc-prim,
-                        hashable                >= 1.1,
-                        hashtables              >= 1.0,
-                        pretty                  >= 1.0,
-                        template-haskell,
-                        mtl                     >= 2.0,
-                        transformers            >= 0.3
-
-  if flag(more-pp)
-    Build-depends:      bytestring              >= 0.9,
-                        blaze-html              >= 0.5,
-                        blaze-markup            >= 0.5,
-                        directory               >= 1.0,
-                        filepath                >= 1.0,
-                        mtl                     >= 2.0,
-                        text                    >= 0.10,
-                        unix                    >= 2.4
+  Build-depends:
+          base                          >= 4.7
+        , array                         >= 0.3
+        , base-orphans                  >= 0.3
+        , containers                    >= 0.3
+        , directory                     >= 1.0
+        , exceptions                    >= 0.6
+        , fclabels                      >= 2.0
+        , filepath                      >= 1.0
+        , ghc-prim
+        , hashable                      >= 1.1
+        , hashtables                    >= 1.0
+        , mtl                           >= 2.0
+        , pretty                        >= 1.0
+        , template-haskell
+        , transformers                  >= 0.3
+        , unique
+        , unordered-containers          >= 0.2
 
   Exposed-modules:
                         -- The core language and reference implementation
@@ -208,10 +199,12 @@ Library
                         Data.Array.Accelerate.Array.Data
                         Data.Array.Accelerate.Array.Lifted
                         Data.Array.Accelerate.Array.Memory
-                        Data.Array.Accelerate.Array.Memory.Table
                         Data.Array.Accelerate.Array.Memory.Cache
+                        Data.Array.Accelerate.Array.Memory.Table
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
+                        Data.Array.Accelerate.Array.Unique
+                        Data.Array.Accelerate.Async
                         Data.Array.Accelerate.Debug
                         Data.Array.Accelerate.Error
                         Data.Array.Accelerate.FullList
@@ -228,8 +221,10 @@ Library
                         Data.Array.Accelerate.Debug.Trace
                         Data.Array.Accelerate.Language
                         Data.Array.Accelerate.Prelude
+                        Data.Array.Accelerate.Pretty.Graphviz
+                        Data.Array.Accelerate.Pretty.Graphviz.Monad
+                        Data.Array.Accelerate.Pretty.Graphviz.Type
                         Data.Array.Accelerate.Pretty.Print
-                        Data.Array.Accelerate.Pretty.Traverse
                         Data.Array.Accelerate.Trafo.Algebra
                         Data.Array.Accelerate.Trafo.Base
                         Data.Array.Accelerate.Trafo.Fusion
@@ -240,10 +235,6 @@ Library
                         Data.Array.Accelerate.Trafo.Simplify
                         Data.Array.Accelerate.Trafo.Substitution
                         Data.Array.Accelerate.Trafo.Vectorise
-
-  if flag(more-pp)
-    Other-modules:      Data.Array.Accelerate.Pretty.HTML
-                        Data.Array.Accelerate.Pretty.Graphviz
 
   if flag(debug)
     cpp-options:        -DACCELERATE_DEBUG
@@ -257,11 +248,18 @@ Library
   if flag(internal-checks)
     cpp-options:        -DACCELERATE_INTERNAL_CHECKS
 
+  if os(windows)
+    cpp-options:        -DWIN32
+    build-depends:      Win32
+  else
+    cpp-options:        -DUNIX
+    build-depends:      unix
+
   ghc-options:          -O2 -Wall -funbox-strict-fields -fno-warn-name-shadowing
   ghc-prof-options:     -caf-all -auto-all
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25
+    ghc-options:        -fspec-constr-count=25 -fcontext-stack=30
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
@@ -269,7 +267,8 @@ Library
   --
   -- Extensions:
 
-Source-repository head
+source-repository head
   Type:                 git
   Location:             git://github.com/AccelerateHS/accelerate.git
 
+-- vim: nospell

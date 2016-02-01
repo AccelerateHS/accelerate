@@ -63,55 +63,116 @@ instance IsProduct cst () where
 
 instance (cst a, cst b) => IsProduct cst (a, b) where
   type ProdRepr (a, b)   = (((), a), b)
-  fromProd _ (x, y)      = (((), x), y)
-  toProd _ (((), x), y)  = (x, y)
+  fromProd _ (a, b)      = (((), a), b)
+  toProd _ (((), a), b)  = (a, b)
   prod _ _               = ProdRsnoc $ ProdRsnoc ProdRunit
 
 instance (cst a, cst b, cst c) => IsProduct cst (a, b, c) where
   type ProdRepr (a, b, c)    = (ProdRepr (a, b), c)
-  fromProd _ (x, y, z)       = ((((), x), y), z)
-  toProd _ ((((), x), y), z) = (x, y, z)
+  fromProd _ (a, b, c)       = ((((), a), b), c)
+  toProd _ ((((), a), b), c) = (a, b, c)
   prod p _                   = ProdRsnoc (prod p (undefined :: (a,b)))
 
 instance (cst a, cst b, cst c, cst d) => IsProduct cst (a, b, c, d) where
   type ProdRepr (a, b, c, d)      = (ProdRepr (a, b, c), d)
-  fromProd _ (x, y, z, v)         = (((((), x), y), z), v)
-  toProd _ (((((), x), y), z), v) = (x, y, z, v)
+  fromProd _ (a, b, c, d)         = (((((), a), b), c), d)
+  toProd _ (((((), a), b), c), d) = (a, b, c, d)
   prod p _                        = ProdRsnoc (prod p (undefined :: (a,b,c)))
 
 instance (cst a, cst b, cst c, cst d, cst e) => IsProduct cst (a, b, c, d, e) where
   type ProdRepr (a, b, c, d, e)        = (ProdRepr (a, b, c, d), e)
-  fromProd _ (x, y, z, v, w)           = ((((((), x), y), z), v), w)
-  toProd _ ((((((), x), y), z), v), w) = (x, y, z, v, w)
+  fromProd _ (a, b, c, d, e)           = ((((((), a), b), c), d), e)
+  toProd _ ((((((), a), b), c), d), e) = (a, b, c, d, e)
   prod p _                             = ProdRsnoc (prod p (undefined :: (a,b,c,d)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f) => IsProduct cst (a, b, c, d, e, f) where
   type ProdRepr (a, b, c, d, e, f)          = (ProdRepr (a, b, c, d, e), f)
-  fromProd _ (x, y, z, v, w, r)             = (((((((), x), y), z), v), w), r)
-  toProd _ (((((((), x), y), z), v), w), r) = (x, y, z, v, w, r)
+  fromProd _ (a, b, c, d, e, f)             = (((((((), a), b), c), d), e), f)
+  toProd _ (((((((), a), b), c), d), e), f) = (a, b, c, d, e, f)
   prod p _                                  = ProdRsnoc (prod p (undefined :: (a,b,c,d,e)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g)
   => IsProduct cst (a, b, c, d, e, f, g) where
   type ProdRepr (a, b, c, d, e, f, g)            = (ProdRepr (a, b, c, d, e, f), g)
-  fromProd _ (x, y, z, v, w, r, s)               = ((((((((), x), y), z), v), w), r), s)
-  toProd _ ((((((((), x), y), z), v), w), r), s) = (x, y, z, v, w, r, s)
+  fromProd _ (a, b, c, d, e, f, g)               = ((((((((), a), b), c), d), e), f), g)
+  toProd _ ((((((((), a), b), c), d), e), f), g) = (a, b, c, d, e, f, g)
   prod p _                                       = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h)
   => IsProduct cst (a, b, c, d, e, f, g, h) where
   type ProdRepr (a, b, c, d, e, f, g, h)              = (ProdRepr (a, b, c, d, e, f, g), h)
-  fromProd _ (x, y, z, v, w, r, s, t)                 = (((((((((), x), y), z), v), w), r), s), t)
-  toProd _ (((((((((), x), y), z), v), w), r), s), t) = (x, y, z, v, w, r, s, t)
+  fromProd _ (a, b, c, d, e, f, g, h)                 = (((((((((), a), b), c), d), e), f), g), h)
+  toProd _ (((((((((), a), b), c), d), e), f), g), h) = (a, b, c, d, e, f, g, h)
   prod p _                                            = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g)))
 
 instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i)
   => IsProduct cst (a, b, c, d, e, f, g, h, i) where
   type ProdRepr (a, b, c, d, e, f, g, h, i) = (ProdRepr (a, b, c, d, e, f, g, h), i)
-  fromProd _ (x, y, z, v, w, r, s, t, u)
-    = ((((((((((), x), y), z), v), w), r), s), t), u)
-  toProd _ ((((((((((), x), y), z), v), w), r), s), t), u)
-    = (x, y, z, v, w, r, s, t, u)
+  fromProd _ (a, b, c, d, e, f, g, h, i)
+    = ((((((((((), a), b), c), d), e), f), g), h), i)
+  toProd _ ((((((((((), a), b), c), d), e), f), g), h), i)
+    = (a, b, c, d, e, f, g, h, i)
   prod p _
     = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j) = (ProdRepr (a, b, c, d, e, f, g, h, i), j)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j)
+    = (((((((((((), a), b), c), d), e), f), g), h), i), j)
+  toProd _ (((((((((((), a), b), c), d), e), f), g), h), i), j)
+    = (a, b, c, d, e, f, g, h, i, j)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k) = (ProdRepr (a, b, c, d, e, f, g, h, i, j), k)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k)
+    = ((((((((((((), a), b), c), d), e), f), g), h), i), j), k)
+  toProd _ ((((((((((((), a), b), c), d), e), f), g), h), i), j), k)
+    = (a, b, c, d, e, f, g, h, i, j, k)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k), l)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k, l)
+    = (((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l)
+  toProd _ (((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l)
+    = (a, b, c, d, e, f, g, h, i, j, k, l)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l), m)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k, l, m)
+    = ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m)
+  toProd _ ((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m)
+    = (a, b, c, d, e, f, g, h, i, j, k, l, m)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l)))
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m), n)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+    = (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n)
+  toProd _ (((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n)
+    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m)))
+
+
+instance (cst a, cst b, cst c, cst d, cst e, cst f, cst g, cst h, cst i, cst j, cst k, cst l, cst m, cst n, cst o)
+  => IsProduct cst (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
+  type ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (ProdRepr (a, b, c, d, e, f, g, h, i, j, k, l, m, n), o)
+  fromProd _ (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+    = ((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o)
+  toProd _ ((((((((((((((((), a), b), c), d), e), f), g), h), i), j), k), l), m), n), o)
+    = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+  prod p _
+    = ProdRsnoc (prod p (undefined :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n)))
 

@@ -2,6 +2,11 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeOperators            #-}
+#ifndef ACCELERATE_DEBUG
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Debug.Flags
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -20,8 +25,8 @@ module Data.Array.Accelerate.Debug.Flags (
   Flags, Mode,
   acc_sharing, exp_sharing, fusion, simplify, flush_cache, fast_math, verbose,
   dump_sharing, dump_simpl_stats, dump_simpl_iterations, dump_vectorisation,
-  dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm, dump_exec, dump_sched,
-  chunk_size,
+  dump_dot, dump_simpl_dot, dump_gc, dump_gc_stats, debug_cc, dump_cc, dump_asm,
+  dump_exec, dump_sched,
 
   accInit,
   queryFlag, setFlag, setFlags, clearFlag, clearFlags,
@@ -80,6 +85,8 @@ fclabels [d|
     , dump_simpl_stats          :: !Bool                -- statistics form fusion/simplification
     , dump_simpl_iterations     :: !Bool                -- output from each simplifier iteration
     , dump_vectorisation        :: !Bool                -- output from the vectoriser
+    , dump_dot                  :: !Bool                -- generate dot output of the program
+    , dump_simpl_dot            :: !Bool                -- generate simplified dot output
 
       -- garbage collection
     , dump_gc                   :: !Bool                -- dump GC trace
@@ -93,8 +100,6 @@ fclabels [d|
       -- execution
     , dump_exec                 :: !Bool                -- dump execution trace
     , dump_sched                :: !Bool                -- dump scheduler trace
-      
-    , chunk_size                :: !(Maybe Int)         -- override the chunk size for sequences
     }
  |]
 
@@ -132,6 +137,8 @@ dflags =
   , Option "dump-simpl-stats"           (set dump_simpl_stats)
   , Option "dump-simpl-iterations"      (set dump_simpl_iterations)
   , Option "dump-vectorisation"         (set dump_vectorisation)
+  , Option "dump-dot"                   (set dump_dot)
+  , Option "dump-simpl-dot"             (set dump_simpl_dot)
   , Option "dump-gc"                    (set dump_gc)
   , Option "dump-gc-stats"              (set dump_gc_stats)
   , Option "debug-cc"                   (set debug_cc)
@@ -183,16 +190,9 @@ initialiseFlags = do
   env   <- maybe [] words `fmap` lookupEnv "ACCELERATE_FLAGS"
   return $ parse (env ++ argv)
   where
-    defaults            = Flags def def def def def def def def def def def def def def def def def def def
+    defaults            = Flags def def def def def def def def def def def def def def def def def def def def
 
     parse               = foldl parse1 defaults
-    parse1 opts this 
-      | "-chunk-size=" `isPrefixOf` this
-      = let arg = tail $ dropWhile (/='=') this 
-            r = reads arg
-        in case r of
-             [(n, "")] | n > 0 -> set chunk_size (Just n) opts
-             _ -> trace ("Illegal argument to chunk-size: " ++ show arg ++ ". Expected positive integer.") opts
     parse1 opts this    =
       case filter (\(Option flag _) -> this `isPrefixOf` flag) allFlags of
         [Option _ go]   -> go opts
@@ -216,7 +216,6 @@ initialiseFlags = do
 --
 getUpdateArgs :: IO [String]
 getUpdateArgs = do
-  prog <- getProgName
   argv <- getArgs
   --
   let (before, r1)      = span (/= "+ACC") argv
@@ -224,6 +223,7 @@ getUpdateArgs = do
       after             = dropWhile (== "-ACC") r2
   --
 #ifdef ACCELERATE_DEBUG
+  prog <- getProgName
   setProgArgv (prog : before ++ after)
 #else
   M.unless (null flags)
@@ -295,4 +295,3 @@ setProgArgv argv = do
 foreign import ccall unsafe "setProgArgv"
   c_setProgArgv  :: CInt -> Ptr CString -> IO ()
 #endif
-

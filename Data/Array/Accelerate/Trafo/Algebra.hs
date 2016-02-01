@@ -122,6 +122,9 @@ evalPrimApp env f x
       PrimAsin ty               -> evalAsin ty x env
       PrimAcos ty               -> evalAcos ty x env
       PrimAtan ty               -> evalAtan ty x env
+      PrimSinh ty               -> evalSinh ty x env
+      PrimCosh ty               -> evalCosh ty x env
+      PrimTanh ty               -> evalTanh ty x env
       PrimAsinh ty              -> evalAsinh ty x env
       PrimAcosh ty              -> evalAcosh ty x env
       PrimAtanh ty              -> evalAtanh ty x env
@@ -341,8 +344,9 @@ evalMul' arg env
   = eval2 (*) arg env
 
 evalNeg :: Elt a => NumType a -> a :-> a
-evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 negate
-evalNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = eval1 negate
+evalNeg _                    x _   | PrimApp PrimNeg{} x' <- x       = Stats.ruleFired "negate/negate" $ Just x'
+evalNeg (IntegralNumType ty) x env | IntegralDict <- integralDict ty = eval1 negate x env
+evalNeg (FloatingNumType ty) x env | FloatingDict <- floatingDict ty = eval1 negate x env
 
 evalAbs :: Elt a => NumType a -> a :-> a
 evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = eval1 abs
@@ -481,6 +485,15 @@ evalAcos ty | FloatingDict <- floatingDict ty = eval1 acos
 evalAtan :: Elt a => FloatingType a -> a :-> a
 evalAtan ty | FloatingDict <- floatingDict ty = eval1 atan
 
+evalSinh :: Elt a => FloatingType a -> a :-> a
+evalSinh ty | FloatingDict <- floatingDict ty = eval1 sinh
+
+evalCosh :: Elt a => FloatingType a -> a :-> a
+evalCosh ty | FloatingDict <- floatingDict ty = eval1 cosh
+
+evalTanh :: Elt a => FloatingType a -> a :-> a
+evalTanh ty | FloatingDict <- floatingDict ty = eval1 tanh
+
 evalAsinh :: Elt a => FloatingType a -> a :-> a
 evalAsinh ty | FloatingDict <- floatingDict ty = eval1 asinh
 
@@ -598,7 +611,8 @@ evalLOr _ _
   = Nothing
 
 evalLNot :: Bool :-> Bool
-evalLNot = eval1 not
+evalLNot x _   | PrimApp PrimLNot x' <- x = Stats.ruleFired "not/not" $ Just x'
+evalLNot x env                            = eval1 not x env
 
 evalOrd :: Char :-> Int
 evalOrd = eval1 ord

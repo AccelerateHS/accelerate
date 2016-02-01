@@ -32,6 +32,7 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
   DelayedSeq, DelayedOpenSeq, StreamSeq(..),
+  prettyDelayedSeq,
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -41,26 +42,23 @@ module Data.Array.Accelerate.Trafo.Base (
 
   subApply, inlineA,
 
-  -- Miscellaneous
-  prettyDelayedSeq
-
 ) where
 
 -- standard library
-import Prelude                                          hiding ( until )
 import Control.Applicative
 import Data.Hashable
 import Text.PrettyPrint
+import Prelude                                          hiding ( until )
 
 -- friends
-import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.AST                        hiding ( Val(..) )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays, Shape, Elt )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pretty.Print
 import Data.Array.Accelerate.Trafo.Substitution
 
-import Data.Array.Accelerate.Debug                      as Stats
+import Data.Array.Accelerate.Debug.Stats                as Stats
 
 
 -- Toolkit
@@ -161,18 +159,19 @@ instance Rebuildable DelayedOpenAcc where
 instance Sink DelayedOpenAcc where
 
 instance Kit DelayedOpenAcc where
-  inject        = Manifest
-  extract       = error "DelayedAcc.extract"
-  fromOpenAcc   = error "DelayedAcc.fromOpenAcc"
+  inject                  = Manifest
+  extract (Manifest pacc) = pacc
+  extract Delayed{}       = error "DelayedAcc.extract"
+  fromOpenAcc             = error "DelayedAcc.fromOpenAcc"
   --
-  matchAcc      = matchDelayed
-  hashAcc       = hashDelayed
-  prettyAcc     = prettyDelayed
+  matchAcc                = matchDelayed
+  hashAcc                 = hashDelayed
+  prettyAcc               = prettyDelayed
 
 
 hashDelayed :: HashAcc DelayedOpenAcc
-hashDelayed (Manifest pacc)     = hash "Manifest"       `hashWithSalt` hashPreOpenAcc hashAcc pacc
-hashDelayed Delayed{..}         = hash "Delayed"        `hashE` extentD `hashF` indexD `hashF` linearIndexD
+hashDelayed (Manifest pacc)     = hash "Manifest" `hashWithSalt` hashPreOpenAcc hashAcc pacc
+hashDelayed Delayed{..}         = hash "Delayed"  `hashE` extentD `hashF` indexD `hashF` linearIndexD
   where
     hashE salt = hashWithSalt salt . hashPreOpenExp hashAcc
     hashF salt = hashWithSalt salt . hashPreOpenFun hashAcc
@@ -201,34 +200,41 @@ matchDelayed _ _
 -- > let a0 = <...> in map f a0
 --
 prettyDelayed :: PrettyAcc DelayedOpenAcc
-prettyDelayed alvl wrap acc = case acc of
-  Manifest pacc         -> prettyPreAcc prettyDelayed alvl wrap pacc
+prettyDelayed wrap aenv acc = case acc of
+  Manifest pacc         -> prettyPreOpenAcc prettyDelayed wrap aenv pacc
   Delayed sh f _
     | Shape a           <- sh
     , Just REFL         <- match f (Lam (Body (Index a (Var ZeroIdx))))
-    -> prettyDelayed alvl wrap a
+    -> prettyDelayed wrap aenv a
 
     | otherwise
     -> wrap $ hang (text "Delayed") 2
-            $ sep [ prettyPreExp prettyDelayed 0 alvl parens sh
-                  , parens (prettyPreFun prettyDelayed alvl f)
+            $ sep [ prettyPreExp prettyDelayed parens aenv sh
+                  , parens (prettyPreFun prettyDelayed aenv f)
                   ]
 
+
+-- Pretty print delayed sequences
+--
+-- TLM: What is going on with this sequence thing, why is it closed?
+-- RCE: Not all sequence computations are embedded in array computations. For
+-- example, if you want to stream the whole sequence out.
+--
 prettyDelayedSeq
     :: forall index arrs.
        (Doc -> Doc)                             -- apply to compound expressions
     -> DelayedSeq index arrs
     -> Doc
 prettyDelayedSeq wrap (StreamSeq env s)
-  | (d, lvl) <- pp env 0
-  =  wrap $  (hang (text "let") 2 $ vcat $ d)
-          $$ (hang (text "in sequence")  2 $ vcat $ punctuate (text ";") $ prettySeq prettyAcc lvl wrap s)
+  | (d, aenv) <- pp env
+  =  wrap $   (hang (text "let") 2 $ sep $ punctuate semi d)
+          <+> (hang (text "in")  2 $ sep $ punctuate semi
+                                         $ prettySeq prettyAcc wrap aenv s)
   where
-    pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
-    pp BaseEnv          lvl = ([],lvl)
-    pp (PushEnv env' a) lvl | (d', lvl') <- pp env' (lvl + 1)
-                            = let x = char 'a' <> int lvl
-                              in (x <+> equals <+> prettyAcc lvl wrap a : d', lvl')
+    pp :: Extend DelayedOpenAcc () aenv' -> ([Doc], Val aenv')
+    pp BaseEnv          = ([],Empty)
+    pp (PushEnv env' a) | (d', aenv) <- pp env'
+                        = (prettyAcc wrap aenv a : d', Push aenv (char 'a' <> int (sizeEnv aenv)))
 
 -- Environments
 -- ============
@@ -339,6 +345,7 @@ bindExps BaseSup       = id
 bindExps (PushSup g b) = bindExps g . Let b
 
 -- Application via let binding.
+--
 subApply :: (RebuildableAcc acc, Arrays a)
          => PreOpenAfun acc aenv (a -> b)
          -> acc             aenv a
@@ -346,8 +353,8 @@ subApply :: (RebuildableAcc acc, Arrays a)
 subApply (Alam (Abody f)) a = Alet a f
 subApply _                _ = error "subApply: inconsistent evaluation"
 
--- | Replace all occurences of the first variable with the given array expression. The environment
--- shrinks.
+-- | Replace all occurrences of the first variable with the given array
+-- expression. The environment shrinks.
 --
 inlineA :: Rebuildable f => f (aenv,s) t -> PreOpenAcc (AccClo f) aenv s -> f aenv t
 inlineA f g = Stats.substitution "inlineA" $ rebuildA (subAtop g) f

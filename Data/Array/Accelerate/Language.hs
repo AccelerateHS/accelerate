@@ -2,8 +2,8 @@
 {-# LANGUAGE OverlappingInstances #-}   -- TLM: required by client code
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
-{-# OPTIONS -fno-warn-missing-methods #-}
-{-# OPTIONS -fno-warn-orphans         #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_GHC -fno-warn-orphans         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -665,12 +665,12 @@ awhile = Acc $$$ Awhile
 
 -- | Get the outermost dimension of a shape
 --
-indexHead :: Slice sh => Exp (sh :. Int) -> Exp Int
+indexHead :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp a
 indexHead = Exp . IndexHead
 
 -- | Get all but the outermost element of a shape
 --
-indexTail :: Slice sh => Exp (sh :. Int) -> Exp sh
+indexTail :: (Slice sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail = Exp . IndexTail
 
 -- | Transpose a shape.
@@ -922,6 +922,9 @@ instance (Elt t, IsFloating t) => Floating (Exp t) where
   asin    = mkAsin
   acos    = mkAcos
   atan    = mkAtan
+  sinh    = mkSinh
+  cosh    = mkCosh
+  tanh    = mkTanh
   asinh   = mkAsinh
   acosh   = mkAcosh
   atanh   = mkAtanh

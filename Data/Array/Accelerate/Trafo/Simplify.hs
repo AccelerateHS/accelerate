@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns         #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
@@ -7,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ViewPatterns         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Simplify
 -- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -24,12 +24,13 @@ module Data.Array.Accelerate.Trafo.Simplify (
 ) where
 
 -- standard library
-import Prelude                                          hiding ( exp, iterate )
 import Data.List                                        ( nubBy )
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
+import Text.Printf
 import Control.Applicative                              hiding ( Const )
+import Prelude                                          hiding ( exp, iterate )
 
 -- friends
 import Data.Array.Accelerate.AST                        hiding ( prj )
@@ -43,7 +44,6 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList, transpose )
-import Data.Array.Accelerate.Pretty.Print
 import qualified Data.Array.Accelerate.Debug            as Stats
 
 
@@ -53,7 +53,7 @@ class Simplify f where
 instance Kit acc => Simplify (PreFun acc aenv f) where
   simplify = simplifyFun
 
-instance Kit acc => Simplify (PreExp acc aenv e) where
+instance (Kit acc, Elt e) => Simplify (PreExp acc aenv e) where
   simplify = simplifyExp
 
 
@@ -88,6 +88,20 @@ localCSE :: (Kit acc, Elt a, Elt b)
          -> Maybe (PreOpenExp acc env aenv b)
 localCSE env bnd body
   | Just ix <- lookupExp env bnd = Stats.ruleFired "CSE" . Just $ inline body (Var ix)
+  | otherwise                    = Nothing
+
+-- Common subexpression elimination, which attempts to match the given
+-- expression against something already bound in the environment. This can occur
+-- due to simplification, in which case we replace the entire subterm with x.
+--
+-- > let x = e in .. e ..
+--
+globalCSE :: (Kit acc, Elt t)
+          => Gamma      acc env env aenv
+          -> PreOpenExp acc env     aenv t
+          -> Maybe (PreOpenExp acc env aenv t)
+globalCSE env exp
+  | Just ix <- lookupExp env exp = Stats.ruleFired "CSE" . Just $ Var ix
   | otherwise                    = Nothing
 
 
@@ -182,20 +196,15 @@ recoverLoops _ bnd e3
 --       introduced by the fusion transformation. This would benefit from a
 --       rewrite rule schema.
 --
--- TODO: Our implementation of CSE doesn't catch the following, where an
---       expression in the body is equivalent to an existing binding (presumably
---       through simplifications):
---
---       > let x = e in .. e ..
---
 simplifyOpenExp
-    :: forall acc env aenv e. Kit acc
+    :: forall acc env aenv e. (Kit acc, Elt e)
     => Gamma acc env env aenv
     -> PreOpenExp acc env aenv e
     -> (Bool, PreOpenExp acc env aenv e)
 simplifyOpenExp env = first getAny . cvtE
   where
-    cvtE :: PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
         | Just reduct <- localCSE     env (snd bnd') (snd body') -> yes . snd $ cvtE reduct
@@ -209,7 +218,7 @@ simplifyOpenExp env = first getAny . cvtE
       Var ix                    -> pure $ Var ix
       Const c                   -> pure $ Const c
       Tuple tup                 -> Tuple <$> cvtT tup
-      Prj ix t                  -> prj ix (cvtE t)
+      Prj ix t                  -> prj env ix (cvtE t)
       IndexNil                  -> pure IndexNil
       IndexAny                  -> pure IndexAny
       IndexCons sh sz           -> indexCons (cvtE sh) (cvtE sz)
@@ -237,7 +246,7 @@ simplifyOpenExp env = first getAny . cvtE
     cvtT NilTup        = pure NilTup
     cvtT (SnocTup t e) = SnocTup <$> cvtT t <*> cvtE e
 
-    cvtE' :: Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
+    cvtE' :: Elt e' => Gamma acc env' env' aenv -> PreOpenExp acc env' aenv e' -> (Any, PreOpenExp acc env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
 
     cvtF :: Gamma acc env' env' aenv -> PreOpenFun acc env' aenv f -> (Any, PreOpenFun acc env' aenv f)
@@ -303,24 +312,49 @@ simplifyOpenExp env = first getAny . cvtE
     -- If we are projecting elements from a tuple structure or tuple of constant
     -- valued tuple, pick out the appropriate component directly.
     --
-    prj :: forall s t. (Elt s, Elt t, IsTuple t)
-        => TupleIdx (TupleRepr t) s
-        -> (Any, PreOpenExp acc env aenv t)
-        -> (Any, PreOpenExp acc env aenv s)
-    prj ix exp@(_,exp')
-      | Tuple t <- exp' = Stats.inline "prj/Tuple" . yes $ prjT ix t
-      | Const c <- exp' = Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
-      | Let a b <- exp' = Stats.ruleFired "prj/Let"      $ cvtE (Let a (Prj ix b))
-      | otherwise       = Prj ix <$> exp
+    -- Follow variable bindings, but only if they result in a simplification.
+    --
+    prj :: forall env' s t. (Elt s, Elt t, IsTuple t)
+        => Gamma acc env' env' aenv
+        -> TupleIdx (TupleRepr t) s
+        -> (Any, PreOpenExp acc env' aenv t)
+        -> (Any, PreOpenExp acc env' aenv s)
+    prj env' ix top@(_,e) = case e of
+      Tuple t                      -> Stats.inline "prj/Tuple" . yes $ prjT ix t
+      Const c                      -> Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
+      Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"   . yes $ x
+      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
+      _                            -> Prj ix <$> top
       where
-        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env aenv) tup -> PreOpenExp acc env aenv s
-        prjT ZeroTupIdx       (SnocTup _ e) = e
+        prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s
+        prjT ZeroTupIdx       (SnocTup _ v) = v
         prjT (SuccTupIdx idx) (SnocTup t _) = prjT idx t
         prjT _                _             = error "DO MORE OF WHAT MAKES YOU HAPPY"
 
-        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env aenv s
+        prjC :: TupleIdx tup s -> tup -> PreOpenExp acc env' aenv s
         prjC ZeroTupIdx       (_,   v) = Const (fromElt v)
         prjC (SuccTupIdx idx) (tup, _) = prjC idx tup
+
+        prjV :: Idx env' t -> Maybe (PreOpenExp acc env' aenv s)
+        prjV var
+          | e'      <- prjExp var env'
+          , Nothing <- match e e'
+          = case e' of
+              -- Don't push through nested let-bindings; this leads to code explosion
+              Let _ _                                    -> Nothing
+              _ | (Any True, x) <- prj env' ix (pure e') -> Just x
+              _                                          -> Nothing
+          | otherwise
+          = Nothing
+
+        prjL :: Elt a
+             => PreOpenExp acc env'     aenv a
+             -> PreOpenExp acc (env',a) aenv t
+             -> Maybe (PreOpenExp acc env' aenv s)
+        prjL a b
+          | (Any True, c) <- prj (incExp $ PushExp env' a) ix (pure b) = Just (Let a c)
+        prjL _ _                                                       = Nothing
+
 
     -- Shape manipulations
     --
@@ -392,14 +426,16 @@ simplifyOpenFun env (Lam f)  = Lam  <$> simplifyOpenFun env' f
     env' = incExp env `PushExp` Var ZeroIdx
 
 
--- Simplify closed expressions and functions. The process is applied repeatedly
--- until no more changes are made.
+-- Simplify closed expressions and functions. The process is applied
+-- repeatedly until no more changes are made.
 --
-simplifyExp :: Kit acc => PreExp acc aenv t -> PreExp acc aenv t
-simplifyExp = iterate (show . prettyPreExp prettyAcc 0 0 noParens) (simplifyOpenExp EmptyExp)
+simplifyExp :: (Elt t, Kit acc) => PreExp acc aenv t -> PreExp acc aenv t
+simplifyExp = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenExp EmptyExp)
+-- simplifyExp = iterate (show . prettyPreOpenExp prettyAcc noParens PP.Empty PP.Empty) (simplifyOpenExp EmptyExp)
 
 simplifyFun :: Kit acc => PreFun acc aenv f -> PreFun acc aenv f
-simplifyFun = iterate (show . prettyPreFun prettyAcc 0) (simplifyOpenFun EmptyExp)
+simplifyFun = iterate (\_ -> "<dump-simpl-iters>") (simplifyOpenFun EmptyExp)
+-- simplifyFun = iterate (show . prettyPreOpenFun prettyAcc PP.Empty) (simplifyOpenFun EmptyExp)
 
 
 -- NOTE: [Simplifier iterations]
@@ -428,33 +464,34 @@ iterate
     -> (f a -> (Bool, f a))
     -> f a
     -> f a
-iterate ppr f = fix 0 . setup . simplify'
+iterate ppr f = fix 1 . setup
   where
     -- The maximum number of simplifier iterations. To be conservative and avoid
     -- excessive run times, we set this value very low.
     --
-    lIMIT       = 1
+    lIMIT       = 5
 
     simplify'   = Stats.simplifierDone . f
-    setup (_,x) = msg x x
+    setup x     = Stats.trace Stats.dump_simpl_iterations (printf "simplifier begin:\n%s\n" (ppr x))
+                $ snd (trace 0 "simplify" (simplify' x))
 
     fix :: Int -> f a -> f a
-    fix !i !x0
-      | i >= lIMIT      = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
+    fix i x0
+      | i > lIMIT       = $internalWarning "iterate" "iteration limit reached" (x0 ==^ f x0) x0
       | not shrunk      = x1
       | not simplified  = x2
       | otherwise       = fix (i+1) x2
       where
-        (shrunk,     x1) = trace $ shrink' x0
-        (simplified, x2) = trace $ simplify' x1
+        (shrunk,     x1) = trace i "shrink"   $ shrink' x0
+        (simplified, x2) = trace i "simplify" $ simplify' x1
 
     -- debugging support
     --
     u ==^ (_,v)         = isJust (match u v)
 
-    trace v@(changed,x)
-      | changed         = msg x v
+    trace i s v@(changed,x)
+      | changed         = Stats.trace Stats.dump_simpl_iterations (msg i s x) v
       | otherwise       = v
 
-    msg :: f a -> x -> x
-    msg x next          = Stats.trace Stats.dump_simpl_iterations (unlines [ "simplifier done", ppr x ]) next
+    msg :: Int -> String -> f a -> String
+    msg i s x = printf "%s [%d/%d]:\n%s\n" s i lIMIT (ppr x)

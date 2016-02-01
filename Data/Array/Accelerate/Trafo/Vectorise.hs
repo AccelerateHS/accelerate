@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Vectorise
--- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everes
+-- Copyright   : [2012..2013] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell, Robert Clifton-Everest
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
@@ -48,7 +48,7 @@ module Data.Array.Accelerate.Trafo.Vectorise (
 import Prelude                                          hiding ( exp, replicate, concat )
 import qualified Prelude                                as P
 import Data.Typeable
-import Control.Applicative                              hiding ( Const )
+import Control.Applicative                              hiding ( Const, empty )
 import Data.Maybe
 
 -- friends
@@ -396,9 +396,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
         in case (avoidF f) of
              Avoided (b, Lam (Body e')) | avoidLifting
                                         -> (l, Just $ AvoidedFun b (Lam (Body e')))
-             _                          -> trace "liftPreOpenAcc" ("Function had to be lifted: \n" ++ show f)
+             _                          -> trace "liftPreOpenAcc" "Function had to be lifted"
                                         $  (l, Nothing)
-    cvtF1 f              = $internalError "cvtF1" ("Inconsistent valuation" ++ show f)
+    cvtF1 _              = $internalError "cvtF1" "Inconsistent valuation"
 
     cvtF2 :: forall a b c. (Elt a, Elt b, Elt c)
           => PreFun  acc  aenv  (a -> b -> c)
@@ -412,7 +412,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
         in case (avoidF f) of
              Avoided (b, Lam (Lam (Body e'))) | avoidLifting
                                               -> (l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
-             _                                -> trace "liftPreOpenAcc" ("Function had to be lifted: \n" ++ show f)
+             _                                -> trace "liftPreOpenAcc" "Function had to be lifted"
                                               $  (l, Nothing)
     cvtF2 _              = $internalError "cvtF2" "Inconsistent valuation"
 
@@ -1606,9 +1606,9 @@ data Avoid f acc env aenv e where
   Avoided :: (Extend acc aenv aenv', f acc env aenv' e) -> Avoid f acc env aenv e
   Unavoided :: Avoid f acc env aenv e
 
-instance Kit acc => Show (Avoid PreOpenFun acc env aenv e) where
-  show (Avoided (_,e)) = "lets ...\n" ++ show e
-  show Unavoided       = "Unavoided"
+-- instance Kit acc => Show (Avoid PreOpenFun acc env aenv e) where
+--   show (Avoided (_,e)) = "lets ...\n" ++ show e
+--   show Unavoided       = "Unavoided"
 
 type AvoidExp = Avoid PreOpenExp
 type AvoidFun = Avoid PreOpenFun
@@ -3149,7 +3149,7 @@ reduceOpenSeq seq =
               => Exp aenv sh
               -> Array sh e
               -> Producer index OpenAcc aenv (Array sh e)
-    subarrays sh arr = ProduceAccum (Just (totalSize `div` subSize)) f (OpenAcc (Unit (Const (fromElt (emptyS :: sh)))))
+    subarrays sh arr = ProduceAccum (Just (totalSize `div` subSize)) f (OpenAcc (Unit (Const (fromElt (empty :: sh)))))
       where
         f = Alam . Alam . Abody
           $ atup (OpenAcc (Subarray (the avar0) (weakenA2 sh) arr)) (OpenAcc (Unit (the avar0 `plusS` (weakenA2 sh))))

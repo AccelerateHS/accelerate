@@ -37,15 +37,13 @@ module Data.Array.Accelerate.Trafo.Substitution (
 
 ) where
 
-import Prelude                                  hiding ( exp, seq )
+import Control.Applicative                              hiding ( Const )
+import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Array.Sugar        ( Elt, Arrays, Tuple(..), Atuple(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt, Arrays, Tuple(..), Atuple(..) )
+import qualified Data.Array.Accelerate.Debug.Stats      as Stats
 
-import qualified Data.Array.Accelerate.Debug    as Stats
-
-import Control.Applicative                      hiding ( Const )
-import Data.Traversable
 
 -- NOTE: [Renaming and Substitution]
 --

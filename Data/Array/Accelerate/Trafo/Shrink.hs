@@ -43,6 +43,11 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
 ) where
 
+-- standard library
+import Data.Monoid
+import Control.Applicative                              hiding ( Const )
+import Prelude                                          hiding ( exp, seq )
+
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Sugar               hiding ( Any )
@@ -50,11 +55,6 @@ import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
 
 import qualified Data.Array.Accelerate.Debug            as Stats
-
--- standard library
-import Prelude                                          hiding ( exp, seq )
-import Data.Monoid
-import Control.Applicative                              hiding ( Const )
 
 
 class Shrink f where

@@ -1,14 +1,15 @@
 An Embedded Language for Accelerated Array Computations
 =======================================================
 
-[![Build Status](https://travis-ci.org/tmcdonell/accelerate.svg?branch=master)](https://travis-ci.org/tmcdonell/accelerate)
+[![Build Status](https://travis-ci.org/AccelerateHS/accelerate.svg?branch=master)](https://travis-ci.org/AccelerateHS/accelerate)
 
 `Data.Array.Accelerate` defines an embedded language of array computations for high-performance computing in Haskell. Computations on multi-dimensional, regular arrays are expressed in the form of parameterised collective operations (such as maps, reductions, and permutations). These computations are online-compiled and executed on a range of architectures.
 
 For more details, see our papers:
  * [Accelerating Haskell Array Codes with Multicore GPUs][CKLM+11]
- * [Optimising Purely Functional GPU Programs][MCKL13]
+ * [Optimising Purely Functional GPU Programs][MCKL13] ([slides][MCKL13-slides])
  * [Embedding Foreign Code][CMCK14]
+ * [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15] ([slides][MCGN15-slides]) ([video][MCGN15-video])
 
 There are also slides from some fairly recent presentations:
  * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
@@ -147,6 +148,10 @@ required) to cite the following papers ([BibTeX](http://www.cse.unsw.edu.au/~tmc
     [Embedding Foreign Code][CMCK14].
     In _PADL '14: The 16th International Symposium on Practical Aspects of Declarative Languages_, Springer-Verlag, LNCS, 2014.
 
+  * Trevor L. McDonell, Manuel M. T. Chakravarty, Vinod Grover, and Ryan R. Newton.
+    [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15].
+    In _Haskell '15: The 8th ACM SIGPLAN Symposium on Haskell_, ACM, 2015.
+
 Accelerate is primarily developed by academics, so citations matter a lot to us.
 As an added benefit, you increase Accelerate's exposure and potential user (and
 developer!) base, which is a benefit to all users of Accelerate. Thanks in advance!
@@ -163,7 +168,11 @@ Here is a list of features that are currently missing:
 
   [CKLM+11]:                http://www.cse.unsw.edu.au/~chak/papers/CKLM+11.html
   [MCKL13]:                 http://www.cse.unsw.edu.au/~chak/papers/MCKL13.html
+  [MCKL13-slides]:          https://speakerdeck.com/tmcdonell/optimising-purely-functional-gpu-programs
   [CMCK14]:                 http://www.cse.unsw.edu.au/~chak/papers/CMCK14.html
+  [MCGN15]:                 http://www.cse.unsw.edu.au/~chak/papers/MCGN15.html
+  [MCGN15-slides]:          https://speakerdeck.com/tmcdonell/type-safe-runtime-code-generation-accelerate-to-llvm
+  [MCGN15-video]:           https://www.youtube.com/watch?v=snXhXA5noVc
   [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
   [Mar13]:                  http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell

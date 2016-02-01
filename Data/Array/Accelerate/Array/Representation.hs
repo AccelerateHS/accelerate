@@ -47,7 +47,7 @@ class (Eq sh, Slice sh) => Shape sh where
   -- user-facing methods
   dim       :: sh -> Int             -- ^number of dimensions (>= 0); rank of the array
   size      :: sh -> Int             -- ^total number of elements in an array of this /shape/
-  emptyS    :: sh                    -- ^empty shape.
+  empty     :: sh                    -- ^empty shape.
 
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
@@ -84,7 +84,7 @@ class (Eq sh, Slice sh) => Shape sh where
 instance Shape () where
   dim _             = 0
   size ()           = 1
-  emptyS            = ()
+  empty             = ()
 
   () `intersect` () = ()
   () `union` ()     = ()
@@ -105,7 +105,7 @@ instance Shape () where
 instance Shape sh => Shape (sh, Int) where
   dim _                             = dim (undefined :: sh) + 1
   size (sh, sz)                     = size sh * sz
-  emptyS                            = (emptyS, 0)
+  empty                             = (empty, 0)
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
@@ -123,17 +123,25 @@ instance Shape sh => Shape (sh, Int) where
 
   bound (sh, sz) (ix, i) bndy
     | i < 0                         = case bndy of
-                                        Clamp      -> bound sh ix bndy `addDim` 0
-                                        Mirror     -> bound sh ix bndy `addDim` (-i)
-                                        Wrap       -> bound sh ix bndy `addDim` (sz+i)
+                                        Clamp      -> next `addDim` 0
+                                        Mirror     -> next `addDim` (-i)
+                                        Wrap       -> next `addDim` (sz+i)
                                         Constant e -> Left e
     | i >= sz                       = case bndy of
-                                        Clamp      -> bound sh ix bndy `addDim` (sz-1)
-                                        Mirror     -> bound sh ix bndy `addDim` (sz-(i-sz+2))
-                                        Wrap       -> bound sh ix bndy `addDim` (i-sz)
+                                        Clamp      -> next `addDim` (sz-1)
+                                        Mirror     -> next `addDim` (sz-(i-sz+2))
+                                        Wrap       -> next `addDim` (i-sz)
                                         Constant e -> Left e
-    | otherwise                     = bound sh ix bndy `addDim` i
+    | otherwise                     = next `addDim` i
     where
+      -- This function is quite difficult to optimize due to the deep recursion
+      -- that is can generate with high-dimensional arrays. If we let 'next' be
+      -- inlined into each alternative of the cases above the size of this
+      -- function on an n-dimensional array will grow as 7^n. This quickly causes
+      -- GHC's head to explode. See GHC Trac #10491 for more details.
+      next = bound sh ix bndy
+      {-# NOINLINE next #-}
+
       Right ds `addDim` d = Right (ds, d)
       Left e   `addDim` _ = Left e
 
@@ -206,30 +214,26 @@ instance Show (SliceIndex ix slice coSlice sliceDim) where
   show (SliceFixed rest) = "SliceFixed (" ++ show rest ++ ")"
 
 -- | Project the shape of a slice from the full shape.
+--
 sliceShape :: forall slix co sl dim.
               SliceIndex slix sl co dim
            -> dim
            -> sl
-sliceShape SliceNil () = ()
+sliceShape SliceNil        ()      = ()
 sliceShape (SliceAll   sl) (sh, n) = (sliceShape sl sh, n)
 sliceShape (SliceFixed sl) (sh, _) = sliceShape sl sh
 
 
 -- | Enumerate all slices within a given bound. The outermost
--- dimension changes most rapid.
+-- dimension changes most rapidly.
 --
--- E.g. enumSlices slix ((((), 2), 3), ()) = [ ((((), 0), 0), ())
---                                           , ((((), 0), 1), ())
---                                           , ((((), 0), 2), ())
---                                           , ((((), 1), 0), ())
---                                           , ((((), 1), 1), ())
---                                           , ((((), 1), 2), ()) ]
+-- See 'Data.Array.Accelerate.Array.Sugar.enumSlices' for an example.
 --
 enumSlices :: forall slix co sl dim.
               SliceIndex slix sl co dim
            -> dim
            -> [slix]
-enumSlices SliceNil () = [()]
+enumSlices SliceNil        ()       = [()]
 enumSlices (SliceAll   sl) (sh, _)  = [ (sh', ()) | sh' <- enumSlices sl sh]
-enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh
-                                                  , i   <- [0..n-1]]
+enumSlices (SliceFixed sl) (sh, n)  = [ (sh', i)  | sh' <- enumSlices sl sh, i <- [0..n-1]]
+

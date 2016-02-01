@@ -33,8 +33,7 @@ module Data.Array.Accelerate.Array.Memory.Cache (
 
 ) where
 
-import Prelude                                                  hiding ( lookup )
-import Data.Functor                                             ( (<$>) )
+import Data.Functor
 import Data.Maybe                                               ( isNothing )
 import Data.Proxy
 import Control.Monad                                            ( filterM )
@@ -43,6 +42,7 @@ import Control.Monad.IO.Class                                   ( MonadIO, liftI
 import Control.Concurrent.MVar                                  ( MVar, newMVar, takeMVar, putMVar, mkWeakMVar )
 import System.CPUTime
 import System.Mem.Weak                                          ( Weak, deRefWeak, finalize )
+import Prelude                                                  hiding ( lookup )
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -50,14 +50,17 @@ import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
-import qualified Data.Array.Accelerate.Array.Memory             as M
 import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
+import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Table       as MT
 
+
 -- We build the cache on top of a memory table.
+--
 -- A key invariant is that the arrays in the MemoryTable are a subset of the
 -- arrays in the UseTable. The UseTable reflects all arrays that have ever been
 -- in the cache.
+--
 data MemoryCache p task = MemoryCache (MemoryTable p) (UseTable task) (Weak (UseTable task))
 
 type UseTable task = MVar (UT task)
@@ -86,6 +89,7 @@ data Used task where
 -- |A Task represents a process executing asynchronously that can be polled for
 -- its status. This is necessary for backends that work asynchronously (i.e.
 -- the CUDA backend). If a backend is synchronous, the () instance can be used.
+--
 class Task task where
   -- |Returns true when the task has finished.
   isDone :: task -> IO Bool
@@ -161,7 +165,6 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
                  (Used ts Clean count tasks n weak_arr)
       M.poke n p arr
       return p
-
 
     run' :: RemotePointer m b -> m c
     run' p = liftIO $ do

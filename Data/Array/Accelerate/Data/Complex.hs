@@ -7,8 +7,18 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS -fno-warn-orphans #-}
-
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+-- |
+-- Module      : Data.Array.Accelerate.Data.Complex
+-- Copyright   : [2015] Trevor L. McDonell
+-- License     : BSD3
+--
+-- Maintainer  : Manuel M T Chakravarty <chak@cse.unsw.edu.au>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+--
+-- Complex numbers
+--
 module Data.Array.Accelerate.Data.Complex (
 
   -- * Rectangular from
@@ -34,6 +44,7 @@ import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar
+import qualified Data.Complex                   as C
 
 
 type instance EltRepr (Complex a) = EltRepr (a, a)
@@ -96,7 +107,7 @@ instance (Elt a, IsFloating a, RealFloat a) => Floating (Exp (Complex a)) where
         {- then -} ( 0
         {- else -} , lift (u :+ (y A.<* 0 ? (-v,v))) )
 
-  pi            = lift (pi :+ constant 0)
+  pi            = lift (pi :: Complex (Exp a))
   log z         = lift (log (magnitude z) :+ phase z)
   exp           = lift1 (exp :: Complex (Exp a) -> Complex (Exp a))
   sin           = lift1 (sin :: Complex (Exp a) -> Complex (Exp a))
@@ -137,14 +148,14 @@ polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: (Elt a, IsFloating a) => Exp a -> Exp a -> Exp (Complex a)
-mkPolar r theta  =  lift $ r * cos theta :+ r * sin theta
+mkPolar :: forall a. (Elt a, IsFloating a) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: (Elt a, IsFloating a) => Exp a -> Exp (Complex a)
-cis theta = lift $ cos theta :+ sin theta
+cis :: forall a. (Elt a, IsFloating a) => Exp a -> Exp (Complex a)
+cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
 --

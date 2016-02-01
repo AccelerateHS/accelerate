@@ -12,9 +12,9 @@ module Data.Array.Accelerate.Pretty.Traverse
   where
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!))
-import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
 import Data.Array.Accelerate.AST
+import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
+import Data.Array.Accelerate.Array.Sugar          hiding ((!))
 import Data.Array.Accelerate.Type
 
 import Data.Maybe                                 ( fromMaybe )
@@ -256,6 +256,9 @@ labelForPrimFun (PrimTan _)            = "PrimTan"
 labelForPrimFun (PrimAsin _)           = "PrimAsin"
 labelForPrimFun (PrimAcos _)           = "PrimAcos"
 labelForPrimFun (PrimAtan _)           = "PrimAtan"
+labelForPrimFun (PrimSinh _)           = "PrimSinh"
+labelForPrimFun (PrimCosh _)           = "PrimCosh"
+labelForPrimFun (PrimTanh _)           = "PrimTanh"
 labelForPrimFun (PrimAsinh _)          = "PrimAsinh"
 labelForPrimFun (PrimAcosh _)          = "PrimAcosh"
 labelForPrimFun (PrimAtanh _)          = "PrimAtanh"

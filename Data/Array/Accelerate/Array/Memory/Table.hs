@@ -37,34 +37,30 @@ module Data.Array.Accelerate.Array.Memory.Table (
 
 ) where
 
-import Prelude                                                  hiding ( lookup )
-import Data.Array.Storable.Internals                            ( StorableArray(..) )
-import Data.Functor                                             ( (<$>) )
+import Control.Concurrent                                       ( yield )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
+import Control.Concurrent.Unique                                ( Unique )
+import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
+import Data.Functor
+import Data.Hashable                                            ( hash )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
-import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
-import Control.Concurrent                                       ( yield )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
+import Foreign.Storable                                         ( sizeOf )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
-import Foreign.Storable                                         ( sizeOf )
-
-import GHC.Exts                                                 ( Ptr(..) )
-import GHC.ForeignPtr                                           ( ForeignPtr(..), ForeignPtrContents(..) )
-import GHC.IORef                                                ( IORef(..) )
-import GHC.STRef                                                ( STRef(..) )
-import GHC.Base                                                 ( mkWeak#, mkWeakNoFinalizer#, IO(..) )
-import GHC.Weak                                                 ( Weak(..) )
-
+import Prelude                                                  hiding ( lookup, id )
 import qualified Data.HashTable.IO                              as HT
 
+import GHC.Exts                                                 ( Ptr(..) )
+
 import Data.Array.Accelerate.Error                              ( internalError )
+import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
-                                                                  ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..),
-                                                                  UniqueArray, storableFromUnique, getUniqueId )
+                                                                  ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..) )
 import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
 import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..) )
+import Data.Array.Accelerate.Lifetime
 import qualified Data.Array.Accelerate.Array.Memory             as M
 import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
@@ -90,10 +86,6 @@ data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Nursery p)
                                       (forall a. p a -> IO ())
 
--- | An untyped reference to an array, similar to a stablename.
---
-type StableArray = Int
-
 data RemoteArray p where
   RemoteArray :: Typeable e
               => {-# UNPACK #-} !(Weak ()) -- Keep track of host array liveness.
@@ -101,6 +93,9 @@ data RemoteArray p where
               -> Int                       -- The array size in bytes
               -> RemoteArray p
 
+-- | An untyped reference to an array, similar to a StableName.
+--
+type StableArray = Int
 
 -- |Create a new memory table from host to remote arrays.
 --
@@ -110,13 +105,13 @@ data RemoteArray p where
 -- depend on any state.
 --
 new :: (RemoteMemory m, MonadIO m) => (forall a. RemotePointer m a -> IO ()) -> m (MemoryTable (RemotePointer m))
-new free = do
+new release = do
   message "initialise memory table"
   tbl  <- liftIO $ HT.new
   ref  <- liftIO $ newMVar tbl
-  nrs  <- N.new free
+  nrs  <- N.new release
   weak <- liftIO $ mkWeakMVar ref (return ())
-  return $! MemoryTable ref weak nrs free
+  return $! MemoryTable ref weak nrs release
 
 
 -- | Look for the remote pointer corresponding to a given host-side array.
@@ -145,8 +140,8 @@ lookup (MemoryTable !ref _ _ _) !arr = do
         -- pointers, is why we can not reuse the stable name 'sa' computed
         -- above in the error message.
         --
-        Nothing                    ->
-          makeStableArray  arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
+        Nothing                     ->
+          makeStableArray arr >>= \x -> $internalError "lookup" $ "dead weak pair: " ++ show x
 
 
 -- | Allocate a new device array to be associated with the given host-side array.
@@ -276,11 +271,11 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
 --
 clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
 clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
-  -- Unforunately there is no real way to force a GC then wait for it to finsh.
-  -- Calling performGC then yielding works moderately well in single-threaded
-  -- cases, but tends to fall down otherwise. Either way, given that finalizers
-  -- are often significantly delayed, it is worth our while traversing the table
-  -- and explicitly freeing any dead entires.
+  -- Unfortunately there is no real way to force a GC then wait for it to
+  -- finish. Calling performGC then yielding works moderately well in
+  -- single-threaded cases, but tends to fall down otherwise. Either way, given
+  -- that finalizers are often significantly delayed, it is worth our while
+  -- traversing the table and explicitly freeing any dead entires.
   --
   performGC
   yield
@@ -299,8 +294,8 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
 -- arrays.
 --
 purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
-purge (MemoryTable _ _ nursery@(Nursery nrs _) free) = management "purge" nursery . liftIO $
-  modifyMVar_ nrs (\(tbl,_) -> N.flush free tbl >> return (tbl, 0))
+purge (MemoryTable _ _ nursery@(Nursery nrs _) release) = management "purge" nursery . liftIO $
+  modifyMVar_ nrs (\(tbl,_) -> N.flush release tbl >> return (tbl, 0))
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
@@ -318,120 +313,94 @@ remoteFinalizer !weak_ref !key = do
 -- Miscellaneous
 -- -------------
 
--- | Make a new StableArray.
+-- | Make a new 'StableArray'.
+--
 {-# INLINE makeStableArray #-}
-makeStableArray :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a) => ArrayData a -> m StableArray
-makeStableArray !ad = liftIO $ id arrayElt ad
+makeStableArray
+    :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a)
+    => ArrayData a
+    -> m StableArray
+makeStableArray !ad = return $! hash (id arrayElt ad)
   where
-    id :: ArrayEltR e -> ArrayData e -> IO Int
-    id ArrayEltRint     (AD_Int ua)     = getUniqueId ua
-    id ArrayEltRint8    (AD_Int8 ua)    = getUniqueId ua
-    id ArrayEltRint16   (AD_Int16 ua)   = getUniqueId ua
-    id ArrayEltRint32   (AD_Int32 ua)   = getUniqueId ua
-    id ArrayEltRint64   (AD_Int64 ua)   = getUniqueId ua
-    id ArrayEltRword    (AD_Word ua)    = getUniqueId ua
-    id ArrayEltRword8   (AD_Word8 ua)   = getUniqueId ua
-    id ArrayEltRword16  (AD_Word16 ua)  = getUniqueId ua
-    id ArrayEltRword32  (AD_Word32 ua)  = getUniqueId ua
-    id ArrayEltRword64  (AD_Word64 ua)  = getUniqueId ua
-    id ArrayEltRcshort  (AD_CShort ua)  = getUniqueId ua
-    id ArrayEltRcushort (AD_CUShort ua) = getUniqueId ua
-    id ArrayEltRcint    (AD_CInt ua)    = getUniqueId ua
-    id ArrayEltRcuint   (AD_CUInt ua)   = getUniqueId ua
-    id ArrayEltRclong   (AD_CLong ua)   = getUniqueId ua
-    id ArrayEltRculong  (AD_CULong ua)  = getUniqueId ua
-    id ArrayEltRcllong  (AD_CLLong ua)  = getUniqueId ua
-    id ArrayEltRcullong (AD_CULLong ua) = getUniqueId ua
-    id ArrayEltRfloat   (AD_Float ua)   = getUniqueId ua
-    id ArrayEltRdouble  (AD_Double ua)  = getUniqueId ua
-    id ArrayEltRcfloat  (AD_CFloat ua)  = getUniqueId ua
-    id ArrayEltRcdouble (AD_CDouble ua) = getUniqueId ua
-    id ArrayEltRbool    (AD_Bool ua)    = getUniqueId ua
-    id ArrayEltRchar    (AD_Char ua)    = getUniqueId ua
-    id ArrayEltRcchar   (AD_CChar ua)   = getUniqueId ua
-    id ArrayEltRcschar  (AD_CSChar ua)  = getUniqueId ua
-    id ArrayEltRcuchar  (AD_CUChar ua)  = getUniqueId ua
+    id :: ArrayEltR e -> ArrayData e -> Unique
+    id ArrayEltRint     (AD_Int ua)     = uniqueArrayId ua
+    id ArrayEltRint8    (AD_Int8 ua)    = uniqueArrayId ua
+    id ArrayEltRint16   (AD_Int16 ua)   = uniqueArrayId ua
+    id ArrayEltRint32   (AD_Int32 ua)   = uniqueArrayId ua
+    id ArrayEltRint64   (AD_Int64 ua)   = uniqueArrayId ua
+    id ArrayEltRword    (AD_Word ua)    = uniqueArrayId ua
+    id ArrayEltRword8   (AD_Word8 ua)   = uniqueArrayId ua
+    id ArrayEltRword16  (AD_Word16 ua)  = uniqueArrayId ua
+    id ArrayEltRword32  (AD_Word32 ua)  = uniqueArrayId ua
+    id ArrayEltRword64  (AD_Word64 ua)  = uniqueArrayId ua
+    id ArrayEltRcshort  (AD_CShort ua)  = uniqueArrayId ua
+    id ArrayEltRcushort (AD_CUShort ua) = uniqueArrayId ua
+    id ArrayEltRcint    (AD_CInt ua)    = uniqueArrayId ua
+    id ArrayEltRcuint   (AD_CUInt ua)   = uniqueArrayId ua
+    id ArrayEltRclong   (AD_CLong ua)   = uniqueArrayId ua
+    id ArrayEltRculong  (AD_CULong ua)  = uniqueArrayId ua
+    id ArrayEltRcllong  (AD_CLLong ua)  = uniqueArrayId ua
+    id ArrayEltRcullong (AD_CULLong ua) = uniqueArrayId ua
+    id ArrayEltRfloat   (AD_Float ua)   = uniqueArrayId ua
+    id ArrayEltRdouble  (AD_Double ua)  = uniqueArrayId ua
+    id ArrayEltRcfloat  (AD_CFloat ua)  = uniqueArrayId ua
+    id ArrayEltRcdouble (AD_CDouble ua) = uniqueArrayId ua
+    id ArrayEltRbool    (AD_Bool ua)    = uniqueArrayId ua
+    id ArrayEltRchar    (AD_Char ua)    = uniqueArrayId ua
+    id ArrayEltRcchar   (AD_CChar ua)   = uniqueArrayId ua
+    id ArrayEltRcschar  (AD_CSChar ua)  = uniqueArrayId ua
+    id ArrayEltRcuchar  (AD_CUChar ua)  = uniqueArrayId ua
     id _                _               = error "I do have a cause, though. It is obscenity. I'm for it."
 
 -- Weak arrays
 -- ----------------------
 
--- |Make a weak pointer using an array as a key. Unlike the stanard `mkWeak`,
+-- |Make a weak pointer using an array as a key. Unlike the standard `mkWeak`,
 -- this guarantees finalisers won't fire early.
-makeWeakArrayData :: forall a e c. (ArrayElt e, ArrayPtrs e ~ Ptr a) => ArrayData e -> c -> Maybe (IO ()) -> IO (Weak c)
-makeWeakArrayData ad c f = mw arrayElt ad
+--
+makeWeakArrayData
+    :: forall a e c. (ArrayElt e, ArrayPtrs e ~ Ptr a)
+    => ArrayData e
+    -> c
+    -> Maybe (IO ())
+    -> IO (Weak c)
+makeWeakArrayData ad c mf = mw arrayElt ad
   where
     mw :: ArrayEltR e -> ArrayData e -> IO (Weak c)
-    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua c f
-    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua c f
-    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua c f
-    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua c f
-    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua c f
-    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua c f
-    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua c f
-    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua c f
-    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua c f
-    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua c f
-    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua c f
-    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua c f
-    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua c f
-    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua c f
-    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua c f
-    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua c f
-    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua c f
-    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua c f
-    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua c f
-    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua c f
-    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua c f
-    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua c f
-    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua c f
-    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua c f
-    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua c f
-    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua c f
-    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua c f
-    mw _                _               = error "Base eight is just like base ten really — if you're missing two fingers."
+    mw ArrayEltRint     (AD_Int ua)     = mkWeak' ua mf
+    mw ArrayEltRint8    (AD_Int8 ua)    = mkWeak' ua mf
+    mw ArrayEltRint16   (AD_Int16 ua)   = mkWeak' ua mf
+    mw ArrayEltRint32   (AD_Int32 ua)   = mkWeak' ua mf
+    mw ArrayEltRint64   (AD_Int64 ua)   = mkWeak' ua mf
+    mw ArrayEltRword    (AD_Word ua)    = mkWeak' ua mf
+    mw ArrayEltRword8   (AD_Word8 ua)   = mkWeak' ua mf
+    mw ArrayEltRword16  (AD_Word16 ua)  = mkWeak' ua mf
+    mw ArrayEltRword32  (AD_Word32 ua)  = mkWeak' ua mf
+    mw ArrayEltRword64  (AD_Word64 ua)  = mkWeak' ua mf
+    mw ArrayEltRcshort  (AD_CShort ua)  = mkWeak' ua mf
+    mw ArrayEltRcushort (AD_CUShort ua) = mkWeak' ua mf
+    mw ArrayEltRcint    (AD_CInt ua)    = mkWeak' ua mf
+    mw ArrayEltRcuint   (AD_CUInt ua)   = mkWeak' ua mf
+    mw ArrayEltRclong   (AD_CLong ua)   = mkWeak' ua mf
+    mw ArrayEltRculong  (AD_CULong ua)  = mkWeak' ua mf
+    mw ArrayEltRcllong  (AD_CLLong ua)  = mkWeak' ua mf
+    mw ArrayEltRcullong (AD_CULLong ua) = mkWeak' ua mf
+    mw ArrayEltRfloat   (AD_Float ua)   = mkWeak' ua mf
+    mw ArrayEltRdouble  (AD_Double ua)  = mkWeak' ua mf
+    mw ArrayEltRcfloat  (AD_CFloat ua)  = mkWeak' ua mf
+    mw ArrayEltRcdouble (AD_CDouble ua) = mkWeak' ua mf
+    mw ArrayEltRbool    (AD_Bool ua)    = mkWeak' ua mf
+    mw ArrayEltRchar    (AD_Char ua)    = mkWeak' ua mf
+    mw ArrayEltRcchar   (AD_CChar ua)   = mkWeak' ua mf
+    mw ArrayEltRcschar  (AD_CSChar ua)  = mkWeak' ua mf
+    mw ArrayEltRcuchar  (AD_CUChar ua)  = mkWeak' ua mf
+    mw _                _               = error "Base eight is just like base ten really - if you're missing two fingers."
 
-    -- Note: [Weak Array pointers]
-    --
-    -- One of the unfortunate properties of GHC's weak pointers is that if a
-    -- weak pointer is created with a non-primitive object as key, there is
-    -- the possibility that the finalizer attached to the pointer may fire early.
-    -- The reason for this is that the optimiser, at compile time, and the GC, at
-    -- runtime, are free to create copies of the objects they are attached to.
-    -- This is less than ideal if we want to properly track when arrays are no
-    -- longer reachable.
-    --
-    -- The solution to this problem is to use a primitive object as a key for
-    -- any weak pointers we create. However, the obvious choice of primitive,
-    -- the `Addr#` that points to the pinned payload of the array, is not
-    -- suitable. Being a pointer into non-GHC managed memory, the rts won't let
-    -- us use it as a key. Instead we use the `MutVar#` contained within an
-    -- IORef, itself part of the ForeignPtr contained within a StorableArray.
-    -- This means that GHC is free to create as many copies of the container
-    -- and any finalizers will not fire until all copies have been made
-    -- unreachable
-    --
-    mkWeak' :: UniqueArray i a -> c -> Maybe (IO ()) -> IO (Weak c)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c (Just f)
-      = IO $ \s ->
-          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (MallocPtr _ (IORef (STRef r#))))) c Nothing
-      = IO $ \s ->
-          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainForeignPtr (IORef (STRef r#))))) c (Just f)
-          = IO $ \s ->
-              case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainForeignPtr (IORef (STRef r#))))) c Nothing
-          = IO $ \s ->
-              case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainPtr r#))) c (Just f)
-      = IO $ \s ->
-          case mkWeak# r# c f s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' (storableFromUnique -> StorableArray _ _ _ (ForeignPtr _ (PlainPtr r#))) c Nothing
-      = IO $ \s ->
-          case mkWeakNoFinalizer# r# c s of (# s1, w #) -> (# s1, Weak w #)
-    mkWeak' _                                                                     _ _
-      = $internalError "makeWeakArrayData" "Internal representation of Storable array has changed"
+    mkWeak' :: UniqueArray a -> Maybe (IO ()) -> IO (Weak c)
+    mkWeak' ua Nothing  = mkWeak (uniqueArrayData ua) c
+    mkWeak' ua (Just f) = do
+      addFinalizer (uniqueArrayData ua) f
+      mkWeak (uniqueArrayData ua) c
 
 
 -- Debug
@@ -464,3 +433,4 @@ management msg nrs next = do
                   ++ ", remaining: " ++ showBytes after
                   ++ " of "          ++ showBytes total ++ ")"
   return r
+

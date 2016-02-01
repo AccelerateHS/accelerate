@@ -79,7 +79,7 @@ module Data.Array.Accelerate (
   L.use, L.unit,
 
   -- *** Initialisation
-  L.generate, L.replicate, P.fill, P.empty,
+  L.generate, L.replicate, P.fill,
 
   -- *** Enumeration
   P.enumFromN, P.enumFromStepN,
@@ -159,7 +159,7 @@ module Data.Array.Accelerate (
   L.mapSeq, L.zipWithSeq, L.mapAccumFlat, P.mapSeqE, P.zipWithSeqE, P.scanSeqE,
 
   -- ** Sequence consumers
-  P.foldSeqE, L.foldSeqFlatten, P.fromSeq, P.fromSeqE, P.shapes,
+  P.foldSeqE, L.foldSeqFlatten, P.fromSeq, P.fromSeqElems, P.fromSeqShapes,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),
@@ -218,7 +218,7 @@ module Data.Array.Accelerate (
   -- >     -> lift      :: Acc (Scalar Int, Vector Float)
   -- >     -> ...
   --
-  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.ilift1, P.ilift2,
+  P.Lift(..), P.Unlift(..), P.lift1, P.lift2, P.lift3, P.ilift1, P.ilift2, P.ilift3,
 
   -- ** Operations
   --
@@ -254,7 +254,7 @@ module Data.Array.Accelerate (
   L.rotate, L.rotateL, L.rotateR,
 
   -- *** Shape manipulation
-  P.index0, P.index1, P.unindex1, P.index2, P.unindex2,
+  P.index0, P.index1, P.unindex1, P.index2, P.unindex2, P.index3, P.unindex3,
   L.indexHead, L.indexTail,
   L.toIndex, L.fromIndex,
   L.intersect,

@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Memory
@@ -12,8 +12,10 @@
 --
 
 module Data.Array.Accelerate.Array.Memory (
+
   RemoteMemory(..), PrimElt
-  ) where
+
+) where
 
 import Data.Array.Accelerate.Array.Data
 
@@ -28,13 +30,13 @@ type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typ
 
 -- |Monads that have access to a remote memory.
 --
--- Acclerate backends can provide an instance of this class in order to take
+-- Accelerate backends can provide an instance of this class in order to take
 -- advantage of the automated memory managers we provide as part of the base
 -- package.
 --
 class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
 
-  -- | Pointers into this particalur remote memory.
+  -- | Pointers into this particular remote memory.
   type RemotePointer m :: * -> *
 
   -- | Allocate into the remote memory. Returns Nothing if out of memory.
@@ -64,3 +66,4 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- number of allocations.
   chunkSize :: m Int
   chunkSize = return 1
+

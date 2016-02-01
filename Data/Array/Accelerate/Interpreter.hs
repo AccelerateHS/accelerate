@@ -70,7 +70,7 @@ import Data.Array.Accelerate.Array.Data
 import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Debug                              ( queryFlag, chunk_size )
+import Data.Array.Accelerate.Debug                              ( queryFlag )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Interpreter.Prim
 import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
@@ -105,7 +105,7 @@ run1 afun
 --
 streamOut :: Arrays a => Sugar.Seq [a] -> [a]
 streamOut seq = let seq' = convertSeqWith config seq
-                in evalDelayedSeq defaultSeqConfig seq'
+                in evalDelayedSeq seq'
 
 
 config :: Phase
@@ -191,9 +191,9 @@ evalOpenAcc (AST.Manifest pacc) aenv =
 
     Use arr                     -> toArr arr
     Unit e                      -> unitOp (evalE e)
-    Collect s cs                -> fromMaybe (evalSeq defaultSeqConfig s aenv)
-                                             (evalSeq defaultSeqConfig <$> cs <*> pure aenv)
-    -- Collect s cs                -> evalSeq defaultSeqConfig s aenv
+    Collect s cs                -> fromMaybe (evalSeq s aenv)
+                                             (evalSeq <$> cs <*> pure aenv)
+    -- Collect s cs                -> evalSeq s aenv
 
 
     -- Producers
@@ -756,81 +756,273 @@ evalPrj (SuccTupIdx idx) (tup, !_) = evalPrj idx tup
   --        not only those that we happen to encounter during the recursive
   --        walk.
 
+
+-- Implementation of scalar primitives
+-- -----------------------------------
+
+evalLAnd :: (Bool, Bool) -> Bool
+evalLAnd (x, y) = x && y
+
+evalLOr  :: (Bool, Bool) -> Bool
+evalLOr (x, y) = x || y
+
+evalLNot :: Bool -> Bool
+evalLNot = not
+
+evalOrd :: Char -> Int
+evalOrd = ord
+
+evalChr :: Int -> Char
+evalChr = chr
+
+evalBoolToInt :: Bool -> Int
+evalBoolToInt = fromEnum
+
+evalFromIntegral :: IntegralType a -> NumType b -> a -> b
+evalFromIntegral ta (IntegralNumType tb)
+  | IntegralDict <- integralDict ta
+  , IntegralDict <- integralDict tb
+  = fromIntegral
+
+evalFromIntegral ta (FloatingNumType tb)
+  | IntegralDict <- integralDict ta
+  , FloatingDict <- floatingDict tb
+  = fromIntegral
+
+
+-- Extract methods from reified dictionaries
+--
+
+-- Constant methods of Bounded
+--
+
+evalMinBound :: BoundedType a -> a
+evalMinBound (IntegralBoundedType ty)
+  | IntegralDict <- integralDict ty
+  = minBound
+
+evalMinBound (NonNumBoundedType   ty)
+  | NonNumDict   <- nonNumDict ty
+  = minBound
+
+evalMaxBound :: BoundedType a -> a
+evalMaxBound (IntegralBoundedType ty)
+  | IntegralDict <- integralDict ty
+  = maxBound
+
+evalMaxBound (NonNumBoundedType   ty)
+  | NonNumDict   <- nonNumDict ty
+  = maxBound
+
+-- Constant method of floating
+--
+
+evalPi :: FloatingType a -> a
+evalPi ty | FloatingDict <- floatingDict ty = pi
+
+evalSin :: FloatingType a -> (a -> a)
+evalSin ty | FloatingDict <- floatingDict ty = sin
+
+evalCos :: FloatingType a -> (a -> a)
+evalCos ty | FloatingDict <- floatingDict ty = cos
+
+evalTan :: FloatingType a -> (a -> a)
+evalTan ty | FloatingDict <- floatingDict ty = tan
+
+evalAsin :: FloatingType a -> (a -> a)
+evalAsin ty | FloatingDict <- floatingDict ty = asin
+
+evalAcos :: FloatingType a -> (a -> a)
+evalAcos ty | FloatingDict <- floatingDict ty = acos
+
+evalAtan :: FloatingType a -> (a -> a)
+evalAtan ty | FloatingDict <- floatingDict ty = atan
+
+evalSinh :: FloatingType a -> (a -> a)
+evalSinh ty | FloatingDict <- floatingDict ty = sinh
+
+evalCosh :: FloatingType a -> (a -> a)
+evalCosh ty | FloatingDict <- floatingDict ty = cosh
+
+evalTanh :: FloatingType a -> (a -> a)
+evalTanh ty | FloatingDict <- floatingDict ty = tanh
+
+evalAsinh :: FloatingType a -> (a -> a)
+evalAsinh ty | FloatingDict <- floatingDict ty = asinh
+
+evalAcosh :: FloatingType a -> (a -> a)
+evalAcosh ty | FloatingDict <- floatingDict ty = acosh
+
+evalAtanh :: FloatingType a -> (a -> a)
+evalAtanh ty | FloatingDict <- floatingDict ty = atanh
+
+evalExpFloating :: FloatingType a -> (a -> a)
+evalExpFloating ty | FloatingDict <- floatingDict ty = exp
+
+evalSqrt :: FloatingType a -> (a -> a)
+evalSqrt ty | FloatingDict <- floatingDict ty = sqrt
+
+evalLog :: FloatingType a -> (a -> a)
+evalLog ty | FloatingDict <- floatingDict ty = log
+
+evalFPow :: FloatingType a -> ((a, a) -> a)
+evalFPow ty | FloatingDict <- floatingDict ty = uncurry (**)
+
+evalLogBase :: FloatingType a -> ((a, a) -> a)
+evalLogBase ty | FloatingDict <- floatingDict ty = uncurry logBase
+
+evalTruncate :: FloatingType a -> IntegralType b -> (a -> b)
+evalTruncate ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb
+  = truncate
+
+evalRound :: FloatingType a -> IntegralType b -> (a -> b)
+evalRound ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb
+  = round
+
+evalFloor :: FloatingType a -> IntegralType b -> (a -> b)
+evalFloor ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb
+  = floor
+
+evalCeiling :: FloatingType a -> IntegralType b -> (a -> b)
+evalCeiling ta tb
+  | FloatingDict <- floatingDict ta
+  , IntegralDict <- integralDict tb
+  = ceiling
+
+evalAtan2 :: FloatingType a -> ((a, a) -> a)
+evalAtan2 ty | FloatingDict <- floatingDict ty = uncurry atan2
+
+evalIsNaN :: FloatingType a -> (a -> Bool)
+evalIsNaN ty | FloatingDict <- floatingDict ty = isNaN
+
+
+-- Methods of Num
+--
+
+evalAdd :: NumType a -> ((a, a) -> a)
+evalAdd (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (+)
+evalAdd (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (+)
+
+evalSub :: NumType a -> ((a, a) -> a)
+evalSub (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (-)
+evalSub (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (-)
+
+evalMul :: NumType a -> ((a, a) -> a)
+evalMul (IntegralNumType ty) | IntegralDict <- integralDict ty = uncurry (*)
+evalMul (FloatingNumType ty) | FloatingDict <- floatingDict ty = uncurry (*)
+
+evalNeg :: NumType a -> (a -> a)
+evalNeg (IntegralNumType ty) | IntegralDict <- integralDict ty = negate
+evalNeg (FloatingNumType ty) | FloatingDict <- floatingDict ty = negate
+
+evalAbs :: NumType a -> (a -> a)
+evalAbs (IntegralNumType ty) | IntegralDict <- integralDict ty = abs
+evalAbs (FloatingNumType ty) | FloatingDict <- floatingDict ty = abs
+
+evalSig :: NumType a -> (a -> a)
+evalSig (IntegralNumType ty) | IntegralDict <- integralDict ty = signum
+evalSig (FloatingNumType ty) | FloatingDict <- floatingDict ty = signum
+
+evalQuot :: IntegralType a -> ((a, a) -> a)
+evalQuot ty | IntegralDict <- integralDict ty = uncurry quot
+
+evalRem :: IntegralType a -> ((a, a) -> a)
+evalRem ty | IntegralDict <- integralDict ty = uncurry rem
+
+evalQuotRem :: IntegralType a -> ((a, a) -> (a, a))
+evalQuotRem ty | IntegralDict <- integralDict ty = uncurry quotRem
+
+evalIDiv :: IntegralType a -> ((a, a) -> a)
+evalIDiv ty | IntegralDict <- integralDict ty = uncurry div
+
+evalMod :: IntegralType a -> ((a, a) -> a)
+evalMod ty | IntegralDict <- integralDict ty = uncurry mod
+
+evalDivMod :: IntegralType a -> ((a, a) -> (a, a))
+evalDivMod ty | IntegralDict <- integralDict ty = uncurry divMod
+
+evalBAnd :: IntegralType a -> ((a, a) -> a)
+evalBAnd ty | IntegralDict <- integralDict ty = uncurry (.&.)
+
+evalBOr :: IntegralType a -> ((a, a) -> a)
+evalBOr ty | IntegralDict <- integralDict ty = uncurry (.|.)
+
+evalBXor :: IntegralType a -> ((a, a) -> a)
+evalBXor ty | IntegralDict <- integralDict ty = uncurry xor
+
+evalBNot :: IntegralType a -> (a -> a)
+evalBNot ty | IntegralDict <- integralDict ty = complement
+
+evalBShiftL :: IntegralType a -> ((a, Int) -> a)
+evalBShiftL ty | IntegralDict <- integralDict ty = uncurry shiftL
+
+evalBShiftR :: IntegralType a -> ((a, Int) -> a)
+evalBShiftR ty | IntegralDict <- integralDict ty = uncurry shiftR
+
+evalBRotateL :: IntegralType a -> ((a, Int) -> a)
+evalBRotateL ty | IntegralDict <- integralDict ty = uncurry rotateL
+
+evalBRotateR :: IntegralType a -> ((a, Int) -> a)
+evalBRotateR ty | IntegralDict <- integralDict ty = uncurry rotateR
+
+evalFDiv :: FloatingType a -> ((a, a) -> a)
+evalFDiv ty | FloatingDict <- floatingDict ty = uncurry (/)
+
+evalRecip :: FloatingType a -> (a -> a)
+evalRecip ty | FloatingDict <- floatingDict ty = recip
+
+
+
+evalLt :: ScalarType a -> ((a, a) -> Bool)
+evalLt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<)
+evalLt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<)
+evalLt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<)
+
+evalGt :: ScalarType a -> ((a, a) -> Bool)
+evalGt (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>)
+evalGt (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>)
+evalGt (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>)
+
+evalLtEq :: ScalarType a -> ((a, a) -> Bool)
+evalLtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (<=)
+evalLtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (<=)
+evalLtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (<=)
+
+evalGtEq :: ScalarType a -> ((a, a) -> Bool)
+evalGtEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (>=)
+evalGtEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (>=)
+evalGtEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (>=)
+
+evalEq :: ScalarType a -> ((a, a) -> Bool)
+evalEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (==)
+evalEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (==)
+evalEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (==)
+
+evalNEq :: ScalarType a -> ((a, a) -> Bool)
+evalNEq (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry (/=)
+evalNEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry (/=)
+evalNEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry (/=)
+
+evalMax :: ScalarType a -> ((a, a) -> a)
+evalMax (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry max
+evalMax (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry max
+evalMax (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry max
+
+evalMin :: ScalarType a -> ((a, a) -> a)
+evalMin (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = uncurry min
+evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = uncurry min
+evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = uncurry min
+
+
+
 -- Sequence evaluation
 -- ---------------
-
--- Configuration for sequence evaluation.
---
-data SeqConfig = SeqConfig
-  { chunkSize :: Int -- Allocation limit for a sequence in
-                     -- words. Actual runtime allocation should be the
-                     -- maximum of this size and the size of the
-                     -- largest element in the sequence.
-  }
-
--- Default sequence evaluation configuration for testing purposes.
---
-defaultSeqConfig :: SeqConfig
-defaultSeqConfig = SeqConfig { chunkSize = case unsafePerformIO (queryFlag chunk_size) of Nothing -> 2; Just n -> n }
-
-type Chunk a = Regular a
-
--- Get the shape of a chunk of arrays. O(1).
---
-chunkShape :: Shape sh => Chunk (Array sh a) -> sh
-chunkShape = shape'
-
--- Get all the elements of a chunk of arrays. O(1).
---
-chunkElems :: Chunk (Array sh a) -> Vector a
-chunkElems = elements'
-
--- Convert a vector to a chunk of scalars.
---
-vec2Chunk :: Elt e => Vector e -> Chunk (Scalar e)
-vec2Chunk = vec2Regular
-
--- Convert a list of arrays to a chunk.
---
-fromListChunk :: Arrays a => [a] -> Regular a
-fromListChunk = fromList' concatOp
-
--- Convert a chunk to a list of arrays.
---
-toListChunk :: Arrays a => Regular a -> [a]
-toListChunk = toList' fetchAllOp
-
--- fmap for Chunk. O(n).
---   TODO: Use vectorised function.
-mapChunk :: (Arrays a, Arrays b)
-         => (a -> b)
-         -> Chunk a -> Chunk b
-mapChunk f c = fromListChunk $ map f (toListChunk c)
-
--- zipWith for Chunk. O(n).
---  TODO: Use vectorised function.
-zipWithChunk :: (Arrays a, Arrays b, Arrays c)
-             => (a -> b -> c)
-             -> Chunk a -> Chunk b -> Chunk c
-zipWithChunk f c1 c2 = fromListChunk $ zipWith f (toListChunk c1) (toListChunk c2)
-
--- Valuation for an environment of shapes.
---
-
--- Valuation for an environment of sequence windows.
---
-data Val' aenv where
-  Base' :: Val  aenv -> Val' aenv
-  Push' :: Val' aenv -> Maybe t -> Val' (aenv, t)
-
--- Projection of a window from a window valuation using a de Bruijn
--- index.
---
-prj' :: Idx senv t -> Val' senv -> Maybe t
-prj' ZeroIdx       (Push' _   v) = v
-prj' (SuccIdx idx) (Push' val _) = prj' idx val
-prj' idx           (Base' aenv)  = Just $ prj idx aenv
-prj' _             _             = $internalError "prj" "inconsistent valuation"
 
 -- An executable sequence.
 --
@@ -881,17 +1073,15 @@ instance SeqIndex (Scalar (Int, Int)) where
                                        else fromList Z [(i,max - i)]
 
 evalDelayedSeq :: SeqIndex index
-               => SeqConfig
-               -> DelayedSeq index arrs
+               => DelayedSeq index arrs
                -> arrs
-evalDelayedSeq cfg (StreamSeq aenv s) | aenv' <- evalExtend aenv Empty
-                                      = evalSeq cfg s aenv'
+evalDelayedSeq (StreamSeq aenv s) | aenv' <- evalExtend aenv Empty
+                                      = evalSeq s aenv'
 
 evalSeq :: forall index aenv arrs. SeqIndex index
-        => SeqConfig
-        -> PreOpenSeq index DelayedOpenAcc aenv  arrs
+        => PreOpenSeq index DelayedOpenAcc aenv  arrs
         -> Val aenv -> arrs
-evalSeq conf s aenv = evalSeq' s
+evalSeq s aenv = evalSeq' s
   where
     evalSeq' :: PreOpenSeq index DelayedOpenAcc aenv arrs -> arrs
     evalSeq' = (uncurry . flip) (evalStream aenv) . initSeq Just

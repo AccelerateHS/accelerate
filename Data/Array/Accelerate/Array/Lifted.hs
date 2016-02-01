@@ -216,7 +216,7 @@ empty' :: forall a. Arrays a => Regular a
 empty' =
   case flavour (undefined :: a) of
     ArraysFunit  -> Regular ((),scalar 0)
-    ArraysFarray -> newRegularArray 0 emptyS emptyVec
+    ArraysFarray -> newRegularArray 0 empty emptyVec
     ArraysFtuple -> Regular $ tup (prod arraysP (undefined :: a))
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t
