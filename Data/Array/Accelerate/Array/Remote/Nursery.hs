@@ -6,7 +6,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Memory.Nursery
+-- Module      : Data.Array.Accelerate.Array.Remote.Nursery
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2009..2014] Trevor L. McDonell
 --               [2015..2015] Robert Clifton-Everest
@@ -17,7 +17,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Array.Memory.Nursery (
+module Data.Array.Accelerate.Array.Remote.Nursery (
 
   Nursery(..), NRS, new, malloc, stash, flush, size
 
@@ -25,10 +25,10 @@ module Data.Array.Accelerate.Array.Memory.Nursery (
 
 -- friends
 import Data.Array.Accelerate.FullList                           ( FullList(..) )
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer )
+import Data.Array.Accelerate.Array.Remote                       ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
-import qualified Data.Array.Accelerate.Array.Memory             as M
+import qualified Data.Array.Accelerate.Array.Remote             as R
 
 -- libraries
 import Prelude
@@ -49,11 +49,11 @@ import qualified Data.HashTable.IO                              as HT
 -- Note that since there might be many arrays for the same size, each entry in
 -- the map keeps a (non-empty) list of remote arrays.
 --
-type HashTable key val  = HT.BasicHashTable key val
+type HashTable key val = HT.BasicHashTable key val
 
-type NRS p            = MVar ( HashTable Int (FullList () (p ())), Int64 )
-data Nursery p        = Nursery {-# UNPACK #-} !(NRS p)
-                                {-# UNPACK #-} !(Weak (NRS p))
+type NRS p             = MVar ( HashTable Int (FullList () (p ())), Int64 )
+data Nursery p         = Nursery {-# UNPACK #-} !(NRS p)
+                                 {-# UNPACK #-} !(Weak (NRS p))
 
 
 -- Generate a fresh nursery
@@ -86,7 +86,7 @@ malloc !n (Nursery !ref _) = modifyMVar ref $ \(tbl,sz) -> do
 --
 {-# INLINE stash #-}
 stash :: forall m e proxy. RemoteMemory m => proxy m -> Int -> NRS (RemotePointer m) -> RemotePointer m e -> IO ()
-stash _ !n !ref (M.castPtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,sz) -> do
+stash _ !n !ref (R.castPtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,sz) -> do
   mp  <- HT.lookup tbl n
   case mp of
     Nothing     -> HT.insert tbl n (FL.singleton () ptr)

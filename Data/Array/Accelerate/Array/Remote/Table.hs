@@ -10,7 +10,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Memory.Table
+-- Module      : Data.Array.Accelerate.Array.Remote.Table
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
 --               [2009..2014] Trevor L. McDonell
 -- License     : BSD3
@@ -25,7 +25,7 @@
 -- allocated for them will be freed when GHC's garbage collector collects the
 -- host array.
 --
-module Data.Array.Accelerate.Array.Memory.Table (
+module Data.Array.Accelerate.Array.Remote.Table (
 
   -- Tables for host/device memory associations
   MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
@@ -58,11 +58,11 @@ import Data.Array.Accelerate.Error                              ( internalError 
 import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
                                                                   ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..) )
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
-import Data.Array.Accelerate.Array.Memory.Nursery               ( Nursery(..) )
+import Data.Array.Accelerate.Array.Remote                       ( RemoteMemory, RemotePointer, PrimElt )
+import Data.Array.Accelerate.Array.Remote.Nursery               ( Nursery(..) )
 import Data.Array.Accelerate.Lifetime
-import qualified Data.Array.Accelerate.Array.Memory             as M
-import qualified Data.Array.Accelerate.Array.Memory.Nursery     as N
+import qualified Data.Array.Accelerate.Array.Remote             as R
+import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
 
 
@@ -165,7 +165,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   --
   -- TLM: I believe the CUDA API allocates in chunks, of size 4MB.
   --
-  chunk <- M.chunkSize
+  chunk <- R.chunkSize
   let -- next highest multiple of f from x
       multiple x f      = (x + (f-1)) `div` f
 
@@ -174,17 +174,17 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   --
   message ("malloc: " ++ showBytes bytes)
   mp <-
-      attempt "malloc/nursery" (liftIO $ fmap (M.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+      attempt "malloc/nursery" (liftIO $ fmap (R.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
     `orElse` attempt "malloc/new" (do
-      M.malloc n')
+      R.malloc n')
     `orElse` (do
       message "malloc/remote-malloc-failed (cleaning)"
       clean mt
-      liftIO $ fmap (M.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+      liftIO $ fmap (R.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
     `orElse` (do
       message "malloc/remote-malloc-failed (purging)"
       purge mt
-      M.malloc n')
+      R.malloc n')
     `orElse` (do
       message "malloc/remote-malloc-failed (non-recoverable)"
       return Nothing)
@@ -421,12 +421,12 @@ message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
 management msg nrs next = do
-  before     <- M.availableMem
+  before     <- R.availableMem
   before_nrs <- liftIO $ N.size nrs
-  total      <- M.totalMem
+  total      <- R.totalMem
   r          <- next
   D.when D.dump_gc $ do
-    after     <- M.availableMem
+    after     <- R.availableMem
     after_nrs <- liftIO $ N.size nrs
     message $ msg ++ " (freed: "     ++ showBytes (after - before)
                   ++ ", stashed: "   ++ showBytes (before_nrs - after_nrs)

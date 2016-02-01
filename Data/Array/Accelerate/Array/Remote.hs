@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Memory
+-- Module      : Data.Array.Accelerate.Array.Remote
 -- Copyright   : [2015] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
 -- License     : BSD3
 --
@@ -11,7 +11,7 @@
 -- Portability : non-portable (GHC extensions)
 --
 
-module Data.Array.Accelerate.Array.Memory (
+module Data.Array.Accelerate.Array.Remote (
 
   RemoteMemory(..), PrimElt
 

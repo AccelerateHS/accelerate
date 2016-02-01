@@ -8,7 +8,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Memory.Cache
+-- Module      : Data.Array.Accelerate.Array.Remote.Cache
 -- Copyright   : [2015..2015] Manuel M T Chakravarty, Gabriele Keller,
 --                            Robert Clifton-Everest
 -- License     : BSD3
@@ -23,7 +23,7 @@
 -- memory when the remote memory is exhausted. This requires keeping of track
 -- of what remote pointers are being "used". See `withRemote` below.
 --
-module Data.Array.Accelerate.Array.Memory.Cache (
+module Data.Array.Accelerate.Array.Remote.Cache (
 
   -- Tables for host/device memory associations
   MemoryCache, new, withRemote, malloc, free, insertUnmanaged, reclaim,
@@ -49,10 +49,10 @@ import qualified Data.HashTable.IO                              as HT
 import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
-import Data.Array.Accelerate.Array.Memory                       ( RemoteMemory, RemotePointer, PrimElt )
-import Data.Array.Accelerate.Array.Memory.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
-import qualified Data.Array.Accelerate.Array.Memory             as M
-import qualified Data.Array.Accelerate.Array.Memory.Table       as MT
+import Data.Array.Accelerate.Array.Remote                       ( RemoteMemory, RemotePointer, PrimElt )
+import Data.Array.Accelerate.Array.Remote.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
+import qualified Data.Array.Accelerate.Array.Remote             as M
+import qualified Data.Array.Accelerate.Array.Remote.Table       as MT
 
 
 -- We build the cache on top of a memory table.
