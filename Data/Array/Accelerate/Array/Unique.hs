@@ -71,9 +71,8 @@ unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
 
 
 -- | Ensure that the unique array is alive at the given place in a sequence of
--- IO actions.
+-- IO actions. Note that this does not force the actual array payload.
 --
 touchUniqueArray :: UniqueArray a -> IO ()
-touchUniqueArray ua =
-  withLifetime (uniqueArrayData ua) touchForeignPtr
+touchUniqueArray = touchLifetime . uniqueArrayData
 
