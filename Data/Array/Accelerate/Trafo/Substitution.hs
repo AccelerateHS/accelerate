@@ -185,6 +185,18 @@ instance RebuildableAcc acc => Rebuildable (PreOpenAfun acc) where
   type AccClo (PreOpenAfun acc) = acc
   rebuildPartial = rebuildAfun rebuildPartial
 
+instance RebuildableAcc acc => Rebuildable (PreOpenSeq index acc) where
+  type AccClo (PreOpenSeq index acc) = acc
+  rebuildPartial = rebuildSeq rebuildPartial
+
+instance RebuildableAcc acc => Rebuildable (Producer index acc) where
+  type AccClo (Producer index acc) = acc
+  rebuildPartial = rebuildP rebuildPartial
+
+instance RebuildableAcc acc => Rebuildable (Consumer index acc) where
+  type AccClo (Consumer index acc) = acc
+  rebuildPartial = rebuildC rebuildPartial
+
 -- Tuples have to be handled specially.
 newtype RebuildTup acc env aenv t = RebuildTup { unRTup :: Tuple (PreOpenExp acc env aenv) t }
 
@@ -231,11 +243,14 @@ instance Sink Idx where
 --instance Rebuildable f => Sink f where -- undecidable, incoherent
 --  weaken k = Stats.substitution "weaken" . rebuildA (Avar . k)
 
-instance RebuildableAcc acc => Sink (PreOpenAcc acc) where
-instance RebuildableAcc acc => Sink (PreOpenAfun acc) where
-instance RebuildableAcc acc => Sink (PreOpenExp acc env) where
-instance RebuildableAcc acc => Sink (PreOpenFun acc env) where
-instance RebuildableAcc acc => Sink (RebuildTup acc env) where
+instance RebuildableAcc acc => Sink (PreOpenAcc acc)
+instance RebuildableAcc acc => Sink (PreOpenAfun acc)
+instance RebuildableAcc acc => Sink (PreOpenExp acc env)
+instance RebuildableAcc acc => Sink (PreOpenFun acc env)
+instance RebuildableAcc acc => Sink (RebuildTup acc env)
+instance RebuildableAcc acc => Sink (PreOpenSeq index acc)
+instance RebuildableAcc acc => Sink (Producer index acc)
+instance RebuildableAcc acc => Sink (Consumer index acc)
 instance Sink OpenAcc where
 
 -- This rewrite rule is disabled because 'weaken' is now part of a type class.
@@ -483,9 +498,9 @@ rebuildSeq
     -> f (PreOpenSeq idx acc aenv' t)
 rebuildSeq k v seq =
   case seq of
-    Producer p s -> Producer <$> (rebuildP k v p) <*> (rebuildSeq k (shiftA k v) s)
-    Consumer c   -> Consumer <$> (rebuildC k v c)
-    Reify a      -> Reify    <$> k v a
+    Producer p s -> Producer <$> rebuildP k v p <*> rebuildSeq k (shiftA k v) s
+    Consumer c   -> Consumer <$> rebuildC k v c
+    Reify  a     -> Reify    <$> k v a
 
 rebuildP :: (SyntacticAcc fa, Applicative f)
          => RebuildAcc acc
@@ -510,10 +525,11 @@ rebuildC k v c =
     FoldSeqFlatten f acc x -> FoldSeqFlatten <$> rebuildAfun k v f <*> k v acc <*> k v x
     Iterate l f acc        -> Iterate <$> sequenceA (rebuildPreOpenExp k (pure . IE) v <$> l) <*> rebuildAfun k v f <*> k v acc
     Stuple t               -> Stuple <$> rebuildT t
+    Conclude a d           -> Conclude <$> k v a <*> k v d
   where
-    rebuildT :: Atuple (Consumer idx acc aenv) t -> f (Atuple (Consumer idx acc aenv') t)
+    rebuildT :: Atuple (PreOpenSeq idx acc aenv) t -> f (Atuple (PreOpenSeq idx acc aenv') t)
     rebuildT NilAtup        = pure NilAtup
-    rebuildT (SnocAtup t s) = SnocAtup <$> (rebuildT t) <*> (rebuildC k v s)
+    rebuildT (SnocAtup t s) = SnocAtup <$> rebuildT t <*> rebuildSeq k v s
 
 -- For OpenAcc
 

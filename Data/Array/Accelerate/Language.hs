@@ -128,7 +128,7 @@ import Text.Printf
 -- friends
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -1076,4 +1076,3 @@ fromIntegral = mkFromIntegral
 --
 ignore :: Shape ix => Exp ix
 ignore = constant Sugar.ignore
-

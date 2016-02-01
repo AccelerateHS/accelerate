@@ -56,8 +56,9 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex )
 import Data.Array.Accelerate.Array.Sugar                as Sugar
 import Data.Array.Accelerate.AST                        hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenSeq(..), Producer(..), Consumer(..),
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
+import Data.Array.Accelerate.Trafo.Base                 ( StreamSeq(..), Extend(..) )
 import qualified Data.Array.Accelerate.AST              as AST
 import qualified Data.Array.Accelerate.Debug            as Debug
 
@@ -318,18 +319,24 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
 -- sharing information.
 --
 convertSeq
-    :: Typeable s
+    :: forall s. Typeable s
     => Bool             -- ^ recover sharing of array computations ?
     -> Bool             -- ^ recover sharing of scalar expressions ?
     -> Bool             -- ^ recover sharing of sequence computations ?
     -> Bool             -- ^ always float array computations out of expressions?
     -> Seq s            -- ^ computation to be converted
-    -> AST.NaturalSeq s
+    -> StreamSeq (Scalar Int) AST.OpenAcc s
 convertSeq shareAcc shareExp shareSeq floatAcc seq
   = let config = Config shareAcc shareExp shareSeq floatAcc
-        (sharingSeq, initialEnv) = recoverSharingSeq config seq
-    in
-    convertSharingSeq config EmptyLayout [] initialEnv sharingSeq
+        (sharingSeq, senv, aenv) = recoverSharingSeq config seq
+
+        go :: [StableSharingAcc] -> Extend AST.OpenAcc () aenv -> Layout aenv aenv -> StreamSeq (Scalar Int) AST.OpenAcc s
+        go [] binds lyt = StreamSeq binds (convertSharingSeq config lyt aenv senv sharingSeq)
+        go (StableSharingAcc _ acc : as) binds lyt
+          = go as (binds `PushEnv` convertSharingAcc config lyt as (ScopedAcc [] acc)) (incLayout lyt `PushLayout` ZeroIdx)
+
+
+    in go (reverse aenv) BaseEnv EmptyLayout
 
 convertSharingSeq
     :: forall aenv arrs.
@@ -440,12 +447,9 @@ convertSharingSeq config alyt aenv senv s
     cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
     cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
 
-    cvtST :: Atuple ScopedSeq t -> Atuple (AST.NaturalConsumer AST.OpenAcc aenv) t
+    cvtST :: Atuple ScopedSeq t -> Atuple (AST.OpenNaturalSeq aenv) t
     cvtST NilAtup        = NilAtup
-    cvtST (SnocAtup t c) | AST.Consumer c' <- cvtC c
-                         = SnocAtup (cvtST t) c'
-                         | otherwise
-                         = $internalError "convertSharingSeq" "Unreachable"
+    cvtST (SnocAtup t c) = SnocAtup (cvtST t) (cvtC c)
 
 convertSharingAfun1
     :: forall aenv a b. (Arrays a, Arrays b)
@@ -2830,7 +2834,7 @@ recoverSharingSeq
     :: Typeable e
     => Config
     -> Seq e
-    -> (ScopedSeq e, [StableSharingSeq])
+    -> (ScopedSeq e, [StableSharingSeq], [StableSharingAcc])
 {-# NOINLINE recoverSharingSeq #-}
 recoverSharingSeq config seq
   = let
@@ -2844,7 +2848,7 @@ recoverSharingSeq config seq
         (ScopedSeq sharingSeq, (ns, _)) =
           determineScopesSeq config accOccMap rootSeq
     in
-    (ScopedSeq sharingSeq, [a | SeqNodeCount a _ <- ns])
+    (ScopedSeq sharingSeq, [a | SeqNodeCount a _ <- ns], [a | AccNodeCount a _ <- ns])
 
 
 -- Debugging
@@ -2864,4 +2868,3 @@ tracePure :: String -> String -> a -> a
 tracePure header msg
   = Debug.trace Debug.dump_sharing
   $ header ++ ": " ++ msg
-

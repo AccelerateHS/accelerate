@@ -17,6 +17,7 @@ import Data.Array.Accelerate.Array.Representation ( SliceIndex (..) )
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
 
+import Data.Maybe                                 ( fromMaybe )
 
 cat :: Show s => String -> s -> String
 cat t s = t ++ show s
@@ -74,41 +75,39 @@ travAcc f c l (OpenAcc openAcc) = travAcc' openAcc
     travAcc' (Stencil2 sten bndy1 acc1 bndy2 acc2) = combine "Stencil2" [ travFun f c l sten, travBoundary f l acc1 bndy1
                                                                         , travAcc f c l acc1, travBoundary f l acc2 bndy2
                                                                         , travAcc f c l acc2]
-    travAcc' (Collect seq)                         = travSeq f c l seq
+    travAcc' (Collect seq cseq)                    = maybe (travSeq f c l seq) (travSeq f c l ) cseq
 
-travSeq :: forall m b aenv senv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
-         -> (String -> String -> m b) -> PreOpenSeq OpenAcc aenv senv a -> m b
+travSeq :: forall m b index aenv a. Monad m => Labels -> (String -> String -> [m b] -> m b)
+         -> (String -> String -> m b) -> PreOpenSeq index OpenAcc aenv a -> m b
 travSeq f c l seq =
   case seq of
     Producer p s' ->
       case p of
-        StreamIn _    -> combine "StreamIn" [ leaf "..." , travSeq f c l s' ]
-        ToSeq _ slix _ a -> combine "ToSeq" [ leaf (travSlix slix), travAcc f c l a, travSeq f c l s' ]
-        GeneralMapSeq pre a _ -> combine "GeneralMapSeq" [ travAcc f c l a ]
-        MapSeq afun _ x -> combine "MapSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), travSeq f c l s' ]
-        ZipWithSeq afun _ x y -> combine "ZipWithSeq" [ travAfun f c l afun, leaf (show (idxToInt x)), leaf (show (idxToInt y)), travSeq f c l s' ]
-        ScanSeq fun e x -> combine "ScanSeq" [ travFun f c l fun, travExp f c l e, leaf (show (idxToInt x)), travSeq f c l s' ]
+        Pull _    -> combine "Pull" [ leaf "..." , travSeq f c l s' ]
+        Subarrays sh _       -> combine "subarrays"    [ travExp f c l sh, leaf "[..]", travSeq f c l s' ]
+        Produce l' f'        -> combine "produce"      [ travL l', travAfun f c l f' , travSeq f c l s' ]
+        MapAccumFlat f' a x  -> combine "mapAccumFlat" [ travAfun f c l f', travAcc f c l a, travAcc f c l x , travSeq f c l s' ]
+        ProduceAccum l' f' a -> combine "produceAccum" [ travL l', travAfun f c l f', travAcc f c l a , travSeq f c l s' ]
     Consumer co -> travC co
-    Reify _ ix  -> leaf (show (idxToInt ix))
+    Reify a     -> travAcc f c l a
   where
     combine = c (accFormat f)
     leaf    = l (accFormat f)
     --
-    travT :: Atuple (Consumer OpenAcc aenv senv) t' -> m b
-    travT NilAtup          = l (tupleFormat f) "NilAtup"
-    travT (SnocAtup tup s) = c (tupleFormat f) "SnocAtup" [ travT tup, travC s ]
+    travL Nothing = leaf "Infinity"
+    travL (Just e) = travExp f c l e
 
-    travC :: forall a. Consumer OpenAcc aenv senv a -> m b
+    travT :: Atuple (PreOpenSeq index OpenAcc aenv) t' -> m b
+    travT NilAtup          = l (tupleFormat f) "NilAtup"
+    travT (SnocAtup tup s) = c (tupleFormat f) "SnocAtup" [ travT tup, travSeq f c l s ]
+
+    travC :: forall a. Consumer index OpenAcc aenv a -> m b
     travC co =
       case co of
-        FoldSeqRegular pre afun a -> combine "FoldSeqRegular" [ travAfun f c l afun, travAcc f c l a ]
-        FoldSeqFlatten _ afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, leaf (show (idxToInt x)) ]
+        FoldSeqFlatten afun a x -> combine "FoldSeqFlatten" [ travAfun f c l afun, travAcc f c l a, travAcc f c l x ]
+        Iterate l' afun a       -> combine "iterate"        [ travL l', travAfun f c l afun, travAcc f c l a ]
+        Conclude a d            -> combine "conclude"       [ travAcc f c l a, travAcc f c l d]
         Stuple t -> travT t
-
-    travSlix :: SliceIndex slix sl co sh -> String
-    travSlix SliceNil       = "Z"
-    travSlix (SliceAll s)   = travSlix s ++ ":.All"
-    travSlix (SliceFixed s) = travSlix s ++ ":.Split"
 
 travExp :: forall m env aenv a b . Monad m => Labels
        -> (String -> String -> [m b] -> m b)
@@ -294,4 +293,3 @@ labelForConst (PrimPi       _) = "PrimPi"
 
 -- Auxiliary ops
 --
-

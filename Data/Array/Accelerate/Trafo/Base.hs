@@ -31,7 +31,7 @@ module Data.Array.Accelerate.Trafo.Base (
   DelayedAcc,  DelayedOpenAcc(..),
   DelayedAfun, DelayedOpenAfun,
   DelayedExp, DelayedFun, DelayedOpenExp, DelayedOpenFun,
-  DelayedSeq(..), DelayedOpenSeq,
+  DelayedSeq, DelayedOpenSeq, StreamSeq(..),
 
   -- Environments
   Gamma(..), incExp, prjExp, lookupExp,
@@ -132,13 +132,14 @@ type DelayedAfun        = PreOpenAfun DelayedOpenAcc ()
 type DelayedExp         = DelayedOpenExp ()
 type DelayedFun         = DelayedOpenFun ()
 
-data DelayedSeq t where
- DelayedSeq :: Extend DelayedOpenAcc () aenv -> DelayedOpenSeq aenv () t -> DelayedSeq t
+data StreamSeq index acc t where
+  StreamSeq :: Extend acc () aenv -> PreOpenSeq index acc aenv t -> StreamSeq index acc t
 
-type DelayedOpenAfun    = PreOpenAfun DelayedOpenAcc
-type DelayedOpenExp     = PreOpenExp DelayedOpenAcc
-type DelayedOpenFun     = PreOpenFun DelayedOpenAcc
-type DelayedOpenSeq     = PreOpenSeq DelayedOpenAcc
+type DelayedOpenAfun      = PreOpenAfun DelayedOpenAcc
+type DelayedOpenExp       = PreOpenExp DelayedOpenAcc
+type DelayedOpenFun       = PreOpenFun DelayedOpenAcc
+type DelayedOpenSeq index = PreOpenSeq index DelayedOpenAcc
+type DelayedSeq index     = StreamSeq index DelayedOpenAcc
 
 data DelayedOpenAcc aenv a where
   Manifest              :: PreOpenAcc DelayedOpenAcc aenv a -> DelayedOpenAcc aenv a
@@ -214,14 +215,14 @@ prettyDelayed alvl wrap acc = case acc of
                   ]
 
 prettyDelayedSeq
-    :: forall arrs.
+    :: forall index arrs.
        (Doc -> Doc)                             -- apply to compound expressions
-    -> DelayedSeq arrs
+    -> DelayedSeq index arrs
     -> Doc
-prettyDelayedSeq wrap (DelayedSeq env s)
+prettyDelayedSeq wrap (StreamSeq env s)
   | (d, lvl) <- pp env 0
   =  wrap $  (hang (text "let") 2 $ vcat $ d)
-          $$ (hang (text "in sequence")  2 $ vcat $ punctuate (text ";") $ prettySeq prettyAcc lvl 0 wrap s)
+          $$ (hang (text "in sequence")  2 $ vcat $ punctuate (text ";") $ prettySeq prettyAcc lvl wrap s)
   where
     pp :: Extend DelayedOpenAcc aenv aenv' -> Int -> ([Doc], Int)
     pp BaseEnv          lvl = ([],lvl)

@@ -276,7 +276,7 @@ evalShapeSeq eval s aenv =
       intermediateShape =<< lift (toShapeTree a)
       evalShapeSeq eval s0 (aenv `PushPartial` a)
     Consumer c -> evalC c
-    Reify    _ -> return ()
+    Reify  _   -> return ()
   where
     evalP :: Producer (Scalar Int) acc aenv a -> Shapes (ArraysPartial a)
     evalP p =
@@ -324,9 +324,9 @@ evalShapeSeq eval s aenv =
             (PartialArray (Just Z) Nothing )
             a'
         Stuple tup ->
-          let f :: Atuple (Consumer (Scalar Int) acc aenv) t -> Shapes ()
+          let f :: Atuple (PreOpenSeq (Scalar Int) acc aenv) t -> Shapes ()
               f NilAtup = return ()
-              f (SnocAtup t c) = f t >> evalC c
+              f (SnocAtup t c) = f t >> evalShapeSeq eval c aenv
           in f tup
 
     evalSrc :: Source a -> ArraysPartial a

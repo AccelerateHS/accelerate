@@ -18,6 +18,7 @@ import Prelude                                          hiding ( seq )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Trafo.Base                 ( Extend(..), StreamSeq(..) )
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Array.Sugar                ( Arrays, Segments, Elt, fromElt, Tuple(..), Atuple(..) )
 
@@ -89,7 +90,7 @@ convertSegments = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s                 -> Collect (convertSegmentsSeq s)
+      Collect s cs              -> Collect (convertSegmentsSeq s) (convertSegmentsSeq <$> cs)
 
       -- Things we are interested in, whoo!
       FoldSeg f z a s           -> Alet (segments s) (OpenAcc (FoldSeg (cvtF f') (cvtE z') (cvtA a') a0))
@@ -108,33 +109,39 @@ convertSegmentsAfun afun =
     Abody b     -> Abody (convertSegments b)
     Alam f      -> Alam  (convertSegmentsAfun f)
 
-convertSegmentsSeq :: PreOpenSeq OpenAcc aenv senv a -> PreOpenSeq OpenAcc aenv senv a
+convertSegmentsStreamSeq :: StreamSeq index OpenAcc a -> StreamSeq index OpenAcc a
+convertSegmentsStreamSeq (StreamSeq binds seq) = StreamSeq (cvtExtend binds) (convertSegmentsSeq seq)
+  where
+    cvtExtend :: Extend OpenAcc aenv aenv' -> Extend OpenAcc aenv aenv'
+    cvtExtend BaseEnv = BaseEnv
+    cvtExtend (PushEnv env a) = cvtExtend env `PushEnv` convertSegments a
+
+convertSegmentsSeq :: PreOpenSeq index OpenAcc aenv a -> PreOpenSeq index OpenAcc aenv a
 convertSegmentsSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (convertSegmentsSeq s)
     Consumer c   -> Consumer (cvtC c)
-    Reify f ix   -> Reify (cvtAfun `fmap` f) ix
+    Reify a      -> Reify (cvtA a)
   where
-    cvtP :: Producer OpenAcc aenv senv a -> Producer OpenAcc aenv senv a
+    cvtP :: Producer index OpenAcc aenv a -> Producer index OpenAcc aenv a
     cvtP p =
       case p of
-        StreamIn arrs        -> StreamIn arrs
-        ToSeq f sl slix a    -> ToSeq (cvtAfun `fmap` f) sl slix (cvtA a)
-        GeneralMapSeq pre a a' -> GeneralMapSeq pre (cvtA a) (cvtA `fmap` a')
-        MapSeq f f' x        -> MapSeq (cvtAfun f) (cvtAfun `fmap` f') x
-        ZipWithSeq f f' x y  -> ZipWithSeq (cvtAfun f) (cvtAfun `fmap` f') x y
-        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
+        Pull src           -> Pull src
+        Subarrays sh arr   -> Subarrays (cvtE sh) arr
+        Produce l f        -> Produce (cvtE <$> l) (cvtAfun f)
+        MapAccumFlat f a x -> MapAccumFlat (cvtAfun f) (cvtA a) (cvtA x)
+        ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAfun f) (cvtA a)
 
-    cvtC :: Consumer OpenAcc aenv senv a -> Consumer OpenAcc aenv senv a
+    cvtC :: Consumer index OpenAcc aenv a -> Consumer index OpenAcc aenv a
     cvtC c =
       case c of
-        FoldSeqRegular pre f a  -> FoldSeqRegular pre (cvtAfun f) (cvtA a)
-        FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAfun `fmap` f') (cvtAfun f) (cvtA a) x
-        Stuple t                -> Stuple (cvtCT t)
+        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) (cvtA x)
+        Iterate l f a        -> Iterate (cvtE <$> l) (cvtAfun f) (cvtA a)
+        Stuple t             -> Stuple (cvtCT t)
 
-    cvtCT :: Atuple (Consumer OpenAcc senv aenv) t -> Atuple (Consumer OpenAcc senv aenv) t
+    cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
     cvtCT NilAtup        = NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (convertSegmentsSeq c)
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
     cvtE = id
@@ -147,4 +154,3 @@ convertSegmentsSeq seq =
 
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
     cvtAfun = convertSegmentsAfun
-

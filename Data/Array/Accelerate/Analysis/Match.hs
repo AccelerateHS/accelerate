@@ -392,7 +392,7 @@ matchSeq m h = match
       , Just REFL <- m acc1 acc2
       = Just REFL
     matchC (Stuple s1) (Stuple s2)
-      | Just REFL <- matchAtuple matchC s1 s2
+      | Just REFL <- matchAtuple (matchSeq m h) s1 s2
       = gcast REFL
     matchC _ _
       = Nothing
@@ -1022,7 +1022,8 @@ hashPreOpenSeq hashAcc s =
       case c of
         FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashA` x
         Iterate l f acc        -> hashWithSalt salt "Iterate"        `hashL` l `hashAF` f `hashA` acc
-        Stuple t               -> hash "Stuple"                      `hashWithSalt` hashAtuple (hashC salt) t
+        Conclude a d           -> hashWithSalt salt "Conclude"       `hashA` a `hashA` d
+        Stuple t               -> hash "Stuple"                      `hashWithSalt` hashAtuple (hashS salt) t
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'
@@ -1220,4 +1221,3 @@ hashPrimFun PrimLNot                    = hash "PrimLNot"
 hashPrimFun PrimOrd                     = hash "PrimOrd"
 hashPrimFun PrimChr                     = hash "PrimChr"
 hashPrimFun PrimBoolToInt               = hash "PrimBoolToInt"
-

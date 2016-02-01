@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
@@ -17,20 +18,18 @@
 
 module Data.Array.Accelerate.Trafo.Normalise (
 
-  untupleAcc, untupleAfun, TupleMap(..), untupleSeq
+  untupleAcc, untupleAfun, ReducedMap(..), untupleSeq
 
 ) where
 
 import Prelude                                          hiding ( exp )
 import Data.Functor                                     ( (<$>) )
-import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
-
-import Data.Proxy
+import Data.Array.Accelerate.Error
 
 -- Convert to Administrative Normal (a-normal) Form, where lets-within-lets of
 -- an expression are flattened.
@@ -99,98 +98,81 @@ import Data.Proxy
 --         Foreign ff f e          -> Foreign ff (cvtF f) (cvt e)
 
 
-data TupleMap aenv aenv' where
-  BaseTupleMap :: TupleMap aenv aenv
-  OneTupleMap  :: (IsAtuple t, Arrays t') => TupleMap aenv aenv' -> TupleReduction (TupleRepr t) t' -> TupleMap (aenv, t) (aenv', t')
-  SnocTupleMap :: TupleMap aenv aenv' -> TupleMap (aenv,t) (aenv',t)
+data ReducedMap aenv aenv' where
+  BaseReducedMap :: ReducedMap aenv aenv
+  SnocReducedMap :: Arrays t' => ReducedMap aenv aenv' -> Reduction t t' -> ReducedMap (aenv,t) (aenv',t')
 
-data Untupled f t where
-  Same     :: f t -> Untupled f t
-  OneTuple :: (Arrays t, IsAtuple t, Arrays t') => TupleReduction (TupleRepr t) t' -> f t' -> Untupled f t
+data Reduced f t where
+  Reduced :: Arrays t' => Reduction t t' -> f t' -> Reduced f t
 
-data TupleReduction t t' where
-  TROne  :: TupleReduction ((),t) t
-  TRNest :: (Arrays t, IsAtuple t)
-         => TupleReduction (TupleRepr t) t' -> TupleReduction ((),t) t'
+data Reduction t t' where
+  RId   :: Reduction t t
+  RNest :: (Arrays t', IsAtuple t, TupleRepr t ~ ((),t'))
+        => Reduction t' t''
+        -> Reduction t t''
 
-data HasReduction t where
-  HasReduction :: Arrays t' => TupleReduction t t' -> HasReduction t
-
-data UntupledAfun aenv f where
-  UTBody  :: Arrays t => Untupled (OpenAcc aenv) t -> UntupledAfun aenv t
-  SameLam :: Arrays a => UntupledAfun (aenv,a) b -> UntupledAfun aenv (a -> b)
-  OTLam   :: (Arrays a, Arrays a', IsAtuple a) => TupleReduction (TupleRepr a) a' -> UntupledAfun (aenv,a') b -> UntupledAfun aenv (a -> b)
-
-buildTuple :: Arrays t' => TupleReduction t t' -> OpenAcc aenv t' -> Atuple (OpenAcc aenv) t
-buildTuple TROne t'  = NilAtup `SnocAtup` t'
-buildTuple (TRNest tr) t' = NilAtup `SnocAtup` OpenAcc (Atuple (buildTuple tr t'))
-
-wrap :: Arrays t => (forall t. Arrays t => f t -> f' t) -> Untupled f t -> Untupled f' t
-wrap f (Same t)     = Same (f t)
-wrap f (OneTuple tr t) = OneTuple tr (f t)
-
-makeSame :: Untupled (OpenAcc aenv) t -> OpenAcc aenv t
-makeSame a = case a of
-               Same a'        -> a'
-               OneTuple tr a' -> OpenAcc (Atuple (buildTuple tr a'))
+wrap :: (forall t. f t -> f' t) -> Reduced f t -> Reduced f' t
+wrap f (Reduced r t) = Reduced r (f t)
 
 -- Remove any 1-tuples
 --
 untupleAcc :: forall aenv aenv' t. Arrays t
-           => TupleMap aenv aenv'
+           => ReducedMap aenv aenv'
            -> OpenAcc aenv  t
-           -> Untupled (OpenAcc aenv') t
+           -> Reduced (OpenAcc aenv') t
 untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
   Alet bnd body             -> alet bnd body
   Avar ix                   -> avar tmap ix id
   Atuple tup                -> atuple tup
   Aprj tup a                -> aprj tup a
   Apply f a                 -> apply f a
-  Aforeign ff afun acc      -> Same $ Aforeign ff (untupleAfun BaseTupleMap afun) (same acc)
-  Acond p t e               -> Same $ Acond (cvtE p) (same t) (same e)
-  Awhile p f a              -> Same $ Awhile (cvtAF p) (cvtAF f) (same a)
+  Aforeign ff afun acc      -> noRed $ Aforeign ff (untupleAfun BaseReducedMap afun) (same acc)
+  Acond p t e               -> noRed $ Acond (cvtE p) (same t) (same e)
+  Awhile p f a              -> noRed $ Awhile (cvtAF p) (cvtAF f) (same a)
   Use a                     -> use a
-  Unit e                    -> Same $ Unit (cvtE e)
-  Reshape e a               -> Same $ Reshape (cvtE e) (cvtA a)
-  Generate e f              -> Same $ Generate (cvtE e) (cvtF f)
-  Transform sh ix f a       -> Same $ Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
-  Replicate sl slix a       -> Same $ Replicate sl (cvtE slix) (cvtA a)
-  Slice sl a slix           -> Same $ Slice sl (cvtA a) (cvtE slix)
-  Map f a                   -> Same $ Map (cvtF f) (cvtA a)
-  ZipWith f a1 a2           -> Same $ ZipWith (cvtF f) (cvtA a1) (cvtA a2)
-  Fold f z a                -> Same $ Fold (cvtF f) (cvtE z) (cvtA a)
-  Fold1 f a                 -> Same $ Fold1 (cvtF f) (cvtA a)
-  Scanl f z a               -> Same $ Scanl (cvtF f) (cvtE z) (cvtA a)
-  Scanl' f z a              -> Same $ Scanl' (cvtF f) (cvtE z) (cvtA a)
-  Scanl1 f a                -> Same $ Scanl1 (cvtF f) (cvtA a)
-  Scanr f z a               -> Same $ Scanr (cvtF f) (cvtE z) (cvtA a)
-  Scanr' f z a              -> Same $ Scanr' (cvtF f) (cvtE z) (cvtA a)
-  Scanr1 f a                -> Same $ Scanr1 (cvtF f) (cvtA a)
-  Permute f1 a1 f2 a2       -> Same $ Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
-  Backpermute sh f a        -> Same $ Backpermute (cvtE sh) (cvtF f) (cvtA a)
-  Stencil f b a             -> Same $ Stencil (cvtF f) b (cvtA a)
-  Stencil2 f b1 a1 b2 a2    -> Same $ Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-  Collect s                 -> Same $ Collect (untupleSeq tmap s)
-  FoldSeg f z a s           -> Same $ FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
-  Fold1Seg f a s            -> Same $ Fold1Seg (cvtF f) (cvtA a) (cvtA s)
+  Subarray ix sh a          -> noRed $ Subarray (cvtE ix) (cvtE sh) a
+  Unit e                    -> noRed $ Unit (cvtE e)
+  Reshape e a               -> noRed $ Reshape (cvtE e) (cvtA a)
+  Generate e f              -> noRed $ Generate (cvtE e) (cvtF f)
+  Transform sh ix f a       -> noRed $ Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
+  Replicate sl slix a       -> noRed $ Replicate sl (cvtE slix) (cvtA a)
+  Slice sl a slix           -> noRed $ Slice sl (cvtA a) (cvtE slix)
+  Map f a                   -> noRed $ Map (cvtF f) (cvtA a)
+  ZipWith f a1 a2           -> noRed $ ZipWith (cvtF f) (cvtA a1) (cvtA a2)
+  Fold f z a                -> noRed $ Fold (cvtF f) (cvtE z) (cvtA a)
+  Fold1 f a                 -> noRed $ Fold1 (cvtF f) (cvtA a)
+  Scanl f z a               -> noRed $ Scanl (cvtF f) (cvtE z) (cvtA a)
+  Scanl' f z a              -> noRed $ Scanl' (cvtF f) (cvtE z) (cvtA a)
+  Scanl1 f a                -> noRed $ Scanl1 (cvtF f) (cvtA a)
+  Scanr f z a               -> noRed $ Scanr (cvtF f) (cvtE z) (cvtA a)
+  Scanr' f z a              -> noRed $ Scanr' (cvtF f) (cvtE z) (cvtA a)
+  Scanr1 f a                -> noRed $ Scanr1 (cvtF f) (cvtA a)
+  Permute f1 a1 f2 a2       -> noRed $ Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
+  Backpermute sh f a        -> noRed $ Backpermute (cvtE sh) (cvtF f) (cvtA a)
+  Stencil f b a             -> noRed $ Stencil (cvtF f) b (cvtA a)
+  Stencil2 f b1 a1 b2 a2    -> noRed $ Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+  Collect s cs              -> noRed $ Collect (untupleSeq tmap s) (untupleSeq tmap <$> cs)
+  FoldSeg f z a s           -> noRed $ FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+  Fold1Seg f a s            -> noRed $ Fold1Seg (cvtF f) (cvtA a) (cvtA s)
 
   where
     cvtA :: (Shape sh, Elt e)
          => OpenAcc aenv  (Array sh e)
          -> OpenAcc aenv' (Array sh e)
-    cvtA (untupleAcc tmap -> Same a) = a
-    cvtA _                           = error "Unreachable"
+    cvtA (untupleAcc tmap -> Reduced RId a) = a
+    cvtA _                                  = error "Unreachable"
 
-    same :: Arrays a
-         => OpenAcc aenv  a
-         -> OpenAcc aenv' a
-    same a = makeSame (untupleAcc tmap a)
+    noRed :: f t
+          -> Reduced f t
+    noRed = Reduced RId
 
-    atuple :: IsAtuple t => Atuple (OpenAcc aenv) (TupleRepr t) -> Untupled (PreOpenAcc OpenAcc aenv') t
-    atuple (NilAtup `SnocAtup` t) = case untupleAcc tmap t of
-                                      Same (OpenAcc t') -> OneTuple TROne t'
-                                      OneTuple tr (OpenAcc t') -> OneTuple (TRNest tr) t'
-    atuple t = Same $ Atuple (cvtAT t) -- The tuple is already larger than a one-tuple. Further reduction is pointless.
+    same :: Arrays a => OpenAcc aenv a -> OpenAcc aenv' a
+    same = unreduce . untupleAcc tmap
+
+    atuple :: IsAtuple t => Atuple (OpenAcc aenv) (TupleRepr t) -> Reduced (PreOpenAcc OpenAcc aenv') t
+    atuple (NilAtup `SnocAtup` t) | Reduced r t' <- untupleAcc tmap t
+                                  = Reduced (RNest r) (extract t')
+    atuple t                      = Reduced RId (Atuple (cvtAT t))
       where
         cvtAT :: forall t. Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv') t
         cvtAT atup = case atup of
@@ -206,104 +188,76 @@ untupleAcc tmap (OpenAcc pacc) = wrap OpenAcc $ case pacc of
     cvtF :: forall t. Fun aenv t -> Fun aenv' t
     cvtF = untupleFun tmap
 
-    alet :: (Arrays bnd, Arrays body) => OpenAcc aenv bnd -> OpenAcc (aenv, bnd) body -> Untupled (PreOpenAcc OpenAcc aenv') body
+    alet :: (Arrays bnd, Arrays body) => OpenAcc aenv bnd -> OpenAcc (aenv, bnd) body -> Reduced (PreOpenAcc OpenAcc aenv') body
     alet (OpenAcc (Avar ix)) body = extract `wrap` untupleAcc tmap  (inlineA body (Avar ix))
     alet (OpenAcc (Alet bnd body')) body
       = alet bnd (OpenAcc (Alet body' (weaken oneBelow body)))
-    alet bnd body =
-      case untupleAcc tmap bnd of
-        OneTuple tr bnd' -> Alet bnd' `wrap` untupleAcc (OneTupleMap tmap tr) body
-        Same bnd'        -> Alet bnd' `wrap` untupleAcc (SnocTupleMap tmap) body
+    alet bnd body
+      | Reduced r bnd'   <- untupleAcc tmap bnd
+      , Reduced r' body' <- untupleAcc (SnocReducedMap tmap r) body
+      = Reduced r' $ Alet bnd' body'
 
     avar :: forall aenv0 aenv0' t. Arrays t
-         => TupleMap aenv0 aenv0'
+         => ReducedMap aenv0 aenv0'
          -> Idx aenv0 t
          -> (forall t. Idx aenv0' t -> Idx aenv' t)
-         -> Untupled (PreOpenAcc OpenAcc aenv') t
-    avar BaseTupleMap       ix           ixt = Same $ Avar (ixt ix)
-    avar (SnocTupleMap _)   ZeroIdx      ixt = Same $ Avar (ixt ZeroIdx)
-    avar (SnocTupleMap tm)  (SuccIdx ix) ixt = avar tm ix (ixt . SuccIdx)
-    avar (OneTupleMap _ tr) ZeroIdx      ixt = OneTuple tr $ Avar (ixt ZeroIdx)
-    avar (OneTupleMap tm _) (SuccIdx ix) ixt = avar tm ix (ixt . SuccIdx)
+         -> Reduced (PreOpenAcc OpenAcc aenv') t
+    avar BaseReducedMap         ix           ixt = Reduced RId $ Avar (ixt ix)
+    avar (SnocReducedMap _ r)   ZeroIdx      ixt = Reduced r $ Avar (ixt ZeroIdx)
+    avar (SnocReducedMap tm _)  (SuccIdx ix) ixt = avar tm ix (ixt . SuccIdx)
 
     aprj :: forall t a. (Arrays t, IsAtuple t, Arrays a)
          => TupleIdx (TupleRepr t) a
          -> OpenAcc aenv t
-         -> Untupled (PreOpenAcc OpenAcc aenv') a
-    aprj idx t =
-      case untupleAcc tmap t of
-        OneTuple (TRNest tr) (OpenAcc t') | ZeroTupIdx <- idx
-                                          -> OneTuple tr t'
-        OneTuple TROne       (OpenAcc t') | ZeroTupIdx <- idx
-                                          -> Same t'
-        Same t'                           -> Same (Aprj idx t')
-        _                                 -> error "Arrrrrr"
+         -> Reduced (PreOpenAcc OpenAcc aenv') a
+    aprj idx t
+      | Reduced r t' <- untupleAcc tmap t
+      = case r of
+          RId                          -> Reduced RId $ Aprj idx t'
+          RNest r' | ZeroTupIdx <- idx -> Reduced r' (extract t')
+          _                            -> error "Unreachable"
 
-    apply :: Arrays a => OpenAfun aenv (a -> t) -> OpenAcc aenv a -> Untupled (PreOpenAcc OpenAcc aenv') t
-    apply (Alam (Abody t)) a =
-      case untupleAcc tmap a of
-        OneTuple tr a' -> Alet a' `wrap` untupleAcc (OneTupleMap tmap tr) t
-        Same a'        -> Alet a' `wrap` untupleAcc (SnocTupleMap tmap) t
-    apply _ _ = error "Ohhhhh it's getting late."
+    apply :: Arrays a => OpenAfun aenv (a -> t) -> OpenAcc aenv a -> Reduced (PreOpenAcc OpenAcc aenv') t
+    apply f a = Reduced RId (Apply (cvtAF f) (same a))
 
-    use :: ArrRepr t -> Untupled (PreOpenAcc OpenAcc aenv') t
-    use t | ArraysFtuple        <- flavour (undefined :: t)
-          , ProdRsnoc ProdRunit <- prod (Proxy :: Proxy Arrays) (undefined :: t)
-          , ((), t')             <- fromProd (Proxy :: Proxy Arrays) (toArr t :: t)
-          = OneTuple (TROne) (Use (fromArr t'))
-          | otherwise
-          = Same $ Use t
+    use :: ArrRepr t -> Reduced (PreOpenAcc OpenAcc aenv') t
+    use = noRed . Use
 
-untupleSeq :: forall senv aenv aenv' t.
-              TupleMap aenv aenv'
-           -> PreOpenSeq OpenAcc aenv senv t
-           -> PreOpenSeq OpenAcc aenv' senv t
+untupleSeq :: forall index aenv aenv' t.
+              ReducedMap aenv aenv'
+           -> PreOpenSeq index OpenAcc aenv  t
+           -> PreOpenSeq index OpenAcc aenv' t
 untupleSeq tmap seq =
   case seq of
-    Producer p s -> Producer (cvtP p) (untupleSeq tmap s)
+    Producer p s -> Producer (cvtP p) (untupleSeq (SnocReducedMap tmap RId) s)
     Consumer c   -> Consumer (cvtC c)
-    Reify f ix   -> Reify (cvtAF `fmap` f) ix
+    Reify a      -> Reify (cvtA a)
   where
-    cvtP :: forall senv t. Producer OpenAcc aenv senv t -> Producer OpenAcc aenv' senv t
+    stageError :: a
+    stageError = $internalError "untupleSeq" "Internal syntax is at the wrong stage"
+
+    cvtP :: forall t. Producer index OpenAcc aenv t -> Producer index OpenAcc aenv' t
     cvtP p =
       case p of
-        StreamIn arrs        -> StreamIn arrs
-        ToSeq f sl slix a    -> ToSeq (cvtAF `fmap` f) sl slix (cvtA a)
-        MapSeq f f' x        -> MapSeq (cvtAF f) (cvtAF `fmap` f') x
-        GeneralMapSeq pre a a'
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' m m' <- hackPre tmap pre
-          , Just a0' <- makeSame . untupleAcc m' <$> a'
-          -> GeneralMapSeq pre' (makeSame (untupleAcc m a)) (Just a0')
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' m m' <- hackPre tmap pre
-          , Nothing <- makeSame . untupleAcc m' <$> a'
-          -> GeneralMapSeq pre' (makeSame (untupleAcc m a)) Nothing
-          | otherwise -> error "should not happen normalise prod."
-        ZipWithSeq f f' x y  -> ZipWithSeq (cvtAF f) (cvtAF `fmap` f') x y
-        ScanSeq f e x        -> ScanSeq (cvtF f) (cvtE e) x
+        Pull src           -> Pull src
+        ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAF f) (cvtA a)
+        _                  -> stageError
 
-    cvtC :: forall senv t. Consumer OpenAcc aenv senv t -> Consumer OpenAcc aenv' senv t
+    cvtC :: forall t. Consumer index OpenAcc aenv t -> Consumer index OpenAcc aenv' t
     cvtC c =
       case c of
-        FoldSeqRegular pre f a
-          | IsC <- isArraysFlat (undefined :: t)
-          , HackPre pre' _ m <- hackPre tmap pre
-          -> FoldSeqRegular pre' (untupleAfun m f) (makeSame (untupleAcc tmap a))
-          | otherwise -> error "should not happen normalise cons."
-        FoldSeqFlatten f' f a x -> FoldSeqFlatten (cvtAF `fmap` f') (cvtAF f) (cvtA a) x
-        Stuple t                -> Stuple (cvtCT t)
+        Iterate l f a        -> Iterate (cvtE <$> l) (cvtAF f) (cvtA a)
+        Stuple t             -> Stuple (cvtCT t)
+        _                    -> stageError
 
-    cvtCT :: forall senv t. Atuple (Consumer OpenAcc aenv senv) t -> Atuple (Consumer OpenAcc aenv' senv) t
+    cvtCT :: forall t. Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv') t
     cvtCT NilAtup        = NilAtup
-    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (cvtC c)
+    cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (untupleSeq tmap c)
 
     cvtA :: Arrays a
          => OpenAcc aenv  a
          -> OpenAcc aenv' a
-    cvtA a = case untupleAcc tmap a of
-               Same a'        -> a'
-               OneTuple tr a' -> OpenAcc (Atuple (buildTuple tr a'))
+    cvtA = unreduce . untupleAcc tmap
 
     cvtAF :: forall t. OpenAfun aenv t -> OpenAfun aenv' t
     cvtAF = untupleAfun tmap
@@ -311,81 +265,8 @@ untupleSeq tmap seq =
     cvtE :: forall t. Exp aenv t -> Exp aenv' t
     cvtE = untupleExp tmap
 
-    cvtF :: forall t. Fun aenv t -> Fun aenv' t
-    cvtF = untupleFun tmap
 
-data HackPre aenv senv env envReg where
-  HackPre :: SeqPrelude aenv senv env' envReg'
-        -> TupleMap env env'
-        -> TupleMap envReg envReg'
-        -> HackPre aenv senv env envReg
-
-data HackExt a a' x b b' where
-  HackExt :: ExtReg a a' x b0 b0'
-          -> TupleMap b b0
-          -> TupleMap b' b0'
-          -> HackExt a a' x b b'
-
-hackExt :: forall a a0 a0' a' x b b'.
-           TupleMap a a0
-        -> TupleMap a' a0'
-        -> ExtReg a a' x b b'
-        -> HackExt a0 a0' x b b'
-hackExt v v' ExtEmpty = HackExt ExtEmpty v v'
-hackExt v v' (ExtPush ex (x :: Idx x c))
-  | HackExt ex0 a b <- hackExt v v' ex
-  -- , ArraysFarray <- flavour (undefined :: c)
-  -- , Just (HasReduction tr) <- hasTupleReduction (prod (Proxy :: Proxy Arrays) (undefined :: Regular c))
-  = HackExt (ex0 `ExtPush` x) (SnocTupleMap a) (SnocTupleMap b)
-
-hackPre :: TupleMap aenv aenv'
-        -> SeqPrelude aenv senv env envReg
-        -> HackPre aenv' senv env envReg
-hackPre v (SeqPrelude arrs0 ex ex')
-  | HackExt ex0  a b <- hackExt v v ex
-  , HackExt ex0' c d <- hackExt a b ex'
-  = HackPre (SeqPrelude arrs0 ex0 ex0') c d
-
-untupleAfun :: TupleMap aenv aenv' -> OpenAfun aenv f -> OpenAfun aenv' f
-untupleAfun tm f = retupleAfun $ untupleAfun' tm f
-
-untupleAfun' :: forall aenv aenv' f. TupleMap aenv aenv' -> OpenAfun aenv f -> UntupledAfun aenv' f
-untupleAfun' tm (Abody a) = UTBody (untupleAcc tm a)
-untupleAfun' tm (Alam (a :: OpenAfun (aenv,a) r))
-  | ArraysFtuple <- flavour (undefined :: a)
-  , Just (HasReduction tr) <- hasTupleReduction (prod (Proxy :: Proxy Arrays) (undefined :: a))
-  = OTLam tr (untupleAfun' (OneTupleMap tm tr) a)
-  | otherwise
-  = SameLam (untupleAfun' (SnocTupleMap tm) a)
-
-retupleAfun :: forall aenv f. UntupledAfun aenv f -> OpenAfun aenv f
-retupleAfun = rt
-  where
-    rt :: forall aenv f. UntupledAfun aenv f -> OpenAfun aenv f
-    rt (UTBody   b) =
-      case b of
-        Same a        -> Abody a
-        OneTuple tr a -> Abody (OpenAcc $ Atuple $ buildTuple tr a)
-    rt (SameLam  f) = Alam (rt f)
-    rt (OTLam tr f) = Alam (bindOne tr (rt f))
-
-    bindOne :: forall a a' f aenv. (Arrays a', Arrays a, IsAtuple a)
-            => TupleReduction (TupleRepr a) a'
-            -> OpenAfun (aenv,a') f
-            -> OpenAfun (aenv,a) f
-    bindOne tr (Abody b) = Abody $ OpenAcc $ Alet (reduceTuple tr (OpenAcc $ Avar ZeroIdx)) (weaken oneBelow b)
-    bindOne tr (Alam f)  = Alam $ weaken swapTop $ bindOne tr (weaken swapTop f)
-
-reduceTuple :: (Arrays a', Arrays a, IsAtuple a) => TupleReduction (TupleRepr a) a' -> OpenAcc aenv a -> OpenAcc aenv a'
-reduceTuple TROne       = OpenAcc . Aprj ZeroTupIdx
-reduceTuple (TRNest tr) = reduceTuple tr . OpenAcc . Aprj ZeroTupIdx
-
-hasTupleReduction :: ProdR Arrays t -> Maybe (HasReduction t)
-hasTupleReduction ProdRunit             = Nothing
-hasTupleReduction (ProdRsnoc ProdRunit) = Just (HasReduction TROne)
-hasTupleReduction _                     = Nothing
-
-untupleExp :: forall env aenv aenv' t. TupleMap aenv aenv'
+untupleExp :: forall env aenv aenv' t. ReducedMap aenv aenv'
            -> OpenExp env aenv  t
            -> OpenExp env aenv' t
 untupleExp tmap = cvtE
@@ -408,6 +289,7 @@ untupleExp tmap = cvtE
         IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
+        ToSlice x slix sh i     -> ToSlice x (cvtE slix) (cvtE sh) (cvtE i)
         Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
         While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
         PrimConst c             -> PrimConst c
@@ -418,7 +300,7 @@ untupleExp tmap = cvtE
         ShapeSize sh            -> ShapeSize (cvtE sh)
         Intersect s t           -> Intersect (cvtE s) (cvtE t)
         Union s t               -> Union (cvtE s) (cvtE t)
-        Foreign ff f e          -> Foreign ff (untupleFun BaseTupleMap f) (cvtE e)
+        Foreign ff f e          -> Foreign ff (untupleFun BaseReducedMap f) (cvtE e)
 
     cvtF :: forall env t. OpenFun env aenv t -> OpenFun env aenv' t
     cvtF = untupleFun tmap
@@ -429,13 +311,18 @@ untupleExp tmap = cvtE
       SnocTup t a -> cvtT t `SnocTup` cvtE a
 
     cvtA :: (Shape sh, Elt e) => OpenAcc aenv (Array sh e) -> OpenAcc aenv' (Array sh e)
-    cvtA (untupleAcc tmap -> Same a) = a
+    cvtA (untupleAcc tmap -> Reduced RId a) = a
     cvtA _                           = error "Urrrr"
 
-untupleFun :: TupleMap aenv aenv' -> OpenFun env aenv t -> OpenFun env aenv' t
+untupleFun :: ReducedMap aenv aenv' -> OpenFun env aenv t -> OpenFun env aenv' t
 untupleFun tmap f = case f of
   Body e -> Body (untupleExp tmap e)
   Lam f  -> Lam  (untupleFun tmap f)
+
+untupleAfun :: ReducedMap aenv aenv' -> OpenAfun aenv t -> OpenAfun aenv' t
+untupleAfun tmap f = case f of
+  Abody a -> Abody (unreduce $ untupleAcc tmap a)
+  Alam f  -> Alam  (untupleAfun (SnocReducedMap tmap RId) f)
 
 
 
@@ -446,7 +333,11 @@ oneBelow :: forall aenv a b. (aenv,a) :> ((aenv,b),a)
 oneBelow ZeroIdx      = ZeroIdx
 oneBelow (SuccIdx ix) = SuccIdx (SuccIdx ix)
 
-swapTop :: forall aenv a b. ((aenv,a),b) :> ((aenv,b),a)
-swapTop ZeroIdx           = SuccIdx ZeroIdx
-swapTop (SuccIdx ZeroIdx) = ZeroIdx
-swapTop (SuccIdx (SuccIdx idx)) = SuccIdx (SuccIdx idx)
+unreduce :: forall a aenv. Arrays a => Reduced (OpenAcc aenv) a -> OpenAcc aenv a
+unreduce (Reduced r a) = unr r a
+  where
+    unr :: forall t t'. Arrays t => Reduction t t' -> OpenAcc aenv t' -> OpenAcc aenv t
+    unr r a =
+      case r of
+        RId      -> a
+        RNest r' -> OpenAcc (Atuple (NilAtup `SnocAtup` unr r' a))

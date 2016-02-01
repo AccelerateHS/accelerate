@@ -36,7 +36,6 @@ import Text.PrettyPrint
 
 -- friends
 import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
-import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Type
@@ -113,6 +112,7 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Acond e acc1 acc2)      = wrap $ sep [ ppE e, text "?|", tuple [ppA acc1, ppA acc2] ]
     pp (Slice _ty acc ix)       = wrap $ sep [ ppA acc, char '!', prettyPreExp prettyAcc 0 alvl noParens ix ]
     pp (Use arrs)               = "use"         .$ [ prettyArrays (arrays (undefined :: arrs)) arrs ]
+    pp (Subarray ix sh arrs)    = "subarray"    .$ [ ppE ix, ppE sh, prettyArrays (arrays (undefined :: arrs)) arrs ]
     pp (Unit e)                 = "unit"        .$ [ ppE e ]
     pp (Generate sh f)          = "generate"    .$ [ ppSh sh, ppF f ]
     pp (Transform sh ix f acc)  = "transform"   .$ [ ppSh sh, ppF ix, ppF f, ppA acc ]
@@ -137,36 +137,31 @@ prettyPreAcc prettyAcc alvl wrap = pp
     pp (Stencil2 sten bndy1 acc1 bndy2 acc2)
                                 = "stencil2"    .$ [ ppF sten, ppB acc1 bndy1, ppA acc1,
                                                                ppB acc2 bndy2, ppA acc2 ]
-    pp (Collect s)              = wrap . hang (text "collect") 2 . vcat $ punctuate (text ";") (prettySeq prettyAcc alvl 0 wrap s)
+    pp (Collect s Nothing)      = wrap . hang (text "collect") 2 . vcat $ punctuate (text ";") (prettySeq prettyAcc alvl wrap s)
+    pp (Collect _ (Just s))     = wrap . hang (text "collect") 2 . vcat $ punctuate (text ";") (prettySeq prettyAcc alvl wrap s)
 
 
 prettySeq
-    :: forall acc aenv senv arrs.
+    :: forall idx acc aenv arrs.
        PrettyAcc acc
     -> Int                                      -- level of array variables
-    -> Int                                      -- level of sequence variables
     -> (Doc -> Doc)                             -- apply to compound expressions
-    -> PreOpenSeq acc aenv senv arrs
+    -> PreOpenSeq idx acc aenv arrs
     -> [Doc]
-prettySeq prettyAcc alvl llvl wrap seq =
+prettySeq prettyAcc alvl wrap seq =
   case seq of
     Producer p s' ->
-      (prettyP p) : (prettySeq prettyAcc alvl (llvl+1) wrap s')
+      prettyP p : (prettySeq prettyAcc (alvl+1) wrap s')
     Consumer c    ->
       [prettyC c]
-    Reify f ix    -> ["reify" ..$ [ppMaybeAF f, var (idxToInt ix)]]
+    Reify ix      -> ["reify" ..$ [ppA ix]]
   where
-    var n          = char 's' <> int n
     avar n         = char 'a' <> int n
-    cvar n         = char 'c' <> int n    
-    name .$  docs = wrap $ hang (var llvl <+> text ":=" <+> text name) 2 (sep docs)
+    name .$  docs = wrap $ hang (avar alvl <+> text ":=" <+> text name) 2 (sep docs)
     name ..$ docs = wrap $ hang (text name) 2 (sep docs)
 
     ppE :: PreOpenExp acc env aenv e -> Doc
     ppE = prettyPreExp prettyAcc 0 alvl parens
-
-    ppF :: PreOpenFun acc env aenv f -> Doc
-    ppF = parens . prettyPreFun prettyAcc alvl
 
     ppA :: acc aenv a -> Doc
     ppA = prettyAcc alvl parens
@@ -174,62 +169,30 @@ prettySeq prettyAcc alvl llvl wrap seq =
     ppAF :: PreOpenAfun acc aenv f -> Doc
     ppAF = parens . prettyPreAfun prettyAcc alvl
 
-    ppMaybeAF :: Maybe (PreOpenAfun acc aenv f) -> Doc
-    ppMaybeAF Nothing  = text "Nothing"
-    ppMaybeAF (Just f) = parens (text "Just" <+> ppAF f)
+    ppL :: Maybe (PreExp acc aenv e) -> Doc
+    ppL Nothing  = text "forever"
+    ppL (Just l) = ppE l
 
-    ppX :: Idx aenv' a -> Doc
-    ppX x = var (idxToInt x)
-
-    ppSlix :: SliceIndex slix sl co sh -> Doc
-    ppSlix = parens . pp
-      where
-        pp :: SliceIndex slix sl co sh -> Doc
-        pp SliceNil       = text "Z"
-        pp (SliceAll s)   = pp s <+> text ":." <+> text "All"
-        pp (SliceFixed s) = pp s <+> text ":." <+> text "Split"
-
-    prettyP :: forall a. Producer acc aenv senv a -> Doc
+    prettyP :: forall a. Producer idx acc aenv a -> Doc
     prettyP p =
       case p of
-        StreamIn _          -> "streamIn"   .$ [ text "[..]" ]
-        ToSeq f slix _ a    -> "toSeq"      .$ [ ppMaybeAF f, ppSlix slix, ppA a ]
-        MapSeq f f' x       -> "mapSeq"     .$ [ ppAF f, ppMaybeAF f', ppX x ]
-        GeneralMapSeq pre a a' 
-          | (ppre, alvl') <- prettyPre pre alvl
-          -> "generalMapSeq" .$ [ppre, prettyAcc alvl' parens a, case a' of Nothing -> text "Nothing"; Just a0' -> parens (text "Just" <+> prettyAcc alvl parens a0')]
-        ZipWithSeq f f' x y -> "zipWithSeq" .$ [ ppAF f, ppMaybeAF f', ppX x, ppX y ]
-        ScanSeq f e x       -> "foldSeq"    .$ [ ppF f, ppE e, ppX x ]
+        Pull _               -> "pull"         .$ [ text "[..]" ]
+        Subarrays sh _       -> "subarrays"    .$ [ ppE sh, text "[..]" ]
+        Produce l f          -> "produce"      .$ [ ppL l, ppAF f ]
+        MapAccumFlat f a x   -> "mapAccumFlat" .$ [ ppAF f, ppA a, ppA x ]
+        ProduceAccum l f a   -> "produceAccum" .$ [ ppL l, ppAF f, ppA a ]
 
-    prettyC :: forall a. Consumer acc aenv senv a -> Doc
+    prettyC :: forall a. Consumer idx acc aenv a -> Doc
     prettyC c =
       case c of
-        FoldSeqRegular pre f a  
-          | (ppre, alvl') <- prettyPre pre alvl
-          -> "foldSeqRegular" ..$ [ ppre , parens (prettyPreAfun prettyAcc alvl' f), ppA a ]
-        FoldSeqFlatten f' f a x -> "foldSeqFlatten" ..$ [ ppMaybeAF f', ppAF f, ppA a, ppX x ]
-        Stuple t                -> tuple (prettyT t)
+        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f, ppA a, ppA x ]
+        Iterate l f a        -> "iterate"        ..$ [ ppL l, ppAF f, ppA a ]
+        Conclude a d         -> "conclude"       ..$ [ ppA a, ppA d]
+        Stuple t             -> tuple (prettyT t)
 
-    prettyT :: forall t. Atuple (Consumer acc aenv senv) t -> [Doc]
+    prettyT :: forall t. Atuple (PreOpenSeq idx acc aenv) t -> [Doc]
     prettyT NilAtup        = []
-    prettyT (SnocAtup t c) = prettyT t ++ [prettyC c]
-
-    prettyPre :: SeqPrelude aenv senv env envReg -> Int -> (Doc, Int)
-    prettyPre (SeqPrelude arrs ex1 ex2) alvl0 = 
-      let (pex1, alvl1) = prettyExt cvar ex1 alvl0
-          (pex2, alvl2) = prettyExt var  ex2 alvl1
-      in (parens (prettyAtuple ppAconst alvl (toAconstT' arrs) $$ brackets (hsep pex1) <+> brackets (hsep pex2)), alvl2)
-    
-    prettyExt :: (Int -> Doc) -> ExtReg a a' x b b' -> Int -> ([Doc], Int)
-    prettyExt _  ExtEmpty alvl = ([], alvl)
-    prettyExt pv (ExtPush ex x) alvl =
-      let (docs, alvl') = prettyExt pv ex (alvl + 1)
-      in (avar alvl <+> text ":=" <+> pv (idxToInt x) : docs, alvl')
-    
-    ppAconst :: PrettyAcc Aconst'
-    ppAconst _ _ (Aconst' (SliceArr slix _ a))   = "sliceArr"    ..$ [ ppSlix slix, prettyArrays (arrays a) a ]
-    ppAconst _ _ (Aconst' (ArrList _))           = "arrList"     ..$ [ text "[..]" ]
-    ppAconst _ _ (Aconst' (RegArrList _ _))      = "regArrList"  ..$ [ text "[..]" ]
+    prettyT (SnocAtup t c) = prettyT t ++ prettySeq prettyAcc alvl wrap c
 
 -- Pretty print a function over array computations.
 --
@@ -346,6 +309,7 @@ prettyPreExp prettyAcc lvl alvl wrap = pp
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppSl slix, ppSh sl ]
     pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
     pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppE ix ]
+    pp (ToSlice _ slix sh ix)   = "toSlice"    .$ [ ppE slix, ppSh sh, ppE ix ]
     pp (While p f x)            = "while"      .$ [ ppF p, ppF f, ppE x ]
     pp (Foreign ff _f e)        = "foreign"    .$ [ text (strForeign ff), {- ppF f, -} ppE e ]
     pp (Shape idx)              = "shape"      .$ [ ppA idx ]
@@ -521,4 +485,3 @@ runScalarShow (NumScalarType (FloatingNumType ty))
 runScalarShow (NonNumScalarType ty)
   | NonNumDict   <- nonNumDict ty   = show
 -}
-

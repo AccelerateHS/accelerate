@@ -46,7 +46,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array indexing and slicing
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..), AsSlice(..),
-  (:<=),
+  (:<=)(..), (:<=:)(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
@@ -553,7 +553,7 @@ data ArraysFlavour arrs where
   ArraysFarray :: (Shape sh, Elt e)                       => ArraysFlavour (Array sh e)
   ArraysFtuple :: (IsAtuple arrs, ArrRepr arrs ~ (l,r)) => ArraysFlavour arrs
 
-class (Typeable a, Typeable (ArrRepr a)) => Arrays a where
+class Typeable a => Arrays a where
   arrays   :: a {- dummy -} -> ArraysR (ArrRepr a)
   flavour  :: a {- dummy -} -> ArraysFlavour a
   --
@@ -842,6 +842,8 @@ class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape 
                                     (EltRepr (SliceShape   sl))
                                     (EltRepr (CoSliceShape sl))
                                     (EltRepr (FullShape    sl))
+  -- | Increment a slice index into the given shape by 'n'.
+  --
   toSlice :: sl -> (FullShape sl) -> Int -> sl
 
 instance Slice Z where
@@ -910,13 +912,21 @@ instance (Shape sh, Slice sh) => Division (Divide sh) where
 -- | Ensures the rank of one shape is less than the rank of another.
 --
 class sh1 :<= sh2 where
+  maximumRank :: sh1 :<=: sh2
 
 infix 2 :<=
 
-instance Z :<= sh
+instance Z :<= sh where
+  maximumRank = RankZ
 
-instance (sh1 :<= sh2) => sh1:.i1 :<= sh2:.i2
+instance (sh1 :<= sh2) => sh1:.Int :<= sh2:.Int where
+  maximumRank = RankSnoc maximumRank
 
+infix 2 :<=:
+
+data sh1 :<=: sh2 where
+  RankZ :: Z :<=: sh
+  RankSnoc :: sh1 :<=: sh2 -> sh1:.Int :<=: sh2:.Int
 
 -- Array operations
 -- ----------------
@@ -1120,4 +1130,3 @@ enumSlices :: forall slix co sl dim. (Elt slix, Elt dim)
            -> dim    -- Bounds
            -> [slix] -- All slices within bounds.
 enumSlices slix = map toElt . Repr.enumSlices slix . fromElt
-

@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Shrink
@@ -33,6 +34,12 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
   -- Occurrence counting
   UsesOfAcc, usesOfPreAcc, usesOfExp,
+
+  -- Dependency analysis
+  (::>)(..), Stronger(..), weakIn, weakOut,
+  DependenciesAcc, dependenciesOpenAcc,
+  dependenciesPreAcc, dependenciesAfun,
+  dependenciesProducer, dependenciesConsumer,
 
 ) where
 
@@ -109,6 +116,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       IndexAny                  -> pure IndexAny
       ToIndex sh ix             -> ToIndex <$> shrinkE sh <*> shrinkE ix
       FromIndex sh i            -> FromIndex <$> shrinkE sh <*> shrinkE i
+      ToSlice x slix sh i       -> ToSlice x <$> shrinkE slix <*> shrinkE sh <*> shrinkE i
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
       PrimConst c               -> pure (PrimConst c)
@@ -169,6 +177,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Acond p t e               -> Acond (shrinkE p) (shrinkAcc t) (shrinkAcc e)
       Awhile p f a              -> Awhile (shrinkAF p) (shrinkAF f) (shrinkAcc a)
       Use a                     -> Use a
+      Subarray ix sh a          -> Subarray (shrinkE ix) (shrinkE sh) a
       Unit e                    -> Unit (shrinkE e)
       Reshape e a               -> Reshape (shrinkE e) (shrinkAcc a)
       Generate e f              -> Generate (shrinkE e) (shrinkF f)
@@ -191,35 +200,34 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       Backpermute sh f a        -> Backpermute (shrinkE sh) (shrinkF f) (shrinkAcc a)
       Stencil f b a             -> Stencil (shrinkF f) b (shrinkAcc a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (shrinkF f) b1 (shrinkAcc a1) b2 (shrinkAcc a2)
-      Collect s                 -> Collect (shrinkS s)
+      Collect s cs              -> Collect (shrinkS s) (shrinkS <$> cs)
 
-    shrinkS :: PreOpenSeq acc aenv' senv a -> PreOpenSeq acc aenv' senv a
+    shrinkS :: PreOpenSeq index acc aenv' a -> PreOpenSeq index acc aenv' a
     shrinkS seq =
       case seq of
         Producer p s -> Producer (shrinkP p) (shrinkS s)
         Consumer c   -> Consumer (shrinkC c)
-        Reify f ix   -> Reify (shrinkAF <$> f) ix
+        Reify a      -> Reify (shrinkAcc a)
 
-    shrinkP :: Producer acc aenv' senv a -> Producer acc aenv' senv a
+    shrinkP :: Producer index acc aenv' a -> Producer index acc aenv' a
     shrinkP p =
       case p of
-        StreamIn arrs        -> StreamIn arrs
-        ToSeq f sl slix a    -> ToSeq (shrinkAF <$> f) sl slix (shrinkAcc a)
-        GeneralMapSeq pre a a' -> GeneralMapSeq pre (shrinkAcc a) (shrinkAcc <$> a')
-        MapSeq f f' x        -> MapSeq (shrinkAF f) (shrinkAF <$> f') x
-        ZipWithSeq f f' x y  -> ZipWithSeq (shrinkAF f) (shrinkAF <$> f') x y
-        ScanSeq f e x        -> ScanSeq (shrinkF f) (shrinkE e) x
+        Pull src           -> Pull src
+        Subarrays sh arr   -> Subarrays (shrinkE sh) arr
+        Produce l f        -> Produce (shrinkE <$> l) (shrinkAF f)
+        MapAccumFlat f a x -> MapAccumFlat (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
+        ProduceAccum l f a -> ProduceAccum (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
 
-    shrinkC :: Consumer acc aenv' senv a -> Consumer acc aenv' senv a
+    shrinkC :: Consumer index acc aenv' a -> Consumer index acc aenv' a
     shrinkC c =
       case c of
-        FoldSeqRegular pre f a -> FoldSeqRegular pre (shrinkAF f) (shrinkAcc a)
-        FoldSeqFlatten f' f a x -> FoldSeqFlatten (shrinkAF <$> f') (shrinkAF f) (shrinkAcc a) x
-        Stuple t                -> Stuple (shrinkCT t)
+        FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
+        Iterate l f a        -> Iterate (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
+        Stuple t             -> Stuple (shrinkCT t)
 
-    shrinkCT :: Atuple (Consumer acc aenv' senv) t -> Atuple (Consumer acc aenv' senv) t
+    shrinkCT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
     shrinkCT NilAtup        = NilAtup
-    shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkC c)
+    shrinkCT (SnocAtup t c) = SnocAtup (shrinkCT t) (shrinkS c)
 
     shrinkE :: PreOpenExp acc env aenv' t -> PreOpenExp acc env aenv' t
     shrinkE exp = case exp of
@@ -238,6 +246,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       IndexAny                  -> IndexAny
       ToIndex sh ix             -> ToIndex (shrinkE sh) (shrinkE ix)
       FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
+      ToSlice x slix sh i       -> ToSlice x (shrinkE slix) (shrinkE sh) (shrinkE i)
       Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
       While p f x               -> While (shrinkF p) (shrinkF f) (shrinkE x)
       PrimConst c               -> PrimConst c
@@ -322,6 +331,7 @@ usesOfExp idx = countE
       IndexAny                  -> 0
       ToIndex sh ix             -> countE sh + countE ix
       FromIndex sh i            -> countE sh + countE i
+      ToSlice _ slix sh i       -> countE slix + countE sh + countE i
       Cond p t e                -> countE p  + countE t + countE e
       While p f x               -> countE x  + countF idx p + countF idx f
       PrimConst _               -> 0
@@ -370,11 +380,12 @@ usesOfPreAcc withShape countAcc idx = count
       Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
       Atuple tup                -> countAT tup
       Aprj _ a                  -> countA a     -- special case discount?
-      Apply _ a                 -> countA a
+      Apply f a                 -> countAF f idx + countA a
       Aforeign _ _ a            -> countA a
       Acond p t e               -> countE p  + countA t + countA e
-      Awhile _ _ a              -> countA a
+      Awhile p f a              -> countAF p idx + countAF f idx + countA a
       Use _                     -> 0
+      Subarray ix sh _          -> countE ix + countE sh
       Unit e                    -> countE e
       Reshape e a               -> countE e  + countA a
       Generate e f              -> countE e  + countF f
@@ -397,70 +408,10 @@ usesOfPreAcc withShape countAcc idx = count
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Collect s                 -> countS s
-
-    countS :: PreOpenSeq acc aenv senv arrs -> Int
-    countS seq =
-      case seq of
-        Producer p s -> countP p + countS s
-        Consumer c   -> countC c
-        Reify _ _    -> 0
-
-    countP :: Producer acc aenv senv arrs -> Int
-    countP p =
-      case p of
-        StreamIn _           -> 0
-        ToSeq _ _ _ a        -> countA a
-        GeneralMapSeq pre a _  -> countAcc withShape (weaken (seqPreludeShift pre) idx) a
-        MapSeq f _ _         -> countAF f idx -- Count f'?
-        ZipWithSeq f _ _ _   -> countAF f idx
-        ScanSeq f e _        -> countF f + countE e
-
-    countC :: Consumer acc aenv senv arrs -> Int
-    countC c =
-      case c of
-        FoldSeqRegular pre (Alam (Abody f)) a -> countAcc withShape (weaken (SuccIdx . seqPreludeShiftReg pre) idx) f + countA a
-        FoldSeqRegular _ _ _   -> error "should not happen countC"
-        FoldSeqFlatten _ f a _ -> countAF f idx + countA a
-        Stuple t               -> countCT t
-
-    countCT :: Atuple (Consumer acc aenv senv) t' -> Int
-    countCT NilAtup        = 0
-    countCT (SnocAtup t c) = countCT t + countC c
+      Collect s cs              -> usesOfPreSeq withShape countAcc idx s  + maybe 0 (usesOfPreSeq withShape countAcc idx) cs
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
-
-    countE :: PreOpenExp acc env aenv e -> Int
-    countE exp = case exp of
-      Let bnd body              -> countE bnd + countE body
-      Var _                     -> 0
-      Const _                   -> 0
-      Tuple t                   -> countT t
-      Prj _ e                   -> countE e
-      IndexNil                  -> 0
-      IndexCons sl sz           -> countE sl + countE sz
-      IndexHead sh              -> countE sh
-      IndexTail sh              -> countE sh
-      IndexTrans sh             -> countE sh
-      IndexSlice _ ix sh        -> countE ix + countE sh
-      IndexFull _ ix sl         -> countE ix + countE sl
-      IndexAny                  -> 0
-      ToIndex sh ix             -> countE sh + countE ix
-      FromIndex sh i            -> countE sh + countE i
-      Cond p t e                -> countE p  + countE t + countE e
-      While p f x               -> countF p  + countF f + countE x
-      PrimConst _               -> 0
-      PrimApp _ x               -> countE x
-      Index a sh                -> countA a + countE sh
-      LinearIndex a i           -> countA a + countE i
-      ShapeSize sh              -> countE sh
-      Intersect sh sz           -> countE sh + countE sz
-      Union sh sz               -> countE sh + countE sz
-      Shape a
-        | withShape             -> countA a
-        | otherwise             -> 0
-      Foreign _ _ e             -> countE e
 
     countAF :: Kit acc
             => PreOpenAfun acc aenv' f
@@ -473,11 +424,317 @@ usesOfPreAcc withShape countAcc idx = count
     countF (Lam  f) = countF f
     countF (Body b) = countE b
 
-    countT :: Tuple (PreOpenExp acc env aenv) e -> Int
-    countT NilTup        = 0
-    countT (SnocTup t e) = countT t + countE e
-
     countAT :: Atuple (acc aenv) a -> Int
     countAT NilAtup        = 0
     countAT (SnocAtup t a) = countAT t + countA a
 
+    countE :: PreOpenExp acc env aenv e -> Int
+    countE = usesOfExpA withShape countAcc idx
+
+usesOfPreSeq :: forall acc index aenv s t. Kit acc
+             => Bool
+             -> UsesOfAcc acc
+             -> Idx aenv s
+             -> PreOpenSeq index acc aenv t
+             -> Int
+usesOfPreSeq withShape countAcc idx seq =
+  case seq of
+    Producer p s -> countP p + usesOfPreSeq withShape countAcc (SuccIdx idx) s
+    Consumer c   -> countC c
+    Reify a      -> countA a
+  where
+    countP :: Producer index acc aenv arrs -> Int
+    countP p =
+      case p of
+        Pull _             -> 0
+        Subarrays sh _     -> countE sh
+        Produce l f        -> maybe 0 countE l + countAF f idx
+        MapAccumFlat f a x -> countAF f idx + countA a + countA x
+        ProduceAccum l f a -> maybe 0 countE l + countAF f idx + countA a
+
+    countC :: Consumer index acc aenv arrs -> Int
+    countC c =
+      case c of
+        FoldSeqFlatten f a x -> countAF f idx + countA a + countA x
+        Iterate l f a        -> maybe 0 countE l + countAF f idx + countA a
+        Stuple t             -> countCT t
+
+    countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Int
+    countCT NilAtup        = 0
+    countCT (SnocAtup t c) = countCT t + usesOfPreSeq withShape countAcc idx c
+
+    countA :: acc aenv a -> Int
+    countA = countAcc withShape idx
+
+    countAF :: Kit acc
+            => PreOpenAfun acc aenv' f
+            -> Idx aenv' s
+            -> Int
+    countAF (Alam f)  v = countAF f (SuccIdx v)
+    countAF (Abody a) v = countAcc withShape v a
+
+    countE :: PreOpenExp acc env aenv e -> Int
+    countE = usesOfExpA withShape countAcc idx
+
+usesOfExpA :: forall acc env aenv t e. Bool
+           -> UsesOfAcc acc
+           -> Idx aenv t
+           -> PreOpenExp acc env aenv e
+           -> Int
+usesOfExpA withShape countAcc idx exp =
+  case exp of
+    Let bnd body              -> countE bnd + countE body
+    Var _                     -> 0
+    Const _                   -> 0
+    Tuple t                   -> countT t
+    Prj _ e                   -> countE e
+    IndexNil                  -> 0
+    IndexCons sl sz           -> countE sl + countE sz
+    IndexHead sh              -> countE sh
+    IndexTail sh              -> countE sh
+    IndexTrans sh             -> countE sh
+    IndexSlice _ ix sh        -> countE ix + countE sh
+    IndexFull _ ix sl         -> countE ix + countE sl
+    IndexAny                  -> 0
+    ToIndex sh ix             -> countE sh + countE ix
+    FromIndex sh i            -> countE sh + countE i
+    ToSlice _ slix sh i       -> countE slix + countE sh + countE i
+    Cond p t e                -> countE p  + countE t + countE e
+    While p f x               -> countF p  + countF f + countE x
+    PrimConst _               -> 0
+    PrimApp _ x               -> countE x
+    Index a sh                -> countA a + countE sh
+    LinearIndex a i           -> countA a + countE i
+    ShapeSize sh              -> countE sh
+    Intersect sh sz           -> countE sh + countE sz
+    Union sh sz               -> countE sh + countE sz
+    Shape a
+      | withShape             -> countA a
+      | otherwise             -> 0
+    Foreign _ _ e             -> countE e
+
+  where
+    countE :: PreOpenExp acc env' aenv e' -> Int
+    countE = usesOfExpA withShape countAcc idx
+
+    countT :: Tuple (PreOpenExp acc env aenv) e' -> Int
+    countT NilTup        = 0
+    countT (SnocTup t e) = countT t + countE e
+
+    countF :: PreOpenFun acc env' aenv f -> Int
+    countF (Lam  f) = countF f
+    countF (Body b) = countE b
+
+    countA :: acc aenv a -> Int
+    countA = countAcc withShape idx
+
+-- Count the number of occurrences of the array term bound at the given
+-- environment index. If the first argument is 'True' then it includes in the
+-- total uses of the variable for 'Shape' information, otherwise not.
+--
+type DependenciesAcc acc = forall aenv t. acc aenv t -> Stronger aenv
+
+-- A reified proof that aenv' is weaker than aenv
+data aenv ::> aenv' where
+  WeakEmpty :: ()   ::> aenv
+  WeakBase  :: aenv ::> aenv
+  WeakIn    :: aenv ::> aenv' -> (aenv,a) ::> (aenv',a)
+  WeakOut   :: aenv ::> aenv' -> aenv     ::> (aenv', a)
+
+-- Existentially captures a stronger environment than aenv
+data Stronger aenv where
+  Stronger :: aenv' ::> aenv -> Stronger aenv
+
+weakIn, weakOut :: Stronger aenv -> Stronger (aenv,a)
+weakIn  (Stronger v) = Stronger (WeakIn v)
+weakOut (Stronger v) = Stronger (WeakOut v)
+
+dropTop :: Stronger (aenv, a) -> Stronger aenv
+dropTop (Stronger WeakEmpty) = Stronger WeakEmpty
+dropTop (Stronger WeakBase) = Stronger WeakBase
+dropTop (Stronger (WeakIn rv)) = Stronger rv
+dropTop (Stronger (WeakOut rv)) = Stronger rv
+
+single :: Idx aenv t -> Stronger aenv
+single ZeroIdx = weakIn mempty
+single (SuccIdx ix) = weakOut (single ix)
+
+instance Monoid (Stronger env) where
+  mempty = Stronger WeakEmpty
+
+  mappend (Stronger WeakEmpty) (Stronger v) = Stronger v
+  mappend (Stronger v) (Stronger WeakEmpty) = Stronger v
+  mappend (Stronger WeakBase) (Stronger _)  = Stronger WeakBase
+  mappend (Stronger _) (Stronger WeakBase) = Stronger WeakBase
+  mappend (Stronger (WeakIn v)) (Stronger (WeakIn v')) = weakIn (Stronger v <> Stronger v')
+  mappend (Stronger (WeakIn v)) (Stronger (WeakOut v')) = weakIn (Stronger v <> Stronger v')
+  mappend (Stronger (WeakOut v)) (Stronger (WeakIn v')) = weakIn (Stronger v <> Stronger v')
+  mappend (Stronger (WeakOut v)) (Stronger (WeakOut v')) = weakOut (Stronger v <> Stronger v')
+
+dependenciesOpenAcc :: OpenAcc aenv t -> Stronger aenv
+dependenciesOpenAcc (OpenAcc acc) = dependenciesPreAcc dependenciesOpenAcc acc
+
+dependenciesPreAcc
+    :: forall acc aenv t. Kit acc
+    => DependenciesAcc  acc
+    -> PreOpenAcc acc aenv t
+    -> Stronger aenv
+dependenciesPreAcc depsAcc = deps
+  where
+    deps :: PreOpenAcc acc aenv a -> Stronger aenv
+    deps pacc = case pacc of
+      Avar this                 -> single this
+      --
+      Alet bnd body             -> depsAcc bnd <> dropTop (depsAcc body)
+      Atuple tup                -> depsAT tup
+      Aprj _ a                  -> depsAcc a
+      Apply f a                 -> depsAF f <> depsAcc a
+      Aforeign _ _ a            -> depsAcc a
+      Acond p t e               -> depsE p  <> depsAcc t <> depsAcc e
+      Awhile p f a              -> depsAF p <> depsAF f <> depsAcc a
+      Use _                     -> mempty
+      Subarray ix sh _          -> depsE ix <> depsE sh
+      Unit e                    -> depsE e
+      Reshape e a               -> depsE e  <> depsAcc a
+      Generate e f              -> depsE e  <> depsF f
+      Transform sh ix f a       -> depsE sh <> depsF ix <> depsF f  <> depsAcc a
+      Replicate _ sh a          -> depsE sh <> depsAcc a
+      Slice _ a sl              -> depsE sl <> depsAcc a
+      Map f a                   -> depsF f  <> depsAcc a
+      ZipWith f a1 a2           -> depsF f  <> depsAcc a1 <> depsAcc a2
+      Fold f z a                -> depsF f  <> depsE z  <> depsAcc a
+      Fold1 f a                 -> depsF f  <> depsAcc a
+      FoldSeg f z a s           -> depsF f  <> depsE z  <> depsAcc a  <> depsAcc s
+      Fold1Seg f a s            -> depsF f  <> depsAcc a  <> depsAcc s
+      Scanl f z a               -> depsF f  <> depsE z  <> depsAcc a
+      Scanl' f z a              -> depsF f  <> depsE z  <> depsAcc a
+      Scanl1 f a                -> depsF f  <> depsAcc a
+      Scanr f z a               -> depsF f  <> depsE z  <> depsAcc a
+      Scanr' f z a              -> depsF f  <> depsE z  <> depsAcc a
+      Scanr1 f a                -> depsF f  <> depsAcc a
+      Permute f1 a1 f2 a2       -> depsF f1 <> depsAcc a1 <> depsF f2 <> depsAcc a2
+      Backpermute sh f a        -> depsE sh <> depsF f  <> depsAcc a
+      Stencil f _ a             -> depsF f  <> depsAcc a
+      Stencil2 f _ a1 _ a2      -> depsF f  <> depsAcc a1 <> depsAcc a2
+      Collect s cs              -> dependenciesPreSeq depsAcc s  <> maybe mempty (dependenciesPreSeq depsAcc) cs
+
+    depsAF :: Kit acc
+           => PreOpenAfun acc aenv' f
+           -> Stronger aenv'
+    depsAF = dependenciesAfun depsAcc
+
+    depsF :: PreOpenFun acc env aenv f -> Stronger aenv
+    depsF (Lam  f) = depsF f
+    depsF (Body b) = depsE b
+
+    depsAT :: Atuple (acc aenv) a -> Stronger aenv
+    depsAT NilAtup        = mempty
+    depsAT (SnocAtup t a) = depsAT t <> depsAcc a
+
+    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
+    depsE = dependenciesExp depsAcc
+
+dependenciesAfun :: DependenciesAcc acc
+                    -> PreOpenAfun acc aenv t
+                    -> Stronger aenv
+dependenciesAfun depsAcc (Alam f)  = dropTop (dependenciesAfun depsAcc f)
+dependenciesAfun depsAcc (Abody a) = depsAcc a
+
+dependenciesPreSeq :: forall acc index aenv t. Kit acc
+                   => DependenciesAcc acc
+                   -> PreOpenSeq index acc aenv t
+                   -> Stronger aenv
+dependenciesPreSeq depsAcc seq =
+  case seq of
+    Producer p s -> dependenciesProducer depsAcc p <> dropTop (dependenciesPreSeq depsAcc s)
+    Consumer c   -> dependenciesConsumer depsAcc c
+    Reify a      -> depsAcc a
+
+dependenciesProducer :: forall acc index aenv arrs. Kit acc
+                     => DependenciesAcc acc
+                     -> Producer index acc aenv arrs
+                     -> Stronger aenv
+dependenciesProducer depsAcc p =
+  case p of
+    Pull _             -> mempty
+    Subarrays sh _     -> depsE sh
+    Produce l f        -> maybe mempty depsE l <> depsAF f
+    MapAccumFlat f a x -> depsAF f <> depsAcc a <> depsAcc x
+    ProduceAccum l f a -> maybe mempty depsE l <> depsAF f <> depsAcc a
+  where
+    depsAF :: Kit acc
+            => PreOpenAfun acc aenv' f
+            -> Stronger aenv'
+    depsAF = dependenciesAfun depsAcc
+
+    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
+    depsE = dependenciesExp depsAcc
+
+dependenciesConsumer :: forall acc index aenv arrs. Kit acc
+                     => DependenciesAcc acc
+                     -> Consumer index acc aenv arrs
+                     -> Stronger aenv
+dependenciesConsumer depsAcc c =
+  case c of
+    FoldSeqFlatten f a x -> depsAF f <> depsAcc a <> depsAcc x
+    Iterate l f a        -> maybe mempty depsE l <> depsAF f <> depsAcc a
+    Conclude a d         -> depsAcc a <> depsAcc d
+    Stuple t             -> depsCT t
+  where
+    depsCT :: Atuple (PreOpenSeq index acc aenv) t' -> Stronger aenv
+    depsCT NilAtup        = mempty
+    depsCT (SnocAtup t c) = depsCT t <> dependenciesPreSeq depsAcc c
+
+    depsAF :: Kit acc
+            => PreOpenAfun acc aenv' f
+            -> Stronger aenv'
+    depsAF = dependenciesAfun depsAcc
+
+    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
+    depsE = dependenciesExp depsAcc
+
+dependenciesExp :: forall acc env aenv e.
+                   DependenciesAcc acc
+                -> PreOpenExp acc env aenv e
+                -> Stronger aenv
+dependenciesExp depsAcc exp =
+  case exp of
+    Let bnd body              -> depsE bnd <> depsE body
+    Var _                     -> mempty
+    Const _                   -> mempty
+    Tuple t                   -> depsT t
+    Prj _ e                   -> depsE e
+    IndexNil                  -> mempty
+    IndexCons sl sz           -> depsE sl <> depsE sz
+    IndexHead sh              -> depsE sh
+    IndexTail sh              -> depsE sh
+    IndexTrans sh             -> depsE sh
+    IndexSlice _ ix sh        -> depsE ix <> depsE sh
+    IndexFull _ ix sl         -> depsE ix <> depsE sl
+    IndexAny                  -> mempty
+    ToIndex sh ix             -> depsE sh <> depsE ix
+    FromIndex sh i            -> depsE sh <> depsE i
+    ToSlice _ slix sh i       -> depsE slix <> depsE sh <> depsE i
+    Cond p t e                -> depsE p  <> depsE t <> depsE e
+    While p f x               -> depsF p  <> depsF f <> depsE x
+    PrimConst _               -> mempty
+    PrimApp _ x               -> depsE x
+    Index a sh                -> depsAcc a <> depsE sh
+    LinearIndex a i           -> depsAcc a <> depsE i
+    ShapeSize sh              -> depsE sh
+    Intersect sh sz           -> depsE sh <> depsE sz
+    Union sh sz               -> depsE sh <> depsE sz
+    Shape a                   -> depsAcc a
+    Foreign _ _ e             -> depsE e
+
+  where
+    depsE :: PreOpenExp acc env' aenv e' -> Stronger aenv
+    depsE = dependenciesExp depsAcc
+
+    depsT :: Tuple (PreOpenExp acc env aenv) e' -> Stronger aenv
+    depsT NilTup        = mempty
+    depsT (SnocTup t e) = depsT t <> depsE e
+
+    depsF :: PreOpenFun acc env' aenv f -> Stronger aenv
+    depsF (Lam  f) = depsF f
+    depsF (Body b) = depsE b

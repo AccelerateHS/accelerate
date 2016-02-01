@@ -81,7 +81,7 @@ import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                hiding (
-  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, PreOpenSeq(..), Producer(..), Consumer(..),
+  PreOpenAcc(..), OpenAcc(..), Acc, Stencil(..), PreOpenExp(..), OpenExp, PreExp, Exp, Seq, PreOpenSeq(..), Producer(..), Consumer(..),
   showPreAccOp, showPreExpOp )
 import qualified Data.Array.Accelerate.AST      as AST
 
@@ -1263,4 +1263,3 @@ showPreExpOp ShapeSize{}        = "ShapeSize"
 showPreExpOp Intersect{}        = "Intersect"
 showPreExpOp Union{}            = "Union"
 showPreExpOp Foreign{}          = "Foreign"
-

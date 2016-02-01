@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Trafo (
 
   -- * Fusion
   module Data.Array.Accelerate.Trafo.Fusion,
-  DelayedSeq(..), Extend(..),
+  DelayedSeq, StreamSeq(..), Extend(..),
 
   -- * Substitution
   module Data.Array.Accelerate.Trafo.Substitution,
@@ -37,7 +37,7 @@ import Data.Typeable
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Scalar )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun, convertSeq ) -- to export types
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )
@@ -158,14 +158,14 @@ convertFun
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
-convertSeq :: Typeable s => Seq s -> DelayedSeq s
+convertSeq :: Typeable s => Seq s -> DelayedSeq (Scalar Int) s
 convertSeq = convertSeqWith phases
 
-convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq s
+convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq (Scalar Int) s
 convertSeqWith Phase{..} s
-  = Fusion.convertSeq enableAccFusion
-  $ Vectorise.vectoriseSeq `when` vectoriseSequences
-  $ Rewrite.convertSegmentsSeq `when` convertOffsetOfSegment
+  = Fusion.convertStreamSeq enableAccFusion
+  $ Vectorise.reduceStreamSeq
+  $ Rewrite.convertSegmentsStreamSeq `when` convertOffsetOfSegment
   $ Sharing.convertSeq recoverAccSharing recoverExpSharing recoverSeqSharing floatOutAccFromExp
   $ s
 
@@ -212,4 +212,3 @@ withSimplStats x = unsafePerformIO $ do
 #else
 withSimplStats x = x
 #endif
-

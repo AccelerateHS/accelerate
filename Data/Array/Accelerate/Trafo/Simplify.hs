@@ -220,6 +220,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
       FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
+      ToSlice x sl sh i         -> ToSlice x <$> cvtE sl <*> cvtE sh <*> cvtE i
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> evalPrimApp env f <$> cvtE x
@@ -457,4 +458,3 @@ iterate ppr f = fix 0 . setup . simplify'
 
     msg :: f a -> x -> x
     msg x next          = Stats.trace Stats.dump_simpl_iterations (unlines [ "simplifier done", ppr x ]) next
-

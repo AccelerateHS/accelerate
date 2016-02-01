@@ -1,11 +1,13 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -23,15 +25,9 @@
 
 module Data.Array.Accelerate.Array.Lifted (
 
-  Vector'(..), LiftedArray,
-
-  LiftedTupleRepr,
+  Irregular, IrregularTupleRepr,
 
   Regular, RegularTupleRepr,
-
-  IsConstrained(..),
-
-  isArraysFlat,
 
   elements', shape', empty', length', drop', vec2Regular, fromList', toList', unit', the'
 
@@ -53,66 +49,60 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- `Arrays' class. We do this in order to convince the type checker that the lifted arrays or tuples
 -- of arrays, are still members of the 'Arrays' class.
 
-newtype Vector' a = Vector' (LiftedRepr (ArrRepr a) a)
-  deriving Typeable
+newtype Irregular a = Irregular (Irregular' a (ArrRepr a))
 
-type family LiftedRepr r a where
-  LiftedRepr ()     ()                 = ((),Scalar Int)
-  LiftedRepr (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
-  LiftedRepr (l,r) a                   = LiftedTupleRepr (TupleRepr a)
+type family Irregular' a a' where
+  Irregular' ()           ()           = ((),Scalar Int)
+  Irregular' (Array sh e) (Array sh e) = (((),Segments sh), Vector e)
+  Irregular' a            (l,r)        = IrregularTupleRepr (TupleRepr a)
 
-type family LiftedTupleRepr t :: *
-type instance LiftedTupleRepr () = ()
-type instance LiftedTupleRepr (b, a) = (LiftedTupleRepr b, Vector' a)
+type family IrregularTupleRepr t where
+  IrregularTupleRepr ()     = ()
+  IrregularTupleRepr (b, a) = (IrregularTupleRepr b, Irregular a)
 
-type LiftedArray sh e = Vector' (Array sh e)
-
-instance Arrays t => IsProduct Arrays (Vector' t) where
-  type ProdRepr (Vector' t) = LiftedRepr (ArrRepr t) t
-  fromProd _ (Vector' t) = t
-  toProd _ = Vector'
-  prod _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
-                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-    where
-      tup :: forall a. ProdR Arrays a -> ProdR Arrays (LiftedTupleRepr a)
-      tup ProdRunit     = ProdRunit
-      tup (ProdRsnoc t) = swiz
+instance Arrays a => IsProduct Arrays (Irregular a) where
+  type ProdRepr (Irregular a) = Irregular' a (ArrRepr a)
+  fromProd _ (Irregular a) = a
+  toProd   _               = Irregular
+  prod     _ _             =
+    case flavour (undefined :: a) of
+      ArraysFunit  -> ProdRsnoc ProdRunit
+      ArraysFarray -> ProdRsnoc (ProdRsnoc ProdRunit)
+      ArraysFtuple -> tup (prod arraysP (undefined :: a))
         where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (LiftedTupleRepr a)
-          swiz | IsC <- isArraysFlat (undefined :: r)
-               = ProdRsnoc (tup t)
+          tup :: ProdR Arrays t -> ProdR Arrays (IrregularTupleRepr t)
+          tup ProdRunit      = ProdRunit
+          tup (ProdRsnoc pr) = ProdRsnoc (tup pr)
 
+type instance ArrRepr (Irregular a) = ArrRepr (Irregular' a (ArrRepr a))
 
-type instance ArrRepr (Vector' a) = ArrRepr (TupleRepr (Vector' a))
-
-
-instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
-  arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
+instance Arrays a => Arrays (Irregular a) where
+  arrays _ = tup (prod arraysP (undefined :: Irregular a))
     where
-      arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)
-      arrs ProdRunit     = ArraysRunit
-      arrs (ProdRsnoc t) = ArraysRpair (ArraysRpair ArraysRunit (arrs t)) (arrays t')
-        where t' :: (a ~ (l,r)) => r
-              t' = undefined
-  flavour _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ArraysFtuple
-                ArraysFarray -> ArraysFtuple
-                ArraysFtuple | ProdRsnoc _ <- prod (Proxy :: Proxy Arrays) (undefined::t)
-                             -> ArraysFtuple
-                             | otherwise -> error "Absurd"
-  --
-  fromArr (Vector' vt) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t)) vt
+      tup :: forall t. ProdR Arrays t -> ArraysR (ArrRepr t)
+      tup ProdRunit      = ArraysRunit
+      tup (ProdRsnoc pr) = ArraysRpair (ArraysRpair ArraysRunit (tup pr)) ar
+        where ar :: forall e l. t ~ (l,e) => ArraysR (ArrRepr e)
+              ar = arrays (undefined :: e)
+  flavour _ = case flavour (undefined :: a) of
+    ArraysFunit  -> ArraysFtuple
+    ArraysFarray -> ArraysFtuple
+    ArraysFtuple ->
+      case arrays (undefined :: Irregular a) of
+        ArraysRpair _ _ -> ArraysFtuple
+        _               -> error "Unreachable"
+
+  toArr a = Irregular (tA (prod arraysP (undefined :: Irregular a)) a)
     where
-      fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
-      fa ProdRunit     ()    = ()
-      fa (ProdRsnoc t) (l,a) = (((), fa t l), fromArr a)
-  toArr = Vector' . ta (prod (Proxy :: Proxy Arrays) (undefined :: Vector' t))
+      tA :: ProdR Arrays t -> ArrRepr t -> t
+      tA ProdRunit      ()          = ()
+      tA (ProdRsnoc pr) (((),ar),a) = (tA pr ar, toArr a)
+
+  fromArr (Irregular a) = fA (prod arraysP (undefined :: Irregular a)) a
     where
-      ta :: forall a. ProdR Arrays a -> ArrRepr a -> a
-      ta ProdRunit     ()         = ()
-      ta (ProdRsnoc t) (((),l),a) = (ta t l, toArr a)
+      fA :: ProdR Arrays t -> t -> ArrRepr t
+      fA ProdRunit      ()    = ()
+      fA (ProdRsnoc pr) (l,a) = (((),fA pr l), fromArr a)
 
 -- Lifted regular arrays.
 -- ----------------------
@@ -121,103 +111,60 @@ instance (Arrays t, Typeable (ArrRepr (Vector' t))) => Arrays (Vector' t) where
 -- is no need to store all segment descriptors.
 --
 
-newtype Regular a = Regular (RegularRepr (ArrRepr a) a)
-  deriving Typeable
+newtype Regular a = Regular (Regular' a (ArrRepr a))
 
-type family RegularRepr r a where
-  RegularRepr ()     ()                 = ((),Scalar Int)
-  RegularRepr (Array sh e) (Array sh e) = ((),Array (sh:.Int) e)
-  RegularRepr (l,r) a                   = RegularTupleRepr (TupleRepr a)
+type family Regular' a a' where
+  Regular' ()           ()           = ((),Scalar Int)
+  Regular' (Array sh e) (Array sh e) = ((),Array (sh:.Int) e)
+  Regular' a            (l,r)        = RegularTupleRepr (TupleRepr a)
 
-type family RegularTupleRepr t :: *
-type instance RegularTupleRepr () = ()
-type instance RegularTupleRepr (b, a) = (RegularTupleRepr b, Regular a)
+type family RegularTupleRepr t where
+  RegularTupleRepr ()     = ()
+  RegularTupleRepr (b, a) = (RegularTupleRepr b, Regular a)
 
-instance Arrays t => IsProduct Arrays (Regular t) where
-  type ProdRepr (Regular t) = RegularRepr (ArrRepr t) t
-  fromProd _ (Regular t) = t
-  toProd _ = Regular
-  prod _ _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ProdRsnoc ProdRunit
-                ArraysFarray -> ProdRsnoc ProdRunit
-                ArraysFtuple -> tup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
-    where
-      tup :: forall a. ProdR Arrays a -> ProdR Arrays (RegularTupleRepr a)
-      tup ProdRunit     = ProdRunit
-      tup (ProdRsnoc t) = swiz
+instance Arrays a => IsProduct Arrays (Regular a) where
+  type ProdRepr (Regular a) = Regular' a (ArrRepr a)
+  fromProd _ (Regular a) = a
+  toProd   _               = Regular
+  prod     _ _             =
+    case flavour (undefined :: a) of
+      ArraysFunit  -> ProdRsnoc ProdRunit
+      ArraysFarray -> ProdRsnoc ProdRunit
+      ArraysFtuple -> tup (prod arraysP (undefined :: a))
         where
-          swiz :: forall l r. (a ~ (l,r), Arrays r) => ProdR Arrays (RegularTupleRepr a)
-          swiz | IsC <- isArraysFlat (undefined :: r)
-               = ProdRsnoc (tup t)
+          tup :: ProdR Arrays t -> ProdR Arrays (RegularTupleRepr t)
+          tup ProdRunit      = ProdRunit
+          tup (ProdRsnoc pr) = ProdRsnoc (tup pr)
 
-type instance ArrRepr (Regular a) = ArrRepr (TupleRepr (Regular a))
+type instance ArrRepr (Regular a) = ArrRepr (Regular' a (ArrRepr a))
 
-
-instance (Arrays t, Typeable (ArrRepr (Regular t))) => Arrays (Regular t) where
-  arrays _ = arrs (prod (Proxy :: Proxy Arrays) (undefined :: Regular t))
+instance Arrays a => Arrays (Regular a) where
+  arrays _ = tup (prod arraysP (undefined :: Regular a))
     where
-      arrs :: forall a. ProdR Arrays a -> ArraysR (ArrRepr a)
-      arrs ProdRunit     = ArraysRunit
-      arrs (ProdRsnoc t) = ArraysRpair (ArraysRpair ArraysRunit (arrs t)) (arrays t')
-        where t' :: (a ~ (l,r)) => r
-              t' = undefined
-  flavour _ = case flavour (undefined :: t) of
-                ArraysFunit  -> ArraysFtuple
-                ArraysFarray -> ArraysFtuple
-                ArraysFtuple | ProdRsnoc _ <- prod (Proxy :: Proxy Arrays) (undefined::t)
-                             -> ArraysFtuple
-                             | otherwise -> error "Absurd"
-  --
-  fromArr (Regular vt) = fa (prod (Proxy :: Proxy Arrays) (undefined :: Regular t)) vt
+      tup :: forall t. ProdR Arrays t -> ArraysR (ArrRepr t)
+      tup ProdRunit      = ArraysRunit
+      tup (ProdRsnoc pr) = ArraysRpair (ArraysRpair ArraysRunit (tup pr)) ar
+        where ar :: forall e l. t ~ (l,e) => ArraysR (ArrRepr e)
+              ar = arrays (undefined :: e)
+  flavour _ = case flavour (undefined :: a) of
+    ArraysFunit  -> ArraysFtuple
+    ArraysFarray -> ArraysFtuple
+    ArraysFtuple ->
+      case arrays (undefined :: Regular a) of
+        ArraysRpair _ _ -> ArraysFtuple
+        _               -> error "Unreachable"
+
+  toArr a = Regular (tA (prod arraysP (undefined :: Regular a)) a)
     where
-      fa :: forall a. ProdR Arrays a -> a -> ArrRepr a
-      fa ProdRunit     ()    = ()
-      fa (ProdRsnoc t) (l,a) = (((), fa t l), fromArr a)
-  toArr = Regular . ta (prod (Proxy :: Proxy Arrays) (undefined :: Regular t))
+      tA :: ProdR Arrays t -> ArrRepr t -> t
+      tA ProdRunit      ()          = ()
+      tA (ProdRsnoc pr) (((),ar),a) = (tA pr ar, toArr a)
+
+  fromArr (Regular a) = fA (prod arraysP (undefined :: Regular a)) a
     where
-      ta :: forall a. ProdR Arrays a -> ArrRepr a -> a
-      ta ProdRunit     ()         = ()
-      ta (ProdRsnoc t) (((),l),a) = (ta t l, toArr a)
-
-data IsConstrained c where
-  IsC :: c => IsConstrained c
-
-type IsTypeableArrRepr t = IsConstrained (Typeable (ArrRepr t))
-
-type IsArraysFlat t = IsConstrained (Arrays (Vector' t), Arrays (Regular t))
-
-isTypeableVector' :: forall t. Arrays t => {- dummy -} t -> IsTypeableArrRepr (Vector' t)
-isTypeableVector' _ =
-  case flavour (undefined :: t) of
-    ArraysFunit  -> IsC
-    ArraysFarray -> IsC
-    ArraysFtuple | IsC <- isT (prod arraysP (undefined :: Vector' t))
-                 -> IsC
-  where
-    isT :: ProdR Arrays t' -> IsTypeableArrRepr t'
-    isT ProdRunit                    = IsC
-    isT (ProdRsnoc t) | IsC <- isT t = IsC
-
-isTypeableRegular :: forall t. Arrays t => {- dummy -} t -> IsTypeableArrRepr (Regular t)
-isTypeableRegular _ =
-  case flavour (undefined :: t) of
-    ArraysFunit  -> IsC
-    ArraysFarray -> IsC
-    ArraysFtuple | IsC <- isT (prod arraysP (undefined :: Regular t))
-                 -> IsC
-  where
-    isT :: ProdR Arrays t' -> IsTypeableArrRepr t'
-    isT ProdRunit                    = IsC
-    isT (ProdRsnoc t) | IsC <- isT t = IsC
-
-isArraysFlat :: forall t. Arrays t => {- dummy -} t -> IsArraysFlat t
-isArraysFlat t = case flavour t of
-                   ArraysFunit  -> IsC
-                   ArraysFtuple | IsC <- isTypeableVector' t
-                                , IsC <- isTypeableRegular t
-                                -> IsC
-                   ArraysFarray -> IsC
-
+      fA :: ProdR Arrays t -> t -> ArrRepr t
+      fA ProdRunit      ()    = ()
+      fA (ProdRsnoc pr) (l,a) = (((),fA pr l), fromArr a)
 
 -- Useful helper-functions (not exported)
 -- --------------------------------------
@@ -240,6 +187,7 @@ reshape sh' (Array sh e) | size sh' == Repr.size sh
 arraysP :: Proxy Arrays
 arraysP = Proxy
 
+
 -- Useful helper-functions for Regular
 -- ----------------------------------
 
@@ -251,7 +199,7 @@ fromRegular (Regular ((),a)) = a
 -- Turn an array into a regular nested vector
 --
 toRegular :: Array (sh:.Int) e -> Regular (Array sh e)
-toRegular a = Regular ((),a)
+toRegular = Regular . ((),)
 
 -- Get all the elements. O(1).
 --
@@ -276,21 +224,21 @@ empty' =
     tup (ProdRsnoc t) = (tup t, empty')
 
 newRegularArray :: Shape sh => Int -> sh -> Vector e -> Regular (Array sh e)
-newRegularArray n sh vals = toRegular (reshape sh' vals)
+newRegularArray n sh = toRegular . reshape sh'
   where
     sh' = listToShape (shapeToList sh ++ [n])
 
 -- Number of arrays in Regular. O(1).
 --
 length' :: forall a. Arrays a => Regular a -> Int
-length' x =
+length' (Regular x) =
   case flavour (undefined :: a) of
-    ArraysFunit  | Regular ((),n) <- x -> n ! Z
-    ArraysFarray -> last (shapeToList (shape' x))
-    ArraysFtuple -> tup (prod arraysP (undefined :: a)) (fromProd arraysP x)
+    ArraysFunit  -> snd x ! Z
+    ArraysFarray -> last (shapeToList (shape (snd x)))
+    ArraysFtuple -> tup (prod arraysP (undefined :: a)) x
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> Int
-    tup ProdRunit () = error "unreachable"
+    tup ProdRunit       ()     = error "unreachable"
     tup (ProdRsnoc _) (_, b) = length' b
 
 -- Drop a number of arrays from a Regular.
@@ -300,20 +248,20 @@ drop' :: forall a. Arrays a
       => (forall e. Elt e => Int -> Vector e -> Vector e)
       -> Int -> Regular a -> Regular a
 drop' dropVec k x =
-  case flavour (undefined :: a) of
-    ArraysFunit -> Regular ((),scalar (length' x - k `max` 0))
-    ArraysFarray | k < length' x
+  let l = length' x
+  in case flavour (undefined :: a) of
+    ArraysFunit -> Regular ((),scalar (l - k `max` 0))
+    ArraysFarray | k < l
                  -> let sh = shape' x
                         k' = k * size sh
-                    in newRegularArray (length' x - k) sh (dropVec k' (elements' x))
+                    in newRegularArray (l - k) sh (dropVec k' (elements' x))
                  | otherwise -> empty'
-    ArraysFtuple -> Regular $
-                      tup (prod arraysP (undefined :: a))
-                          (fromProd arraysP x)
+    ArraysFtuple | Regular x' <- x
+                 -> Regular $ tup (prod arraysP (undefined :: a)) x'
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> RegularTupleRepr t
-    tup ProdRunit () = ()
-    tup (ProdRsnoc t) (a, b) = (tup t a, drop' dropVec k b)
+    tup ProdRunit            () = ()
+    tup (ProdRsnoc t') (a, b) = (tup t' a, drop' dropVec k b)
 
 -- Convert a vector to a Regular of scalars.
 --
@@ -328,9 +276,10 @@ toList' fetchAll x =
   case flavour (undefined :: a) of
     ArraysFunit  -> replicate (length' x) ()
     ArraysFarray -> fetchAll (shape' x) (elements' x)
-    ArraysFtuple -> let proxy = arraysP
+    ArraysFtuple | Regular x' <- x
+                 -> let proxy = arraysP
                     in map (toProd proxy)
-                           (tup (prod proxy (undefined :: a)) (fromProd proxy x))
+                           (tup (prod proxy (undefined :: a)) x')
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> [t]
     tup ProdRunit () = repeat ()
@@ -364,8 +313,8 @@ the' x =
                  -> Array (fromElt (shape' x)) vals
                  | otherwise
                  -> $internalError "the'" "non-unit regular nested array"
-    ArraysFtuple -> let proxy = arraysP
-                    in toProd proxy (tup (prod proxy (undefined :: a)) (fromProd proxy x))
+    ArraysFtuple | Regular x' <- x
+                 -> toProd arraysP (tup (prod arraysP (undefined :: a)) x')
   where
     tup :: forall t. ProdR Arrays t -> RegularTupleRepr t -> t
     tup ProdRunit () = ()

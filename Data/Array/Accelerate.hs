@@ -152,11 +152,11 @@ module Data.Array.Accelerate (
   L.collect,
 
   -- ** Sequence producers
-  L.streamIn, L.toSeq, P.toSeqE, P.generateSeqE,
-  P.toSeqInner, P.toSeqOuter2, P.toSeqOuter3,
+  L.streamIn, L.subarrays, L.produce, P.toSeqE, P.generateSeqE,
+  P.toSeqInner, P.toSeqOuter,
 
   -- ** Sequence transducers
-  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, L.scanSeqE,
+  L.mapSeq, L.zipWithSeq, L.mapAccumFlat, P.mapSeqE, P.zipWithSeqE, P.scanSeqE,
 
   -- ** Sequence consumers
   P.foldSeqE, L.foldSeqFlatten, P.fromSeq, P.fromSeqE, P.shapes,
@@ -329,4 +329,3 @@ arraySize = S.size
 {-# INLINE fromFunction #-}
 fromFunction :: (S.Shape sh, S.Elt e) => sh -> (sh -> e) -> S.Array sh e
 fromFunction = S.newArray
-

@@ -101,7 +101,7 @@ preAccType k pacc =
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Who on earth wrote all these weird error messages?"
 
-    Collect _           -> case arrays (undefined :: Array sh e) of
+    Collect _ _         -> case arrays (undefined :: Array sh e) of
                              ArraysRarray -> eltType (undefined::e)
                              _            -> error "Something funny"
 
@@ -187,4 +187,3 @@ sizeOf (SingleTuple (NumScalarType (FloatingNumType t)))
   | FloatingDict <- floatingDict t = F.sizeOf $ (undefined :: FloatingType a -> a) t
 sizeOf (SingleTuple (NonNumScalarType t))
   | NonNumDict   <- nonNumDict t   = F.sizeOf $ (undefined :: NonNumType a   -> a) t
-
