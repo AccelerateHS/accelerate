@@ -25,10 +25,10 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 
 -- friends
 import Data.Array.Accelerate.FullList                           ( FullList(..) )
-import Data.Array.Accelerate.Array.Remote                       ( RemoteMemory, RemotePointer )
+import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer )
 import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
-import qualified Data.Array.Accelerate.Array.Remote             as R
+import qualified Data.Array.Accelerate.Array.Remote.Class       as R
 
 -- libraries
 import Prelude

@@ -11,8 +11,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Table
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <tmcdonell@cse.unsw.edu.au>
@@ -30,9 +30,8 @@ module Data.Array.Accelerate.Array.Remote.Table (
   -- Tables for host/device memory associations
   MemoryTable, new, lookup, malloc, free, freeStable, insertUnmanaged, reclaim,
 
+  -- Internals
   StableArray, makeStableArray,
-
-  -- Weak pointers of arrays
   makeWeakArrayData
 
 ) where
@@ -58,10 +57,10 @@ import Data.Array.Accelerate.Error                              ( internalError 
 import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
                                                                   ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..) )
-import Data.Array.Accelerate.Array.Remote                       ( RemoteMemory, RemotePointer, PrimElt )
+import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer, PrimElt )
 import Data.Array.Accelerate.Array.Remote.Nursery               ( Nursery(..) )
 import Data.Array.Accelerate.Lifetime
-import qualified Data.Array.Accelerate.Array.Remote             as R
+import qualified Data.Array.Accelerate.Array.Remote.Class       as R
 import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
 
@@ -104,7 +103,9 @@ type StableArray = Int
 -- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
 -- depend on any state.
 --
-new :: (RemoteMemory m, MonadIO m) => (forall a. RemotePointer m a -> IO ()) -> m (MemoryTable (RemotePointer m))
+new :: (RemoteMemory m, MonadIO m)
+    => (forall a. RemotePointer m a -> IO ())
+    -> m (MemoryTable (RemotePointer m))
 new release = do
   message "initialise memory table"
   tbl  <- liftIO $ HT.new
@@ -116,7 +117,11 @@ new release = do
 
 -- | Look for the remote pointer corresponding to a given host-side array.
 --
-lookup :: (PrimElt a b) => MemoryTable p -> ArrayData a -> IO (Maybe (p b))
+lookup
+    :: (PrimElt a b)
+    => MemoryTable p
+    -> ArrayData a
+    -> IO (Maybe (p b))
 lookup (MemoryTable !ref _ _ _) !arr = do
   sa <- makeStableArray arr
   mw <- withMVar ref (`HT.lookup` sa)
@@ -163,7 +168,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- greater chance the nursery will get a hit, and moreover that we can search
   -- the nursery for an exact size.
   --
-  -- TLM: I believe the CUDA API allocates in chunks, of size 4MB.
+  -- TLM: I believe the CUDA API allocates in chunks of size 4MB.
   --
   chunk <- R.chunkSize
   let -- next highest multiple of f from x
@@ -215,7 +220,10 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances.
 --
-free :: (RemoteMemory m, PrimElt a b) => proxy m ->  MemoryTable (RemotePointer m) -> ArrayData a -> IO ()
+free :: (RemoteMemory m, PrimElt a b)
+     => proxy m
+     ->  MemoryTable (RemotePointer m)
+     -> ArrayData a -> IO ()
 free proxy mt !arr = do
   sa <- makeStableArray arr
   freeStable proxy mt sa
@@ -223,7 +231,12 @@ free proxy mt !arr = do
 -- | Deallocate the device array associated with the given StableArray. This
 -- is useful for other memory managers built on top of the memory table.
 --
-freeStable :: RemoteMemory m => proxy m -> MemoryTable (RemotePointer m) -> StableArray -> IO ()
+freeStable
+    :: RemoteMemory m
+    => proxy m
+    -> MemoryTable (RemotePointer m)
+    -> StableArray
+    -> IO ()
 freeStable proxy (MemoryTable !ref _ (Nursery !nrs _) _) !sa = withMVar ref $ \mt -> do
   mw <-  mt `HT.lookup` sa
   case mw of
@@ -255,7 +268,12 @@ insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
 --
 -- This typically only has use for backends that provide an FFI.
 --
-insertUnmanaged :: (PrimElt a b, MonadIO m) => MemoryTable p -> ArrayData a -> p b -> m ()
+insertUnmanaged
+    :: (PrimElt a b, MonadIO m)
+    => MemoryTable p
+    -> ArrayData a
+    -> p b
+    -> m ()
 insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
   key  <- makeStableArray  arr
   weak <- liftIO $ makeWeakArrayData arr () (Just $ remoteFinalizer weak_ref key)
@@ -309,6 +327,7 @@ remoteFinalizer !weak_ref !key = do
   case mr of
     Nothing  -> message ("finalise/dead table: " ++ show key)
     Just ref -> trace   ("finalise: "            ++ show key) $ withMVar ref (`HT.delete` key)
+
 
 -- Miscellaneous
 -- -------------

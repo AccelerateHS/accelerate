@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies    #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Module      : Data.Array.Accelerate.Array.Remote
+-- Module      : Data.Array.Accelerate.Array.Remote.Class
 -- Copyright   : [2015] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
 -- License     : BSD3
 --
@@ -10,8 +10,21 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
+-- This module define a class of operations over pointers in a remote memory
+-- space. Backends provide an instance of this class, and then can use (or
+-- extend upon) one of the following modules in order to manage the remote
+-- memory:
+--
+-- * 'Data.Array.Accelerate.Array.Remote.Table': basic, unmanaged memory tables,
+--   mapping accelerate arrays on the host to the corresponding array in the
+--   remote memory space.
+--
+-- * 'Data.Array.Accelerate.Array.Remote.LRU': managed memory tables which
+--   additionally evict old entries from the device if the remote memory is
+--   exhausted.
+--
 
-module Data.Array.Accelerate.Array.Remote (
+module Data.Array.Accelerate.Array.Remote.Class (
 
   RemoteMemory(..), PrimElt
 
@@ -25,10 +38,11 @@ import Data.Typeable
 import Foreign.Ptr
 import Foreign.Storable
 
--- |Matches array element types to primitive types.
+-- | Matches array element types to primitive types.
+--
 type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typeable a)
 
--- |Monads that have access to a remote memory.
+-- | Monads that have access to a remote memory.
 --
 -- Accelerate backends can provide an instance of this class in order to take
 -- advantage of the automated memory managers we provide as part of the base
