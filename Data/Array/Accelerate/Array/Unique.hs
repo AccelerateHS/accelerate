@@ -36,6 +36,14 @@ import Data.Array.Accelerate.Lifetime
 -- this reason we need a way to uniquely identify each array we create. We do
 -- this by attaching a unique identifier to each array.
 --
+-- Note: [Unique array strictness]
+--
+-- The actual array data is in many cases unnecessary. For discrete memory
+-- backends such as for GPUs, we require the unique identifier to track the data
+-- in the remote memory space, but the data will in most cases never be copied
+-- back to the host. Thus, the array payload field is only lazily allocated, and
+-- we should be careful not to make this field overly strict.
+--
 data UniqueArray e = UniqueArray
     { uniqueArrayId   :: {-# UNPACK #-} !Unique
     , uniqueArrayData :: {-# UNPACK #-} !(Lifetime (ForeignPtr e))
@@ -72,6 +80,8 @@ unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
 
 -- | Ensure that the unique array is alive at the given place in a sequence of
 -- IO actions. Note that this does not force the actual array payload.
+--
+-- See: [Unique array strictness]
 --
 touchUniqueArray :: UniqueArray a -> IO ()
 touchUniqueArray = touchLifetime . uniqueArrayData
