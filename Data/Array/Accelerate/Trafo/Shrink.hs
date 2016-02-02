@@ -223,6 +223,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       case c of
         FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
         Iterate l f a        -> Iterate (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
+        Conclude a d         -> Conclude (shrinkAcc a) (shrinkAcc d)
         Stuple t             -> Stuple (shrinkCT t)
 
     shrinkCT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
@@ -408,7 +409,7 @@ usesOfPreAcc withShape countAcc idx = count
       Backpermute sh f a        -> countE sh + countF f  + countA a
       Stencil f _ a             -> countF f  + countA a
       Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
-      Collect s cs              -> usesOfPreSeq withShape countAcc idx s  + maybe 0 (usesOfPreSeq withShape countAcc idx) cs
+      Collect s cs              -> maybe (usesOfPreSeq withShape countAcc idx s) (usesOfPreSeq withShape countAcc idx) cs
 
     countA :: acc aenv a -> Int
     countA = countAcc withShape idx
