@@ -50,7 +50,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
 import Prelude                                          hiding ( exp, until )
 import Control.Applicative                              ( pure, (<$>), (<*>) )
 import Data.Maybe                                       ( fromMaybe )
-import Data.Monoid                                      ( (<>) )
+import Data.Monoid                                      ( (<>), Monoid(..) )
 
 -- friends
 import Data.Array.Accelerate.AST

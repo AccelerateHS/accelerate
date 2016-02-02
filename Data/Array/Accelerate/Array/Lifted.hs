@@ -49,7 +49,7 @@ import qualified Data.Array.Accelerate.Array.Representation     as Repr
 -- `Arrays' class. We do this in order to convince the type checker that the lifted arrays or tuples
 -- of arrays, are still members of the 'Arrays' class.
 
-newtype Irregular a = Irregular (Irregular' a (ArrRepr a))
+newtype Irregular a = Irregular (Irregular' a (ArrRepr a)) deriving Typeable
 
 type family Irregular' a a' where
   Irregular' ()           ()           = ((),Scalar Int)
@@ -111,7 +111,7 @@ instance Arrays a => Arrays (Irregular a) where
 -- is no need to store all segment descriptors.
 --
 
-newtype Regular a = Regular (Regular' a (ArrRepr a))
+newtype Regular a = Regular (Regular' a (ArrRepr a)) deriving Typeable
 
 type family Regular' a a' where
   Regular' ()           ()           = ((),Scalar Int)

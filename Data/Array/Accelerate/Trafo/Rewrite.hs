@@ -14,6 +14,7 @@ module Data.Array.Accelerate.Trafo.Rewrite
   where
 
 import Prelude                                          hiding ( seq )
+import Data.Functor                                     ( (<$>) )
 
 -- friends
 import Data.Array.Accelerate.AST

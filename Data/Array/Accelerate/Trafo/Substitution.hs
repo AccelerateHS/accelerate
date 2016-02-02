@@ -38,6 +38,7 @@ module Data.Array.Accelerate.Trafo.Substitution (
 ) where
 
 import Control.Applicative                              hiding ( Const )
+import Data.Traversable                                 ( sequenceA )
 import Prelude                                          hiding ( exp, seq )
 
 import Data.Array.Accelerate.AST

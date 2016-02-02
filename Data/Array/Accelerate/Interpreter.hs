@@ -55,10 +55,9 @@ import Debug.Trace
 -- standard libraries
 import Control.Monad
 import Control.Monad.State                              ( State, put, runState )
-import Control.Applicative                              ( (<$>) )
+import Control.Applicative                              ( (<$>), (<*>), pure )
 import Data.Bits
 import Data.Char                                        ( chr, ord )
-import Data.List                                        ( uncons )
 import Data.Maybe                                       ( fromMaybe, fromJust )
 import Prelude                                          hiding ( sum )
 import System.IO.Unsafe                                 ( unsafePerformIO )
@@ -1117,6 +1116,10 @@ evalSeq s aenv = evalSeq' s
     unsrc :: Source a -> [a]
     unsrc (List as) = as
     unsrc (RegularList _ as) = as
+
+    uncons :: [a] -> Maybe (a, [a])
+    uncons [] = Nothing
+    uncons (x : xs) = Just (x, xs)
 
     drop :: aenv' :?> aenv -> (aenv',a) :?> aenv
     drop _ ZeroIdx = Nothing
