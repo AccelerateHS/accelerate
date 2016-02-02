@@ -27,7 +27,7 @@
 module Data.Array.Accelerate.Array.Remote.LRU (
 
   -- Tables for host/device memory associations
-  MemoryCache, new, withRemote, malloc, free, insertUnmanaged, reclaim,
+  MemoryTable, new, withRemote, malloc, free, insertUnmanaged, reclaim,
 
   -- Asynchronous tasks
   Task(..)
@@ -51,9 +51,9 @@ import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
 import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer, PrimElt )
-import Data.Array.Accelerate.Array.Remote.Table                 ( MemoryTable, StableArray, makeWeakArrayData )
+import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
 import qualified Data.Array.Accelerate.Array.Remote.Class       as R
-import qualified Data.Array.Accelerate.Array.Remote.Table       as RT
+import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
 
 
 -- We build cached memory tables on top of a basic memory table.
@@ -62,7 +62,7 @@ import qualified Data.Array.Accelerate.Array.Remote.Table       as RT
 -- arrays in the UseTable. The UseTable reflects all arrays that have ever been
 -- in the cache.
 --
-data MemoryCache p task = MemoryCache {-# UNPACK #-} !(MemoryTable p)
+data MemoryTable p task = MemoryTable {-# UNPACK #-} !(Basic.MemoryTable p)
                                       {-# UNPACK #-} !(UseTable task)
                                       {-# UNPACK #-} !(Weak (UseTable task))
 
@@ -108,13 +108,13 @@ instance Task () where
 --
 new :: (RemoteMemory m, MonadIO m)
     => (forall a. RemotePointer m a -> IO ())
-    -> m (MemoryCache (RemotePointer m) task)
+    -> m (MemoryTable (RemotePointer m) task)
 new free = do
-  mt   <- RT.new free
+  mt   <- Basic.new free
   utbl <- liftIO $ HT.new
   ref  <- liftIO $ newMVar utbl
   weak_utbl <- liftIO $ mkWeakMVar ref (cache_finalizer utbl)
-  return $ MemoryCache mt ref weak_utbl
+  return $ MemoryTable mt ref weak_utbl
 
 -- |Perform some IO action that requires the remote pointer corresponding to
 -- the given array. Returns `Nothing` if the array have NEVER been in the
@@ -130,27 +130,27 @@ new free = do
 -- of the remote pointer.
 --
 withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, MonadIO m, Functor m)
-           => MemoryCache (RemotePointer m) task
+           => MemoryTable (RemotePointer m) task
            -> ArrayData a
            -> (RemotePointer m b -> IO (task, c))
            -> m (Maybe c)
-withRemote (MemoryCache !mt !ref _) !arr run = do
-  key  <- RT.makeStableArray arr
-  mp <- withMVar' ref $ \utbl -> do
+withRemote (MemoryTable !mt !ref _) !arr run = do
+  key <- Basic.makeStableArray arr
+  mp  <- withMVar' ref $ \utbl -> do
    mu <- liftIO $ HT.lookup utbl key
    case mu of
      Nothing -> trace ("withRemote/array has never been malloc'd: " ++ show key)
               $ return Nothing
      Just u  -> Just <$> do
        liftIO $ HT.insert utbl key (incCount u)
-       mp <- liftIO $ RT.lookup mt arr
+       mp <- liftIO $ Basic.lookup mt arr
        case mp of
          Nothing | isEvicted u -> copy utbl (incCount u)
          Just p                -> return p
          _                     -> trace ("lost array " ++ show key) $ $internalError "withRemote" "non-evicted array has been lost"
 
   case mp of
-    Just p -> Just <$> run' p
+    Just p  -> Just <$> run' p
     Nothing -> return Nothing -- The array was never in the table.
   where
     updateTask :: Maybe (Used task) -> task -> IO (Used task)
@@ -172,7 +172,7 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
 
     run' :: RemotePointer m b -> m c
     run' p = liftIO $ do
-      key <- RT.makeStableArray arr
+      key <- Basic.makeStableArray arr
       message ("withRemote/using: " ++ show key)
       (task, c) <- run p
       withMVar' ref $ \utbl -> do
@@ -196,14 +196,14 @@ withRemote (MemoryCache !mt !ref _) !arr run = do
 -- it becomes a no-op.
 --
 malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
-       => MemoryCache (RemotePointer m) task
+       => MemoryTable (RemotePointer m) task
        -> ArrayData e
        -> Bool                               -- ^True if host array is frozen.
        -> Int
        -> m Bool
-malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
+malloc (MemoryTable mt ref weak_utbl) !ad !frozen !n = do
   ts <- liftIO $ getCPUTime
-  key <- RT.makeStableArray ad
+  key <- Basic.makeStableArray ad
   let status = if frozen then Clean else Dirty
 
   withMVar' ref $ \utbl -> do
@@ -216,7 +216,7 @@ malloc (MemoryCache mt ref weak_utbl) !ad !frozen !n = do
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
-    => MemoryTable (RemotePointer m)
+    => Basic.MemoryTable (RemotePointer m)
     -> UT task
     -> ArrayData e
     -> Used task
@@ -224,19 +224,19 @@ mallocWithUsage
 mallocWithUsage !mt utbl !ad !usage@(Used _ _ _ _ n _) = malloc'
   where
     malloc' = do
-      mp <- RT.malloc mt ad n :: m (Maybe (RemotePointer m a))
+      mp <- Basic.malloc mt ad n :: m (Maybe (RemotePointer m a))
       case mp of
         Nothing -> do
           success <- evictLRU utbl mt
           if success then malloc' else $internalError "malloc" "Remote memory exhausted"
         Just p -> liftIO $ do
-          key <- RT.makeStableArray ad
+          key <- Basic.makeStableArray ad
           HT.insert utbl key usage
           return p
 
 evictLRU :: forall m task. (RemoteMemory m, MonadIO m, Task task)
          => UT task
-         -> MemoryTable (RemotePointer m)
+         -> Basic.MemoryTable (RemotePointer m)
          -> m Bool
 evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
   mused <- liftIO $ HT.foldM eldest Nothing utbl
@@ -252,13 +252,13 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
           --
           -- Small caveat: Due to finalisers being delayed, it's a good idea
           -- to free the array here.
-          RT.freeStable (Proxy :: Proxy m) mt sa
+          Basic.freeStable (Proxy :: Proxy m) mt sa
           delete utbl sa
           message "evictLRU/Accelerate GC interrupted by GHC GC"
         Just arr -> do
           message ("evictLRU/evicting " ++ show sa)
           copyIfNecessary status n arr
-          liftIO $ RT.freeStable (Proxy :: Proxy m) mt sa
+          liftIO $ Basic.freeStable (Proxy :: Proxy m) mt sa
           liftIO $ HT.insert utbl sa (Used ts Evicted count tasks n weak_arr)
       return True
     _ -> trace "evictLRU/All arrays in use, unable to evict" $ return False
@@ -287,7 +287,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
     copyIfNecessary Unmanaged _ _  = return ()
     copyIfNecessary Evicted   _ _  = $internalError "evictLRU" "Attempting to evict already evicted array"
     copyIfNecessary Dirty     n ad = do
-      mp <- liftIO $ RT.lookup mt ad
+      mp <- liftIO $ Basic.lookup mt ad
       case mp of
         Nothing -> return () -- RCE: I think this branch is actually impossible.
         Just p  -> R.peek n p ad
@@ -296,11 +296,15 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
 -- Typically this should only be called in very specific circumstances. This
 -- operation is not thread-safe.
 --
-free :: (RemoteMemory m, Task task, PrimElt a b) => proxy m -> MemoryCache (RemotePointer m) task -> ArrayData a -> IO ()
-free proxy (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
-  key <- RT.makeStableArray arr
+free :: (RemoteMemory m, Task task, PrimElt a b)
+     => proxy m
+     -> MemoryTable (RemotePointer m) task
+     -> ArrayData a
+     -> IO ()
+free proxy (MemoryTable !mt !ref _) !arr = withMVar' ref $ \utbl -> do
+  key <- Basic.makeStableArray arr
   delete utbl key
-  RT.freeStable proxy mt key
+  Basic.freeStable proxy mt key
 
 -- |Record an association between a host-side array and a remote memory area
 -- that was not allocated by accelerate. The remote memory will NOT be re-used
@@ -308,10 +312,15 @@ free proxy (MemoryCache !mt !ref _) !arr = withMVar' ref $ \utbl -> do
 --
 -- This typically only has use for backends that provide an FFI.
 --
-insertUnmanaged :: (PrimElt e a, MonadIO m, Task task) => MemoryCache p task -> ArrayData e -> p a -> m ()
-insertUnmanaged (MemoryCache mt ref weak_utbl) !arr !ptr = liftIO . withMVar' ref $ \utbl -> do
-  key <- RT.makeStableArray arr
-  RT.insertUnmanaged mt arr ptr
+insertUnmanaged
+    :: (PrimElt e a, MonadIO m, Task task)
+    => MemoryTable p task
+    -> ArrayData e
+    -> p a
+    -> m ()
+insertUnmanaged (MemoryTable mt ref weak_utbl) !arr !ptr = liftIO . withMVar' ref $ \utbl -> do
+  key <- Basic.makeStableArray arr
+  Basic.insertUnmanaged mt arr ptr
   ts <- getCPUTime
   weak_arr <- makeWeakArrayData arr arr (Just $ finalizer key weak_utbl)
   HT.insert utbl key (Used ts Unmanaged 0 [] 0 weak_arr)
@@ -337,8 +346,11 @@ delete utbl key = do
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
-reclaim :: forall m task. (RemoteMemory m, MonadIO m) => MemoryCache (RemotePointer m) task -> m ()
-reclaim (MemoryCache !mt _ _) = RT.reclaim mt
+reclaim
+    :: forall m task. (RemoteMemory m, MonadIO m)
+    => MemoryTable (RemotePointer m) task
+    -> m ()
+reclaim (MemoryTable !mt _ _) = Basic.reclaim mt
 
 cache_finalizer :: UT task -> IO ()
 cache_finalizer !tbl
