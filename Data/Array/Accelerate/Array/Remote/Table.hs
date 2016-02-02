@@ -102,15 +102,14 @@ type StableArray = Int
 -- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
 -- depend on any state.
 --
-new :: (RemoteMemory m, MonadIO m)
-    => (forall a. RemotePtr m a -> IO ())
-    -> m (MemoryTable (RemotePtr m))
+new :: (forall a. ptr a -> IO ())
+    -> IO (MemoryTable ptr)
 new release = do
   message "initialise memory table"
-  tbl  <- liftIO $ HT.new
-  ref  <- liftIO $ newMVar tbl
+  tbl  <- HT.new
+  ref  <- newMVar tbl
   nrs  <- N.new release
-  weak <- liftIO $ mkWeakMVar ref (return ())
+  weak <- mkWeakMVar ref (return ())
   return $! MemoryTable ref weak nrs release
 
 

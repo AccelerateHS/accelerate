@@ -105,14 +105,12 @@ instance Task () where
 -- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
 -- depend on any state.
 --
-new :: (RemoteMemory m, MonadIO m)
-    => (forall a. RemotePtr m a -> IO ())
-    -> m (MemoryTable (RemotePtr m) task)
+new :: (forall a. ptr a -> IO ()) -> IO (MemoryTable ptr task)
 new release = do
   mt        <- Basic.new release
-  utbl      <- liftIO $ HT.new
-  ref       <- liftIO $ newMVar utbl
-  weak_utbl <- liftIO $ mkWeakMVar ref (cache_finalizer utbl)
+  utbl      <- HT.new
+  ref       <- newMVar utbl
+  weak_utbl <- mkWeakMVar ref (cache_finalizer utbl)
   return    $! MemoryTable mt ref weak_utbl
 
 -- |Perform some action that requires the remote pointer corresponding to

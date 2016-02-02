@@ -57,10 +57,8 @@ data Nursery p         = Nursery {-# UNPACK #-} !(NRS p)
 
 -- Generate a fresh nursery
 --
-new :: forall m. (RemoteMemory m, MonadIO m)
-    => (RemotePtr m () -> IO ())
-    -> m (Nursery (RemotePtr m))
-new free = liftIO $ do
+new :: (ptr () -> IO ()) -> IO (Nursery ptr)
+new free = do
   tbl    <- HT.new
   ref    <- newMVar (tbl, 0)
   weak   <- mkWeakMVar ref (flush free tbl)
