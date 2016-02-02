@@ -57,10 +57,10 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- | Allocate into the remote memory. Returns Nothing if out of memory.
   mallocRemote :: Storable e => Int -> m (Maybe (RemotePtr m e))
 
-  -- | Copy from host array to remote memory.
+  -- | Copy the given number of elements from the host array into remote memory.
   pokeRemote :: PrimElt e a => Int -> RemotePtr m a -> ArrayData e -> m ()
 
-  -- | Copy from remote memory to host array.
+  -- | Copy the given number of elements from remote memory to the host array.
   peekRemote :: PrimElt e a => Int -> RemotePtr m a -> MutableArrayData e -> m ()
 
   -- | Free memory previously allocated with `mallocRemote`.

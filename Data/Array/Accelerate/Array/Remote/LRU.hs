@@ -109,45 +109,47 @@ new :: (RemoteMemory m, MonadIO m)
     => (forall a. RemotePtr m a -> IO ())
     -> m (MemoryTable (RemotePtr m) task)
 new release = do
-  mt   <- Basic.new release
-  utbl <- liftIO $ HT.new
-  ref  <- liftIO $ newMVar utbl
+  mt        <- Basic.new release
+  utbl      <- liftIO $ HT.new
+  ref       <- liftIO $ newMVar utbl
   weak_utbl <- liftIO $ mkWeakMVar ref (cache_finalizer utbl)
-  return $ MemoryTable mt ref weak_utbl
+  return    $! MemoryTable mt ref weak_utbl
 
--- |Perform some IO action that requires the remote pointer corresponding to
+-- |Perform some action that requires the remote pointer corresponding to
 -- the given array. Returns `Nothing` if the array have NEVER been in the
 -- cache. If the array was previously in the cache, but was evicted due to its
 -- age, then the array will be copied back from host memory.
 --
 -- The continuation passed as the third argument needs to obey some precise
--- properties. Firstly, the supplied remote pointer should not leak out of the
--- function, as it is only guaranteed to be valid within it. If it is required
--- that it does leak (e.g. the backend is uses concurrency to interleave
--- execution of different parts of the program), then `completed` on the
--- returned task should not return true until it is guaranteed there are no more
--- accesses of the remote pointer.
+-- properties. As with all bracketed functions, the supplied remote pointer must
+-- not leak out of the function, as it is only guaranteed to be valid within it.
+-- If it is required that it does leak (e.g. the backend is uses concurrency to
+-- interleave execution of different parts of the program), then `completed` on
+-- the returned task should not return true until it is guaranteed there are no
+-- more accesses of the remote pointer.
 --
-withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, MonadIO m, Functor m)
-           => MemoryTable (RemotePtr m) task
-           -> ArrayData a
-           -> (RemotePtr m b -> IO (task, c))
-           -> m (Maybe c)
+withRemote
+    :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, MonadIO m, Functor m)
+    => MemoryTable (RemotePtr m) task
+    -> ArrayData a
+    -> (RemotePtr m b -> m (task, c))
+    -> m (Maybe c)
 withRemote (MemoryTable !mt !ref _) !arr run = do
   key <- Basic.makeStableArray arr
   mp  <- withMVar' ref $ \utbl -> do
-   mu <- liftIO $ HT.lookup utbl key
-   case mu of
-     Nothing -> trace ("withRemote/array has never been malloc'd: " ++ show key)
-              $ return Nothing
-     Just u  -> Just <$> do
-       liftIO $ HT.insert utbl key (incCount u)
-       mp <- liftIO $ Basic.lookup mt arr
-       case mp of
-         Nothing | isEvicted u -> copy utbl (incCount u)
-         Just p                -> return p
-         _                     -> trace ("lost array " ++ show key) $ $internalError "withRemote" "non-evicted array has been lost"
-
+    mu <- liftIO $ HT.lookup utbl key
+    case mu of
+      Nothing -> do message ("withRemote/array has never been malloc'd: " ++ show key)
+                    return Nothing
+      Just u  -> do
+        mp <- liftIO $ do HT.insert utbl key (incCount u)
+                          Basic.lookup mt arr
+        Just <$> case mp of
+                   Nothing | isEvicted u -> copy utbl (incCount u)
+                   Just p                -> return p
+                   _                     -> do message ("lost array " ++ show key)
+                                               $internalError "withRemote" "non-evicted array has been lost"
+  --
   case mp of
     Just p  -> Just <$> run' p
     Nothing -> return Nothing -- The array was never in the table.
@@ -164,21 +166,20 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
     copy :: UT task -> Used task -> m (RemotePtr m b)
     copy utbl (Used ts _ count tasks n weak_arr) = do
       message "withRemote/reuploading-evicted-array"
-      p <- mallocWithUsage mt utbl arr
-                 (Used ts Clean count tasks n weak_arr)
+      p <- mallocWithUsage mt utbl arr (Used ts Clean count tasks n weak_arr)
       pokeRemote n p arr
       return p
 
     run' :: RemotePtr m b -> m c
-    run' p = liftIO $ do
+    run' p = do
       key <- Basic.makeStableArray arr
       message ("withRemote/using: " ++ show key)
       (task, c) <- run p
-      withMVar' ref $ \utbl -> do
+      withMVar' ref $ \utbl -> liftIO $ do
         mu       <- HT.lookup utbl key
         u        <- updateTask mu task
         HT.insert utbl key u
-      touchArrayData arr
+      liftIO $ touchArrayData arr
       return c
 
 
@@ -194,6 +195,9 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
 -- If malloc is called on an array that is already contained within the cache,
 -- it becomes a no-op.
 --
+-- On return, 'True' indicates that we allocated some remote memory, and 'False'
+-- indicates that we did not need to.
+--
 malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        => MemoryTable (RemotePtr m) task
        -> ArrayData e
@@ -201,17 +205,22 @@ malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
        -> Int
        -> m Bool
 malloc (MemoryTable mt ref weak_utbl) !ad !frozen !n = do
-  ts <- liftIO $ getCPUTime
+  ts  <- liftIO $ getCPUTime
   key <- Basic.makeStableArray ad
-  let status = if frozen then Clean else Dirty
-
+  --
+  let status = if frozen
+                 then Clean
+                 else Dirty
+  --
   withMVar' ref $ \utbl -> do
     mu <- liftIO $ HT.lookup utbl key
-    if isNothing mu then do
-      weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
-      _ <- mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
-      return True
-    else return False
+    if isNothing mu
+      then do
+        weak_arr <- liftIO $ makeWeakArrayData ad ad (Just $ finalizer key weak_utbl)
+        _        <- mallocWithUsage mt utbl ad (Used ts status 0 [] n weak_arr)
+        return True
+      else
+        return False
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
