@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Unique
 -- Copyright   : [2016] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
