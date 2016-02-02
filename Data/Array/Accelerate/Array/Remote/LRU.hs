@@ -50,9 +50,8 @@ import qualified Data.HashTable.IO                              as HT
 import qualified Data.Array.Accelerate.Debug                    as D
 import Data.Array.Accelerate.Error                              ( internalError )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, touchArrayData )
-import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer, PrimElt )
+import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Table                 ( StableArray, makeWeakArrayData )
-import qualified Data.Array.Accelerate.Array.Remote.Class       as R
 import qualified Data.Array.Accelerate.Array.Remote.Table       as Basic
 
 
@@ -94,10 +93,10 @@ data Used task where
 --
 class Task task where
   -- |Returns true when the task has finished.
-  isDone :: task -> IO Bool
+  completed :: task -> IO Bool
 
 instance Task () where
-  isDone () = return True
+  completed () = return True
 
 -- |Create a new memory cache from host to remote arrays.
 --
@@ -107,10 +106,10 @@ instance Task () where
 -- depend on any state.
 --
 new :: (RemoteMemory m, MonadIO m)
-    => (forall a. RemotePointer m a -> IO ())
-    -> m (MemoryTable (RemotePointer m) task)
-new free = do
-  mt   <- Basic.new free
+    => (forall a. RemotePtr m a -> IO ())
+    -> m (MemoryTable (RemotePtr m) task)
+new release = do
+  mt   <- Basic.new release
   utbl <- liftIO $ HT.new
   ref  <- liftIO $ newMVar utbl
   weak_utbl <- liftIO $ mkWeakMVar ref (cache_finalizer utbl)
@@ -125,14 +124,14 @@ new free = do
 -- properties. Firstly, the supplied remote pointer should not leak out of the
 -- function, as it is only guaranteed to be valid within it. If it is required
 -- that it does leak (e.g. the backend is uses concurrency to interleave
--- execution of different parts of the program), then `isDone` on the returned
--- task should not return true until it is guaranteed there are no more accesses
--- of the remote pointer.
+-- execution of different parts of the program), then `completed` on the
+-- returned task should not return true until it is guaranteed there are no more
+-- accesses of the remote pointer.
 --
 withRemote :: forall task m a b c. (PrimElt a b, Task task, RemoteMemory m, MonadIO m, Functor m)
-           => MemoryTable (RemotePointer m) task
+           => MemoryTable (RemotePtr m) task
            -> ArrayData a
-           -> (RemotePointer m b -> IO (task, c))
+           -> (RemotePtr m b -> IO (task, c))
            -> m (Maybe c)
 withRemote (MemoryTable !mt !ref _) !arr run = do
   key <- Basic.makeStableArray arr
@@ -162,15 +161,15 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
           tasks'  <- cleanUses tasks
           return (Used ts status (count - 1) (task : tasks') n weak_arr)
 
-    copy :: UT task -> Used task -> m (RemotePointer m b)
+    copy :: UT task -> Used task -> m (RemotePtr m b)
     copy utbl (Used ts _ count tasks n weak_arr) = do
       message "withRemote/reuploading-evicted-array"
       p <- mallocWithUsage mt utbl arr
                  (Used ts Clean count tasks n weak_arr)
-      R.poke n p arr
+      pokeRemote n p arr
       return p
 
-    run' :: RemotePointer m b -> m c
+    run' :: RemotePtr m b -> m c
     run' p = liftIO $ do
       key <- Basic.makeStableArray arr
       message ("withRemote/using: " ++ show key)
@@ -196,7 +195,7 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
 -- it becomes a no-op.
 --
 malloc :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
-       => MemoryTable (RemotePointer m) task
+       => MemoryTable (RemotePtr m) task
        -> ArrayData e
        -> Bool                               -- ^True if host array is frozen.
        -> Int
@@ -216,15 +215,15 @@ malloc (MemoryTable mt ref weak_utbl) !ad !frozen !n = do
 
 mallocWithUsage
     :: forall a e m task. (PrimElt e a, RemoteMemory m, MonadIO m, Task task)
-    => Basic.MemoryTable (RemotePointer m)
+    => Basic.MemoryTable (RemotePtr m)
     -> UT task
     -> ArrayData e
     -> Used task
-    -> m (RemotePointer m a)
+    -> m (RemotePtr m a)
 mallocWithUsage !mt utbl !ad !usage@(Used _ _ _ _ n _) = malloc'
   where
     malloc' = do
-      mp <- Basic.malloc mt ad n :: m (Maybe (RemotePointer m a))
+      mp <- Basic.malloc mt ad n :: m (Maybe (RemotePtr m a))
       case mp of
         Nothing -> do
           success <- evictLRU utbl mt
@@ -236,7 +235,7 @@ mallocWithUsage !mt utbl !ad !usage@(Used _ _ _ _ n _) = malloc'
 
 evictLRU :: forall m task. (RemoteMemory m, MonadIO m, Task task)
          => UT task
-         -> Basic.MemoryTable (RemotePointer m)
+         -> Basic.MemoryTable (RemotePtr m)
          -> m Bool
 evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
   mused <- liftIO $ HT.foldM eldest Nothing utbl
@@ -290,7 +289,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
       mp <- liftIO $ Basic.lookup mt ad
       case mp of
         Nothing -> return () -- RCE: I think this branch is actually impossible.
-        Just p  -> R.peek n p ad
+        Just p  -> peekRemote n p ad
 
 -- | Deallocate the device array associated with the given host-side array.
 -- Typically this should only be called in very specific circumstances. This
@@ -298,7 +297,7 @@ evictLRU utbl mt = trace "evictLRU/evicting-eldest-array" $  do
 --
 free :: (RemoteMemory m, Task task, PrimElt a b)
      => proxy m
-     -> MemoryTable (RemotePointer m) task
+     -> MemoryTable (RemotePtr m) task
      -> ArrayData a
      -> IO ()
 free proxy (MemoryTable !mt !ref _) !arr = withMVar' ref $ \utbl -> do
@@ -348,7 +347,7 @@ delete utbl key = do
 --
 reclaim
     :: forall m task. (RemoteMemory m, MonadIO m)
-    => MemoryTable (RemotePointer m) task
+    => MemoryTable (RemotePtr m) task
     -> m ()
 reclaim (MemoryTable !mt _ _) = Basic.reclaim mt
 
@@ -365,7 +364,7 @@ cache_finalizer !tbl
 -- -------------
 
 cleanUses :: Task task => [task] -> IO [task]
-cleanUses = filterM (fmap not . isDone)
+cleanUses = filterM (fmap not . completed)
 
 incCount :: Used task -> Used task
 incCount (Used ts status count uses n weak_arr) = Used ts status (count + 1) uses n weak_arr

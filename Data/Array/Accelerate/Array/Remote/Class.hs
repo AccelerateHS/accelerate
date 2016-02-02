@@ -4,6 +4,7 @@
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Class
 -- Copyright   : [2015] Manuel M T Chakravarty, Gabriele Keller, Robert Clifton-Everest
+--               [2016] Trevor L. McDonell
 -- License     : BSD3
 --
 -- Maintainer  : Robert Clifton-Everest <robertce@cse.unsw.edu.au>
@@ -51,33 +52,35 @@ type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typ
 class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
 
   -- | Pointers into this particular remote memory.
-  type RemotePointer m :: * -> *
+  type RemotePtr m :: * -> *
 
   -- | Allocate into the remote memory. Returns Nothing if out of memory.
-  malloc :: Storable e => Int -> m (Maybe (RemotePointer m e))
+  mallocRemote :: Storable e => Int -> m (Maybe (RemotePtr m e))
 
   -- | Copy from host array to remote memory.
-  poke :: PrimElt e a => Int -> RemotePointer m a -> ArrayData e -> m ()
+  pokeRemote :: PrimElt e a => Int -> RemotePtr m a -> ArrayData e -> m ()
 
   -- | Copy from remote memory to host array.
-  peek :: PrimElt e a => Int -> RemotePointer m a -> MutableArrayData e -> m ()
+  peekRemote :: PrimElt e a => Int -> RemotePtr m a -> MutableArrayData e -> m ()
 
-  -- | Free memory previously allocated with `malloc`.
-  --
-  free :: RemotePointer m e -> m ()
+  -- | Free memory previously allocated with `mallocRemote`.
+  freeRemote :: RemotePtr m e -> m ()
 
   -- | Cast a remote pointer.
-  castPtr :: proxy m -> RemotePointer m a -> RemotePointer m b
+  castRemotePtr :: proxy m -> RemotePtr m a -> RemotePtr m b
+
+  -- | Advance the remote pointer address by the given offset in bytes
+  plusRemotePtr :: proxy m -> RemotePtr m a -> Int -> RemotePtr m a
 
   -- | Returns the total remote memory available in bytes.
-  totalMem :: m Int64
+  totalRemoteMem :: m Int64
 
   -- | Returns, in bytes, the available remote memory.
-  availableMem :: m Int64
+  availableRemoteMem :: m Int64
 
   -- | Some remote memories allocate in chunks of a certain size. Memory
   -- managers can take advantage of this information to minimise the total
   -- number of allocations.
-  chunkSize :: m Int
-  chunkSize = return 1
+  remoteAllocationSize :: m Int
+  remoteAllocationSize = return 1
 

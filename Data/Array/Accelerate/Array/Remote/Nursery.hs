@@ -8,7 +8,7 @@
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+--               [2009..2016] Trevor L. McDonell
 --               [2015..2015] Robert Clifton-Everest
 -- License     : BSD3
 --
@@ -25,10 +25,9 @@ module Data.Array.Accelerate.Array.Remote.Nursery (
 
 -- friends
 import Data.Array.Accelerate.FullList                           ( FullList(..) )
-import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer )
+import Data.Array.Accelerate.Array.Remote.Class
 import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
-import qualified Data.Array.Accelerate.Array.Remote.Class       as R
 
 -- libraries
 import Prelude
@@ -58,7 +57,9 @@ data Nursery p         = Nursery {-# UNPACK #-} !(NRS p)
 
 -- Generate a fresh nursery
 --
-new :: forall m. (RemoteMemory m, MonadIO m) => (RemotePointer m () -> IO ()) -> m (Nursery (RemotePointer m))
+new :: forall m. (RemoteMemory m, MonadIO m)
+    => (RemotePtr m () -> IO ())
+    -> m (Nursery (RemotePtr m))
 new free = liftIO $ do
   tbl    <- HT.new
   ref    <- newMVar (tbl, 0)
@@ -71,7 +72,9 @@ new free = liftIO $ do
 -- returned.
 --
 {-# INLINE malloc #-}
-malloc :: Int -> Nursery p -> IO (Maybe (p ()))
+malloc :: Int
+       -> Nursery p
+       -> IO (Maybe (p ()))
 malloc !n (Nursery !ref _) = modifyMVar ref $ \(tbl,sz) -> do
   mp  <- HT.lookup tbl n
   case mp of
@@ -85,8 +88,13 @@ malloc !n (Nursery !ref _) = modifyMVar ref $ \(tbl,sz) -> do
 -- Add a device pointer to the nursery.
 --
 {-# INLINE stash #-}
-stash :: forall m e proxy. RemoteMemory m => proxy m -> Int -> NRS (RemotePointer m) -> RemotePointer m e -> IO ()
-stash _ !n !ref (R.castPtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,sz) -> do
+stash :: forall m e proxy. RemoteMemory m
+      => proxy m
+      -> Int
+      -> NRS (RemotePtr m)
+      -> RemotePtr m e
+      -> IO ()
+stash _ !n !ref (castRemotePtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,sz) -> do
   mp  <- HT.lookup tbl n
   case mp of
     Nothing     -> HT.insert tbl n (FL.singleton () ptr)
@@ -96,7 +104,9 @@ stash _ !n !ref (R.castPtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,
 
 -- Delete all entries from the nursery and free all associated device memory.
 --
-flush :: (p () -> IO ()) -> HashTable Int (FullList () (p ())) -> IO ()
+flush :: (p () -> IO ())
+      -> HashTable Int (FullList () (p ()))
+      -> IO ()
 flush free !tbl =
   let clean (!key,!val) = do
         FL.mapM_ (const free) val

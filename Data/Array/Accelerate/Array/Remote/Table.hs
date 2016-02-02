@@ -57,10 +57,9 @@ import Data.Array.Accelerate.Error                              ( internalError 
 import Data.Array.Accelerate.Array.Unique                       ( UniqueArray(..) )
 import Data.Array.Accelerate.Array.Data                         ( ArrayData, GArrayData(..),
                                                                   ArrayPtrs, ArrayElt, arrayElt, ArrayEltR(..) )
-import Data.Array.Accelerate.Array.Remote.Class                 ( RemoteMemory, RemotePointer, PrimElt )
+import Data.Array.Accelerate.Array.Remote.Class
 import Data.Array.Accelerate.Array.Remote.Nursery               ( Nursery(..) )
 import Data.Array.Accelerate.Lifetime
-import qualified Data.Array.Accelerate.Array.Remote.Class       as R
 import qualified Data.Array.Accelerate.Array.Remote.Nursery     as N
 import qualified Data.Array.Accelerate.Debug                    as D
 
@@ -104,8 +103,8 @@ type StableArray = Int
 -- depend on any state.
 --
 new :: (RemoteMemory m, MonadIO m)
-    => (forall a. RemotePointer m a -> IO ())
-    -> m (MemoryTable (RemotePointer m))
+    => (forall a. RemotePtr m a -> IO ())
+    -> m (MemoryTable (RemotePtr m))
 new release = do
   message "initialise memory table"
   tbl  <- liftIO $ HT.new
@@ -156,10 +155,10 @@ lookup (MemoryTable !ref _ _ _) !arr = do
 -- 'Nothing' is returned.
 --
 malloc :: forall a b m. (PrimElt a b, RemoteMemory m, MonadIO m)
-       => MemoryTable (RemotePointer m)
+       => MemoryTable (RemotePtr m)
        -> ArrayData a
        -> Int
-       -> m (Maybe (RemotePointer m b))
+       -> m (Maybe (RemotePtr m b))
 malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- Note: [Allocation sizes]
   --
@@ -170,7 +169,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   --
   -- TLM: I believe the CUDA API allocates in chunks of size 4MB.
   --
-  chunk <- R.chunkSize
+  chunk <- remoteAllocationSize
   let -- next highest multiple of f from x
       multiple x f      = (x + (f-1)) `div` f
 
@@ -179,17 +178,17 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   --
   message ("malloc: " ++ showBytes bytes)
   mp <-
-      attempt "malloc/nursery" (liftIO $ fmap (R.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+      attempt "malloc/nursery" (liftIO $ fmap (castRemotePtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
     `orElse` attempt "malloc/new" (do
-      R.malloc n')
+      mallocRemote n')
     `orElse` (do
       message "malloc/remote-malloc-failed (cleaning)"
       clean mt
-      liftIO $ fmap (R.castPtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
+      liftIO $ fmap (castRemotePtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
     `orElse` (do
       message "malloc/remote-malloc-failed (purging)"
       purge mt
-      R.malloc n')
+      mallocRemote n')
     `orElse` (do
       message "malloc/remote-malloc-failed (non-recoverable)"
       return Nothing)
@@ -222,7 +221,7 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
 --
 free :: (RemoteMemory m, PrimElt a b)
      => proxy m
-     ->  MemoryTable (RemotePointer m)
+     ->  MemoryTable (RemotePtr m)
      -> ArrayData a -> IO ()
 free proxy mt !arr = do
   sa <- makeStableArray arr
@@ -234,7 +233,7 @@ free proxy mt !arr = do
 freeStable
     :: RemoteMemory m
     => proxy m
-    -> MemoryTable (RemotePointer m)
+    -> MemoryTable (RemotePtr m)
     -> StableArray
     -> IO ()
 freeStable proxy (MemoryTable !ref _ (Nursery !nrs _) _) !sa = withMVar ref $ \mt -> do
@@ -250,9 +249,9 @@ freeStable proxy (MemoryTable !ref _ (Nursery !nrs _) _) !sa = withMVar ref $ \m
 -- The device memory will be freed when the host array is garbage collected.
 --
 insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
-       => MemoryTable (RemotePointer m)
+       => MemoryTable (RemotePtr m)
        -> ArrayData a
-       -> RemotePointer m b
+       -> RemotePtr m b
        -> Int
        -> m ()
 insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
@@ -287,7 +286,7 @@ insertUnmanaged (MemoryTable !ref !weak_ref _ _) !arr !ptr = do
 -- |Initiate garbage collection and mark any arrays that no longer have host-side
 -- equivalents as reusable.
 --
-clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+clean :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
 clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
   -- Unfortunately there is no real way to force a GC then wait for it to
   -- finish. Calling performGC then yielding works moderately well in
@@ -311,14 +310,14 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
 -- |Call `free` on all arrays that are not currently associated with host-side
 -- arrays.
 --
-purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
 purge (MemoryTable _ _ nursery@(Nursery nrs _) release) = management "purge" nursery . liftIO $
   modifyMVar_ nrs (\(tbl,_) -> N.flush release tbl >> return (tbl, 0))
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.
 --
-reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePointer m) -> m ()
+reclaim :: forall m. (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
 reclaim mt = clean mt >> purge mt
 
 remoteFinalizer :: Weak (MT p) -> StableArray -> IO ()
@@ -440,12 +439,12 @@ message msg = liftIO $ D.traceIO D.dump_gc ("gc: " ++ msg)
 {-# INLINE management #-}
 management :: (RemoteMemory m, MonadIO m) => String -> Nursery p -> m a -> m a
 management msg nrs next = do
-  before     <- R.availableMem
+  before     <- availableRemoteMem
   before_nrs <- liftIO $ N.size nrs
-  total      <- R.totalMem
+  total      <- totalRemoteMem
   r          <- next
   D.when D.dump_gc $ do
-    after     <- R.availableMem
+    after     <- availableRemoteMem
     after_nrs <- liftIO $ N.size nrs
     message $ msg ++ " (freed: "     ++ showBytes (after - before)
                   ++ ", stashed: "   ++ showBytes (before_nrs - after_nrs)
