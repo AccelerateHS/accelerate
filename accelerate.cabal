@@ -146,6 +146,11 @@ Flag debug
     .
     * -ddump-simpl-iterations: dump the program after each iteration of the simplifier
     .
+    * -ddump-dot: write the program DAG to file in Graphviz dot format
+    .
+    * -ddump-simpl-dot: write the program DAG to file in Graphviz dot format,
+    .                   but elide the scalar expressions
+    .
     * -dverbose: other, uncategorised messages
     .
 
