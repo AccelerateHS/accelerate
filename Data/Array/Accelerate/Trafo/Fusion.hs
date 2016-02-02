@@ -1452,6 +1452,16 @@ aletD :: (Kit acc, Arrays arrs, Arrays brrs)
       -> Embed    acc aenv        brrs
 aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
 
+  -- dead-code elimination
+  -- ---------------------
+  --
+  -- If the binding is not used at all then get rid of it entirely. While the
+  -- let-elimination below deals with most dead code cases, it only works if the
+  -- bound term is not manifest.
+  --
+  | Just acc0' <- strengthen noTop acc0
+  = embedAcc acc0'
+
   -- let-floating
   -- ------------
   --
@@ -1468,6 +1478,11 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   --
   | otherwise
   = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
+
+  where
+    noTop :: (aenv,a) :?> aenv
+    noTop ZeroIdx = Nothing
+    noTop (SuccIdx ix) = Just ix
 
 
 aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
