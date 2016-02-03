@@ -30,11 +30,12 @@ import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
 
 -- libraries
-import Prelude
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar, modifyMVar_, mkWeakMVar )
 import Data.Int
 import Data.Proxy
+import Data.Word
 import System.Mem.Weak                                          ( Weak )
+import Prelude
 
 import qualified Data.HashTable.IO                              as HT
 
@@ -49,14 +50,14 @@ import qualified Data.HashTable.IO                              as HT
 --
 type HashTable key val = HT.BasicHashTable key val
 
-type NRS p             = MVar ( HashTable Int (FullList () (p ())), Int64 )
-data Nursery p         = Nursery {-# UNPACK #-} !(NRS p)
-                                 {-# UNPACK #-} !(Weak (NRS p))
+type NRS ptr           = MVar ( HashTable Int (FullList () (ptr Word8)), Int64 )
+data Nursery ptr       = Nursery {-# UNPACK #-} !(NRS ptr)
+                                 {-# UNPACK #-} !(Weak (NRS ptr))
 
 
 -- Generate a fresh nursery
 --
-new :: (ptr () -> IO ()) -> IO (Nursery ptr)
+new :: (ptr Word8 -> IO ()) -> IO (Nursery ptr)
 new free = do
   tbl    <- HT.new
   ref    <- newMVar (tbl, 0)
@@ -70,8 +71,8 @@ new free = do
 --
 {-# INLINE malloc #-}
 malloc :: Int
-       -> Nursery p
-       -> IO (Maybe (p ()))
+       -> Nursery ptr
+       -> IO (Maybe (ptr Word8))
 malloc !n (Nursery !ref _) = modifyMVar ref $ \(tbl,sz) -> do
   mp  <- HT.lookup tbl n
   case mp of
@@ -101,8 +102,8 @@ stash _ !n !ref (castRemotePtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(
 
 -- Delete all entries from the nursery and free all associated device memory.
 --
-flush :: (p () -> IO ())
-      -> HashTable Int (FullList () (p ()))
+flush :: (ptr Word8 -> IO ())
+      -> HashTable Int (FullList () (ptr Word8))
       -> IO ()
 flush free !tbl =
   let clean (!key,!val) = do
@@ -113,7 +114,7 @@ flush free !tbl =
 
 -- The total size of all arrays stashed in the nursery.
 --
-size :: Nursery p -> IO Int64
+size :: Nursery ptr -> IO Int64
 size (Nursery ref _) = withMVar ref (return . snd)
 
 

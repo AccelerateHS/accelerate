@@ -168,27 +168,22 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   chunk <- remoteAllocationSize
   let -- next highest multiple of f from x
       multiple x f      = (x + (f-1)) `div` f
-
-      !n'               = chunk * multiple n chunk
-      !bytes            = n' * sizeOf (undefined :: b)
+      bytes             = chunk * multiple (n * sizeOf (undefined::b)) chunk
   --
   message ("malloc: " ++ showBytes bytes)
   mp <-
-      attempt "malloc/nursery" (liftIO $ fmap (castRemotePtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
-    `orElse` attempt "malloc/new" (do
-      mallocRemote n')
-    `orElse` (do
-      message "malloc/remote-malloc-failed (cleaning)"
-      clean mt
-      liftIO $ fmap (castRemotePtr (Proxy :: Proxy m)) <$> N.malloc bytes nursery)
-    `orElse` (do
-      message "malloc/remote-malloc-failed (purging)"
-      purge mt
-      mallocRemote n')
-    `orElse` (do
-      message "malloc/remote-malloc-failed (non-recoverable)"
-      return Nothing)
-
+    fmap (castRemotePtr (Proxy :: Proxy m))
+    <$> attempt "malloc/nursery" (liftIO $ N.malloc bytes nursery)
+        `orElse`
+        attempt "malloc/new" (mallocRemote bytes)
+        `orElse` do message "malloc/remote-malloc-failed (cleaning)"
+                    clean mt
+                    liftIO $ N.malloc bytes nursery
+        `orElse` do message "malloc/remote-malloc-failed (purging)"
+                    purge mt
+                    mallocRemote bytes
+        `orElse` do message "malloc/remote-malloc-failed (non-recoverable)"
+                    return Nothing
   case mp of
     Nothing -> return Nothing
     Just p' -> do
@@ -253,8 +248,8 @@ insert :: forall m a b. (PrimElt a b, RemoteMemory m, MonadIO m)
 insert mt@(MemoryTable !ref _ _ _) !arr !ptr !bytes = do
   key  <- makeStableArray  arr
   weak <- liftIO $ makeWeakArrayData arr () (Just $ freeStable (Proxy :: Proxy m) mt key)
-  message      $ "insert: " ++ show key
-  liftIO $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr bytes)
+  message $ "insert: " ++ show key
+  liftIO  $ withMVar ref $ \tbl -> HT.insert tbl key (RemoteArray weak ptr bytes)
 
 
 -- |Record an association between a host-side array and a remote memory area

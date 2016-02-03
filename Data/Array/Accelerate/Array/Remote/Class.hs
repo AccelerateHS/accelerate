@@ -35,9 +35,11 @@ import Data.Array.Accelerate.Array.Data
 
 import Control.Monad.Catch
 import Data.Int
+import Data.Word
 import Data.Typeable
 import Foreign.Ptr
 import Foreign.Storable
+
 
 -- | Matches array element types to primitive types.
 --
@@ -52,8 +54,9 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- | Pointers into this particular remote memory.
   type RemotePtr m :: * -> *
 
-  -- | Allocate into the remote memory. Returns Nothing if out of memory.
-  mallocRemote :: Storable e => Int -> m (Maybe (RemotePtr m e))
+  -- | Attempt to allocate the given number of bytes in the remote memory space.
+  -- Returns Nothing on failure.
+  mallocRemote :: Int -> m (Maybe (RemotePtr m Word8))
 
   -- | Copy the given number of elements from the host array into remote memory.
   pokeRemote :: PrimElt e a => Int -> RemotePtr m a -> ArrayData e -> m ()
@@ -70,7 +73,7 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- | Returns, in bytes, the available remote memory.
   availableRemoteMem :: m Int64
 
-  -- | The chunk allocation size (number of array elements).
+  -- | The chunk allocation size (bytes).
   remoteAllocationSize :: m Int
   remoteAllocationSize = return 1024
 
