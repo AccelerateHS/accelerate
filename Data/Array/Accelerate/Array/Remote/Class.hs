@@ -63,14 +63,8 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- | Copy the given number of elements from remote memory to the host array.
   peekRemote :: PrimElt e a => Int -> RemotePtr m a -> MutableArrayData e -> m ()
 
-  -- | Free memory previously allocated with `mallocRemote`.
-  freeRemote :: RemotePtr m e -> m ()
-
   -- | Cast a remote pointer.
   castRemotePtr :: proxy m -> RemotePtr m a -> RemotePtr m b
-
-  -- | Advance the remote pointer address by the given offset in bytes
-  plusRemotePtr :: proxy m -> RemotePtr m a -> Int -> RemotePtr m a
 
   -- | Returns the total remote memory available in bytes.
   totalRemoteMem :: m Int64
