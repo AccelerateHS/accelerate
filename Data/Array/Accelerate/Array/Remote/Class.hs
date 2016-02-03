@@ -78,9 +78,7 @@ class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
   -- | Returns, in bytes, the available remote memory.
   availableRemoteMem :: m Int64
 
-  -- | Some remote memories allocate in chunks of a certain size. Memory
-  -- managers can take advantage of this information to minimise the total
-  -- number of allocations.
+  -- | The chunk allocation size (number of array elements).
   remoteAllocationSize :: m Int
-  remoteAllocationSize = return 1
+  remoteAllocationSize = return 1024
 

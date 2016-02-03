@@ -162,11 +162,9 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   -- Note: [Allocation sizes]
   --
   -- Instead of allocating the exact number of elements requested, we round up to
-  -- a fixed chunk size; currently set at 128 elements. This means there is a
-  -- greater chance the nursery will get a hit, and moreover that we can search
-  -- the nursery for an exact size.
-  --
-  -- TLM: I believe the CUDA API allocates in chunks of size 4MB.
+  -- a fixed chunk size as specified by RemoteMemory.remoteAllocationSize. This
+  -- means there is a greater chance the nursery will get a hit, and moreover
+  -- that we can search the nursery for an exact size.
   --
   chunk <- remoteAllocationSize
   let -- next highest multiple of f from x
