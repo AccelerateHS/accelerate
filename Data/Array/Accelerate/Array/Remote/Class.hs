@@ -43,9 +43,7 @@ import Foreign.Storable
 --
 type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typeable a)
 
--- | Monads that have access to a remote memory.
---
--- Accelerate backends can provide an instance of this class in order to take
+-- | Accelerate backends can provide an instance of this class in order to take
 -- advantage of the automated memory managers we provide as part of the base
 -- package.
 --

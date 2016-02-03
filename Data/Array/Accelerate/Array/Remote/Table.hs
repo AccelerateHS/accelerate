@@ -102,8 +102,7 @@ type StableArray = Int
 -- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
 -- depend on any state.
 --
-new :: (forall a. ptr a -> IO ())
-    -> IO (MemoryTable ptr)
+new :: (forall a. ptr a -> IO ()) -> IO (MemoryTable ptr)
 new release = do
   message "initialise memory table"
   tbl  <- HT.new

@@ -142,11 +142,11 @@ withRemote (MemoryTable !mt !ref _) !arr run = do
       Just u  -> do
         mp <- liftIO $ do HT.insert utbl key (incCount u)
                           Basic.lookup mt arr
-        Just <$> case mp of
-                   Nothing | isEvicted u -> copy utbl (incCount u)
-                   Just p                -> return p
-                   _                     -> do message ("lost array " ++ show key)
-                                               $internalError "withRemote" "non-evicted array has been lost"
+        case mp of
+          Nothing | isEvicted u -> Just <$> copy utbl (incCount u)
+          Just p                -> return (Just p)
+          _                     -> do message ("lost array " ++ show key)
+                                      $internalError "withRemote" "non-evicted array has been lost"
   --
   case mp of
     Just p  -> Just <$> run' p

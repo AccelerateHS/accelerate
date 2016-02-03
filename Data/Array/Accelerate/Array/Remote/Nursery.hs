@@ -32,7 +32,6 @@ import qualified Data.Array.Accelerate.Debug                    as D
 -- libraries
 import Prelude
 import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar, modifyMVar_, mkWeakMVar )
-import Control.Monad.IO.Class
 import Data.Int
 import Data.Proxy
 import System.Mem.Weak                                          ( Weak )
