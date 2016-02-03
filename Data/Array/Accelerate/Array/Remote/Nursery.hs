@@ -30,7 +30,7 @@ import qualified Data.Array.Accelerate.FullList                 as FL
 import qualified Data.Array.Accelerate.Debug                    as D
 
 -- libraries
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar, modifyMVar_, mkWeakMVar )
+import Control.Concurrent.MVar
 import Data.Int
 import Data.Proxy
 import Data.Word
