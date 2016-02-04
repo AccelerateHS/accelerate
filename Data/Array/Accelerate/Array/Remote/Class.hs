@@ -33,12 +33,14 @@ module Data.Array.Accelerate.Array.Remote.Class (
 
 import Data.Array.Accelerate.Array.Data
 
+import Control.Applicative
 import Control.Monad.Catch
 import Data.Int
 import Data.Word
 import Data.Typeable
 import Foreign.Ptr
 import Foreign.Storable
+import Prelude
 
 
 -- | Matches array element types to primitive types.
@@ -49,7 +51,7 @@ type PrimElt e a = (ArrayElt e, Storable a, ArrayPtrs e ~ Ptr a, Typeable e, Typ
 -- advantage of the automated memory managers we provide as part of the base
 -- package.
 --
-class (Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
+class (Applicative m, Monad m, MonadCatch m, MonadMask m) => RemoteMemory m where
 
   -- | Pointers into this particular remote memory.
   type RemotePtr m :: * -> *
