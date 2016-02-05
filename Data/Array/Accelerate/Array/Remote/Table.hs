@@ -37,7 +37,7 @@ module Data.Array.Accelerate.Array.Remote.Table (
 ) where
 
 import Control.Concurrent                                       ( yield )
-import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, modifyMVar_, mkWeakMVar )
+import Control.Concurrent.MVar                                  ( MVar, newMVar, withMVar, mkWeakMVar )
 import Control.Concurrent.Unique                                ( Unique )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Data.Functor
@@ -45,6 +45,7 @@ import Data.Hashable                                            ( hash )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
+import Data.Word
 import Foreign.Storable                                         ( sizeOf )
 import System.Mem                                               ( performGC )
 import System.Mem.Weak                                          ( Weak, deRefWeak )
@@ -82,7 +83,7 @@ type MT p               = MVar ( HashTable StableArray (RemoteArray p) )
 data MemoryTable p      = MemoryTable {-# UNPACK #-} !(MT p)
                                       {-# UNPACK #-} !(Weak (MT p))
                                       {-# UNPACK #-} !(Nursery p)
-                                      (forall a. p a -> IO ())
+                                      (p Word8 -> IO ())
 
 data RemoteArray p where
   RemoteArray :: Typeable e
@@ -173,12 +174,12 @@ malloc mt@(MemoryTable _ _ !nursery _) !ad !n = do
   message ("malloc: " ++ showBytes bytes)
   mp <-
     fmap (castRemotePtr (Proxy :: Proxy m))
-    <$> attempt "malloc/nursery" (liftIO $ N.malloc bytes nursery)
+    <$> attempt "malloc/nursery" (liftIO $ N.lookup bytes nursery)
         `orElse`
         attempt "malloc/new" (mallocRemote bytes)
         `orElse` do message "malloc/remote-malloc-failed (cleaning)"
                     clean mt
-                    liftIO $ N.malloc bytes nursery
+                    liftIO $ N.lookup bytes nursery
         `orElse` do message "malloc/remote-malloc-failed (purging)"
                     purge mt
                     mallocRemote bytes
@@ -218,6 +219,7 @@ free proxy mt !arr = do
   sa <- makeStableArray arr
   freeStable proxy mt sa
 
+
 -- | Deallocate the device array associated with the given StableArray. This
 -- is useful for other memory managers built on top of the memory table.
 --
@@ -227,13 +229,15 @@ freeStable
     -> MemoryTable (RemotePtr m)
     -> StableArray
     -> IO ()
-freeStable proxy (MemoryTable !ref _ (Nursery !nrs _) _) !sa = withMVar ref $ \mt -> do
-  mw <-  mt `HT.lookup` sa
-  case mw of
-    Nothing -> message ("free/already-removed: " ++ show sa)
-    Just (RemoteArray _ !p !bytes)  -> trace ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes) $ do
-      N.stash proxy bytes nrs p
-      mt `HT.delete` sa
+freeStable proxy (MemoryTable !ref _ !nrs _) !sa =
+  withMVar ref $ \mt -> do
+    mw <- mt `HT.lookup` sa
+    case mw of
+      Nothing                        -> message ("free/already-removed: " ++ show sa)
+      Just (RemoteArray _ !p !bytes) -> do
+        message ("free/evict: " ++ show sa ++ " of " ++ showBytes bytes)
+        N.insert bytes (castRemotePtr proxy p) nrs
+        mt `HT.delete` sa
 
 
 -- Record an association between a host-side array and a new device memory area.
@@ -298,12 +302,15 @@ clean mt@(MemoryTable _ weak_ref nrs _) = management "clean" nrs . liftIO $ do
       alive <- isJust <$> deRefWeak w
       if alive then return rs else return (sa:rs)
 
--- |Call `free` on all arrays that are not currently associated with host-side
+
+-- | Call `free` on all arrays that are not currently associated with host-side
 -- arrays.
 --
 purge :: (RemoteMemory m, MonadIO m) => MemoryTable (RemotePtr m) -> m ()
-purge (MemoryTable _ _ nursery@(Nursery nrs _) release) = management "purge" nursery . liftIO $
-  modifyMVar_ nrs (\(tbl,_) -> N.flush release tbl >> return (tbl, 0))
+purge (MemoryTable _ _ nursery@(Nursery nrs _) release)
+  = management "purge" nursery
+  $ liftIO (N.cleanup release nrs)
+
 
 -- |Initiate garbage collection and `free` any remote arrays that no longer
 -- have matching host-side equivalents.

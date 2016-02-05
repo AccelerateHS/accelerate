@@ -1,10 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE PolyKinds #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- |
 -- Module      : Data.Array.Accelerate.Array.Remote.Nursery
 -- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
@@ -19,103 +14,103 @@
 
 module Data.Array.Accelerate.Array.Remote.Nursery (
 
-  Nursery(..), NRS, new, malloc, stash, flush, size
+  Nursery(..), NRS, new, lookup, insert, cleanup, size
 
 ) where
 
 -- friends
-import Data.Array.Accelerate.FullList                           ( FullList(..) )
-import Data.Array.Accelerate.Array.Remote.Class
-import qualified Data.Array.Accelerate.FullList                 as FL
+import Data.Array.Accelerate.Error
 import qualified Data.Array.Accelerate.Debug                    as D
 
 -- libraries
+import Prelude                                                  hiding ( lookup )
 import Control.Concurrent.MVar
 import Data.Int
-import Data.Proxy
+import Data.IntMap                                              ( IntMap )
+import Data.Sequence                                            ( Seq )
 import Data.Word
 import System.Mem.Weak                                          ( Weak )
-import Prelude
-
-import qualified Data.HashTable.IO                              as HT
+import qualified Data.IntMap.Strict                             as IM
+import qualified Data.Sequence                                  as Seq
+import qualified Data.Traversable                               as Seq
 
 
 -- The nursery is a place to store remote memory arrays that are no longer
--- needed. If a new array is requested of a similar size, we might return an
--- array from the nursery instead of calling into the backends underlying API
--- to allocate fresh memory.
+-- needed. Often it is quicker to reuse an existing array, rather than call out
+-- to the external API to allocate fresh memory.
 --
--- Note that since there might be many arrays for the same size, each entry in
--- the map keeps a (non-empty) list of remote arrays.
+-- The nursery is wrapped in an MVar so that several threads may safely access
+-- it concurrently.
 --
-type HashTable key val = HT.BasicHashTable key val
+data Nursery ptr        = Nursery {-# UNPACK #-} !(NRS ptr)
+                                  {-# UNPACK #-} !(Weak (NRS ptr))
+type NRS ptr            = MVar (N ptr)
 
-type NRS ptr           = MVar ( HashTable Int (FullList () (ptr Word8)), Int64 )
-data Nursery ptr       = Nursery {-# UNPACK #-} !(NRS ptr)
-                                 {-# UNPACK #-} !(Weak (NRS ptr))
+data N ptr              = N !(IntMap (Seq (ptr Word8)))       -- #bytes -> ptr
+                            {-# UNPACK #-} !Int64             -- total allocated bytes
 
 
--- Generate a fresh nursery
+-- | Create a fresh nursery.
 --
+-- When the nursery is garbage collected, the provided function will be run on
+-- each value to free the retained memory.
+--
+{-# INLINEABLE new #-}
 new :: (ptr Word8 -> IO ()) -> IO (Nursery ptr)
-new free = do
-  tbl    <- HT.new
-  ref    <- newMVar (tbl, 0)
-  weak   <- mkWeakMVar ref (flush free tbl)
+new delete = do
+  message "initialise nursery"
+  ref    <- newMVar ( N IM.empty 0 )
+  weak   <- mkWeakMVar ref (cleanup delete ref)
   return $! Nursery ref weak
 
 
--- Look for a chunk of memory in the nursery of a given size (or a little bit
--- larger). If found, it is removed from the nursery and a pointer to it
--- returned.
+-- | Look for an entry with the requested size.
 --
-{-# INLINE malloc #-}
-malloc :: Int
-       -> Nursery ptr
-       -> IO (Maybe (ptr Word8))
-malloc !n (Nursery !ref _) = modifyMVar ref $ \(tbl,sz) -> do
-  mp  <- HT.lookup tbl n
-  case mp of
-    Nothing               -> return ((tbl,sz),Nothing)
-    Just (FL () ptr rest) ->
-      case rest of
-        FL.Nil          -> HT.delete tbl n              >> return ((tbl,sz - fromIntegral n), Just ptr)
-        FL.Cons () v xs -> HT.insert tbl n (FL () v xs) >> return ((tbl,sz - fromIntegral n), Just ptr)
+{-# INLINEABLE lookup #-}
+lookup :: Int -> Nursery ptr -> IO (Maybe (ptr Word8))
+lookup !key (Nursery !ref !_) =
+  modifyMVar ref $ \nrs@( N im sz ) ->
+    let
+        (mv, nrs')  = IM.updateLookupWithKey f key im         -- returns _original_ value, if located
+        f _k v      =
+          case Seq.viewl v of
+            Seq.EmptyL  -> $internalError "lookup" "expected non-empty sequence"
+            _ Seq.:< vs -> if Seq.null vs then Nothing        -- delete this entry in the map
+                                          else Just vs        -- re-insert the tail
+    in
+    case fmap Seq.viewl mv of
+      Just (v Seq.:< _) -> return ( N nrs' (sz - fromIntegral key) , Just v  )
+      _                 -> return ( nrs,                             Nothing )
 
 
--- Add a device pointer to the nursery.
+-- | Add an entry to the nursery
 --
-{-# INLINE stash #-}
-stash :: forall m e proxy. RemoteMemory m
-      => proxy m
-      -> Int
-      -> NRS (RemotePtr m)
-      -> RemotePtr m e
-      -> IO ()
-stash _ !n !ref (castRemotePtr (Proxy :: Proxy m) -> ptr) = modifyMVar_ ref $ \(tbl,sz) -> do
-  mp  <- HT.lookup tbl n
-  case mp of
-    Nothing     -> HT.insert tbl n (FL.singleton () ptr)
-    Just xs     -> HT.insert tbl n (FL.cons () ptr xs)
-  return (tbl, sz + fromIntegral n)
-
-
--- Delete all entries from the nursery and free all associated device memory.
---
-flush :: (ptr Word8 -> IO ())
-      -> HashTable Int (FullList () (ptr Word8))
-      -> IO ()
-flush free !tbl =
-  let clean (!key,!val) = do
-        FL.mapM_ (const free) val
-        HT.delete tbl key
+{-# INLINEABLE insert #-}
+insert :: Int -> ptr Word8 -> Nursery ptr -> IO ()
+insert !key !val (Nursery !ref _) =
+  let
+      f Nothing   = Just (Seq.singleton val)
+      f (Just vs) = Just (vs Seq.|> val)
   in
-  message "flush nursery" >> HT.mapM_ clean tbl
+  modifyMVar_ ref $ \(N im sz) ->
+    return $! N (IM.alter f key im) (sz + fromIntegral key)
 
--- The total size of all arrays stashed in the nursery.
+
+-- | Delete all entries from the nursery
 --
+{-# INLINEABLE cleanup #-}
+cleanup :: (ptr Word8 -> IO ()) -> NRS ptr -> IO ()
+cleanup delete !ref = do
+  message "nursery cleanup"
+  modifyMVar_ ref $ \(N nrs _) -> do mapM_ (Seq.mapM delete) (IM.elems nrs)
+                                     return ( N IM.empty 0 )
+
+
+-- | The total number of bytes retained by the nursery
+--
+{-# INLINEABLE size #-}
 size :: Nursery ptr -> IO Int64
-size (Nursery ref _) = withMVar ref (return . snd)
+size (Nursery ref _) = withMVar ref $ \(N _ sz) -> return sz
 
 
 -- Debug
