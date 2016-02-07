@@ -1460,7 +1460,7 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   -- bound term is not manifest.
   --
   | Just acc0' <- strengthen noTop acc0
-  = embedAcc acc0'
+  = Stats.ruleFired "aletD/dead" embedAcc acc0'
 
   -- let-floating
   -- ------------
