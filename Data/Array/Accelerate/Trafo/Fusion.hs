@@ -158,6 +158,7 @@ manifest fuseAcc (OpenAcc pacc) =
     -- -----------------
     Avar ix                 -> Avar ix
     Use arr                 -> Use arr
+    Subarray sh ix arr      -> Subarray (cvtE sh) (cvtE ix) arr
     Unit e                  -> Unit (cvtE e)
     Alet bnd body           -> alet (manifest fuseAcc bnd) (manifest fuseAcc body)
     Acond p t e             -> Acond (cvtE p) (manifest fuseAcc t) (manifest fuseAcc e)
@@ -401,6 +402,7 @@ embedPreAcc fuseAcc embedAcc elimAcc pacc
     -- Array injection
     Avar v              -> done $ Avar v
     Use arrs            -> done $ Use arrs
+    Subarray sh ix arr  -> done $ Subarray (cvtE sh) (cvtE ix) arr
     Unit e              -> unitD (cvtE e)
 
     -- Producers
@@ -1577,6 +1579,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
+        ToSlice x sl sh ix              -> ToSlice x (cvtE sl) (cvtE sh) (cvtE ix)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
         PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
@@ -1636,6 +1639,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
           Alet (cvtA bnd) (kmap (replaceA sh'' f'' (SuccIdx avar)) body)
 
         Use arrs                -> Use arrs
+        Subarray sh ix arr      -> Subarray (cvtE sh) (cvtE ix) arr
         Unit e                  -> Unit (cvtE e)
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
