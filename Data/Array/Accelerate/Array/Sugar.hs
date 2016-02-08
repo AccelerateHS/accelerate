@@ -53,6 +53,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Tuples
   TupleR, TupleRepr, tuple,
+  AtupleR, atuple,
   Tuple(..), IsTuple, fromTuple, toTuple,
   Atuple(..), IsAtuple, fromAtuple, toAtuple,
 
@@ -784,10 +785,14 @@ data Atuple c t where
 
 -- |Tuple reification
 --
-type TupleR a = ProdR Elt a
+type TupleR  a = ProdR Elt    a
+type AtupleR a = ProdR Arrays a
 
 tuple :: IsTuple tup => {- dummy -} tup -> TupleR (TupleRepr tup)
 tuple = prod (Proxy :: Proxy Elt)
+
+atuple :: IsAtuple tup => {- dummy -} tup -> AtupleR (TupleRepr tup)
+atuple = prod (Proxy :: Proxy Arrays)
 
 
 -- |Multi-dimensional arrays for array processing.

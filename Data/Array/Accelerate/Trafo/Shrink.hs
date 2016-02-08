@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -34,6 +35,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
   -- Occurrence counting
   UsesOfAcc, usesOfPreAcc, usesOfExp,
+  Use(..), zeroUse, oneUse, allUse,
 
   -- Dependency analysis
   (::>)(..), Stronger(..), weakIn, weakOut,
@@ -51,6 +53,7 @@ import Prelude                                          hiding ( exp, seq )
 -- friends
 import Data.Array.Accelerate.AST
 import Data.Array.Accelerate.Array.Sugar               hiding ( Any )
+import Data.Array.Accelerate.Product                   ( ProdR(..), TupleIdx(..) )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Substitution
 
@@ -152,7 +155,7 @@ shrinkFun (Body b) = Body <$> shrinkExp b
 -- array computations into scalar expressions, which is generally not desirable.
 --
 type ShrinkAcc acc = forall aenv a.   acc aenv a -> acc aenv a
-type ReduceAcc acc = forall aenv s t. acc aenv s -> acc (aenv,s) t -> Maybe (PreOpenAcc acc aenv t)
+type ReduceAcc acc = forall aenv s t. Arrays s => acc aenv s -> acc (aenv,s) t -> Maybe (PreOpenAcc acc aenv t)
 
 shrinkPreAcc
     :: forall acc aenv arrs. ShrinkAcc acc -> ReduceAcc acc
@@ -286,9 +289,9 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd       = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
-  | uses <= lIMIT       = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
-  | otherwise           = Nothing
+  | Avar _ <- bnd          = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
+  | allUse (<= lIMIT) uses = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
+  | otherwise              = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. Since this implies an array computation could be inlined
@@ -298,9 +301,9 @@ basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
     lIMIT = 0
 
     uses  = countAcc True ZeroIdx body
-    msg   = case uses of
-      0 -> "dead acc"
-      _ -> "inline acc"         -- forced inlining when lIMIT > 1
+    msg   = if allUse (== 0) uses
+            then "dead acc"
+            else "inline acc"         -- forced inlining when lIMIT > 1
 
 
 -- Occurrence Counting
@@ -358,184 +361,258 @@ usesOfExp idx = countE
 -- environment index. If the first argument is 'True' then it includes in the
 -- total uses of the variable for 'Shape' information, otherwise not.
 --
-type UsesOfAcc acc = forall aenv s t. Bool -> Idx aenv s -> acc aenv t -> Int
+type UsesOfAcc acc = forall aenv s t. Arrays s => Bool -> Idx aenv s -> acc aenv t -> Use s
+
+-- How an array variable is used in its context. If it is of a product type, we
+-- track the usage of each component.
+--
+data Use a where
+  UseArray :: Int -> Use (Array sh e)
+  UseTuple :: Atuple Use (TupleRepr t) -> Use t
+
+-- Combine the uses of an array variable.
+--
+(<+>) :: Use a -> Use a -> Use a
+UseArray n1 <+> UseArray n2 = UseArray (n1 + n2)
+UseTuple t1 <+> UseTuple t2 = UseTuple (t1 `tup` t2)
+  where
+    tup :: Atuple Use t -> Atuple Use t -> Atuple Use t
+    tup NilAtup          NilAtup          = NilAtup
+    tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` (a1 <+> a2)
+    tup _                _                = error "Chewie, we're home."
+_           <+> _           = error "Aaarrrrhhggg!"
+
+-- A variable's components each occur `n` times in total.
+--
+nUse :: forall t. Arrays t => Int -> Use t
+nUse n =
+  case flavour (undefined :: t) of
+    ArraysFunit  -> UseTuple NilAtup
+    ArraysFarray -> UseArray n
+    ArraysFtuple -> UseTuple (nt (atuple (undefined :: t)))
+  where
+    nt :: ProdR Arrays t' -> Atuple Use t'
+    nt ProdRunit = NilAtup
+    nt (ProdRsnoc t) = nt t `SnocAtup` nUse n
+
+zeroUse, oneUse :: Arrays t => Use t
+zeroUse = nUse 0
+oneUse  = nUse 1
+
+instance Eq (Use a) where
+  UseArray n1 == UseArray n2 = n1 == n2
+  UseTuple t1 == UseTuple t2 = t1 == t2
+  _           == _           = error "It can camouflage!"
+
+instance Eq (Atuple Use t) where
+  NilAtup        == NilAtup        = True
+  SnocAtup t1 a1 == SnocAtup t2 a2 = t1 == t2 && a1 == a2
+  _              == _              = error "That thing out there... That is no dinosaur"
+
+-- Check if a condition is try for the use of all components.
+--
+allUse :: (Int -> Bool) -> Use t -> Bool
+allUse p (UseArray n) = p n
+allUse p (UseTuple t) = aT t
+  where
+    aT :: Atuple Use t -> Bool
+    aT NilAtup = True
+    aT (SnocAtup t u) = aT t && allUse p u
+
+-- Specify a certain component of a variable has been used.
+--
+useComponent :: TupleIdx (TupleRepr t) a -> Use t -> Use t
+useComponent ix (UseTuple t) = UseTuple (use ix t)
+  where
+    use :: TupleIdx t a -> Atuple Use t -> Atuple Use t
+    use ZeroTupIdx      (SnocAtup t u) = SnocAtup t (u <+> oneUse)
+    use (SuccTupIdx ix) (SnocAtup t u) = SnocAtup (use ix t) u
+    use _               _              = error "All these facts and opinions look the same. I can't tell them apart."
+useComponent _  _            = error "Happens to me all the time. Don't worry about it."
 
 usesOfPreAcc
-    :: forall acc aenv s t. Kit acc
+    :: forall acc aenv s t. (Kit acc, Arrays s)
     => Bool
     -> UsesOfAcc  acc
     -> Idx            aenv s
     -> PreOpenAcc acc aenv t
-    -> Int
+    -> Use s
 usesOfPreAcc withShape countAcc idx = count
   where
-    countIdx :: Idx aenv a -> Int
+    countIdx :: Idx aenv a -> Use s
     countIdx this
-        | Just REFL <- match this idx   = 1
-        | otherwise                     = 0
+        | Just REFL <- match this idx   = oneUse
+        | otherwise                     = zeroUse
 
-    count :: PreOpenAcc acc aenv a -> Int
+    count :: PreOpenAcc acc aenv a -> Use s
     count pacc = case pacc of
       Avar this                 -> countIdx this
       --
-      Alet bnd body             -> countA bnd + countAcc withShape (SuccIdx idx) body
+      Alet bnd body             -> countA bnd <+> countAcc withShape (SuccIdx idx) body
+                                     --  Possible special case?
       Atuple tup                -> countAT tup
-      Aprj _ a                  -> countA a     -- special case discount?
-      Apply f a                 -> countAF f idx + countA a
+      Aprj ix a                 | Avar v <- extract a
+                                , Just REFL <- match v idx
+                                -> useComponent ix zeroUse
+                                | otherwise
+                                -> countA a
+      Apply f a                 -> countAF f idx <+> countA a
       Aforeign _ _ a            -> countA a
-      Acond p t e               -> countE p  + countA t + countA e
-      Awhile p f a              -> countAF p idx + countAF f idx + countA a
-      Use _                     -> 0
-      Subarray ix sh _          -> countE ix + countE sh
+      Acond p t e               -> countE p  <+> countA t <+> countA e
+      Awhile p f a              -> countAF p idx <+> countAF f idx <+> countA a
+      Use _                     -> zeroUse
+      Subarray ix sh _          -> countE ix <+> countE sh
       Unit e                    -> countE e
-      Reshape e a               -> countE e  + countA a
-      Generate e f              -> countE e  + countF f
-      Transform sh ix f a       -> countE sh + countF ix + countF f  + countA a
-      Replicate _ sh a          -> countE sh + countA a
-      Slice _ a sl              -> countE sl + countA a
-      Map f a                   -> countF f  + countA a
-      ZipWith f a1 a2           -> countF f  + countA a1 + countA a2
-      Fold f z a                -> countF f  + countE z  + countA a
-      Fold1 f a                 -> countF f  + countA a
-      FoldSeg f z a s           -> countF f  + countE z  + countA a  + countA s
-      Fold1Seg f a s            -> countF f  + countA a  + countA s
-      Scanl f z a               -> countF f  + countE z  + countA a
-      Scanl' f z a              -> countF f  + countE z  + countA a
-      Scanl1 f a                -> countF f  + countA a
-      Scanr f z a               -> countF f  + countE z  + countA a
-      Scanr' f z a              -> countF f  + countE z  + countA a
-      Scanr1 f a                -> countF f  + countA a
-      Permute f1 a1 f2 a2       -> countF f1 + countA a1 + countF f2 + countA a2
-      Backpermute sh f a        -> countE sh + countF f  + countA a
-      Stencil f _ a             -> countF f  + countA a
-      Stencil2 f _ a1 _ a2      -> countF f  + countA a1 + countA a2
+      Reshape e a               -> countE e  <+> countA a
+      Generate e f              -> countE e  <+> countF f
+      Transform sh ix f a       -> countE sh <+> countF ix <+> countF f  <+> countA a
+      Replicate _ sh a          -> countE sh <+> countA a
+      Slice _ a sl              -> countE sl <+> countA a
+      Map f a                   -> countF f  <+> countA a
+      ZipWith f a1 a2           -> countF f  <+> countA a1 <+> countA a2
+      Fold f z a                -> countF f  <+> countE z  <+> countA a
+      Fold1 f a                 -> countF f  <+> countA a
+      FoldSeg f z a s           -> countF f  <+> countE z  <+> countA a  <+> countA s
+      Fold1Seg f a s            -> countF f  <+> countA a  <+> countA s
+      Scanl f z a               -> countF f  <+> countE z  <+> countA a
+      Scanl' f z a              -> countF f  <+> countE z  <+> countA a
+      Scanl1 f a                -> countF f  <+> countA a
+      Scanr f z a               -> countF f  <+> countE z  <+> countA a
+      Scanr' f z a              -> countF f  <+> countE z  <+> countA a
+      Scanr1 f a                -> countF f  <+> countA a
+      Permute f1 a1 f2 a2       -> countF f1 <+> countA a1 <+> countF f2 <+> countA a2
+      Backpermute sh f a        -> countE sh <+> countF f  <+> countA a
+      Stencil f _ a             -> countF f  <+> countA a
+      Stencil2 f _ a1 _ a2      -> countF f  <+> countA a1 <+> countA a2
       Collect s cs              -> maybe (usesOfPreSeq withShape countAcc idx s) (usesOfPreSeq withShape countAcc idx) cs
 
-    countA :: acc aenv a -> Int
+    countA :: acc aenv a -> Use s
     countA = countAcc withShape idx
 
     countAF :: Kit acc
             => PreOpenAfun acc aenv' f
             -> Idx aenv' s
-            -> Int
+            -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
     countAF (Abody a) v = countAcc withShape v a
 
-    countF :: PreOpenFun acc env aenv f -> Int
+    countF :: PreOpenFun acc env aenv f -> Use s
     countF (Lam  f) = countF f
     countF (Body b) = countE b
 
-    countAT :: Atuple (acc aenv) a -> Int
-    countAT NilAtup        = 0
-    countAT (SnocAtup t a) = countAT t + countA a
+    countAT :: Atuple (acc aenv) a -> Use s
+    countAT NilAtup        = zeroUse
+    countAT (SnocAtup t a) = countAT t <+> countA a
 
-    countE :: PreOpenExp acc env aenv e -> Int
+    countE :: PreOpenExp acc env aenv e -> Use s
     countE = usesOfExpA withShape countAcc idx
 
-usesOfPreSeq :: forall acc index aenv s t. Kit acc
+usesOfPreSeq :: forall acc index aenv s t. (Kit acc, Arrays s)
              => Bool
              -> UsesOfAcc acc
              -> Idx aenv s
              -> PreOpenSeq index acc aenv t
-             -> Int
+             -> Use s
 usesOfPreSeq withShape countAcc idx seq =
   case seq of
-    Producer p s -> countP p + usesOfPreSeq withShape countAcc (SuccIdx idx) s
+    Producer p s -> countP p <+> usesOfPreSeq withShape countAcc (SuccIdx idx) s
     Consumer c   -> countC c
     Reify a      -> countA a
   where
-    countP :: Producer index acc aenv arrs -> Int
+    countP :: Producer index acc aenv arrs -> Use s
     countP p =
       case p of
-        Pull _             -> 0
+        Pull _             -> zeroUse
         Subarrays sh _     -> countE sh
-        Produce l f        -> maybe 0 countE l + countAF f idx
-        MapAccumFlat f a x -> countAF f idx + countA a + countA x
-        ProduceAccum l f a -> maybe 0 countE l + countAF f idx + countA a
+        Produce l f        -> maybe zeroUse countE l <+> countAF f idx
+        MapAccumFlat f a x -> countAF f idx <+> countA a <+> countA x
+        ProduceAccum l f a -> maybe zeroUse countE l <+> countAF f idx <+> countA a
 
-    countC :: Consumer index acc aenv arrs -> Int
+    countC :: Consumer index acc aenv arrs -> Use s
     countC c =
       case c of
-        FoldSeqFlatten f a x -> countAF f idx + countA a + countA x
-        Iterate l f a        -> maybe 0 countE l + countAF f idx + countA a
+        FoldSeqFlatten f a x -> countAF f idx <+> countA a <+> countA x
+        Iterate l f a        -> maybe zeroUse countE l <+> countAF f idx <+> countA a
+        Conclude a _         -> countA a
         Stuple t             -> countCT t
 
-    countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Int
-    countCT NilAtup        = 0
-    countCT (SnocAtup t c) = countCT t + usesOfPreSeq withShape countAcc idx c
+    countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Use s
+    countCT NilAtup        = zeroUse
+    countCT (SnocAtup t c) = countCT t <+> usesOfPreSeq withShape countAcc idx c
 
-    countA :: acc aenv a -> Int
+    countA :: acc aenv a -> Use s
     countA = countAcc withShape idx
 
     countAF :: Kit acc
             => PreOpenAfun acc aenv' f
             -> Idx aenv' s
-            -> Int
+            -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
     countAF (Abody a) v = countAcc withShape v a
 
-    countE :: PreOpenExp acc env aenv e -> Int
+    countE :: PreOpenExp acc env aenv e -> Use s
     countE = usesOfExpA withShape countAcc idx
 
-usesOfExpA :: forall acc env aenv t e. Bool
+usesOfExpA :: forall acc env aenv t e. Arrays t
+           => Bool
            -> UsesOfAcc acc
            -> Idx aenv t
            -> PreOpenExp acc env aenv e
-           -> Int
+           -> Use t
 usesOfExpA withShape countAcc idx exp =
   case exp of
-    Let bnd body              -> countE bnd + countE body
-    Var _                     -> 0
-    Const _                   -> 0
+    Let bnd body              -> countE bnd <+> countE body
+    Var _                     -> zeroUse
+    Const _                   -> zeroUse
     Tuple t                   -> countT t
     Prj _ e                   -> countE e
-    IndexNil                  -> 0
-    IndexCons sl sz           -> countE sl + countE sz
+    IndexNil                  -> zeroUse
+    IndexCons sl sz           -> countE sl <+> countE sz
     IndexHead sh              -> countE sh
     IndexTail sh              -> countE sh
     IndexTrans sh             -> countE sh
-    IndexSlice _ ix sh        -> countE ix + countE sh
-    IndexFull _ ix sl         -> countE ix + countE sl
-    IndexAny                  -> 0
-    ToIndex sh ix             -> countE sh + countE ix
-    FromIndex sh i            -> countE sh + countE i
-    ToSlice _ slix sh i       -> countE slix + countE sh + countE i
-    Cond p t e                -> countE p  + countE t + countE e
-    While p f x               -> countF p  + countF f + countE x
-    PrimConst _               -> 0
+    IndexSlice _ ix sh        -> countE ix <+> countE sh
+    IndexFull _ ix sl         -> countE ix <+> countE sl
+    IndexAny                  -> zeroUse
+    ToIndex sh ix             -> countE sh <+> countE ix
+    FromIndex sh i            -> countE sh <+> countE i
+    ToSlice _ slix sh i       -> countE slix <+> countE sh <+> countE i
+    Cond p t e                -> countE p  <+> countE t <+> countE e
+    While p f x               -> countF p  <+> countF f <+> countE x
+    PrimConst _               -> zeroUse
     PrimApp _ x               -> countE x
-    Index a sh                -> countA a + countE sh
-    LinearIndex a i           -> countA a + countE i
+    Index a sh                -> countA a <+> countE sh
+    LinearIndex a i           -> countA a <+> countE i
     ShapeSize sh              -> countE sh
-    Intersect sh sz           -> countE sh + countE sz
-    Union sh sz               -> countE sh + countE sz
+    Intersect sh sz           -> countE sh <+> countE sz
+    Union sh sz               -> countE sh <+> countE sz
     Shape a
       | withShape             -> countA a
-      | otherwise             -> 0
+      | otherwise             -> zeroUse
     Foreign _ _ e             -> countE e
 
   where
-    countE :: PreOpenExp acc env' aenv e' -> Int
+    countE :: PreOpenExp acc env' aenv e' -> Use t
     countE = usesOfExpA withShape countAcc idx
 
-    countT :: Tuple (PreOpenExp acc env aenv) e' -> Int
-    countT NilTup        = 0
-    countT (SnocTup t e) = countT t + countE e
+    countT :: Tuple (PreOpenExp acc env aenv) e' -> Use t
+    countT NilTup        = zeroUse
+    countT (SnocTup t e) = countT t <+> countE e
 
-    countF :: PreOpenFun acc env' aenv f -> Int
+    countF :: PreOpenFun acc env' aenv f -> Use t
     countF (Lam  f) = countF f
     countF (Body b) = countE b
 
-    countA :: acc aenv a -> Int
+    countA :: acc aenv a -> Use t
     countA = countAcc withShape idx
 
--- Count the number of occurrences of the array term bound at the given
--- environment index. If the first argument is 'True' then it includes in the
--- total uses of the variable for 'Shape' information, otherwise not.
+-- Given an array term in environment 'aenv', determine what variables, are
+-- actually referenced. This yields a new environment,
 --
 type DependenciesAcc acc = forall aenv t. acc aenv t -> Stronger aenv
 
--- A reified proof that aenv' is weaker than aenv
+-- A reified proof that aenv' is weaker than aenv.
+--
 data aenv ::> aenv' where
   WeakEmpty :: ()   ::> aenv
   WeakBase  :: aenv ::> aenv
@@ -543,6 +620,7 @@ data aenv ::> aenv' where
   WeakOut   :: aenv ::> aenv' -> aenv     ::> (aenv', a)
 
 -- Existentially captures a stronger environment than aenv
+--
 data Stronger aenv where
   Stronger :: aenv' ::> aenv -> Stronger aenv
 
