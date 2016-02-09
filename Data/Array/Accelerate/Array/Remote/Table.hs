@@ -95,10 +95,11 @@ data RemoteArray p where
 
 -- | An untyped reference to an array, similar to a StableName.
 --
-newtype StableArray = StableArray Unique deriving (Eq, Hashable)
+newtype StableArray = StableArray Unique
+  deriving (Eq, Hashable)
 
 instance Show StableArray where
-  show (StableArray u)= show (hash u)
+  show (StableArray u) = show (hash u)
 
 -- |Create a new memory table from host to remote arrays.
 --
