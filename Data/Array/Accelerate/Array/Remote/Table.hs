@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -41,7 +42,7 @@ import Control.Concurrent.MVar                                  ( MVar, newMVar,
 import Control.Concurrent.Unique                                ( Unique )
 import Control.Monad.IO.Class                                   ( MonadIO, liftIO )
 import Data.Functor
-import Data.Hashable                                            ( hash )
+import Data.Hashable                                            ( hash, Hashable )
 import Data.Maybe                                               ( isJust )
 import Data.Proxy
 import Data.Typeable                                            ( Typeable, gcast )
@@ -94,7 +95,10 @@ data RemoteArray p where
 
 -- | An untyped reference to an array, similar to a StableName.
 --
-type StableArray = Int
+newtype StableArray = StableArray Unique deriving (Eq, Hashable)
+
+instance Show StableArray where
+  show (StableArray u)= show (hash u)
 
 -- |Create a new memory table from host to remote arrays.
 --
@@ -336,7 +340,7 @@ makeStableArray
     :: (MonadIO m, Typeable a, Typeable e, ArrayPtrs a ~ Ptr e, ArrayElt a)
     => ArrayData a
     -> m StableArray
-makeStableArray !ad = return $! hash (id arrayElt ad)
+makeStableArray !ad = return $! StableArray (id arrayElt ad)
   where
     id :: ArrayEltR e -> ArrayData e -> Unique
     id ArrayEltRint     (AD_Int ua)     = uniqueArrayId ua
