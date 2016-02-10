@@ -779,9 +779,9 @@ registerForeignPtrAllocator
     -> IO ()
 registerForeignPtrAllocator new = do
   traceIO dump_gc "registering new array allocator"
-  writeIORef __mallocForeignPtrBytes new
+  atomicWriteIORef __mallocForeignPtrBytes new
 
 {-# NOINLINE __mallocForeignPtrBytes #-}
 __mallocForeignPtrBytes :: IORef (Int -> IO (ForeignPtr Word8))
-__mallocForeignPtrBytes = unsafePerformIO $ newIORef mallocForeignPtrBytes
+__mallocForeignPtrBytes = unsafePerformIO $! newIORef mallocForeignPtrBytes
 
