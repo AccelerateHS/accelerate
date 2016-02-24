@@ -49,27 +49,17 @@ module Data.Array.Accelerate.Interpreter (
 
 ) where
 
--- Tmp TODO del
-import Debug.Trace
-
 -- standard libraries
 import Control.Monad
-import Control.Monad.State                              ( State, put, runState )
 import Control.Applicative                              ( (<$>), (<*>), pure )
-import Data.Bits
-import Data.Char                                        ( chr, ord )
 import Data.Maybe                                       ( fromMaybe, fromJust )
 import Prelude                                          hiding ( sum )
-import System.IO.Unsafe                                 ( unsafePerformIO )
 
 -- friends
 import Data.Array.Accelerate.AST
-import Data.Array.Accelerate.Analysis.Shape
 import Data.Array.Accelerate.Array.Data
-import Data.Array.Accelerate.Array.Lifted
 import Data.Array.Accelerate.Array.Representation               ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Debug                              ( queryFlag )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Interpreter.Prim
 import Data.Array.Accelerate.Trafo                              hiding ( Delayed )
