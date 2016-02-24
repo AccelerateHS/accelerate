@@ -23,9 +23,7 @@
 
 module Data.Array.Accelerate.Array.Lifted (
 
-  Irregular, IrregularTupleRepr,
-
-  Regular, RegularTupleRepr,
+  Irregular, IrregularTupleRepr, Segments
 
 ) where
 
@@ -34,7 +32,7 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Product
-import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Array.Sugar                        hiding ( Segments )
 
 -- Lifted arrays
 -- ----------------
@@ -44,6 +42,13 @@ import Data.Array.Accelerate.Array.Sugar
 -- of arrays, are still members of the 'Arrays' class.
 
 newtype Irregular a = Irregular (Irregular' a (ArrRepr a)) deriving Typeable
+
+-- Segment descriptors. Each segment of a lifted array is defined by its index
+-- into its flattend representation as well as its shape. We also keep track of
+-- the total size of the lifted array the segment descriptors refer to, in order
+-- to aid in fusion.
+--
+type Segments sh = (Scalar Int, Vector Int, Vector sh)
 
 type family Irregular' a a' where
   Irregular' ()           ()           = ((),Scalar Int)
@@ -97,69 +102,6 @@ instance Arrays a => Arrays (Irregular a) where
       fA :: ProdR Arrays t -> t -> ArrRepr t
       fA ProdRunit      ()    = ()
       fA (ProdRsnoc pr) (l,a) = (((),fA pr l), fromArr a)
-
--- Lifted regular arrays.
--- ----------------------
---
--- Similar to Vector' but we assume all sub arrays are the same size, thus there
--- is no need to store all segment descriptors.
---
-
-newtype Regular a = Regular (Regular' a (ArrRepr a)) deriving Typeable
-
-type family Regular' a a' where
-  Regular' ()           ()           = ((),Scalar Int)
-  Regular' (Array sh e) (Array sh e) = ((),Array (sh:.Int) e)
-  Regular' a            (l,r)        = RegularTupleRepr (TupleRepr a)
-
-type family RegularTupleRepr t where
-  RegularTupleRepr ()     = ()
-  RegularTupleRepr (b, a) = (RegularTupleRepr b, Regular a)
-
-instance Arrays a => IsProduct Arrays (Regular a) where
-  type ProdRepr (Regular a) = Regular' a (ArrRepr a)
-  fromProd _ (Regular a) = a
-  toProd   _               = Regular
-  prod     _ _             =
-    case flavour (undefined :: a) of
-      ArraysFunit  -> ProdRsnoc ProdRunit
-      ArraysFarray -> ProdRsnoc ProdRunit
-      ArraysFtuple -> tup (prod arraysP (undefined :: a))
-        where
-          tup :: ProdR Arrays t -> ProdR Arrays (RegularTupleRepr t)
-          tup ProdRunit      = ProdRunit
-          tup (ProdRsnoc pr) = ProdRsnoc (tup pr)
-
-type instance ArrRepr (Regular a) = ArrRepr (Regular' a (ArrRepr a))
-
-instance Arrays a => Arrays (Regular a) where
-  arrays _ = tup (prod arraysP (undefined :: Regular a))
-    where
-      tup :: forall t. ProdR Arrays t -> ArraysR (ArrRepr t)
-      tup ProdRunit      = ArraysRunit
-      tup (ProdRsnoc pr) = ArraysRpair (ArraysRpair ArraysRunit (tup pr)) ar
-        where ar :: forall e l. t ~ (l,e) => ArraysR (ArrRepr e)
-              ar = arrays (undefined :: e)
-  flavour _ = case flavour (undefined :: a) of
-    ArraysFunit  -> ArraysFtuple
-    ArraysFarray -> ArraysFtuple
-    ArraysFtuple ->
-      case arrays (undefined :: Regular a) of
-        ArraysRpair _ _ -> ArraysFtuple
-        _               -> error "Unreachable"
-
-  toArr a = Regular (tA (prod arraysP (undefined :: Regular a)) a)
-    where
-      tA :: ProdR Arrays t -> ArrRepr t -> t
-      tA ProdRunit      ()          = ()
-      tA (ProdRsnoc pr) (((),ar),a) = (tA pr ar, toArr a)
-
-  fromArr (Regular a) = fA (prod arraysP (undefined :: Regular a)) a
-    where
-      fA :: ProdR Arrays t -> t -> ArrRepr t
-      fA ProdRunit      ()    = ()
-      fA (ProdRsnoc pr) (l,a) = (((),fA pr l), fromArr a)
-
 
 arraysP :: Proxy Arrays
 arraysP = Proxy
