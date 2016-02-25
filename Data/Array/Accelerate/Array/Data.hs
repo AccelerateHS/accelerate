@@ -763,7 +763,7 @@ unsafeWriteArray ua i e =
 {-# INLINE newArrayData' #-}
 newArrayData' :: forall e. Storable e => Int -> IO (UniqueArray e)
 newArrayData' size =
-  newUniqueArray . unsafePerformIO $ do
+  newUniqueArray <=< unsafeInterleaveIO $ do
     new <- readIORef __mallocForeignPtrBytes
     ptr <- new (size * sizeOf (undefined :: e))
     traceIO dump_gc $ printf "gc: allocated new host array (size=%d, ptr=%s)" size (show ptr)
