@@ -44,8 +44,8 @@ module Data.Array.Accelerate.Prelude (
   -- * Shape manipulation
   flatten,
 
-  -- * Enumeration and filling
-  fill, enumFromN, enumFromStepN,
+  -- * Enumeration, filling and other construction
+  fill, enumFromN, enumFromStepN, emptyArray,
 
   -- * Concatenation
   (++),
@@ -2090,7 +2090,7 @@ length = unindex1 . shape
 -- Sequence operations
 -- --------------------------------------
 
-emptyArray :: (Shape sh, Elt e) => Acc (Array sh e)
+emptyArray :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e)
 emptyArray = use (newArray empty undefined)
 
 -- | foldSeqE (+) a0 x seq. Fold a sequence x by combining each
