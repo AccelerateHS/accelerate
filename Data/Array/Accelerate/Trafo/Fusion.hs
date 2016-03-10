@@ -70,7 +70,6 @@ import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), Arr
                                                         , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..) )
 import Data.Array.Accelerate.Product
 
-import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 import qualified Data.Array.Accelerate.Debug            as Stats
 #ifdef ACCELERATE_DEBUG
 import System.IO.Unsafe -- for debugging
