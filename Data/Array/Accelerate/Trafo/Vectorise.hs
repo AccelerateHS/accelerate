@@ -2822,7 +2822,7 @@ vectoriseSeqOpenExp strength ctx = cvtE
         Foreign ff f e          -> Foreign ff (vectoriseSeqOpenFun strength EmptyC f) (cvtE e)
 
 vectoriseSeqAcc :: OpenAcc () a -> OpenAcc () a
-vectoriseSeqAcc = vectoriseSeqOpenAcc Aggressive EmptyC
+vectoriseSeqAcc = vectoriseSeqOpenAcc Conservative EmptyC
 
 vectoriseSeqOpenAcc :: forall aenv a.
                        Strength
@@ -2882,7 +2882,7 @@ vectoriseSeqOpenAcc strength ctx = cvtA
       Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
 
 vectoriseSeqAfun :: OpenAfun () t -> OpenAfun () t
-vectoriseSeqAfun = vectoriseSeqOpenAfun Aggressive EmptyC
+vectoriseSeqAfun = vectoriseSeqOpenAfun Conservative EmptyC
 
 vectoriseSeqOpenFun :: forall env aenv t.
                        Strength
