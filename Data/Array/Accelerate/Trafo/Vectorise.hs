@@ -1052,7 +1052,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $^ Backpermute (the avar0) (weakenA1 f) (weakenA1 $ sink b2 a')
       | otherwise
       =  liftedAcc
-      $^ Alet (segmentsFromShapesC (liftedE sh))
+      $^ Alet (segmentsFromExp sh)
       $^ Alet (liftedBackpermutePreC avar0)
       $  construct avar1
       $  liftedBackpermuteC (atup (fstA avar0) (inject $ weakenA2 f_l `subApply` sndA avar0))
@@ -1760,9 +1760,8 @@ replicate :: forall a. Arrays a => S.Exp Int -> S.Acc a -> S.Acc (Nested a)
 replicate size a = case flavour (undefined :: a) of
                      ArraysFunit  -> S.Acc $ S.Atuple $ SnocAtup NilAtup $ S.unit size
                      ArraysFarray ->
-                       let values = S.flatten $ S.replicate (S.lift (Z:.All:.size)) (S.flatten a)
-                           shapes = S.fill (S.index1 size) (S.shape a)
-                       in liftedArray (segmentsFromShapes shapes) values
+                       let values = S.flatten $ S.replicate (S.lift (Z:.size:.All)) (S.flatten a)
+                       in regular size (S.shape a) values
                      ArraysFtuple -> S.Acc $ S.Atuple $ replicateT (asAtuple a)
   where
     replicateT :: Atuple S.Acc t -> Atuple S.Acc (NestedTupleRepr t)
