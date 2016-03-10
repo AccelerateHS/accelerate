@@ -52,7 +52,7 @@ import Prelude                                          hiding ( exp, until )
 import Control.Applicative                              ( pure, (<$>), (<*>) )
 import Data.Constraint                                  ( Dict(..) )
 import Data.Maybe                                       ( fromMaybe )
-import Data.Monoid                                      ( (<>) )
+import Data.Monoid                                      ( Monoid(..), (<>) )
 import Data.Typeable                                    ( Typeable )
 
 -- friends
