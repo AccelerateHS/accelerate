@@ -166,6 +166,7 @@ Library
           base                          >= 4.7
         , array                         >= 0.3
         , base-orphans                  >= 0.3
+        , constraints                   >= 0.1
         , containers                    >= 0.3
         , directory                     >= 1.0
         , exceptions                    >= 0.6
