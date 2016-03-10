@@ -373,14 +373,26 @@ data Use a where
 -- Combine the uses of an array variable.
 --
 (<+>) :: Use a -> Use a -> Use a
-UseArray n1 <+> UseArray n2 = UseArray (n1 + n2)
-UseTuple t1 <+> UseTuple t2 = UseTuple (t1 `tup` t2)
+(<+>) = zipWithU (+)
+
+zipWithU :: (Int -> Int -> Int) -> Use a -> Use a -> Use a
+zipWithU f (UseArray n1) (UseArray n2) = UseArray (n1 `f` n2)
+zipWithU f (UseTuple t1) (UseTuple t2) = UseTuple (t1 `tup` t2)
   where
     tup :: Atuple Use t -> Atuple Use t -> Atuple Use t
     tup NilAtup          NilAtup          = NilAtup
-    tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` (a1 <+> a2)
+    tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` zipWithU f a1 a2
     tup _                _                = error "Chewie, we're home."
-_           <+> _           = error "Aaarrrrhhggg!"
+zipWithU _ _             _           = error "Aaarrrrhhggg!"
+
+-- Update use at a specific index.
+--
+updateUse :: Use s -> TupleIdx (TupleRepr s) a -> Use a -> Use s
+updateUse (UseTuple ut) ix = UseTuple . tup ut ix
+  where
+    tup :: Atuple Use t -> TupleIdx t a -> Use a -> Atuple Use t
+    tup (SnocAtup t s) ZeroTupIdx      a = SnocAtup t (s <+> a)
+    tup (SnocAtup t s) (SuccTupIdx ix) a = SnocAtup (tup t ix a) s
 
 -- A variable's components each occur `n` times in total.
 --
@@ -448,8 +460,13 @@ usesOfPreAcc withShape countAcc idx = count
     count pacc = case pacc of
       Avar this                 -> countIdx this
       --
-      Alet bnd body             -> countA bnd <+> countAcc withShape (SuccIdx idx) body
-                                     --  Possible special case?
+      Alet bnd body             | Aprj ix a <- extract bnd
+                                , Avar v    <- extract a
+                                , Just REFL <- match v idx
+                                -> updateUse (countAcc withShape (SuccIdx idx) body) ix (countAcc withShape ZeroIdx body)
+                                | otherwise
+                                -> countA bnd <+> countAcc withShape (SuccIdx idx) body
+
       Atuple tup                -> countAT tup
       Aprj ix a                 | Avar v <- extract a
                                 , Just REFL <- match v idx
@@ -458,7 +475,7 @@ usesOfPreAcc withShape countAcc idx = count
                                 -> countA a
       Apply f a                 -> countAF f idx <+> countA a
       Aforeign _ _ a            -> countA a
-      Acond p t e               -> countE p  <+> countA t <+> countA e
+      Acond p t e               -> countE p  <+> zipWithU max (countA t) (countA e)
       Awhile p f a              -> countAF p idx <+> countAF f idx <+> countA a
       Use _                     -> zeroUse
       Subarray ix sh _          -> countE ix <+> countE sh
