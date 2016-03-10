@@ -935,7 +935,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   IndexSlice    :: (Shape sh, Shape sl, Elt slix)
                 => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
-                -> PreOpenExp acc env aenv slix
+                -> proxy slix
                 -> PreOpenExp acc env aenv sh
                 -> PreOpenExp acc env aenv sl
 

@@ -689,7 +689,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $^ Alet a
       $^ Alet (inject $ Unit $ weakenA1 slix)
       $^ Backpermute (IndexFull sl (the avar0) (Shape avar1))
-                     (Lam $ Body $ IndexSlice sl (weakenE1 (the avar0)) $ var0)
+                     (Lam $ Body $ IndexSlice sl (Proxy :: Proxy slix) var0)
       $ avar1
 
     sliceL :: forall sh sl slix e co.
@@ -712,7 +712,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = cvtA
       $^ Alet a
       $^ Alet (inject $ Unit $ weakenA1 slix)
-      $^ Backpermute (IndexSlice sl (the avar0) (Shape avar1))
+      $^ Backpermute (IndexSlice sl (Proxy :: Proxy slix) (Shape avar1))
                      (fun1 $ IndexFull sl (weakenE1 (the avar0)))
       $ avar1
 
@@ -1273,7 +1273,7 @@ liftExp vectAcc strength ctx size exp
       IndexHead sh              -> Map (fun1 IndexHead) (cvtE sh)
       IndexTail sh              -> Map (fun1 IndexTail) (cvtE sh)
       IndexTrans sh             -> Map (fun1 IndexTrans) (cvtE sh)
-      IndexSlice x ix sh        -> ZipWith (fun2 (IndexSlice x)) (cvtE ix) (cvtE sh)
+      IndexSlice x ix sh        -> Map (fun1 (IndexSlice x ix)) (cvtE sh)
       IndexFull x ix sl         -> ZipWith (fun2 (IndexFull x)) (cvtE ix) (cvtE sl)
       ToIndex sh ix             -> ZipWith (fun2 ToIndex) (cvtE sh) (cvtE ix)
       FromIndex sh ix           -> ZipWith (fun2 FromIndex) (cvtE sh) (cvtE ix)
@@ -1585,7 +1585,7 @@ avoidExp = cvtE
         IndexTail sh        -> IndexTail `cvtE1` sh
         IndexTrans sh       -> IndexTrans `cvtE1` sh
         IndexAny            -> simple IndexAny
-        IndexSlice x ix sh  -> cvtE2 (IndexSlice x) ix sh
+        IndexSlice x ix sh  -> IndexSlice x ix `cvtE1` sh
         IndexFull x ix sl   -> cvtE2 (IndexFull x) ix sl
         ToIndex sh ix       -> cvtE2 ToIndex sh ix
         FromIndex sh ix     -> cvtE2 FromIndex sh ix
@@ -2804,7 +2804,7 @@ vectoriseSeqOpenExp strength ctx = cvtE
         IndexTail sh            -> IndexTail (cvtE sh)
         IndexTrans sh           -> IndexTrans (cvtE sh)
         IndexAny                -> IndexAny
-        IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexSlice x ix sh      -> IndexSlice x ix (cvtE sh)
         IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)

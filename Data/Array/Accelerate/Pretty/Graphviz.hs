@@ -535,7 +535,7 @@ fvPreOpenExp fvA env aenv = fv
     fv (IndexHead sh)           = fv sh
     fv (IndexTail sh)           = fv sh
     fv (IndexCons t h)          = concat [ fv t, fv h ]
-    fv (IndexSlice _ slix sh)   = concat [ fv slix, fv sh ]
+    fv (IndexSlice _ _ sh)      = concat [ fv sh ]
     fv (IndexFull _ slix sh)    = concat [ fv slix, fv sh ]
     fv (ToIndex sh ix)          = concat [ fv sh, fv ix ]
     fv (FromIndex sh ix)        = concat [ fv sh, fv ix ]
@@ -545,4 +545,3 @@ fvPreOpenExp fvA env aenv = fv
     fv Foreign{}                = []
     fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
     fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
-

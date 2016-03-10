@@ -225,7 +225,7 @@ simplifyOpenExp env = first getAny . cvtE
       IndexHead sh              -> indexHead (cvtE sh)
       IndexTail sh              -> indexTail (cvtE sh)
       IndexTrans sh             -> indexTrans (cvtE sh)
-      IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
+      IndexSlice x ix sh        -> IndexSlice x ix <$> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
       FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)

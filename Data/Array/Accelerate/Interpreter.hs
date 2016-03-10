@@ -682,16 +682,15 @@ evalPreOpenExp evalAcc pexp env aenv =
     IndexHead sh                -> let _  :. ix = evalE sh in ix
     IndexTail sh                -> let ix :. _  = evalE sh in ix
     IndexTrans sh               -> transpose (evalE sh)
-    IndexSlice slice slix sh    -> toElt $ restrict slice (fromElt (evalE slix))
-                                                          (fromElt (evalE sh))
+    IndexSlice slice _slix sh   -> toElt $ restrict slice (fromElt (evalE sh))
       where
-        restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl
-        restrict SliceNil              ()        ()         = ()
-        restrict (SliceAll sliceIdx)   (slx, ()) (sl, sz)   =
-          let sl' = restrict sliceIdx slx sl
+        restrict :: SliceIndex slix sl co sh -> sh -> sl
+        restrict SliceNil              ()         = ()
+        restrict (SliceAll sliceIdx)   (sl, sz)   =
+          let sl' = restrict sliceIdx sl
           in  (sl', sz)
-        restrict (SliceFixed sliceIdx) (slx, _i)  (sl, _sz) =
-          restrict sliceIdx slx sl
+        restrict (SliceFixed sliceIdx) (sl, _sz) =
+          restrict sliceIdx sl
 
     IndexFull slice slix sh     -> toElt $ extend slice (fromElt (evalE slix))
                                                         (fromElt (evalE sh))

@@ -50,6 +50,7 @@ import Data.List
 import Text.PrettyPrint
 
 -- friends
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                hiding ( tuple )
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                        hiding ( Val(..), prj )
@@ -300,6 +301,11 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     ppSl :: Elt sl => PreOpenExp acc env aenv sl -> Doc
     ppSl = parens . ppE'
 
+    ppSI :: SliceIndex slix sl co sh -> Doc
+    ppSI SliceNil        = char 'Z'
+    ppSI (SliceAll sl)   = ppSI sl <+> text ":. All"
+    ppSI (SliceFixed sl) = ppSI sl <+> text ":. Fixed"
+
     ppF :: PreOpenFun acc env aenv f -> Doc
     ppF = parens . prettyPreOpenFun prettyAcc env aenv
 
@@ -349,7 +355,7 @@ prettyPreOpenExp prettyAcc wrap env aenv = pp
     pp (IndexHead ix)           = "indexHead"  .$ [ ppSl ix ]
     pp (IndexTail ix)           = "indexTail"  .$ [ ppSl ix ]
     pp (IndexTrans ix)          = "indexTrans" .$ [ ppSh ix ]
-    pp (IndexSlice _ slix sh)   = "indexSlice" .$ [ ppSl slix, ppSh sh ]
+    pp (IndexSlice slix _ sh)   = "indexSlice" .$ [ ppSI slix, ppSh sh ]
     pp (IndexFull _ slix sl)    = "indexFull"  .$ [ ppSl slix, ppSh sl ]
     pp (ToIndex sh ix)          = "toIndex"    .$ [ ppSh sh, ppSh ix ]
     pp (FromIndex sh ix)        = "fromIndex"  .$ [ ppSh sh, ppE ix ]

@@ -513,9 +513,8 @@ matchPreOpenExp matchAcc hashAcc = match
       | Just REFL <- match sl1 sl2
       = Just REFL
 
-    match (IndexSlice sliceIndex1 ix1 sh1) (IndexSlice sliceIndex2 ix2 sh2)
-      | Just REFL <- match ix1 ix2
-      , Just REFL <- match sh1 sh2
+    match (IndexSlice sliceIndex1 _ sh1) (IndexSlice sliceIndex2 _ sh2)
+      | Just REFL <- match sh1 sh2
       , Just REFL <- matchSliceRestrict sliceIndex1 sliceIndex2
       = gcast REFL  -- SliceIndex representation/surface type
 
@@ -671,7 +670,7 @@ matchTuple _ _ _               _                = Nothing
 --
 matchSliceRestrict
     :: SliceIndex slix s co  sh
-    -> SliceIndex slix t co' sh
+    -> SliceIndex slix' t co' sh
     -> Maybe (s :=: t)
 matchSliceRestrict SliceNil SliceNil
   = Just REFL
@@ -1137,7 +1136,7 @@ hashPreOpenExp hashAcc exp =
     IndexHead sl                -> hash "IndexHead"     `hashE` sl
     IndexTail sl                -> hash "IndexTail"     `hashE` sl
     IndexTrans sl               -> hash "IndexTrans"    `hashE` sl
-    IndexSlice spec ix sh       -> hash "IndexSlice"    `hashE` ix `hashE` sh `hashWithSalt` show spec
+    IndexSlice spec _ sh        -> hash "IndexSlice"    `hashE` sh            `hashWithSalt` show spec
     IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
     FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i

@@ -114,7 +114,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       IndexHead sh              -> IndexHead <$> shrinkE sh
       IndexTail sh              -> IndexTail <$> shrinkE sh
       IndexTrans sh             -> IndexTrans <$> shrinkE sh
-      IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
+      IndexSlice x ix sh        -> IndexSlice x ix <$> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       IndexAny                  -> pure IndexAny
       ToIndex sh ix             -> ToIndex <$> shrinkE sh <*> shrinkE ix
@@ -245,7 +245,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       IndexHead sh              -> IndexHead (shrinkE sh)
       IndexTail sh              -> IndexTail (shrinkE sh)
       IndexTrans sh             -> IndexTrans (shrinkE sh)
-      IndexSlice x ix sh        -> IndexSlice x (shrinkE ix) (shrinkE sh)
+      IndexSlice x ix sh        -> IndexSlice x ix (shrinkE sh)
       IndexFull x ix sl         -> IndexFull x (shrinkE ix) (shrinkE sl)
       IndexAny                  -> IndexAny
       ToIndex sh ix             -> ToIndex (shrinkE sh) (shrinkE ix)
@@ -330,7 +330,7 @@ usesOfExp idx = countE
       IndexHead sh              -> countE sh
       IndexTail sh              -> countE sh
       IndexTrans sh             -> countE sh
-      IndexSlice _ ix sh        -> countE ix + countE sh
+      IndexSlice _ _ sh         -> countE sh
       IndexFull _ ix sl         -> countE ix + countE sl
       IndexAny                  -> 0
       ToIndex sh ix             -> countE sh + countE ix
@@ -588,7 +588,7 @@ usesOfExpA withShape countAcc idx exp =
     IndexHead sh              -> countE sh
     IndexTail sh              -> countE sh
     IndexTrans sh             -> countE sh
-    IndexSlice _ ix sh        -> countE ix <+> countE sh
+    IndexSlice _ _ sh         -> countE sh
     IndexFull _ ix sl         -> countE ix <+> countE sl
     IndexAny                  -> zeroUse
     ToIndex sh ix             -> countE sh <+> countE ix
@@ -805,7 +805,7 @@ dependenciesExp depsAcc exp =
     IndexHead sh              -> depsE sh
     IndexTail sh              -> depsE sh
     IndexTrans sh             -> depsE sh
-    IndexSlice _ ix sh        -> depsE ix <> depsE sh
+    IndexSlice _ _ sh         -> depsE sh
     IndexFull _ ix sl         -> depsE ix <> depsE sl
     IndexAny                  -> mempty
     ToIndex sh ix             -> depsE sh <> depsE ix

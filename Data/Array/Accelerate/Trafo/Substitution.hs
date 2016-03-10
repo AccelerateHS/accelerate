@@ -354,7 +354,7 @@ rebuildPreOpenExp k v av exp =
     IndexTail sh        -> IndexTail <$> rebuildPreOpenExp k v av sh
     IndexTrans sh       -> IndexTrans <$> rebuildPreOpenExp k v av sh
     IndexAny            -> pure IndexAny
-    IndexSlice x ix sh  -> IndexSlice x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sh
+    IndexSlice x ix sh  -> IndexSlice x ix <$> rebuildPreOpenExp k v av sh
     IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
     ToIndex sh ix       -> ToIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
     FromIndex sh ix     -> FromIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix

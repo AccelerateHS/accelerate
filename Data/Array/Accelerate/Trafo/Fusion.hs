@@ -266,7 +266,7 @@ convertOpenExp fuseAcc exp =
     IndexTail sh            -> IndexTail (cvtE sh)
     IndexTrans sh           -> IndexTrans (cvtE sh)
     IndexAny                -> IndexAny
-    IndexSlice x ix sh      -> IndexSlice x (cvtE ix) (cvtE sh)
+    IndexSlice x ix sh      -> IndexSlice x ix (cvtE sh)
     IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
     ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
     FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
@@ -1898,7 +1898,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         IndexTail sz                    -> IndexTail (cvtE sz)
         IndexTrans sz                   -> IndexTrans (cvtE sz)
         IndexAny                        -> IndexAny
-        IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
+        IndexSlice x ix sh              -> IndexSlice x ix (cvtE sh)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
@@ -2233,7 +2233,7 @@ simpleExp e =
     IndexTail sz       -> simpleExp sz
     IndexTrans sz      -> simpleExp sz
     IndexAny           -> True
-    IndexSlice _ ix sh -> simpleExp ix && simpleExp sh
+    IndexSlice _ _ sh  -> simpleExp sh
     IndexFull _ ix sl  -> simpleExp ix && simpleExp sl
     ToIndex sh ix      -> simpleExp sh && simpleExp ix
     FromIndex sh i     -> simpleExp sh && simpleExp i

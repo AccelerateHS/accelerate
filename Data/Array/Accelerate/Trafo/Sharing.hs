@@ -674,7 +674,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           IndexTail ix          -> AST.IndexTail (cvt ix)
           IndexTrans ix         -> AST.IndexTrans (cvt ix)
           IndexAny              -> AST.IndexAny
-          IndexSlice slix sh    -> AST.IndexSlice (mkSliceIndex slix) (cvt slix) (cvt sh)
+          IndexSlice slix sh    -> AST.IndexSlice (mkSliceIndex slix) slix (cvt sh)
           ToIndex sh ix         -> AST.ToIndex (cvt sh) (cvt ix)
           FromIndex sh e        -> AST.FromIndex (cvt sh) (cvt e)
           ToSlice slix sh i     -> AST.ToSlice (mkSliceIndex slix) (cvt slix) (cvt sh) (cvt i)
