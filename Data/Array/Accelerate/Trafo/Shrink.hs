@@ -46,6 +46,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 ) where
 
 -- standard library
+import Data.Function                                    ( on )
 import Data.Monoid
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
@@ -289,9 +290,9 @@ basicReduceAcc
     -> UsesOfAcc acc
     -> ReduceAcc acc
 basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
-  | Avar _ <- bnd          = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
-  | allUse (<= lIMIT) uses = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
-  | otherwise              = Nothing
+  | Avar _ <- bnd                      = Stats.inline "Avar"  . Just $ rebuildA (subAtop bnd) pbody
+  | allUse (on (&&) (<=lIMIT)) uses = Stats.betaReduce msg . Just $ rebuildA (subAtop bnd) pbody
+  | otherwise                          = Nothing
   where
     -- If the bound variable is used at most this many times, it will be inlined
     -- into the body. Since this implies an array computation could be inlined
@@ -300,8 +301,8 @@ basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
     --
     lIMIT = 0
 
-    uses  = countAcc True ZeroIdx body
-    msg   = if allUse (== 0) uses
+    uses  = countAcc ZeroIdx body
+    msg   = if allUse (on (&&) (<=lIMIT)) uses
             then "dead acc"
             else "inline acc"         -- forced inlining when lIMIT > 1
 
@@ -357,17 +358,18 @@ usesOfExp idx = countE
     countT (SnocTup t e) = countT t + countE e
 
 
--- Count the number of occurrences of the array term bound at the given
--- environment index. If the first argument is 'True' then it includes in the
--- total uses of the variable for 'Shape' information, otherwise not.
+-- Count the number of uses of the array term bound at the given environment
+-- index.
 --
-type UsesOfAcc acc = forall aenv s t. Arrays s => Bool -> Idx aenv s -> acc aenv t -> Use s
+type UsesOfAcc acc = forall aenv s t. Arrays s => Idx aenv s -> acc aenv t -> Use s
 
--- How an array variable is used in its context. If it is of a product type, we
+-- |How an array variable is used in its context. If it is of a product type, we
 -- track the usage of each component.
 --
 data Use a where
-  UseArray :: Int -> Use (Array sh e)
+  UseArray :: Int                -- How often the shape of the array is used
+           -> Int                -- How often the contents of the array is used
+           -> Use (Array sh e)
   UseTuple :: Atuple Use (TupleRepr t) -> Use t
 
 -- Combine the uses of an array variable.
@@ -376,8 +378,8 @@ data Use a where
 (<+>) = zipWithU (+)
 
 zipWithU :: (Int -> Int -> Int) -> Use a -> Use a -> Use a
-zipWithU f (UseArray n1) (UseArray n2) = UseArray (n1 `f` n2)
-zipWithU f (UseTuple t1) (UseTuple t2) = UseTuple (t1 `tup` t2)
+zipWithU f (UseArray s1 c1) (UseArray s2 c2) = UseArray (s1 `f` s2) (c1 `f` c2)
+zipWithU f (UseTuple t1)    (UseTuple t2)    = UseTuple (t1 `tup` t2)
   where
     tup :: Atuple Use t -> Atuple Use t -> Atuple Use t
     tup NilAtup          NilAtup          = NilAtup
@@ -400,7 +402,7 @@ nUse :: forall t. Arrays t => Int -> Use t
 nUse n =
   case flavour (undefined :: t) of
     ArraysFunit  -> UseTuple NilAtup
-    ArraysFarray -> UseArray n
+    ArraysFarray -> UseArray n n
     ArraysFtuple -> UseTuple (nt (atuple (undefined :: t)))
   where
     nt :: ProdR Arrays t' -> Atuple Use t'
@@ -412,9 +414,9 @@ zeroUse = nUse 0
 oneUse  = nUse 1
 
 instance Eq (Use a) where
-  UseArray n1 == UseArray n2 = n1 == n2
-  UseTuple t1 == UseTuple t2 = t1 == t2
-  _           == _           = error "It can camouflage!"
+  UseArray s1 c1 == UseArray s2 c2 = s1 == s2 && c1 == c2
+  UseTuple t1    == UseTuple t2    = t1 == t2
+  _              == _              = error "It can camouflage!"
 
 instance Eq (Atuple Use t) where
   NilAtup        == NilAtup        = True
@@ -423,9 +425,9 @@ instance Eq (Atuple Use t) where
 
 -- Check if a condition is try for the use of all components.
 --
-allUse :: (Int -> Bool) -> Use t -> Bool
-allUse p (UseArray n) = p n
-allUse p (UseTuple t) = aT t
+allUse :: (Int -> Int -> Bool) -> Use t -> Bool
+allUse p (UseArray s c) = p s c
+allUse p (UseTuple t)   = aT t
   where
     aT :: Atuple Use t -> Bool
     aT NilAtup = True
@@ -444,12 +446,11 @@ useComponent _  _            = error "Happens to me all the time. Don't worry ab
 
 usesOfPreAcc
     :: forall acc aenv s t. (Kit acc, Arrays s)
-    => Bool
-    -> UsesOfAcc  acc
+    => UsesOfAcc  acc
     -> Idx            aenv s
     -> PreOpenAcc acc aenv t
     -> Use s
-usesOfPreAcc withShape countAcc idx = count
+usesOfPreAcc countAcc idx = count
   where
     countIdx :: Idx aenv a -> Use s
     countIdx this
@@ -461,11 +462,17 @@ usesOfPreAcc withShape countAcc idx = count
       Avar this                 -> countIdx this
       --
       Alet bnd body             | Aprj ix a <- extract bnd
+                                , Aprj ix' a' <- extract a
+                                , Avar v    <- extract a'
+                                , Just REFL <- match v idx
+                                , u <-  countAcc ZeroIdx body
+                                -> updateUse (countAcc (SuccIdx idx) body) ix' (updateUse zeroUse ix u)
+                                | Aprj ix a <- extract bnd
                                 , Avar v    <- extract a
                                 , Just REFL <- match v idx
-                                -> updateUse (countAcc withShape (SuccIdx idx) body) ix (countAcc withShape ZeroIdx body)
+                                -> updateUse (countAcc (SuccIdx idx) body) ix (countAcc ZeroIdx body)
                                 | otherwise
-                                -> countA bnd <+> countAcc withShape (SuccIdx idx) body
+                                -> countA bnd <+> countAcc (SuccIdx idx) body
 
       Atuple tup                -> countAT tup
       Aprj ix a                 | Avar v <- extract a
@@ -501,17 +508,17 @@ usesOfPreAcc withShape countAcc idx = count
       Backpermute sh f a        -> countE sh <+> countF f  <+> countA a
       Stencil f _ a             -> countF f  <+> countA a
       Stencil2 f _ a1 _ a2      -> countF f  <+> countA a1 <+> countA a2
-      Collect s cs              -> maybe (usesOfPreSeq withShape countAcc idx s) (usesOfPreSeq withShape countAcc idx) cs
+      Collect s cs              -> maybe (usesOfPreSeq countAcc idx s) (usesOfPreSeq countAcc idx) cs
 
     countA :: acc aenv a -> Use s
-    countA = countAcc withShape idx
+    countA = countAcc idx
 
     countAF :: Kit acc
             => PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
-    countAF (Abody a) v = countAcc withShape v a
+    countAF (Abody a) v = countAcc v a
 
     countF :: PreOpenFun acc env aenv f -> Use s
     countF (Lam  f) = countF f
@@ -522,17 +529,16 @@ usesOfPreAcc withShape countAcc idx = count
     countAT (SnocAtup t a) = countAT t <+> countA a
 
     countE :: PreOpenExp acc env aenv e -> Use s
-    countE = usesOfExpA withShape countAcc idx
+    countE = usesOfExpA countAcc idx
 
 usesOfPreSeq :: forall acc index aenv s t. (Kit acc, Arrays s)
-             => Bool
-             -> UsesOfAcc acc
+             => UsesOfAcc acc
              -> Idx aenv s
              -> PreOpenSeq index acc aenv t
              -> Use s
-usesOfPreSeq withShape countAcc idx seq =
+usesOfPreSeq countAcc idx seq =
   case seq of
-    Producer p s -> countP p <+> usesOfPreSeq withShape countAcc (SuccIdx idx) s
+    Producer p s -> countP p <+> usesOfPreSeq countAcc (SuccIdx idx) s
     Consumer c   -> countC c
     Reify a      -> countA a
   where
@@ -555,28 +561,27 @@ usesOfPreSeq withShape countAcc idx seq =
 
     countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Use s
     countCT NilAtup        = zeroUse
-    countCT (SnocAtup t c) = countCT t <+> usesOfPreSeq withShape countAcc idx c
+    countCT (SnocAtup t c) = countCT t <+> usesOfPreSeq countAcc idx c
 
     countA :: acc aenv a -> Use s
-    countA = countAcc withShape idx
+    countA = countAcc idx
 
     countAF :: Kit acc
             => PreOpenAfun acc aenv' f
             -> Idx aenv' s
             -> Use s
     countAF (Alam f)  v = countAF f (SuccIdx v)
-    countAF (Abody a) v = countAcc withShape v a
+    countAF (Abody a) v = countAcc v a
 
     countE :: PreOpenExp acc env aenv e -> Use s
-    countE = usesOfExpA withShape countAcc idx
+    countE = usesOfExpA countAcc idx
 
-usesOfExpA :: forall acc env aenv t e. Arrays t
-           => Bool
-           -> UsesOfAcc acc
+usesOfExpA :: forall acc env aenv t e. (Kit acc, Arrays t)
+           => UsesOfAcc acc
            -> Idx aenv t
            -> PreOpenExp acc env aenv e
            -> Use t
-usesOfExpA withShape countAcc idx exp =
+usesOfExpA countAcc idx exp =
   case exp of
     Let bnd body              -> countE bnd <+> countE body
     Var _                     -> zeroUse
@@ -603,14 +608,16 @@ usesOfExpA withShape countAcc idx exp =
     ShapeSize sh              -> countE sh
     Intersect sh sz           -> countE sh <+> countE sz
     Union sh sz               -> countE sh <+> countE sz
-    Shape a
-      | withShape             -> countA a
-      | otherwise             -> zeroUse
+    Shape a                   | Avar v    <- extract a
+                              , Just REFL <- match v idx
+                              -> UseArray 1 0
+                              | otherwise
+                              -> countA a
     Foreign _ _ e             -> countE e
 
   where
     countE :: PreOpenExp acc env' aenv e' -> Use t
-    countE = usesOfExpA withShape countAcc idx
+    countE = usesOfExpA countAcc idx
 
     countT :: Tuple (PreOpenExp acc env aenv) e' -> Use t
     countT NilTup        = zeroUse
@@ -621,7 +628,7 @@ usesOfExpA withShape countAcc idx exp =
     countF (Body b) = countE b
 
     countA :: acc aenv a -> Use t
-    countA = countAcc withShape idx
+    countA = countAcc idx
 
 -- Given an array term in environment 'aenv', determine what variables, are
 -- actually referenced. This yields a new environment,

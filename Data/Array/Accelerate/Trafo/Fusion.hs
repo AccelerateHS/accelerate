@@ -52,6 +52,7 @@ module Data.Array.Accelerate.Trafo.Fusion (
 import Prelude                                          hiding ( exp, until )
 import Control.Applicative                              ( pure, (<$>), (<*>) )
 import Data.Constraint                                  ( Dict(..) )
+import Data.Function                                    ( on )
 import Data.Maybe                                       ( fromMaybe )
 import Data.Monoid                                      ( Monoid(..), (<>) )
 import Data.Typeable                                    ( Typeable )
@@ -345,8 +346,11 @@ type ElimAcc  acc = forall aenv aenv' s t. Arrays s => Cunctation acc aenv' s ->
 --
 data Elim acc aenv a where
   -- The term should not be eliminated.
-  ElimBind  :: acc aenv a
+  ElimBind  :: PreOpenAcc acc aenv a
             -> Elim acc aenv a
+
+  -- The term is dead so should be eliminated
+  ElimDead  :: Elim acc aenv a
 
   -- The term should be eliminated.
   ElimEmbed :: Elim acc aenv a
@@ -375,12 +379,12 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
   where
     elimOpenAcc :: Arrays s => Cunctation OpenAcc aenv' s -> OpenAcc (aenv,s) t -> Elim OpenAcc aenv' s
     elimOpenAcc bnd body
-      = elimA bnd (count False ZeroIdx body)
+      = elimA bnd (count ZeroIdx body)
       where
         -- Ensure we only calculate the usage of the bound variable once.
         --
         count :: UsesOfAcc OpenAcc
-        count ok idx (OpenAcc pacc) = usesOfPreAcc ok count idx pacc
+        count idx (OpenAcc pacc) = usesOfPreAcc count idx pacc
 
         -- Given how it is used in the body term, decide whether all or some
         -- components can be eliminated.
@@ -393,19 +397,27 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
         elimA :: Arrays s' => Cunctation OpenAcc aenv' s' -> Use s' -> Elim OpenAcc aenv' s'
         elimA bnd u =
           case bnd of
+            -- The bound term is dead in the body, so don't traverse it.
+            --
+            _   | allUse (on (&&) (==0)) u
+                -> Stats.ruleFired "elimDead" ElimDead
+
+            -- The bound term can't be fused anyway, so bind it.
+            --
+            Done _   -> Stats.ruleFired "elimBind" (ElimBind (compute' bnd))
+
             -- Unit (()) terms can always be eliminated.
             --
             Ctuple NilAtup -> Stats.ruleFired "elimUnit" ElimEmbed
 
             -- The bound term can be split into several tuple components, decide
             -- whether we can eliminate each one independently.
+            --
             Ctuple t | UseTuple u' <- u
                      -> elimTuple t u'
 
-            -- The bound term can't be fused anyway, so don't embed it.
-            Done _   -> Stats.ruleFired "elimBind" (ElimBind (OpenAcc (compute' bnd)))
-
-            -- The bound term is indivisble, but possibly fusible.
+            -- The bound term is indivisble, but fusible.
+            --
             _        -> elimBase (compute' bnd) u
 
         -- When does the cost of re-computation outweigh that of memory access?
@@ -430,17 +442,19 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
 
           -- Similarly, "simple" scalar expression wrapped in unit arrays should
           -- also be eliminated in all cases.
+          --
           | Unit e <- bnd
           , simpleExp e
           = Stats.ruleFired "simpleScalar" ElimEmbed
 
           -- Eliminate when there is a single use of the bound array in the use
           -- site.
-          | allUse (<= lIMIT) u
+          --
+          | allUse (const (<= lIMIT)) u
           = ElimEmbed
 
           | otherwise
-          = ElimBind (inject bnd)
+          = ElimBind bnd
           where
             lIMIT = 1
 
@@ -503,23 +517,27 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
                   => Atuple (Embed OpenAcc aenv') (TupleRepr t)
                   -> Atuple Use (TupleRepr t)
                   -> Elim OpenAcc aenv' t
-        elimTuple = elim ElimTuple id
+        elimTuple = elim ElimTuple id True
           where
             elim :: forall aenv aenv' t a. IsAtuple a
                  => (forall aenv'' t'. IsAtupleRepr t' => Extend OpenAcc aenv' aenv'' -> Subproduct (OpenAcc aenv'') t' t -> Elim OpenAcc aenv a)
                  -> aenv :> aenv'
+                 -> Bool
                  -> Atuple (Embed OpenAcc aenv) t
                  -> Atuple Use t
                  -> Elim OpenAcc aenv a
-            elim k _ NilAtup NilAtup
+            elim _ _ True NilAtup NilAtup
+              = ElimDead
+            elim k _ False NilAtup NilAtup
               = k BaseEnv NilSub
-            elim k v (SnocAtup t (weaken v -> Embed env' a)) (SnocAtup ut u)
+            elim k v allDead (SnocAtup t (weaken v -> Embed env' a)) (SnocAtup ut u)
               = case elimA a u of
-                  ElimBind a'  -> elim (\env'' sp -> k (env' `append` env'') (InSub sp (AllSub (sink env'' a')))) (sink env' . v) t ut
-                  ElimEmbed    -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (inject (compute (Embed env' a)))))) v t ut
+                  ElimDead     -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (inject (compute (Embed env' a)))))) v allDead t ut
+                  ElimBind a'  -> elim (\env'' sp -> k env'' (InSub sp (AllSub (sink env'' (OpenAcc (bind env' a')))))) v False t ut
+                  ElimEmbed    -> elim (\env'' sp -> k (env' `append` env'') (OutSub sp (sink env'' (inject (compute' a))))) (sink env' . v) False t ut
                   ElimTuple env1 t' ->
                     let env'' = env' `append` env1
-                    in elim (\env''' sp -> k (env'' `append` env''') (InSub sp (TupleSub  (sinkSub env''' t')))) (sink env'' . v) t ut
+                    in elim (\env''' sp -> k (env'' `append` env''') (InSub sp (TupleSub  (sinkSub env''' t')))) (sink env'' . v) False t ut
 
         sinkSub  :: Sink acc => Extend acc aenv aenv' -> Subproduct (acc aenv) t' t -> Subproduct (acc aenv') t' t
         sinkSub _   NilSub = NilSub
@@ -1829,7 +1847,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
   --
   | otherwise
   = Stats.ruleFired "aletD/eliminateSome"
-  $ eliminate elim env1 cc1 (sink1 env1 acc0)
+  $ eliminate elim env1 cc1 acc0
 
   where
     acc0 :: acc (aenv, arrs) brrs
@@ -1838,8 +1856,9 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     elim = elimAcc cc1 acc0
 
     noEliminations :: forall aenv a. Elim acc aenv a -> Bool
-    noEliminations (ElimBind _)  = True
-    noEliminations ElimEmbed = False
+    noEliminations (ElimBind _)    = True
+    noEliminations ElimDead        = False
+    noEliminations ElimEmbed       = False
     noEliminations (ElimTuple _ t) = tup t
       where
         tup :: Subproduct k t' t -> Bool
@@ -1856,16 +1875,18 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
               => Elim acc aenv' t
               -> Extend     acc aenv aenv'
               -> Cunctation acc      aenv' t
-              ->            acc     (aenv', t) brrs
+              ->            acc      (aenv, t) brrs
               -> Embed      acc aenv           brrs
     eliminate elim env1 cc1 body
       | ElimTuple env1' sp <- elim
       , t'' <- fromSubproduct sp
-      , body' <- rebuildA (subAtop (Atuple t'')) (weaken (under SuccIdx) (sink1 env1' body))
+      , body' <- rebuildA (subAtop (Atuple t'')) (weaken (under SuccIdx) (sink1 (env1 `append` env1') body))
       , Embed env0' cc0' <- embedAcc . inject $ Alet (inject (Atuple (subproduct sp))) body'
       = Embed (env1 `append` env1' `append` env0') cc0'
+      | ElimDead <- elim
+      = embedAcc $ rebuildA (subAtop (compute (Embed env1 cc1))) body
       | ElimEmbed <- elim
-      , Embed env0' cc0' <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA (weaken SuccIdx cc1) ZeroIdx) body
+      , Embed env0' cc0' <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA (weaken SuccIdx cc1) ZeroIdx) (sink1 env1 body)
       = Embed (env1 `append` env0') cc0'
       where
         bnd :: PreOpenAcc acc aenv' t
