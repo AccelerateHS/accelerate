@@ -68,7 +68,7 @@ import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
 import Data.Array.Accelerate.Array.Sugar                ( Array, Arrays(..), ArraysR(..), ArrRepr
-                                                        , Elt, EltRepr, Shape, Tuple(..), Atuple(..)
+                                                        , Elt, EltRepr, Shape, Slice, Tuple(..), Atuple(..)
                                                         , IsAtuple, TupleRepr, Scalar, ArraysFlavour(..) )
 import Data.Array.Accelerate.Product
 
@@ -125,7 +125,7 @@ withSimplStats x = x
 --      encode this property in the type somehow...
 --
 convertOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> DelayedOpenAcc aenv arrs
-convertOpenAcc fuseAcc = manifest fuseAcc . computeAcc . embedOpenAcc fuseAcc
+convertOpenAcc fuseAcc = manifest fuseAcc . computeAcc . embedOpenAcc fuseAcc . computeAcc . embedOpenAcc fuseAcc
 
 -- Convert array computations into an embeddable delayed representation.
 -- Reapply the embedding function from the first pass and unpack the
@@ -271,7 +271,7 @@ convertOpenExp fuseAcc exp =
     IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
     ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
     FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
-    ToSlice x sl sh ix      -> ToSlice x (cvtE sl) (cvtE sh) (cvtE ix)
+    ToSlice x sh ix         -> ToSlice x (cvtE sh) (cvtE ix)
     Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
     While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
     PrimConst c             -> PrimConst c
@@ -1610,7 +1610,7 @@ transformD sh' p f
 --       expensive and/or `sh` is large.
 --
 replicateD
-    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Slice slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sl e)
@@ -1623,7 +1623,7 @@ replicateD sliceIndex slix cc
 -- Dimensional slice as a backwards permutation
 --
 sliceD
-    :: (Kit acc, Shape sh, Shape sl, Elt slix, Elt e)
+    :: (Kit acc, Shape sh, Shape sl, Slice slix, Elt e)
     => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
     -> PreExp     acc aenv slix
     -> Cunctation acc aenv (Array sh e)
@@ -1923,7 +1923,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix                   -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh i                  -> FromIndex (cvtE sh) (cvtE i)
-        ToSlice x sl sh ix              -> ToSlice x (cvtE sl) (cvtE sh) (cvtE ix)
+        ToSlice x sh ix                 -> ToSlice x (cvtE sh) (cvtE ix)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
         PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
@@ -2219,7 +2219,7 @@ reindex sh' sh
   | Just REFL <- match sh sh'   = identity
   | otherwise                   = fromIndex sh' `compose` toIndex sh
 
-extend :: (Kit acc, Shape sh, Shape sl, Elt slix)
+extend :: (Kit acc, Shape sh, Shape sl, Slice slix)
        => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
        -> PreExp acc aenv slix
        -> PreFun acc aenv (sh -> sl)

@@ -125,8 +125,8 @@ instance Shape sh => Slice (None sh) where
   type CoSliceShape (None sh) = sh
   type FullShape    (None sh) = sh
   sliceIndex _ = sliceNoneIndex (undefined :: sh)
-  toSlice (None sl) sh i | AsSlice <- asSlice (Proxy :: Proxy sh)
-                         = None (toSlice sl sh i)
+  toSlice sh i | AsSlice <- asSlice (Proxy :: Proxy sh)
+                         = None (toSlice sh i)
 
 instance Shape sh => IsProduct Elt (None sh) where
   type ProdRepr (None sh) = ((),sh)
@@ -669,7 +669,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                   (inject $ weakenA1 f_l `subApply` (inject . Map (fun1 $ Prj tupIx0) $ enumSegC avar0))
 
     replicateL :: forall sh sl slix e co.
-                  (Shape sh, Shape sl, Elt slix, Elt e)
+                  (Shape sh, Shape sl, Slice slix, Elt e)
                => SliceIndex (EltRepr slix)
                              (EltRepr sl)
                              co
@@ -693,7 +693,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $ avar1
 
     sliceL :: forall sh sl slix e co.
-              (Shape sh, Shape sl, Elt slix, Elt e)
+              (Shape sh, Shape sl, Slice slix, Elt e)
            => SliceIndex (EltRepr slix)
                          (EltRepr sl)
                          co
@@ -1277,7 +1277,7 @@ liftExp vectAcc strength ctx size exp
       IndexFull x ix sl         -> ZipWith (fun2 (IndexFull x)) (cvtE ix) (cvtE sl)
       ToIndex sh ix             -> ZipWith (fun2 ToIndex) (cvtE sh) (cvtE ix)
       FromIndex sh ix           -> ZipWith (fun2 FromIndex) (cvtE sh) (cvtE ix)
-      ToSlice x sl sh i         -> zipWith3 (fun3 (ToSlice x)) (cvtE sl) (cvtE sh) (cvtE i)
+      ToSlice x sh i            -> ZipWith (fun2 (ToSlice x)) (cvtE sh) (cvtE i)
       Cond p t e                -> condL p t e
       While p it i              -> whileL p it i
       PrimConst c               -> replicateE size (PrimConst c)
@@ -1589,7 +1589,7 @@ avoidExp = cvtE
         IndexFull x ix sl   -> cvtE2 (IndexFull x) ix sl
         ToIndex sh ix       -> cvtE2 ToIndex sh ix
         FromIndex sh ix     -> cvtE2 FromIndex sh ix
-        ToSlice x sl sh i   -> cvtE3 (ToSlice x) sl sh i
+        ToSlice x sh i      -> cvtE2 (ToSlice x) sh i
         Cond p t e          -> cvtE3 Cond p t e
         While p f x         -> whileA p f x
         PrimConst c         -> simple $ PrimConst c
@@ -2808,7 +2808,7 @@ vectoriseSeqOpenExp strength ctx = cvtE
         IndexFull x ix sl       -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex sh ix           -> ToIndex (cvtE sh) (cvtE ix)
         FromIndex sh ix         -> FromIndex (cvtE sh) (cvtE ix)
-        ToSlice x sl sh i       -> ToSlice x (cvtE sl) (cvtE sh) (cvtE i)
+        ToSlice x sh i          -> ToSlice x (cvtE sh) (cvtE i)
         Cond p t e              -> Cond (cvtE p) (cvtE t) (cvtE e)
         While p f x             -> While (cvtF p) (cvtF f) (cvtE x)
         PrimConst c             -> PrimConst c

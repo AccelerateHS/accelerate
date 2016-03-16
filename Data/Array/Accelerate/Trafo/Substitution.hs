@@ -358,7 +358,7 @@ rebuildPreOpenExp k v av exp =
     IndexFull x ix sl   -> IndexFull x <$> rebuildPreOpenExp k v av ix <*> rebuildPreOpenExp k v av sl
     ToIndex sh ix       -> ToIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
     FromIndex sh ix     -> FromIndex <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
-    ToSlice x sl sh ix  -> ToSlice x <$> rebuildPreOpenExp k v av sl <*> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
+    ToSlice x sh ix     -> ToSlice x <$> rebuildPreOpenExp k v av sh <*> rebuildPreOpenExp k v av ix
     Cond p t e          -> Cond <$> rebuildPreOpenExp k v av p <*> rebuildPreOpenExp k v av t <*> rebuildPreOpenExp k v av e
     While p f x         -> While <$> rebuildFun k v av p <*> rebuildFun k v av f <*> rebuildPreOpenExp k v av x
     PrimConst c         -> pure $ PrimConst c

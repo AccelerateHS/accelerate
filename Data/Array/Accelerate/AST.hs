@@ -308,7 +308,7 @@ data PreOpenAcc acc aenv a where
 
   -- Replicate an array across one or more dimensions as given by the first
   -- argument
-  Replicate   :: (Shape sh, Shape sl, Elt slix, Elt e)
+  Replicate   :: (Shape sh, Shape sl, Slice slix, Elt e)
               => SliceIndex (EltRepr slix)                      -- slice type specification
                             (EltRepr sl)
                             co
@@ -319,7 +319,7 @@ data PreOpenAcc acc aenv a where
 
   -- Index a sub-array out of an array; i.e., the dimensions not indexed are
   -- returned whole
-  Slice       :: (Shape sh, Shape sl, Elt slix, Elt e)
+  Slice       :: (Shape sh, Shape sl, Slice slix, Elt e)
               => SliceIndex (EltRepr slix)                      -- slice type specification
                             (EltRepr sl)
                             co
@@ -933,7 +933,7 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
   IndexAny      :: Shape sh
                 => PreOpenExp acc env aenv (Any sh)
 
-  IndexSlice    :: (Shape sh, Shape sl, Elt slix)
+  IndexSlice    :: (Shape sh, Shape sl, Slice slix)
                 => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
                 -> proxy slix
                 -> PreOpenExp acc env aenv sh
@@ -958,7 +958,6 @@ data PreOpenExp (acc :: * -> * -> *) env aenv t where
 
   ToSlice       :: Slice slix
                 => SliceIndex (EltRepr slix) sl co (EltRepr (FullShape slix))
-                -> PreOpenExp acc env aenv slix
                 -> PreOpenExp acc env aenv (FullShape slix)
                 -> PreOpenExp acc env aenv Int
                 -> PreOpenExp acc env aenv slix

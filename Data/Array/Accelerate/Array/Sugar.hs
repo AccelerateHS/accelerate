@@ -36,7 +36,7 @@ module Data.Array.Accelerate.Array.Sugar (
   Arrays(..), ArraysR(..), ArraysFlavour(..), ArrRepr,
 
   -- * Class of supported surface element types and their mapping to representation types
-  Elt(..), EltRepr,
+  Elt(..), EltRepr, EltFlavour(..),
 
   -- * Derived functions
   liftToElt, liftToElt2, sinkFromElt, sinkFromElt2,
@@ -46,7 +46,7 @@ module Data.Array.Accelerate.Array.Sugar (
 
   -- * Array indexing and slicing
   Z(..), (:.)(..), All(..), Split(..), Any(..), Divide(..), Shape(..), Slice(..), Division(..), AsSlice(..),
-  (:<=)(..), (:<=:)(..),
+  (:<=)(..), (:<=:)(..), ShapeR(..), SliceR(..),
 
   -- * Array shape query, indexing, and conversions
   shape, (!), newArray, allocateArray, fromIArray, toIArray, fromList, toList, concatVectors,
@@ -231,6 +231,13 @@ fromTuple = fromProd (Proxy :: Proxy Elt)
 toTuple :: IsTuple tup => TupleRepr tup -> tup
 toTuple = toProd (Proxy :: Proxy Elt)
 
+-- For the purposes of optimisation, we sometimes need to know whether an array
+-- elements is scalar or if it is a tuple.
+--
+data EltFlavour e where
+  EltBase  :: Elt e     => EltFlavour e
+  EltTuple :: IsTuple t => EltFlavour t
+
 
 -- Array elements (tuples of scalars)
 -- ----------------------------------
@@ -245,198 +252,237 @@ toTuple = toProd (Proxy :: Proxy Elt)
 class (Show a, Typeable a, Typeable (EltRepr a), ArrayElt (EltRepr a))
       => Elt a where
   eltType  :: {-dummy-} a -> TupleType (EltRepr a)
+  eltFlavour :: {-dummy-} a -> EltFlavour a
   fromElt  :: a -> EltRepr a
   toElt    :: EltRepr a -> a
 
 instance Elt () where
-  eltType _ = UnitTuple
-  fromElt   = id
-  toElt     = id
+  eltType _    = UnitTuple
+  eltFlavour _ = EltTuple
+  fromElt      = id
+  toElt        = id
 
 instance Elt Z where
-  eltType _  = UnitTuple
-  fromElt Z  = ()
-  toElt ()   = Z
+  eltType _    = UnitTuple
+  eltFlavour _ = EltBase
+  fromElt Z    = ()
+  toElt ()     = Z
 
 instance (Elt t, Elt h) => Elt (t:.h) where
   eltType (_::(t:.h))   = PairTuple (eltType (undefined :: t)) (eltType (undefined :: h))
+  eltFlavour _          = EltTuple
   fromElt (t:.h)        = (fromElt t, fromElt h)
   toElt (t, h)          = toElt t :. toElt h
 
 instance Elt All where
   eltType _     = UnitTuple
+  eltFlavour _  = EltBase
   fromElt All   = ()
   toElt ()      = All
 
 instance Elt (Any Z) where
   eltType _     = UnitTuple
+  eltFlavour _  = EltBase
   fromElt _     = ()
   toElt _       = Any
 
 instance Shape sh => Elt (Any (sh:.Int)) where
   eltType _     = PairTuple (eltType (undefined::Any sh)) UnitTuple
   fromElt _     = (fromElt (undefined :: Any sh), ())
+  eltFlavour _  = EltBase
   toElt _       = Any
 
 instance Elt Int where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Int8 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Int16 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Int32 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Int64 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Word where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Word8 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Word16 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Word32 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Word64 where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CShort where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CUShort where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CInt where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CUInt where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CLong where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CULong where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CLLong where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CULLong where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Float where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Double where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CFloat where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CDouble where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Bool where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt Char where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CChar where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CSChar where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance Elt CUChar where
   eltType       = singletonScalarType
+  eltFlavour _  = EltBase
   fromElt       = id
   toElt         = id
 
 instance (Elt a, Elt b) => Elt (a, b) where
   eltType _             = PairTuple (PairTuple UnitTuple (eltType (undefined::a))) (eltType (undefined::b))
+  eltFlavour _          = EltTuple
   fromElt (a,b)         = (((), fromElt a), fromElt b)
   toElt (((),a),b)      = (toElt a, toElt b)
 
 instance (Elt a, Elt b, Elt c) => Elt (a, b, c) where
   eltType _             = PairTuple (eltType (undefined :: (a, b))) (eltType (undefined :: c))
   fromElt (a, b, c)     = (fromElt (a, b), fromElt c)
+  eltFlavour _          = EltTuple
   toElt (ab, c)         = let (a, b) = toElt ab in (a, b, toElt c)
 
 instance (Elt a, Elt b, Elt c, Elt d) => Elt (a, b, c, d) where
   eltType _             = PairTuple (eltType (undefined :: (a, b, c))) (eltType (undefined :: d))
   fromElt (a, b, c, d)  = (fromElt (a, b, c), fromElt d)
+  eltFlavour _          = EltTuple
   toElt (abc, d)        = let (a, b, c) = toElt abc in (a, b, c, toElt d)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e) => Elt (a, b, c, d, e) where
   eltType _               = PairTuple (eltType (undefined :: (a, b, c, d))) (eltType (undefined :: e))
   fromElt (a, b, c, d, e) = (fromElt (a, b, c, d), fromElt e)
+  eltFlavour _            = EltTuple
   toElt (abcd, e)         = let (a, b, c, d) = toElt abcd in (a, b, c, d, toElt e)
 
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f) => Elt (a, b, c, d, e, f) where
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e)))
                 (eltType (undefined :: f))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f) = (fromElt (a, b, c, d, e), fromElt f)
   toElt (abcde, f) = let (a, b, c, d, e) = toElt abcde in (a, b, c, d, e, toElt f)
 
@@ -445,6 +491,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g)
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f)))
                 (eltType (undefined :: g))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g) = (fromElt (a, b, c, d, e, f), fromElt g)
   toElt (abcdef, g) = let (a, b, c, d, e, f) = toElt abcdef
                       in  (a, b, c, d, e, f, toElt g)
@@ -454,6 +501,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h)
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g)))
                 (eltType (undefined :: h))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h) = (fromElt (a, b, c, d, e, f, g), fromElt h)
   toElt (abcdefg, h) = let (a, b, c, d, e, f, g) = toElt abcdefg
                        in  (a, b, c, d, e, f, g, toElt h)
@@ -463,6 +511,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i)
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h)))
                 (eltType (undefined :: i))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i) = (fromElt (a, b, c, d, e, f, g, h), fromElt i)
   toElt (abcdefgh, i) = let (a, b, c, d, e, f, g, h) = toElt abcdefgh
                         in  (a, b, c, d, e, f, g, h, toElt i)
@@ -472,6 +521,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j)
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i)))
                 (eltType (undefined :: j))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j) = (fromElt (a, b, c, d, e, f, g, h, i), fromElt j)
   toElt (abcdefghi, j) = let (a, b, c, d, e, f, g, h, i) = toElt abcdefghi
                          in  (a, b, c, d, e, f, g, h, i, toElt j)
@@ -481,6 +531,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j)))
                 (eltType (undefined :: k))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j, k) = (fromElt (a, b, c, d, e, f, g, h, i, j), fromElt k)
   toElt (abcdefghij, k) = let (a, b, c, d, e, f, g, h, i, j) = toElt abcdefghij
                           in  (a, b, c, d, e, f, g, h, i, j, toElt k)
@@ -490,6 +541,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k)))
                 (eltType (undefined :: l))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l) = (fromElt (a, b, c, d, e, f, g, h, i, j, k), fromElt l)
   toElt (abcdefghijk, l) = let (a, b, c, d, e, f, g, h, i, j, k) = toElt abcdefghijk
                            in  (a, b, c, d, e, f, g, h, i, j, k, toElt l)
@@ -499,6 +551,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l)))
                 (eltType (undefined :: m))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l), fromElt m)
   toElt (abcdefghijkl, m) = let (a, b, c, d, e, f, g, h, i, j, k, l) = toElt abcdefghijkl
                             in  (a, b, c, d, e, f, g, h, i, j, k, l, toElt m)
@@ -508,6 +561,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m)))
                 (eltType (undefined :: n))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m), fromElt n)
   toElt (abcdefghijklm, n) = let (a, b, c, d, e, f, g, h, i, j, k, l, m) = toElt abcdefghijklm
                              in  (a, b, c, d, e, f, g, h, i, j, k, l, m, toElt n)
@@ -517,6 +571,7 @@ instance (Elt a, Elt b, Elt c, Elt d, Elt e, Elt f, Elt g, Elt h, Elt i, Elt j, 
   eltType _
     = PairTuple (eltType (undefined :: (a, b, c, d, e, f, g, h, i, j, k, l, m, n)))
                 (eltType (undefined :: o))
+  eltFlavour _ = EltTuple
   fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = (fromElt (a, b, c, d, e, f, g, h, i, j, k, l, m, n), fromElt o)
   toElt (abcdefghijklmn, o) = let (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = toElt abcdefghijklmn
                               in  (a, b, c, d, e, f, g, h, i, j, k, l, m, n, toElt o)
@@ -906,6 +961,8 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
 
   asSlice :: proxy sh -> AsSlice sh
 
+  shapeType :: proxy sh -> ShapeR sh
+
   dim                   = Repr.dim . fromElt
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty
@@ -938,16 +995,27 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
 
 data AsSlice sh = Slice sh => AsSlice
 
+data ShapeR sh where
+  ShapeRnil  :: ShapeR Z
+  ShapeRcons :: Shape sh => ShapeR sh -> ShapeR (sh :. Int)
+
+data SliceR sh where
+  SliceRnil  :: SliceR Z
+  SliceRcons :: (Slice sl, Elt e) => SliceR sl -> SliceR (sl :. e)
+  SliceRany  :: Shape sh => SliceR (Any sh)
+
 instance Shape Z where
   sliceAnyIndex  _ = Repr.SliceNil
   sliceNoneIndex _ = Repr.SliceNil
   asSlice _ = AsSlice
+  shapeType _ = ShapeRnil
 
 instance Shape sh => Shape (sh:.Int) where
   sliceAnyIndex  _ = Repr.SliceAll   (sliceAnyIndex  (undefined :: sh))
   sliceNoneIndex _ = Repr.SliceFixed (sliceNoneIndex (undefined :: sh))
   asSlice _ | AsSlice <- asSlice (Proxy :: Proxy sh)
             = AsSlice
+  shapeType _ = ShapeRcons (shapeType (Proxy :: Proxy sh))
 
 -- | Slices, aka generalised indices, as /n/-tuples and mappings of slice
 -- indices to slices, co-slices, and slice dimensions
@@ -963,35 +1031,49 @@ class (Elt sl, Shape (SliceShape sl), Shape (CoSliceShape sl), Shape (FullShape 
                                     (EltRepr (FullShape    sl))
   -- | Increment a slice index into the given shape by 'n'.
   --
-  toSlice :: sl -> (FullShape sl) -> Int -> sl
+  toSlice :: FullShape sl -> Int -> sl
+
+  sliceType :: proxy sl -> SliceR sl
 
 instance Slice Z where
   type SliceShape   Z = Z
   type CoSliceShape Z = Z
   type FullShape    Z = Z
   sliceIndex _ = Repr.SliceNil
-  toSlice _ _ _ = Z
+  toSlice _ _ = Z
+  sliceType _ = SliceRnil
 
 instance Slice sl => Slice (sl:.All) where
   type SliceShape   (sl:.All) = SliceShape   sl :. Int
   type CoSliceShape (sl:.All) = CoSliceShape sl
   type FullShape    (sl:.All) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceAll (sliceIndex (undefined :: sl))
-  toSlice (sl :. All) (sh :. _) i = toSlice sl sh i :. All
+  toSlice (sh :. _) i = toSlice sh i :. All
+  sliceType _ = SliceRcons (sliceType (Proxy :: Proxy sl))
 
 instance Slice sl => Slice (sl:.Int) where
   type SliceShape   (sl:.Int) = SliceShape   sl
   type CoSliceShape (sl:.Int) = CoSliceShape sl :. Int
   type FullShape    (sl:.Int) = FullShape    sl :. Int
   sliceIndex _ = Repr.SliceFixed (sliceIndex (undefined :: sl))
-  toSlice (sl :. i) (sh :. n) i' = toSlice sl sh ((i + i')  `div` n) :. ((i + i') `mod` n)
+  toSlice (sh :. n) i' = toSlice sh (i' `div` n) :. (i' `mod` n)
+  sliceType _ = SliceRcons (sliceType (Proxy :: Proxy sl))
 
 instance Shape sh => Slice (Any sh) where
   type SliceShape   (Any sh) = sh
   type CoSliceShape (Any sh) = Z
   type FullShape    (Any sh) = sh
   sliceIndex _ = sliceAnyIndex (undefined :: sh)
-  toSlice Any _ _ = Any
+  toSlice _ _ = Any
+  sliceType _ = SliceRany
+
+-- Actual tuple instances for slices and shapes
+--
+instance (Elt sh, Elt i) => IsProduct Elt (sh:.i) where
+  type ProdRepr (sh:.i) = (((),sh),i)
+  fromProd _ (sh:.i)   = (((),sh),i)
+  toProd _ (((),sh),i) = (sh:.i)
+  prod _ _             = ProdRsnoc (ProdRsnoc ProdRunit)
 
 
 -- | Generalised array division, like above but use for splitting an array into

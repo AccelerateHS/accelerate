@@ -26,7 +26,7 @@ module Data.Array.Accelerate.Trafo.Simplify (
 -- standard library
 import Data.List                                        ( nubBy )
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid                                      hiding ( All )
 import Data.Typeable
 import Text.Printf
 import Control.Applicative                              hiding ( Const )
@@ -36,13 +36,15 @@ import Prelude                                          hiding ( exp, iterate )
 import Data.Array.Accelerate.AST                        hiding ( prj )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Algebra
 import Data.Array.Accelerate.Trafo.Shrink
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Analysis.Shape
-import Data.Array.Accelerate.Array.Sugar                ( Elt, Shape, Slice, toElt, fromElt, (:.)(..)
+import Data.Array.Accelerate.Array.Representation       ( SliceIndex(..) )
+import Data.Array.Accelerate.Array.Sugar                ( Elt(..), Shape(..), ShapeR(..), SliceR(..), Slice(..), AsSlice(..), toElt, fromElt, (:.)(..), EltRepr, All(..)
                                                         , Tuple(..), IsTuple, fromTuple, TupleRepr, shapeToList, transpose )
 import qualified Data.Array.Accelerate.Debug            as Stats
 
@@ -204,6 +206,8 @@ simplifyOpenExp
 simplifyOpenExp env = first getAny . cvtE
   where
     cvtE :: Elt t => PreOpenExp acc env aenv t -> (Any, PreOpenExp acc env aenv t)
+    cvtE IndexNil = pure IndexNil
+    cvtE _   | Just e <- gcast IndexNil    = yes e -- If it's Z, don't bother traversing
     cvtE exp | Just e <- globalCSE env exp = yes e
     cvtE exp = case exp of
       Let bnd body
@@ -225,11 +229,11 @@ simplifyOpenExp env = first getAny . cvtE
       IndexHead sh              -> indexHead (cvtE sh)
       IndexTail sh              -> indexTail (cvtE sh)
       IndexTrans sh             -> indexTrans (cvtE sh)
-      IndexSlice x ix sh        -> IndexSlice x ix <$> cvtE sh
-      IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
+      IndexSlice x ix sh        -> indexSlice x ix (cvtE sh)
+      IndexFull x ix sl         -> indexFull x (cvtE ix) (cvtE sl)
       ToIndex sh ix             -> toIndex (cvtE sh) (cvtE ix)
       FromIndex sh ix           -> fromIndex (cvtE sh) (cvtE ix)
-      ToSlice x sl sh i         -> ToSlice x <$> cvtE sl <*> cvtE sh <*> cvtE i
+      ToSlice x sh i            -> toSlice x (cvtE sh) (cvtE i)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
       PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> evalPrimApp env f <$> cvtE x
@@ -388,23 +392,141 @@ simplifyOpenExp env = first getAny . cvtE
     indexTail sh                        = IndexTail <$> sh
 
     indexTrans :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh)
-    indexTrans (_, Const c)       = Stats.ruleFired "indexTrans/const"      $ yes (Const (fromElt (transpose (toElt c :: sh))))
-    indexTrans (_, IndexTrans sh) = Stats.ruleFired "indexTrans/indexTrans" $ yes sh
-    indexTrans sh                 = IndexTrans <$> sh
+    indexTrans (_, Const c)                = Stats.ruleFired "indexTrans/const"      $ yes (Const (fromElt (transpose (toElt c :: sh))))
+    indexTrans (_, IndexTrans sh)          = Stats.ruleFired "indexTrans/indexTrans" $ yes sh
+    indexTrans (_, sh)
+      | ShapeRcons ShapeRnil <- shapeType sh
+      = Stats.ruleFired "indexTrans/dim1" $ yes sh
+    indexTrans sh                          = IndexTrans <$> sh
+
+    indexFull :: forall slix sl sh co. (Shape sl, Shape sh, Elt slix)
+              => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+              -> (Any, PreOpenExp acc env aenv slix)
+              -> (Any, PreOpenExp acc env aenv sl)
+              -> (Any, PreOpenExp acc env aenv sh)
+    indexFull _ (_, IndexNil) _
+      | Just sh <- gcast IndexNil         -- sh ~ Z
+      = Stats.ruleFired "indexFull/Z" $ yes sh
+    indexFull (SliceAll x) (_, IndexCons slix (Const ())) (_, IndexCons sl i)
+      | ShapeRcons sr <- shapeType (Proxy :: Proxy sh)
+      , ShapeRcons _  <- shapeType (Proxy :: Proxy sl)
+      , AsSlice       <- asSlice sr
+      , Just i'       <- gcast i
+      = Stats.ruleFired "indexFull/All" $ yes (IndexCons (IndexFull x slix sl) i')
+    indexFull (SliceFixed x) (_, IndexCons slix i) (_, sl)
+      | ShapeRcons sr <- shapeType (Proxy :: Proxy sh)
+      , AsSlice       <- asSlice sr
+      , Just i'       <- gcast i
+      = Stats.ruleFired "indexFull/Fixed" $ yes (IndexCons (IndexFull x slix sl) i')
+    indexFull slix (_,ToSlice _ sh i) _
+      | allFixed slix
+      , Just sh' <- gcast (FromIndex sh i)
+      = Stats.ruleFired "indexFull/toSlice" $ yes sh'
+    indexFull x slix sl
+      = IndexFull x <$> slix <*> sl
+
+
+    indexSlice :: forall proxy slix sl sh co. (Shape sl, Shape sh, Slice slix)
+               => SliceIndex (EltRepr slix) (EltRepr sl) co (EltRepr sh)
+               -> proxy slix
+               -> (Any, PreOpenExp acc env aenv sh)
+               -> (Any, PreOpenExp acc env aenv sl)
+    indexSlice SliceNil _ _
+      | Just sh <- gcast IndexNil         -- sh ~ Z
+      = Stats.ruleFired "indexSlice/nil" $ yes sh
+    indexSlice (SliceFixed x) p (_, sh)
+      | SliceRcons sr  <- sliceType p
+      , ShapeRcons sh' <- shapeType sh
+      , AsSlice        <- asSlice sh'
+      = Stats.ruleFired "indexSlice/fixed" $ yes (IndexSlice x sr (IndexTail sh))
+    indexSlice (SliceAll x) p (_, IndexCons sh i)
+      | SliceRcons sr  <- sliceType p
+      , ShapeRcons _   <- shapeType (Proxy :: Proxy sh)
+      , ShapeRcons sl' <- shapeType (Proxy :: Proxy sl)
+      , AsSlice        <- asSlice sl'
+      = Stats.ruleFired "indexSlice/fixed" $ yes (IndexCons (IndexSlice x sr sh) i)
+    indexSlice x p sh
+      = IndexSlice x p <$> sh
 
     shapeSize :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
-    shapeSize (_, Const c) = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
-    shapeSize sh           = ShapeSize <$> sh
+    shapeSize (_, Const c)  = Stats.ruleFired "shapeSize/const" $ yes (Const (product (shapeToList (toElt c :: sh))))
+    shapeSize (_, sh)
+      | ShapeRnil <- shapeType sh
+      = Stats.ruleFired "shapeSize/Z"     $ yes (Const 1)
+    shapeSize (_, IndexCons IndexNil i)
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
+      = Stats.ruleFired "shapeSize/index1" $ yes i
+    shapeSize (_, IndexCons sh (Const n))
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
+      , n == 1
+      = Stats.ruleFired "shapeSize/indexCons" $ yes (ShapeSize sh)
+    shapeSize sh            = ShapeSize <$> sh
 
     toIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int)
     toIndex  (_,sh) (_,FromIndex sh' ix)
-      | Just REFL <- match sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+      | sameSize sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
+    toIndex _ (_,IndexNil)        = Stats.ruleFired "toIndex/Z"         $ yes (Const 0)
+    toIndex _ (_,ix)
+      | ShapeRcons ShapeRnil <- shapeType ix
+      = Stats.ruleFired "toIndex/dim1" $ yes (ShapeSize ix)
     toIndex sh ix                 = ToIndex <$> sh <*> ix
 
     fromIndex :: forall sh. Shape sh => (Any, PreOpenExp acc env aenv sh) -> (Any, PreOpenExp acc env aenv Int) -> (Any, PreOpenExp acc env aenv sh)
+    fromIndex  (_,IndexNil) _
+      = Stats.ruleFired "fromIndex/Z" $ yes IndexNil
+    fromIndex  (_,IndexCons sh (Const i)) (_,i')
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
+      , i == 1
+      = Stats.ruleFired "fromIndex/indexCons" $ yes (IndexCons (FromIndex sh i') (Const 1))
     fromIndex  (_,sh) (_,ToIndex sh' ix)
       | Just REFL <- match sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
+    fromIndex _ (_,i)
+      | ShapeRcons ShapeRnil <- shapeType (Proxy :: Proxy sh)
+      = Stats.ruleFired "fromIndex/dim1" $ yes (IndexCons IndexNil i)
     fromIndex sh ix               = FromIndex <$> sh <*> ix
+
+    toSlice :: forall slix sl co. Slice slix
+            => SliceIndex (EltRepr slix) sl co (EltRepr (FullShape slix))
+            -> (Any, PreOpenExp acc env aenv (FullShape slix))
+            -> (Any, PreOpenExp acc env aenv Int)
+            -> (Any, PreOpenExp acc env aenv slix)
+    toSlice SliceNil _ _
+      | SliceRnil <- sliceType (Proxy :: Proxy slix)
+      = Stats.ruleFired "toSlice/z" $ yes IndexNil
+    toSlice _ _ _
+      | SliceRany <- sliceType (Proxy :: Proxy slix)
+      = Stats.ruleFired "toSlice/Any" $ yes IndexAny
+    toSlice x sh i
+      = ToSlice x <$> sh <*> i
+
+    sameSize :: forall sh sh'. (Shape sh, Shape sh') => PreOpenExp acc env aenv sh -> PreOpenExp acc env aenv sh' -> Bool
+    sameSize (Const sh) (Const sh')
+      | size (toElt sh :: sh) == size (toElt sh' :: sh')
+      = True
+    sameSize (IndexTrans sh) sh'
+      = sameSize sh sh'
+    sameSize sh (IndexTrans sh')
+      = sameSize sh sh'
+    sameSize (IndexCons sh (Const i)) sh'
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
+      , i == 1 = sameSize sh sh'
+    sameSize sh (IndexCons sh' (Const i))
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh')
+      , i == 1 = sameSize sh sh'
+    sameSize (IndexCons sh i) (IndexCons sh' i')
+      | ShapeRcons _ <- shapeType (Proxy :: Proxy sh)
+      , ShapeRcons _ <- shapeType (Proxy :: Proxy sh')
+      , Just REFL <- match i i'
+      = sameSize sh sh'
+    sameSize sh sh'
+      | Just REFL <- match sh sh'
+      = True
+    sameSize _ _ = False
+
+    allFixed :: SliceIndex slix sl co sh -> Bool
+    allFixed SliceNil          = True
+    allFixed (SliceFixed slix) = allFixed slix
+    allFixed (SliceAll _)      = False
 
     first :: (a -> a') -> (a,b) -> (a',b)
     first f (x,y) = (f x, y)

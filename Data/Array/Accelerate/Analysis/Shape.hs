@@ -631,7 +631,7 @@ evalPreOpenExp eval exp env aenv =
 
     ToIndex sh ix               -> toIndex <$> evalE sh <*> evalE ix
     FromIndex sh ix             -> fromIndex <$> evalE sh <*> evalE ix
-    ToSlice _ slix sh i         -> toSlice <$> evalE slix <*> evalE sh <*> evalE i
+    ToSlice _ sh i              -> toSlice <$> evalE sh <*> evalE i
     Cond c t e ->
       do b <- evalE c
          case b of

@@ -95,16 +95,16 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
     shrinkE exp = case exp of
       Let bnd body
         | Var _ <- bnd  -> Stats.inline "Var"   . yes $ shrinkE (inline body bnd)
-        | uses <= lIMIT -> Stats.betaReduce msg . yes $ shrinkE (inline (snd body') (snd bnd'))
+        | allUseElt (<= lIMIT) uses -> Stats.betaReduce msg . yes $ shrinkE (inline (snd body') (snd bnd'))
         | otherwise     -> Let <$> bnd' <*> body'
         where
           bnd'  = shrinkE bnd
           body' = shrinkE body
           uses  = usesOfExp ZeroIdx (snd body')
 
-          msg   = case uses of
-            0 -> "dead exp"
-            _ -> "inline exp"   -- forced inlining when lIMIT > 1
+          msg   = if allUseElt (==0) uses
+                  then "dead exp"
+                  else "inline exp"   -- forced inlining when lIMIT > 1
       --
       Var idx                   -> pure (Var idx)
       Const c                   -> pure (Const c)
@@ -120,7 +120,7 @@ shrinkExp = Stats.substitution "shrink exp" . first getAny . shrinkE
       IndexAny                  -> pure IndexAny
       ToIndex sh ix             -> ToIndex <$> shrinkE sh <*> shrinkE ix
       FromIndex sh i            -> FromIndex <$> shrinkE sh <*> shrinkE i
-      ToSlice x slix sh i       -> ToSlice x <$> shrinkE slix <*> shrinkE sh <*> shrinkE i
+      ToSlice x sh i            -> ToSlice x <$> shrinkE sh <*> shrinkE i
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
       PrimConst c               -> pure (PrimConst c)
@@ -251,7 +251,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
       IndexAny                  -> IndexAny
       ToIndex sh ix             -> ToIndex (shrinkE sh) (shrinkE ix)
       FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
-      ToSlice x slix sh i       -> ToSlice x (shrinkE slix) (shrinkE sh) (shrinkE i)
+      ToSlice x sh i            -> ToSlice x (shrinkE sh) (shrinkE i)
       Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
       While p f x               -> While (shrinkF p) (shrinkF f) (shrinkE x)
       PrimConst c               -> PrimConst c
@@ -310,52 +310,121 @@ basicReduceAcc unwrapAcc countAcc (unwrapAcc -> bnd) body@(unwrapAcc -> pbody)
 -- Occurrence Counting
 -- ===================
 
+data UseElt e where
+  UseElt      :: Elt e => Int -> UseElt e
+  UseEltTuple :: Tuple UseElt (TupleRepr t) -> UseElt t
+
+-- Combine the uses of an array variable.
+--
+(<+.>) :: UseElt a -> UseElt a -> UseElt a
+(<+.>) = zipWithUelt (+)
+
+zipWithUelt :: (Int -> Int -> Int) -> UseElt a -> UseElt a -> UseElt a
+zipWithUelt f (UseElt c1)      (UseElt c2)      = UseElt (c1 `f` c2)
+zipWithUelt f (UseEltTuple t1) (UseEltTuple t2) = UseEltTuple (t1 `tup` t2)
+  where
+    tup :: Tuple UseElt t -> Tuple UseElt t -> Tuple UseElt t
+    tup NilTup          NilTup          = NilTup
+    tup (SnocTup t1 a1) (SnocTup t2 a2) = tup t1 t2 `SnocTup` zipWithUelt f a1 a2
+    tup _               _               = error "Chewie, we're home."
+zipWithUelt _ _                 _           = error "Aaarrrrhhggg!"
+
+-- Update use at a specific index.
+--
+updateUseElt :: UseElt s -> TupleIdx (TupleRepr s) a -> UseElt a -> UseElt s
+updateUseElt (UseEltTuple ut) ix = UseEltTuple . tup ut ix
+  where
+    tup :: Tuple UseElt t -> TupleIdx t a -> UseElt a -> Tuple UseElt t
+    tup (SnocTup t s) ZeroTupIdx      a = SnocTup t (s <+.> a)
+    tup (SnocTup t s) (SuccTupIdx ix) a = SnocTup (tup t ix a) s
+
+-- A variable's components each occur `n` times in total.
+--
+nUseElt :: forall t. Elt t => Int -> UseElt t
+nUseElt n =
+  case eltFlavour (undefined :: t) of
+    EltBase  -> UseElt n
+    EltTuple -> UseEltTuple (nt (tuple (undefined :: t)))
+  where
+    nt :: ProdR Elt t' -> Tuple UseElt t'
+    nt ProdRunit = NilTup
+    nt (ProdRsnoc t) = nt t `SnocTup` nUseElt n
+
+zeroUseElt, oneUseElt :: Elt t => UseElt t
+zeroUseElt = nUseElt 0
+oneUseElt  = nUseElt 1
+
+instance Eq (UseElt a) where
+  UseElt c1      == UseElt c2      = c1 == c2
+  UseEltTuple t1 == UseEltTuple t2 = t1 == t2
+
+instance Eq (Tuple UseElt t) where
+  NilTup        == NilTup        = True
+  SnocTup t1 a1 == SnocTup t2 a2 = t1 == t2 && a1 == a2
+
+-- Check if a condition is try for the use of all components.
+--
+allUseElt :: (Int -> Bool) -> UseElt t -> Bool
+allUseElt p (UseElt c) = p c
+allUseElt p (UseEltTuple t) = aT t
+  where
+    aT :: Tuple UseElt t -> Bool
+    aT NilTup = True
+    aT (SnocTup t u) = aT t && allUseElt p u
+
+-- Specify a certain component of a variable has been used.
+--
+useComponentElt :: Elt a => TupleIdx (TupleRepr t) a -> UseElt t -> UseElt t
+useComponentElt tix u = updateUseElt u tix oneUseElt
+
 -- Count the number of occurrences an in-scope scalar expression bound at the
 -- given variable index recursively in a term.
 --
-usesOfExp :: forall acc env aenv s t. Idx env s -> PreOpenExp acc env aenv t -> Int
+usesOfExp :: forall acc env aenv s t. Elt s => Idx env s -> PreOpenExp acc env aenv t -> UseElt s
 usesOfExp idx = countE
   where
-    countE :: PreOpenExp acc env aenv e -> Int
+    countE :: PreOpenExp acc env aenv e -> UseElt s
     countE exp = case exp of
       Var this
-        | Just REFL <- match this idx   -> 1
-        | otherwise                     -> 0
+        | Just REFL <- match this idx   -> oneUseElt
+        | otherwise                     -> zeroUseElt
       --
-      Let bnd body              -> countE bnd + usesOfExp (SuccIdx idx) body
-      Const _                   -> 0
+      Let bnd body              -> countE bnd <+.> usesOfExp (SuccIdx idx) body
+      Const _                   -> zeroUseElt
       Tuple t                   -> countT t
+      Prj ix (Var v)            | Just REFL <- match v idx
+                                -> useComponentElt ix zeroUseElt
       Prj _ e                   -> countE e
-      IndexNil                  -> 0
-      IndexCons sl sz           -> countE sl + countE sz
+      IndexNil                  -> zeroUseElt
+      IndexCons sl sz           -> countE sl <+.> countE sz
       IndexHead sh              -> countE sh
       IndexTail sh              -> countE sh
       IndexTrans sh             -> countE sh
       IndexSlice _ _ sh         -> countE sh
-      IndexFull _ ix sl         -> countE ix + countE sl
-      IndexAny                  -> 0
-      ToIndex sh ix             -> countE sh + countE ix
-      FromIndex sh i            -> countE sh + countE i
-      ToSlice _ slix sh i       -> countE slix + countE sh + countE i
-      Cond p t e                -> countE p  + countE t + countE e
-      While p f x               -> countE x  + countF idx p + countF idx f
-      PrimConst _               -> 0
+      IndexFull _ ix sl         -> countE ix <+.> countE sl
+      IndexAny                  -> zeroUseElt
+      ToIndex sh ix             -> countE sh <+.> countE ix
+      FromIndex sh i            -> countE sh <+.> countE i
+      ToSlice _ sh i            -> countE sh <+.> countE i
+      Cond p t e                -> countE p  <+.> countE t <+.> countE e
+      While p f x               -> countE x  <+.> countF idx p <+.> countF idx f
+      PrimConst _               -> zeroUseElt
       PrimApp _ x               -> countE x
       Index _ sh                -> countE sh
       LinearIndex _ i           -> countE i
-      Shape _                   -> 0
+      Shape _                   -> zeroUseElt
       ShapeSize sh              -> countE sh
-      Intersect sh sz           -> countE sh + countE sz
-      Union sh sz               -> countE sh + countE sz
+      Intersect sh sz           -> countE sh <+.> countE sz
+      Union sh sz               -> countE sh <+.> countE sz
       Foreign _ _ e             -> countE e
 
-    countF :: Idx env' s -> PreOpenFun acc env' aenv f -> Int
+    countF :: Idx env' s -> PreOpenFun acc env' aenv f -> UseElt s
     countF idx' (Lam  f) = countF (SuccIdx idx') f
     countF idx' (Body b) = usesOfExp idx' b
 
-    countT :: Tuple (PreOpenExp acc env aenv) e -> Int
-    countT NilTup        = 0
-    countT (SnocTup t e) = countT t + countE e
+    countT :: Tuple (PreOpenExp acc env aenv) e -> UseElt s
+    countT NilTup        = zeroUseElt
+    countT (SnocTup t e) = countT t <+.> countE e
 
 
 -- Count the number of uses of the array term bound at the given environment
@@ -395,6 +464,8 @@ updateUse (UseTuple ut) ix = UseTuple . tup ut ix
     tup :: Atuple Use t -> TupleIdx t a -> Use a -> Atuple Use t
     tup (SnocAtup t s) ZeroTupIdx      a = SnocAtup t (s <+> a)
     tup (SnocAtup t s) (SuccTupIdx ix) a = SnocAtup (tup t ix a) s
+    tup _              _               _ = error "All these facts and opinions look the same. I can't tell them apart."
+updateUse _             _  = error "Happens to me all the time. Don't worry about it."
 
 -- A variable's components each occur `n` times in total.
 --
@@ -435,14 +506,8 @@ allUse p (UseTuple t)   = aT t
 
 -- Specify a certain component of a variable has been used.
 --
-useComponent :: TupleIdx (TupleRepr t) a -> Use t -> Use t
-useComponent ix (UseTuple t) = UseTuple (use ix t)
-  where
-    use :: TupleIdx t a -> Atuple Use t -> Atuple Use t
-    use ZeroTupIdx      (SnocAtup t u) = SnocAtup t (u <+> oneUse)
-    use (SuccTupIdx ix) (SnocAtup t u) = SnocAtup (use ix t) u
-    use _               _              = error "All these facts and opinions look the same. I can't tell them apart."
-useComponent _  _            = error "Happens to me all the time. Don't worry about it."
+useComponent :: Arrays a => TupleIdx (TupleRepr t) a -> Use t -> Use t
+useComponent ix u = updateUse u ix oneUse
 
 usesOfPreAcc
     :: forall acc aenv s t. (Kit acc, Arrays s)
@@ -598,7 +663,7 @@ usesOfExpA countAcc idx exp =
     IndexAny                  -> zeroUse
     ToIndex sh ix             -> countE sh <+> countE ix
     FromIndex sh i            -> countE sh <+> countE i
-    ToSlice _ slix sh i       -> countE slix <+> countE sh <+> countE i
+    ToSlice _ sh i            -> countE sh <+> countE i
     Cond p t e                -> countE p  <+> countE t <+> countE e
     While p f x               -> countF p  <+> countF f <+> countE x
     PrimConst _               -> zeroUse
@@ -817,7 +882,7 @@ dependenciesExp depsAcc exp =
     IndexAny                  -> mempty
     ToIndex sh ix             -> depsE sh <> depsE ix
     FromIndex sh i            -> depsE sh <> depsE i
-    ToSlice _ slix sh i       -> depsE slix <> depsE sh <> depsE i
+    ToSlice _ sh i            -> depsE sh <> depsE i
     Cond p t e                -> depsE p  <> depsE t <> depsE e
     While p f x               -> depsF p  <> depsF f <> depsE x
     PrimConst _               -> mempty

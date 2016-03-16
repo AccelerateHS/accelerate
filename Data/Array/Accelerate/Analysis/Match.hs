@@ -534,11 +534,10 @@ matchPreOpenExp matchAcc hashAcc = match
       , Just REFL <- match sh1 sh2
       = Just REFL
 
-    match (ToSlice _ slix1 sh1 i1) (ToSlice _ slix2 sh2 i2)
-      | Just REFL <- match slix1 slix2
-      , Just REFL <- match sh1 sh2
+    match (ToSlice _ sh1 i1) (ToSlice _ sh2 i2)
+      | Just REFL <- match sh1 sh2
       , Just REFL <- match i1  i2
-      = Just REFL
+      = gcast REFL
 
     match (Cond p1 t1 e1) (Cond p2 t2 e2)
       | Just REFL <- match p1 p2
@@ -1140,7 +1139,7 @@ hashPreOpenExp hashAcc exp =
     IndexFull  spec ix sl       -> hash "IndexFull"     `hashE` ix `hashE` sl `hashWithSalt` show spec
     ToIndex sh i                -> hash "ToIndex"       `hashE` sh `hashE` i
     FromIndex sh i              -> hash "FromIndex"     `hashE` sh `hashE` i
-    ToSlice _ ix sh i           -> hash "ToSlice"       `hashE` ix `hashE` sh `hashE` i
+    ToSlice spec sh i           -> hash "ToSlice"       `hashE` sh `hashE` i  `hashWithSalt` show spec
     Cond c t e                  -> hash "Cond"          `hashE` c  `hashE` t  `hashE` e
     While p f x                 -> hash "While"         `hashWithSalt` hashPreOpenFun hashAcc p  `hashWithSalt` hashPreOpenFun hashAcc f  `hashE` x
     PrimApp f x                 -> hash "PrimApp"       `hashWithSalt` hashPrimFun f `hashE` fromMaybe x (commutes hashAcc f x)
