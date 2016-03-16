@@ -579,14 +579,16 @@ evalNEq (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty =
 evalNEq (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 (/=)
 
 evalMax :: Elt a => ScalarType a -> (a,a) :-> a
-evalMax (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 max
-evalMax (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 max
-evalMax (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 max
+evalMax _ (untup2 -> Just (x,y)) _                   | Just REFL <- match x y          = Just x
+evalMax (NumScalarType (IntegralNumType ty)) arg env | IntegralDict <- integralDict ty = eval2 max arg env
+evalMax (NumScalarType (FloatingNumType ty)) arg env | FloatingDict <- floatingDict ty = eval2 max arg env
+evalMax (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDict ty   = eval2 max arg env
 
 evalMin :: Elt a => ScalarType a -> (a,a) :-> a
-evalMin (NumScalarType (IntegralNumType ty)) | IntegralDict <- integralDict ty = eval2 min
-evalMin (NumScalarType (FloatingNumType ty)) | FloatingDict <- floatingDict ty = eval2 min
-evalMin (NonNumScalarType ty)                | NonNumDict   <- nonNumDict ty   = eval2 min
+evalMin _ (untup2 -> Just (x,y)) _                   | Just REFL <- match x y          = Just x
+evalMin (NumScalarType (IntegralNumType ty)) arg env | IntegralDict <- integralDict ty = eval2 min arg env
+evalMin (NumScalarType (FloatingNumType ty)) arg env | FloatingDict <- floatingDict ty = eval2 min arg env
+evalMin (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDict ty   = eval2 min arg env
 
 
 -- Logical operators
