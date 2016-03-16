@@ -378,7 +378,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq (SletSharing sa@(StableSharin
         producer :: (bnd ~ [a], Arrays a)
                  => AST.NaturalProducer AST.OpenAcc aenv a
                  -> AST.PreOpenNaturalSeq AST.OpenAcc aenv body
-        producer p = AST.Producer p $ convertSharingSeq config alyt' aenv (sa:senv) body
+        producer p = AST.Producer p $ convertSharingSeq config alyt' (noStableSharingAcc : aenv) (sa:senv) body
           where
             alyt' = incLayout alyt `PushLayout` ZeroIdx
 
