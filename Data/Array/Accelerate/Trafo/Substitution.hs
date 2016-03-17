@@ -76,10 +76,10 @@ infixr `substitute`
 -- | Replace the first variable with the given expression. The environment
 -- shrinks.
 --
-inline :: (RebuildableAcc acc, Elt t)
-       => PreOpenExp acc (env, s) aenv t
+inline :: (RebuildableExp f, AccCloE f ~ acc)
+       => f (env, s) aenv t
        -> PreOpenExp acc env      aenv s
-       -> PreOpenExp acc env      aenv t
+       -> f env      aenv t
 inline f g = Stats.substitution "inline" $ rebuildE (subTop g) f
 
 -- | Replace an expression that uses the top environment variable with another.
@@ -150,14 +150,15 @@ class Rebuildable f where
 -- Minimal complete definition is 'AccClo' and rebuild'.
 --
 class RebuildableExp f where
+  type AccCloE (f :: * -> * -> * -> *) :: * -> * -> *
 
   rebuildPartialE :: (Applicative f', SyntacticExp fe)
-                  => (forall e'. Elt e' => Idx env e' -> f' (fe (AccClo (f env)) env' aenv e'))
+                  => (forall e'. Elt e' => Idx env e' -> f' (fe (AccCloE f) env' aenv e'))
                   -> f env aenv  e
                   -> f' (f env' aenv e)
 
   rebuildE :: SyntacticExp fe
-           => (forall e'. Elt e' => Idx env e' -> fe (AccClo (f env)) env' aenv e')
+           => (forall e'. Elt e' => Idx env e' -> fe (AccCloE f) env' aenv e')
            -> f env aenv  e
            -> f env' aenv e
   rebuildE v = runIdentity . rebuildPartialE (Identity . v)
@@ -213,9 +214,11 @@ instance Rebuildable OpenAcc where
   rebuildPartial = rebuildOpenAcc
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenExp acc) where
+  type AccCloE (PreOpenExp acc) = acc
   rebuildPartialE v = rebuildPreOpenExp rebuildPartial v (pure . IA)
 
 instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
+  type AccCloE (PreOpenFun acc) = acc
   rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
 
 -- NOTE: [Weakening]
