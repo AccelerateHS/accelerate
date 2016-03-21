@@ -2030,10 +2030,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                                                   af
 
         cvtE :: PreExp acc aenv s -> PreExp acc aenv s
-        cvtE = assumeArray cunc replaceE (const id) avar
+        cvtE = assumeArray cunc (\sh f ix -> replaceE sh f ix . reduceAccessExp ix) (const id) avar
 
         cvtF :: PreFun acc aenv s -> PreFun acc aenv s
-        cvtF = assumeArray cunc replaceF (const id) avar
+        cvtF = assumeArray cunc (\sh f ix -> replaceF sh f ix . reduceAccessFun ix) (const id) avar
 
         cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
         cvtAT NilAtup          = NilAtup
@@ -2081,7 +2081,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
                                                    af
 
         cvtE :: PreExp acc aenv s -> PreExp acc aenv s
-        cvtE = assumeArray cunc replaceE (const id) avar
+        cvtE = assumeArray cunc (\sh f ix -> replaceE sh f ix . reduceAccessExp ix) (const id) avar
 
     assumeArray :: forall aenv t a. Arrays t
                 => Cunctation acc aenv t

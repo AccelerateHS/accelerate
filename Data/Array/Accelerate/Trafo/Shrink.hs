@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE PatternGuards       #-}
@@ -42,6 +43,9 @@ module Data.Array.Accelerate.Trafo.Shrink (
   DependenciesAcc, dependenciesOpenAcc,
   dependenciesPreAcc, dependenciesAfun,
   dependenciesProducer, dependenciesConsumer,
+
+  -- Array access merging
+  reduceAccessExp, reduceAccessFun,
 
 ) where
 
@@ -547,7 +551,7 @@ usesOfPreAcc countAcc idx = count
                                 -> countA a
       Apply f a                 -> countAF f idx <+> countA a
       Aforeign _ _ a            -> countA a
-      Acond p t e               -> countE p  <+> zipWithU max (countA t) (countA e)
+      Acond p t e               -> countE p  <+> countA t <+> countA e
       Awhile p f a              -> countAF p idx <+> countAF f idx <+> countA a
       Use _                     -> zeroUse
       Subarray ix sh _          -> countE ix <+> countE sh
@@ -594,7 +598,10 @@ usesOfPreAcc countAcc idx = count
     countAT (SnocAtup t a) = countAT t <+> countA a
 
     countE :: PreOpenExp acc env aenv e -> Use s
-    countE = usesOfExpA countAcc idx
+    countE | ArraysFarray <- flavour (undefined :: s)
+           = usesOfExpA countAcc idx . reduceAccessExp idx
+           | otherwise
+           = usesOfExpA countAcc idx
 
 usesOfPreSeq :: forall acc index aenv s t. (Kit acc, Arrays s)
              => UsesOfAcc acc
@@ -906,3 +913,176 @@ dependenciesExp depsAcc exp =
     depsF :: PreOpenFun acc env' aenv f -> Stronger aenv
     depsF (Lam  f) = depsF f
     depsF (Body b) = depsE b
+
+-- Find and merge common array accesses
+--
+
+reduceAccessExp :: (Kit acc, Shape sh, Elt e)
+                => Idx aenv (Array sh e)
+                -> PreOpenExp acc env aenv e'
+                -> PreOpenExp acc env aenv e'
+reduceAccessExp idx e =
+  case elimArrayAccess idx e of
+    Left (sh, e) -> inline e (Index (inject $ Avar idx) sh)
+    Right e      -> e
+
+reduceAccessFun :: (Kit acc, Shape sh, Elt e)
+                => Idx aenv (Array sh e)
+                -> PreOpenFun acc env aenv f
+                -> PreOpenFun acc env aenv f
+reduceAccessFun ix (Body b) = Body (reduceAccessExp ix b)
+reduceAccessFun ix (Lam f)  = Lam (reduceAccessFun ix f)
+
+elimArrayAccess :: forall acc env aenv sh e e'. (Kit acc, Elt e, Shape sh)
+                => Idx aenv (Array sh e)
+                -> PreOpenExp acc env aenv e'
+                -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv e') (PreOpenExp acc env aenv e')
+elimArrayAccess idx exp =
+  case exp of
+    Let a b             -> cvtLet (cvtE a) (cvtE b)
+    Var ix              -> noAccess $ Var ix
+    Const c             -> noAccess $ Const c
+    Tuple tup           -> cvtTup tup
+    Prj tup e           -> Prj tup `cvtE1` cvtE e
+    IndexNil            -> noAccess IndexNil
+    IndexCons sh sz     -> cvtE2 IndexCons (cvtE sh) (cvtE sz)
+    IndexHead sh        -> IndexHead `cvtE1` cvtE sh
+    IndexTail sh        -> IndexTail `cvtE1` cvtE sh
+    IndexTrans sh       -> IndexTrans `cvtE1` cvtE sh
+    IndexAny            -> noAccess IndexAny
+    IndexSlice x ix sh  -> IndexSlice x ix `cvtE1` cvtE sh
+    IndexFull x ix sl   -> cvtE2 (IndexFull x)  (cvtE ix) (cvtE sl)
+    ToIndex sh ix       -> cvtE2 ToIndex (cvtE sh) (cvtE ix)
+    FromIndex sh ix     -> cvtE2 FromIndex (cvtE sh) (cvtE ix)
+    ToSlice x sh ix     -> cvtE2 (ToSlice x) (cvtE sh) (cvtE ix)
+    Cond p t e          -> cvtE3 Cond (cvtE p) (cvtE t) (cvtE e)
+    While p f x         -> cvtE3 While (cvtF p) (cvtF f) (cvtE x)
+    PrimConst c         -> noAccess $ PrimConst c
+    PrimApp f x         -> PrimApp f `cvtE1` cvtE x
+    Index a sh          | Avar idx' <- extract a
+                        , Just REFL <- match idx idx'
+                        -> Left (sh, Var ZeroIdx)
+                        | otherwise
+                        -> Right (Index a sh)
+    LinearIndex a i     -> LinearIndex a `cvtE1` cvtE i
+    Shape a             -> noAccess $ Shape a
+    ShapeSize sh        -> ShapeSize `cvtE1` cvtE sh
+    Intersect s t       -> cvtE2 Intersect (cvtE s) (cvtE t)
+    Union s t           -> cvtE2 Union (cvtE s) (cvtE t)
+    Foreign ff f e      -> Foreign ff f `cvtE1` cvtE e
+
+  where
+    cvtE :: forall env t. PreOpenExp acc env aenv t -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv t) (PreOpenExp acc env aenv t)
+    cvtE = elimArrayAccess idx
+
+    cvtF :: PreOpenFun acc env aenv (a -> b) -> Either (PreOpenExp acc env aenv sh, PreOpenFun acc (env,e) aenv (a -> b)) (PreOpenFun acc env aenv (a -> b))
+    cvtF (Lam (Body b)) =
+      case cvtE b of
+        Left (sh, e) | Just sh' <- strengthenE noTop sh
+                     -> Left (sh', Lam (Body (weakenE swapTop e)))
+                     | otherwise
+                     -> Right (Lam (Body (inline e (access sh))))
+        Right b'     -> Right (Lam (Body b'))
+
+    cvtE1 :: forall s t.
+             (forall env. PreOpenExp acc env aenv s -> PreOpenExp acc env aenv t)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv s) (PreOpenExp acc env aenv s)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv t) (PreOpenExp acc env aenv t)
+    cvtE1 f (Left (sh, e)) = Left (sh, f e)
+    cvtE1 f (Right e)      = Right (f e)
+
+    cvtE2 :: forall s t a. (Elt a, Elt s, Elt t)
+          => (forall env. PreOpenExp acc env aenv s -> PreOpenExp acc env aenv t -> PreOpenExp acc env aenv a)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv s) (PreOpenExp acc env aenv s)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv t) (PreOpenExp acc env aenv t)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv a) (PreOpenExp acc env aenv a)
+    cvtE2 f (Right s)     (Right t)      = Right (f s t)
+    cvtE2 f (Right s)     (Left (e, t))  = Left (e, f (weakenE SuccIdx s) t)
+    cvtE2 f (Left (e, s)) (Left (e', t)) | Just REFL <- match e e'
+                                         = Left (e, Let (Var ZeroIdx) $ f (weakenE oneBelow s) (weakenE oneBelow t))
+                                         | otherwise
+                                         = Right (f (inline s (access e)) (inline t (access e')))
+    cvtE2 f s             t              = cvtE2 (flip f) t s
+
+    cvtE3 :: forall f g h r s t a. (Elt a, SinkExp f, SinkExp g, SinkExp h, RebuildableExp f, acc ~ AccCloE f, RebuildableExp g, acc ~ AccCloE g, RebuildableExp h, acc ~ AccCloE h)
+          => (forall env. f env aenv r -> g env aenv s -> h env aenv t -> PreOpenExp acc env aenv a)
+          -> Either (PreOpenExp acc env aenv sh, f (env,e) aenv r) (f env aenv r)
+          -> Either (PreOpenExp acc env aenv sh, g (env,e) aenv s) (g env aenv s)
+          -> Either (PreOpenExp acc env aenv sh, h (env,e) aenv t) (h env aenv t)
+          -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv a) (PreOpenExp acc env aenv a)
+    cvtE3 f (Right r) (Right s)     (Right t)      = Right (f r s t)
+    cvtE3 f (Right r) (Right s)     (Left (e, t))  = Left (e, f (weakenE SuccIdx r) (weakenE SuccIdx s) t)
+    cvtE3 f r@Right{} s@Left{}      t@Right{}      = cvtE3 (flip . f) r t s
+    cvtE3 f r@Left{}  s@Right{}     t@Right{}      = cvtE3 (flip f) s r t
+    cvtE3 f (Right r) (Left (e, s)) (Left (e', t)) | Just REFL <- match e e'
+                                                   = Left (e, Let (Var ZeroIdx) $ f (weakenE (SuccIdx . SuccIdx) r) (weakenE oneBelow s) (weakenE oneBelow t))
+                                                   | otherwise
+                                                   = Right (f r (inline s (access e)) (inline t (access e')))
+    cvtE3 f r@Left{}  s@Right{}     t@Left{}       = cvtE3 (flip f) s r t
+    cvtE3 f r@Left{}  s@Left{}      t@Right{}      = cvtE3 (flip . f) r t s
+    cvtE3 f (Left (e,r)) (Left (e', s)) (Left (e'', t))
+      | Just REFL <- match e e'
+      , Just REFL <- match e' e''
+      = Left (e, Let (Var ZeroIdx) $ f (weakenE oneBelow r) (weakenE oneBelow s) (weakenE oneBelow t))
+      | otherwise
+      = Right (f (inline r (access e)) (inline s (access e)) (inline t (access e')))
+
+    cvtLet :: forall s t. (Elt s, Elt t)
+           => Either (PreOpenExp acc env aenv sh,     PreOpenExp acc (env,e) aenv s)     (PreOpenExp acc env aenv s)
+           -> Either (PreOpenExp acc (env,s) aenv sh, PreOpenExp acc ((env,s),e) aenv t) (PreOpenExp acc (env,s) aenv t)
+           -> Either (PreOpenExp acc env aenv sh,     PreOpenExp acc (env,e) aenv t)     (PreOpenExp acc env aenv t)
+    cvtLet (Right s)     (Right t)      = Right (Let s t)
+    cvtLet (Right s)     (Left (e, t))  | Just e' <- strengthenE noTop e
+                                        = Left (e', Let (weakenE SuccIdx s) (weakenE swapTop t))
+                                        | otherwise
+                                        = Right (Let s (inline t (access e)))
+    cvtLet (Left (e, s)) (Right t)      = Left (e, Let s (weakenE (swapTop . SuccIdx) t))
+    cvtLet (Left (e, s)) (Left (e', t)) | Just e''  <- strengthenE noTop e'
+                                        , Just REFL <- match e e''
+                                        = Left (e, Let (Var ZeroIdx) $ Let (weakenE oneBelow s) (weakenE (under oneBelow . swapTop) t))
+                                        | otherwise
+                                        = Right (Let (inline s (access e)) (inline t (access e')))
+
+    cvtTup :: (Elt t, IsTuple t)
+           => Tuple (PreOpenExp acc env aenv) (TupleRepr t)
+           -> Either (PreOpenExp acc env aenv sh, PreOpenExp acc (env,e) aenv t) (PreOpenExp acc env aenv t)
+    cvtTup t =
+      case cvtT t of
+        Left (sh, t', True)  -> Left (sh, Let (Var ZeroIdx) (weakenE oneBelow $ Tuple t'))
+        Left (sh, t', False) -> Left (sh, Tuple t')
+        Right t'             -> Right (Tuple t')
+      where
+        cvtT :: Tuple (PreOpenExp acc env aenv) t
+             -> Either (PreOpenExp acc env aenv sh, Tuple (PreOpenExp acc (env,e) aenv) t, Bool) (Tuple (PreOpenExp acc env aenv) t)
+        cvtT NilTup = Right NilTup
+        cvtT (SnocTup t e) =
+          case (cvtT t, cvtE e) of
+            (Right t', Right e')             -> Right (t' `SnocTup` e')
+            (Right t', Left (sh, e'))  -> Left (sh, (unRTup . weakenE SuccIdx . RebuildTup) t' `SnocTup` e', False)
+            (Left (sh, t', dups), Right e')  -> Left (sh, t' `SnocTup` weakenE SuccIdx e', dups)
+            (Left (sh, t', _), Left (sh', e')) | Just REFL <- match sh sh'
+                                            -> Left (sh, t' `SnocTup` e', True)
+                                            | otherwise
+                                            -> Right (unRTup (inline (RebuildTup t') (access sh)) `SnocTup` inline e' (access sh'))
+
+    oneBelow :: forall env a b. (env,a) :> ((env,b),a)
+    oneBelow ZeroIdx = ZeroIdx
+    oneBelow (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
+    swapTop :: forall env a b. ((env,a),b) :> ((env,b),a)
+    swapTop ZeroIdx                = SuccIdx ZeroIdx
+    swapTop (SuccIdx ZeroIdx)      = ZeroIdx
+    swapTop (SuccIdx (SuccIdx ix)) = SuccIdx (SuccIdx ix)
+
+    under :: forall env env' a. env :> env' -> (env,a) :> (env',a)
+    under _ ZeroIdx = ZeroIdx
+    under v (SuccIdx ix) = SuccIdx (v ix)
+
+    noTop :: forall env a. (env,a) :?> env
+    noTop ZeroIdx      = Nothing
+    noTop (SuccIdx ix) = Just ix
+
+    access :: forall env. PreOpenExp acc env aenv sh -> PreOpenExp acc env aenv e
+    access = Index (inject (Avar idx))
+
+    noAccess = Right
