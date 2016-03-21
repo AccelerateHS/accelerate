@@ -221,6 +221,10 @@ instance RebuildableAcc acc => RebuildableExp (PreOpenFun acc) where
   type AccCloE (PreOpenFun acc) = acc
   rebuildPartialE v = rebuildFun rebuildPartial v (pure . IA)
 
+instance RebuildableAcc acc => RebuildableExp (RebuildTup acc) where
+  type AccCloE (RebuildTup acc) = acc
+  rebuildPartialE v = (RebuildTup <$>) . rebuildTup rebuildPartial v (pure . IA) . unRTup
+
 -- NOTE: [Weakening]
 --
 -- Weakening is something we usually take for granted: every time you learn a
@@ -275,6 +279,7 @@ class SinkExp f where
 
 instance RebuildableAcc acc => SinkExp (PreOpenExp acc) where
 instance RebuildableAcc acc => SinkExp (PreOpenFun acc) where
+instance RebuildableAcc acc => SinkExp (RebuildTup acc) where
 
 -- See above for why this is disabled.
 -- {-# RULES
