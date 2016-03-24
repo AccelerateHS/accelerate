@@ -751,25 +751,41 @@ evalPrj (SuccTupIdx idx) (tup, !_) = evalPrj idx tup
 --
 data Stream index aenv arrs where
   Step    :: (index -> Val aenv -> s -> Maybe (a,s)) -> s -> Stream index (aenv,a) arrs -> Stream index aenv arrs
-  Yield   :: Stream index (aenv,arrs) arrs
-  Combine :: Atuple (Stream index aenv) (TupleRepr arrs) -> Stream index aenv arrs
+  Yield   :: arrs -> Stream index (aenv,arrs) arrs
+  Done    :: arrs -> Stream index aenv arrs
+  Combine :: IsAtuple arrs => Atuple (Stream index aenv) (TupleRepr arrs) -> Stream index aenv arrs
 
-evalStream :: forall index aenv arrs. SeqIndex index => Val aenv -> arrs -> Stream index aenv arrs -> arrs
-evalStream aenv arrs = eval initialIndex arrs
+evalStream :: forall index aenv arrs. SeqIndex index => Val aenv -> Stream index aenv arrs -> arrs
+evalStream aenv = eval initialIndex
   where
-    eval :: index -> arrs -> Stream index aenv arrs -> arrs
-    eval i _ s | Just (arrs,s') <- stepStream i aenv s
-               = eval (nextIndex i) arrs s'
-    eval _ a _ = a
+    eval :: index -> Stream index aenv arrs -> arrs
+    eval i s =
+      case stepStream i aenv s of
+        Left a   -> a
+        Right s' -> eval (nextIndex i) s'
 
-    stepStream :: forall aenv. index -> Val aenv -> Stream index aenv arrs -> Maybe (arrs, Stream index aenv arrs)
-    stepStream _ (Push _ a) Yield = Just (a, Yield)
-    stepStream index aenv (Step f s st) =
+    stepStream :: forall aenv arrs. index -> Val aenv -> Stream index aenv arrs -> Either arrs (Stream index aenv arrs)
+    stepStream _     (Push _ a) (Yield _)     = Right (Yield a)
+    stepStream _     _          (Done a)      = Left a
+    stepStream index aenv       (Step f s st) =
       case f index aenv s of
-        Nothing -> Nothing
-        Just (a, s') -> do (arrs, st') <- stepStream index (Push aenv a) st
-                           return (arrs, Step f s' st')
+        Nothing      -> Left (getResult st)
+        Just (a, s') -> Step f s' <$> stepStream index (Push aenv a) st
+    stepStream index aenv (Combine t) = Right (Combine (stepTup t))
+      where
+        stepTup :: Atuple (Stream index aenv) t -> Atuple (Stream index aenv) t
+        stepTup NilAtup        = NilAtup
+        stepTup (SnocAtup t s) = stepTup t `SnocAtup` either Done id (stepStream index aenv s)
 
+    getResult :: forall aenv arrs. Stream index aenv arrs -> arrs
+    getResult (Done a)  = a
+    getResult (Yield a) = a
+    getResult (Step _ _ s) = getResult s
+    getResult (Combine t)  = toAtuple (getTup t)
+      where
+        getTup :: Atuple (Stream index aenv) t -> t
+        getTup NilAtup        = ()
+        getTup (SnocAtup t s) = (getTup t, getResult s)
 
 class SeqIndex index where
   initialIndex :: index
@@ -799,7 +815,7 @@ evalDelayedSeq :: SeqIndex index
                => DelayedSeq index arrs
                -> arrs
 evalDelayedSeq (StreamSeq aenv s) | aenv' <- evalExtend aenv Empty
-                                      = evalSeq s aenv'
+                                  = evalSeq s aenv'
 
 evalSeq :: forall index aenv arrs. SeqIndex index
         => PreOpenSeq index DelayedOpenAcc aenv  arrs
@@ -807,13 +823,13 @@ evalSeq :: forall index aenv arrs. SeqIndex index
 evalSeq s aenv = evalSeq' s
   where
     evalSeq' :: PreOpenSeq index DelayedOpenAcc aenv arrs -> arrs
-    evalSeq' = (uncurry . flip) (evalStream aenv) . initSeq Just
+    evalSeq' = evalStream aenv . initSeq Just
 
     initSeq :: forall arrs aenv'. aenv' :?> aenv
             -> PreOpenSeq index DelayedOpenAcc aenv' arrs
-            -> (Stream index aenv' arrs, arrs)
-    initSeq v (Producer (Pull src) s) = Step (const (const uncons)) (unsrc src) $. initSeq (drop v) s
-    initSeq v (Producer (ProduceAccum l f a) s) = Step f' (evalOpenAcc a' aenv) $. initSeq (drop v) s
+            -> Stream index aenv' arrs
+    initSeq v (Producer (Pull src) s) = Step (const (const uncons)) (unsrc src) (initSeq (drop v) s)
+    initSeq v (Producer (ProduceAccum l f a) s) = Step f' (evalOpenAcc a' aenv) (initSeq (drop v) s)
       where
         a'        = fromJust (strengthen v a)
         l'        = evalPreExp evalOpenAcc (fromJust (strengthen v =<< l)) aenv
@@ -824,18 +840,18 @@ evalSeq s aenv = evalSeq' s
                     = Nothing
     initSeq v (Consumer c) = initC c
       where
-        initC :: Consumer index DelayedOpenAcc aenv' a -> (Stream index aenv' a, a)
-        initC (Stuple t) = let t' = initCT t in (Combine (fst t'), toAtuple (snd t'))
-        initC (Conclude a d) = (Step f' () Yield, (evalOpenAcc d' aenv))
+        initC :: Consumer index DelayedOpenAcc aenv' a -> Stream index aenv' a
+        initC (Stuple t) = Combine (initCT t)
+        initC (Conclude a d) = Step f' () (Yield (evalOpenAcc d' aenv))
           where
             d'           = fromJust (strengthen v d)
             f' _ aenv () = Just (evalOpenAcc a aenv,())
 
-        initCT :: Atuple (PreOpenSeq index DelayedOpenAcc aenv') t -> (Atuple (Stream index aenv') t, t)
-        initCT NilAtup = (NilAtup, ())
+        initCT :: Atuple (PreOpenSeq index DelayedOpenAcc aenv') t -> Atuple (Stream index aenv') t
+        initCT NilAtup = NilAtup
         initCT (t `SnocAtup` c) = let t' = initCT t
                                       c' = initSeq v c
-                                  in (fst t' `SnocAtup` fst c', (snd t', snd c'))
+                                  in (t' `SnocAtup` c')
 
     unsrc :: Source a -> [a]
     unsrc (List as) = as
@@ -846,27 +862,10 @@ evalSeq s aenv = evalSeq' s
     uncons (x : xs) = Just (x, xs)
 
     drop :: aenv' :?> aenv -> (aenv',a) :?> aenv
-    drop _ ZeroIdx = Nothing
+    drop _ ZeroIdx      = Nothing
     drop v (SuccIdx ix) = v ix
-
-    ($.) :: (a -> b) -> (a,s) -> (b,s)
-    f $. a = (f (fst a), snd a)
 
 evalExtend :: Extend DelayedOpenAcc aenv aenv' -> Val aenv -> Val aenv'
 evalExtend BaseEnv aenv = aenv
 evalExtend (PushEnv ext1 ext2) aenv | aenv' <- evalExtend ext1 aenv
                                     = Push aenv' (evalOpenAcc ext2 aenv')
-
-delayArray :: Array sh e -> Delayed (Array sh e)
-delayArray arr@(Array _ adata) = Delayed (shape arr) (arr!) (toElt . unsafeIndexArrayData adata)
-
-concatOp :: forall e. Elt e => [Vector e] -> Vector e
-concatOp = concatVectors
-
-fetchAllOp :: (Shape sh, Elt e) => sh -> Vector e -> [Array sh e]
-fetchAllOp seg elts
-  | (n,0) <- size (shape elts) `divMod` size seg
-  = [fetch seg (i * size seg) | i <- [0..n-1]]
-  | otherwise = $internalError "fetchAllOp" "Vector is the wrong size"
-  where
-    fetch sh offset = newArray sh (\ ix -> elts ! (Z :. ((toIndex sh ix) + offset)))
