@@ -448,17 +448,17 @@ data Use a where
 -- Combine the uses of an array variable.
 --
 (<+>) :: Use a -> Use a -> Use a
-(<+>) = zipWithU (+)
+(<+>) = zipWithU (+) (+)
 
-zipWithU :: (Int -> Int -> Int) -> Use a -> Use a -> Use a
-zipWithU f (UseArray s1 c1) (UseArray s2 c2) = UseArray (s1 `f` s2) (c1 `f` c2)
-zipWithU f (UseTuple t1)    (UseTuple t2)    = UseTuple (t1 `tup` t2)
+zipWithU :: (Int -> Int -> Int) -> (Int -> Int -> Int)-> Use a -> Use a -> Use a
+zipWithU f g (UseArray s1 c1) (UseArray s2 c2) = UseArray (s1 `f` s2) (c1 `g` c2)
+zipWithU f g (UseTuple t1)    (UseTuple t2)    = UseTuple (t1 `tup` t2)
   where
     tup :: Atuple Use t -> Atuple Use t -> Atuple Use t
     tup NilAtup          NilAtup          = NilAtup
-    tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` zipWithU f a1 a2
+    tup (SnocAtup t1 a1) (SnocAtup t2 a2) = tup t1 t2 `SnocAtup` zipWithU f g a1 a2
     tup _                _                = error "Chewie, we're home."
-zipWithU _ _             _           = error "Aaarrrrhhggg!"
+zipWithU _ _ _                _                = error "Aaarrrrhhggg!"
 
 -- Update use at a specific index.
 --
@@ -508,11 +508,6 @@ allUse p (UseTuple t)   = aT t
     aT NilAtup = True
     aT (SnocAtup t u) = aT t && allUse p u
 
--- Specify a certain component of a variable has been used.
---
-useComponent :: Arrays a => TupleIdx (TupleRepr t) a -> Use t -> Use t
-useComponent ix u = updateUse u ix oneUse
-
 usesOfPreAcc
     :: forall acc aenv s t. (Kit acc, Arrays s)
     => UsesOfAcc  acc
@@ -530,23 +525,16 @@ usesOfPreAcc countAcc idx = count
     count pacc = case pacc of
       Avar this                 -> countIdx this
       --
-      Alet bnd body             | Aprj ix a <- extract bnd
-                                , Aprj ix' a' <- extract a
-                                , Avar v    <- extract a'
-                                , Just REFL <- match v idx
-                                , u <-  countAcc ZeroIdx body
-                                -> updateUse (countAcc (SuccIdx idx) body) ix' (updateUse zeroUse ix u)
-                                | Aprj ix a <- extract bnd
-                                , Avar v    <- extract a
-                                , Just REFL <- match v idx
-                                -> updateUse (countAcc (SuccIdx idx) body) ix (countAcc ZeroIdx body)
+      Alet bnd body             | Just u <- prjChain idx bnd (countAcc ZeroIdx body)
+                                -> countAcc (SuccIdx idx) body <+> u
                                 | otherwise
                                 -> countA bnd <+> countAcc (SuccIdx idx) body
 
       Atuple tup                -> countAT tup
-      Aprj ix a                 | Avar v <- extract a
-                                , Just REFL <- match v idx
-                                -> useComponent ix zeroUse
+      Aprj ix a                 | Just u <- prjChain idx (inject $ Aprj ix a) zeroUse
+                                -> u
+                                | Atuple t <- extract a
+                                -> countA (prj t ix)
                                 | otherwise
                                 -> countA a
       Apply f a                 -> countAF f idx <+> countA a
@@ -602,6 +590,19 @@ usesOfPreAcc countAcc idx = count
            = usesOfExpA countAcc idx . reduceAccessExp idx
            | otherwise
            = usesOfExpA countAcc idx
+
+    prj :: Atuple k t' -> TupleIdx t' a -> k a
+    prj (SnocAtup _ a) ZeroTupIdx      = a
+    prj (SnocAtup t _) (SuccTupIdx ix) = prj t ix
+
+prjChain :: Kit acc => Idx aenv s -> acc aenv t' -> Use t' -> Maybe (Use s)
+prjChain idx a u =
+  case extract a of
+    Avar x    | Just REFL <- match idx x
+              -> Just u
+    Aprj ix a -> prjChain idx a (updateUse zeroUse ix u)
+    _         -> Nothing
+
 
 usesOfPreSeq :: forall acc index aenv s t. (Kit acc, Arrays s)
              => UsesOfAcc acc
@@ -675,7 +676,10 @@ usesOfExpA countAcc idx exp =
     While p f x               -> countF p  <+> countF f <+> countE x
     PrimConst _               -> zeroUse
     PrimApp _ x               -> countE x
-    Index a sh                -> countA a <+> countE sh
+    Index a sh                | Just u <- prjChain idx a oneUse
+                              -> zipWithU const (+) u (countE sh)
+                              | otherwise
+                              -> countA a <+> countE sh
     LinearIndex a i           -> countA a <+> countE i
     ShapeSize sh              -> countE sh
     Intersect sh sz           -> countE sh <+> countE sz
