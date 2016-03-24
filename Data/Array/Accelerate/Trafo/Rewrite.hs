@@ -71,6 +71,7 @@ convertSegments = cvtA
       Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
       Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
       Use a                     -> Use a
+      Subarray ix sh arr        -> Subarray (cvtE ix) (cvtE sh) arr
       Unit e                    -> Unit (cvtE e)
       Reshape e a               -> Reshape (cvtE e) (cvtA a)
       Generate e f              -> Generate (cvtE e) (cvtF f)
@@ -138,6 +139,7 @@ convertSegmentsSeq seq =
       case c of
         FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) (cvtA x)
         Iterate l f a        -> Iterate (cvtE <$> l) (cvtAfun f) (cvtA a)
+        Conclude a d         -> Conclude (cvtA a) (cvtA d)
         Stuple t             -> Stuple (cvtCT t)
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
@@ -146,9 +148,6 @@ convertSegmentsSeq seq =
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
     cvtE = id
-
-    cvtF :: Fun aenv t -> Fun aenv t
-    cvtF = id
 
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t
     cvtA = convertSegments
