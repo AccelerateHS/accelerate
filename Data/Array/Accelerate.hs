@@ -108,11 +108,15 @@ module Data.Array.Accelerate (
   P.reverse, P.transpose,
 
   -- ** Element-wise operations
+  -- *** Indexing
+  P.indexed,
+
   -- *** Mapping
-  L.map,
+  L.map, P.imap,
 
   -- *** Zipping
   L.zipWith, P.zipWith3, P.zipWith4, P.zipWith5, P.zipWith6, P.zipWith7, P.zipWith8, P.zipWith9,
+  P.izipWith, P.izipWith3, P.izipWith4, P.izipWith5, P.izipWith6, P.izipWith7, P.izipWith8, P.izipWith9,
   P.zip, P.zip3, P.zip4, P.zip5, P.zip6, P.zip7, P.zip8, P.zip9,
 
   -- *** Unzipping

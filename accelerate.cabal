@@ -146,6 +146,11 @@ Flag debug
     .
     * -ddump-simpl-iterations: dump the program after each iteration of the simplifier
     .
+    * -ddump-dot: write the program DAG to file in Graphviz dot format
+    .
+    * -ddump-simpl-dot: write the program DAG to file in Graphviz dot format,
+    .                   but elide the scalar expressions
+    .
     * -dverbose: other, uncategorised messages
     .
 
@@ -198,10 +203,10 @@ Library
                         Data.Array.Accelerate.Analysis.Stencil
                         Data.Array.Accelerate.Analysis.Type
                         Data.Array.Accelerate.Array.Data
-                        Data.Array.Accelerate.Array.Lifted
-                        Data.Array.Accelerate.Array.Memory
-                        Data.Array.Accelerate.Array.Memory.Cache
-                        Data.Array.Accelerate.Array.Memory.Table
+                        Data.Array.Accelerate.Array.Remote
+                        Data.Array.Accelerate.Array.Remote.Class
+                        Data.Array.Accelerate.Array.Remote.LRU
+                        Data.Array.Accelerate.Array.Remote.Table
                         Data.Array.Accelerate.Array.Representation
                         Data.Array.Accelerate.Array.Sugar
                         Data.Array.Accelerate.Array.Unique
@@ -216,7 +221,8 @@ Library
                         Data.Array.Accelerate.Trafo
                         Data.Array.Accelerate.Type
 
-  Other-modules:        Data.Array.Accelerate.Array.Memory.Nursery
+  Other-modules:        Data.Array.Accelerate.Array.Lifted
+                        Data.Array.Accelerate.Array.Remote.Nursery
                         Data.Array.Accelerate.Debug.Flags
                         Data.Array.Accelerate.Debug.Stats
                         Data.Array.Accelerate.Debug.Trace

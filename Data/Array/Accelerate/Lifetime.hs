@@ -14,8 +14,11 @@
 
 module Data.Array.Accelerate.Lifetime (
 
-  Lifetime, newLifetime, withLifetime, addFinalizer, finalize, mkWeak,
-  mkWeakPtr, unsafeGetValue
+  Lifetime,
+  newLifetime, withLifetime, touchLifetime,
+  addFinalizer, finalize, mkWeak, mkWeakPtr,
+
+  unsafeGetValue,
 
 ) where
 
@@ -73,6 +76,12 @@ withLifetime (Lifetime ref _ a) f = do
   r <- f a
   touchIORef ref
   return r
+
+-- | Ensure that the lifetime is alive at the given place in a sequence of IO
+-- actions. Does not force the payload.
+--
+touchLifetime :: Lifetime a -> IO ()
+touchLifetime (Lifetime ref _ _) = touchIORef ref
 
 -- | Attaches a finalizer to a 'Lifetime'. Like in "System.Mem.Weak", there is
 -- no guarantee that the finalizers will eventually run. If they do run,

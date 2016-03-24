@@ -115,7 +115,7 @@ Accelerate users have also built some substantial applications of their own.
 Please feel free to add your own examples!
 
   * Henning Thielemann, [patch-image](http://hackage.haskell.org/package/patch-image): Combine a collage of overlapping images
-  * apunktbau, [bildpunkt](https://github.com/apunktbau/bildpunkt): A ray-marching distance field renderer
+  * apunktbau, [bildpunkt](https://github.com/abau/bildpunkt): A ray-marching distance field renderer
   * klarh, [hasdy](https://github.com/klarh/hasdy): Molecular dynamics in Haskell using Accelerate
   * Alexandros Gremm used Accelerate as part of the [2014 CSCS summer school](http://user.cscs.ch/blog/2014/cscs_usi_summer_school_2014_30_june_10_july_2014_in_serpiano_tessin/index.html) ([code](https://github.com/agremm/cscs))
 
@@ -173,7 +173,7 @@ Here is a list of features that are currently missing:
   [MCGN15]:                 http://www.cse.unsw.edu.au/~chak/papers/MCGN15.html
   [MCGN15-slides]:          https://speakerdeck.com/tmcdonell/type-safe-runtime-code-generation-accelerate-to-llvm
   [MCGN15-video]:           https://www.youtube.com/watch?v=snXhXA5noVc
-  [HIW'09]:                 http://haskell.org/haskellwiki/HaskellImplementorsWorkshop
+  [HIW'09]:                 https://wiki.haskell.org/HaskellImplementorsWorkshop
   [Mar13]:                  http://chimera.labs.oreilly.com/books/1230000000929
   [Embedded]:               https://speakerdeck.com/mchakravarty/embedded-languages-for-high-performance-computing-in-haskell
   [Hackage]:                http://hackage.haskell.org/package/accelerate
@@ -194,14 +194,14 @@ Here is a list of features that are currently missing:
   [Google-Group]:           http://groups.google.com/group/accelerate-haskell
   [HOAS-conv]:              http://www.cse.unsw.edu.au/~chak/haskell/term-conv/
   [repa]:                   http://hackage.haskell.org/package/repa
-  [wiki-cc]:                http://en.wikipedia.org/wiki/CUDA#Supported_GPUs
+  [wiki-cc]:                https://en.wikipedia.org/wiki/CUDA#Supported_GPUs
   [YLJ13-video]:            http://youtu.be/ARqE4yT2Z0o
   [YLJ13-slides]:           https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate
   [YLJ13-workshop]:         https://speakerdeck.com/tmcdonell/gpgpu-programming-in-haskell-with-accelerate-workshop
-  [wiki-canny]:             http://en.wikipedia.org/wiki/Canny_edge_detector
-  [wiki-mandelbrot]:        http://en.wikipedia.org/wiki/Mandelbrot_set
-  [wiki-nbody]:             http://en.wikipedia.org/wiki/N-body
-  [wiki-raytracing]:        http://en.wikipedia.org/wiki/Ray_tracing
-  [wiki-pagerank]:          http://en.wikipedia.org/wiki/Pagerank
+  [wiki-canny]:             https://en.wikipedia.org/wiki/Canny_edge_detector
+  [wiki-mandelbrot]:        https://en.wikipedia.org/wiki/Mandelbrot_set
+  [wiki-nbody]:             https://en.wikipedia.org/wiki/N-body
+  [wiki-raytracing]:        https://en.wikipedia.org/wiki/Ray_tracing
+  [wiki-pagerank]:          https://en.wikipedia.org/wiki/Pagerank
   [Trevor-thesis]:          http://www.cse.unsw.edu.au/~tmcdonell/papers/TrevorMcDonell_PhD_submission.pdf
 
