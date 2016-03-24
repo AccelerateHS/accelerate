@@ -919,6 +919,9 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- |Yield the union of two shapes
   union :: sh -> sh -> sh
 
+  -- |Offset a shape by another shape
+  offset :: sh -> sh -> sh
+
   -- |Transpose a shape
   transpose :: sh -> sh
 
@@ -972,6 +975,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   ignore                = toElt Repr.ignore
   intersect sh1 sh2     = toElt (Repr.intersect (fromElt sh1) (fromElt sh2))
   union sh1 sh2         = toElt (Repr.union (fromElt sh1) (fromElt sh2))
+  offset sh1 sh2        = toElt (Repr.offset (fromElt sh1) (fromElt sh2))
   transpose             = toElt . Repr.transpose . fromElt
   fromIndex sh ix       = toElt (Repr.fromIndex (fromElt sh) ix)
   toIndex sh ix         = Repr.toIndex (fromElt sh) (fromElt ix)

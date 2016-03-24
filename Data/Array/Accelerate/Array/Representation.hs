@@ -52,6 +52,7 @@ class (Eq sh, Slice sh) => Shape sh where
   -- internal methods
   intersect :: sh -> sh -> sh  -- yield the intersection of two shapes
   union     :: sh -> sh -> sh  -- yield the union of two shapes
+  offset    :: sh -> sh -> sh  -- yield the offset of two shapes
   transpose :: sh -> sh        -- transpose a shape
   ignore    :: sh              -- identifies ignored elements in 'permute'
   toIndex   :: sh -> sh -> Int -- yield the index position in a linear, row-major representation of
@@ -88,6 +89,7 @@ instance Shape () where
 
   () `intersect` () = ()
   () `union` ()     = ()
+  () `offset` ()    = ()
   ignore            = ()
   toIndex () ()     = 0
   fromIndex () _    = ()
@@ -109,6 +111,7 @@ instance Shape sh => Shape (sh, Int) where
 
   (sh1, sz1) `intersect` (sh2, sz2) = (sh1 `intersect` sh2, sz1 `min` sz2)
   (sh1, sz1) `union` (sh2, sz2)     = (sh1 `union` sh2, sz1 `max` sz2)
+  (sh1, sz1) `offset` (sh2, sz2)    = (sh1 `offset` sh2, sz1 + sz2)
   ignore                            = (ignore, -1)
   toIndex (sh, sz) (ix, i)          = $indexCheck "toIndex" i sz
                                     $ toIndex sh ix * sz + i

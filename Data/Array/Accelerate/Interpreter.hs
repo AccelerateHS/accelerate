@@ -179,10 +179,10 @@ evalOpenAcc (AST.Manifest pacc) aenv =
           | otherwise   = x
 
     Use arr                     -> toArr arr
+    Subarray ix sh arr          -> subarrayOp (evalE ix) (evalE sh) arr
     Unit e                      -> unitOp (evalE e)
     Collect s cs                -> fromMaybe (evalSeq s aenv)
                                              (evalSeq <$> cs <*> pure aenv)
-    -- Collect s cs                -> evalSeq s aenv
 
 
     -- Producers
@@ -563,6 +563,15 @@ backpermuteOp
 backpermuteOp sh' p (Delayed _ arr _)
   = newArray sh' (\ix -> arr $ p ix)
 
+subarrayOp
+    :: (Shape sh, Elt e)
+    => sh
+    -> sh
+    -> Array sh e
+    -> Array sh e
+subarrayOp ix sh arr
+  = newArray sh (\ix' -> arr ! (ix `offset` ix'))
+
 
 stencilOp
     :: (Elt a, Elt b, Stencil sh a stencil)
@@ -607,17 +616,6 @@ stencil2Op stencil boundary1 arr1 boundary2 arr2
       case bound sh2 ix boundary2 of
         Left v    -> toElt v
         Right ix' -> arr2 ! ix'
-
-toSeqOp :: forall slix sl dim co e proxy. (Elt slix, Shape sl, Shape dim, Elt e)
-        => SliceIndex (EltRepr slix)
-                      (EltRepr sl)
-                      co
-                      (EltRepr dim)
-        -> proxy slix
-        -> Array dim e
-        -> [Array sl e]
-toSeqOp sliceIndex _ arr = map (sliceOp sliceIndex arr :: slix -> Array sl e)
-                               (enumSlices sliceIndex (shape arr))
 
 -- Scalar expression evaluation
 -- ----------------------------
@@ -706,6 +704,7 @@ evalPreOpenExp evalAcc pexp env aenv =
 
     ToIndex sh ix               -> toIndex (evalE sh) (evalE ix)
     FromIndex sh ix             -> fromIndex (evalE sh) (evalE ix)
+    ToSlice _ sh ix             -> toSlice (evalE sh) (evalE ix)
     Cond c t e
       | evalE c                 -> evalE t
       | otherwise               -> evalE e
