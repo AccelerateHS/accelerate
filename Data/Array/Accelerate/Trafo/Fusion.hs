@@ -225,11 +225,6 @@ manifest fuseAcc (OpenAcc pacc) =
         , Manifest x              <- bnd
         = x
 
-        | Manifest (Aprj tupix (Manifest (Avar ix))) <- bnd
-        , Manifest (Alet bnd' body')           <- body
-        , Just REFL                            <- matchAcc (weaken SuccIdx bnd) bnd'
-        = Alet (Manifest $ Aprj tupix (Manifest (Avar ix))) (inlineA body' (Avar ZeroIdx))
-
         | otherwise
         = Alet bnd body
 
