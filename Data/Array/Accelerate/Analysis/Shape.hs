@@ -255,19 +255,19 @@ intermediateShape shT = tell (shT, mempty)
 
 type EvalAcc acc = forall aenv a. Arrays a => acc aenv a -> ValPartial aenv -> Shapes (ArraysPartial a)
 
-seqShapes :: PreOpenSeq (Scalar Int) DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
+seqShapes :: PreOpenSeq Int DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
 seqShapes s aenv = fst . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv)
 
-seqPD :: PreOpenSeq (Scalar Int) DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe Int
+seqPD :: PreOpenSeq Int DelayedOpenAcc aenv arrs -> ValPartial aenv -> Maybe Int
 seqPD s aenv = runMaxNat . snd . snd <$> runWriterT (evalShapeSeq evalDelayedOpenAcc s aenv)
 
 
-seqShapesOpenAcc :: PreOpenSeq (Scalar Int) OpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
+seqShapesOpenAcc :: PreOpenSeq Int OpenAcc aenv arrs -> ValPartial aenv -> Maybe ShapeTree
 seqShapesOpenAcc s aenv = fst . snd <$> runWriterT (evalShapeSeq evalOpenAcc s aenv)
 
 evalShapeSeq :: forall acc aenv arrs.
                 EvalAcc acc
-             -> PreOpenSeq (Scalar Int) acc aenv arrs
+             -> PreOpenSeq Int acc aenv arrs
              -> ValPartial aenv -> Shapes ()
 evalShapeSeq eval s aenv =
   case s of
@@ -278,7 +278,7 @@ evalShapeSeq eval s aenv =
     Consumer c -> evalC c
     Reify  _   -> return ()
   where
-    evalP :: Producer (Scalar Int) acc aenv a -> Shapes (ArraysPartial a)
+    evalP :: Producer Int acc aenv a -> Shapes (ArraysPartial a)
     evalP p =
       case p of
         Pull src -> return $ evalSrc src
@@ -304,7 +304,7 @@ evalShapeSeq eval s aenv =
             a'
           return b
 
-    evalC :: Consumer (Scalar Int) acc aenv a -> Shapes ()
+    evalC :: Consumer Int acc aenv a -> Shapes ()
     evalC c =
       case c of
         FoldSeqFlatten f acc x
@@ -324,7 +324,7 @@ evalShapeSeq eval s aenv =
             (PartialArray (Just Z) Nothing )
             a'
         Stuple tup ->
-          let f :: Atuple (PreOpenSeq (Scalar Int) acc aenv) t -> Shapes ()
+          let f :: Atuple (PreOpenSeq Int acc aenv) t -> Shapes ()
               f NilAtup = return ()
               f (SnocAtup t c) = f t >> evalShapeSeq eval c aenv
           in f tup

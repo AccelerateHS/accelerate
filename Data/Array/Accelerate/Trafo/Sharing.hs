@@ -326,12 +326,12 @@ convertSeq
     -> Bool             -- ^ recover sharing of sequence computations ?
     -> Bool             -- ^ always float array computations out of expressions?
     -> Seq s            -- ^ computation to be converted
-    -> StreamSeq (Scalar Int) AST.OpenAcc s
+    -> StreamSeq Int AST.OpenAcc s
 convertSeq shareAcc shareExp shareSeq floatAcc seq
   = let config = Config shareAcc shareExp shareSeq floatAcc
         (sharingSeq, senv, aenv) = recoverSharingSeq config seq
 
-        go :: [StableSharingAcc] -> Extend AST.OpenAcc () aenv -> Layout aenv aenv -> StreamSeq (Scalar Int) AST.OpenAcc s
+        go :: [StableSharingAcc] -> Extend AST.OpenAcc () aenv -> Layout aenv aenv -> StreamSeq Int AST.OpenAcc s
         go [] binds lyt = StreamSeq binds (convertSharingSeq config lyt aenv senv sharingSeq)
         go (StableSharingAcc _ acc : as) binds lyt
           = go as (binds `PushEnv` convertSharingAcc config lyt as (ScopedAcc [] acc)) (incLayout lyt `PushLayout` ZeroIdx)

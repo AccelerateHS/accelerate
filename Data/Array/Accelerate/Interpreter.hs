@@ -793,23 +793,22 @@ class SeqIndex index where
   nextIndex    :: index -> index
   boundIndex   :: index -> Int -> index
 
-instance SeqIndex (Scalar Int) where
-  initialIndex = fromList Z [0]
-  startIndex = head . toList
-  nextIndex = fromList Z . map (+1) . toList
+instance SeqIndex Int where
+  initialIndex = 0
+  startIndex = id
+  nextIndex = (+1)
   boundIndex i _ = i
 
 mAXIMUM_CHUNK_SIZE :: Int
 mAXIMUM_CHUNK_SIZE = 1024
 
-instance SeqIndex (Scalar (Int, Int)) where
-  initialIndex = fromList Z [(0,1)]
-  startIndex = fst . head . toList
-  nextIndex is = let [(i,n)] = toList is
-                 in fromList Z [(i+n, if n < mAXIMUM_CHUNK_SIZE then n*2 else n)]
-  boundIndex (toList -> [(i,n)]) max = if i + n < max
-                                       then fromList Z [(i,n)]
-                                       else fromList Z [(i,max - i)]
+instance SeqIndex (Int, Int) where
+  initialIndex = (0,1)
+  startIndex = fst
+  nextIndex (i,n) = (i+n, if n < mAXIMUM_CHUNK_SIZE then n*2 else n)
+  boundIndex (i,n) max = if i + n < max
+                         then (i,n)
+                         else (i,max - i)
 
 evalDelayedSeq :: SeqIndex index
                => DelayedSeq index arrs
@@ -834,7 +833,7 @@ evalSeq s aenv = evalSeq' s
         a'        = fromJust (strengthen v a)
         l'        = evalPreExp evalOpenAcc (fromJust (strengthen v =<< l)) aenv
         f' i aenv a | startIndex i < l'
-                    = let (arr, a') = evalOpenAfun f aenv (boundIndex i l') a
+                    = let (arr, a') = evalOpenAfun f aenv (fromList Z [boundIndex i l']) a
                       in Just (arr, a')
                     | otherwise
                     = Nothing

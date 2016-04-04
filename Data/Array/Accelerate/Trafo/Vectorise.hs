@@ -2906,12 +2906,12 @@ vectoriseSeqOpenAfun strength ctx afun =
 
 -- Sequence AST reduction
 --
-reduceStreamSeq :: Arrays index
+reduceStreamSeq :: Elt index
                 => StreamSeq index OpenAcc a
                 -> StreamSeq index OpenAcc a
 reduceStreamSeq (StreamSeq binds seq) = StreamSeq binds (reduceOpenSeq seq)
 
-reduceOpenSeq :: forall index aenv a. Arrays index
+reduceOpenSeq :: forall index aenv a. Elt index
               => PreOpenSeq index OpenAcc aenv a
               -> PreOpenSeq index OpenAcc aenv a
 reduceOpenSeq seq =
@@ -2970,8 +2970,8 @@ reduceOpenSeq seq =
     nil = OpenAcc (Atuple NilAtup)
 
     streamify :: Arrays t
-              => PreOpenAfun OpenAcc aenv (index -> t)
-              -> PreOpenAfun OpenAcc aenv (index -> () -> (t, ()))
+              => PreOpenAfun OpenAcc aenv (Scalar index -> t)
+              -> PreOpenAfun OpenAcc aenv (Scalar index -> () -> (t, ()))
     streamify f = Alam . Alam . Abody $ atup (weakenA2 f `apply` avar1) nil
 
     subarrays :: forall sh aenv e. (Shape sh, sh :<= DIM3, Elt e)

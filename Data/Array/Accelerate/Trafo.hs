@@ -158,10 +158,10 @@ convertFun
 -- | Convert a closed sequence computation, incorporating sharing observation and
 --   optimisation.
 --
-convertSeq :: Typeable s => Seq s -> DelayedSeq (Scalar Int) s
+convertSeq :: Typeable s => Seq s -> DelayedSeq Int s
 convertSeq = convertSeqWith phases
 
-convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq (Scalar Int) s
+convertSeqWith :: Typeable s => Phase -> Seq s -> DelayedSeq Int s
 convertSeqWith Phase{..} s
   = Fusion.convertStreamSeq enableAccFusion
   $ Vectorise.reduceStreamSeq

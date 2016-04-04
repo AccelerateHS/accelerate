@@ -93,7 +93,7 @@ convertAfun fuseAcc = withSimplStats . convertOpenAfun fuseAcc
 
 -- | Apply the fusion transformation to the array computations embedded
 --   in a sequence computation.
-convertStreamSeq :: Arrays index => Bool -> StreamSeq index OpenAcc a -> DelayedSeq index a
+convertStreamSeq :: Elt index => Bool -> StreamSeq index OpenAcc a -> DelayedSeq index a
 convertStreamSeq fuseAcc (StreamSeq binds (fuseSeq -> seq))
   = let s = embedSeq (embedOpenAcc fuseAcc) seq
     in withSimplStats (StreamSeq (fuseBinds binds) (convertOpenSeq fuseAcc s))
@@ -820,7 +820,7 @@ data DependentSeq index aenv arrs where
              -> DependentSeq index (aenv,a) arrs
              -> DependentSeq index aenv     arrs
 
-  Dconsumers :: (Arrays index, Arrays arrs)
+  Dconsumers :: (Elt index, Arrays arrs)
              => Dconsumer index aenv arrs
              -> DependentSeq index aenv arrs
 
@@ -833,13 +833,13 @@ data Dproducer index aenv a where
   Dpull :: Source a
         -> Dproducer index aenv a
 
-  DproduceAccum :: (Arrays a, Arrays s, Arrays index)
+  DproduceAccum :: (Arrays a, Arrays s, Elt index)
                 => Stream index s aenv a
                 -> Dproducer index aenv a
 
 data Stream index s aenv a where
   Stream :: Maybe (Exp aenv Int)
-         -> OpenAfun aenv (index -> s -> (a,s))
+         -> OpenAfun aenv (Scalar index -> s -> (a,s))
          -> OpenAcc aenv s
          -> Stream index s aenv a
 
@@ -862,7 +862,7 @@ data Dconsumer index aenv arrs where
            -> OpenAcc aenv'' a
            -> Dconsumer index aenv a
 
-fuseSeq :: Arrays index
+fuseSeq :: Elt index
         => PreOpenSeq index OpenAcc aenv arrs
         -> PreOpenSeq index OpenAcc aenv arrs
 fuseSeq = deannotate . fuseDependent . makeDependent
@@ -876,7 +876,7 @@ deannotate (Dproducer wenv (DproduceAccum (Stream l f s)) _ ds)
 deannotate (Dconsumers cons)
   = Consumer $ dcons cons
   where
-    dcons :: forall aenv index a. Arrays index => Dconsumer index aenv a -> Consumer index OpenAcc aenv a
+    dcons :: forall aenv index a. Elt index => Dconsumer index aenv a -> Consumer index OpenAcc aenv a
     dcons (Ddone env a envd d) = Conclude (weaken (abstract env) a) (weaken (abstract envd) d)
     dcons (Dtuple t) = Stuple (dtup t)
       where
@@ -886,12 +886,12 @@ deannotate (Dconsumers cons)
         dtup (t `SnocAtup` c) = dtup t `SnocAtup` deannotate c
 deannotate (Dreify wenv a) = weaken (abstract wenv) $ Reify a
 
-makeDependent :: Arrays index
+makeDependent :: Elt index
               => PreOpenSeq index OpenAcc aenv arrs
               -> DependentSeq index aenv arrs
 makeDependent = fst . makeD
   where
-    makeD :: Arrays index
+    makeD :: Elt index
           => PreOpenSeq index OpenAcc aenv arrs
           -> (DependentSeq index aenv arrs, Count aenv)
     makeD (Producer p s)
@@ -910,7 +910,7 @@ makeDependent = fst . makeD
     makeP (ProduceAccum l f a) = DproduceAccum (Stream l f a)
     makeP _ = $internalError "makeDependent" "AST is at incorrect stage for fusion"
 
-    makeC :: Arrays index
+    makeC :: Elt index
           => Consumer index OpenAcc aenv arrs
           -> (DependentSeq index aenv arrs, Count aenv)
     makeC (Iterate l f a)
@@ -924,7 +924,7 @@ makeDependent = fst . makeD
       | (t', counts) <- makeT t
       = (Dconsumers (Dtuple t'), counts)
       where
-        makeT :: Arrays index
+        makeT :: Elt index
               => Atuple (PreOpenSeq index OpenAcc aenv) arrs
               -> (Atuple (DependentSeq index aenv) arrs, Count aenv)
         makeT NilAtup = (NilAtup, CountBase)
@@ -963,7 +963,7 @@ fuseDependent (Dconsumers c)
 fuseDependent (Dreify env a)
   = Dreify env a
 
-pushDown :: forall index aenv out out' a s arrs. (Arrays a, Arrays s, Arrays index)
+pushDown :: forall index aenv out out' a s arrs. (Arrays a, Arrays s, Elt index)
          => out' ::> out
          -> Stream index s out' a
          -> In a aenv out
@@ -1059,17 +1059,17 @@ bindSInP inenv src (DproduceAccum target)
 bindSInP _ _ (Dpull target)
   = Dpull target
 
-fuseStreams :: (Arrays index, Arrays s, Arrays s', Arrays a, Arrays arrs)
+fuseStreams :: (Elt index, Arrays s, Arrays s', Arrays a, Arrays arrs)
             => Stream index s      aenv     a
             -> Stream index s'     (aenv,a) arrs
             -> Stream index (s,s') aenv     arrs
 fuseStreams (Stream l fun init) (Stream l' fun' init')
   = Stream (mergeLimits l (discardTop <$> l')) (pair fun fun') (tuple init (discardTop init'))
   where
-    pair  :: (Arrays index, Arrays a, Arrays b, Arrays b', Arrays arrs)
-          => OpenAfun aenv (index -> b -> (a, b))
-          -> OpenAfun (aenv,a) (index -> b' -> (arrs, b'))
-          -> OpenAfun aenv (index -> (b,b') -> (arrs, (b, b')))
+    pair  :: (Elt index, Arrays a, Arrays b, Arrays b', Arrays arrs)
+          => OpenAfun aenv (Scalar index -> b -> (a, b))
+          -> OpenAfun (aenv,a) (Scalar index -> b' -> (arrs, b'))
+          -> OpenAfun aenv (Scalar index -> (b,b') -> (arrs, (b, b')))
     pair f f'
       = Alam $ Alam $ Abody $
         alet (app2 (weaken (SuccIdx . SuccIdx) f) v1 (fstA v0))
