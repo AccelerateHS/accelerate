@@ -1,8 +1,7 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
-{-# LANGUAGE IncoherentInstances  #-}
-{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE PatternGuards        #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
@@ -10,7 +9,12 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeOperators        #-}
+#if !MIN_VERSION_base(4,8,0)
+{-# LANGUAGE IncoherentInstances  #-}
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Base
 -- Copyright   : [2012..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -112,7 +116,7 @@ instance Kit acc => Match (PreOpenFun acc env aenv) where
 instance Kit acc => Match (PreOpenAcc acc aenv) where
   match = matchPreOpenAcc matchAcc hashAcc
 
-instance Kit acc => Match (acc aenv) where      -- overlapping, undecidable, incoherent
+instance {-# INCOHERENT #-} Kit acc => Match (acc aenv) where
   match = matchAcc
 
 

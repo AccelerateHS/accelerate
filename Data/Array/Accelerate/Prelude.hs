@@ -1,10 +1,14 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances  #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+#if !MIN_VERSION_base(4,8,0)
+{-# LANGUAGE OverlappingInstances  #-}
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Prelude
 -- Copyright   : [2009..2014] Manuel M T Chakravarty, Gabriele Keller, Trevor L. McDonell
@@ -1505,10 +1509,10 @@ instance (Elt e, Slice (Plain ix), Lift Exp ix) => Lift Exp (ix :. Exp e) where
   type Plain (ix :. Exp e) = Plain ix :. e
   lift (ix:.i) = Exp $ IndexCons (lift ix) i
 
-instance (Elt e, Slice (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
+instance {-# OVERLAPPABLE #-} (Elt e, Slice (Plain ix), Unlift Exp ix) => Unlift Exp (ix :. Exp e) where
   unlift e = unlift (Exp $ IndexTail e) :. Exp (IndexHead e)
 
-instance (Elt e, Slice ix) => Unlift Exp (Exp ix :. Exp e) where
+instance {-# OVERLAPPABLE #-} (Elt e, Slice ix) => Unlift Exp (Exp ix :. Exp e) where
   unlift e = (Exp $ IndexTail e) :. Exp (IndexHead e)
 
 instance Shape sh => Lift Exp (Any sh) where
