@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP           #-}
 {-# LANGUAGE MagicHash     #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UnboxedTuples #-}
@@ -115,8 +116,15 @@ finalize (Lifetime ref _ _) = finalizer ref
 --   have already run.
 --
 mkWeak :: Lifetime k -> v -> IO (Weak v)
-mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = IO $ \s ->
-  case mkWeak# r# v (finalizer ref) s of (# s', w# #) -> (# s', Weak w# #)
+mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = go (finalizer ref)
+  where
+#if MIN_VERSION_base(4,9,0)
+    go (IO f)  =  -- GHC-8.x
+#else
+    go f       =  -- GHC-7.x
+#endif
+      IO $ \s -> case mkWeak# r# v f s of
+                   (# s', w# #) -> (# s', Weak w# #)
 
 -- A specialised version of 'mkWeak' where the key and value are the same
 -- 'Lifetime'.
