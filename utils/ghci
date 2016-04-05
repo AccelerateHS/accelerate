@@ -3,15 +3,12 @@
 # Get cabal to load up ghci for us. This will set the environment appropriately
 # if we have a local sandbox installation.
 #
-GHC="cabal exec ghc --"
+GHC="stack exec ghci --"
+CABAL_MACROS="`stack path --dist-dir`/build/autogen/cabal_macros.h"
 
 GHC_FLAGS="$GHC_FLAGS
-    --interactive
-    -DACCELERATE_BOUNDS_CHECKS
-    -DACCELERATE_INTERNAL_CHECKS
-    -DACCELERATE_DEBUG"
-
-     # -iutils -optP-include -optPdist/build/autogen/cabal_macros.h"
+    -optP-include -optP$CABAL_MACROS
+    +RTS -A128M -RTS"
 
 # If we have specified one command line argument, but that file doesn't exist,
 # search the source files for something with that name prefix.
