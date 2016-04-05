@@ -5,7 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
-#if !MIN_VERSION_base(4,8,0)
+#if __GLASGOW_HASKELL__ <= 708
 {-# LANGUAGE OverlappingInstances  #-}
 {-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
 #endif

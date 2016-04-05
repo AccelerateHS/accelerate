@@ -118,7 +118,7 @@ finalize (Lifetime ref _ _) = finalizer ref
 mkWeak :: Lifetime k -> v -> IO (Weak v)
 mkWeak (Lifetime ref@(IORef (STRef r#)) _ _) v = go (finalizer ref)
   where
-#if MIN_VERSION_base(4,9,0)
+#if __GLASGOW_HASKELL__ >= 800
     go (IO f)  =  -- GHC-8.x
 #else
     go f       =  -- GHC-7.x

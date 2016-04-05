@@ -4,10 +4,8 @@
 # if we have a local sandbox installation.
 #
 GHC="stack exec ghci --"
-CABAL_MACROS="`stack path --dist-dir`/build/autogen/cabal_macros.h"
 
 GHC_FLAGS="$GHC_FLAGS
-    -optP-include -optP$CABAL_MACROS
     +RTS -A128M -RTS"
 
 # If we have specified one command line argument, but that file doesn't exist,
