@@ -76,7 +76,7 @@ install:
       if [ ${GHC} != head ]; then
         travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
       else
-        travis_retry cabal install --only-dependencies --allow-newer ./accelerate
+        travis_retry cabal install --only-dependencies --allow-newer
       fi
 
 script:
@@ -85,7 +85,7 @@ script:
         stack build --no-terminal --flag accelerate:debug
         stack build --no-terminal --haddock --no-haddock-deps
       else
-        cabal install --allow-newer ./accelerate
+        cabal install --allow-newer
       fi
 
 notifications:
