@@ -32,43 +32,58 @@ matrix:
             - happy-1.19.5
             - alex-3.1.4
 
-    # - env: GHC=8.0.1 CABAL=1.24
-    #   compiler: "GHC 8.0 (prerelease)"
-    #   addons:
-    #     apt:
-    #       sources:
-    #         - hvr-ghc
-    #       packages:
-    #         - ghc-8.0.1
-    #         - cabal-install-1.24
-    #         - happy-1.19.5
-    #         - alex-3.1.4
+    - env: GHC=head CABAL=1.24
+      compiler: "GHC HEAD"
+      addons:
+        apt:
+          sources:
+            - hvr-ghc
+          packages:
+            - ghc-head
+            - cabal-install-1.24
+            - happy-1.19.5
+            - alex-3.1.4
 
   allow_failures:
-    - env: GHC=8.0.1 CABAL=1.24
+    - env: GHC=head CABAL=1.24
 
 before_install:
   - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
 
-  # Fetch stack
+  # cabal
+  - travis_retry cabal update
+  - sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config
+
+  # stack
   - mkdir $HOME/bin
   - export PATH=$HOME/bin:$PATH
   - travis_retry curl -L "https://www.stackage.org/stack/linux-x86_64" | gunzip | tar -x
   - mv stack-*/stack $HOME/bin
-  - ln -s stack-${GHC%.*}.yaml stack.yaml
+  - if [ ${GHC} != head ]; then ln -s stack-${GHC%.*}.yaml stack.yaml; fi
   - travis_retry stack setup
   - travis_retry stack install hscolour
 
 install:
-  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - stack --version
+  - cabal --version
   - opt --version; true
   - llc --version; true
-  - travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
+  - |
+      if [ ${GHC} != head ]; then
+        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
+      else
+        travis_retry cabal install --only-dependencies --allow-newer ./accelerate
+      fi
 
 script:
-  - stack build --no-terminal --flag accelerate:debug
-  - stack build --no-terminal --haddock --no-haddock-deps
+  - |
+      if [ ${GHC} != head ]; then
+        stack build --no-terminal --flag accelerate:debug
+        stack build --no-terminal --haddock --no-haddock-deps
+      else
+        cabal install --allow-newer ./accelerate
+      fi
 
 notifications:
   slack:
