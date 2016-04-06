@@ -20,14 +20,14 @@ matrix:
             - happy-1.19.5
             - alex-3.1.4
 
-    - env: GHC=7.10.2 CABAL=1.22
+    - env: GHC=7.10.3 CABAL=1.22
       compiler: "GHC 7.10"
       addons:
         apt:
           sources:
             - hvr-ghc
           packages:
-            - ghc-7.10.2
+            - ghc-7.10.3
             - cabal-install-1.22
             - happy-1.19.5
             - alex-3.1.4
