@@ -222,15 +222,13 @@ prettySeq prettyAcc wrap aenv seq =
         Pull _               -> "pull"         .$ [ text "[..]" ]
         Subarrays sh _       -> "subarrays"    .$ [ ppE sh, text "[..]" ]
         Produce l f          -> "produce"      .$ [ ppL l, ppAF f ]
-        MapAccumFlat f a x   -> "mapAccumFlat" .$ [ ppAF f, ppA a, ppA x ]
+        MapBatch f f' s a    -> "mapBatch"     .$ [ ppAF f, ppAF f', ppA s, ppA a]
         ProduceAccum l f a   -> "produceAccum" .$ [ ppL l, ppAF f, ppA a ]
 
     prettyC :: forall a. Consumer idx acc aenv a -> Doc
     prettyC c =
       case c of
-        FoldSeqFlatten f a x -> "foldSeqFlatten" ..$ [ ppAF f, ppA a, ppA x ]
-        Iterate l f a        -> "iterate"        ..$ [ ppL l, ppAF f, ppA a ]
-        Conclude a d         -> "conclude"       ..$ [ ppA a, ppA d]
+        Last a d             -> "last"        ..$ [ ppA a, ppA d]
         Stuple t             -> tuple (prettyT t)
 
     prettyT :: forall t. Atuple (PreOpenSeq idx acc aenv) t -> [Doc]

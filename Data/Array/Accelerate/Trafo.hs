@@ -37,7 +37,7 @@ import Data.Typeable
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Pretty                     ( ) -- show instances
-import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt, Scalar )
+import Data.Array.Accelerate.Array.Sugar                ( Arrays, Elt )
 import Data.Array.Accelerate.Trafo.Base
 import Data.Array.Accelerate.Trafo.Fusion               hiding ( convertAcc, convertAfun ) -- to export types
 import Data.Array.Accelerate.Trafo.Sharing              ( Function, FunctionR, Afunction, AfunctionR )

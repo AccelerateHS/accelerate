@@ -98,10 +98,10 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence reductions
-  foldSeqE, fromSeq, fromSeqElems, fromSeqShapes,
+  foldSeqE, fromSeq, concatElems, concatShapes, foldSeqFlatten,
 
   -- * Sequence generators
-  toSeqE, toSeqInner, toSeqOuter, generateSeqE,
+  toSeqInner, toSeqOuter, produceScalar,
 
   -- * Sequence transducers
   mapSeqE, zipWithSeqE, scanSeqE
@@ -116,8 +116,10 @@ import Prelude ((.), ($), (+), (-), (*), undefined, const, id, min, max, Float, 
 import qualified Prelude as P
 
 -- friends
+import Data.Array.Accelerate.Array.Lifted hiding ( Segments )
 import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect, union, transpose, toSlice)
 import Data.Array.Accelerate.Language
+import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -2272,20 +2274,15 @@ fromSeq = foldSeqFlatten f (lift (emptyArray, emptyArray))
       in lift (sh0 ++ sh1, a0 ++ a1)
 
 
-fromSeqElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
-fromSeqElems = foldSeqFlatten f emptyArray
+concatElems :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector a)
+concatElems = foldSeqFlatten f emptyArray
   where
     f a0 _ a1 = a0 ++ a1
 
-fromSeqShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
-fromSeqShapes = foldSeqFlatten f emptyArray
+concatShapes :: (Shape ix, Elt a) => Seq [Array ix a] -> Seq (Vector ix)
+concatShapes = foldSeqFlatten f emptyArray
   where
     f sh0 sh1 _ = sh0 ++ sh1
-
--- | Create a scalar sequence from a vector
---
-toSeqE ::Elt a => Acc (Vector a) -> Seq [Scalar a]
-toSeqE = toSeqInner
 
 -- | Sequence an array on the innermost dimension.
 --
@@ -2295,13 +2292,13 @@ toSeqInner = toSeq (lift (Any :. (0 :: Int)))
 -- | Sequence an array on the outermost dimension.
 --
 toSeqOuter :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Seq [Array sh e]
-toSeqOuter = toSeqInner . transpose
+toSeqOuter = mapSeq transpose . toSeqInner . transpose
 
 -- | Generate a scalar sequence of a fixed given length, by applying
 -- the given scalar function at each index.
 --
-generateSeqE :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
-generateSeqE n f = produce n (unit . f . the)
+produceScalar :: Elt a => Exp Int -> (Exp Int -> Exp a) -> Seq [Scalar a]
+produceScalar n f = produce n (unit . f . the)
 
 -- | Map over sequences specialised to scalar sequences.
 --
@@ -2326,8 +2323,11 @@ scanSeqE :: Elt e
          -> Exp e
          -> Seq [Scalar e]
          -> Seq [Scalar e]
-scanSeqE f z = mapAccumFlat (\acc shs es -> let (es', acc') = (scanl' f (the acc) es)
-                                            in lift (acc', shs, es')) (unit z)
+scanSeqE f z = mapSeq asnd .
+               mapBatch (const id)
+                        (\acc es -> let (es', acc') = scanl' f (the acc) (nestedValues es)
+                                    in lift (acc', nestedScalars es'))
+                        (unit z)
 
 -- | Convert the given array to a sequence by dividing the array up into slices.
 -- This is similar to 'slice' in the way the array is indexed. The initial slice
@@ -2341,3 +2341,73 @@ toSeq :: (Slice slix, Elt a)
 toSeq spec acc
   = let length = size acc `P.div` shapeSize (indexSlice spec (shape acc))
     in produce length (\ix -> slice acc (toSlice spec (shape acc) (the ix)))
+
+-- |A combination of map and fold. Applies a function to a chunk of a sequence,
+-- passing an accumulating parameter from left to right, and returning the new
+-- sequence.
+--
+-- The function "f" needs to obey the following law, at least
+-- observationally:
+--
+--   forall a shs1 shs2 es1 es2.
+--     uncurry3 f (f b shs1 es1) = f b (shs1 ++ shs2) (es1 ++ es2)
+--
+--     where uncurry3 f (a, b, c) = f a b c
+--
+-- mapAccumFlat :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
+--              => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> Acc (a, Vector sh', Vector e'))
+--              -> Acc a
+--              -> Seq [Array sh e]
+--              -> Seq [Array sh' e']
+-- mapAccumFlat f a = mapSeq asnd . mapBatch (const id) a
+--   where
+--     f' a' arrs = let (a', shapes, es) = unlift $ f a' (withShapes arrs id P.Nothing) (nestedValues arrs)
+--                  in _
+
+-- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
+-- vecotor append (++) as the companion operator:
+--
+--   Forall b sh1 a1 sh2 a2.
+--     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
+--
+-- It is common to ignore the shape vectors, yielding the usual
+-- semi-associativity law:
+--
+--   f b a _ = b + a,
+--
+-- for some (+) satisfying:
+--
+--   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
+--
+foldSeqFlatten :: (Arrays a, Shape sh, Elt e)
+               => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> Acc a)
+               -> Acc a
+               -> Seq [Array sh e]
+               -> Seq a
+foldSeqFlatten f a = last a . mapSeq afst . mapBatch (const id) f' a
+  where
+    f' a' arrs = lift (f a' (withShapes arrs id P.Nothing) (nestedValues arrs), arrs)
+
+
+nestedValues :: (Shape sh, Elt e) => Acc (Nested (Array sh e)) -> Acc (Vector e)
+nestedValues = Acc . Aprj ZeroTupIdx
+
+withShapes :: (Arrays a, Shape sh, Elt e)
+           => Acc (Nested (Array sh e))
+           -> (Acc (Vector sh) -> Acc a)
+           -> P.Maybe (Acc (Scalar (Int, sh)) -> Acc a)
+           -> Acc a
+withShapes a irregular mr =
+  let
+    (isIrregular, _, r_subCount, r_shape, _, ir_shapes) = unatup6 (Acc (Aprj (SuccTupIdx ZeroTupIdx) a))
+    regular =
+      case mr of
+        P.Nothing -> irregular (fill (index1 (the r_subCount)) (the r_shape))
+        P.Just r  -> r (unit (lift (the r_subCount, the r_shape)))
+  in the isIrregular ?| (irregular ir_shapes, regular)
+
+nestedScalars :: Elt e => Acc (Vector e) -> Acc (Nested (Scalar e))
+nestedScalars es = Acc (Atuple $ NilAtup `SnocAtup` segs `SnocAtup` es)
+  where
+    segs = atup6 (unit (constant False), unit l, unit l, unit index0, emptyArray, emptyArray)
+    l    = size es

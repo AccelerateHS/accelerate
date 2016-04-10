@@ -51,7 +51,7 @@ module Data.Array.Accelerate.Trafo.Shrink (
 
 -- standard library
 import Data.Function                                    ( on )
-import Data.Monoid
+import Data.Monoid                                      hiding ( Last )
 import Control.Applicative                              hiding ( Const )
 import Prelude                                          hiding ( exp, seq )
 
@@ -223,16 +223,14 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
         Pull src           -> Pull src
         Subarrays sh arr   -> Subarrays (shrinkE sh) arr
         Produce l f        -> Produce (shrinkE <$> l) (shrinkAF f)
-        MapAccumFlat f a x -> MapAccumFlat (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
+        MapBatch f f' a x  -> MapBatch (shrinkAF f) (shrinkAF f') (shrinkAcc a) (shrinkAcc x)
         ProduceAccum l f a -> ProduceAccum (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
 
     shrinkC :: Consumer index acc aenv' a -> Consumer index acc aenv' a
     shrinkC c =
       case c of
-        FoldSeqFlatten f a x -> FoldSeqFlatten (shrinkAF f) (shrinkAcc a) (shrinkAcc x)
-        Iterate l f a        -> Iterate (shrinkE <$> l) (shrinkAF f) (shrinkAcc a)
-        Conclude a d         -> Conclude (shrinkAcc a) (shrinkAcc d)
-        Stuple t             -> Stuple (shrinkCT t)
+        Last a d           -> Last (shrinkAcc a) (shrinkAcc d)
+        Stuple t           -> Stuple (shrinkCT t)
 
     shrinkCT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
     shrinkCT NilAtup        = NilAtup
@@ -621,16 +619,14 @@ usesOfPreSeq countAcc idx seq =
         Pull _             -> zeroUse
         Subarrays sh _     -> countE sh
         Produce l f        -> maybe zeroUse countE l <+> countAF f idx
-        MapAccumFlat f a x -> countAF f idx <+> countA a <+> countA x
+        MapBatch f f' a x  -> countAF f idx <+> countAF f' idx <+> countA a <+> countA x
         ProduceAccum l f a -> maybe zeroUse countE l <+> countAF f idx <+> countA a
 
     countC :: Consumer index acc aenv arrs -> Use s
     countC c =
       case c of
-        FoldSeqFlatten f a x -> countAF f idx <+> countA a <+> countA x
-        Iterate l f a        -> maybe zeroUse countE l <+> countAF f idx <+> countA a
-        Conclude a _         -> countA a
-        Stuple t             -> countCT t
+        Last a d         -> countA a <+> countA d
+        Stuple t         -> countCT t
 
     countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Use s
     countCT NilAtup        = zeroUse
@@ -838,7 +834,7 @@ dependenciesProducer depsAcc p =
     Pull _             -> mempty
     Subarrays sh _     -> depsE sh
     Produce l f        -> maybe mempty depsE l <> depsAF f
-    MapAccumFlat f a x -> depsAF f <> depsAcc a <> depsAcc x
+    MapBatch f f' a x  -> depsAF f <> depsAF f' <> depsAcc a <> depsAcc x
     ProduceAccum l f a -> maybe mempty depsE l <> depsAF f <> depsAcc a
   where
     depsAF :: Kit acc
@@ -855,22 +851,12 @@ dependenciesConsumer :: forall acc index aenv arrs. Kit acc
                      -> Stronger aenv
 dependenciesConsumer depsAcc c =
   case c of
-    FoldSeqFlatten f a x -> depsAF f <> depsAcc a <> depsAcc x
-    Iterate l f a        -> maybe mempty depsE l <> depsAF f <> depsAcc a
-    Conclude a d         -> depsAcc a <> depsAcc d
-    Stuple t             -> depsCT t
+    Last a d         -> depsAcc a <> depsAcc d
+    Stuple t         -> depsCT t
   where
     depsCT :: Atuple (PreOpenSeq index acc aenv) t' -> Stronger aenv
     depsCT NilAtup        = mempty
     depsCT (SnocAtup t c) = depsCT t <> dependenciesPreSeq depsAcc c
-
-    depsAF :: Kit acc
-            => PreOpenAfun acc aenv' f
-            -> Stronger aenv'
-    depsAF = dependenciesAfun depsAcc
-
-    depsE :: PreOpenExp acc env aenv e -> Stronger aenv
-    depsE = dependenciesExp depsAcc
 
 dependenciesExp :: forall acc env aenv e.
                    DependenciesAcc acc

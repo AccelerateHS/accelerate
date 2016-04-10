@@ -2590,8 +2590,8 @@ vectoriseOpenSeq strength ctx seq =
       case p of
         Pull _             -> Nothing
         Subarrays sh a     -> subarrays <$> cvtE sh <*> pure a
-        Produce l f        -> ProduceAccum <$> cvtL l <*> return (streamify f) <*> return unit
-        MapAccumFlat f a x -> mapAccumFlat <$> cvtAF' f <*> cvtA' a <*> pure (cvtA x)
+        Produce l f        -> ProduceAccum <$> cvtL l <*> return (streamify f) <*> return nil
+        MapBatch f f' a x  -> mapBatch <$> pure (cvtAF f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
         ProduceAccum{}     -> stageError
 
     cvtL :: Maybe (Exp aenv Int) -> Maybe (Maybe (Exp aenv' Int))
@@ -2601,24 +2601,25 @@ vectoriseOpenSeq strength ctx seq =
                   | otherwise
                   = Nothing
 
-    mapAccumFlat :: (Shape sh', Arrays b, Shape sh, Elt e, Elt e')
-                 => OpenAfun aenv' (b -> Vector sh -> Vector e -> (b, Vector sh', Vector e'))
-                 -> OpenAcc aenv' b
-                 -> OpenAfun aenv' (Scalar Int -> Nested (Array sh e))
-                 -> ChunkedProducer OpenAcc aenv' (Nested (Array sh' e'))
-    mapAccumFlat f a x = ProduceAccum Nothing (Alam . Alam . Abody
-                       $ repack
-                       $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
-                       $ weakenA3 f `partApply` avar1 `partApply` shapesC (segmentsC avar0) `apply` valuesC avar0) a
+    mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
+             => OpenAfun aenv' (Nested s -> Nested a -> Nested b)
+             -> OpenAfun aenv' (s -> Nested b -> (s, Nested c))
+             -> OpenAcc  aenv' s
+             -> OpenAfun aenv' (Scalar Int -> Nested a)
+             -> ChunkedProducer OpenAcc aenv' (Nested (s,c))
+    mapBatch f f' a x = ProduceAccum Nothing f'' a
       where
+        f'' = Alam . Alam . Abody
+            $ repack
+            $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
+            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` replicateC (unit (sndE (the avar2))) avar1 `apply` avar0)
         repack a = OpenAcc $ Alet a
-                 $ atup (irregularC (segmentsFromShapesC . inject $ Aprj tupIx1 avar0) (inject $ Aprj tupIx0 avar0))
-                 $^ Aprj tupIx2 avar0
+                 $ atup (atup (replicateC (unit (sndE (the avar2))) (fstA avar0)) (sndA avar0)) (fstA avar0)
 
     subarrays :: (Shape sh, sh :<= DIM3, Elt e) => Exp aenv' sh -> Array sh e -> ChunkedProducer OpenAcc aenv' (Nested (Array sh e))
-    subarrays sh arr = ProduceAccum subLimit f unit
+    subarrays sh arr = ProduceAccum subLimit f nil
       where
-        f = Alam . Alam . Abody $ atup (liftedSubArrays (the avar1) (weakenA2 sh) arr) unit
+        f = Alam . Alam . Abody $ atup (liftedSubArrays (the avar1) (weakenA2 sh) arr) nil
         totalSize = Const (size (shape arr))
         subSize = ShapeSize sh
         subLimit = Just (totalSize `div` subSize)
@@ -2639,33 +2640,20 @@ vectoriseOpenSeq strength ctx seq =
         plus a b = PrimApp (PrimAdd numType) (tup a b)
 
     nest :: forall aenv a. Arrays a => OpenAcc aenv a -> OpenAcc aenv (a,())
-    nest = OpenAcc . Atuple . (\a -> NilAtup `SnocAtup` a `SnocAtup` unit)
+    nest = OpenAcc . Atuple . (\a -> NilAtup `SnocAtup` a `SnocAtup` nil)
 
     cvtC :: NaturalConsumer OpenAcc aenv t -> Maybe (ChunkedConsumer OpenAcc aenv' t)
     cvtC c =
       case c of
-        FoldSeqFlatten f a x -> foldSeqFlatten <$> cvtAF' f <*> cvtA' a <*> pure (cvtA x)
-        Stuple t             -> Stuple <$> cvtCT t
-        Iterate{}            -> stageError
-        Conclude{}           -> stageError
-
-    foldSeqFlatten :: (Arrays t, Shape sh, Elt e)
-                   => OpenAfun aenv' (t -> Vector sh -> Vector e -> t)
-                   -> OpenAcc aenv' t
-                   -> OpenAfun aenv' (Scalar Int -> Nested (Array sh e))
-                   -> ChunkedConsumer OpenAcc aenv' t
-    foldSeqFlatten f a x = Iterate Nothing f' a
-      where
-        f' = Alam . Alam . Abody
-           $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
-           $ weakenA3 f `partApply` avar1 `partApply` shapesC (segmentsC avar0) `apply` valuesC avar0
+        Stuple t -> Stuple <$> cvtCT t
+        Last a d -> Last   <$> cvtA' a <*> cvtA' d
 
     cvtCT :: Atuple (OpenNaturalSeq aenv) t -> Maybe (Atuple (OpenChunkedSeq aenv') t)
     cvtCT NilAtup        = Just NilAtup
     cvtCT (SnocAtup t c) = SnocAtup <$> cvtCT t <*> vectoriseOpenSeq strength ctx c
 
-    unit :: forall aenv. OpenAcc aenv ()
-    unit = OpenAcc $ Atuple NilAtup
+    nil :: forall aenv. OpenAcc aenv ()
+    nil = OpenAcc $ Atuple NilAtup
 
     cvtE :: Elt t => Exp aenv t -> Maybe (Exp aenv' t)
     cvtE e | Just e' <- rebuildToLift ctx e
@@ -2680,6 +2668,9 @@ vectoriseOpenSeq strength ctx seq =
 
     cvtA' :: OpenAcc aenv t -> Maybe (OpenAcc aenv' t)
     cvtA' = rebuildToLift ctx
+
+    cvtAF :: forall a b c. OpenAfun aenv (a -> b -> c) -> OpenAfun aenv' (Nested a -> Nested b -> Nested c)
+    cvtAF = liftOpenAfun2 Conservative ctx
 
     cvtAF' :: OpenAfun aenv t -> Maybe (OpenAfun aenv' t)
     cvtAF' = rebuildToLift ctx
@@ -2926,41 +2917,44 @@ reduceOpenSeq seq =
         Pull src           -> Pull src
         Subarrays sh a     -> subarrays sh a
         Produce l f        -> ProduceAccum l (streamify f) nil
-        MapAccumFlat f a x -> mapAccumFlat f a x
+        MapBatch f f' a x  -> mapBatch f f' a x
         ProduceAccum{}     -> stageError
 
     cvtC :: Consumer index OpenAcc aenv t -> Consumer index OpenAcc aenv t
     cvtC c =
       case c of
-        FoldSeqFlatten f a x -> foldSeqFlatten f a x
-        Stuple t             -> Stuple (cvtCT t)
-        Iterate{}            -> stageError
-        Conclude{}           -> stageError
+        Stuple t -> Stuple (cvtCT t)
+        Last a d -> Last a d
 
-    mapAccumFlat :: forall b sh e sh' e'. (Arrays b, Shape sh, Shape sh', Elt e, Elt e')
-                 => OpenAfun aenv (b -> Vector sh -> Vector e -> (b, Vector sh', Vector e'))
-                 -> OpenAcc aenv b
-                 -> OpenAcc aenv (Array sh e)
-                 -> Producer index OpenAcc aenv (Array sh' e')
-    mapAccumFlat f a x = ProduceAccum Nothing f' a
+    mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
+             => OpenAfun aenv (s -> a -> b)
+             -> OpenAfun aenv (s -> Nested b -> (s, Nested c))
+             -> OpenAcc aenv s
+             -> OpenAcc aenv a
+             -> Producer index OpenAcc aenv (s,c)
+    mapBatch f f' a x = ProduceAccum Nothing f'' a
       where
-        f' = Alam . Alam . Abody . repack . alet (weakenA2 x)
-           $ weakenA3 f `partApply` avar1 `partApply` flattenC (unit (Shape avar0)) `apply` flattenC avar0
+        f'' :: OpenAfun aenv (Scalar index -> s -> ((s,c),s))
+        f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
+            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` weakenA3 x)
 
-        repack :: forall aenv. OpenAcc aenv (b, Vector sh', Vector e') -> OpenAcc aenv (Array sh' e', b)
-        repack b = alet b $ atup (unflatten (inject $ Aprj tupIx1 avar0) (inject $ Aprj tupIx0 avar0)) (inject $ Aprj tupIx2 avar0)
+        repack :: forall aenv. OpenAcc aenv (s, Nested c) -> OpenAcc aenv ((s, c),s)
+        repack b = alet b $ atup (atup (fstA avar0) (fromHOAS deNest1 (sndA avar0))) (fstA avar0)
 
-        unflatten sh e = alet sh $^ Reshape (Index avar0 (index1 (Const 0))) (weakenA1 e)
+        nest1 :: forall aenv x. Arrays x => OpenAcc aenv x -> OpenAcc aenv (Nested x)
+        nest1 = replicateC (unit (Const 1))
 
-    foldSeqFlatten :: (Arrays t, Shape sh, Elt e)
-                   => OpenAfun aenv (t -> Vector sh -> Vector e -> t)
-                   -> OpenAcc aenv t
-                   -> OpenAcc aenv (Array sh e)
-                   -> Consumer index OpenAcc aenv t
-    foldSeqFlatten f a x = Iterate Nothing f' a
-      where
-        f' = Alam . Alam . Abody . alet (weakenA2 x)
-           $ weakenA3 f `partApply` avar1 `partApply` flattenC (unit (Shape avar0)) `apply` flattenC avar0
+        deNest1 :: forall x. Arrays x => S.Acc (Nested x) -> S.Acc x
+        deNest1 x =
+          case flavour (undefined :: x) of
+            ArraysFunit  -> S.use ()
+            ArraysFarray -> S.reshape (S.the $ withSegs (segments x) (S.unit (shapes (segments x) S.!! 0)) (const S.unit))
+                                      (values x)
+            ArraysFtuple -> S.Acc $ S.Atuple $ deNestT (prod (Proxy :: Proxy Arrays) (undefined :: x)) (asAtuple x)
+          where
+            deNestT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc t
+            deNestT ProdRunit     NilAtup         = NilAtup
+            deNestT (ProdRsnoc p) (SnocAtup t a') = SnocAtup (deNestT p t) (deNest1 a')
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
     cvtCT NilAtup        = NilAtup

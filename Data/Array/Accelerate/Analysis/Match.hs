@@ -367,8 +367,9 @@ matchSeq m h = match
       | Just REFL <- join $ liftA2 matchExp l1 l2
       , Just REFL <- matchPreOpenAfun m f1 f2
       = Just REFL
-    matchP (MapAccumFlat f1 a1 x1) (MapAccumFlat f2 a2 x2)
+    matchP (MapBatch f1 c1 a1 x1) (MapBatch f2 c2 a2 x2)
       | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchPreOpenAfun m c1 c2
       , Just REFL <- m a1 a2
       , Just REFL <- m x1 x2
       = Just REFL
@@ -381,15 +382,9 @@ matchSeq m h = match
       = Nothing
 
     matchC :: forall aenv u v. Consumer idx acc aenv u -> Consumer idx acc aenv v -> Maybe (u :=: v)
-    matchC (FoldSeqFlatten f1 acc1 x1) (FoldSeqFlatten f2 acc2 x2)
-      | Just REFL <- m x1 x2
-      , Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- m acc1 acc2
-      = Just REFL
-    matchC (Iterate l1 f1 acc1) (Iterate l2 f2 acc2)
-      | Just REFL <- join $ liftA2 matchExp l1 l2
-      , Just REFL <- matchPreOpenAfun m f1 f2
-      , Just REFL <- m acc1 acc2
+    matchC (Last a1 d1) (Last a2 d2)
+      | Just REFL <- m a1 a2
+      , Just REFL <- m d1 d2
       = Just REFL
     matchC (Stuple s1) (Stuple s2)
       | Just REFL <- matchAtuple (matchSeq m h) s1 s2
@@ -1011,7 +1006,7 @@ hashPreOpenSeq hashAcc s =
         Pull src            -> hashWithSalt salt "Pull"         `hashSource` src
         Subarrays sh a      -> hashWithSalt salt "Subarrays"    `hashE` sh `hashWithSalt` hashArrays ArraysRarray a
         Produce l f         -> hashWithSalt salt "Produce"      `hashL` l  `hashAF` f
-        MapAccumFlat f a x  -> hashWithSalt salt "MapAccumFlat" `hashAF` f `hashA`  a `hashA` x
+        MapBatch f c a x    -> hashWithSalt salt "MapBatch"     `hashAF` f `hashAF` c `hashA`  a `hashA` x
         ProduceAccum l f a  -> hashWithSalt salt "ProduceAccum" `hashL` l `hashAF` f `hashA` a
 
 
@@ -1024,10 +1019,8 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer idx acc aenv' a -> Int
     hashC salt c =
       case c of
-        FoldSeqFlatten f acc x -> hashWithSalt salt "FoldSeqFlatten" `hashAF` f `hashA` acc `hashA` x
-        Iterate l f acc        -> hashWithSalt salt "Iterate"        `hashL` l `hashAF` f `hashA` acc
-        Conclude a d           -> hashWithSalt salt "Conclude"       `hashA` a `hashA` d
-        Stuple t               -> hash "Stuple"                      `hashWithSalt` hashAtuple (hashS salt) t
+        Last a d               -> hashWithSalt salt "Last"       `hashA` a `hashA` d
+        Stuple t               -> hash "Stuple"                  `hashWithSalt` hashAtuple (hashS salt) t
 
   in case s of
     Producer   p s' -> hash "Producer"   `hashP` p `hashS` s'

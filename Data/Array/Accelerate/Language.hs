@@ -50,10 +50,10 @@ module Data.Array.Accelerate.Language (
   streamIn, subarrays, produce,
 
   -- * Sequence transudcers
-  mapSeq, zipWithSeq, mapAccumFlat,
+  mapSeq, zipWithSeq, mapBatch,
 
   -- * Sequence consumers
-  foldSeqFlatten,
+  last,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -129,6 +129,7 @@ import Text.Printf
 import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union, toSlice)
+import Data.Array.Accelerate.Array.Lifted               ( Nested )
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 
@@ -516,46 +517,24 @@ zipWithSeq :: (Arrays a, Arrays b, Arrays c)
            -> Seq [c]
 zipWithSeq = Seq $$$ ZipWithSeq
 
--- |A combination of map and fold. Applies a function to a chunk of a sequence,
--- passing an accumulating parameter from left to right, and returning the new
--- sequence.
+-- |A batched map.
 --
--- The function "f" needs to obey the following law, at least
--- observationally:
---
---   forall a shs1 shs2 es1 es2.
---     uncurry3 f (f b shs1 es1) = f b (shs1 ++ shs2) (es1 ++ es2)
---
---     where uncurry3 f (a, b, c) = f a b c
---
-mapAccumFlat :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
-             => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> Acc (a, Vector sh', Vector e'))
-             -> Acc a
-             -> Seq [Array sh e]
-             -> Seq [Array sh' e']
-mapAccumFlat = Seq $$$ MapAccumFlat
+mapBatch :: (Arrays a, Arrays b, Arrays c, Arrays s)
+         => (Acc s -> Acc a -> Acc b)
+         -> (Acc s -> Acc (Nested b) -> Acc (s, Nested c))
+         -> Acc s
+         -> Seq [a]
+         -> Seq [(s,c)]
+mapBatch = Seq $$$$ MapBatch
 
--- | foldSeqFlatten f a0 x seq. f must be semi-associative, with
--- vecotor append (++) as the companion operator:
+-- |Get the last element of the sequence or the default value if the sequence is
+-- empty last.
 --
---   Forall b sh1 a1 sh2 a2.
---     f (f b sh1 a1) sh2 a2 = f b (sh1 ++ sh2) (a1 ++ a2).
---
--- It is common to ignore the shape vectors, yielding the usual
--- semi-associativity law:
---
---   f b a _ = b + a,
---
--- for some (+) satisfying:
---
---   Forall b a1 a2. (b + a1) + a2 = b + (a1 ++ a2).
---
-foldSeqFlatten :: (Arrays a, Shape jx, Elt b)
-               => (Acc a -> Acc (Vector jx) -> Acc (Vector b) -> Acc a)
-               -> Acc a
-               -> Seq [Array jx b]
-               -> Seq a
-foldSeqFlatten = Seq $$$ FoldSeqFlatten
+last :: Arrays a
+     => Acc a
+     -> Seq [a]
+     -> Seq a
+last = Seq $$ Last
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect

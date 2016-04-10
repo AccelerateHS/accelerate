@@ -372,7 +372,7 @@ convertSharingSeq config alyt aenv senv (ScopedSeq (SletSharing sa@(StableSharin
         Produce l f                 -> producer $ AST.Produce (Just $ cvtE l) (cvtAF1 f)
         MapSeq afun x               -> producer $ mkMapSeq (convertSharingAfun1 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x)
         ZipWithSeq afun x y         -> producer $ mkZipWithSeq (convertSharingAfun2 config (incLayout alyt `PushLayout` ZeroIdx) (noStableSharingAcc : aenv) afun) (asIdx x) (asIdx y)
-        MapAccumFlat fun a x        -> producer $ AST.MapAccumFlat (cvtAF3 fun) (cvtA a) (AST.OpenAcc . AST.Avar $ asIdx x)
+        MapBatch fun fun' a x       -> producer $ AST.MapBatch (cvtAF2 fun) (cvtAF2 fun') (cvtA a) (AST.OpenAcc . AST.Avar $ asIdx x)
         _                           -> $internalError "convertSharingSeq:convSeq" "Consumer appears to have been let bound"
       where
         producer :: (bnd ~ [a], Arrays a)
@@ -408,8 +408,8 @@ convertSharingSeq config alyt aenv senv (ScopedSeq (SletSharing sa@(StableSharin
         cvtAF1 :: forall a b. (Arrays a, Arrays b) => (Acc a -> ScopedAcc b) -> OpenAfun aenv (a -> b)
         cvtAF1 = convertSharingAfun1 config alyt aenv
 
-        cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
-        cvtAF3 = convertSharingAfun3 config alyt aenv
+        cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
+        cvtAF2 = convertSharingAfun2 config alyt aenv
 
 convertSharingSeq _ _ _ _ (ScopedSeq (SletSharing _ _))
  = $internalError "convertSharingSeq" "Sequence computation not in A-normal form"
@@ -420,7 +420,7 @@ convertSharingSeq config alyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenNaturalSeq AST.OpenAcc aenv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        FoldSeqFlatten afun acc x          -> AST.Consumer $ AST.FoldSeqFlatten (cvtAF3 afun) (cvtA acc) (AST.OpenAcc . AST.Avar $ asIdx x)
+        Last d a                           -> AST.Consumer $ AST.Last (AST.OpenAcc . AST.Avar $ asIdx a) (cvtA d)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"
@@ -444,9 +444,6 @@ convertSharingSeq config alyt aenv senv s
 
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
-
-    cvtAF3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d) => (Acc a -> Acc b -> Acc c -> ScopedAcc d) -> OpenAfun aenv (a -> b -> c -> d)
-    cvtAF3 afun = convertSharingAfun3 config alyt aenv afun
 
     cvtST :: Atuple ScopedSeq t -> Atuple (AST.OpenNaturalSeq aenv) t
     cvtST NilAtup        = NilAtup
@@ -477,19 +474,6 @@ convertSharingAfun2 config alyt aenv f
       where
         alyt' = incLayout (incLayout alyt `PushLayout` ZeroIdx) `PushLayout` ZeroIdx
         body  = f undefined undefined
-
-convertSharingAfun3
-    :: forall aenv a b c d. (Arrays a, Arrays b, Arrays c, Arrays d)
-    => Config
-    -> Layout aenv aenv
-    -> [StableSharingAcc]
-    -> (Acc a -> Acc b -> Acc c -> ScopedAcc d)
-    -> OpenAfun aenv (a -> b -> c -> d)
-convertSharingAfun3 config alyt aenv f
-  = Alam (Alam (Alam (Abody (convertSharingAcc config alyt' aenv body))))
-      where
-        alyt' = incLayout (incLayout (incLayout alyt `PushLayout` ZeroIdx) `PushLayout` ZeroIdx) `PushLayout` ZeroIdx
-        body  = f undefined undefined undefined
 
 convertSharingAtuple
     :: forall aenv a.
@@ -1463,20 +1447,6 @@ makeOccMapAfun2 config accOccMap lvl f = do
   (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+2) (f x y)
   return (\ _ _ -> (UnscopedAcc [lvl, lvl+1] body), height)
 
-makeOccMapAfun3 :: (Arrays a, Arrays b, Arrays c, Typeable d)
-                => Config
-                -> OccMapHash Acc
-                -> Level
-                -> (Acc a -> Acc b -> Acc c -> Acc d)
-                -> IO (Acc a -> Acc b -> Acc c -> UnscopedAcc d, Int)
-makeOccMapAfun3 config accOccMap lvl f = do
-  let x = Acc (Atag (lvl + 2))
-      y = Acc (Atag (lvl + 1))
-      z = Acc (Atag (lvl + 0))
-  --
-  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+3) (f x y z)
-  return (\ _ _ _ -> (UnscopedAcc [lvl, lvl+1, lvl+2] body), height)
-
 -- Generate occupancy information for scalar functions and expressions. Helper
 -- functions wrapping around 'makeOccMapRootExp' with more specific types.
 --
@@ -1758,9 +1728,6 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
     traverseAfun2 :: (Arrays a, Arrays b, Typeable c) => Level -> (Acc a -> Acc b -> Acc c) -> IO (Acc a -> Acc b -> UnscopedAcc c, Int)
     traverseAfun2 = makeOccMapAfun2 config accOccMap
 
-    traverseAfun3 :: (Arrays a, Arrays b, Arrays c, Typeable d) => Level -> (Acc a -> Acc b -> Acc c -> Acc d) -> IO (Acc a -> Acc b -> Acc c -> UnscopedAcc d, Int)
-    traverseAfun3 = makeOccMapAfun3 config accOccMap
-
     traverseExp :: Typeable e => Level -> Exp e -> IO (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
@@ -1827,16 +1794,16 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
               (s1'  , h2) <- traverseSeq lvl s1
               (s2'  , h3) <- traverseSeq lvl s2
               return (ZipWithSeq afun' s1' s2', h1 `max` h2 `max` h3 + 1)
-            MapAccumFlat fun a s -> producer $ do
-              (fun', h1) <- traverseAfun3 lvl fun
-              (a'  , h2) <- traverseAcc lvl a
-              (s'  , h3) <- traverseSeq lvl s
-              return (MapAccumFlat fun' a' s', h1 `max` h2 `max` h3 + 1)
-            FoldSeqFlatten afun acc s -> consumer $ do
-              (afun', h1) <- traverseAfun3 lvl afun
-              (acc',  h2) <- traverseAcc lvl acc
-              (s'   , h3) <- traverseSeq lvl s
-              return (FoldSeqFlatten afun' acc' s', h1 `max` h2 `max` h3 + 1)
+            MapBatch fun1 fun2 a s -> producer $ do
+              (fun1', h1) <- traverseAfun2 lvl fun1
+              (fun2', h2) <- traverseAfun2 lvl fun2
+              (a'   , h3) <- traverseAcc lvl a
+              (s'   , h4) <- traverseSeq lvl s
+              return (MapBatch fun1' fun2' a' s', h1 `max` h2 `max` h3 `max` h4 + 1)
+            Last d a -> consumer $ do
+              (d', h1) <- traverseAcc lvl d
+              (a', h2) <- traverseSeq lvl a
+              return (Last d' a', h1 `max` h2 + 1)
             Stuple t -> consumer $ do
               (t', h1) <- traverseTup lvl t
               return (Stuple t', h1 + 1)
@@ -2697,17 +2664,6 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
         isBoundHere _                                                             = False
 
-    scopesAfun3 :: (Arrays a1, Arrays a2, Arrays a3) => (Acc a1 -> Acc a2 -> Acc a3 -> UnscopedAcc a4) -> (Acc a1 -> Acc a2 -> Acc a3 -> ScopedAcc a4, NodeCounts)
-    scopesAfun3 f = (\ _ _ _ -> (ScopedAcc ssa body'), (counts',graph))
-      where
-        body@(UnscopedAcc fvs _) = f undefined undefined undefined
-        ((ScopedAcc [] body'), (counts,graph)) = scopesAcc body
-        ssa     = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
-        (freeCounts, counts') = partition isBoundHere counts
-
-        isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag i))) _) = i `elem` fvs
-        isBoundHere _                                                             = False
-
     scopesTup :: Atuple UnscopedSeq tup -> (Atuple ScopedSeq tup, NodeCounts)
     scopesTup NilAtup          = (NilAtup, noNodeCounts)
     scopesTup (SnocAtup tup s) = let
@@ -2741,20 +2697,19 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                                    (s1'  , accCount2) = scopesSeq s1
                                    (s2'  , accCount3) = scopesSeq s2
                                  in producer (ZipWithSeq afun' s1' s2') (accCount1 +++ accCount2 +++ accCount3)
-        MapAccumFlat fun e s' -> let
-                              (fun', accCount1) = scopesAfun3 fun
-                              (e'  , accCount2) = scopesAcc e
-                              (s'' , accCount3) = scopesSeq s'
-                            in producer (MapAccumFlat fun' e' s'') (accCount1 +++ accCount2 +++ accCount3)
-        FoldSeqFlatten afun acc s' ->
-                               let
-                                 (afun', accCount1) = scopesAfun3 afun
-                                 (acc' , accCount2) = scopesAcc acc
-                                 (s''  , accCount3) = scopesSeq s'
-                               in consumer (FoldSeqFlatten afun' acc' s'') (accCount1 +++ accCount2 +++ accCount3)
-        Stuple tup          -> let
-                                 (tup', accCount1) = scopesTup tup
-                               in consumer (Stuple tup') accCount1
+        MapBatch fun1 fun2 e s' -> let
+                                     (fun1', accCount1) = scopesAfun2 fun1
+                                     (fun2', accCount2) = scopesAfun2 fun2
+                                     (e'   , accCount3) = scopesAcc e
+                                     (s''  , accCount4) = scopesSeq s'
+                                   in producer (MapBatch fun1' fun2' e' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
+        Last d a -> let
+                      (d', accCount1) = scopesAcc d
+                      (a', accCount2) = scopesSeq a
+                    in consumer (Last d' a') (accCount1 +++ accCount2)
+        Stuple tup -> let
+                         (tup', accCount1) = scopesTup tup
+                      in consumer (Stuple tup') accCount1
       where
         -- All producers must be replaced by sharing variables
         --

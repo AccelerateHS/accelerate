@@ -841,7 +841,7 @@ evalSeq s aenv = evalSeq' s
       where
         initC :: Consumer index DelayedOpenAcc aenv' a -> Stream index aenv' a
         initC (Stuple t) = Combine (initCT t)
-        initC (Conclude a d) = Step f' () (Yield (evalOpenAcc d' aenv))
+        initC (Last a d) = Step f' () (Yield (evalOpenAcc d' aenv))
           where
             d'           = fromJust (strengthen v d)
             f' _ aenv () = Just (evalOpenAcc a aenv,())

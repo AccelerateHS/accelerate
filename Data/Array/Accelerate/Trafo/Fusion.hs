@@ -307,8 +307,8 @@ convertOpenSeq fuseAcc s =
     cvtC :: Consumer index OpenAcc aenv a -> Consumer index DelayedOpenAcc aenv a
     cvtC c =
       case c of
-        Conclude a d -> Conclude (manifest fuseAcc a) (manifest fuseAcc d)
-        Stuple t     -> Stuple (cvtCT t)
+        Last a d -> Last (manifest fuseAcc a) (manifest fuseAcc d)
+        Stuple t -> Stuple (cvtCT t)
 
     cvtP :: Producer index OpenAcc aenv a -> Producer index DelayedOpenAcc aenv a
     cvtP p =
@@ -877,7 +877,7 @@ deannotate (Dconsumers cons)
   = Consumer $ dcons cons
   where
     dcons :: forall aenv index a. Elt index => Dconsumer index aenv a -> Consumer index OpenAcc aenv a
-    dcons (Ddone env a envd d) = Conclude (weaken (abstract env) a) (weaken (abstract envd) d)
+    dcons (Ddone env a envd d) = Last (weaken (abstract env) a) (weaken (abstract envd) d)
     dcons (Dtuple t) = Stuple (dtup t)
       where
         dtup :: Atuple (DependentSeq index aenv) arrs
@@ -913,13 +913,13 @@ makeDependent = fst . makeD
     makeC :: Elt index
           => Consumer index OpenAcc aenv arrs
           -> (DependentSeq index aenv arrs, Count aenv)
-    makeC (Iterate l f a)
-      | Stronger env  <- dependenciesAfun dependenciesOpenAcc f
-      , Stronger envd <- dependenciesOpenAcc a
-      , p  <- DproduceAccum $ weaken (inverse env) (Stream l (streamify f) a)
-      , a' <- weaken (inverse envd) a
-      = (Dproducer env p 1 (Dconsumers (Ddone (WeakIn WeakEmpty) v0 (WeakOut envd) a'))
-        , count env)
+    makeC (Last a d)
+      | Stronger env  <- dependenciesOpenAcc a
+      , Stronger envd <- dependenciesOpenAcc d
+      , a' <- weaken (inverse env) a
+      , d' <- weaken (inverse envd) d
+      = (Dconsumers (Ddone env a' envd d')
+        , count env <> count envd)
     makeC (Stuple t)
       | (t', counts) <- makeT t
       = (Dconsumers (Dtuple t'), counts)
@@ -932,10 +932,6 @@ makeDependent = fst . makeD
           | (t', counts) <- makeT t
           , (c', counts') <- makeD c
           = (t' `SnocAtup` c', counts <> counts')
-
-    streamify :: OpenAfun aenv (index -> a -> a)
-              -> OpenAfun aenv (index -> a -> (a,a))
-    streamify (Alam (Alam (Abody a))) = Alam . Alam . Abody . OpenAcc $Alet a $ tuple v0 v0
 
     count :: aenv' ::> aenv -> Count aenv
     count WeakEmpty = CountBase
@@ -1183,7 +1179,7 @@ embedSeq embedAcc
 
     travC :: Consumer index acc aenv' arrs'
           -> Consumer index acc aenv' arrs'
-    travC (Conclude d a) = Conclude (cvtA d) (cvtA a)
+    travC (Last d a) = Last (cvtA d) (cvtA a)
     travC (Stuple t) = Stuple (cvtCT t)
       where
         cvtCT :: Atuple (PreOpenSeq index acc aenv') t -> Atuple (PreOpenSeq index acc aenv') t
@@ -2053,8 +2049,8 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtC :: Consumer index acc aenv s -> Consumer index acc aenv s
         cvtC c =
           case c of
-            Conclude a d -> Conclude (cvtA a) (cvtA d)
-            Stuple t     -> Stuple (cvtCT t)
+            Last a d -> Last (cvtA a) (cvtA d)
+            Stuple t -> Stuple (cvtCT t)
 
         cvtCT :: Atuple (PreOpenSeq index acc aenv) s -> Atuple (PreOpenSeq index acc aenv) s
         cvtCT NilAtup        = NilAtup

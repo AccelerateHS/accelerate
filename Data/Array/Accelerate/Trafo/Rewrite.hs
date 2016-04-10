@@ -131,16 +131,14 @@ convertSegmentsSeq seq =
         Pull src           -> Pull src
         Subarrays sh arr   -> Subarrays (cvtE sh) arr
         Produce l f        -> Produce (cvtE <$> l) (cvtAfun f)
-        MapAccumFlat f a x -> MapAccumFlat (cvtAfun f) (cvtA a) (cvtA x)
+        MapBatch f f' a x  -> MapBatch (cvtAfun f) (cvtAfun f') (cvtA a) (cvtA x)
         ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAfun f) (cvtA a)
 
     cvtC :: Consumer index OpenAcc aenv a -> Consumer index OpenAcc aenv a
     cvtC c =
       case c of
-        FoldSeqFlatten f a x -> FoldSeqFlatten (cvtAfun f) (cvtA a) (cvtA x)
-        Iterate l f a        -> Iterate (cvtE <$> l) (cvtAfun f) (cvtA a)
-        Conclude a d         -> Conclude (cvtA a) (cvtA d)
-        Stuple t             -> Stuple (cvtCT t)
+        Last a d           -> Last (cvtA a) (cvtA d)
+        Stuple t           -> Stuple (cvtCT t)
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
     cvtCT NilAtup        = NilAtup

@@ -79,6 +79,7 @@ import Data.Typeable
 
 -- friends
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Array.Lifted       ( Nested )
 import Data.Array.Accelerate.Array.Sugar
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.AST                hiding (
@@ -290,16 +291,16 @@ data PreSeq acc seq exp arrs where
                  -> seq [b]
                  -> PreSeq acc seq exp [c]
 
-  MapAccumFlat   :: (Arrays a, Shape sh, Elt e, Shape sh', Elt e')
-                 => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> acc (a, Vector sh', Vector e'))
-                 -> acc a
-                 -> seq [Array sh e]
-                 -> PreSeq acc seq exp [Array sh' e']
+  MapBatch       :: (Arrays a, Arrays b, Arrays c, Arrays s)
+                 => (Acc s -> Acc a -> acc b)
+                 -> (Acc s -> Acc (Nested b) -> acc (s, Nested c))
+                 -> acc s
+                 -> seq [a]
+                 -> PreSeq acc seq exp [(s,c)]
 
-  FoldSeqFlatten :: (Arrays a, Shape sh, Elt e)
-                 => (Acc a -> Acc (Vector sh) -> Acc (Vector e) -> acc a)
-                 -> acc a
-                 -> seq [Array sh e]
+  Last           :: Arrays a
+                 => acc a
+                 -> seq [a]
                  -> PreSeq acc seq exp a
 
   Stuple         :: (Arrays arrs, IsAtuple arrs)
@@ -1539,14 +1540,14 @@ showPreAccOp Aforeign{}         = "Aforeign"
 showPreAccOp Collect{}          = "Collect"
 
 showPreSeqOp :: PreSeq acc seq exp arrs -> String
-showPreSeqOp (StreamIn{})       = "StreamIn"
-showPreSeqOp (Subarrays{})      = "Subarrays"
-showPreSeqOp (Produce{})        = "Produce"
-showPreSeqOp (MapSeq{})         = "MapSeq"
-showPreSeqOp (ZipWithSeq{})     = "ZipWithSeq"
-showPreSeqOp (MapAccumFlat{})   = "ScanSeq"
-showPreSeqOp (FoldSeqFlatten{}) = "FoldSeqFlatten"
-showPreSeqOp (Stuple{})         = "Stuple"
+showPreSeqOp StreamIn{}       = "StreamIn"
+showPreSeqOp Subarrays{}      = "Subarrays"
+showPreSeqOp Produce{}        = "Produce"
+showPreSeqOp MapSeq{}         = "MapSeq"
+showPreSeqOp ZipWithSeq{}     = "ZipWithSeq"
+showPreSeqOp MapBatch{}       = "MapBatch"
+showPreSeqOp Last{}           = "Last"
+showPreSeqOp Stuple{}         = "Stuple"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String
 showArrays = display . collect (arrays (undefined::arrs)) . fromArr
