@@ -51,6 +51,7 @@ module Data.Array.Accelerate.Interpreter (
 import Control.Monad
 import Data.Bits
 import Data.Char                                        ( chr, ord )
+import Unsafe.Coerce                                    ( unsafeCoerce )
 import Prelude                                          hiding ( sum )
 
 -- friends
@@ -809,6 +810,8 @@ evalPrim PrimOrd                  = evalOrd
 evalPrim PrimChr                  = evalChr
 evalPrim PrimBoolToInt            = evalBoolToInt
 evalPrim (PrimFromIntegral ta tb) = evalFromIntegral ta tb
+evalPrim (PrimToFloating ta tb)   = evalToFloating ta tb
+evalPrim PrimCoerce{}             = unsafeCoerce
 
 
 -- Tuple construction and projection
@@ -858,6 +861,17 @@ evalFromIntegral ta (FloatingNumType tb)
   | IntegralDict <- integralDict ta
   , FloatingDict <- floatingDict tb
   = fromIntegral
+
+evalToFloating :: NumType a -> FloatingType b -> a -> b
+evalToFloating (IntegralNumType ta) tb
+  | IntegralDict <- integralDict ta
+  , FloatingDict <- floatingDict tb
+  = realToFrac
+
+evalToFloating (FloatingNumType ta) tb
+  | FloatingDict <- floatingDict ta
+  , FloatingDict <- floatingDict tb
+  = realToFrac
 
 
 -- Extract methods from reified dictionaries

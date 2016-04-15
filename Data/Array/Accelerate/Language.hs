@@ -106,7 +106,7 @@ module Data.Array.Accelerate.Language (
   (&&*), (||*), not,
 
   -- * Conversions
-  ord, chr, boolToInt, fromIntegral,
+  ord, chr, boolToInt, fromIntegral, realToFrac,
 
   -- * Constants
   ignore
@@ -1056,6 +1056,11 @@ boolToInt = mkBoolToInt
 --
 fromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
 fromIntegral = mkFromIntegral
+
+-- |General coercion to floating types
+--
+realToFrac :: (Elt a, Elt b, IsNum a, IsFloating b) => Exp a -> Exp b
+realToFrac = mkRealToFrac
 
 
 -- Constants

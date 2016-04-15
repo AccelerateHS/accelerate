@@ -1074,19 +1074,27 @@ data PrimFun sig where
   PrimLNot :: PrimFun (Bool         -> Bool)
 
   -- character conversions
+  -- FIXME: use IntegralType?
   PrimOrd  :: PrimFun (Char -> Int)
   PrimChr  :: PrimFun (Int  -> Char)
-  -- FIXME: use IntegralType?
 
-  -- FIXME: conversions between various integer types
-  --        should we have an overloaded functions like 'toInt'?
-  --        (or 'fromEnum' for enums?)
-  PrimBoolToInt    :: PrimFun (Bool -> Int)
+  -- boolean conversion
+  PrimBoolToInt :: PrimFun (Bool -> Int)
+
+  -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
+  PrimToFloating   :: NumType a -> FloatingType b -> PrimFun (a -> b)
 
-  -- FIXME: what do we want to do about Enum?  succ and pred are only
-  --   moderatly useful without user-defined enumerations, but we want
-  --   the range constructs for arrays (but that's not scalar primitives)
+  -- reinterpret the bits of a value as a different type
+  -- (the two types must have the same bit size)
+  PrimCoerce  :: NumType a -> NumType b -> PrimFun (a -> b)
+
+  -- FIXME: Conversions between various integer types: should we have overloaded
+  -- functions like 'toInt'? (or 'fromEnum' for enums?)
+
+  -- FIXME: What do we want to do about Enum? 'succ' and 'pred' are only
+  -- moderately useful without user-defined enumerations, but we want the range
+  -- constructs for arrays (but that's not scalar primitives)
 
 
 -- Debugging

@@ -27,6 +27,7 @@ import Prelude                                          hiding ( exp )
 import Data.Maybe                                       ( fromMaybe )
 import Data.Bits
 import Data.Char
+import GHC.Float                                        ( float2Double, double2Float )
 import Text.PrettyPrint
 import qualified Prelude                                as P
 
@@ -153,6 +154,8 @@ evalPrimApp env f x
       PrimChr                   -> evalChr x env
       PrimBoolToInt             -> evalBoolToInt x env
       PrimFromIntegral ta tb    -> evalFromIntegral ta tb x env
+      PrimToFloating ta tb      -> evalToFloating ta tb x env
+      PrimCoerce ta tb          -> evalCoerce ta tb x env
 
 
 -- Discriminate binary functions that commute, and if so return the operands in
@@ -630,6 +633,30 @@ evalFromIntegral ta (IntegralNumType tb)
 evalFromIntegral ta (FloatingNumType tb)
   | IntegralDict <- integralDict ta
   , FloatingDict <- floatingDict tb = eval1 fromIntegral
+
+evalToFloating :: Elt b => NumType a -> FloatingType b -> a :-> b
+evalToFloating (IntegralNumType ta) tb x env
+  | IntegralDict <- integralDict ta
+  , FloatingDict <- floatingDict tb = eval1 realToFrac x env
+
+evalToFloating (FloatingNumType ta) tb x env
+  | TypeFloat  FloatingDict <- ta
+  , TypeFloat  FloatingDict <- tb = Just x
+
+  | TypeDouble FloatingDict <- ta
+  , TypeDouble FloatingDict <- tb = Just x
+
+  | TypeFloat  FloatingDict <- ta
+  , TypeDouble FloatingDict <- tb = eval1 float2Double x env
+
+  | TypeDouble FloatingDict <- ta
+  , TypeFloat  FloatingDict <- tb = eval1 double2Float x env
+
+  | FloatingDict <- floatingDict ta
+  , FloatingDict <- floatingDict tb = eval1 realToFrac x env
+
+evalCoerce :: Elt b => NumType a -> NumType b -> a :-> b
+evalCoerce _ _ _ _ = Nothing
 
 
 -- Scalar primitives
