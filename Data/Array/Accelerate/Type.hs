@@ -73,10 +73,10 @@ import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
 -- standard libraries
 import Data.Bits
 import Data.Int
+import Data.Type.Equality
 import Data.Typeable
 import Data.Word
 import GHC.TypeLits
-import Data.Type.Equality
 import Foreign.Storable
 import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
