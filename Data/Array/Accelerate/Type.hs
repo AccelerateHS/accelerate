@@ -19,16 +19,42 @@
 --
 --  /Scalar types supported in array computations/
 --
---  Integral types: Int, Int8, Int16, Int32, Int64, Word, Word8, Word16, Word32,
---    Word64, CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong
+--  Integral types:
+--    * Int
+--    * Int8
+--    * Int16
+--    * Int32
+--    * Int64
+--    * Word
+--    * Word8
+--    * Word16
+--    * Word32
+--    * Word64
+--    * CShort
+--    * CUShort
+--    * CInt
+--    * CUInt
+--    * CLong
+--    * CULong
+--    * CLLong
+--    * CULLong
 --
---  Floating types: Float, Double, CFloat, CDouble
+--  Floating types:
+--    * Float
+--    * Double
+--    * CFloat
+--    * CDouble
 --
---  Non-numeric types: Bool, Char, CChar, CSChar, CUChar
+--  Non-numeric types:
+--    * Bool
+--    * Char
+--    * CChar
+--    * CSChar
+--    * CUChar
 --
---  'Int' has the same bitwidth as in plain Haskell computations, and 'Float'
---  and 'Double' represent IEEE single and double precision floating point
---  numbers, respectively.
+--  Note that 'Int' has the same bit width as in plain Haskell computations, and
+--  'Float' and 'Double' represent IEEE single and double precision floating
+--  point numbers, respectively.
 --
 
 module Data.Array.Accelerate.Type (
@@ -38,8 +64,9 @@ module Data.Array.Accelerate.Type (
   module Data.Array.Accelerate.Type
 ) where
 
--- Imports Typeable instances for 8-tuples and beyond
-import Data.Orphans ()
+
+import Data.Orphans ()    -- orphan instances for 8-tuples and beyond
+
 -- standard libraries
 import Data.Bits
 import Data.Int
