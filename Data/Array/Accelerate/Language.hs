@@ -106,7 +106,7 @@ module Data.Array.Accelerate.Language (
   (&&*), (||*), not,
 
   -- * Conversions
-  ord, chr, boolToInt, fromIntegral, realToFrac,
+  ord, chr, boolToInt, fromIntegral, realToFrac, bitcast,
 
   -- * Constants
   ignore
@@ -1061,6 +1061,12 @@ fromIntegral = mkFromIntegral
 --
 realToFrac :: (Elt a, Elt b, IsNum a, IsFloating b) => Exp a -> Exp b
 realToFrac = mkRealToFrac
+
+-- |Reinterpret a value as another type. The two representations must have the
+-- same bit size.
+--
+bitcast :: (Elt a, Elt b, IsScalar a, IsScalar b, BitSizeEq a b) => Exp a -> Exp b
+bitcast = mkBitcast
 
 
 -- Constants

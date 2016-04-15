@@ -655,7 +655,7 @@ evalToFloating (FloatingNumType ta) tb x env
   | FloatingDict <- floatingDict ta
   , FloatingDict <- floatingDict tb = eval1 realToFrac x env
 
-evalCoerce :: Elt b => NumType a -> NumType b -> a :-> b
+evalCoerce :: Elt b => ScalarType a -> ScalarType b -> a :-> b
 evalCoerce _ _ _ _ = Nothing
 
 

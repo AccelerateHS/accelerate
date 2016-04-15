@@ -264,7 +264,7 @@ module Data.Array.Accelerate (
   L.intersect,
 
   -- *** Conversions
-  L.ord, L.chr, L.boolToInt, L.fromIntegral, L.realToFrac,
+  L.ord, L.chr, L.boolToInt, L.fromIntegral, L.realToFrac, L.bitcast,
 
   -- ---------------------------------------------------------------------------
 

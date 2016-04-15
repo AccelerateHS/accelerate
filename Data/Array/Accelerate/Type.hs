@@ -1,9 +1,12 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies       #-}
-{-# LANGUAGE TypeOperators      #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveDataTypeable   #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
@@ -72,6 +75,8 @@ import Data.Bits
 import Data.Int
 import Data.Typeable
 import Data.Word
+import GHC.TypeLits
+import Data.Type.Equality
 import Foreign.Storable
 import Foreign.C.Types (
   CChar, CSChar, CUChar, CShort, CUShort, CInt, CUInt, CLong, CULong,
@@ -579,13 +584,71 @@ nonNumDict (TypeCSChar dict) = dict
 nonNumDict (TypeCUChar dict) = dict
 
 
--- Tuple type
--- ----------
+-- Tuple types
+-- -----------
 
 data TupleType a where
   UnitTuple   ::                               TupleType ()
   SingleTuple :: ScalarType a               -> TupleType a
   PairTuple   :: TupleType a -> TupleType b -> TupleType (a, b)
+
+
+-- Type-level bit sizes
+-- --------------------
+
+-- |Constraint that values of these two types have the same bit width
+--
+type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
+
+type family BitSize a :: Nat
+
+type instance BitSize Int8    = 8
+type instance BitSize Int16   = 16
+type instance BitSize Int32   = 32
+type instance BitSize Int64   = 64
+type instance BitSize Word8   = 8
+type instance BitSize Word16  = 16
+type instance BitSize Word32  = 32
+type instance BitSize Word64  = 64
+type instance BitSize Char    = 32
+type instance BitSize Bool    = 1
+
+type instance BitSize CShort  = 16
+type instance BitSize CUShort = 16
+type instance BitSize CInt    = 32
+type instance BitSize CUInt   = 32
+type instance BitSize CLLong  = 64
+type instance BitSize CULLong = 64
+type instance BitSize CChar   = 8
+type instance BitSize CUChar  = 8
+type instance BitSize CSChar  = 8
+
+type instance BitSize Float   = 32
+type instance BitSize CFloat  = 32
+type instance BitSize Double  = 64
+type instance BitSize CDouble = 64
+
+type instance BitSize Int    = $( case finiteBitSize (undefined::Int) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+type instance BitSize Word   = $( case finiteBitSize (undefined::Word) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+type instance BitSize CLong  = $( case finiteBitSize (undefined::CLong) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
+
+type instance BitSize CULong = $( case finiteBitSize (undefined::CULLong) of
+                                    32 -> [t| 32 |]
+                                    64 -> [t| 64 |]
+                                    _  -> error "I don't know what architecture I am"  )
+
 
 -- Stencil support
 -- ---------------
