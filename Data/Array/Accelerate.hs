@@ -163,7 +163,7 @@ module Data.Array.Accelerate (
   L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.scanSeqE, L.mapBatch,
 
   -- ** Sequence consumers
-  P.foldSeqE, P.foldSeqFlatten, P.fromSeq, P.concatElems, P.concatShapes,
+  L.last, P.foldSeqE, P.foldSeqFlatten, P.fromSeq, P.concatElems, P.concatShapes,
 
   -- *** Specification
   L.Stencil, L.Boundary(..),
