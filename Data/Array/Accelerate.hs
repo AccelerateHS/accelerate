@@ -160,7 +160,7 @@ module Data.Array.Accelerate (
   P.toSeqInner, P.toSeqOuter,
 
   -- ** Sequence transducers
-  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.scanSeqE,
+  L.mapSeq, L.zipWithSeq, P.mapSeqE, P.zipWithSeqE, P.scanSeqE, L.mapBatch,
 
   -- ** Sequence consumers
   P.foldSeqE, P.foldSeqFlatten, P.fromSeq, P.concatElems, P.concatShapes,
