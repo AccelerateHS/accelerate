@@ -837,7 +837,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
        => Shape sh where
 
   -- |Number of dimensions of a /shape/ or /index/ (>= 0).
-  dim    :: sh -> Int
+  rank   :: sh -> Int
 
   -- |Total number of elements in an array of the given /shape/.
   size   :: sh -> Int
@@ -891,7 +891,7 @@ class (Elt sh, Elt (Any sh), Repr.Shape (EltRepr sh), FullShape sh ~ sh, CoSlice
   -- | The slice index for specifying a slice with only the Z component projected
   sliceNoneIndex :: sh -> Repr.SliceIndex (EltRepr sh) () (EltRepr sh) (EltRepr sh)
 
-  dim                   = Repr.dim . fromElt
+  rank                  = Repr.rank . fromElt
   size                  = Repr.size . fromElt
   empty                 = toElt Repr.empty
   -- (#) must be individually defined, as it holds for all instances *except*

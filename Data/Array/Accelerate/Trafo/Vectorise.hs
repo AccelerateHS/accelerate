@@ -1817,7 +1817,7 @@ offsets segs = S.scanl' (+) 0 $ S.map (S.shapeSize) segs
 makeNonEmpty :: forall sh. Shape sh => S.Acc (Segments sh) -> S.Acc (Segments sh)
 makeNonEmpty = S.map nonEmpty
   where
-    nonEmpty = S.union (S.constant $ listToShape $ P.replicate (dim (ignore::sh)) 1)
+    nonEmpty = S.union (S.constant $ listToShape $ P.replicate (rank (ignore::sh)) 1)
 
 -- RCE: I have a strong feeling this can be done better.
 --

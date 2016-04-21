@@ -270,7 +270,7 @@ module Data.Array.Accelerate (
 
   -- * Plain arrays
   -- ** Operations
-  arrayDim, arrayShape, arraySize, indexArray,
+  arrayRank, arrayShape, arraySize, indexArray,
 
   -- ** Conversions
   --
@@ -313,9 +313,8 @@ indexArray = (S.!)
 
 -- | Rank of an array.
 --
-arrayDim :: S.Shape sh => sh -> T.Int
-arrayDim = S.dim
--- FIXME: Rename to rank
+arrayRank :: S.Shape sh => sh -> T.Int
+arrayRank = S.rank
 
 -- |Array shape in plain Haskell code.
 --
