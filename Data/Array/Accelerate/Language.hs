@@ -758,8 +758,8 @@ shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
 
 
--- Instances of all relevant H98 classes
--- -------------------------------------
+-- Instances of all relevant Haskell 98 classes
+-- --------------------------------------------
 
 preludeError :: String -> String -> a
 preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
@@ -769,17 +769,18 @@ instance (Elt t, IsBounded t) => Bounded (Exp t) where
   maxBound = mkMaxBound
 
 instance (Elt t, IsScalar t) => Enum (Exp t)
+  -- FIXME: Provided only to fulfil superclass constraints; e.g. Integral
 --  succ = mkSucc
 --  pred = mkPred
-  -- FIXME: ops
 
 instance (Elt t, IsScalar t) => Eq (Exp t) where
-  -- FIXME: instance makes no sense with standard signatures
+  -- FIXME: Provided only to fulfil superclass constraints; e.g. Ord
   (==)  = preludeError "Eq.==" "(==*)"
   (/=)  = preludeError "Eq./=" "(/=*)"
 
 instance (Elt t, IsScalar t) => Ord (Exp t) where
-  -- FIXME: instance makes no sense with standard signatures
+  -- FIXME: Provided only to fulfil superclass constraints; e.g. Real
+  -- FIXME: Instance makes no sense with standard signatures
   min           = mkMin
   max           = mkMax
   --
@@ -889,8 +890,9 @@ instance (Elt t, IsNum t) => Num (Exp t) where
   fromInteger = constant . P.fromInteger
 
 instance (Elt t, IsNum t) => Real (Exp t)
-  -- FIXME: Why did we include this class?  We won't need `toRational' until
-  --   we support rational numbers in AP computations.
+  -- FIXME: Provided only to fulfil superclass constrains; e.g. Integral
+  -- FIXME: We won't need `toRational' until we support rational numbers in AP
+  --        computations.
 
 instance (Elt t, IsIntegral t) => Integral (Exp t) where
   quot    = mkQuot
