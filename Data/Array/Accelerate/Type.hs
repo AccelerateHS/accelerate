@@ -61,6 +61,7 @@
 --
 
 module Data.Array.Accelerate.Type (
+  Float, Double, Char, Bool(..),
   module Data.Int,
   module Data.Word,
   module Foreign.C.Types,
