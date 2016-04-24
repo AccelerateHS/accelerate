@@ -111,6 +111,8 @@ Description:
   .
     * "Data.Array.Accelerate.Interpreter"
   .
+    * "Data.Array.Accelerate.Data.Bits"
+  .
     * "Data.Array.Accelerate.Data.Complex"
   .
 
@@ -187,59 +189,76 @@ Library
         , unordered-containers          >= 0.2
 
   Exposed-modules:
-                        -- The core language and reference implementation
-                        Data.Array.Accelerate
-                        Data.Array.Accelerate.Interpreter
+        -- The core language and reference implementation
+        Data.Array.Accelerate
+        Data.Array.Accelerate.Interpreter
 
-                        -- Prelude-like
-                        Data.Array.Accelerate.Data.Complex
+        -- Prelude-like
+        Data.Array.Accelerate.Data.Bits
+        Data.Array.Accelerate.Data.Complex
 
-                        -- For backend development
-                        Data.Array.Accelerate.AST
-                        Data.Array.Accelerate.Analysis.Match
-                        Data.Array.Accelerate.Analysis.Shape
-                        Data.Array.Accelerate.Analysis.Stencil
-                        Data.Array.Accelerate.Analysis.Type
-                        Data.Array.Accelerate.Array.Data
-                        Data.Array.Accelerate.Array.Remote
-                        Data.Array.Accelerate.Array.Remote.Class
-                        Data.Array.Accelerate.Array.Remote.LRU
-                        Data.Array.Accelerate.Array.Remote.Table
-                        Data.Array.Accelerate.Array.Representation
-                        Data.Array.Accelerate.Array.Sugar
-                        Data.Array.Accelerate.Array.Unique
-                        Data.Array.Accelerate.Async
-                        Data.Array.Accelerate.Debug
-                        Data.Array.Accelerate.Error
-                        Data.Array.Accelerate.FullList
-                        Data.Array.Accelerate.Lifetime
-                        Data.Array.Accelerate.Pretty
-                        Data.Array.Accelerate.Product
-                        Data.Array.Accelerate.Smart
-                        Data.Array.Accelerate.Trafo
-                        Data.Array.Accelerate.Type
+        -- For backend development
+        Data.Array.Accelerate.AST
+        Data.Array.Accelerate.Analysis.Match
+        Data.Array.Accelerate.Analysis.Shape
+        Data.Array.Accelerate.Analysis.Stencil
+        Data.Array.Accelerate.Analysis.Type
+        Data.Array.Accelerate.Array.Data
+        Data.Array.Accelerate.Array.Remote
+        Data.Array.Accelerate.Array.Remote.Class
+        Data.Array.Accelerate.Array.Remote.LRU
+        Data.Array.Accelerate.Array.Remote.Table
+        Data.Array.Accelerate.Array.Representation
+        Data.Array.Accelerate.Array.Sugar
+        Data.Array.Accelerate.Array.Unique
+        Data.Array.Accelerate.Async
+        Data.Array.Accelerate.Debug
+        Data.Array.Accelerate.Error
+        Data.Array.Accelerate.FullList
+        Data.Array.Accelerate.Lifetime
+        Data.Array.Accelerate.Pretty
+        Data.Array.Accelerate.Product
+        Data.Array.Accelerate.Smart
+        Data.Array.Accelerate.Trafo
+        Data.Array.Accelerate.Type
 
-  Other-modules:        Data.Array.Accelerate.Array.Lifted
-                        Data.Array.Accelerate.Array.Remote.Nursery
-                        Data.Array.Accelerate.Debug.Flags
-                        Data.Array.Accelerate.Debug.Stats
-                        Data.Array.Accelerate.Debug.Trace
-                        Data.Array.Accelerate.Language
-                        Data.Array.Accelerate.Lift
-                        Data.Array.Accelerate.Prelude
-                        Data.Array.Accelerate.Pretty.Graphviz
-                        Data.Array.Accelerate.Pretty.Graphviz.Monad
-                        Data.Array.Accelerate.Pretty.Graphviz.Type
-                        Data.Array.Accelerate.Pretty.Print
-                        Data.Array.Accelerate.Trafo.Algebra
-                        Data.Array.Accelerate.Trafo.Base
-                        Data.Array.Accelerate.Trafo.Fusion
-                        Data.Array.Accelerate.Trafo.Rewrite
-                        Data.Array.Accelerate.Trafo.Sharing
-                        Data.Array.Accelerate.Trafo.Shrink
-                        Data.Array.Accelerate.Trafo.Simplify
-                        Data.Array.Accelerate.Trafo.Substitution
-                        Data.Array.Accelerate.Trafo.Vectorise
+  Other-modules:
+        Data.Array.Accelerate.Array.Lifted
+        Data.Array.Accelerate.Array.Remote.Nursery
+        Data.Array.Accelerate.Classes
+        Data.Array.Accelerate.Classes.Bounded
+        Data.Array.Accelerate.Classes.Enum
+        Data.Array.Accelerate.Classes.Eq
+        Data.Array.Accelerate.Classes.Floating
+        Data.Array.Accelerate.Classes.Fractional
+        Data.Array.Accelerate.Classes.FromIntegral
+        Data.Array.Accelerate.Classes.Integral
+        Data.Array.Accelerate.Classes.Num
+        Data.Array.Accelerate.Classes.Ord
+        Data.Array.Accelerate.Classes.Real
+        Data.Array.Accelerate.Classes.RealFloat
+        Data.Array.Accelerate.Classes.RealFrac
+        Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Debug.Flags
+        Data.Array.Accelerate.Debug.Stats
+        Data.Array.Accelerate.Debug.Trace
+        Data.Array.Accelerate.Language
+        Data.Array.Accelerate.Lift
+        Data.Array.Accelerate.Prelude
+        Data.Array.Accelerate.Pretty.Graphviz
+        Data.Array.Accelerate.Pretty.Graphviz.Monad
+        Data.Array.Accelerate.Pretty.Graphviz.Type
+        Data.Array.Accelerate.Pretty.Print
+        Data.Array.Accelerate.Trafo.Algebra
+        Data.Array.Accelerate.Trafo.Base
+        Data.Array.Accelerate.Trafo.Fusion
+        Data.Array.Accelerate.Trafo.Rewrite
+        Data.Array.Accelerate.Trafo.Sharing
+        Data.Array.Accelerate.Trafo.Shrink
+        Data.Array.Accelerate.Trafo.Simplify
+        Data.Array.Accelerate.Trafo.Substitution
+        Data.Array.Accelerate.Trafo.Vectorise
+
 
   if flag(debug)
     cpp-options:        -DACCELERATE_DEBUG
@@ -264,7 +283,7 @@ Library
   ghc-prof-options:     -caf-all -auto-all
 
   if impl(ghc >= 7.0)
-    ghc-options:        -fspec-constr-count=25 -fcontext-stack=30
+    ghc-options:        -fspec-constr-count=25 -fcontext-stack=35
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the

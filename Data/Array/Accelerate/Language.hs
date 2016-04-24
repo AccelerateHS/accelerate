@@ -1,11 +1,9 @@
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
-{-# OPTIONS_GHC -fno-warn-orphans         #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
--- Copyright   : [2008..2014] Manuel M T Chakravarty, Gabriele Keller
---               [2009..2014] Trevor L. McDonell
+-- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
+--               [2009..2016] Trevor L. McDonell
 --               [2014..2014] Frederik M. Madsen
 -- License     : BSD3
 --
@@ -35,7 +33,7 @@ module Data.Array.Accelerate.Language (
   -- * Shape manipulation
   reshape,
 
-  -- * Extraction of subarrays
+  -- * Extraction of sub-arrays
   slice,
 
   -- * Map-like functions
@@ -47,7 +45,7 @@ module Data.Array.Accelerate.Language (
   -- * Sequence producers
   streamIn, toSeq,
 
-  -- * Sequence transudcers
+  -- * Sequence transducers
   mapSeq, zipWithSeq, scanSeq,
 
   -- * Sequence consumers
@@ -81,53 +79,36 @@ module Data.Array.Accelerate.Language (
   -- * Pipelining
   (>->),
 
-  -- * Array-level flow-control
-  acond, awhile,
-
   -- * Index construction and destruction
   indexHead, indexTail, toIndex, fromIndex,
   intersect, union,
 
   -- * Flow-control
-  cond, while,
+  acond, awhile,
+  cond,  while,
 
   -- * Array operations with a scalar result
   (!), (!!), shape, size, shapeSize,
-
-  -- * Methods of H98 classes that we need to redefine as their signatures change
-  (==*), (/=*), (<*), (<=*), (>*), (>=*),
-  bit, setBit, clearBit, complementBit, testBit,
-  shift,  shiftL,  shiftR,
-  rotate, rotateL, rotateR,
-  truncate, round, floor, ceiling,
-  even, odd, isNaN,
 
   -- * Standard functions that we need to redefine as their signatures change
   (&&*), (||*), not,
 
   -- * Conversions
-  ord, chr, boolToInt, fromIntegral, realToFrac, bitcast,
+  ord, chr, boolToInt, bitcast,
 
   -- * Constants
   ignore
 
-  -- Instances of Bounded, Enum, Eq, Ord, Bits, Num, Real, Floating,
-  -- Fractional, RealFrac, RealFloat
-
 ) where
 
--- standard libraries
-import Prelude ( Bounded, Enum, Num, Real, Integral, Floating, Fractional,
-  RealFloat, RealFrac, Eq, Ord, Bool, Char, String, (.), ($), error )
-import Data.Bits ( Bits((.&.), (.|.), xor, complement) )
-import qualified Prelude                                as P
-import Text.Printf
-
 -- friends
-import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Type
 import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
+
+-- standard libraries
+import Prelude                                          ( (.) )
 
 
 -- Array introduction
@@ -758,262 +739,6 @@ shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
 
 
--- Instances of all relevant Haskell 98 classes
--- --------------------------------------------
-
-preludeError :: String -> String -> a
-preludeError x y = error (printf "Prelude.%s applied to EDSL types: use %s instead" x y)
-
-instance (Elt t, IsBounded t) => Bounded (Exp t) where
-  minBound = mkMinBound
-  maxBound = mkMaxBound
-
-instance (Elt t, IsScalar t) => Enum (Exp t)
-  -- FIXME: Provided only to fulfil superclass constraints; e.g. Integral
---  succ = mkSucc
---  pred = mkPred
-
-instance (Elt t, IsScalar t) => Eq (Exp t) where
-  -- FIXME: Provided only to fulfil superclass constraints; e.g. Ord
-  (==)  = preludeError "Eq.==" "(==*)"
-  (/=)  = preludeError "Eq./=" "(/=*)"
-
-instance (Elt t, IsScalar t) => Ord (Exp t) where
-  -- FIXME: Provided only to fulfil superclass constraints; e.g. Real
-  -- FIXME: Instance makes no sense with standard signatures
-  min           = mkMin
-  max           = mkMax
-  --
-  compare       = error "Prelude.Ord.compare applied to EDSL types"
-  (<)           = preludeError "Ord.<"  "(<*)"
-  (<=)          = preludeError "Ord.<=" "(<=*)"
-  (>)           = preludeError "Ord.>"  "(>*)"
-  (>=)          = preludeError "Ord.>=" "(>=*)"
-
-instance (Elt t, IsNum t, IsIntegral t) => Bits (Exp t) where
-  (.&.)      = mkBAnd
-  (.|.)      = mkBOr
-  xor        = mkBXor
-  complement = mkBNot
-  -- FIXME: argh, the rest have fixed types in their signatures
-
-
--- | @'shift' x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
--- @-i@ bits otherwise. Right shifts perform sign extension on signed number
--- types; i.e. they fill the top bits with 1 if the @x@ is negative and with 0
--- otherwise.
---
-shift :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shift  x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBShiftR` (-i))
-                   (x `mkBShiftL` i)
-
--- | Shift the argument left by the specified number of bits
--- (which must be non-negative).
---
-shiftL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftL x i
-  = cond (i ==* 0) x
-  $ mkBShiftL x i
-
--- | Shift the first argument right by the specified number of bits. The result
--- is undefined for negative shift amounts and shift amounts greater or equal to
--- the 'bitSize'.
---
--- Right shifts perform sign extension on signed number types; i.e. they fill
--- the top bits with 1 if the @x@ is negative and with 0 otherwise.
---
-shiftR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-shiftR x i
-  = cond (i ==* 0) x
-  $ mkBShiftR x i
-
--- | @'rotate' x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right by
--- @-i@ bits otherwise.
---
-rotate :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotate x i
-  = cond (i ==* 0) x
-  $ cond (i <*  0) (x `mkBRotateR` (-i))
-                   (x `mkBRotateL` i)
-
--- | Rotate the argument left by the specified number of bits
--- (which must be non-negative).
---
-rotateL :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateL x i
-  = cond (i ==* 0) x
-  $ mkBRotateL x i
-
--- | Rotate the argument right by the specified number of bits
--- (which must be non-negative).
---
-rotateR :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-rotateR x i
-  = cond (i ==* 0) x
-  $ mkBRotateR x i
-
--- | @bit i@ is a value with the @i@th bit set and all other bits clear
---
-bit :: (Elt t, IsIntegral t) => Exp Int -> Exp t
-bit x = 1 `shiftL` x
-
--- | @x \`setBit\` i@ is the same as @x .|. bit i@
---
-setBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `setBit` i = x .|. bit i
-
--- | @x \`clearBit\` i@ is the same as @x .&. complement (bit i)@
---
-clearBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `clearBit` i = x .&. complement (bit i)
-
--- | @x \`complementBit\` i@ is the same as @x \`xor\` bit i@
---
-complementBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp t
-x `complementBit` i = x `xor` bit i
-
--- | Return 'True' if the @n@th bit of the argument is 1
---
-testBit :: (Elt t, IsIntegral t) => Exp t -> Exp Int -> Exp Bool
-x `testBit` i       = (x .&. bit i) /=* 0
-
-
-instance (Elt t, IsNum t) => Num (Exp t) where
-  (+)         = mkAdd
-  (-)         = mkSub
-  (*)         = mkMul
-  negate      = mkNeg
-  abs         = mkAbs
-  signum      = mkSig
-  fromInteger = constant . P.fromInteger
-
-instance (Elt t, IsNum t) => Real (Exp t)
-  -- FIXME: Provided only to fulfil superclass constrains; e.g. Integral
-  -- FIXME: We won't need `toRational' until we support rational numbers in AP
-  --        computations.
-
-instance (Elt t, IsIntegral t) => Integral (Exp t) where
-  quot    = mkQuot
-  rem     = mkRem
-  div     = mkIDiv
-  mod     = mkMod
-  quotRem = mkQuotRem
-  divMod  = mkDivMod
---  toInteger =  -- makes no sense
-
-instance (Elt t, IsFloating t) => Floating (Exp t) where
-  pi      = mkPi
-  sin     = mkSin
-  cos     = mkCos
-  tan     = mkTan
-  asin    = mkAsin
-  acos    = mkAcos
-  atan    = mkAtan
-  sinh    = mkSinh
-  cosh    = mkCosh
-  tanh    = mkTanh
-  asinh   = mkAsinh
-  acosh   = mkAcosh
-  atanh   = mkAtanh
-  exp     = mkExpFloating
-  sqrt    = mkSqrt
-  log     = mkLog
-  (**)    = mkFPow
-  logBase = mkLogBase
-
-instance (Elt t, IsFloating t) => Fractional (Exp t) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
-instance (Elt t, IsFloating t) => RealFrac (Exp t)
-  -- FIXME: add other ops
-
-instance (Elt t, IsFloating t) => RealFloat (Exp t) where
-  atan2 = mkAtan2
-  -- FIXME: add other ops
-
-
--- Methods from H98 classes, where we need other signatures
--- --------------------------------------------------------
-
-infix 4 ==*, /=*, <*, <=*, >*, >=*
-
--- |Equality lifted into Accelerate expressions.
---
-(==*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(==*) = mkEq
-
--- |Inequality lifted into Accelerate expressions.
---
-(/=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(/=*) = mkNEq
-
--- compare :: a -> a -> Ordering  -- we have no enumerations at the moment
--- compare = ...
-
--- |Smaller-than lifted into Accelerate expressions.
---
-(<*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(<*)  = mkLt
-
--- |Greater-or-equal lifted into Accelerate expressions.
---
-(>=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(>=*) = mkGtEq
-
--- |Greater-than lifted into Accelerate expressions.
---
-(>*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(>*)  = mkGt
-
--- |Smaller-or-equal lifted into Accelerate expressions.
---
-(<=*) :: (Elt t, IsScalar t) => Exp t -> Exp t -> Exp Bool
-(<=*) = mkLtEq
-
--- Conversions from the RealFrac class
---
-
--- | @truncate x@ returns the integer nearest @x@ between zero and @x@.
---
-truncate :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-truncate = mkTruncate
-
--- | @round x@ returns the nearest integer to @x@, or the even integer if @x@ is
--- equidistant between two integers.
---
-round :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-round = mkRound
-
--- | @floor x@ returns the greatest integer not greater than @x@.
---
-floor :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-floor = mkFloor
-
--- | @ceiling x@ returns the least integer not less than @x@.
---
-ceiling :: (Elt a, Elt b, IsFloating a, IsIntegral b) => Exp a -> Exp b
-ceiling = mkCeiling
-
--- | return if the integer is even
---
-even :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
-even x = x .&. 1 ==* 0
-
--- | return if the integer is odd
---
-odd :: (Elt a, IsIntegral a) => Exp a -> Exp Bool
-odd x = x .&. 1 ==* 1
-
--- | return if the argument is an IEEE "not-a-number" (NaN) value
---
-isNaN :: (Elt a, IsFloating a) => Exp a -> Exp Bool
-isNaN = mkIsNaN
-
-
 -- Non-overloaded standard functions, where we need other signatures
 -- -----------------------------------------------------------------
 
@@ -1053,16 +778,6 @@ chr = mkChr
 --
 boolToInt :: Exp Bool -> Exp Int
 boolToInt = mkBoolToInt
-
--- |General coercion from integral types
---
-fromIntegral :: (Elt a, Elt b, IsIntegral a, IsNum b) => Exp a -> Exp b
-fromIntegral = mkFromIntegral
-
--- |General coercion to floating types
---
-realToFrac :: (Elt a, Elt b, IsNum a, IsFloating b) => Exp a -> Exp b
-realToFrac = mkRealToFrac
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

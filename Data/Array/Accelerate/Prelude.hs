@@ -71,10 +71,13 @@ module Data.Array.Accelerate.Prelude (
   -- * Controlling execution
   compute,
 
-  -- * Array-level flow control
+  -- * Flow control
+  IfThenElse(..),
+
+  -- ** Array-level
   (?|),
 
-  -- * Expression-level flow control
+  -- ** Expression-level
   (?), caseof,
 
   -- * Scalar iteration
@@ -103,17 +106,19 @@ module Data.Array.Accelerate.Prelude (
 
 -- avoid clashes with Prelude functions
 --
-import Data.Bits
-import Data.Bool
-import Prelude ((.), ($), (+), (-), (*), undefined, const, id, min, max, Float, Double, Char)
-import qualified Prelude as P
+import GHC.Base                                                     ( Constraint )
+import Prelude                                                      ( (.), ($), undefined, const, id )
+import qualified Prelude                                            as P
 
 -- friends
-import Data.Array.Accelerate.Array.Sugar hiding ((!), ignore, shape, size, intersect)
+import Data.Array.Accelerate.Array.Sugar                            hiding ( (!), ignore, shape, size, intersect )
+import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Language
-import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Lift
+import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
+
+import Data.Array.Accelerate.Data.Bits
 
 
 -- Element-wise operations
@@ -662,28 +667,28 @@ or = foldAll (||*) (constant False)
 
 -- | Compute the sum of elements
 --
-sum :: (Shape sh, Elt e, IsNum e)
+sum :: (Shape sh, Elt e, Num e)
     => Acc (Array sh e)
     -> Acc (Scalar e)
 sum = foldAll (+) 0
 
 -- | Compute the product of the elements
 --
-product :: (Shape sh, Elt e, IsNum e)
+product :: (Shape sh, Elt e, Num e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 product = foldAll (*) 1
 
 -- | Yield the minimum element of an array. The array must not be empty.
 --
-minimum :: (Shape sh, Elt e, IsScalar e)
+minimum :: (Shape sh, Elt e, Ord e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 minimum = fold1All min
 
 -- | Yield the maximum element of an array. The array must not be empty.
 --
-maximum :: (Shape sh, Elt e, IsScalar e)
+maximum :: (Shape sh, Elt e, Ord e)
         => Acc (Array sh e)
         -> Acc (Scalar e)
 maximum = fold1All max
@@ -744,7 +749,7 @@ postscanr f e = map (`f` e) . scanr1 f
 
 -- |Segmented version of 'scanl'
 --
-scanlSeg :: (Elt a, Elt i, IsIntegral i)
+scanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -781,7 +786,7 @@ scanlSeg f z vec seg = scanl1Seg f vec' seg'
 -- second element is a vector of segment scan totals and has the same size as
 -- the segment vector.
 --
-scanl'Seg :: forall a i. (Elt a, Elt i, IsIntegral i)
+scanl'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -833,7 +838,7 @@ scanl'Seg f z vec seg = result
 
 -- |Segmented version of 'scanl1'.
 --
-scanl1Seg :: (Elt a, Elt i, IsIntegral i)
+scanl1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc (Segments i)
@@ -846,7 +851,7 @@ scanl1Seg f vec seg
 
 -- |Segmented version of 'prescanl'.
 --
-prescanlSeg :: (Elt a, Elt i, IsIntegral i)
+prescanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -859,7 +864,7 @@ prescanlSeg f e vec seg
 
 -- |Segmented version of 'postscanl'.
 --
-postscanlSeg :: (Elt a, Elt i, IsIntegral i)
+postscanlSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -871,7 +876,7 @@ postscanlSeg f e vec seg
 
 -- |Segmented version of 'scanr'.
 --
-scanrSeg :: (Elt a, Elt i, IsIntegral i)
+scanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
          => (Exp a -> Exp a -> Exp a)
          -> Exp a
          -> Acc (Vector a)
@@ -893,7 +898,7 @@ scanrSeg f z vec seg = scanr1Seg f vec' seg'
 
 -- | Segmented version of 'scanr''.
 --
-scanr'Seg :: forall a i. (Elt a, Elt i, IsIntegral i)
+scanr'Seg :: forall a i. (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Exp a
           -> Acc (Vector a)
@@ -920,7 +925,7 @@ scanr'Seg f z vec seg = result
 
 -- |Segmented version of 'scanr1'.
 --
-scanr1Seg :: (Elt a, Elt i, IsIntegral i)
+scanr1Seg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
           => (Exp a -> Exp a -> Exp a)
           -> Acc (Vector a)
           -> Acc (Segments i)
@@ -933,7 +938,7 @@ scanr1Seg f vec seg
 
 -- |Segmented version of 'prescanr'.
 --
-prescanrSeg :: (Elt a, Elt i, IsIntegral i)
+prescanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
             => (Exp a -> Exp a -> Exp a)
             -> Exp a
             -> Acc (Vector a)
@@ -946,7 +951,7 @@ prescanrSeg f e vec seg
 
 -- |Segmented version of 'postscanr'.
 --
-postscanrSeg :: (Elt a, Elt i, IsIntegral i)
+postscanrSeg :: (Elt a, Elt i, Integral i, Bits i, FromIntegral i Int, FromIntegral Int i)
              => (Exp a -> Exp a -> Exp a)
              -> Exp a
              -> Acc (Vector a)
@@ -967,7 +972,10 @@ postscanrSeg f e vec seg
 -- empty segments are represented by this single flag entry. This is additional
 -- data is used by exclusive segmented scan.
 --
-mkHeadFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
+mkHeadFlags
+    :: (Elt i, Integral i, FromIntegral i Int)
+    => Acc (Segments i)
+    -> Acc (Segments i)
 mkHeadFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (offset ! ix)) ones
@@ -979,7 +987,10 @@ mkHeadFlags seg
 -- |Compute tail flags vector from segment vector for right-scans. That is, the
 -- flag is placed at the last place in each segment.
 --
-mkTailFlags :: (Elt i, IsIntegral i) => Acc (Segments i) -> Acc (Segments i)
+mkTailFlags
+    :: (Elt i, Integral i, FromIntegral i Int)
+    => Acc (Segments i)
+    -> Acc (Segments i)
 mkTailFlags seg
   = init
   $ permute (+) zeros (\ix -> index1' (the len - 1 - offset ! ix)) ones
@@ -992,9 +1003,12 @@ mkTailFlags seg
 -- The segmented apply operates on a head-flag value tuple, and follows the
 -- procedure of Sengupta et. al.
 --
-segmented :: (Elt e, Elt i, IsIntegral i)
-          => (Exp e -> Exp e -> Exp e)
-          -> Exp (i, e) -> Exp (i, e) -> Exp (i, e)
+segmented
+    :: (Elt e, Elt i, Num i, Bits i)
+    => (Exp e -> Exp e -> Exp e)
+    -> Exp (i, e)
+    -> Exp (i, e)
+    -> Exp (i, e)
 segmented f a b =
   let (aF, aV) = unlift a
       (bF, bV) = unlift b
@@ -1012,10 +1026,10 @@ segmented f a b =
 -- back to concrete Int. However, don't put these generalised forms into the
 -- base library, because it results in too many ambiguity errors.
 --
-index1' ::  (Elt i, IsIntegral i) => Exp i -> Exp DIM1
+index1' ::  (Elt i, Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
 index1' i = lift (Z :. fromIntegral i)
 
-unindex1' :: (Elt i, IsIntegral i) => Exp DIM1 -> Exp i
+unindex1' :: (Elt i, Num i, FromIntegral Int i) => Exp DIM1 -> Exp i
 unindex1' ix = let Z :. i = unlift ix in fromIntegral i
 
 
@@ -1039,17 +1053,22 @@ fill sh c = generate sh (const c)
 -- | Create an array of the given shape containing the values x, x+1, etc (in
 --   row-major order).
 --
-enumFromN :: (Shape sh, Elt e, IsNum e) => Exp sh -> Exp e -> Acc (Array sh e)
+enumFromN
+    :: (Shape sh, Elt e, Num e, FromIntegral Int e)
+    => Exp sh
+    -> Exp e
+    -> Acc (Array sh e)
 enumFromN sh x = enumFromStepN sh x 1
 
 -- | Create an array of the given shape containing the values @x@, @x+y@,
 -- @x+y+y@ etc. (in row-major order).
 --
-enumFromStepN :: (Shape sh, Elt e, IsNum e)
-              => Exp sh
-              -> Exp e    -- ^ x: start
-              -> Exp e    -- ^ y: step
-              -> Acc (Array sh e)
+enumFromStepN
+    :: (Shape sh, Elt e, Num e, FromIntegral Int e)
+    => Exp sh
+    -> Exp e              -- ^ x: start
+    -> Exp e              -- ^ y: step
+    -> Acc (Array sh e)
 enumFromStepN sh x y
   = reshape sh
   $ generate (index1 $ shapeSize sh)
@@ -1363,12 +1382,16 @@ compute = id >-> id
 -- | Infix version of 'acond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
 --
+-- See also: 'ifThenElse'.
+--
 infix 0 ?|
 (?|) :: (Arrays a) => Exp Bool -> (Acc a, Acc a) -> Acc a
 c ?| (t, e) = acond c t e
 
 -- | An infix version of 'cond'. If the predicate evaluates to 'True', the first
 -- component of the tuple is returned, else the second.
+--
+-- See also: 'ifThenElse'.
 --
 infix 0 ?
 (?) :: Elt t => Exp Bool -> (Exp t, Exp t) -> Exp t
@@ -1383,6 +1406,22 @@ caseof :: (Elt a, Elt b)
        -> Exp b
 caseof _ []        e = e
 caseof x ((p,b):l) e = cond (p x) b (caseof x l e)
+
+
+-- | For use with @-XRebindableSyntax@, this class provides 'ifThenElse' lifted
+-- to both scalar and array types.
+--
+class IfThenElse t where
+  type EltT t a :: Constraint
+  ifThenElse :: EltT t a => Exp Bool -> t a -> t a -> t a
+
+instance IfThenElse Exp where
+  type EltT Exp t = Elt t
+  ifThenElse = cond
+
+instance IfThenElse Acc where
+  type EltT Acc a = Arrays a
+  ifThenElse = acond
 
 
 -- Scalar iteration

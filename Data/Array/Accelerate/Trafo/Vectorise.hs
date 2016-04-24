@@ -60,13 +60,15 @@ import Data.Array.Accelerate.Pretty                    ()
 import Data.Array.Accelerate.Trafo.Substitution
 import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Type
-import qualified Data.Array.Accelerate.Smart            as S
-import qualified Data.Array.Accelerate.Prelude          as S
+import qualified Data.Array.Accelerate.Classes.Eq       as S
 import qualified Data.Array.Accelerate.Language         as S
+import qualified Data.Array.Accelerate.Prelude          as S
+import qualified Data.Array.Accelerate.Smart            as S
 import qualified Data.Array.Accelerate.Trafo.Sharing    as S
 
 import qualified Data.Array.Accelerate.Debug            as Debug
 import Data.Array.Accelerate.Error
+
 
 -- |Encodes the relationship between the old environments and the new environments during the
 -- lifting transform

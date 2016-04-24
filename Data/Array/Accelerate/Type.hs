@@ -462,7 +462,7 @@ instance IsBounded CSChar where
 instance IsBounded CUChar where
   boundedType = NonNumBoundedType nonNumType
 
--- |All scalar type
+-- |All scalar types
 --
 class Typeable a => IsScalar a where
   scalarType :: ScalarType a
