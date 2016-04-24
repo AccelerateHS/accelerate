@@ -159,13 +159,13 @@ polar z =  lift (magnitude z, phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.
 --
-mkPolar :: forall a. (Elt a, Floating a) => Exp a -> Exp a -> Exp (Complex a)
+mkPolar :: forall a. (Elt a, RealFloat a) => Exp a -> Exp a -> Exp (Complex a)
 mkPolar = lift2 (C.mkPolar :: Exp a -> Exp a -> Complex (Exp a))
 
 -- | @'cis' t@ is a complex value with magnitude @1@ and phase @t@ (modulo
 -- @2*'pi'@).
 --
-cis :: forall a. (Elt a, Floating a) => Exp a -> Exp (Complex a)
+cis :: forall a. (Elt a, RealFloat a) => Exp a -> Exp (Complex a)
 cis = lift1 (C.cis :: Exp a -> Complex (Exp a))
 
 -- | Return the real part of a complex number
