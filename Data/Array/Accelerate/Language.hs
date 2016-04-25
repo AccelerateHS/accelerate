@@ -640,12 +640,14 @@ acond :: Arrays a
       -> Acc a
 acond = Acc $$$ Acond
 
--- | An array-level while construct
+-- | An array-level 'while' construct. Continue to apply the given function,
+-- starting with the initial value, until the test function evaluates to
+-- 'False'.
 --
 awhile :: Arrays a
-       => (Acc a -> Acc (Scalar Bool))
-       -> (Acc a -> Acc a)
-       -> Acc a
+       => (Acc a -> Acc (Scalar Bool))    -- ^ keep evaluating while this returns 'True'
+       -> (Acc a -> Acc a)                -- ^ function to apply
+       -> Acc a                           -- ^ initial value
        -> Acc a
 awhile = Acc $$$ Awhile
 
@@ -698,12 +700,12 @@ cond :: Elt t
 cond = Exp $$$ Cond
 
 -- | While construct. Continue to apply the given function, starting with the
--- initial value, until the test function evaluates to true.
+-- initial value, until the test function evaluates to 'False'.
 --
 while :: Elt e
-      => (Exp e -> Exp Bool)
-      -> (Exp e -> Exp e)
-      -> Exp e
+      => (Exp e -> Exp Bool)    -- ^ keep evaluating while this returns 'True'
+      -> (Exp e -> Exp e)       -- ^ function to apply
+      -> Exp e                  -- ^ initial value
       -> Exp e
 while = Exp $$$ While
 
