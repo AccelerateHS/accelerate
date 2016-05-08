@@ -98,13 +98,16 @@ module Data.Array.Accelerate.Prelude (
   the, null, length,
 
   -- * Sequence reductions
-  foldSeqE, fromSeq, concatElems, concatShapes, foldSeqFlatten,
+  foldSeqE, fromSeq, concatElems, concatShapes, foldSeqFlatten, foldBatch, isIrregularSeq,
 
   -- * Sequence generators
   toSeqInner, toSeqOuter, produceScalar,
 
   -- * Sequence transducers
-  mapSeqE, zipWithSeqE, scanSeqE
+  mapSeqE, zipWithSeqE, scanSeqE, zipSeq, unzipSeq,
+
+  -- * Sequence batches
+  denest, denest3, nestedValues, nestedSize,
 
 ) where
 
@@ -2314,6 +2317,16 @@ zipWithSeqE :: (Elt a, Elt b, Elt c)
             -> Seq [Scalar c]
 zipWithSeqE f = zipWithSeq (zipWith f)
 
+-- Take two sequences and turn them into a sequence of tuples
+--
+zipSeq :: (Arrays a, Arrays b) => Seq [a] -> Seq [b] -> Seq [(a,b)]
+zipSeq = zipWithSeq (curry lift)
+
+-- Unzip for sequences
+--
+unzipSeq :: (Arrays a, Arrays b) => Seq [(a,b)] -> (Seq [a], Seq [b])
+unzipSeq s = (mapSeq afst s, mapSeq asnd s)
+
 -- | Perform an exclusive left-to-right scan over a scalar sequence x by
 -- combining each element using the given binary operation (+). (+) must be
 -- associative.
@@ -2384,13 +2397,32 @@ foldSeqFlatten :: (Arrays a, Shape sh, Elt e)
                -> Acc a
                -> Seq [Array sh e]
                -> Seq a
-foldSeqFlatten f a = last a . mapSeq afst . mapBatch (const id) f' a
+foldSeqFlatten f a = foldBatch (const id) f' a
   where
-    f' a' arrs = lift (f a' (withShapes arrs id P.Nothing) (nestedValues arrs), arrs)
+    f' a' arrs = f a' (withShapes arrs id P.Nothing) (nestedValues arrs)
 
+isIrregularSeq :: (Shape sh, Elt e) => Seq [Array sh e] -> Seq (Scalar Bool)
+isIrregularSeq = foldBatch (const id) (const f) (unit (constant False))
+  where
+    f a = withShapes a (const (unit (constant True))) (P.Just (const (unit (constant False))))
+
+denest :: (Arrays a, Arrays b)
+       => Acc (Nested (a,b))
+       -> (Acc (Nested a), Acc (Nested b))
+denest nab = (Acc (Aprj (SuccTupIdx ZeroTupIdx) nab), Acc (Aprj ZeroTupIdx nab))
+
+denest3 :: (Arrays a, Arrays b, Arrays c)
+        => Acc (Nested (a,b,c))
+        -> (Acc (Nested a), Acc (Nested b), Acc (Nested c))
+denest3 nabc = (Acc (Aprj (SuccTupIdx (SuccTupIdx ZeroTupIdx)) nabc)
+             , Acc (Aprj (SuccTupIdx ZeroTupIdx) nabc)
+             , Acc (Aprj ZeroTupIdx nabc))
 
 nestedValues :: (Shape sh, Elt e) => Acc (Nested (Array sh e)) -> Acc (Vector e)
 nestedValues = Acc . Aprj ZeroTupIdx
+
+nestedSize :: (Shape sh, Elt e) => Acc (Nested (Array sh e)) -> Exp Int
+nestedSize a = the $ withShapes a (unit . size) (P.Just (unit . fst . the))
 
 withShapes :: (Arrays a, Shape sh, Elt e)
            => Acc (Nested (Array sh e))
