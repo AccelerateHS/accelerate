@@ -2810,17 +2810,17 @@ liftedSubArrays index sh arr
   case (maximumRank :: sh :<=: DIM3) of
     RankZ          -> flattenC $^ (Use arr)
     RankSnoc RankZ -> flattenC
-                    $^ Subarray (index1 (fstE index)) (index1 (sndE index `times` unindex1 sh)) arr
+                    $^ Subarray (index1 (fstE index `times` unindex1 sh)) (index1 (sndE index `times` unindex1 sh)) arr
     RankSnoc (RankSnoc RankZ)
       -> flattenC
       $^ Alet (inject $ Unit (twoDC index sh (Const fsh)))
-      $  head `catC` body `catC` tail
+      $  tail -- head `catC` body `catC` tail
       where
-        head = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
-        body = inject
-             $  Backpermute (weakenA1 $ index2 (sndE index) (IndexHead sh)) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
-             $^ Subarray (fstE . snd $ the avar0) (sndE . snd $ the avar0) arr
-        tail = inject $ Subarray (fstE . trd $ the avar0) (sndE . trd $ the avar0) arr
+        -- head = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
+        -- body = inject
+        --      $  Backpermute (weakenA1 $ index2 (sndE index) (IndexHead sh)) (Lam . Body $ reorderC (weakenA1 . weakenE1 $ sh) (Const fsh) var0)
+        --      $^ Subarray (fstE . snd $ the avar0) (sndE . snd $ the avar0) arr
+        tail = inject $ Subarray (fstE . fst $ the avar0) (sndE . fst $ the avar0) arr
 
         fst :: (Elt a, Elt b, Elt c) => Exp aenv' (a,b,c) -> Exp aenv' a
         fst = Prj (SuccTupIdx (SuccTupIdx ZeroTupIdx))
@@ -2855,10 +2855,10 @@ liftedSubArrays index sh arr
         i_y = i `mod` fheight
         i_x = i `div` fheight
         tail, body, head :: S.Exp (DIM2, DIM2)
-        tail = S.lift (toAbs (S.index2 i_y i_x), toAbs (S.index2 1 (fheight - i_y)))
+        tail = S.lift (toAbs (S.index2 i_y i_x), toAbs (S.index2 ((fheight - i_y) `min` n) 1))
         tail_n = fheight - i_y
         body = S.lift (toAbs (S.index2 0 (i_x + 1)), toAbs (S.index2 fheight ((n - tail_n) `div` fheight)))
-        head = S.lift (toAbs (S.index2 0 (i_x + 1 + S.indexHead (S.snd body))), toAbs (S.index2 1 ((n - tail_n) `mod` fheight)))
+        head = S.lift (toAbs (S.index2 0 (i_x + 1 + S.indexHead (S.snd body))), toAbs (S.index2 ((n - tail_n) `mod` fheight) 1))
       in S.lift (tail,body,head)
 
     cat :: S.Acc (Array DIM2 e) -> S.Acc (Array DIM2 e) -> S.Acc (Array DIM2 e)
@@ -3133,9 +3133,12 @@ reduceOpenSeq seq =
           case (maximumRank :: sh :<=: DIM3) of
             RankZ          -> a
             RankSnoc RankZ -> index1 (unindex1 a `plus` unindex1 b)
-            RankSnoc (RankSnoc RankZ) -> index2 (height a `plus` height b `mod` height fsh)
-                                                (height a `plus` height b `div` height fsh `times` width b)
-            _                         -> error "Unreachable"
+            RankSnoc (RankSnoc RankZ) ->
+              let
+                y = height a `plus` height b
+              in index2 (y `mod` height fsh)
+                        (width a `plus` (y `div` height fsh `times` width b))
+            _                         -> error "Vectorisation doesn't currently support subarrays on an array of dimension higher than 2"
           where
             height, width :: Exp aenv DIM2 -> Exp aenv Int
             height = IndexHead . IndexTail
