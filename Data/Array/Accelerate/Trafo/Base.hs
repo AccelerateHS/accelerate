@@ -88,7 +88,7 @@ instance Kit OpenAcc where
 avarIn :: (Kit acc, Arrays arrs) => Idx aenv arrs -> acc aenv arrs
 avarIn = inject  . Avar
 
-kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv b) -> acc aenv a -> acc aenv b
+kmap :: Kit acc => (PreOpenAcc acc aenv a -> PreOpenAcc acc aenv' b) -> acc aenv a -> acc aenv' b
 kmap f = inject . f . extract
 
 fromOpenAfun :: Kit acc => OpenAfun aenv f -> PreOpenAfun acc aenv f
