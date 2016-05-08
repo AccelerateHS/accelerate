@@ -45,7 +45,8 @@ module Data.Array.Accelerate.Trafo.Shrink (
   dependenciesProducer, dependenciesConsumer,
 
   -- Array access merging
-  reduceAccessExp, reduceAccessFun,
+  reduceAccessExp, reduceAccessFun, reduceAccessOpenAcc, reduceAccessPreAcc,
+  reduceAccessAfun,
 
 ) where
 
@@ -912,8 +913,109 @@ dependenciesExp depsAcc exp =
     depsF (Lam  f) = depsF f
     depsF (Body b) = depsE b
 
+
 -- Find and merge common array accesses
 --
+type ReduceAccess acc = forall aenv sh e a. (Shape sh, Elt e) => Idx aenv (Array sh e) -> acc aenv a -> acc aenv a
+
+reduceAccessOpenAcc :: (Shape sh, Elt e)
+                    => Idx aenv (Array sh e)
+                    -> OpenAcc aenv a
+                    -> OpenAcc aenv a
+reduceAccessOpenAcc idx (OpenAcc pacc) = OpenAcc (reduceAccessPreAcc reduceAccessOpenAcc idx pacc)
+
+reduceAccessPreAcc :: forall acc aenv a sh e. (Kit acc, Shape sh, Elt e)
+                   => ReduceAccess acc
+                   -> Idx aenv (Array sh e)
+                   -> PreOpenAcc acc aenv a
+                   -> PreOpenAcc acc aenv a
+reduceAccessPreAcc reduceAcc idx pacc =
+  case pacc of
+    Alet bnd body             -> Alet (cvtA bnd) (reduceAcc (SuccIdx idx) body)
+    Avar ix                   -> Avar ix
+    Atuple tup                -> Atuple (cvtT tup)
+    Aprj tup a                -> Aprj tup (cvtA a)
+    Apply f a                 -> Apply (cvtAfun f) (cvtA a)
+    Aforeign ff afun acc      -> Aforeign ff afun (cvtA acc)
+    Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
+    Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
+    Use a                     -> Use a
+    Subarray ix sh arr        -> Subarray (cvtE ix) (cvtE sh) arr
+    Unit e                    -> Unit (cvtE e)
+    Reshape e a               -> Reshape (cvtE e) (cvtA a)
+    Generate e f              -> Generate (cvtE e) (cvtF f)
+    Transform sh ix f a       -> Transform (cvtE sh) (cvtF ix) (cvtF f) (cvtA a)
+    Replicate sl slix a       -> Replicate sl (cvtE slix) (cvtA a)
+    Slice sl a slix           -> Slice sl (cvtA a) (cvtE slix)
+    Map f a                   -> Map (cvtF f) (cvtA a)
+    ZipWith f a1 a2           -> ZipWith (cvtF f) (cvtA a1) (cvtA a2)
+    Fold f z a                -> Fold (cvtF f) (cvtE z) (cvtA a)
+    Fold1 f a                 -> Fold1 (cvtF f) (cvtA a)
+    Scanl f z a               -> Scanl (cvtF f) (cvtE z) (cvtA a)
+    Scanl' f z a              -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+    Scanl1 f a                -> Scanl1 (cvtF f) (cvtA a)
+    Scanr f z a               -> Scanr (cvtF f) (cvtE z) (cvtA a)
+    Scanr' f z a              -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+    Scanr1 f a                -> Scanr1 (cvtF f) (cvtA a)
+    Permute f1 a1 f2 a2       -> Permute (cvtF f1) (cvtA a1) (cvtF f2) (cvtA a2)
+    Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
+    Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
+    Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
+    Collect s cs              -> Collect (reduceAccessSeq reduceAcc idx s) (reduceAccessSeq reduceAcc idx <$> cs)
+
+  where
+    cvtA :: acc aenv a' -> acc aenv a'
+    cvtA = reduceAcc idx
+
+    cvtE :: PreOpenExp acc env aenv e' -> PreOpenExp acc env aenv e'
+    cvtE = reduceAccessExp idx
+
+    cvtF :: PreOpenFun acc env aenv e' -> PreOpenFun acc env aenv e'
+    cvtF = reduceAccessFun idx
+
+    cvtT :: Atuple (acc aenv) t -> Atuple (acc aenv) t
+    cvtT NilAtup        = NilAtup
+    cvtT (SnocAtup t a) = SnocAtup (cvtT t) (cvtA a)
+
+    cvtAfun :: PreOpenAfun acc aenv t -> PreOpenAfun acc aenv t
+    cvtAfun = reduceAccessAfun reduceAcc idx
+
+reduceAccessAfun :: (Shape sh, Elt e)
+                 => ReduceAccess acc
+                 -> Idx aenv (Array sh e)
+                 -> PreOpenAfun acc aenv f
+                 -> PreOpenAfun acc aenv f
+reduceAccessAfun reduceAcc idx (Abody a) = Abody (reduceAcc idx a)
+reduceAccessAfun reduceAcc idx (Alam f)  = Alam (reduceAccessAfun reduceAcc (SuccIdx idx) f)
+
+reduceAccessSeq :: forall index acc aenv a sh e. (Kit acc, Shape sh, Elt e)
+                => ReduceAccess acc
+                -> Idx aenv (Array sh e)
+                -> PreOpenSeq index acc aenv a
+                -> PreOpenSeq index acc aenv a
+reduceAccessSeq reduceAcc idx seq =
+  case seq of
+    Producer p s -> Producer (cvtP p) (reduceAccessSeq reduceAcc (SuccIdx idx) s)
+    Consumer c   -> Consumer (cvtC c)
+    Reify a      -> Reify (cvtA a)
+  where
+    cvtA :: acc aenv a' -> acc aenv a'
+    cvtA = reduceAcc idx
+
+    cvtE :: PreOpenExp acc env aenv e' -> PreOpenExp acc env aenv e'
+    cvtE = reduceAccessExp idx
+
+    cvtP :: Producer index acc aenv a' -> Producer index acc aenv a'
+    cvtP (Pull src) = Pull src
+    cvtP (ProduceAccum l f a) = ProduceAccum (cvtE <$> l) (reduceAccessAfun reduceAcc idx f) (cvtA a)
+
+    cvtC :: Consumer index acc aenv a' -> Consumer index acc aenv a'
+    cvtC (Last a d) = Last (cvtA a) (cvtA d)
+    cvtC (Stuple t) = Stuple (cvtT t)
+
+    cvtT :: Atuple (PreOpenSeq index acc aenv) t -> Atuple (PreOpenSeq index acc aenv) t
+    cvtT NilAtup = NilAtup
+    cvtT (SnocAtup t s) = SnocAtup (cvtT t) (reduceAccessSeq reduceAcc idx s)
 
 reduceAccessExp :: (Kit acc, Shape sh, Elt e)
                 => Idx aenv (Array sh e)
@@ -961,7 +1063,7 @@ elimArrayAccess idx exp =
                         , Just REFL <- match idx idx'
                         -> Left (sh, Var ZeroIdx)
                         | otherwise
-                        -> Right (Index a sh)
+                        -> Index a `cvtE1` cvtE sh
     LinearIndex a i     -> LinearIndex a `cvtE1` cvtE i
     Shape a             -> noAccess $ Shape a
     ShapeSize sh        -> ShapeSize `cvtE1` cvtE sh

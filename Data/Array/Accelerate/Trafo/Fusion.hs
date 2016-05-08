@@ -314,7 +314,7 @@ convertOpenSeq fuseAcc s =
     cvtP p =
       case p of
         Pull s -> Pull s
-        ProduceAccum l f acc -> ProduceAccum (cvtE <$> l) (cvtAF f) (manifest fuseAcc acc)
+        ProduceAccum l (Alam f) acc -> ProduceAccum (cvtE <$> l) (Alam (cvtAF (reduceAccessAfun reduceAccessOpenAcc ZeroIdx f))) (manifest fuseAcc acc)
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index DelayedOpenAcc aenv) t
     cvtCT NilAtup        = NilAtup
