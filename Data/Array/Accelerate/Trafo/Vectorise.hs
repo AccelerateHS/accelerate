@@ -2629,7 +2629,7 @@ vectoriseOpenSeq strength ctx seq =
     streamify :: Arrays t => OpenAfun aenv (Scalar Int -> t) -> OpenAfun aenv' (Scalar (Int,Int) -> () -> (Nested t, ()))
     streamify f =
       let f' = liftOpenAfun1 Conservative ctx f
-      in Alam . Alam . Abody . nest . OpenAcc $ weakenA2 f' `subApply` fromRange avar1
+      in Alam . Alam . Abody . nest $ weakenA2 f' `apply` fromRange avar1
 
     fromRange :: forall aenv. OpenAcc aenv (Scalar (Int, Int)) -> OpenAcc aenv (Nested (Scalar Int))
     fromRange r =  liftedScalarC
@@ -2642,11 +2642,26 @@ vectoriseOpenSeq strength ctx seq =
     nest :: forall aenv a. Arrays a => OpenAcc aenv a -> OpenAcc aenv (a,())
     nest = OpenAcc . Atuple . (\a -> NilAtup `SnocAtup` a `SnocAtup` nil)
 
-    cvtC :: NaturalConsumer OpenAcc aenv t -> Maybe (ChunkedConsumer OpenAcc aenv' t)
+    cvtC :: NaturalConsumer OpenAcc aenv t -> Maybe (OpenChunkedSeq aenv' t)
     cvtC c =
       case c of
-        Stuple t -> Stuple <$> cvtCT t
-        Last a d -> Last   <$> cvtA' a <*> cvtA' d
+        FoldBatch f f' a x -> foldBatch <$> pure (cvtAF f) <*> cvtAF' f' <*> cvtA' a <*> pure (cvtA x)
+        Stuple t           -> Consumer . Stuple <$> cvtCT t
+
+    foldBatch :: forall a b s. (Arrays a, Arrays b, Arrays s)
+              => OpenAfun aenv' (Nested s -> Nested a -> Nested b)
+              -> OpenAfun aenv' (s -> Nested b -> s)
+              -> OpenAcc  aenv' s
+              -> OpenAfun aenv' (Scalar Int -> Nested a)
+              -> OpenChunkedSeq aenv' s
+    foldBatch f f' a x = Producer (ProduceAccum Nothing f'' a) (Consumer (Last avar0 (weakenA1 a)))
+      where
+        f'' = Alam . Alam . Abody
+            $ repack
+            $^ Alet (apply (weakenA2 x) $^ Unit (sndE (the avar1)))
+            $ weakenA3 f' `partApply` avar1 `apply` (weakenA3 f `partApply` replicateC (unit (sndE (the avar2))) avar1 `apply` avar0)
+        repack a = OpenAcc $ Alet a
+                 $ atup avar0 avar0
 
     cvtCT :: Atuple (OpenNaturalSeq aenv) t -> Maybe (Atuple (OpenChunkedSeq aenv') t)
     cvtCT NilAtup        = Just NilAtup
@@ -2908,7 +2923,7 @@ reduceOpenSeq :: forall index aenv a. Elt index
 reduceOpenSeq seq =
   case seq of
     Producer p s -> Producer (cvtP p) (reduceOpenSeq s)
-    Consumer c   -> Consumer (cvtC c)
+    Consumer c   -> cvtC c
     Reify a      -> Reify a
   where
     cvtP :: Producer index OpenAcc aenv t -> Producer index OpenAcc aenv t
@@ -2920,11 +2935,11 @@ reduceOpenSeq seq =
         MapBatch f f' a x  -> mapBatch f f' a x
         ProduceAccum{}     -> stageError
 
-    cvtC :: Consumer index OpenAcc aenv t -> Consumer index OpenAcc aenv t
+    cvtC :: Consumer index OpenAcc aenv t -> PreOpenSeq index OpenAcc aenv t
     cvtC c =
       case c of
-        Stuple t -> Stuple (cvtCT t)
-        Last a d -> Last a d
+        FoldBatch f f' a x -> foldBatch f f' a x
+        Stuple t           -> Consumer (Stuple (cvtCT t))
 
     mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
              => OpenAfun aenv (s -> a -> b)
@@ -2936,7 +2951,7 @@ reduceOpenSeq seq =
       where
         f'' :: OpenAfun aenv (Scalar index -> s -> ((s,c),s))
         f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
-            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` weakenA3 x)
+            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` avar0)
 
         repack :: forall aenv. OpenAcc aenv (s, Nested c) -> OpenAcc aenv ((s, c),s)
         repack b = alet b $ atup (atup (fstA avar0) (fromHOAS deNest1 (sndA avar0))) (fstA avar0)
@@ -2955,6 +2970,24 @@ reduceOpenSeq seq =
             deNestT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc t
             deNestT ProdRunit     NilAtup         = NilAtup
             deNestT (ProdRsnoc p) (SnocAtup t a') = SnocAtup (deNestT p t) (deNest1 a')
+
+    foldBatch :: forall a b s. (Arrays a, Arrays b, Arrays s)
+              => OpenAfun aenv (s -> a -> b)
+              -> OpenAfun aenv (s -> Nested b -> s)
+              -> OpenAcc aenv s
+              -> OpenAcc aenv a
+              -> PreOpenSeq index OpenAcc aenv s
+    foldBatch f f' a x = Producer (ProduceAccum Nothing f'' a) (Consumer (Last avar0 (weakenA1 a)))
+      where
+        f'' :: OpenAfun aenv (Scalar index -> s -> (s,s))
+        f'' = Alam . Alam . Abody . repack . alet (weakenA2 x)
+            $ weakenA3 f' `partApply` avar1 `apply` (nest1 $ weakenA3 f `partApply` avar1 `apply` avar0)
+
+        repack :: forall aenv. OpenAcc aenv s -> OpenAcc aenv (s,s)
+        repack b = alet b $ atup avar0 avar0
+
+        nest1 :: forall aenv x. Arrays x => OpenAcc aenv x -> OpenAcc aenv (Nested x)
+        nest1 = replicateC (unit (Const 1))
 
     cvtCT :: Atuple (PreOpenSeq index OpenAcc aenv) t -> Atuple (PreOpenSeq index OpenAcc aenv) t
     cvtCT NilAtup        = NilAtup

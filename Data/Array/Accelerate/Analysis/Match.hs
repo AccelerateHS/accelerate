@@ -386,6 +386,12 @@ matchSeq m h = match
       | Just REFL <- m a1 a2
       , Just REFL <- m d1 d2
       = Just REFL
+    matchC (FoldBatch f1 c1 a1 x1) (FoldBatch f2 c2 a2 x2)
+      | Just REFL <- matchPreOpenAfun m f1 f2
+      , Just REFL <- matchPreOpenAfun m c1 c2
+      , Just REFL <- m a1 a2
+      , Just REFL <- m x1 x2
+      = Just REFL
     matchC (Stuple s1) (Stuple s2)
       | Just REFL <- matchAtuple (matchSeq m h) s1 s2
       = gcast REFL
@@ -1019,6 +1025,7 @@ hashPreOpenSeq hashAcc s =
     hashC :: Int -> Consumer idx acc aenv' a -> Int
     hashC salt c =
       case c of
+        FoldBatch f c a x      -> hashWithSalt salt "FoldBatch"     `hashAF` f `hashAF` c `hashA`  a `hashA` x
         Last a d               -> hashWithSalt salt "Last"       `hashA` a `hashA` d
         Stuple t               -> hash "Stuple"                  `hashWithSalt` hashAtuple (hashS salt) t
 

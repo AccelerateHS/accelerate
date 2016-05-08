@@ -420,7 +420,7 @@ convertSharingSeq config alyt aenv senv s
     cvtC :: ScopedSeq a -> AST.PreOpenNaturalSeq AST.OpenAcc aenv a
     cvtC (ScopedSeq (SeqSharing _ s)) =
       case s of
-        Last d a                           -> AST.Consumer $ AST.Last (AST.OpenAcc . AST.Avar $ asIdx a) (cvtA d)
+        FoldBatch f f' a x                 -> AST.Consumer $ AST.FoldBatch (cvtAF2 f) (cvtAF2 f') (cvtA a) (AST.OpenAcc . AST.Avar $ asIdx x)
         Stuple t                           -> AST.Consumer $ AST.Stuple (cvtST t)
         _                                  -> $internalError "convertSharingSeq" "Producer has not been let bound"
     cvtC _ = $internalError "convertSharingSeq" "Unreachable"
@@ -444,6 +444,9 @@ convertSharingSeq config alyt aenv senv s
 
     cvtA :: forall a. Arrays a => ScopedAcc a -> AST.OpenAcc aenv a
     cvtA acc = convertSharingAcc config alyt aenv acc
+
+    cvtAF2 :: forall a b c. (Arrays a, Arrays b, Arrays c) => (Acc a -> Acc b -> ScopedAcc c) -> OpenAfun aenv (a -> b -> c)
+    cvtAF2 = convertSharingAfun2 config alyt aenv
 
     cvtST :: Atuple ScopedSeq t -> Atuple (AST.OpenNaturalSeq aenv) t
     cvtST NilAtup        = NilAtup
@@ -1800,10 +1803,12 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
               (a'   , h3) <- traverseAcc lvl a
               (s'   , h4) <- traverseSeq lvl s
               return (MapBatch fun1' fun2' a' s', h1 `max` h2 `max` h3 `max` h4 + 1)
-            Last d a -> consumer $ do
-              (d', h1) <- traverseAcc lvl d
-              (a', h2) <- traverseSeq lvl a
-              return (Last d' a', h1 `max` h2 + 1)
+            FoldBatch fun1 fun2 a s -> consumer $ do
+              (fun1', h1) <- traverseAfun2 lvl fun1
+              (fun2', h2) <- traverseAfun2 lvl fun2
+              (a'   , h3) <- traverseAcc lvl a
+              (s'   , h4) <- traverseSeq lvl s
+              return (FoldBatch fun1' fun2' a' s', h1 `max` h2 `max` h3 `max` h4 + 1)
             Stuple t -> consumer $ do
               (t', h1) <- traverseTup lvl t
               return (Stuple t', h1 + 1)
@@ -2703,10 +2708,12 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
                                      (e'   , accCount3) = scopesAcc e
                                      (s''  , accCount4) = scopesSeq s'
                                    in producer (MapBatch fun1' fun2' e' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
-        Last d a -> let
-                      (d', accCount1) = scopesAcc d
-                      (a', accCount2) = scopesSeq a
-                    in consumer (Last d' a') (accCount1 +++ accCount2)
+        FoldBatch fun1 fun2 e s' -> let
+                                      (fun1', accCount1) = scopesAfun2 fun1
+                                      (fun2', accCount2) = scopesAfun2 fun2
+                                      (e'   , accCount3) = scopesAcc e
+                                      (s''  , accCount4) = scopesSeq s'
+                                    in consumer (FoldBatch fun1' fun2' e' s'') (accCount1 +++ accCount2 +++ accCount3 +++ accCount4)
         Stuple tup -> let
                          (tup', accCount1) = scopesTup tup
                       in consumer (Stuple tup') accCount1

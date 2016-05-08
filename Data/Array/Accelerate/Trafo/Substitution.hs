@@ -535,8 +535,9 @@ rebuildC :: forall idx acc fa f aenv aenv' a. (SyntacticAcc fa, Applicative f)
          -> f (Consumer idx acc aenv' a)
 rebuildC k v c =
   case c of
-    Stuple t -> Stuple <$> rebuildT t
-    Last a d -> Last <$> k v a <*> k v d
+    FoldBatch f f' a x -> FoldBatch <$> rebuildAfun k v f <*> rebuildAfun k v f' <*> k v a <*> k v x
+    Stuple t           -> Stuple <$> rebuildT t
+    Last a d           -> Last <$> k v a <*> k v d
   where
     rebuildT :: Atuple (PreOpenSeq idx acc aenv) t -> f (Atuple (PreOpenSeq idx acc aenv') t)
     rebuildT NilAtup        = pure NilAtup

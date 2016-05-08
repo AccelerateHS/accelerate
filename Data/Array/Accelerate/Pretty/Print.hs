@@ -228,6 +228,7 @@ prettySeq prettyAcc wrap aenv seq =
     prettyC :: forall a. Consumer idx acc aenv a -> Doc
     prettyC c =
       case c of
+        FoldBatch f f' s a   -> "foldBatch"    .$ [ ppAF f, ppAF f', ppA s, ppA a]
         Last a d             -> "last"        ..$ [ ppA a, ppA d]
         Stuple t             -> tuple (prettyT t)
 

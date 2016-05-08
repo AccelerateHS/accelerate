@@ -298,10 +298,12 @@ data PreSeq acc seq exp arrs where
                  -> seq [a]
                  -> PreSeq acc seq exp [(s,c)]
 
-  Last           :: Arrays a
-                 => acc a
+  FoldBatch      :: (Arrays a, Arrays b, Arrays s)
+                 => (Acc s -> Acc a -> acc b)
+                 -> (Acc s -> Acc (Nested b) -> acc s)
+                 -> acc s
                  -> seq [a]
-                 -> PreSeq acc seq exp a
+                 -> PreSeq acc seq exp s
 
   Stuple         :: (Arrays arrs, IsAtuple arrs)
                  => Atuple (seq) (TupleRepr arrs)
@@ -1546,7 +1548,7 @@ showPreSeqOp Produce{}        = "Produce"
 showPreSeqOp MapSeq{}         = "MapSeq"
 showPreSeqOp ZipWithSeq{}     = "ZipWithSeq"
 showPreSeqOp MapBatch{}       = "MapBatch"
-showPreSeqOp Last{}           = "Last"
+showPreSeqOp FoldBatch{}      = "FoldBatch"
 showPreSeqOp Stuple{}         = "Stuple"
 
 showArrays :: forall arrs. Arrays arrs => arrs -> String

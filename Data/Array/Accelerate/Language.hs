@@ -53,7 +53,10 @@ module Data.Array.Accelerate.Language (
   mapSeq, zipWithSeq, mapBatch,
 
   -- * Sequence consumers
-  last,
+  foldBatch,
+
+  -- * Batched sequencing
+  Nested,
 
   -- * Reductions
   fold, fold1, foldSeg, fold1Seg,
@@ -527,14 +530,13 @@ mapBatch :: (Arrays a, Arrays b, Arrays c, Arrays s)
          -> Seq [(s,c)]
 mapBatch = Seq $$$$ MapBatch
 
--- |Get the last element of the sequence or the default value if the sequence is
--- empty last.
---
-last :: Arrays a
-     => Acc a
-     -> Seq [a]
-     -> Seq a
-last = Seq $$ Last
+foldBatch :: (Arrays a, Arrays b, Arrays s)
+          => (Acc s -> Acc a -> Acc b)
+          -> (Acc s -> Acc (Nested b) -> Acc s)
+          -> Acc s
+          -> Seq [a]
+          -> Seq s
+foldBatch = Seq $$$$ FoldBatch
 
 collect :: Arrays arrs => Seq arrs -> Acc arrs
 collect = Acc . Collect

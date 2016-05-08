@@ -23,7 +23,7 @@
 
 module Data.Array.Accelerate.Array.Lifted (
 
-  Nested, NestedTupleRepr, Segments
+  Nested(..), NestedTupleRepr, Segments
 
 ) where
 

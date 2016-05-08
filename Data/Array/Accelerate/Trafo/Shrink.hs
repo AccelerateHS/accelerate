@@ -229,6 +229,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrink acc" shrinkA
     shrinkC :: Consumer index acc aenv' a -> Consumer index acc aenv' a
     shrinkC c =
       case c of
+        FoldBatch f f' a x -> FoldBatch (shrinkAF f) (shrinkAF f') (shrinkAcc a) (shrinkAcc x)
         Last a d           -> Last (shrinkAcc a) (shrinkAcc d)
         Stuple t           -> Stuple (shrinkCT t)
 
@@ -625,8 +626,9 @@ usesOfPreSeq countAcc idx seq =
     countC :: Consumer index acc aenv arrs -> Use s
     countC c =
       case c of
-        Last a d         -> countA a <+> countA d
-        Stuple t         -> countCT t
+        FoldBatch f f' a x -> countAF f idx <+> countAF f' idx <+> countA a <+> countA x
+        Last a d           -> countA a <+> countA d
+        Stuple t           -> countCT t
 
     countCT :: Atuple (PreOpenSeq index acc aenv) t' -> Use s
     countCT NilAtup        = zeroUse
@@ -851,12 +853,18 @@ dependenciesConsumer :: forall acc index aenv arrs. Kit acc
                      -> Stronger aenv
 dependenciesConsumer depsAcc c =
   case c of
-    Last a d         -> depsAcc a <> depsAcc d
-    Stuple t         -> depsCT t
+    FoldBatch f f' a x -> depsAF f <> depsAF f' <> depsAcc a <> depsAcc x
+    Last a d           -> depsAcc a <> depsAcc d
+    Stuple t           -> depsCT t
   where
     depsCT :: Atuple (PreOpenSeq index acc aenv) t' -> Stronger aenv
     depsCT NilAtup        = mempty
     depsCT (SnocAtup t c) = depsCT t <> dependenciesPreSeq depsAcc c
+
+    depsAF :: Kit acc
+           => PreOpenAfun acc aenv' f
+           -> Stronger aenv'
+    depsAF = dependenciesAfun depsAcc
 
 dependenciesExp :: forall acc env aenv e.
                    DependenciesAcc acc

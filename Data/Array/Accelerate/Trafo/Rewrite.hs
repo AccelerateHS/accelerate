@@ -137,6 +137,7 @@ convertSegmentsSeq seq =
     cvtC :: Consumer index OpenAcc aenv a -> Consumer index OpenAcc aenv a
     cvtC c =
       case c of
+        FoldBatch f f' a x -> FoldBatch (cvtAfun f) (cvtAfun f') (cvtA a) (cvtA x)
         Last a d           -> Last (cvtA a) (cvtA d)
         Stuple t           -> Stuple (cvtCT t)
 
