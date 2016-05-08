@@ -530,7 +530,7 @@ usesOfPreAcc countAcc idx = count
                                 -> countA bnd <+> countAcc (SuccIdx idx) body
 
       Atuple tup                -> countAT tup
-      Aprj ix a                 | Just u <- prjChain idx (inject $ Aprj ix a) zeroUse
+      Aprj ix a                 | Just u <- prjChain idx (inject $ Aprj ix a) oneUse
                                 -> u
                                 | Atuple t <- extract a
                                 -> countA (prj t ix)
