@@ -335,13 +335,13 @@ convertOpenSeq fuseAcc s =
 -- that term should be embedded in the body. More generallly, if the term is of
 -- a product type, we need to what components of the product should be embedded.
 --
-type ElimAcc  acc = forall aenv aenv' s t. Arrays s => Cunctation acc aenv' s -> acc (aenv,s) t -> Elim acc aenv' s
+type ElimAcc  acc = forall aenv aenv' s t. Arrays s => Extend acc aenv aenv' -> Cunctation acc aenv' s -> acc (aenv,s) t -> Elim acc aenv' s
 
 -- Component-wise elimination.
 --
 data Elim acc aenv a where
   -- The term should not be eliminated.
-  ElimBind  :: PreOpenAcc acc aenv a
+  ElimBind  :: Cunctation acc aenv a
             -> Elim acc aenv a
 
   -- The term is dead so should be eliminated
@@ -357,7 +357,7 @@ data Elim acc aenv a where
   --
   ElimTuple :: (IsAtupleRepr t', IsAtuple a)
             => Extend acc aenv aenv'
-            -> Subproduct (acc aenv') t' (TupleRepr a)
+            -> Subproduct (Embed acc aenv') t' (TupleRepr a)
             -> Elim acc aenv a
 
 -- | Apply the fusion transformation to the AST to combine and simplify terms.
@@ -372,9 +372,9 @@ embedOpenAcc :: Arrays arrs => Bool -> OpenAcc aenv arrs -> Embed OpenAcc aenv a
 embedOpenAcc fuseAcc (OpenAcc pacc) =
   embedPreAcc fuseAcc (embedOpenAcc fuseAcc) elimOpenAcc pacc
   where
-    elimOpenAcc :: Arrays s => Cunctation OpenAcc aenv' s -> OpenAcc (aenv,s) t -> Elim OpenAcc aenv' s
-    elimOpenAcc bnd body
-      = elimA bnd (count ZeroIdx body)
+    elimOpenAcc :: Arrays s => Extend OpenAcc aenv aenv' -> Cunctation OpenAcc aenv' s -> OpenAcc (aenv,s) t -> Elim OpenAcc aenv' s
+    elimOpenAcc env bnd body
+      = elimA env bnd (count ZeroIdx body)
       where
         -- Ensure we only calculate the usage of the bound variable once.
         --
@@ -389,17 +389,20 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
         -- dead terms that don't get eliminated. This problem occurred in the
         -- canny program. RCE: I'm not actually sure this is true anymore.
         --
-        elimA :: Arrays s' => Cunctation OpenAcc aenv' s' -> Use s' -> Elim OpenAcc aenv' s'
-        elimA bnd u =
+        elimA :: forall aenv aenv' s'. Arrays s' => Extend OpenAcc aenv aenv' -> Cunctation OpenAcc aenv' s' -> Use s' -> Elim OpenAcc aenv' s'
+        elimA env bnd u =
           case bnd of
             -- The bound term is dead in the body, so don't traverse it.
             --
             _   | allUse (on (&&) (==0)) u
                 -> Stats.ruleFired "elimDead" ElimDead
 
-            -- The bound term can't be fused anyway, so bind it.
+            -- The term can't be fused, but if it's simple enough, still embed
+            -- it.
             --
-            Done _   -> Stats.ruleFired "elimBind" (ElimBind (compute' bnd))
+            Done _   -> if zeroCostExtend env
+                        then Stats.ruleFired "elimDone" ElimEmbed
+                        else Stats.ruleFired "elimBind" (ElimBind bnd)
 
             -- Unit (()) terms can always be eliminated.
             --
@@ -414,44 +417,45 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
             -- The bound term is indivisble, but fusible.
             --
             _        -> elimBase (compute' bnd) u
-
-        -- When does the cost of re-computation outweigh that of memory access?
-        -- For the moment only do the substitution if the bound array is
-        -- constructed in a few special ways or if there is only a single use of
-        -- it in the body. However, it is likely advantageous to be far more
-        -- aggressive here. SEE: [Sharing vs. Fusion]
-        --
-        elimBase :: PreOpenAcc OpenAcc aenv' s' -> Use s'-> Elim OpenAcc aenv' s'
-        elimBase bnd u
-          -- The definition of 'unzip' applied to manifest data, which is
-          -- defined in the prelude as a map projecting out the appropriate
-          -- element. This should always be eliminated
-          --
-          | Map f a                 <- bnd
-          , Avar _                  <- extract a
-          , Lam (Body (Prj _ _))    <- f
-          = Stats.ruleFired "unzipD" ElimEmbed
-
-          | Avar _ <- bnd
-          = Stats.ruleFired "elimAvar" ElimEmbed
-
-          -- Similarly, "simple" scalar expression wrapped in unit arrays should
-          -- also be eliminated in all cases.
-          --
-          | Unit e <- bnd
-          , simpleExp e
-          = Stats.ruleFired "simpleScalar" ElimEmbed
-
-          -- Eliminate when there is a single use of the bound array in the use
-          -- site.
-          --
-          | allUse (const (<= lIMIT)) u
-          = ElimEmbed
-
-          | otherwise
-          = ElimBind bnd
           where
-            lIMIT = 1
+
+            -- When does the cost of re-computation outweigh that of memory access?
+            -- For the moment only do the substitution if the bound array is
+            -- constructed in a few special ways or if there is only a single use of
+            -- it in the body. However, it is likely advantageous to be far more
+            -- aggressive here. SEE: [Sharing vs. Fusion]
+            --
+            elimBase :: PreOpenAcc OpenAcc aenv' s' -> Use s'-> Elim OpenAcc aenv' s'
+            elimBase bnd' u
+              -- The definition of 'unzip' applied to manifest data, which is
+              -- defined in the prelude as a map projecting out the appropriate
+              -- element. This should always be eliminated
+              --
+              | Map f a                 <- bnd'
+              , Avar _                  <- extract a
+              , Lam (Body (Prj _ (Var ZeroIdx)))    <- f
+              = Stats.ruleFired "unzipD" ElimEmbed
+
+              | Avar _ <- bnd'
+              = Stats.ruleFired "elimAvar" ElimEmbed
+
+              -- Similarly, "simple" scalar expression wrapped in unit arrays should
+              -- also be eliminated in all cases.
+              --
+              | Unit e <- bnd'
+              , simpleExp e
+              = Stats.ruleFired "simpleScalar" ElimEmbed
+
+              -- Eliminate when there is a single use of the bound array in the use
+              -- site.
+              --
+              | allUse (const (<= lIMIT)) u
+              = ElimEmbed
+
+              | otherwise
+              = ElimBind bnd
+              where
+                lIMIT = 1
 
         -- Different components of a tuple can be eliminated independently.
         --
@@ -515,7 +519,7 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
         elimTuple = elim ElimTuple id True
           where
             elim :: forall aenv aenv' t a. IsAtuple a
-                 => (forall aenv'' t'. IsAtupleRepr t' => Extend OpenAcc aenv' aenv'' -> Subproduct (OpenAcc aenv'') t' t -> Elim OpenAcc aenv a)
+                 => (forall aenv'' t'. IsAtupleRepr t' => Extend OpenAcc aenv' aenv'' -> Subproduct (Embed OpenAcc aenv'') t' t -> Elim OpenAcc aenv a)
                  -> aenv :> aenv'
                  -> Bool
                  -> Atuple (Embed OpenAcc aenv) t
@@ -526,19 +530,36 @@ embedOpenAcc fuseAcc (OpenAcc pacc) =
             elim k _ False NilAtup NilAtup
               = k BaseEnv NilSub
             elim k v allDead (SnocAtup t (weaken v -> Embed env' a)) (SnocAtup ut u)
-              = case elimA a u of
-                  ElimDead     -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (inject (compute (Embed env' a)))))) v allDead t ut
-                  ElimBind a'  -> elim (\env'' sp -> k env'' (InSub sp (AllSub (sink env'' (OpenAcc (bind env' a')))))) v False t ut
-                  ElimEmbed    -> elim (\env'' sp -> k (env' `append` env'') (OutSub sp (sink env'' (inject (compute' a))))) (sink env' . v) False t ut
+              = case elimA env' a u of
+                  ElimDead     -> elim (\env'' sp -> k env'' (OutSub sp (sink env'' (Embed env' a)))) v allDead t ut
+                  ElimBind a'  -> elim (\env'' sp -> k env'' (InSub sp (AllSub (sink env'' (Embed env' a'))))) v False t ut
+                  ElimEmbed    -> elim (\env'' sp -> k (env' `append` env'') (OutSub sp (sink env'' (Embed BaseEnv a)))) (sink env' . v) False t ut
                   ElimTuple env1 t' ->
                     let env'' = env' `append` env1
                     in elim (\env''' sp -> k (env'' `append` env''') (InSub sp (TupleSub  (sinkSub env''' t')))) (sink env'' . v) False t ut
 
-        sinkSub  :: Sink acc => Extend acc aenv aenv' -> Subproduct (acc aenv) t' t -> Subproduct (acc aenv') t' t
+        sinkSub  :: Sink acc => Extend acc' aenv aenv' -> Subproduct (acc aenv) t' t -> Subproduct (acc aenv') t' t
         sinkSub _   NilSub = NilSub
         sinkSub env (OutSub t' a) = OutSub (sinkSub env t') (sink env a)
         sinkSub env (InSub t' (AllSub a)) = InSub (sinkSub env t') (AllSub (sink env a))
         sinkSub env (InSub t' (TupleSub t)) = InSub (sinkSub env t') (TupleSub (sinkSub env t))
+
+        zeroCostExtend :: Kit acc => Extend acc env env' -> Bool
+        zeroCostExtend BaseEnv = True
+        zeroCostExtend (PushEnv env a) = zeroCostExtend env && zeroCostAcc a
+
+        zeroCostAcc :: Kit acc => acc env t -> Bool
+        zeroCostAcc acc =
+          case extract acc of
+            Avar _   -> True
+            Aprj _ a -> zeroCostAcc a
+            Alet a b -> zeroCostAcc a && zeroCostAcc b
+            Atuple t -> zeroCostAtuple t
+            _        -> False
+
+        zeroCostAtuple :: Kit acc => Atuple (acc env) t -> Bool
+        zeroCostAtuple NilAtup        = True
+        zeroCostAtuple (SnocAtup t a) = zeroCostAcc a && zeroCostAtuple t
 
 embedPreAcc
     :: forall acc aenv arrs. (Kit acc, Arrays arrs)
@@ -1463,7 +1484,7 @@ data Subcomponent k a' a where
 -- in it and references those that are.
 --
 fromSubproduct :: Kit acc
-               => Subproduct (acc aenv) t' t
+               => Subproduct (Embed acc aenv) t' t
                -> Atuple (acc (aenv, FreeProd t')) t
 fromSubproduct sp | Dict <- witness sp
                   = fromSubproduct (inject . flip Aprj v0) sp
@@ -1472,7 +1493,7 @@ fromSubproduct sp | Dict <- witness sp
     -- nested tuples.
     fromSubproduct :: (Kit acc, IsAtuple (FreeProd t''), Arrays (FreeProd t''))
                     => (forall a. Arrays a => TupleIdx t' a -> acc (aenv, FreeProd t'') a)
-                    -> Subproduct (acc aenv) t' t
+                    -> Subproduct (Embed acc aenv) t' t
                     -> Atuple (acc (aenv, FreeProd t'')) t
     fromSubproduct _ NilSub             = NilAtup
     fromSubproduct k (InSub sp (AllSub _))
@@ -1481,7 +1502,7 @@ fromSubproduct sp | Dict <- witness sp
       | at <- fromSubproduct (inject . flip Aprj (k ZeroTupIdx)) ts
       = SnocAtup (fromSubproduct (k . SuccTupIdx) sp) (inject $ Atuple at)
     fromSubproduct k (OutSub sp a)
-      = SnocAtup (fromSubproduct k sp) (weaken SuccIdx a)
+      = SnocAtup (fromSubproduct k sp) (weaken SuccIdx (inject (compute a)))
 
     -- We need to peek under the subproduct structure to get a witness that the
     -- sub products is a valid product representation.
@@ -1492,9 +1513,9 @@ fromSubproduct sp | Dict <- witness sp
     witness (OutSub (witness -> Dict) _) = Dict
 
 
-subproduct :: Kit acc => Subproduct (acc aenv) t' t -> Atuple (acc aenv) t'
+subproduct :: Kit acc => Subproduct (Embed acc aenv) t' t -> Atuple (acc aenv) t'
 subproduct NilSub = NilAtup
-subproduct (InSub t (AllSub a)) = subproduct t `SnocAtup` a
+subproduct (InSub t (AllSub a)) = subproduct t `SnocAtup` inject (compute a)
 subproduct (InSub t (TupleSub t')) = subproduct t `SnocAtup` inject (Atuple (subproduct t'))
 subproduct (OutSub t _) = subproduct t
 
@@ -1509,6 +1530,7 @@ subproduct (OutSub t _) = subproduct t
 -- Use the most specific version of a combinator whenever possible.
 --
 compute :: (Kit acc, Arrays arrs) => Embed acc aenv arrs -> PreOpenAcc acc aenv arrs
+compute (Embed (PushEnv env a) (Done ZeroIdx)) = bind env (extract a)
 compute (Embed env cc) = bind env (compute' cc)
 
 compute' :: (Kit acc, Arrays arrs) => Cunctation acc aenv arrs -> PreOpenAcc acc aenv arrs
@@ -1803,11 +1825,6 @@ aletD embedAcc elimAcc (embedAcc -> Embed env1 cc1) acc0
   | otherwise
   = aletD' embedAcc elimAcc (Embed env1 cc1) (embedAcc acc0)
 
-  where
-    noTop :: (aenv,a) :?> aenv
-    noTop ZeroIdx = Nothing
-    noTop (SuccIdx ix) = Just ix
-
 
 aletD' :: forall acc aenv arrs brrs. (Kit acc, Arrays arrs, Arrays brrs)
        => EmbedAcc acc
@@ -1844,7 +1861,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     acc0 :: acc (aenv, arrs) brrs
     acc0 = computeAcc (Embed env0 cc0)
 
-    elim = elimAcc cc1 acc0
+    elim = elimAcc env1 cc1 acc0
 
     noEliminations :: forall aenv a. Elim acc aenv a -> Bool
     noEliminations (ElimBind _)    = True
@@ -1871,11 +1888,15 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
     eliminate elim env1 cc1 body
       | ElimTuple env1' sp <- elim
       , t'' <- fromSubproduct sp
-      , body' <- rebuildA (subAtop (Atuple t'')) (weaken (under SuccIdx) (sink1 (env1 `append` env1') body))
-      , Embed env0' cc0' <- embedAcc . inject $ Alet (inject (Atuple (subproduct sp))) body'
-      = Embed (env1 `append` env1' `append` env0') cc0'
+      , body'  <- kmap (subtupleA (unRAtup (weaken SuccIdx (RebuildAtup t''))) ZeroIdx (under SuccIdx))
+                       (sink1 (env1 `append` env1') body)
+      , Just body'' <- strengthen noTop body' -- This is just to convince the type checker
+      , Embed env0' cc0' <- embedAcc body''
+      = Embed (env1 `append` env1' `append` PushEnv BaseEnv (inject (Atuple (subproduct sp))) `append` env0') cc0'
       | ElimDead <- elim
-      = embedAcc $ rebuildA (subAtop (compute (Embed env1 cc1))) body
+      , Just body' <- strengthen noTop body
+      -- , body' <- rebuildA (subAtop (compute (Embed env1 cc1))) body
+      = embedAcc body'
       | ElimEmbed <- elim
       , Embed env0' cc0' <- embedAcc $ rebuildA (subAtop bnd) $ kmap (replaceA (weaken SuccIdx cc1) ZeroIdx) (sink1 env1 body)
       = Embed (env1 `append` env0') cc0'
@@ -1975,7 +1996,7 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         Use arrs                -> Use arrs
         Subarray sh ix arr      -> Subarray (cvtE sh) (cvtE ix) arr
         Unit e                  -> Unit (cvtE e)
-        Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
+        Acond p at ae           -> reduceAcond (cvtE p) (cvtA at) (cvtA ae)
         Aprj ix tup             -> Aprj ix (cvtA tup)
         Atuple tup              -> Atuple (cvtAT tup)
         Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
@@ -2029,6 +2050,10 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
         cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv) s
         cvtAT NilAtup          = NilAtup
         cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+
+        reduceAcond :: Arrays a => PreExp acc aenv' Bool -> acc aenv' a -> acc aenv' a -> PreOpenAcc acc aenv' a
+        reduceAcond (Const f) t e = if f then extract t else extract e
+        reduceAcond f t e         = Acond f t e
 
     replaceSeq :: forall index aenv t t'. (Kit acc, Arrays t')
                => Cunctation acc aenv t' -> Idx aenv t'
@@ -2088,6 +2113,145 @@ aletD' embedAcc elimAcc (Embed env1 cc1) (Embed env0 cc0)
       = k sh1 f1
     assumeArray _ _ a
       = a
+
+    subtupleA :: forall aenv aenv' t a. (IsAtuple t, Kit acc, Arrays t)
+              => Atuple (acc aenv') (TupleRepr t)
+              -> Idx aenv t
+              -> aenv :> aenv'
+              -> PreOpenAcc acc aenv  a
+              -> PreOpenAcc acc aenv' a
+    subtupleA atup avar ixt pacc =
+      case pacc of
+        Avar v
+          | Just REFL <- match v avar   -> Atuple atup
+          | otherwise                   -> Avar (ixt v)
+
+        Alet bnd body                   ->
+          let atup' = unRAtup (weaken SuccIdx (RebuildAtup atup))
+          in
+          Alet (cvtA bnd) (kmap (subtupleA atup' (SuccIdx avar) (under ixt)) body)
+
+        Use arrs                -> Use arrs
+        Subarray sh ix arr      -> Subarray (cvtE sh) (cvtE ix) arr
+        Unit e                  -> Unit (cvtE e)
+        Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
+        Aprj ix tup             -> reducePrj ix (cvtA tup)
+        Atuple tup              -> Atuple (cvtAT tup)
+        Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
+        Apply f a               -> Apply (cvtAF f) (cvtA a)
+        Aforeign ff f a         -> Aforeign ff f (cvtA a)       -- no sharing between f and a
+        Generate sh f           -> Generate (cvtE sh) (cvtF f)
+        Map f a                 -> Map (cvtF f) (cvtA a)
+        ZipWith f a b           -> ZipWith (cvtF f) (cvtA a) (cvtA b)
+        Backpermute sh p a      -> Backpermute (cvtE sh) (cvtF p) (cvtA a)
+        Transform sh p f a      -> Transform (cvtE sh) (cvtF p) (cvtF f) (cvtA a)
+        Slice slix a sl         -> Slice slix (cvtA a) (cvtE sl)
+        Replicate slix sh a     -> Replicate slix (cvtE sh) (cvtA a)
+        Reshape sl a            -> Reshape (cvtE sl) (cvtA a)
+        Fold f z a              -> Fold (cvtF f) (cvtE z) (cvtA a)
+        Fold1 f a               -> Fold1 (cvtF f) (cvtA a)
+        FoldSeg f z a s         -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
+        Fold1Seg f a s          -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
+        Scanl f z a             -> Scanl (cvtF f) (cvtE z) (cvtA a)
+        Scanl1 f a              -> Scanl1 (cvtF f) (cvtA a)
+        Scanl' f z a            -> Scanl' (cvtF f) (cvtE z) (cvtA a)
+        Scanr f z a             -> Scanr (cvtF f) (cvtE z) (cvtA a)
+        Scanr1 f a              -> Scanr1 (cvtF f) (cvtA a)
+        Scanr' f z a            -> Scanr' (cvtF f) (cvtE z) (cvtA a)
+        Permute f d p a         -> Permute (cvtF f) (cvtA d) (cvtF p) (cvtA a)
+        Stencil f x a           -> Stencil (cvtF f) x (cvtA a)
+        Stencil2 f x a y b      -> Stencil2 (cvtF f) x (cvtA a) y (cvtA b)
+        Collect s cs            -> Collect (subtupleSeq atup avar ixt s) (subtupleSeq atup avar ixt <$> cs)
+
+      where
+        cvtA :: acc aenv s -> acc aenv' s
+        cvtA = kmap (subtupleA atup avar ixt)
+
+        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv' s
+        cvtAF = cvt atup avar ixt
+          where
+            cvt :: forall aenv aenv' a.
+                   Atuple (acc aenv') (TupleRepr t)
+                -> Idx aenv t
+                -> aenv :> aenv'
+                -> PreOpenAfun acc aenv a
+                -> PreOpenAfun acc aenv' a
+            cvt atup avar' ixt (Abody a) = Abody $ kmap (subtupleA atup avar' ixt) a
+            cvt atup avar' ixt (Alam af) = Alam $ cvt (unRAtup (weaken SuccIdx (RebuildAtup atup)))
+                                                      (SuccIdx avar')
+                                                      (under ixt)
+                                                      af
+
+        cvtE :: PreExp acc aenv s -> PreExp acc aenv' s
+        cvtE = weaken ixt
+
+        cvtF :: PreFun acc aenv s -> PreFun acc aenv' s
+        cvtF = weaken ixt
+
+        cvtAT :: Atuple (acc aenv) s -> Atuple (acc aenv') s
+        cvtAT NilAtup          = NilAtup
+        cvtAT (SnocAtup tup a) = cvtAT tup `SnocAtup` cvtA a
+
+        reducePrj :: (Arrays a, Arrays s, IsAtuple s) => TupleIdx (TupleRepr s) a -> acc aenv' s -> PreOpenAcc acc aenv' a
+        reducePrj ix a =
+          case extract a of
+            Atuple t -> extract $ prj ix t
+            _        -> Aprj ix a
+          where
+            prj :: TupleIdx s a -> Atuple (acc aenv') s -> acc aenv' a
+            prj ZeroTupIdx      (_ `SnocAtup` t) = t
+            prj (SuccTupIdx ix) (s `SnocAtup` _) = prj ix s
+
+
+    subtupleSeq :: forall index aenv aenv' t t'. (IsAtuple t', Kit acc, Arrays t')
+                => Atuple (acc aenv') (TupleRepr t')
+                -> Idx aenv t'
+                -> aenv :> aenv'
+                -> PreOpenSeq index acc aenv t
+                -> PreOpenSeq index acc aenv' t
+    subtupleSeq atup avar ixt s =
+      case s of
+        Producer p s' ->
+          Producer
+            (case p of
+               Pull s -> Pull s
+               ProduceAccum l f a -> ProduceAccum (cvtE <$> l) (cvtAF f) (cvtA a))
+            (subtupleSeq (unRAtup (weaken SuccIdx (RebuildAtup atup))) (weaken SuccIdx avar) (under ixt) s')
+        Consumer c ->
+          Consumer (cvtC c)
+        Reify a -> Reify (cvtA a)
+
+      where
+        cvtC :: Consumer index acc aenv s -> Consumer index acc aenv' s
+        cvtC c =
+          case c of
+            Last a d -> Last (cvtA a) (cvtA d)
+            Stuple t -> Stuple (cvtCT t)
+
+        cvtCT :: Atuple (PreOpenSeq index acc aenv) s -> Atuple (PreOpenSeq index acc aenv') s
+        cvtCT NilAtup        = NilAtup
+        cvtCT (SnocAtup t c) = SnocAtup (cvtCT t) (subtupleSeq atup avar ixt c)
+
+        cvtA :: acc aenv s -> acc aenv' s
+        cvtA = kmap (subtupleA atup avar ixt)
+
+        cvtAF :: PreOpenAfun acc aenv s -> PreOpenAfun acc aenv' s
+        cvtAF = cvt atup avar ixt
+          where
+            cvt :: forall aenv aenv' a.
+                   Atuple (acc aenv') (TupleRepr t')
+                -> Idx aenv t'
+                -> aenv :> aenv'
+                -> PreOpenAfun acc aenv a
+                -> PreOpenAfun acc aenv' a
+            cvt atup avar' ixt (Abody a) = Abody $ kmap (subtupleA atup avar' ixt) a
+            cvt atup avar' ixt (Alam af) = Alam $ cvt (unRAtup (weaken SuccIdx (RebuildAtup atup)))
+                                                      (SuccIdx avar')
+                                                      (under ixt)
+                                                      af
+
+        cvtE :: PreExp acc aenv s -> PreExp acc aenv' s
+        cvtE = weaken ixt
 
 -- The apply operator, or (>->) in the surface language. This eliminates
 -- redundant application to an identity function, instead lifting the argument
@@ -2261,3 +2425,7 @@ simpleExp e =
 simpleTuple :: Tuple (PreOpenExp acc env aenv) t -> Bool
 simpleTuple NilTup        = True
 simpleTuple (SnocTup t e) = simpleTuple t && simpleExp e
+
+noTop :: (aenv,a) :?> aenv
+noTop ZeroIdx = Nothing
+noTop (SuccIdx ix) = Just ix
