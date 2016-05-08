@@ -50,6 +50,7 @@ import Prelude                                          hiding ( exp, replicate,
 import qualified Prelude                                as P
 import Data.Typeable
 import Control.Applicative                              hiding ( Const, empty )
+import Control.Monad                                    ( (>=>) )
 import Data.Maybe
 
 -- friends
@@ -82,7 +83,7 @@ data Context env aenv env' aenv' where
   -- An expression that has already been lifted
   PushLExpC :: Elt e
             => Context env aenv env' aenv'
-            -> Context (env, e) aenv env' (aenv', Vector e)
+            -> Context (env, e) aenv env' (aenv', Vector' e)
 
   -- An unlifted expression
   PushExpC  :: Elt e
@@ -162,7 +163,7 @@ data LiftedExp acc env aenv t where
   AvoidedExp :: Extend acc aenv aenv'
              -> PreOpenExp acc env aenv' t
              -> LiftedExp acc env aenv t
-  LiftedExp  :: acc aenv (Vector t)
+  LiftedExp  :: acc aenv (Vector' t)
              -> LiftedExp acc env aenv t
 
 data AvoidedFun acc env aenv t where
@@ -335,7 +336,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
           => Context env aenv env' aenv'
           -> Size acc aenv' Int
           -> PreOpenExp acc env aenv e
-          -> PreOpenAcc acc aenv' (Vector e)
+          -> PreOpenAcc acc aenv' (Vector' e)
     liftE | HoistOnly <- strength
           = hoistingOnlyError
           | otherwise
@@ -350,15 +351,6 @@ liftPreOpenAcc vectAcc strength ctx size acc
            | otherwise
            = trace "liftPreOpenAcc" ("Expression had to be lifted: " ++ showPreExpOp e)
            $ LiftedExp $ inject $ liftE ctx size e
-
-    cvtE' :: forall e. Elt e
-          => PreExp acc aenv e
-          -> LiftedExp acc () aenv' e
-    cvtE' e | Avoided (b,e') <- avoidE e
-            = AvoidedExp b e'
-            | otherwise
-            = trace "liftPreOpenAcc" ("Expression had to be lifted: " ++ showPreExpOp e)
-            $ LiftedExp $ inject $ liftE ctx size e
 
     cvtT :: forall t.
             Atuple (acc aenv) t
@@ -393,12 +385,16 @@ liftPreOpenAcc vectAcc strength ctx size acc
           -> ( PreOpenAfun acc aenv' (Vector a -> Vector b)
              , Maybe (AvoidedFun acc () aenv' (a -> b)))
     cvtF1 f@(Lam (Body e))
-      = let l = Alam (Abody (inject $ liftE (PushLExpC ctx) (simpleSize $ ShapeSize (Shape avar0)) e))
+      = let l = Alam (Abody (inject $ liftE (PushLExpC ctx) (sizeOfVector' avar0) e))
         in case (avoidF f) of
              Avoided (b, Lam (Body e')) | avoidLifting
-                                        -> (l, Just $ AvoidedFun b (Lam (Body e')))
+                                        -> (rewrap l, Just $ AvoidedFun b (Lam (Body e')))
              _                          -> trace "liftPreOpenAcc" "Function had to be lifted"
-                                        $  (l, Nothing)
+                                        $  (rewrap l, Nothing)
+        where
+          rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b) -> PreOpenAfun acc aenv' (Vector a -> Vector b)
+          rewrap f = Alam . Abody . asVectorC $ weakenA1 f `apply` asVector'C avar0
+
     cvtF1 _              = $internalError "cvtF1" "Inconsistent valuation"
 
     cvtF2 :: forall a b c. (Elt a, Elt b, Elt c)
@@ -407,30 +403,19 @@ liftPreOpenAcc vectAcc strength ctx size acc
              , Maybe (AvoidedFun acc () aenv' (a -> b -> c)))
     cvtF2 f@(Lam (Lam (Body e)))
       = let l = Alam (Alam (Abody (inject $ liftE (PushLExpC (PushLExpC ctx))
-                                                  (simpleSize $ ShapeSize (Shape avar0))
+                                                  (sizeOfVector' avar0)
                                                   e)))
 
         in case (avoidF f) of
              Avoided (b, Lam (Lam (Body e'))) | avoidLifting
-                                              -> (l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
+                                              -> (rewrap l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
              _                                -> trace "liftPreOpenAcc" "Function had to be lifted"
-                                              $  (l, Nothing)
+                                              $  (rewrap l, Nothing)
+      where
+        rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b -> Vector' c)
+               -> PreOpenAfun acc aenv' (Vector a -> Vector b -> Vector c)
+        rewrap f = Alam . Alam . Abody . asVectorC $ weakenA2 f `partApply` asVector'C avar1 `apply` asVector'C avar0
     cvtF2 _              = $internalError "cvtF2" "Inconsistent valuation"
-
-    cvtF2' :: forall a b c. (Elt a, Elt b, Elt c)
-           => PreFun  acc aenv  (a -> b -> c)
-           -> ( PreOpenAfun acc aenv' (Vector a -> Vector b -> Vector c)
-              , Maybe (AvoidedFun acc () aenv' (a -> b -> c)))
-    cvtF2' f@(Lam (Lam (Body e)))
-      = let l = Alam (Alam (Abody (inject $ liftE (PushLExpC (PushLExpC ctx))
-                                                  (simpleSize $ ShapeSize (Shape avar0))
-                                                  e)))
-        in case (avoidF f) of
-             Avoided (b, Lam (Lam (Body e'))) -> (l, Just $ AvoidedFun b (Lam (Lam (Body e'))))
-             _                                -> trace "liftPreOpenAcc" ("Function had to be lifted")
-                                              $  (l, Nothing)
-    cvtF2' _
-      = $internalError "cvtF2" "Inconsistent valuation"
 
     unzip :: forall aenv a b sh.
              (Elt a, Elt b, Shape sh)
@@ -461,15 +446,15 @@ liftPreOpenAcc vectAcc strength ctx size acc
     nonEmpty :: forall env aenv sh. Shape sh
              => PreOpenExp acc env aenv sh
              -> PreOpenExp acc env aenv sh
-    nonEmpty = Union (Const $ fromElt (listToShape (repeat 1) :: sh))
+    nonEmpty = Union (Const $ fromElt (listToShape (P.replicate (dim (undefined :: sh)) 1) :: sh))
 
     lifted :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Nested t)
     lifted (AvoidedAcc a)   = replicateA a size
     lifted (LiftedAcc l)    = l
 
-    liftedE :: forall t. Elt t => LiftedExp acc () aenv' t -> acc aenv' (Vector t)
-    liftedE (AvoidedExp b e) = inject $ bind b $ replicateE (sink b size) e
-    liftedE (LiftedExp  e) = e
+    liftedE :: forall t. Elt t => LiftedExp acc () aenv' t -> acc aenv' (Vector' t)
+    liftedE (AvoidedExp b e) = inject . bind b . extract $ replicatedC (unitSize (sink b size)) (unit e)
+    liftedE (LiftedExp  e)   = e
 
     -- Nested versions of combinators.
     -- ===================================
@@ -575,7 +560,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       | AvoidedExp b p' <- p
       = liftedAcc $ inject $ bind b $ Acond p' (sink b (lifted t)) (sink b (lifted e))
       | otherwise
-      = liftedAcc $ liftedCondC (liftedE p) (lifted t) (lifted e)
+      = liftedAcc $ liftedCondC (asVectorC (liftedE p)) (lifted t) (lifted e)
 
     -- TODO: Try to find a way to clean this up
     awhileL :: forall t. Arrays t
@@ -630,7 +615,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                 AvoidedExp b e | avoidLifting
                                -> AvoidedAcc $ inject $ bind b $ Unit e
                 a              -> liftedAcc
-                               $ liftedScalarC (liftedE a)
+                               $ liftedScalarC (asVectorC (liftedE a))
 
     reshapeL :: forall sh sh' e.
                 (Shape sh, Shape sh', Elt e)
@@ -647,7 +632,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = liftedAcc
       $  regularC (unitSize size) (inject . bind b $ Unit sh') (valuesC (lifted a))
       | otherwise
-      = liftedAcc $ liftedIrregularReshapeC (liftedE sh) (lifted a)
+      = liftedAcc $ liftedReshapeC (liftedE sh) (lifted a)
 
 
     generateL :: forall sh e. (Elt e, Shape sh)
@@ -687,10 +672,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
     replicateL sl slix a
       = cvtA
       $^ Alet a
-      $^ Alet (inject $ Unit $ weakenA1 slix)
-      $^ Backpermute (IndexFull sl (the avar0) (Shape avar1))
+      $^ Backpermute (IndexFull sl (weakenA1 slix) (Shape avar0))
                      (Lam $ Body $ IndexSlice sl (Proxy :: Proxy slix) var0)
-      $ avar1
+      $ avar0
 
     sliceL :: forall sh sl slix e co.
               (Shape sh, Shape sl, Slice slix, Elt e)
@@ -711,10 +695,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
     sliceL sl a slix
       = cvtA
       $^ Alet a
-      $^ Alet (inject $ Unit $ weakenA1 slix)
-      $^ Backpermute (IndexSlice sl (Proxy :: Proxy slix) (Shape avar1))
-                     (fun1 $ IndexFull sl (weakenE1 (the avar0)))
-      $ avar1
+      $^ Backpermute (IndexSlice sl (Proxy :: Proxy slix) (Shape avar0))
+                     (Lam . Body $ IndexFull sl (weakenE1 (weakenA1 slix)) var0)
+      $ avar0
 
     mapL :: forall sh e e'. (Elt e, Elt e', Shape sh)
          => PreFun    acc  aenv  (e -> e')
@@ -766,7 +749,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
           -> PreExp acc     aenv  e
           -> acc            aenv  (Array (sh:.Int) e)
           -> LiftedAcc  acc aenv' (Array sh e)
-    foldL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z') (cvtA -> a)
+    foldL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z') (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a'    <- a
       = AvoidedAcc
@@ -786,10 +769,10 @@ liftPreOpenAcc vectAcc strength ctx size acc
         $^ FoldSeg (weakenA4 f) (the avar2) (valuesC avar3) (fstA avar0)
       ) (inject
         -- The array is regular
-        $  Alet (weakenA3 (sink b1 (unitSize size)))
+        $  Alet (regularSizeC (segmentsC avar2))
         $^ Alet (regularShapeC (segmentsC avar3))
         $^ Alet (inject $ Fold (weakenA5 f) (the avar3) $^ Reshape (indexSnoc (the avar0) (the avar1)) (valuesC avar4))
-        $  construct (regularSegsC avar2 (unit . nonEmpty . indexInit $ the avar1))
+        $  construct (regularSegsC avar2 (unit . indexInit $ Shape avar0))
         $  flattenC avar0
         )
     foldL _ _ _
@@ -799,7 +782,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
            => PreFun acc  aenv  (e -> e -> e)
            -> acc            aenv  (Array (sh:.Int) e)
            -> LiftedAcc  acc aenv' (Array sh e)
-    fold1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
+    fold1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a'    <- a
       = AvoidedAcc
@@ -832,7 +815,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> acc            aenv (Array (sh:.Int) e)
              -> acc            aenv (Sugar.Segments i)
              -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
-    foldSegL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a) (cvtA -> segs)
+    foldSegL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a) (cvtA -> segs)
       | avoidLifting
       , AvoidedAcc a'    <- a
       , AvoidedAcc segs' <- segs
@@ -857,7 +840,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
               -> acc            aenv (Array (sh:.Int) e)
               -> acc            aenv (Sugar.Segments i)
               -> LiftedAcc  acc aenv' (Array (sh:.Int) e)
-    fold1SegL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a) (cvtA -> segs)
+    fold1SegL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a) (cvtA -> segs)
       | avoidLifting
       , AvoidedAcc a'    <- a
       , AvoidedAcc segs' <- segs
@@ -879,7 +862,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                => PreFun acc  aenv  (e -> e -> e)
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanl1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
+    scanl1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -897,7 +880,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanlL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+    scanlL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -917,7 +900,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
-    scanl'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+    scanl'L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -961,7 +944,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                => PreFun acc  aenv  (e -> e -> e)
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanr1L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
+    scanr1L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -979,7 +962,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e)
-    scanrL (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+    scanrL (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -999,7 +982,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                -> PreExp acc  aenv  e
                -> acc            aenv  (Vector e)
                -> LiftedAcc  acc aenv' (Vector e, Scalar e)
-    scanr'L (cvtF2' -> (_, Just (AvoidedFun b1 f))) (cvtE' -> AvoidedExp b2 z) (cvtA -> a)
+    scanr'L (cvtF2 -> (_, Just (AvoidedFun b1 f))) (cvtE -> AvoidedExp b2 z) (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       = AvoidedAcc
@@ -1079,7 +1062,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $  Permute (sink b2' comb') (sink b2' . sink b1' $ defs) p' (sink b2' . sink b1' $ a)
 
     -- Lifted version
-    permuteL (cvtF2' -> (_, Just (AvoidedFun b comb))) (cvtA -> defs) (cvtF1 -> (p_l,p_a)) (cvtA -> a)
+    permuteL (cvtF2 -> (_, Just (AvoidedFun b comb))) (cvtA -> defs) (cvtF1 -> (p_l,p_a)) (cvtA -> a)
       =  trace "permuteL" ("Lifting permute: " ++ show (isJust p_a))
       $  liftedAcc
       $^ bind b
@@ -1229,7 +1212,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                       $  Alet (unitSize size)
                                       $^ Alet (weakenA1 . inject . bind b $ Unit sh)
                                       $  regularSegsC avar1 avar0
-    segmentsFromExp (LiftedExp sh)    = segmentsFromShapesC sh
+    segmentsFromExp (LiftedExp sh)    = asSegmentsC sh
 
     avoidF :: PreFun acc aenv f
            -> AvoidFun acc () aenv' f
@@ -1248,10 +1231,9 @@ liftPreOpenAcc vectAcc strength ctx size acc
                                           = Avoided (env', e')
     avoidE _                              = Unavoided
 
+type Vector' e = (Scalar Bool, Scalar Int, Scalar e, Vector e)
+
 -- |Performs the lifting transform on a given scalar expression.
---
--- Because lifting is performed in the presence of higher dimensional arrays, the output of the
--- transform has an extra element in the environment, the shape of the output array.
 --
 liftExp :: forall acc env env' aenv aenv' e. Kit acc
         => VectoriseAcc acc
@@ -1259,36 +1241,36 @@ liftExp :: forall acc env env' aenv aenv' e. Kit acc
         -> Context env aenv env' aenv'
         -> Size acc aenv' Int
         -> PreOpenExp acc env       aenv  e
-        -> PreOpenAcc acc aenv' (Vector e)
+        -> PreOpenAcc acc aenv' (Vector' e)
 liftExp vectAcc strength ctx size exp
   = case exp of
       Let bnd body              -> letL bnd body
       Var ix                    -> varL ctx ix id id
-      Const c                   -> replicateE size (Const c)
+      Const c                   -> unlifted (Const c)
       Tuple tup                 -> liftTuple vectAcc strength ctx size tup
-      Prj ix t                  -> Map (fun1 (Prj ix)) (cvtE t)
-      IndexNil                  -> replicateE size IndexNil
-      IndexAny                  -> replicateE size IndexAny
-      IndexCons sh sz           -> ZipWith (fun2 IndexCons) (cvtE sh) (cvtE sz)
-      IndexHead sh              -> Map (fun1 IndexHead) (cvtE sh)
-      IndexTail sh              -> Map (fun1 IndexTail) (cvtE sh)
-      IndexTrans sh             -> Map (fun1 IndexTrans) (cvtE sh)
-      IndexSlice x ix sh        -> Map (fun1 (IndexSlice x ix)) (cvtE sh)
-      IndexFull x ix sl         -> ZipWith (fun2 (IndexFull x)) (cvtE ix) (cvtE sl)
-      ToIndex sh ix             -> ZipWith (fun2 ToIndex) (cvtE sh) (cvtE ix)
-      FromIndex sh ix           -> ZipWith (fun2 FromIndex) (cvtE sh) (cvtE ix)
-      ToSlice x sh i            -> ZipWith (fun2 (ToSlice x)) (cvtE sh) (cvtE i)
+      Prj ix t                  -> mapVector' (Prj ix) (cvtE t)
+      IndexNil                  -> unlifted IndexNil
+      IndexAny                  -> unlifted IndexAny
+      IndexCons sh sz           -> zipWithVector' IndexCons (cvtE sh) (cvtE sz)
+      IndexHead sh              -> mapVector' IndexHead (cvtE sh)
+      IndexTail sh              -> mapVector' IndexTail (cvtE sh)
+      IndexTrans sh             -> mapVector' IndexTrans (cvtE sh)
+      IndexSlice x ix sh        -> mapVector' (IndexSlice x ix) (cvtE sh)
+      IndexFull x ix sl         -> zipWithVector' (IndexFull x) (cvtE ix) (cvtE sl)
+      ToIndex sh ix             -> zipWithVector' ToIndex (cvtE sh) (cvtE ix)
+      FromIndex sh ix           -> zipWithVector' FromIndex (cvtE sh) (cvtE ix)
+      ToSlice x sh i            -> zipWithVector' (ToSlice x) (cvtE sh) (cvtE i)
       Cond p t e                -> condL p t e
       While p it i              -> whileL p it i
-      PrimConst c               -> replicateE size (PrimConst c)
-      PrimApp f x               -> Map (fun1 (PrimApp f)) (cvtE x)
+      PrimConst c               -> unlifted (PrimConst c)
+      PrimApp f x               -> mapVector' (PrimApp f) (cvtE x)
       Index a sh                -> indexL a sh
       LinearIndex a i           -> linearIndexL a i
       Shape a                   -> shapeL a
-      ShapeSize sh              -> Map (fun1 ShapeSize) (cvtE sh)
-      Intersect s t             -> ZipWith (fun2 Intersect) (cvtE s) (cvtE t)
-      Union s t                 -> ZipWith (fun2 Union) (cvtE s) (cvtE t)
-      Foreign ff f e            -> Map (fun1 (Foreign ff f)) (cvtE e)
+      ShapeSize sh              -> mapVector' ShapeSize (cvtE sh)
+      Intersect s t             -> zipWithVector' Intersect (cvtE s) (cvtE t)
+      Union s t                 -> zipWithVector' Union (cvtE s) (cvtE t)
+      Foreign ff f e            -> mapVector' (Foreign ff f) (cvtE e)
   where
     avoidLifting :: Bool
     avoidLifting | Conservative <- strength = True
@@ -1299,8 +1281,52 @@ liftExp vectAcc strength ctx size exp
     lifted (AvoidedAcc a)   = replicateA a size
     lifted (LiftedAcc l)    = l
 
+    unlifted :: forall a. Elt a => PreExp acc aenv' a -> PreOpenAcc acc aenv' (Vector' a)
+    unlifted = extract . replicatedC (unitSize size) . unit
+
+    mapVector' :: forall aenv' a b. (Elt a, Elt b)
+               => (forall env. PreOpenExp acc env aenv' a -> PreOpenExp acc env aenv' b)
+               -> acc aenv' (Vector' a)
+               -> PreOpenAcc acc aenv' (Vector' b)
+    mapVector' f v
+      = Alet v
+      $^ Alet (inject $ Aprj tupIx3 avar0)
+      $^ Acond (the avar0) (
+          asVector'C
+        $^ Map (weakenA2 $ fun1 f) (inject $ Aprj tupIx0 avar1)
+      ) (
+          inject
+        $ Alet (inject $ Aprj tupIx1 avar1)
+        $ replicatedC (inject $ Aprj tupIx2 avar2)
+        $^ Unit (weakenA3 (fun1 f) `subApplyE` the avar0)
+      )
+
+    zipWithVector' :: (Elt a, Elt b, Elt c)
+                   => (forall env aenv. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c)
+                   -> acc aenv' (Vector' a)
+                   -> acc aenv' (Vector' b)
+                   -> PreOpenAcc acc aenv' (Vector' c)
+    zipWithVector' f v1 v2
+      = mapVector' (\ab -> Let ab (f (Prj tupIx1 var0) (Prj tupIx0 var0))) (zip v1 v2)
+      where
+        -- uncurry :: (Elt a, Elt b, Elt c)
+        --         => PreFun acc aenv (a -> b -> c)
+        --         -> PreFun acc aenv ((a,b) -> c)
+        -- uncurry f
+        --   = Lam . Body
+        --   $ Let (Prj tupIx1 var0)
+        --   $ Let (Prj tupIx0 var1)
+        --   $ subApplyE2 (weakenE3 f) var1 var0
+        -- uncurry _ = error "Absurd"
+
+        zip = fromHOAS2 $ \v1 v2 ->
+                withVector' v1 (\c e -> withVector' v2
+                                 (\c' e' -> replicated (c `min` c') (S.lift (e, e')))
+                                 (asVector' . S.map (S.lift . (e,))))
+                               (\v1' -> asVector' $ S.zip v1' (asVector v2))
+
     cvtE :: forall e. PreOpenExp acc env aenv e
-         -> acc aenv' (Vector e)
+         -> acc aenv' (Vector' e)
     cvtE exp' = inject $ liftExp vectAcc strength ctx size exp'
 
     cvtA :: forall sh' e'.
@@ -1310,11 +1336,14 @@ liftExp vectAcc strength ctx size exp
     cvtA a | EmbedContext ctx' wk <- embedContext ctx
            = vectAcc strength ctx' size (weaken wk a)
 
-    cvtF1 :: PreOpenFun acc env aenv (a -> b)
+    cvtF1 :: forall a b. PreOpenFun acc env aenv (a -> b)
           -> PreOpenAfun acc aenv' (Vector a -> Vector b)
-    cvtF1 (Lam (Body f)) = Alam . Abody
+    cvtF1 (Lam (Body f)) = rewrap . Alam . Abody
                          $ inject
-                         $ liftExp vectAcc strength (PushLExpC ctx) (simpleSize $ ShapeSize (Shape avar0)) f
+                         $ liftExp vectAcc strength (PushLExpC ctx) (sizeOfVector' avar0) f
+      where
+        rewrap :: PreOpenAfun acc aenv' (Vector' a -> Vector' b) -> PreOpenAfun acc aenv' (Vector a -> Vector b)
+        rewrap f = Alam . Abody . asVectorC $ weakenA1 f `apply` asVector'C avar0
     cvtF1 _              = $internalError "liftExp" "Inconsistent valuation"
 
     -- Lifted versions of operations
@@ -1325,7 +1354,7 @@ liftExp vectAcc strength ctx size exp
          -> Idx env e
          -> (forall e. Idx env''  e -> Idx env'  e)
          -> (forall a. Idx aenv'' a -> Idx aenv' a)
-         -> PreOpenAcc acc aenv' (Vector e)
+         -> PreOpenAcc acc aenv' (Vector' e)
     varL (PushLExpC _) ZeroIdx      _    cvtA = Avar (cvtA ZeroIdx)
     --varL (PushExpC _)  ZeroIdx      cvtE _    = replicateE size (Var $ cvtE ZeroIdx)
     varL (PushExpC d)  (SuccIdx ix) cvtE cvtA = varL d ix (cvtE . SuccIdx) cvtA
@@ -1337,20 +1366,20 @@ liftExp vectAcc strength ctx size exp
     letL :: forall bnd_t. (Elt e, Elt bnd_t)
          => PreOpenExp acc env          aenv  bnd_t
          -> PreOpenExp acc (env, bnd_t) aenv  e
-         -> PreOpenAcc acc aenv' (Vector e)
+         -> PreOpenAcc acc aenv' (Vector' e)
     letL bnd body = Alet bnd' (inject body')
       where
         bnd'  = cvtE bnd
 
-        body' :: PreOpenAcc acc (aenv', Vector bnd_t) (Vector e)
+        body' :: PreOpenAcc acc (aenv', Vector' bnd_t) (Vector' e)
         body' = liftExp vectAcc strength (PushLExpC ctx) (weakenA1 size) body
 
     condL :: Elt e
           => PreOpenExp acc env     aenv  Bool
           -> PreOpenExp acc env     aenv  e
           -> PreOpenExp acc env     aenv  e
-          -> PreOpenAcc acc aenv' (Vector e)
-    condL p t e = ZipWith (fun2 decide) (cvtE p) (inject $ ZipWith (fun2 tup) (cvtE t) (cvtE e))
+          -> PreOpenAcc acc aenv' (Vector' e)
+    condL p t e = extract . asVector'C $^ ZipWith (fun2 decide) (asVectorC (cvtE p)) (inject $ ZipWith (fun2 tup) (asVectorC (cvtE t)) (asVectorC (cvtE e)))
       where
         decide p' ab = Cond p' (Prj (SuccTupIdx ZeroTupIdx) ab) (Prj ZeroTupIdx ab)
 
@@ -1373,8 +1402,8 @@ liftExp vectAcc strength ctx size exp
            => PreOpenFun acc env     aenv  (e -> Bool)
            -> PreOpenFun acc env     aenv  (e -> e)
            -> PreOpenExp acc env     aenv  e
-           -> PreOpenAcc acc aenv' (Vector e)
-    whileL p it i = Aprj (SuccTupIdx ZeroTupIdx) (inject $ Awhile p' it' i')
+           -> PreOpenAcc acc aenv' (Vector' e)
+    whileL p it i = extract . asVector'C $^ Aprj (SuccTupIdx ZeroTupIdx) (inject $ Awhile p' it' i')
       where
         p'  :: PreOpenAfun acc aenv' ((Vector e, Vector Bool) -> Scalar Bool)
         p'  = Alam $ Abody $ let
@@ -1400,19 +1429,17 @@ liftExp vectAcc strength ctx size exp
 
 
         i'  :: acc aenv' (Vector e, Vector Bool)
-        i'  = cvtE i `atup` inject (replicateE size (Const True))
+        i'  = asVectorC (cvtE i) `atup` inject (replicateE size (Const True))
 
     indexL :: forall sh'. (Elt e, Shape sh')
            => acc            aenv  (Array sh' e)
            -> PreOpenExp acc env      aenv  sh'
-           -> PreOpenAcc acc aenv' (Vector e)
+           -> PreOpenAcc acc aenv' (Vector' e)
     indexL (cvtA -> a) (cvtE -> ix)
       | avoidLifting
       , AvoidedAcc a' <- a
-      , Size b s <- size
-      = Alet b
-      $^ Alet (weakenA1 ix)
-      $^ Backpermute (index1 (weakenA1 s)) (fun1 (Index avar0)) (weakenA2 a')
+      =  Alet a'
+      $^ mapVector' (Index avar0) (weakenA1 ix)
       | otherwise
       =  extract
       $  liftedIndexC (lifted a) ix
@@ -1420,31 +1447,27 @@ liftExp vectAcc strength ctx size exp
     linearIndexL :: forall sh'. (Elt e, Shape sh')
                  => acc            aenv  (Array sh' e)
                  -> PreOpenExp acc env     aenv  Int
-                 -> PreOpenAcc acc aenv' (Vector e)
+                 -> PreOpenAcc acc aenv' (Vector' e)
     linearIndexL (cvtA -> a) (cvtE -> ix)
       | avoidLifting
       , AvoidedAcc a' <- a
-      , Size b s <- size
-      =  Alet b
-      $^ Alet (weakenA1 a')
-      $^ Alet (weakenA2 ix)
-      $^ Generate (index1 (weakenA2 s))
-                  (Lam $ Body $ LinearIndex avar1 $ Index avar0 $ var0)
+      =  Alet a'
+      $^ mapVector' (LinearIndex avar0) (weakenA1 ix)
       | otherwise
       = extract $
         liftedLinearIndexC (lifted a) ix
 
     shapeL :: forall e'. (Shape e, Elt e')
            => acc            aenv  (Array e e')
-           -> PreOpenAcc acc aenv' (Vector e)
+           -> PreOpenAcc acc aenv' (Vector' e)
     shapeL (cvtA -> a)
       | avoidLifting
       , AvoidedAcc a' <- a
       =  Alet a'
-      $^ replicateE (weakenA1 size) (Shape avar0)
+      $ replicatedC (unitSize $ weakenA1 size) (unit $ Shape avar0)
       | otherwise
       = extract
-      $ shapesC (segmentsC (lifted a))
+      $ shapes'C (segmentsC (lifted a))
 
     zipWith3 :: forall aenv a b c d. (Elt a, Elt b, Elt c, Elt d)
              => PreFun acc aenv (a -> b -> c -> d)
@@ -1502,19 +1525,19 @@ liftTuple :: forall acc env aenv env' aenv' e.
           -> Context env aenv env' aenv'
           -> Size acc aenv' Int
           -> Tuple (PreOpenExp acc env aenv) (TupleRepr e)
-          -> PreOpenAcc acc aenv' (Vector e)
-liftTuple vectAcc strength ctx size t = cvtT t (liftExp vectAcc strength ctx size) gen size
+          -> PreOpenAcc acc aenv' (Vector' e)
+liftTuple vectAcc strength ctx size t = extract . asVector'C $^ cvtT t (liftExp vectAcc strength ctx size) gen size
   where
     cvtT :: forall t aenv'.
             Tuple (PreOpenExp acc env aenv) t
-         -> (forall e. PreOpenExp acc env aenv e -> PreOpenAcc acc aenv' (Vector e))
+         -> (forall e. PreOpenExp acc env aenv e -> PreOpenAcc acc aenv' (Vector' e))
          -> (Size acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) Int -> PreOpenAcc acc (ExpandEnv aenv' (VectorsOfTupleRepr t)) (Vector e))
          -> Size acc aenv' Int
          -> PreOpenAcc acc aenv'                                    (Vector e)
     cvtT NilTup        _    arr size = arr size
-    cvtT(SnocTup t' e) lift arr size = Alet (inject $ lift e) (inject $ cvtT t' lift' arr (weakenA1 size))
+    cvtT(SnocTup t' e) lift arr size = Alet (asVectorC . inject $ lift e) (inject $ cvtT t' lift' arr (weakenA1 size))
       where
-        lift' :: forall e e'. PreOpenExp acc env aenv e -> PreOpenAcc acc (aenv', Vector e') (Vector e)
+        lift' :: forall e e'. PreOpenExp acc env aenv e -> PreOpenAcc acc (aenv', Vector e') (Vector' e)
         lift' = weakenA1 . lift
 
     gen :: Size acc (TupleEnv aenv' e) Int -> PreOpenAcc acc (TupleEnv aenv' e) (Vector e)
@@ -1818,6 +1841,9 @@ offsets (S.unatup6 -> (f,_,s,sh,o,_)) = S.the f S.?| (o, S.generate (S.index1 (S
 shapes :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector sh)
 shapes (S.unatup6 -> (f,_,s,sh,_,shs)) = S.the f S.?| (shs, S.fill (S.index1 (S.the s)) (S.the sh))
 
+shapes' :: Shape sh => S.Acc (Segments sh) -> S.Acc (Vector' sh)
+shapes' segs = withSegs segs (asVector' (shapes segs)) replicated
+
 totalSize :: Shape sh => S.Acc (Segments sh) -> S.Exp Int
 totalSize (S.unatup6 -> (_,ts,_,_,_,_)) = S.the ts
 
@@ -1850,15 +1876,47 @@ isIrregularSegs (S.unatup6 -> (f,_,_,_,_,_)) = f
 regularShape :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar sh)
 regularShape (S.unatup6 -> (_,_,_,sh,_,_)) = sh
 
+regularSize :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar Int)
+regularSize (S.unatup6 -> (_,_,s,_,_,_)) = s
+
 withSegs :: (Shape sh, Arrays a) => S.Acc (Segments sh) -> S.Acc a -> (S.Exp Int -> S.Exp sh -> S.Acc a) -> S.Acc a
 withSegs (S.unatup6 -> (f,_,s,sh,_,_)) irr r = S.the f S.?| (irr, r (S.the s) (S.the sh))
 
-indexSeg :: (Shape sh, Elt e) => S.Acc (Nested (Array sh e)) -> S.Exp Int -> S.Exp sh -> S.Exp e
-indexSeg arr seg ix = let segs = segments arr
-                      in values arr S.!! ((offsets segs S.!! seg) + (S.toIndex (shapes segs S.!! seg) ix))
+indexInSeg :: (Shape sh, Elt e) => S.Acc (Nested (Array sh e)) -> S.Exp Int -> S.Exp sh -> S.Exp e
+indexInSeg arr seg ix = let segs = segments arr
+                        in values arr S.!! ((offsets segs S.!! seg) + (S.toIndex (shapes segs S.!! seg) ix))
+
+indexSegLast :: forall a. Arrays a => S.Acc (Nested a) -> S.Acc a
+indexSegLast arr =
+  case flavour (undefined :: a) of
+    ArraysFunit  -> S.Acc (S.Atuple NilAtup)
+    ArraysFarray -> let segs  = segments arr
+                        sh    = shapes segs  S.!! (S.size (shapes segs) - 1)
+                        start = offsets segs S.!! (S.size (shapes segs) - 1)
+                    in S.generate sh (\ix -> values arr S.!! (start + S.toIndex sh ix))
+    ArraysFtuple -> S.Acc $ S.Atuple $ indexSegLastT (prod (Proxy :: Proxy Arrays) (undefined :: a)) (asAtuple arr)
+  where
+    indexSegLastT :: ProdR Arrays t -> Atuple S.Acc (NestedTupleRepr t) -> Atuple S.Acc t
+    indexSegLastT ProdRunit      NilAtup         = NilAtup
+    indexSegLastT (ProdRsnoc pr) (SnocAtup t a') = SnocAtup (indexSegLastT pr t) (indexSegLast a')
 
 liftedScalar :: Elt e => S.Acc (Vector e) -> S.Acc (Nested (Scalar e))
 liftedScalar vs = regular (S.size vs) (S.constant Z) vs
+
+replicated :: Elt e => S.Exp Int -> S.Exp e -> S.Acc (Vector' e)
+replicated c e = S.lift (S.unit (S.constant False), S.unit c, S.unit e, S.emptyArray)
+
+asVector :: Elt e => S.Acc (Vector' e) -> S.Acc (Vector e)
+asVector v = withVector' v (\c e -> S.fill (S.index1 c) e) id
+
+asVector' :: Elt e => S.Acc (Vector e) -> S.Acc (Vector' e)
+asVector' v = S.lift (S.unit (S.constant True), S.unit (S.size v), S.unit (v S.!! 0), v)
+
+withVector' :: (Arrays a, Elt e) => S.Acc (Vector' e) -> (S.Exp Int -> S.Exp e -> S.Acc a) -> (S.Acc (Vector e) -> S.Acc a) -> S.Acc a
+withVector' (S.unlift -> (r, c, e, es)) f g = S.the r S.?| (g es, f (S.the c) (S.the e))
+
+asSegments :: Shape sh => S.Acc (Vector' sh) -> S.Acc (Segments sh)
+asSegments v = withVector' v regularSegs segmentsFromShapes
 
 makeFoldSegments :: forall sh. (Shape sh, Slice sh) => S.Acc (Segments (sh:.Int)) -> S.Acc (Vector Int, Segments sh)
 makeFoldSegments segs = S.lift (generateSeg inSegs (\seg sh ix -> (offs S.!! seg) + S.toIndex sh ix), outSegs)
@@ -1883,7 +1941,7 @@ makeFoldSegSegments segs isegs = S.lift (segmentsFromShapes shs', isegs')
                shi = shapes (segments isegs) S.! ix
            in S.lift (sh :. S.shapeSize shi)
 
-    isegs' = generateSeg (segments isegs) (\seg _ ix -> indexSeg isegs seg ix + S.fromIntegral (offsets (segments isegs) S.!! seg))
+    isegs' = generateSeg (segments isegs) (\seg _ ix -> indexInSeg isegs seg ix + S.fromIntegral (offsets (segments isegs) S.!! seg))
 
 -- RCE: I have a strong feeling this can be done better.
 --
@@ -1954,10 +2012,11 @@ liftedCond pred th el
 --            c' = S.or f'
 --        in S.lift (a', f', c')
 
-liftedIrregularReshape :: (Elt e, Shape sh, Shape sh') => S.Acc (Vector sh) -> S.Acc (Nested (Array sh' e)) -> S.Acc (Nested (Array sh e))
-liftedIrregularReshape extents a =
-  let segs = segments a
-  in liftedArray (irregularSegs (totalSize segs) (offsets segs) extents) (values a)
+liftedReshape :: (Elt e, Shape sh, Shape sh') => S.Acc (Vector' sh) -> S.Acc (Nested (Array sh' e)) -> S.Acc (Nested (Array sh e))
+liftedReshape extents a =
+  let segs  = segments a
+      segs' = withVector' extents (\c sh -> regularSegs c sh) (irregularSegs (totalSize segs) (offsets segs))
+  in liftedArray segs' (values a)
 
 --liftedGenerate :: (Elt e, Shape sh)
 --               => S.Acc (Vector sh)
@@ -1974,12 +2033,12 @@ liftedZip as bs = liftedArray segs vals
   where
     segs = intersectSegments (segments as) (segments bs)
 
-    vals = generateSeg segs (\seg _ ix -> S.lift (indexSeg as seg ix, indexSeg bs seg ix))
+    vals = generateSeg segs (\seg _ ix -> S.lift (indexInSeg as seg ix, indexInSeg bs seg ix))
 
 intersectSegments :: Shape sh => S.Acc (Segments sh) -> S.Acc (Segments sh) -> S.Acc (Segments sh)
 intersectSegments as bs = withSegs as bothIrregular
                         $ \sz sh   -> withSegs bs bothIrregular
-                        $ \sz' sh' -> regularSegs (sz `min` sz') (sh `S.intersect` sh')
+                        $ \sz' sh' -> regularSegs sz (sh `S.intersect` sh')
   where
     bothIrregular = segmentsFromShapes (S.zipWith S.intersect (shapes as) (shapes bs))
 
@@ -2073,13 +2132,14 @@ asOffsetsOf ixs shapes' = S.map S.index1 $ S.zipWith (+) starts (S.map S.shapeSi
 
 liftedIndex :: (Shape sh, Elt e)
             => S.Acc (Nested (Array sh e))
-            -> S.Acc (Vector sh)
-            -> S.Acc (Vector e)
-liftedIndex arr ixs = S.backpermute (S.shape ixs) f (values arr)
+            -> S.Acc (Vector' sh)
+            -> S.Acc (Vector' e)
+liftedIndex arr ixs = asVector' $ S.backpermute (S.shape ixs') f (values arr)
   where
+    ixs' = asVector ixs
     f ix = let off = offsets (segments arr) S.! ix
                sh  = shapes  (segments arr) S.! ix
-           in S.index1 $ off + S.toIndex sh (ixs S.! ix)
+           in S.index1 $ off + S.toIndex sh (ixs' S.! ix)
 
 
 -- RCE: Using a generate here, as opposed to the backpermute used above, so that the linear indexing
@@ -2087,12 +2147,13 @@ liftedIndex arr ixs = S.backpermute (S.shape ixs) f (values arr)
 -- makes no difference whatsoever.
 liftedLinearIndex :: (Shape sh, Elt e)
                   => S.Acc (Nested (Array sh e))
-                  -> S.Acc (Vector Int)
-                  -> S.Acc (Vector e)
-liftedLinearIndex arr ixs = S.backpermute (S.shape ixs) f (values arr)
+                  -> S.Acc (Vector' Int)
+                  -> S.Acc (Vector' e)
+liftedLinearIndex arr ixs = asVector' $ S.backpermute (S.shape ixs') f (values arr)
   where
+    ixs' = asVector ixs
     f ix = let off = offsets (segments arr) S.! ix
-           in S.index1 $ off + ixs S.! ix
+           in S.index1 $ off + ixs' S.! ix
 
 -- |Compute head flags vector from segment descriptor for left-scans.
 --
@@ -2144,11 +2205,11 @@ liftedCondC :: (Arrays a, Arrays (Nested a), Kit acc)
             -> acc aenv (Nested a)
 liftedCondC = fromHOAS3 liftedCond
 
-liftedIrregularReshapeC :: (Elt e, Shape sh, Shape sh', Kit acc)
-               => acc aenv (Vector sh)
+liftedReshapeC :: (Elt e, Shape sh, Shape sh', Kit acc)
+               => acc aenv (Vector' sh)
                -> acc aenv (Nested (Array sh' e))
                -> acc aenv (Nested (Array sh e))
-liftedIrregularReshapeC = fromHOAS2 liftedIrregularReshape
+liftedReshapeC = fromHOAS2 liftedReshape
 
 liftedBackpermutePreC :: (Shape sh', Kit acc)
                       => acc aenv (Segments sh')
@@ -2169,14 +2230,14 @@ asOffsetsOfC = fromHOAS2 asOffsetsOf
 
 liftedIndexC :: (Kit acc, Shape sh, Elt e)
              => acc aenv (Nested (Array sh e))
-             -> acc aenv (Vector sh)
-             -> acc aenv (Vector e)
+             -> acc aenv (Vector' sh)
+             -> acc aenv (Vector' e)
 liftedIndexC = fromHOAS2 liftedIndex
 
 liftedLinearIndexC :: (Kit acc, Shape sh, Elt e)
                    => acc aenv (Nested (Array sh e))
-                   -> acc aenv (Vector Int)
-                   -> acc aenv (Vector e)
+                   -> acc aenv (Vector' Int)
+                   -> acc aenv (Vector' e)
 liftedLinearIndexC = fromHOAS2 liftedLinearIndex
 
 indexLastC :: forall acc env aenv sh. Shape sh
@@ -2201,6 +2262,9 @@ segmentsC = fromHOAS segments
 shapesC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Vector sh)
 shapesC = fromHOAS shapes
 
+shapes'C :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Vector' sh)
+shapes'C = fromHOAS shapes'
+
 irregularC :: (Kit acc, Shape sh, Elt e) => acc aenv (Segments sh) -> acc aenv (Vector e) -> acc aenv (Nested (Array sh e))
 irregularC segs vs = inject . Atuple $ NilAtup `SnocAtup` segs `SnocAtup` vs
 
@@ -2218,6 +2282,21 @@ isIrregularSegsC = fromHOAS isIrregularSegs
 
 regularShapeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar sh)
 regularShapeC = fromHOAS regularShape
+
+regularSizeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar Int)
+regularSizeC = fromHOAS regularSize
+
+asVectorC :: (Kit acc, Elt e) => acc aenv (Vector' e) -> acc aenv (Vector e)
+asVectorC = fromHOAS asVector
+
+asVector'C :: (Kit acc, Elt e) => acc aenv (Vector e) -> acc aenv (Vector' e)
+asVector'C = fromHOAS asVector'
+
+asSegmentsC :: (Kit acc, Shape sh) => acc aenv (Vector' sh) -> acc aenv (Segments sh)
+asSegmentsC = fromHOAS asSegments
+
+replicatedC :: (Kit acc, Elt e) => acc aenv (Scalar Int) -> acc aenv (Scalar e) -> acc aenv (Vector' e)
+replicatedC = fromHOAS2 (\i e -> replicated (S.the i) (S.the e))
 
 makeFoldSegmentsC :: (Kit acc, Shape sh, Slice sh) => acc aenv (Segments (sh:.Int)) -> acc aenv (Vector Int, Segments sh)
 makeFoldSegmentsC = fromHOAS makeFoldSegments
@@ -2335,6 +2414,9 @@ tupIx1 = SuccTupIdx ZeroTupIdx
 
 tupIx2 :: TupleIdx (((t,a),b),c) a
 tupIx2 = SuccTupIdx (SuccTupIdx ZeroTupIdx)
+
+tupIx3 :: TupleIdx ((((t,a),b),c),d) a
+tupIx3 = SuccTupIdx (SuccTupIdx (SuccTupIdx ZeroTupIdx))
 
 replicateA :: forall acc aenv a.
              (Kit acc, Arrays a)
@@ -2455,13 +2537,18 @@ weakenE2 :: SinkExp f
          -> f ((env,r),s) aenv t
 weakenE2 = weakenE (SuccIdx . SuccIdx)
 
+weakenE3 :: SinkExp f
+         => f env         aenv t
+         -> f (((env,q),r),s) aenv t
+weakenE3 = weakenE (SuccIdx . SuccIdx . SuccIdx)
+
 fun1 :: (Kit acc, Elt a, Elt b)
-     => (PreOpenExp acc (env,a) aenv a -> PreOpenExp acc (env,a) aenv b)
+     => (forall env. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b)
      -> PreOpenFun acc env aenv (a -> b)
 fun1 f = Lam (Body (f var0))
 
 fun2 :: (Kit acc, Elt a, Elt b, Elt c)
-     => (PreOpenExp acc ((env,a), b) aenv a -> PreOpenExp acc ((env,a), b) aenv b -> PreOpenExp acc ((env,a), b) aenv c)
+     => (forall env. PreOpenExp acc env aenv a -> PreOpenExp acc env aenv b -> PreOpenExp acc env aenv c)
      -> PreOpenFun acc env aenv (a -> b -> c)
 fun2 f = Lam (Lam (Body (f var1 var0)))
 
@@ -2510,6 +2597,14 @@ subApply2 (Alam (Alam (Abody f))) a b
   $ inject $ Alet (weakenA1 b)
   $ f
 subApply2 _ _ _ = error "subApply2: inconsistent evaluation"
+
+subApplyE :: Kit acc
+          => PreOpenFun  acc env aenv (a -> b)
+          -> PreOpenExp  acc env aenv a
+          -> PreOpenExp  acc env aenv b
+subApplyE (Lam (Body f)) a
+  = Let a f
+subApplyE _ _ = error "subApplyE: inconsistent evaluation"
 
 subApplyE2 :: Kit acc
            => PreOpenFun  acc env aenv (a -> b -> c)
@@ -2561,6 +2656,9 @@ simpleSize e = Size (inject $ Use () :: acc aenv ()) (weakenA1 e)
 unitSize :: (Kit acc, Elt e) => Size acc aenv e -> acc aenv (Scalar e)
 unitSize (Size b s) = inject $ Alet b $ inject $ Unit s
 
+sizeOfVector' :: (Kit acc, Elt e) => acc aenv (Vector' e) -> Size acc aenv Int
+sizeOfVector' a = Size (inject $ Aprj tupIx2 a) (the avar0)
+
 -- Debugging
 -- ----------
 trace :: String -> String -> a -> a
@@ -2582,7 +2680,7 @@ vectoriseOpenSeq :: forall aenv aenv' a.
 vectoriseOpenSeq strength ctx seq =
   case seq of
     Producer p s -> Producer <$> cvtP p <*> vectoriseOpenSeq strength (PushLAccC ctx) s
-    Consumer c   -> Consumer <$> cvtC c
+    Consumer c   -> cvtC c
     Reify{}      -> Nothing
   where
     cvtP :: NaturalProducer OpenAcc aenv t -> Maybe (ChunkedProducer OpenAcc aenv' (Nested t))
@@ -2599,7 +2697,7 @@ vectoriseOpenSeq strength ctx seq =
     cvtL (Just l) | Just l' <- rebuildToLift ctx l
                   = Just (Just l')
                   | otherwise
-                  = Nothing
+                  = $internalError "vectoriseOpenSeq" "Limit depends on sequence elements"
 
     mapBatch :: forall a b c s. (Arrays a, Arrays b, Arrays c, Arrays s)
              => OpenAfun aenv' (Nested s -> Nested a -> Nested b)
@@ -2682,13 +2780,19 @@ vectoriseOpenSeq strength ctx seq =
     cvtA = liftOpenAcc strength ctx
 
     cvtA' :: OpenAcc aenv t -> Maybe (OpenAcc aenv' t)
-    cvtA' = rebuildToLift ctx
+    cvtA' t =
+      case rebuildToLift ctx t of
+        Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array term depends on sequence elements"
+        Just t' -> Just t'
 
     cvtAF :: forall a b c. OpenAfun aenv (a -> b -> c) -> OpenAfun aenv' (Nested a -> Nested b -> Nested c)
     cvtAF = liftOpenAfun2 Conservative ctx
 
     cvtAF' :: OpenAfun aenv t -> Maybe (OpenAfun aenv' t)
-    cvtAF' = rebuildToLift ctx
+    cvtAF' t =
+      case rebuildToLift ctx t of
+        Nothing -> $internalError "vectoriseOpenSeq" "Sequence invariant array function depends on sequence elements"
+        Just t' -> Just t'
 
     -- untup :: OpenAfun aenv t -> OpenAfun aenv t
     -- untup = untupleAfun BaseReducedMap
@@ -2779,14 +2883,15 @@ stripExpCtx c =
     _ -> error "unreachable"
 
 vectoriseSeqOpenExp :: forall env aenv a.
-                       Strength
+                       Bool
+                    -> Strength
                     -> Context env aenv env aenv
                     -> OpenExp env aenv a
                     -> OpenExp env aenv a
-vectoriseSeqOpenExp strength ctx = cvtE
+vectoriseSeqOpenExp vectorise strength ctx = cvtE
   where
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t
-    cvtA a = vectoriseSeqOpenAcc strength (stripExpCtx ctx) a
+    cvtA a = vectoriseSeqOpenAcc vectorise strength (stripExpCtx ctx) a
 
     cvtT :: Tuple (OpenExp env aenv) t -> Tuple (OpenExp env aenv) t
     cvtT tup = case tup of
@@ -2794,12 +2899,12 @@ vectoriseSeqOpenExp strength ctx = cvtE
       SnocTup t a -> cvtT t `SnocTup` cvtE a
 
     cvtF :: OpenFun env aenv t -> OpenFun env aenv t
-    cvtF = vectoriseSeqOpenFun strength ctx
+    cvtF = vectoriseSeqOpenFun vectorise strength ctx
 
     cvtE :: OpenExp env aenv t -> OpenExp env aenv t
     cvtE exp =
       case exp of
-        Let bnd body            -> Let (cvtE bnd) (vectoriseSeqOpenExp strength (PushExpC ctx) body)
+        Let bnd body            -> Let (cvtE bnd) (vectoriseSeqOpenExp vectorise strength (PushExpC ctx) body)
         Var ix                  -> Var ix
         Const c                 -> Const c
         Tuple tup               -> Tuple (cvtT tup)
@@ -2825,17 +2930,18 @@ vectoriseSeqOpenExp strength ctx = cvtE
         ShapeSize sh            -> ShapeSize (cvtE sh)
         Intersect s t           -> Intersect (cvtE s) (cvtE t)
         Union s t               -> Union (cvtE s) (cvtE t)
-        Foreign ff f e          -> Foreign ff (vectoriseSeqOpenFun strength EmptyC f) (cvtE e)
+        Foreign ff f e          -> Foreign ff (vectoriseSeqOpenFun vectorise strength EmptyC f) (cvtE e)
 
-vectoriseSeqAcc :: OpenAcc () a -> OpenAcc () a
-vectoriseSeqAcc = vectoriseSeqOpenAcc Conservative EmptyC
+vectoriseSeqAcc :: Bool -> OpenAcc () a -> OpenAcc () a
+vectoriseSeqAcc vectorise = vectoriseSeqOpenAcc vectorise Conservative EmptyC
 
 vectoriseSeqOpenAcc :: forall aenv a.
-                       Strength
+                       Bool
+                    -> Strength
                     -> Context () aenv () aenv
                     -> OpenAcc aenv a
                     -> OpenAcc aenv a
-vectoriseSeqOpenAcc strength ctx = cvtA
+vectoriseSeqOpenAcc vectorise strength ctx = cvtA
   where
     cvtT :: Atuple (OpenAcc aenv) t -> Atuple (OpenAcc aenv) t
     cvtT atup = case atup of
@@ -2843,22 +2949,22 @@ vectoriseSeqOpenAcc strength ctx = cvtA
       SnocAtup t a -> cvtT t `SnocAtup` cvtA a
 
     cvtAfun :: OpenAfun aenv t -> OpenAfun aenv t
-    cvtAfun = vectoriseSeqOpenAfun strength ctx
+    cvtAfun = vectoriseSeqOpenAfun vectorise strength ctx
 
     cvtE :: Elt t => Exp aenv t -> Exp aenv t
-    cvtE = vectoriseSeqOpenExp strength ctx
+    cvtE = vectoriseSeqOpenExp vectorise strength ctx
 
     cvtF :: Fun aenv t -> Fun aenv t
-    cvtF = vectoriseSeqOpenFun strength ctx
+    cvtF = vectoriseSeqOpenFun vectorise strength ctx
 
     cvtA :: OpenAcc aenv t -> OpenAcc aenv t
     cvtA (OpenAcc pacc) = OpenAcc $ case pacc of
-      Alet bnd body             -> Alet (cvtA bnd) (vectoriseSeqOpenAcc strength (PushAccC ctx) body)
+      Alet bnd body             -> Alet (cvtA bnd) (vectoriseSeqOpenAcc vectorise strength (PushAccC ctx) body)
       Avar ix                   -> Avar ix
       Atuple tup                -> Atuple (cvtT tup)
       Aprj tup a                -> Aprj tup (cvtA a)
       Apply f a                 -> Apply (cvtAfun f) (cvtA a)
-      Aforeign ff afun acc      -> Aforeign ff (vectoriseSeqAfun afun) (cvtA acc)
+      Aforeign ff afun acc      -> Aforeign ff (vectoriseSeqAfun vectorise afun) (cvtA acc)
       Acond p t e               -> Acond (cvtE p) (cvtA t) (cvtA e)
       Awhile p f a              -> Awhile (cvtAfun p) (cvtAfun f) (cvtA a)
       Use a                     -> Use a
@@ -2883,31 +2989,35 @@ vectoriseSeqOpenAcc strength ctx = cvtA
       Backpermute sh f a        -> Backpermute (cvtE sh) (cvtF f) (cvtA a)
       Stencil f b a             -> Stencil (cvtF f) b (cvtA a)
       Stencil2 f b1 a1 b2 a2    -> Stencil2 (cvtF f) b1 (cvtA a1) b2 (cvtA a2)
-      Collect s _               -> Collect (fuseSeq (reduceOpenSeq s)) (fuseSeq <$> vectoriseOpenSeq strength ctx s)
+      Collect s _               -> Collect (fuseSeq (reduceOpenSeq s))
+                                           (if vectorise
+                                            then fuseSeq <$> vectoriseOpenSeq strength ctx s
+                                            else Nothing)
       FoldSeg f z a s           -> FoldSeg (cvtF f) (cvtE z) (cvtA a) (cvtA s)
       Fold1Seg f a s            -> Fold1Seg (cvtF f) (cvtA a) (cvtA s)
 
-vectoriseSeqAfun :: OpenAfun () t -> OpenAfun () t
-vectoriseSeqAfun = vectoriseSeqOpenAfun Conservative EmptyC
+vectoriseSeqAfun :: Bool -> OpenAfun () t -> OpenAfun () t
+vectoriseSeqAfun vectorise = vectoriseSeqOpenAfun vectorise Conservative EmptyC
 
-vectoriseSeqOpenFun :: forall env aenv t.
-                       Strength
+vectoriseSeqOpenFun :: Bool
+                    -> Strength
                     -> Context env aenv env aenv
                     -> OpenFun env aenv t
                     -> OpenFun env aenv t
-vectoriseSeqOpenFun strength ctx fun =
+vectoriseSeqOpenFun vectorise strength ctx fun =
   case fun of
-    Body b -> Body (vectoriseSeqOpenExp strength ctx b)
-    Lam f  -> Lam (vectoriseSeqOpenFun strength (PushExpC ctx) f)
+    Body b -> Body (vectoriseSeqOpenExp vectorise strength ctx b)
+    Lam f  -> Lam (vectoriseSeqOpenFun vectorise strength (PushExpC ctx) f)
 
-vectoriseSeqOpenAfun :: Strength
+vectoriseSeqOpenAfun :: Bool
+                     -> Strength
                      -> Context () aenv () aenv
                      -> OpenAfun aenv t
                      -> OpenAfun aenv t
-vectoriseSeqOpenAfun strength ctx afun =
+vectoriseSeqOpenAfun vectorise strength ctx afun =
   case afun of
-    Abody b -> Abody (vectoriseSeqOpenAcc strength ctx b)
-    Alam f  -> Alam (vectoriseSeqOpenAfun strength (PushAccC ctx) f)
+    Abody b -> Abody (vectoriseSeqOpenAcc vectorise strength ctx b)
+    Alam f  -> Alam (vectoriseSeqOpenAfun vectorise strength (PushAccC ctx) f)
 
 
 -- Sequence AST reduction
