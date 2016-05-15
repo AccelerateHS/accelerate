@@ -133,6 +133,9 @@ instance A.RealFloat a => P.Floating (Exp (Complex a)) where
   acosh         = lift1 (acosh :: Complex (Exp a) -> Complex (Exp a))
   atanh         = lift1 (atanh :: Complex (Exp a) -> Complex (Exp a))
 
+instance (A.FromIntegral a b, A.Num b) => A.FromIntegral a (Complex b) where
+  fromIntegral x = lift (fromIntegral x :+ (0 :: Exp b))
+
 
 -- | The non-negative magnitude of a complex number
 --
