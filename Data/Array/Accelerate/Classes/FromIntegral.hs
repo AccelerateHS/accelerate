@@ -1,8 +1,13 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
+#if __GLASGOW_HASKELL__ <= 708
+{-# LANGUAGE OverlappingInstances  #-}
+{-# OPTIONS_GHC -fno-warn-unrecognised-pragmas #-}
+#endif
 -- |
 -- Module      : Data.Array.Accelerate.Classes.FromIntegral
 -- Copyright   : [2016] Manuel M T Chakravarty, Gabriele Keller
@@ -37,6 +42,6 @@ class FromIntegral a b where
   -- | General coercion from integral types
   fromIntegral :: (Integral a, Num b) => Exp a -> Exp b
 
-instance (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
+instance {-# OVERLAPPABLE #-} (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
   fromIntegral = mkFromIntegral
 
