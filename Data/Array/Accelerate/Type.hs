@@ -59,7 +59,7 @@ import Foreign.C.Types (
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
-                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a)
+                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a, IsIntegral a)
                => IntegralDict a
 
 data FloatingDict a where

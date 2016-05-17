@@ -324,10 +324,11 @@ simplifyOpenExp env = first getAny . cvtE
         -> (Any, PreOpenExp acc env' aenv t)
         -> (Any, PreOpenExp acc env' aenv s)
     prj env' ix top@(_,e) = case e of
-      Tuple t                      -> Stats.inline "prj/Tuple" . yes $ prjT ix t
-      Const c                      -> Stats.inline "prj/Const" . yes $ prjC ix (fromTuple (toElt c :: t))
-      Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"   . yes $ x
-      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"   . yes $ x
+      Tuple t                      -> Stats.inline "prj/Tuple"     . yes $ prjT ix t
+      IndexCons sl i               -> Stats.inline "prj/IndexCons" . yes $ prjT ix (SnocTup (SnocTup NilTup sl) i)
+      Const c                      -> Stats.inline "prj/Const"     . yes $ prjC ix (fromTuple (toElt c :: t))
+      Var v   | Just x <- prjV v   -> Stats.inline "prj/Var"       . yes $ x
+      Let a b | Just x <- prjL a b -> Stats.inline "prj/Let"       . yes $ x
       _                            -> Prj ix <$> top
       where
         prjT :: TupleIdx tup s -> Tuple (PreOpenExp acc env' aenv) tup -> PreOpenExp acc env' aenv s

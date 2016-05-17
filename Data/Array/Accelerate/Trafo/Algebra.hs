@@ -24,9 +24,10 @@ module Data.Array.Accelerate.Trafo.Algebra (
 ) where
 
 import Prelude                                          hiding ( exp )
-import Data.Maybe                                       ( fromMaybe )
+import Data.Maybe                                       ( fromMaybe, isJust )
 import Data.Bits
 import Data.Char
+import Data.List                                        ( nubBy )
 import Text.PrettyPrint
 import qualified Prelude                                as P
 
@@ -585,10 +586,30 @@ evalMax (NumScalarType (FloatingNumType ty)) arg env | FloatingDict <- floatingD
 evalMax (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDict ty   = eval2 max arg env
 
 evalMin :: Elt a => ScalarType a -> (a,a) :-> a
-evalMin _ (untup2 -> Just (x,y)) _                   | Just REFL <- match x y          = Just x
-evalMin (NumScalarType (IntegralNumType ty)) arg env | IntegralDict <- integralDict ty = eval2 min arg env
+evalMin (NumScalarType (IntegralNumType ty)) arg env | IntegralDict <- integralDict ty =
+  case untup2 arg of
+    Just (x,y) -> reduceMin env x y
+    _          -> eval2 min arg env
 evalMin (NumScalarType (FloatingNumType ty)) arg env | FloatingDict <- floatingDict ty = eval2 min arg env
 evalMin (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDict ty   = eval2 min arg env
+
+reduceMin :: (Kit acc, Elt t, IsIntegral t)
+          => Gamma acc env env aenv
+          -> PreOpenExp acc env aenv t
+          -> PreOpenExp acc env aenv t
+          -> Maybe (PreOpenExp acc env aenv t)
+reduceMin env a1 a2
+  | Nothing <- match a a' = Stats.ruleFired "min" (Just a')
+  | otherwise             = Nothing
+  where
+    a      = PrimApp (PrimMin scalarType) (tup2 (a1, a2))
+    a'     = foldl1 (\x y -> PrimApp (PrimMin scalarType) (tup2 (x,y)))
+           $ nubBy (\x y -> isJust (match x y))
+           $ leaves a1 ++ leaves a2
+
+    leaves :: IsIntegral t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
+    leaves (PrimApp (PrimMin _) (untup2 -> Just (x,y))) = leaves x ++ leaves y
+    leaves rest                                         = [rest]
 
 
 -- Logical operators
