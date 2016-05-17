@@ -448,6 +448,12 @@ liftPreOpenAcc vectAcc strength ctx size acc
              -> PreOpenExp acc env aenv sh
     nonEmpty = Union (Const $ fromElt (listToShape (P.replicate (dim (undefined :: sh)) 1) :: sh))
 
+    times :: forall env aenv a. (IsNum a, Elt a)
+          => PreOpenExp acc env aenv a
+          -> PreOpenExp acc env aenv a
+          -> PreOpenExp acc env aenv a
+    times a b = PrimApp (PrimMul numType) (tup a b)
+
     lifted :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Nested t)
     lifted (AvoidedAcc a)   = replicateA a size
     lifted (LiftedAcc l)    = l
@@ -771,9 +777,11 @@ liftPreOpenAcc vectAcc strength ctx size acc
         -- The array is regular
         $  Alet (regularSizeC (segmentsC avar2))
         $^ Alet (regularShapeC (segmentsC avar3))
-        $^ Alet (inject $ Fold (weakenA5 f) (the avar3) $^ Reshape (indexSnoc (the avar0) (the avar1)) (valuesC avar4))
-        $  construct (regularSegsC avar2 (unit . indexInit $ Shape avar0))
-        $  flattenC avar0
+        $^ Alet (inject $ Fold (weakenA5 f) (the avar3) $^ Reshape (index2 (ShapeSize (IndexTail (the avar0)) `times` the avar1)
+                                                                           (IndexHead (the avar0)))
+                                                                   (valuesC avar4))
+        $  construct (regularSegsC avar2 (unit . IndexTail $ the avar1))
+        $  avar0
         )
     foldL _ _ _
       = error $ nestedError "first or second" "fold"
