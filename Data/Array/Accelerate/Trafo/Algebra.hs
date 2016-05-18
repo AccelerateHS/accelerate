@@ -588,28 +588,30 @@ evalMax (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDic
 evalMin :: Elt a => ScalarType a -> (a,a) :-> a
 evalMin (NumScalarType (IntegralNumType ty)) arg env | IntegralDict <- integralDict ty =
   case untup2 arg of
-    Just (x,y) -> reduceMin env x y
+    Just (x,y) -> reduceMin ty x y
     _          -> eval2 min arg env
 evalMin (NumScalarType (FloatingNumType ty)) arg env | FloatingDict <- floatingDict ty = eval2 min arg env
 evalMin (NonNumScalarType ty)                arg env | NonNumDict   <- nonNumDict ty   = eval2 min arg env
 
-reduceMin :: (Kit acc, Elt t, IsIntegral t)
-          => Gamma acc env env aenv
+reduceMin :: (Kit acc, Elt t)
+          => IntegralType t
           -> PreOpenExp acc env aenv t
           -> PreOpenExp acc env aenv t
           -> Maybe (PreOpenExp acc env aenv t)
-reduceMin env a1 a2
+reduceMin ty a1 a2
   | Nothing <- match a a' = Stats.ruleFired "min" (Just a')
   | otherwise             = Nothing
   where
-    a      = PrimApp (PrimMin scalarType) (tup2 (a1, a2))
-    a'     = foldl1 (\x y -> PrimApp (PrimMin scalarType) (tup2 (x,y)))
+    a      = PrimApp (PrimMin ty') (tup2 (a1, a2))
+    a'     = foldl1 (\x y -> PrimApp (PrimMin ty') (tup2 (x,y)))
            $ nubBy (\x y -> isJust (match x y))
            $ leaves a1 ++ leaves a2
 
-    leaves :: IsIntegral t => PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
+    leaves :: PreOpenExp acc env aenv t -> [PreOpenExp acc env aenv t]
     leaves (PrimApp (PrimMin _) (untup2 -> Just (x,y))) = leaves x ++ leaves y
     leaves rest                                         = [rest]
+
+    ty' = NumScalarType (IntegralNumType ty)
 
 
 -- Logical operators
