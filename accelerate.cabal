@@ -174,7 +174,7 @@ Library
         , array                         >= 0.3
         , base-orphans                  >= 0.3
         , containers                    >= 0.3
-        , deepseq                       >= 1.4
+        , deepseq                       >= 1.3
         , directory                     >= 1.0
         , exceptions                    >= 0.6
         , fclabels                      >= 2.0
