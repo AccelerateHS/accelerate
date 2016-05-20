@@ -22,9 +22,10 @@ module Data.Array.Accelerate.Array.Unique (
 -- library
 import Control.Applicative
 import Control.Concurrent.Unique
-import Foreign.Ptr
+import Control.DeepSeq
 import Foreign.ForeignPtr
 import Foreign.ForeignPtr.Unsafe
+import Foreign.Ptr
 import Prelude
 
 -- friends
@@ -49,6 +50,10 @@ data UniqueArray e = UniqueArray
     { uniqueArrayId   :: {-# UNPACK #-} !Unique
     , uniqueArrayData :: {-# UNPACK #-} !(Lifetime (ForeignPtr e))
     }
+
+instance NFData (UniqueArray e) where
+  rnf (UniqueArray _ ad) = unsafeGetValue ad `seq` ()
+
 
 -- | Create a new UniqueArray
 --

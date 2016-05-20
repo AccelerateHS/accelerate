@@ -57,6 +57,7 @@ module Data.Array.Accelerate.Array.Sugar (
 ) where
 
 -- standard library
+import Control.DeepSeq
 import Data.Typeable
 import Data.Array.IArray                                        ( IArray )
 import qualified Data.Array.IArray                              as IArray
@@ -798,6 +799,40 @@ data Array sh e where
         -> Array sh e
 
 deriving instance Typeable Array
+
+instance NFData (Array sh e) where
+  rnf (Array sh ad) = Repr.size sh `seq` go arrayElt ad `seq` ()
+    where
+      go :: ArrayEltR e' -> ArrayData e' -> ()
+      go ArrayEltRunit         AD_Unit         = ()
+      go ArrayEltRint          (AD_Int ua)     = rnf ua
+      go ArrayEltRint8         (AD_Int8 ua)    = rnf ua
+      go ArrayEltRint16        (AD_Int16 ua)   = rnf ua
+      go ArrayEltRint32        (AD_Int32 ua)   = rnf ua
+      go ArrayEltRint64        (AD_Int64 ua)   = rnf ua
+      go ArrayEltRword         (AD_Word ua)    = rnf ua
+      go ArrayEltRword8        (AD_Word8 ua)   = rnf ua
+      go ArrayEltRword16       (AD_Word16 ua)  = rnf ua
+      go ArrayEltRword32       (AD_Word32 ua)  = rnf ua
+      go ArrayEltRword64       (AD_Word64 ua)  = rnf ua
+      go ArrayEltRcshort       (AD_CShort ua)  = rnf ua
+      go ArrayEltRcushort      (AD_CUShort ua) = rnf ua
+      go ArrayEltRcint         (AD_CInt ua)    = rnf ua
+      go ArrayEltRcuint        (AD_CUInt ua)   = rnf ua
+      go ArrayEltRclong        (AD_CLong ua)   = rnf ua
+      go ArrayEltRculong       (AD_CULong ua)  = rnf ua
+      go ArrayEltRcllong       (AD_CLLong ua)  = rnf ua
+      go ArrayEltRcullong      (AD_CULLong ua) = rnf ua
+      go ArrayEltRfloat        (AD_Float ua)   = rnf ua
+      go ArrayEltRdouble       (AD_Double ua)  = rnf ua
+      go ArrayEltRcfloat       (AD_CFloat ua)  = rnf ua
+      go ArrayEltRcdouble      (AD_CDouble ua) = rnf ua
+      go ArrayEltRbool         (AD_Bool ua)    = rnf ua
+      go ArrayEltRchar         (AD_Char ua)    = rnf ua
+      go ArrayEltRcchar        (AD_CChar ua)   = rnf ua
+      go ArrayEltRcschar       (AD_CSChar ua)  = rnf ua
+      go ArrayEltRcuchar       (AD_CUChar ua)  = rnf ua
+      go (ArrayEltRpair r1 r2) (AD_Pair a1 a2) = go r1 a1 `seq` go r2 a2 `seq` ()
 
 -- |Scalars arrays hold a single element
 --
