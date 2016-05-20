@@ -454,6 +454,15 @@ liftPreOpenAcc vectAcc strength ctx size acc
           -> PreOpenExp acc env aenv a
     times a b = PrimApp (PrimMul numType) (tup a b)
 
+    higher :: forall env aenv sh sh'. (Slice sh, Slice sh', Shape sh, Shape sh')
+           => PreOpenFun acc env aenv (sh -> sh')
+           -> PreOpenFun acc env aenv ((sh:.Int) -> (sh':.Int))
+    higher (Lam (Body f)) = Lam . Body $ Let (indexInit var0) (indexSnoc (weakenE ixt f) (indexLastC var1))
+      where
+        ixt :: (env,sh) :> ((env,sh:.Int),sh)
+        ixt ZeroIdx = ZeroIdx
+        ixt (SuccIdx ix) = SuccIdx (SuccIdx ix)
+
     lifted :: forall t. Arrays t => LiftedAcc acc aenv' t -> acc aenv' (Nested t)
     lifted (AvoidedAcc a)   = replicateA a size
     lifted (LiftedAcc l)    = l
@@ -743,6 +752,30 @@ liftPreOpenAcc vectAcc strength ctx size acc
       = AvoidedAcc
       $^ bind binds
       $ ZipWith f (sink binds a') (sink binds b')
+      | Just (AvoidedFun b2 f) <- f_a
+      , AsSlice                <- asSlice (Proxy :: Proxy sh)
+      = liftedAcc
+      $^ bind b2
+      $  Alet (sink b2 (lifted a))
+      $^ Alet (weakenA1 $ sink b2 (lifted b))
+      $^ Alet (isIrregularSegsC (segmentsC avar0))
+      $^ Acond (the avar0) (inject
+        -- The array is irregular
+        $  Alet (liftedZipC avar2 avar1)
+        $^ Alet (unzip (valuesC avar0))
+        $  construct (segmentsC avar1)
+        $^ ZipWith (weakenA5 f) (fstA avar0) (sndA avar0)
+      ) (inject
+        -- The array is regular
+        $  Alet (regularSizeC  (segmentsC avar2))
+        $^ Alet (regularShapeC (segmentsC avar3))
+        $^ Alet (regularShapeC (segmentsC avar3))
+        $ construct (regularSegsC avar2 (unit (Intersect (the avar0) (the avar1))))
+        $ flattenC
+        $^ ZipWith (weakenA6 f)
+            (inject $ Reshape (indexSnoc (the avar1) (the avar2)) (valuesC avar5))
+            (inject $ Reshape (indexSnoc (the avar0) (the avar2)) (valuesC avar4))
+      )
       | otherwise
       = liftedAcc
       $^ Alet (liftedZipC (lifted a) (lifted b))
@@ -1027,7 +1060,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
     scanr'L _ _ _
       = error $ nestedError "first or second" "scanr'"
 
-    backpermuteL :: (Shape sh, Shape sh', Elt e)
+    backpermuteL :: forall sh sh' e. (Shape sh, Shape sh', Elt e)
                  => PreExp acc  aenv  sh'
                  -> PreFun acc  aenv  (sh' -> sh)
                  -> acc            aenv  (Array sh e)
@@ -1041,6 +1074,32 @@ liftPreOpenAcc vectAcc strength ctx size acc
       $^ bind b2
       $  Alet (sink b2 $^ bind b1 (Unit sh'))
       $^ Backpermute (the avar0) (weakenA1 f) (weakenA1 $ sink b2 a')
+      | Just (AvoidedFun b2 f) <- f_a
+      , LiftedExp sh'          <- sh
+      , AsSlice                <- asSlice (Proxy :: Proxy sh)
+      , AsSlice                <- asSlice (Proxy :: Proxy sh')
+      = liftedAcc
+      $^ bind b2
+      $  Alet (sink b2 (lifted a))
+      $^ Alet (isIrregularSegsC (segmentsC avar0))
+      $^ Acond (the avar0) (inject
+        -- The array is irregular
+        $  Alet (weakenA2 . sink b2 $ segmentsFromExp sh)
+        $^ Alet (liftedBackpermutePreC avar0)
+        $  construct avar1
+        $  liftedBackpermuteC (atup (fstA avar0) (inject $ Map (weakenA4 f) (sndA avar0)))
+                              (avar3)
+      ) (inject
+        -- The array is regular
+        $ Alet (regularSizeC (segmentsC avar1))
+        $^ Alet (weakenA3 . sink b2 $^ Aprj tupIx1 sh')
+        $ construct (regularSegsC avar1 avar0)
+        $ flattenC
+        $^ Backpermute (indexSnoc (the avar0) (the avar1)) (weakenA4 (higher f))
+        $^ Alet (regularShapeC (segmentsC avar3))
+        $^ Reshape (indexSnoc (the avar0) (the avar2)) (valuesC avar4)
+
+      )
       | otherwise
       =  liftedAcc
       $^ Alet (segmentsFromExp sh)
@@ -2473,6 +2532,10 @@ avar4 :: (Kit acc, Arrays t)
       => acc (((((aenv, t), s), r), q), p) t
 avar4 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
 
+avar5 :: (Kit acc, Arrays t)
+      => acc ((((((aenv, t), s), r), q), p), o) t
+avar5 = inject $ Avar $ SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx $ ZeroIdx
+
 the :: Elt e
     => acc aenv (Scalar e)
     -> PreOpenExp acc env aenv e
@@ -2534,6 +2597,11 @@ weakenA5 :: Sink f
          => f aenv t
          -> f (((((aenv,o),p),q),r),s) t
 weakenA5 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
+
+weakenA6 :: Sink f
+         => f aenv t
+         -> f ((((((aenv,n),o),p),q),r),s) t
+weakenA6 = weaken (SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx . SuccIdx)
 
 weakenE1 :: SinkExp f
          => f env     aenv t
