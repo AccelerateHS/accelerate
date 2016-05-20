@@ -1129,24 +1129,22 @@ filter p arr
 -- Gather operations
 -- -----------------
 
--- | Copy elements from source array to destination array according to a map. This
---   is a backpermute operation where a 'map' vector encodes the output to input
---   index mapping.
---
---   For example:
+-- | Gather elements from a source array at the given indices. For example:
 --
 --  > input  = [1, 9, 6, 4, 4, 2, 0, 1, 2]
 --  > from   = [1, 3, 7, 2, 5, 3]
 --  >
 --  > output = [9, 4, 1, 6, 2, 4]
 --
-gather :: Elt e
-       => Acc (Vector Int)      -- ^index mapping
-       -> Acc (Vector e)        -- ^input
-       -> Acc (Vector e)        -- ^output
-gather from input = backpermute (shape from) bpF input
-  where
-    bpF ix      = index1 (from ! ix)
+gather :: (Shape sh, Elt e)
+       => Acc (Array sh Int)      -- ^ index of source at each index to gather
+       -> Acc (Vector e)          -- ^ source vector
+       -> Acc (Array sh e)        -- ^ output
+gather indices input = map (input !!) indices
+  -- TLM NOTES:
+  --  * (!!) has potential for later optimisation
+  --  * We needn't fix the source array to Vector, but this matches the
+  --    intuition that 'Int' ~ 'DIM1'.
 
 
 -- | Conditionally copy elements from source array to destination array according
@@ -1166,13 +1164,13 @@ gather from input = backpermute (shape from) bpF input
 --  >
 --  > output  = [6, 6, 1, 6, 2, 4]
 --
-gatherIf :: (Elt e, Elt e')
-         => Acc (Vector Int)    -- ^index mapping
-         -> Acc (Vector e)      -- ^mask
-         -> (Exp e -> Exp Bool) -- ^predicate
-         -> Acc (Vector e')     -- ^default
-         -> Acc (Vector e')     -- ^input
-         -> Acc (Vector e')     -- ^output
+gatherIf :: (Elt a, Elt b)
+         => Acc (Vector Int)      -- ^index mapping
+         -> Acc (Vector a)        -- ^mask
+         -> (Exp a -> Exp Bool)   -- ^predicate
+         -> Acc (Vector b)        -- ^default
+         -> Acc (Vector b)        -- ^input
+         -> Acc (Vector b)        -- ^output
 gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
   where
     zf p g      = p ? (unlift g)
@@ -1201,10 +1199,10 @@ gatherIf from maskV pred defaults input = zipWith zf pf gatheredV
 --   larger than the 'input' vector.
 --
 scatter :: Elt e
-        => Acc (Vector Int)      -- ^index mapping
-        -> Acc (Vector e)        -- ^default
-        -> Acc (Vector e)        -- ^input
-        -> Acc (Vector e)        -- ^output
+        => Acc (Vector Int)       -- ^index mapping
+        -> Acc (Vector e)         -- ^default
+        -> Acc (Vector e)         -- ^input
+        -> Acc (Vector e)         -- ^output
 scatter to defaults input = permute const defaults pf input'
   where
     pf ix       = index1 (to ! ix)
