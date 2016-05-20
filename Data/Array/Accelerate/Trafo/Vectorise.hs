@@ -197,8 +197,8 @@ liftedSize :: forall acc aenv t.
            -> Size acc aenv Int
 liftedSize a =
   case flavour (undefined :: t) of
-    ArraysFunit  -> Size (inject $ Aprj ZeroTupIdx a) $ Index avar0 IndexNil
-    ArraysFarray -> Size (inject $ Aprj ZeroTupIdx a) $ indexLastC (Shape avar0)
+    ArraysFunit  -> Size (inject $ Aprj ZeroTupIdx a) $ the avar0
+    ArraysFarray -> Size (nestedSizeC (segmentsC a)) $ the avar0
     ArraysFtuple -> fromTup $ prod (Proxy :: Proxy Arrays) (undefined :: t)
   where
     fromTup :: (ArrRepr t ~ (l,e), IsAtuple t) => ProdR Arrays (TupleRepr t) -> Size acc aenv Int
@@ -767,7 +767,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
         $^ ZipWith (weakenA5 f) (fstA avar0) (sndA avar0)
       ) (inject
         -- The array is regular
-        $  Alet (regularSizeC  (segmentsC avar2))
+        $  Alet (weakenA3 . sink b2 $ unitSize size)
         $^ Alet (regularShapeC (segmentsC avar3))
         $^ Alet (regularShapeC (segmentsC avar3))
         $ construct (regularSegsC avar2 (unit (Intersect (the avar0) (the avar1))))
@@ -808,7 +808,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
         $^ FoldSeg (weakenA4 f) (the avar2) (valuesC avar3) (fstA avar0)
       ) (inject
         -- The array is regular
-        $  Alet (regularSizeC (segmentsC avar2))
+        $  Alet (nestedSizeC (segmentsC avar2))
         $^ Alet (regularShapeC (segmentsC avar3))
         $^ Alet (inject $ Fold (weakenA5 f) (the avar3) $^ Reshape (index2 (ShapeSize (IndexTail (the avar0)) `times` the avar1)
                                                                            (IndexHead (the avar0)))
@@ -1091,7 +1091,7 @@ liftPreOpenAcc vectAcc strength ctx size acc
                               (avar3)
       ) (inject
         -- The array is regular
-        $ Alet (regularSizeC (segmentsC avar1))
+        $ Alet (weakenA2 . sink b2 $ unitSize size)
         $^ Alet (weakenA3 . sink b2 $^ Aprj tupIx1 sh')
         $ construct (regularSegsC avar1 avar0)
         $ flattenC
@@ -1932,7 +1932,7 @@ regularSegs sz sh = S.lift ( S.unit (S.constant False)
 irregularSegs :: Shape sh => S.Exp Int -> S.Acc (Vector Int) -> S.Acc (Vector sh) -> S.Acc (Segments sh)
 irregularSegs ts offs shs = S.lift ( S.unit (S.constant True)
                                    , S.unit ts
-                                   , S.unit (-1)
+                                   , S.unit (S.size shs)
                                    , S.unit (S.constant empty)
                                    , offs
                                    , shs )
@@ -1943,8 +1943,8 @@ isIrregularSegs (S.unatup6 -> (f,_,_,_,_,_)) = f
 regularShape :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar sh)
 regularShape (S.unatup6 -> (_,_,_,sh,_,_)) = sh
 
-regularSize :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar Int)
-regularSize (S.unatup6 -> (_,_,s,_,_,_)) = s
+nestedSize :: Shape sh => S.Acc (Segments sh) -> S.Acc (Scalar Int)
+nestedSize (S.unatup6 -> (_,_,s,_,_,_)) = s
 
 withSegs :: (Shape sh, Arrays a) => S.Acc (Segments sh) -> S.Acc a -> (S.Exp Int -> S.Exp sh -> S.Acc a) -> S.Acc a
 withSegs (S.unatup6 -> (f,_,s,sh,_,_)) irr r = S.the f S.?| (irr, r (S.the s) (S.the sh))
@@ -2350,8 +2350,8 @@ isIrregularSegsC = fromHOAS isIrregularSegs
 regularShapeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar sh)
 regularShapeC = fromHOAS regularShape
 
-regularSizeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar Int)
-regularSizeC = fromHOAS regularSize
+nestedSizeC :: (Kit acc, Shape sh) => acc aenv (Segments sh) -> acc aenv (Scalar Int)
+nestedSizeC = fromHOAS nestedSize
 
 asVectorC :: (Kit acc, Elt e) => acc aenv (Vector' e) -> acc aenv (Vector e)
 asVectorC = fromHOAS asVector
