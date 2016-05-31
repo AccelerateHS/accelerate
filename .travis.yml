@@ -18,7 +18,7 @@ matrix:
             - ghc-7.8.4
             - cabal-install-1.18
             - happy-1.19.5
-            - alex-3.1.4
+            - alex-3.1.7
 
     - env: GHC=7.10.3 CABAL=1.22
       compiler: "GHC 7.10"
@@ -30,9 +30,21 @@ matrix:
             - ghc-7.10.3
             - cabal-install-1.22
             - happy-1.19.5
-            - alex-3.1.4
+            - alex-3.1.7
 
-    - env: GHC=head CABAL=1.24
+    - env: GHC=8.0.1 CABAL=1.24
+      compiler: "GHC 8.0"
+      addons:
+        apt:
+          sources:
+            - hvr-ghc
+          packages:
+            - ghc-8.0.1
+            - cabal-install-1.24
+            - happy-1.19.5
+            - alex-3.1.7
+
+    - env: GHC=head CABAL=head
       compiler: "GHC HEAD"
       addons:
         apt:
@@ -40,18 +52,18 @@ matrix:
             - hvr-ghc
           packages:
             - ghc-head
-            - cabal-install-1.24
+            - cabal-install-head
             - happy-1.19.5
-            - alex-3.1.4
+            - alex-3.1.7
 
   allow_failures:
-    - env: GHC=head CABAL=1.24
+    - env: GHC=head CABAL=head
 
   fast_finish: true
 
 
 before_install:
-  - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
+  - export PATH=/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$PATH
 
   # cabal
   - travis_retry cabal update
@@ -62,9 +74,9 @@ before_install:
   - export PATH=$HOME/bin:$PATH
   - travis_retry curl -L "https://www.stackage.org/stack/linux-x86_64" | gunzip | tar -x
   - mv stack-*/stack $HOME/bin
-  - if [ ${GHC} != head ]; then ln -s stack-${GHC%.*}.yaml stack.yaml; fi
-  - travis_retry stack setup
-  - travis_retry stack install hscolour
+  - [ -e stack-${GHC%.*}.yaml ] && ln -s stack-${GHC%.*}.yaml stack.yaml
+  - [ -e stack.yaml ]           && travis_retry stack setup
+  - [ -e stack.yaml ]           && travis_retry stack install hscolour
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
@@ -73,18 +85,22 @@ install:
   - opt --version; true
   - llc --version; true
   - |
-      if [ ${GHC} != head ]; then
+      if [ -e stack.yaml ]; then
         travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps -j2
-      else
+      elif [ ${GHC} == head ]; then
         travis_retry cabal install --only-dependencies --allow-newer
+      else
+        travis_retry cabal install --only-dependencies
       fi
 
 script:
   - |
-      if [ ${GHC} != head ]; then
+      if [ -e stack.yaml ]; then
         stack build --no-terminal --flag accelerate:debug
         stack build --no-terminal --haddock --no-haddock-deps
-      else
+      elif [ ${GHC} == head ]; then
         cabal install --allow-newer
+      else
+        cabal install
       fi
 
