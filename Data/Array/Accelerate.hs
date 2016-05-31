@@ -180,7 +180,6 @@ module Data.Array.Accelerate (
   foreignExp, foreignExp2, foreignExp3,
 
   -- ---------------------------------------------------------------------------
-
   -- * The /Accelerate/ Expression Language
   -- ** Scalar data types
   Exp,
@@ -286,7 +285,6 @@ module Data.Array.Accelerate (
   ord, chr, boolToInt, bitcast,
 
   -- ---------------------------------------------------------------------------
-
   -- * Plain arrays
   -- ** Operations
   arrayRank, arrayShape, arraySize, indexArray,
@@ -305,6 +303,11 @@ module Data.Array.Accelerate (
   -- *** 'Data.Array.IArray.IArray'
   fromIArray, toIArray,
 
+  -- ---------------------------------------------------------------------------
+  -- * Prelude re-exports
+
+  (.), ($), error, undefined,
+
 ) where
 
 -- friends
@@ -317,7 +320,7 @@ import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Array.Sugar                  as S
 
 -- re-exported from D.A.A.Classes.Num but not found ??
-import Prelude                                                      ( fromInteger )
+import Prelude                                                      ( (.), ($), undefined, error, fromInteger )
 
 
 -- Renamings
