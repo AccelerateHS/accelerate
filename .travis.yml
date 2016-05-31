@@ -74,9 +74,9 @@ before_install:
   - export PATH=$HOME/bin:$PATH
   - travis_retry curl -L "https://www.stackage.org/stack/linux-x86_64" | gunzip | tar -x
   - mv stack-*/stack $HOME/bin
-  - [ -e stack-${GHC%.*}.yaml ] && ln -s stack-${GHC%.*}.yaml stack.yaml
-  - [ -e stack.yaml ]           && travis_retry stack setup
-  - [ -e stack.yaml ]           && travis_retry stack install hscolour
+  - if [ -e stack-${GHC%.*}.yaml ] ; then ln -s stack-${GHC%.*}.yaml stack.yaml ; fi
+  - if [ -e stack.yaml ]           ; then travis_retry stack setup              ; fi
+  - if [ -e stack.yaml ]           ; then travis_retry stack install hscolour   ; fi
 
 install:
   - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
