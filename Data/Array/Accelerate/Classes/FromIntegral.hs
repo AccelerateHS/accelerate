@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -40,6 +41,11 @@ class FromIntegral a b where
 -- instance {-# OVERLAPPABLE #-} (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
 --   fromIntegral = mkFromIntegral
 
+
+-- Reify in ghci:
+--
+-- $( stringE . show =<< reify ''Thing )
+
 -- Generate all the standard instances explicitly. This gives us sensible error
 -- messages when we don't have an instance available, rather than a "can not
 -- deduce IsNum..." style error (which the user can do nothing about).
@@ -49,22 +55,32 @@ $(runQ $ do
         -- Get all the types that our dictionaries reify
         digItOut :: Name -> Q [Name]
         digItOut name = do
-          TyConI (DataD _ _ _ cons _) <- reify name
+#if __GLASGOW_HASKELL__ < 800
+          TyConI (DataD _ _ _   cons _) <- reify name
+#else
+          TyConI (DataD _ _ _ _ cons _) <- reify name
+#endif
           let
-            dig (ForallC _ _ (NormalC _ [(_, AppT (ConT _) (ConT n))])) = return [n]
             dig (NormalC _ [(_, AppT (ConT n) (VarT _))])               = digItOut n
+#if __GLASGOW_HASKELL__ < 800
+            dig (ForallC _ _ (NormalC _ [(_, AppT (ConT _) (ConT n))])) = return [n]
+#else
+            dig (GadtC _ _ (AppT (ConT _) (ConT n)))                    = return [n]
+#endif
             dig _ = error "Unexpected case generating FromIntegral instances"
             --
           concat `fmap` mapM dig cons
 
-        thFromIntegral :: Name -> Name -> Dec
+        thFromIntegral :: Name -> Name -> Q Dec
         thFromIntegral a b =
-          InstanceD [] (AppT (AppT (ConT (mkName "FromIntegral")) (ConT a)) (ConT b))
-            [ ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName "mkFromIntegral"))) []
-            ]
+          let
+              ty  = AppT (AppT (ConT (mkName "FromIntegral")) (ConT a)) (ConT b)
+              dec = ValD (VarP (mkName "fromIntegral")) (NormalB (VarE (mkName "mkFromIntegral"))) []
+          in
+          instanceD (return []) (return ty) [return dec]
     --
     as <- digItOut ''IntegralType
     bs <- digItOut ''NumType
-    return [ thFromIntegral a b | a <- as, b <- bs ]
+    sequence [ thFromIntegral a b | a <- as, b <- bs ]
  )
 
