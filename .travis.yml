@@ -21,6 +21,7 @@ before_install:
     - travis_retry sudo apt-get install -y ghc-${GHC} cabal-install-${CABAL}
     - export PATH=/opt/ghc/${GHC}/bin:${PATH}
     - export PATH=/opt/cabal/${CABAL}/bin:${PATH}
+    - travis_retry cabal update
 
 install:
     - ghc --version
