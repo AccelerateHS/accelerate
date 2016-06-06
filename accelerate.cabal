@@ -167,7 +167,7 @@ Flag internal-checks
 
 Library
   Build-depends:        array                   >= 0.3  && < 0.6,
-                        base                    >= 4.7  && < 4.9,
+                        base                    >= 4.7  && < 4.10,
                         containers              >= 0.3  && < 0.6,
                         unordered-containers    >= 0.2  && < 0.3,
                         fclabels                >= 2.0  && < 2.1,
