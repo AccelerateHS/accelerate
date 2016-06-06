@@ -92,17 +92,17 @@ import Foreign.C.Types (
 
 data IntegralDict a where
   IntegralDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a
-                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a)
+                  , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                => IntegralDict a
 
 data FloatingDict a where
   FloatingDict :: ( Enum a, Eq a, Ord a, Show a
                   , Floating a, Fractional a, Num a, Real a, RealFrac a
-                  , RealFloat a, Storable a)
+                  , RealFloat a, Storable a )
                => FloatingDict a
 
 data NonNumDict a where
-  NonNumDict :: (Bounded a, Enum a, Eq a, Ord a, Show a, Storable a)
+  NonNumDict :: ( Bounded a, Enum a, Eq a, Ord a, Show a, Storable a )
              => NonNumDict a
 
 -- Scalar type representation
