@@ -1,11 +1,11 @@
-language: haskell
+language: c
 env:
-    - GHC=7.8.4
-    - GHC=7.8.4 MODE=-fdebug
+    - GHC=7.8.4 CABAL=1.18
+    - GHC=7.8.4 CABAL=1.18 MODE=-fdebug
     - GHC=7.10.1 CABAL=1.22
     - GHC=7.10.1 CABAL=1.22 MODE=-fdebug
-    - GHC-8.0.1 CABAL=1.24
-    - GHC-8.0.1 CABAL=1.24 MODE=-fdebug
+    - GHC=8.0.1 CABAL=1.24
+    - GHC=8.0.1 CABAL=1.24 MODE=-fdebug
     - GHC=head CABAL=head MODE=-fdebug
 
 matrix:
