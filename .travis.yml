@@ -58,3 +58,6 @@ script:
         stack build --no-terminal --haddock --no-haddock-deps
       fi
 
+after_success:
+  - source .travis/update-accelerate-buildbot.sh
+
