@@ -15,11 +15,13 @@
 module Data.Array.Accelerate.Classes.Eq (
 
   Eq(..),
+  (&&*),
+  (||*),
+  not,
 
 ) where
 
 import Data.Array.Accelerate.Array.Sugar
-import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
@@ -30,6 +32,27 @@ import qualified Prelude                                            as P
 
 infix 4 ==*
 infix 4 /=*
+
+-- | Conjunction: True if both arguments are true. This is a short-circuit
+-- operator, so the second argument will be evaluate only if the first is true.
+--
+infixr 3 &&*
+(&&*) :: Exp Bool -> Exp Bool -> Exp Bool
+(&&*) = mkLAnd
+
+-- | Disjunction: True if either argument is true. This is a short-circuit
+-- operator, so the second argument will be evaluated only if the first is
+-- false.
+--
+infixr 2 ||*
+(||*) :: Exp Bool -> Exp Bool -> Exp Bool
+(||*) = mkLOr
+
+-- | Logical negation
+--
+not :: Exp Bool -> Exp Bool
+not = mkLNot
+
 
 -- | The 'Eq' class defines equality '==*' and inequality '/=*' for scalar
 -- Accelerate expressions.

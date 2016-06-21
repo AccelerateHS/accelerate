@@ -19,12 +19,11 @@ module Data.Array.Accelerate.Classes.Ord (
 ) where
 
 import Data.Array.Accelerate.Classes.Eq
-import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
 
 import Text.Printf
-import Prelude                                                      ( String, error)
+import Prelude                                                      ( ($), String, error)
 import qualified Prelude                                            as P
 
 
@@ -48,8 +47,8 @@ class Eq a => Ord a where
   x >*  y = not (x <=* y)
   x <=* y = not (x >* y)
   x >=* y = x ==* y ||* not (x <=* y)
-  min x y = cond (x <=* y) x y
-  max x y = cond (x <=* y) y x
+  min x y = Exp $ Cond (x <=* y) x y
+  max x y = Exp $ Cond (x <=* y) y x
 
 
 instance Ord () where

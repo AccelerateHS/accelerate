@@ -1,5 +1,8 @@
-{-# LANGUAGE TypeFamilies  #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies     #-}
+{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE ViewPatterns     #-}
 -- |
 -- Module      : Data.Array.Accelerate.Language
 -- Copyright   : [2008..2016] Manuel M T Chakravarty, Gabriele Keller
@@ -90,8 +93,8 @@ module Data.Array.Accelerate.Language (
   -- * Array operations with a scalar result
   (!), (!!), shape, size, shapeSize,
 
-  -- * Standard functions that we need to redefine as their signatures change
-  (&&*), (||*), not,
+  -- * Numeric functions
+  subtract, even, odd, gcd, lcm,
 
   -- * Conversions
   ord, chr, boolToInt, bitcast,
@@ -102,13 +105,14 @@ module Data.Array.Accelerate.Language (
 ) where
 
 -- friends
+import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
+import Data.Array.Accelerate.Classes
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Type
-import Data.Array.Accelerate.Array.Sugar                hiding ((!), ignore, shape, size, toIndex, fromIndex, intersect, union)
 import qualified Data.Array.Accelerate.Array.Sugar      as Sugar
 
 -- standard libraries
-import Prelude                                          ( (.) )
+import Prelude                                          ( ($), (.) )
 
 
 -- Array introduction
@@ -741,25 +745,53 @@ shapeSize :: Shape ix => Exp ix -> Exp Int
 shapeSize = Exp . ShapeSize
 
 
--- Non-overloaded standard functions, where we need other signatures
--- -----------------------------------------------------------------
+-- Numeric functions
+-- -----------------
 
--- |Conjunction
+-- | 'subtract' is the same as @'flip' ('-')@.
 --
-infixr 3 &&*
-(&&*) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&*) = mkLAnd
+subtract :: Num a => Exp a -> Exp a -> Exp a
+subtract x y = y - x
 
--- |Disjunction
+-- | Determine if a number is even
 --
-infixr 2 ||*
-(||*) :: Exp Bool -> Exp Bool -> Exp Bool
-(||*) = mkLOr
+even :: Integral a => Exp a -> Exp Bool
+even n = n `rem` 2 ==* 0
 
--- |Negation
+-- | Determine if a number is odd
 --
-not :: Exp Bool -> Exp Bool
-not = mkLNot
+odd :: Integral a => Exp a -> Exp Bool
+odd n = n `rem` 2 /=* 0
+
+-- | @'gcd' x y@ is the non-negative factor of both @x@ and @y@ of which every
+-- common factor of both @x@ and @y@ is also a factor; for example:
+--
+-- >>> gcd 4 2 = 2
+-- >>> gcd (-4) 6 = 2
+-- >>> gcd 0 4 = 4
+-- >>> gcd 0 0 = 0
+--
+-- That is, the common divisor that is \"greatest\" in the divisibility
+-- preordering.
+--
+gcd :: Integral a => Exp a -> Exp a -> Exp a
+gcd x y = gcd' (abs x) (abs y)
+  where
+    gcd' :: Integral a => Exp a -> Exp a -> Exp a
+    gcd' x y =
+      let (r,_) = untup2
+                $ while (\(untup2 -> (_,b)) -> b /=* 0)
+                        (\(untup2 -> (a,b)) -> tup2 (b, a `rem` b))
+                        (tup2 (x,y))
+      in r
+
+
+-- | @'lcm' x y@ is the smallest positive integer that both @x@ and @y@ divide.
+--
+lcm :: Integral a => Exp a -> Exp a -> Exp a
+lcm x y
+  = cond (x ==* 0 ||* y ==* 0) 0
+  $ abs ((x `quot` (gcd x y)) * y)
 
 
 -- Conversions
