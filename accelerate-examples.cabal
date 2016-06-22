@@ -339,8 +339,9 @@ Executable accelerate-crystal
     build-depends:      accelerate                      == 2.0.*,
                         accelerate-examples             == 2.0.*,
                         base                            >= 4.7,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
-                        gloss-raster-accelerate         >= 1.7
+                        gloss-raster-accelerate         >= 0.2
 
 
 -- Image edge detection
@@ -373,6 +374,7 @@ Executable accelerate-canny
                         accelerate-examples             == 2.0.*,
                         accelerate-io                   == 2.0.*,
                         base                            >= 4.7,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         repa                            >= 3.1,
                         repa-io                         >= 3.1,
@@ -400,11 +402,11 @@ Executable accelerate-mandelbrot
   else
     build-depends:      accelerate                      == 2.0.*,
                         accelerate-examples             == 2.0.*,
-                        accelerate-io                   == 2.0.*,
                         base                            >= 4.7,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         gloss                           >= 1.7,
-                        gloss-accelerate                >= 1.7
+                        gloss-accelerate                >= 0.2
 
 
 -- A stable fluid simulation
@@ -433,6 +435,7 @@ Executable accelerate-fluid
                         accelerate-io                   == 2.0.*,
                         base                            >= 4.7,
                         bmp                             >= 1.2,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         gloss                           >= 1.9,
                         gloss-rendering                 >= 1.9
@@ -506,11 +509,11 @@ Executable accelerate-smoothlife
     build-depends:      accelerate                      == 2.0.*,
                         accelerate-examples             == 2.0.*,
                         accelerate-fft                  == 2.0.*,
-                        accelerate-io                   == 2.0.*,
                         base                            >= 4.7,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         gloss                           >= 1.7,
-                        gloss-accelerate                >= 1.7,
+                        gloss-accelerate                >= 0.2,
                         mwc-random                      >= 0.8
 
 
@@ -567,6 +570,7 @@ Executable accelerate-fft
                         accelerate-fft                  == 2.0.*,
                         accelerate-io                   == 2.0.*,
                         base                            >= 4.7,
+                        colour-accelerate               >= 0.1,
                         fclabels                        >= 2.0,
                         filepath                        >= 1.0
 
@@ -628,9 +632,10 @@ Executable accelerate-ray
                         accelerate-examples             == 2.0.*,
                         base                            >= 4.7,
                         fclabels                        >= 1.0,
+                        colour-accelerate               >= 0.1,
                         gloss                           >= 1.8,
-                        gloss-accelerate                >= 1.8,
-                        gloss-raster-accelerate         >= 1.8
+                        gloss-accelerate                >= 0.2,
+                        gloss-raster-accelerate         >= 0.2
 
   ghc-options:          -Wall -O2 -threaded -threaded -rtsopts
   ghc-prof-options:     -auto-all
@@ -672,4 +677,6 @@ Executable accelerate-kmeans
 source-repository head
   type:                 git
   location:             https://github.com/AccelerateHS/accelerate-examples
+
+-- vim: nospell
 

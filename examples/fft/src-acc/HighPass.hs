@@ -5,18 +5,24 @@ module HighPass
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
+import Data.Array.Accelerate.Data.Colour.RGBA           as A
 import Data.Array.Accelerate.Math.FFT                   as A
 import Data.Array.Accelerate.Math.DFT.Centre            as A
 import Data.Array.Accelerate.Data.Complex               as A
 
 
 highpassFFT :: Int -> Int -> Int -> Acc (Array DIM2 RGBA32) -> Acc (Array DIM2 RGBA32)
-highpassFFT width height cutoff img = A.map A.packRGBA32 (A.zip4 r' g' b' a)
+highpassFFT width height cutoff img = img'
   where
-    (r,g,b,a)   = A.unzip4 $ A.map unpackRGBA32 img
+    (r,g,b,a)   = A.unzip4
+                $ A.map (\c -> let RGBA x y z w = unlift c :: RGBA (Exp Word8)
+                               in lift (x,y,z,w) :: Exp (Word8, Word8, Word8, Word8))
+                $ A.map unpackRGBA8 img
     r'          = transform width height cutoff r
     g'          = transform width height cutoff g
     b'          = transform width height cutoff b
+    --
+    img'        = A.zipWith4 (\x y z w -> packRGBA8 . lift $ RGBA x y z w) r' g' b' a
 
 
 transform :: Int -> Int -> Int -> Acc (Array DIM2 Word8) -> Acc (Array DIM2 Word8)

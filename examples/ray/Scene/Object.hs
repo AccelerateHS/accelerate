@@ -12,14 +12,15 @@ import Vec3
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Product
 import Data.Array.Accelerate.Array.Sugar                        ( Elt(..), EltRepr, Tuple(..), fromTuple, toTuple )
-import Graphics.Gloss.Accelerate.Data.Color.RGB
+import Data.Array.Accelerate.Data.Bits
+import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Smart
+
+import Data.Array.Accelerate.Data.Colour.RGB
 
 -- standard library
 import Prelude                                                  as P
-import Data.Bits                                                ( xor )
 import Data.Typeable
 
 
@@ -31,21 +32,21 @@ type Objects = (Array DIM1 Sphere, Array DIM1 Plane)
 -- | Objects in the world. Accelerate does not have sum types, so define each
 --   object separately (and hope this works out...)
 --
-data Sphere = Sphere Position Float Color Float
-  deriving (Eq, Show, Typeable)
+data Sphere = Sphere Position Float Colour Float
+  deriving (P.Eq, Show, Typeable)
 
 spherePos    :: Exp Sphere -> Exp Position
-sphereColor  :: Exp Sphere -> Exp Color
+sphereColor  :: Exp Sphere -> Exp Colour
 sphereShine  :: Exp Sphere -> Exp Float
 sphereRadius :: Exp Sphere -> Exp Float
 
 
-data Plane = Plane Position Direction Color Float
-  deriving (Eq, Show, Typeable)
+data Plane = Plane Position Direction Colour Float
+  deriving (P.Eq, Show, Typeable)
 
 planePos    :: Exp Plane -> Exp Position
 planeNormal :: Exp Plane -> Exp Direction
-planeColor  :: Exp Plane -> Exp Color
+planeColor  :: Exp Plane -> Exp Colour
 planeShine  :: Exp Plane -> Exp Float
 
 
@@ -97,12 +98,12 @@ distanceToPlane plane origin direction
 -- | The maximum representable floating point value
 --
 infinity :: Exp Float
-infinity = constant (encodeFloat m n)
+infinity = constant (P.encodeFloat m n)
   where
     a           = undefined :: Float
-    b           = floatRadix a
-    e           = floatDigits a
-    (_, e')     = floatRange a
+    b           = P.floatRadix a
+    e           = P.floatDigits a
+    (_, e')     = P.floatRange a
     m           = b ^ e - 1
     n           = e' - e
 
@@ -119,7 +120,7 @@ sphereNormal sphere point
 
 -- | A checkerboard pattern along the x/z axis
 --
-checkers :: Exp Position -> Exp Color
+checkers :: Exp Position -> Exp Colour
 checkers pos
   = let
         (x,_,z) = xyzOfVec pos
@@ -130,8 +131,8 @@ checkers pos
         v4      = A.fromIntegral . boolToInt $ z A.<* 0.0
     in
     v1 `xor` v2 `xor` v3 `xor` v4 ==* 1 {- True -}
-      ? ( rawColor 1.0 1.0 1.0
-        , rawColor 0.4 0.4 0.4 )
+      ? ( rgb 1.0 1.0 1.0
+        , rgb 0.4 0.4 0.4 )
 
 
 -- Get Objects into Accelerate -------------------------------------------------
@@ -158,18 +159,18 @@ planeCheckShine  = planeShine
 -- Sphere
 -- ------
 
-type instance EltRepr Sphere = EltRepr (Position, Float, Color, Float)
+type instance EltRepr Sphere = EltRepr (Position, Float, Colour, Float)
 
 instance Elt Sphere where
-  eltType (_ :: Sphere)         = eltType (undefined :: (Position, Float, Color, Float))
+  eltType (_ :: Sphere)         = eltType (undefined :: (Position, Float, Colour, Float))
   toElt sphere                  = let (p,r,c,s) = toElt sphere in Sphere p r c s
   fromElt (Sphere p r c s)      = fromElt (p, r, c, s)
 
 instance IsProduct Elt Sphere where
-  type ProdRepr Sphere = ProdRepr (Position, Float, Color, Float)
+  type ProdRepr Sphere = ProdRepr (Position, Float, Colour, Float)
   fromProd _ (Sphere p r c s)    = fromTuple (p, r, c, s)
   toProd _ t                     = let (p, r, c, s) = toTuple t in Sphere p r c s
-  prod cst _                     = prod cst (undefined :: (Position, Float, Color, Float))
+  prod cst _                     = prod cst (undefined :: (Position, Float, Colour, Float))
 
 instance Lift Exp Sphere where
   type Plain Sphere = Sphere
@@ -181,18 +182,18 @@ instance Lift Exp Sphere where
 -- Plane
 -- -----
 
-type instance EltRepr Plane = EltRepr (Position, Direction, Color, Float)
+type instance EltRepr Plane = EltRepr (Position, Direction, Colour, Float)
 
 instance Elt Plane where
-  eltType (_ :: Plane)          = eltType (undefined :: (Position, Direction, Color, Float))
+  eltType (_ :: Plane)          = eltType (undefined :: (Position, Direction, Colour, Float))
   toElt plane                   = let (p,n,c,s) = toElt plane in Plane p n c s
   fromElt (Plane p n c s)       = fromElt (p, n, c, s)
 
 instance IsProduct Elt Plane where
-  type ProdRepr Plane = ProdRepr (Position, Direction, Color, Float)
+  type ProdRepr Plane = ProdRepr (Position, Direction, Colour, Float)
   fromProd _ (Plane p n c s)     = fromTuple (p, n, c, s)
   toProd _ t                     = let (p, n, c, s) = toTuple t in Plane p n c s
-  prod cst _                     = prod cst (undefined :: (Position, Direction, Color, Float))
+  prod cst _                     = prod cst (undefined :: (Position, Direction, Colour, Float))
 
 instance Lift Exp Plane where
   type Plain Plane = Plane

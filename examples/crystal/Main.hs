@@ -15,6 +15,8 @@ import Data.Label                                       ( get )
 
 import Data.Array.Accelerate                            as A hiding ( size )
 import Data.Array.Accelerate.Examples.Internal          as A
+import Data.Array.Accelerate.Data.Colour.RGBA
+
 import Graphics.Gloss.Accelerate.Raster.Field           as G
 
 
@@ -37,7 +39,7 @@ type Time   = Float
 
 -- Point ----------------------------------------------------------------------
 -- | Compute a single point of the visualisation.
-quasicrystal :: Scale -> Degree -> Exp Time -> Exp Point -> Exp Color
+quasicrystal :: Scale -> Degree -> Exp Time -> Exp Point -> Exp Colour
 quasicrystal scale degree time p
   = let -- Scale the time to be the phi value of the animation.
         -- The action seems to slow down at increasing phi values, so we
@@ -60,6 +62,7 @@ waves degree phi x = wrap $ waver degree 0
       | n == 0    = acc
       | otherwise = waver (n - 1) (acc + wave (A.constant (P.fromIntegral n) * th) x)
 
+    wrap :: Exp Float -> Exp Float
     wrap n
       = let n_  = A.truncate n :: Exp Int
             n'  = n - A.fromIntegral n_
@@ -82,8 +85,8 @@ point scale pt = makePoint (x * scale') (y * scale')
     scale'      = A.constant scale
 
 -- | Colour ramp from red to white, convert into RGBA
-rampColour :: Exp Float -> Exp Color
-rampColour v = rawColor 1 (0.4 + (v * 0.6)) v 1
+rampColour :: Exp Float -> Exp Colour
+rampColour v = lift $ RGBA 1 (0.4 + (v * 0.6)) v 1
 
 
 -- Main -----------------------------------------------------------------------

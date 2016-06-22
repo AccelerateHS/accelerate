@@ -2,3 +2,5 @@ dist/
 .DS_Store
 examples/canny/Process_stub.h
 *.swp
+.stack-work
+stack.yaml

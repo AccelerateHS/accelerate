@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 --
@@ -16,7 +17,7 @@ module Mandel (
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.IO                 as A
+import Data.Array.Accelerate.Data.Colour.RGBA
 import Data.Array.Accelerate.Data.Complex
 
 -- Types -----------------------------------------------------------------------
@@ -25,6 +26,7 @@ import Data.Array.Accelerate.Data.Complex
 type View a             = (a, a, a, a)
 
 -- Image data
+type RGBA32             = Word32
 type Bitmap             = Array DIM2 RGBA32
 
 -- Action to render a frame
@@ -40,7 +42,7 @@ type Render a           = Scalar (View a) -> Bitmap
 -- This returns the iteration depth 'i' at divergence.
 --
 mandelbrot
-    :: forall a. (Elt a, IsFloating a)
+    :: forall a. (P.Floating a, A.RealFloat a, A.Ord a, A.FromIntegral Int a)
     => Int
     -> Int
     -> Int
@@ -91,12 +93,11 @@ prettyRGBA cmax c = c ==* cmax ? ( 0xFF000000, escapeToColour (cmax - c) )
 -- Note that OpenGL reads pixel data in AGBR format, rather than RGBA.
 --
 escapeToColour :: Exp Int32 -> Exp RGBA32
-escapeToColour m = constant 0xFFFFFFFF - (packRGBA32 $ lift (a,b,g,r))
+escapeToColour m = constant 0xFFFFFFFF - (packABGR8 . lift $ RGBA r g b 0)
   where
     r   = A.fromIntegral (3 * m)
     g   = A.fromIntegral (5 * m)
     b   = A.fromIntegral (7 * m)
-    a   = constant 0
 
 
 {--

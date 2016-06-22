@@ -1,5 +1,7 @@
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 -- |
 -- Module      : Data.Array.Accelerate.Math.Kmeans
 -- Copyright   : [2014] Trevor L. McDonell
@@ -60,7 +62,7 @@ type PointSum a = (Word32, (a, a))
 -- Get the distance (squared) between two points. Since we only compare this
 -- value, we elide the square root.
 --
-distance :: (Elt a, IsNum a) => Exp (Point a) -> Exp (Point a) -> Exp a
+distance :: A.Num a => Exp (Point a) -> Exp (Point a) -> Exp a
 distance u v =
   let (x1,y1) = unlift u
       (x2,y2) = unlift v
@@ -72,7 +74,7 @@ distance u v =
 -- closest to.
 --
 findClosestCluster
-    :: forall a. (Elt a, IsFloating a, RealFloat a)
+    :: forall a. (A.RealFloat a, P.RealFloat a)
     => Acc (Vector (Cluster a))
     -> Acc (Vector (Point a))
     -> Acc (Vector Id)
@@ -95,7 +97,7 @@ findClosestCluster clusters points =
 -- locations.
 --
 makeNewClusters
-    :: forall a. (Elt a, IsFloating a, RealFloat a)
+    :: forall a. (A.RealFloat a, P.RealFloat a, A.FromIntegral Word32 a)
     => Acc (Vector (Point a))
     -> Acc (Vector (Cluster a))
     -> Acc (Vector (Cluster a))
@@ -154,7 +156,7 @@ makeNewClusters points clusters
                              near    = nearest ! index1 j
 
                              yes     = lift (constant 1, points ! index1 j)
-                             no      = constant (0, (0,0))
+                             no      = constant (0, (0, 0))
                          in
                          near ==* A.fromIntegral i ? ( yes, no ))
 
@@ -190,7 +192,7 @@ makeNewClusters points clusters
 -- positions, until the positions converge (or some maximum iteration limit is
 -- reached?)
 --
-kmeans :: forall a. (Elt a, IsFloating a, RealFloat a)
+kmeans :: forall a. (A.RealFloat a, P.RealFloat a, A.FromIntegral Word32 a)
        => Acc (Vector (Point a))        -- the points to cluster
        -> Acc (Vector (Cluster a))      -- initial cluster positions (guess)
        -> Acc (Vector (Cluster a))
@@ -214,13 +216,13 @@ kmeans points clusters
 
 -- The largest non-infinite floating point number
 --
-inf :: forall a. RealFloat a => a
-inf = encodeFloat m n
+inf :: forall a. P.RealFloat a => a
+inf = P.encodeFloat m n
   where
     a           = undefined :: a
-    b           = floatRadix a
-    e           = floatDigits a
-    (_, e')     = floatRange a
+    b           = P.floatRadix a
+    e           = P.floatDigits a
+    (_, e')     = P.floatRange a
     m           = b ^ e - 1
     n           = e' - e
 

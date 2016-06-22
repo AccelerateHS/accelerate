@@ -16,6 +16,7 @@
 module Data.Array.Accelerate.Examples.Internal.Backend
   where
 
+import Prelude                                          as P
 import Data.Label
 import System.Console.GetOpt
 
@@ -91,7 +92,7 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CILK_BACKEND
              | Cilk
 #endif
-  deriving (Eq, Bounded)
+  deriving (P.Eq, P.Bounded)
 
 
 -- The choice of show instance is important because this will be used to

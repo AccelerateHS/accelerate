@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -35,7 +37,7 @@ test_saxpy backend opt = testGroup "saxpy" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -52,7 +54,7 @@ test_saxpy backend opt = testGroup "saxpy" $ catMaybes
 
 -- Accelerate implementation ---------------------------------------------------
 
-saxpy :: (Elt e, IsNum e)
+saxpy :: A.Num e
       => Exp e
       -> Acc (Vector e)
       -> Acc (Vector e)

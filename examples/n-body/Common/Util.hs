@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Common.Util (
 
@@ -12,13 +14,13 @@ import Data.Array.Accelerate            as A
 
 -- | The magnitude of a vector.
 --
-magnitude :: (Elt a, IsFloating a) => Exp (Vec a) -> Exp a
+magnitude :: A.Floating a => Exp (Vec a) -> Exp a
 magnitude v = sqrt (dot v v)
 
 
 -- | Dot product of a vector
 --
-dot :: (Elt a, IsNum a) => Exp (Vec a) -> Exp (Vec a) -> Exp a
+dot :: A.Num a => Exp (Vec a) -> Exp (Vec a) -> Exp a
 dot v1 v2
   = let (x1,y1,z1) = unlift v1
         (x2,y2,z2) = unlift v2
@@ -28,7 +30,7 @@ dot v1 v2
 
 -- | Normalise a vector, so it has a magnitude of 1.
 --
-normalise :: (Elt a, IsFloating a) => Exp (Vec a) -> Exp (Vec a)
+normalise :: A.Floating a => Exp (Vec a) -> Exp (Vec a)
 normalise v = (1 / magnitude v) *. v
 
 -- | Replicate a value into a vector
@@ -42,7 +44,7 @@ infixl 7 .*.
 infixl 6 .+.
 infixl 6 .-.
 
-(.+.), (.-.), (.*.) :: (Elt a, IsNum a) => Exp (Vec a) -> Exp (Vec a) -> Exp (Vec a)
+(.+.), (.-.), (.*.) :: A.Num a => Exp (Vec a) -> Exp (Vec a) -> Exp (Vec a)
 (.+.) = vzipWith (+)
 (.-.) = vzipWith (-)
 (.*.) = vzipWith (*)
@@ -53,7 +55,7 @@ infixl 7 *.
 infixl 6 +.
 infixl 6 -.
 
-(+.), (-.), (*.) :: (Elt a, IsNum a) => Exp a -> Exp (Vec a) -> Exp (Vec a)
+(+.), (-.), (*.) :: A.Num a => Exp a -> Exp (Vec a) -> Exp (Vec a)
 (+.) c = vmap (c+)
 (-.) c = vmap (c-)
 (*.) c = vmap (c*)

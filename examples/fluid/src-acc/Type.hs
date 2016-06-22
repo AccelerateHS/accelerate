@@ -8,7 +8,7 @@ module Type (
   Timestep, Viscosity, Diffusion, Index, Density, Velocity,
   Field, FieldElt(..), DensityField, VelocityField, DensitySource, VelocitySource,
 
-  RGBA, Image
+  RGBA32, Image
 
 ) where
 
@@ -30,7 +30,7 @@ type Source a           = (Vector Index, Vector a)
 type DensitySource      = Source Density
 type VelocitySource     = Source Velocity
 
-type RGBA               = Word32
+type RGBA32             = Word32
 type Image a            = Array DIM2 a
 
 

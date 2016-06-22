@@ -8,7 +8,7 @@ import Scene.Object
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Graphics.Gloss.Accelerate.Data.Color.RGB
+import Data.Array.Accelerate.Data.Colour.RGB
 
 
 makeLights :: Float -> Lights

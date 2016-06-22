@@ -1,4 +1,6 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns     #-}
 -- An implementation of the Canny edge detection algorithm
 --
 --   J. F. Canny, "A Computational Approach to Edge Detection" in _Pattern
@@ -16,11 +18,12 @@ import Prelude                                          as P
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
+import Data.Array.Accelerate.Data.Colour.RGB
 
 
 -- Canny algorithm -------------------------------------------------------------
 
-canny :: Float -> Float -> Acc (Image RGBA) -> (Acc (Image Float), Acc (Vector Int))
+canny :: Float -> Float -> Acc (Image RGBA32) -> (Acc (Image Float), Acc (Vector Int))
 canny (constant -> low) (constant -> high)
   = stage1
   . nonMaximumSuppression low high
@@ -34,7 +37,6 @@ canny (constant -> low) (constant -> high)
 
 -- Accelerate component --------------------------------------------------------
 
-type RGBA               = Word32
 type Image a            = Array DIM2 a
 
 type Stencil5x1 a       = (Stencil3 a, Stencil5 a, Stencil3 a)
@@ -62,19 +64,19 @@ edge Strong     = 1.0
 edge' :: Edge -> Exp Float
 edge' = constant . edge
 
-convolve5x1 :: (Elt a, IsNum a) => [Exp a] -> Stencil5x1 a -> Exp a
+convolve5x1 :: A.Num a => [Exp a] -> Stencil5x1 a -> Exp a
 convolve5x1 kernel (_, (a,b,c,d,e), _)
   = P.sum $ P.zipWith (*) kernel [a,b,c,d,e]
 
-convolve1x5 :: (Elt a, IsNum a) => [Exp a] -> Stencil1x5 a -> Exp a
+convolve1x5 :: A.Num a => [Exp a] -> Stencil1x5 a -> Exp a
 convolve1x5 kernel ((_,a,_), (_,b,_), (_,c,_), (_,d,_), (_,e,_))
   = P.sum $ P.zipWith (*) kernel [a,b,c,d,e]
 
 
 -- RGB to Greyscale conversion, in the range [0,255]
 --
-toGreyscale :: Acc (Image RGBA) -> Acc (Image Float)
-toGreyscale = A.map (\rgba -> 255 * luminanceOfRGBA32 rgba)
+toGreyscale :: Acc (Image RGBA32) -> Acc (Image Float)
+toGreyscale = A.map (\rgba -> 255 * luminance (unpackRGB rgba))
 
 
 -- Separable Gaussian blur in the x- and y-directions
@@ -137,7 +139,7 @@ gradientMagDir low = stencil magdir Clamp
           --
           -- Determine the angle of the vector and rotate it around a bit to
           -- make the segments easier to classify
-          theta       = atan2 dy dx
+          theta       = A.atan2 dy dx
           alpha       = (theta - (pi/8)) * (4/pi)
 
           -- Normalise the angle to between [0..8)
@@ -145,7 +147,7 @@ gradientMagDir low = stencil magdir Clamp
 
           -- Try to avoid doing explicit tests, to avoid warp divergence
           undef       = abs dx <=* low &&* abs dy <=* low
-          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `min` 255)
+          dir         = boolToInt (A.not undef) * ((64 * (1 + A.floor norm `mod` 4)) `A.min` 255)
       in
       lift (mag, dir)
 
@@ -184,7 +186,7 @@ nonMaximumSuppression low high magdir =
         (fwd, _)        = unlift $ magdir ! lift (clamp (Z :. y+offsety :. x+offsetx)) :: (Exp Float, Exp Int)
         (rev, _)        = unlift $ magdir ! lift (clamp (Z :. y-offsety :. x-offsetx)) :: (Exp Float, Exp Int)
 
-        clamp (Z:.u:.v) = Z :. 0 `max` u `min` (h-1) :. 0 `max` v `min` (w-1)
+        clamp (Z:.u:.v) = Z :. 0 `A.max` u `A.min` (h-1) :. 0 `A.max` v `A.min` (w-1)
 
         -- Try to avoid doing explicit tests to avoid warp divergence.
         --

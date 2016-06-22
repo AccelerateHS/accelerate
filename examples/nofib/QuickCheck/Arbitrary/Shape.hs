@@ -63,7 +63,7 @@ arbitraryShape :: forall sh. (Shape sh, Arbitrary sh) => Int -> Gen sh
 arbitraryShape size =
   let
       eps       = 0.1 :: Double
-      dim       = Sugar.dim (undefined :: sh)
+      dim       = Sugar.rank (undefined :: sh)
       target
         | dim == 0      = 1
         | otherwise     = size * dim

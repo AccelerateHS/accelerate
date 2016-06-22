@@ -14,6 +14,7 @@ import Control.Monad
 import Prelude                                          as P
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.IO                         as A
+import Data.Array.Accelerate.Data.Colour.RGBA           as A
 import Data.Array.Accelerate.Examples.Internal          as A
 
 
@@ -218,7 +219,7 @@ makeDensity_checks backend width height
                 yk1             = abs ty >* 3*pi/2 ? (0 , cos ty)
                 d1              = xk1 * yk1
             in
-            0 `max` d1
+            0 `A.max` d1
     in
     run backend $ A.generate (constant (Z:.height:.width)) checks
 
@@ -273,7 +274,7 @@ loadDensity_bmp backend filepath width height
         when (w /= width || h /= height)
           $ error "accelerate-fluid: density-bmp does not match width x height"
 
-        return . run backend $ A.map luminanceOfRGBA32 (use arr)
+        return . run backend $ A.map (luminance . unpackRGBA) (use arr)
 
 
 loadVelocity_bmp :: Backend -> FilePath -> Int -> Int -> IO VelocityField
@@ -285,9 +286,9 @@ loadVelocity_bmp backend filepath width height
           $ error "accelerate-fluid: velocity-bmp does not match width x height"
 
         let conv rgb =
-              let (r,g,_,_) = unlift (unpackRGBA32 rgb) :: (Exp Word8, Exp Word8, Exp Word8, Exp Word8)
-                  r'        = A.fromIntegral (-128 + A.fromIntegral r :: Exp Int)
-                  g'        = A.fromIntegral (-128 + A.fromIntegral g :: Exp Int)
+              let RGBA r g _ _ = unlift (unpackRGBA8 rgb) :: RGBA (Exp Word8)
+                  r'           = A.fromIntegral (-128 + A.fromIntegral r :: Exp Int)
+                  g'           = A.fromIntegral (-128 + A.fromIntegral g :: Exp Int)
               in lift (r' * 0.0001, g' * 0.0001)
 
         return . run backend $ A.map conv (use arr)

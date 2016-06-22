@@ -42,7 +42,7 @@ splitEvery n xs =
   let (h,t) = splitAt n xs
   in  h : splitEvery n t
 
-splitPlaces :: Integral i => [i] -> [a] -> [[a]]
+splitPlaces :: P.Integral i => [i] -> [a] -> [[a]]
 splitPlaces []     _  = []
 splitPlaces (i:is) vs =
   let (h,t) = splitAt (P.fromIntegral i) vs

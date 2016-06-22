@@ -11,7 +11,8 @@ import Ray.Intersect
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Graphics.Gloss.Accelerate.Data.Color.RGB
+import Data.Array.Accelerate.Data.Colour.RGB                    as RGB
+import Data.Array.Accelerate.Data.Colour.Names
 import Graphics.Gloss.Accelerate.Data.Point
 
 -- standard library
@@ -47,10 +48,10 @@ traceRay
     :: Int                              -- ^ Maximum reflection count
     -> Acc Objects                      -- ^ Objects in the scene
     -> Acc Lights                       -- ^ Direct lighting in the scene
-    -> Exp Color                        -- ^ Ambient light in the scene
+    -> Exp Colour                       -- ^ Ambient light in the scene
     -> Exp Position                     -- ^ Origin of the ray
     -> Exp Direction                    -- ^ Direction of the ray
-    -> Exp Color
+    -> Exp Colour
 traceRay limit objects lights ambient = go limit
   where
     (spheres, planes)   = unlift objects
@@ -61,8 +62,9 @@ traceRay limit objects lights ambient = go limit
     -- Stop once there are too many reflections, in case we've found two
     -- parallel mirrors.
     --
+    go :: Int -> Exp Position -> Exp Direction -> Exp Colour
     go 0 _ _
-      = black
+      = constant black
 
     go bounces orig dir
       = let
@@ -75,7 +77,7 @@ traceRay limit objects lights ambient = go limit
         in
         A.not (hit_s ||* hit_p) ?
           -- ray didn't intersect any objects
-        ( black
+        ( constant black
 
           -- ray hit an object
         , let
@@ -84,7 +86,7 @@ traceRay limit objects lights ambient = go limit
               next_s      = hitSphere     s dist_s orig dir
               next_p      = hitPlaneCheck p dist_p orig dir
 
-              (point, normal, color, shine)
+              (point, normal, colour, shine)
                           = unlift (dist_s A.<* dist_p ? ( next_s, next_p ))
 
               -- result angle of ray after reflection
@@ -103,47 +105,45 @@ traceRay limit objects lights ambient = go limit
               light_in    = scaleColour shine         refl
                           + scaleColour (1.0 - shine) lighting
 
-              -- outgoing light is incoming light modified by surface color.
-              -- We also need to clip it in case the sum of all incoming
-              -- lights is too bright to display.
-              light_out   = clampColor (light_in * color)
+              -- outgoing light is incoming light modified by surface colour. We
+              -- also need to clip it in case the sum of all incoming lights is
+              -- too bright to display.
+              light_out   = RGB.clamp (light_in * colour)
           in
           light_out
         )
 
 
-scaleColour :: Exp Float -> Exp Color -> Exp Color
-scaleColour s c
-  = let (r,g,b) = rgbOfColor c
-    in  rawColor (r * s) (g * s) (b * s)
+scaleColour :: Exp Float -> Exp Colour -> Exp Colour
+scaleColour s c = lift (RGB s s s) * c
 
-hitSphere :: Exp Sphere -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
+hitSphere :: Exp Sphere -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitSphere sph dist orig dir
   = let
         point   = orig + dist .* dir
         normal  = sphereNormal sph point
-        color   = sphereColor sph
+        colour  = sphereColor sph
         shine   = sphereShine sph
     in
-    lift (point, normal, color, shine)
+    lift (point, normal, colour, shine)
 
-hitPlane :: Exp Plane -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
+hitPlane :: Exp Plane -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitPlane pln dist orig dir
   = let
         point   = orig + dist .* dir
         normal  = planeNormal pln
-        color   = planeColor pln
+        colour  = planeColor pln
         shine   = planeShine pln
     in
-    lift (point, normal, color, shine)
+    lift (point, normal, colour, shine)
 
-hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Color, Float)
+hitPlaneCheck :: Exp PlaneCheck -> Exp Float -> Exp Position -> Exp Direction -> Exp (Position, Direction, Colour, Float)
 hitPlaneCheck pln dist orig dir
   = let
         point   = orig + dist .* dir
         normal  = planeCheckNormal pln
-        color   = checkers point
+        colour  = checkers point
         shine   = planeCheckShine pln
     in
-    lift (point, normal, color, shine)
+    lift (point, normal, colour, shine)
 

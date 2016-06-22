@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP           #-}
 {-# LANGUAGE BangPatterns  #-}
 {-# LANGUAGE PatternGuards #-}
 --
@@ -84,7 +85,12 @@ renderDensity df@(Array _ ad) = do
   dst   <- mallocBytes (n*4)
   fill 0 src dst
   fptr  <- newForeignPtr finalizerFree dst
-  return $ bitmapOfForeignPtr w h fptr False
+#if MIN_VERSION_gloss_rendering(1,10,0)
+  let fmt = BitmapFormat BottomToTop PxABGR
+  return $ bitmapOfForeignPtr w h fmt fptr False
+#else
+  return $ bitmapOfForeignPtr w h     fptr False
+#endif
   where
     src         = A.ptrsOfArrayData ad
     Z:.h:.w     = A.arrayShape df

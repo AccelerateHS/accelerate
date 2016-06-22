@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -13,7 +14,7 @@ type SparseVector e = Vector (Int32, e)
 type SparseMatrix e = (Segments Int32, SparseVector e)
 
 
-smvm :: (Elt a, IsNum a) => Acc (SparseMatrix a) -> Acc (Vector a) -> Acc (Vector a)
+smvm :: A.Num a => Acc (SparseMatrix a) -> Acc (Vector a) -> Acc (Vector a)
 smvm smat vec
   = let (segd, svec)    = unlift smat
         (inds, vals)    = A.unzip svec

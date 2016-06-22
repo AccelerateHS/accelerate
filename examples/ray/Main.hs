@@ -13,7 +13,7 @@ import Ray.Trace
 -- Friends
 import Data.Array.Accelerate                                    as A
 import Data.Array.Accelerate.Examples.Internal
-import Graphics.Gloss.Accelerate.Data.Color.RGB
+import Data.Array.Accelerate.Data.Colour.RGB
 import qualified Graphics.Gloss.Accelerate.Raster.Field         as G
 
 -- Enemies
@@ -33,9 +33,9 @@ main = do
       fps       = get configFramerate conf
       backend   = get optBackend opts
       state     = initState 0
-      ambient   = rawColor 0.3 0.3 0.3
+      ambient   = rgb 0.3 0.3 0.3
 
-      scene :: Acc (Objects,Lights) -> Acc (Array DIM2 Color)
+      scene :: Acc (Objects,Lights) -> Acc (Array DIM2 Colour)
       scene st
         = let eye               = constant (get stateEyePos state)
               eyeDir            = castViewRays width height fov eye

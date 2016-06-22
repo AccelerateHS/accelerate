@@ -53,7 +53,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
   , testBoundary
   ]
   where
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a, IArray UArray a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a, IArray UArray a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -68,14 +68,14 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
 
     -- 1D Stencil
     --
-    test_stencil1D :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Vector a -> Property
+    test_stencil1D :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Vector a -> Property
     test_stencil1D vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern (x,y,z) = x + z - 2 * y
 
         acc xs = run backend $ stencil pattern Clamp (use xs)
 
-        ref :: (Num e, IArray UArray e) => UArray Int e -> UArray Int e
+        ref :: (P.Num e, IArray UArray e) => UArray Int e -> UArray Int e
         ref xs =
           let (minx,maxx)   = bounds xs
               clamp x       = Right (minx `P.max` x `P.min` maxx)
@@ -84,7 +84,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
 
     -- 2D Stencil
     --
-    test_stencil2D1 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 a -> Property
+    test_stencil2D1 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 a -> Property
     test_stencil2D1 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern ( (t1, t2, t3)
@@ -95,7 +95,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
 
         acc xs = run backend $ stencil pattern (Constant 0) (use xs)
 
-        ref :: (Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
+        ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
           let
               sh                    = bounds xs
@@ -107,7 +107,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           stencil2DRef pattern constant xs
 
 
-    test_stencil2D2 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 a -> Property
+    test_stencil2D2 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 a -> Property
     test_stencil2D2 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
         pattern ( (_, t, _)
@@ -117,12 +117,12 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
                 = (t + l + r + b - 4 * m)
 
         acc xs =
-          let pattern' :: (Elt a, IsNum a) => Stencil3x3 a -> Exp a
+          let pattern' :: A.Num a => Stencil3x3 a -> Exp a
               pattern' = pattern
           in
           run backend $ stencil pattern' Clamp (use xs)
 
-        ref :: (Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
+        ref :: (P.Num a, IArray UArray a) => UArray (Int,Int) a -> UArray (Int,Int) a
         ref xs =
           let ((minu,minv),(maxu,maxv)) = bounds xs
               clamp (u,v) = Right (minu `P.max` u `P.min` maxu
@@ -130,10 +130,10 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
           in
           stencil2DRef pattern clamp xs
 
-    test_stencil2D3 :: (Num a, IsNum a, Elt a, Similar a, IArray UArray a) => Array DIM2 (a,a) -> Property
+    test_stencil2D3 :: (P.Num a, A.Num a, Similar a, IArray UArray a) => Array DIM2 (a,a) -> Property
     test_stencil2D3 vec = toList (acc vec) ~?= elems (ref (toIArray vec))
       where
-        pattern :: forall a. (Elt a, IsNum a) => Stencil3x3 (a,a) -> Exp a
+        pattern :: forall a. A.Num a => Stencil3x3 (a,a) -> Exp a
         pattern ( (_, _, _) , (x, _, _) , (y, _, z))
           = let (x1,x2) = unlift x
                 (y1,y2) = unlift y
@@ -150,7 +150,7 @@ test_stencil backend opt = testGroup "stencil" $ catMaybes
 
         acc xs = run backend $ stencil pattern (Constant (0,0)) (use xs)
 
-        ref :: Num a => IArray.Array (Int,Int) (a,a) -> IArray.Array (Int,Int) a
+        ref :: P.Num a => IArray.Array (Int,Int) (a,a) -> IArray.Array (Int,Int) a
         ref xs =
           let
               sh                    = bounds xs

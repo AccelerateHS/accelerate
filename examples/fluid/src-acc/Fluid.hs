@@ -150,7 +150,7 @@ advect dt vf df = A.generate sh backtrace
         (u, v)  = A.unlift (vf A.! ix)
 
         -- backtrack densities based on velocity field
-        clamp z = max (-0.5) . min (z + 0.5)
+        clamp z = A.max (-0.5) . A.min (z + 0.5)
         x       = width  `clamp` (A.fromIntegral i - A.constant dt * width  * u)
         y       = height `clamp` (A.fromIntegral j - A.constant dt * height * v)
 

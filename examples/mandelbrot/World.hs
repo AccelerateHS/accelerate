@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -32,7 +34,7 @@ data Move       = Fwd | Rev
 data Precision  = Float | Double
 
 data World where
-  World :: (Elt a, RealFloat a)
+  World :: (Elt a, P.RealFloat a)
         => View a
         -> Render a
         -> Maybe Zoom
@@ -65,7 +67,7 @@ setPrecisionOfWorld f conf opts (World p _ z h v)
         limit   = get configLimit conf
         backend = get optBackend opts
 
-        render :: (Elt a, IsFloating a) => Render a
+        render :: (P.Floating a, A.RealFloat a, A.Ord a, A.FromIntegral Int a) => Render a
         render  = run1 backend
                 $ A.map (prettyRGBA (constant (P.fromIntegral limit)))
                 . mandelbrot width height limit
@@ -175,7 +177,7 @@ horizontal = lens (\(World _ _ _ h _) -> h) (\f (World p r z h v) -> World p r z
 vertical :: World :-> Maybe Move
 vertical = lens (\(World _ _ _ _ v) -> v) (\f (World p r z h v) -> World p r z h (f v))
 
-convertView :: (Real a, Fractional b) => View a -> View b
+convertView :: (P.Real a, P.Fractional b) => View a -> View b
 convertView (x,y,x',y') = (realToFrac x, realToFrac y, realToFrac x', realToFrac y')
 
 -- Presets

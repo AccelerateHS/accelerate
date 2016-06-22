@@ -6,6 +6,7 @@ module Config
 import Prelude                                          as P hiding ((.), id, fst, snd)
 import qualified Prelude                                as P
 
+import Data.Word
 import Data.Label
 import Control.Category
 import System.Console.GetOpt
@@ -18,6 +19,7 @@ import Data.Array.Accelerate.Data.Complex               ( Complex )
 --
 type R          = Float
 type C          = Complex R
+type RGBA32     = Word32
 type Matrix a   = Array DIM2 a
 
 data SigmoidFunction

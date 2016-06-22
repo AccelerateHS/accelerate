@@ -36,7 +36,7 @@ test_ptr _ =
 
 -- Unit tests ------------------------------------------------------------------
 --
-intToBool :: Integral a => a -> Bool
+intToBool :: P.Integral a => a -> Bool
 intToBool 0 = False
 intToBool _ = True
 

@@ -14,7 +14,6 @@ import Control.Monad
 import Control.Applicative
 import Data.Maybe
 import Data.List                                ( foldl' )
-import Data.Bits                                hiding ( rotateL )
 import Data.ByteString.Lex.Integral             ( readHexadecimal )
 import qualified Data.Serialize                 as S
 import qualified Data.ByteString                as B
@@ -22,6 +21,7 @@ import qualified Data.ByteString.Lazy           as L
 import Prelude                                  as P
 
 import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate.Data.Bits          as A
 
 
 -- Generate an MD5 hash for every word in the dictionary, and if an entry

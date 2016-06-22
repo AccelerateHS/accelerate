@@ -1,5 +1,7 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns     #-}
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies     #-}
 
 module Rank (rank)
   where
@@ -109,7 +111,7 @@ pageRank backend noSeq maxIters chunkSize pageCount from to sizes titlesFile ran
           in A.map (+ A.the dangleContrib) ranks
 
         stepInSeq :: A.Vector Rank -> A.Vector Rank
-        stepInSeq = 
+        stepInSeq =
           let !pages  = A.fromVectors (Z:.S.length from) (((), from), to)
           in run1 backend (stepRankSeq pages (use sizes))
 

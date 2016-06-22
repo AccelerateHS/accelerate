@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,6 +27,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 import QuickCheck.Arbitrary.Shape
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 import Data.Array.Accelerate.Array.Sugar                        as Sugar
 import qualified Data.Array.Accelerate.Array.Representation     as R
@@ -48,7 +50,7 @@ test_map backend opt = testGroup "map" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall a. (Elt a, Integral a, Bits a, IsNum a, IsIntegral a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
+    testIntegralElt :: forall a. (P.Integral a, P.Bits a, A.Integral a, A.Bits a, Arbitrary a, Similar a, A.FromIntegral a Float) => (Config :-> Bool) -> a -> Maybe Test
     testIntegralElt ok a
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
@@ -57,15 +59,15 @@ test_map backend opt = testGroup "map" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [ -- operators on Num
             testProperty "neg"          (test negate negate)
           , testProperty "abs"          (test abs abs)
           , testProperty "sig"          (test signum signum)
 
             -- operators on Integral & Bits
-          , testProperty "complement"   (test complement complement)
+          , testProperty "complement"   (test A.complement P.complement)
 
             -- conversions
           , testProperty "fromIntegral" (testF A.fromIntegral P.fromIntegral)
@@ -74,7 +76,7 @@ test_map backend opt = testGroup "map" $ catMaybes
             test  = mkTest a a sh
             testF = mkTest a (undefined::Float) sh
 
-    testFloatingElt :: forall a. (Elt a, RealFrac a, IsFloating a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
+    testFloatingElt :: forall a. (P.Floating a, P.RealFloat a, A.Floating a, A.RealFloat a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
     testFloatingElt ok a
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
@@ -83,8 +85,8 @@ test_map backend opt = testGroup "map" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, P.Ord a, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [ -- operators on Num
             testProperty "neg"          (test negate negate)
           , testProperty "abs"          (test abs abs)
@@ -118,7 +120,7 @@ test_map backend opt = testGroup "map" $ catMaybes
     -- respectively that are arguments to the Map operation, and the final is
     -- the (randomly generated) input data.
     --
-    mkTest :: (Elt a, Elt b, Shape sh, Eq sh, Similar b)
+    mkTest :: (Elt a, Elt b, Shape sh, P.Eq sh, Similar b)
            => a -> b -> sh -> (Exp a -> Exp b) -> (a -> b) -> Array sh a -> Property
     mkTest _ _ _ f g xs = run1 backend (A.map f) xs ~?= mapRef g xs
 
@@ -137,7 +139,7 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall a. (Elt a, Integral a, Bits a, IsNum a, IsIntegral a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
+    testIntegralElt :: forall a. (P.Integral a, P.Bits a, A.Integral a, A.Bits a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
     testIntegralElt ok a
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
@@ -146,8 +148,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a), Arbitrary (Array sh Int)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a), Arbitrary (Array sh Int)) => sh -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [ -- operators on Num
             testProperty "(+)"          (test (+) (+))
           , testProperty "(-)"          (test (-) (-))
@@ -160,9 +162,9 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "div"          (denom $ test div div)
           , testProperty "mod"          (denom $ test mod mod)
           , testProperty "divMod"       (denom $ test' (\x y -> lift (divMod x y)) divMod)
-          , testProperty "(.&.)"        (test (.&.) (.&.))
-          , testProperty "(.|.)"        (test (.|.) (.|.))
-          , testProperty "xor"          (test xor xor)
+          , testProperty "(.&.)"        (test (A..&.) (P..&.))
+          , testProperty "(.|.)"        (test (A..|.) (P..|.))
+          , testProperty "xor"          (test A.xor P.xor)
           , testProperty "shiftL"       (testSR A.shiftL P.shiftL)
           , testProperty "shiftR"       (testSR A.shiftR P.shiftR)
           , testProperty "rotateL"      (testSR A.rotateL P.rotateL)
@@ -175,8 +177,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "(>=)"         (testAB (>=*) (>=))
           , testProperty "(==)"         (testAB (==*) (==))
           , testProperty "(/=)"         (testAB (/=*) (/=))
-          , testProperty "min"          (test min min)
-          , testProperty "max"          (test max max)
+          , testProperty "min"          (test A.min P.min)
+          , testProperty "max"          (test A.max P.max)
           ]
           where
             test        = mkTest a a a sh
@@ -187,7 +189,7 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
                           requiring (>= 0) $ \ys ->
                             mkTest a (undefined::Int) a sh f g xs ys
 
-    testFloatingElt :: forall a. (Elt a, RealFrac a, RealFloat a, IsFloating a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
+    testFloatingElt :: forall a. (P.RealFrac a, P.RealFloat a, A.RealFloat a, A.RealFrac a, Arbitrary a, Similar a) => (Config :-> Bool) -> a -> Maybe Test
     testFloatingElt ok a
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: a)))
@@ -196,8 +198,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [ -- operators on Num
             testProperty "(+)"          (test (+) (+))
           , testProperty "(-)"          (test (-) (-))
@@ -206,7 +208,7 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
             -- operators on Fractional, Floating, RealFrac & RealFloat
           , testProperty "(/)"          (denom $ test (/) (/))
           , testProperty "(**)"         (test (**) (**))
-          , testProperty "atan2"        (test atan2 atan2)
+          , testProperty "atan2"        (test A.atan2 P.atan2)
           , testProperty "logBase"      (requiring (> 0) $ \xs ->
                                          requiring (> 0) $ \ys -> test logBase logBase xs ys)
 
@@ -217,8 +219,8 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
           , testProperty "(>=)"         (testAB (>=*) (>=))
           , testProperty "(==)"         (testAB (==*) (==))
           , testProperty "(/=)"         (testAB (/=*) (/=))
-          , testProperty "min"          (test min min)
-          , testProperty "max"          (test max max)
+          , testProperty "min"          (test A.min P.min)
+          , testProperty "max"          (test A.max P.max)
           ]
           where
             test        = mkTest a a a sh
@@ -226,7 +228,7 @@ test_zipWith backend opt = testGroup "zipWith" $ catMaybes
 
     -- The test generator. See comments in test_map above.
     --
-    mkTest :: (Elt a, Elt b, Elt c, Shape sh, Eq sh, Similar c)
+    mkTest :: (Elt a, Elt b, Elt c, Shape sh, P.Eq sh, Similar c)
            => a -> b -> c -> sh -> (Exp a -> Exp b -> Exp c) -> (a -> b -> c) -> Array sh a -> Array sh b -> Property
     mkTest _ _ _ _ f g xs ys = run2 backend (A.zipWith f) xs ys ~?= zipWithRef g xs ys
 

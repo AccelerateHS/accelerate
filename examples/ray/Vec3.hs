@@ -1,4 +1,6 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -9,12 +11,13 @@
 module Vec3
   where
 
-import Prelude
+import Prelude                                                      as P
 import Data.Typeable
-import Data.Array.Accelerate
-import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Product
+
+import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Array.Sugar
+import Data.Array.Accelerate.Product
+import Data.Array.Accelerate.Smart
 
 
 -- | Points and vectors in 3D Space
@@ -83,7 +86,7 @@ clamp v minVal maxVal =
   makeVec3 (go x) (go y) (go z)
   where
     XYZ x y z   = unlift v
-    go u        = minVal `max` u `min` maxVal
+    go u        = minVal `A.max` u `A.min` maxVal
 
 
 -- | Clip a vector's components to some maximum value.
@@ -93,13 +96,13 @@ clip v maxVal =
   makeVec3 (go x) (go y) (go z)
   where
     XYZ x y z   = unlift v
-    go u        = u `min` maxVal
+    go u        = u `A.min` maxVal
 
 
 -- Get a Vec3 into Accelerate --------------------------------------------------
 
 data XYZ a = XYZ a a a
-  deriving (Eq, Show, Typeable)
+  deriving (P.Eq, Show, Typeable)
 
 type instance EltRepr (XYZ a)  = EltRepr  (a, a, a)
 
@@ -125,7 +128,7 @@ instance Elt a => Unlift Exp (XYZ (Exp a)) where
 
 -- | Pretend a Vec3 is a number
 --
-instance Num a => Num (XYZ a) where
+instance P.Num a => P.Num (XYZ a) where
  (+) (XYZ x1 x2 x3) (XYZ y1 y2 y3)
         = XYZ (x1 + y1) (x2 + y2) (x3 + y3)
 
@@ -136,7 +139,7 @@ instance Num a => Num (XYZ a) where
         = XYZ (x1 * y1) (x2 * y2) (x3 * y3)
 
 
-instance (Elt a, IsNum a) => Num (Exp (XYZ a)) where
+instance A.Num a => P.Num (Exp (XYZ a)) where
   (+)   = lift2 ((+) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))
   (-)   = lift2 ((-) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))
   (*)   = lift2 ((*) :: XYZ (Exp a) -> XYZ (Exp a) -> XYZ (Exp a))

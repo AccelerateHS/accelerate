@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -39,7 +40,7 @@ test_replicate backend opt = testGroup "replicate" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Num e, Eq e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, A.Num e, P.Eq e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))

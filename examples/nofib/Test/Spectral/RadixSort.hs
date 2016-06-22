@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -13,7 +14,7 @@ module Test.Spectral.RadixSort (
 ) where
 
 import Prelude                                                  as P
-import Data.Bits
+import Data.Bits                                                as P ( finiteBitSize )
 import Data.List
 import Data.Label
 import Data.Maybe
@@ -26,6 +27,7 @@ import Test.Framework.Providers.QuickCheck2
 import Config
 import QuickCheck.Arbitrary.Array                               ()
 import Data.Array.Accelerate                                    as A
+import Data.Array.Accelerate.Data.Bits                          as A
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 
@@ -49,7 +51,7 @@ test_radixsort backend opt = testGroup "radix sort" $ catMaybes
   , testElt configWord64 (undefined :: Word64)
   ]
   where
-    testElt :: forall a. (Radix a, Ord a, Elt a, IsIntegral a, Similar a, Arbitrary a)
+    testElt :: forall a. (Radix a, P.Ord a, A.Integral a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -70,18 +72,18 @@ test_radixsort backend opt = testGroup "radix sort" $ catMaybes
 -- Implementation
 -- --------------
 
-class Elt e => Radix e where
+class A.Bits e => Radix e where
   passes :: e {- dummy -} -> Int
   radix  :: Exp Int -> Exp e -> Exp Int
 
 #define signed(ty)                                                             \
 instance Radix ty where ;                                                      \
-  passes = finiteBitSize ;                                                     \
+  passes = P.finiteBitSize ;                                                   \
   radix  = radixOfSigned ;
 
 #define unsigned(ty)                                                           \
 instance Radix ty where ;                                                      \
-  passes = finiteBitSize ;                                                     \
+  passes = P.finiteBitSize ;                                                   \
   radix  = radixOfUnsigned ;
 
 signed(Int)
@@ -95,13 +97,13 @@ unsigned(Word16)
 unsigned(Word32)
 unsigned(Word64)
 
-radixOfSigned :: forall e. (Radix e, IsIntegral e) => Exp Int -> Exp e -> Exp Int
+radixOfSigned :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
 radixOfSigned i e = i ==* (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
    where
      radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
      passes'  = constant (passes (undefined :: e))
 
-radixOfUnsigned :: (Radix e, IsIntegral e) => Exp Int -> Exp e -> Exp Int
+radixOfUnsigned :: (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int) => Exp Int -> Exp e -> Exp Int
 radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` i) .&. 1
 
 

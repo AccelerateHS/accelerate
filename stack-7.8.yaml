@@ -1,0 +1,113 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: lts-2.22
+
+packages:
+- '.'
+
+- location:
+    git:    https://github.com/AccelerateHS/accelerate.git
+    commit: 868c372012cccdf453f5653ecfa40f11545e0150
+  extra-dep: true
+
+- location:
+    git:    https://github.com/AccelerateHS/accelerate-cuda.git
+    commit: f70211c167db0dfb70375e82f69273a6354e6ede
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 7fde958be5493b9984ac90b3b95ec5680b196a5b
+  extra-dep: true
+  subdirs:
+    - 'accelerate-llvm'
+    - 'accelerate-llvm-native'
+    - 'accelerate-llvm-ptx'
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-io.git
+    commit: 968575fd1ab7306cc21ca273cdca02e516aae4c2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-fft.git
+    commit: cede00c627ce3c82d6076134c2928a1bd2bc028f
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/cuda.git
+    commit: d4ce36da07f510b7fcc994f86557af7d6b16c8f2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/cufft.git
+    commit: 370e9945cbc1e5f6c113c849f6b16ae04475110d
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/gloss-accelerate.git
+    commit: 0cfc66ee09b50d5ed2eaa6fb5df68dc720e3a7dd
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/gloss-raster-accelerate.git
+    commit: b3e7eefa07e581d31581f384eef7f80d3895b96c
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/colour-accelerate.git
+    commit: b8d88a99e2d015c9acddefa41a2ffa9955ac5a08
+  extra-dep: true
+
+extra-deps:
+- 'atomic-primops-0.8.0.4'
+- 'base-orphans-0.5.4'
+- 'bytestring-lexing-0.5.0.2'
+- 'chaselev-deque-0.5.0.5'
+- 'ekg-0.4.0.10'
+- 'ekg-core-0.1.1.1'
+- 'ekg-json-0.1.0.2'
+- 'exceptions-0.8.2.1'
+- 'gloss-1.9.2.1'
+- 'gloss-rendering-1.9.2.1'
+- 'GLURaw-1.4.0.2'
+- 'GLUT-2.5.1.1'
+- 'libffi-0.1'
+- 'llvm-general-3.5.1.2'
+- 'llvm-general-pure-3.5.1.0'
+- 'mtl-2.2.1'
+- 'normaldistribution-1.1.0.3'
+- 'OpenGL-2.9.2.0'
+- 'OpenGLRaw-1.5.0.1'
+- 'optparse-applicative-0.12.1.0'
+- 'primitive-0.6.1.0'
+- 'SafeSemaphore-0.10.1'
+- 'transformers-0.4.3.0'
+- 'transformers-compat-0.5.1.4'
+- 'unique-0'
+- 'vector-th-unbox-0.2.1.6'
+
+# Override default flag values for local packages and extra-deps
+flags:
+  llvm-general:
+    shared-llvm: true
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+

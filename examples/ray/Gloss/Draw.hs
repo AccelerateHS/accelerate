@@ -11,8 +11,10 @@ import Ray.Trace
 
 -- frenemies
 import Data.Array.Accelerate                                    as A
-import Graphics.Gloss.Accelerate.Data.Color.RGB
-import qualified Graphics.Gloss.Accelerate.Raster.Field         as G
+import Data.Array.Accelerate.Data.Colour.RGB                    as RGB
+import qualified Data.Array.Accelerate.Data.Colour.RGBA         as RGBA
+
+import Graphics.Gloss.Accelerate.Data.Point
 
 --library
 import Prelude                                                  as P
@@ -38,10 +40,10 @@ tracePixel
     -> Int
     -> Int
     -> Int
-    -> Exp Color
+    -> Exp Colour
     -> Acc (Objects, Lights, Scalar Position)
-    -> Exp G.Point
-    -> Exp G.Color
+    -> Exp Point
+    -> Exp RGBA.Colour
 tracePixel sizeX sizeY fov bounces ambient state point
   = let
         sizeX'          = P.fromIntegral sizeX
@@ -51,14 +53,14 @@ tracePixel sizeX sizeY fov bounces ambient state point
         fovX            = fov' * aspect
         fovY            = fov'
 
-        (x,y)           = G.xyOfPoint point
+        (x,y)           = xyOfPoint point
 
         eyeDir          = normalise $ makeVec3 (x * fovX) ((-y) * fovY) 0 - eyePos
         eyePos          = the eyePos'
         (objects, lights, eyePos')
                         = unlift state
 
-        (r,g,b)         = rgbOfColor $ traceRay bounces objects lights ambient eyePos eyeDir
+        RGB r g b       = unlift $ traceRay bounces objects lights ambient eyePos eyeDir
     in
-    G.rawColor r g b 1
+    RGBA.rgba r g b 1
 

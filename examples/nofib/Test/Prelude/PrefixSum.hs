@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -41,7 +43,7 @@ test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)  = Nothing
       | otherwise           = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -66,7 +68,7 @@ test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
     test_scanl' xs = run backend (A.lift $ A.scanl' (+) 0 (use xs)) ~?= scanl'Ref (+) 0 xs
     test_scanl1 xs =
       arraySize (arrayShape xs) > 0 ==>
-        run backend (A.scanl1 min (use xs)) ~?= scanl1Ref min xs
+        run backend (A.scanl1 A.min (use xs)) ~?= scanl1Ref P.min xs
 
     -- right scan
     --
@@ -74,7 +76,7 @@ test_prefixsum backend opt = testGroup "prefix sum" $ catMaybes
     test_scanr' xs = run backend (A.lift $ A.scanr' (+) 0 (use xs)) ~?= scanr'Ref (+) 0 xs
     test_scanr1 xs =
       arraySize (arrayShape xs) > 0 ==>
-      run backend (A.scanr1 max (use xs)) ~?= scanr1Ref max xs
+      run backend (A.scanr1 A.max (use xs)) ~?= scanr1Ref P.max xs
 
     -- segmented left/right scan
     --
@@ -163,7 +165,7 @@ scanr1Ref f vec
 
 -- segmented operations
 --
-scanlSegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
+scanlSegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
 scanlSegRef f z vec seg =
   let seg'      = toList seg
       vec'      = toList vec
@@ -171,7 +173,7 @@ scanlSegRef f z vec seg =
   in  fromList (Z :. n) $
         concat [ P.scanl f z v | v <- splitPlaces seg' vec' ]
 
-scanl1SegRef :: (Elt e, Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
+scanl1SegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
 scanl1SegRef f vec seg =
   let seg'      = toList seg
       vec'      = toList vec
@@ -179,7 +181,7 @@ scanl1SegRef f vec seg =
   in  fromList (Z :. n) $
         concat [ P.scanl1 f v | v <- splitPlaces seg' vec' ]
 
-scanl'SegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
+scanl'SegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
 scanl'SegRef f z vec seg =
   let seg'              = toList seg
       vec'              = toList vec
@@ -188,7 +190,7 @@ scanl'SegRef f z vec seg =
   in  ( fromList (arrayShape vec) (concat scans)
       , fromList (arrayShape seg) sums )
 
-scanrSegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
+scanrSegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> Vector e
 scanrSegRef f z vec seg =
   let seg'      = toList seg
       vec'      = toList vec
@@ -196,7 +198,7 @@ scanrSegRef f z vec seg =
   in  fromList (Z :. n) $
         concat [ P.scanr f z v | v <- splitPlaces seg' vec' ]
 
-scanr1SegRef :: (Elt e, Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
+scanr1SegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> Vector e -> Vector i -> Vector e
 scanr1SegRef f vec seg =
   let seg'      = toList seg
       vec'      = toList vec
@@ -204,7 +206,7 @@ scanr1SegRef f vec seg =
   in  fromList (Z :. n) $
         concat [ P.scanr1 f v | v <- splitPlaces seg' vec' ]
 
-scanr'SegRef :: (Elt e, Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
+scanr'SegRef :: (Elt e, P.Integral i) => (e -> e -> e) -> e -> Vector e -> Vector i -> (Vector e, Vector e)
 scanr'SegRef f z vec seg =
   let seg'              = toList seg
       vec'              = toList vec

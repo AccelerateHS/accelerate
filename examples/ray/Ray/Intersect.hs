@@ -11,9 +11,6 @@ import Scene.Object
 -- frenemies
 import Data.Array.Accelerate                                    as A
 
--- standard library
-import Prelude                                                  as P
-
 
 -- | Of two intersection tests, take the nearest.
 --

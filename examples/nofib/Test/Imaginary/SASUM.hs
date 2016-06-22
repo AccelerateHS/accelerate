@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
@@ -34,7 +36,7 @@ test_sasum backend opt = testGroup "sasum" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -51,6 +53,6 @@ test_sasum backend opt = testGroup "sasum" $ catMaybes
 
 -- Accelerate implementation ---------------------------------------------------
 
-sasum :: (Elt e, IsNum e) => Acc (Vector e) -> Acc (Scalar e)
+sasum :: A.Num e => Acc (Vector e) -> Acc (Scalar e)
 sasum = A.fold (+) 0 . A.map abs
 
