@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
@@ -38,13 +40,13 @@ test_filter backend opt = testGroup "filter" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
+    testIntegralElt :: forall e. (P.Integral e, A.Integral e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just
       $ testProperty (show (typeOf (undefined :: e))) (run_filter A.even P.even :: Vector e -> Property)
 
-    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
+    testFloatingElt :: forall e. (P.RealFrac e, A.RealFrac e, Arbitrary e, Similar e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just

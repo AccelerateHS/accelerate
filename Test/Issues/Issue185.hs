@@ -25,10 +25,10 @@ test_issue185 backend _conf = testGroup "185"
   ]
 
 
-ref1 :: (Elt a, Num a) => Vector a
+ref1 :: (Elt a, P.Num a) => Vector a
 ref1 = fromList (Z :. 9) [0,1,4,9,0,4,0,6,2]
 
-acc1 :: (Elt a, IsNum a) => Acc (Vector a)
+acc1 :: (Elt a, P.Num a) => Acc (Vector a)
 acc1 = A.scatter to over xs
   where
     over        = use [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -36,10 +36,10 @@ acc1 = A.scatter to over xs
     to          = use [1, 3, 7, 2, 5, 8]
 
 
-ref2 :: (Elt a, Num a) => Vector a
+ref2 :: (Elt a, P.Num a) => Vector a
 ref2 = fromList (Z :. 9) [0,1,0,9,0,0,0,6,0]
 
-acc2 :: (Elt a, IsNum a) => Acc (Vector a)
+acc2 :: (Elt a, P.Num a) => Acc (Vector a)
 acc2 = A.scatter to over xs
   where
     over        = use [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -47,10 +47,10 @@ acc2 = A.scatter to over xs
     to          = use [1, 3, 7, 2, 5, 8]
 
 
-ref3 :: (Elt a, Num a) => Vector a
+ref3 :: (Elt a, P.Num a) => Vector a
 ref3 = fromList (Z :. 9) [0,0,0,0,0,4,0,6,2]
 
-acc3 :: (Elt a, IsNum a) => Acc (Vector a)
+acc3 :: (Elt a, P.Num a) => Acc (Vector a)
 acc3 = A.scatterIf to mask p over xs
   where
     over        = use [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -62,10 +62,10 @@ acc3 = A.scatterIf to mask p over xs
     p           = (>* 4)
 
 
-ref4 :: (Elt a, Num a) => Vector a
+ref4 :: (Elt a, P.Num a) => Vector a
 ref4 = fromList (Z :. 9) [0,0,0,0,0,0,0,6,0]
 
-acc4 :: (Elt a, IsNum a) => Acc (Vector a)
+acc4 :: (Elt a, P.Num a) => Acc (Vector a)
 acc4 = A.scatterIf to mask p over xs
   where
     over        = use [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -77,20 +77,20 @@ acc4 = A.scatterIf to mask p over xs
     p           = (>* 4)
 
 
-ref5 :: (Elt a, Num a) => Vector a
+ref5 :: (Elt a, P.Num a) => Vector a
 ref5 = fromList (Z :. 6) [9,4,1,6,2,4]
 
-acc5 :: (Elt a, IsNum a) => Acc (Vector a)
+acc5 :: (Elt a, P.Num a) => Acc (Vector a)
 acc5 = A.gather from xs
   where
     from        = use [1, 3, 7, 2, 5, 3]
     xs          = use [1, 9, 6, 4, 4, 2, 0, 1, 2]
 
 
-ref6 :: (Elt a, Num a) => Vector a
+ref6 :: (Elt a, P.Num a) => Vector a
 ref6 = fromList (Z :. 6) [6,6,1,6,2,4]
 
-acc6 :: (Elt a, IsNum a) => Acc (Vector a)
+acc6 :: (Elt a, P.Num a) => Acc (Vector a)
 acc6 = A.gatherIf from mask p over xs
   where
     over        = use [6, 6, 6, 6, 6, 6]

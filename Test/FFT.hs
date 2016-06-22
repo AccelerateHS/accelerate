@@ -1,7 +1,9 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Test.FFT (
 
   test_fft
@@ -15,7 +17,7 @@ import Data.Label
 import Data.Maybe
 import Data.Typeable
 
-import Prelude as P
+import Prelude                                                  as P
 
 import Test.QuickCheck                                          hiding ( (.&.) )
 import Test.Framework
@@ -29,7 +31,8 @@ import Data.Array.Accelerate.Array.Sugar                        ( (!) )
 import Data.Array.Accelerate.Data.Complex
 
 
-newtype PowerOf2Array a = PowerOf2Array (Array DIM2 a) deriving Show
+newtype PowerOf2Array a = PowerOf2Array (Array DIM2 a)
+  deriving Show
 
 instance (Arbitrary a, Elt a) => Arbitrary (PowerOf2Array a) where
   arbitrary =
@@ -52,7 +55,7 @@ test_fft backend opt = testGroup "fft" $ catMaybes
   , testElt configDouble (undefined::Double)
   ]
   where
-    testElt :: forall a. (Elt a, Similar a, Arbitrary a, IsFloating a, RealFloat a)
+    testElt :: forall a. (Similar a, Arbitrary a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -62,13 +65,13 @@ test_fft backend opt = testGroup "fft" $ catMaybes
           [ testProperty "size"  (test_size  :: PowerOf2Array (Complex a) -> Property)
           , testProperty "trans" (test_trans :: PowerOf2Array (Complex a) -> Property) ]
 
-    test_trans :: (Elt a, RealFloat a, IsFloating a, Similar a) => PowerOf2Array (Complex a) -> Property
+    test_trans :: (Similar a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a) => PowerOf2Array (Complex a) -> Property
     test_trans (PowerOf2Array xs)
       = let Z:.h:.w = arrayShape xs
         in     run1 backend (transpose . fft2D' Forward w h) xs
            ~?= run1 backend (fft2D' Forward h w . transpose) xs
 
-    test_size :: (Elt a, IsFloating a, RealFloat a, Similar a) => PowerOf2Array (Complex a) -> Property
+    test_size :: (Similar a, P.RealFloat a, A.RealFloat a, A.IsFloating a, A.FromIntegral Int a) => PowerOf2Array (Complex a) -> Property
     test_size (PowerOf2Array xs)
       = let Z:.h:.w = arrayShape xs
         in     arrayShape xs

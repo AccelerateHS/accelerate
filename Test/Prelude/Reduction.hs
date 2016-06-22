@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -49,7 +50,7 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -59,7 +60,7 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
           ]
       where
         testDim :: forall sh. (Shape sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array sh e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array sh e -> e -> Property)
@@ -71,11 +72,11 @@ test_foldAll backend opt = testGroup "foldAll" $ catMaybes
     --
     test_min xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All min (use xs)) ~?= fold1AllRef min xs
+      ==> run backend (A.fold1All A.min (use xs)) ~?= fold1AllRef P.min xs
 
     test_max xs
       =   arraySize (arrayShape xs) > 0
-      ==> run backend (A.fold1All max (use xs)) ~?= fold1AllRef max xs
+      ==> run backend (A.fold1All A.max (use xs)) ~?= fold1AllRef P.max xs
 
     test_sum xs         = run backend (A.foldAll (+) 0 (use xs)) ~?= foldAllRef (+) 0 xs
     test_sum' xs z      =
@@ -101,7 +102,7 @@ test_fold backend opt = testGroup "fold" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -109,8 +110,8 @@ test_fold backend opt = testGroup "fold" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"             (test_sum  :: Array (sh :. Int) e -> Property)
           , testProperty "non-neutral sum" (test_sum' :: Array (sh :. Int) e -> e -> Property)
@@ -122,11 +123,11 @@ test_fold backend opt = testGroup "fold" $ catMaybes
     --
     test_min xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 min (use xs)) ~?= fold1Ref min xs
+      ==> run backend (A.fold1 A.min (use xs)) ~?= fold1Ref P.min xs
 
     test_max xs
       =   indexHead (arrayShape xs) > 0
-      ==> run backend (A.fold1 max (use xs)) ~?= fold1Ref max xs
+      ==> run backend (A.fold1 A.max (use xs)) ~?= fold1Ref P.max xs
 
     test_sum xs         = run backend (A.fold (+) 0 (use xs)) ~?= foldRef (+) 0 xs
     test_sum' xs z      =
@@ -151,7 +152,7 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall e. (Elt e, IsNum e, Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
+    testElt :: forall e. (P.Num e, P.Ord e, A.Num e, A.Ord e, Similar e, Arbitrary e) => (Config :-> Bool) -> e -> Maybe Test
     testElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -159,8 +160,8 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
-        testDim sh = testGroup ("DIM" P.++ show (dim sh))
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array (sh:.Int) e)) => (sh:.Int) -> Test
+        testDim sh = testGroup ("DIM" P.++ show (rank sh))
           [
             testProperty "sum"
           $ forAll arbitrarySegments             $ \(seg :: Segments Int32)    ->
@@ -177,7 +178,7 @@ test_foldSeg backend opt = testGroup "foldSeg" $ catMaybes
           , testProperty "minimum"
           $ forAll arbitrarySegments1            $ \(seg :: Segments Int32)    ->
             forAll (arbitrarySegmentedArray seg) $ \(xs  :: Array (sh:.Int) e) ->
-              run backend (A.fold1Seg min (use xs) (use seg)) ~?= fold1SegRef min xs seg
+              run backend (A.fold1Seg A.min (use xs) (use seg)) ~?= fold1SegRef P.min xs seg
           ]
 
 
@@ -201,7 +202,7 @@ fold1AllRef f
 foldRef :: (Shape sh, Elt e) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Array sh e
 foldRef f z arr =
   let (sh :. n) = arrayShape arr
-      sh'       = listToShape . P.map (max 1) . shapeToList $ sh
+      sh'       = listToShape . P.map (P.max 1) . shapeToList $ sh
   in  fromList sh' [ foldl f z sub | sub <- splitEvery n (toList arr) ]
 
 fold1Ref :: (Shape sh, Elt e) => (e -> e -> e) -> Array (sh :. Int) e -> Array sh e
@@ -209,7 +210,7 @@ fold1Ref f arr =
   let (sh :. n) = arrayShape arr
   in  fromList sh [ foldl1 f sub | sub <- splitEvery n (toList arr) ]
 
-foldSegRef :: (Shape sh, Elt e, Elt i, Integral i) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
+foldSegRef :: (Shape sh, Elt e, Elt i, P.Integral i) => (e -> e -> e) -> e -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
   where
     (sh :. n)   = arrayShape arr
@@ -217,7 +218,7 @@ foldSegRef f z arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- spl
     seg'        = toList seg
     foldseg xs  = P.map (foldl' f z) (splitPlaces seg' xs)
 
-fold1SegRef :: (Shape sh, Elt e, Elt i, Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
+fold1SegRef :: (Shape sh, Elt e, Elt i, P.Integral i) => (e -> e -> e) -> Array (sh :. Int) e -> Segments i -> Array (sh :. Int) e
 fold1SegRef f arr seg = fromList (sh :. sz) $ concat [ foldseg sub | sub <- splitEvery n (toList arr) ]
   where
     (sh :. n)   = arrayShape arr

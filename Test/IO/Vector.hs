@@ -45,8 +45,8 @@ test_vector opt = testGroup "vector" $ catMaybes
           , testDim dim2
           ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
-        testDim sh = testProperty ("DIM" P.++ show (dim sh)) (roundtrip :: Array sh a -> Property)
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh a)) => sh -> Test
+        testDim sh = testProperty ("DIM" P.++ show (rank sh)) (roundtrip :: Array sh a -> Property)
 
         roundtrip arr =
           let sh = arrayShape arr

@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 
@@ -11,6 +13,7 @@ import Config
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate.Data.Bits          as A
 import Test.Framework
 import Test.Framework.Providers.HUnit
 
@@ -278,7 +281,7 @@ iteration = testGroup "iteration"
 _shouldFail :: Acc (Vector Float)
 _shouldFail = mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0..])
   where
-    dotp :: (Elt e, IsNum e) => Acc (Vector e) -> Acc (Vector e) -> Acc (Scalar e)
+    dotp :: A.Num e => Acc (Vector e) -> Acc (Vector e) -> Acc (Scalar e)
     dotp xs ys = A.fold (+) 0 $ A.zipWith (*) xs ys
 
     takeRow :: Elt e => Exp Int -> Acc (Array DIM2 e) -> Acc (Vector e)
@@ -288,7 +291,7 @@ _shouldFail = mvm (use $ fromList (Z:.10:.10) [0..]) (use $ fromList (Z:.10) [0.
                      (\ix -> index2 n (unindex1 ix))
                      mat
 
-    mvm :: (Elt e, IsNum e) => Acc (Array DIM2 e) -> Acc (Vector e) -> Acc (Vector e)
+    mvm :: A.Num e => Acc (Array DIM2 e) -> Acc (Vector e) -> Acc (Vector e)
     mvm mat vec =
       let Z :. rows :. _ = unlift (shape mat) :: Z :. Exp Int :. Exp Int
       in generate (index1 rows)

@@ -1,4 +1,6 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Test.Spectral.SMVM (
@@ -37,7 +39,7 @@ test_smvm backend opt = testGroup "smvm" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -46,7 +48,7 @@ test_smvm backend opt = testGroup "smvm" $ catMaybes
       | otherwise               = Just
       $ testProperty (show (typeOf (undefined :: a))) (run_smvm (undefined :: a))
 
-    run_smvm :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a) => a -> Property
+    run_smvm :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a) => a -> Property
     run_smvm _ =
       forAll arbitraryCSRMatrix           $ \(segd, svec :: Vector (Int32,a), cols) ->
       forAll (arbitraryArray (Z :. cols)) $ \vec ->
@@ -58,7 +60,7 @@ test_smvm backend opt = testGroup "smvm" $ catMaybes
 -- Reference implementation
 -- ------------------------
 
-smvmRef :: (Elt a, IsNum a)
+smvmRef :: (Elt a, P.Num a)
         => Segments Int32
         -> Vector (Int32, a)
         -> Vector a

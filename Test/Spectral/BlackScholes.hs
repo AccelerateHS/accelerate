@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds          #-}
 {-# LANGUAGE FlexibleContexts         #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
@@ -37,7 +38,7 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
   , testElt configDouble c_BlackScholes_d
   ]
   where
-    testElt :: forall a. ( Elt a, IsFloating a, Similar a, Arbitrary a, Random a, Storable a
+    testElt :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Arbitrary a, Random a, Storable a
                          , BlockPtrs (EltRepr a) ~ Ptr a )
             => (Config :-> Bool)
             -> BlackScholes a
@@ -47,10 +48,10 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
       | otherwise               = Just
       $ testProperty (show (typeOf (undefined :: a))) (run_blackscholes cfun)
 
-    opts :: (Floating a, Random a) => Gen (a,a,a)
+    opts :: (P.Floating a, Random a) => Gen (a,a,a)
     opts = (,,) <$> choose (5,30) <*> choose (1,100) <*> choose (0.25,10)
 
-    run_blackscholes :: forall a. ( Elt a, IsFloating a, Similar a, Storable a, Random a, Arbitrary a
+    run_blackscholes :: forall a. ( P.Floating a, A.Floating a, A.Ord a, Similar a, Storable a, Random a, Arbitrary a
                                   , BlockPtrs (EltRepr a) ~ Ptr a )
                      => BlackScholes a
                      -> Property
@@ -67,16 +68,16 @@ test_blackscholes backend opt = testGroup "black-scholes" $ catMaybes
 -- Black-Scholes option pricing ------------------------------------------------
 --
 
-riskfree, volatility :: Floating a => a
+riskfree, volatility :: P.Floating a => a
 riskfree   = 0.02
 volatility = 0.30
 
-horner :: Num a => [a] -> a -> a
+horner :: P.Num a => [a] -> a -> a
 horner coeff x = x * foldr1 madd coeff
   where
     madd a b = a + x*b
 
-cnd' :: Floating a => a -> a
+cnd' :: P.Floating a => a -> a
 cnd' d =
   let poly     = horner coeff
       coeff    = [0.31938153,-0.356563782,1.781477937,-1.821255978,1.330274429]
@@ -86,7 +87,7 @@ cnd' d =
   rsqrt2pi * exp (-0.5*d*d) * poly k
 
 
-blackscholes :: (Elt a, IsFloating a) => Acc (Vector (a, a, a)) -> Acc (Vector (a, a))
+blackscholes :: (P.Floating a, A.Floating a, A.Ord a) => Acc (Vector (a, a, a)) -> Acc (Vector (a, a))
 blackscholes = A.map go
   where
   go x =
@@ -111,7 +112,7 @@ blackscholes = A.map go
 type BlackScholes a = Ptr a -> Ptr a -> Ptr a -> Ptr a -> Ptr a -> a -> a -> Int32 -> IO ()
 
 blackScholesRef
-    :: forall a. (Storable a, Floating a, Elt a, BlockPtrs (EltRepr a) ~ Ptr a)
+    :: forall a. (Storable a, P.Floating a, A.Floating a, BlockPtrs (EltRepr a) ~ Ptr a)
     => BlackScholes a
     -> Vector (a,a,a)
     -> IO (Vector (a,a))

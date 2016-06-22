@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -24,7 +25,7 @@ import Test.Base
 import QuickCheck.Arbitrary.Array
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Array.Sugar                        ( newArray, dim )
+import Data.Array.Accelerate.Array.Sugar                        ( newArray, rank )
 import Data.Array.Accelerate.Examples.Internal                  as A
 
 import Data.Array.ST                                            ( runSTArray )
@@ -51,7 +52,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
   , testFloatingElt configDouble (undefined :: Double)
   ]
   where
-    testIntegralElt :: forall e. (Elt e, Integral e, IsIntegral e, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
+    testIntegralElt :: forall e. (P.Integral e, A.Integral e, A.FromIntegral e Int, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testIntegralElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -62,7 +63,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
           , testProperty "histogram" (test_histogram A.fromIntegral P.fromIntegral :: Vector e -> Property)
           ]
 
-    testFloatingElt :: forall e. (Elt e, RealFrac e, IsFloating e, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
+    testFloatingElt :: forall e. (P.RealFrac e, A.RealFrac e, Arbitrary e, Similar e, IArray UArray e) => (Config :-> Bool) -> e -> Maybe Test
     testFloatingElt ok _
       | P.not (get ok opt)      = Nothing
       | otherwise               = Just $ testGroup (show (typeOf (undefined :: e)))
@@ -77,15 +78,15 @@ test_permute backend opt = testGroup "permute" $ catMaybes
     -- array to the other. Does not attempt to use elements from the defaults
     -- array. Additionally, works for any dimension. (c.f. Issue #93)
     --
-    test_fill :: forall e. (Elt e, IsNum e, Arbitrary e, Similar e) => e -> Test
+    test_fill :: forall e. (P.Num e, A.Num e, Arbitrary e, Similar e) => e -> Test
     test_fill _ = testGroup "fill"
       [ -- testDim dim0         -- Accelerate issue #87
         testDim dim1
       , testDim dim2
       ]
       where
-        testDim :: forall sh. (Shape sh, Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
-        testDim sh = testProperty ("DIM" P.++ show (dim sh)) (push_fill :: Array sh e -> Property)
+        testDim :: forall sh. (Shape sh, P.Eq sh, Arbitrary sh, Arbitrary (Array sh e)) => sh -> Test
+        testDim sh = testProperty ("DIM" P.++ show (rank sh)) (push_fill :: Array sh e -> Property)
           where
             push_fill :: Array sh e -> Property
             push_fill xs =
@@ -97,12 +98,12 @@ test_permute backend opt = testGroup "permute" $ catMaybes
     -- Test if the combining operation for forward permutation works, by
     -- building a histogram. Often tricky for parallel backends.
     --
-    test_histogram :: (Elt e, IsNum e, Similar e, Arbitrary e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
+    test_histogram :: (P.Num e, A.Num e, Similar e, Arbitrary e, IArray UArray e) => (Exp e -> Exp Int) -> (e -> Int) -> Vector e -> Property
     test_histogram f g xs =
       forAll (sized return) $
         \n -> run backend (histogramAcc n f xs) ~?= histogramRef n g xs
 
-    histogramAcc :: (Elt e, IsNum e) => Int -> (Exp e -> Exp Int) -> Vector e -> Acc (Vector e)
+    histogramAcc :: A.Num e => Int -> (Exp e -> Exp Int) -> Vector e -> Acc (Vector e)
     histogramAcc n f xs =
       let n'        = unit (constant n)
           xs'       = use xs
@@ -111,7 +112,7 @@ test_permute backend opt = testGroup "permute" $ catMaybes
       in
       permute (+) zeros (\ix -> index1 $ f (xs' A.! ix) `mod` the n') ones
 
-    histogramRef :: forall e. (Elt e, Num e, IArray UArray e) => Int -> (e -> Int) -> Vector e -> Vector e
+    histogramRef :: forall e. (Elt e, P.Num e, IArray UArray e) => Int -> (e -> Int) -> Vector e -> Vector e
     histogramRef n f xs =
       let arr :: IArray.UArray Int e
           arr =  IArray.accumArray (+) 0 (0, n-1) [ (f e `mod` n, 1) | e <- toList xs ]
@@ -231,8 +232,8 @@ test_backpermute backend opt = testGroup "backpermute" $ catMaybes
           let n     = arraySize (arrayShape xs)
               n'    = 0 `P.max` (n-1)
           in
-          forAll arbitrary                              $ \sh' ->
-          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv ->
+          forAll arbitrary                              $ \(sh' :: DIM1) ->
+          forAll (arbitraryArrayOf sh' (choose (0,n'))) $ \mapv          ->
             toList (run backend (A.gather (use mapv) (use xs)))
             ~?=
             [ xs `indexArray` (Z:.i) | i <- toList mapv ]

@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -35,7 +37,7 @@ test_dotp backend opt = testGroup "dot-product" $ catMaybes
   , testElt configDouble (undefined :: Double)
   ]
   where
-    testElt :: forall a. (Elt a, IsNum a, Similar a, Arbitrary a)
+    testElt :: forall a. (P.Num a, A.Num a, Similar a, Arbitrary a)
             => (Config :-> Bool)
             -> a
             -> Maybe Test
@@ -52,7 +54,7 @@ test_dotp backend opt = testGroup "dot-product" $ catMaybes
 
 -- Accelerate implementation ---------------------------------------------------
 
-dotp :: (Elt e, IsNum e)
+dotp :: A.Num e
      => Acc (Vector e)
      -> Acc (Vector e)
      -> Acc (Scalar e)
