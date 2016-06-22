@@ -18,8 +18,11 @@ module Data.Array.Accelerate.Examples.Internal.Monitoring (
 ) where
 
 #ifdef ACCELERATE_ENABLE_EKG
-import Control.Monad
+import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Exception
 import System.Remote.Monitoring
+import Text.Printf
 #endif
 
 
@@ -30,8 +33,10 @@ import System.Remote.Monitoring
 beginMonitoring :: IO ()
 #ifdef ACCELERATE_ENABLE_EKG
 beginMonitoring = do
-  putStrLn "EKG monitor started at: http://localhost:8000\n"
-  void $ forkServer "localhost" 8000
+  r <- withAsync (forkServer "localhost" 8000 >> threadDelay 10000) waitCatch
+  case r of
+    Right _ -> printf "EKG monitor started at: http://localhost:8000\n"
+    Left _  -> printf "Failed to start EKG monitor\n"
 #else
 beginMonitoring = return ()
 #endif

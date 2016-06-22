@@ -173,7 +173,8 @@ Library
 
   if flag(ekg)
     CPP-options:        -DACCELERATE_ENABLE_EKG
-    build-depends:      ekg                             >= 0.3
+    build-depends:      ekg                             >= 0.3,
+                        async                           >= 2.0
 
   if flag(codespeed)
     CPP-options:        -DACCELERATE_ENABLE_CODESPEED
