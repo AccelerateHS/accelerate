@@ -17,15 +17,15 @@ matrix:
   include:
     - env: GHC=7.8.4 CABAL=1.18 LLVM=3.4.2
       compiler: "GHC 7.8"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, freeglut3-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
 
     - env: GHC=7.10.3 CABAL=1.22 LLVM=3.5.2
       compiler: "GHC 7.10"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, freeglut3-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
 
     - env: GHC=8.0.1 CABAL=1.24 LLVM=3.6.2
       compiler: "GHC 8.0"
-      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, freeglut3-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
 
   fast_finish: true
 
