@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
