@@ -1,144 +1,62 @@
-language: haskell
-env:
-  global:
-    - HAPPY=1.19.5
-    - ALEX=3.1.4
+# vim: nospell
+#
+# Basic template to test with GHC=[7.8, 7.10, 8.0], but also installs the
+# relevant version of LLVM as (a very old version of) the CUDA toolkit (4.0).
+# Caches the 'stack' build directory to speed subsequent compilations.
+#
+language: generic
+dist: trusty
+sudo: false
 
-    - SHA_ACCELERATE=4d181866db677d0bb0fad0aa3224d8856c5a0911
-    - URL_ACCELERATE=https://github.com/AccelerateHS/accelerate.git
-
-    - SHA_ACCELERATE_IO=af478f260b8ea9df892f9af633eec1ba1d694317
-    - URL_ACCELERATE_IO=https://github.com/AccelerateHS/accelerate-io.git
-
-    - SHA_ACCELERATE_FFT=319520e23804315e10d5d7bdf0405a742df9eab2
-    - URL_ACCELERATE_FFT=https://github.com/AccelerateHS/accelerate-fft.git
-
-    - SHA_ACCELERATE_CUDA=6b1f21878991d417b4ff165137e264628ea58bb9
-    - URL_ACCELERATE_CUDA=https://github.com/AccelerateHS/accelerate-cuda.git
-
-    - SHA_GLOSS_ACCELERATE=94aac6e3b2061479ab4dd20ea23b65c7363419e4
-    - URL_GLOSS_ACCELERATE=https://github.com/tmcdonell/gloss-accelerate.git
-
-    - SHA_GLOSS_RASTER_ACCELERATE=2bf0173a862cfd2bc5bd4a80f5c9f9f44631ec14
-    - URL_GLOSS_RASTER_ACCELERATE=https://github.com/tmcdonell/gloss-raster-accelerate.git
-
-  matrix:
-    - GHC=7.8.4
-    - GHC=7.8.4 CUDA=6.5-14
-    - GHC=7.8.4 CUDA=7.0-28
-    - GHC=7.10.1 CABAL=1.22
-      # GHC-7.10 is too slow and uses too much memory for a complete build
-      # within the 50 minute time limit.
-      # - GHC=7.10.1 CABAL=1.22 CUDA=6.5-14
-      # - GHC=7.10.1 CABAL=1.22 CUDA=7.0-28
-    - GHC=head CABAL=head CUDA=7.0-28
+cache:
+  directories:
+    - $HOME/.stack
+    - $HOME/llvm
 
 matrix:
-    allow_failures:
-        - env: GHC=head CABAL=head CUDA=7.0-28
+  include:
+    - env: GHC=7.8.4 CABAL=1.18 LLVM=3.4.2
+      compiler: "GHC 7.8"
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.18, happy-1.19.5, alex-3.1.7 ] }}
+
+    - env: GHC=7.10.3 CABAL=1.22 LLVM=3.5.2
+      compiler: "GHC 7.10"
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.22, happy-1.19.5, alex-3.1.7 ] }}
+
+    - env: GHC=8.0.1 CABAL=1.24 LLVM=3.6.2
+      compiler: "GHC 8.0"
+      addons: { apt: { sources: [ hvr-ghc, ubuntu-toolchain-r-test ], packages: [ nvidia-cuda-toolkit, g++-4.8, libgmp-dev, cabal-install-1.24, happy-1.19.5, alex-3.1.7 ] }}
+
+  fast_finish: true
 
 before_install:
-    # Fetch accelerate dependencies
-    - echo "Checking out dependencies"
-    - travis_retry git clone ${URL_ACCELERATE} deps/accelerate
-    - pushd deps/accelerate
-    - git reset --hard ${SHA_ACCELERATE}
-    - popd
-
-    - travis_retry git clone ${URL_ACCELERATE_IO} deps/accelerate-io
-    - pushd deps/accelerate-io
-    - git reset --hard ${SHA_ACCELERATE_IO}
-    - popd
-
-    - travis_retry git clone ${URL_ACCELERATE_FFT} deps/accelerate-fft
-    - pushd deps/accelerate-fft
-    - git reset --hard ${SHA_ACCELERATE_FFT}
-    - popd
-
-    - travis_retry git clone ${URL_GLOSS_ACCELERATE} deps/gloss-accelerate
-    - pushd deps/gloss-accelerate
-    - git reset --hard ${SHA_GLOSS_ACCELERATE}
-    - popd
-
-    - travis_retry git clone ${URL_GLOSS_RASTER_ACCELERATE} deps/gloss-raster-accelerate
-    - pushd deps/gloss-raster-accelerate
-    - git reset --hard ${SHA_GLOSS_RASTER_ACCELERATE}
-    - popd
-
-    - |
-        if [ ${CUDA} ]; then
-            travis_retry git clone ${URL_ACCELERATE_CUDA} deps/accelerate-cuda
-            pushd deps/accelerate-cuda
-            git reset --hard ${SHA_ACCELERATE_CUDA}
-            popd
-        fi
-
-    # If travis doesn't have the version of GHC that we want, get it from hvr's PPA
-    - echo "Setting up GHC"
-    - travis_retry sudo add-apt-repository -y ppa:hvr/ghc
-    - travis_retry sudo apt-get update -qq
-    - travis_retry sudo apt-get autoremove
-    - travis_retry sudo apt-get install -y c2hs
-    - travis_retry sudo apt-get install happy-${HAPPY} alex-${ALEX}
-    - export PATH=/opt/alex/${ALEX}/bin:/opt/happy/${HAPPY}/bin:${PATH}
-    - export PATH=/usr/local/ghc/${GHC}/bin:${PATH}
-    - |
-        if [ $(ghc --numeric-version) != ${GHC} ]; then
-            travis_retry sudo apt-get install -y ghc-${GHC}
-            export PATH=/opt/ghc/${GHC}/bin:${PATH}
-        fi
-    - |
-        if [ ${CABAL} ]; then
-            travis_retry sudo apt-get install -y cabal-install-${CABAL}
-            export PATH=/opt/cabal/${CABAL}/bin:${PATH}
-        fi
-
-    # Maybe install the CUDA library
-    - |
-        if [ ${CUDA} ]; then
-            echo "Installing CUDA library"
-            travis_retry wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1204/x86_64/cuda-repo-ubuntu1204_${CUDA}_amd64.deb
-            travis_retry sudo dpkg -i cuda-repo-ubuntu1204_${CUDA}_amd64.deb
-            travis_retry sudo apt-get update -qq
-            export CUDA_APT=${CUDA%-*}
-            export CUDA_APT=${CUDA_APT/./-}
-            travis_retry sudo apt-get install -y cuda-drivers cuda-core-${CUDA_APT} cuda-cudart-dev-${CUDA_APT} cuda-cufft-dev-${CUDA_APT}
-            travis_retry sudo apt-get clean
-            export CUDA_HOME=/usr/local/cuda-${CUDA%%-*}
-            export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
-            export PATH=${CUDA_HOME}/bin:${PATH}
-        else
-            export MODE=-f-cuda
-        fi
+  - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
+  - export UPGRADE_CABAL=1
+  - source .travis/install-stack.sh
+  - source .travis/install-llvm-trusty.sh
 
 install:
-    - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
-    - cabal --version
-    - llc --version; true
-    - opt --version; true
-    - cabal install --only-dependencies --enable-tests ${MODE} . deps/*
-    - cabal install ${MODE} deps/*
+  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - cabal --version
+  - stack --version
+  - llc --version; true
+  - opt --version; true
+  - |
+      if [ ${GHC} == head -o ! -e stack.yaml ]; then
+        travis_retry cabal install --only-dependencies
+      else
+        travis_retry stack build --only-dependencies --no-terminal --no-haddock-deps
+      fi
 
 script:
-    # Check the build
-    - cabal configure -v2 -flib-Werror ${MODE}
-    - cabal build
-    - cabal haddock
-#    - cabal test --show-details=always
+  - |
+      if [ ${GHC} == head -o ! -e stack.yaml ]; then
+        cabal install
+        cabal haddock
+      else
+        stack build --no-terminal --haddock --no-haddock-deps
+      fi
 
-    # Check the source distribution can be generated, built, and installed
-    - cabal sdist
-    - |
-        export SRC_TGZ=$(cabal info . | awk '{print $2 ".tar.gz";exit}')
-        cd dist
-        if [ -f "$SRC_TGZ" ]; then
-            travis_wait cabal install --force-reinstalls ${MODE} ${SRC_TGZ} || exit 1
-        else
-            echo "'$SRC_TGZ': not found"
-            exit 1
-        fi
-
-after_failure:
-    - dmesg
-    - ls -R /usr/local/cuda*
+after_success:
+  - source .travis/update-accelerate-buildbot.sh
 

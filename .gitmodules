@@ -1,0 +1,3 @@
+[submodule ".travis"]
+	path = .travis
+	url = https://github.com/tmcdonell/travis-scripts.git
