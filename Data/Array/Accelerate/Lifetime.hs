@@ -15,7 +15,7 @@
 
 module Data.Array.Accelerate.Lifetime (
 
-  Lifetime,
+  Lifetime(..),
   newLifetime, withLifetime, touchLifetime,
   addFinalizer, finalize, mkWeak, mkWeakPtr,
 
