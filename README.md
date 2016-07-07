@@ -122,7 +122,7 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
 
 ### LULESH
 
-[LULESH-accelerate][lulesh-accelerate] is in implementation of the Livermore Unstructured Lagrangian Explicit Shock Hydrodynamics ([LULESH][LULESH]) mini-app. LULESH represents a typical hydrodynamics code such as ALE3D, but is a highly simplified application, hard-coded to solve the Sedov blast problem on an unstructured hexahedron mesh.
+[LULESH-accelerate][lulesh-accelerate] is in implementation of the Livermore Unstructured Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app. [LULESH][LULESH] represents a typical hydrodynamics code such as [ALE3D][ALE3D], but is a highly simplified application, hard-coded to solve the Sedov blast problem on an unstructured hexahedron mesh.
 
 ![LULESH mesh](https://codesign.llnl.gov/images/sedov-3d-LLNL.png)
 
