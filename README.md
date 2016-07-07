@@ -90,9 +90,10 @@ Requirements
 Documentation
 -------------
 
-  * Haddock documentation is included in the package and linked from the [Hackage page][Hackage].
-  * Online documentation is on the [GitHub wiki][Wiki].
-  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately.][HOAS-conv]
+  * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
+  * Haddock documentation for in-development components can be found [here](http://tmcdonell.github.io/accelerate-travis-buildbot/).
+  * Additional online documentation can be found in the [GitHub wiki][Wiki].
+  * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
 
 Examples
 --------
