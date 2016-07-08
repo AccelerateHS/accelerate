@@ -64,7 +64,7 @@ test_map backend opt = testGroup "map" $ catMaybes
           [ -- operators on Num
             testProperty "neg"          (test negate negate)
           , testProperty "abs"          (test abs abs)
-          , testProperty "sig"          (test signum signum)
+          , testProperty "signum"       (test signum signum)
 
             -- operators on Integral & Bits
           , testProperty "complement"   (test A.complement P.complement)
@@ -90,7 +90,7 @@ test_map backend opt = testGroup "map" $ catMaybes
           [ -- operators on Num
             testProperty "neg"          (test negate negate)
           , testProperty "abs"          (test abs abs)
-          , testProperty "sig"          (test signum signum)
+          , testProperty "signum"       (test signum signum)
 
             -- operators on Fractional, Floating, RealFrac & RealFloat
           , testProperty "recip"        (test recip recip)
