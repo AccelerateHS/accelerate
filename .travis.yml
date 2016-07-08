@@ -9,9 +9,11 @@ dist: trusty
 sudo: false
 
 cache:
+  timeout: 600
   directories:
     - $HOME/.stack
     - $HOME/llvm
+    - .stack-work/install
 
 matrix:
   include:
